@@ -189,7 +189,7 @@ const statedAnswers = (message: Message): string | null =>
  * error -- and Pi's stop under a running tool files an empty entry that says
  * `error`, so the trace called that turn complete while the tool said error and
  * the composer said interrupted. A finished turn that did not say how it ended
- * is a harness that forgot to, and it stops here rather than being drawn as a
+ * is a harness that forgot to; it is reported here rather than drawn as a
  * clean finish. A turn still running has not ended, so its rows are the live
  * overlay's and are checked once they are not.
  */
@@ -200,12 +200,18 @@ const lastStatedIndex = (rows: TurnRow[]) => {
   }
   return -1;
 };
+const reportedUnstated = new Set<string>();
 export function assertStatedOutcomes(rows: TurnRow[], turnOpen = false): TurnRow[] {
   // A chat whose turn is still running has not ended it: the unstated traces
   // after the last prompt that did state how it ended are that turn's.
   const checked = turnOpen ? rows.slice(0, lastStatedIndex(rows) + 1) : rows;
-  const unstated = checked.find((row) => row.type === "trace" && row.unstated);
-  if (unstated) throw new Error(`transcript contract: the turn after prompt ${unstated.precedingUserId} ended without stating how. A backend must state \`turn.settle\` when a turn ends.`);
+  // A breach is a bug to report, not a reason to lose the chat: the turn is
+  // drawn without an outcome and the breach is logged once per prompt.
+  for (const row of checked) {
+    if (row.type !== "trace" || !row.unstated || reportedUnstated.has(row.precedingUserId ?? "")) continue;
+    reportedUnstated.add(row.precedingUserId ?? "");
+    console.error(`transcript contract: the turn after prompt ${row.precedingUserId} ended without stating how. A backend must state \`turn.settle\` when a turn ends.`);
+  }
   return rows;
 }
 
@@ -220,6 +226,37 @@ export function assertStatedOutcomes(rows: TurnRow[], turnOpen = false): TurnRow
  * message that stopped it. Until the first answer is named there is no row
  * yet, and the last prompt is the one being answered.
  */
+/**
+ * The part of a live turn still being written: the messages answering its
+ * latest prompt.
+ *
+ * A message steered into a running turn makes one generation answer two
+ * prompts. What answered the first is closed by then, so it is drawn from what
+ * the server stated, exactly as a reload draws it; only what answers the
+ * prompt now being answered is drawn from paint. Projecting the whole
+ * generation under its first prompt drew the steered message's answer above
+ * the message, then moved it at settle.
+ */
+export function currentSegment(generation: ActiveGenerationView, messages: Message[]): ActiveGenerationView {
+  if (!generation.assistantMessages.length) return generation;
+  const rows = new Map(messages.map((message) => [message.id, message]));
+  const ownerOf = (id: string) => { const row = rows.get(id); return row ? statedAnswers(row) : undefined; };
+  const latest = generation.assistantMessages.map((assistant) => ownerOf(assistant.id)).findLast((owner) => owner != null);
+  if (latest == null) return generation;
+  // A prompt taken after the latest answer, once that answer's turn has said
+  // how it ended, is the one now being answered, though nothing answers it yet:
+  // the turn before it is finished and drawn as stated, not as still writing.
+  const ownerIndex = messages.findIndex((message) => message.id === latest);
+  const moved = ownerIndex >= 0 && lastPromptIndex(messages) > ownerIndex && Boolean(messages[ownerIndex]!.outcome)
+    // An answer still arriving is drawn from paint until it closes.
+    && !generation.assistantMessages.some((assistant) => rows.get(assistant.id)?.streaming);
+  const kept = generation.assistantMessages.filter((assistant) => {
+    const owner = ownerOf(assistant.id);
+    return owner == null || (!moved && owner === latest);
+  });
+  return kept.length === generation.assistantMessages.length ? generation : { ...generation, assistantMessages: kept };
+}
+
 const liveOwnerIndex = (messages: Message[], generation?: ActiveGenerationView | null) => {
   const live = new Set((generation?.assistantMessages || []).map((message) => message.id));
   const answerIndex = live.size
@@ -236,9 +273,10 @@ const liveOwner = (messages: Message[], generation: ActiveGenerationView) => {
 };
 
 export function buildLiveProjectionIndex(
-  generation: ActiveGenerationView,
+  wholeGeneration: ActiveGenerationView,
   messages: Message[],
 ): LiveProjectionIndex {
+  const generation = currentSegment(wholeGeneration, messages);
   const classifications = textBlockClassifications(generation) as Record<string, "interim" | "answer">;
   const ownerIndex = liveOwnerIndex(messages, generation);
   const owner = ownerIndex < 0 ? null : messages[ownerIndex]!;
@@ -496,9 +534,10 @@ function liveRows(generation: ActiveGenerationView, owner: Message | null, tools
 export function projectLiveTurn(
   persistedRows: TurnRow[],
   messages: Message[],
-  generation: ActiveGenerationView,
+  wholeGeneration: ActiveGenerationView,
   tools: ToolItem[] = [],
 ): TurnRow[] {
+  const generation = currentSegment(wholeGeneration, messages);
   const owner = liveOwner(messages, generation);
   if (!owner) return [...persistedRows, ...liveRows(generation, null, tools)];
   const ownerRow = persistedRows.findIndex((row) => row.key === `message:${owner.id}`);

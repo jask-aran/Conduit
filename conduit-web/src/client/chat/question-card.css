@@ -68,7 +68,7 @@
 .question-footer { display: flex; min-height: 28px; align-items: center; gap: 8px; padding-left: 8px; }
 .question-hints { display: flex; min-width: 0; flex: 1; flex-wrap: wrap; gap: 4px 12px; color: var(--muted-foreground); font-size: 11px; }
 .question-hints span { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
-.question-footer [data-slot="button"] { margin-left: auto; }
+.question-footer [data-slot="button"]:first-of-type { margin-left: auto; }
 
 /* No keyboard to explain on touch; the rows are taller and a description gets its own line. */
 @media (hover: none) {

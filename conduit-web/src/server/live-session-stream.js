@@ -113,8 +113,27 @@ export function createLiveSessionStream({
   // A target the client names is a Conduit message id; the harness knows only
   // its own entry. Unknown ids pass straight through, so Pi's own history tree
   // and any client that predates this still work.
-  async function harnessEntryId(context, messageId) {
+  /**
+   * The harness's own name for a message, for a fork or regenerate to cut at.
+   *
+   * Pi names a prompt only by the session entry it writes, and says nothing
+   * when it does, so a Conduit id is bound to its entry when its turn
+   * checkpoints. Something asked of a message whose turn has not checkpointed
+   * yet -- a fork straight after a stop -- is bound here, by reading what Pi
+   * has written so far, rather than by reading after every stop in case.
+   */
+  async function harnessEntryId(context, messageId, record = null) {
     if (!context) return messageId;
+    const known = await messageIds.entryIdFor(context.project, context.chat, messageId);
+    if (known !== messageId || !record || !isConduitMessageId(messageId)) return known;
+    try {
+      const { messages } = await adapterFor(record).readTranscript({
+        liveSessionId: record.id, chatId: record.chatId, project: context.project, turns: 3,
+      });
+      await messageIds.bind(context.project, context.chat, messages || []);
+    } catch (error) {
+      console.warn("Could not bind a message to its entry", error.message);
+    }
     return messageIds.entryIdFor(context.project, context.chat, messageId);
   }
 
@@ -157,48 +176,42 @@ export function createLiveSessionStream({
    * turn it assembled from deltas. Reading the backend's own transcript and
    * publishing that is how the client stops having to be right on its own.
    */
-  // The generation the sync closes: the client's copy of that turn is frozen
-  // out of a live generation and carries the same id, which is the only handle
-  // an unwritten turn has. Without it the client has to guess where the range
-  // belongs.
-  // `replace` says the window is the whole of what the client should hold: it
-  // is the answer to a client that has lost its place in the chat's order and
-  // cannot be replayed back into it.
-  // A replacing read that races the log must not spin: `resume_log` has already
-  // sent `log_reset`, so a snapshot has to follow. Three attempts cover a
-  // quiet moment; the last publishes even if the log moved, rather than leaving
-  // the client with a reset and nothing to fold.
-  const REPLACE_SYNC_ATTEMPTS = 3;
+  // The answer to a client that has lost its place in the chat's order and
+  // cannot be replayed back into it: the latest turns, as the record has them,
+  // replacing what it holds from the first of them on.
+  // A read that races the log must not spin: `resume_log` has already sent
+  // `log_reset`, so a snapshot has to follow. Three attempts cover a quiet
+  // moment; the last publishes even if the log moved, rather than leaving the
+  // client with a reset and nothing to fold.
+  const SNAPSHOT_TURNS = 10;
+  const SNAPSHOT_ATTEMPTS = 3;
 
-  async function syncTranscript(record, turns = 1, generationId = null, { replace = false } = {}) {
+  async function publishSnapshot(record) {
     const adapter = adapterFor(record);
     if (record.ephemeral) return;
     try {
-      for (let attempt = 0; attempt < REPLACE_SYNC_ATTEMPTS; attempt += 1) {
-        const log = replace ? logFor(record) : null;
+      for (let attempt = 0; attempt < SNAPSHOT_ATTEMPTS; attempt += 1) {
+        const log = logFor(record);
         const logSeq = log?.state().seq;
         const context = await findChatContext(record.chatId);
         if (!context) return;
         const projection = await adapter.readTranscript({
-          liveSessionId: record.id, chatId: record.chatId, project: context.project, turns,
+          liveSessionId: record.id, chatId: record.chatId, project: context.project, turns: SNAPSHOT_TURNS,
         });
-        if (!replace && !projection.messages?.length) return;
         projection.messages ||= [];
         projection.tools ||= [];
-        // A window is often the first sight of entries Pi has only just
-        // written, so the ids claimed for them are bound here rather than left
-        // until the turn checkpoints. Without this the sync an interrupt
-        // publishes names the prompt `pi:<entryId>` while the client holds the
+        // A snapshot can be the first sight of entries Pi has only just
+        // written, so the ids claimed for them are bound before it is named;
+        // otherwise it names a prompt `pi:<entryId>` while the client holds the
         // id it was handed, and the same message arrives a second time.
         await messageIds.bind(context.project, context.chat, projection.messages);
-        projection.messages = await attachments.decorateMessages(context.project, context.chat.id, projection.messages, { fromStart: !turns });
+        projection.messages = await attachments.decorateMessages(context.project, context.chat.id, projection.messages, { fromStart: false });
         projection.messages = applyMessageIds(projection.messages,
           await messageIds.resolver(context.project, context.chat));
-        // A replacement read outside the event loop can straddle a numbered
-        // transcript change. Retry while attempts remain; the last publish
-        // stands, because `log_reset` already told the client to take a snapshot.
-        if (log && log.state().seq !== logSeq && attempt < REPLACE_SYNC_ATTEMPTS - 1) continue;
-        adapter.publish(record, { type: "transcript_sync", generationId, ...(replace ? { replace: true } : {}), ...projection });
+        // A read outside the event loop can straddle a numbered transcript
+        // change. Retry while attempts remain; the last publish stands.
+        if (log && log.state().seq !== logSeq && attempt < SNAPSHOT_ATTEMPTS - 1) continue;
+        adapter.publish(record, { type: "transcript_sync", generationId: null, replace: true, ...projection });
         return;
       }
     } catch (error) {
@@ -470,27 +483,13 @@ export function createLiveSessionStream({
       const cancelledGenerationId = command.generationId || record.activeGeneration?.id || null;
       await adapter.cancel(record.id, cancelledGenerationId);
       const interrupted = interruptedPromptInput(taken, command.message, command.attachmentIds);
-      if (!interrupted.message) {
-        await syncTranscript(record, 1, cancelledGenerationId);
-        return null;
-      }
-      // Before the replacement, not only after it: the interrupted turn is
-      // already written by the time cancel resolves, and syncing it now settles
-      // it while the client still has nothing else arriving. Leaving it until
-      // after the replacement prompt meant the client carried an unreconciled
-      // interrupted turn for the whole of the next response.
-      await syncTranscript(record, 1, cancelledGenerationId);
+      if (!interrupted.message) return null;
       await applyComposerModel(record, command);
       const prepared = await promptForChat(record, {
         ...command,
         attachmentIds: interrupted.attachmentIds,
       }, interrupted.message);
-      const generationId = await sendPrompt(record, prepared, { messageId: offeredMessageId(command.messageId) });
-      // Pi can write the aborted tool result just after cancel resolves, and
-      // the steered message has no id until Pi writes it, so a two-turn sync
-      // once the replacement is accepted is what names both turns.
-      await syncTranscript(record, 2, generationId);
-      return generationId;
+      return sendPrompt(record, prepared, { messageId: offeredMessageId(command.messageId) });
     }
     if (command.type === "stop_generation" || command.type === "abort") {
       const stoppedGenerationId = command.generationId || record.activeGeneration?.id || null;
@@ -503,14 +502,12 @@ export function createLiveSessionStream({
       if (capabilities.steer || capabilities.followUpQueue) {
         await clearQueuedMessages(record, adapter).catch((error) => console.warn("Could not clear the queue before stopping", error.message));
       }
-      const stopped = await adapter.cancel(record.id, stoppedGenerationId);
-      await syncTranscript(record, 1, stoppedGenerationId);
-      return stopped;
+      return adapter.cancel(record.id, stoppedGenerationId);
     }
     if (command.type === "fork_and_prompt") {
       if (!adapter.getCapabilities().fork) throw Object.assign(new Error("This agent does not support forks"), { code: "fork_unsupported", status: 409 });
       const context = await findChatContext(record.chatId);
-      const entryId = await harnessEntryId(context, command.entryId);
+      const entryId = await harnessEntryId(context, command.entryId, record);
       const sourceCheckpointId = context ? await turnCheckpoints?.checkpointForMessage(
         context.chat.id, context.project.workingRoot, entryId,
       ) : null;
@@ -524,7 +521,7 @@ export function createLiveSessionStream({
     if (command.type === "regenerate") {
       if (!adapter.getCapabilities().regenerate) throw Object.assign(new Error("This agent does not support regeneration"), { code: "regenerate_unsupported", status: 409 });
       const context = await findChatContext(record.chatId);
-      const entryId = await harnessEntryId(context, command.entryId);
+      const entryId = await harnessEntryId(context, command.entryId, record);
       const sourceCheckpointId = context ? await turnCheckpoints?.checkpointForMessage(
         context.chat.id, context.project.workingRoot, entryId,
       ) : null;
@@ -650,7 +647,7 @@ export function createLiveSessionStream({
           return;
         }
         send({ type: "log_reset", log: chatLog?.state() || null });
-        void syncTranscript(record, 10, null, { replace: true });
+        void publishSnapshot(record);
         return;
       }
       const bypassLifecycle = record.ephemeral || command.type === "stop_generation" || command.type === "abort";

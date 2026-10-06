@@ -40,8 +40,8 @@ const fromAnswer = (request: HostUiRequest, response: QuestionResponse): HostUiR
 const dismissLabel = (request: HostUiRequest) =>
   request.kind === "confirm" || request.options?.some((option) => /^deny$/i.test(option)) ? "deny" : "dismiss";
 
-export function HostUiRequests(props: { requests: HostUiRequest[]; onRespond: (response: HostUiResponse) => void }) {
+export function HostUiRequests(props: { requests: HostUiRequest[]; onRespond: (response: HostUiResponse) => void; onStop?: () => void }) {
   return <For each={props.requests.slice(0, 1)}>{(request) => <div class="question-dock">
-    <QuestionCard request={asQuestion(request)} dismissLabel={dismissLabel(request)} onRespond={(response) => props.onRespond(fromAnswer(request, response))} />
+    <QuestionCard request={asQuestion(request)} dismissLabel={dismissLabel(request)} onStop={props.onStop} onRespond={(response) => props.onRespond(fromAnswer(request, response))} />
   </div>}</For>;
 }

@@ -48,9 +48,14 @@ export function registerSessionRoutes(app, {
    */
   // Only the newest page is overlaid with the live log; an older page is
   // asked for with a cursor even when it turns out to be the last.
-  const upToDate = (context, projection, page, requestedBefore = "") => (page?.before || requestedBefore
-    ? projection
-    : { ...projection, ...applyTranscriptOps(projection, chatLogs?.peek(context.chat.id)?.entries || []) });
+  // It also says how far into the log it reaches, read in the same tick as the
+  // fold, so the browser takes that as its place rather than starting from
+  // zero and being replayed every statement it was just handed.
+  const upToDate = (context, projection, page, requestedBefore = "") => {
+    if (page?.before || requestedBefore) return projection;
+    const log = chatLogs?.peek(context.chat.id);
+    return { ...projection, ...applyTranscriptOps(projection, log?.entries || []), ...(log ? { log: log.state() } : {}) };
+  };
   /*
    * Whether a turn is still running in this chat. The transcript holds the
    * steps of a running turn that have finished, and its prompt has no outcome
@@ -186,6 +191,7 @@ export function registerSessionRoutes(app, {
         thinkingLevel: session.thinkingLevel,
         messages: current.messages,
         tools: current.tools,
+        ...(current.log ? { log: current.log } : {}),
         page: session.page,
       });
     } catch (error) { next(error); }
