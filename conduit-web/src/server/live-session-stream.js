@@ -2,7 +2,6 @@ import { CONTINUE_PROMPT } from "../continuation.js";
 import { messageDrop, messageOpen } from "../harnesses/transcript-ops.js";
 import { messagesFromEntries } from "../session-store.js";
 import { parseAttachmentEnvelope } from "../attachment-envelope.js";
-import { ChatBackendRegistry } from "../pi-rpc-adapter.js";
 import { manifestForImplementation } from "../harnesses/index.js";
 import { startWebSocketKeepalive } from "./ws-keepalive.js";
 import { applyMessageIds, isConduitMessageId } from "../message-ids.js";
@@ -59,7 +58,6 @@ export function sendClientEvent(ws, adapter, event) {
 }
 
 export function createLiveSessionStream({
-  manager,
   wss,
   attachments,
   registry,
@@ -70,11 +68,12 @@ export function createLiveSessionStream({
   chatModelView,
   messageIds,
   chatLogs,
-  backends = new ChatBackendRegistry(manager),
+  backends,
   lifecycle,
   autoNameSession = async () => {},
 }) {
   if (!lifecycle) throw new TypeError("Live session stream requires a chat lifecycle");
+  if (!backends) throw new TypeError("Live session stream requires a backend registry");
   const namingChats = new Set();
 
   /**
