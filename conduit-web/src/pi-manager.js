@@ -1915,14 +1915,10 @@ export class PiManager extends EventEmitter {
     }
   }
 
-  async shutdown() {
-    if (this.reaperTimer) {
-      clearInterval(this.reaperTimer);
-      this.reaperTimer = null;
-    }
-    const records = this.liveRecords();
-    await Promise.all(records.map((record) => this.stopAndWait(record.id)));
-    return records.length;
+  shutdownResources() {
+    if (!this.reaperTimer) return;
+    clearInterval(this.reaperTimer);
+    this.reaperTimer = null;
   }
 
   view(record) {
