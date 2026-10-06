@@ -200,8 +200,6 @@ const harnessConfig = {
   testStreamDataDir: path.join(config.dataRoot, "test-stream"),
 };
 const backends = ChatBackendRegistry.fromManifests(MANIFESTS, await detect(MANIFESTS, harnessConfig), harnessConfig);
-// Distinct adapter instances: Pi answers to two implementation keys.
-const adapterInstances = () => new Set(backends.adapters.values());
 const chatgptWeb = backends.adapters.get("chatgpt-web") || null;
 const requireChatgptWeb = () => {
   if (!chatgptWeb) throw Object.assign(new Error("ChatGPT Web is not installed"), { code: "backend_unavailable", status: 409 });
@@ -592,7 +590,7 @@ async function applyBackendName(adapter, record, name) {
 }
 // Every native adapter checkpoints the same way. PiRpcAdapter is not an event
 // emitter and simply has no `on`, so this covers the backends that need it.
-for (const adapter of adapterInstances()) {
+for (const adapter of backends.instances()) {
   adapter.on?.("settled", ({ record, completed }) => {
     // An ephemeral record -- a probe -- has no chat to checkpoint.
     if (!record.ephemeral) checkpointNativeAdapter(adapter, record, completed !== false);
@@ -962,13 +960,9 @@ async function shutdown(signal) {
   clearInterval(leafTimer);
   secureServer?.close();
   secureServer?.closeAllConnections?.();
-  const stoppedProcesses = await manager.shutdown();
-  const codexAdapter = backends.adapters.get("codex");
-  let stoppedCodexProcesses = 0;
-  for (const adapter of adapterInstances()) {
-    const stopped = await adapter.shutdown?.();
-    if (adapter === codexAdapter) stoppedCodexProcesses = stopped || 0;
-  }
+  const stoppedByBackend = await backends.shutdown();
+  const stoppedProcesses = stoppedByBackend.get(backends.adapters.get("conduit_pi")) || 0;
+  const stoppedCodexProcesses = stoppedByBackend.get(backends.adapters.get("codex")) || 0;
   const stoppedTerminals = await terminals.stopAll();
   await voiceModel.stop();
   await closed;
