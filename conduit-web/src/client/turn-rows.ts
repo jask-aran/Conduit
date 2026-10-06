@@ -220,6 +220,27 @@ export function assertStatedOutcomes(rows: TurnRow[], turnOpen = false): TurnRow
  * message that stopped it. Until the first answer is named there is no row
  * yet, and the last prompt is the one being answered.
  */
+/**
+ * The part of a live turn still being written: the messages answering its
+ * latest prompt.
+ *
+ * A message steered into a running turn makes one generation answer two
+ * prompts. What answered the first is closed by then, so it is drawn from what
+ * the server stated, exactly as a reload draws it; only what answers the
+ * prompt now being answered is drawn from paint. Projecting the whole
+ * generation under its first prompt drew the steered message's answer above
+ * the message, then moved it at settle.
+ */
+export function currentSegment(generation: ActiveGenerationView, messages: Message[]): ActiveGenerationView {
+  if (generation.assistantMessages.length < 2) return generation;
+  const rows = new Map(messages.map((message) => [message.id, message]));
+  const ownerOf = (id: string) => { const row = rows.get(id); return row ? statedAnswers(row) : undefined; };
+  const latest = generation.assistantMessages.map((assistant) => ownerOf(assistant.id)).findLast((owner) => owner != null);
+  if (latest == null) return generation;
+  const kept = generation.assistantMessages.filter((assistant) => { const owner = ownerOf(assistant.id); return owner == null || owner === latest; });
+  return kept.length === generation.assistantMessages.length ? generation : { ...generation, assistantMessages: kept };
+}
+
 const liveOwnerIndex = (messages: Message[], generation?: ActiveGenerationView | null) => {
   const live = new Set((generation?.assistantMessages || []).map((message) => message.id));
   const answerIndex = live.size
@@ -236,9 +257,10 @@ const liveOwner = (messages: Message[], generation: ActiveGenerationView) => {
 };
 
 export function buildLiveProjectionIndex(
-  generation: ActiveGenerationView,
+  wholeGeneration: ActiveGenerationView,
   messages: Message[],
 ): LiveProjectionIndex {
+  const generation = currentSegment(wholeGeneration, messages);
   const classifications = textBlockClassifications(generation) as Record<string, "interim" | "answer">;
   const ownerIndex = liveOwnerIndex(messages, generation);
   const owner = ownerIndex < 0 ? null : messages[ownerIndex]!;
@@ -496,9 +518,10 @@ function liveRows(generation: ActiveGenerationView, owner: Message | null, tools
 export function projectLiveTurn(
   persistedRows: TurnRow[],
   messages: Message[],
-  generation: ActiveGenerationView,
+  wholeGeneration: ActiveGenerationView,
   tools: ToolItem[] = [],
 ): TurnRow[] {
+  const generation = currentSegment(wholeGeneration, messages);
   const owner = liveOwner(messages, generation);
   if (!owner) return [...persistedRows, ...liveRows(generation, null, tools)];
   const ownerRow = persistedRows.findIndex((row) => row.key === `message:${owner.id}`);
