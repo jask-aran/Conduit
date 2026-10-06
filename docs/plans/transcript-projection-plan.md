@@ -102,6 +102,16 @@ scenario:
 - `deny-tool` -- the same across a dismissed approval.
 - `queued`, `queued-tool` -- a message queued mid-answer (next turn) and mid-tools (joins the turn): no answer above its prompt, never queued and sent at once, no earlier turn still working, and the settled shape equals a reload's.
 
+- `history` -- two turns, regenerate, edit, stop, process recycled, edit the
+  stopped prompt: after each, no error screen and live equals reload.
+
+Known gap: the crash fixed in `cf1518d0` (stop, reload, edit on Pi: the
+attach replayed the whole log over the loaded transcript and tripped the
+stated-outcome contract) does not reproduce on the Test profile even with the
+process recycled; it was found and verified with a live Pi script. The
+contract itself still takes the whole app to its error screen on any
+violation, which turns a transient fold state into a crash.
+
 The word-fade unwrapping its spans and the action row replacing its
 placeholder are expected after settle and are not counted, nor is the queued
 card while it leaves. The Test profile ends a turn before taking a late

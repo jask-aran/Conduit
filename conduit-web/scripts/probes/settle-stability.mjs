@@ -16,7 +16,7 @@
  *
  * Prints ok/FAIL per scenario and exits 1 on any failure.
  *
- *   node scripts/probes/settle-stability.mjs [--only settle,stop-answer,deny-tool,queued,queued-tool]
+ *   node scripts/probes/settle-stability.mjs [--only settle,stop-answer,deny-tool,queued,queued-tool,history]
  */
 import { arg, open, origin } from "./lib.mjs";
 
@@ -224,6 +224,37 @@ const scenarios = {
     const frames = await watchQueue("hmm");
     const shapes = await settledShape();
     return [...frames, ["settled as a reload shows it", shapes.live === shapes.reloaded, `${shapes.live} vs ${shapes.reloaded}`]];
+  },
+  /**
+   * Regenerate, edit, stop, and edit the stopped prompt after a reload: after
+   * each, the transcript is what a reload shows and the app never reaches its
+   * error screen.
+   */
+  async history() {
+    const checks = [];
+    const step = async (label, act) => {
+      await act();
+      await page.waitForTimeout(300);
+      await settled();
+      await page.waitForTimeout(1000);
+      const crashed = await page.locator(".crash-screen").count();
+      const shapes = await settledShape();
+      checks.push([`${label}: no error screen`, crashed === 0]);
+      checks.push([`${label}: as a reload shows it`, shapes.live === shapes.reloaded, `${shapes.live} vs ${shapes.reloaded}`]);
+    };
+    await step("two turns", async () => { await send("think 100 300t"); await settled(); await page.waitForTimeout(500); await send("1 tool 300t"); });
+    await step("regenerate last", () => page.locator("[aria-label='Regenerate response']").last().click());
+    await step("edit first", async () => { await page.locator("[aria-label='Edit from here']").first().click(); await composer().fill("2 tools 200t"); await page.keyboard.press("Enter"); });
+    await step("stop", async () => { await send("think 100 3000t"); await waitForAnswer(); await stopButton().click(); });
+    // The process goes, as an idle one is recycled, so the edit below is what
+    // attaches a socket -- after this client has already cut its rows.
+    await step("process recycled", () => page.evaluate(async () => {
+      const chatId = location.pathname.split("/").pop();
+      const live = (await (await fetch("/v0/live-sessions")).json()).sessions.find((item) => item.chatId === chatId);
+      if (live) await fetch(`/v0/live-sessions/${live.id}/process`, { method: "DELETE" });
+    }));
+    await step("edit stopped prompt", async () => { await page.locator("[aria-label='Edit from here']").last().click(); await composer().fill("100t"); await page.keyboard.press("Enter"); });
+    return checks;
   },
 };
 
