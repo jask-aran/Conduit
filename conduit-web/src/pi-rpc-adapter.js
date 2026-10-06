@@ -305,6 +305,7 @@ export class PiRpcAdapter {
   prompt(id, message, options) { return this.manager.promptAccepted(id, message, options); }
   cancel(id, generationId) { return this.manager.abortGeneration(id, generationId); }
   close(id) { return this.manager.stopAndWait(id); }
+  shutdownResources() { return this.manager.shutdownResources(); }
   respondHostUi(id, response) { return this.manager.respondHostUi(id, response); }
   replay(id) {
     const record = this.manager.get(id);
@@ -455,11 +456,22 @@ export class ChatBackendRegistry {
     }
     return null;
   }
+  instances() { return [...new Set(this.adapters.values())]; }
   list() {
-    return [...new Set(this.adapters.values())].flatMap((adapter) => adapter.list());
+    return this.instances().flatMap((adapter) => adapter.list());
   }
   rawRecords() {
-    return [...new Set(this.adapters.values())].flatMap((adapter) => [...adapter.rawRecords()]);
+    return this.instances().flatMap((adapter) => [...adapter.rawRecords()]);
+  }
+  async shutdown() {
+    const stopped = new Map();
+    for (const adapter of this.instances()) {
+      const records = [...adapter.rawRecords()];
+      await Promise.all(records.map((record) => adapter.close(record.id)));
+      await adapter.shutdownResources?.();
+      stopped.set(adapter, records.length);
+    }
+    return stopped;
   }
   view(record) { return this.adapterForRecord(record).view(record); }
   async stop(id) {
