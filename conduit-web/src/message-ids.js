@@ -234,14 +234,24 @@ export class MessageIds {
     };
 
     // A prompt that knows its parent entry takes the entry written under it,
-    // wherever that sits; only prompts without one are paired by order.
+    // wherever that sits; only prompts without one are paired by order. Pi may
+    // write entries that are not messages in between -- the system prompt, a
+    // model or thinking change -- so the walk up passes over them.
     const anchored = list.length && list.every((row) => "parentId" in row);
+    const entries = new Map((rows || []).filter((row) => row?.id).map((row) => [row.id, row]));
+    const writtenUnder = (row, parent) => {
+      let above = row.parentId ?? null;
+      while (above !== parent && above !== null && entries.has(above) && !state.unbound[entries.get(above).role]) {
+        above = entries.get(above).parentId ?? null;
+      }
+      return above === parent;
+    };
     const prompts = state.unbound.user;
     const remaining = [];
     for (const claim of prompts) {
       if (!anchored || !("parent" in claim)) { remaining.push(claim); continue; }
       // Not written yet: it waits for its own entry, and takes no other.
-      const index = list.findIndex((row) => row.role === "user" && row.parentId === claim.parent && !state.byEntry.has(row.id));
+      const index = list.findIndex((row) => row.role === "user" && writtenUnder(row, claim.parent) && !state.byEntry.has(row.id));
       if (index >= 0) await take(claim.messageId, "user", index);
     }
 
@@ -317,10 +327,12 @@ export class MessageIds {
 
 /** The user and assistant messages a run of session entries wrote, in order. */
 export function entryMessageRows(entries) {
+  // Every entry, with only the user and assistant messages given a role: the
+  // rest are bound to nothing, but a prompt's place is found through them.
   return (entries || [])
-    .filter((entry) => entry?.type === "message" && typeof entry.id === "string"
-      && ["user", "assistant"].includes(entry.message?.role))
-    .map((entry) => ({ id: entry.id, role: entry.message.role, parentId: entry.parentId ?? null }));
+    .filter((entry) => typeof entry?.id === "string" && entry.type !== "session")
+    .map((entry) => ({ id: entry.id, parentId: entry.parentId ?? null,
+      role: entry.type === "message" && ["user", "assistant"].includes(entry.message?.role) ? entry.message.role : null }));
 }
 
 /**
