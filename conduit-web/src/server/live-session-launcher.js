@@ -107,6 +107,7 @@ export function createLiveSessionLauncher({
     thinkingLevel = "",
     forceModel = false,
     attachOnly = false,
+    spare = false,
   } = {}) {
     lifecycle.assertAvailable(context.chat.id, context.project.id);
     const adapter = backends.forChat(context.chat);
@@ -114,7 +115,16 @@ export function createLiveSessionLauncher({
       throw launchError("session_project_mismatch", "The requested project does not own this chat", 409);
     }
     const resident = backends.getByChatId(context.chat.id);
-    if (resident) return { live: resident, modelRecovery: null };
+    if (resident) {
+      // A warm draft was started on whatever model its first page had; one
+      // taken by another page with another choice is moved to it.
+      if (context.chat.status === "draft") {
+        const view = backends.view(resident);
+        if (model && view.model !== model) await adapter.setModel?.(resident.id, model);
+        if (thinkingLevel && view.thinkingLevel !== thinkingLevel) await adapter.setThinkingLevel?.(resident.id, thinkingLevel);
+      }
+      return { live: resident, modelRecovery: null };
+    }
     // Selecting a chat may not start anything; sending a message must. That is
     // the whole of what `warm` says, and `attachOnly` already carries it here:
     // an "open" does not spawn, a prompt does. Refusing every launch on a
@@ -126,11 +136,18 @@ export function createLiveSessionLauncher({
     // Only admission is machine-wide: reclaiming room and reserving a slot.
     // Starting the process holds its slot, not the lock, so one cold start does
     // not hold up every other chat's.
-    await concurrency.runCapacity(() => reclaimLiveProcesses(backends, maxLiveProcesses(), {
+    // A spare agent, started ahead of being asked for, only takes free room:
+    // it never stops somebody's idle chat to make some.
+    await concurrency.runCapacity(() => reclaimLiveProcesses(backends, spare ? 0 : maxLiveProcesses(), {
       exceptChatId: context.chat.id,
       reserve: 1,
       failIfBlocked: true,
       starting,
+    }).then(() => {
+      if (!spare) return;
+      const max = Math.trunc(Number(maxLiveProcesses()) || 0);
+      const held = liveProcessEntries(backends, context.chat.id).length + starting.size;
+      if (max > 0 && held >= max) throw launchError("live_process_limit", "No room for a spare agent", 429);
     }).then(() => { starting.add(context.chat.id); }));
     try {
       const result = await adapter.launch(context, { model, thinkingLevel, forceModel }, {
@@ -151,16 +168,17 @@ export function createLiveSessionLauncher({
     forceModel = false,
     attachOnly = false,
     alreadyLocked = false,
+    spare = false,
   } = {}) {
     if (!isChatId(chatId)) throw launchError("chat_not_found", "Chat not found", 404);
     if (alreadyLocked) {
       const context = await findChatContext(chatId);
       if (!context) throw launchError("chat_not_found", "Chat not found", 404);
       return lifecycle.withProjects([context.project.id], async () => launchFromContext(context, {
-        requestedProject, model, thinkingLevel, forceModel, attachOnly,
+        requestedProject, model, thinkingLevel, forceModel, attachOnly, spare,
       }));
     }
-    const request = { requestedProject, model, thinkingLevel, forceModel, attachOnly };
+    const request = { requestedProject, model, thinkingLevel, forceModel, attachOnly, spare };
     return lifecycle.runLaunch(chatId, async () => {
       const context = await findChatContext(chatId);
       if (!context) throw launchError("chat_not_found", "Chat not found", 404);
@@ -170,6 +188,7 @@ export function createLiveSessionLauncher({
         thinkingLevel,
         forceModel,
         attachOnly,
+        spare,
       }));
     }, request);
   };

@@ -1316,14 +1316,17 @@ function App() {
   // just reading on another profile. Seeding the launch from it then asks the
   // new profile for a model it has never heard of and the launch is refused,
   // so the selection only travels when it is this profile's to give.
+  // The server keeps an untouched draft warm when its page lets go of it, and
+  // may hand that same chat back here: it is ours again, to discard again.
   const createProfileChat = (project: Project, profileId: string, chosen = models) => api<ChatSummary>("/v0/chats", {
     method: "POST",
     body: JSON.stringify({
       projectId: project.id,
       profileId,
+      warm: true,
       ...(chosen.profile() === profileId ? { model: chosen.model(), thinkingLevel: chosen.effort() } : {}),
     }),
-  });
+  }).then((created) => { discarded.delete(created.id); return created; });
 
   const activateCreatedChat = async (created: ChatSummary, project: Project, profileId: string) => {
     await chat.initialize({ ...created, templateId: created.templateId || profileId || undefined }, project);

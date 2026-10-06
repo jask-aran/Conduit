@@ -32,6 +32,7 @@ export function registerChatRoutes(app, {
   backends,
   catalogFor,
   chatModelView,
+  composerDraft = () => null,
   config,
   defaultTemplate,
   findChatContext,
@@ -43,21 +44,25 @@ export function registerChatRoutes(app, {
   registry,
   runtimeFor,
   templateForChat,
+  warmDrafts = null,
 }) {
   const discoverable = discoverableFrom(backends);
   const defaultDiscovery = () => backends.where((manifest) => manifest.discovery !== "none")[0] || "";
   const profileFor = (profileId) => agentProfiles(config.piTemplates, {
     available: new Set([...backends.adapters.keys()]),
   }).find((profile) => profile.id === profileId && profile.management === "agent");
-  const completeCreation = (request, response, chat, project) => {
+  const completeCreation = (request, response, chat, project, { start = false } = {}) => {
     response.status(201).json(chatView(chat));
-    if (request.body?.start !== true) return;
+    if (request.body?.start !== true && !start) return;
     void launchLiveSession({
       chatId: chat.id,
       requestedProject: project.id,
       model: request.body?.model || "",
       thinkingLevel: request.body?.thinkingLevel || "",
-    }).catch((error) => console.error("Could not start new chat runtime", { chatId: chat.id, error }));
+      spare: request.body?.start !== true,
+    }).catch((error) => {
+      if (error.code !== "live_process_limit") console.error("Could not start new chat runtime", { chatId: chat.id, error });
+    });
   };
   app.get("/v0/projects/:projectId/backend-sessions", async (request, response, next) => {
     try {
@@ -209,13 +214,18 @@ export function registerChatRoutes(app, {
         if (runtimeKind !== "conduit_profile") {
           return response.status(400).json({ error: "unknown_runtime_kind" });
         }
+        // A page's composer asks for its draft warm: its agent is started with
+        // it, so the first message goes to an agent already up.
+        const warmed = request.body?.warm === true && warmDrafts;
+        const warm = warmed && await warmDrafts.take(project.id, template.id);
+        if (warm) return completeCreation(request, response, warm, project, { start: true });
         const runtime = runtimeFor({ runtimeKind, template });
         const chat = await registry.create(project, {
           templateId: template.id,
           templateVersion: template.version,
           runtime,
         });
-        completeCreation(request, response, chat, project);
+        completeCreation(request, response, chat, project, { start: Boolean(warmed) });
       });
     } catch (error) { next(error); }
   });
@@ -531,6 +541,11 @@ export function registerChatRoutes(app, {
         const context = await findChatContext(request.params.chatId);
         if (!context) return null;
         return lifecycle.withProjects([context.project.id], async () => {
+          // An untouched draft keeps its agent for the next page that wants one.
+          const typed = composerDraft(context.chat.id);
+          if (warmDrafts && !typed?.text?.trim() && !typed?.attachmentIds?.length
+            && !await registry.hasAttachments(context.project, context.chat.id)
+            && await warmDrafts.release(context.chat)) return true;
           await stopSessionProcesses(backends, context.chat);
           return registry.removeEmptyDraft(context.chat.id, context.project);
         });
