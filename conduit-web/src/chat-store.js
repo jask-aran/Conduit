@@ -382,7 +382,7 @@ export class ChatStore {
     catch (error) { if (error.code === "ENOENT") return null; throw error; }
   }
 
-  async create(project, { templateId = null, templateVersion = null, runtime = null, backend = null, untracked = false } = {}) {
+  async create(project, { templateId = null, templateVersion = null, runtime = null, backend = null, untracked = false, run = false } = {}) {
     const timestamp = new Date(this.now()).toISOString();
     const chat = {
       id: crypto.randomUUID(),
@@ -403,6 +403,8 @@ export class ChatStore {
       lastMessageAt: null,
       lastReadAt: null,
       ...(untracked ? { untracked: true } : {}),
+      // Started by a headless run rather than from a chat page.
+      ...(run ? { run: true } : {}),
     };
     await this.ensureDirectories(project, chat.id);
     this.chats.push(chat);
