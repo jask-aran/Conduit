@@ -266,6 +266,8 @@ export function createLiveSessionStream({
         // Every further message this turn writes is named as it starts, so no
         // message is ever streamed under one name and stored under another.
         claimAnswer: (after) => messageIds.claimNow(prepared.context.chat, "assistant", after || user),
+        // The entry the prompt is written under, once the harness says.
+        anchor: (parent) => messageIds.anchor?.(prepared.context.chat, user, parent),
       }
       : null;
     // Stated before it is sent, not after it is accepted. The harness can begin

@@ -64,6 +64,7 @@ export class MessageIds {
     // a reload would put every id ever claimed back in the queue.
     const claims = [];
     const released = new Set();
+    const anchors = new Map();
     for (const line of raw.split("\n").filter(Boolean)) {
       let row;
       try { row = JSON.parse(line); } catch { continue; }
@@ -81,13 +82,15 @@ export class MessageIds {
         continue;
       }
       if (row.released) { released.add(row.messageId); continue; }
+      if (row.anchor) { anchors.set(row.messageId, row.parent ?? null); continue; }
       if (state.unbound[row.role || "user"]) {
         claims.push({ messageId: row.messageId, role: row.role || "user", after: row.after || null });
       }
     }
     for (const claim of claims) {
       if (state.byMessage.has(claim.messageId) || released.has(claim.messageId)) continue;
-      state.unbound[claim.role].push({ messageId: claim.messageId, after: claim.after });
+      state.unbound[claim.role].push({ messageId: claim.messageId, after: claim.after,
+        ...(anchors.has(claim.messageId) ? { parent: anchors.get(claim.messageId) } : {}) });
     }
     this.chats.set(chatId, state);
     return state;
@@ -147,6 +150,24 @@ export class MessageIds {
     state.byEntry.delete(entryId);
     await this.append(state, { messageId, unbound: true });
     return messageId;
+  }
+
+  /**
+   * Say which entry a prompt was sent on top of.
+   *
+   * Pi names an entry only once it is written, but it writes a prompt as a
+   * child of whatever its leaf was when the prompt arrived. Read just before
+   * the prompt is sent, that leaf picks out the prompt's own entry exactly --
+   * the one whose parent it is -- instead of leaving the binding to count
+   * prompts and entries and hope they line up. `null` is the session's root.
+   */
+  anchor(chat, messageId, parent) {
+    if (!this.owns(chat)) return;
+    const state = this.chats.get(chat.id);
+    const claim = state?.unbound.user.find((item) => item.messageId === messageId);
+    if (!claim) return;
+    claim.parent = parent ?? null;
+    void this.append(state, { messageId, anchor: true, parent: claim.parent });
   }
 
   /**
@@ -212,15 +233,27 @@ export class MessageIds {
       await this.append(state, { messageId, entryId: id, role });
     };
 
+    // A prompt that knows its parent entry takes the entry written under it,
+    // wherever that sits; only prompts without one are paired by order.
+    const anchored = list.length && list.every((row) => "parentId" in row);
+    const prompts = state.unbound.user;
+    const remaining = [];
+    for (const claim of prompts) {
+      if (!anchored || !("parent" in claim)) { remaining.push(claim); continue; }
+      // Not written yet: it waits for its own entry, and takes no other.
+      const index = list.findIndex((row) => row.role === "user" && row.parentId === claim.parent && !state.byEntry.has(row.id));
+      if (index >= 0) await take(claim.messageId, "user", index);
+    }
+
     let cursor = -1;
     const waiting = [];
-    for (const claim of state.unbound.user) {
+    for (const claim of remaining) {
       const index = waiting.length ? -1 : freeAfter("user", cursor);
       if (index < 0) { waiting.push(claim); continue; }
       cursor = index;
       await take(claim.messageId, "user", index);
     }
-    state.unbound.user = waiting;
+    state.unbound.user = prompts.filter((claim) => !state.byMessage.has(claim.messageId));
 
     const pending = [];
     for (const claim of state.unbound.assistant) {
@@ -287,7 +320,7 @@ export function entryMessageRows(entries) {
   return (entries || [])
     .filter((entry) => entry?.type === "message" && typeof entry.id === "string"
       && ["user", "assistant"].includes(entry.message?.role))
-    .map((entry) => ({ id: entry.id, role: entry.message.role }));
+    .map((entry) => ({ id: entry.id, role: entry.message.role, parentId: entry.parentId ?? null }));
 }
 
 /**

@@ -1159,6 +1159,17 @@ export class PiManager extends EventEmitter {
     const payload = { type: "prompt", message: prepared.message };
     if (prepared.images.length) payload.images = prepared.images;
     if (streamingBehavior === "steer" || streamingBehavior === "followUp") payload.streamingBehavior = streamingBehavior;
+    // Pi reads its stdin in order, so a leaf asked for just ahead of the prompt
+    // is the entry the prompt will be written under: its parent. Not waited
+    // for -- the prompt goes out at once. A queued message is written later,
+    // under whatever the leaf is then, so it is paired by order instead.
+    if (claims?.anchor && !payload.streamingBehavior) {
+      this.request(id, { type: "get_entries", ...(record.leafId ? { since: record.leafId } : {}) })
+        .then((response) => {
+          record.leafId = response.data?.leafId ?? null;
+          claims.anchor(record.leafId);
+        }, () => { record.leafId = null; });
+    }
     try {
       await this.request(id, payload);
     } catch (error) {

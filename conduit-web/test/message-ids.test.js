@@ -73,8 +73,30 @@ test("entryMessageRows keeps only what a message wrote, in order", () => {
     { type: "message", id: "e1", message: { role: "user" } },
     { type: "tool_call", id: "t1" },
     { type: "message", id: "e2", message: { role: "system" } },
-    { type: "message", id: "e3", message: { role: "assistant" } },
-  ]), [{ id: "e1", role: "user" }, { id: "e3", role: "assistant" }]);
+    { type: "message", id: "e3", parentId: "e2", message: { role: "assistant" } },
+  ]), [{ id: "e1", role: "user", parentId: null }, { id: "e3", role: "assistant", parentId: "e2" }]);
+});
+
+/**
+ * A prompt that knows the entry it was sent on top of takes the entry written
+ * under it, not the next one in line. Counting put an older prompt still waiting
+ * for its entry onto this one, and every name after it slid down by one.
+ */
+test("an anchored prompt takes the entry written under its parent", async () => {
+  const workspace = await project();
+  const ledger = new MessageIds();
+  const chat = { id: "c-anchor", backend: { implementation: "conduit_pi" } };
+  const stale = await ledger.claim(workspace, chat, "user");
+  const sent = await ledger.claim(workspace, chat, "user");
+  ledger.anchor(chat, sent, "a1");
+  await ledger.bind(workspace, chat, [
+    { id: "u0", role: "user", parentId: null },
+    { id: "a1", role: "assistant", parentId: "u0" },
+    { id: "u2", role: "user", parentId: "a1" },
+  ]);
+  const idFor = await ledger.resolver(workspace, chat);
+  assert.equal(idFor("u2"), sent);
+  assert.equal(idFor("u0"), stale);
 });
 
 /**
