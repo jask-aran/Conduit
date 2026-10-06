@@ -69,7 +69,8 @@ export function applyTranscriptOp(messages, event) {
         ...(event.generationId ? { generationId: event.generationId } : {}),
       }
       : {
-        id: incoming.id, role: "user", content: displayUserText(incoming),
+        // Stated now, so no longer only this client's.
+        id: incoming.id, role: "user", content: displayUserText(incoming), local: undefined,
         timestamp: incoming.timestamp || new Date().toISOString(),
         // A prompt the harness made itself, not the user's words.
         ...(incoming.origin === "harness" ? { origin: "harness" } : {}),

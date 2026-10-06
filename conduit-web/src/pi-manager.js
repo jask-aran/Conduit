@@ -676,6 +676,13 @@ export class PiManager extends EventEmitter {
       // Publishing a normalized generation failure first made the client
       // freeze a synthetic error turn and show a crash toast before the
       // deliberate runtime_exit arrived and detached it.
+      // A stop asked for still leaves the turn's rows to say so: what was
+      // written is closed with it, what never was is dropped, and the prompt
+      // says it was interrupted -- the browser no longer decides any of it.
+      if (deliberate) {
+        this.dropUnwrittenMessages(record);
+        this.settleTurn(record, "generation_stopped");
+      }
       if (!deliberate) {
         this.ingestGenerationEvent(record, {
           type: "runtime_exit",

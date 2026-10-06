@@ -79,7 +79,7 @@ export function assignToolSeq(tools: ToolItem[] = []): ToolItem[] {
  * own unsent messages, and an answer still arriving over the socket.
  */
 export function replaceMessages(current: Message[], incoming: Message[]): Message[] {
-  const kept = current.filter((message) => (message.pending || message.streaming)
+  const kept = current.filter((message) => (message.local || message.streaming)
     && !incoming.some((item) => item.id === message.id));
   return [...incoming, ...kept];
 }

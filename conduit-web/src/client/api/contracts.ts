@@ -266,6 +266,8 @@ export interface Message {
   status?: string | null;
   continuing?: boolean;
   pending?: boolean;
+  /** Added by this client and not yet stated by the server. */
+  local?: boolean;
   /**
    * An answer that is still arriving. It takes its place in the transcript the
    * moment the harness names it, so everything sent afterwards lands after it,

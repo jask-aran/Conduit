@@ -27,18 +27,18 @@ test("the cut a fork states removes every abandoned message, and keeps what is u
   const current = [
     message("m_u1", "user", "hi"), message("pi:a1", "assistant", "hello"),
     message("m_u2", "user", "abandoned"), message("pi:a2", "assistant", "abandoned answer"),
-    message("user_3", "user", "unsent", { pending: true }),
+    message("user_3", "user", "unsent", { local: true }),
   ];
   const cut = truncateAt(current, "m_u2", { inclusive: true });
   assert.deepEqual(cut.map((item) => item.id), ["m_u1", "pi:a1"]);
-  assert.equal(current.at(-1).pending, true);
+  assert.equal(current.at(-1).local, true);
 });
 
 test("a full load replaces, so one landing after a fork cannot restore the abandoned branch", () => {
   const afterFork = [
     message("m_u1", "user", "hi"), message("pi:a1", "assistant", "hello"),
     message("m_u3", "user", "regenerated"), message("pi:a3", "assistant", "new answer"),
-    message("user_4", "user", "unsent", { pending: true }),
+    message("user_4", "user", "unsent", { local: true }),
   ];
   // The server's whole truth, fetched before the fork and arriving after it.
   const stale = [

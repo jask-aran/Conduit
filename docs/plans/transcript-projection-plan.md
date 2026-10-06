@@ -66,7 +66,7 @@ Ordered by risk, smallest first. Each lists its regression gate.
    *Gate:* `turn-rows` (notably "keeps the answer display key across live and
    persisted projections"), `timeline-projection`, settle-stability probe.
 
-4. **Client-side transcript decisions.** `runtime_exit` prunes streaming rows
+4. **Done**, except regenerate still cuts twice on purpose: a snapshot taken while the agent starts can restore the cut answers. **Client-side transcript decisions.** `runtime_exit` prunes streaming rows
    locally; send / interrupt / regenerate / fork roll back with
    `setMessages(previous)`, which can overwrite ops that arrived meanwhile, and
    regenerate cuts twice. The server states the exit as `message.close` /
