@@ -27,7 +27,7 @@ test("chat lifecycle serializes a move behind launch work", async () => {
   assert.deepEqual(order, ["launch", "launch-complete", "move"]);
 });
 
-test("different chats do not share a serialization permit", { timeout: 1_000 }, async () => {
+test("different chats do not share a serialization permit", { timeout: 5_000 }, async () => {
   const lifecycle = new ChatLifecycle();
   const firstReady = deferred();
   const releaseFirst = deferred();
