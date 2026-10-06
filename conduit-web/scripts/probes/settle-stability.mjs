@@ -277,16 +277,14 @@ const scenarios = {
 
 const only = arg("--only", "")?.split(",").filter(Boolean);
 let failed = 0;
-// A breach of the transcript contract is logged, not thrown, so it is caught here.
-let breaches = [];
-page.on("console", (message) => { if (message.type() === "error" && message.text().startsWith("transcript contract")) breaches.push(message.text()); });
+// A turn that ends without stating how is now stated by the server, which
+// logs the breach in its own journal ("transcript contract: ..."), not here.
 for (const [name, run] of Object.entries(scenarios)) {
   if (only?.length && !only.includes(name)) continue;
   let id = null;
   try {
     id = await chat("fast-250");
-    breaches = [];
-    const checks = [...await run(), ["no contract breach", !breaches.length, breaches[0]]];
+    const checks = await run();
     const bad = checks.filter(([, ok]) => !ok);
     failed += bad.length ? 1 : 0;
     console.log(`${bad.length ? "FAIL" : "ok  "} ${name}${bad.length ? `: ${bad.map(([label, , detail]) => detail === undefined ? label : `${label} (${detail})`).join(", ")}` : ""}`);

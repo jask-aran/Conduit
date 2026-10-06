@@ -1512,6 +1512,9 @@ export class PiManager extends EventEmitter {
 
   /** Publish without asking whose message it is; `publish` has already asked. */
   publishRaw(record, event) {
+    // Asked in Conduit's words: Pi's own events are translated first.
+    const owed = this.logFor(record)?.owedSettle(toNeutralPiEvent(event));
+    if (owed) this.publishRaw(record, owed);
     const stamped = this.stampForLog(record, event);
     this.publishInternal(record, stamped);
     this.deliver(record, stamped);
