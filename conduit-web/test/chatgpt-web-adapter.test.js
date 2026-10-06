@@ -128,16 +128,16 @@ test("ChatGPT Web changes model and effort on an existing chat", async () => {
   }
 });
 
-test("shutting down without a sidecar is quiet, not a crash", async () => {
+test("sidecar cleanup without a child is quiet, not a crash", async () => {
   // Shutdown runs mid-sequence in the server's SIGTERM path: a throw here took
   // the terminals, the voice model and the archive drain down with it.
   const adapter = new ChatGptWebAdapter({ dataDir: "." });
-  await adapter.shutdown();
+  await adapter.shutdownResources();
   const killed = [];
   adapter.child = { exitCode: null, kill: (signal) => killed.push(signal) };
-  await adapter.shutdown();
+  await adapter.shutdownResources();
   assert.deepEqual(killed, ["SIGTERM"]);
   adapter.child = { exitCode: 0, kill: () => killed.push("late") };
-  await adapter.shutdown();
+  await adapter.shutdownResources();
   assert.deepEqual(killed, ["SIGTERM"], "an exited sidecar is not signalled again");
 });
