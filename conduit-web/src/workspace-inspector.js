@@ -4,6 +4,7 @@ import { EventEmitter } from "node:events";
 import { Worker } from "node:worker_threads";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { terminate } from "./server/effect-process.js";
 
 export const MAX_PREVIEW_BYTES = 25 * 1024 * 1024;
 export const GIT_COMMAND_TIMEOUT_MS = 10_000;
@@ -221,17 +222,7 @@ function releaseGitSlot() {
 }
 
 function terminateProcess(child) {
-  if (!child.pid) return;
-  if (process.platform !== "win32") {
-    try { process.kill(-child.pid, "SIGTERM"); }
-    catch { child.kill("SIGTERM"); }
-    setTimeout(() => {
-      try { process.kill(-child.pid, "SIGKILL"); }
-      catch {}
-    }, 500).unref();
-    return;
-  }
-  child.kill("SIGTERM");
+  if (child.pid) void terminate(child, { graceMs: 500, group: true });
 }
 
 /** Run one Git command with a process cap, hard deadline, bounded output, and cancellation. */

@@ -170,7 +170,6 @@ if (startupViolation) {
 const chatLogs = new ChatLogs();
 const concurrency = new ServerConcurrency();
 const manager = new PiManager({
-  concurrency,
   serializeEvent: serializePiV0,
   logs: chatLogs,
   command: config.piCommand,

@@ -8,6 +8,7 @@ import { parseAttachmentEnvelope } from "./attachment-envelope.js";
 import { SessionRecords } from "./harnesses/session-records.js";
 import { messageClose, messageOpen, toolClose, toolKind, toolOpen, toolSubject, turnSettle } from "./harnesses/transcript-ops.js";
 import { unsupported } from "./harnesses/unsupported.js";
+import { terminate } from "./server/effect-process.js";
 
 const execFile = promisify(execFileCallback);
 
@@ -153,7 +154,7 @@ class AcpClient {
   }
 
   close() {
-    if (this.child.exitCode == null && this.child.signalCode == null) this.child.kill("SIGTERM");
+    return terminate(this.child);
   }
 }
 

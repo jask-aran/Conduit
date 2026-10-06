@@ -1,3 +1,4 @@
+import { EventEmitter } from "node:events";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { ChatGptWebAdapter, CHATGPT_WEB_CAPABILITIES } from "../src/chatgpt-web-adapter.js";
@@ -134,7 +135,10 @@ test("sidecar cleanup without a child is quiet, not a crash", async () => {
   const adapter = new ChatGptWebAdapter({ dataDir: "." });
   await adapter.shutdownResources();
   const killed = [];
-  adapter.child = { exitCode: null, kill: (signal) => killed.push(signal) };
+  // A child that exits when told to, as a real one does.
+  const child = Object.assign(new EventEmitter(), { exitCode: null, signalCode: null,
+    kill: (signal) => { killed.push(signal); child.signalCode = signal; child.emit("exit", null, signal); } });
+  adapter.child = child;
   await adapter.shutdownResources();
   assert.deepEqual(killed, ["SIGTERM"]);
   adapter.child = { exitCode: 0, kill: () => killed.push("late") };

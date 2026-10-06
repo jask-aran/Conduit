@@ -25,7 +25,7 @@ import { DELIVERY_FLUSH_MS, clampFrameMs, deliveryKey } from "./harnesses/socket
 import { emptyCacheStats, finishCacheStats, promptTokenParts } from "./cache-stats.js";
 import { piPlanUsage } from "./plan-usage.js";
 import { messageIsInterim } from "./active-generation.js";
-import { ServerConcurrency } from "./server/effect-concurrency.js";
+import { terminate } from "./server/effect-process.js";
 
 export function buildPiArgs({ sessionFile = null, model = "", thinkingLevel = "", models, template }) {
   const args = [
@@ -267,7 +267,6 @@ export class PiManager extends EventEmitter {
     // The chat-level event order. Shared with the rest of the server, so a
     // client is caught up from the same numbers whoever published them.
     logs = new ChatLogs(),
-    concurrency = new ServerConcurrency(),
   } = {}) {
     super();
     if (!agentDir) throw new Error("PiManager requires an isolated agent directory");
@@ -278,7 +277,6 @@ export class PiManager extends EventEmitter {
     this.commandCatalog = new PiCommandCatalog(agentDir);
     this.processes = new Map();
     this.logs = logs;
-    this.concurrency = concurrency;
     this.byChatId = new Map();
     this.bySessionFile = new Map();
     this.requestSequence = 0;
@@ -1875,7 +1873,7 @@ export class PiManager extends EventEmitter {
     // that window still advertised the process as running, so a client would
     // attach to a corpse, get no process out of it, and have to ask twice.
     this.emit("process_removed", { id: record.id, chatId: record.chatId });
-    record.child.kill("SIGTERM");
+    void terminate(record.child);
     return true;
   }
 
@@ -1884,18 +1882,7 @@ export class PiManager extends EventEmitter {
     if (!record || !["starting", "running"].includes(record.status)) return false;
     record.stopping = true;
     record.terminating = true;
-    const exited = new Promise((resolve) => record.child.once("exit", () => resolve(true)));
-    record.child.kill("SIGTERM");
-    try {
-      return await this.concurrency.waitFor(
-        () => exited,
-        3000,
-        () => new Error("Pi process did not stop after SIGTERM"),
-      );
-    } catch {
-      record.child.kill("SIGKILL");
-      return exited;
-    }
+    return terminate(record.child);
   }
 
   shutdownResources() {
