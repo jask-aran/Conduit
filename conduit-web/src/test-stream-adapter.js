@@ -167,9 +167,16 @@ export function toolRunsFromPrompt(message) {
   return /\btools?\b/i.test(String(message || "")) ? 1 : 0;
 }
 
-/** "think" opens the turn with a thinking block, so a trace has something to fold. */
-export const THINKING_TOKENS = 80;
-export const thinkingFromPrompt = (message) => /\bthink(ing)?\b/i.test(String(message || ""));
+/**
+ * "think" opens the turn with a thinking block, so a trace has something to
+ * fold; "think 900" sets its length. A number ending in t is the answer's.
+ */
+export const THINKING_TOKENS = 400;
+export function thinkingFromPrompt(message) {
+  const match = /\bthink(?:ing)?\b(?:\s+(\d+)(?!\d|\s*t\b))?/i.exec(String(message || ""));
+  if (!match) return 0;
+  return match[1] ? Math.min(MAX_TOKENS, Math.max(1, Number(match[1]))) : THINKING_TOKENS;
+}
 
 export const approvalFromPrompt = (message) => /\bapprove|approval\b/i.test(String(message || ""));
 
@@ -204,9 +211,9 @@ export function tokenAt(index) {
  * it up front is what makes a run repeatable: the same prompt produces the same
  * turn, down to which token the call lands on.
  */
-export function planTurn(tokens, toolRuns, thinking = false) {
+export function planTurn(tokens, toolRuns, thinking = 0) {
   const total = Math.max(1, tokens);
-  const steps = thinking ? [{ kind: "thinking", tokens: THINKING_TOKENS }] : [];
+  const steps = thinking ? [{ kind: "thinking", tokens: thinking }] : [];
   if (!toolRuns) return [...steps, { kind: "text", tokens: total }];
   const share = Math.max(1, Math.floor(total / (toolRuns + 1)));
   let left = total;
@@ -436,10 +443,11 @@ export class TestStreamAdapter extends EventEmitter {
     if (!turn) return;
     const finished = turn.steps[turn.step];
     turn.step += 1;
-    // A harness reads its queue between requests -- after a tool, or when the
-    // answer ends -- never between thinking and the answer it leads to.
-    if (finished?.kind !== "thinking" && this.takeQueued(record)) return;
     const next = turn.steps[turn.step];
+    // A harness reads its queue between requests: after a tool it joins the
+    // turn, and once the answer has ended it is the next turn (see finish).
+    // Never between thinking and the answer it leads to.
+    if (next && finished?.kind !== "thinking" && this.takeQueued(record)) return;
     if (!next) return this.finish(record, "stop");
     if (next.kind === "tool") return this.runTool(record, next);
     this.runStream(record);
@@ -558,6 +566,8 @@ export class TestStreamAdapter extends EventEmitter {
     const queued = record.queue.steering.shift();
     turn.userMessages = (turn.userMessages || 1) + 1;
     this.closeAnswer(record, "toolUse");
+    // Off the queue before it is in the transcript, so it is never in both.
+    this.publishQueue(record);
     this.publish(record, messageOpen({ id: queued.messageId, role: "user",
       generationId: turn.generationId, content: queued.message, timestamp: new Date().toISOString() }));
     // The prompt the turn moves on from is over now.
@@ -570,7 +580,6 @@ export class TestStreamAdapter extends EventEmitter {
     // budget so a message steered at the end still produces something.
     turn.steps = turn.steps.slice(0, turn.step).concat(planTurn(Math.max(40, Math.round(record.tokens / 4)), 0));
     turn.step = turn.steps.length - 1;
-    this.publishQueue(record);
     this.openAnswer(record);
     this.runStream(record);
     return true;
@@ -661,7 +670,8 @@ export class TestStreamAdapter extends EventEmitter {
     this.publishUsage(record);
     // A follow-up waited for exactly this moment. It is a prompt of its own,
     // which is the difference between the two queues.
-    const next = record.queue.followUp.shift();
+    // A steer still waiting when the answer ended is too, as Pi takes one.
+    const next = (stopReason !== "aborted" && record.queue.steering.shift()) || record.queue.followUp.shift();
     if (next) {
       this.publishQueue(record);
       void this.prompt(record.id, next.message, { clientUserMessageId: next.messageId });

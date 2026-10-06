@@ -529,11 +529,12 @@ shape the turn, and the same prompt always produces the same turn:
 | `1500t` | stream exactly 1500 tokens, whatever the level says |
 | `tool`, `3 tools` | text, a tool call, text, ... with that many calls |
 | `approve` | each tool asks for approval first |
-| `think` | open with an 80-token thinking block |
+| `think`, `think 900` | open with a thinking block, 400 tokens or the number given (a number ending in `t` is the answer's: `think 900 1500t`) |
 
-Sending while it answers steers. Like a real harness, the steered message is
-taken at the next step boundary -- after a tool or when the answer ends,
-never between thinking and its answer -- and what is left answers it.
+Sending while it answers steers, read where a real harness reads its queue:
+after a tool call the message joins the turn and what is left answers it;
+once the answer has ended it starts the next turn, the finished answer staying
+an answer. Never between thinking and its answer.
 Stopping keeps the partial answer.
 
 ## Deterministic harnesses
