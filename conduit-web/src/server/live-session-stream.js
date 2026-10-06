@@ -96,8 +96,27 @@ export function createLiveSessionStream({
   // A target the client names is a Conduit message id; the harness knows only
   // its own entry. Unknown ids pass straight through, so Pi's own history tree
   // and any client that predates this still work.
-  async function harnessEntryId(context, messageId) {
+  /**
+   * The harness's own name for a message, for a fork or regenerate to cut at.
+   *
+   * Pi names a prompt only by the session entry it writes, and says nothing
+   * when it does, so a Conduit id is bound to its entry when its turn
+   * checkpoints. Something asked of a message whose turn has not checkpointed
+   * yet -- a fork straight after a stop -- is bound here, by reading what Pi
+   * has written so far, rather than by reading after every stop in case.
+   */
+  async function harnessEntryId(context, messageId, record = null) {
     if (!context) return messageId;
+    const known = await messageIds.entryIdFor(context.project, context.chat, messageId);
+    if (known !== messageId || !record || !isConduitMessageId(messageId)) return known;
+    try {
+      const { messages } = await adapterFor(record).readTranscript({
+        liveSessionId: record.id, chatId: record.chatId, project: context.project, turns: 3,
+      });
+      await messageIds.bind(context.project, context.chat, messages || []);
+    } catch (error) {
+      console.warn("Could not bind a message to its entry", error.message);
+    }
     return messageIds.entryIdFor(context.project, context.chat, messageId);
   }
 
@@ -165,16 +184,11 @@ export function createLiveSessionStream({
         const projection = await adapter.readTranscript({
           liveSessionId: record.id, chatId: record.chatId, project: context.project, turns,
         });
-        if (!replace && !projection.messages?.length) return;
         projection.messages ||= [];
         projection.tools ||= [];
-        // Only a replacing sync reaches the browser. A window is read for the
-        // ids it lets this server bind, and for nothing else.
-        if (!replace) { await messageIds.bind(context.project, context.chat, projection.messages); return; }
-        // A window is often the first sight of entries Pi has only just
-        // written, so the ids claimed for them are bound here rather than left
-        // until the turn checkpoints. Without this the sync an interrupt
-        // publishes names the prompt `pi:<entryId>` while the client holds the
+        // A snapshot can be the first sight of entries Pi has only just
+        // written, so the ids claimed for them are bound before it is named;
+        // otherwise it names a prompt `pi:<entryId>` while the client holds the
         // id it was handed, and the same message arrives a second time.
         await messageIds.bind(context.project, context.chat, projection.messages);
         projection.messages = await attachments.decorateMessages(context.project, context.chat.id, projection.messages, { fromStart: !turns });
@@ -454,24 +468,13 @@ export function createLiveSessionStream({
       const cancelledGenerationId = command.generationId || record.activeGeneration?.id || null;
       await adapter.cancel(record.id, cancelledGenerationId);
       const interrupted = interruptedPromptInput(taken, command.message, command.attachmentIds);
-      if (!interrupted.message) {
-        await syncTranscript(record, 1, cancelledGenerationId);
-        return null;
-      }
-      // Before the replacement: the interrupted turn is already written by the
-      // time cancel resolves, so its prompt's id can be bound now.
-      await syncTranscript(record, 1, cancelledGenerationId);
+      if (!interrupted.message) return null;
       await applyComposerModel(record, command);
       const prepared = await promptForChat(record, {
         ...command,
         attachmentIds: interrupted.attachmentIds,
       }, interrupted.message);
-      const generationId = await sendPrompt(record, prepared, { messageId: offeredMessageId(command.messageId) });
-      // Pi can write the aborted tool result just after cancel resolves, and
-      // the steered message has no id until Pi writes it, so both turns are
-      // read again once the replacement is accepted to bind their ids.
-      await syncTranscript(record, 2, generationId);
-      return generationId;
+      return sendPrompt(record, prepared, { messageId: offeredMessageId(command.messageId) });
     }
     if (command.type === "stop_generation" || command.type === "abort") {
       const stoppedGenerationId = command.generationId || record.activeGeneration?.id || null;
@@ -484,14 +487,12 @@ export function createLiveSessionStream({
       if (capabilities.steer || capabilities.followUpQueue) {
         await clearQueuedMessages(record, adapter).catch((error) => console.warn("Could not clear the queue before stopping", error.message));
       }
-      const stopped = await adapter.cancel(record.id, stoppedGenerationId);
-      await syncTranscript(record, 1, stoppedGenerationId);
-      return stopped;
+      return adapter.cancel(record.id, stoppedGenerationId);
     }
     if (command.type === "fork_and_prompt") {
       if (!adapter.getCapabilities().fork) throw Object.assign(new Error("This agent does not support forks"), { code: "fork_unsupported", status: 409 });
       const context = await findChatContext(record.chatId);
-      const entryId = await harnessEntryId(context, command.entryId);
+      const entryId = await harnessEntryId(context, command.entryId, record);
       const sourceCheckpointId = context ? await turnCheckpoints?.checkpointForMessage(
         context.chat.id, context.project.workingRoot, entryId,
       ) : null;
@@ -505,7 +506,7 @@ export function createLiveSessionStream({
     if (command.type === "regenerate") {
       if (!adapter.getCapabilities().regenerate) throw Object.assign(new Error("This agent does not support regeneration"), { code: "regenerate_unsupported", status: 409 });
       const context = await findChatContext(record.chatId);
-      const entryId = await harnessEntryId(context, command.entryId);
+      const entryId = await harnessEntryId(context, command.entryId, record);
       const sourceCheckpointId = context ? await turnCheckpoints?.checkpointForMessage(
         context.chat.id, context.project.workingRoot, entryId,
       ) : null;

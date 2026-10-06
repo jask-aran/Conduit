@@ -74,7 +74,7 @@ Ordered by risk, smallest first. Each lists its regression gate.
    `replaceMessages` keeps only rows the client itself added and not yet stated.
    *Gate:* `transcript-sync`, `transcript-pipeline`.
 
-5. **Pi's id binding happens late.** `m_` ↔ `pi:<entryId>` is joined at
+5. **Done, differently:** Pi states no entry id on accepting a prompt, so ids still bind at checkpoint; the reads after every stop and interrupt are gone, and `harnessEntryId` binds on demand when a fork or regenerate names an unbound Conduit id. **Pi's id binding happens late.** `m_` ↔ `pi:<entryId>` is joined at
    checkpoint or sync time. Bind when Pi accepts the prompt where it says so,
    and keep the checkpoint join only as the fallback.
    *Gate:* `transcript-pipeline` queued and interrupt cases.
