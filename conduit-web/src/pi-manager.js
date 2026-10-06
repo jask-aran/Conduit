@@ -25,6 +25,7 @@ import { DELIVERY_FLUSH_MS, clampFrameMs, deliveryKey } from "./harnesses/socket
 import { emptyCacheStats, finishCacheStats, promptTokenParts } from "./cache-stats.js";
 import { piPlanUsage } from "./plan-usage.js";
 import { messageIsInterim } from "./active-generation.js";
+import { ServerConcurrency } from "./server/effect-concurrency.js";
 
 export function buildPiArgs({ sessionFile = null, model = "", thinkingLevel = "", models, template }) {
   const args = [
@@ -268,6 +269,7 @@ export class PiManager extends EventEmitter {
     // The chat-level event order. Shared with the rest of the server, so a
     // client is caught up from the same numbers whoever published them.
     logs = new ChatLogs(),
+    concurrency = new ServerConcurrency(),
   } = {}) {
     super();
     if (!agentDir) throw new Error("PiManager requires an isolated agent directory");
@@ -278,6 +280,7 @@ export class PiManager extends EventEmitter {
     this.commandCatalog = new PiCommandCatalog(agentDir);
     this.processes = new Map();
     this.logs = logs;
+    this.concurrency = concurrency;
     this.byChatId = new Map();
     this.bySessionFile = new Map();
     this.requestSequence = 0;
@@ -292,7 +295,6 @@ export class PiManager extends EventEmitter {
     this.socketRecoveryPollMs = Math.max(10, Math.trunc(Number(socketRecoveryPollMs) || 50));
     this.deliveryMaxNotifications = Math.max(1, Math.trunc(Number(deliveryMaxNotifications) || 32));
     this.deliveryMaxNotificationBytes = Math.max(1024, Math.trunc(Number(deliveryMaxNotificationBytes) || 64 * 1024));
-    this.capacityQueue = Promise.resolve();
     this.reaperTimer = null;
     if (reaperIntervalMs > 0) {
       this.reaperTimer = setInterval(() => {
@@ -304,13 +306,6 @@ export class PiManager extends EventEmitter {
 
   listAvailableCommands({ cwd, template = this.template }) {
     return this.commandCatalog.list({ cwd, template });
-  }
-
-  /** Serialize capacity checks and creates so concurrent requests cannot overshoot the cap. */
-  runExclusive(work) {
-    const run = this.capacityQueue.then(work, work);
-    this.capacityQueue = run.then(() => {}, () => {});
-    return run;
   }
 
   configure({ maxLiveProcesses, maxGeneratingProcesses, idleProcessTtlMs } = {}) {
@@ -421,10 +416,10 @@ export class PiManager extends EventEmitter {
   }
 
   async ensureCapacity({ excludeChatId = null } = {}) {
-    return this.runExclusive(() => this.ensureCapacityUnlocked({ excludeChatId }));
+    return this.concurrency.runCapacity(() => this.makeRoomForProcess({ excludeChatId }));
   }
 
-  async ensureCapacityUnlocked({ excludeChatId = null } = {}) {
+  async makeRoomForProcess({ excludeChatId = null } = {}) {
     while (this.liveRecords().filter((record) => record.chatId !== excludeChatId).length >= this.maxLiveProcesses) {
       const victim = this.reclaimCandidates({ excludeChatId })[0];
       if (!victim) {
@@ -439,8 +434,8 @@ export class PiManager extends EventEmitter {
 
   /** Capacity check + create under one lock so concurrent POSTs cannot exceed the cap. */
   async createWithCapacity(options = {}) {
-    return this.runExclusive(async () => {
-      await this.ensureCapacityUnlocked({ excludeChatId: options.chatId || null });
+    return this.concurrency.runCapacity(async () => {
+      await this.makeRoomForProcess({ excludeChatId: options.chatId || null });
       return this.create(options);
     });
   }
@@ -1971,15 +1966,18 @@ export class PiManager extends EventEmitter {
     if (!record || !["starting", "running"].includes(record.status)) return false;
     record.stopping = true;
     record.terminating = true;
-    return new Promise((resolve) => {
-      const timeout = setTimeout(() => record.child.kill("SIGKILL"), 3000);
-      timeout.unref();
-      record.child.once("exit", () => {
-        clearTimeout(timeout);
-        resolve(true);
-      });
-      record.child.kill("SIGTERM");
-    });
+    const exited = new Promise((resolve) => record.child.once("exit", () => resolve(true)));
+    record.child.kill("SIGTERM");
+    try {
+      return await this.concurrency.waitFor(
+        () => exited,
+        3000,
+        () => new Error("Pi process did not stop after SIGTERM"),
+      );
+    } catch {
+      record.child.kill("SIGKILL");
+      return exited;
+    }
   }
 
   async shutdown() {

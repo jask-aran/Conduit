@@ -76,6 +76,7 @@ import { MANIFESTS } from "./harnesses/index.js";
 import { detect } from "./harnesses/probe.js";
 import { TurnCheckpointStore } from "./turn-checkpoint-store.js";
 import { conduitPiSessionFile } from "./backend-session.js";
+import { ServerConcurrency } from "./server/effect-concurrency.js";
 
 const config = loadConfig();
 const turnCheckpoints = new TurnCheckpointStore(path.join(config.dataRoot, "turn-checkpoints"));
@@ -167,7 +168,9 @@ if (startupViolation) {
 // One order per chat, shared by everything that publishes into a chat: the
 // harness process, and the command handlers above it.
 const chatLogs = new ChatLogs();
+const concurrency = new ServerConcurrency();
 const manager = new PiManager({
+  concurrency,
   serializeEvent: serializePiV0,
   logs: chatLogs,
   command: config.piCommand,
@@ -250,7 +253,7 @@ const piAuth = new PiAuthBroker({
   onCredentialsChanged: recycleIdleIsolatedPiProcesses,
 });
 const modelCatalogs = new Map([[`isolated:${config.piTemplate.id}`, modelCatalog]]);
-const lifecycle = new ChatLifecycle();
+const lifecycle = new ChatLifecycle({ concurrency });
 const app = express();
 const dist = process.env.CONDUIT_CLIENT_DIST
   ? path.resolve(process.env.CONDUIT_CLIENT_DIST)
