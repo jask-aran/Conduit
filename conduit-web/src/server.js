@@ -815,6 +815,8 @@ const dictationStream = createDictationStream({
 });
 const liveSessionStream = createLiveSessionStream({
   backends,
+  concurrency,
+  maxGeneratingProcesses: () => runtimeSettings.get().maxGeneratingProcesses,
   wss,
   attachments,
   registry,
