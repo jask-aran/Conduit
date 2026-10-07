@@ -92,6 +92,15 @@ export default defineConfig(() => {
           skipWaiting: false,
           clientsClaim: true,
           globPatterns: ["**/*.{js,css,html,svg,png,ico,woff2}"],
+          // The file icons are 1,250 files of which a file list shows a few;
+          // precaching them made installing the worker 1,250 requests. They
+          // are kept as they are first drawn instead.
+          globIgnores: ["assets/file-icons/**"],
+          runtimeCaching: [{
+            urlPattern: ({ url }) => url.pathname.startsWith("/assets/file-icons/"),
+            handler: "CacheFirst",
+            options: { cacheName: "file-icons", expiration: { maxEntries: 400 } },
+          }],
           navigateFallback: "/index.html",
           navigateFallbackDenylist: [
             /^\/v0(?:\/|(?:\?.*)?$)/,
@@ -110,7 +119,18 @@ export default defineConfig(() => {
       ? { exclude: ["@jask-aran/solid-components"] }
       : undefined,
     define: { __CONDUIT_BUILD__: JSON.stringify(buildStamp()) },
-    build: { outDir: "dist", emptyOutDir: true },
+    build: {
+      outDir: "dist",
+      emptyOutDir: true,
+      rollupOptions: {
+        output: {
+          // The file icons in a folder of their own, so the worker can leave them out.
+          assetFileNames: (asset) => (asset.originalFileNames || []).some((name) => name.includes("material-icon-theme/icons/"))
+            ? "assets/file-icons/[name]-[hash][extname]"
+            : "assets/[name]-[hash][extname]",
+        },
+      },
+    },
     server: {
       fs: solidComponents
         ? { allow: [import.meta.dirname, solidComponents.root] }

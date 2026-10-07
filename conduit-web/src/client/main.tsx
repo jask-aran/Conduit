@@ -756,6 +756,11 @@ function App() {
   const [workspaceFocusRequest, setWorkspaceFocusRequest] = createSignal(0);
   const [mobileSidebarOpen, setMobileSidebarOpen] = createSignal(false);
   const initialRouteId = pathChatId();
+  // Asked for before anything else on the way in: every route waits on it,
+  // and behind the browser's six connections to a server it queued for a
+  // whole round trip behind reads nothing waits on. A route cannot finish
+  // loading if it fails during a long outage, so it keeps retrying.
+  const catalogueRequest = apiWhenServed<{ projects: Project[] }>("/v0/projects", true);
   const initialProjectRouteId = pathProjectId();
   const initialTerminalRoute = location.pathname === "/terminal";
   const initialComputerRoute = location.pathname === "/computer" || location.pathname.startsWith("/computer/harness/");
@@ -5019,8 +5024,6 @@ function App() {
       .finally(() => setInstallationsLoading(false));
 
     const routeId = initialRouteId;
-    // A route cannot finish loading if these reads fail during a long outage.
-    const catalogueRequest = apiWhenServed<{ projects: Project[] }>("/v0/projects", true);
     const selectedChatRequest = routeId ? Promise.all([
       apiWhenServed<ChatSummary>(`/v0/chats/${encodeURIComponent(routeId)}`, true),
       apiWhenServed<TranscriptDetail>(`/v0/sessions/${encodeURIComponent(routeId)}`, true),

@@ -30,7 +30,8 @@ const UNAUTHENTICATED_PWA_PATTERNS = [
   // with 401 renders as unstyled HTML rather than as a sign-in screen. The
   // bundles are content-hashed build output and carry nobody's data; what
   // needs a session is the API they call, which still has one.
-  /^\/assets\/[^/]+$/,
+  // The file icons are kept in a folder of their own (vite.config.js).
+  /^\/assets\/(?:file-icons\/)?[^/]+$/,
 ];
 
 function isLoopback(host) {
