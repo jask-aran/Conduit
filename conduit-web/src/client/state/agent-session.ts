@@ -6,6 +6,9 @@ import type { RuntimeStore } from "./runtime";
 import { frameIntervalMs } from "../frame-interval";
 import { onPathChange } from "../platform/servers";
 
+
+/** Time away after which a socket is replaced on return rather than trusted. */
+export const RESUME_RECONNECT_AFTER_MS = 5_000;
 /** What a caller can say about the agent it needs. */
 export interface AgentRequest {
   /** Why: the server decides from this whether a process may be started. */
@@ -317,24 +320,39 @@ export function createAgentSession(deps: {
     socket = null;
   };
 
-  const resume = () => {
-    if (document.visibilityState === "hidden") return;
-    if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) return;
+  /*
+   * Coming back to the page. A socket the OS cut while the app was in the
+   * background still says OPEN -- nothing tells it otherwise until TCP gives
+   * up, minutes later -- so after any real time away it is replaced at once
+   * rather than trusted. Replacing one that was fine costs a handshake; the
+   * log resumes from where this client got to either way.
+   */
+  let hiddenAt = 0;
+  const resume = (force = false) => {
+    if (document.visibilityState === "hidden") { hiddenAt ||= Date.now(); return; }
+    const away = hiddenAt ? Date.now() - hiddenAt : 0;
+    hiddenAt = 0;
+    const live = socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING);
+    if (live && !force && away < RESUME_RECONNECT_AFTER_MS) return;
     const chatId = deps.chatId();
     if (pendingRecord && chatId && pendingRecord.chatId === chatId) {
+      reconnectAttempts = 0;
       void connect(pendingRecord, chatId, epoch).catch(deps.onError);
     }
   };
-  const restore = (event: PageTransitionEvent) => { if (event.persisted) resume(); };
-  document.addEventListener("visibilitychange", resume);
+  const onVisibility = () => resume();
+  const restore = (event: PageTransitionEvent) => { if (event.persisted) resume(true); };
+  // The network came back: whatever the socket says, it predates that.
+  const online = () => resume(true);
+  document.addEventListener("visibilitychange", onVisibility);
   window.addEventListener("pageshow", restore);
-  window.addEventListener("online", resume);
+  window.addEventListener("online", online);
 
   const dispose = () => {
     reset();
-    document.removeEventListener("visibilitychange", resume);
+    document.removeEventListener("visibilitychange", onVisibility);
     window.removeEventListener("pageshow", restore);
-    window.removeEventListener("online", restore as unknown as EventListener);
+    window.removeEventListener("online", online);
   };
 
   return { ensure, require, send, sendWhenReady, isOpen, launching, detach, reset, dispose, cancelReconnect };

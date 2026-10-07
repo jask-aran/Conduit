@@ -6,6 +6,7 @@ import { eventSourceUrl } from "../api/transport";
 import { authorizedFetch } from "../api/native-auth-client";
 import { browserRegistrationId, finishPwaRestart, preparePwaRestart } from "../pwa-update";
 import { api } from "../api/client";
+import { RESUME_RECONNECT_AFTER_MS } from "./agent-session";
 import { buildLabel, clientBuild } from "../platform/build-info";
 
 /** This client's runtime stream, as the server lists it in /v0/runtime/clients. */
@@ -126,11 +127,13 @@ export function createRuntimeStore() {
         void finishPwaRestart();
       }
       attempts += 1;
-      const offline = attempts >= 5;
+      // A blip is the usual cause, so the first retries come quickly:
+      // 250ms, doubling to 8s, and offline after about fifteen seconds.
+      const offline = attempts >= 8;
       setConnectivity(offline ? "offline" : "reconnecting");
       setStale(true);
       if (reconnectTimer) clearTimeout(reconnectTimer);
-      reconnectTimer = setTimeout(connect, offline ? 10_000 : Math.min(1000 * 2 ** Math.min(attempts, 4), 8000));
+      reconnectTimer = setTimeout(connect, offline ? 10_000 : Math.min(250 * 2 ** (attempts - 1), 8000));
     };
     if (isInstalledClient()) {
       const controller = new AbortController();
@@ -174,30 +177,39 @@ export function createRuntimeStore() {
    */
   onPathChange(() => connect());
 
-  const resume = () => {
-    if (document.visibilityState === "hidden") return;
-    // Waking up is exactly when a stream is most likely to be dead without
-    // having said so, so a quiet one is replaced rather than trusted.
-    if (!source || Date.now() - lastFrameAt >= SILENCE_MS) connect();
+  // Waking up is exactly when a stream is most likely to be dead without
+  // having said so: after any real time away it is replaced rather than
+  // trusted, which used to take the 45s of silence above to notice.
+  let hiddenAt = 0;
+  const resume = (force = false) => {
+    if (document.visibilityState === "hidden") { hiddenAt ||= Date.now(); return; }
+    const away = hiddenAt ? Date.now() - hiddenAt : 0;
+    hiddenAt = 0;
+    if (force || !source || away >= RESUME_RECONNECT_AFTER_MS || Date.now() - lastFrameAt >= SILENCE_MS) {
+      attempts = 0;
+      connect();
+    }
   };
+  const onVisibility = () => resume();
   const restore = (event: PageTransitionEvent) => {
-    if (event.persisted) resume();
+    if (event.persisted) resume(true);
   };
+  const online = () => resume(true);
 
   onMount(() => {
     connect();
-    document.addEventListener("visibilitychange", resume);
+    document.addEventListener("visibilitychange", onVisibility);
     window.addEventListener("pageshow", restore);
-    window.addEventListener("online", resume);
+    window.addEventListener("online", online);
   });
   onCleanup(() => {
     if (reconnectTimer) clearTimeout(reconnectTimer);
     if (watchdog) clearInterval(watchdog);
     watchdog = undefined;
     source?.close();
-    document.removeEventListener("visibilitychange", resume);
+    document.removeEventListener("visibilitychange", onVisibility);
     window.removeEventListener("pageshow", restore);
-    window.removeEventListener("online", resume);
+    window.removeEventListener("online", online);
   });
 
   return {

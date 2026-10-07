@@ -70,6 +70,7 @@ import type { ActiveChatStore } from "./state/active-chat";
 import { createChatSession, type ChatSession } from "./state/chat-session";
 import { DEFAULT_MAX_ATTACHMENT_BYTES, filesFromDataTransfer } from "./state/attachments";
 import { createDrafts } from "./state/drafts";
+import { clearCachedCatalogue, readCachedCatalogue, writeCachedCatalogue } from "./state/catalogue-cache";
 import { createCatalogueStore } from "./state/catalogue";
 import { markChatRead } from "./state/read-receipts";
 import { createSideChat, type SideChat } from "./state/side-chat";
@@ -628,6 +629,7 @@ type PaneSlot = { index: number; session: SideChat; host: () => HTMLElement | un
 
 function App() {
   const logout = async () => {
+    clearCachedCatalogue();
     if (nativeApp) {
       try { await authorizedFetch(logoutUrl(), { method: "POST" }); } catch {}
       await clearNativeBearerToken();
@@ -760,7 +762,14 @@ function App() {
   // and behind the browser's six connections to a server it queued for a
   // whole round trip behind reads nothing waits on. A route cannot finish
   // loading if it fails during a long outage, so it keeps retrying.
-  const catalogueRequest = apiWhenServed<{ projects: Project[] }>("/v0/projects", true);
+  const catalogueFresh = apiWhenServed<{ projects: Project[] }>("/v0/projects", true)
+    .then((payload) => { writeCachedCatalogue(payload); return payload; });
+  // The dashboard is drawn from the last catalogue this device saw, if it has
+  // one, and corrected when the server answers: a cold open no longer waits
+  // a round trip (or a fresh TLS handshake) to show what it showed last time.
+  // Other routes name something the cache may not have, so they wait.
+  const cachedCatalogue = location.pathname === "/" ? readCachedCatalogue() : null;
+  const catalogueRequest = cachedCatalogue ? Promise.resolve(cachedCatalogue) : catalogueFresh;
   const initialProjectRouteId = pathProjectId();
   const initialTerminalRoute = location.pathname === "/terminal";
   const initialComputerRoute = location.pathname === "/computer" || location.pathname.startsWith("/computer/harness/");
@@ -784,6 +793,13 @@ function App() {
   // project or Computer route draws its own dashboard. Their chunks are asked
   // for now, beside the route's data, rather than once the route is ready. A
   // route that never settles is shown anyway after a moment.
+  // Whether the first open has been shown. Decoration waits for it: the
+  // meteor field cost a phone a tenth of a second of the open it decorates.
+  const [arrived, setArrived] = createSignal(false);
+  // A phone's sidebar is off-screen at the first open, and its rows -- each
+  // with its own menu -- were a large part of what that open built. They are
+  // filled in once it has been shown, or at once if the sidebar is opened.
+  const sidebarFilled = () => arrived() || !isMobileLayout() || mobileSidebarOpen();
   {
     const layoutReady = Promise.all([
       readSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "open") === "true" && !isMobileLayout() ? WorkspacePanel.preload() : null,
@@ -796,7 +812,7 @@ function App() {
       if (root.dataset.arrival !== "waiting") return;
       root.dataset.arrival = "arriving";
       settleFocus();
-      settle = setTimeout(() => { delete root.dataset.arrival; dismissLaunchMark(); }, 400);
+      settle = setTimeout(() => { delete root.dataset.arrival; dismissLaunchMark(); setArrived(true); }, 400);
     };
     root.dataset.arrival = "waiting";
     const fallback = setTimeout(arrive, 2500);
@@ -818,9 +834,15 @@ function App() {
       requestAnimationFrame(check);
     });
     createEffect(() => {
-      if (routeBootstrap() !== "loading" && panesLoaded()) void layoutReady.then(waitForStill).then(arrive);
+      // Only a transcript renders in passes. A dashboard or project page is
+      // laid out in one, and three still frames on a phone still busy with
+      // the rest of the open were close to half a second of nothing.
+      const settled = () => ["dashboard", "project"].includes(routeKind()) && shownSlots().length <= 1
+        ? new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+        : waitForStill();
+      if (routeBootstrap() !== "loading" && panesLoaded()) void layoutReady.then(settled).then(arrive);
     });
-    onCleanup(() => { clearTimeout(fallback); clearTimeout(settle); delete root.dataset.arrival; dismissLaunchMark(); });
+    onCleanup(() => { clearTimeout(fallback); clearTimeout(settle); delete root.dataset.arrival; dismissLaunchMark(); setArrived(true); });
   }
   let dragDepth = 0;
   let workspaceSuggestionsRequest: Promise<void> | null = null;
@@ -5036,6 +5058,13 @@ function App() {
       const projects = asList<Project>(cataloguePayload.projects).map((project) => ({ ...project, sessions: asList<ChatSummary>(project.sessions) }));
       migrateWorkspacePanelStorage(workspacePanelScopes(projects));
       catalogue.setProjects(projects);
+      // Usually the server says what the cache did; then there is nothing to
+      // redraw, and replacing every row with an equal one was a phone's
+      // tenth of a second.
+      if (cachedCatalogue) void catalogueFresh.then((fresh) => {
+        if (JSON.stringify(fresh) === JSON.stringify(cachedCatalogue)) return;
+        catalogue.setProjects(asList<Project>(fresh.projects).map((project) => ({ ...project, sessions: asList<ChatSummary>(project.sessions) })));
+      }).catch(() => {});
       if (selectedChat) {
         const [target, detail] = selectedChat;
         const project = projects.find((item) => item.id === target.projectId) || projects[0];
@@ -5228,7 +5257,7 @@ function App() {
         <Show when={workspaceIdentityProject()}>{(project) => <WorkspaceAppearanceEditor compact value={project().workspaceAppearance} saving={workspaceIdentitySaving()} onSave={(appearance) => void saveWorkspaceIdentity(appearance)} />}</Show>
     </FrostDialog>
     <Show when={routeKind() !== "terminal"}>
-    <Sidebar projects={catalogue.projects()} catalogueLoaded={catalogue.loaded()} projectId={catalogue.projectId()} selectedId={catalogue.selectedId()} focusedId={keyboardSlot() !== null ? slotChatId(keyboardSlot()!) : null} openIds={openChatIds()} onOpenChatBeside={isMobileLayout() ? undefined : openChatBeside} navigatingId={chat.navigatingId()} dashboard={routeKind() === "dashboard" && !paneAOverride()} project={routeKind() === "project"} computer={routeKind() === "computer" && !paneAOverride()} routeCovered={paneAOverride() !== null} terminal={false} runtime={runtime} chatLimit={sidebarChatLimit()}
+    <Sidebar projects={sidebarFilled() ? catalogue.projects() : []} catalogueLoaded={sidebarFilled() && catalogue.loaded()} projectId={catalogue.projectId()} selectedId={catalogue.selectedId()} focusedId={keyboardSlot() !== null ? slotChatId(keyboardSlot()!) : null} openIds={openChatIds()} onOpenChatBeside={isMobileLayout() ? undefined : openChatBeside} navigatingId={chat.navigatingId()} dashboard={routeKind() === "dashboard" && !paneAOverride()} project={routeKind() === "project"} computer={routeKind() === "computer" && !paneAOverride()} routeCovered={paneAOverride() !== null} terminal={false} runtime={runtime} chatLimit={sidebarChatLimit()}
       connectivity={runtime.connectivity()} workspaceSuggestions={workspaceSuggestions()} workspacePolicy={workspacePolicy()} command={sidebarCommand()}
       sidebarPins={sidebarPins()} onTogglePin={toggleSidebarPin}
       mobileOpen={mobileSidebarOpen()} onMobileOpenChange={setMobileSidebar}
@@ -5283,7 +5312,7 @@ function App() {
       <Show when={!paneAOverride() && routeBootstrap() === "ready"} fallback={paneAOverride() ? null : <div class="chat-bootstrap" role={routeBootstrap() === "error" ? "alert" : "status"}>{routeBootstrap() === "error"
         ? routeBootstrapError() || (routeKind() === "project" ? "This project could not be loaded." : "This chat could not be loaded.")
         : routeKind() === "project" ? "Loading project…" : routeKind() === "dashboard" ? "Loading Conduit…" : "Loading chat…"}</div>}>
-        <Show when={["chat", "dashboard", "project"].includes(routeKind()) && meteorField()}>
+        <Show when={["chat", "dashboard", "project"].includes(routeKind()) && meteorField() && arrived()}>
           <div class="chat-meteors" aria-hidden="true">
             <DefaultMeteorShower />
           </div>
