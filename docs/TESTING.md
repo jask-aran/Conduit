@@ -141,7 +141,8 @@ only place display scaling and frame cost are real.
 | `settle-stability.mjs` | Does a turn hold still as it settles, stops (also from an approval) or takes a steered message? A turn a harness ends without stating its outcome is stated by the server and logged in its journal as `transcript contract: ...`. Asserted, `ok`/`FAIL` per scenario, no model call (Test profile below). Gate for transcript live/settle changes. |
 | `stream-budget.mjs` | While an answer streams: tasks over 6.94ms, what ran inside them, and how evenly the text appeared. It makes a live model call. |
 | `load-waterfall.mjs` | How long the first open takes to its arrival fade, and what it waits on: every request's start and end and the long tasks, in a phone-sized page. `--rtt <ms>` (default 80), `--cpu 4` for a phone's CPU, `--runs <n>`. |
-| `load-profile.mjs` | What the first open spends its main thread on, as self and inclusive time per function. Names come from source after `npx vite build --sourcemap`; rebuild without it afterwards. |
+| `load-profile.mjs` | What the first open spends its main thread on, as self and inclusive time per function. Names come from source after `npx vite build --sourcemap`; rebuild without it afterwards. `--cpu 4` for a phone; `--slices` shows what ran in each 50ms. |
+| `resume-reconnect.mjs` | How long a page takes to be live again after time in the background: fakes `--away <ms>` hidden on the latest chat, then times each socket and stream from the return to its first frame. |
 
 A probe killed mid-run leaves its page open in Windows Chrome. Close it before
 the next run, or the next page load can hang.
