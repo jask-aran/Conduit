@@ -110,6 +110,7 @@ service_kind() {
 write_service() {
   local node; node="$(node_bin)"
   [[ -x "$node" ]] || fail "No Node to run $(code_label) with."
+  local PATH="$(dirname "$node"):$PATH"
   local extra=""; [[ -f "$STATE_DIR/dev.env" ]] && extra="EnvironmentFile=-$STATE_DIR/dev.env"
   case "$(service_kind)" in
     systemd)
@@ -202,7 +203,8 @@ start() {
       pid_alive && kill "$(cat "$PID_FILE")" 2>/dev/null && sleep 1
       cd "$HOME"
       [[ -f "$STATE_DIR/dev.env" ]] && { set -a; . "$STATE_DIR/dev.env"; set +a; }
-      nohup setsid "$(node_bin)" "$CURRENT/conduit-web/src/server.js" >>"$LOG_FILE" 2>&1 </dev/null &
+      local node; node="$(node_bin)"
+      PATH="$(dirname "$node"):$PATH" nohup setsid "$node" "$CURRENT/conduit-web/src/server.js" >>"$LOG_FILE" 2>&1 </dev/null &
       echo $! >"$PID_FILE"; disown ;;
   esac
   wait_healthy || fail "Did not come up. See: $NAME logs"
@@ -904,11 +906,15 @@ rollback() {
 doctor_checks() {
   local node; node="$(node_bin)"
   [[ -x "$node" ]] && echo "ok|Node $("$node" --version)||" || echo "warn|No Node for $(code_label)||"
+  command -v "$NAME" >/dev/null 2>&1 || echo "warn|CLI is not on shell PATH|Use $HOME/.local/bin/$NAME or run the installer|"
   [[ -x "$CURRENT/working-files/.venv/bin/python" ]] && echo "ok|Python tools||" || echo "warn|Python tools missing||python"
   [[ -f "$CONDUIT_DATA_ROOT/auth.json" ]] && echo "ok|Login password||" || echo "warn|No login password|$NAME password|"
   if [[ "$(service_kind)" == systemd ]]; then
     [[ "$(loginctl show-user "$USER" -p Linger --value 2>/dev/null)" == yes ]] && echo "ok|Runs after you log out||" || echo "warn|Stops when you log out|lingering is off|linger"
     if [[ -f "$UNIT_FILE" ]] && ! grep -qF "ExecStart=$node $CURRENT/" "$UNIT_FILE"; then echo "warn|Service file is out of date||service"; fi
+    if [[ -x "$node" && -f "$UNIT_FILE" ]] && ! grep -qF "Environment=PATH=$(dirname "$node"):" "$UNIT_FILE"; then
+      echo "warn|Service PATH does not include the selected Node first||service"
+    fi
   fi
   local newer; newer="$(update_available)"; [[ -n "$newer" ]] && echo "warn|$newer available|$NAME update|"
   local agent auth_file

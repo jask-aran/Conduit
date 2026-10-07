@@ -5,7 +5,8 @@
 #
 # Downloads the latest release for this platform and the Node it runs on into
 # ~/.local/share/conduit, puts `conduit-server` on PATH, and runs its setup.
-# Nothing needs root. Re-running it updates; ~/.conduit is never touched.
+# Nothing needs root. Re-running it offers update, repair, or management.
+# Updates preserve ~/.conduit, including chats, credentials and configuration.
 #
 #   --version v0.7.7   install that release
 #   --sandbox          a separate throwaway daemon (~/.conduit-sandbox, port 4321)
@@ -104,6 +105,62 @@ choose() { # choose "Question" "one" "two" -> REPLY (1-based); digits then enter
   [[ "$REPLY" =~ ^[0-9]+$ && "$REPLY" -ge 1 && "$REPLY" -le $# ]] || REPLY=1
 }
 
+install_shell_path() {
+  local shell_name="${SHELL:-}" rc line
+  shell_name="${shell_name##*/}"
+  local -a files
+  case "$shell_name" in
+    zsh) files=("${ZDOTDIR:-$HOME}/.zshrc" "${ZDOTDIR:-$HOME}/.zprofile") ;;
+    bash)
+      files=("$HOME/.bashrc")
+      if [[ -f "$HOME/.bash_profile" ]]; then files+=("$HOME/.bash_profile")
+      elif [[ -f "$HOME/.bash_login" ]]; then files+=("$HOME/.bash_login")
+      else files+=("$HOME/.profile"); fi ;;
+    *) printf '%s%s  Add %s to your shell PATH. Use %s/%s until then.\n' "$D" "$BAR" "$BIN_DIR" "$BIN_DIR" "$NAME"; return ;;
+  esac
+  printf -v line 'export PATH=%q:"$PATH" # Conduit CLI' "$BIN_DIR"
+  for rc in "${files[@]}"; do
+    if ! grep -qxF "$line" "$rc" 2>/dev/null; then
+      printf '\n%s\n' "$line" >>"$rc"
+    fi
+  done
+  export PATH="$BIN_DIR:$PATH"
+  [[ "$(command -v "$NAME")" == "$BIN_DIR/$NAME" ]] || fail "CLI is not available at $BIN_DIR/$NAME."
+  printf '%s%s%s  CLI PATH configured for %s. Open a new shell to use %s.\n' "$G" "$DONE" "$N" "$shell_name" "$NAME"
+}
+
+existing_install() {
+  [[ -x "$APP_HOME/current/scripts/conduit-server" ]] || return 0
+  (( ! UPDATE && SETUP )) || return 0
+  if { : </dev/tty; } 2>/dev/null; then
+    choose "Conduit is already installed" \
+      "Update or reinstall program files; keep chats, logins and settings" \
+      "Repair CLI and service PATH without downloading a release" \
+      "Show existing management commands"
+    case "$REPLY" in
+      2)
+        env CONDUIT_PROFILE="$PROFILE" "$APP_HOME/current/scripts/conduit-server" _link
+        install_shell_path
+        local node
+        node="$(cat "$APP_HOME/current/NODE_BIN" 2>/dev/null || true)"
+        if [[ ! -x "$node" && -f "$APP_HOME/current/NODE_VERSION" ]]; then
+          node="$APP_HOME/node/$(cat "$APP_HOME/current/NODE_VERSION")/bin/node"
+        fi
+        [[ ! -x "$node" ]] || export PATH="$(dirname "$node"):$PATH"
+        env CONDUIT_PROFILE="$PROFILE" "$BIN_DIR/$NAME" restart
+        env CONDUIT_PROFILE="$PROFILE" "$BIN_DIR/$NAME" doctor
+        exit 0 ;;
+      3)
+        env CONDUIT_PROFILE="$PROFILE" "$APP_HOME/current/scripts/conduit-server" _link
+        install_shell_path
+        exec env CONDUIT_PROFILE="$PROFILE" "$BIN_DIR/$NAME" help ;;
+    esac
+  else
+    printf '%s%s  Existing installation: update in place; keep chats, logins and settings.\n' "$D" "$BAR"
+  fi
+  UPDATE=1; SETUP=0
+}
+
 for tool in curl tar; do command -v "$tool" >/dev/null 2>&1 || fail "$tool is required."; done
 case "$(uname -s)" in
   Linux) os=linux ;;
@@ -114,6 +171,7 @@ case "$(uname -m)" in
   *) fail "Conduit server releases support x64 only; no build for $(uname -m)." ;;
 esac
 platform="$os-$arch"
+existing_install
 
 if (( ! UPDATE )); then
   printf '\n%s%s%s  %s conduit-server %s  %sinstall%s%s\n' "$D" "$START" "$N" "$BADGE" "$N" "$B" "$N" "${PROFILE:+  ${D}$PROFILE${N}}"
@@ -256,6 +314,9 @@ if (( thin )); then
   fi
 fi
 
+env CONDUIT_PROFILE="$PROFILE" "$APP_HOME/current/scripts/conduit-server" _link
+install_shell_path
+
 # Beside a development clone: the daemon keeps serving the clone unless asked
 # to switch; `conduit-server use release|dev` moves between them later.
 if [[ ! -f "$APP_HOME/current/NODE_VERSION" ]]; then
@@ -271,11 +332,6 @@ if [[ ! -f "$APP_HOME/current/NODE_VERSION" ]]; then
   bar; printf '%s%s%s  Still serving %s. Switch any time: %s%s use release%s · %suse dev %s%s\n\n' "$D" "$END" "$N" "${clone/#$HOME/~}" "$C" "$NAME" "$N" "$C" "${clone/#$HOME/~}" "$N"
   exit 0
 fi
-case ":$PATH:" in
-  *":$BIN_DIR:"*) ;;
-  *) printf '%s%s  add %s to PATH:%s export PATH="%s:$PATH"\n' "$D" "$BAR" "${BIN_DIR/#$HOME/~}" "$N" "$BIN_DIR" ;;
-esac
-
 if (( UPDATE )); then
   step "Python tools" env CONDUIT_PROFILE="$PROFILE" "$BIN_DIR/$NAME" _sync-python
   exec env CONDUIT_PROFILE="$PROFILE" "$BIN_DIR/$NAME" restart
