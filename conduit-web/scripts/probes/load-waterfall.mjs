@@ -2,16 +2,19 @@
  * How long the first open takes, and what it waits on: a cold load of `/` in
  * a phone-sized page with a round trip added, timed to the arrival fade, with
  * every request's start and end. `--rtt <ms>` (default 80), `--path <route>`,
- * `--runs <n>` (default 3; the median is reported).
+ * `--runs <n>` (default 3; the median is reported), `--cpu <rate>` to slow
+ * the CPU as a phone would (4 is a mid-range phone).
  */
 import { arg, open, origin } from "./lib.mjs";
 
 const rtt = Number(arg("--rtt", "80"));
 const route = arg("--path", "/");
 const runs = Number(arg("--runs", "3"));
+const cpu = Number(arg("--cpu", "1"));
 const { page, cdp, close } = await open({ width: 390, height: 844 });
 await cdp.send("Network.enable");
 await cdp.send("Network.emulateNetworkConditions", { offline: false, latency: rtt, downloadThroughput: -1, uploadThroughput: -1 });
+if (cpu > 1) await cdp.send("Emulation.setCPUThrottlingRate", { rate: cpu });
 await cdp.send("Network.setCacheDisabled", { cacheDisabled: false });
 await page.addInitScript(() => {
   const marks = {}; window.__load = marks; window.__long = [];
@@ -42,7 +45,7 @@ for (let run = 0; run < runs; run += 1) {
 }
 results.sort((a, b) => (a.arriving ?? 1e9) - (b.arriving ?? 1e9));
 const median = results[Math.floor(results.length / 2)];
-console.log(`rtt ${rtt}ms  arriving: ${results.map((r) => r.arriving).join(", ")}  (median run below)`);
+console.log(`rtt ${rtt}ms cpu ${cpu}x  arriving: ${results.map((r) => r.arriving).join(", ")}  (median run below)`);
 console.log(`long tasks ${median.long.map(([t, d]) => `${t}+${d}`).join(" ")}`);
 console.log(`dcl ${median.dcl}  load ${median.load}  waiting ${median.waiting}  arriving ${median.arriving}`);
 for (const [start, end, name] of median.requests) if (start < (median.arriving ?? 1e9) + 200) console.log(`${String(start).padStart(5)} ${String(end).padStart(5)}  ${name}`);

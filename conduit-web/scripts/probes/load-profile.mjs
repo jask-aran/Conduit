@@ -3,7 +3,18 @@
  * reload of `/` in a phone-sized page, to the arrival fade, as total time per
  * function (self and inclusive). `--top <n>` (default 30).
  */
+import fs from "node:fs";
+import path from "node:path";
+import { SourceMapConsumer } from "source-map-js";
 import { arg, open, origin } from "./lib.mjs";
+
+// With a build made by \`vite build --sourcemap\`, frames are named from source.
+const maps = new Map();
+const consumer = (url) => {
+  const file = path.join("dist/assets", url.split("/").pop() + ".map");
+  if (!maps.has(file)) maps.set(file, fs.existsSync(file) ? new SourceMapConsumer(JSON.parse(fs.readFileSync(file, "utf8"))) : null);
+  return maps.get(file);
+};
 
 const top = Number(arg("--top", "30"));
 const { page, cdp, close } = await open({ width: 390, height: 844 });
@@ -19,7 +30,12 @@ const byId = new Map(profile.nodes.map((node) => [node.id, node]));
 const parent = new Map();
 for (const node of profile.nodes) for (const child of node.children || []) parent.set(child, node.id);
 const self = new Map(); const total = new Map();
-const label = (node) => `${node.callFrame.functionName || "(anon)"} ${node.callFrame.url.split("/").pop()}:${node.callFrame.lineNumber + 1}`;
+const label = (node) => {
+  const { functionName, url, lineNumber, columnNumber } = node.callFrame;
+  const original = url && lineNumber >= 0 && consumer(url)?.originalPositionFor({ line: lineNumber + 1, column: columnNumber });
+  if (original?.source) return `${original.name || functionName || "(anon)"} ${original.source.replace(/^(\.\.\/)+/, "")}:${original.line}`;
+  return `${functionName || "(anon)"} ${url.split("/").pop()}:${lineNumber + 1}`;
+};
 for (let i = 0; i < profile.samples.length; i += 1) {
   const dt = (profile.timeDeltas[i + 1] ?? 0) / 1000;
   let node = byId.get(profile.samples[i]);
