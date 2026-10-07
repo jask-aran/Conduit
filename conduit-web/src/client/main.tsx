@@ -17,7 +17,7 @@ import "solid-sonner/styles.css";
 import { DefaultMeteorShower } from "@jask-aran/solid-components/meteor-shower";
 import "@jask-aran/solid-components/meteor-shower.css";
 import { phoneLayerOpen } from "@/components/phone-overlays";
-import { Button, Menu, MenuContent, MenuGroup, MenuItem, MenuLabel, MenuSeparator, MenuTrigger, Spinner } from "@/components/primitives";
+import { attachRowMenus, Button, Menu, MenuContent, MenuGroup, MenuItem, MenuLabel, MenuSeparator, MenuTrigger, Spinner } from "@/components/primitives";
 import { ContextBar, ContextBreakdown } from "./chat/context-gauge";
 import { contextUsagePercent } from "./chat/context-metrics";
 import { api, apiWhenServed, asList, pathChatId, pathProjectId, projectMatchesPath, projectPath } from "./api/client";
@@ -812,7 +812,7 @@ function App() {
       if (root.dataset.arrival !== "waiting") return;
       root.dataset.arrival = "arriving";
       settleFocus();
-      settle = setTimeout(() => { delete root.dataset.arrival; dismissLaunchMark(); setArrived(true); }, 400);
+      settle = setTimeout(() => { delete root.dataset.arrival; dismissLaunchMark(); setArrived(true); attachRowMenus(); }, 400);
     };
     root.dataset.arrival = "waiting";
     const fallback = setTimeout(arrive, 2500);
@@ -842,7 +842,7 @@ function App() {
         : waitForStill();
       if (routeBootstrap() !== "loading" && panesLoaded()) void layoutReady.then(settled).then(arrive);
     });
-    onCleanup(() => { clearTimeout(fallback); clearTimeout(settle); delete root.dataset.arrival; dismissLaunchMark(); setArrived(true); });
+    onCleanup(() => { clearTimeout(fallback); clearTimeout(settle); delete root.dataset.arrival; dismissLaunchMark(); setArrived(true); attachRowMenus(); });
   }
   let dragDepth = 0;
   let workspaceSuggestionsRequest: Promise<void> | null = null;

@@ -1,7 +1,8 @@
 import "./phone-overlays";
-import type { JSX, ParentProps } from "solid-js";
+import type { JSX, ParentProps, ValidComponent } from "solid-js";
 import type { FocusOutsideEvent } from "@kobalte/core";
-import { createEffect, createMemo, createSignal, createUniqueId, For, on, onCleanup, onMount, Show, splitProps } from "solid-js";
+import { createContext, createEffect, createMemo, createSignal, createUniqueId, For, on, onCleanup, onMount, Show, splitProps, useContext } from "solid-js";
+import { Dynamic } from "solid-js/web";
 import { DropdownMenu as KMenu } from "@kobalte/core/dropdown-menu";
 import { ContextMenu as KContextMenu } from "@kobalte/core/context-menu";
 import { Popover as KPopover } from "@kobalte/core/popover";
@@ -160,12 +161,32 @@ export function PopoverSearchList<T>(props: {
   </>;
 }
 
+/*
+ * Row menus wait for the first open to have been shown.
+ *
+ * Every chat, folder and project row carries a context menu, and building the
+ * menu machinery for each one was a tenth of a second of a phone's first open.
+ * Until `attachRowMenus()` the rows draw as the elements they wrap and their
+ * menus are absent; then each row is redrawn with its menu, well before anyone
+ * could right-click or long-press it.
+ */
+const [rowMenusAttached, setRowMenusAttached] = createSignal(false);
+const RowMenuDeferred = createContext(false);
+export const attachRowMenus = () => setRowMenusAttached(true);
+
 export function ContextMenu(props: ParentProps<{ onOpenChange?: (open: boolean) => void; placement?: "bottom-start" | "right-start" }>) {
-  return <KContextMenu modal={false} fitViewport overflowPadding={8} placement={props.placement || "right-start"} onOpenChange={props.onOpenChange}>{props.children}</KContextMenu>;
+  return <Show when={rowMenusAttached()} fallback={<RowMenuDeferred.Provider value={true}>{props.children}</RowMenuDeferred.Provider>}>
+    <KContextMenu modal={false} fitViewport overflowPadding={8} placement={props.placement || "right-start"} onOpenChange={props.onOpenChange}>{props.children}</KContextMenu>
+  </Show>;
 }
-export const ContextMenuTrigger = KContextMenu.Trigger;
+// Typed as Kobalte's own trigger, so each row's props are checked as before.
+export const ContextMenuTrigger = ((props: Record<string, unknown>) => {
+  if (!useContext(RowMenuDeferred)) return <KContextMenu.Trigger {...props} />;
+  const [local, rest] = splitProps(props, ["as"]);
+  return <Dynamic component={(local.as as ValidComponent | undefined) || "div"} {...rest} />;
+}) as typeof KContextMenu.Trigger;
 export const ContextMenuGroup = KContextMenu.Group;
-export function ContextMenuContent(props: ParentProps<{ class?: string; shortcutScope?: string }>) { return <KContextMenu.Portal><KContextMenu.Content data-slot="context-menu-content" data-shortcut-scope={props.shortcutScope} class={cn(menuContentClass, props.class)}>{props.children}</KContextMenu.Content></KContextMenu.Portal>; }
+export function ContextMenuContent(props: ParentProps<{ class?: string; shortcutScope?: string }>) { if (useContext(RowMenuDeferred)) return null; return <KContextMenu.Portal><KContextMenu.Content data-slot="context-menu-content" data-shortcut-scope={props.shortcutScope} class={cn(menuContentClass, props.class)}>{props.children}</KContextMenu.Content></KContextMenu.Portal>; }
 export function ContextMenuItem(props: ParentProps<{ disabled?: boolean; variant?: "destructive"; onSelect?: () => void; class?: string }>) { return <KContextMenu.Item disabled={props.disabled} onSelect={props.onSelect} data-variant={props.variant} class={cn(menuItemClass, props.class)}>{props.children}</KContextMenu.Item>; }
 export const ContextMenuSub = KContextMenu.Sub;
 export function ContextMenuSubTrigger(props: ParentProps<{ disabled?: boolean }>) { return <KContextMenu.SubTrigger disabled={props.disabled} class={cn(menuItemClass, "data-[expanded]:bg-accent")}>{props.children}<ChevronRightIcon class="menu-chevron" /></KContextMenu.SubTrigger>; }
