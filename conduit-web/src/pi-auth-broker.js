@@ -113,7 +113,7 @@ export class PiAuthBroker {
   activeFor(owner) {
     this.expire();
     if (!this.attempt) return null;
-    if (this.attempt.owner !== owner) return { active: true, owned: false, providerId: this.attempt.providerId };
+    if (this.attempt.owner !== owner) return { active: ["running", "waiting"].includes(this.attempt.state), owned: false, providerId: this.attempt.providerId };
     const {
       controller: _controller,
       resolveInput: _resolveInput,
@@ -126,6 +126,10 @@ export class PiAuthBroker {
 
   expire() {
     if (!this.attempt || this.attempt.expiresAt > this.now()) return;
+    if (!["running", "waiting"].includes(this.attempt.state)) {
+      this.attempt = null;
+      return;
+    }
     this.cancel(this.attempt.owner, { expired: true });
   }
 
