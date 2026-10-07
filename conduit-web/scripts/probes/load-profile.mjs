@@ -1,6 +1,6 @@
 /**
  * What the first open spends its main thread on: a CPU profile of a cold
- * reload of `/` in a phone-sized page, to the arrival fade, as total time per
+ * reload of `--path` (default `/`) in a phone-sized page, to the arrival fade, as total time per
  * function (self and inclusive). `--top <n>` (default 30).
  */
 import fs from "node:fs";
@@ -19,7 +19,7 @@ const consumer = (url) => {
 const top = Number(arg("--top", "30"));
 const cpu = Number(arg("--cpu", "1"));
 const { page, cdp, close } = await open({ width: 390, height: 844 });
-await page.goto(`${origin}/`, { waitUntil: "load" });
+await page.goto(`${origin}${arg("--path", "/")}`, { waitUntil: "load" });
 await page.waitForTimeout(2500);
 if (cpu > 1) await cdp.send("Emulation.setCPUThrottlingRate", { rate: cpu });
 await cdp.send("Profiler.enable");

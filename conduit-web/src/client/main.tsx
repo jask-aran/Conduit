@@ -45,6 +45,7 @@ import { isWorkspace } from "./chat/place-picker";
 import {
   MARKDOWN_RENDERER_STORAGE_KEY,
   saveMarkdownRenderer,
+  isIncremarkRenderer,
   selectedMarkdownRenderer,
   type MarkdownRendererId,
 } from "./chat/markdown-settings";
@@ -767,9 +768,24 @@ function App() {
   // The dashboard is drawn from the last catalogue this device saw, if it has
   // one, and corrected when the server answers: a cold open no longer waits
   // a round trip (or a fresh TLS handshake) to show what it showed last time.
-  // Other routes name something the cache may not have, so they wait.
-  const cachedCatalogue = location.pathname === "/" ? readCachedCatalogue() : null;
+  // A chat's address names its project, which a stale cache may not have yet;
+  // then that route waits for the server. Other routes always wait.
+  const cachedCatalogue = location.pathname === "/" || initialRouteId ? readCachedCatalogue() : null;
   const catalogueRequest = cachedCatalogue ? Promise.resolve(cachedCatalogue) : catalogueFresh;
+  // A chat opened by its address is the other thing a first open waits on,
+  // so it is asked for in the same breath, ahead of the queue.
+  const selectedChatRequest = initialRouteId ? Promise.all([
+    apiWhenServed<ChatSummary>(`/v0/chats/${encodeURIComponent(initialRouteId)}`, true),
+    apiWhenServed<TranscriptDetail>(`/v0/sessions/${encodeURIComponent(initialRouteId)}`, true),
+  ]) : null;
+  selectedChatRequest?.catch(() => {});
+  // Its transcript is drawn by a renderer loaded on demand, in a chain each
+  // link of which was only found once the one before it ran: two round trips
+  // after the transcript itself had arrived. Asked for now, all at once.
+  if (initialRouteId) {
+    void import("./chat/markdown").catch(() => {});
+    void (isIncremarkRenderer(selectedMarkdownRenderer()) ? import("./chat/incremark-markdown") : import("./chat/marked-markdown")).catch(() => {});
+  }
   const initialProjectRouteId = pathProjectId();
   const initialTerminalRoute = location.pathname === "/terminal";
   const initialComputerRoute = location.pathname === "/computer" || location.pathname.startsWith("/computer/harness/");
@@ -5045,11 +5061,6 @@ function App() {
       .catch(() => setInstallations([]))
       .finally(() => setInstallationsLoading(false));
 
-    const routeId = initialRouteId;
-    const selectedChatRequest = routeId ? Promise.all([
-      apiWhenServed<ChatSummary>(`/v0/chats/${encodeURIComponent(routeId)}`, true),
-      apiWhenServed<TranscriptDetail>(`/v0/sessions/${encodeURIComponent(routeId)}`, true),
-    ]) : null;
     void (async () => {
       const [cataloguePayload, selectedChat] = await Promise.all([
         catalogueRequest,
@@ -5067,7 +5078,13 @@ function App() {
       }).catch(() => {});
       if (selectedChat) {
         const [target, detail] = selectedChat;
-        const project = projects.find((item) => item.id === target.projectId) || projects[0];
+        let project = projects.find((item) => item.id === target.projectId);
+        if (!project && cachedCatalogue) {
+          const fresh = asList<Project>((await catalogueFresh).projects).map((item) => ({ ...item, sessions: asList<ChatSummary>(item.sessions) }));
+          catalogue.setProjects(fresh);
+          project = fresh.find((item) => item.id === target.projectId) || fresh[0];
+        }
+        project ||= projects[0];
         if (!project) throw new Error("Conduit has no chat project");
         await chat.initialize(target, project, detail);
         setRouteKind("chat");
@@ -5409,7 +5426,8 @@ function App() {
     <Show when={dockDocHost()} keyed>{(host) =>
       <For each={dockContents()}>{(slot) => <Portal mount={host}>{renderSlot(slot, () => 0, true)}</Portal>}</For>}</Show>
     <Show when={routeKind() === "computer" && computerLocation()}><WorkspacePanel connectivity={runtime.connectivity} projectId={() => computerLocation()!.project.id} projectName={() => computerLocation()!.project.name} sourceControlEnabled={() => computerLocation()!.repository} workingRoot={() => computerLocation()!.project.workingRoot} chatId={() => "computer"} settingsScope={() => "computer"} initialDirectory={() => computerLocation()!.listing} requestedFile={computerFile} open={panelOpen} expanded={workspaceExpanded} focusRequest={workspaceFocusRequest} onFocusRequestComplete={acknowledgeWorkspaceFocus} requestedTab={workspaceViewRequest} onTabChange={setDockTool} splitView={toolView} splitHost={toolHost} documentShown={() => dockSlot() !== null} widthRequest={dockWidthRequest} documentHost={(element) => setDockDocHost((current) => element ?? (current?.isConnected ? current : undefined))} minWidth={dockMinWidth} overlay={dockOverlay} onOpenBeside={isMobileLayout() ? undefined : openBeside} onMoveToDock={moveToDock} onCloseSplit={closeSplit} bindSplit={bindSplit} onOpenFile={canOpenFilePanes() ? openFileDocument : undefined} openFiles={openFileKeys} onToggleExpanded={toggleWorkspaceExpanded} onClose={closePanel} shortcuts={shortcutManager} onBrowseDirectory={(path) => void browseComputer(`${computerLocation()!.project.workingRoot}/${path}`)} onBrowseParent={() => void browseComputer(computerLocation()!.parent)} /></Show>
-    <Show when={["chat", "project", "dashboard"].includes(routeKind()) && Boolean(selectedProject()) && Boolean(workspacePanelScope())}><WorkspacePanel connectivity={runtime.connectivity} projectId={() => dockProject()!.id} projectName={() => dockProject()!.name} sourceControlEnabled={() => dockProject()!.kind === "workspace"} workingRoot={() => dockProject()!.workingRoot} chatId={() => dockScope()!} artifactChatId={() => sideFocused() ? focusedChat().loadedId() : routeKind() === "chat" ? chat.loadedId() : null} commentChatId={() => focusedChat().loadedId()} historyAvailable={() => sideFocused() ? focusedSession().history() !== "none" : routeKind() !== "chat" || chatHistory() !== "none"} open={panelOpen} expanded={workspaceExpanded} focusRequest={workspaceFocusRequest} onFocusRequestComplete={acknowledgeWorkspaceFocus} requestedTab={workspaceViewRequest} onTabChange={setDockTool} splitView={toolView} splitHost={toolHost} documentShown={() => dockSlot() !== null} widthRequest={dockWidthRequest} documentHost={(element) => setDockDocHost((current) => element ?? (current?.isConnected ? current : undefined))} minWidth={dockMinWidth} overlay={dockOverlay} onOpenBeside={isMobileLayout() ? undefined : openBeside} onMoveToDock={moveToDock} onCloseSplit={closeSplit} bindSplit={bindSplit} onOpenFile={canOpenFilePanes() ? openFileDocument : undefined} openFiles={openFileKeys} onRequestOpen={() => setPanelOpenForChat(true)} onToggleExpanded={toggleWorkspaceExpanded} onClose={closePanel} shortcuts={shortcutManager} /></Show>
+    {/* Closed and off-screen on a phone, so built after the first open is shown. */}
+    <Show when={["chat", "project", "dashboard"].includes(routeKind()) && Boolean(selectedProject()) && Boolean(workspacePanelScope()) && (arrived() || !isMobileLayout() || panelOpen())}><WorkspacePanel connectivity={runtime.connectivity} projectId={() => dockProject()!.id} projectName={() => dockProject()!.name} sourceControlEnabled={() => dockProject()!.kind === "workspace"} workingRoot={() => dockProject()!.workingRoot} chatId={() => dockScope()!} artifactChatId={() => sideFocused() ? focusedChat().loadedId() : routeKind() === "chat" ? chat.loadedId() : null} commentChatId={() => focusedChat().loadedId()} historyAvailable={() => sideFocused() ? focusedSession().history() !== "none" : routeKind() !== "chat" || chatHistory() !== "none"} open={panelOpen} expanded={workspaceExpanded} focusRequest={workspaceFocusRequest} onFocusRequestComplete={acknowledgeWorkspaceFocus} requestedTab={workspaceViewRequest} onTabChange={setDockTool} splitView={toolView} splitHost={toolHost} documentShown={() => dockSlot() !== null} widthRequest={dockWidthRequest} documentHost={(element) => setDockDocHost((current) => element ?? (current?.isConnected ? current : undefined))} minWidth={dockMinWidth} overlay={dockOverlay} onOpenBeside={isMobileLayout() ? undefined : openBeside} onMoveToDock={moveToDock} onCloseSplit={closeSplit} bindSplit={bindSplit} onOpenFile={canOpenFilePanes() ? openFileDocument : undefined} openFiles={openFileKeys} onRequestOpen={() => setPanelOpenForChat(true)} onToggleExpanded={toggleWorkspaceExpanded} onClose={closePanel} shortcuts={shortcutManager} /></Show>
     </div>
     <Show when={dragHintContent()}>{(hint) => <div class="drag-hint" aria-hidden="true" ref={(element) => { dragHintElement = element; placeDragHint(); onCleanup(() => { if (dragHintElement === element) dragHintElement = undefined; }); }}>
       <Show when={hint().icon} keyed>{(icon) => ({ left: <PanelLeftIcon />, right: <PanelRightIcon />, column: <Columns2Icon />, tab: <PanelTopIcon />, swap: <ArrowLeftRightIcon />, here: <PanelTopIcon /> })[icon]}</Show>{hint().text}
