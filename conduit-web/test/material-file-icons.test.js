@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import {
-  materialFileIconAsset,
-  materialFolderIconAsset,
-} from "../src/client/workspace/material-file-icons.ts";
+import { buildMaterialIconManifest } from "../scripts/material-icon-manifest.mjs";
+import { materialIconLookup } from "../src/client/workspace/material-icon-lookup.ts";
+
+const { materialFileIconAsset, materialFolderIconAsset } = materialIconLookup(buildMaterialIconManifest());
 
 test("Material Icon Theme resolves files, compound extensions, and DAX", () => {
   assert.equal(materialFileIconAsset("report.csv"), "table.svg");

@@ -4,6 +4,7 @@ import tailwindcss from "@tailwindcss/vite";
 import { VitePWA } from "vite-plugin-pwa";
 import path from "node:path";
 import { buildStamp } from "./src/build-info.js";
+import { buildMaterialIconManifest } from "./scripts/material-icon-manifest.mjs";
 import { solidComponentsViteOptions } from "./scripts/solid-components-mode.mjs";
 import { MOBILE_LAYOUT_BREAKPOINT_PX, NON_PHONE_LAYOUT_QUERY, PHONE_LAYOUT_QUERY } from "./src/client/layout-geometry.ts";
 
@@ -26,6 +27,19 @@ function sharedGeometryCssPlugin() {
   };
 }
 
+// See scripts/material-icon-manifest.mjs.
+function materialIconManifestPlugin() {
+  const id = "virtual:material-icon-manifest";
+  return {
+    name: "conduit-material-icon-manifest",
+    resolveId: (source) => source === id ? `\0${id}` : null,
+    load: (resolved) => resolved === `\0${id}`
+      // JSON.parse of a string loads quicker than the same object as a literal.
+      ? `export default JSON.parse(${JSON.stringify(JSON.stringify(buildMaterialIconManifest()))});`
+      : null,
+  };
+}
+
 export default defineConfig(() => {
   const serverPort = process.env.CONDUIT_PORT || "4310";
   const serverTarget = `http://127.0.0.1:${serverPort}`;
@@ -37,6 +51,7 @@ export default defineConfig(() => {
   return {
     plugins: [
       sharedGeometryCssPlugin(),
+      materialIconManifestPlugin(),
       solid(),
       tailwindcss(),
       // Production-only installability: the client owns SW registration so
