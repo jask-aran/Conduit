@@ -431,6 +431,9 @@ function NativeServerSetup(props: { onAuthenticated: () => void }) {
  * -- to learn something the next request reveals anyway: every response goes
  * through `authorizedFetch`, and a 401 lands here as `NATIVE_AUTH_REQUIRED`.
  */
+/** Take down index.html's launch screen, once whatever replaces it is drawn. */
+const dismissLaunchMark = () => document.querySelector(".launch-mark")?.remove();
+
 function NativeRoot() {
   const [state, setState] = createSignal<"loading" | "login" | "app">("loading");
   onMount(() => {
@@ -445,7 +448,10 @@ function NativeRoot() {
       .then((token) => setState(token ? "app" : "login"))
       .catch(() => setState("login"));
   });
-  return <Show when={state() !== "loading"} fallback={<main class="native-server-setup"><span class="native-server-brand">Conduit</span></main>}>
+  // Sign-in has no arrival to wait for; it fades in on its own.
+  createEffect(() => { if (state() === "login") dismissLaunchMark(); });
+  // The launch screen covers the wait for the token.
+  return <Show when={state() !== "loading"}>
     <Show when={state() === "app" ? activeOrigin() ?? undefined : undefined} keyed fallback={<NativeServerSetup onAuthenticated={() => setState("app")} />}>
       {(_origin: string) => <App />}
     </Show>
@@ -785,7 +791,7 @@ function App() {
       if (root.dataset.arrival !== "waiting") return;
       root.dataset.arrival = "arriving";
       settleFocus();
-      settle = setTimeout(() => delete root.dataset.arrival, 400);
+      settle = setTimeout(() => { delete root.dataset.arrival; dismissLaunchMark(); }, 400);
     };
     root.dataset.arrival = "waiting";
     const fallback = setTimeout(arrive, 2500);
@@ -809,7 +815,7 @@ function App() {
     createEffect(() => {
       if (routeBootstrap() !== "loading" && panesLoaded()) void layoutReady.then(waitForStill).then(arrive);
     });
-    onCleanup(() => { clearTimeout(fallback); clearTimeout(settle); delete root.dataset.arrival; });
+    onCleanup(() => { clearTimeout(fallback); clearTimeout(settle); delete root.dataset.arrival; dismissLaunchMark(); });
   }
   let dragDepth = 0;
   let workspaceSuggestionsRequest: Promise<void> | null = null;
@@ -5402,10 +5408,7 @@ function App() {
  */
 void publishTrustedIdentities(trustedIdentities());
 
-// Solid inserts into the mount; it does not remove index.html's launch mark.
-// That fixed, full-window placeholder would remain behind panes and intercept rail clicks.
 const mount = document.getElementById("root")!;
-mount.replaceChildren();
-render(() => <ErrorBoundary fallback={(error) => <div class="crash-screen"><div class="crash-card"><h1>Conduit hit a UI error</h1><p>{error instanceof Error ? error.message : "Unknown interface error"}</p><Button onClick={() => location.reload()}>Reload Conduit</Button></div></div>}>
+render(() => <ErrorBoundary fallback={(error) => { dismissLaunchMark(); return <div class="crash-screen"><div class="crash-card"><h1>Conduit hit a UI error</h1><p>{error instanceof Error ? error.message : "Unknown interface error"}</p><Button onClick={() => location.reload()}>Reload Conduit</Button></div></div>; }}>
   {nativeApp ? <NativeRoot /> : <App />}
 </ErrorBoundary>, mount);
