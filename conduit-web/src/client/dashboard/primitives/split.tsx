@@ -202,8 +202,11 @@ export function watchFold(more: HTMLElement, setFit: (count: number) => void) {
     while (count < widths.length && used + widths[count]! <= room) used += widths[count++]!;
     setFit(count);
   };
+  // Measured from the observer alone, which reports every element it starts
+  // watching, once, before the frame is drawn. Measuring on each change to the
+  // row as well laid the page out once per item while it was being built.
   const observer = new ResizeObserver(measure);
-  const observeAll = () => { observer.disconnect(); observer.observe(bar); for (const child of bar.children) observer.observe(child); measure(); };
+  const observeAll = () => { observer.disconnect(); observer.observe(bar); for (const child of bar.children) observer.observe(child); };
   const mutations = new MutationObserver(observeAll);
   mutations.observe(bar, { childList: true });
   observeAll();

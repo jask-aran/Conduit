@@ -233,9 +233,13 @@ export function AppDashboard(props: {
     const measure = () => setShelfOver(shelf.scrollHeight > shelf.clientHeight + 1);
     const observer = new ResizeObserver(measure);
     observer.observe(shelf);
-    const mutations = new MutationObserver(measure);
+    // Folders added change what overflows without resizing the shelf. Checked
+    // once a frame: once per folder laid the page out per folder while the
+    // first open was still building it.
+    let frame = 0;
+    const mutations = new MutationObserver(() => { if (!frame) frame = requestAnimationFrame(() => { frame = 0; measure(); }); });
     mutations.observe(shelf, { childList: true });
-    onCleanup(() => { observer.disconnect(); mutations.disconnect(); });
+    onCleanup(() => { cancelAnimationFrame(frame); observer.disconnect(); mutations.disconnect(); });
   };
   const foldersGroup = () => <SplitGroup id="app-dashboard-projects" label="Projects" count={folders().length} order="first" class="app-dashboard-projects"
     actions={<Show when={shelfOver() || shelfAll()}><button type="button" onClick={() => setShelfAll((value) => !value)}>{shelfAll() ? "Show less" : "Show all"}</button></Show>}>

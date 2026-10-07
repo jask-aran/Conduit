@@ -214,6 +214,16 @@ export function Composer(props: {
     setMobileActionsStacked(mobileActionsStacked() ? lines >= 2 : lines >= 3);
   };
 
+  // Every reason to resize that arrives in one task resizes once: the first
+  // open set the draft, the busy state and the layout in turn, and each
+  // measurement laid out the page it was still building.
+  let resizeQueued = false;
+  const scheduleResize = () => {
+    if (resizeQueued) return;
+    resizeQueued = true;
+    queueMicrotask(() => { resizeQueued = false; resize(); });
+  };
+
   const keyboardWasOpen = (inputFocused: boolean) => {
     if (!isMobileLayout()) return true;
     if (!inputFocused) return false;
@@ -243,7 +253,7 @@ export function Composer(props: {
       if (props.chat.draft() === value) setSlashOpen(composerSlashCommands(value, slashCommandOptions()).length > 0);
     });
     setSlashOpen(composerSlashCommands(value, slashCommandOptions()).length > 0);
-    queueMicrotask(resize);
+    scheduleResize();
   };
 
   const applyTranscript = (text: string) => {
@@ -489,7 +499,7 @@ export function Composer(props: {
     const media = typeof matchMedia === "function" ? matchMedia(MOBILE_LAYOUT_QUERY) : null;
     const syncPhoneLayout = () => {
       setPhoneLayout(Boolean(media?.matches));
-      queueMicrotask(resize);
+      scheduleResize();
     };
     syncPhoneLayout();
     media?.addEventListener("change", syncPhoneLayout);
@@ -509,7 +519,7 @@ export function Composer(props: {
       props.chat.draft();
       busy();
       dictating();
-      queueMicrotask(resize);
+      scheduleResize();
     });
     createEffect(() => {
       props.chat.loadedId();
