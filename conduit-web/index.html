@@ -31,6 +31,9 @@
       html, body { margin: 0; background: #08090a; }
       .launch-mark { position: fixed; inset: 0; z-index: 2147483647; display: grid; place-items: center; background: #08090a; pointer-events: none; }
       .launch-mark svg { width: 56px; color: #edeef0; }
+      /* An installed web app has Chrome's own splash, its icon at Chrome's
+         size, fading out over this; a second mark under it read as two. */
+      @media (display-mode: standalone) { .launch-mark svg { display: none; } }
     </style>
     <title>Conduit</title>
   </head>
