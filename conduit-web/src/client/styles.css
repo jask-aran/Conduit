@@ -1763,21 +1763,6 @@ svg.lucide { stroke-width: 2.4; }
 
 }
 
-/* Narrow palettes use the available height without changing the desktop shell. */
-@media (--conduit-mobile-layout) {
-  .command-dialog {
-    display: flex;
-    align-items: stretch;
-    justify-content: stretch;
-    height: 100dvh;
-    padding: 8px;
-  }
-  .command-dialog .command-shell {
-    width: 100%;
-    height: 100%;
-    max-height: none;
-  }
-}
 
 /* Capacitor first-launch server selection, on the frame (DESIGN.md,
    Surfaces): the Conduit mark, a heading, then the ways in as sidebar rows --
@@ -2540,7 +2525,16 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
 .command-hint-action:hover, .command-hint-action:focus-visible { outline: none; background: oklch(1 0 0 / 10%); }
 
 @media (--conduit-mobile-layout) {
-  .command-dialog { align-items: stretch; padding: var(--phone-overlay-padding); }
+  /*
+   * Every overlay on a phone ends where the keyboard begins, as the composer
+   * does: --app-height is the visible height, set on each frame of the
+   * keyboard's travel (mobile-layout.ts). A full-screen 100dvh left the
+   * keyboard over the bottom of search, the palette and every form.
+   */
+  .frost-overlay { height: var(--app-height, 100dvh); }
+  .frost-dialog { max-height: calc(var(--app-height, 100dvh) - 32px); }
+  .settings-dialog .settings-shell { height: var(--app-height, 100dvh); }
+  .command-dialog { display: flex; height: var(--app-height, 100dvh); align-items: stretch; justify-content: stretch; padding: var(--phone-overlay-padding); }
   .command-dialog .command-shell { width: 100%; height: 100%; max-height: none; border-radius: 14px; }
   .command-input-row { min-height: 52px; padding-inline: 12px; }
   .command-input { min-height: 44px; font-size: 16px; }
