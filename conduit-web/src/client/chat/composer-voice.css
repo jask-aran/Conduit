@@ -25,6 +25,8 @@
     flex: none; width: 44px; min-width: 44px; height: 44px; padding: 0; border-radius: 999px;
   }
 
+  [data-phone-layout] :is(.composer-actions [data-slot="button"], .composer-plus-trigger) svg { width: 18px; height: 18px; }
+
   /* Surface: one pill, the mic pushed to the right end. */
   [data-phone-layout="surface"] .dictation-trigger { margin-left: auto; }
 
