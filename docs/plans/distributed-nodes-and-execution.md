@@ -99,6 +99,22 @@ environments.
     pi-durable emits them; on boot or a detected gap it rebuilds that chat's
     log from pi-durable storage and clients get a normal reset.
 
+16. **History edits fork in place.** Editing an earlier message forks the
+    pi-durable conversation there; the chat switches to the fork and the old
+    branch stays reachable, like Pi's tree today.
+17. **Node protocol = pi-durable's remote `env`.** The node implements
+    pi-durable's env interface over the tailnet; main's env factory returns a
+    remote env for node workspaces. Typed device capabilities ride an extra
+    channel on the same connection. Conduit's file browser/viewer use the same
+    env for **read-only** remote browsing in v1; editor writes, git panel and
+    terminals on remote workspaces come later.
+18. **Remote shell survives disconnects.** The node keeps the process and
+    buffered output; on reconnect the tool reattaches by action id. If the
+    node itself restarted, the call is reported interrupted.
+19. **Android is push-wakeable.** Main sends an FCM push to wake the Android
+    node for a capability call (Firebase messaging in the app, key on main);
+    otherwise the thread waits per decision 8.
+
 ## Milestones
 
 1. **pi-durable harness for normal chats, local env only.** Manifest entry
@@ -121,12 +137,6 @@ environments.
 
 ## Open questions
 
-- How Pi history edits map onto pi-durable forks.
-- Node protocol shape: pi-durable's remote `env` adapter vs a Conduit
-  WebSocket protocol over the tailnet.
-- Remote shell lifetime when a node disconnects mid-command.
-- Whether Android can hold the node role in the background at all, or only
-  while foregrounded.
 - Future: federation (any device can be main) needs replicated storage and
   loss protection; explicitly deferred.
 
