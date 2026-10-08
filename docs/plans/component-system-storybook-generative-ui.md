@@ -66,18 +66,18 @@ Non-goals for the first milestones:
 - Adding TanStack, Ark UI, or a large charting dependency before a use case
   demonstrates the need.
 
-## Single-source design governance: \`DESIGN.md\`
+## Single-source design governance: `DESIGN.md`
 
 **The rulebook, component catalogue and intentional-exception register all
-live in the repository-root \`DESIGN.md\`**. No competing \`components.md\`,
-\`theme.md\`, Storybook-only rulebook or per-feature mini design specs.
-\`docs/plans/*\` may explain implementation sequencing and prior decisions;
-\`docs/design/*\` images/sketches remain illustrative or historical references.
-Neither is authoritative when it disagrees with \`DESIGN.md\`. The plan should
+live in the repository-root `DESIGN.md`**. No competing `components.md`,
+`theme.md`, Storybook-only rulebook or per-feature mini design specs.
+`docs/plans/*` may explain implementation sequencing and prior decisions;
+`docs/design/*` images/sketches remain illustrative or historical references.
+Neither is authoritative when it disagrees with `DESIGN.md`. The plan should
 eventually be archived as a completed implementation record, rather than
 maintained as another ongoing design document.
 
-Keep \`DESIGN.md\` easy to read. Use **short sections, compact inventories and
+Keep `DESIGN.md` easy to read. Use **short sections, compact inventories and
 links**, not copied TS signatures or a generated dump of 75 screen files.
 Proposed persistent sections:
 
@@ -103,7 +103,7 @@ Proposed persistent sections:
 
 Use the actual component inventory to fill the catalogue as components become
 canonical. A component's location and Storybook story should be discoverable
-from the \`DESIGN.md\` catalogue, and a story should link back to the relevant
+from the `DESIGN.md` catalogue, and a story should link back to the relevant
 catalogue entry. For example:
 
 | Component | Contract | Source / Story | Exceptions |
@@ -112,12 +112,12 @@ catalogue entry. For example:
 | FrostDialog | Floating dialog, size, focus return, phone treatment | Links | Linked exception if any |
 
 The table above illustrates **the documentation shape**, not a declaration
-that those exact variants are finalized. Use the existing \`DESIGN.md\` rules
+that those exact variants are finalized. Use the existing `DESIGN.md` rules
 to set actual names, sizes, motion and visual semantics.
 
 **Drift rule:** When adding, materially changing, deprecating or deliberately
 overriding a canonical component, update the **component source**, its
-**workbench stories/fixtures**, and its **\`DESIGN.md\` catalogue/exception**
+**workbench stories/fixtures**, and its **`DESIGN.md` catalogue/exception**
 in the same bounded change. Code remains the executable implementation; the
 design document governs intent; Storybook proves visual reality. Do not
 generate entire design rules from Storybook or let story descriptions quietly

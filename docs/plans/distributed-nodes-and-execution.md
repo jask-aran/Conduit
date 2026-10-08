@@ -3,7 +3,7 @@
 Status: architecture proposal / shaping; **not implemented by this document**.
 Scope: Conduit server, installed clients, Conduit Pi, third-party harness adapters, workspaces, tasks, and security.
 Date: 2026-10-08.
-Repository: `jask-aran/Conduit`. Related references: [web runtime](../conduit-web/README.md), [harness contract](chat-backend-contract.md), [installation and client model](DEPLOYMENT.md), [testing](TESTING.md).
+Repository: `jask-aran/Conduit`. Related references: [web runtime](../../conduit-web/README.md), [harness contract](../chat-backend-contract.md), [installation and client model](../DEPLOYMENT.md), [testing](../TESTING.md).
 
 ## Purpose and core decision
 
