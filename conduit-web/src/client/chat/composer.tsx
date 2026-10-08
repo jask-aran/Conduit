@@ -117,6 +117,17 @@ export function Composer(props: {
   createEffect(on(phoneMode, () => scheduleResize(), { defer: true }));
   // Dictation failures go through the app's normal toasts.
   createEffect(on(dictationError, (message) => { if (message) toast.error(message); }, { defer: true }));
+  /* A new caption line pushes the old ones up; glide them instead of jumping. */
+  const glideCaptions = (element: HTMLElement) => {
+    let height = 0;
+    const observer = new ResizeObserver(() => {
+      const next = element.offsetHeight;
+      if (height && next > height) element.animate([{ transform: `translateY(${next - height}px)` }, { transform: "none" }], { duration: 180, easing: "ease-out" });
+      height = next;
+    });
+    observer.observe(element);
+    onCleanup(() => observer.disconnect());
+  };
   const dictatedText = () => { const range = dictatedRange(); return range ? props.chat.draft().slice(range.start, range.end) : ""; };
   // A phone has no model chip in its row, so the empty draft names the model --
   // it stays in view at no cost in height.
@@ -593,7 +604,7 @@ export function Composer(props: {
 
   return <div class="composer-wrap" data-part="composer" data-phone-layout={voiceFirst() ? phoneComposer() : undefined} data-phone-mode={phoneMode()} style={phoneMode() === "listening" ? { "--voice-level": String(dictationWaveform.level()) } : undefined}>
     <Show when={phoneMode() === "listening"}>
-      <Show when={dictatedText()}><div class="composer-voice-captions" aria-live="polite"><p>{dictatedText()}</p></div></Show>
+      <Show when={dictatedText()}><div class="composer-voice-captions" aria-live="polite"><p ref={glideCaptions}>{dictatedText()}</p></div></Show>
     </Show>
     <QueuedMessages
       messages={props.chat.pendingMessages()}
