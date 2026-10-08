@@ -81,13 +81,34 @@ environments.
     strip (now durable). A reply interrupted by a crash keeps its partial
     text marked "interrupted by restart"; the turn resumes or reports.
 
+12. **pi-durable is the north star for new backend concepts.** When the
+    contract gains a concept it lacks (subagents, compaction, interruption,
+    documents), pi-durable's model shapes the neutral vocabulary, kept
+    harness-neutral so other harnesses can map equivalents.
+13. **Agent identity is native only for Conduit's own harnesses.** Conduit Pi
+    and the pi-durable harness have deep agent identity (subagent/worker
+    records with parent, status, spend, preview) owned by the runtime and
+    shown in the agent sidebar. Third-party harnesses run their agents
+    natively; Conduit may visualise their reporting but owns no identity.
+14. **Coordinators drive workers through Conduit chat tools**
+    (`chat.create(harness, workspace, prompt)`, `chat.send`, `chat.wait`,
+    `chat.read_outcome`) over the existing contract, so any harness can be a
+    worker. A worker's outcome is its final message, status
+    (done / failed / needs input) and its worktree diff if any.
+15. **ChatLog projection.** The adapter appends neutral events live as
+    pi-durable emits them; on boot or a detected gap it rebuilds that chat's
+    log from pi-durable storage and clients get a normal reset.
+
 ## Milestones
 
-1. **Conduit runtime on main, local env only.** pi-durable host + thin chat adapter; durable
-   across server restarts; any client can attach to a running conversation;
-   transcript projected through the existing chat contract.
-   *Gate:* kill the server mid-turn, restart, the turn resumes or reports
-   interruption honestly; two clients watch the same stream.
+1. **pi-durable harness for normal chats, local env only.** Manifest entry
+   with an Assistant profile; reuses Pi's provider auth and model catalogue;
+   Conduit Pi's tools (read/edit/write/grep/find/bash, questions, history)
+   ported as pi-durable extensions with replay flags; background compaction.
+   *Gate:* killing the server mid-tool-call resumes or honestly reports the
+   turn; phone and desktop watch the same live turn; parity with Pi chat
+   basics (model switch, approvals/questions, attachments, stop, history
+   edits); compaction runs on a long chat without blocking the turn.
 2. **Persistent assistant** on the same runtime (compaction, reset, subagents).
 3. **Node role + one remote device.** Node mode in the install, tailnet
    pairing, root grants, remote read/edit/search/shell `env`, device status
@@ -100,10 +121,7 @@ environments.
 
 ## Open questions
 
-- Exact neutral events for subagent and worker status, and ChatLog rebuild
-  from pi-durable storage.
-- How a coordinator drives third-party worker chats (Conduit chat tools over
-  the same contract) and reads their outcome.
+- How Pi history edits map onto pi-durable forks.
 - Node protocol shape: pi-durable's remote `env` adapter vs a Conduit
   WebSocket protocol over the tailnet.
 - Remote shell lifetime when a node disconnects mid-command.
