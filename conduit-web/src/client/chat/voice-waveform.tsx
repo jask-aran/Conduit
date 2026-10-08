@@ -96,6 +96,8 @@ export interface VoiceWaveformProps {
   /** Pixels allocated to each bar when the plot width is known. */
   barDensity?: number;
   variant?: "monitor" | "compact";
+  /** Multiplies each bar's level before it is drawn (clamped to full height). */
+  gain?: number;
   ariaLabel?: string;
   class?: string;
 }
@@ -147,7 +149,7 @@ export function VoiceWaveform(props: VoiceWaveformProps) {
         <span class="voice-waveform-gridline voice-waveform-gridline-high" />
         <span class="voice-waveform-gridline voice-waveform-gridline-low" />
       </Show>
-      <For each={bars()}>{(value) => <span class="voice-waveform-bar" style={{ height: `${waveformBarHeightPercent(value, compact())}%` }} />}</For>
+      <For each={bars()}>{(value) => <span class="voice-waveform-bar" style={{ height: `${waveformBarHeightPercent(Math.min(1, value * (props.gain ?? 1)), compact())}%` }} />}</For>
       <Show when={!compact()}><span class="voice-waveform-peak" data-visible={props.peak() >= 0.02} style={{ bottom: peakHeight() }} /></Show>
     </div>
     <Show when={!compact()}><div class="voice-waveform-scale" aria-hidden="true"><span>quiet</span><span>now</span></div></Show>
