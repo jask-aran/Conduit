@@ -27,6 +27,14 @@
 
   [data-phone-layout] :is(.composer-actions [data-slot="button"], .composer-plus-trigger) svg { width: 18px; height: 18px; }
 
+  /* Send opens and closes rather than popping: with nothing to send it
+     folds to nothing and the mic pill takes its room. */
+  [data-phone-layout] :is(.composer-send-trigger, .composer-stop-trigger) { transition: opacity .2s ease, width .25s cubic-bezier(.2, .8, .2, 1), min-width .25s cubic-bezier(.2, .8, .2, 1), margin .25s cubic-bezier(.2, .8, .2, 1); }
+  [data-phone-layout][data-primary-hidden] .composer-send-trigger { width: 0; min-width: 0; margin-left: -8px; opacity: 0; overflow: hidden; border-width: 0; pointer-events: none; }
+  /* Waiting on the transcript the mic stays drawn as it rests. */
+  [data-phone-layout] .dictation-trigger:disabled { opacity: 1; }
+  [data-phone-layout] .composer-actions .dictation-trigger[aria-pressed="true"] { animation: none; }
+
   /* Surface: one pill, the mic pushed to the right end. */
   [data-phone-layout="surface"] .dictation-trigger { margin-left: auto; }
 
@@ -36,18 +44,26 @@
 
   /* Idle and listening hide the text; the textarea stays focusable so the
      keyboard button and dictation can reach it. */
+  /* The text pill always has its own row above the controls; idle and
+     listening fold it shut (the textarea stays focusable), typing unfolds
+     it. It eases open and closed rather than appearing. */
+  [data-phone-layout] .composer-input-shell {
+    order: 0; flex: 1 0 100%; max-height: 220px; overflow: hidden;
+    transition: max-height .24s cubic-bezier(.2, .8, .2, 1), margin .24s cubic-bezier(.2, .8, .2, 1), opacity .18s ease, transform .24s cubic-bezier(.2, .8, .2, 1);
+  }
   :is([data-phone-mode="idle"], [data-phone-mode="listening"]) .composer-input-shell {
-    order: 9; flex: 0 0 0; width: 0; min-width: 0; height: 0; min-height: 0; margin-left: -8px; overflow: hidden; opacity: 0; pointer-events: none;
+    min-height: 0; max-height: 0; margin-bottom: -8px; opacity: 0; transform: translateY(8px); pointer-events: none; border-color: transparent;
   }
 
   /* Typing: the text is its own frost pill on a row of its own above the
      controls, like the classic composer without its buttons. */
-  [data-phone-mode="typing"] .composer.composer-surface-material { border-color: transparent; background: transparent; backdrop-filter: none; box-shadow: none; }
-  [data-phone-mode="typing"] .composer-input-shell { order: 0; flex: 1 0 100%; min-height: 46px; border-radius: var(--composer-radius, 22px); padding-inline: 10px; animation: composer-voice-rise .22s cubic-bezier(.2, .8, .2, 1); }
-  [data-phone-layout="surface"][data-phone-mode="typing"] .composer::before {
+  [data-phone-layout] .composer.composer-surface-material { border-color: transparent; background: transparent; backdrop-filter: none; box-shadow: none; }
+  [data-phone-layout] .composer-input-shell { border-radius: var(--composer-radius, 22px); padding-inline: 10px; }
+  [data-phone-mode="typing"] .composer-input-shell { min-height: 46px; }
+  [data-phone-layout="surface"] .composer::before {
     content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 46px; z-index: -1; border-radius: var(--composer-radius, 22px);
   }
-  [data-phone-layout="surface"][data-phone-mode="typing"] .composer { gap: 8px 4px; padding: 0 1px 1px; }
+  [data-phone-layout="surface"] .composer { gap: 8px 4px; padding: 0 1px 1px; }
 
   /* The mic: icon and orb stacked in the button, crossfading. */
   [data-phone-layout] .dictation-trigger { position: relative; }
