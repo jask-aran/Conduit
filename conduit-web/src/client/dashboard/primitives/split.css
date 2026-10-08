@@ -128,6 +128,14 @@
   .split-group-heading .settings-segmented button { transition: none; }
 }
 
+@media (--conduit-phone-layout) {
+  .split-dashboard-body {
+    width: 100%; min-width: 0; margin-inline: 0; padding-inline: 16px;
+    box-sizing: border-box;
+  }
+  .app-dashboard :is(.split-group-heading, .split-day, .split-row, .app-folder) { padding-inline: 0; }
+}
+
 /* Change rows match the workspace panel's: file mark, name, folder, line
    counts and a status letter. */
 .split-change-row > svg { width: 12px; height: 12px; flex: none; }

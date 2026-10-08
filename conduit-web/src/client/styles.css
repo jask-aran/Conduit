@@ -2178,6 +2178,15 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
 .overlay-scrollbar[data-axis="y"] .overlay-scrollbar-thumb { left: 2px; top: 0; }
 .overlay-scrollbar[data-axis="x"] .overlay-scrollbar-thumb { left: 0; top: 2px; }
 .overlay-scrollbar-thumb:hover, .overlay-scrollbar-thumb:active { opacity: 1; }
+@media (--conduit-phone-layout) {
+  .overlay-scrollbar-thumb {
+    background: var(--frost-fill, #ffffff2b);
+    backdrop-filter: var(--frost-blur);
+    -webkit-backdrop-filter: var(--frost-blur);
+    box-shadow: inset 0 0 0 1px var(--frost-stroke, #ffffff4d);
+  }
+  .overlay-scrollbar[data-touch] .overlay-scrollbar-thumb { opacity: 1; }
+}
 
 @media (max-width: 760px) {
   /*
