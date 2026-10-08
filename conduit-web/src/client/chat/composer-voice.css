@@ -155,3 +155,10 @@
   @keyframes composer-voice-rise { from { opacity: 0; transform: translateY(10px); } }
 }
 @media (prefers-reduced-motion: reduce) { .composer-voice-glow i { animation: none; } }
+
+/* The plus menu open: the rest of the row dims exactly as a parent menu does
+   under its submenu (styles.css, .composer-options-parent). */
+@media (--conduit-phone-layout) {
+  [data-phone-layout] :is(.composer-keyboard-trigger, .dictation-trigger, .composer-send-trigger, .composer-stop-trigger, .composer-input-shell) { transition: opacity .16s ease, filter .16s ease; }
+  [data-phone-layout][data-options-open] :is(.composer-keyboard-trigger, .dictation-trigger, .composer-send-trigger, .composer-stop-trigger, .composer-input-shell) { opacity: .38; filter: saturate(.6); }
+}

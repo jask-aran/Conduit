@@ -1,4 +1,4 @@
-import { For, Show, createSignal, createUniqueId, onCleanup } from "solid-js";
+import { For, Show, createEffect, createSignal, createUniqueId, onCleanup } from "solid-js";
 import { createPhoneMenuPanels, PhoneMenuSubmenu } from "@/components/phone-menu-panels";
 // Kobalte's public dropdown-menu entrypoint does not expose this hook, but its
 // menu content uses the same context. The compiled chunk keeps the context
@@ -60,8 +60,14 @@ export function MobileComposerOptions(props: {
   const chosen = (apply: () => void) => { apply(); go("root"); };
   const preserveFocus = (event: Event) => event.preventDefault();
 
-  return <div class="composer-mobile-plus">
-    <Menu modal={false} open={open()} onOpenChange={(value) => { setOpen(value); if (!value) reset(); }}>
+  /* The bubble composer's other controls dim while the menu is open, as a
+     parent menu does under its submenu. */
+  let root!: HTMLDivElement;
+  createEffect(() => root.closest(".composer-wrap")?.toggleAttribute("data-options-open", open()));
+  onCleanup(() => root?.closest(".composer-wrap")?.removeAttribute("data-options-open"));
+
+  return <div ref={root} class="composer-mobile-plus">
+    <Menu modal={false} placement="top-start" gutter={8} open={open()} onOpenChange={(value) => { setOpen(value); if (!value) reset(); }}>
       <MobileComposerPlusTrigger serverOnline={composer.serverOnline} />
       <MenuContent class="composer-options-menu" data-settling={settling()} onOpenAutoFocus={preserveFocus} onCloseAutoFocus={preserveFocus} onFocusOutside={preserveFocus} onPointerDownOutside={keepForChild}>
         <div class="composer-options-parent" data-panel-open={panel() !== "root"} onPointerDown={returnToRoot}>
