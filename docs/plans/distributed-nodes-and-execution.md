@@ -65,6 +65,22 @@ environments.
    is an explicit, separately listed long-lived conversation that never ends, bounded by compaction/reset, spawning
    subagent conversations for work and able to use any node.
 
+10. **Two delegation shapes.**
+    - *Thread subagent*: owned by a tool call in one chat, may outlive the
+      turn. The chat shows it as a disclosure (spend, preview stream or
+      spinner); its status beyond the turn lives in the agent sidebar. Not a
+      chat-list row.
+    - *Orchestrator / worker threads* (cf. Claude Code Projects): a persistent
+      runtime conversation splits a goal into **worker threads** that are real
+      chats on **any harness**, grouped under it in the chat list. The
+      coordinator chooses per job whether a worker gets its own worktree and
+      hands back a reviewable diff, or works in the shared tree. Shared memory
+      is coordinator-owned pi-durable documents (notes, decisions, task board)
+      that workers read and write through tools.
+11. **Projection rules.** Messages sent mid-turn map onto the existing queued
+    strip (now durable). A reply interrupted by a crash keeps its partial
+    text marked "interrupted by restart"; the turn resumes or reports.
+
 ## Milestones
 
 1. **Conduit runtime on main, local env only.** pi-durable host + thin chat adapter; durable
@@ -84,9 +100,10 @@ environments.
 
 ## Open questions
 
-- Exact projection: how pi-durable's transcript/watch events (aborted
-  partials, queued messages, subagents) map onto neutral events and ChatLog
-  rebuild.
+- Exact neutral events for subagent and worker status, and ChatLog rebuild
+  from pi-durable storage.
+- How a coordinator drives third-party worker chats (Conduit chat tools over
+  the same contract) and reads their outcome.
 - Node protocol shape: pi-durable's remote `env` adapter vs a Conduit
   WebSocket protocol over the tailnet.
 - Remote shell lifetime when a node disconnects mid-command.
