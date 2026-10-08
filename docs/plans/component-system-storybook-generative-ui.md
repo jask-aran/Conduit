@@ -4,38 +4,55 @@ Status: design / implementation plan; **nothing in this plan is implemented by t
 Snapshot: `jask-aran/Conduit`, `main` tree `b2f323e756f4854785c54c1e6f2b3c9486764775` (2026-10-08).
 Owner: Conduit frontend. Scope: `conduit-web`, its styles, and development tooling.
 
-This plan records the proposed progression from Conduit's existing loose component
-conventions to a browsable, tunable SolidJS design system, and subsequently to
-optional model-generated native UI. It deliberately separates a near-term,
-low-risk Storybook/component consolidation from later protocol and artifact work.
+This plan records the progression from Conduit's dispersed component
+implementations to **one documented design system with three complementary
+interfaces**: `DESIGN.md` is the **only authoritative human-readable design
+document**, a Storybook-like workbench visually displays and tunes the **real
+components and real app compositions**, and a stable SolidJS component API is
+ready to expose selected components through a future model-facing registry.
 
-`DESIGN.md` remains the **normative source of visual rules and interaction
-grammar**. It describes the frame/pane/frost surfaces, charcoal palette, text
-roles, the selection wash, keyboard behaviour, motion, accessibility conventions,
-and mobile rules. This document is a build plan, not a second visual spec.
+The registry and the eventual DIL-like, structured-data or sandboxed-iframe
+transport are downstream consumers of **the same component implementations**,
+not alternate design systems. No transport is selected in this plan.
+
+`DESIGN.md` remains the sole normative source of visual rules and interaction
+grammar, including intentional deviations. It describes frame/pane/frost,
+colours, typography, spacing, behaviour, accessibility and mobile rules, plus
+the human-readable inventory of canonical components. This file is a
+**historical implementation plan**, not a second design specification.
 `CONTRIBUTING.md` governs issues/commits and `docs/TESTING.md` governs validation
 and environment boundaries.
 
 ## Outcomes and non-goals
 
-The first deliverable is a **running component catalogue/editor**: one place to
-inspect Conduit's actual components in isolation, switch states and variants,
-preview mobile and desktop behaviour, and tune theme variables while seeing the
-result immediately. The components must be the same Solid components that the
-app uses, not screenshots or visually similar Storybook copies.
+The end state has three **non-competing representations of the same system**:
 
-The second deliverable is a **coherent component API**: one canonical
-implementation for each broadly reusable visual/interaction primitive, grouped
-into appropriately scoped modules, with a convenient public barrel. Screens
-remain compositions of primitives and feature-specific behaviour. The target is
-**not one giant TSX file**, nor the mechanical conversion of every `<button>`,
-`<div>`, or `.tsx` file into a component-library call.
+1. **`DESIGN.md` — the only design document.** A concise, comprehensive
+   human-facing catalogue of *every canonical library component*, the shared
+   design rules, usage/interaction semantics, and *every intentional exception*
+   to those rules. Link to the canonical implementation and workbench example
+   instead of copying source code, every prop or screenshots into Markdown.
+2. **Storybook or an equivalent workbench — the visual reference.** Browse
+   Conduit's actual base components, actual application compositions, and all
+   meaningful variants and states. Tune props and design tokens live, compare
+   changes, and export deliberate patches for source review. Stories must render
+   real code, not separately implemented lookalikes.
+3. **A canonical SolidJS component API — the implementation.** Focused reusable
+   modules with stable, typed, composable contracts, suitable both for ordinary
+   app authors and for selective publication to a future model-facing registry.
+   Model authors should be *steered towards* these prebuilt components rather
+   than inventing HTML/CSS/JS for every routine interface.
 
-Longer term, that component API can support an **optional, constrained,
-model-facing component registry** and eventually declarative/streamed generative
-UI (DIL-like markup, structured JSON, or another format). Arbitrary HTML/JS
-artifacts inside sandboxed iframes are a complementary route, not something the
-native component system must replace.
+The target is **not one giant TSX file**, nor mechanical conversion of every
+`<button>`, `<div>`, or `.tsx` file into a library call. Screens remain
+compositions of primitives and feature-specific behaviour.
+
+The final transport is undecided: DIL-like syntax, progressive JSON or
+structured tools may mount trusted components natively; an iframe may expose a
+sandbox-safe bundled widget facade over selected existing components. The
+underlying design system must serve all of them *without depending on any
+particular transport*. Arbitrary HTML artifacts remain an additional escape
+hatch, not the preferred implementation of ordinary controls.
 
 Non-goals for the first milestones:
 
@@ -48,6 +65,65 @@ Non-goals for the first milestones:
 - A blanket rule that no application code may contain native HTML elements.
 - Adding TanStack, Ark UI, or a large charting dependency before a use case
   demonstrates the need.
+
+## Single-source design governance: \`DESIGN.md\`
+
+**The rulebook, component catalogue and intentional-exception register all
+live in the repository-root \`DESIGN.md\`**. No competing \`components.md\`,
+\`theme.md\`, Storybook-only rulebook or per-feature mini design specs.
+\`docs/plans/*\` may explain implementation sequencing and prior decisions;
+\`docs/design/*\` images/sketches remain illustrative or historical references.
+Neither is authoritative when it disagrees with \`DESIGN.md\`. The plan should
+eventually be archived as a completed implementation record, rather than
+maintained as another ongoing design document.
+
+Keep \`DESIGN.md\` easy to read. Use **short sections, compact inventories and
+links**, not copied TS signatures or a generated dump of 75 screen files.
+Proposed persistent sections:
+
+- **Foundations:** frame/pane/frost, palette, type roles, spacing, radius,
+  motion, responsiveness, keyboard/focus and interaction grammar.
+- **Component catalogue:** *every component intentionally published as part
+  of the Conduit library*, grouped into primitives, composed patterns and
+  reusable feature widgets. For each: canonical name, one-line purpose,
+  correct surface/context, main variants/behaviour, link to real source,
+  and story reference. Props/types remain documented in code and surfaced by
+  the workbench, not duplicated exhaustively in Markdown.
+- **Composition rules:** when to reuse a base component versus a pattern
+  versus domain-specific JSX; where overrides are allowed; accessibility and
+  navigation expectations; how design tokens are applied.
+- **Intentional exceptions:** each deliberate deviation states the **rule
+  being overridden, affected components/routes, rationale, exact scope,
+  and whether it is permanent or intended for review**. The exception is
+  explicit and searchable; no silent per-screen CSS workaround becomes
+  acceptable by accident.
+- **Known mismatches / being migrated:** code not yet conforming to the rules.
+  These are **not** intentional exceptions and should not be canonized into
+  new component stories or copied as patterns.
+
+Use the actual component inventory to fill the catalogue as components become
+canonical. A component's location and Storybook story should be discoverable
+from the \`DESIGN.md\` catalogue, and a story should link back to the relevant
+catalogue entry. For example:
+
+| Component | Contract | Source / Story | Exceptions |
+| --- | --- | --- | --- |
+| Button | Primary/ghost/destructive, size, busy/disabled, key focus | Links | None |
+| FrostDialog | Floating dialog, size, focus return, phone treatment | Links | Linked exception if any |
+
+The table above illustrates **the documentation shape**, not a declaration
+that those exact variants are finalized. Use the existing \`DESIGN.md\` rules
+to set actual names, sizes, motion and visual semantics.
+
+**Drift rule:** When adding, materially changing, deprecating or deliberately
+overriding a canonical component, update the **component source**, its
+**workbench stories/fixtures**, and its **\`DESIGN.md\` catalogue/exception**
+in the same bounded change. Code remains the executable implementation; the
+design document governs intent; Storybook proves visual reality. Do not
+generate entire design rules from Storybook or let story descriptions quietly
+become a second standard. Lightweight checks may flag exported library
+components missing catalogue/story entries, but avoid brittle full-codegen
+that overwrites human explanations.
 
 ## Existing state and design constraints
 
@@ -115,10 +191,18 @@ Important constraints from `DESIGN.md`:
    selected headless engines. TanStack and Ark UI may be adopted later for
    particular missing behaviours; they must not replace the design system.
 
-An eventual **fourth, opt-in model-facing registry** sits *above* the stable
-components. It maps a small safe schema of model-visible component names,
-properties, slots and actions onto the actual Conduit implementations. It is
-not identical to the general TypeScript export barrel.
+The component API must be **registry-ready from the beginning**, even though
+the registry's runtime and transport are deferred. Give reusable components
+stable names, typed/serializable presentation props where practicable, clear
+controlled-state semantics, well-defined events/actions, bounded layout
+variants and independent theme styling. Application callbacks and arbitrary
+JSX children may remain available to trusted application authors; a separate
+safe descriptor/facade later selects what models may actually invoke.
+
+An eventual **model-facing registry** sits *above* the stable components. It
+maps model-visible IDs, schemas, slots and permissible actions onto the
+canonical Conduit implementations. It is not equivalent to the TypeScript
+barrel and does not require a new language or protocol.
 
 Proposed *directional* layout (final paths may change during implementation):
 
@@ -459,6 +543,20 @@ theme or a second copy of the components.
 
 Suggested sidebar categories: **Foundations**, **Primitives**, **Patterns**,
 **Chat**, **Navigation**, **Workspace**, **Overlays**, **Experimental**.
+Organize these categories to mirror the canonical component catalogue in
+`DESIGN.md`, not an independently invented Storybook taxonomy. For every
+canonical shared component, provide an isolated base story plus meaningful
+state/variant stories.
+
+**Also provide real application examples**: render components and composed
+patterns imported from the *actual* chat, composer, sidebar, dashboards,
+settings, workspace and transcript code with deterministic fixtures. Show the
+app's original implementation, at realistic desktop and phone widths and on
+its real pane/frame/frost background. A reproduction written only for
+Storybook does **not** count as a real application example. For components
+that currently require deeply coupled server/session state, extract a thin
+presentational seam or build a fixture adapter; don't clone the JSX and don't
+force stories to connect to a live server.
 
 Start with working stories for:
 
@@ -497,11 +595,14 @@ change, and support Reset, Compare before/after, Copy CSS and/or Export patch.
 Persisting a design change to source is a separate explicit developer action,
 reviewable in Git; avoid quietly mutating TSX or `styles.css` from browser UI.
 
-**Stage C: Composite inspection.** Add a side-by-side variant grid and
-viewport presets for desktop and phone. Test frost over several real
-backgrounds, particularly blur/opacity. Where a style is still hardcoded in a
-feature stylesheet, label it **not token-controlled** rather than presenting
-a slider which has no effect.
+**Stage C: Real-app inspection and tuning.** Add a side-by-side variant grid,
+viewport presets for desktop and phone, and real implementation stories
+for composer controls, dialog flows, settings lists, dashboard rows and
+chat widgets. Make it possible to inspect/tune a base component *and* see how
+its change affects a real application composition using that same component.
+Test frost over several real backgrounds, particularly blur/opacity. Where a
+style remains hardcoded in a feature stylesheet, label it **not
+token-controlled** rather than presenting a slider which has no effect.
 
 Storybook is a visual **viewer + props playground** out of the box, not
 automatically a general source editor. Do not promise WYSIWYG edits to
@@ -528,11 +629,15 @@ all of them in a single change. They align with the issue conventions in
 `CONTRIBUTING.md`; when scheduling, search for existing work and attach
 Features to an appropriate Roadmap rather than creating duplicates.
 
-### 0. Establish inventory and baseline (small, independent)
+### 0. Establish inventory, DESIGN.md catalogue and baseline (small, independent)
 
 - Record the inventory above and the current imports/consumers of shared
-  primitives. Search raw JSX/DOM/CSS overrides; tag real duplicates and
-  intentional exceptions.
+  primitives. Search raw JSX/DOM/CSS overrides; tag real duplicates, genuine
+  intentional exceptions and known mismatches *separately*.
+- Establish the compact `DESIGN.md` component-catalogue format and
+  exception-record format. Place the initial existing shared-component index
+  there, with links to current sources; as stories come online, add story
+  references. Do not create another ongoing design doc.
 - Identify the current effective design tokens versus hardcoded values and
   CSS/cascade dependencies.
 - Capture representative baseline previews (desktop/phone, menu/dialog,
@@ -553,8 +658,10 @@ claim that all TSX files are reusable components.
   development catalogue.
 
 **Done:** components render identically in the app and in a functioning
-workbench, including an open dialog and menu; production application runtime
-is unchanged.
+workbench, including an open dialog and menu; representative real
+app-component examples render from the same code via fixtures; the
+`DESIGN.md` catalogue points to them; production application runtime is
+unchanged.
 
 ### 2. Canonical shared primitives (component consolidation)
 
@@ -568,7 +675,11 @@ is unchanged.
 - Update stories to import the canonical components.
 
 **Done:** the public UI primitives have one owned implementation, are
-browsable, typechecked, and app parity is preserved.
+browsable, typechecked, and app parity is preserved. Each has a stable API
+and a corresponding `DESIGN.md` catalogue entry, with deliberate
+exceptions documented there rather than hidden in feature-specific CSS.
+The APIs are structured so a later safe model-facing facade need not
+replace their visual implementations.
 
 ### 3. Shared patterns, not a universal widget soup
 
@@ -624,14 +735,21 @@ another library's visual palette.
 **Done:** each advanced adoption answers a specific unmet interaction/data
 requirement and is wrapped in Conduit's own component API and Storybook stories.
 
-### 7. Model-facing UI registry / generative UI (deferred experiment)
+### 7. Expose the prepared component API to models (runtime deferred)
 
-Build only after the UI API has stabilized and there is a real product need.
-See the contract and security considerations below. This phase is not a
-dependency of Storybook or UI consolidation.
+Design the shared API with protocol-independent registry readiness during
+earlier phases, **but defer building the model-facing runtime** until a
+working library and an actual consumer exist. Then implement a curated
+component manifest/adapter, decide between native streamed
+declarative/structured UI and an iframe-safe widget facade, and measure
+whether models prefer the known components when appropriately prompted.
+This phase is **not a prerequisite** of Storybook or UI consolidation, but
+its compatibility requirements are. See below.
 
-## Model-facing component registry (future)
+## Model-facing component registry (API-ready now; runtime future)
 
+The initial component-library APIs should already be suitable for discovery
+and safe adaptation by models, without implementing a rendering protocol.
 A TypeScript barrel exporting everything in `components/ui` is **not** a safe
 model interface. A model-facing registry should intentionally expose a limited
 set of renderable components with versioned identifiers, typed/validated props,
@@ -658,6 +776,21 @@ The registry maps a model-visible identifier like `table`, `slider`,
 allow arbitrary module imports, arbitrary Solid component execution, or
 unrestricted event-handler strings. A chart is a renderer receiving data
 and config, not a free-form JS function supplied by the model.
+
+**Encourage reuse, don't merely permit it.** When a model-facing adapter
+exists, give models a compact catalogue, semantic component descriptions,
+validated prop contracts, meaningful examples from the Storybook fixtures,
+and compositional recipes that default to Conduit's prebuilt components
+for ordinary UI. Keep the model's creative freedom for truly novel
+visualizations or behaviors. Where a common use case repeatedly triggers
+custom HTML, first consider adding a reusable component/pattern and
+documenting it in `DESIGN.md`, instead of enlarging a custom DSL.
+
+The registry's safe model-facing names and schema can be generated or checked
+against typed source metadata, with explicit curation and review. Storybook
+shows examples and design states; `DESIGN.md` owns how and when a component
+ought to be used. Never blindly advertise every internal helper or
+feature-specific callback to a model.
 
 Potential descriptors include:
 
@@ -693,10 +826,16 @@ reusable rendering: comparison tables, charts, filters, selectors, calculators
 and in-message data exploration. The model chooses a validated component tree;
 Conduit owns actual rendering, local state, layout, motion, and host actions.
 
-**Arbitrary artifacts** are best for unconstrained visualizations,
-simulations, bespoke mini-apps and exploratory HTML/CSS/JS that would be
-awkward to express through a fixed registry. Render these in an isolated
-iframe, not as trusted Conduit DOM.
+**Iframe widget compositions and arbitrary artifacts** are different
+cases. Models may be offered a **sandbox-safe prebuilt Conduit widget kit**
+for common controls even when the output medium is HTML/JS. This requires
+an explicit packaged iframe-compatible layer (for example a preloaded,
+origin-isolated ESM bundle, safe custom elements, or a validated host/widget
+bridge). Raw Solid JSX modules cannot simply be pasted into arbitrary
+iframe HTML and expected to run. Decide on the bridge only after proving
+the component API. For unconstrained visualizations, simulations and bespoke
+mini-apps, keep arbitrary HTML/CSS/JS as the escape hatch in an isolated
+iframe, not trusted Conduit DOM.
 
 A DIL-like language would be one encoding of a component tree, **not** an
 architectural prerequisite. Options to evaluate when ready:
@@ -773,8 +912,11 @@ to enforce styling.
 
 ### What this means for Storybook
 
-Storybook develops and documents the **native Conduit UI layer**. Its stories
-and component docs can later inform a deliberately curated model registry.
+Storybook develops and visually **demonstrates** the real Conduit UI layer:
+both isolated base components and actual imported application compositions.
+It does not become a competing authority for design intent, which remains
+in `DESIGN.md`. Its stories and fixtures can later inform a deliberately
+curated model registry.
 Storybook does not itself interpret DIL, sandbox HTML, validate permissions,
 or make model-generated components safe. If model-facing support is added,
 keep story metadata, component renderers, schema validators and action
@@ -796,6 +938,22 @@ permissions separately owned and testable.
 | Divergence between `DESIGN.md` and component stories | `DESIGN.md` wins on visual intent; stories demonstrate *current code* and flag migration debt. |
 
 ## Acceptance and verification
+
+**Overall architectural outcome** is complete when:
+
+- `DESIGN.md` is the **only normative design document**, simply describing
+  shared rules, the full canonical component catalogue, composition guidance,
+  and every deliberate exception with scope/rationale; known mismatches are
+  separately tracked.
+- A Storybook-like workbench renders *exactly the same components and
+  application compositions as the app* at base, stateful and realistic
+  desktop/mobile settings, with meaningful live controls and token tuning.
+- A single coherent, typed component API is actually used throughout Conduit
+  where appropriate and designed to be *exposable* through a protocol-neutral,
+  constrained model registry. A future model should be guided to existing
+  components instead of generating routine controls from scratch.
+- The design intent, executable components and interactive examples remain
+  synchronized by the same bounded change process.
 
 **First milestone (Storybook + foundation inventory)** is complete when:
 
@@ -827,9 +985,10 @@ permissions separately owned and testable.
   CSS change for review, without silently modifying source.
 - Unsupported tuning dimensions are identified honestly.
 
-**Generative UI** has **no current completion gate**: it remains a later
-prototype decision, contingent on a stable useful registry and a demonstrated
-use case. Native declarative components and sandboxed artifacts should be
+**Generative UI runtime** has **no current completion gate**: it remains a later
+prototype decision, contingent on a stable, model-ready component API and a
+demonstrated use case. API readiness is part of the **component consolidation**
+outcome; shipping a DIL parser, iframe widget bridge or model runtime is not. Native declarative components and sandboxed artifacts should be
 evaluated independently against security, performance and usability.
 
 Follow `docs/TESTING.md` for each implementation change: smallest sufficient
@@ -850,7 +1009,12 @@ does not authorize restarting any user-managed service.
 - [Current Vite toolchain](../../conduit-web/vite.config.js)
 - [Separate solid-components development workflow](../../scripts/solid-components-workbench.mjs)
 
-This is a proposed architecture and migration sequence. The **committed
-near-term direction** is *viewer first, canonical components second, visual
-editing third*. The model registry and DIL-like/UI-artifact choices are
-explicitly deferred until those foundations can be exercised in the app.
+This is a proposed architecture and migration sequence, **not** an additional
+design standard. The **end goal** is `DESIGN.md` as Conduit's only design
+document, Storybook as its visual/interactive inspection and tuning surface,
+and a coherent shared component API designed for future model consumption.
+The immediate direction is *gallery and documentation first, canonical
+components second, visual tuning and real-app examples throughout*.
+The model-facing runtime and DIL/iframe transport choices remain deferred;
+**readiness to expose existing components, rather than generating routine
+UI from scratch, is part of today's API design**.
