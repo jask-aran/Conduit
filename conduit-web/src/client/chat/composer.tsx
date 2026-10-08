@@ -111,21 +111,8 @@ export function Composer(props: {
   const phoneMode = () => !voiceFirst() ? undefined
     : ["starting", "listening"].includes(dictationState()) ? "listening"
     : inputFocused() || hasText() || dictating() ? "typing" : "idle";
-  /* Listening: the mic slides to the row's end as the others fade (FLIP). */
-  let micButton: HTMLButtonElement | undefined;
-  let micLeft = 0;
-  createEffect(on(phoneMode, () => {
-    if (!micButton) return;
-    const before = micLeft;
-    queueMicrotask(() => requestAnimationFrame(() => {
-      if (!micButton) return;
-      micLeft = micButton.getBoundingClientRect().left;
-      const shift = before - micLeft;
-      if (!before || Math.abs(shift) < 1 || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-      micButton.animate([{ transform: `translateX(${shift}px)` }, { transform: "none" }], { duration: 220, easing: "cubic-bezier(.2,.8,.2,1)" });
-    }));
-  }, { defer: true }));
-  onMount(() => { if (micButton) micLeft = micButton.getBoundingClientRect().left; });
+  // The text row was zero wide while hidden; measure it again once shown.
+  createEffect(on(phoneMode, () => scheduleResize(), { defer: true }));
   const dictatedText = () => { const range = dictatedRange(); return range ? props.chat.draft().slice(range.start, range.end) : ""; };
   // A phone has no model chip in its row, so the empty draft names the model --
   // it stays in view at no cost in height.
@@ -230,7 +217,7 @@ export function Composer(props: {
   const resize = () => {
     input.style.height = "auto";
     input.style.height = `${Math.min(input.scrollHeight, 192)}px`;
-    if (!phoneLayout() || (voiceFirst() && phoneMode() !== "typing") || !mobileActions) return setMobileActionsStacked(false);
+    if (!phoneLayout() || voiceFirst() || !mobileActions) return setMobileActionsStacked(false);
     /* The actions stack the moment the draft reaches its third line. Stacked,
        the draft is a button wider and may rewrap to two lines; it stays
        stacked until it fits on one, which at the narrower width is at most
@@ -619,7 +606,7 @@ export function Composer(props: {
     </Show>
     <div class="composer-surface-shell" data-composer-surface={composerSurface()}>
       <div class="composer composer-surface-material" data-composer-surface={composerSurface()}>
-        <Show when={phoneMode() === "listening" && phoneComposer() === "surface"}><div class="composer-voice-glow" aria-hidden="true"><i /><i /><i /><i /></div></Show>
+        <Show when={voiceFirst() && phoneComposer() === "surface"}><div class="composer-voice-glow" aria-hidden="true"><i /><i /><i /><i /></div><VoiceWaveform class="chat-status-waveform composer-voice-waveform" history={dictationWaveform.history} level={dictationWaveform.level} peak={dictationWaveform.peak} state={recorderMonitorState()} variant="compact" barDensity={3} ariaLabel="Microphone input level" /></Show>
         <div class="composer-content">
           <MobileComposerOptions composer={props} />
           <div class="composer-input-shell">
@@ -630,7 +617,7 @@ export function Composer(props: {
             onPointerDown={(event) => { const control = (event.target as Element).closest("button"); if (control) control.dataset.pointerOpened = ""; }}
             onKeyDown={(event) => { if (["Enter", " ", "ArrowDown", "ArrowUp"].includes(event.key)) delete (event.target as HTMLElement).dataset?.pointerOpened; }}>
             <div ref={actionsLeft} class="composer-actions-left">
-              <Show when={phoneMode() === "idle"}><Button variant="ghost" size="icon-sm" class="composer-keyboard-trigger" aria-label="Type a message" disabled={!props.serverOnline || !interactive()} onClick={() => input.focus()}><KeyboardIcon /></Button></Show>
+              <Show when={phoneMode() !== "typing"}><Button variant="ghost" size="icon-sm" class="composer-keyboard-trigger" aria-label="Type a message" disabled={!props.serverOnline || !interactive()} onClick={() => input.focus()}><KeyboardIcon /></Button></Show>
               <Show when={!phoneLayout()}><ComposerPlusMenu folded={folded()} chat={props.chat} models={props.models} permissions={props.permissions} serviceLevels={props.serviceLevels}
                 profiles={props.profiles} activeProfile={props.activeProfile} place={props.place} disabled={!props.serverOnline || !interactive()} modelSwitch={supports("modelSwitch")}
                 onChooseProfile={props.onChooseProfile} onOpenModelSelector={props.onOpenModelSelector} modelSelectorShortcut={props.modelSelectorShortcut}
@@ -643,10 +630,10 @@ export function Composer(props: {
               </div></Show>
               <Show when={(props.permissions?.profiles().length || props.serviceLevels?.levels().length) && shows("permissions")}><div class="composer-desktop-setting" data-composer-fold="permissions"><Menu><MenuTrigger class="model-trigger composer-permission-trigger" aria-label="Session settings" disabled={!props.serverOnline || !interactive()}><ShieldCheckIcon /><span>{props.permissions?.profiles().find((profile) => profile.id === props.permissions?.selected())?.label || "Settings"}</span><ChevronDownIcon /></MenuTrigger><MenuContent class="w-72"><Show when={props.permissions?.profiles().length}><MenuGroup><MenuLabel>Permissions</MenuLabel><MenuRadioGroup value={props.permissions?.selected() || ""} onChange={(value) => void props.permissions?.choose(value)}><For each={props.permissions?.profiles() || []}>{(profile) => <MenuRadioItem value={profile.id} disabled={!profile.allowed}><span class="shrink-0 whitespace-nowrap">{profile.label}</span><Show when={profile.description}><span class="ml-auto max-w-40 truncate text-xs text-muted-foreground">{profile.description}</span></Show></MenuRadioItem>}</For></MenuRadioGroup></MenuGroup></Show><Show when={props.serviceLevels?.levels().length}><Show when={props.permissions?.profiles().length}><MenuSeparator /></Show><MenuGroup><MenuLabel>Service level</MenuLabel><MenuRadioGroup value={props.serviceLevels?.selected() || ""} onChange={(value) => void props.serviceLevels?.choose(value)}><For each={props.serviceLevels?.levels() || []}>{(level) => <MenuRadioItem value={level.id}>{level.label}</MenuRadioItem>}</For></MenuRadioGroup></MenuGroup></Show></MenuContent></Menu></div></Show>
             </div>
-            <Show when={recording() && (!phoneLayout() || voiceFirst())}><VoiceWaveform class="composer-status-waveform composer-actions-waveform" history={dictationWaveform.history} level={dictationWaveform.level} peak={dictationWaveform.peak} state={recorderMonitorState()} variant="compact" barDensity={3} ariaLabel={dictationLabel() || "Microphone input level"} /></Show>
+            <Show when={recording() && !phoneLayout()}><VoiceWaveform class="composer-status-waveform composer-actions-waveform" history={dictationWaveform.history} level={dictationWaveform.level} peak={dictationWaveform.peak} state={recorderMonitorState()} variant="compact" barDensity={3} ariaLabel={dictationLabel() || "Microphone input level"} /></Show>
             <div ref={mobileActions} class="composer-actions-right">
               <Show when={!recording() && (dictationLabel() || (activity()?.label && activity()?.label !== "Ready"))}><span class="composer-status-state composer-actions-status" role="status" aria-live="polite"><Show when={dictationLabel()} fallback={<><Show when={SPINNING_ACTIVITY.has(activity()?.kind || "")}><Spinner /></Show><Show when={["request_failed", "runtime_failed"].includes(activity()?.kind || "")}><TriangleAlertIcon aria-hidden="true" /></Show>{activity()?.label || "Ready"}</>}>{dictationLabel()}</Show></span></Show>
-              <Button variant="ghost" size="icon-sm" ref={micButton} class="dictation-trigger" data-state={dictationState()} aria-label={["starting", "listening"].includes(dictationState()) ? "Stop voice dictation" : "Start voice dictation"} aria-pressed={dictating()} title={`Voice dictation (${props.voiceSettings.shortcut})`} disabled={!props.serverOnline || !interactive() || ["finishing", "waiting", "transcribing"].includes(dictationState())} onPointerDown={captureDictationLaunch} onClick={toggleDictation}><Show when={phoneMode() === "listening" && phoneComposer() === "bar"}><div class="composer-voice-glow" aria-hidden="true"><i /><i /><i /><i /></div></Show><Show when={voiceFirst() && ["starting", "listening"].includes(dictationState())} fallback={<Show when={["starting", "finishing", "waiting", "transcribing"].includes(dictationState())} fallback={<MicIcon />}><Spinner /></Show>}><ThinkingOrb state="listening" class="composer-voice-orb" /></Show></Button>
+              <Button variant="ghost" size="icon-sm" class="dictation-trigger" data-state={dictationState()} aria-label={["starting", "listening"].includes(dictationState()) ? "Stop voice dictation" : "Start voice dictation"} aria-pressed={dictating()} title={`Voice dictation (${props.voiceSettings.shortcut})`} disabled={!props.serverOnline || !interactive() || ["finishing", "waiting", "transcribing"].includes(dictationState())} onPointerDown={captureDictationLaunch} onClick={toggleDictation}><Show when={voiceFirst()} fallback={<Show when={["starting", "finishing", "waiting", "transcribing"].includes(dictationState())} fallback={<MicIcon />}><Spinner /></Show>}><Show when={phoneComposer() === "bar"}><div class="composer-voice-glow" aria-hidden="true"><i /><i /><i /><i /></div><VoiceWaveform class="chat-status-waveform composer-voice-waveform" history={dictationWaveform.history} level={dictationWaveform.level} peak={dictationWaveform.peak} state={recorderMonitorState()} variant="compact" barDensity={3} ariaLabel="Microphone input level" /></Show><span class="composer-voice-mic"><Show when={["finishing", "waiting", "transcribing"].includes(dictationState())} fallback={<MicIcon />}><Spinner /></Show></span><ThinkingOrb state="listening" class="composer-voice-orb" paused={phoneMode() !== "listening"} /></Show></Button>
               {/* One primary slot, so nothing beside it moves. While the agent
                   works it is Stop; once a draft is typed it is Send again --
                   which queues the message for the agent -- and Stop steps to
