@@ -1,6 +1,6 @@
 import * as KDialog from "@kobalte/core/dialog";
 import * as KAlertDialog from "@kobalte/core/alert-dialog";
-import { createEffect, Show, type JSX } from "solid-js";
+import { createEffect, onCleanup, Show, type JSX } from "solid-js";
 import { XIcon } from "lucide-solid";
 import { createFullscreenPortalMount } from "@/components/primitives";
 
@@ -57,6 +57,12 @@ export function FrostOverlay(props: {
   /** Beside the card, inside the overlay. */
   aside?: JSX.Element;
 }) {
+  /* A tap outside an open menu only closes the menu: noted on window, before
+     the menu's own document listener has taken it off screen. */
+  let closingMenu = false;
+  const noteMenu = () => { closingMenu = Boolean(document.querySelector('[data-slot="menu-content"], [data-slot="popover-content"]')); };
+  window.addEventListener("pointerdown", noteMenu, true);
+  onCleanup(() => window.removeEventListener("pointerdown", noteMenu, true));
   return <KDialog.Root open={props.open} onOpenChange={props.onOpenChange}>
     <KDialog.Portal>
       <KDialog.Content
@@ -66,7 +72,7 @@ export function FrostOverlay(props: {
         onOpenAutoFocus={props.onOpenAutoFocus}
         onCloseAutoFocus={props.onCloseAutoFocus}
         onEscapeKeyDown={props.onEscapeKeyDown}
-        onPointerDown={(event) => { if (event.target === event.currentTarget) props.onOpenChange(false); }}
+        onPointerDown={(event) => { if (event.target === event.currentTarget && !closingMenu) props.onOpenChange(false); }}
       >
         <div {...props.cardAttrs} class={`frost-card${props.cardClass ? ` ${props.cardClass}` : ""}`}>{props.children}</div>
         {props.aside}
