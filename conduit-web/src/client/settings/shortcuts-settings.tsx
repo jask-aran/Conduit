@@ -5,6 +5,7 @@ import {
   AlertTriangleIcon, PlusIcon, RotateCcwIcon, SearchIcon, XIcon,
 } from "lucide-solid";
 import { Button, Input } from "@/components/primitives";
+import { Select } from "./settings-controls";
 import { desktopShell } from "../platform/installed-client";
 import { shortcutConflicts } from "../shortcuts/shortcut-conflicts";
 import { shortcutEnvironmentLabel } from "../shortcuts/shortcut-environment";
@@ -226,9 +227,9 @@ export function ShortcutsSettings(props: { manager: ShortcutManager }) {
       <div class="settings-line"><span>Keys for<em>{shortcutEnvironmentLabel(props.manager.environment)}</em></span>
         <Button variant="ghost" size="sm" onClick={resetAll} disabled={!hasOverrides()}><RotateCcwIcon /> Reset all</Button></div>
       <label class="settings-line" for="leader-menu"><span>Leader menu<Show when={props.manager.leader}>{(stroke) => <em><kbd>{formatShortcutStroke(stroke(), props.manager.environment)}</kbd></em>}</Show></span>
-        <select id="leader-menu" aria-label="When the leader menu shows" value={leaderMenu()} onChange={(event) => saveLeaderMenu(event.currentTarget.value as LeaderMenuMode)}>
+        <Select id="leader-menu" aria-label="When the leader menu shows" value={leaderMenu()} onChange={(event) => saveLeaderMenu(event.currentTarget.value as LeaderMenuMode)}>
           <For each={LEADER_MENU_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
-        </select>
+        </Select>
       </label>
       <label class="shortcuts-search">
         <SearchIcon />

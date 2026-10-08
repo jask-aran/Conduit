@@ -1,6 +1,6 @@
 import { For, Show } from "solid-js";
 import { Button } from "@/components/primitives";
-import { Switch } from "./settings-controls";
+import { Select, Switch } from "./settings-controls";
 import type { VoiceBackendPathStatus, VoiceExecutionProfile, VoiceExecutionCatalogueView, VoiceLocalModel, VoiceLocalSelection } from "../api/contracts";
 
 type CatalogueModel = VoiceExecutionCatalogueView["models"][number];
@@ -112,25 +112,25 @@ export default function VoiceLocalCatalogue(props: VoiceLocalCatalogueProps) {
     : artifactStateLabel(props.backendStatus?.artifactState).replace(/^./, (first) => first.toUpperCase());
   return <>
     <label class="settings-line" for="voice-local-family"><span>Model</span>
-      <select id="voice-local-family" disabled={disabled()} title={props.selectedModel?.description} value={props.selection?.modelId || ""} onChange={(event) => props.onFamilyChange(event.currentTarget.value)}>
+      <Select id="voice-local-family" disabled={disabled()} title={props.selectedModel?.description} value={props.selection?.modelId || ""} onChange={(event) => props.onFamilyChange(event.currentTarget.value)}>
         <For each={props.catalogue.models}>{(model) => <option value={model.id}>{model.label}</option>}</For>
-      </select>
+      </Select>
     </label>
     <Show when={props.selection}>{(selection) => <>
       <label class="settings-line" for="voice-local-runtime"><span>Runtime</span>
-        <select id="voice-local-runtime" disabled={disabled()} value={selection().runtimeId} onChange={(event) => props.onRuntimeChange(event.currentTarget.value)}>
+        <Select id="voice-local-runtime" disabled={disabled()} value={selection().runtimeId} onChange={(event) => props.onRuntimeChange(event.currentTarget.value)}>
           <For each={runtimeChoices()}>{(backendPath) => <option value={backendPath.runtimeId} title={runtimeOptionLabel(backendPath.runtimeId)}>{runtimeShortLabel(backendPath.runtimeId)}</option>}</For>
-        </select>
+        </Select>
       </label>
       <label class="settings-line" for="voice-local-variant"><span>Variant</span>
-        <select id="voice-local-variant" disabled={disabled()} value={selection().artifactId} onChange={(event) => props.onVariantChange(event.currentTarget.value)}>
+        <Select id="voice-local-variant" disabled={disabled()} value={selection().artifactId} onChange={(event) => props.onVariantChange(event.currentTarget.value)}>
           <For each={variantChoices()}>{(artifact) => <option value={artifact.id} title={variantOptionLabel(artifact)}>{variantShortLabel(artifact)}</option>}</For>
-        </select>
+        </Select>
       </label>
       <label class="settings-line" for="voice-local-batching"><span>Timing</span>
-        <select id="voice-local-batching" disabled={disabled() || !props.profiles.length} title={selectedProfile() ? profileDescription(selectedProfile()!) : undefined} value={selectedProfile()?.id || ""} onChange={(event) => props.onTimingChange(event.currentTarget.value)}>
+        <Select id="voice-local-batching" disabled={disabled() || !props.profiles.length} title={selectedProfile() ? profileDescription(selectedProfile()!) : undefined} value={selectedProfile()?.id || ""} onChange={(event) => props.onTimingChange(event.currentTarget.value)}>
           <For each={props.profiles}>{(profile) => <option value={profile.id}>{profileLabel(profile)}</option>}</For>
-        </select>
+        </Select>
       </label>
       <Show when={props.selectedLocalModel && !props.selectedLocalModel!.installed && !props.installingModelId}>
         <div class="settings-line" title={props.selectedLocalModel!.license.attribution}><span>Accept {props.selectedLocalModel!.license.id} licence</span>

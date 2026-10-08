@@ -41,7 +41,7 @@ import {
 } from "../chat/transcript-appearance";
 import type { CodeBlockCollapseMode } from "../chat/code-block";
 import { ShortcutsSettings } from "./shortcuts-settings";
-import { Segmented, Switch } from "./settings-controls";
+import { Segmented, Select, Switch } from "./settings-controls";
 import { combineSaveStates, createAutosave, type SaveState } from "./autosave";
 import { SaveStatus } from "./save-status";
 import { FrostOverlay } from "@/components/frost";
@@ -1134,9 +1134,9 @@ export function Settings(props: {
                   <h3>System prompt</h3>
                   <label class="settings-line" for="prompt-selector" title="Changes apply when the next runtime or naming request starts."><span>Prompt<em>{prompts().find((item) => item.id === promptId())?.modified ? "modified" : "default"}</em></span>
                     <span class="settings-line-control">
-                      <select id="prompt-selector" value={promptId()} onChange={(event) => choosePrompt(event.currentTarget.value)}>
+                      <Select id="prompt-selector" value={promptId()} onChange={(event) => choosePrompt(event.currentTarget.value)}>
                         <For each={prompts()}>{(prompt) => <option value={prompt.id} selected={prompt.id === promptId()}>{prompt.label}{prompt.kind === "service" ? " · service" : ""}</option>}</For>
-                      </select>
+                      </Select>
                       <Button variant="ghost" size="icon-sm" aria-label="Reset to default" title="Reset to default" disabled={promptSaving() || (!prompts().find((item) => item.id === promptId())?.modified && promptDraft() === promptBaseline())} onClick={() => void resetPrompt()}><RotateCcwIcon /></Button>
                     </span>
                   </label>
@@ -1152,43 +1152,43 @@ export function Settings(props: {
               <section class="settings-group" aria-label="Interface">
                 <h3>Interface</h3>
                   <label class="settings-line" for="interface-scale"><span>Scale</span>
-                    <select id="interface-scale" aria-label="Interface scale" value={props.interfaceScale} onChange={(event) => props.onInterfaceScaleChange(parseUiScale(event.currentTarget.value))}>
+                    <Select id="interface-scale" aria-label="Interface scale" value={props.interfaceScale} onChange={(event) => props.onInterfaceScaleChange(parseUiScale(event.currentTarget.value))}>
                       <For each={UI_SCALE_OPTIONS}>{(scale) => <option value={scale}>{Math.round(scale * 100)}%</option>}</For>
-                    </select>
+                    </Select>
                   </label>
                   <label class="settings-line" for="sidebar-chat-limit"><span>Sidebar chats</span>
                     <Input id="sidebar-chat-limit" type="number" min={MIN_SIDEBAR_CHAT_LIMIT} max={MAX_SIDEBAR_CHAT_LIMIT} step="1" value={props.sidebarChatLimit} onChange={(event) => props.onSidebarChatLimitChange(Number(event.currentTarget.value))} onBlur={(event) => props.onSidebarChatLimitChange(Number(event.currentTarget.value))} />
                   </label>
                   <label class="settings-line" for="composer-surface-mode"><span>Composer</span>
-                    <select id="composer-surface-mode" aria-label="Composer material" title={COMPOSER_SURFACE_OPTIONS.find((option) => option.value === props.composerSurface)?.description} value={props.composerSurface} onChange={(event) => props.onComposerSurfaceChange(event.currentTarget.value as ComposerSurfaceMode)}>
+                    <Select id="composer-surface-mode" aria-label="Composer material" title={COMPOSER_SURFACE_OPTIONS.find((option) => option.value === props.composerSurface)?.description} value={props.composerSurface} onChange={(event) => props.onComposerSurfaceChange(event.currentTarget.value as ComposerSurfaceMode)}>
                       <For each={COMPOSER_SURFACE_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
-                    </select>
+                    </Select>
                   </label>
                   <label class="settings-line" for="phone-composer-layout"><span>Phone composer</span>
-                    <select id="phone-composer-layout" aria-label="Phone composer layout" value={phoneComposer()} onChange={(event) => setPhoneComposer(savePhoneComposerLayout(event.currentTarget.value as PhoneComposerLayout))}>
+                    <Select id="phone-composer-layout" aria-label="Phone composer layout" value={phoneComposer()} onChange={(event) => setPhoneComposer(savePhoneComposerLayout(event.currentTarget.value as PhoneComposerLayout))}>
                       <For each={PHONE_COMPOSER_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
-                    </select>
+                    </Select>
                   </label>
                   <label class="settings-line" for="tab-frost"><span>Tab row</span>
                     <Switch id="tab-frost" label="Frosted tab row" checked={frosted()} onChange={(on) => setFrosted(saveTabFrost(on))} />
                   </label>
                   <label class="settings-line" for="markdown-renderer"><span>Markdown</span>
-                    <select id="markdown-renderer" aria-label="Markdown renderer" title={MARKDOWN_RENDERER_OPTIONS.find((option) => option.value === props.markdownRenderer)?.description} value={props.markdownRenderer} onChange={(event) => props.onMarkdownRendererChange(event.currentTarget.value as MarkdownRendererId)}>
+                    <Select id="markdown-renderer" aria-label="Markdown renderer" title={MARKDOWN_RENDERER_OPTIONS.find((option) => option.value === props.markdownRenderer)?.description} value={props.markdownRenderer} onChange={(event) => props.onMarkdownRendererChange(event.currentTarget.value as MarkdownRendererId)}>
                       <For each={MARKDOWN_RENDERER_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
-                    </select>
+                    </Select>
                   </label>
                   <Show when={props.markdownRenderer === "incremark"}>
                     <label class="settings-line" for="stream-pacing"><span>Streaming</span>
-                      <select id="stream-pacing" aria-label="Streaming reveal" value={pacing()} onChange={(event) => setPacing(saveIncremarkPacing(event.currentTarget.value as IncremarkPacingMode))}>
+                      <Select id="stream-pacing" aria-label="Streaming reveal" value={pacing()} onChange={(event) => setPacing(saveIncremarkPacing(event.currentTarget.value as IncremarkPacingMode))}>
                         <For each={INCREMARK_PACING_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
-                      </select>
+                      </Select>
                     </label>
                   </Show>
                   <Show when={props.markdownRenderer === "incremark" && pacing() === "fade"}>
                     <label class="settings-line" for="stream-fade"><span>Word fade</span>
-                      <select id="stream-fade" aria-label="Word fade time" value={fadeMs()} onChange={(event) => setFadeMs(saveStreamFade(Number(event.currentTarget.value)))}>
+                      <Select id="stream-fade" aria-label="Word fade time" value={fadeMs()} onChange={(event) => setFadeMs(saveStreamFade(Number(event.currentTarget.value)))}>
                         <For each={STREAM_FADE_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
-                      </select>
+                      </Select>
                     </label>
                     <label class="settings-line" for="stream-math-fade"><span>Fade formulas in when complete</span>
                       <Switch id="stream-math-fade" label="Fade formulas in when complete" checked={streamMathFade()} onChange={saveStreamMathFade} />
@@ -1202,42 +1202,42 @@ export function Settings(props: {
               <section class="settings-group" aria-label="Reading">
                 <h3>Reading</h3>
                   <label class="settings-line" for="transcript-width"><span>Transcript width</span>
-                    <select id="transcript-width" aria-label="Transcript width" value={props.transcriptWidth} onChange={(event) => props.onTranscriptWidthChange(event.currentTarget.value as TranscriptWidthMode)}>
+                    <Select id="transcript-width" aria-label="Transcript width" value={props.transcriptWidth} onChange={(event) => props.onTranscriptWidthChange(event.currentTarget.value as TranscriptWidthMode)}>
                       <For each={TRANSCRIPT_WIDTH_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
-                    </select>
+                    </Select>
                   </label>
                   <label class="settings-line" for="transcript-wide-blocks"><span>Wide blocks</span>
-                    <select id="transcript-wide-blocks" aria-label="Wide blocks" value={props.transcriptWideBlocks} onChange={(event) => props.onTranscriptWideBlocksChange(event.currentTarget.value as TranscriptWideBlocksMode)}>
+                    <Select id="transcript-wide-blocks" aria-label="Wide blocks" value={props.transcriptWideBlocks} onChange={(event) => props.onTranscriptWideBlocksChange(event.currentTarget.value as TranscriptWideBlocksMode)}>
                       <For each={TRANSCRIPT_WIDE_BLOCKS_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
-                    </select>
+                    </Select>
                   </label>
                   <label class="settings-line" for="code-block-width"><span>Code width</span>
-                    <select id="code-block-width" aria-label="Code block width" value={props.codeBlockWidth} onChange={(event) => props.onCodeBlockWidthChange(event.currentTarget.value as CodeBlockWidthMode)}>
+                    <Select id="code-block-width" aria-label="Code block width" value={props.codeBlockWidth} onChange={(event) => props.onCodeBlockWidthChange(event.currentTarget.value as CodeBlockWidthMode)}>
                       <For each={CODE_BLOCK_WIDTH_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
-                    </select>
+                    </Select>
                   </label>
                   <label class="settings-line" for="panel-motion"><span>Panel drag</span>
-                    <select id="panel-motion" aria-label="Panel drag" title={PANEL_MOTION_OPTIONS.find((option) => option.value === props.panelMotion)?.label} value={props.panelMotion} onChange={(event) => props.onPanelMotionChange(event.currentTarget.value as PanelMotionMode)}>
+                    <Select id="panel-motion" aria-label="Panel drag" title={PANEL_MOTION_OPTIONS.find((option) => option.value === props.panelMotion)?.label} value={props.panelMotion} onChange={(event) => props.onPanelMotionChange(event.currentTarget.value as PanelMotionMode)}>
                       <For each={PANEL_MOTION_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
-                    </select>
+                    </Select>
                   </label>
               </section>
               <section class="settings-group" aria-label="Collapse">
                 <h3>Collapse</h3>
                   <label class="settings-line" for="code-block-collapse"><span>Code blocks</span>
-                    <select id="code-block-collapse" aria-label="Collapse code blocks" value={props.codeBlockCollapse} onChange={(event) => props.onCodeBlockCollapseChange(event.currentTarget.value as CodeBlockCollapseMode)}>
+                    <Select id="code-block-collapse" aria-label="Collapse code blocks" value={props.codeBlockCollapse} onChange={(event) => props.onCodeBlockCollapseChange(event.currentTarget.value as CodeBlockCollapseMode)}>
                       <For each={CODE_BLOCK_COLLAPSE_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
-                    </select>
+                    </Select>
                   </label>
                   <label class="settings-line" for="code-block-collapse-lines"><span>Fold over</span>
-                    <select id="code-block-collapse-lines" aria-label="Collapse code blocks over" disabled={props.codeBlockCollapse === "off"} value={props.codeBlockCollapseLines} onChange={(event) => props.onCodeBlockCollapseLinesChange(Number(event.currentTarget.value))}>
+                    <Select id="code-block-collapse-lines" aria-label="Collapse code blocks over" disabled={props.codeBlockCollapse === "off"} value={props.codeBlockCollapseLines} onChange={(event) => props.onCodeBlockCollapseLinesChange(Number(event.currentTarget.value))}>
                       <For each={CODE_BLOCK_COLLAPSE_LINE_CHOICES}>{(lines) => <option value={lines}>{lines} lines</option>}</For>
-                    </select>
+                    </Select>
                   </label>
                   <label class="settings-line" for="user-message-collapse"><span>Your messages</span>
-                    <select id="user-message-collapse" aria-label="Collapse your messages" value={props.userMessageCollapse} onChange={(event) => props.onUserMessageCollapseChange(event.currentTarget.value as UserMessageCollapseMode)}>
+                    <Select id="user-message-collapse" aria-label="Collapse your messages" value={props.userMessageCollapse} onChange={(event) => props.onUserMessageCollapseChange(event.currentTarget.value as UserMessageCollapseMode)}>
                       <For each={USER_MESSAGE_COLLAPSE_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
-                    </select>
+                    </Select>
                   </label>
               </section>
               <section class="settings-group" aria-label="Graphics">
@@ -1268,10 +1268,10 @@ export function Settings(props: {
           </Show>
           <Show when={section() === "workspaces"}>
             <Show when={!props.templatesLoading && !props.installationsLoading} fallback={<div class="settings-loading"><Spinner /><span>Loading workspace settings…</span></div>}><Show when={workspaceProjects().find((workspace) => workspace.id === workspaceId())} fallback={<p>This workspace is not available.</p>}>{(workspace) => <div class="workspace-settings-card" data-current="true"><h3>{workspace().name}</h3><p>{workspace().workingRoot}</p><p>Override: {workspaceDefaultLabel(workspace()).startsWith("Inherit") ? "None" : workspaceDefaultLabel(workspace())}</p>
-              <Field><FieldLabel for={`workspace-default-profile-${workspace().id}`}>Default profile</FieldLabel><select id={`workspace-default-profile-${workspace().id}`} aria-label={`${workspace().name} default profile`} value={workspace().defaultTemplateId || ""} onChange={(event) => void saveWorkspace(workspace(), event.currentTarget.value || null)}>
+              <Field><FieldLabel for={`workspace-default-profile-${workspace().id}`}>Default profile</FieldLabel><Select id={`workspace-default-profile-${workspace().id}`} aria-label={`${workspace().name} default profile`} value={workspace().defaultTemplateId || ""} onChange={(event) => void saveWorkspace(workspace(), event.currentTarget.value || null)}>
                 <option value="">Inherit global ({props.templates.find((item) => item.id === props.defaultTemplateId)?.label || "General"})</option>
                 <For each={props.templates.filter((item) => item.defaultable !== false)}>{(item) => <option value={item.id}>{item.label}</option>}</For>
-              </select></Field>
+              </Select></Field>
             </div>}</Show></Show>
           </Show>
           <Show when={section() === "voice"}>
@@ -1310,19 +1310,19 @@ export function Settings(props: {
                     onUninstall={() => void uninstallVoiceModel(selectedVoiceInstallModelId())}
                   />}</Show>
                   <Show when={voiceServerSettings()!.mode === "remote"}>
-                    <label class="settings-line" for="voice-provider"><span>Provider</span><select id="voice-provider" disabled={voiceBusy()} value={voiceServerSettings()!.provider} onChange={(event) => {
+                    <label class="settings-line" for="voice-provider"><span>Provider</span><Select id="voice-provider" disabled={voiceBusy()} value={voiceServerSettings()!.provider} onChange={(event) => {
                       const provider = voiceServerSettings()!.providers.find((candidate) => candidate.id === event.currentTarget.value)!;
                       setVoiceSecret("");
                       editVoiceServer((current) => ({ ...current, provider: provider.id, adapter: provider.adapter, endpoint: provider.endpoint, model: provider.models[0]?.id || "", auth: { ...current.auth, type: provider.id === "custom" ? current.auth.type : "bearer", configured: Boolean(provider.configured), source: provider.configured ? "stored" : null, removable: Boolean(provider.configured) } }));
-                    }}><For each={voiceServerSettings()!.providers}>{(provider) => <option value={provider.id}>{provider.label}</option>}</For></select></label>
+                    }}><For each={voiceServerSettings()!.providers}>{(provider) => <option value={provider.id}>{provider.label}</option>}</For></Select></label>
                     <Show when={selectedVoiceProvider()?.models.length}>
-                      <label class="settings-line" for="voice-cloud-model"><span>Model</span><select id="voice-cloud-model" disabled={voiceBusy()} title={selectedVoiceProvider()!.models.find((model) => model.id === voiceServerSettings()!.model)?.description} value={voiceServerSettings()!.model} onChange={(event) => {
+                      <label class="settings-line" for="voice-cloud-model"><span>Model</span><Select id="voice-cloud-model" disabled={voiceBusy()} title={selectedVoiceProvider()!.models.find((model) => model.id === voiceServerSettings()!.model)?.description} value={voiceServerSettings()!.model} onChange={(event) => {
                         const model = selectedVoiceProvider()!.models.find((candidate) => candidate.id === event.currentTarget.value);
                         updateVoiceServer({ model: event.currentTarget.value, ...(model?.adapter ? { adapter: model.adapter } : {}) });
-                      }}><For each={selectedVoiceProvider()!.models}>{(model) => <option value={model.id}>{model.label}</option>}</For></select></label>
+                      }}><For each={selectedVoiceProvider()!.models}>{(model) => <option value={model.id}>{model.label}</option>}</For></Select></label>
                     </Show>
                     <Show when={voiceServerSettings()!.provider === "custom"}>
-                      <label class="settings-line" for="voice-adapter"><span>Protocol</span><select id="voice-adapter" disabled={voiceBusy()} title={selectedVoiceAdapter()?.description} value={voiceServerSettings()!.adapter} onChange={(event) => updateVoiceServer({ adapter: event.currentTarget.value })}><For each={voiceServerSettings()!.adapters}>{(adapter) => <option value={adapter.id}>{adapter.label}</option>}</For></select></label>
+                      <label class="settings-line" for="voice-adapter"><span>Protocol</span><Select id="voice-adapter" disabled={voiceBusy()} title={selectedVoiceAdapter()?.description} value={voiceServerSettings()!.adapter} onChange={(event) => updateVoiceServer({ adapter: event.currentTarget.value })}><For each={voiceServerSettings()!.adapters}>{(adapter) => <option value={adapter.id}>{adapter.label}</option>}</For></Select></label>
                       <label class="settings-line" for="voice-endpoint"><span>Endpoint<Show when={voiceEndpointError(voiceServerSettings()!)}>{(message) => <em data-tone="error">{message()}</em>}</Show></span><Input id="voice-endpoint" type="url" disabled={voiceBusy()} value={voiceServerSettings()!.endpoint} placeholder="https://…" onInput={(event) => updateVoiceServer({ endpoint: event.currentTarget.value }, "pause")} /></label>
                       <label class="settings-line" for="voice-custom-model"><span>Model parameter</span><Input id="voice-custom-model" value={voiceServerSettings()!.model} placeholder="Optional" onInput={(event) => updateVoiceServer({ model: event.currentTarget.value }, "pause")} /></label>
                       <div class="settings-line"><span>Authentication</span>
@@ -1355,11 +1355,11 @@ export function Settings(props: {
                   <h3>Input</h3>
                   <label class="settings-line" data-stack="mic" for="voice-input-device"><span>Microphone</span>
                     <div class="settings-line-control">
-                      <select ref={voiceInputSelect} id="voice-input-device" disabled={audioInputBusy()} value={voiceDraft().inputDeviceId} onChange={(event) => updateVoiceDraft({ inputDeviceId: event.currentTarget.value })}>
+                      <Select ref={voiceInputSelect} id="voice-input-device" disabled={audioInputBusy()} value={voiceDraft().inputDeviceId} onChange={(event) => updateVoiceDraft({ inputDeviceId: event.currentTarget.value })}>
                         <option value="">System default</option>
                         <Show when={voiceDraft().inputDeviceId && !audioInputDevices().some((device) => device.deviceId === voiceDraft().inputDeviceId)}><option value={voiceDraft().inputDeviceId}>Unavailable microphone</option></Show>
                         <For each={audioInputDevices()}>{(device) => <option value={device.deviceId}>{device.label}</option>}</For>
-                      </select>
+                      </Select>
                       <Button variant="ghost" size="icon-sm" aria-label="Refresh microphones" title="Refresh microphones" disabled={audioInputBusy() || audioInputStatus() === "loading"} onClick={() => void loadAudioInputs()}><RefreshCwIcon /></Button>
                       <Show when={audioInputTest()?.recording && !audioInputBusy()}><Button variant="ghost" size="icon-sm" aria-label={audioInputPlayback() ? "Stop playback" : "Play test recording"} title={audioInputPlayback() ? "Stop playback" : "Play test recording"} onClick={() => audioInputPlayback() ? stopAudioInputPlayback() : void playAudioInputTest()}>{audioInputPlayback() ? <SquareIcon /> : <PlayIcon />}</Button></Show>
                       <Button variant="ghost" size="sm" disabled={audioInputStatus() === "loading"} onClick={() => audioInputBusy() ? stopAudioInputTest() : void testAudioInput()}>{audioInputBusy() ? "Stop" : "Test"}</Button>
@@ -1434,7 +1434,7 @@ export function Settings(props: {
             <section class="settings-group" aria-label="Defaults">
               <h3>Defaults</h3>
               <Show when={!props.templatesLoading} fallback={<div class="settings-line"><span>Default profile<em>loading…</em></span><span /></div>}>
-                <label class="settings-line" for="default-profile"><span>Default profile</span><select id="default-profile" value={props.defaultTemplateId} onChange={(event) => defaultProfileAutosave.edit(event.currentTarget.value, "now")}><For each={props.templates.filter((item) => item.defaultable !== false)}>{(item) => <option value={item.id}>{item.label}</option>}</For></select></label>
+                <label class="settings-line" for="default-profile"><span>Default profile</span><Select id="default-profile" value={props.defaultTemplateId} onChange={(event) => defaultProfileAutosave.edit(event.currentTarget.value, "now")}><For each={props.templates.filter((item) => item.defaultable !== false)}>{(item) => <option value={item.id}>{item.label}</option>}</For></Select></label>
               </Show>
               <div class="settings-line"><span>Session naming</span>
                 <ModelSelector
@@ -1474,7 +1474,7 @@ export function Settings(props: {
               <Show when={authUnavailable()}><p role="alert" class="settings-line-note">Set a Conduit password with <code>node scripts/conduit-auth.mjs set-password</code>, then sign in to manage Pi credentials here.</p></Show>
               <Show when={authError() && !authUnavailable()}><p role="alert" class="settings-line-note">{authError()}</p></Show>
               <Show when={!authUnavailable() && authLoading() && !authProviders().length} fallback={<Show when={!authUnavailable()}>
-                <label class="settings-line" for="pi-auth-provider" title="Credentials are stored only in Conduit's pinned Pi runtime."><span>Provider</span><select id="pi-auth-provider" aria-label="Pi authentication provider" value={authProviderId()} onChange={(event) => setAuthProviderId(event.currentTarget.value)}><For each={authProviders()}>{(provider) => <option value={provider.id}>{provider.label}</option>}</For></select></label>
+                <label class="settings-line" for="pi-auth-provider" title="Credentials are stored only in Conduit's pinned Pi runtime."><span>Provider</span><Select id="pi-auth-provider" aria-label="Pi authentication provider" value={authProviderId()} onChange={(event) => setAuthProviderId(event.currentTarget.value)}><For each={authProviders()}>{(provider) => <option value={provider.id}>{provider.label}</option>}</For></Select></label>
                 <Show when={authProviders().find((provider) => provider.id === authProviderId())?.oauth}>
                   <div class="settings-line"><span>Sign in</span><Button variant="ghost" size="sm" disabled={authLoading() || Boolean(authAttempt()?.active)} onClick={() => void startOAuth()}>{authLoading() ? <Spinner /> : null}Sign in with browser</Button></div>
                 </Show>

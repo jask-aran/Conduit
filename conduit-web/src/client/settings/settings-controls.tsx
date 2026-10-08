@@ -1,4 +1,6 @@
-import { For, type JSX } from "solid-js";
+import { createSignal, For, onCleanup, onMount, splitProps, type JSX } from "solid-js";
+import { ChevronDownIcon } from "lucide-solid";
+import { Menu, MenuContent, MenuRadioGroup, MenuRadioItem, MenuTrigger } from "@/components/primitives";
 import "./settings-controls.css";
 
 /**
@@ -60,4 +62,48 @@ export function Switch(props: { label: string; checked: boolean; onChange: (chec
     disabled={props.disabled}
     onClick={() => props.onChange(!props.checked)}
   ><span aria-hidden="true" /></button>;
+}
+
+/**
+ * A settings dropdown: the native select stays as the value's owner (ids,
+ * labels, refs and onChange keep working) but is hidden, and a trigger opens
+ * the app's own menu listing its options instead of the OS picker.
+ */
+export function Select(props: JSX.SelectHTMLAttributes<HTMLSelectElement>) {
+  const [local, rest] = splitProps(props, ["ref", "class", "title", "disabled", "children"]);
+  let select!: HTMLSelectElement;
+  let trigger: HTMLButtonElement | undefined;
+  const [value, setValue] = createSignal("");
+  const [label, setLabel] = createSignal("");
+  const [options, setOptions] = createSignal<Array<{ value: string; label: string; disabled: boolean }>>([]);
+  const read = () => {
+    setValue(select.value);
+    setLabel(select.selectedOptions[0]?.textContent || "");
+    setOptions(Array.from(select.options, (option) => ({ value: option.value, label: option.textContent || "", disabled: option.disabled })));
+  };
+  onMount(() => {
+    read();
+    const observer = new MutationObserver(read);
+    observer.observe(select, { childList: true, subtree: true, characterData: true, attributes: true });
+    onCleanup(() => observer.disconnect());
+  });
+  const choose = (value: string) => {
+    if (value === select.value) return;
+    select.value = value;
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+    read();
+  };
+  return <span class={`settings-select${local.class ? ` ${local.class}` : ""}`}>
+    <select {...rest} ref={(element) => { select = element; (local.ref as ((element: HTMLSelectElement) => void) | undefined)?.(element); }} disabled={local.disabled} tabIndex={-1} aria-hidden="true" onFocus={() => trigger?.focus()}>{local.children}</select>
+    <Menu placement="bottom-end" gutter={4} onOpenChange={(open) => open && read()}>
+      <MenuTrigger ref={trigger} as="button" type="button" class="settings-select-trigger" title={local.title} disabled={local.disabled} aria-label={select?.labels?.[0]?.textContent || undefined}>
+        <span>{label()}</span><ChevronDownIcon aria-hidden="true" />
+      </MenuTrigger>
+      <MenuContent class="settings-select-menu">
+        <MenuRadioGroup value={value()} onChange={choose}>
+          <For each={options()}>{(option) => <MenuRadioItem value={option.value} disabled={option.disabled}>{option.label}</MenuRadioItem>}</For>
+        </MenuRadioGroup>
+      </MenuContent>
+    </Menu>
+  </span>;
 }
