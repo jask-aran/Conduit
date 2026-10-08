@@ -280,7 +280,7 @@ svg.lucide { stroke-width: 2.4; }
 .message-user [data-slot="message-content"] { align-items: flex-end; }
 .response-actions .response-time { flex: none; padding: 0 4.8px 0 1.6px; color: var(--muted-foreground); font-size: 8.8px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .bubble { max-width: min(512px, 88vw); border-radius: 12px; }
-.bubble-user { padding: 8px 10.4px; white-space: pre-wrap; }
+.bubble-user { padding: 8px 10.4px; white-space: pre-wrap; overflow-wrap: anywhere; }
 .harness-prompt { display: flex; justify-content: flex-end; align-items: center; gap: 6px; margin: 0; color: var(--muted-foreground); font-size: 0.8125rem; }
 .harness-prompt svg { width: 13px; height: 13px; flex: none; }
 /* Folded user message.
@@ -1058,7 +1058,7 @@ svg.lucide { stroke-width: 2.4; }
 .message-user [data-slot="message-content"] { align-items: flex-end; }
 .response-actions .response-time { flex: none; padding: 0 6px 0 2px; color: var(--muted-foreground); font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .bubble { max-width: min(640px, 88vw); border-radius: 15px; }
-.bubble-user { padding: 10px 13px; white-space: pre-wrap; }
+.bubble-user { padding: 10px 13px; white-space: pre-wrap; overflow-wrap: anywhere; }
 .user-message-text { display: block; }
 .user-message-text[data-collapsed="true"] {
   display: -webkit-box;
