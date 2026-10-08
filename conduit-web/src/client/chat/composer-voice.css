@@ -8,6 +8,7 @@
    nothing reflows when dictation starts or stops. */
 @media (--conduit-phone-layout) {
   [data-phone-layout] .composer { position: relative; isolation: isolate; min-height: 0; }
+  [data-phone-layout] .composer-surface-shell { position: relative; z-index: 6; }
 
   /* One flat row: the nested action groups dissolve so a single gap spaces
      every control. Order: + · keyboard/folder · mic · stop · send. */
@@ -118,8 +119,8 @@
   /* A dark scrim behind the captions so the transcript under them never
      shows through, fading out upwards. */
   .composer-voice-captions::before {
-    content: ""; position: absolute; inset: 0 -12px -8px; z-index: -1;
-    background: linear-gradient(to top, var(--background) 72%, transparent);
+    content: ""; position: absolute; top: -40px; bottom: -160px; left: calc(50% - 50vw); right: calc(50% - 50vw); z-index: -1;
+    background: linear-gradient(to bottom, transparent, var(--background) 64px);
   }
   .composer-voice-captions p {
     display: flex; flex-direction: column; justify-content: flex-end; max-height: calc(3 * 1.45em); overflow: hidden;
