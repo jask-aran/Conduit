@@ -74,6 +74,14 @@
   [data-phone-layout="bar"] .composer-actions [data-slot="button"].dictation-trigger { clip-path: inset(0 round var(--composer-radius, 22px)); transition: clip-path .32s cubic-bezier(.2, .8, .2, 1); }
   [data-phone-layout="bar"][data-phone-mode="listening"] .composer-actions [data-slot="button"].dictation-trigger { clip-path: inset(0 0 0 calc(100% - 64px) round var(--composer-radius, 22px)); }
   [data-phone-layout="bar"] .thinking-orb.composer-voice-orb { left: calc(100% - 32px); }
+  /* Bar: the waveform draws on the page with no surface; the glow lives in
+     the orb pill. */
+  [data-phone-layout="bar"] .composer-voice-track .composer-voice-glow { display: none; }
+  [data-phone-layout="bar"] .composer-voice-waveform { left: 4px; right: 4px; }
+  [data-phone-layout="bar"] .dictation-trigger { isolation: isolate; }
+  [data-phone-layout="bar"] .dictation-trigger .composer-voice-glow { left: calc(100% - 64px); opacity: 0; transition: opacity .25s ease; }
+  [data-phone-layout="bar"][data-phone-mode="listening"] .dictation-trigger .composer-voice-glow { opacity: calc(.4 + var(--voice-level, 0) * .5); }
+  [data-phone-layout="bar"] .dictation-trigger .composer-voice-glow i { width: 90%; }
 
   .chat-status-waveform.voice-waveform.composer-voice-waveform { position: absolute; left: 18px; right: 18px; top: 50%; width: auto; height: 26px; flex: none; translate: 0 -50%; }
   [data-phone-layout="surface"] .composer-voice-waveform { right: 58px; }
