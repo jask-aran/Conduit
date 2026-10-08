@@ -19,15 +19,21 @@ environments.
 
 ## Decisions
 
-1. **Durable runtime is pi-durable.** Conduit Pi is rebuilt on
-   `@earendil-works/pi-durable`: its storage, task checkpoints, replay-safe
-   tools, `requestId` submissions and multi-client watching are the durable
-   layer. Conduit does **not** build its own Task/Action engine.
-   Codex/Claude Code/OpenCode keep their current server-local adapters.
-2. **Side by side, then cut over.** pi-durable ships as a new harness/profile
-   next to today's Conduit Pi. Once at parity it becomes the default for new
-   chats; old Pi stays to read/continue existing chats and is removed when
-   nothing active uses it. No transcript conversion.
+1. **A new server-owned system: the Conduit runtime.** Built on
+   `@earendil-works/pi-durable`, it is not a profile or a plain harness: it
+   hosts all its conversations in one in-process Harness and owns pi-durable
+   storage, tasks, subagents, documents, node `env`s and persistent
+   assistants. Conduit does **not** build its own Task/Action engine.
+   Its chats appear in the normal chat list through a **thin adapter** on the
+   existing [harness contract](../chat-backend-contract.md); runtime-only
+   things (assistants, devices, tasks) get their own surfaces.
+   **pi-durable's record is authoritative**; Conduit's ChatLog for these chats
+   is a projection rebuilt from it. Codex/Claude Code/OpenCode keep their
+   current adapters.
+2. **Side by side, then cut over.** The runtime ships next to today's Conduit
+   Pi harness. Once at parity it becomes the default for new chats; old Pi
+   stays to read/continue existing chats and is removed when nothing active
+   uses it. No transcript conversion.
 3. **One install, two roles.** A single Conduit server install runs as
    either the **main** (owns chats, harnesses, pi-durable storage, persistent
    assistants, auth, UI) or a **node** (exposes its environment to main).
@@ -50,13 +56,14 @@ environments.
 8. **Offline = wait and notify.** A tool call needing an offline node pauses
    its pi-durable task; the thread shows "waiting for <device>" and resumes on
    reconnect. Interrupted unsafe calls are reported to the model, not replayed.
-9. **Persistent assistant = long-lived conversation.** A pi-durable root
-   conversation that never ends, bounded by compaction/reset, spawning
+9. **Short threads by default.** Ordinary chats are short runtime
+   conversations that happen to survive restarts. A **persistent assistant**
+   is an explicit, separately listed long-lived conversation that never ends, bounded by compaction/reset, spawning
    subagent conversations for work and able to use any node.
 
 ## Milestones
 
-1. **pi-durable Pi on main, local env only.** New harness/profile; durable
+1. **Conduit runtime on main, local env only.** pi-durable host + thin chat adapter; durable
    across server restarts; any client can attach to a running conversation;
    transcript projected through the existing chat contract.
    *Gate:* kill the server mid-turn, restart, the turn resumes or reports
