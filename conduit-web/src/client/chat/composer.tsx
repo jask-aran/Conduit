@@ -109,8 +109,10 @@ export function Composer(props: {
   const [inputFocused, setInputFocused] = createSignal(false);
   const voiceFirst = () => phoneLayout() && phoneComposer() !== "classic";
   const phoneMode = () => !voiceFirst() ? undefined
-    : ["starting", "listening"].includes(dictationState()) ? "listening"
-    : inputFocused() || hasText() || dictating() ? "typing" : "idle";
+    // Finishing and transcribing still look like listening, so stopping goes
+    // straight to the result instead of flashing through the text row.
+    : dictating() ? "listening"
+    : inputFocused() || hasText() ? "typing" : "idle";
   // The text row was zero wide while hidden; measure it again once shown.
   createEffect(on(phoneMode, () => scheduleResize(), { defer: true }));
   const dictatedText = () => { const range = dictatedRange(); return range ? props.chat.draft().slice(range.start, range.end) : ""; };
@@ -606,7 +608,7 @@ export function Composer(props: {
     </Show>
     <div class="composer-surface-shell" data-composer-surface={composerSurface()}>
       <div class="composer composer-surface-material" data-composer-surface={composerSurface()}>
-        <Show when={voiceFirst() && phoneComposer() === "surface"}><div class="composer-voice-glow" aria-hidden="true"><i /><i /><i /><i /></div><VoiceWaveform class="chat-status-waveform composer-voice-waveform" history={dictationWaveform.history} level={dictationWaveform.level} peak={dictationWaveform.peak} state={recorderMonitorState()} variant="compact" barDensity={3} ariaLabel="Microphone input level" /></Show>
+        <Show when={voiceFirst()}><div class="composer-voice-track" onClick={() => { if (phoneMode() === "listening") toggleDictation(); }}><div class="composer-voice-glow" aria-hidden="true"><i /><i /><i /><i /></div><VoiceWaveform class="chat-status-waveform composer-voice-waveform" history={dictationWaveform.history} level={dictationWaveform.level} peak={dictationWaveform.peak} state={recorderMonitorState()} variant="compact" barDensity={3} ariaLabel="Microphone input level" /><ThinkingOrb state="listening" class="composer-voice-orb" paused={phoneMode() !== "listening"} /></div></Show>
         <div class="composer-content">
           <MobileComposerOptions composer={props} />
           <div class="composer-input-shell">
@@ -633,7 +635,7 @@ export function Composer(props: {
             <Show when={recording() && !phoneLayout()}><VoiceWaveform class="composer-status-waveform composer-actions-waveform" history={dictationWaveform.history} level={dictationWaveform.level} peak={dictationWaveform.peak} state={recorderMonitorState()} variant="compact" barDensity={3} ariaLabel={dictationLabel() || "Microphone input level"} /></Show>
             <div ref={mobileActions} class="composer-actions-right">
               <Show when={!recording() && (dictationLabel() || (activity()?.label && activity()?.label !== "Ready"))}><span class="composer-status-state composer-actions-status" role="status" aria-live="polite"><Show when={dictationLabel()} fallback={<><Show when={SPINNING_ACTIVITY.has(activity()?.kind || "")}><Spinner /></Show><Show when={["request_failed", "runtime_failed"].includes(activity()?.kind || "")}><TriangleAlertIcon aria-hidden="true" /></Show>{activity()?.label || "Ready"}</>}>{dictationLabel()}</Show></span></Show>
-              <Button variant="ghost" size="icon-sm" class="dictation-trigger" data-state={dictationState()} aria-label={["starting", "listening"].includes(dictationState()) ? "Stop voice dictation" : "Start voice dictation"} aria-pressed={dictating()} title={`Voice dictation (${props.voiceSettings.shortcut})`} disabled={!props.serverOnline || !interactive() || ["finishing", "waiting", "transcribing"].includes(dictationState())} onPointerDown={captureDictationLaunch} onClick={toggleDictation}><Show when={voiceFirst()} fallback={<Show when={["starting", "finishing", "waiting", "transcribing"].includes(dictationState())} fallback={<MicIcon />}><Spinner /></Show>}><Show when={phoneComposer() === "bar"}><div class="composer-voice-glow" aria-hidden="true"><i /><i /><i /><i /></div><VoiceWaveform class="chat-status-waveform composer-voice-waveform" history={dictationWaveform.history} level={dictationWaveform.level} peak={dictationWaveform.peak} state={recorderMonitorState()} variant="compact" barDensity={3} ariaLabel="Microphone input level" /></Show><span class="composer-voice-mic"><Show when={["finishing", "waiting", "transcribing"].includes(dictationState())} fallback={<MicIcon />}><Spinner /></Show></span><ThinkingOrb state="listening" class="composer-voice-orb" paused={phoneMode() !== "listening"} /></Show></Button>
+              <Button variant="ghost" size="icon-sm" class="dictation-trigger" data-state={dictationState()} aria-label={["starting", "listening"].includes(dictationState()) ? "Stop voice dictation" : "Start voice dictation"} aria-pressed={dictating()} title={`Voice dictation (${props.voiceSettings.shortcut})`} disabled={!props.serverOnline || !interactive() || ["finishing", "waiting", "transcribing"].includes(dictationState())} onPointerDown={captureDictationLaunch} onClick={toggleDictation}><Show when={voiceFirst()} fallback={<Show when={["starting", "finishing", "waiting", "transcribing"].includes(dictationState())} fallback={<MicIcon />}><Spinner /></Show>}><span class="composer-voice-mic"><MicIcon /></span></Show></Button>
               {/* One primary slot, so nothing beside it moves. While the agent
                   works it is Stop; once a draft is typed it is Send again --
                   which queues the message for the agent -- and Stop steps to

@@ -362,7 +362,8 @@ svg.lucide { stroke-width: 2.4; }
 .composer-surface-material[data-composer-surface="static"],
 [data-phone-layout="bar"] .composer[data-composer-surface="static"] :is(.composer-actions [data-slot="button"], .composer-plus-trigger),
 [data-phone-mode="typing"] .composer[data-composer-surface="static"] .composer-input-shell,
-[data-phone-layout="surface"][data-phone-mode="typing"] .composer[data-composer-surface="static"]::before {
+[data-phone-layout="surface"][data-phone-mode="typing"] .composer[data-composer-surface="static"]::before,
+[data-phone-layout="bar"] .composer[data-composer-surface="static"] .composer-voice-track {
   border: 1px solid color-mix(in oklch, oklch(1 0 0 / 30%), transparent 20%);
   background:
     linear-gradient(180deg, oklch(1 0 0 / 9%), oklch(1 0 0 / 2%) 58%),
@@ -373,7 +374,8 @@ svg.lucide { stroke-width: 2.4; }
 .composer-surface-material[data-composer-surface="frosted-live"],
 [data-phone-layout="bar"] .composer[data-composer-surface="frosted-live"] :is(.composer-actions [data-slot="button"], .composer-plus-trigger),
 [data-phone-mode="typing"] .composer[data-composer-surface="frosted-live"] .composer-input-shell,
-[data-phone-layout="surface"][data-phone-mode="typing"] .composer[data-composer-surface="frosted-live"]::before {
+[data-phone-layout="surface"][data-phone-mode="typing"] .composer[data-composer-surface="frosted-live"]::before,
+[data-phone-layout="bar"] .composer[data-composer-surface="frosted-live"] .composer-voice-track {
   border: 1px solid #ffffff4d;
   background: #ffffff2b;
   backdrop-filter: blur(19.2px);
@@ -1136,7 +1138,8 @@ svg.lucide { stroke-width: 2.4; }
 .composer-surface-material[data-composer-surface="static"],
 [data-phone-layout="bar"] .composer[data-composer-surface="static"] :is(.composer-actions [data-slot="button"], .composer-plus-trigger),
 [data-phone-mode="typing"] .composer[data-composer-surface="static"] .composer-input-shell,
-[data-phone-layout="surface"][data-phone-mode="typing"] .composer[data-composer-surface="static"]::before {
+[data-phone-layout="surface"][data-phone-mode="typing"] .composer[data-composer-surface="static"]::before,
+[data-phone-layout="bar"] .composer[data-composer-surface="static"] .composer-voice-track {
   border: 1px solid color-mix(in oklch, oklch(1 0 0 / 30%), transparent 20%);
   background:
     linear-gradient(180deg, oklch(1 0 0 / 9%), oklch(1 0 0 / 2%) 58%),
@@ -1147,7 +1150,8 @@ svg.lucide { stroke-width: 2.4; }
 .composer-surface-material[data-composer-surface="frosted-live"],
 [data-phone-layout="bar"] .composer[data-composer-surface="frosted-live"] :is(.composer-actions [data-slot="button"], .composer-plus-trigger),
 [data-phone-mode="typing"] .composer[data-composer-surface="frosted-live"] .composer-input-shell,
-[data-phone-layout="surface"][data-phone-mode="typing"] .composer[data-composer-surface="frosted-live"]::before {
+[data-phone-layout="surface"][data-phone-mode="typing"] .composer[data-composer-surface="frosted-live"]::before,
+[data-phone-layout="bar"] .composer[data-composer-surface="frosted-live"] .composer-voice-track {
   border: 1px solid #ffffff4d;
   background: #ffffff2b;
   backdrop-filter: blur(24px);
