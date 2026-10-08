@@ -19,17 +19,21 @@ environments.
 
 ## Decisions
 
-1. **A new server-owned system: the Conduit runtime.** Built on
-   `@earendil-works/pi-durable`, it is not a profile or a plain harness: it
-   hosts all its conversations in one in-process Harness and owns pi-durable
-   storage, tasks, subagents, documents, node `env`s and persistent
-   assistants. Conduit does **not** build its own Task/Action engine.
-   Its chats appear in the normal chat list through a **thin adapter** on the
-   existing [harness contract](../chat-backend-contract.md); runtime-only
-   things (assistants, devices, tasks) get their own surfaces.
-   **pi-durable's record is authoritative**; Conduit's ChatLog for these chats
-   is a projection rebuilt from it. Codex/Claude Code/OpenCode keep their
-   current adapters.
+1. **Conduit runtime on pi-durable, in one harness registry.** pi-durable
+   (`@earendil-works/pi-durable`) enters as a **manifest entry** like the
+   other harnesses (a "Conduit" harness with a normal Assistant profile) for
+   ordinary chats. The manifest stays the **single registry** long-term: a
+   durable harness declares `recordAuthority: "harness"`, and Conduit's
+   ChatLog for its chats is a projection rebuilt from pi-durable's record,
+   which is authoritative. The browser sees one chat contract regardless.
+   Its wider features (persistent assistants, subagents, documents, node
+   `env`s, tasks) are **runtime services beside the registry**, not manifest
+   concerns. Conduit does not build its own Task/Action engine.
+   The pi-durable Harness is one resource in the server's Effect Scope; its
+   storage is SQLite under `~/.conduit/data/runtime/`, included in
+   backup/restore; its turns and subagents count against the same
+   live-process and generation caps as every harness. Codex/Claude
+   Code/OpenCode keep their current adapters.
 2. **Side by side, then cut over.** The runtime ships next to today's Conduit
    Pi harness. Once at parity it becomes the default for new chats; old Pi
    stays to read/continue existing chats and is removed when nothing active
@@ -80,10 +84,9 @@ environments.
 
 ## Open questions
 
-- How pi-durable storage relates to `~/.conduit/data`, backup/restore and the
-  Effect v4 server runtime's process/scope ownership.
-- How pi-durable's transcript/watch events project onto Conduit's existing
-  chat delivery contract without a second transcript model.
+- Exact projection: how pi-durable's transcript/watch events (aborted
+  partials, queued messages, subagents) map onto neutral events and ChatLog
+  rebuild.
 - Node protocol shape: pi-durable's remote `env` adapter vs a Conduit
   WebSocket protocol over the tailnet.
 - Remote shell lifetime when a node disconnects mid-command.
