@@ -360,7 +360,9 @@ svg.lucide { stroke-width: 2.4; }
 /* A single class owns the material. Do not add material declarations to each
    component: the composer, Follow button, and desktop header pill must match. */
 .composer-surface-material[data-composer-surface="static"],
-[data-phone-layout="bar"]:not([data-phone-mode="typing"]) .composer[data-composer-surface="static"] :is(.composer-actions [data-slot="button"], .composer-plus-trigger) {
+[data-phone-layout="bar"] .composer[data-composer-surface="static"] :is(.composer-actions [data-slot="button"], .composer-plus-trigger),
+[data-phone-mode="typing"] .composer[data-composer-surface="static"] .composer-input-shell,
+[data-phone-layout="surface"][data-phone-mode="typing"] .composer[data-composer-surface="static"]::before {
   border: 1px solid color-mix(in oklch, oklch(1 0 0 / 30%), transparent 20%);
   background:
     linear-gradient(180deg, oklch(1 0 0 / 9%), oklch(1 0 0 / 2%) 58%),
@@ -369,7 +371,9 @@ svg.lucide { stroke-width: 2.4; }
   box-shadow: 0 6.4px 22.4px rgb(0 0 0 / 10%);
 }
 .composer-surface-material[data-composer-surface="frosted-live"],
-[data-phone-layout="bar"]:not([data-phone-mode="typing"]) .composer[data-composer-surface="frosted-live"] :is(.composer-actions [data-slot="button"], .composer-plus-trigger) {
+[data-phone-layout="bar"] .composer[data-composer-surface="frosted-live"] :is(.composer-actions [data-slot="button"], .composer-plus-trigger),
+[data-phone-mode="typing"] .composer[data-composer-surface="frosted-live"] .composer-input-shell,
+[data-phone-layout="surface"][data-phone-mode="typing"] .composer[data-composer-surface="frosted-live"]::before {
   border: 1px solid #ffffff4d;
   background: #ffffff2b;
   backdrop-filter: blur(19.2px);
@@ -1130,7 +1134,9 @@ svg.lucide { stroke-width: 2.4; }
 /* A single class owns the material. Do not add material declarations to each
    component: the composer, Follow button, and desktop header pill must match. */
 .composer-surface-material[data-composer-surface="static"],
-[data-phone-layout="bar"]:not([data-phone-mode="typing"]) .composer[data-composer-surface="static"] :is(.composer-actions [data-slot="button"], .composer-plus-trigger) {
+[data-phone-layout="bar"] .composer[data-composer-surface="static"] :is(.composer-actions [data-slot="button"], .composer-plus-trigger),
+[data-phone-mode="typing"] .composer[data-composer-surface="static"] .composer-input-shell,
+[data-phone-layout="surface"][data-phone-mode="typing"] .composer[data-composer-surface="static"]::before {
   border: 1px solid color-mix(in oklch, oklch(1 0 0 / 30%), transparent 20%);
   background:
     linear-gradient(180deg, oklch(1 0 0 / 9%), oklch(1 0 0 / 2%) 58%),
@@ -1139,7 +1145,9 @@ svg.lucide { stroke-width: 2.4; }
   box-shadow: 0 8px 28px rgb(0 0 0 / 10%);
 }
 .composer-surface-material[data-composer-surface="frosted-live"],
-[data-phone-layout="bar"]:not([data-phone-mode="typing"]) .composer[data-composer-surface="frosted-live"] :is(.composer-actions [data-slot="button"], .composer-plus-trigger) {
+[data-phone-layout="bar"] .composer[data-composer-surface="frosted-live"] :is(.composer-actions [data-slot="button"], .composer-plus-trigger),
+[data-phone-mode="typing"] .composer[data-composer-surface="frosted-live"] .composer-input-shell,
+[data-phone-layout="surface"][data-phone-mode="typing"] .composer[data-composer-surface="frosted-live"]::before {
   border: 1px solid #ffffff4d;
   background: #ffffff2b;
   backdrop-filter: blur(24px);
