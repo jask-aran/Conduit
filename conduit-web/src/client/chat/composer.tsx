@@ -602,7 +602,7 @@ export function Composer(props: {
     });
   });
 
-  return <div class="composer-wrap" data-part="composer" data-phone-layout={voiceFirst() ? phoneComposer() : undefined} data-phone-mode={phoneMode()} style={phoneMode() === "listening" ? { "--voice-level": String(dictationWaveform.level()) } : undefined}>
+  return <div class="composer-wrap" data-part="composer" data-phone-layout={voiceFirst() ? phoneComposer() : undefined} data-phone-mode={phoneMode()} data-primary-hidden={voiceFirst() && !hasPayload() && !stoppable() ? "" : undefined} style={phoneMode() === "listening" ? { "--voice-level": String(dictationWaveform.level()) } : undefined}>
     <Show when={phoneMode() === "listening"}>
       <Show when={dictatedText()}><div class="composer-voice-captions" aria-live="polite"><p><span ref={glideCaptions} class="composer-voice-words"><Index each={dictatedText().split(/(?<=\s)/)}>{(word) => <span>{word()}</span>}</Index></span></p></div></Show>
     </Show>
@@ -632,7 +632,7 @@ export function Composer(props: {
             onPointerDown={(event) => { const control = (event.target as Element).closest("button"); if (control) control.dataset.pointerOpened = ""; }}
             onKeyDown={(event) => { if (["Enter", " ", "ArrowDown", "ArrowUp"].includes(event.key)) delete (event.target as HTMLElement).dataset?.pointerOpened; }}>
             <div ref={actionsLeft} class="composer-actions-left">
-              <Show when={phoneMode() !== "typing"}><Button variant="ghost" size="icon-sm" class="composer-keyboard-trigger" aria-label="Type a message" disabled={!props.serverOnline || !interactive()} onClick={() => input.focus()}><KeyboardIcon /></Button></Show>
+              <Show when={voiceFirst()}><Button variant="ghost" size="icon-sm" class="composer-keyboard-trigger" aria-label={inputFocused() ? "Close the keyboard" : "Type a message"} disabled={!props.serverOnline || !interactive()} onPointerDown={(event) => event.preventDefault()} onClick={() => inputFocused() ? input.blur() : input.focus()}><KeyboardIcon /></Button></Show>
               <Show when={!phoneLayout()}><ComposerPlusMenu folded={folded()} chat={props.chat} models={props.models} permissions={props.permissions} serviceLevels={props.serviceLevels}
                 profiles={props.profiles} activeProfile={props.activeProfile} place={props.place} disabled={!props.serverOnline || !interactive()} modelSwitch={supports("modelSwitch")}
                 onChooseProfile={props.onChooseProfile} onOpenModelSelector={props.onOpenModelSelector} modelSelectorShortcut={props.modelSelectorShortcut}
@@ -656,7 +656,7 @@ export function Composer(props: {
               <Show when={stoppable() && newDraft()}>
                 <Button variant="ghost" size="icon-sm" class="composer-stop-aside" aria-label="Stop response" onClick={props.chat.stop}><Show when={props.chat.stopping()} fallback={<SquareIcon />}><Spinner /></Show></Button>
               </Show>
-              <Show when={!(phoneMode() === "idle" && !stoppable())}><span class="composer-primary-slot">
+              <Show when={voiceFirst() || !(phoneMode() === "idle" && !stoppable())}><span class="composer-primary-slot">
                 <Show when={phoneMode() !== "listening"}>
                 <Show when={stoppable() && !newDraft()} fallback={
                   <Button variant="ghost" size="icon-sm" class="composer-send-trigger" aria-label={busy() ? "Send to the agent" : "Send message"} title={busy() ? "Send — the agent takes it when the current step finishes" : undefined} disabled={!canSend()} onClick={() => sendMessage()}><ArrowUpIcon /></Button>}>
