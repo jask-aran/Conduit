@@ -209,6 +209,13 @@ export function bindVisualViewportShell(): () => void {
     virtualKeyboard?: EventTarget & { overlaysContent: boolean; boundingRect: DOMRect };
   }).virtualKeyboard;
   let dropVirtualKeyboard: (() => void) | null = null;
+  /* VirtualKeyboard is secure-context only: on plain http (a LAN address)
+     nothing would measure the keyboard under `overlays-content`, so let
+     Chromium shrink the visual viewport instead and read that. */
+  if (!virtualKeyboard && !window.isSecureContext && installedClientKind !== "android") {
+    const meta = document.querySelector<HTMLMetaElement>('meta[name="viewport"]');
+    if (meta) meta.content = meta.content.replace("interactive-widget=overlays-content", "interactive-widget=resizes-visual");
+  }
   if (virtualKeyboard && installedClientKind !== "android") {
     virtualKeyboard.overlaysContent = true;
     source = "virtualkeyboard";
