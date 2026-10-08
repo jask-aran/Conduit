@@ -74,18 +74,20 @@
   [data-phone-layout="surface"] .dictation-trigger { z-index: 4; }
   [data-phone-layout="bar"] .composer-voice-track { right: 72px; clip-path: inset(0 0 0 100% round var(--composer-radius, 22px)); transition: opacity .08s ease .3s, clip-path .32s cubic-bezier(.2, .8, .2, 1); }
   [data-phone-layout="bar"][data-phone-mode="listening"] .composer-voice-track { clip-path: inset(0 round var(--composer-radius, 22px)); transition: opacity 0s, clip-path .32s cubic-bezier(.2, .8, .2, 1) .04s; }
-  /* Bar listening: the wide mic pill shrinks toward the right as it fades,
-     and a real 64px frost pill (orb + glow) fades in at the row's end. */
-  [data-phone-layout="bar"] .dictation-trigger { transform-origin: right center; transition: opacity .2s ease, transform .3s cubic-bezier(.2, .8, .2, 1); }
-  [data-phone-layout="bar"][data-phone-mode="listening"] .dictation-trigger { opacity: 0; transform: scaleX(.3); pointer-events: none; }
-  [data-phone-layout="bar"] .dictation-trigger .composer-voice-orb { display: none; }
-  .composer-voice-pill {
-    position: absolute; right: 0; bottom: 0; z-index: 3; width: 64px; height: 44px; overflow: hidden; isolation: isolate;
-    border-radius: var(--composer-radius, 22px); opacity: 0; transform: scale(.9); pointer-events: none;
-    transition: opacity .2s ease .08s, transform .3s cubic-bezier(.2, .8, .2, 1) .08s;
-  }
-  [data-phone-mode="listening"] .composer-voice-pill { opacity: 1; transform: none; pointer-events: auto; }
-  .composer-voice-pill .thinking-orb.composer-voice-orb { opacity: 1; }
+  /* Bar listening: the mic pill really resizes, shrinking into a 64px pill
+     at the row's end as a spacer before it grows (flex-grow, so the border,
+     radius and icon stay crisp). The orb and glow crossfade in inside it. */
+  [data-phone-layout="bar"] .composer::before { content: ""; order: 3; flex: 0 0 0; min-width: 0; margin-left: -8px; transition: flex-grow .3s cubic-bezier(.2, .8, .2, 1); }
+  [data-phone-layout="bar"][data-phone-mode="listening"] .composer::before { flex-grow: 1; }
+  [data-phone-layout="bar"] .dictation-trigger { order: 4; overflow: hidden; isolation: isolate; }
+  [data-phone-layout="bar"] .composer-actions [data-slot="button"].dictation-trigger { flex: 1 1 64px; min-width: 64px; transition: flex-grow .3s cubic-bezier(.2, .8, .2, 1); }
+  [data-phone-layout="bar"][data-phone-mode="listening"] .composer-actions [data-slot="button"].dictation-trigger { flex-grow: 0; }
+  [data-phone-layout="bar"] .composer-stop-aside { order: 5; }
+  [data-phone-layout="bar"] :is(.composer-send-trigger, .composer-stop-trigger) { order: 6; }
+  [data-phone-layout="bar"] .dictation-trigger .composer-voice-glow { opacity: 0; transition: opacity .25s ease; }
+  [data-phone-layout="bar"][data-phone-mode="listening"] .dictation-trigger .composer-voice-glow { opacity: calc(.4 + var(--voice-level, 0) * .5); }
+  .dictation-trigger .composer-voice-glow i { width: 90%; }
+
   /* Bar: the waveform draws on the page with no surface; the glow lives in
      the orb pill. */
   [data-phone-layout="bar"] .composer-voice-track .composer-voice-glow { display: none; }
@@ -101,7 +103,6 @@
      level; paused when not listening. Gradients rather than a blur filter,
      so nothing re-rasterises per frame. Intentional exception to DESIGN.md's
      "no colored glows". */
-  .composer-voice-pill .composer-voice-glow i { width: 90%; }
   .composer-voice-glow { position: absolute; inset: 0; z-index: -1; pointer-events: none; opacity: calc(.4 + var(--voice-level, 0) * .5); transition: opacity .12s linear; }
   .composer-voice-glow i { position: absolute; top: -40%; width: 60%; height: 180%; will-change: transform; transform: scale(calc(.8 + var(--voice-level, 0) * .6)); transition: transform .12s linear; animation: composer-voice-drift 6s ease-in-out infinite alternate paused; }
   [data-phone-mode="listening"] .composer-voice-glow i { animation-play-state: running; }
