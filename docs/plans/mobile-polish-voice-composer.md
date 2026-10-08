@@ -70,9 +70,13 @@ Candidate text, also tried both ways:
 
 - **Top row**: the text appears where you'd type it, with provisional words
   dimmed.
-- **Floating**: caption-style text over the glow, above the composer with no
-  surface (Claude app reference screenshots pending), dropping into the
-  draft at the end.
+- **Floating** (Claude app reference): caption-style italic muted text with
+  no surface, sitting just above the composer. Only the most recent ~3 lines
+  show; older lines scroll up and out as you speak, so it never takes over
+  the transcript. On stop it drops into the draft.
+
+While listening, the composer itself becomes one row: cancel (✕), a full-width
+live waveform, stop (keep the draft), and send (stop and send now).
 
 ### Open questions
 
