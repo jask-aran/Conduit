@@ -111,17 +111,25 @@
   /* Captions: no surface, only the newest three lines; older ones are cut
      off at the top as the text grows. */
   .composer-voice-captions {
-    position: absolute; left: 12px; right: 12px; bottom: calc(100% + 14px);
-    display: flex; flex-direction: column; justify-content: flex-end;
-    max-height: calc(3 * 1.45em); overflow: hidden;
+    position: absolute; left: 0; right: 0; bottom: 100%; z-index: 5; padding: 28px 12px 14px;
     font-size: .875rem; line-height: 1.45; font-style: italic; color: var(--muted-foreground);
-    -webkit-mask-image: linear-gradient(to bottom, transparent, black 1.1em); mask-image: linear-gradient(to bottom, transparent, black 1.1em);
     pointer-events: none; animation: composer-voice-in .2s ease-out;
   }
+  /* A dark scrim behind the captions so the transcript under them never
+     shows through, fading out upwards. */
+  .composer-voice-captions::before {
+    content: ""; position: absolute; inset: 0 -12px -8px; z-index: -1;
+    background: linear-gradient(to top, var(--background) 72%, transparent);
+  }
+  .composer-voice-captions p {
+    display: flex; flex-direction: column; justify-content: flex-end; max-height: calc(3 * 1.45em); overflow: hidden;
+    -webkit-mask-image: linear-gradient(to bottom, transparent, black 1.1em); mask-image: linear-gradient(to bottom, transparent, black 1.1em);
+  }
   .composer-voice-captions p { margin: 0; }
+  .composer-voice-words { display: block; }
   /* Words fade in as the transcript does (incremark-markdown.css): colour,
      not opacity, and a revised word keeps its node so it does not replay. */
-  .composer-voice-captions span { animation: composer-voice-word var(--stream-word-fade, 200ms) ease-out both; }
+  .composer-voice-words span { animation: composer-voice-word var(--stream-word-fade, 200ms) ease-out both; }
   @keyframes composer-voice-word { from { color: transparent; } }
   @keyframes composer-voice-in { from { opacity: 0; } }
   @keyframes composer-voice-rise { from { opacity: 0; transform: translateY(10px); } }
