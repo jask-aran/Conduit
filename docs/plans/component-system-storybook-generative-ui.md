@@ -57,6 +57,16 @@ components in answers. One canonical component set serves all four.
    Conduit-owned tool: native to the Conduit runtime (pi-durable), and to
    Codex/Claude Code via MCP, so nothing harness-specific reaches the browser.
 
+9. **Fixture runtime store.** Coupled app pieces (composer, sidebar,
+   transcript) mount unchanged in the gallery against one fake runtime/state
+   provider seeded from recorded fixtures, reused by stories and agent checks.
+10. **Drift rule is linted.** A script fails when a `components/ui` export
+    lacks a story or a `DESIGN.md` catalogue row; it runs with typecheck.
+11. **Gallery is the preferred agent UI seam.** For component and styling
+    changes agents screenshot the relevant story at desktop and phone widths
+    instead of driving the full app; record this in `docs/TESTING.md` when the
+    gallery lands.
+
 ## Milestones
 
 0. **Inventory.** Regenerate (don't trust a stale list) the shared
