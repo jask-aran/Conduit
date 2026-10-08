@@ -1,0 +1,72 @@
+/* Voice-first phone composer (Settings → Interface → Phone composer).
+   data-phone-layout: surface (one frosted pill) | bar (separate buttons).
+   data-phone-mode: idle (buttons only) | typing (text row above controls) |
+   listening (orb in the mic spot, coloured glow, floating captions). */
+@media (--conduit-phone-layout) {
+  [data-phone-layout] { position: relative; }
+
+  /* Idle and listening hide the text row; the textarea stays focusable so
+     the keyboard button and dictation can still reach it. */
+  [data-phone-mode="idle"] .composer-input-shell,
+  [data-phone-mode="listening"] .composer-input-shell {
+    position: absolute; width: 1px; height: 0; min-height: 0; overflow: hidden; opacity: 0; pointer-events: none;
+  }
+  [data-phone-layout] .composer-actions { flex: 1 1 auto; }
+  [data-phone-layout] .composer-actions-right { margin-left: auto; }
+
+  /* Typing: two rows, text on top, the same controls below. */
+  [data-phone-mode="typing"] .composer { flex-wrap: wrap; }
+  [data-phone-mode="typing"] .composer-input-shell { order: 1; flex: 1 0 100%; padding: 4px 10px 0; }
+  [data-phone-mode="typing"] .composer-mobile-plus { order: 2; }
+
+  /* The mic is the primary action: larger, filled. */
+  [data-phone-mode="idle"] .composer-actions .dictation-trigger,
+  [data-phone-mode="listening"] .composer-actions .dictation-trigger {
+    width: 52px; height: 52px; border-radius: 999px; background: var(--foreground); color: var(--background);
+  }
+  [data-phone-mode="idle"] .composer-actions .dictation-trigger svg { width: 22px; height: 22px; }
+  [data-phone-mode="listening"] .composer-actions .dictation-trigger { background: transparent; }
+  [data-phone-layout="surface"][data-phone-mode="idle"] .composer,
+  [data-phone-layout="surface"][data-phone-mode="listening"] .composer { min-height: 60px; padding-block: 4px; }
+  /* Surface: the mic sits in the middle of the row. */
+  [data-phone-layout="surface"]:is([data-phone-mode="idle"], [data-phone-mode="listening"]) .composer-actions-right { margin-left: 0; flex: 1 1 auto; justify-content: space-between; }
+  [data-phone-layout="surface"]:is([data-phone-mode="idle"], [data-phone-mode="listening"]) .composer-actions-right::before { content: ""; width: 40px; }
+
+  .composer-voice-orb { display: block; width: 44px; height: 44px; transform: scale(calc(1 + var(--voice-level, 0) * .25)); }
+  .composer-voice-orb canvas { width: 100%; height: 100%; }
+
+  /* Bar: no shared surface. Each control is its own frosted circle; typing
+     gives the text row its own pill above the bar. */
+  [data-phone-layout="bar"] .composer.composer-surface-material { border-color: transparent; background: transparent; backdrop-filter: none; box-shadow: none; }
+  [data-phone-layout="bar"] .composer-actions, [data-phone-layout="bar"] .composer-actions-left, [data-phone-layout="bar"] .composer-actions-right { gap: 10px; }
+  [data-phone-layout="bar"] .composer-actions-right { margin-left: 0; flex: 1 1 auto; justify-content: space-evenly; }
+  [data-phone-layout="bar"] :is(.composer-actions [data-slot="button"], .composer-plus-trigger) {
+    width: 48px; height: 48px; border-radius: 999px; border: 1px solid #ffffff4d; background: #ffffff2b; backdrop-filter: blur(24px);
+  }
+  [data-phone-layout="bar"][data-phone-mode="typing"] .composer-input-shell {
+    margin-bottom: 8px; border: 1px solid #ffffff4d; border-radius: var(--composer-radius, 22px); background: #ffffff2b; backdrop-filter: blur(24px);
+  }
+
+  /* Listening glow: soft colour blobs behind the composer, swelling with
+     the input level. Transform/opacity only. */
+  .composer-voice-glow { position: absolute; inset: -40px -8px -12px; z-index: -1; pointer-events: none; filter: blur(28px); opacity: calc(.45 + var(--voice-level, 0) * .55); transition: opacity .12s linear; }
+  .composer-voice-glow i { position: absolute; bottom: 10%; width: 45%; height: 80%; border-radius: 50%; transform: scale(calc(.75 + var(--voice-level, 0) * .5)); transition: transform .12s linear; animation: composer-voice-drift 6s ease-in-out infinite alternate; }
+  .composer-voice-glow i:nth-child(1) { left: 0; background: oklch(.68 .2 300); }
+  .composer-voice-glow i:nth-child(2) { left: 22%; background: oklch(.72 .17 230); animation-delay: -1.5s; }
+  .composer-voice-glow i:nth-child(3) { left: 45%; background: oklch(.74 .19 350); animation-delay: -3s; }
+  .composer-voice-glow i:nth-child(4) { right: 0; background: oklch(.78 .16 60); animation-delay: -4.5s; }
+  @keyframes composer-voice-drift { from { translate: -8% 0; } to { translate: 8% -6%; } }
+
+  /* Captions: no surface, only the newest three lines; older ones are cut
+     off at the top as the text grows. */
+  .composer-voice-captions {
+    position: absolute; left: 12px; right: 12px; bottom: calc(100% + 14px);
+    display: flex; flex-direction: column; justify-content: flex-end;
+    max-height: calc(3 * 1.4em); overflow: hidden;
+    font-size: 1.25rem; line-height: 1.4; font-style: italic; color: var(--muted-foreground);
+    -webkit-mask-image: linear-gradient(to bottom, transparent, black 1.1em); mask-image: linear-gradient(to bottom, transparent, black 1.1em);
+    pointer-events: none;
+  }
+  .composer-voice-captions p { margin: 0; }
+}
+@media (prefers-reduced-motion: reduce) { .composer-voice-glow i { animation: none; } }
