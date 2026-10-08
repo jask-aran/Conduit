@@ -216,7 +216,7 @@ export function Composer(props: {
   const resize = () => {
     input.style.height = "auto";
     input.style.height = `${Math.min(input.scrollHeight, 192)}px`;
-    if (!phoneLayout() || voiceFirst() || !mobileActions) return setMobileActionsStacked(false);
+    if (!phoneLayout() || (voiceFirst() && phoneMode() !== "typing") || !mobileActions) return setMobileActionsStacked(false);
     /* The actions stack the moment the draft reaches its third line. Stacked,
        the draft is a button wider and may rewrap to two lines; it stays
        stacked until it fits on one, which at the narrower width is at most
@@ -653,14 +653,14 @@ export function Composer(props: {
               <Show when={stoppable() && newDraft()}>
                 <Button variant="ghost" size="icon-sm" class="composer-stop-aside" aria-label="Stop response" onClick={props.chat.stop}><Show when={props.chat.stopping()} fallback={<SquareIcon />}><Spinner /></Show></Button>
               </Show>
-              <span class="composer-primary-slot">
+              <Show when={!(phoneMode() === "idle" && !stoppable())}><span class="composer-primary-slot">
                 <Show when={phoneMode() !== "listening"} fallback={<Button variant="ghost" size="icon-sm" class="composer-send-trigger" aria-label="Stop and send" onClick={sendDictation}><ArrowUpIcon /></Button>}>
                 <Show when={stoppable() && !newDraft()} fallback={
                   <Button variant="ghost" size="icon-sm" class="composer-send-trigger" aria-label={busy() ? "Send to the agent" : "Send message"} title={busy() ? "Send — the agent takes it when the current step finishes" : undefined} disabled={!canSend()} onClick={() => sendMessage()}><ArrowUpIcon /></Button>}>
                   <Button variant="ghost" size="icon-sm" class="composer-stop-trigger" aria-label="Stop response" onClick={props.chat.stop}><Show when={props.chat.stopping()} fallback={<SquareIcon />}><Spinner /></Show></Button>
                 </Show>
                 </Show>
-              </span>
+              </span></Show>
             </div>
           </div>
         </div>
