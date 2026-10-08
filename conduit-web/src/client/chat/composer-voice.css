@@ -20,7 +20,6 @@
   /* Typing is the classic composer, unchanged. */
 
   .thinking-orb.composer-voice-orb { display: block; flex: none; width: 26px; height: 26px; transform: scale(calc(1 + var(--voice-level, 0) * .3)); transition: transform .07s linear; }
-  [data-phone-mode="listening"] .composer-actions-right { flex: 1 1 auto; justify-content: space-between; }
 
   /* Bar: no shared pill; the controls are frost segments filling the row
      (material from styles.css .composer-surface-material). Typing gives the
@@ -37,15 +36,28 @@
   [data-phone-layout="bar"]:not([data-phone-mode="typing"]) .composer-actions-left [data-slot="button"] { flex: 0 0 auto; width: 52px; }
   [data-phone-layout="bar"]:not([data-phone-mode="typing"]) .composer-plus-trigger { width: 52px; }
 
-  /* Listening glow: soft colour blobs behind the composer, swelling with
-     the input level. Transform/opacity only. */
-  .composer-voice-glow { position: absolute; inset: -24px 0 -8px; z-index: -1; pointer-events: none; filter: blur(28px); opacity: calc(.45 + var(--voice-level, 0) * .55); transition: opacity .12s linear; }
-  .composer-voice-glow i { position: absolute; bottom: 10%; width: 45%; height: 80%; border-radius: 50%; transform: scale(calc(.75 + var(--voice-level, 0) * .5)); transition: transform .12s linear; animation: composer-voice-drift 6s ease-in-out infinite alternate; }
+  /* Listening glow: soft colour blobs inside the composer (surface) or the
+     mic pill (bar), clipped to it, swelling with the input level.
+     Transform/opacity only. Intentional exception to "no colored glows". */
+  [data-phone-mode="listening"] .composer, [data-phone-mode="listening"] .dictation-trigger { position: relative; overflow: hidden; isolation: isolate; }
+  .composer-voice-glow { position: absolute; inset: 0; z-index: -1; pointer-events: none; filter: blur(18px); opacity: calc(.35 + var(--voice-level, 0) * .5); transition: opacity .12s linear; }
+  .composer-voice-glow i { position: absolute; top: 10%; width: 45%; height: 80%; border-radius: 50%; transform: scale(calc(.8 + var(--voice-level, 0) * .6)); transition: transform .12s linear; animation: composer-voice-drift 6s ease-in-out infinite alternate; }
   .composer-voice-glow i:nth-child(1) { left: 0; background: oklch(.68 .2 300); }
-  .composer-voice-glow i:nth-child(2) { left: 22%; background: oklch(.7 .2 20); animation-delay: -1.5s; }
-  .composer-voice-glow i:nth-child(3) { left: 45%; background: oklch(.74 .19 350); animation-delay: -3s; }
+  .composer-voice-glow i:nth-child(2) { left: 20%; background: oklch(.7 .2 20); animation-delay: -1.5s; }
+  .composer-voice-glow i:nth-child(3) { left: 40%; background: oklch(.74 .19 350); animation-delay: -3s; }
   .composer-voice-glow i:nth-child(4) { right: 0; background: oklch(.78 .16 60); animation-delay: -4.5s; }
-  @keyframes composer-voice-drift { from { translate: -8% 0; } to { translate: 8% -6%; } }
+  @keyframes composer-voice-drift { from { translate: -10% 0; } to { translate: 10% 0; } }
+
+  /* Listening row: everything but the mic fades out; the waveform fills
+     the row to the mic's left. */
+  [data-phone-mode="listening"] :is(.composer-mobile-plus, .composer-actions-left, .composer-primary-slot, .composer-stop-aside) {
+    position: absolute; opacity: 0; pointer-events: none; animation: composer-voice-fade .16s ease-out;
+  }
+  @keyframes composer-voice-fade { from { opacity: 1; } to { opacity: 0; } }
+  [data-phone-mode="listening"] .composer-actions-waveform.voice-waveform { display: flex; flex: 1 1 auto; min-width: 0; height: 28px; padding-left: 12px; animation: composer-voice-in .2s ease-out; }
+  @keyframes composer-voice-in { from { opacity: 0; } }
+  [data-phone-mode="listening"] .composer-actions-right { flex: 0 0 auto; margin-left: auto; }
+  [data-phone-layout="bar"][data-phone-mode="listening"] .composer-actions [data-slot="button"].dictation-trigger { flex: 0 0 auto; width: 96px; }
 
   /* Captions: no surface, only the newest three lines; older ones are cut
      off at the top as the text grows. */
