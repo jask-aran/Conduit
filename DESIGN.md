@@ -331,7 +331,7 @@ Almost none on listed content. Frosted glass carries the depth.
 - Frost chrome (the signature): translucent `frost-fill`, a 1px white-alpha `frost-stroke`, a strong blur, optional top specular inset, no heavy drop. Composer, user bubble (`glass-bg` + blur), header pill and future floating toolbars share this one material — do not redeclare it per component.
 - Primary buttons: top specular inset and a short lift. Ghost buttons: no fill until hover.
 
-No stacked card shadows, no colored glows, no frost on a row or a list.
+No stacked card shadows, no colored glows, no frost on a row or a list. One exception: while the phone's voice-first composer is listening, soft colour fields swell with the input level inside its orb pill (or, in the one-surface layout, the composer), clipped to that surface and gone when it stops.
 
 # Shapes
 
@@ -353,7 +353,7 @@ Motion explains a change of place: where something went, and what took its place
 - **One leaves, then the other arrives.** The outgoing surface goes first and the incoming one starts a beat later, so they never cross-fade in place.
 - **Quick out, gentle in.** Leaving is short and accelerates; arriving is longer and settles, rising with a fade. The easings are tokens in `styles.css`.
 - **Hold the reading position.** A surface that is swapped keeps its room while it is away, so the swap itself moves nothing. The transcript moves only through its tail spring, when what replaced the surface is taller.
-- **Transform and opacity only.** Never animate width, height or layout. A panel slides over its neighbour rather than squeezing it. Exceptions: a row the reader opens or closes (a Disclosure) unfolds in height, because pushing what is below is what they asked for; pane widths ease when panes open, close or take a preset; and the composer eases across a layout switch.
+- **Transform and opacity only.** Never animate width, height or layout. A panel slides over its neighbour rather than squeezing it. Exceptions: a row the reader opens or closes (a Disclosure) unfolds in height, because pushing what is below is what they asked for; pane widths ease when panes open, close or take a preset; the composer eases across a layout switch; and on the phone's voice-first composer the mic pill resizes into and out of its listening pill, send slides open and shut, and the text pill folds open and shut above the row (`chat/composer-voice.css`), each one small element in one row.
 - **The first open settles, then shows.** Until the page is laid out -- every pane's document included, and the layout holding still -- only the frame shows. Then every region fades in once, with no rise, since nothing is changing place. Nothing may arrive or move after the fade starts: what decides the layout loads before it.
 - **A turn starts as its header.** From the prompt until its first step, a live turn is the trace header it will become, and its trace takes that place at the same height, moving nothing.
 - **A stopped turn is one row.** Its trace says Interrupted, and text the stop discarded is a struck-through step of the trace under "Not kept", never a row of its own.
