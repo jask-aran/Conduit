@@ -1,3 +1,5 @@
+import { MOBILE_LAYOUT_QUERY } from "./mobile-layout";
+
 const EDGE = 16;
 const DWELL = 180;
 const HIDDEN = ".message-scroller-viewport, .xterm-viewport, .terminal-shortcuts, .terminal-mobile-keys, .katex-display, .incremark-math-block, .markdown-table-scroll";
@@ -24,6 +26,7 @@ export function bindOverlayScrollbars() {
    * nothing and appears only while it is actually moving.
    */
   const touch = matchMedia("(pointer: coarse)");
+  const phoneLayout = matchMedia(MOBILE_LAYOUT_QUERY);
   const TOUCH_LINGER = 900;
   let touching = false;
   let lingerTimer = 0;
@@ -109,12 +112,15 @@ export function bindOverlayScrollbars() {
     const m = metrics(target);
     if (!m.range || m.length < 28 || getComputedStyle(target.element).visibility === "hidden") { hide(); return; }
     bar.dataset.axis = target.axis;
-    bar.style.left = `${m.vertical ? m.r.right - 12 : m.r.left + 2}px`;
-    bar.style.top = `${m.vertical ? m.r.top + 2 : m.r.bottom - 12}px`;
-    bar.style.width = `${m.vertical ? 12 : m.length}px`;
-    bar.style.height = `${m.vertical ? m.length : 12}px`;
-    thumb.style.width = m.vertical ? "8px" : `${m.size}px`;
-    thumb.style.height = m.vertical ? `${m.size}px` : "8px";
+    const phone = phoneLayout.matches;
+    const thickness = phone ? 3 : 8;
+    const trackWidth = phone ? 5 : 12;
+    bar.style.left = `${m.vertical ? m.r.right - trackWidth : m.r.left + 2}px`;
+    bar.style.top = `${m.vertical ? m.r.top + 2 : m.r.bottom - trackWidth}px`;
+    bar.style.width = `${m.vertical ? trackWidth : m.length}px`;
+    bar.style.height = `${m.vertical ? m.length : trackWidth}px`;
+    thumb.style.width = m.vertical ? `${thickness}px` : `${m.size}px`;
+    thumb.style.height = m.vertical ? `${m.size}px` : `${thickness}px`;
     thumb.style.transform = `translate${m.vertical ? "Y" : "X"}(${m.offset}px)`;
     // Only the visible control follows layout/scroll changes. No idle polling,
     // transcript observers, or per-scroll-container components.
