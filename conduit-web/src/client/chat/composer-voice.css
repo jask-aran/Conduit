@@ -34,7 +34,7 @@
   /* Idle and listening hide the text; the textarea stays focusable so the
      keyboard button and dictation can reach it. */
   :is([data-phone-mode="idle"], [data-phone-mode="listening"]) .composer-input-shell {
-    order: 9; flex: 0 0 0; width: 0; min-width: 0; margin-left: -8px; overflow: hidden; opacity: 0; pointer-events: none;
+    order: 9; flex: 0 0 0; width: 0; min-width: 0; height: 0; min-height: 0; margin-left: -8px; overflow: hidden; opacity: 0; pointer-events: none;
   }
 
   /* Typing: the text is its own frost pill on a row of its own above the
@@ -112,8 +112,8 @@
   .composer-voice-captions {
     position: absolute; left: 12px; right: 12px; bottom: calc(100% + 14px);
     display: flex; flex-direction: column; justify-content: flex-end;
-    max-height: calc(3 * 1.4em); overflow: hidden;
-    font-size: 1.25rem; line-height: 1.4; font-style: italic; color: var(--muted-foreground);
+    max-height: calc(3 * 1.45em); overflow: hidden;
+    font-size: 1rem; line-height: 1.45; font-style: italic; color: var(--muted-foreground);
     -webkit-mask-image: linear-gradient(to bottom, transparent, black 1.1em); mask-image: linear-gradient(to bottom, transparent, black 1.1em);
     pointer-events: none; animation: composer-voice-in .2s ease-out;
   }
