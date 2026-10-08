@@ -102,12 +102,13 @@ environments.
 16. **History edits fork in place.** Editing an earlier message forks the
     pi-durable conversation there; the chat switches to the fork and the old
     branch stays reachable, like Pi's tree today.
-17. **Node protocol = pi-durable's remote `env`.** The node implements
-    pi-durable's env interface over the tailnet; main's env factory returns a
-    remote env for node workspaces. Typed device capabilities ride an extra
-    channel on the same connection. Conduit's file browser/viewer use the same
-    env for **read-only** remote browsing in v1; editor writes, git panel and
-    terminals on remote workspaces come later.
+17. **Conduit-owned node protocol.** A versioned Conduit protocol over a
+    tailnet WebSocket, independent of pi-durable's experimental API so
+    installed apps survive upstream changes. Its initial op set mirrors what
+    pi-durable's `env` needs; main provides a thin pi-durable remote-env
+    adapter onto it. Device capabilities, action ids/reattach and Conduit's
+    file browser/viewer share the same protocol. Remote browsing is
+    **read-only** in v1; editor writes, git panel and terminals come later.
 18. **Remote shell survives disconnects.** The node keeps the process and
     buffered output; on reconnect the tool reattaches by action id. If the
     node itself restarted, the call is reported interrupted.
