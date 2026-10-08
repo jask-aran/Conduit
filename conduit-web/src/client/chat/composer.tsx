@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createSignal, For, lazy, on, onCleanup, onMount, Show, type JSX } from "solid-js";
+import { createEffect, createMemo, createSignal, For, Index, lazy, on, onCleanup, onMount, Show, type JSX } from "solid-js";
 import { ArrowUpIcon, ChevronDownIcon, KeyboardIcon, MicIcon, ShieldCheckIcon, SquareIcon, TriangleAlertIcon } from "lucide-solid";
 import { ThinkingOrb } from "./thinking-orb";
 import { PHONE_COMPOSER_CHANGE_EVENT, phoneComposerLayout } from "../preferences/phone-composer";
@@ -603,7 +603,7 @@ export function Composer(props: {
 
   return <div class="composer-wrap" data-part="composer" data-phone-layout={voiceFirst() ? phoneComposer() : undefined} data-phone-mode={phoneMode()} style={phoneMode() === "listening" ? { "--voice-level": String(dictationWaveform.level()) } : undefined}>
     <Show when={phoneMode() === "listening"}>
-      <Show when={dictatedText()}><div class="composer-voice-captions" aria-live="polite"><p ref={glideCaptions}>{dictatedText()}</p></div></Show>
+      <Show when={dictatedText()}><div class="composer-voice-captions" aria-live="polite"><p ref={glideCaptions}><Index each={dictatedText().split(/(?<=\s)/)}>{(word) => <span>{word()}</span>}</Index></p></div></Show>
     </Show>
     <QueuedMessages
       messages={props.chat.pendingMessages()}
@@ -621,7 +621,7 @@ export function Composer(props: {
     <div class="composer-surface-shell" data-composer-surface={composerSurface()}>
       <div class="composer composer-surface-material" data-composer-surface={composerSurface()}>
         <Show when={voiceFirst() && phoneComposer() === "bar"}><div class="composer-voice-pill composer-surface-material" data-composer-surface={composerSurface()} onClick={() => { if (phoneMode() === "listening") toggleDictation(); }}><div class="composer-voice-glow" aria-hidden="true"><i /><i /><i /><i /></div><ThinkingOrb state="listening" class="composer-voice-orb" paused={phoneMode() !== "listening"} /></div></Show>
-        <Show when={voiceFirst()}><div class="composer-voice-track" onClick={() => { if (phoneMode() === "listening") toggleDictation(); }}><div class="composer-voice-glow" aria-hidden="true"><i /><i /><i /><i /></div><VoiceWaveform class="chat-status-waveform composer-voice-waveform" history={dictationWaveform.history} level={dictationWaveform.level} peak={dictationWaveform.peak} state={recorderMonitorState()} variant="compact" barDensity={3} ariaLabel="Microphone input level" /></div></Show>
+        <Show when={voiceFirst()}><div class="composer-voice-track" onClick={() => { if (phoneMode() === "listening") toggleDictation(); }}><div class="composer-voice-glow" aria-hidden="true"><i /><i /><i /><i /></div><VoiceWaveform class="chat-status-waveform composer-voice-waveform" history={dictationWaveform.history} level={dictationWaveform.level} peak={dictationWaveform.peak} state={recorderMonitorState()} variant="compact" barDensity={4} gain={2.5} ariaLabel="Microphone input level" /></div></Show>
         <div class="composer-content">
           <MobileComposerOptions composer={props} />
           <div class="composer-input-shell">
