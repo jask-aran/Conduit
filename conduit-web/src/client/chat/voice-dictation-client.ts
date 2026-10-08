@@ -526,7 +526,7 @@ export function createVoiceDictationClient(callbacks: VoiceDictationCallbacks, o
     stopRequested = false;
     releaseWarmAfterStop = false;
     if (!navigator.mediaDevices?.getUserMedia || !ensureAudioContext()) {
-      fail(new Error("Voice capture is not supported by this browser"));
+      fail(new Error(window.isSecureContext ? "Voice capture is not supported by this browser" : "The microphone needs a secure page: open Conduit over https or localhost, not a plain http address"));
       return;
     }
     diagnostics = diagnosticsFactory?.(acceptedAt) || null;
