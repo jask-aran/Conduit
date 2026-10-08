@@ -95,7 +95,7 @@ export function Select(props: JSX.SelectHTMLAttributes<HTMLSelectElement>) {
   };
   return <span class={`settings-select${local.class ? ` ${local.class}` : ""}`}>
     <select {...rest} ref={(element) => { select = element; (local.ref as ((element: HTMLSelectElement) => void) | undefined)?.(element); }} disabled={local.disabled} tabIndex={-1} aria-hidden="true" onFocus={() => trigger?.focus()}>{local.children}</select>
-    <Menu placement="bottom-end" gutter={4} onOpenChange={(open) => open && read()}>
+    <Menu modal={false} placement="bottom-end" gutter={4} onOpenChange={(open) => open && read()}>
       <MenuTrigger ref={trigger} as="button" type="button" class="settings-select-trigger" title={local.title} disabled={local.disabled} aria-label={select?.labels?.[0]?.textContent || undefined}>
         <span>{label()}</span><ChevronDownIcon aria-hidden="true" />
       </MenuTrigger>
