@@ -115,6 +115,8 @@ export function Composer(props: {
     : inputFocused() || hasText() ? "typing" : "idle";
   // The text row was zero wide while hidden; measure it again once shown.
   createEffect(on(phoneMode, () => scheduleResize(), { defer: true }));
+  // Dictation failures go through the app's normal toasts.
+  createEffect(on(dictationError, (message) => { if (message) toast.error(message); }, { defer: true }));
   const dictatedText = () => { const range = dictatedRange(); return range ? props.chat.draft().slice(range.start, range.end) : ""; };
   // A phone has no model chip in its row, so the empty draft names the model --
   // it stays in view at no cost in height.
@@ -656,6 +658,5 @@ export function Composer(props: {
         </div>
       </div>
     </div>
-    <Show when={dictationError()}><div class="composer-dictation-error" role="alert"><TriangleAlertIcon />{dictationError()}</div></Show>
   </div>;
 }
