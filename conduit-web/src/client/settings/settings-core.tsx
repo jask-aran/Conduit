@@ -1279,7 +1279,7 @@ export function Settings(props: {
               <div class="settings-list">
                 <section class="settings-group" aria-label="Transcription">
                   <h3>Transcription</h3>
-                  <div class="settings-line"><span>Source</span>
+                  <div class="settings-line" data-stack><span>Source</span>
                     <Segmented label="Transcription source" value={voiceServerSettings()!.mode} disabled={voiceBusy()} onChange={(mode) => updateVoiceServer({ mode })} options={[
                       { value: "off", label: "Off", icon: <MicOffIcon /> },
                       { value: "local", label: "Local", icon: <CpuIcon />, title: "This machine" },
@@ -1337,7 +1337,7 @@ export function Settings(props: {
                       </Show>
                     </Show>
                     <Show when={voiceServerSettings()!.provider !== "custom" || voiceServerSettings()!.auth.type !== "none"}>
-                      <div class="settings-line"><label for="voice-secret">{selectedVoiceProvider()?.authLabel || "Key"}<em>{voiceServerSettings()!.auth.configured ? "stored" : "not set"}</em></label>
+                      <div class="settings-line" data-stack><label for="voice-secret">{selectedVoiceProvider()?.authLabel || "Key"}<em>{voiceServerSettings()!.auth.configured ? "stored" : "not set"}</em></label>
                         <div class="settings-line-control">
                           <Input id="voice-secret" type="password" autocomplete="new-password" data-1p-ignore data-lpignore="true" data-bwignore disabled={voiceBusy()} value={voiceSecret()} onInput={(event) => setVoiceSecret(event.currentTarget.value)} onKeyDown={(event) => { if (event.key === "Enter") void saveVoiceSecret(); }} placeholder={voiceServerSettings()!.auth.configured ? "Replace" : "Paste key"} />
                           <Show when={voiceSecret().trim()}><Button size="sm" disabled={voiceBusy()} onClick={() => void saveVoiceSecret()}>Save</Button></Show>
@@ -1353,7 +1353,7 @@ export function Settings(props: {
 
                 <section class="settings-group" aria-label="Input">
                   <h3>Input</h3>
-                  <label class="settings-line" for="voice-input-device"><span>Microphone</span>
+                  <label class="settings-line" data-stack="mic" for="voice-input-device"><span>Microphone</span>
                     <div class="settings-line-control">
                       <select ref={voiceInputSelect} id="voice-input-device" disabled={audioInputBusy()} value={voiceDraft().inputDeviceId} onChange={(event) => updateVoiceDraft({ inputDeviceId: event.currentTarget.value })}>
                         <option value="">System default</option>
@@ -1367,7 +1367,7 @@ export function Settings(props: {
                   </label>
                   <Show when={audioInputBusy() || audioInputTest()}>
                     {/* The composer's own waveform, so a test looks like dictation will. */}
-                    <div class="settings-line"><span>{audioInputBusy() ? (audioInputSignalDetected() ? "Signal" : "Listening…") : audioInputTest()!.signalDetected ? "Signal" : "No signal"}<em data-tone={audioInputTest() && !audioInputBusy() && !audioInputTest()!.signalDetected ? "error" : undefined}>level {Math.round(audioInputWaveform.level() * 100)}% · peak {Math.round(audioInputWaveform.peak() * 100)}%</em></span>
+                    <div class="settings-line" data-stack><span>{audioInputBusy() ? (audioInputSignalDetected() ? "Signal" : "Listening…") : audioInputTest()!.signalDetected ? "Signal" : "No signal"}<em data-tone={audioInputTest() && !audioInputBusy() && !audioInputTest()!.signalDetected ? "error" : undefined}>level {Math.round(audioInputWaveform.level() * 100)}% · peak {Math.round(audioInputWaveform.peak() * 100)}%</em></span>
                       <VoiceWaveform class="composer-actions-waveform settings-recorder-monitor" history={audioInputWaveform.history} level={audioInputWaveform.level} peak={audioInputWaveform.peak} state={audioInputBusy() ? "listening" : "stopped"} variant="compact" barDensity={3} ariaLabel="Microphone input level" />
                     </div>
                   </Show>
