@@ -239,7 +239,7 @@ export function ServerSwitcher(props: {
         <Show when={props.connectivity === "connecting" || props.connectivity === "reconnecting"} fallback={<span class="runtime-indicator-dot" />}><Spinner class="size-3" /></Show>
       </span>
     </MenuTrigger>
-    <MenuContent class="server-switcher-menu" data-settling={settling()} onPointerDownOutside={keepForChild} onCloseAutoFocus={(event) => event.preventDefault()}>
+    <MenuContent class="server-switcher-menu" data-settling={settling()} onPointerDownOutside={keepForChild} onFocusOutside={keepForChild} onCloseAutoFocus={(event) => event.preventDefault()}>
       <div class="phone-menu-parent" data-panel-open={panel() !== "root"} onPointerDown={returnToRoot}>
       <Show when={servers().length > 0}>
         <MenuGroup>
