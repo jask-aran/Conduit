@@ -837,8 +837,9 @@ svg.lucide { stroke-width: 2.4; }
   }
   .chat-header-title { display: none; }
   .chat-header-desktop-action { display: none !important; }
+  /* Retired on the phone for now: the trace says how a turn went. */
   .chat-status-line {
-    display: inline-flex;
+    display: none;
     min-width: 0;
     min-height: 32px;
     flex: 1 1 0;
@@ -1623,8 +1624,9 @@ svg.lucide { stroke-width: 2.4; }
   }
   .chat-header-title { display: none; }
   .chat-header-desktop-action { display: none !important; }
+  /* Retired on the phone for now: the trace says how a turn went. */
   .chat-status-line {
-    display: inline-flex;
+    display: none;
     min-width: 0;
     min-height: 40px;
     flex: 1 1 0;
