@@ -1,3 +1,5 @@
+import { createSignal, onCleanup } from "solid-js";
+
 export type ComposerSurfaceMode = "static" | "frosted-live";
 
 export const COMPOSER_SURFACE_STORAGE_KEY = "conduit:composer-surface";
@@ -34,5 +36,14 @@ export function saveComposerSurface(
   storage.setItem(COMPOSER_SURFACE_STORAGE_KEY, surface);
   if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent("conduit:ui-preference-change", { detail: { key: "composerSurface", value: surface } }));
   if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent<ComposerSurfaceMode>(COMPOSER_SURFACE_CHANGE_EVENT, { detail: surface }));
+  return surface;
+}
+
+/** The composer's material as it changes, for surfaces that wear it too. */
+export function createComposerSurfaceSignal() {
+  const [surface, setSurface] = createSignal<ComposerSurfaceMode>(selectedComposerSurface());
+  const changed = (event: Event) => setSurface((event as CustomEvent<ComposerSurfaceMode>).detail);
+  window.addEventListener(COMPOSER_SURFACE_CHANGE_EVENT, changed);
+  onCleanup(() => window.removeEventListener(COMPOSER_SURFACE_CHANGE_EVENT, changed));
   return surface;
 }

@@ -923,6 +923,10 @@ svg.lucide { stroke-width: 2.4; }
     min-height: 32px;
   }
   .mobile-header-leading, .chat-header-actions { gap: 0; }
+  /* Two pills of the composer's material (headerPill in main.tsx); the
+     header's own fade gives way so the transcript runs under them. */
+  :is(.mobile-header-leading, .chat-header-actions).composer-surface-material { display: flex; height: 44px; align-items: center; gap: 2px; padding: 0 6px; border-radius: 999px; }
+  .chat-header:has(> .composer-surface-material) { height: calc(56px + var(--safe-area-inset-top, env(safe-area-inset-top, 0px))); padding-top: calc(8px + var(--safe-area-inset-top, env(safe-area-inset-top, 0px))); padding-bottom: 4px; background: linear-gradient(to bottom, var(--background) 0 var(--safe-area-inset-top, env(safe-area-inset-top, 0px)), transparent calc(var(--safe-area-inset-top, env(safe-area-inset-top, 0px)) + 20px)); }
   .chat-header-actions { margin-left: auto; justify-content: flex-end; }
   .chat-header-more { display: inline-flex; flex: none; align-items: center; justify-content: center; border: 0; border-radius: var(--radius-md); background: transparent; color: inherit; }
   .chat-header-more:hover { background: var(--accent); }
@@ -1710,6 +1714,10 @@ svg.lucide { stroke-width: 2.4; }
     min-height: 40px;
   }
   .mobile-header-leading, .chat-header-actions { gap: 0; }
+  /* Two pills of the composer's material (headerPill in main.tsx); the
+     header's own fade gives way so the transcript runs under them. */
+  :is(.mobile-header-leading, .chat-header-actions).composer-surface-material { display: flex; height: 44px; align-items: center; gap: 2px; padding: 0 6px; border-radius: 999px; }
+  .chat-header:has(> .composer-surface-material) { height: calc(56px + var(--safe-area-inset-top, env(safe-area-inset-top, 0px))); padding-top: calc(8px + var(--safe-area-inset-top, env(safe-area-inset-top, 0px))); padding-bottom: 4px; background: linear-gradient(to bottom, var(--background) 0 var(--safe-area-inset-top, env(safe-area-inset-top, 0px)), transparent calc(var(--safe-area-inset-top, env(safe-area-inset-top, 0px)) + 20px)); }
   .chat-header-actions { margin-left: auto; justify-content: flex-end; }
   .chat-header-more { display: inline-flex; flex: none; align-items: center; justify-content: center; border: 0; border-radius: var(--radius-md); background: transparent; color: inherit; }
   .chat-header-more:hover { background: var(--accent); }

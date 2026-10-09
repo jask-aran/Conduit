@@ -38,7 +38,7 @@ import type { ChatSummary, DashboardChat, HarnessManifestView, Installation, Pro
 import { createErrorDiagnostic, formatRuntimeDiagnosticPrompt, type ErrorDiagnostic, type ErrorDiagnosticContext } from "./error-diagnostics";
 import { Composer, SPINNING_ACTIVITY, type ComposerStatus } from "./chat/composer";
 import { AppDashboard } from "./dashboard/app-dashboard";
-import { COMPOSER_SURFACE_CHANGE_EVENT, COMPOSER_SURFACE_STORAGE_KEY, selectedComposerSurface } from "./chat/composer-surface";
+import { COMPOSER_SURFACE_CHANGE_EVENT, COMPOSER_SURFACE_STORAGE_KEY, createComposerSurfaceSignal, selectedComposerSurface } from "./chat/composer-surface";
 import { applyTabFrost } from "./preferences/tab-frost";
 import { applyStreamFade } from "./preferences/stream-fade";
 import { installFocusShown } from "./preferences/focus-shown";
@@ -534,10 +534,11 @@ function ChatHeader(props: {
   const waveformLevel = () => props.composerStatus?.waveform.level() || 0;
   const waveformPeak = () => props.composerStatus?.waveform.peak() || 0;
   const waveformState = () => props.composerStatus?.recorderMonitorState() || "stopped";
+  const leadingPill = headerPill();
   return <>
     <header class="chat-header">
       <Show when={!props.mobileSidebarOpen}>
-        <div class="mobile-header-leading">
+        <div class={`mobile-header-leading ${leadingPill().class ?? ""}`} data-composer-surface={leadingPill()["data-composer-surface"]}>
           <Button variant="ghost" size="icon-sm" class="mobile-sidebar-trigger" data-mobile-open="false" aria-label="Toggle Sidebar" aria-expanded={false} onClick={props.onToggleMobileSidebar}><PanelLeftIcon /></Button>
           <Button variant="ghost" size="icon-sm" class="mobile-new-chat-trigger" aria-label="New chat" title="New chat" onClick={props.onNewChat}><MessageSquarePlusIcon /></Button>
         </div>
@@ -622,8 +623,16 @@ function Conversation(props: { chat: ActiveChatStore; busy?: boolean; transcript
   </div>;
 }
 
+/* On a phone the header's two control groups are pills of the composer's own
+   material, floating over the transcript like the composer below. */
+function headerPill() {
+  const surface = createComposerSurfaceSignal();
+  return () => isMobileLayout() ? { class: "composer-surface-material", "data-composer-surface": surface() } : {};
+}
+
 function HeaderActions(props: { children: JSX.Element }) {
-  return <div class="chat-header-actions">
+  const pill = headerPill();
+  return <div class={`chat-header-actions ${pill().class ?? ""}`} data-composer-surface={pill()["data-composer-surface"]}>
     {props.children}
   </div>;
 }
