@@ -179,3 +179,20 @@
 @media (--conduit-phone-layout) {
   [data-phone-layout][data-options-open] :is(.composer-keyboard-trigger, .dictation-trigger, .composer-send-trigger, .composer-stop-trigger, .composer-input-shell) { filter: opacity(.38) saturate(.6); }
 }
+
+/* Edit actions: the text pill has the cursor and the keyboard is down. The
+   same circles, gap and material as the row under it, one gap above the pill;
+   absolute, so nothing under them moves when they fade in and out. */
+.composer-edit-actions { display: none; }
+@media (--conduit-phone-layout) {
+  [data-phone-layout] .composer-edit-actions {
+    position: absolute; left: 0; bottom: calc(100% + 8px); z-index: 6;
+    display: flex; gap: 8px; opacity: 0; pointer-events: none; transition: opacity .18s ease;
+  }
+  [data-phone-layout="surface"] .composer-edit-actions { left: 1px; gap: 4px; }
+  [data-phone-layout] .composer-edit-actions[data-shown] { opacity: 1; pointer-events: auto; }
+  [data-phone-layout] .composer-edit-action[data-slot="button"] {
+    flex: none; width: 44px; min-width: 44px; height: 44px; padding: 0; border-radius: 999px; color: var(--foreground);
+  }
+  [data-phone-layout] .composer-edit-action[data-slot="button"] svg { width: 18px; height: 18px; }
+}

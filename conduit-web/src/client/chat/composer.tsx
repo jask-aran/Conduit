@@ -1,5 +1,5 @@
 import { createEffect, createMemo, createSignal, For, Index, lazy, on, onCleanup, onMount, Show, type JSX } from "solid-js";
-import { ArrowUpIcon, ChevronDownIcon, KeyboardIcon, MicIcon, ShieldCheckIcon, SquareIcon, TriangleAlertIcon } from "lucide-solid";
+import { ArrowUpIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, DeleteIcon, KeyboardIcon, MicIcon, TextCursorInputIcon, Undo2Icon, ShieldCheckIcon, SquareIcon, TriangleAlertIcon } from "lucide-solid";
 import { ThinkingOrb } from "./thinking-orb";
 import { PHONE_COMPOSER_CHANGE_EVENT, phoneComposerLayout } from "../preferences/phone-composer";
 import {
@@ -312,7 +312,52 @@ export function Composer(props: {
     pendingDictationLaunch = { inputFocused, keyboardOpen: keyboardWasOpen(inputFocused), acceptedAt: performance.now() };
   };
 
+  /* Edit actions for the text pill in the voice layouts, where the keyboard
+     is usually down: a cursor placed by finger is nudged a word at a time,
+     and undo is the composer's own because programmatic draft changes
+     (dictation, these actions) never reach the textarea's native stack. */
+  type DraftSnapshot = { text: string; start: number; end: number };
+  const undoStack: DraftSnapshot[] = [];
+  let lastSnapshotAt = 0;
+  const snapshot = (force = false) => {
+    const now = performance.now();
+    if (!force && now - lastSnapshotAt < 800) return;
+    lastSnapshotAt = now;
+    const text = props.chat.draft();
+    if (undoStack.at(-1)?.text === text) return;
+    undoStack.push({ text, start: input?.selectionStart ?? text.length, end: input?.selectionEnd ?? text.length });
+    if (undoStack.length > 100) undoStack.shift();
+  };
+  const placeCursor = (start: number, end = start) => queueMicrotask(() => { input.focus({ preventScroll: true }); input.setSelectionRange(start, end); });
+  const editDraft = (text: string, cursor: number) => { snapshot(true); change(text); placeCursor(cursor); };
+  const wordBefore = (text: string, at: number) => at - (text.slice(0, at).match(/\S+\s*$|\s+$/)?.[0].length ?? 0);
+  const wordAfter = (text: string, at: number) => at + (text.slice(at).match(/^\s*\S+|^\s+/)?.[0].length ?? 0);
+  const editActions = {
+    undo: () => {
+      const previous = undoStack.pop();
+      if (!previous) return;
+      lastSnapshotAt = 0;
+      change(previous.text);
+      placeCursor(previous.start, previous.end);
+    },
+    delete: () => {
+      const text = props.chat.draft();
+      const start = input.selectionStart ?? text.length;
+      const end = input.selectionEnd ?? start;
+      const from = start === end ? wordBefore(text, start) : start;
+      if (from === end) return;
+      editDraft(text.slice(0, from) + text.slice(end), from);
+    },
+    left: () => placeCursor(wordBefore(props.chat.draft(), input.selectionStart ?? 0)),
+    right: () => placeCursor(wordAfter(props.chat.draft(), input.selectionEnd ?? 0)),
+    end: () => placeCursor(props.chat.draft().length),
+  };
+  const editing = () => voiceFirst() && inputFocused() && !keyboardWanted() && hasText() && phoneMode() === "typing";
+  // The transcript's scroll-to-latest button moves above the edit actions.
+  createEffect(on(editing, () => window.dispatchEvent(new CustomEvent("conduit:voice-captions")), { defer: true }));
+
   const change = (value: string, manual = true) => {
+    if (manual) snapshot();
     if (manual) {
       historyIndex = null;
       historyDraft = "";
@@ -457,6 +502,7 @@ export function Composer(props: {
 
   const startDictation = (acceptedAt = performance.now()) => {
     if (recordingNow()) return;
+    snapshot(true);
     dictationWaveform.reset();
     setDictationError("");
     setTranscriberReady(false);
@@ -706,6 +752,15 @@ export function Composer(props: {
   });
 
   return <div class="composer-wrap" data-part="composer" data-phone-layout={voiceFirst() ? phoneComposer() : undefined} data-phone-mode={phoneMode()} data-primary-hidden={voiceFirst() && !hasPayload() && !stoppable() ? "" : undefined} style={phoneMode() === "listening" ? { "--voice-level": String(dictationWaveform.level()) } : undefined}>
+    <div class="composer-edit-actions" data-shown={editing() ? "" : undefined} aria-hidden={editing() ? undefined : "true"}>
+      <For each={[
+        { key: "undo", label: "Undo", icon: () => <Undo2Icon /> },
+        { key: "delete", label: "Delete word or selection", icon: () => <DeleteIcon /> },
+        { key: "left", label: "Previous word", icon: () => <ChevronLeftIcon /> },
+        { key: "right", label: "Next word", icon: () => <ChevronRightIcon /> },
+        { key: "end", label: "End of draft", icon: () => <TextCursorInputIcon /> },
+      ] as const}>{(action) => <Button variant="ghost" size="icon-sm" class="composer-edit-action composer-surface-material" data-composer-surface={composerSurface()} aria-label={action.label} title={action.label} tabIndex={editing() ? 0 : -1} onPointerDown={(event) => event.preventDefault()} onClick={() => editActions[action.key]()}>{action.icon()}</Button>}</For>
+    </div>
     <Show when={phoneMode() === "listening"}>
       <Show when={phoneMode() === "listening"}><div class="composer-voice-captions" data-empty={captionLead() || dictatedText() ? undefined : ""} data-lead={captionLead() ? "" : undefined} aria-live="polite"><p><span ref={glideCaptions} class="composer-voice-words"><Show when={captionLead()}><span class="composer-voice-lead">{captionLead()}</span></Show><Index each={dictatedText().split(/(?<=\s)/)}>{(word) => <span>{word()}</span>}</Index></span></p></div></Show>
     </Show>
