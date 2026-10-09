@@ -802,8 +802,11 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
       if (!conversation || !composerShell) return;
       const shellRect = motionShell.getBoundingClientRect();
       const composerRect = composerShell.getBoundingClientRect();
+      // Dictation captions float above the composer; the button clears them too.
+      const captions = conversation.querySelector<HTMLElement>(".composer-voice-captions p");
+      const captionsTop = captions?.getBoundingClientRect().top ?? Infinity;
       if (shellRect.width <= 0 || shellRect.height <= 0 || composerRect.width <= 0 || composerRect.height <= 0) return;
-      const bottom = `${Math.max(isMobileLayout() ? 8 : 6.4, shellRect.bottom - composerRect.top + (isMobileLayout() ? 10 : 8))}px`;
+      const bottom = `${Math.max(isMobileLayout() ? 8 : 6.4, shellRect.bottom - Math.min(composerRect.top, captionsTop) + (isMobileLayout() ? 10 : 8))}px`;
       for (const button of anchored) {
         if (button.style.getPropertyValue("--message-scroller-button-bottom") !== bottom) button.style.setProperty("--message-scroller-button-bottom", bottom);
       }
@@ -812,6 +815,8 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
       if (latestButtonAnchorFrame != null) return;
       latestButtonAnchorFrame = requestAnimationFrame(syncLatestButtonAnchor);
     };
+    window.addEventListener("conduit:voice-captions", scheduleLatestButtonAnchor);
+    onCleanup(() => window.removeEventListener("conduit:voice-captions", scheduleLatestButtonAnchor));
     const composerStack = transcriptRoot.closest<HTMLElement>(".work-area-conversation")?.querySelector<HTMLElement>(".composer-stack");
     // The composer floats over the bottom of the transcript, so the thread has
     // to reserve its height itself. A fixed reservation only ever matched the
@@ -1201,7 +1206,9 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
         * what they are replying to. The click still lands -- only the focus
         * change is refused.
         */}
-      <Show when={!following() && latestDistance() >= TAIL_NEAR_LATEST_PX}><Button ref={(element) => { latestButton = element; scheduleLatestButtonAnchor(); }} variant="ghost" size="icon-sm" class="message-scroller-button composer-surface-material" data-composer-surface={composerSurface()} aria-label="Scroll to latest" title="Scroll to latest" onMouseDown={(event) => event.preventDefault()} onClick={() => viewport.scrollTo({ top: viewport.scrollHeight, behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" })}><ArrowDownIcon /></Button></Show>
+      {/* Always mounted, so it fades out as well as in: when pressed, and when
+           somebody scrolls back down themselves. */}
+      <Button ref={(element) => { latestButton = element; scheduleLatestButtonAnchor(); }} variant="ghost" size="icon-sm" class="message-scroller-button composer-surface-material" data-composer-surface={composerSurface()} data-shown={!following() && latestDistance() >= TAIL_NEAR_LATEST_PX ? "" : undefined} tabIndex={!following() && latestDistance() >= TAIL_NEAR_LATEST_PX ? 0 : -1} aria-hidden={!following() && latestDistance() >= TAIL_NEAR_LATEST_PX ? undefined : "true"} aria-label="Scroll to latest" title="Scroll to latest" onMouseDown={(event) => event.preventDefault()} onClick={() => viewport.scrollTo({ top: viewport.scrollHeight, behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" })}><ArrowDownIcon /></Button>
       {/* Editing an earlier message: a way out that is always there, floating
           over the composer where the edit happens, as the pencil would. */}
       <Show when={props.chat.editingEntryId()}><Button ref={(element) => { cancelEditButton = element; scheduleLatestButtonAnchor(); }} variant="ghost" size="sm" class="message-scroller-button message-cancel-edit composer-surface-material" data-composer-surface={composerSurface()} data-beside-latest={!following() && latestDistance() >= TAIL_NEAR_LATEST_PX ? "" : undefined} onMouseDown={(event) => event.preventDefault()} onClick={() => { props.chat.cancelEdit(); focusComposerSoon(); }}><XIcon />Cancel editing</Button></Show>

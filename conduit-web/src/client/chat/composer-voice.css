@@ -142,8 +142,8 @@
   /* A dark scrim behind the captions so the transcript under them never
      shows through, fading out upwards. */
   .composer-voice-captions::before {
-    content: ""; position: absolute; top: -40px; bottom: -160px; left: calc(50% - 50vw); right: calc(50% - 50vw); z-index: -1;
-    background: linear-gradient(to bottom, transparent, var(--background) 64px);
+    content: ""; position: absolute; top: -8px; bottom: -160px; left: calc(50% - 50vw); right: calc(50% - 50vw); z-index: -1;
+    background: linear-gradient(to bottom, transparent, var(--background) 32px);
   }
   .composer-voice-captions p {
     display: flex; flex-direction: column; justify-content: flex-end; max-height: calc(3 * 1.45em); overflow: hidden;

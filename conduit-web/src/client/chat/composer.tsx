@@ -125,9 +125,11 @@ export function Composer(props: {
       const next = element.offsetHeight;
       if (height && next > height) element.animate([{ transform: `translateY(${next - height}px)` }, { transform: "none" }], { duration: 180, easing: "ease-out" });
       height = next;
+      // The transcript's scroll-to-latest button sits above the captions.
+      window.dispatchEvent(new CustomEvent("conduit:voice-captions"));
     });
     observer.observe(element);
-    onCleanup(() => observer.disconnect());
+    onCleanup(() => { observer.disconnect(); queueMicrotask(() => window.dispatchEvent(new CustomEvent("conduit:voice-captions"))); });
   };
   /* The bars are 2px on a 4px pitch, which on a fractional pixel ratio lands
      some on 5 device pixels and some on 6, and partly covered ones paint
