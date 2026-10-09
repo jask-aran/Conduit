@@ -352,7 +352,8 @@ async function performPwaUpdate(reloadPage: () => void) {
     reloadPage();
     return true;
   }
-  await registration.update();
+  // Bounded: with the server gone this fetch can hang for minutes.
+  await Promise.race([registration.update(), new Promise((_, reject) => setTimeout(() => reject(new Error("Could not reach the server to check for updates.")), 15_000))]);
   // Nothing new was fetched: up to date. A new build precaches the whole
   // client before it waits, which over a phone connection takes well past a
   // few seconds -- so a build that is installing gets the time it needs, and

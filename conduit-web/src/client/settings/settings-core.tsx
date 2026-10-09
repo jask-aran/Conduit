@@ -750,7 +750,12 @@ export function Settings(props: {
     }
   };
   createEffect(() => {
-    if (props.open && section() === "voice") void loadAudioInputs();
+    if (!props.open || section() !== "voice") return;
+    void loadAudioInputs();
+    // A microphone plugged in, or the list becoming visible, refreshes it.
+    const changed = () => void loadAudioInputs();
+    navigator.mediaDevices?.addEventListener("devicechange", changed);
+    onCleanup(() => navigator.mediaDevices?.removeEventListener("devicechange", changed));
   });
   createEffect(() => {
     const selectedDeviceId = voiceDraft().inputDeviceId;

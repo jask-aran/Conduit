@@ -84,8 +84,32 @@ function mediaDevices() {
   return navigator.mediaDevices;
 }
 
+async function microphoneGranted() {
+  // The Android app holds the permission itself, so a page there may open the
+  // microphone without asking anyone.
+  if (installedClientKind === "android") return true;
+  try {
+    return (await navigator.permissions.query({ name: "microphone" as PermissionName })).state === "granted";
+  } catch {
+    return false;
+  }
+}
+
 export async function listAudioInputDevices(): Promise<AudioInputDevice[]> {
-  const devices = await mediaDevices().enumerateDevices();
+  let devices = await mediaDevices().enumerateDevices();
+  // A freshly loaded page (a reload after a reconnect, say) is shown the
+  // microphones without ids or names until it has opened one, so a saved
+  // choice reads as missing. With the grant already held, open one for an
+  // instant to see them -- this is all on the device, not the server.
+  if (devices.some((device) => device.kind === "audioinput" && !device.deviceId) && await microphoneGranted()) {
+    try {
+      const stream = await mediaDevices().getUserMedia({ audio: true });
+      stream.getTracks().forEach((track) => track.stop());
+      devices = await mediaDevices().enumerateDevices();
+    } catch {
+      // Keep the anonymous list.
+    }
+  }
   return devices
     .filter((device) => device.kind === "audioinput")
     .map((device, index) => ({

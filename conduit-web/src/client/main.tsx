@@ -943,13 +943,18 @@ function App() {
     }
   };
   const setPwaUpdating = (busy: boolean) => setUpdateState(busy ? { kind: "checking" } : { kind: "idle" });
+  let quietCheck = false;
   const prepareDesktopUpdate = async (quiet: boolean) => {
     const shell = updateShell;
-    if (!shell || pwaUpdating()) return;
-    setPwaUpdating(true);
+    if (!shell || pwaUpdating() || (quiet && quietCheck)) return;
+    // A background check says nothing until it has something: on Android it
+    // waits for Wi-Fi, which can be hours, and a spinner that long is a lie.
+    if (quiet) quietCheck = true;
+    else setPwaUpdating(true);
     const notice = quiet ? null : toast.loading("Checking for updates…");
     try {
       const result = await shell.prepareUpdate((progress) => {
+        if (quiet) return;
         const share = progress.total ? Math.round((progress.downloaded / progress.total) * 100) : 0;
         const label = `Downloading ${progress.version}… ${share}%`;
         setUpdateState({ kind: "working", label });
@@ -959,14 +964,16 @@ function App() {
         setUpdateState({ kind: "ready" });
         if (notice) toast.success(`Conduit ${result.version} is ready to ${androidShell ? "install" : "restart"}`, { id: notice });
       } else if (quiet) {
-        setUpdateState({ kind: "idle" });
+        // Nothing to say.
       } else {
         sayUpToDate();
         if (notice) toast.success("Conduit is up to date", { id: notice });
       }
     } catch (error) {
-      setUpdateState({ kind: "idle" });
+      if (!quiet) setUpdateState({ kind: "idle" });
       if (notice) { toast.dismiss(notice); showError(error); }
+    } finally {
+      if (quiet) quietCheck = false;
     }
   };
   const [addingServer, setAddingServer] = createSignal(false);
@@ -980,7 +987,10 @@ function App() {
     try {
       // Stays "checking" until it resolves: a true return is followed by the
       // reload, so there is no install to narrate.
-      if (!await forcePwaUpdate()) {
+      // An unreachable server can leave the worker's fetch hanging; give up
+      // rather than spin forever (a new build gets its two minutes to install).
+      const updated = await Promise.race([forcePwaUpdate(), new Promise<never>((_, reject) => setTimeout(() => reject(new Error("Could not check for updates. Try again when the server is reachable.")), 150_000))]);
+      if (!updated) {
         sayUpToDate();
         toast.success("Conduit is up to date");
       }
