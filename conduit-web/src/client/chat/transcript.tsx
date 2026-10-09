@@ -313,8 +313,18 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
   const settledMessages = createMemo(() => props.chat.messages().filter((message) => !message.pending));
   /* A message sent from this view fades in as the composer's text pill fades
      out; everything drawn when the chat opens is simply there. */
-  let chatShownAt = performance.now();
-  createEffect(on(() => props.chat.loadedId(), () => { chatShownAt = performance.now(); }));
+  // When each message we sent first showed here: its fade runs from then,
+  // and a row rebuilt for it (the server's copy, a new chat's id) carries on
+  // from the same point instead of starting again.
+  const ARRIVE_MS = 180;
+  const arrivedAt = new Map<string, number>();
+  const arrival = (message: Message): JSX.CSSProperties | undefined => {
+    if (message.local && !arrivedAt.has(message.id)) arrivedAt.set(message.id, performance.now());
+    const at = arrivedAt.get(message.id);
+    if (at == null) return undefined;
+    const ago = performance.now() - at;
+    return ago < ARRIVE_MS ? { "--arrive-delay": `${-Math.round(ago)}ms` } : undefined;
+  };
   const timeline = createTimelineStore(
     settledMessages,
     props.chat.tools,
@@ -326,7 +336,6 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
   const awaitingTurn = createMemo(() => {
     const last = props.chat.messages().at(-1);
     if (!last || last.role !== "user" || !last.local) return false;
-    if (!props.chat.streaming() && !props.chat.activity()) return false;
     return timeline.at(-1)?.type === "message";
   });
 
@@ -1223,7 +1232,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
               <p class="harness-prompt"><BellIcon aria-hidden="true" /><span>{message().content}</span></p>
             </div>;
           }
-          return <div ref={row} data-slot="message-scroller-item" data-message-id={message().id} data-arrived={user() && performance.now() - chatShownAt > 1500 ? "" : undefined}>
+          return <div ref={row} data-slot="message-scroller-item" data-message-id={message().id} data-arrived={user() && arrival(message()) ? "" : undefined} style={user() ? arrival(message()) : undefined}>
             <article data-slot="message" data-align={user() ? "end" : "start"} class={user() ? "message-user" : "message-assistant"}>
               <div data-slot="message-content" data-incremark={!user() && rendererUsesTypewriter() ? "" : undefined}>
                 <Show when={!user() || review().text}><div data-slot="bubble" data-align={user() ? "end" : "start"} data-error={failed() ? "true" : undefined} data-editing={props.chat.editingEntryId() === message().id ? "true" : "false"} data-composer-surface={user() ? composerSurface() : undefined} class={user() ? "bubble bubble-user composer-surface-material" : "bubble bubble-assistant"}>
@@ -1273,7 +1282,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
             requestAnimationFrame(() => [...viewport.querySelectorAll<HTMLElement>(".turn-trace")].at(-1)
               ?.animate([{ opacity: 1 - left / 180 }, { opacity: 1 }], { duration: left, easing: "ease-out" }));
           });
-        }} data-slot="message-scroller-item" data-arrived=""><TraceStarting startedAt={props.chat.messages().at(-1)?.timestamp} label="Starting" /></div></Show>
+        }} data-slot="message-scroller-item" data-arrived="" style={arrival(props.chat.messages().at(-1)!)}><TraceStarting startedAt={props.chat.messages().at(-1)?.timestamp} label="Starting" /></div></Show>
         </div>
       </div>
       {/*
