@@ -53,6 +53,7 @@ import {
   type MarkdownRendererId,
 } from "./chat/markdown-settings";
 import { loadVoiceDictationSettings, saveVoiceDictationSettings, VOICE_DICTATION_STORAGE_KEY } from "./chat/voice-dictation";
+import { listAudioInputDevices, rematchInputDevice } from "./chat/voice-audio";
 import { Transcript } from "./chat/transcript";
 import { isChatContentActivity } from "./chat/transcript-source";
 import { COMMAND_IDS, commandRegistry, getCommandDefinition, LEADER_STROKE } from "./commands/command-registry";
@@ -675,6 +676,15 @@ function App() {
   const [defaultTemplateId, setDefaultTemplateId] = createSignal("assistant");
   const [voiceSettings, setVoiceSettings] = createSignal<VoiceDictationSettings>(loadVoiceDictationSettings());
   const updateVoiceSettings = (next: VoiceDictationSettings) => setVoiceSettings(saveVoiceDictationSettings(next));
+  // Find the chosen microphone again if this device gave it a new id.
+  onMount(() => {
+    const saved = voiceSettings();
+    if (!saved.inputDeviceId || !saved.inputDeviceLabel) return;
+    void listAudioInputDevices().then((devices) => {
+      const moved = rematchInputDevice(voiceSettings(), devices);
+      if (moved) updateVoiceSettings({ ...voiceSettings(), inputDeviceId: moved });
+    }).catch(() => {});
+  });
   const [partialContinue, setPartialContinue] = createSignal(true);
   const [maxAttachmentBytes, setMaxAttachmentBytes] = createSignal(DEFAULT_MAX_ATTACHMENT_BYTES);
   const [markdownRenderer, setMarkdownRenderer] = createSignal<MarkdownRendererId>(selectedMarkdownRenderer());
@@ -4857,7 +4867,9 @@ function App() {
       else if (key === "shortcutOverrides" && value && typeof value === "object" && !Array.isArray(value)) {
         shortcutManager.replaceOverrides(value as ReturnType<ShortcutManager["shortcutOverrides"]>);
       } else if (key === "voicePreferences" && value && typeof value === "object" && !Array.isArray(value)) {
-        const next = { ...localVoice, ...value } as VoiceDictationSettings;
+        // Read now: the copy taken at startup would put back whatever
+        // microphone was chosen then (the device stays on this client only).
+        const next = { ...loadVoiceDictationSettings(), ...value } as VoiceDictationSettings;
         localStorage.setItem(VOICE_DICTATION_STORAGE_KEY, JSON.stringify(next));
         setVoiceSettings(next);
       }
