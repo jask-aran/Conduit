@@ -476,6 +476,14 @@ async function ensureChatTemplate(chat, project = null) {
   });
 }
 
+// The LAN name exists to be a secure context: plain http to it goes to https
+// on the same port, which already speaks both.
+app.use((req, res, next) => {
+  if (!lanNameMatches(req.hostname)) return next();
+  // Remembered, so the next typed address skips the plain-http hop.
+  if (req.socket.encrypted) { res.setHeader("Strict-Transport-Security", "max-age=31536000"); return next(); }
+  res.redirect(308, `https://${req.headers.host}${req.originalUrl}`);
+});
 app.use(compression());
 app.use(nativeCors);
 
