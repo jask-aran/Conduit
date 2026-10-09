@@ -1,5 +1,5 @@
 import { setLatestAway, setLatestScroller } from "./latest-away";
-import { createEffect, createMemo, createRenderEffect, createSignal, For, lazy, on, onCleanup, onMount, Show, Suspense, untrack, type JSX } from "solid-js";
+import { createComputed, createEffect, createMemo, createRenderEffect, createSignal, For, lazy, on, onCleanup, onMount, Show, Suspense, untrack, type JSX } from "solid-js";
 import { ArrowDownIcon, BellIcon, CheckIcon, CopyIcon, PencilIcon, PlayIcon, RefreshCwIcon, SquareIcon, TriangleAlertIcon, XIcon } from "lucide-solid";
 import { Button, Spinner } from "@/components/primitives";
 import type { BooleanCapability, Message } from "../api/contracts";
@@ -345,6 +345,17 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
     return timeline.at(-1)?.type === "message";
   });
 
+  // The tail's rows are swapped whole -- the starting row for the turn's,
+  // the pending row for its trace -- and a layout read partway through saw
+  // the thread without either, so the browser clamped the scroll up for a
+  // frame. Before any such change reaches the page, the thread keeps at
+  // least the height it had until the frame is laid out.
+  createComputed(on(() => [timeline.length, timeline.at(-1)?.key, awaitingTurn()], () => {
+    if (!thread) return;
+    thread.style.minHeight = `${thread.offsetHeight}px`;
+    requestAnimationFrame(() => { thread.style.minHeight = ""; });
+  }, { defer: true }));
+
   let scrollFrame: number | null = null;
   let typewriterTailFrame: number | null = null;
   const typewriterTailReasons = new Set<string>();
@@ -453,8 +464,6 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
    * underneath it; a touch or wheel hands the view straight back.
    */
   let sendGlide: number | null = null;
-  let lastScrollInputAt = -Infinity;
-  const noteScrollInput = () => { lastScrollInputAt = performance.now(); };
   const cancelSendGlide = () => { if (sendGlide != null) cancelAnimationFrame(sendGlide); sendGlide = null; };
   // A send scrolls the way scroll to latest does, to the bottom; nothing else
   // writes the scroll until it lands or is taken.
@@ -1112,22 +1121,13 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
       // two ways a user produces one -- scrollbar drags, PageUp/Home, and
       // trackpad momentum arriving after wheel-end land here instead, and used
       // to leave the spring believing it still owned the viewport.
-      // An upward move with no touch, wheel, pointer or key behind it is the
-      // browser's: scroll anchoring as one row is swapped for another. It
-      // must not read as the reader leaving the tail.
-      const unprompted = performance.now() - lastScrollInputAt > 1000;
-      // Following, it goes straight back, in the same frame, before a paint.
-      if (decision.direction === "up" && unprompted && following()) {
-        setViewportScrollTop(viewportMaxScrollTop());
-        return;
-      }
-      if (decision.direction === "up" && !unprompted) {
+      if (decision.direction === "up") {
         cancelTypewriterTailRejoin();
         if (!wasProgrammatic) claimUserScroll();
       }
       if (!rendererUsesInertialTailFollow() || typewriterTailState.owner === "user" || !following()) {
         setFollowing(decision.following);
-      } else if (decision.direction === "up" && !unprompted) {
+      } else if (decision.direction === "up") {
         setFollowing(false);
       }
       if (rendererUsesInertialTailFollow() && decision.rejoin) scheduleTypewriterTailRejoin();
@@ -1146,7 +1146,6 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
     viewport.addEventListener("wheel", claimUserScroll, { passive: true });
     viewport.addEventListener("touchstart", onTouchStart, { passive: true });
     viewport.addEventListener("wheel", cancelSendGlide, { passive: true });
-    for (const type of ["wheel", "touchstart", "touchmove", "pointerdown", "keydown"]) viewport.addEventListener(type, noteScrollInput, { passive: true });
     viewport.addEventListener("touchstart", cancelSendGlide, { passive: true });
     viewport.addEventListener("pointerdown", onPointerDown, { passive: true });
     viewport.addEventListener("keydown", onKeyDown, { passive: true });
