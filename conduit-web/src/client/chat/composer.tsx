@@ -686,7 +686,7 @@ export function Composer(props: {
 
   return <div class="composer-wrap" data-part="composer" data-phone-layout={voiceFirst() ? phoneComposer() : undefined} data-phone-mode={phoneMode()} data-primary-hidden={voiceFirst() && !hasPayload() && !stoppable() ? "" : undefined} style={phoneMode() === "listening" ? { "--voice-level": String(dictationWaveform.level()) } : undefined}>
     <Show when={phoneMode() === "listening"}>
-      <Show when={dictatedText()}><div class="composer-voice-captions" aria-live="polite"><p><span ref={glideCaptions} class="composer-voice-words"><Show when={captionLead()}><span class="composer-voice-lead">{captionLead()}</span></Show><Index each={dictatedText().split(/(?<=\s)/)}>{(word) => <span>{word()}</span>}</Index></span></p></div></Show>
+      <Show when={phoneMode() === "listening" && (captionLead() || dictatedText())}><div class="composer-voice-captions" aria-live="polite"><p><span ref={glideCaptions} class="composer-voice-words"><Show when={captionLead()}><span class="composer-voice-lead">{captionLead()}</span></Show><Index each={dictatedText().split(/(?<=\s)/)}>{(word) => <span>{word()}</span>}</Index></span></p></div></Show>
     </Show>
     <QueuedMessages
       messages={props.chat.pendingMessages()}
