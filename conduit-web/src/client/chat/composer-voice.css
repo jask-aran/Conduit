@@ -29,7 +29,7 @@
 
   /* Send opens and closes rather than popping: with nothing to send it
      folds to nothing and the mic pill takes its room. */
-  [data-phone-layout] :is(.composer-send-trigger, .composer-stop-trigger) { transition: opacity .2s ease, width .25s cubic-bezier(.2, .8, .2, 1), min-width .25s cubic-bezier(.2, .8, .2, 1), margin .25s cubic-bezier(.2, .8, .2, 1); }
+  [data-phone-layout] :is(.composer-send-trigger, .composer-stop-trigger) { transition: opacity .2s ease, width .25s cubic-bezier(.2, .8, .2, 1), min-width .25s cubic-bezier(.2, .8, .2, 1), margin .25s cubic-bezier(.2, .8, .2, 1), filter .16s ease; }
   [data-phone-layout][data-primary-hidden] .composer-send-trigger { width: 0; min-width: 0; margin-left: -8px; opacity: 0; overflow: hidden; border-width: 0; pointer-events: none; }
   /* Waiting on the transcript the mic stays drawn as it rests. */
   [data-phone-layout] .dictation-trigger:disabled { opacity: 1; }
@@ -49,7 +49,7 @@
      it. It eases open and closed rather than appearing. */
   [data-phone-layout] .composer-input-shell {
     order: 0; flex: 1 0 100%; max-height: 220px; overflow: hidden;
-    transition: max-height .24s cubic-bezier(.2, .8, .2, 1), margin .24s cubic-bezier(.2, .8, .2, 1), opacity .18s ease, transform .24s cubic-bezier(.2, .8, .2, 1);
+    transition: max-height .24s cubic-bezier(.2, .8, .2, 1), margin .24s cubic-bezier(.2, .8, .2, 1), opacity .18s ease, transform .24s cubic-bezier(.2, .8, .2, 1), filter .16s ease;
   }
   :is([data-phone-mode="idle"], [data-phone-mode="listening"]) .composer-input-shell {
     min-height: 0; max-height: 0; margin-bottom: -8px; opacity: 0; transform: translateY(8px); pointer-events: none; border-color: transparent;
@@ -73,7 +73,7 @@
   [data-phone-mode="listening"] .thinking-orb.composer-voice-orb { opacity: 1; }
 
   /* Listening: the other controls fade where they stand. */
-  :is(.composer-mobile-plus, .composer-keyboard-trigger, .composer-stop-aside, .composer-send-trigger, .composer-stop-trigger, .composer-actions-left > *) { transition: opacity .18s ease; }
+  :is(.composer-mobile-plus, .composer-keyboard-trigger, .composer-stop-aside, .composer-send-trigger, .composer-stop-trigger, .composer-actions-left > *) { transition: opacity .18s ease, filter .16s ease; }
   [data-phone-mode="listening"] :is(.composer-mobile-plus, .composer-keyboard-trigger, .composer-stop-aside, .composer-send-trigger, .composer-stop-trigger, .composer-actions-left > *) { opacity: 0; pointer-events: none; }
 
   /* The voice track (glow + waveform). Surface: it fills the pill behind the
@@ -96,7 +96,7 @@
   [data-phone-layout="bar"] .composer::before { content: ""; order: 3; flex: 0 0 0; min-width: 0; margin-left: -8px; transition: flex-grow .3s cubic-bezier(.2, .8, .2, 1); }
   [data-phone-layout="bar"][data-phone-mode="listening"] .composer::before { flex-grow: 1; }
   [data-phone-layout="bar"] .dictation-trigger { order: 4; overflow: hidden; isolation: isolate; }
-  [data-phone-layout="bar"] .composer-actions [data-slot="button"].dictation-trigger { flex: 1 1 64px; min-width: 64px; transition: flex-grow .3s cubic-bezier(.2, .8, .2, 1); }
+  [data-phone-layout="bar"] .composer-actions [data-slot="button"].dictation-trigger { flex: 1 1 64px; min-width: 64px; transition: flex-grow .3s cubic-bezier(.2, .8, .2, 1), filter .16s ease; }
   [data-phone-layout="bar"][data-phone-mode="listening"] .composer-actions [data-slot="button"].dictation-trigger { flex-grow: 0; }
   [data-phone-layout="bar"] .composer-stop-aside { order: 5; }
   [data-phone-layout="bar"] :is(.composer-send-trigger, .composer-stop-trigger) { order: 6; }
@@ -159,6 +159,5 @@
 /* The plus menu open: the rest of the row dims exactly as a parent menu does
    under its submenu (styles.css, .composer-options-parent). */
 @media (--conduit-phone-layout) {
-  [data-phone-layout] :is(.composer-keyboard-trigger, .dictation-trigger, .composer-send-trigger, .composer-stop-trigger, .composer-input-shell) { transition: opacity .16s ease, filter .16s ease; }
-  [data-phone-layout][data-options-open] :is(.composer-keyboard-trigger, .dictation-trigger, .composer-send-trigger, .composer-stop-trigger, .composer-input-shell) { opacity: .38; filter: saturate(.6); }
+  [data-phone-layout][data-options-open] :is(.composer-keyboard-trigger, .dictation-trigger, .composer-send-trigger, .composer-stop-trigger, .composer-input-shell) { filter: opacity(.38) saturate(.6); }
 }
