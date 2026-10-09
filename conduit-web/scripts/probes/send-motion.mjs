@@ -17,6 +17,12 @@ const layout = arg("--layout", "bar");
 const { page, cdp, close } = await open({ width: 600, height: 1100 });
 await cdp.send("Emulation.setDeviceMetricsOverride", { width: 412, height: 915, deviceScaleFactor: 2.625, mobile: true });
 await cdp.send("Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 5 });
+// A phone's round trip: what the page sends reaches the server late.
+const latency = Number(arg("--latency", "250"));
+await page.addInitScript((latency) => {
+  const send = WebSocket.prototype.send;
+  WebSocket.prototype.send = function (data) { setTimeout(() => { try { send.call(this, data); } catch {} }, latency); };
+}, latency);
 await page.goto(origin);
 await page.evaluate((layout) => localStorage.setItem("conduit:phone-composer", layout), layout);
 const api = (url, method, body) => page.evaluate(async ([url, method, body]) => {
@@ -38,6 +44,9 @@ for (const prompt of ["400t", "400t"]) {
 await page.evaluate(() => document.querySelector(".composer-keyboard-trigger")?.click());
 await textarea.fill("Hello, this is a message being sent 300t");
 await page.waitForTimeout(600);
+// Scrolled up into the transcript, the way a send usually starts.
+const up = Number(arg("--up", "0"));
+if (up) { await page.evaluate((up) => { const v = document.querySelector(".message-scroller-viewport"); v.dispatchEvent(new WheelEvent("wheel", { deltaY: -up, bubbles: true })); v.scrollTop -= up; }, up); await page.waitForTimeout(600); }
 await cdp.send("Animation.enable");
 await cdp.send("Animation.setPlaybackRate", { playbackRate: rate });
 await page.evaluate(() => {
