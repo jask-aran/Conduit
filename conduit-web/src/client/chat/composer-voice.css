@@ -58,7 +58,7 @@
   /* Typing: the text is its own frost pill on a row of its own above the
      controls, like the classic composer without its buttons. */
   [data-phone-layout] .composer.composer-surface-material { border-color: transparent; background: transparent; backdrop-filter: none; box-shadow: none; }
-  [data-phone-layout] .composer-input-shell { border-radius: var(--composer-radius, 22px); padding-inline: 10px; }
+  [data-phone-layout] .composer-input-shell { border-radius: var(--composer-radius, 22px); padding-inline: 14px; }
   [data-phone-mode="typing"] .composer-input-shell { min-height: 46px; }
   [data-phone-layout="surface"] .composer::before {
     content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 46px; z-index: -1; border-radius: var(--composer-radius, 22px);
