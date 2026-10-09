@@ -54,6 +54,7 @@ import {
 } from "./chat/markdown-settings";
 import { loadVoiceDictationSettings, saveVoiceDictationSettings, VOICE_DICTATION_STORAGE_KEY } from "./chat/voice-dictation";
 import { listAudioInputDevices, rematchInputDevice } from "./chat/voice-audio";
+import { installedClientKind } from "./platform/installed-client";
 import { Transcript } from "./chat/transcript";
 import { isChatContentActivity } from "./chat/transcript-source";
 import { COMMAND_IDS, commandRegistry, getCommandDefinition, LEADER_STROKE } from "./commands/command-registry";
@@ -70,7 +71,7 @@ import { Sidebar, type SidebarCommand } from "./navigation/sidebar";
 import { clampSidebarChatLimit, selectedSidebarChatLimit, SIDEBAR_CHAT_LIMIT_STORAGE_KEY } from "./navigation/sidebar-preferences";
 import { CHAT_SORT_STORAGE_KEY, selectedChatSort, useChatSort } from "./preferences/chat-sort";
 import { WorkspaceAppearanceEditor } from "./project/workspace-appearance-editor";
-import { applyPwaUpdate, checkForPwaUpdate, claimPwaUpdateArrival, forcePwaUpdate, pwaUpdateWaiting, resetPwaAppCache, startPwaUpdates } from "./pwa-update";
+import { applyPwaUpdate, checkForPwaUpdate, arrivedByNewBuild, claimPwaUpdateArrival, forcePwaUpdate, pwaUpdateWaiting, resetPwaAppCache, startPwaUpdates } from "./pwa-update";
 import type { ActiveChatStore } from "./state/active-chat";
 import { createChatSession, type ChatSession } from "./state/chat-session";
 import { DEFAULT_MAX_ATTACHMENT_BYTES, filesFromDataTransfer } from "./state/attachments";
@@ -676,6 +677,15 @@ function App() {
   const [defaultTemplateId, setDefaultTemplateId] = createSignal("assistant");
   const [voiceSettings, setVoiceSettings] = createSignal<VoiceDictationSettings>(loadVoiceDictationSettings());
   const updateVoiceSettings = (next: VoiceDictationSettings) => setVoiceSettings(saveVoiceDictationSettings(next));
+  // A phone with nothing chosen takes its speakerphone microphone rather than
+  // whatever Bluetooth headset happens to be connected.
+  onMount(() => {
+    if (voiceSettings().inputDeviceId || !(installedClientKind === "android" || isMobileLayout())) return;
+    void listAudioInputDevices().then((devices) => {
+      const speaker = devices.find((device) => device.deviceId && /speaker/i.test(device.label));
+      if (speaker && !voiceSettings().inputDeviceId) updateVoiceSettings({ ...voiceSettings(), inputDeviceId: speaker.deviceId, inputDeviceLabel: speaker.label });
+    }).catch(() => {});
+  });
   // Find the chosen microphone again if this device gave it a new id.
   onMount(() => {
     const saved = voiceSettings();
@@ -1126,6 +1136,17 @@ function App() {
   // race that asking again closes. A chat that opened before this landed is
   // told to look once more, and a composer with something in it is left alone.
   void drafts.load().then(() => chat.rehydrateDraft());
+
+  // Any client, however the new build came (a worker, a live update, a new
+  // app): the bundle's own name changed since this device last ran it. On a
+  // phone it is said when the sidebar first opens, where the row is seen.
+  if (arrivedByNewBuild()) {
+    if (!isMobileLayout() || mobileSidebarOpen()) saySettled("updated");
+    else {
+      let said = false;
+      createEffect(() => { if (!said && mobileSidebarOpen()) { said = true; saySettled("updated"); } });
+    }
+  }
 
   /*
    * When a new build is allowed to replace this page.

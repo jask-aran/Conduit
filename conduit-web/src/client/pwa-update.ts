@@ -89,6 +89,26 @@ const TOOK_UPDATE_KEY = "conduit:pwa-took-update";
 /** How long the worker gets to take over before the page reloads regardless. */
 const RELOAD_FALLBACK_MS = 4_000;
 
+const LAST_BUILD_KEY = "conduit:last-build";
+
+/**
+ * Whether this page runs a different build than this device last ran. The
+ * entry script's hashed name is the build; the first run has nothing to
+ * compare and says no.
+ */
+export function arrivedByNewBuild(): boolean {
+  const entry = document.querySelector<HTMLScriptElement>('script[type="module"][src]')?.src;
+  if (!entry) return false;
+  const build = new URL(entry).pathname;
+  try {
+    const last = localStorage.getItem(LAST_BUILD_KEY);
+    localStorage.setItem(LAST_BUILD_KEY, build);
+    return Boolean(last && last !== build);
+  } catch {
+    return false;
+  }
+}
+
 /** Read once: the new build asks whether it arrived by an update, then forgets. */
 export function claimPwaUpdateArrival(): boolean {
   try {
