@@ -409,6 +409,9 @@ export function Composer(props: {
           return;
         }
         if (take) applyTranscript(take, transcript);
+        // Finished: the text pill shows the end of the draft, not wherever the
+        // dictated range left it scrolled.
+        if (take === currentTake) requestAnimationFrame(() => { input.scrollTop = input.scrollHeight; });
         if (completion.completionReason === "duration_limit") {
           setDictationError("Dictation reached the server time limit. Start another dictation to continue.");
         }
