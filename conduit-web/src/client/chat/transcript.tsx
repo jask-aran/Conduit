@@ -318,9 +318,14 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
   // from the same point instead of starting again.
   const ARRIVE_MS = 180;
   const arrivedAt = new Map<string, number>();
+  let lastArrivedId: string | null = null;
   const arrival = (message: Message): JSX.CSSProperties | undefined => {
-    if (message.local && !arrivedAt.has(message.id)) arrivedAt.set(message.id, performance.now());
-    const at = arrivedAt.get(message.id);
+    if (message.local && !arrivedAt.has(message.id)) { arrivedAt.set(message.id, performance.now()); lastArrivedId = message.id; }
+    return arrivalOf(message.id);
+  };
+  // The turn under a message just sent fades with it, from the same moment.
+  const arrivalOf = (id: string | null): JSX.CSSProperties | undefined => {
+    const at = id ? arrivedAt.get(id) : undefined;
     if (at == null) return undefined;
     const ago = performance.now() - at;
     return ago < ARRIVE_MS ? { "--arrive-delay": `${-Math.round(ago)}ms` } : undefined;
@@ -447,24 +452,46 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
    * underneath it; a touch or wheel hands the view straight back.
    */
   let sendGlide: number | null = null;
-  const SEND_GLIDE_MS = 240;
   const cancelSendGlide = () => { if (sendGlide != null) cancelAnimationFrame(sendGlide); sendGlide = null; };
+  /*
+   * Room below a message just sent: enough that it can sit at the top of the
+   * view with its turn under it. It is there before the scroll starts, so the
+   * scroll heads for a bottom that is already where it will stay, and it gives
+   * way exactly as the answer grows, so the bottom does not move under it.
+   */
+  const SEND_TOP_GAP = 16;
+  const [sendRoom, setSendRoom] = createSignal(0);
+  let sentId: string | null = null;
+  const measureSendRoom = () => {
+    const row = sentId ? thread.querySelector<HTMLElement>(`[data-message-id="${CSS.escape(sentId)}"]`) : null;
+    if (!row) { if (sendRoom()) setSendRoom(0); return; }
+    const top = row.getBoundingClientRect().top - viewport.getBoundingClientRect().top + viewport.scrollTop;
+    const below = viewport.scrollHeight - sendRoom() - top;
+    setSendRoom(Math.max(0, Math.round(viewport.clientHeight - SEND_TOP_GAP - below)));
+  };
+  // A send scrolls the way scroll to latest does, to the bottom the room has
+  // already set; nothing else writes the scroll until it lands or is taken.
   const glideToSent = (then: () => void) => {
     cancelSendGlide();
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) { then(); return; }
+    measureSendRoom();
     const from = viewport.scrollTop;
+    // Where the sent message sits at the top: the room is sized for exactly
+    // that. Read each frame, since its row may not be built yet at the start.
+    const target = () => {
+      const row = sentId ? thread.querySelector<HTMLElement>(`[data-message-id="${CSS.escape(sentId)}"]`) : null;
+      return row ? Math.max(0, row.getBoundingClientRect().top - viewport.getBoundingClientRect().top + viewport.scrollTop - SEND_TOP_GAP) : viewport.scrollHeight - viewport.clientHeight;
+    };
+    const first = target();
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches || Math.abs(first - from) < 2) { setViewportScrollTop(first, true, true); then(); return; }
+    // About the pace of the browser's own smooth scroll, the one scroll to
+    // latest uses: longer for further, eased at both ends.
+    const duration = Math.min(700, 280 + Math.sqrt(Math.abs(first - from)) * 6);
     const started = performance.now();
     const step = () => {
-      const elapsed = performance.now() - started;
-      const progress = Math.min(1, elapsed / SEND_GLIDE_MS);
-      const eased = 1 - (1 - progress) ** 3;
-      const target = viewport.scrollHeight - viewport.clientHeight;
-      // Once landed it keeps chasing the bottom while the turn's first rows
-      // come in, so they extend the glide instead of snapping after it.
-      const next = progress < 1 ? from + (target - from) * eased : viewport.scrollTop + (target - viewport.scrollTop) * 0.3;
-      const chasing = progress >= 1 && elapsed < SEND_GLIDE_MS + 1200 && Math.abs(target - next) > 1;
-      sendGlide = progress < 1 || chasing ? requestAnimationFrame(step) : null;
-      setViewportScrollTop(next, true, true);
+      const progress = Math.min(1, (performance.now() - started) / duration);
+      const eased = progress < 0.5 ? 4 * progress ** 3 : 1 - (-2 * progress + 2) ** 3 / 2;
+      sendGlide = progress < 1 ? requestAnimationFrame(step) : null;
+      setViewportScrollTop(from + (target() - from) * eased, true, true);
       if (sendGlide == null) then();
     };
     sendGlide = requestAnimationFrame(step);
@@ -734,6 +761,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
     // switch did, and sending while scrolled up left the view where it was.
     if (trailingUserId && trailingUserId !== previousUserMessageId) {
       previousUserMessageId = trailingUserId;
+      sentId = trailingUserId;
       setFollowing(true);
       glideToSent(() => {
         if (rendererUsesInertialTailFollow()) resumeTypewriterTailFollow("user-send");
@@ -1128,6 +1156,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
     viewport.addEventListener("keydown", onKeyDown, { passive: true });
     window.addEventListener(COMPOSER_SURFACE_CHANGE_EVENT, syncComposerSurface);
     const resizeObserver = new ResizeObserver(() => {
+      measureSendRoom();
       if (!following()) return;
       // Hiding and showing blocks resizes the thread. Chasing the tail on those
       // is a feedback loop: the scroll write changes what is in the overscan
@@ -1186,7 +1215,8 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
             let traceRow!: HTMLDivElement;
             const chatId = () => props.chat.loadedId();
             const artifact = () => item.answerless && item.precedingUserId ? artifactSummaries().get(item.precedingUserId) : undefined;
-            return <div ref={traceRow} data-slot="message-scroller-item"><TurnTrace trace={item.value} writing={item.answerless === false} sessionId={chatId()} renderer={markdownRenderer()} pacing={incremarkPacing()} profileLabel={props.profileLabel} initialOpen={itemExpanded(chatId(), item.key)} onOpenChange={(open) => setItemExpanded(chatId(), item.key, open)} toolOpen={(id) => itemExpanded(chatId(), `tool:${id}`)} onToolOpenChange={(id, open) => setItemExpanded(chatId(), `tool:${id}`, open)} onRendered={() => settleAfterMarkdown(traceRow)} />
+            const arrive = arrivalOf(lastArrivedId);
+            return <div ref={traceRow} data-slot="message-scroller-item" data-arrived={arrive ? "" : undefined} style={arrive}><TurnTrace trace={item.value} writing={item.answerless === false} sessionId={chatId()} renderer={markdownRenderer()} pacing={incremarkPacing()} profileLabel={props.profileLabel} initialOpen={itemExpanded(chatId(), item.key)} onOpenChange={(open) => setItemExpanded(chatId(), item.key, open)} toolOpen={(id) => itemExpanded(chatId(), `tool:${id}`)} onToolOpenChange={(id, open) => setItemExpanded(chatId(), `tool:${id}`, open)} onRendered={() => settleAfterMarkdown(traceRow)} />
               {/* A turn that ended without an answer -- stopped under a tool, or
                   one that only ran commands -- still offers to try again. */}
               <Show when={item.answerless && !item.value.active}>
@@ -1227,12 +1257,15 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
             return userId ? artifactSummaries().get(userId) : undefined;
           });
           let row!: HTMLDivElement;
+          // Read once: the fade is timed from when the row was built, and a
+          // later update must not shift it.
+          const arrive = untrack(() => user() ? arrival(message()) : undefined);
           if (user() && message().origin === "harness") {
             return <div ref={row} data-slot="message-scroller-item" data-message-id={message().id}>
               <p class="harness-prompt"><BellIcon aria-hidden="true" /><span>{message().content}</span></p>
             </div>;
           }
-          return <div ref={row} data-slot="message-scroller-item" data-message-id={message().id} data-arrived={user() && arrival(message()) ? "" : undefined} style={user() ? arrival(message()) : undefined}>
+          return <div ref={row} data-slot="message-scroller-item" data-message-id={message().id} data-arrived={arrive ? "" : undefined} style={arrive}>
             <article data-slot="message" data-align={user() ? "end" : "start"} class={user() ? "message-user" : "message-assistant"}>
               <div data-slot="message-content" data-incremark={!user() && rendererUsesTypewriter() ? "" : undefined}>
                 <Show when={!user() || review().text}><div data-slot="bubble" data-align={user() ? "end" : "start"} data-error={failed() ? "true" : undefined} data-editing={props.chat.editingEntryId() === message().id ? "true" : "false"} data-composer-surface={user() ? composerSurface() : undefined} class={user() ? "bubble bubble-user composer-surface-material" : "bubble bubble-assistant"}>
@@ -1272,17 +1305,8 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
         {/* Sent, and the server has not started the turn yet: its starting
             header shows with the message, fading in beside it, so the turn's
             own header later takes the same spot instead of pushing in. */}
-        <Show when={awaitingTurn()}><div ref={() => {
-          const shownAt = performance.now();
-          onCleanup(() => {
-            // The turn's own header replaces this one mid-fade: it carries
-            // on from the same point instead of snapping to full.
-            const left = 180 - (performance.now() - shownAt);
-            if (left <= 0) return;
-            requestAnimationFrame(() => [...viewport.querySelectorAll<HTMLElement>(".turn-trace")].at(-1)
-              ?.animate([{ opacity: 1 - left / 180 }, { opacity: 1 }], { duration: left, easing: "ease-out" }));
-          });
-        }} data-slot="message-scroller-item" data-arrived="" style={arrival(props.chat.messages().at(-1)!)}><TraceStarting startedAt={props.chat.messages().at(-1)?.timestamp} label="Starting" /></div></Show>
+        <Show when={awaitingTurn()}>{(_) => { const arrive = untrack(() => arrival(props.chat.messages().at(-1)!)); return <div data-slot="message-scroller-item" data-arrived="" style={arrive}><TraceStarting startedAt={props.chat.messages().at(-1)?.timestamp} label="Starting" /></div>; }}</Show>
+        <div class="send-room" aria-hidden="true" style={{ height: `${sendRoom()}px` }} />
         </div>
       </div>
       {/*
