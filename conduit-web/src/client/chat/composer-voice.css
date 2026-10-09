@@ -154,6 +154,10 @@
      fading out above the row when dictation starts, and captions placed over
      it would drop when it gave up its room. Here they open where they stay. */
   [data-phone-layout] .composer-voice-captions { bottom: 46px; }
+  /* Listening with nothing to caption yet, the scrim still sits under the
+     bare waveform and the orb pill, so the transcript never shows through
+     them when scrolled up. */
+  .composer-voice-captions[data-empty] p { display: none; }
   /* Opening with the composer's text: the text pill is still fading out in
      that spot, and gives up its room only once it has, so the captions wait
      for it and fade in where it was rather than above it. */
