@@ -453,34 +453,15 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
    */
   let sendGlide: number | null = null;
   const cancelSendGlide = () => { if (sendGlide != null) cancelAnimationFrame(sendGlide); sendGlide = null; };
-  /*
-   * Room below a message just sent: enough that it can sit at the top of the
-   * view with its turn under it. It is there before the scroll starts, so the
-   * scroll heads for a bottom that is already where it will stay, and it gives
-   * way exactly as the answer grows, so the bottom does not move under it.
-   */
-  const SEND_TOP_GAP = 16;
-  const [sendRoom, setSendRoom] = createSignal(0);
-  let sentId: string | null = null;
-  const measureSendRoom = () => {
-    const row = sentId ? thread.querySelector<HTMLElement>(`[data-message-id="${CSS.escape(sentId)}"]`) : null;
-    if (!row) { if (sendRoom()) setSendRoom(0); return; }
-    const top = row.getBoundingClientRect().top - viewport.getBoundingClientRect().top + viewport.scrollTop;
-    const below = viewport.scrollHeight - sendRoom() - top;
-    setSendRoom(Math.max(0, Math.round(viewport.clientHeight - SEND_TOP_GAP - below)));
-  };
-  // A send scrolls the way scroll to latest does, to the bottom the room has
-  // already set; nothing else writes the scroll until it lands or is taken.
+  // A send scrolls the way scroll to latest does, to the bottom; nothing else
+  // writes the scroll until it lands or is taken.
   const glideToSent = (then: () => void) => {
     cancelSendGlide();
-    measureSendRoom();
     const from = viewport.scrollTop;
-    // Where the sent message sits at the top: the room is sized for exactly
-    // that. Read each frame, since its row may not be built yet at the start.
-    const target = () => {
-      const row = sentId ? thread.querySelector<HTMLElement>(`[data-message-id="${CSS.escape(sentId)}"]`) : null;
-      return row ? Math.max(0, row.getBoundingClientRect().top - viewport.getBoundingClientRect().top + viewport.scrollTop - SEND_TOP_GAP) : viewport.scrollHeight - viewport.clientHeight;
-    };
+    // The message and its starting header are already in the transcript, so
+    // the bottom is final before the scroll starts; read each frame anyway,
+    // since their rows may be built a frame late.
+    const target = () => viewport.scrollHeight - viewport.clientHeight;
     const first = target();
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches || Math.abs(first - from) < 2) { setViewportScrollTop(first, true, true); then(); return; }
     // About the pace of the browser's own smooth scroll, the one scroll to
@@ -761,7 +742,6 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
     // switch did, and sending while scrolled up left the view where it was.
     if (trailingUserId && trailingUserId !== previousUserMessageId) {
       previousUserMessageId = trailingUserId;
-      sentId = trailingUserId;
       setFollowing(true);
       glideToSent(() => {
         if (rendererUsesInertialTailFollow()) resumeTypewriterTailFollow("user-send");
@@ -1156,7 +1136,6 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
     viewport.addEventListener("keydown", onKeyDown, { passive: true });
     window.addEventListener(COMPOSER_SURFACE_CHANGE_EVENT, syncComposerSurface);
     const resizeObserver = new ResizeObserver(() => {
-      measureSendRoom();
       if (!following()) return;
       // Hiding and showing blocks resizes the thread. Chasing the tail on those
       // is a feedback loop: the scroll write changes what is in the overscan
@@ -1306,7 +1285,6 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
             header shows with the message, fading in beside it, so the turn's
             own header later takes the same spot instead of pushing in. */}
         <Show when={awaitingTurn()}>{(_) => { const arrive = untrack(() => arrival(props.chat.messages().at(-1)!)); return <div data-slot="message-scroller-item" data-arrived="" style={arrive}><TraceStarting startedAt={props.chat.messages().at(-1)?.timestamp} label="Starting" /></div>; }}</Show>
-        <div class="send-room" aria-hidden="true" style={{ height: `${sendRoom()}px` }} />
         </div>
       </div>
       {/*
