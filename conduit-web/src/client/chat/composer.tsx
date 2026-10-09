@@ -1,5 +1,6 @@
+import { latestAway, scrollToLatest } from "./latest-away";
 import { createEffect, createMemo, createSignal, For, Index, lazy, on, onCleanup, onMount, Show, type JSX } from "solid-js";
-import { ArrowUpIcon, CameraIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, DeleteIcon, KeyboardIcon, MicIcon, TextCursorInputIcon, Undo2Icon, ShieldCheckIcon, SquareIcon, TriangleAlertIcon } from "lucide-solid";
+import { ArrowDownIcon, ArrowUpIcon, CameraIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, DeleteIcon, KeyboardIcon, MicIcon, TextCursorInputIcon, Undo2Icon, ShieldCheckIcon, SquareIcon, TriangleAlertIcon } from "lucide-solid";
 import { ThinkingOrb } from "./thinking-orb";
 import { PHONE_COMPOSER_CHANGE_EVENT, phoneComposerLayout } from "../preferences/phone-composer";
 import {
@@ -111,6 +112,9 @@ export function Composer(props: {
      on the text pill places the cursor (where dictation will land) or starts
      a selection, with inputmode="none" keeping the keyboard down. */
   const [keyboardWanted, setKeyboardWanted] = createSignal(false);
+  // The floating scroll-to-latest gives way to the row's own in these layouts.
+  createEffect(() => document.documentElement.toggleAttribute("data-voice-composer", voiceFirst()));
+  onCleanup(() => document.documentElement.removeAttribute("data-voice-composer"));
   const toggleKeyboard = () => {
     if (keyboardWanted()) { setKeyboardWanted(false); input.blur(); return; }
     setKeyboardWanted(true);
@@ -780,7 +784,7 @@ export function Composer(props: {
     });
   });
 
-  return <div class="composer-wrap" data-part="composer" data-phone-layout={voiceFirst() ? phoneComposer() : undefined} data-phone-mode={phoneMode()} data-primary-hidden={voiceFirst() && !hasPayload() && !stoppable() ? "" : undefined} style={phoneMode() === "listening" ? { "--voice-level": String(dictationWaveform.level()) } : undefined}>
+  return <div class="composer-wrap" data-part="composer" data-phone-layout={voiceFirst() ? phoneComposer() : undefined} data-latest-away={voiceFirst() && latestAway() ? "" : undefined} data-phone-mode={phoneMode()} data-primary-hidden={voiceFirst() && !hasPayload() && !stoppable() ? "" : undefined} style={phoneMode() === "listening" ? { "--voice-level": String(dictationWaveform.level()) } : undefined}>
     <div class="composer-edit-actions" data-shown={editing() ? "" : undefined} aria-hidden={editing() ? undefined : "true"}>
       <For each={[
         { key: "undo", label: "Undo", icon: () => <Undo2Icon /> },
@@ -825,6 +829,7 @@ export function Composer(props: {
                 <input ref={cameraInput} type="file" accept="image/*" capture="environment" hidden onChange={(event) => { const files = Array.from(event.currentTarget.files || []); event.currentTarget.value = ""; if (files.length) props.attachments.addFiles(files); }} />
                 <Button variant="ghost" size="icon-sm" class="composer-camera-trigger" aria-label="Take a photo" title="Take a photo (hold to choose files)" disabled={!props.serverOnline || !interactive()} onPointerDown={cameraPointerDown} onPointerUp={cameraPointerUp} onPointerLeave={cameraPointerCancel} onPointerCancel={cameraPointerCancel} onContextMenu={(event) => event.preventDefault()}><CameraIcon /></Button>
               </Show>
+              <Show when={voiceFirst()}><Button variant="ghost" size="icon-sm" class="composer-latest-trigger" data-shown={latestAway() ? "" : undefined} aria-label="Scroll to latest" title="Scroll to latest" tabIndex={latestAway() ? 0 : -1} aria-hidden={latestAway() ? undefined : "true"} onPointerDown={(event) => event.preventDefault()} onClick={scrollToLatest}><ArrowDownIcon /></Button></Show>
               <Show when={voiceFirst()}><Button variant="ghost" size="icon-sm" class="composer-keyboard-trigger" aria-label={keyboardWanted() ? "Close the keyboard" : "Type a message"} disabled={!props.serverOnline || !interactive()} onPointerDown={(event) => event.preventDefault()} onClick={toggleKeyboard}><KeyboardIcon /></Button></Show>
               <Show when={!phoneLayout()}><ComposerPlusMenu folded={folded()} chat={props.chat} models={props.models} permissions={props.permissions} serviceLevels={props.serviceLevels}
                 profiles={props.profiles} activeProfile={props.activeProfile} place={props.place} disabled={!props.serverOnline || !interactive()} modelSwitch={supports("modelSwitch")}

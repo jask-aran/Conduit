@@ -17,6 +17,14 @@
   [data-phone-layout="surface"] .composer { padding: 0 1px; gap: 4px; }
   [data-phone-layout] .composer-mobile-plus { order: 1; padding: 0; }
   [data-phone-layout] :is(.composer-camera-trigger, .composer-keyboard-trigger) { order: 2; }
+  /* Scroll to latest: just left of the mic, and folds open and shut as Send
+     does, so the mic pill gives it room and takes it back. It replaces the
+     floating button, which these layouts hide. */
+  [data-phone-layout] .composer-latest-trigger { order: 3; transition: opacity .2s ease, width .25s cubic-bezier(.2, .8, .2, 1), min-width .25s cubic-bezier(.2, .8, .2, 1), margin .25s cubic-bezier(.2, .8, .2, 1), filter .16s ease; }
+  [data-phone-layout] .composer-actions .composer-latest-trigger[data-slot="button"]:not([data-shown]) { width: 0; min-width: 0; margin-left: -8px; opacity: 0; overflow: hidden; border-width: 0; pointer-events: none; }
+  [data-phone-layout="surface"] .composer-actions .composer-latest-trigger[data-slot="button"]:not([data-shown]) { margin-left: -4px; }
+  [data-phone-mode="listening"] .composer-latest-trigger { opacity: 0; pointer-events: none; }
+  :root[data-voice-composer] .message-scroller-button[data-slot="button"]:not(.message-cancel-edit) { display: none; }
   [data-phone-layout] .composer-stop-send { order: 5; animation: composer-voice-in .2s ease-out .12s both; }
   [data-phone-layout] .dictation-trigger { order: 3; }
   [data-phone-layout] .composer-stop-aside { order: 4; }
@@ -181,7 +189,7 @@
 /* The plus menu open: the rest of the row dims exactly as a parent menu does
    under its submenu (styles.css, .composer-options-parent). */
 @media (--conduit-phone-layout) {
-  [data-phone-layout][data-options-open] :is(.composer-camera-trigger, .composer-keyboard-trigger, .dictation-trigger, .composer-send-trigger, .composer-stop-trigger, .composer-input-shell) { filter: opacity(.38) saturate(.6); }
+  [data-phone-layout][data-options-open] :is(.composer-latest-trigger, .composer-camera-trigger, .composer-keyboard-trigger, .dictation-trigger, .composer-send-trigger, .composer-stop-trigger, .composer-input-shell) { filter: opacity(.38) saturate(.6); }
 }
 
 /* Edit actions: the text pill has the cursor and the keyboard is down. The
@@ -204,4 +212,10 @@
     flex: none; width: 44px; min-width: 44px; height: 44px; padding: 0; border-radius: 999px; color: var(--foreground);
   }
   [data-phone-layout] .composer-edit-action[data-slot="button"] svg { width: 18px; height: 18px; }
+}
+@media (--conduit-phone-layout) {
+  /* Folded to zero width, a bar circle keeps its 1px frost border each side
+     (the material rule outranks border-width here): the gap gives up 2px more. */
+  [data-phone-layout="bar"] .composer-actions .composer-latest-trigger[data-slot="button"]:not([data-shown]),
+  [data-phone-layout="bar"][data-primary-hidden] .composer-send-trigger { margin-left: -10px; }
 }
