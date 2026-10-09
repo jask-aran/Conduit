@@ -137,6 +137,17 @@ export function Composer(props: {
     : inputFocused() || hasText() ? "typing" : "idle";
   // The text row was zero wide while hidden; measure it again once shown.
   createEffect(on(phoneMode, () => scheduleResize(), { defer: true }));
+  // Just back from listening: the row's buttons fade back in together, scroll
+  // to latest too, without the delay it takes when it first appears.
+  const [leftListening, setLeftListening] = createSignal(false);
+  let leftListeningTimer: number | undefined;
+  createEffect(on(phoneMode, (mode, previous) => {
+    if (previous !== "listening" || mode === "listening") return;
+    setLeftListening(true);
+    window.clearTimeout(leftListeningTimer);
+    leftListeningTimer = window.setTimeout(() => setLeftListening(false), 400);
+  }, { defer: true }));
+  onCleanup(() => window.clearTimeout(leftListeningTimer));
   // Dictation failures go through the app's normal toasts.
   createEffect(on(dictationError, (message) => { if (message) toast.error(message); }, { defer: true }));
   /* A new caption line pushes the old ones up; glide them instead of jumping. */
@@ -798,7 +809,7 @@ export function Composer(props: {
     });
   });
 
-  return <div class="composer-wrap" data-part="composer" data-phone-layout={voiceFirst() ? phoneComposer() : undefined} data-latest-away={voiceFirst() && latestAway() ? "" : undefined} data-phone-mode={phoneMode()} data-primary-hidden={voiceFirst() && !hasPayload() && !stoppable() ? "" : undefined} style={phoneMode() === "listening" ? { "--voice-level": String(dictationWaveform.level()) } : undefined}>
+  return <div class="composer-wrap" data-part="composer" data-phone-layout={voiceFirst() ? phoneComposer() : undefined} data-latest-away={voiceFirst() && latestAway() ? "" : undefined} data-phone-mode={phoneMode()} data-left-listening={leftListening() ? "" : undefined} data-primary-hidden={voiceFirst() && !hasPayload() && !stoppable() ? "" : undefined} style={phoneMode() === "listening" ? { "--voice-level": String(dictationWaveform.level()) } : undefined}>
     <div class="composer-edit-actions" data-shown={editing() ? "" : undefined} aria-hidden={editing() ? undefined : "true"}>
       <For each={[
         { key: "undo", label: "Undo", icon: () => <Undo2Icon /> },
