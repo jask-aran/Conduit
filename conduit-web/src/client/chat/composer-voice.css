@@ -150,6 +150,10 @@
    
   }
   .composer-voice-captions p { margin: 0; }
+  /* Opening with the composer's text: the text pill is still fading out in
+     that spot, and gives up its room only once it has, so the captions wait
+     for it and fade in where it was rather than above it. */
+  .composer-voice-captions[data-lead] { animation: composer-voice-in .2s ease-out .18s both; }
   .composer-voice-words { display: block; }
   /* Words fade in as the transcript does (incremark-markdown.css): colour,
      not opacity, and a revised word keeps its node so it does not replay. */
