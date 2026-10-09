@@ -1,3 +1,4 @@
+import { setLatestAway, setLatestScroller } from "./latest-away";
 import { createEffect, createMemo, createRenderEffect, createSignal, For, lazy, on, onCleanup, onMount, Show, Suspense, untrack, type JSX } from "solid-js";
 import { ArrowDownIcon, BellIcon, CheckIcon, CopyIcon, PencilIcon, PlayIcon, RefreshCwIcon, SquareIcon, TriangleAlertIcon, XIcon } from "lucide-solid";
 import { Button, Spinner } from "@/components/primitives";
@@ -278,6 +279,12 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
   let previousMarkdownRenderer = props.markdownRenderer;
   const [following, setFollowing] = createSignal(true);
   const [latestDistance, setLatestDistance] = createSignal(0);
+  /* The phone's voice composer carries its own scroll-to-latest in its row
+     and hides the floating one: tell it when the latest is out of view, and
+     take its press. */
+  const latestAway = createMemo(() => !following() && latestDistance() >= TAIL_NEAR_LATEST_PX);
+  createEffect(() => setLatestAway(latestAway()));
+  onCleanup(() => setLatestAway(false));
   const [composerSurface, setComposerSurface] = createSignal<ComposerSurfaceMode>(selectedComposerSurface());
   const [markdownRenderer, setMarkdownRenderer] = createSignal<MarkdownRendererId>(selectedMarkdownRenderer());
   const [incremarkPacing, setIncremarkPacing] = createSignal<IncremarkPacingMode>(selectedIncremarkPacing());
@@ -818,6 +825,9 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
       if (latestButtonAnchorFrame != null) return;
       latestButtonAnchorFrame = requestAnimationFrame(syncLatestButtonAnchor);
     };
+    const scrollLatest = () => viewport.scrollTo({ top: viewport.scrollHeight, behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+    setLatestScroller(scrollLatest);
+    onCleanup(() => setLatestScroller(null));
     window.addEventListener("conduit:voice-captions", scheduleLatestButtonAnchor);
     onCleanup(() => window.removeEventListener("conduit:voice-captions", scheduleLatestButtonAnchor));
     const composerStack = transcriptRoot.closest<HTMLElement>(".work-area-conversation")?.querySelector<HTMLElement>(".composer-stack");
