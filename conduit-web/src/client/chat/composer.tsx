@@ -119,6 +119,9 @@ export function Composer(props: {
   onCleanup(() => document.documentElement.removeAttribute("data-voice-composer"));
   const toggleKeyboard = () => {
     if (keyboardWanted()) { setKeyboardWanted(false); input.blur(); return; }
+    // Focused with the keyboard down and nothing left (a dictation cleared
+    // out): the button closes the edit row and text pill, back to idle.
+    if (document.activeElement === input && !hasText()) { input.blur(); return; }
     setKeyboardWanted(true);
     // inputmode is read on focus, so an already focused field is focused anew.
     if (document.activeElement === input) { refocusing = true; input.blur(); refocusing = false; }
