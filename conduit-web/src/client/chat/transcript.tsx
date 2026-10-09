@@ -311,6 +311,10 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
   // arriving keeps its row here: the projection below skips drawing it, but
   // needs to see where it sits to place the live overlay.
   const settledMessages = createMemo(() => props.chat.messages().filter((message) => !message.pending));
+  /* A message sent from this view fades in as the composer's text pill fades
+     out; everything drawn when the chat opens is simply there. */
+  let chatShownAt = performance.now();
+  createEffect(on(() => props.chat.loadedId(), () => { chatShownAt = performance.now(); }));
   const timeline = createTimelineStore(
     settledMessages,
     props.chat.tools,
@@ -1178,7 +1182,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
               <p class="harness-prompt"><BellIcon aria-hidden="true" /><span>{message().content}</span></p>
             </div>;
           }
-          return <div ref={row} data-slot="message-scroller-item" data-message-id={message().id}>
+          return <div ref={row} data-slot="message-scroller-item" data-message-id={message().id} data-arrived={user() && performance.now() - chatShownAt > 1500 ? "" : undefined}>
             <article data-slot="message" data-align={user() ? "end" : "start"} class={user() ? "message-user" : "message-assistant"}>
               <div data-slot="message-content" data-incremark={!user() && rendererUsesTypewriter() ? "" : undefined}>
                 <Show when={!user() || review().text}><div data-slot="bubble" data-align={user() ? "end" : "start"} data-error={failed() ? "true" : undefined} data-editing={props.chat.editingEntryId() === message().id ? "true" : "false"} data-composer-surface={user() ? composerSurface() : undefined} class={user() ? "bubble bubble-user composer-surface-material" : "bubble bubble-assistant"}>
