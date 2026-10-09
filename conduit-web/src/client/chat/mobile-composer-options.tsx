@@ -74,8 +74,9 @@ export function MobileComposerOptions(props: {
   };
   const restoreTyping = () => {
     const textarea = typingAtOpen;
-    typingAtOpen = null;
     if (!textarea) return;
+    // Kept until the close has run: the menu root focuses the trigger after this.
+    setTimeout(() => { if (!open()) typingAtOpen = null; });
     textarea.focus({ preventScroll: true });
     queueMicrotask(() => { if (document.activeElement !== textarea) textarea.focus({ preventScroll: true }); });
   };
@@ -95,7 +96,7 @@ export function MobileComposerOptions(props: {
 
   return <div ref={root} class="composer-mobile-plus">
     <Menu modal={false} placement="top-start" gutter={8} open={open()} onOpenChange={(value) => { if (value) typingAtOpen = composerTextarea(); setOpen(value); if (!value) reset(); }}>
-      <MobileComposerPlusTrigger serverOnline={composer.serverOnline} />
+      <MobileComposerPlusTrigger serverOnline={composer.serverOnline} holdFocus={() => typingAtOpen !== null} />
       <MenuContent class="composer-options-menu" data-settling={settling()} onOpenAutoFocus={preserveFocus} onCloseAutoFocus={(event) => { event.preventDefault(); restoreTyping(); }} onFocusOutside={preserveFocus} onPointerDownOutside={keepForChild}>
         <div class="composer-options-parent" data-panel-open={panel() !== "root"} onPointerDown={returnToRoot}>
          <MenuGroup>
@@ -219,6 +220,10 @@ export function MobileComposerOptions(props: {
 
 function MobileComposerPlusTrigger(props: {
   serverOnline: boolean;
+  /* While the text pill has the keyboard, the menu's closing focus never lands
+     here: even a moment away from the textarea makes Android drop and re-raise
+     the keyboard. */
+  holdFocus: () => boolean;
 }) {
   const menu = useMenuContext();
   const triggerId = `composer-plus-${createUniqueId()}`;
@@ -226,7 +231,11 @@ function MobileComposerPlusTrigger(props: {
 
   return <button
     type="button"
-    ref={menu.setTriggerRef}
+    ref={(element) => {
+      const focus = element.focus.bind(element);
+      element.focus = (options?: FocusOptions) => { if (!props.holdFocus()) focus(options); };
+      menu.setTriggerRef(element);
+    }}
     id={triggerId}
     class="composer-plus-trigger"
     aria-label="Message options"
