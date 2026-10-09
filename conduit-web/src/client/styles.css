@@ -2,6 +2,11 @@
 @import "tw-animate-css";
 @import "@fontsource-variable/geist";
 
+/* Paper Mono (OFL, fonts/PaperMono-OFL.txt): the transcript face when chosen
+   in Settings → Appearance (preferences/transcript-font.ts). */
+@font-face { font-family: "Paper Mono"; src: url("./fonts/PaperMono-Variable.woff2") format("woff2"); font-weight: 100 800; font-style: normal; font-display: swap; }
+:root[data-transcript-font="paper-mono"] :is(.thread, .composer textarea, .composer-voice-captions) { font-family: "Paper Mono", ui-monospace, monospace; }
+
 @custom-variant dark (&:is(.dark *));
 
 :root {

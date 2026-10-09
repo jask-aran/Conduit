@@ -17,6 +17,7 @@ import { isWarmMicrophoneActive, stopWarmMicrophone } from "../chat/voice-dictat
 import { createVoiceWaveformController, VoiceWaveform } from "../chat/voice-waveform";
 import { ModelSelector } from "../chat/model-selector";
 import { saveTabFrost, tabFrost } from "../preferences/tab-frost";
+import { saveTranscriptFont, TRANSCRIPT_FONT_OPTIONS, transcriptFont, type TranscriptFont } from "../preferences/transcript-font";
 import { PHONE_COMPOSER_OPTIONS, phoneComposerLayout, savePhoneComposerLayout, type PhoneComposerLayout } from "../preferences/phone-composer";
 import { saveStreamFade, saveStreamMathFade, STREAM_FADE_OPTIONS, streamFadeMs, streamMathFade } from "../preferences/stream-fade";
 import { INCREMARK_PACING_OPTIONS, saveIncremarkPacing, selectedIncremarkPacing, type IncremarkPacingMode } from "../chat/incremark-pacing";
@@ -247,6 +248,7 @@ export function Settings(props: {
   const [section, setSection] = createSignal<Section>(props.initialSection || "ui");
   const [frosted, setFrosted] = createSignal(tabFrost());
   const [phoneComposer, setPhoneComposer] = createSignal(phoneComposerLayout());
+  const [transcriptFontChoice, setTranscriptFontChoice] = createSignal(transcriptFont());
   const [fadeMs, setFadeMs] = createSignal(streamFadeMs());
   // On a phone, a field holding a text input or model picker stacks its
   // control under the label. Marked here rather than with
@@ -1154,6 +1156,11 @@ export function Settings(props: {
                   <label class="settings-line" for="interface-scale"><span>Scale</span>
                     <Select id="interface-scale" aria-label="Interface scale" value={props.interfaceScale} onChange={(event) => props.onInterfaceScaleChange(parseUiScale(event.currentTarget.value))}>
                       <For each={UI_SCALE_OPTIONS}>{(scale) => <option value={scale}>{Math.round(scale * 100)}%</option>}</For>
+                    </Select>
+                  </label>
+                  <label class="settings-line" for="transcript-font"><span>Transcript font</span>
+                    <Select id="transcript-font" aria-label="Transcript font" value={transcriptFontChoice()} onChange={(event) => setTranscriptFontChoice(saveTranscriptFont(event.currentTarget.value as TranscriptFont))}>
+                      <For each={TRANSCRIPT_FONT_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
                     </Select>
                   </label>
                   <label class="settings-line" for="sidebar-chat-limit"><span>Sidebar chats</span>
