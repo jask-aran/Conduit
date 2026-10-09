@@ -107,6 +107,18 @@ export function Composer(props: {
      shows the orb, the coloured glow and the last lines of the transcript. */
   const [phoneComposer, setPhoneComposer] = createSignal(phoneComposerLayout());
   const [inputFocused, setInputFocused] = createSignal(false);
+  /* In the voice layouts only the keyboard button raises the keyboard. A tap
+     on the text pill places the cursor (where dictation will land) or starts
+     a selection, with inputmode="none" keeping the keyboard down. */
+  const [keyboardWanted, setKeyboardWanted] = createSignal(false);
+  const toggleKeyboard = () => {
+    if (keyboardWanted()) { setKeyboardWanted(false); input.blur(); return; }
+    setKeyboardWanted(true);
+    // inputmode is read on focus, so an already focused field is focused anew.
+    if (document.activeElement === input) { refocusing = true; input.blur(); refocusing = false; }
+    queueMicrotask(() => input.focus({ preventScroll: true }));
+  };
+  let refocusing = false;
   const voiceFirst = () => phoneLayout() && phoneComposer() !== "classic";
   const phoneMode = () => !voiceFirst() ? undefined
     // Finishing and transcribing still look like listening, so stopping goes
@@ -346,7 +358,8 @@ export function Composer(props: {
     setDictationSelectionOwned(true);
     queueMicrotask(() => {
       resize();
-      if (take.restoreFocus) input.focus({ preventScroll: true });
+      // The keyboard was up when dictation began: it comes back with focus.
+      if (take.restoreFocus) { if (document.activeElement !== input) setKeyboardWanted(true); input.focus({ preventScroll: true }); }
       input.setSelectionRange(next.range.start, next.range.end);
     });
   };
@@ -669,7 +682,10 @@ export function Composer(props: {
     const voiceToggle = () => { if (!props.keyboardOwner || props.keyboardOwner()) toggleDictation(); };
     const phoneComposerChanged = () => setPhoneComposer(phoneComposerLayout());
     // Keyboard put away with nothing typed: leave the text pill too.
-    const keyboardHidden = () => { if (voiceFirst() && document.activeElement === input && !hasText()) input.blur(); };
+    const keyboardHidden = () => {
+      setKeyboardWanted(false);
+      if (voiceFirst() && document.activeElement === input && !hasText()) input.blur();
+    };
     window.addEventListener(KEYBOARD_HIDDEN_EVENT, keyboardHidden);
     onCleanup(() => window.removeEventListener(KEYBOARD_HIDDEN_EVENT, keyboardHidden));
     window.addEventListener(PHONE_COMPOSER_CHANGE_EVENT, phoneComposerChanged);
@@ -712,14 +728,14 @@ export function Composer(props: {
         <div class="composer-content">
           <MobileComposerOptions composer={props} />
           <div class="composer-input-shell">
-            <textarea ref={input} rows={1} aria-label="Message the agent" data-has-text={hasText() ? "true" : "false"} data-dictated-range={dictationSelectionOwned() && dictatedRange() ? "true" : undefined} placeholder={!props.serverOnline ? "Server unavailable" : !props.chat.loadedId() ? "New chat" : interactive() ? placeholder() : "Reconnecting..."} value={props.chat.draft()} disabled={!props.serverOnline || !interactive()} onInput={(event) => change(event.currentTarget.value)} onPaste={paste} onSelect={selectionChanged} onKeyDown={keydown} onFocus={() => setInputFocused(true)} onBlur={() => setInputFocused(false)} />
+            <textarea ref={input} rows={1} aria-label="Message the agent" data-has-text={hasText() ? "true" : "false"} data-dictated-range={dictationSelectionOwned() && dictatedRange() ? "true" : undefined} placeholder={!props.serverOnline ? "Server unavailable" : !props.chat.loadedId() ? "New chat" : interactive() ? placeholder() : "Reconnecting..."} value={props.chat.draft()} disabled={!props.serverOnline || !interactive()} onInput={(event) => change(event.currentTarget.value)} onPaste={paste} onSelect={selectionChanged} onKeyDown={keydown} inputMode={voiceFirst() && !keyboardWanted() ? "none" : undefined} onFocus={() => setInputFocused(true)} onBlur={() => { setInputFocused(false); if (!refocusing) setKeyboardWanted(false); }} />
             <Show when={slashOpen() && slashCommand()}>{(item) => <div class="slash-completion" aria-hidden="true"><span>{props.chat.draft()}</span>{item().command.slice(props.chat.draft().length)} <small>{item().description}</small></div>}</Show>
           </div>
           <div ref={actionsRow} class="composer-actions" data-mobile-actions-stacked={mobileActionsStacked()}
             onPointerDown={(event) => { const control = (event.target as Element).closest("button"); if (control) control.dataset.pointerOpened = ""; }}
             onKeyDown={(event) => { if (["Enter", " ", "ArrowDown", "ArrowUp"].includes(event.key)) delete (event.target as HTMLElement).dataset?.pointerOpened; }}>
             <div ref={actionsLeft} class="composer-actions-left">
-              <Show when={voiceFirst()}><Button variant="ghost" size="icon-sm" class="composer-keyboard-trigger" aria-label={inputFocused() ? "Close the keyboard" : "Type a message"} disabled={!props.serverOnline || !interactive()} onPointerDown={(event) => event.preventDefault()} onClick={() => inputFocused() ? input.blur() : input.focus()}><KeyboardIcon /></Button></Show>
+              <Show when={voiceFirst()}><Button variant="ghost" size="icon-sm" class="composer-keyboard-trigger" aria-label={keyboardWanted() ? "Close the keyboard" : "Type a message"} disabled={!props.serverOnline || !interactive()} onPointerDown={(event) => event.preventDefault()} onClick={toggleKeyboard}><KeyboardIcon /></Button></Show>
               <Show when={!phoneLayout()}><ComposerPlusMenu folded={folded()} chat={props.chat} models={props.models} permissions={props.permissions} serviceLevels={props.serviceLevels}
                 profiles={props.profiles} activeProfile={props.activeProfile} place={props.place} disabled={!props.serverOnline || !interactive()} modelSwitch={supports("modelSwitch")}
                 onChooseProfile={props.onChooseProfile} onOpenModelSelector={props.onOpenModelSelector} modelSelectorShortcut={props.modelSelectorShortcut}

@@ -135,21 +135,25 @@
   /* Captions: no surface, only the newest three lines; older ones are cut
      off at the top as the text grows. */
   .composer-voice-captions {
-    position: absolute; left: 0; right: 0; bottom: 100%; z-index: 5; padding: 28px 12px 4px;
+    position: absolute; left: 0; right: 0; bottom: 100%; z-index: 5; padding: 12px 12px 4px;
     font-size: .875rem; line-height: 1.45; font-style: italic; color: var(--muted-foreground);
     pointer-events: none; animation: composer-voice-in .2s ease-out;
   }
   /* A dark scrim behind the captions so the transcript under them never
      shows through, fading out upwards. */
   .composer-voice-captions::before {
-    content: ""; position: absolute; top: -8px; bottom: -160px; left: calc(50% - 50vw); right: calc(50% - 50vw); z-index: -1;
-    background: linear-gradient(to bottom, transparent, var(--background) 32px);
+    content: ""; position: absolute; top: -4px; bottom: -160px; left: calc(50% - 50vw); right: calc(50% - 50vw); z-index: -1;
+    background: linear-gradient(to bottom, transparent, var(--background) 16px);
   }
   .composer-voice-captions p {
     display: flex; flex-direction: column; justify-content: flex-end; max-height: calc(3 * 1.45em); overflow: hidden;
    
   }
   .composer-voice-captions p { margin: 0; }
+  /* Anchored to the row, not the composer's top: the text pill is still
+     fading out above the row when dictation starts, and captions placed over
+     it would drop when it gave up its room. Here they open where they stay. */
+  [data-phone-layout] .composer-voice-captions { bottom: 46px; }
   /* Opening with the composer's text: the text pill is still fading out in
      that spot, and gives up its room only once it has, so the captions wait
      for it and fade in where it was rather than above it. */

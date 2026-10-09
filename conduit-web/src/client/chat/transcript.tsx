@@ -827,6 +827,11 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
     // up out of the way while the card is there, and back down when it goes.
     const COMPOSER_CLEARANCE_PX = 40;
     const syncComposerInset = (blockSize: number) => {
+      // Dictating on a phone, the text pill folds away under captions that
+      // float where it was: the room is still taken, so the thread keeps it
+      // rather than following the composer down and back up.
+      const current = parseFloat(transcriptRoot.style.getPropertyValue("--transcript-composer-inset")) || 0;
+      if (composerStack?.querySelector('.composer-wrap[data-phone-mode="listening"]') && blockSize + COMPOSER_CLEARANCE_PX < current) return;
       const inset = `${Math.round(blockSize + COMPOSER_CLEARANCE_PX)}px`;
       if (transcriptRoot.style.getPropertyValue("--transcript-composer-inset") === inset) return;
       transcriptRoot.style.setProperty("--transcript-composer-inset", inset);
