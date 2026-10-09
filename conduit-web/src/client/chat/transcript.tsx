@@ -340,7 +340,8 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
   // A message of ours the server has not answered with any row of its turn.
   const awaitingTurn = createMemo(() => {
     const last = props.chat.messages().at(-1);
-    if (!last || last.role !== "user" || !last.local) return false;
+    // Sent from here: the server's copy replacing ours keeps it waiting.
+    if (!last || last.role !== "user" || !(last.local || arrivedAt.has(last.id))) return false;
     return timeline.at(-1)?.type === "message";
   });
 
@@ -452,6 +453,8 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
    * underneath it; a touch or wheel hands the view straight back.
    */
   let sendGlide: number | null = null;
+  let lastScrollInputAt = -Infinity;
+  const noteScrollInput = () => { lastScrollInputAt = performance.now(); };
   const cancelSendGlide = () => { if (sendGlide != null) cancelAnimationFrame(sendGlide); sendGlide = null; };
   // A send scrolls the way scroll to latest does, to the bottom; nothing else
   // writes the scroll until it lands or is taken.
@@ -744,6 +747,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
       previousUserMessageId = trailingUserId;
       setFollowing(true);
       glideToSent(() => {
+        setFollowing(true);
         if (rendererUsesInertialTailFollow()) resumeTypewriterTailFollow("user-send");
         else scrollBottom();
       });
@@ -1082,7 +1086,9 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
         previousMaxScrollTop = maxScrollTop;
         return;
       }
-      if (programmaticScrollTop != null && Math.abs(viewport.scrollTop - programmaticScrollTop) < 1) {
+      // The send's glide is not the reader scrolling: its frames neither
+      // drop nor decide the follow, which it hands back on landing.
+      if (sendGlide != null || (programmaticScrollTop != null && Math.abs(viewport.scrollTop - programmaticScrollTop) < 1)) {
         programmaticScrollTop = null;
         previousScrollTop = viewport.scrollTop;
         previousMaxScrollTop = maxScrollTop;
@@ -1106,13 +1112,22 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
       // two ways a user produces one -- scrollbar drags, PageUp/Home, and
       // trackpad momentum arriving after wheel-end land here instead, and used
       // to leave the spring believing it still owned the viewport.
-      if (decision.direction === "up") {
+      // An upward move with no touch, wheel, pointer or key behind it is the
+      // browser's: scroll anchoring as one row is swapped for another. It
+      // must not read as the reader leaving the tail.
+      const unprompted = performance.now() - lastScrollInputAt > 1000;
+      // Following, it goes straight back, in the same frame, before a paint.
+      if (decision.direction === "up" && unprompted && following()) {
+        setViewportScrollTop(viewportMaxScrollTop());
+        return;
+      }
+      if (decision.direction === "up" && !unprompted) {
         cancelTypewriterTailRejoin();
         if (!wasProgrammatic) claimUserScroll();
       }
       if (!rendererUsesInertialTailFollow() || typewriterTailState.owner === "user" || !following()) {
         setFollowing(decision.following);
-      } else if (decision.direction === "up") {
+      } else if (decision.direction === "up" && !unprompted) {
         setFollowing(false);
       }
       if (rendererUsesInertialTailFollow() && decision.rejoin) scheduleTypewriterTailRejoin();
@@ -1131,6 +1146,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
     viewport.addEventListener("wheel", claimUserScroll, { passive: true });
     viewport.addEventListener("touchstart", onTouchStart, { passive: true });
     viewport.addEventListener("wheel", cancelSendGlide, { passive: true });
+    for (const type of ["wheel", "touchstart", "touchmove", "pointerdown", "keydown"]) viewport.addEventListener(type, noteScrollInput, { passive: true });
     viewport.addEventListener("touchstart", cancelSendGlide, { passive: true });
     viewport.addEventListener("pointerdown", onPointerDown, { passive: true });
     viewport.addEventListener("keydown", onKeyDown, { passive: true });

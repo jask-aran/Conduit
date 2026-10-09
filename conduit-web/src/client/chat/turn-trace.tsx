@@ -351,7 +351,7 @@ export function TurnTrace(props: { trace: TurnTraceData; writing?: boolean; sess
           <Show when={time()}>{(text) => <span class="turn-trace-time">{"\u00a0· "}{text()}</span>}</Show>
           <Show when={preview().work}>{(text) => <span class="turn-trace-work">{"\u00a0· "}{text()}</span>}</Show>
         </div>
-        <Show when={preview().detail || (props.trace.active && !empty())}>
+        <Show when={preview().detail || props.trace.active}>
           <div class="turn-trace-summary">
             {/* A tool's line is plain text -- a path's underscores are not emphasis. */}
             <Show when={preview().detail} fallback={"\u00a0"}>{(detail) =>
