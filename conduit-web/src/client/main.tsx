@@ -5468,6 +5468,22 @@ function App() {
 void publishTrustedIdentities(trustedIdentities());
 
 const mount = document.getElementById("root")!;
+// A part of the app loaded on demand -- its code and the stylesheet that
+// lays it out -- could not be fetched: the server restarted under the open
+// page (the old file names are gone) or is still down. Shown without its
+// styles it was a broken page (the workspace rail stuck out beside a phone
+// layout), so wait for the server and reload into the build it now serves.
+let reloadingForChunk = false;
+window.addEventListener("vite:preloadError", (event) => {
+  event.preventDefault();
+  if (reloadingForChunk) return;
+  reloadingForChunk = true;
+  const tryReload = () => void fetch("/healthz", { cache: "no-store" })
+    .then((response) => { if (response.ok) location.reload(); else setTimeout(tryReload, 1000); })
+    .catch(() => setTimeout(tryReload, 1000));
+  tryReload();
+});
+
 render(() => <ErrorBoundary fallback={(error) => { dismissLaunchMark(); return <div class="crash-screen"><div class="crash-card"><h1>Conduit hit a UI error</h1><p>{error instanceof Error ? error.message : "Unknown interface error"}</p><Button onClick={() => location.reload()}>Reload Conduit</Button></div></div>; }}>
   {nativeApp ? <NativeRoot /> : <App />}
 </ErrorBoundary>, mount);

@@ -381,7 +381,9 @@ export function Composer(props: {
     right: () => placeCursor(wordAfter(props.chat.draft(), input.selectionEnd ?? 0)),
     end: () => placeCursor(props.chat.draft().length),
   };
-  const editing = () => voiceFirst() && inputFocused() && hasText() && phoneMode() === "typing";
+  // Whenever the text pill has the cursor, empty or not: clearing the draft
+  // is exactly when undo is wanted.
+  const editing = () => voiceFirst() && inputFocused() && phoneMode() === "typing";
   // The transcript's scroll-to-latest button moves above the edit actions.
   createEffect(on(editing, () => window.dispatchEvent(new CustomEvent("conduit:voice-captions")), { defer: true }));
 
