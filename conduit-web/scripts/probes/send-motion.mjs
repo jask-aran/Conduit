@@ -17,6 +17,9 @@ const layout = arg("--layout", "bar");
 const { page, cdp, close } = await open({ width: 600, height: 1100 });
 await cdp.send("Emulation.setDeviceMetricsOverride", { width: 412, height: 915, deviceScaleFactor: 2.625, mobile: true });
 await cdp.send("Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 5 });
+// Always the build just made, not what the service worker cached.
+await cdp.send("Network.enable");
+await cdp.send("Network.setBypassServiceWorker", { bypass: true });
 // A phone's round trip: what the page sends reaches the server late.
 const latency = Number(arg("--latency", "250"));
 await page.addInitScript((latency) => {
