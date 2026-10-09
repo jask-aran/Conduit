@@ -1,5 +1,5 @@
 import { createEffect, createMemo, createSignal, For, Index, lazy, on, onCleanup, onMount, Show, type JSX } from "solid-js";
-import { ArrowUpIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, DeleteIcon, KeyboardIcon, MicIcon, TextCursorInputIcon, Undo2Icon, ShieldCheckIcon, SquareIcon, TriangleAlertIcon } from "lucide-solid";
+import { ArrowUpIcon, CameraIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, DeleteIcon, KeyboardIcon, MicIcon, TextCursorInputIcon, Undo2Icon, ShieldCheckIcon, SquareIcon, TriangleAlertIcon } from "lucide-solid";
 import { ThinkingOrb } from "./thinking-orb";
 import { PHONE_COMPOSER_CHANGE_EVENT, phoneComposerLayout } from "../preferences/phone-composer";
 import {
@@ -210,7 +210,7 @@ export function Composer(props: {
   /* One take per press of the mic. A stopped take keeps finalising on its own
      client and writes into its own range while the next one records; ranges
      after a take shift when its text changes length. */
-  type DictationTake = { client: VoiceClient; range: { start: number; end: number } | null; cancelled: boolean; restoreFocus: boolean; autoSend: boolean };
+  type DictationTake = { client: VoiceClient; range: { start: number; end: number } | null; cancelled: boolean; restoreFocus: boolean; autoSend: boolean; sendWhenDone?: boolean };
   type VoiceClient = ReturnType<typeof createVoiceDictationClient>;
   const voiceClients: VoiceClient[] = [];
   const takes = new Map<VoiceClient, DictationTake>();
@@ -329,15 +329,24 @@ export function Composer(props: {
     if (undoStack.length > 100) undoStack.shift();
   };
   const placeCursor = (start: number, end = start) => queueMicrotask(() => { input.focus({ preventScroll: true }); input.setSelectionRange(start, end); });
-  const editDraft = (text: string, cursor: number) => { snapshot(true); change(text); placeCursor(cursor); };
+  const editDraft = (text: string, cursor: number) => {
+    snapshot(true);
+    restoringDraft = true;
+    change(text);
+    restoringDraft = false;
+    // The next typed change starts a step of its own.
+    lastSnapshotAt = 0;
+    placeCursor(cursor);
+  };
   const wordBefore = (text: string, at: number) => at - (text.slice(0, at).match(/\S+\s*$|\s+$/)?.[0].length ?? 0);
   const wordAfter = (text: string, at: number) => at + (text.slice(at).match(/^\s*\S+|^\s+/)?.[0].length ?? 0);
   const editActions = {
     undo: () => {
       const previous = undoStack.pop();
       if (!previous) return;
-      lastSnapshotAt = 0;
+      restoringDraft = true;
       change(previous.text);
+      restoringDraft = false;
       placeCursor(previous.start, previous.end);
     },
     delete: () => {
@@ -352,12 +361,13 @@ export function Composer(props: {
     right: () => placeCursor(wordAfter(props.chat.draft(), input.selectionEnd ?? 0)),
     end: () => placeCursor(props.chat.draft().length),
   };
-  const editing = () => voiceFirst() && inputFocused() && !keyboardWanted() && hasText() && phoneMode() === "typing";
+  const editing = () => voiceFirst() && inputFocused() && hasText() && phoneMode() === "typing";
   // The transcript's scroll-to-latest button moves above the edit actions.
   createEffect(on(editing, () => window.dispatchEvent(new CustomEvent("conduit:voice-captions")), { defer: true }));
 
+  let restoringDraft = false;
   const change = (value: string, manual = true) => {
-    if (manual) snapshot();
+    if (manual && !restoringDraft) snapshot();
     if (manual) {
       historyIndex = null;
       historyDraft = "";
@@ -458,6 +468,8 @@ export function Composer(props: {
         const transcript = completion.text.trim();
         if (!transcript) {
           clear();
+          // Stop and send with nothing new said still sends what was there.
+          if (take?.sendWhenDone && !take.cancelled && props.chat.draft().trim()) autoSendPending = true;
           if (!completion.inputSignalDetected && shouldReportNoSignal(completion)) {
             setDictationError(`No microphone signal detected after ${Math.max(1, Math.round(completion.captureDurationMs / 1000))}s (peak ${completion.maxInputPeak.toFixed(3)}). Check Voice → Microphone and Chrome site settings.`);
           } else if (completion.completionReason === "duration_limit") {
@@ -478,7 +490,8 @@ export function Composer(props: {
         if (audioTransferLost(completion)) {
           setDictationError(`Microphone audio was truncated before transcription (${completion.serverAudioBytes} of ${completion.audioBytesSent} bytes reached the server). Check the connection and try again.`);
         }
-        if (take && !take.cancelled && take.autoSend && completion.completionReason !== "duration_limit" && shouldAutoSend({ enabled: props.voiceSettings.autoSend, ...completion })) {
+        if (take?.sendWhenDone && !take.cancelled) autoSendPending = true;
+        else if (take && !take.cancelled && take.autoSend && completion.completionReason !== "duration_limit" && shouldAutoSend({ enabled: props.voiceSettings.autoSend, ...completion })) {
           autoSendPending = true;
         }
       },
@@ -499,6 +512,8 @@ export function Composer(props: {
   };
   const recordingNow = () => ["starting", "listening"].includes(dictationState());
   const stopTake = () => currentTake?.client.stop();
+  // Ends the take and sends the draft once its transcript lands.
+  const stopAndSend = () => { if (currentTake) currentTake.sendWhenDone = true; stopTake(); };
 
   const startDictation = (acceptedAt = performance.now()) => {
     if (recordingNow()) return;
@@ -549,6 +564,20 @@ export function Composer(props: {
     else await props.chat.send(mode);
   };
 
+  let cameraInput!: HTMLInputElement;
+  let cameraHold: ReturnType<typeof setTimeout> | null = null;
+  let cameraHeld = false;
+  const cameraPointerDown = (event: PointerEvent) => {
+    event.preventDefault();
+    cameraHeld = false;
+    cameraHold = setTimeout(() => { cameraHold = null; cameraHeld = true; props.onOpenAttachments(); }, 450);
+  };
+  const cameraPointerCancel = () => { if (cameraHold) clearTimeout(cameraHold); cameraHold = null; };
+  const cameraPointerUp = () => {
+    if (!cameraHold) return;
+    cameraPointerCancel();
+    if (!cameraHeld) cameraInput.click();
+  };
   const attach = () => {
     setSlashOpen(false);
     props.onOpenAttachments();
@@ -790,6 +819,12 @@ export function Composer(props: {
             onPointerDown={(event) => { const control = (event.target as Element).closest("button"); if (control) control.dataset.pointerOpened = ""; }}
             onKeyDown={(event) => { if (["Enter", " ", "ArrowDown", "ArrowUp"].includes(event.key)) delete (event.target as HTMLElement).dataset?.pointerOpened; }}>
             <div ref={actionsLeft} class="composer-actions-left">
+              <Show when={voiceFirst() && props.attachmentsSupported !== false}>
+                {/* Tap: the camera, through the platform's own capture. Hold:
+                    the same picker as Attach files. */}
+                <input ref={cameraInput} type="file" accept="image/*" capture="environment" hidden onChange={(event) => { const files = Array.from(event.currentTarget.files || []); event.currentTarget.value = ""; if (files.length) props.attachments.addFiles(files); }} />
+                <Button variant="ghost" size="icon-sm" class="composer-camera-trigger" aria-label="Take a photo" title="Take a photo (hold to choose files)" disabled={!props.serverOnline || !interactive()} onPointerDown={cameraPointerDown} onPointerUp={cameraPointerUp} onPointerLeave={cameraPointerCancel} onPointerCancel={cameraPointerCancel} onContextMenu={(event) => event.preventDefault()}><CameraIcon /></Button>
+              </Show>
               <Show when={voiceFirst()}><Button variant="ghost" size="icon-sm" class="composer-keyboard-trigger" aria-label={keyboardWanted() ? "Close the keyboard" : "Type a message"} disabled={!props.serverOnline || !interactive()} onPointerDown={(event) => event.preventDefault()} onClick={toggleKeyboard}><KeyboardIcon /></Button></Show>
               <Show when={!phoneLayout()}><ComposerPlusMenu folded={folded()} chat={props.chat} models={props.models} permissions={props.permissions} serviceLevels={props.serviceLevels}
                 profiles={props.profiles} activeProfile={props.activeProfile} place={props.place} disabled={!props.serverOnline || !interactive()} modelSwitch={supports("modelSwitch")}
@@ -815,6 +850,9 @@ export function Composer(props: {
                 <Button variant="ghost" size="icon-sm" class="composer-stop-aside" aria-label="Stop response" onClick={props.chat.stop}><Show when={props.chat.stopping()} fallback={<SquareIcon />}><Spinner /></Show></Button>
               </Show>
               <Show when={voiceFirst() || !(phoneMode() === "idle" && !stoppable())}><span class="composer-primary-slot">
+                <Show when={phoneMode() === "listening"}>
+                  <Button variant="ghost" size="icon-sm" class="composer-stop-send" aria-label="Stop and send" title="Stop dictating and send" onPointerDown={(event) => event.preventDefault()} onClick={stopAndSend}><ArrowUpIcon /></Button>
+                </Show>
                 <Show when={phoneMode() !== "listening"}>
                 <Show when={stoppable() && !newDraft()} fallback={
                   <Button variant="ghost" size="icon-sm" class="composer-send-trigger" aria-label={busy() ? "Send to the agent" : "Send message"} title={busy() ? "Send — the agent takes it when the current step finishes" : undefined} disabled={!canSend()} onClick={() => sendMessage()}><ArrowUpIcon /></Button>}>
