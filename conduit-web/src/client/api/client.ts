@@ -48,7 +48,9 @@ export async function api<T>(url: string, options: RequestInit = {}): Promise<T>
  * behind the caller's back.
  */
 export async function apiWhenServed<T>(url: string, keepRetrying = false): Promise<T> {
-  const delays = [250, 500, 1000, 1500, 2000, 3000, 4000, 5000, 5000, 5000];
+  // A restart is down for a second or two: retried often, so the page is
+  // back as soon as the server is, for about as long in all as before.
+  const delays = [150, 250, 400, 600, 800, ...Array(30).fill(1000)];
   for (let attempt = 0; ; attempt += 1) {
     try {
       return await api<T>(url);
