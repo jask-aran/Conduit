@@ -917,7 +917,7 @@ function App() {
    * and the strip would otherwise sit on "Updating Conduit..." forever with
    * the one state that has no timer and no button.
    */
-  const takePwaUpdate = async () => {
+  const takePwaUpdate = async (fromButton = false) => {
     if (updateShell) {
       setUpdateState({ kind: "working", label: "Installing Conduit…" });
       try {
@@ -932,9 +932,13 @@ function App() {
       return;
     }
     setUpdateState({ kind: "working", label: "Updating Conduit…" });
-    if (!await applyPwaUpdate()) {
-      if (pwaUpdateWaiting()) setUpdateState({ kind: "ready" });
-      else sayUpToDate();
+    // Pressed by hand: this tab's own draft does not hold it (the press is the
+    // answer), but another tab's unsent draft still does, and says so.
+    if (!await (fromButton ? forcePwaUpdate() : applyPwaUpdate())) {
+      if (pwaUpdateWaiting()) {
+        setUpdateState({ kind: "ready" });
+        if (fromButton) toast.error("Another Conduit window has an unsent draft. Send or clear it, then restart.");
+      } else sayUpToDate();
     }
   };
   const setPwaUpdating = (busy: boolean) => setUpdateState(busy ? { kind: "checking" } : { kind: "idle" });
@@ -5313,7 +5317,7 @@ function App() {
       onOpenDashboard={() => { if (altActivation()) openPageBeside("dashboard"); else void openDashboardHere(); }}
       onOpenWorkspaceIdentity={openWorkspaceIdentity} onOpenSettings={openSettings} onOpenPalette={(page, initialQuery) => openPalette(page || null, initialQuery || "", page === "chat-search")}
       onUpdatePwa={() => void runPwaUpdate()} pwaUpdating={pwaUpdating()}
-      updateState={updateState()} onTakeUpdate={() => void takePwaUpdate()}
+      updateState={updateState()} onTakeUpdate={() => void takePwaUpdate(true)}
       onAddServer={() => setAddingServer(true)}
       onLogout={() => void logout()} />
     <FrostDialog open={addingServer()} title="Add server" close size="wide" onOpenChange={setAddingServer} class="add-server-dialog">
