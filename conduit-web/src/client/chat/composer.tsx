@@ -112,6 +112,8 @@ export function Composer(props: {
      on the text pill places the cursor (where dictation will land) or starts
      a selection, with inputmode="none" keeping the keyboard down. */
   const [keyboardWanted, setKeyboardWanted] = createSignal(false);
+  const [sendingTake, setSendingTake] = createSignal(false);
+  const sendingOut = () => sendingTake() || props.chat.generation() === "submitting";
   // The floating scroll-to-latest gives way to the row's own in these layouts.
   createEffect(() => document.documentElement.toggleAttribute("data-voice-composer", voiceFirst()));
   onCleanup(() => document.documentElement.removeAttribute("data-voice-composer"));
@@ -129,6 +131,9 @@ export function Composer(props: {
     // straight to the result instead of flashing through the text row.
     // Once stopped, the row settles at once; the transcript lands when it lands.
     : ["starting", "listening"].includes(dictationState()) ? "listening"
+    // Sent, or stop-and-send waiting on its transcript: the text pill goes at
+    // once rather than holding the draft until the agent takes it.
+    : sendingOut() ? "idle"
     : inputFocused() || hasText() ? "typing" : "idle";
   // The text row was zero wide while hidden; measure it again once shown.
   createEffect(on(phoneMode, () => scheduleResize(), { defer: true }));
@@ -434,6 +439,7 @@ export function Composer(props: {
     setDictatedRange(null);
     for (const take of takes.values()) take.range = null;
     sendDraftNow();
+    queueMicrotask(() => setSendingTake(false));
   };
 
   const createTakeClient = () => {
@@ -458,7 +464,7 @@ export function Composer(props: {
       onCompleted: (completion) => {
         const take = takes.get(client);
         // After this body, whichever way it returns.
-        queueMicrotask(settleAutoSend);
+        queueMicrotask(() => { settleAutoSend(); if (!autoSendPending) setSendingTake(false); });
         window.dispatchEvent(new CustomEvent("conduit:voice-dictation-metrics", { detail: completion }));
         const clear = () => {
           if (take) setTakeRange(take, null);
@@ -500,6 +506,7 @@ export function Composer(props: {
         }
       },
       onError: (error) => {
+        setSendingTake(false);
         setDictationError(error.message);
         const code = (error as Error & { code?: string }).code;
         if (props.voiceSettings.inputDeviceId && ["NotFoundError", "OverconstrainedError"].includes(code || "")) {
@@ -517,7 +524,14 @@ export function Composer(props: {
   const recordingNow = () => ["starting", "listening"].includes(dictationState());
   const stopTake = () => currentTake?.client.stop();
   // Ends the take and sends the draft once its transcript lands.
-  const stopAndSend = () => { if (currentTake) currentTake.sendWhenDone = true; stopTake(); };
+  const stopAndSend = () => {
+    if (!currentTake) return;
+    currentTake.sendWhenDone = true;
+    setSendingTake(true);
+    // Never left hiding the draft if the transcript does not come back.
+    setTimeout(() => setSendingTake(false), 20_000);
+    stopTake();
+  };
 
   const startDictation = (acceptedAt = performance.now()) => {
     if (recordingNow()) return;
