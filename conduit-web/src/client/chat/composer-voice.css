@@ -22,6 +22,10 @@
      floating button, which these layouts hide. */
   [data-phone-layout] .composer-latest-trigger { order: 3; transition: opacity .2s ease, width .25s cubic-bezier(.2, .8, .2, 1), min-width .25s cubic-bezier(.2, .8, .2, 1), margin .25s cubic-bezier(.2, .8, .2, 1), filter .16s ease; }
   [data-phone-layout] .composer-actions .composer-latest-trigger[data-slot="button"]:not([data-shown]) { width: 0; min-width: 0; margin-left: -8px; opacity: 0; overflow: hidden; border-width: 0; pointer-events: none; }
+  /* Going, it fades out first and only then gives its room to the mic, so it
+     is never seen squeezed; coming, the room opens and it fades into it. */
+  [data-phone-layout] .composer-actions .composer-latest-trigger[data-slot="button"]:not([data-shown]) { transition: opacity .12s ease, width .25s cubic-bezier(.2, .8, .2, 1) .12s, min-width .25s cubic-bezier(.2, .8, .2, 1) .12s, margin .25s cubic-bezier(.2, .8, .2, 1) .12s, filter .16s ease; }
+  [data-phone-layout] .composer-actions .composer-latest-trigger[data-slot="button"][data-shown] { transition: opacity .16s ease .14s, width .25s cubic-bezier(.2, .8, .2, 1), min-width .25s cubic-bezier(.2, .8, .2, 1), margin .25s cubic-bezier(.2, .8, .2, 1), filter .16s ease; }
   [data-phone-layout="surface"] .composer-actions .composer-latest-trigger[data-slot="button"]:not([data-shown]) { margin-left: -4px; }
   [data-phone-mode="listening"] .composer-latest-trigger { opacity: 0; pointer-events: none; }
   :root[data-voice-composer] .message-scroller-button[data-slot="button"]:not(.message-cancel-edit) { display: none; }
