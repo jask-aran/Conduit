@@ -5,15 +5,15 @@ export type TranscriptFont = "geist" | "paper-mono";
 const KEY = "conduit:transcript-font";
 
 export const TRANSCRIPT_FONT_OPTIONS: readonly { value: TranscriptFont; label: string }[] = [
-  { value: "paper-mono", label: "Paper Mono" },
   { value: "geist", label: "Geist" },
+  { value: "paper-mono", label: "Paper Mono" },
 ];
 
 export function transcriptFont(): TranscriptFont {
   try {
-    if (localStorage.getItem(KEY) === "geist") return "geist";
+    if (localStorage.getItem(KEY) === "paper-mono") return "paper-mono";
   } catch { /* unavailable */ }
-  return "paper-mono";
+  return "geist";
 }
 
 export function applyTranscriptFont(font = transcriptFont()) {
