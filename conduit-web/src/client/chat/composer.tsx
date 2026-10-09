@@ -129,6 +129,28 @@ export function Composer(props: {
     observer.observe(element);
     onCleanup(() => observer.disconnect());
   };
+  /* The bars are 2px on a 4px pitch, which on a fractional pixel ratio lands
+     some on 5 device pixels and some on 6, and partly covered ones paint
+     dimmer. Width and gap become whole device pixels, and the plot's right
+     edge, where the bars start, is moved onto one. */
+  const snapWaveform = (track: HTMLElement) => {
+    const snap = () => {
+      const ratio = window.devicePixelRatio || 1;
+      track.style.setProperty("--wave-bar", `${Math.max(1, Math.round(2 * ratio)) / ratio}px`);
+      const plot = track.querySelector<HTMLElement>(".voice-waveform-plot");
+      if (!plot) return;
+      plot.style.paddingRight = "0px";
+      const offset = (plot.getBoundingClientRect().right * ratio) % 1;
+      plot.style.paddingRight = `${offset / ratio}px`;
+    };
+    const observer = new ResizeObserver(snap);
+    queueMicrotask(() => { const plot = track.querySelector(".voice-waveform-plot"); if (plot) observer.observe(plot); snap(); });
+    onCleanup(() => observer.disconnect());
+  };
+  /* Captions open with the end of what is already in the composer, upright,
+     so the new dictation reads as continuing it. Only the tail is kept: three
+     lines show at most. */
+  const captionLead = () => { const range = dictatedRange(); return range ? props.chat.draft().slice(Math.max(0, range.start - 240), range.start).trimStart() : ""; };
   const dictatedText = () => { const range = dictatedRange(); return range ? props.chat.draft().slice(range.start, range.end) : ""; };
   // A phone has no model chip in its row, so the empty draft names the model --
   // it stays in view at no cost in height.
@@ -664,7 +686,7 @@ export function Composer(props: {
 
   return <div class="composer-wrap" data-part="composer" data-phone-layout={voiceFirst() ? phoneComposer() : undefined} data-phone-mode={phoneMode()} data-primary-hidden={voiceFirst() && !hasPayload() && !stoppable() ? "" : undefined} style={phoneMode() === "listening" ? { "--voice-level": String(dictationWaveform.level()) } : undefined}>
     <Show when={phoneMode() === "listening"}>
-      <Show when={dictatedText()}><div class="composer-voice-captions" aria-live="polite"><p><span ref={glideCaptions} class="composer-voice-words"><Index each={dictatedText().split(/(?<=\s)/)}>{(word) => <span>{word()}</span>}</Index></span></p></div></Show>
+      <Show when={dictatedText()}><div class="composer-voice-captions" aria-live="polite"><p><span ref={glideCaptions} class="composer-voice-words"><Show when={captionLead()}><span class="composer-voice-lead">{captionLead()}</span></Show><Index each={dictatedText().split(/(?<=\s)/)}>{(word) => <span>{word()}</span>}</Index></span></p></div></Show>
     </Show>
     <QueuedMessages
       messages={props.chat.pendingMessages()}
@@ -681,7 +703,7 @@ export function Composer(props: {
     </Show>
     <div class="composer-surface-shell" data-composer-surface={composerSurface()}>
       <div class="composer composer-surface-material" data-composer-surface={composerSurface()}>
-                <Show when={voiceFirst()}><div class="composer-voice-track" onClick={() => { if (phoneMode() === "listening") toggleDictation(); }}><div class="composer-voice-glow" aria-hidden="true"><i /><i /><i /><i /></div><VoiceWaveform class="chat-status-waveform composer-voice-waveform" history={dictationWaveform.history} level={dictationWaveform.level} peak={dictationWaveform.peak} state={recorderMonitorState()} variant="compact" barDensity={4} gain={2.5} ariaLabel="Microphone input level" /></div></Show>
+                <Show when={voiceFirst()}><div ref={snapWaveform} class="composer-voice-track" onClick={() => { if (phoneMode() === "listening") toggleDictation(); }}><div class="composer-voice-glow" aria-hidden="true"><i /><i /><i /><i /></div><VoiceWaveform class="chat-status-waveform composer-voice-waveform" history={dictationWaveform.history} level={dictationWaveform.level} peak={dictationWaveform.peak} state={recorderMonitorState()} variant="compact" barDensity={4} gain={2.5} ariaLabel="Microphone input level" /></div></Show>
         <div class="composer-content">
           <MobileComposerOptions composer={props} />
           <div class="composer-input-shell">
