@@ -43,7 +43,10 @@ export function setMobileOverlayKind(kind: MobileOverlayKind | null): void {
  * the Android shell. Where neither exists -- iOS, which pans instead of
  * resizing -- `visualViewport` and `--vv-offset-top` are already the answer.
  */
+export const KEYBOARD_HIDDEN_EVENT = "conduit:keyboard-hidden";
+
 export function bindVisualViewportShell(): () => void {
+  let keyboardWasShown = false;
   const root = document.documentElement;
   /*
    * CSS pixels the keyboard covers, as the shell reports them, and the height
@@ -150,6 +153,11 @@ export function bindVisualViewportShell(): () => void {
     root.style.setProperty("--app-height", `${Math.round(height)}px`);
     root.style.setProperty("--vv-offset-top", `${Math.round(offsetTop)}px`);
     root.setAttribute("data-vv-shell", "true");
+    /* The keyboard went away with focus still in a field (Android's back
+       button does this): say so, since no blur will. */
+    const keyboardOpen = shellKeyboard > 120 || viewport < restingHeight - 120;
+    if (keyboardWasShown && !keyboardOpen) window.dispatchEvent(new CustomEvent(KEYBOARD_HIDDEN_EVENT));
+    keyboardWasShown = keyboardOpen;
     reportKeyboardProbe({
       source,
       inner: window.innerHeight,
