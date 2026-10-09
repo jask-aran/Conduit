@@ -230,3 +230,4 @@
 [data-slot="message-scroller-item"][data-arrived] :is([data-slot="message-content"] > *, .turn-trace) { animation: message-arrive .18s ease-out var(--arrive-delay, 0ms) both; }
 @keyframes message-arrive { from { opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { [data-slot="message-scroller-item"][data-arrived] :is([data-slot="message-content"] > *, .turn-trace) { animation: none; } }
+
