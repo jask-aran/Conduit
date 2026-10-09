@@ -99,6 +99,28 @@ Build scripts and configuration are in
 [`build-desktop-windows.sh`](../conduit-web/scripts/build-desktop-windows.sh),
 [`src-tauri/`](../conduit-web/src-tauri/) and [`android/`](../conduit-web/android/).
 
+## LAN https for browsers
+
+A browser only grants the microphone, the service worker and the installable
+PWA to a secure context, and a plain `http://192.168.x.x:4310` is not one.
+The shells verify the server's attested leaf themselves; a browser needs a
+certificate it already trusts. So a LAN name gets a real one:
+
+- A DNS-only A record (`lan.jask-aran.com` → the server's LAN address) in
+  Cloudflare. It resolves anywhere but only connects on that LAN.
+- `scripts/lan-cert/issue.sh` obtains a Let's Encrypt certificate for it by
+  DNS-01 through the signed-in `cf` CLI (nothing exposed to the internet) into
+  `~/.conduit/tls/`. Rerunning renews only when due; the user timer
+  `conduit-lan-cert.timer` runs it weekly.
+- The server presents it on its usual port to a ClientHello naming that host
+  (`CONDUIT_LAN_TLS_CERT` / `CONDUIT_LAN_TLS_KEY` override the paths) and the
+  attested leaf to everything else, and rereads it hourly.
+
+Routers with DNS rebinding protection return nothing for a public name that
+points at a private address. Allow the domain in the router, or point the
+device at a resolver that does not filter (Android Private DNS
+`one.one.one.one`).
+
 ## Several servers
 
 A server has one identity and can have several routes: loopback, LAN, Tailscale

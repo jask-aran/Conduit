@@ -3,6 +3,8 @@ import https from "node:https";
 import net from "node:net";
 import os from "node:os";
 import path from "node:path";
+import crypto from "node:crypto";
+import tls from "node:tls";
 import { fileURLToPath } from "node:url";
 import express from "express";
 import compression from "compression";
@@ -959,8 +961,40 @@ server.on("upgrade", handleUpgrade);
  * `http` origins until both shells accept a leaf by its embedded attestation,
  * in `onReceivedSslError` and `ServerCertificateErrorDetected`.
  */
+/*
+ * A browser on the LAN needs a certificate it already trusts before it will
+ * treat the page as a secure context (microphone, service worker). When a
+ * publicly trusted certificate for a LAN name is on disk (scripts/lan-cert),
+ * a ClientHello naming it gets that certificate; every other name, and the
+ * shells that verify the attested leaf, get the leaf as before.
+ */
+const LAN_TLS_CERT = process.env.CONDUIT_LAN_TLS_CERT || path.join(os.homedir(), ".conduit", "tls", "lan-cert.pem");
+const LAN_TLS_KEY = process.env.CONDUIT_LAN_TLS_KEY || path.join(os.homedir(), ".conduit", "tls", "lan-key.pem");
+let lanTls = null;
+async function loadLanTls() {
+  try {
+    const [cert, key] = await Promise.all([fs.readFile(LAN_TLS_CERT, "utf8"), fs.readFile(LAN_TLS_KEY, "utf8")]);
+    if (lanTls?.cert === cert) return;
+    const names = new crypto.X509Certificate(cert).subjectAltName?.split(", ").filter((entry) => entry.startsWith("DNS:")).map((entry) => entry.slice(4).toLowerCase()) || [];
+    lanTls = { cert, names, context: tls.createSecureContext({ cert, key }) };
+    console.log(JSON.stringify({ type: "conduit.lan-tls", state: "loaded", names }));
+  } catch (error) {
+    if (error.code !== "ENOENT") console.warn("Conduit could not load its LAN certificate", error.message);
+    lanTls = null;
+  }
+}
+await loadLanTls();
+const lanNameMatches = (servername) => {
+  const name = String(servername || "").toLowerCase();
+  const parent = name.split(".").slice(1).join(".");
+  return Boolean(lanTls?.names.some((pattern) => pattern === name || (pattern.startsWith("*.") && pattern.slice(2) === parent)));
+};
 const secureServer = serverLeaf
-  ? https.createServer({ cert: serverLeaf.certificate, key: serverLeaf.privateKey }, app)
+  ? https.createServer({
+    cert: serverLeaf.certificate,
+    key: serverLeaf.privateKey,
+    SNICallback: (servername, done) => done(null, lanNameMatches(servername) ? lanTls.context : null),
+  }, app)
   : null;
 secureServer?.on("upgrade", handleUpgrade);
 const TLS_HANDSHAKE = 0x16;
@@ -985,6 +1019,7 @@ const front = net.createServer((socket) => {
 const LEAF_CHECK_MS = 60 * 60 * 1000;
 if (secureServer) lifetime.interval("TLS leaf check", async () => {
   try {
+    await loadLanTls();
     const next = await leafStore.ensure(leafFor());
     if (next === serverLeaf) return;
     serverLeaf = next;
