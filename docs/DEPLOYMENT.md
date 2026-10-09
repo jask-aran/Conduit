@@ -92,6 +92,14 @@ Development clients install beside released clients with separate local state.
 Android development APKs must be rebuilt and sideloaded; they cannot update the
 released app because their identifier and signing key differ.
 
+A development APK (`.dev`) also takes interface updates from the server it is
+connected to, without a reinstall: in the background it downloads that
+server's build (`/client-bundle/manifest.json`, then `/client-bundle/<build>.zip`),
+and switches to it the next time the app goes to the background. It keeps
+launching from the copy on the device. A build that never reports it started
+is dropped on the next launch, and installing a new APK resets to the bundled
+interface. Changes to native code, plugins or permissions still need a new APK.
+
 Run builds one at a time: they share `conduit-web/dist`.
 Use Settings → Appearance → About to check interface, shell and server versions.
 Build scripts and configuration are in

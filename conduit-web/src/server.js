@@ -83,6 +83,7 @@ import { TurnCheckpointStore } from "./turn-checkpoint-store.js";
 import { conduitPiSessionFile } from "./backend-session.js";
 import { ServerConcurrency } from "./server/effect-concurrency.js";
 import { ServerLifetime } from "./server/server-lifetime.js";
+import { createClientBundle } from "./server/client-bundle.js";
 
 const config = loadConfig();
 const turnCheckpoints = new TurnCheckpointStore(path.join(config.dataRoot, "turn-checkpoints"));
@@ -504,6 +505,26 @@ if (desktopUpdateDir) {
     setHeaders: (response) => response.setHeader("Cache-Control", "no-store"),
   }));
 }
+
+// The interface as one download, for an installed client's live update. Ahead
+// of authentication like the compiled client it is made of, which is already
+// served without a session (auth-middleware.js): it carries nobody's data.
+const clientBundle = createClientBundle(dist);
+app.get("/client-bundle/manifest.json", async (_request, response, next) => {
+  try {
+    response.setHeader("Cache-Control", "no-store");
+    response.json(await clientBundle.manifest());
+  } catch (error) { next(error); }
+});
+app.get("/client-bundle/:build.zip", async (request, response, next) => {
+  try {
+    const zip = await clientBundle.zip(request.params.build);
+    if (!zip) { response.status(404).end(); return; }
+    response.setHeader("Content-Type", "application/zip");
+    response.setHeader("Cache-Control", "no-store");
+    response.end(zip);
+  } catch (error) { next(error); }
+});
 
 const requireAuth = prepareAuthMiddleware(authStore);
 app.use(requireAuth);
