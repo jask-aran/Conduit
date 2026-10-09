@@ -135,7 +135,7 @@
   /* Captions: no surface, only the newest three lines; older ones are cut
      off at the top as the text grows. */
   .composer-voice-captions {
-    position: absolute; left: 0; right: 0; bottom: 100%; z-index: 5; padding: 28px 12px 14px;
+    position: absolute; left: 0; right: 0; bottom: 100%; z-index: 5; padding: 28px 12px 4px;
     font-size: .875rem; line-height: 1.45; font-style: italic; color: var(--muted-foreground);
     pointer-events: none; animation: composer-voice-in .2s ease-out;
   }
@@ -147,7 +147,7 @@
   }
   .composer-voice-captions p {
     display: flex; flex-direction: column; justify-content: flex-end; max-height: calc(3 * 1.45em); overflow: hidden;
-    -webkit-mask-image: linear-gradient(to bottom, rgb(0 0 0 / 20%), black 1.45em); mask-image: linear-gradient(to bottom, rgb(0 0 0 / 20%), black 1.45em);
+   
   }
   .composer-voice-captions p { margin: 0; }
   .composer-voice-words { display: block; }
