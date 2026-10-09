@@ -65,11 +65,38 @@ export function MobileComposerOptions(props: {
   let root!: HTMLDivElement;
   createEffect(() => root.closest(".composer-wrap")?.toggleAttribute("data-options-open", open()));
   onCleanup(() => root?.closest(".composer-wrap")?.removeAttribute("data-options-open"));
+  /* Closing hands focus back to the trigger; with the text pill open it goes
+     back to the textarea instead, in the same task, so the keyboard stays. */
+  let typingAtOpen: HTMLTextAreaElement | null = null;
+  const composerTextarea = () => {
+    const active = document.activeElement;
+    return active instanceof HTMLTextAreaElement && root.closest(".composer-wrap")?.contains(active) ? active : null;
+  };
+  const restoreTyping = () => {
+    const textarea = typingAtOpen;
+    typingAtOpen = null;
+    if (!textarea) return;
+    textarea.focus({ preventScroll: true });
+    queueMicrotask(() => { if (document.activeElement !== textarea) textarea.focus({ preventScroll: true }); });
+  };
+  /* With the text pill open, tapping out of the menu closes only the menu: the
+     tap's default focus change would blur the textarea and drop the keyboard. */
+  const keepKeyboard = (event: PointerEvent) => {
+    const active = document.activeElement;
+    if (!(active instanceof HTMLTextAreaElement) || !root.closest(".composer-wrap")?.contains(active)) return;
+    if ((event.target as Element | null)?.closest?.('[data-slot="menu-content"], [data-slot="menu-sub-content"]')) return;
+    event.preventDefault();
+  };
+  createEffect(() => {
+    if (!open()) return;
+    window.addEventListener("pointerdown", keepKeyboard, true);
+    onCleanup(() => window.removeEventListener("pointerdown", keepKeyboard, true));
+  });
 
   return <div ref={root} class="composer-mobile-plus">
-    <Menu modal={false} placement="top-start" gutter={8} open={open()} onOpenChange={(value) => { setOpen(value); if (!value) reset(); }}>
+    <Menu modal={false} placement="top-start" gutter={8} open={open()} onOpenChange={(value) => { if (value) typingAtOpen = composerTextarea(); setOpen(value); if (!value) reset(); }}>
       <MobileComposerPlusTrigger serverOnline={composer.serverOnline} />
-      <MenuContent class="composer-options-menu" data-settling={settling()} onOpenAutoFocus={preserveFocus} onCloseAutoFocus={preserveFocus} onFocusOutside={preserveFocus} onPointerDownOutside={keepForChild}>
+      <MenuContent class="composer-options-menu" data-settling={settling()} onOpenAutoFocus={preserveFocus} onCloseAutoFocus={(event) => { event.preventDefault(); restoreTyping(); }} onFocusOutside={preserveFocus} onPointerDownOutside={keepForChild}>
         <div class="composer-options-parent" data-panel-open={panel() !== "root"} onPointerDown={returnToRoot}>
          <MenuGroup>
           <MenuLabel class="composer-options-label composer-options-header"><span>{composer.profiles.length ? "Profile" : "Model"}</span>
