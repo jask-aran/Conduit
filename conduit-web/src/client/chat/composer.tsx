@@ -869,8 +869,8 @@ export function Composer(props: {
                 <Button variant="ghost" size="icon-sm" class="composer-stop-aside" aria-label="Stop response" onClick={props.chat.stop}><Show when={props.chat.stopping()} fallback={<SquareIcon />}><Spinner /></Show></Button>
               </Show>
               <Show when={voiceFirst() || !(phoneMode() === "idle" && !stoppable())}><span class="composer-primary-slot">
-                <Show when={phoneMode() === "listening"}>
-                  <Button variant="ghost" size="icon-sm" class="composer-stop-send" aria-label="Stop and send" title="Stop dictating and send" onPointerDown={(event) => event.preventDefault()} onClick={stopAndSend}><ArrowUpIcon /></Button>
+                <Show when={voiceFirst()}>
+                  <Button variant="ghost" size="icon-sm" class="composer-stop-send" data-shown={phoneMode() === "listening" ? "" : undefined} aria-hidden={phoneMode() === "listening" ? undefined : "true"} tabIndex={phoneMode() === "listening" ? 0 : -1} aria-label="Stop and send" title="Stop dictating and send" onPointerDown={(event) => event.preventDefault()} onClick={stopAndSend}><ArrowUpIcon /></Button>
                 </Show>
                 <Show when={phoneMode() !== "listening"}>
                 <Show when={stoppable() && !newDraft()} fallback={

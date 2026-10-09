@@ -29,20 +29,20 @@
   [data-phone-layout="surface"] .composer-actions .composer-latest-trigger[data-slot="button"]:not([data-shown]) { margin-left: -4px; }
   /* Listening, it fades out in place with the rest of the row, at the same
      pace and with no delay; its own fold timings are for showing/hiding. */
-  [data-phone-mode="listening"] .composer-actions .composer-latest-trigger[data-slot="button"] { opacity: 0; pointer-events: none; transition: opacity .18s ease, filter .16s ease; }
+  [data-phone-mode="listening"] .composer-actions .composer-latest-trigger[data-slot="button"][data-shown] { opacity: 0; pointer-events: none; transition: opacity .18s ease, filter .16s ease; }
   :root[data-voice-composer] .message-scroller-button[data-slot="button"]:not(.message-cancel-edit) { display: none; }
   /* It takes its room as the pill shrinks, so the pill's right edge slides
      over instead of jumping, then fades in -- as Send does beside it. */
-  [data-phone-layout] .composer-stop-send { order: 5; overflow: hidden; animation: composer-fold-in .3s cubic-bezier(.2, .8, .2, 1) both; }
-  @keyframes composer-fold-in {
-    from { width: 0; min-width: 0; margin-left: -8px; border-width: 0; opacity: 0; }
-    50% { opacity: 0; }
-  }
-  [data-phone-layout="bar"] .composer-stop-send { animation-name: composer-fold-in-bar; }
-  @keyframes composer-fold-in-bar {
-    from { width: 0; min-width: 0; margin-left: -10px; border-width: 0; opacity: 0; }
-    50% { opacity: 0; }
-  }
+  /* Always there, folded away until listening: it takes its room as the pill
+     shrinks, so the pill's right edge slides rather than jumps, then fades in;
+     leaving, it fades quickly as the room goes back with the pill. */
+  [data-phone-layout] .composer-stop-send { order: 5; overflow: hidden; transition: opacity .16s ease .14s, width .3s cubic-bezier(.2, .8, .2, 1), min-width .3s cubic-bezier(.2, .8, .2, 1), margin .3s cubic-bezier(.2, .8, .2, 1); }
+  [data-phone-layout] .composer-actions .composer-stop-send[data-slot="button"]:not([data-shown]) { width: 0; min-width: 0; margin-left: -8px; opacity: 0; border-width: 0; pointer-events: none; transition: opacity .12s ease, width .3s cubic-bezier(.2, .8, .2, 1), min-width .3s cubic-bezier(.2, .8, .2, 1), margin .3s cubic-bezier(.2, .8, .2, 1); }
+  [data-phone-layout="bar"] .composer-actions .composer-stop-send[data-slot="button"]:not([data-shown]) { margin-left: -10px; }
+  /* With a draft, Send holds that slot already: the two swap in place, the
+     room never folding, so the pill does not move at all. */
+  [data-phone-layout]:not([data-primary-hidden]) .composer-actions .composer-stop-send[data-slot="button"] { transition: opacity .16s ease; }
+  [data-phone-layout]:not([data-primary-hidden]) .composer-actions .composer-stop-send[data-slot="button"]:not([data-shown]) { transition: none; }
   [data-phone-layout] .dictation-trigger { order: 3; }
   [data-phone-layout] .composer-stop-aside { order: 4; }
   [data-phone-layout] :is(.composer-send-trigger, .composer-stop-trigger) { order: 5; }
@@ -126,7 +126,7 @@
   /* Bar listening: the mic pill really resizes, shrinking into a 64px pill
      at the row's end as a spacer before it grows (flex-grow, so the border,
      radius and icon stay crisp). The orb and glow crossfade in inside it. */
-  [data-phone-layout="bar"] .composer::before { content: ""; order: 3; flex: 0 0 0; min-width: 0; margin-left: -8px; transition: flex-grow .3s cubic-bezier(.2, .8, .2, 1); }
+  [data-phone-layout="bar"] .composer::before { content: ""; order: 4; flex: 0 0 0; min-width: 0; margin-left: -8px; transition: flex-grow .3s cubic-bezier(.2, .8, .2, 1); }
   [data-phone-layout="bar"][data-phone-mode="listening"] .composer::before { flex-grow: 1; }
   [data-phone-layout="bar"] .dictation-trigger { order: 4; overflow: hidden; isolation: isolate; }
   [data-phone-layout="bar"] .composer-actions [data-slot="button"].dictation-trigger { flex: 1 1 64px; min-width: 64px; transition: flex-grow .3s cubic-bezier(.2, .8, .2, 1), filter .16s ease; }
