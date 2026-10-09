@@ -64,7 +64,7 @@ import { isLeaderMenuMode, LEADER_MENU_STORAGE_KEY, selectedLeaderMenu, setLeade
 import type { PaletteActions, PaletteContext } from "./palette/command-registry";
 import { bindVisualViewportShell, focusFirst, isMobileLayout, MOBILE_LAYOUT_QUERY, setMobileOverlayKind } from "./navigation/mobile-layout";
 import { toggleKeyboardProbe } from "./navigation/keyboard-probe.ts";
-import { mobileSwipeAction } from "./navigation/mobile-swipe";
+import { beginEdgeSwipe, swipeBlocked, type EdgeSwipe } from "./navigation/mobile-swipe";
 import { bindOverlayScrollbars } from "./navigation/overlay-scrollbars";
 import { FrostDialog } from "@/components/frost";
 import { Sidebar, type SidebarCommand } from "./navigation/sidebar";
@@ -1348,24 +1348,30 @@ function App() {
   };
 
   onMount(() => {
-    let swipe: { id: number; x: number; y: number } | null = null;
+    let swipe: { id: number; gesture: EdgeSwipe } | null = null;
+    // Safari outside an installed app takes the left edge for its own Back.
+    const browserOwnsEdges = /iP(hone|ad|od)/.test(navigator.userAgent) && !(navigator as Navigator & { standalone?: boolean }).standalone;
+    const keyboardUp = () => Boolean(window.visualViewport && window.visualViewport.height < window.innerHeight * 0.75);
     const start = (event: TouchEvent) => {
-      if (!isMobileLayout() || event.touches.length !== 1) return;
-      if (event.target instanceof Element && event.target.closest("[data-mobile-swipe-ignore]")) return;
+      swipe = null;
+      if (!isMobileLayout() || event.touches.length !== 1 || keyboardUp()) return;
+      if (swipeBlocked(event.target) || String(window.getSelection() || "")) return;
       const touch = event.touches[0]!;
-      swipe = { id: touch.identifier, x: touch.clientX, y: touch.clientY };
+      const opening = !mobileSidebarOpen() && !panelOpen();
+      if (opening && browserOwnsEdges) return;
+      const gesture = beginEdgeSwipe({ x: touch.clientX, y: touch.clientY, t: event.timeStamp, width: window.innerWidth, sidebarOpen: mobileSidebarOpen(), workspaceOpen: panelOpen() });
+      if (gesture) swipe = { id: touch.identifier, gesture };
+    };
+    const move = (event: TouchEvent) => {
+      if (!swipe) return;
+      if (event.touches.length !== 1) { swipe = null; return; }
+      const touch = [...event.changedTouches].find((item) => item.identifier === swipe!.id);
+      if (touch && swipe.gesture.move({ x: touch.clientX, y: touch.clientY, t: event.timeStamp }) === "abandoned") swipe = null;
     };
     const end = (event: TouchEvent) => {
       const touch = swipe && [...event.changedTouches].find((item) => item.identifier === swipe!.id);
       if (!swipe || !touch) return;
-      const action = mobileSwipeAction({
-        startX: swipe.x,
-        startY: swipe.y,
-        endX: touch.clientX,
-        endY: touch.clientY,
-        sidebarOpen: mobileSidebarOpen(),
-        workspaceOpen: panelOpen(),
-      });
+      const action = swipe.gesture.end({ x: touch.clientX, y: touch.clientY, t: event.timeStamp });
       swipe = null;
       if (action === "open-sidebar") setMobileSidebar(true);
       else if (action === "close-sidebar") setMobileSidebar(false);
@@ -1376,10 +1382,12 @@ function App() {
     };
     const cancel = () => { swipe = null; };
     window.addEventListener("touchstart", start, { passive: true });
+    window.addEventListener("touchmove", move, { passive: true });
     window.addEventListener("touchend", end, { passive: true });
     window.addEventListener("touchcancel", cancel, { passive: true });
     onCleanup(() => {
       window.removeEventListener("touchstart", start);
+      window.removeEventListener("touchmove", move);
       window.removeEventListener("touchend", end);
       window.removeEventListener("touchcancel", cancel);
     });
