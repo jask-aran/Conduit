@@ -1731,6 +1731,10 @@ svg.lucide { stroke-width: 2.4; }
      that changed panels. */
   .phone-menu-parent { transition: opacity .16s ease, filter .16s ease; }
   .phone-menu-parent[data-panel-open="true"] { opacity: .38; filter: saturate(.6); }
+  /* A modal menu turns the page's pointer events off and only its own
+     content back on; the child panel is portaled beside it, so it takes them
+     back itself or every tap falls through to the parent. */
+  .phone-menu-submenu { pointer-events: auto; }
   .phone-menu-parent[data-panel-open="true"] > *, [data-settling="true"] :is(.phone-menu-parent, .phone-menu-parent *), .phone-menu-submenu[data-settling="true"] * { pointer-events: none; }
   .phone-menu-submenu.server-route-menu { --phone-submenu-offset: 48px; width: min(258px, calc(100vw - 32px)); max-height: min(60dvh, 420px); overflow-y: auto; padding: 4px; border-radius: 14px; }
   .phone-menu-submenu.server-route-menu [role^="menuitem"] { min-height: 38px; padding: 8px 9px; gap: 8px; border-radius: 9px; font-size: 13px; }
