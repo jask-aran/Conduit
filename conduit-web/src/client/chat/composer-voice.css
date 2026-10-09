@@ -49,10 +49,14 @@
      it. It eases open and closed rather than appearing. */
   [data-phone-layout] .composer-input-shell {
     order: 0; flex: 1 0 100%; max-height: 220px; overflow: hidden;
-    transition: max-height .24s cubic-bezier(.2, .8, .2, 1), margin .24s cubic-bezier(.2, .8, .2, 1), opacity .18s ease, transform .24s cubic-bezier(.2, .8, .2, 1), filter .16s ease;
+    /* Fades in and out in place: the row under it never moves, so a slide
+       read as coming from nowhere. It takes its room at once on the way in
+       and gives it up once faded out. */
+    transition: opacity .18s ease, filter .16s ease;
   }
   :is([data-phone-mode="idle"], [data-phone-mode="listening"]) .composer-input-shell {
-    min-height: 0; max-height: 0; margin-bottom: -8px; opacity: 0; transform: translateY(8px); pointer-events: none; border-color: transparent;
+    min-height: 0; max-height: 0; margin-bottom: -8px; opacity: 0; pointer-events: none; border-color: transparent;
+    transition: opacity .18s ease, filter .16s ease, max-height 0s .18s, min-height 0s .18s, margin 0s .18s, border-color 0s .18s;
   }
 
   /* Typing: the text is its own frost pill on a row of its own above the
@@ -112,8 +116,8 @@
   .chat-status-waveform.voice-waveform.composer-voice-waveform { position: absolute; left: 18px; right: 18px; top: 50%; width: auto; height: 34px; flex: none; translate: 0 -50%; }
   [data-phone-layout="surface"] .composer-voice-waveform { right: 58px; height: 30px; }
   /* Whole-pixel bars on a fixed pitch: sub-pixel bars dropped out at 1x. */
-  .composer-voice-waveform .voice-waveform-plot { justify-content: flex-end; gap: 2px; }
-  .composer-voice-waveform .voice-waveform-bar { flex: 0 0 2px; width: 2px; min-width: 2px; max-width: 2px; }
+  .composer-voice-waveform .voice-waveform-plot { justify-content: flex-end; gap: var(--wave-bar, 2px); }
+  .composer-voice-waveform .voice-waveform-bar { flex: 0 0 var(--wave-bar, 2px); width: var(--wave-bar, 2px); min-width: var(--wave-bar, 2px); max-width: var(--wave-bar, 2px); }
 
   /* Glow: soft colour fields inside the track, swelling with the input
      level; paused when not listening. Gradients rather than a blur filter,
@@ -143,13 +147,15 @@
   }
   .composer-voice-captions p {
     display: flex; flex-direction: column; justify-content: flex-end; max-height: calc(3 * 1.45em); overflow: hidden;
-    -webkit-mask-image: linear-gradient(to bottom, transparent, black 1.1em); mask-image: linear-gradient(to bottom, transparent, black 1.1em);
+    -webkit-mask-image: linear-gradient(to bottom, rgb(0 0 0 / 20%), black 1.45em); mask-image: linear-gradient(to bottom, rgb(0 0 0 / 20%), black 1.45em);
   }
   .composer-voice-captions p { margin: 0; }
   .composer-voice-words { display: block; }
   /* Words fade in as the transcript does (incremark-markdown.css): colour,
      not opacity, and a revised word keeps its node so it does not replay. */
   .composer-voice-words span { animation: composer-voice-word var(--stream-word-fade, 200ms) ease-out both; }
+  /* What was already in the composer: upright, and already there. */
+  .composer-voice-words .composer-voice-lead { font-style: normal; animation: none; margin-right: .3em; }
   @keyframes composer-voice-word { from { color: transparent; } }
   @keyframes composer-voice-in { from { opacity: 0; } }
   @keyframes composer-voice-rise { from { opacity: 0; transform: translateY(10px); } }
