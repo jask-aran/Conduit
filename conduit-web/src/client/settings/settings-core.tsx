@@ -10,7 +10,7 @@ import { Button, Field, FieldGroup, FieldLabel, Input, Spinner } from "@/compone
 import { api } from "../api/client";
 import { COMPOSER_SURFACE_OPTIONS, type ComposerSurfaceMode } from "../chat/composer-surface";
 import { MARKDOWN_RENDERER_OPTIONS, type MarkdownRendererId } from "../chat/markdown-settings";
-import { formatMicrophoneError, hasAudioSignal, isUnavailableAudioInputError, listAudioInputDevices, MAX_AUDIO_INPUT_TEST_DURATION_MS, revokeAudioInputRecording, startAudioInputTest as beginAudioInputTest, type AudioInputDevice, type AudioInputTestResult, type AudioInputTestSession, } from "../chat/voice-audio";
+import { formatMicrophoneError, hasAudioSignal, rematchInputDevice, isUnavailableAudioInputError, listAudioInputDevices, MAX_AUDIO_INPUT_TEST_DURATION_MS, revokeAudioInputRecording, startAudioInputTest as beginAudioInputTest, type AudioInputDevice, type AudioInputTestResult, type AudioInputTestSession, } from "../chat/voice-audio";
 import { shortcutFromKeyboardEvent } from "../chat/voice-dictation";
 import type { VoiceDictationSettings } from "../chat/voice-dictation-types";
 import { isWarmMicrophoneActive, stopWarmMicrophone } from "../chat/voice-dictation-client";
@@ -166,6 +166,7 @@ const sameVoiceDraft = (left: VoiceDictationSettings, right: VoiceDictationSetti
   && left.activation === right.activation
   && left.autoSend === right.autoSend
   && left.inputDeviceId === right.inputDeviceId
+  && left.inputDeviceLabel === right.inputDeviceLabel
   && left.captureProfile === right.captureProfile
   && left.warmMicrophone === right.warmMicrophone;
 // The runtime fields as typed, checked against the ranges the server keeps
@@ -742,8 +743,11 @@ export function Settings(props: {
     setAudioInputStatus("loading");
     setAudioInputError("");
     try {
-      setAudioInputDevices(await listAudioInputDevices());
+      const devices = await listAudioInputDevices();
+      setAudioInputDevices(devices);
       setAudioInputStatus("ready");
+      const moved = rematchInputDevice(voiceDraft(), devices);
+      if (moved) updateVoiceDraft({ inputDeviceId: moved });
     } catch (error) {
       setAudioInputError(formatMicrophoneError(error));
       setAudioInputStatus("error");
@@ -1367,7 +1371,7 @@ export function Settings(props: {
                   <h3>Input</h3>
                   <label class="settings-line" data-stack="mic" for="voice-input-device"><span>Microphone</span>
                     <div class="settings-line-control">
-                      <Select ref={voiceInputSelect} id="voice-input-device" disabled={audioInputBusy()} value={voiceDraft().inputDeviceId} onChange={(event) => updateVoiceDraft({ inputDeviceId: event.currentTarget.value })}>
+                      <Select ref={voiceInputSelect} id="voice-input-device" disabled={audioInputBusy()} value={voiceDraft().inputDeviceId} onChange={(event) => { const deviceId = event.currentTarget.value; updateVoiceDraft({ inputDeviceId: deviceId, inputDeviceLabel: audioInputDevices().find((device) => device.deviceId === deviceId)?.label || "" }); }}>
                         <option value="">System default</option>
                         <Show when={voiceDraft().inputDeviceId && !audioInputDevices().some((device) => device.deviceId === voiceDraft().inputDeviceId)}><option value={voiceDraft().inputDeviceId}>Unavailable microphone</option></Show>
                         <For each={audioInputDevices()}>{(device) => <option value={device.deviceId}>{device.label}</option>}</For>

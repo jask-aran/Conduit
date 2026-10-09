@@ -95,6 +95,17 @@ async function microphoneGranted() {
   }
 }
 
+/**
+ * The chosen microphone under its new id, when its old one is gone: Android
+ * hands a page new device ids, so the saved one stops matching while the
+ * device is still there under the same name. Null when nothing moved.
+ */
+export function rematchInputDevice(settings: { inputDeviceId: string; inputDeviceLabel?: string }, devices: AudioInputDevice[]): string | null {
+  if (!settings.inputDeviceId || !settings.inputDeviceLabel) return null;
+  if (devices.some((device) => device.deviceId === settings.inputDeviceId)) return null;
+  return devices.find((device) => device.deviceId && device.label === settings.inputDeviceLabel)?.deviceId ?? null;
+}
+
 export async function listAudioInputDevices(): Promise<AudioInputDevice[]> {
   let devices = await mediaDevices().enumerateDevices();
   // A freshly loaded page (a reload after a reconnect, say) is shown the

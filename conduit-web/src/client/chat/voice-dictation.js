@@ -80,6 +80,7 @@ export function loadVoiceDictationSettings(storage = globalThis.localStorage) {
       activation: normalizeActivation(stored?.activation),
       autoSend: stored?.autoSend === true,
       inputDeviceId: typeof stored?.inputDeviceId === "string" ? stored.inputDeviceId : "",
+      inputDeviceLabel: typeof stored?.inputDeviceLabel === "string" ? stored.inputDeviceLabel : "",
       captureProfile: stored?.captureProfile === "processed" ? "processed" : "raw",
       warmMicrophone: stored?.warmMicrophone === true,
     };
@@ -95,6 +96,7 @@ export function saveVoiceDictationSettings(settings, storage = globalThis.localS
     activation: normalizeActivation(settings.activation),
     autoSend: settings.autoSend === true,
     inputDeviceId: typeof settings.inputDeviceId === "string" ? settings.inputDeviceId : "",
+    inputDeviceLabel: typeof settings.inputDeviceLabel === "string" ? settings.inputDeviceLabel : "",
     captureProfile: settings.captureProfile === "processed" ? "processed" : "raw",
     warmMicrophone: settings.warmMicrophone === true,
   };
