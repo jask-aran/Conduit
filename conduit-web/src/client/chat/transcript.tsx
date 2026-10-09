@@ -805,8 +805,11 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
       // Dictation captions float above the composer; the button clears them too.
       const captions = conversation.querySelector<HTMLElement>(".composer-voice-captions p");
       const captionsTop = captions?.getBoundingClientRect().top ?? Infinity;
+      // So do the text pill's edit actions while they show.
+      const editActions = conversation.querySelector<HTMLElement>(".composer-edit-actions[data-shown]");
+      const editTop = editActions?.getBoundingClientRect().top ?? Infinity;
       if (shellRect.width <= 0 || shellRect.height <= 0 || composerRect.width <= 0 || composerRect.height <= 0) return;
-      const bottom = `${Math.max(isMobileLayout() ? 8 : 6.4, shellRect.bottom - Math.min(composerRect.top, captionsTop) + (isMobileLayout() ? 10 : 8))}px`;
+      const bottom = `${Math.max(isMobileLayout() ? 8 : 6.4, shellRect.bottom - Math.min(composerRect.top, captionsTop, editTop) + (isMobileLayout() ? 10 : 8))}px`;
       for (const button of anchored) {
         if (button.style.getPropertyValue("--message-scroller-button-bottom") !== bottom) button.style.setProperty("--message-scroller-button-bottom", bottom);
       }
