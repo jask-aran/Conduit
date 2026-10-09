@@ -27,9 +27,22 @@
   [data-phone-layout] .composer-actions .composer-latest-trigger[data-slot="button"]:not([data-shown]) { transition: opacity .12s ease, width .25s cubic-bezier(.2, .8, .2, 1) .12s, min-width .25s cubic-bezier(.2, .8, .2, 1) .12s, margin .25s cubic-bezier(.2, .8, .2, 1) .12s, filter .16s ease; }
   [data-phone-layout] .composer-actions .composer-latest-trigger[data-slot="button"][data-shown] { transition: opacity .16s ease .14s, width .25s cubic-bezier(.2, .8, .2, 1), min-width .25s cubic-bezier(.2, .8, .2, 1), margin .25s cubic-bezier(.2, .8, .2, 1), filter .16s ease; }
   [data-phone-layout="surface"] .composer-actions .composer-latest-trigger[data-slot="button"]:not([data-shown]) { margin-left: -4px; }
-  [data-phone-mode="listening"] .composer-latest-trigger { opacity: 0; pointer-events: none; }
+  /* Listening, it fades out in place with the rest of the row, at the same
+     pace and with no delay; its own fold timings are for showing/hiding. */
+  [data-phone-mode="listening"] .composer-actions .composer-latest-trigger[data-slot="button"] { opacity: 0; pointer-events: none; transition: opacity .18s ease, filter .16s ease; }
   :root[data-voice-composer] .message-scroller-button[data-slot="button"]:not(.message-cancel-edit) { display: none; }
-  [data-phone-layout] .composer-stop-send { order: 5; animation: composer-voice-in .2s ease-out .12s both; }
+  /* It takes its room as the pill shrinks, so the pill's right edge slides
+     over instead of jumping, then fades in -- as Send does beside it. */
+  [data-phone-layout] .composer-stop-send { order: 5; overflow: hidden; animation: composer-fold-in .3s cubic-bezier(.2, .8, .2, 1) both; }
+  @keyframes composer-fold-in {
+    from { width: 0; min-width: 0; margin-left: -8px; border-width: 0; opacity: 0; }
+    50% { opacity: 0; }
+  }
+  [data-phone-layout="bar"] .composer-stop-send { animation-name: composer-fold-in-bar; }
+  @keyframes composer-fold-in-bar {
+    from { width: 0; min-width: 0; margin-left: -10px; border-width: 0; opacity: 0; }
+    50% { opacity: 0; }
+  }
   [data-phone-layout] .dictation-trigger { order: 3; }
   [data-phone-layout] .composer-stop-aside { order: 4; }
   [data-phone-layout] :is(.composer-send-trigger, .composer-stop-trigger) { order: 5; }
