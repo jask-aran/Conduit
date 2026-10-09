@@ -322,6 +322,13 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
     props.chat.activeGenerationChange,
   );
   const empty = createMemo(() => !timeline.length && !isChatContentActivity(props.chat.activity()));
+  // A message of ours the server has not answered with any row of its turn.
+  const awaitingTurn = createMemo(() => {
+    const last = props.chat.messages().at(-1);
+    if (!last || last.role !== "user" || !last.local) return false;
+    if (!props.chat.streaming() && !props.chat.activity()) return false;
+    return timeline.at(-1)?.type === "message";
+  });
 
   let scrollFrame: number | null = null;
   let typewriterTailFrame: number | null = null;
@@ -407,7 +414,9 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
   };
   // Normal tail movement uses whole pixels. Panel reflow anchoring must retain
   // fractional scroll positions or each resize frame accumulates visible drift.
-  const setViewportScrollTop = (next: number, round = true) => {
+  const setViewportScrollTop = (next: number, round = true, glide = false) => {
+    // A send's glide owns the viewport until it lands (glideToSent).
+    if (sendGlide != null && !glide) return;
     viewport.scrollTop = round ? Math.round(next) : next;
     programmaticScrollTop = viewport.scrollTop;
     previousScrollTop = viewport.scrollTop;
@@ -420,6 +429,36 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
   });
   const syncLatestDistance = () => {
     setLatestDistance(Math.max(0, viewportMaxScrollTop() - viewport.scrollTop));
+  };
+  /*
+   * Sending glides the view to the new message: one quick ease-out, faster
+   * than Scroll to latest, aimed at the bottom as it is on each frame (the
+   * message is already in the thread, and the composer may be folding). The
+   * tail follow and every other scroll wait until it lands, so nothing snaps
+   * underneath it; a touch or wheel hands the view straight back.
+   */
+  let sendGlide: number | null = null;
+  const SEND_GLIDE_MS = 240;
+  const cancelSendGlide = () => { if (sendGlide != null) cancelAnimationFrame(sendGlide); sendGlide = null; };
+  const glideToSent = (then: () => void) => {
+    cancelSendGlide();
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) { then(); return; }
+    const from = viewport.scrollTop;
+    const started = performance.now();
+    const step = () => {
+      const elapsed = performance.now() - started;
+      const progress = Math.min(1, elapsed / SEND_GLIDE_MS);
+      const eased = 1 - (1 - progress) ** 3;
+      const target = viewport.scrollHeight - viewport.clientHeight;
+      // Once landed it keeps chasing the bottom while the turn's first rows
+      // come in, so they extend the glide instead of snapping after it.
+      const next = progress < 1 ? from + (target - from) * eased : viewport.scrollTop + (target - viewport.scrollTop) * 0.3;
+      const chasing = progress >= 1 && elapsed < SEND_GLIDE_MS + 1200 && Math.abs(target - next) > 1;
+      sendGlide = progress < 1 || chasing ? requestAnimationFrame(step) : null;
+      setViewportScrollTop(next, true, true);
+      if (sendGlide == null) then();
+    };
+    sendGlide = requestAnimationFrame(step);
   };
   const scrollBottomNow = () => {
     if (scrollFrame != null) {
@@ -686,11 +725,11 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
     // switch did, and sending while scrolled up left the view where it was.
     if (trailingUserId && trailingUserId !== previousUserMessageId) {
       previousUserMessageId = trailingUserId;
-      if (rendererUsesInertialTailFollow()) resumeTypewriterTailFollow("user-send");
-      else {
-        setFollowing(true);
-        scrollBottom();
-      }
+      setFollowing(true);
+      glideToSent(() => {
+        if (rendererUsesInertialTailFollow()) resumeTypewriterTailFollow("user-send");
+        else scrollBottom();
+      });
       return;
     }
     previousUserMessageId = trailingUserId;
@@ -1074,6 +1113,8 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
     viewport.addEventListener("scroll", onScroll, { passive: true });
     viewport.addEventListener("wheel", claimUserScroll, { passive: true });
     viewport.addEventListener("touchstart", onTouchStart, { passive: true });
+    viewport.addEventListener("wheel", cancelSendGlide, { passive: true });
+    viewport.addEventListener("touchstart", cancelSendGlide, { passive: true });
     viewport.addEventListener("pointerdown", onPointerDown, { passive: true });
     viewport.addEventListener("keydown", onKeyDown, { passive: true });
     window.addEventListener(COMPOSER_SURFACE_CHANGE_EVENT, syncComposerSurface);
@@ -1219,6 +1260,20 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
             </article>
           </div>;
         }}</For>
+        {/* Sent, and the server has not started the turn yet: its starting
+            header shows with the message, fading in beside it, so the turn's
+            own header later takes the same spot instead of pushing in. */}
+        <Show when={awaitingTurn()}><div ref={() => {
+          const shownAt = performance.now();
+          onCleanup(() => {
+            // The turn's own header replaces this one mid-fade: it carries
+            // on from the same point instead of snapping to full.
+            const left = 180 - (performance.now() - shownAt);
+            if (left <= 0) return;
+            requestAnimationFrame(() => [...viewport.querySelectorAll<HTMLElement>(".turn-trace")].at(-1)
+              ?.animate([{ opacity: 1 - left / 180 }, { opacity: 1 }], { duration: left, easing: "ease-out" }));
+          });
+        }} data-slot="message-scroller-item" data-arrived=""><TraceStarting startedAt={props.chat.messages().at(-1)?.timestamp} label="Starting" /></div></Show>
         </div>
       </div>
       {/*
