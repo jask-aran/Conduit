@@ -2,6 +2,7 @@ package com.jaskaran.conduit;
 
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.net.ConnectivityManager;
 import android.net.Uri;
 import android.os.Build;
@@ -15,14 +16,19 @@ import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 
+import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.security.MessageDigest;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipInputStream;
 
 /**
  * Download a release APK ahead of time, and hand it to the installer on request.
@@ -135,6 +141,148 @@ public class ConduitUpdaterPlugin extends Plugin {
         install.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
         context.startActivity(install);
         call.resolve(new JSObject());
+    }
+
+    // --- Live update of the interface (development builds) -----------------
+    //
+    // The app launches from the interface on the device; this only swaps in a
+    // newer one the server offers, after it is downloaded and unpacked whole.
+    // A swapped-in interface has to say it started (confirmBundle) before the
+    // app is next launched, or MainActivity puts the bundled one back.
+
+    static final String BUNDLE_PREFS = "ConduitBundle";
+    static final String PENDING = "pending";
+
+    private File bundles() {
+        File dir = new File(getContext().getFilesDir(), "bundles");
+        dir.mkdirs();
+        return dir;
+    }
+
+    /** The build the app is showing: a downloaded one, or the bundled one's. */
+    private String currentBuild() throws Exception {
+        String path = getBridge().getServerBasePath();
+        if (path != null && !path.isEmpty() && new File(path).getParentFile() != null
+                && new File(path).getParentFile().equals(bundles())) return new File(path).getName();
+        MessageDigest sha = MessageDigest.getInstance("SHA-256");
+        try (InputStream in = getContext().getAssets().open("public/index.html")) {
+            byte[] buffer = new byte[16 * 1024];
+            for (int read; (read = in.read(buffer)) > 0; ) sha.update(buffer, 0, read);
+        }
+        StringBuilder hex = new StringBuilder();
+        for (byte b : sha.digest()) hex.append(String.format("%02x", b));
+        return hex.substring(0, 16);
+    }
+
+    private static HttpURLConnection get(String url) throws Exception {
+        HttpURLConnection connection = (HttpURLConnection) new URL(url).openConnection();
+        if (connection instanceof javax.net.ssl.HttpsURLConnection) ConduitWebViewClient.trustPaired((javax.net.ssl.HttpsURLConnection) connection);
+        connection.setConnectTimeout(10_000);
+        connection.setReadTimeout(30_000);
+        if (connection.getResponseCode() != 200) throw new IllegalStateException("HTTP " + connection.getResponseCode() + " for " + url);
+        return connection;
+    }
+
+    /** Fetch the server's interface if it differs from the one showing; never applies it. */
+    @PluginMethod
+    public void stageBundle(PluginCall call) {
+        String origin = call.getString("origin");
+        if (origin == null || !(origin.startsWith("https://") || origin.startsWith("http://"))) {
+            call.reject("A server origin is required");
+            return;
+        }
+        worker.execute(() -> {
+            File part = null;
+            try {
+                String manifest;
+                HttpURLConnection connection = get(origin + "/client-bundle/manifest.json");
+                try (BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getInputStream()))) {
+                    StringBuilder text = new StringBuilder();
+                    for (String line; (line = reader.readLine()) != null; ) text.append(line);
+                    manifest = text.toString();
+                } finally { connection.disconnect(); }
+                String build = new org.json.JSONObject(manifest).getString("build");
+                if (!build.matches("[0-9a-f]{16}")) throw new IllegalStateException("Unexpected build name");
+                JSObject result = new JSObject();
+                result.put("build", build);
+                String current = currentBuild();
+                if (build.equals(current)) { result.put("state", "current"); call.resolve(result); return; }
+                File target = new File(bundles(), build);
+                if (!new File(target, "index.html").isFile()) {
+                    part = new File(bundles(), build + ".part");
+                    deleteTree(part);
+                    part.mkdirs();
+                    String root = part.getCanonicalPath() + File.separator;
+                    connection = get(origin + "/client-bundle/" + build + ".zip");
+                    try (ZipInputStream zip = new ZipInputStream(connection.getInputStream())) {
+                        byte[] buffer = new byte[64 * 1024];
+                        for (ZipEntry entry; (entry = zip.getNextEntry()) != null; ) {
+                            File out = new File(part, entry.getName());
+                            // Nothing may land outside the bundle's own folder.
+                            if (!out.getCanonicalPath().startsWith(root)) throw new IllegalStateException("Bad path in bundle");
+                            if (entry.isDirectory()) { out.mkdirs(); continue; }
+                            out.getParentFile().mkdirs();
+                            try (OutputStream file = new FileOutputStream(out)) {
+                                for (int read; (read = zip.read(buffer)) > 0; ) file.write(buffer, 0, read);
+                            }
+                        }
+                    } finally { connection.disconnect(); }
+                    if (!new File(part, "index.html").isFile()) throw new IllegalStateException("Bundle has no index.html");
+                    deleteTree(target);
+                    if (!part.renameTo(target)) throw new IllegalStateException("Could not keep the bundle");
+                    part = null;
+                }
+                // Keep this one and the one showing; nothing older.
+                File[] all = bundles().listFiles();
+                if (all != null) for (File dir : all) if (!dir.getName().equals(build) && !dir.getName().equals(current)) deleteTree(dir);
+                result.put("state", "staged");
+                call.resolve(result);
+            } catch (Exception error) {
+                if (part != null) deleteTree(part);
+                call.reject(error.getMessage() == null ? "Live update failed" : error.getMessage());
+            }
+        });
+    }
+
+    /** Switch to a staged interface now: the page reloads from it. */
+    @PluginMethod
+    public void applyBundle(PluginCall call) {
+        String build = call.getString("build");
+        File target = build == null ? null : new File(bundles(), build);
+        if (target == null || !build.matches("[0-9a-f]{16}") || !new File(target, "index.html").isFile()) {
+            call.reject("No staged bundle " + build);
+            return;
+        }
+        String path = target.getAbsolutePath();
+        getContext().getSharedPreferences(BUNDLE_PREFS, Context.MODE_PRIVATE).edit().putString(PENDING, path).commit();
+        getContext().getSharedPreferences(com.getcapacitor.plugin.WebView.WEBVIEW_PREFS_NAME, Context.MODE_PRIVATE)
+            .edit().putString(com.getcapacitor.plugin.WebView.CAP_SERVER_PATH, path).commit();
+        call.resolve(new JSObject());
+        getActivity().runOnUiThread(() -> getBridge().setServerBasePath(path));
+    }
+
+    /** The interface started: keep it for the next launch. */
+    @PluginMethod
+    public void confirmBundle(PluginCall call) {
+        getContext().getSharedPreferences(BUNDLE_PREFS, Context.MODE_PRIVATE).edit().remove(PENDING).commit();
+        JSObject result = new JSObject();
+        try { result.put("build", currentBuild()); } catch (Exception ignored) { }
+        call.resolve(result);
+    }
+
+    /** Called before the bridge exists: an interface that never confirmed is dropped. */
+    static void revertUnconfirmed(Context context) {
+        SharedPreferences prefs = context.getSharedPreferences(BUNDLE_PREFS, Context.MODE_PRIVATE);
+        if (prefs.getString(PENDING, null) == null) return;
+        prefs.edit().remove(PENDING).commit();
+        context.getSharedPreferences(com.getcapacitor.plugin.WebView.WEBVIEW_PREFS_NAME, Context.MODE_PRIVATE)
+            .edit().remove(com.getcapacitor.plugin.WebView.CAP_SERVER_PATH).commit();
+    }
+
+    private static void deleteTree(File file) {
+        File[] children = file.listFiles();
+        if (children != null) for (File child : children) deleteTree(child);
+        file.delete();
     }
 
     private static JSObject ready(boolean ready) {

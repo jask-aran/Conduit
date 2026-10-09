@@ -55,6 +55,9 @@ public class MainActivity extends BridgeActivity {
         // Registered before the bridge is built, which is the only point at
         // which a plugin living in the app rather than in a package can be
         // added to it.
+        // A live-updated interface that never said it started is put back to
+        // the bundled one before the bridge reads which one to load.
+        ConduitUpdaterPlugin.revertUnconfirmed(this);
         registerPlugin(ConduitDiscoveryPlugin.class);
         registerPlugin(ConduitKeyboardPlugin.class);
         registerPlugin(ConduitTlsPlugin.class);
