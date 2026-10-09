@@ -32,7 +32,8 @@ export function isNewerVersion(candidate: string, current: string): boolean {
  * shown -- so nothing here carries a Conduit token to a third party.
  */
 export async function latestRelease(fetchImpl: typeof fetch = fetch): Promise<PublishedRelease | null> {
-  const response = await fetchImpl(RELEASES_API, { headers: { accept: "application/vnd.github+json" } });
+  // A question, not a download: answered in seconds or not at all.
+  const response = await fetchImpl(RELEASES_API, { headers: { accept: "application/vnd.github+json" }, signal: AbortSignal.timeout(8_000) });
   if (!response.ok) return null;
   const body = await response.json() as { tag_name?: unknown; assets?: unknown };
   const tag = typeof body.tag_name === "string" ? body.tag_name : "";

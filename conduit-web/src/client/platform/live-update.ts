@@ -21,6 +21,16 @@ interface BundlePlugin {
 
 let staged: string | null = null;
 let checking = false;
+let now: (() => Promise<"current" | "applying" | "unreachable">) | null = null;
+
+/**
+ * Check for updates, pressed by hand on a development client: take the
+ * connected server's interface now (the page reloads into it) rather than at
+ * the next app switch. Null when this client does not live-update.
+ */
+export function liveUpdateNow() {
+  return now ? now() : null;
+}
 
 export async function startLiveUpdate(origin: () => string | null): Promise<void> {
   if (installedClientKind !== "android") return;
@@ -41,6 +51,18 @@ export async function startLiveUpdate(origin: () => string | null): Promise<void
       // Unreachable, or an older server without bundles: try again later.
     } finally {
       checking = false;
+    }
+  };
+  now = async () => {
+    const server = origin();
+    if (!server) return "unreachable";
+    try {
+      const result = await plugin.stageBundle({ origin: server });
+      if (result.state !== "staged") return "current";
+      await plugin.applyBundle({ build: result.build });
+      return "applying";
+    } catch {
+      return "unreachable";
     }
   };
   void check();

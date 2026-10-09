@@ -8,7 +8,7 @@ import type { ComputerLocation, ComputerPrefetchPayload } from "./api/contracts"
 import { batch, createEffect, createMemo, createRenderEffect, createSignal, ErrorBoundary, For, lazy, on, onCleanup, onMount, Show, untrack, type JSX } from "solid-js";
 import { Portal, render } from "solid-js/web";
 import { androidShell, desktopShell, isInstalledClient } from "./platform/installed-client.ts";
-import { startLiveUpdate } from "./platform/live-update.ts";
+import { liveUpdateNow, startLiveUpdate } from "./platform/live-update.ts";
 // The clients that stage a downloaded update and install it on request.
 const updateShell = desktopShell ?? androidShell;
 import {
@@ -951,27 +951,30 @@ function App() {
     // waits for Wi-Fi, which can be hours, and a spinner that long is a lie.
     if (quiet) quietCheck = true;
     else setPwaUpdating(true);
-    const notice = quiet ? null : toast.loading("Checking for updates…");
     try {
+      // A development Android client takes the connected server's interface:
+      // a few MB from a server it is already talking to, then a reload.
+      if (!quiet) {
+        const live = liveUpdateNow();
+        if (live) {
+          setUpdateState({ kind: "working", label: "Updating Conduit…" });
+          const outcome = await live;
+          if (outcome === "current") sayUpToDate();
+          else if (outcome === "unreachable") { setUpdateState({ kind: "idle" }); toast.error("Could not reach the server to update."); }
+          return;
+        }
+      }
+      // The answer is in the sidebar row; a newer version downloads there with
+      // its progress, and the row offers it once it is ready.
       const result = await shell.prepareUpdate((progress) => {
         if (quiet) return;
         const share = progress.total ? Math.round((progress.downloaded / progress.total) * 100) : 0;
-        const label = `Downloading ${progress.version}… ${share}%`;
-        setUpdateState({ kind: "working", label });
-        if (notice) toast.loading(label, { id: notice });
+        setUpdateState({ kind: "working", label: `Downloading ${progress.version}… ${share}%` });
       }, quiet);
-      if (result.kind === "ready") {
-        setUpdateState({ kind: "ready" });
-        if (notice) toast.success(`Conduit ${result.version} is ready to ${androidShell ? "install" : "restart"}`, { id: notice });
-      } else if (quiet) {
-        // Nothing to say.
-      } else {
-        sayUpToDate();
-        if (notice) toast.success("Conduit is up to date", { id: notice });
-      }
+      if (result.kind === "ready") setUpdateState({ kind: "ready" });
+      else if (!quiet) sayUpToDate();
     } catch (error) {
-      if (!quiet) setUpdateState({ kind: "idle" });
-      if (notice) { toast.dismiss(notice); showError(error); }
+      if (!quiet) { setUpdateState({ kind: "idle" }); showError(error); }
     } finally {
       if (quiet) quietCheck = false;
     }
@@ -990,10 +993,7 @@ function App() {
       // An unreachable server can leave the worker's fetch hanging; give up
       // rather than spin forever (a new build gets its two minutes to install).
       const updated = await Promise.race([forcePwaUpdate(), new Promise<never>((_, reject) => setTimeout(() => reject(new Error("Could not check for updates. Try again when the server is reachable.")), 150_000))]);
-      if (!updated) {
-        sayUpToDate();
-        toast.success("Conduit is up to date");
-      }
+      if (!updated) sayUpToDate();
     } catch (error) {
       setPwaUpdating(false);
       showError(error);
