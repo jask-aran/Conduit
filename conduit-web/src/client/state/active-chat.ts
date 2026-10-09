@@ -1145,20 +1145,33 @@ export function createActiveChat(options: ActiveChatOptions) {
       return;
     }
 
-    if (!live() || live()!.chatId !== selectedId() || !session.isOpen()) {
-      setGeneration("submitting");
-      try { await requireAgent("prompt"); } catch (error) { setGeneration("idle"); onError(error); return; }
-    }
-
+    /*
+     * Shown before the server has it: the message joins the transcript and
+     * the draft empties at once, and only then does an agent that is not
+     * running start. A failure to start takes both back.
+     */
     const previous = messages();
     const editId = editingEntryId();
-    setDraft("");
-    setMessages((current) => {
+    const placeLocal = (current: Message[]) => {
+      if (current.some((item) => item.id === messageId)) return current;
       if (!editId) return [...current, local];
       const index = current.findIndex((item) => item.id === editId);
       return index >= 0 ? [...current.slice(0, index), local] : [...current, local];
-    });
+    };
+    setDraft("");
+    setMessages(placeLocal);
     setGeneration("submitting");
+    if (!live() || live()!.chatId !== selectedId() || !session.isOpen()) {
+      try { await requireAgent("prompt"); } catch (error) {
+        setMessages(previous);
+        setDraft(prepared.text);
+        setGeneration("idle");
+        onError(error);
+        return;
+      }
+      // A snapshot read while the agent started may not hold it yet.
+      setMessages(placeLocal);
+    }
     try {
       session.send(editId
         ? { type: "fork_and_prompt", entryId: editId, messageId, message: prepared.message, attachmentIds: prepared.attachmentIds, model: models.model(), thinkingLevel: models.effort() }
