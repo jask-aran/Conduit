@@ -453,6 +453,9 @@ svg.lucide { stroke-width: 2.4; }
 }
 .composer textarea, .composer-actions { position: relative; z-index: 2; }
 .composer-mobile-plus { display: none; }
+/* A plain button, not Button: drop the UA ring as Button does; keyboard focus shows as the hover wash. */
+.composer-plus-trigger { outline: none; }
+.composer-plus-trigger:focus-visible { background: var(--accent); }
 .composer-input-shell { position: relative; min-height: 35.2px; }
 .composer textarea { display: block; width: 100%; min-height: 35.2px; max-height: 153.6px; resize: none; overflow-y: auto; border: 0; outline: 0; background: transparent; padding: 8.8px 9.6px 1.6px; color: inherit; line-height: 1.45; }
 .composer textarea:placeholder-shown { height: 35.2px !important; }
