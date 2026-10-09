@@ -22,7 +22,7 @@ import type { ComposerModels } from "./composer-models";
 import type { ComposerPermissions } from "./composer-permissions";
 import type { ServiceLevelSettings } from "../state/service-level-settings";
 import type { VoiceDictationSettings } from "./voice-dictation-types";
-import { isMobileLayout, MOBILE_LAYOUT_QUERY } from "../navigation/mobile-layout";
+import { isMobileLayout, KEYBOARD_HIDDEN_EVENT, MOBILE_LAYOUT_QUERY } from "../navigation/mobile-layout";
 import { QueuedMessages } from "./queued-messages";
 import { AttachmentStrip } from "./attachment-strip";
 import { composerSlashCommands } from "./composer-slash-commands";
@@ -641,6 +641,10 @@ export function Composer(props: {
     };
     const voiceToggle = () => { if (!props.keyboardOwner || props.keyboardOwner()) toggleDictation(); };
     const phoneComposerChanged = () => setPhoneComposer(phoneComposerLayout());
+    // Keyboard put away with nothing typed: leave the text pill too.
+    const keyboardHidden = () => { if (voiceFirst() && document.activeElement === input && !hasText()) input.blur(); };
+    window.addEventListener(KEYBOARD_HIDDEN_EVENT, keyboardHidden);
+    onCleanup(() => window.removeEventListener(KEYBOARD_HIDDEN_EVENT, keyboardHidden));
     window.addEventListener(PHONE_COMPOSER_CHANGE_EVENT, phoneComposerChanged);
     onCleanup(() => window.removeEventListener(PHONE_COMPOSER_CHANGE_EVENT, phoneComposerChanged));
     window.addEventListener(COMPOSER_SURFACE_CHANGE_EVENT, composerSurfaceChanged);
