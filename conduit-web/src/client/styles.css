@@ -362,7 +362,7 @@ svg.lucide { stroke-width: 2.4; }
 }
 .message-scroller-button[data-slot="button"] svg { width: 14.4px; height: 14.4px; }
 .message-scroller-button[data-slot="button"]:hover:not(:disabled) { filter: brightness(1.12); }
-.message-scroller-button[data-slot="button"]:not(.message-cancel-edit) { opacity: 0; pointer-events: none; transition: opacity .18s ease; }
+.message-scroller-button[data-slot="button"]:not(.message-cancel-edit) { opacity: 0; pointer-events: none; transition: opacity .18s ease, bottom .22s cubic-bezier(.2, .8, .2, 1); }
 .message-scroller-button[data-slot="button"][data-shown] { opacity: 1; pointer-events: auto; }
 /* A single class owns the material. Do not add material declarations to each
    component: the composer, Follow button, and desktop header pill must match. */
@@ -1141,7 +1141,7 @@ svg.lucide { stroke-width: 2.4; }
 }
 .message-scroller-button[data-slot="button"] svg { width: 18px; height: 18px; }
 .message-scroller-button[data-slot="button"]:hover:not(:disabled) { filter: brightness(1.12); }
-.message-scroller-button[data-slot="button"]:not(.message-cancel-edit) { opacity: 0; pointer-events: none; transition: opacity .18s ease; }
+.message-scroller-button[data-slot="button"]:not(.message-cancel-edit) { opacity: 0; pointer-events: none; transition: opacity .18s ease, bottom .22s cubic-bezier(.2, .8, .2, 1); }
 .message-scroller-button[data-slot="button"][data-shown] { opacity: 1; pointer-events: auto; }
 /* A single class owns the material. Do not add material declarations to each
    component: the composer, Follow button, and desktop header pill must match. */
