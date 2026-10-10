@@ -1,5 +1,6 @@
 import { isConduitManagedProject } from "./sidebar-preferences";
 import { ServerSwitcher } from "./server-switcher";
+import { createComposerSurfaceSignal } from "../chat/composer-surface";
 import { batch, createEffect, createMemo, createSignal, For, lazy, onCleanup, onMount, Show } from "solid-js";
 import { FrostDialog } from "@/components/frost";
 import {
@@ -378,6 +379,7 @@ export function Sidebar(props: {
     onCleanup(() => window.removeEventListener(UI_PREFERENCE_CHANGE_EVENT, syncPreferences));
   });
   const [phoneLayout, setPhoneLayout] = createSignal(isMobileLayout());
+  const headerSurface = createComposerSurfaceSignal();
   onMount(() => {
     const media = typeof matchMedia === "function" ? matchMedia(MOBILE_LAYOUT_QUERY) : null;
     if (!media) return;
@@ -1161,9 +1163,11 @@ export function Sidebar(props: {
     <aside ref={sidebarRoot} data-slot="sidebar" data-region="sidebar" data-state={phoneLayout() ? "expanded" : collapsed() ? "collapsed" : "expanded"} data-visual-state={phoneLayout() ? "expanded" : visualCollapsed() ? "collapsed" : "expanded"} data-mobile-open={props.mobileOpen} class="conduit-sidebar" style={{ width: phoneLayout() ? undefined : `${shellWidth()}px` }} aria-hidden={phoneLayout() && !props.mobileOpen ? true : undefined} inert={phoneLayout() && !props.mobileOpen ? true : undefined} onTransitionEnd={(event) => { if (event.target === sidebarRoot && event.propertyName === "width") finishSidebarMotion?.(); }} onTransitionCancel={(event) => { if (event.target === sidebarRoot && event.propertyName === "width") finishSidebarMotion?.(); }}>
       <div ref={sidebarSurface} data-slot="sidebar-container" class="sidebar-container">
         <div data-sidebar="header">
+          <div class={`sidebar-header-pill ${phoneLayout() ? "composer-surface-material" : ""}`} data-composer-surface={phoneLayout() ? headerSurface() : undefined}>
           <Button variant="ghost" size="icon-sm" data-sidebar="trigger" aria-label="Toggle Sidebar" aria-expanded={isMobileLayout() ? props.mobileOpen : !collapsed()} onClick={onSidebarTrigger}><PanelLeftIcon /></Button>
           <button data-sidebar="brand" aria-label="Conduit" onClick={() => { setArea("conduit"); closeMobile(); props.onOpenDashboard(); enterPane(); }}><span>Conduit</span></button>
-          <div class="sidebar-area-toggle" data-area={area()} role="group" aria-label="Sidebar section">
+          </div>
+          <div class={`sidebar-area-toggle ${phoneLayout() ? "composer-surface-material" : ""}`} data-composer-surface={phoneLayout() ? headerSurface() : undefined} data-area={area()} role="group" aria-label="Sidebar section">
             <button type="button" aria-label="Conduit" title="Conduit" aria-pressed={area() === "conduit"} onClick={() => setArea("conduit")}><LayoutDashboardIcon /></button>
             <button type="button" aria-label="Computer" title="Computer" aria-pressed={area() === "computer"} onClick={() => setArea("computer")}><MonitorIcon /></button>
           </div>
