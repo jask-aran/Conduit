@@ -94,7 +94,7 @@
 .ui-icon > .workspace-glyph svg { width: 100%; height: 100%; }
 .ui-icon:has(> .harness-mark) { width: calc(0.875 * var(--u-type)); height: calc(0.875 * var(--u-type)); }
 .ui-row > .ui-label { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ui-row > small { flex: none; color: var(--muted-foreground); font-weight: 400; font-size: calc(0.75 * var(--u-type)); }
+.ui-row > :is(small, .ui-meta) { flex: none; margin-left: auto; color: var(--muted-foreground); font-weight: 400; font-size: calc(0.75 * var(--u-type)); }
 .ui-row > .ui-keys { display: inline-flex; flex: none; gap: calc(0.1875 * var(--u-space)); }
 .ui-row > .ui-chevron { width: calc(0.875 * var(--u-type)); height: calc(0.875 * var(--u-type)); color: var(--muted-foreground); }
 .ui-row:is(:hover, [data-highlighted]) { background: var(--frost-wash); color: var(--foreground); }
@@ -245,3 +245,13 @@
 }
 /* A rule between groups of an app menu's rows, where a library menu has sections. */
 .ui-menu .ui-rule { height: 1px; margin: var(--frost-inset) calc(-1 * var(--frost-inset)); border: 0; background: var(--frost-rule); }
+/* A menu keeps its caller's class for its width and placement; its shell
+   (inset, radius, lift) is the library's. */
+.ui-frost.ui-menu { padding: var(--frost-inset); border-radius: var(--frost-radius); }
+.ui-frost.ui-menu[data-lift="raised"] { box-shadow: var(--frost-lift-raised), var(--frost-highlight); }
+/* An app row's own text runs out in an ellipsis, as a library label does. */
+.ui-row > span:not(.ui-icon, .ui-keys, .ui-meta) { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* An item's detail: a second line under its label (a route's address). */
+.ui-row > .ui-label[data-stacked] { display: flex; flex-direction: column; }
+.ui-label > .ui-detail { overflow: hidden; color: var(--muted-foreground); font: 400 calc(0.6875 * var(--u-type))/1.3 inherit; font-family: inherit; text-overflow: ellipsis; white-space: nowrap; }

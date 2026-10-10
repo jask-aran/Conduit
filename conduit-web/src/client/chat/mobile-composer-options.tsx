@@ -22,7 +22,7 @@ import type { ComposerModels } from "./composer-models";
 import type { ComposerPermissions } from "./composer-permissions";
 import type { ServiceLevelSettings } from "../state/service-level-settings";
 import { HarnessMark } from "../harness-brand";
-import { StepSlider } from "./step-slider";
+import { StepSlider, sliderParts } from "./step-slider";
 import { contextUsagePercent } from "./context-metrics";
 import { isWorkspace, PlaceGlyph, type PlaceOptions } from "./place-picker";
 
@@ -85,7 +85,7 @@ export function MobileComposerOptions(props: {
   const keepKeyboard = (event: PointerEvent) => {
     const active = document.activeElement;
     if (!(active instanceof HTMLTextAreaElement) || !root.closest(".composer-wrap")?.contains(active)) return;
-    if ((event.target as Element | null)?.closest?.('[data-slot="menu-content"], [data-slot="menu-sub-content"]')) return;
+    if ((event.target as Element | null)?.closest?.('[data-slot="menu-content"], [data-slot="menu-sub-content"], [data-slot="ui-menu-content"], [data-slot="ui-menu-sub-content"]')) return;
     event.preventDefault();
   };
   createEffect(() => {
@@ -114,7 +114,7 @@ export function MobileComposerOptions(props: {
           <MenuSeparator />
           <StepSlider label="Effort" value={composer.models.effort()} disabled={!composer.serverOnline || levels().length < 2}
             options={levels().map((level) => ({ value: level, label: thinkingLabel(level) }))}
-            valueControl={(label) => <button type="button" class="step-slider-value" disabled={!composer.serverOnline || levels().length < 2}
+            valueControl={(label) => <button type="button" class={sliderParts().value} data-opens="" disabled={!composer.serverOnline || levels().length < 2}
               onClick={() => go("effort")}>{label()}<ChevronRightIcon /></button>}
             onChange={(value) => void composer.models.chooseEffort(value)} />
           <Show when={composer.permissions?.profiles().length}>

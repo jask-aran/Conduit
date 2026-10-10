@@ -1,3 +1,5 @@
+import { libraryPiece } from "@/components/ui/swap";
+import { useLibrary } from "@/components/ui/swap";
 import { createSignal, For, Show } from "solid-js";
 import { GaugeIcon, PaperclipIcon, PlusIcon, ShieldCheckIcon } from "lucide-solid";
 import {
@@ -57,11 +59,11 @@ export function ComposerPlusMenu(props: {
   const [open, setOpen] = createSignal(false);
 
   return <Menu open={open()} onOpenChange={setOpen}>
-    <MenuTrigger class="composer-plus-trigger" aria-label="Attach and more" title="Attach and more" disabled={props.disabled}><PlusIcon /></MenuTrigger>
+    <MenuTrigger {...libraryPiece("icon-button").data} class={`composer-plus-trigger ${libraryPiece("icon-button").class}`.trim()} aria-label="Attach and more" title="Attach and more" disabled={props.disabled}><PlusIcon /></MenuTrigger>
     <MenuContent class="composer-plus-menu">
       <Show when={has("model")}>
         <MenuSub>
-          <MenuSubTrigger disabled={!props.modelSwitch}><span class="composer-plus-name">Model</span><span class="composer-plus-value">{model()?.label || props.models.model() || "Not selected"}</span></MenuSubTrigger>
+          <MenuSubTrigger disabled={!props.modelSwitch}><span class={useLibrary() ? "ui-label" : "composer-plus-name"}>Model</span><span class={useLibrary() ? "ui-meta" : "composer-plus-value"}>{model()?.label || props.models.model() || "Not selected"}</span></MenuSubTrigger>
           <MenuSubContent class="composer-quick-model-menu">
             <ModelMenuItems models={props.models.models()} model={props.models.model()} thinkingLevel={props.models.effort()} notice={props.models.notice()}
               onModelChange={(value) => void props.models.chooseModel(value)} onThinkingLevelChange={(value) => void props.models.chooseEffort(value)}
@@ -71,7 +73,7 @@ export function ComposerPlusMenu(props: {
       </Show>
       <Show when={has("profile") && props.profiles.length}>
         <MenuSub>
-          <MenuSubTrigger><HarnessMark id={props.activeProfile?.implementation || "conduit"} class="size-4" /><span class="composer-plus-name">Profile</span><span class="composer-plus-value">{props.activeProfile?.label || "General"}</span></MenuSubTrigger>
+          <MenuSubTrigger><HarnessMark id={props.activeProfile?.implementation || "conduit"} class="size-4" /><span class={useLibrary() ? "ui-label" : "composer-plus-name"}>Profile</span><span class={useLibrary() ? "ui-meta" : "composer-plus-value"}>{props.activeProfile?.label || "General"}</span></MenuSubTrigger>
           <MenuSubContent class="w-72">
             <MenuGroup><MenuLabel>Profile</MenuLabel><MenuRadioGroup value={props.activeProfile?.id || ""} onChange={props.onChooseProfile}>
               <For each={props.profiles}>{(item) => <MenuRadioItem value={item.id} disabled={(props.chat.status() !== "draft" && item.id !== props.activeProfile?.id) || item.disabled}><HarnessMark id={item.implementation || "conduit"} class="size-4" /><span class="composer-profile-copy"><span>{item.label}</span><small>{item.implementation || "conduit"}</small></span></MenuRadioItem>}</For>
@@ -81,7 +83,7 @@ export function ComposerPlusMenu(props: {
       </Show>
       <Show when={has("permissions") && props.permissions?.profiles().length}>
         <MenuSub>
-          <MenuSubTrigger><ShieldCheckIcon /><span class="composer-plus-name">Permissions</span><span class="composer-plus-value">{permission()?.label || "Default"}</span></MenuSubTrigger>
+          <MenuSubTrigger><ShieldCheckIcon /><span class={useLibrary() ? "ui-label" : "composer-plus-name"}>Permissions</span><span class={useLibrary() ? "ui-meta" : "composer-plus-value"}>{permission()?.label || "Default"}</span></MenuSubTrigger>
           <MenuSubContent class="w-72">
             <MenuGroup><MenuLabel>Permissions</MenuLabel><MenuRadioGroup value={props.permissions?.selected() || ""} onChange={(value) => void props.permissions?.choose(value)}>
               <For each={props.permissions?.profiles() || []}>{(profile) => <MenuRadioItem value={profile.id} disabled={!profile.allowed}><span class="shrink-0 whitespace-nowrap">{profile.label}</span><Show when={profile.description}><span class="ml-auto max-w-40 truncate text-xs text-muted-foreground">{profile.description}</span></Show></MenuRadioItem>}</For>
@@ -91,7 +93,7 @@ export function ComposerPlusMenu(props: {
       </Show>
       <Show when={has("permissions") && props.serviceLevels?.levels().length}>
         <MenuSub>
-          <MenuSubTrigger><GaugeIcon /><span class="composer-plus-name">Service level</span><span class="composer-plus-value">{service()?.label || "Default"}</span></MenuSubTrigger>
+          <MenuSubTrigger><GaugeIcon /><span class={useLibrary() ? "ui-label" : "composer-plus-name"}>Service level</span><span class={useLibrary() ? "ui-meta" : "composer-plus-value"}>{service()?.label || "Default"}</span></MenuSubTrigger>
           <MenuSubContent>
             <MenuGroup><MenuLabel>Service level</MenuLabel><MenuRadioGroup value={props.serviceLevels?.selected() || ""} onChange={(value) => void props.serviceLevels?.choose(value)}>
               <For each={props.serviceLevels?.levels() || []}>{(level) => <MenuRadioItem value={level.id}>{level.label}</MenuRadioItem>}</For>
@@ -102,7 +104,7 @@ export function ComposerPlusMenu(props: {
       <Show when={props.place}>
         <Show when={anyFolded()}><MenuSeparator /></Show>
         <MenuSub>
-          <MenuSubTrigger disabled={props.place!.disabled}><PlaceGlyph project={placed()} /><span class="composer-plus-name">Project</span><span class="composer-plus-value">{placed()?.name || "None"}</span></MenuSubTrigger>
+          <MenuSubTrigger disabled={props.place!.disabled}><PlaceGlyph project={placed()} /><span class={useLibrary() ? "ui-label" : "composer-plus-name"}>Project</span><span class={useLibrary() ? "ui-meta" : "composer-plus-value"}>{placed()?.name || "None"}</span></MenuSubTrigger>
           <MenuSubContent class="composer-place-menu">
             {/* The folder button's own list. Keys stay with its search, not the menu's typeahead. */}
             <div ref={(element) => requestAnimationFrame(() => element.querySelector("input")?.focus())}

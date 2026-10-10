@@ -59,14 +59,14 @@ export function HeadingSection(props: { title: string; detail?: JSX.Element; chi
 
 /** An item in a list section. Icon, meta, keys and opens are its parts; checked, disabled and destructive its states. */
 export function Item(props: {
-  icon?: JSX.Element; meta?: JSX.Element; keys?: string[]; opens?: boolean; active?: boolean;
+  icon?: JSX.Element; meta?: JSX.Element; detail?: JSX.Element; keys?: string[]; opens?: boolean; active?: boolean;
   /** field: the label is a field name (title type) and meta its value, as in "CONTEXT  Unavailable ›". */
   field?: boolean; onClick?: () => void;
   checked?: boolean; disabled?: boolean; destructive?: boolean; children: JSX.Element;
 }) {
   return <div role={props.checked !== undefined ? "menuitemradio" : "menuitem"} class="ui-row" aria-checked={props.checked} data-field={props.field ? "" : undefined} onClick={props.onClick}
     data-highlighted={props.active ? "" : undefined} data-checked={props.checked ? "" : undefined} data-disabled={props.disabled ? "" : undefined} data-destructive={props.destructive ? "" : undefined}>
-    <Show when={props.icon}><span class="ui-icon">{props.icon}</span></Show><span class="ui-label">{props.children}</span>
+    <Show when={props.icon}><span class="ui-icon">{props.icon}</span></Show><span class="ui-label" data-stacked={props.detail ? "" : undefined}><Show when={props.detail} fallback={props.children}><span>{props.children}</span><small class="ui-detail">{props.detail}</small></Show></span>
     <Show when={props.meta}><small>{props.meta}</small></Show>
     <Show when={props.keys}><span class="ui-keys"><For each={props.keys}>{(key) => <kbd class="ui-keycap">{key}</kbd>}</For></span></Show>
     <Show when={props.opens}><ChevronRightIcon class="ui-chevron" /></Show>

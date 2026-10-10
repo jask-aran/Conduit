@@ -1,3 +1,4 @@
+import { libraryPiece } from "@/components/ui/swap";
 import { createMemo, For, Show } from "solid-js";
 import { ChevronDownIcon, SearchIcon } from "lucide-solid";
 import {
@@ -16,7 +17,7 @@ import {
   Spinner,
 } from "@/components/primitives";
 import type { ModelOption } from "../api/contracts";
-import { StepSlider } from "./step-slider";
+import { StepSlider, sliderParts } from "./step-slider";
 
 const thinkingLabel = (value: string) => value ? value[0]!.toUpperCase() + value.slice(1) : "Off";
 
@@ -51,7 +52,7 @@ export function ModelMenuItems(props: ModelMenuProps) {
         <StepSlider label="Thinking" value={levels().length > 1 ? props.thinkingLevel : levels()[0]!} disabled={levels().length < 2}
           options={levels().map((level) => ({ value: level, label: thinkingLabel(level) }))}
           valueControl={levels().length < 2 ? undefined : (label) => <MenuSub>
-            <MenuSubTrigger class="step-slider-value">{label()}</MenuSubTrigger>
+            <MenuSubTrigger class={sliderParts().value}>{label()}</MenuSubTrigger>
             <MenuSubContent>
               <MenuGroup><MenuLabel>Thinking</MenuLabel><MenuRadioGroup value={props.thinkingLevel} onChange={props.onThinkingLevelChange}>
                 <For each={levels()}>{(level) => <MenuRadioItem value={level}>{thinkingLabel(level)}</MenuRadioItem>}</For>
@@ -88,7 +89,7 @@ export function ModelSelector(props: {
   const pending = createMemo(() => Boolean(props.loading) && !label());
 
   return <Menu>
-    <MenuTrigger class="model-trigger" classList={{ "composer-model-trigger": Boolean(props.onSearchModels) }} aria-label={pending() ? "Connecting to model" : `${label() || "Model"} ${props.thinkingLevel || "off"}`} disabled={props.disabled || pending()}>
+    <MenuTrigger {...libraryPiece("select").data} class={`model-trigger ${libraryPiece("select").class}`.trim()} classList={{ "composer-model-trigger": Boolean(props.onSearchModels) }} aria-label={pending() ? "Connecting to model" : `${label() || "Model"} ${props.thinkingLevel || "off"}`} disabled={props.disabled || pending()}>
       <Show when={!pending()} fallback={<><Spinner /><span>Connecting…</span></>}>
         <span>{label() || "Model"}</span>
         <span class="text-muted-foreground">{props.thinkingLevel || "off"}</span>

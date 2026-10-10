@@ -1,3 +1,4 @@
+import { useLibrary } from "@/components/ui/swap";
 import { createSignal, For, lazy, onCleanup, onMount, Show } from "solid-js";
 import { ChevronRightIcon, ExternalLinkIcon, PlusIcon, QrCodeIcon, RefreshCwIcon } from "lucide-solid";
 import { Menu, MenuContent, MenuGroup, MenuItem, MenuLabel, MenuRadioGroup, MenuRadioItem, MenuSeparator, MenuSub, MenuSubContent, MenuSubTrigger, MenuTrigger, Spinner } from "@/components/primitives";
@@ -214,19 +215,19 @@ export function ServerSwitcher(props: {
         */}
       <Show when={isInstalledClient()}>
         <MenuRadioItem class="server-route-choice" value={AUTOMATIC}>
-          <span class="server-route-label"><span>Automatic</span>
-            <Show when={inUse()}>{(path) => <code title={path().origin}>{serverPathLabel(path())} · {shortOrigin(path().origin)}</code>}</Show>
+          <span class={useLibrary() ? "ui-label" : "server-route-label"} data-stacked={useLibrary() ? "" : undefined}><span>Automatic</span>
+            <Show when={inUse()}>{(path) => <code class={useLibrary() ? "ui-detail" : undefined} title={path().origin}>{serverPathLabel(path())} · {shortOrigin(path().origin)}</code>}</Show>
           </span>
-          <span class="server-row-latency ml-auto text-xs text-muted-foreground">
+          <span class={useLibrary() ? "ui-meta" : "server-row-latency ml-auto text-xs text-muted-foreground"}>
             {inUse() ? latencyLabel(inUse()!.origin) : ""}
           </span>
         </MenuRadioItem>
       </Show>
       <For each={activeServerPaths()}>{(path) =>
         <MenuRadioItem class="server-route-choice" value={path.origin} disabled={(!canReachOtherOrigins() && path.origin !== location.origin) || unreachable(path.origin)}>
-          <span class="server-route-label"><span>{serverPathLabel(path)}</span><code title={path.origin}>{shortOrigin(path.origin)}</code></span>
+          <span class={useLibrary() ? "ui-label" : "server-route-label"} data-stacked={useLibrary() ? "" : undefined}><span>{serverPathLabel(path)}</span><code class={useLibrary() ? "ui-detail" : undefined} title={path.origin}>{shortOrigin(path.origin)}</code></span>
           <Show when={!isInstalledClient() && !isStandaloneBrowser() && path.origin !== location.origin}><ExternalLinkIcon class="size-3 text-muted-foreground" /></Show>
-          <span class="server-row-latency ml-auto text-xs text-muted-foreground">
+          <span class={useLibrary() ? "ui-meta" : "server-row-latency ml-auto text-xs text-muted-foreground"}>
             {checking() === path.origin ? "Checking…" : latencyLabel(path.origin)}
           </span>
         </MenuRadioItem>}</For>
@@ -255,9 +256,9 @@ export function ServerSwitcher(props: {
             <For each={servers()}>{(entry) =>
               <MenuRadioItem value={entry.origin} disabled={(!canReachOtherOrigins() && entry.origin !== location.origin)
                 || (entry.origin !== activeOrigin() && pathsOf(entry).every((path) => unreachable(path.origin)))}>
-                <span class="truncate">{entry.name}</span>
+                <span class={useLibrary() ? "ui-label" : "truncate"}>{entry.name}</span>
                 <Show when={away(entry)}><ExternalLinkIcon class="size-3 text-muted-foreground" /></Show>
-                <span class="server-row-latency ml-auto text-xs text-muted-foreground">{latencyLabel(entry.origin)}</span>
+                <span class={useLibrary() ? "ui-meta" : "server-row-latency ml-auto text-xs text-muted-foreground"}>{latencyLabel(entry.origin)}</span>
               </MenuRadioItem>}</For>
           </MenuRadioGroup>
         </MenuGroup>
@@ -278,15 +279,15 @@ export function ServerSwitcher(props: {
               dimmed parent, inside the screen, with the opening tap spent. */}
           <Show when={phone()} fallback={<MenuSub>
             <MenuSubTrigger class="server-route-choice">
-            <span class="server-route-label"><span>Route</span>
-              <Show when={inUse()}>{(path) => <code title={path().origin}>{serverPathLabel(path())} · {shortOrigin(path().origin)}</code>}</Show>
+            <span class={useLibrary() ? "ui-label" : "server-route-label"} data-stacked={useLibrary() ? "" : undefined}><span>Route</span>
+              <Show when={inUse()}>{(path) => <code class={useLibrary() ? "ui-detail" : undefined} title={path().origin}>{serverPathLabel(path())} · {shortOrigin(path().origin)}</code>}</Show>
             </span>
             </MenuSubTrigger>
             <MenuSubContent class="server-switcher-menu server-route-menu"><RouteChoices /></MenuSubContent>
           </MenuSub>}>
             <MenuItem class="server-route-choice" closeOnSelect={false} onSelect={() => go("routes")}>
-            <span class="server-route-label"><span>Route</span>
-              <Show when={inUse()}>{(path) => <code title={path().origin}>{serverPathLabel(path())} · {shortOrigin(path().origin)}</code>}</Show>
+            <span class={useLibrary() ? "ui-label" : "server-route-label"} data-stacked={useLibrary() ? "" : undefined}><span>Route</span>
+              <Show when={inUse()}>{(path) => <code class={useLibrary() ? "ui-detail" : undefined} title={path().origin}>{serverPathLabel(path())} · {shortOrigin(path().origin)}</code>}</Show>
             </span>
               <ChevronRightIcon class="menu-chevron" />
             </MenuItem>
