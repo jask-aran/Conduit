@@ -7,7 +7,7 @@ import { DropdownMenu as KMenu } from "@kobalte/core/dropdown-menu";
 import { ContextMenu as KContextMenu } from "@kobalte/core/context-menu";
 import { Popover as KPopover } from "@kobalte/core/popover";
 import * as KTooltip from "@kobalte/core/tooltip";
-import { ChevronRightIcon, LoaderCircleIcon, XIcon } from "lucide-solid";
+import { ChevronRightIcon, LoaderCircleIcon, SearchIcon, XIcon } from "lucide-solid";
 import { useLibrary } from "@/components/ui/swap";
 import { cn } from "@/lib/utils";
 
@@ -72,7 +72,8 @@ const libraryShell = () => useLibrary() ? { "data-surface": "frost", "data-lift"
 
 export const Menu = KMenu;
 export const MenuTrigger = KMenu.Trigger;
-export const MenuGroup = KMenu.Group;
+/* A group of rows; in the Library previews, the library's list section. */
+export function MenuGroup(props: ParentProps<{ class?: string }>) { return <KMenu.Group class={cn(useLibrary() ? "ui-section" : undefined, props.class) || undefined} data-kind={useLibrary() ? "list" : undefined}>{props.children}</KMenu.Group>; }
 export const MenuRadioGroup = KMenu.RadioGroup;
 
 export function MenuContent(props: ParentProps<{ class?: string; onOpenAutoFocus?: (event: Event) => void; onCloseAutoFocus?: (event: Event) => void; onFocusOutside?: (event: FocusOutsideEvent) => void; onPointerDown?: (event: PointerEvent) => void; onClick?: (event: MouseEvent) => void; "data-settling"?: boolean; onPointerDownOutside?: (event: Event) => void }>) {
@@ -157,13 +158,16 @@ export function PopoverSearchList<T>(props: {
       if (row !== undefined) { event.preventDefault(); props.onChoose(row); }
     }
   };
-  return <>
-    <input class="popover-search" placeholder={props.placeholder} value={query()} onInput={(event) => setQuery(event.currentTarget.value)}
+  // Library previews: the library's search section over a list section (library.css).
+  const lib = useLibrary();
+  const field = <input class={lib ? "ui-search" : "popover-search"} placeholder={props.placeholder} value={query()} onInput={(event) => setQuery(event.currentTarget.value)}
       role="combobox" aria-expanded="true" aria-controls={`${id}-list`} aria-activedescendant={active() >= 0 ? `${id}-${active()}` : undefined}
-      onKeyDown={onKeyDown} autofocus />
-    <div class="popover-search-list" id={`${id}-list`} role="listbox" ref={list}>
+      onKeyDown={onKeyDown} autofocus />;
+  return <>
+    {lib ? <div role="search" class="ui-section ui-search-section" data-kind="search"><SearchIcon />{field}</div> : field}
+    <div class={lib ? "ui-section popover-search-list" : "popover-search-list"} data-kind={lib ? "list" : undefined} id={`${id}-list`} role="listbox" ref={list}>
       <For each={rows()} fallback={<div class="popover-search-empty">{props.empty ?? "No matches."}</div>}>{(item, index) =>
-        <button type="button" class="menu-row" role="option" id={`${id}-${index()}`} tabIndex={-1}
+        <button type="button" class={lib ? "ui-row" : "menu-row"} role="option" id={`${id}-${index()}`} tabIndex={-1}
           aria-selected={active() === index()} data-highlighted={active() === index() || undefined} data-checked={props.isCurrent?.(item) || undefined}
           onPointerMove={() => setActive(index())} onClick={() => props.onChoose(item)}>{props.children(item)}</button>}
       </For>
@@ -195,7 +199,7 @@ export const ContextMenuTrigger = ((props: Record<string, unknown>) => {
   const [local, rest] = splitProps(props, ["as"]);
   return <Dynamic component={(local.as as ValidComponent | undefined) || "div"} {...rest} />;
 }) as typeof KContextMenu.Trigger;
-export const ContextMenuGroup = KContextMenu.Group;
+export function ContextMenuGroup(props: ParentProps<{ class?: string }>) { return <KContextMenu.Group class={cn(useLibrary() ? "ui-section" : undefined, props.class) || undefined} data-kind={useLibrary() ? "list" : undefined}>{props.children}</KContextMenu.Group>; }
 export function ContextMenuContent(props: ParentProps<{ class?: string; shortcutScope?: string }>) { if (useContext(RowMenuDeferred)) return null; return <KContextMenu.Portal><KContextMenu.Content data-slot="context-menu-content" data-shortcut-scope={props.shortcutScope} {...libraryShell()} class={cn(contentClass(menuContentClass), props.class)}>{props.children}</KContextMenu.Content></KContextMenu.Portal>; }
 export function ContextMenuItem(props: ParentProps<{ disabled?: boolean; variant?: "destructive"; onSelect?: () => void; class?: string }>) { return <KContextMenu.Item disabled={props.disabled} onSelect={props.onSelect} data-variant={props.variant} class={cn(itemClass(), props.class)}>{props.children}</KContextMenu.Item>; }
 export const ContextMenuSub = KContextMenu.Sub;
