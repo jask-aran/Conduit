@@ -273,14 +273,14 @@
   .conduit-sidebar[data-state="collapsed"] [data-sidebar="brand"] { display: initial; }
   .conduit-sidebar[data-state="collapsed"] [data-sidebar="header"] { justify-content: flex-start; padding: 12px 10px 6px; }
   .conduit-sidebar [data-sidebar="trigger"] { display: inline-flex; }
-  /* The header's two pills, as the chat header has them: the close button and
-     wordmark in the left one, its button where the open button was (8px top,
-     10px in, the pill's 1px edge and 6px padding), the area toggle the right. */
+  /* Pills as the chat header has them: the close button in its own, where the
+     open button was, the wordmark on the black beside it, the area toggle on
+     the right. A button sits concentric in its pill: 2px all round. */
   .conduit-sidebar [data-sidebar="header"],
   .conduit-sidebar[data-state="collapsed"] [data-sidebar="header"] { min-height: 56px; justify-content: space-between; padding: 8px 10px 4px; }
-  .sidebar-header-pill.composer-surface-material { display: flex; height: 44px; align-items: center; gap: 2px; padding: 0 16px 0 6px; border-radius: 999px; }
+  .sidebar-header-pill.composer-surface-material { display: flex; height: 44px; align-items: center; padding: 0 1px; border-radius: 999px; }
   .sidebar-header-pill > [data-sidebar="trigger"] { width: 40px; height: 40px; border-radius: 999px; background: transparent; }
-  .sidebar-header-pill > [data-sidebar="brand"] { flex: none; height: 40px; padding: 0 2px; }
+  .conduit-sidebar [data-sidebar="header"] [data-sidebar="brand"] { flex: 1; height: 40px; padding: 0 10px; }
   .sidebar-area-toggle.composer-surface-material { height: 44px; grid-template-columns: 38px 38px; align-items: center; padding: 3px; border-radius: 999px; }
   .sidebar-area-toggle.composer-surface-material button { height: 36px; border-radius: 999px; }
   .sidebar-area-toggle.composer-surface-material::before { inset: 3px auto 3px 3px; width: 38px; border-radius: 999px; }
