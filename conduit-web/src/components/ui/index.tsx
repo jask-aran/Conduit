@@ -15,9 +15,9 @@ export function Frost(props: { lift?: Lift; core?: boolean; class?: string; styl
   return <div class={cn("ui-frost", props.class)} data-surface="frost" data-lift={props.lift ?? "rest"} data-core={props.core ? "" : undefined} style={props.style}>{props.children}</div>;
 }
 
-/** solo: a lone floating frost button (the composer's +), a circle rather than a capsule. */
-export function Pill(props: { icons: { label: string; icon: JSX.Element }[]; solo?: boolean; onPick?: (label: string) => void }) {
-  return <div class="ui-frost ui-pill" data-solo={props.icons.length === 1 && props.solo ? "" : undefined}><For each={props.icons}>{(item) => <button type="button" aria-label={item.label} title={item.label}
+/** One icon is a circle (the composer's +); more share a capsule, each slot a pill-shaped target. */
+export function Pill(props: { icons: { label: string; icon: JSX.Element }[]; onPick?: (label: string) => void }) {
+  return <div class="ui-frost ui-pill" data-solo={props.icons.length === 1 ? "" : undefined}><For each={props.icons}>{(item) => <button type="button" aria-label={item.label} title={item.label}
     onClick={(event) => { if (props.onPick) { event.stopPropagation(); props.onPick(item.label); } }}>{item.icon}</button>}</For></div>;
 }
 
