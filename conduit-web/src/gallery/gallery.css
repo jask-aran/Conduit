@@ -67,3 +67,6 @@ html, body { background: var(--frame, #08090a); color: var(--foreground); }
 .g-grid[data-density="phone"] .g-w12 { width: 190px; } .g-grid[data-density="phone"] .g-w16, .g-grid[data-density="phone"] .g-w18 { width: 280px; }
 .g-tag [data-scope="desktop"] { color: #7aa2f7; } .g-tag [data-scope="phone"] { color: #9ece6a; }
 .g-tag [data-kind] { color: var(--muted-foreground); font-style: italic; }
+/* The building blocks share one popover width per variant, as the app's popovers do. */
+.g-side > [data-density="desktop"] .ui-menu { width: 224px; }
+.g-side > [data-density="phone"] .ui-menu { width: 280px; }
