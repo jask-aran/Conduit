@@ -151,3 +151,5 @@ html, body { background: var(--frame, #08090a); color: var(--foreground); }
 /* The composer row where the app puts its composer: 10px under the transcript, 12px in from each side, 54 tall. */
 .g-solo-body .g-live .composer-stack { padding: 0; }
 .g-solo-body .g-live .composer-stack > .g-live-composer { height: 54px; margin: 10px 12px 12px; padding: 6px 1px 4px; }
+.g-live-desktop { position: relative; }
+.g-live-model-menu .ui-row > small { font-size: 11px; }
