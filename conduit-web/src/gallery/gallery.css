@@ -34,3 +34,5 @@ html, body { background: var(--frame, #08090a); color: var(--foreground); }
 .g-answer { margin-top: 16px; font-size: 16px; line-height: 1.55; }
 .g-answer code { border-radius: 4px; background: var(--muted); padding: 1px 5px; }
 .g-panel-inline { display: inline-block; min-width: 10rem; border-radius: var(--radius-lg); padding: 4px; color: var(--popover-foreground); }
+/* The app locks body scrolling; the canvas is a page that scrolls. */
+body:not(.g-solo-body) { overflow: auto; }

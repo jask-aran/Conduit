@@ -17,6 +17,7 @@ data/auth.json
 data/auth.json.*.tmp
 data/preferences.json
 conduit-web/dist/
+conduit-web/dist-gallery/
 conduit-web/playwright-report/
 conduit-web/test-results/
 conduit-web/native/transcribe-rs-worker/target/
