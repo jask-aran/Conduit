@@ -1,0 +1,77 @@
+/*
+ * The unified component library (gallery only until it replaces the app's
+ * copies). One frost material, two lifts; every size in rem so the desktop
+ * (12.8px root) and phone (16px root) take the same rules.
+ *
+ *   .ui-frost              the material: stroke, fill, blur, highlight
+ *     [data-lift=raised]   what floats over the app: menus, popovers, cards
+ *     [data-core]          a phone full-screen bubble, nothing dimmed round it
+ *   .ui-pill               frost capsule of one or more icon slots
+ *   .ui-menu               raised frost container of sections
+ *     .ui-title            a section's title
+ *     .ui-sep              a rule between sections
+ *     .ui-row              the one row: icon, label, meta, keys, chevron
+ *   .ui-card               raised frost card: dialogs and overlays
+ *   .ui-bubble             the user's message
+ */
+:root {
+  --frost-stroke: #ffffff4d;
+  --frost-fill: #ffffff2b;
+  --frost-blur: blur(24px);
+  --frost-highlight: inset 0 1px 0 rgb(255 255 255 / 50%), inset 0 -1px 0 rgb(255 255 255 / 10%);
+  --frost-lift-rest: 0 8px 32px rgb(0 0 0 / 10%);
+  --frost-lift-raised: 0 24px 70px rgb(0 0 0 / 38%);
+  --frost-core-ground: oklch(0.19 0.005 264 / 72%);
+  --frost-wash: oklch(1 0 0 / 10%);
+  --frost-rule: oklch(1 0 0 / 10%);
+  --frost-radius: 0.875rem;
+  --frost-inset: 0.25rem;
+}
+
+.ui-frost {
+  border: 1px solid var(--frost-stroke);
+  background: var(--frost-fill);
+  -webkit-backdrop-filter: var(--frost-blur);
+  backdrop-filter: var(--frost-blur);
+  box-shadow: var(--frost-lift-rest), var(--frost-highlight);
+  color: var(--foreground);
+}
+.ui-frost[data-lift="raised"] { box-shadow: var(--frost-lift-raised), var(--frost-highlight); }
+.ui-frost[data-core] { background: linear-gradient(var(--frost-fill), var(--frost-fill)), var(--frost-core-ground); }
+
+/* Pill: icon slots in a capsule, 1px from its edge. */
+.ui-pill { display: inline-flex; height: 2.75rem; align-items: center; gap: 0.125rem; padding: 0 1px; border-radius: 999px; }
+.ui-pill > button { display: grid; width: 2.125rem; height: 2.5rem; place-items: center; border: 0; border-radius: 999px; background: transparent; color: inherit; }
+.ui-pill > button:hover { background: var(--frost-wash); }
+.ui-pill > button svg { width: 1.125rem; height: 1.125rem; }
+
+/* Menu: a raised container; rows sit concentric inside it. */
+.ui-menu { display: flex; min-width: 12rem; flex-direction: column; border-radius: var(--frost-radius); padding: var(--frost-inset); }
+.ui-title { display: flex; align-items: baseline; justify-content: space-between; gap: 0.5rem; padding: 0.375rem 0.5rem 0.25rem; color: var(--muted-foreground); font: 0.625rem/1.2 ui-monospace, SFMono-Regular, Consolas, monospace; letter-spacing: 0.07em; text-transform: uppercase; }
+.ui-title small { font-size: inherit; letter-spacing: 0; text-transform: none; }
+.ui-sep { height: 1px; margin: var(--frost-inset) calc(-1 * var(--frost-inset)); background: var(--frost-rule); }
+
+.ui-row { display: flex; width: 100%; min-height: 2.25rem; align-items: center; gap: 0.5rem; border: 0; border-radius: calc(var(--frost-radius) - var(--frost-inset)); background: transparent; padding: 0.375rem 0.5rem; color: color-mix(in oklch, var(--foreground), transparent 38%); font-size: 0.875rem; font-weight: 450; text-align: left; cursor: default; user-select: none; outline: none; }
+.ui-row > svg { width: 1rem; height: 1rem; flex: none; }
+.ui-row > .ui-label { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ui-row > small { flex: none; color: var(--muted-foreground); font: 0.6875rem ui-monospace, monospace; }
+.ui-row > .ui-keys { display: inline-flex; flex: none; gap: 0.1875rem; }
+.ui-row > .ui-chevron { width: 0.875rem; height: 0.875rem; color: var(--muted-foreground); }
+.ui-row:is(:hover, [data-highlighted]) { background: var(--frost-wash); color: var(--foreground); }
+.ui-row[data-checked] { color: var(--foreground); font-weight: 660; }
+.ui-row[data-checked] > svg { stroke-width: 3; }
+.ui-row[data-disabled] { pointer-events: none; color: color-mix(in oklch, var(--foreground), transparent 22%); text-decoration: line-through 1.5px; }
+.ui-row[data-disabled] > small { text-decoration: none; }
+.ui-row[data-destructive] { color: var(--destructive); }
+.ui-row[data-destructive]:hover { background: color-mix(in oklch, var(--destructive), transparent 85%); }
+
+.ui-keycap { display: inline-grid; min-width: 1.25rem; height: 1.25rem; place-items: center; border: 1px solid oklch(1 0 0 / 16%); border-radius: 0.3125rem; background: oklch(0 0 0 / 12%); padding: 0 0.3125rem; color: var(--muted-foreground); font: 550 0.6875rem/1 ui-monospace, SFMono-Regular, Menlo, monospace; }
+.ui-row:hover .ui-keycap { color: var(--foreground); }
+
+/* Card: the menu's container at dialog padding. */
+.ui-card { display: flex; flex-direction: column; gap: 1rem; border-radius: var(--frost-radius); padding: 1.25rem; }
+.ui-card > h3 { margin: 0; font-size: 1rem; font-weight: 600; }
+.ui-card > p { margin: -0.5rem 0 0; color: var(--muted-foreground); font-size: 0.875rem; }
+.ui-card-actions { display: flex; justify-content: flex-end; gap: 0.5rem; }
+
+.ui-bubble { max-width: 80%; margin-left: auto; border-radius: 1.1rem; padding: 0.625rem 0.8125rem; font-size: 0.875rem; white-space: pre-wrap; overflow-wrap: anywhere; }
