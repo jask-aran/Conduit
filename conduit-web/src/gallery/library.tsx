@@ -1,3 +1,4 @@
+import { PanelLeftIcon, MessageSquarePlusIcon, EllipsisIcon } from "lucide-solid";
 import { createSignal, For, type JSX } from "solid-js";
 import { PanelRightIcon, ClipboardCopyIcon, Columns2Icon, CopyIcon, FolderIcon, FolderInputIcon, LayoutDashboardIcon, MenuIcon, MonitorIcon, PaperclipIcon, PencilIcon, PinIcon, PlusIcon, QrCodeIcon, RefreshCwIcon, SearchIcon, ShareIcon, ShieldCheckIcon, SquarePenIcon, TerminalIcon, Trash2Icon } from "lucide-solid";
 import { Spinner } from "@/components/primitives";
@@ -125,7 +126,7 @@ export const libraryGroups: Group[] = [
   ] },
   { title: "Frost on the page", note: "frost resting on the transcript, not floating", atoms: [
     lib("bubble", "User message", "both", "frost", "Bubble", () => <div style={{ width: "240px" }}><Bubble>write a .txt file with lorem ipsum</Bubble></div>),
-    lib("pill", "Pill", "phone", "frost", "Pill", () => <div class="g-row"><Pill icons={[{ label: "Menu", icon: <MenuIcon /> }]} /><Pill icons={[{ label: "Menu", icon: <MenuIcon /> }, { label: "New chat", icon: <SquarePenIcon /> }]} /><Pill icons={[{ label: "Search", icon: <SearchIcon /> }, { label: "Folder", icon: <FolderIcon /> }, { label: "Share", icon: <ShareIcon /> }]} /></div>),
+    lib("pill", "Pill", "phone", "frost", "Pill", () => <div class="g-row" data-density="phone"><Pill icons={[{ label: "Sidebar", icon: <PanelLeftIcon /> }]} /><Pill icons={[{ label: "Sidebar", icon: <PanelLeftIcon /> }, { label: "New chat", icon: <MessageSquarePlusIcon /> }]} /><Pill icons={[{ label: "Search", icon: <SearchIcon /> }, { label: "Terminal", icon: <TerminalIcon /> }, { label: "More", icon: <EllipsisIcon /> }]} /></div>),
     lib("seg-pill", "Segmented · pill (sidebar)", "phone", "frost", "Segmented pill", () => <SegmentedIcons pill />),
     lib("frost", "Frost material", "both", "material", "Frost", () => <Frost class="g-swatch" />),
   ] },
