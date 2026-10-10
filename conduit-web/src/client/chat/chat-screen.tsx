@@ -1,6 +1,7 @@
 import { createSignal, Show, type JSX } from "solid-js";
 import { ChevronRightIcon, EllipsisIcon, MessageSquarePlusIcon, PanelLeftIcon, PanelRightIcon, PencilIcon, RefreshCwIcon, SearchIcon, ShareIcon, TerminalIcon, Trash2Icon } from "lucide-solid";
 import { Button, Menu, MenuContent, MenuGroup, MenuItem, MenuLabel, MenuSeparator, MenuTrigger } from "@/components/primitives";
+import { useLibrary } from "@/components/ui/swap";
 import type { Project, RuntimeIdentity, Template } from "../api/contracts";
 import type { ActiveChatStore } from "../state/active-chat";
 import { SPINNING_ACTIVITY, type ComposerStatus } from "./composer";
@@ -119,22 +120,27 @@ export function ChatHeader(props: {
         <Show when={!props.appDashboard}><Menu modal={false}>
           <MenuTrigger class="chat-header-more" tabIndex={-1} aria-label={props.dashboard ? `More ${placeKind()} options` : "More chat options"} title={props.dashboard ? `More ${placeKind()} options` : "More chat options"}><EllipsisIcon /></MenuTrigger>
           <MenuContent class="chat-header-menu">
-            <MenuGroup>
+            {/* Library previews: the library's heading section (components/ui/swap.ts). */}
+            <Show when={useLibrary()} fallback={<MenuGroup>
               <MenuLabel class="chat-header-menu-title">{props.title}</MenuLabel>
               <MenuLabel class="chat-header-menu-meta">{menuLine()}</MenuLabel>
-            </MenuGroup>
+            </MenuGroup>}>
+              <div class="ui-section ui-heading" data-kind="heading"><div class="ui-heading-title">{props.title}</div><div class="ui-heading-detail">{menuLine()}</div></div>
+            </Show>
             <Show when={!props.dashboard}>
               <Show when={props.chat}>{(chat) => {
                 // Opens in place: a submenu has nowhere to go beside a menu that fills a phone.
                 const [expanded, setExpanded] = createSignal(false);
                 const used = () => contextUsagePercent(chat().contextUsage());
                 return <div class="chat-header-menu-context-block">
-                  <button type="button" class="chat-header-menu-context-trigger" aria-expanded={expanded()}
+                  <Show when={useLibrary()}><div role="menuitem" class="ui-row" data-field="" aria-expanded={expanded()} onClick={() => { if (!expanded()) chat().refreshContext(); setExpanded(!expanded()); }}>
+                    <span class="ui-label">Context</span><small>{used() == null ? "Unavailable" : `${Math.round(used()!)}% used`}</small><ChevronRightIcon class="ui-chevron" /></div></Show>
+                  <Show when={!useLibrary()}><button type="button" class="chat-header-menu-context-trigger" aria-expanded={expanded()}
                     onClick={() => { if (!expanded()) chat().refreshContext(); setExpanded(!expanded()); }}>
                     <span class="chat-header-menu-context-line"><span class="chat-header-menu-section-label">Context</span>
                       <span>{used() == null ? "Unavailable" : `${Math.round(used()!)}% used`}</span><ChevronRightIcon class="chat-header-menu-context-chevron" /></span>
                     <Show when={!expanded()}><ContextBar chat={chat()} /></Show>
-                  </button>
+                  </button></Show>
                   <Show when={expanded()}><ContextBreakdown chat={chat()} bare canCompact={chat().capabilities()?.compaction !== false} /></Show>
                 </div>;
               }}</Show>

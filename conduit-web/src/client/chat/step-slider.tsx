@@ -1,5 +1,6 @@
 import { For, Show, createEffect, createSignal, createUniqueId, type JSX } from "solid-js";
 import "./step-slider.css";
+import { useLibrary } from "@/components/ui/swap";
 
 export type StepOption = { value: string; label: string };
 
@@ -30,19 +31,22 @@ export function StepSlider(props: {
     if (option && option.value !== props.value) props.onChange(option.value);
   };
 
-  return <div class="step-slider" data-disabled={props.disabled ? "true" : undefined}
+  // In the gallery's Library previews this is the library's slider (library.css).
+  const lib = useLibrary();
+  const c = (app: string, library: string) => lib ? library : app;
+  return <div class={c("step-slider", "ui-slider")} data-disabled={props.disabled ? "true" : undefined}
     onKeyDown={(event) => { if (event.target instanceof HTMLInputElement && event.key !== "Escape" && event.key !== "Tab") event.stopPropagation(); }}>
-    <div class="step-slider-header">
-      <label for={id}>{props.label}</label>
-      <Show when={props.valueControl} fallback={<span class="step-slider-value">{shown()?.label}</span>}>{(control) => control()(() => shown()?.label || "")}</Show>
+    <div class={c("step-slider-header", "ui-slider-head")}>
+      <label for={id} class={lib ? "ui-title-text" : undefined}>{props.label}</label>
+      <Show when={props.valueControl} fallback={<span class={c("step-slider-value", "ui-slider-value")}>{shown()?.label}</span>}>{(control) => control()(() => shown()?.label || "")}</Show>
     </div>
-    <input id={id} class="step-slider-input" type="range" min={0} max={Math.max(0, props.options.length - 1)} step={1}
+    <input id={id} class={c("step-slider-input", "ui-slider-input")} type="range" min={0} max={Math.max(0, props.options.length - 1)} step={1}
       value={preview()} disabled={props.disabled} aria-valuetext={shown()?.label}
-      style={{ "--step-fill": `${props.options.length > 1 ? (preview() / (props.options.length - 1)) * 100 : 0}%` }}
+      style={{ [lib ? "--fill" : "--step-fill"]: `${props.options.length > 1 ? (preview() / (props.options.length - 1)) * 100 : 0}%` }}
       onInput={(event) => setPreview(Number(event.currentTarget.value))}
       onChange={(event) => commit(Number(event.currentTarget.value))} />
-    <div class="step-slider-ticks" aria-hidden="true">
-      <For each={props.options}>{(_, index) => <i data-reached={index() <= preview() ? "true" : undefined} />}</For>
+    <div class={c("step-slider-ticks", "ui-slider-ticks")} aria-hidden="true">
+      <For each={props.options}>{(_, index) => <i data-reached={index() <= preview() ? (lib ? "" : "true") : undefined} />}</For>
     </div>
   </div>;
 }

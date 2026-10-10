@@ -72,7 +72,7 @@
 .ui-pill > button svg { width: var(--u-icon); height: var(--u-icon); }
 
 /* Menu: a raised container; rows sit concentric inside it. */
-.ui-menu { display: flex; min-width: calc(12 * var(--u-type)); flex-direction: column; border-radius: var(--frost-radius); padding: var(--frost-inset); }
+.ui-menu { outline: none; display: flex; min-width: calc(12 * var(--u-type)); flex-direction: column; border-radius: var(--frost-radius); padding: var(--frost-inset); }
 .ui-title-text { font-size: calc(0.5625 * var(--u-type)) !important; }
 .ui-title, .ui-title-text { color: var(--muted-foreground); font: calc(0.625 * var(--u-type))/1.2 ui-monospace, SFMono-Regular, Consolas, monospace; letter-spacing: 0.07em; text-transform: uppercase; }
 .ui-title { display: flex; align-items: baseline; justify-content: space-between; gap: var(--row-gap); padding: calc(0.375 * var(--u-type)) calc(0.5 * var(--u-type)) calc(0.3125 * var(--u-type)); }
@@ -244,4 +244,4 @@
   box-shadow: var(--frost-lift-rest), var(--frost-highlight);
 }
 /* A rule between groups of an app menu's rows, where a library menu has sections. */
-.ui-menu > .ui-rule { height: 1px; margin: var(--frost-inset) calc(-1 * var(--frost-inset)); border: 0; background: var(--frost-rule); }
+.ui-menu .ui-rule { height: 1px; margin: var(--frost-inset) calc(-1 * var(--frost-inset)); border: 0; background: var(--frost-rule); }
