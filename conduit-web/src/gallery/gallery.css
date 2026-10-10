@@ -73,7 +73,7 @@ html, body { background: var(--frame, #08090a); color: var(--foreground); }
 /* The phone built from the library. */
 .g-live { position: relative; display: flex; flex: none; width: 414px; height: min(860px, calc(100vh - 60px)); flex-direction: column; overflow: hidden; border: 1px solid var(--border); border-radius: 18px; background: var(--background); font-family: "Geist Variable", sans-serif; }
 .g-live-header { position: absolute; inset: 0 0 auto; z-index: 2; display: flex; justify-content: space-between; padding: 8px 10px; }
-.g-live-transcript { display: flex; flex: 1; flex-direction: column; gap: 14px; overflow: auto; padding: 68px 14px 90px; font-size: 15px; line-height: 1.5; }
+.g-live-transcript { display: flex; flex: 1; flex-direction: column; gap: 14px; overflow: auto; padding: 68px 14px 90px; font-size: var(--u-type); line-height: 1.5; }
 .g-live-answer { margin: 0; }
 .g-live-answer code { border-radius: 4px; background: var(--accent); padding: 1px 5px; font-size: 13px; }
 .g-live-composer { position: absolute; inset: auto 0 0; display: flex; align-items: center; gap: 8px; padding: 10px 12px 14px; }
@@ -98,3 +98,24 @@ html, body { background: var(--frame, #08090a); color: var(--foreground); }
 .g-live-dot { width: 7px; height: 7px; border-radius: 999px; background: oklch(0.62 0.17 145); }
 .g-live-sidebar-list { display: flex; flex-direction: column; gap: 6px; overflow: auto; padding: 4px 8px 16px; }
 .g-live-sidebar-list .ui-section + .ui-section { border-top: 0; }
+.g-sidebar-screen { position: relative; height: 100vh; overflow: hidden; }
+/* The desktop built from the library. */
+.g-live-desktop { width: min(900px, 60vw); flex-direction: row; }
+.g-live-rail { display: flex; width: 200px; flex: none; flex-direction: column; gap: 4px; overflow: auto; border-right: 1px solid var(--border); background: var(--frame); padding: 10px 6px; }
+.g-live-rail .ui-section + .ui-section { border-top: 0; }
+.g-live-main { position: relative; display: flex; min-width: 0; flex: 1; flex-direction: column; }
+.g-live-desk-head { display: flex; align-items: center; gap: 6px; padding: 8px 10px; font-size: 12px; }
+.g-live-grow { flex: 1; }
+.g-live-desk-transcript { padding: 12px 28px 150px; font-size: 13px; }
+.g-live-desk-composer { position: absolute; inset: auto 20px 18px; border-radius: 17.6px; padding: 10px 10px 6px; }
+.g-live-desk-composer textarea { width: 100%; resize: none; border: 0; background: transparent; padding: 2px 4px; color: var(--foreground); font: 13px "Geist Variable", sans-serif; outline: none; }
+.g-live-desk-row { display: flex; align-items: center; gap: 2px; }
+.g-live-model { display: inline-flex; align-items: center; gap: 6px; border: 0; border-radius: 6px; background: transparent; padding: 3px 6px; color: var(--foreground); font-size: 11px; font-weight: 560; }
+.g-live-model span { color: var(--muted-foreground); font-weight: 400; }
+.g-live-model svg { width: 12px; height: 12px; }
+.g-live-model:hover { background: var(--accent); }
+.g-live-anchor { position: absolute; z-index: 20; }
+.g-live-anchor[data-at="model"] { bottom: 100%; left: 80px; margin-bottom: 4px; }
+.g-live-anchor[data-at="plus"] { bottom: 100%; left: 8px; margin-bottom: 4px; }
+.g-live-anchor[data-at="chat"] { top: 40px; right: 10px; }
+.g-live-desk-menu { width: 260px; }

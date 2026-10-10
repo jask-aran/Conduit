@@ -1,6 +1,6 @@
 import { createSignal, For, Show, type JSX } from "solid-js";
-import { EllipsisIcon, FolderPlusIcon, LayoutDashboardIcon, MicIcon, PanelLeftIcon, PanelRightIcon, PaperclipIcon, PlusIcon, QrCodeIcon, RefreshCwIcon, SearchIcon, ShareIcon, SquarePenIcon, TerminalIcon, ChevronDownIcon, CameraIcon, KeyboardIcon } from "lucide-solid";
-import { Bubble, Item, Menu, Pill, Section } from "@/components/ui";
+import { EllipsisIcon, FolderPlusIcon, LayoutDashboardIcon, MicIcon, PanelLeftIcon, PanelRightIcon, PaperclipIcon, PlusIcon, QrCodeIcon, RefreshCwIcon, SearchIcon, ShareIcon, SquarePenIcon, TerminalIcon, ChevronDownIcon, CameraIcon, KeyboardIcon, ArrowUpIcon, Trash2Icon, PencilIcon, ShieldCheckIcon, CircleIcon } from "lucide-solid";
+import { Bubble, Button, Item, Menu, Pill, Section } from "@/components/ui";
 import { HarnessMark } from "../client/harness-brand";
 import { PlaceGlyph } from "../client/chat/place-picker";
 import { ChatTitle, Levels, ModelList, Profiles, Projects, SegmentedIcons, thinking } from "./library";
@@ -89,5 +89,59 @@ export function LivePhone() {
         </Menu></Float></Show>
       </aside>
     </Show>
+  </div>;
+}
+
+type DesktopPopover = "plus" | "model" | "chat" | null;
+
+/** The desktop chat screen, built only from the library, in a desktop layout. */
+export function LiveDesktop() {
+  const [open, setOpen] = createSignal<DesktopPopover>(null);
+  const toggle = (which: DesktopPopover) => (event: MouseEvent) => { event.stopPropagation(); setOpen(open() === which ? null : which); };
+  return <div class="g-live g-live-desktop" data-density="desktop" onClick={() => setOpen(null)}>
+    <aside class="g-live-rail">
+      <Section><Item icon={<LayoutDashboardIcon />}>Dashboard</Item><Item icon={<FolderPlusIcon />}>New project</Item></Section>
+      <For each={PROJECTS.slice(2, 5)}>{(project, index) => <Section title={project.name}>
+        <Item icon={<PlaceGlyph project={project} />} checked={index() === 0}>Lorem ipsum file</Item>
+        <Item icon={<PlaceGlyph project={project} />}>Plan the trip</Item>
+      </Section>}</For>
+    </aside>
+    <div class="g-live-main">
+      <header class="g-live-desk-head">
+        <Button variant="ghost" size="icon-sm" aria-label="Sidebar"><PanelLeftIcon /></Button>
+        <strong>Lorem ipsum file</strong>
+        <span class="g-live-grow" />
+        <Button variant="ghost" size="icon-sm" aria-label="Share"><ShareIcon /></Button>
+        <Button variant="ghost" size="icon-sm" aria-label="More" onClick={toggle("chat")}><EllipsisIcon /></Button>
+      </header>
+      <main class="g-live-transcript g-live-desk-transcript">
+        <Bubble>write a .txt file in this folder that contains lorem ipsum text</Bubble>
+        <p class="g-live-answer">Created <code>lorem_ipsum.txt</code> in this folder with lorem ipsum text.</p>
+        <Bubble>and make the second paragraph shorter</Bubble>
+        <p class="g-live-answer">Done. The second paragraph is now two sentences.</p>
+      </main>
+      <footer class="ui-frost g-live-desk-composer">
+        <textarea placeholder="Send a message…" rows={1} />
+        <div class="g-live-desk-row">
+          <Button variant="ghost" size="icon-sm" aria-label="Attach and more" onClick={toggle("plus")}><PlusIcon /></Button>
+          <Button variant="ghost" size="icon-sm" aria-label="Context"><CircleIcon /></Button>
+          <button type="button" class="g-live-model" onClick={toggle("model")}>Meta: Muse Spark 1.3 Contributor<span>medium</span><ChevronDownIcon /></button>
+          <span class="g-live-grow" />
+          <Button variant="ghost" size="icon-sm" aria-label="Dictate"><MicIcon /></Button>
+          <Button variant="ghost" size="icon-sm" aria-label="Send"><ArrowUpIcon /></Button>
+        </div>
+        <Show when={open() === "model"}><div class="g-live-anchor" data-at="model" onClick={(event) => event.stopPropagation()}><Menu class="g-live-desk-menu"><ModelList keys={["⌘", "⇧", "X"]} /><Section kind="slider"><Levels /></Section></Menu></div></Show>
+        <Show when={open() === "plus"}><div class="g-live-anchor" data-at="plus" onClick={(event) => event.stopPropagation()}><Menu class="g-live-desk-menu">
+          <Section><Item meta="Muse Spark 1.3" opens>Model</Item><Item icon={<HarnessMark id="conduit" class="size-4" />} meta="Assistant" opens>Profile</Item><Item icon={<ShieldCheckIcon />} meta="Default" opens>Permissions</Item></Section>
+          <Section><Item icon={<PlaceGlyph project={null} />} meta="None" opens>Project</Item></Section>
+          <Section><Item icon={<PaperclipIcon />}>Attach files</Item></Section>
+        </Menu></div></Show>
+      </footer>
+      <Show when={open() === "chat"}><div class="g-live-anchor" data-at="chat" onClick={(event) => event.stopPropagation()}><Menu class="g-live-desk-menu">
+        <ChatTitle />
+        <Section><Item icon={<RefreshCwIcon />}>Update app</Item></Section>
+        <Section><Item icon={<ShareIcon />}>Share</Item><Item icon={<PencilIcon />}>Rename</Item><Item icon={<Trash2Icon />} destructive>Delete</Item></Section>
+      </Menu></div></Show>
+    </div>
   </div>;
 }

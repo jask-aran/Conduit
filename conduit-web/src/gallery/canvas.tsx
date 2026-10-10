@@ -5,7 +5,8 @@ import "../client/chat/composer-geometry.css";
 import "../client/styles.css";
 import "./gallery.css";
 import { ChatScreen } from "./stories";
-import { LivePhone } from "./live";
+import { LiveDesktop, LivePhone } from "./live";
+import { SidebarScreen } from "./sidebar-story";
 import { atoms, phoneAtoms, type Atom } from "./atoms";
 import { libraryGroups } from "./library";
 
@@ -43,7 +44,7 @@ function Piece(props: { atom: Atom; side?: boolean }) {
 
 function Canvas() {
   const [tune, setTune] = createSignal(read());
-  const [preview, setPreview] = createSignal<"desktop" | "phone" | "library">("library");
+  const [preview, setPreview] = createSignal<"desktop" | "phone" | "sidebar" | "library" | "library-desktop">("sidebar");
   const [tuning, setTuning] = createSignal(false);
   const update = (css: string) => {
     setTune(css);
@@ -75,10 +76,14 @@ function Canvas() {
     <aside class="g-right">
       <div class="g-toggle" role="group" aria-label="Preview">
         <button type="button" aria-pressed={preview() === "phone"} onClick={() => setPreview("phone")}>Phone</button>
+        <button type="button" aria-pressed={preview() === "sidebar"} onClick={() => setPreview("sidebar")}>Phone sidebar</button>
         <button type="button" aria-pressed={preview() === "desktop"} onClick={() => setPreview("desktop")}>Desktop</button>
         <button type="button" aria-pressed={preview() === "library"} onClick={() => setPreview("library")}>Phone · library</button>
+        <button type="button" aria-pressed={preview() === "library-desktop"} onClick={() => setPreview("library-desktop")}>Desktop · library</button>
       </div>
+      <Show when={preview() === "sidebar"}><iframe class="g-phone" title="Phone sidebar" src="/gallery.html?frame=sidebar" onLoad={tuneFrame} /></Show>
       <Show when={preview() === "library"}><LivePhone /></Show>
+      <Show when={preview() === "library-desktop"}><LiveDesktop /></Show>
       <Show when={preview() === "desktop"}><div class="g-desktop-screen"><ChatScreen /></div></Show>
       <Show when={preview() === "phone"}>
         <iframe class="g-phone" title="Phone preview" src="/gallery.html?frame=phone" onLoad={tuneFrame} />
@@ -97,6 +102,7 @@ export function mount(frame: string | null) {
   // Frosted only: the static material is on its way out.
   try { localStorage.setItem("conduit:composer-surface", "frosted-live"); localStorage.setItem("conduit:phone-composer", "bar"); } catch { /* private window */ }
   if (frame === "parts") { document.body.classList.add("g-parts-body"); render(() => <Parts />, root); }
+  else if (frame === "sidebar") { document.body.classList.add("g-solo-body"); render(() => <SidebarScreen />, root); }
   else if (frame) { document.body.classList.add("g-solo-body"); render(() => <ChatScreen />, root); }
   else render(() => <Canvas />, root);
 }
