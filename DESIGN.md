@@ -480,20 +480,20 @@ Every canonical component, where it lives and what varies. A change to one updat
 
 | Component | Source | Surface | Variants | Gallery |
 | --- | --- | --- | --- | --- |
-| Button | `components/primitives.tsx` | any | ghost, outline, default; icon sizes | `#button` |
-| Spinner | `components/primitives.tsx` | any | size | `#spinner` |
+| Button | `components/primitives.tsx` | any | ghost, outline, default; icon sizes | — |
+| Spinner | `components/primitives.tsx` | any | size | — |
 | Menu, ContextMenu (+ Sub, Radio, Label, Separator) | `components/primitives.tsx` | frost | phone panels via `PhoneMenuSubmenu` | `#menu` |
-| Popover, PopoverSearchList | `components/primitives.tsx` | frost | — | `#popover` |
-| Tooltip | `components/primitives.tsx` | frost | — | `#tooltip` |
-| Field, FieldGroup, FieldLabel, Input, Textarea | `components/primitives.tsx` | pane, frost | bordered, quiet | `#fields` |
-| FrostDialog, FrostOverlay | `components/frost.tsx` | frost | narrow, wide | `#dialog` |
-| Keycap | `components/frost.tsx` | frost | — | `#keycap` |
-| Frost material | `.composer-surface-material` + `chat/composer-surface.ts` | frost | static, frosted-live | `#materials` |
-| Segmented choice | `settings/settings-controls.tsx` | pane | 2-4 options | `#segmented` |
-| Switch | `settings/settings-controls.tsx` | pane | — | `#switch` |
-| Disclosure | `chat/disclosure.tsx` | transcript, pane | — | `#disclosure` |
-| StepSlider | `chat/step-slider.tsx` | frost, pane | — | `#step-slider` |
-| Runtime dot | `navigation/runtime-indicator.tsx` | any | success, warn, danger, muted, busy | `#runtime-dot` |
+| Popover, PopoverSearchList | `components/primitives.tsx` | frost | — | — |
+| Tooltip | `components/primitives.tsx` | frost | — | — |
+| Field, FieldGroup, FieldLabel, Input, Textarea | `components/primitives.tsx` | pane, frost | bordered, quiet | — |
+| FrostDialog, FrostOverlay | `components/frost.tsx` | frost | narrow, wide | — |
+| Keycap | `components/frost.tsx` | frost | — | — |
+| Frost material | `.composer-surface-material` + `chat/composer-surface.ts` | frost | static, frosted-live | `#material` |
+| Segmented choice | `settings/settings-controls.tsx` | pane | 2-4 options | — |
+| Switch | `settings/settings-controls.tsx` | pane | — | — |
+| Disclosure | `chat/disclosure.tsx` | transcript, pane | — | — |
+| StepSlider | `chat/step-slider.tsx` | frost, pane | — | `#slider` |
+| Runtime dot | `navigation/runtime-indicator.tsx` | any | success, warn, danger, muted, busy | — |
 
 ## Intentional exceptions
 

@@ -49,7 +49,7 @@ node scripts/conduit-auth.mjs mint-session \
 
 ## Component gallery
 
-For component and styling changes, check the gallery before the app. `npm run gallery` in `conduit-web` serves it at `http://localhost:5180/gallery.html`: every catalogued component and a few app surfaces, real and live, on one canvas. It needs no server, sign-in or fixtures. Each entry has an anchor (`#phone-header`). Its phone render is `gallery.html?frame=<id>` at 412px wide, which passes for a phone (`src/gallery/phone-emulation.ts`), so a headless screenshot or geometry read of that URL needs no touch emulation. First load is slow while Vite optimises dependencies, so wait about 6s. The gallery is dev-only and never built into `dist`.
+For component and styling changes, check the gallery before the app. Run `npm run gallery` in `conduit-web`; it serves `http://localhost:5180/gallery.html` and needs no server, sign-in or fixtures. It holds the frosted family: real components, live, on one canvas. Each card has an anchor (`#menu`). The phone screen is `gallery.html?frame=phone` at 412px wide, which passes for a phone (`src/gallery/phone-emulation.ts`), so a headless screenshot of it needs no touch emulation. The first load is slow while Vite optimises dependencies, so wait about 8s. The gallery is dev-only and never built into `dist`.
 
 ## Browser surfaces
 
