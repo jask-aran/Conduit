@@ -80,7 +80,11 @@
 .ui-empty { padding: calc(0.5 * var(--u-space)); color: var(--muted-foreground); font-size: calc(0.8125 * var(--u-type)); }
 
 .ui-row { display: flex; width: 100%; align-items: center; gap: var(--row-gap); border: 0; border-radius: var(--row-radius); background: transparent; padding: var(--row-pad); color: color-mix(in oklch, var(--foreground), transparent 38%); font-size: calc(0.8125 * var(--u-type)); font-weight: 450; text-align: left; cursor: default; user-select: none; outline: none; }
-.ui-row > svg { width: calc(1 * var(--u-icon)); height: calc(1 * var(--u-icon)); flex: none; }
+/* The icon slot: every leading mark -- a lucide icon, a workspace glyph, a
+   harness mark -- fills one icon-sized square. */
+.ui-icon { display: inline-grid; width: var(--u-icon); height: var(--u-icon); flex: none; place-items: center; }
+.ui-icon > * { width: 100% !important; height: 100% !important; }
+.ui-icon > .workspace-glyph svg { width: 100%; height: 100%; }
 .ui-row > .ui-label { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ui-row > small { flex: none; color: var(--muted-foreground); font-weight: 400; font-size: calc(0.75 * var(--u-type)); }
 .ui-row > .ui-keys { display: inline-flex; flex: none; gap: calc(0.1875 * var(--u-space)); }
@@ -174,3 +178,7 @@
 .ui-slider-ticks { display: flex; justify-content: space-between; margin-top: -4px; padding-inline: calc(var(--thumb, calc(1.25 * var(--u-icon))) / 2 - 1px); }
 .ui-slider-ticks i { width: 2px; height: 4px; border-radius: 1px; background: var(--frost-rule); }
 .ui-slider-ticks i[data-reached] { background: var(--muted-foreground); }
+
+/* A phone variant has no keyboard: shortcut keys are off wherever they sit. */
+[data-density="phone"] .ui-keys { display: none; }
+@media (--conduit-phone-layout) { .ui-keys { display: none; } }

@@ -33,7 +33,7 @@ export function Section(props: { title?: string; note?: JSX.Element; kind?: "lis
   </div>;
 }
 
-/** A search section: the field alone. It filters the list section after it, or opens a full search (keys). */
+/** A search section: the field alone. It filters the list section after it, or opens a full search; keys shows its shortcut, which a phone variant never shows. */
 export function SearchSection(props: { placeholder: string; value?: string; keys?: string[]; onInput?: (value: string) => void }) {
   return <div role="search" class="ui-section ui-search-section" data-kind="search">
     <SearchIcon /><input class="ui-search" placeholder={props.placeholder} value={props.value ?? ""} onInput={(event) => props.onInput?.(event.currentTarget.value)} />
@@ -48,7 +48,7 @@ export function Item(props: {
 }) {
   return <div role={props.checked !== undefined ? "menuitemradio" : "menuitem"} class="ui-row" aria-checked={props.checked}
     data-highlighted={props.active ? "" : undefined} data-checked={props.checked ? "" : undefined} data-disabled={props.disabled ? "" : undefined} data-destructive={props.destructive ? "" : undefined}>
-    {props.icon}<span class="ui-label">{props.children}</span>
+    <Show when={props.icon}><span class="ui-icon">{props.icon}</span></Show><span class="ui-label">{props.children}</span>
     <Show when={props.meta}><small>{props.meta}</small></Show>
     <Show when={props.keys}><span class="ui-keys"><For each={props.keys}>{(key) => <kbd class="ui-keycap">{key}</kbd>}</For></span></Show>
     <Show when={props.opens}><ChevronRightIcon class="ui-chevron" /></Show>
