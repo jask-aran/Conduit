@@ -4,7 +4,6 @@ import "../client/project/dashboard.css";
 import "../client/chat/composer-geometry.css";
 import "../client/styles.css";
 import "./gallery.css";
-import { COMPOSER_SURFACE_CHANGE_EVENT, saveComposerSurface, selectedComposerSurface, type ComposerSurfaceMode } from "../client/chat/composer-surface";
 import { desktop, PhoneScreen } from "./stories";
 
 /*
@@ -29,23 +28,16 @@ const frames = () => Array.from(document.querySelectorAll<HTMLIFrameElement>("if
 
 function Canvas() {
   const [tune, setTune] = createSignal(read());
-  const [surface, setSurface] = createSignal<ComposerSurfaceMode>(selectedComposerSurface());
   const update = (css: string) => {
     setTune(css);
     try { localStorage.setItem(TUNE_KEY, css); } catch { /* private window */ }
     applyTune(document, css);
     for (const frame of frames()) if (frame.contentDocument) applyTune(frame.contentDocument, css);
   };
-  const choose = (mode: ComposerSurfaceMode) => {
-    setSurface(saveComposerSurface(mode));
-    for (const frame of frames()) frame.contentWindow?.dispatchEvent(new CustomEvent(COMPOSER_SURFACE_CHANGE_EVENT, { detail: mode }));
-  };
   applyTune(document, tune());
   return <div class="g-canvas">
     <aside class="g-panel">
       <h1>Frost</h1>
-      <div class="g-filter"><For each={["frosted-live", "static"] as const}>{(mode) =>
-        <button type="button" aria-pressed={surface() === mode} onClick={() => choose(mode)}>{mode}</button>}</For></div>
       <label for="g-tune">Tune (CSS, live everywhere)</label>
       <textarea id="g-tune" spellcheck={false} value={tune()} onInput={(event) => update(event.currentTarget.value)}
         placeholder={".composer-surface-material[data-composer-surface=\"frosted-live\"] {\n  backdrop-filter: blur(30px);\n}"} />
@@ -62,7 +54,7 @@ function Canvas() {
       </section>
       <section class="g-column g-phone-column">
         <h2>Phone</h2>
-        <p class="g-note">Pills of one or several icons, the user message, and the screen they make. Not wired to the app; the mic adds a message.</p>
+        <p class="g-note">The app's own header, transcript and composer over a seeded chat, not wired to a server. Type and send to add a seeded reply.</p>
         <iframe class="g-phone" title="Phone" src="/gallery.html?frame=phone" onLoad={(event) => applyTune(event.currentTarget.contentDocument!, read())} />
       </section>
     </main>
@@ -71,6 +63,8 @@ function Canvas() {
 
 export function mount(frame: string | null) {
   const root = document.getElementById("root")!;
+  // Frosted only: the static material is on its way out.
+  try { localStorage.setItem("conduit:composer-surface", "frosted-live"); localStorage.setItem("conduit:phone-composer", "bar"); } catch { /* private window */ }
   if (frame) { document.body.classList.add("g-solo-body"); render(() => <PhoneScreen />, root); }
   else render(() => <Canvas />, root);
 }

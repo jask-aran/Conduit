@@ -1,9 +1,13 @@
 import { createSignal, For, type JSX } from "solid-js";
-import { CameraIcon, CopyIcon, EllipsisIcon, KeyboardIcon, MessageSquarePlusIcon, MicIcon, PanelLeftIcon, PencilIcon, PlusIcon, RefreshCwIcon, SearchIcon, SquareTerminalIcon } from "lucide-solid";
+import { Composer } from "../client/chat/composer";
+import { loadVoiceDictationSettings } from "../client/chat/voice-dictation.js";
+import { fakeAttachments, fakeChat, fakeModels } from "./fake-chat";
+import { ChatHeader, Conversation } from "../client/chat/chat-screen";
+import { Transcript } from "../client/chat/transcript";
+import { selectedMarkdownRenderer } from "../client/chat/markdown-settings";
 import { Button, Menu, MenuContent, MenuGroup, MenuItem, MenuLabel, MenuSeparator, MenuSub, MenuSubContent, MenuSubTrigger, MenuTrigger, PopoverSearchList } from "@/components/primitives";
 import { StepSlider } from "../client/chat/step-slider";
 import { createComposerSurfaceSignal } from "../client/chat/composer-surface";
-import { headerPill, HeaderActions } from "../client/navigation/header-pill";
 
 /*
  * The frosted family: one material, and what is built from it. Desktop pieces
@@ -59,7 +63,6 @@ export function UserBubble(props: { text: string }) {
 function Swatches() {
   return <div class="g-under"><Text />
     <div class="g-swatches">
-      <div class="g-swatch composer-surface-material" data-composer-surface="static"><span>static</span></div>
       <div class="g-swatch composer-surface-material" data-composer-surface="frosted-live"><span>frosted-live</span></div>
     </div>
   </div>;
@@ -67,7 +70,7 @@ function Swatches() {
 
 export const desktop: Entry[] = [
   { id: "material", name: "Frost material", source: ".composer-surface-material (styles.css)",
-    note: "The base. Its two modes are the Settings → Appearance choice; the switch at the left flips both here.",
+    note: "The base: what the composer, the user message and the phone pills wear.",
     render: () => <Swatches /> },
   { id: "bubble", name: "User message", source: "chat/transcript.tsx", note: "The material at the bubble's radius. Same component on the phone.",
     render: () => <div class="g-under"><Text /><div class="g-over"><UserBubble text="write a .txt file in this folder that contains lorem ipsum text" /></div></div> },
@@ -82,36 +85,15 @@ export const desktop: Entry[] = [
     render: () => <div class="g-under"><Text /><div class="g-over"><div class="frost-card g-card-demo"><strong>Delete this chat?</strong><div class="g-row"><Button variant="outline">Cancel</Button><Button variant="destructive">Delete</Button></div></div></div></div> },
 ];
 
-/** A pill of the material holding one or more icon buttons: the header's, today. */
-function Pill(props: { side: "leading" | "actions"; children: JSX.Element }) {
-  const pill = headerPill();
-  return props.side === "actions" ? <HeaderActions>{props.children}</HeaderActions>
-    : <div class={`mobile-header-leading ${pill().class ?? ""}`} data-composer-surface={pill()["data-composer-surface"]}>{props.children}</div>;
-}
-const Icon = (props: { label: string; children: JSX.Element }) => <Button variant="ghost" size="icon-sm" aria-label={props.label} title={props.label}>{props.children}</Button>;
-
-/** The phone screen: pieces from the family laid out as the app lays them out, not wired to anything. */
+/** The phone screen: the app's own header, transcript and composer over a seeded chat, not wired to a server. */
 export function PhoneScreen() {
-  const [messages, setMessages] = createSignal(["write a .txt file in this folder that contains lorem ipsum text"]);
-  return <div class="g-phone-screen">
-    <header class="chat-header">
-      <Pill side="leading"><Icon label="Toggle Sidebar"><PanelLeftIcon /></Icon><Icon label="New chat"><MessageSquarePlusIcon /></Icon></Pill>
-      <nav class="chat-header-title" />
-      <Pill side="actions"><Icon label="Search"><SearchIcon /></Icon><Icon label="Terminal"><SquareTerminalIcon /></Icon><Icon label="More"><EllipsisIcon /></Icon></Pill>
-    </header>
-    <div class="g-phone-thread">
-      <For each={messages()}>{(text) => <>
-        <UserBubble text={text} />
-        <div class="g-meta g-end"><span>22:14</span><PencilIcon /></div>
-        <p class="g-answer">Created <code>lorem_ipsum.txt</code> in this folder with lorem ipsum text.</p>
-        <div class="g-meta"><span>22:16</span><CopyIcon /><RefreshCwIcon /></div>
-      </>}</For>
-    </div>
-    <div class="g-phone-bar">
-      <Pill side="leading"><Icon label="Add"><PlusIcon /></Icon></Pill>
-      <Pill side="leading"><Icon label="Camera"><CameraIcon /></Icon></Pill>
-      <Pill side="leading"><Icon label="Keyboard"><KeyboardIcon /></Icon></Pill>
-      <Pill side="actions"><button type="button" class="g-mic" aria-label="Dictate" onClick={() => setMessages((list) => [...list, "and another one"])}><MicIcon /></button></Pill>
-    </div>
-  </div>;
+  const chat = fakeChat();
+  return <main data-slot="sidebar-inset" data-region="chat" class="chat-main">
+    <ChatHeader title="Lorem ipsum file" chat={chat} panelOpen={false} mobileSidebarOpen={false} connectivity="online"
+      onToggleMobileSidebar={() => {}} onNewChat={() => {}} onOpenPalette={() => {}} onOpenSearch={() => {}} onTogglePanel={() => {}} onShare={() => {}} onUpdatePwa={() => {}} pwaUpdating={() => false} />
+    <Conversation chat={chat}
+      transcript={<Transcript chat={chat} supports={() => true} partialContinue={false} markdownRenderer={selectedMarkdownRenderer()} />}
+      composer={<Composer chat={chat} attachments={fakeAttachments()} models={fakeModels()} profiles={[]} serverOnline voiceSettings={loadVoiceDictationSettings()}
+        onChooseProfile={() => {}} onOpenSettings={() => {}} onOpenAttachments={() => {}} />} />
+  </main>;
 }
