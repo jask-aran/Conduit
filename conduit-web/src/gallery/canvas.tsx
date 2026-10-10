@@ -6,7 +6,7 @@ import "../client/styles.css";
 import "./gallery.css";
 import { ChatScreen } from "./stories";
 import { atoms, phoneAtoms, type Atom } from "./atoms";
-import { libraryAtoms } from "./library";
+import { libraryGroups } from "./library";
 
 /*
  * Components on the left, each centred in a cell of one grid with a bubble
@@ -55,10 +55,12 @@ function Canvas() {
       </div>
       <Show when={tuning()}><textarea class="g-tune" spellcheck={false} value={tune()} onInput={(event) => update(event.currentTarget.value)}
         placeholder={".composer-surface-material[data-composer-surface=\"frosted-live\"] {\n  backdrop-filter: blur(30px);\n}"} /></Show>
-      <h2 class="g-heading">Library</h2>
-      <div class="g-grid">
-        <For each={libraryAtoms}>{(atom) => <Piece atom={atom} />}</For>
-      </div>
+      <For each={libraryGroups}>{(group) => <>
+        <h2 class="g-heading">{group.title} <small>{group.note}</small></h2>
+        <div class="g-grid">
+          <For each={group.atoms}>{(atom) => <Piece atom={atom} />}</For>
+        </div>
+      </>}</For>
       <h2 class="g-heading">In the app now</h2>
       <div class="g-grid">
         <For each={atoms}>{(atom) => <Piece atom={atom} />}</For>

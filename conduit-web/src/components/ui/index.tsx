@@ -42,11 +42,11 @@ export function SearchSection<T>(props: { title?: string; placeholder: string; i
 
 /** An item in a list section. Icon, meta, keys and opens are its parts; checked, disabled and destructive its states. */
 export function Item(props: {
-  icon?: JSX.Element; meta?: JSX.Element; keys?: string[]; opens?: boolean;
+  icon?: JSX.Element; meta?: JSX.Element; keys?: string[]; opens?: boolean; active?: boolean;
   checked?: boolean; disabled?: boolean; destructive?: boolean; children: JSX.Element;
 }) {
   return <div role={props.checked !== undefined ? "menuitemradio" : "menuitem"} class="ui-row" aria-checked={props.checked}
-    data-checked={props.checked ? "" : undefined} data-disabled={props.disabled ? "" : undefined} data-destructive={props.destructive ? "" : undefined}>
+    data-highlighted={props.active ? "" : undefined} data-checked={props.checked ? "" : undefined} data-disabled={props.disabled ? "" : undefined} data-destructive={props.destructive ? "" : undefined}>
     {props.icon}<span class="ui-label">{props.children}</span>
     <Show when={props.meta}><small>{props.meta}</small></Show>
     <Show when={props.keys}><span class="ui-keys"><For each={props.keys}>{(key) => <kbd class="ui-keycap">{key}</kbd>}</For></span></Show>
@@ -85,12 +85,12 @@ export function SelectTrigger(props: { value: string; bare?: boolean; onClick?: 
   return <button type="button" class="ui-input" data-bare={props.bare ? "" : undefined} onClick={props.onClick}><span>{props.value}</span><ChevronDownIcon /></button>;
 }
 
-export function Segmented<T extends string>(props: { label: string; value: T; options: ReadonlyArray<{ value: T; label: string; icon?: JSX.Element }>; onChange: (value: T) => void; pill?: boolean }) {
+export function Segmented<T extends string>(props: { label: string; value: T; options: ReadonlyArray<{ value: T; label: string; icon?: JSX.Element; count?: number }>; onChange: (value: T) => void; pill?: boolean; icons?: boolean }) {
   const index = () => Math.max(0, props.options.findIndex((option) => option.value === props.value));
-  return <div role="radiogroup" aria-label={props.label} class={cn("ui-seg", props.pill && "ui-frost")} data-pill={props.pill ? "" : undefined}
+  return <div role="radiogroup" aria-label={props.label} class={props.pill ? "ui-seg ui-frost" : "ui-seg"} data-pill={props.pill ? "" : undefined} data-icons={props.icons || props.pill ? "" : undefined}
     style={{ "--segments": props.options.length, "--segment": index() }}>
     <span class="ui-seg-thumb" aria-hidden="true" />
-    <For each={props.options}>{(option) => <button type="button" role="radio" aria-checked={option.value === props.value} aria-label={props.pill ? option.label : undefined} title={props.pill ? option.label : undefined}
-      onClick={() => props.onChange(option.value)}>{option.icon}{props.pill && option.icon ? null : <span>{option.label}</span>}</button>}</For>
+    <For each={props.options}>{(option) => <button type="button" role="radio" aria-checked={option.value === props.value} aria-label={props.icons || props.pill ? option.label : undefined} title={props.icons || props.pill ? option.label : undefined}
+      onClick={() => props.onChange(option.value)}>{option.icon}{props.icons || props.pill ? null : <span>{option.label}</span>}{option.count !== undefined && <small>{option.count}</small>}</button>}</For>
   </div>;
 }
