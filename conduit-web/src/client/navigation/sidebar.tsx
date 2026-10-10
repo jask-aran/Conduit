@@ -1165,8 +1165,8 @@ export function Sidebar(props: {
         <div data-sidebar="header">
           <div class={`sidebar-header-pill ${phoneLayout() ? "composer-surface-material" : ""}`} data-composer-surface={phoneLayout() ? headerSurface() : undefined}>
           <Button variant="ghost" size="icon-sm" data-sidebar="trigger" aria-label="Toggle Sidebar" aria-expanded={isMobileLayout() ? props.mobileOpen : !collapsed()} onClick={onSidebarTrigger}><PanelLeftIcon /></Button>
-          <button data-sidebar="brand" aria-label="Conduit" onClick={() => { setArea("conduit"); closeMobile(); props.onOpenDashboard(); enterPane(); }}><span>Conduit</span></button>
           </div>
+          <button data-sidebar="brand" aria-label="Conduit" onClick={() => { setArea("conduit"); closeMobile(); props.onOpenDashboard(); enterPane(); }}><span>Conduit</span></button>
           <div class={`sidebar-area-toggle ${phoneLayout() ? "composer-surface-material" : ""}`} data-composer-surface={phoneLayout() ? headerSurface() : undefined} data-area={area()} role="group" aria-label="Sidebar section">
             <button type="button" aria-label="Conduit" title="Conduit" aria-pressed={area() === "conduit"} onClick={() => setArea("conduit")}><LayoutDashboardIcon /></button>
             <button type="button" aria-label="Computer" title="Computer" aria-pressed={area() === "computer"} onClick={() => setArea("computer")}><MonitorIcon /></button>
