@@ -273,6 +273,11 @@
   .conduit-sidebar[data-state="collapsed"] [data-sidebar="brand"] { display: initial; }
   .conduit-sidebar[data-state="collapsed"] [data-sidebar="header"] { justify-content: flex-start; padding: 12px 10px 6px; }
   .conduit-sidebar [data-sidebar="trigger"] { display: inline-flex; }
+  /* The close button sits exactly where the header's open button was: the
+     header's 8px top and 44px pill, the pill's 1px edge and 6px padding. */
+  .conduit-sidebar [data-sidebar="header"],
+  .conduit-sidebar[data-state="collapsed"] [data-sidebar="header"] { min-height: 52px; padding: 8px 10px 0 17px; }
+  .conduit-sidebar [data-sidebar="header"] > [data-sidebar="trigger"] { width: 40px; height: 40px; }
 }
 
 @media (--conduit-wide-layout) {
