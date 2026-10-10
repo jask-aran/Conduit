@@ -79,7 +79,7 @@
 .ui-search::placeholder { color: var(--muted-foreground); }
 .ui-empty { padding: calc(0.5 * var(--u-space)); color: var(--muted-foreground); font-size: calc(0.8125 * var(--u-type)); }
 
-.ui-row { display: flex; width: 100%; align-items: center; gap: var(--row-gap); border: 0; border-radius: var(--row-radius); background: transparent; padding: var(--row-pad); color: color-mix(in oklch, var(--foreground), transparent 38%); font-size: calc(0.8125 * var(--u-type)); font-weight: 450; text-align: left; cursor: default; user-select: none; outline: none; }
+.ui-row { display: flex; width: 100%; align-items: center; gap: var(--row-gap); border: 0; border-radius: var(--row-radius); background: transparent; padding: var(--row-pad); color: color-mix(in oklch, var(--foreground), transparent 38%); font-size: calc(0.8125 * var(--u-type)); font-weight: 450; line-height: 1.43; text-align: left; cursor: default; user-select: none; outline: none; }
 /* The icon slot: every leading mark -- a lucide icon, a workspace glyph, a
    harness mark -- fills one icon-sized square. */
 .ui-icon { display: inline-grid; width: var(--u-icon); height: var(--u-icon); flex: none; place-items: center; }
