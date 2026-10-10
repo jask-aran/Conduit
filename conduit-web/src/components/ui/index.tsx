@@ -1,5 +1,5 @@
 import { createSignal, For, Show, splitProps, type JSX } from "solid-js";
-import { ChevronRightIcon } from "lucide-solid";
+import { ChevronDownIcon, ChevronRightIcon } from "lucide-solid";
 import { cn } from "@/lib/utils";
 import "./library.css";
 
@@ -11,7 +11,7 @@ import "./library.css";
 export type Lift = "rest" | "raised";
 
 export function Frost(props: { lift?: Lift; core?: boolean; class?: string; style?: JSX.CSSProperties; children?: JSX.Element }) {
-  return <div class={cn("ui-frost", props.class)} data-lift={props.lift ?? "rest"} data-core={props.core ? "" : undefined} style={props.style}>{props.children}</div>;
+  return <div class={cn("ui-frost", props.class)} data-surface="frost" data-lift={props.lift ?? "rest"} data-core={props.core ? "" : undefined} style={props.style}>{props.children}</div>;
 }
 
 export function Pill(props: { icons: { label: string; icon: JSX.Element }[] }) {
@@ -19,7 +19,7 @@ export function Pill(props: { icons: { label: string; icon: JSX.Element }[] }) {
 }
 
 export function Menu(props: { class?: string; core?: boolean; children: JSX.Element }) {
-  return <div role="menu" class={cn("ui-frost ui-menu", props.class)} data-lift="raised" data-core={props.core ? "" : undefined}>{props.children}</div>;
+  return <div role="menu" class={cn("ui-frost ui-menu", props.class)} data-surface="frost" data-lift="raised" data-core={props.core ? "" : undefined}>{props.children}</div>;
 }
 
 /** A menu's section: a list of items (the default) or a slider, with an optional title and a note beside it. */
@@ -57,7 +57,7 @@ export function Item(props: {
 export const Keycap = (props: { children: JSX.Element }) => <kbd class="ui-keycap">{props.children}</kbd>;
 
 export function Card(props: { title: string; detail?: string; class?: string; core?: boolean; actions?: JSX.Element; children?: JSX.Element }) {
-  return <div role="dialog" aria-label={props.title} class={cn("ui-frost ui-card", props.class)} data-lift="raised" data-core={props.core ? "" : undefined}>
+  return <div role="dialog" aria-label={props.title} class={cn("ui-frost ui-card", props.class)} data-surface="frost" data-lift="raised" data-core={props.core ? "" : undefined}>
     <h3>{props.title}</h3><Show when={props.detail}><p>{props.detail}</p></Show>
     {props.children}
     <Show when={props.actions}><div class="ui-card-actions">{props.actions}</div></Show>
@@ -66,7 +66,10 @@ export function Card(props: { title: string; detail?: string; class?: string; co
 
 export const Bubble = (props: { children: JSX.Element }) => <div class="ui-frost ui-bubble">{props.children}</div>;
 
-export type ButtonVariant = "primary" | "frost" | "ghost" | "destructive";
+
+/* What sits on a surface: the look follows [data-surface] above it (library.css). */
+
+export type ButtonVariant = "primary" | "outline" | "ghost" | "destructive";
 export function Button(props: JSX.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: ButtonVariant; size?: "default" | "sm" | "icon" | "icon-sm" }) {
   const [local, rest] = splitProps(props, ["class", "variant", "size"]);
   return <button type="button" {...rest} class={cn("ui-button", local.class)} data-variant={local.variant ?? "primary"} data-size={local.size ?? "default"} />;
@@ -75,4 +78,19 @@ export function Button(props: JSX.ButtonHTMLAttributes<HTMLButtonElement> & { va
 export function Input(props: JSX.InputHTMLAttributes<HTMLInputElement>) {
   const [local, rest] = splitProps(props, ["class"]);
   return <input {...rest} class={cn("ui-input", local.class)} />;
+}
+
+/** A select's trigger: a field with a chevron, or bare (its value and a chevron, as in a settings row). */
+export function SelectTrigger(props: { value: string; bare?: boolean; onClick?: () => void }) {
+  return <button type="button" class="ui-input" data-bare={props.bare ? "" : undefined} onClick={props.onClick}><span>{props.value}</span><ChevronDownIcon /></button>;
+}
+
+export function Segmented<T extends string>(props: { label: string; value: T; options: ReadonlyArray<{ value: T; label: string; icon?: JSX.Element }>; onChange: (value: T) => void; pill?: boolean }) {
+  const index = () => Math.max(0, props.options.findIndex((option) => option.value === props.value));
+  return <div role="radiogroup" aria-label={props.label} class={cn("ui-seg", props.pill && "ui-frost")} data-pill={props.pill ? "" : undefined}
+    style={{ "--segments": props.options.length, "--segment": index() }}>
+    <span class="ui-seg-thumb" aria-hidden="true" />
+    <For each={props.options}>{(option) => <button type="button" role="radio" aria-checked={option.value === props.value} aria-label={props.pill ? option.label : undefined} title={props.pill ? option.label : undefined}
+      onClick={() => props.onChange(option.value)}>{option.icon}{props.pill && option.icon ? null : <span>{option.label}</span>}</button>}</For>
+  </div>;
 }
