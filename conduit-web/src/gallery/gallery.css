@@ -10,7 +10,7 @@ html, body { background: var(--frame, #08090a); color: var(--foreground); }
 :is(.g-bar, .g-toggle) button[aria-pressed="true"] { background: var(--accent); }
 .g-tune { display: block; width: calc(100% - 32px); height: 160px; margin: 8px 16px; border: 1px solid var(--border); border-radius: 6px; background: transparent; padding: 8px; color: var(--foreground); font: 11px ui-monospace, monospace; }
 /* One grid of equal cells on charcoal, each piece centred in its cell. */
-.g-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 1px; margin: 16px; background: var(--border); border: 1px solid var(--border); }
+.g-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 1px; margin: 16px; background: var(--border); border: 1px solid var(--border); }
 .g-cell { position: relative; display: grid; min-height: 220px; margin: 0; background: #1b1c1f; place-items: center; padding: 36px 16px 20px; }
 .g-cell-body { display: grid; place-items: center; }
 .g-tag { position: absolute; top: 8px; left: 8px; display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; border-radius: 999px; background: #26272b; padding: 2px 9px; color: var(--muted-foreground); font-size: 10px; }
@@ -40,3 +40,10 @@ html, body { background: var(--frame, #08090a); color: var(--foreground); }
 .g-parts-body { overflow: auto; background: #1b1c1f; }
 .g-card { width: 280px; }
 .g-parts { height: 5600px; }
+/* One piece on each surface it sits on. */
+.g-surfaces { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; }
+.g-surface { position: relative; display: grid; min-width: 200px; place-items: center; border-radius: 14px; padding: 28px 16px 16px; }
+.g-surface[data-surface="ground"] { background: var(--background); box-shadow: inset 0 0 0 1px var(--border); }
+.g-surface > small { position: absolute; top: 7px; left: 10px; color: var(--muted-foreground); font: 9px ui-monospace, monospace; text-transform: uppercase; letter-spacing: .07em; }
+.g-field { display: grid; width: 220px; gap: 8px; }
+.g-field .g-row { justify-content: space-between; font-size: 13px; }
