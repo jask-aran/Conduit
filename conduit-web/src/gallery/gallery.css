@@ -135,3 +135,6 @@ html, body { background: var(--frame, #08090a); color: var(--foreground); }
 .g-live-desk-transcript { width: min(540px, 100%); margin-inline: auto; padding-inline: 0; }
 .g-live-desk-composer { left: 50%; right: auto; width: min(608px, calc(100% - 40px)); transform: translateX(-50%); }
 .g-live-sb-list { gap: 0; } .g-live-sb-list .ui-nav-group + .ui-nav-group { margin-top: 12px; }
+.g-view { display: contents; } .g-view[hidden] { display: none; }
+/* The answer is the app markdown, sized in rem: on a phone the root is 16px, on this page 12.8. */
+.g-live[data-density="phone"] .g-live-answer { zoom: 1.25; }
