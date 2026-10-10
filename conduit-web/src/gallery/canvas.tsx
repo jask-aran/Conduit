@@ -6,6 +6,7 @@ import "../client/styles.css";
 import "./gallery.css";
 import { ChatScreen } from "./stories";
 import { atoms, phoneAtoms, type Atom } from "./atoms";
+import { libraryAtoms } from "./library";
 
 /*
  * Components on the left, each centred in a cell of one grid with a bubble
@@ -54,10 +55,15 @@ function Canvas() {
       </div>
       <Show when={tuning()}><textarea class="g-tune" spellcheck={false} value={tune()} onInput={(event) => update(event.currentTarget.value)}
         placeholder={".composer-surface-material[data-composer-surface=\"frosted-live\"] {\n  backdrop-filter: blur(30px);\n}"} /></Show>
+      <h2 class="g-heading">Library</h2>
+      <div class="g-grid">
+        <For each={libraryAtoms}>{(atom) => <Piece atom={atom} />}</For>
+      </div>
+      <h2 class="g-heading">In the app now</h2>
       <div class="g-grid">
         <For each={atoms}>{(atom) => <Piece atom={atom} />}</For>
       </div>
-      <h2 class="g-heading">Phone only</h2>
+      <h2 class="g-heading">On a phone: library, then the app now</h2>
       <iframe class="g-parts" title="Phone parts" src="/gallery.html?frame=parts" loading="lazy" onLoad={tuneFrame} />
     </section>
     <aside class="g-right">
@@ -74,7 +80,7 @@ function Canvas() {
 
 /** The phone-only pieces, alone in a phone frame. */
 function Parts() {
-  return <div class="g-grid g-parts-grid"><For each={phoneAtoms}>{(atom) => <Piece atom={atom} />}</For></div>;
+  return <div class="g-grid g-parts-grid"><For each={[...libraryAtoms, ...phoneAtoms]}>{(atom) => <Piece atom={atom} />}</For></div>;
 }
 
 export function mount(frame: string | null) {

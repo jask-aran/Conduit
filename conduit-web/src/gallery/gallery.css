@@ -21,7 +21,7 @@ html, body { background: var(--frame, #08090a); color: var(--foreground); }
 /* Menus drawn in place, not floating. */
 .g-static { position: relative; z-index: auto; }
 .g-top { align-items: flex-start; }
-.g-parts-grid { margin: 0; grid-template-columns: 1fr 1fr; }
+.g-parts-grid { margin: 0; grid-template-columns: 1fr; }
 .g-parts-grid .g-cell { min-height: 180px; padding-inline: 8px; }
 .g-phone-menu { width: 190px; }
 .g-swatch { width: 160px; height: 110px; border-radius: 17.6px; }
@@ -38,3 +38,5 @@ html, body { background: var(--frame, #08090a); color: var(--foreground); }
 .g-desktop-screen .chat-main { flex: 1; height: 100%; min-height: 0; }
 .g-solo-body #root, .g-parts-body #root { height: 100vh; }
 .g-parts-body { overflow: auto; background: #1b1c1f; }
+.g-card { width: 280px; }
+.g-parts { height: 5600px; }
