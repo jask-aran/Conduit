@@ -26,14 +26,17 @@
 :root, [data-density="desktop"] {
   --u-type: 12.8px; --u-space: 12.8px; --u-icon: 12.8px;
   --frost-radius: 8px; --frost-inset: 3.2px; --row-pad: 3.2px 4.8px; --row-min: 21.2px; --row-gap: 4.8px; --row-radius: 6.4px;
+  --nav-min: 24px; --nav-pad: 4px 6.4px; --nav-gap: 6.4px; --nav-text: 10.4px; --nav-icon: 12px; --nav-label: 9.6px; --nav-label-pad: 3.2px 6.4px; --nav-indent: 24px;
 }
 [data-density="phone"] {
   --u-type: 16px; --u-space: 16px; --u-icon: 16px;
   --frost-radius: 14px; --frost-inset: 5px; --row-pad: 8px 9px; --row-min: 38px; --row-gap: 8px; --row-radius: 9px;
+  --nav-min: 44px; --nav-pad: 6px 9px; --nav-gap: 8px; --nav-text: 14.5px; --nav-icon: 17px; --nav-label: 13px; --nav-label-pad: 5px 9px; --nav-indent: 30px;
 }
 @media (--conduit-phone-layout) { :root {
   --u-type: 16px; --u-space: 16px; --u-icon: 16px;
   --frost-radius: 14px; --frost-inset: 5px; --row-pad: 8px 9px; --row-min: 38px; --row-gap: 8px; --row-radius: 9px;
+  --nav-min: 44px; --nav-pad: 6px 9px; --nav-gap: 8px; --nav-text: 14.5px; --nav-icon: 17px; --nav-label: 13px; --nav-label-pad: 5px 9px; --nav-indent: 30px;
 } }
 [data-density] { font-size: calc(var(--u-type) * 0.875); }
 :root {
@@ -196,3 +199,21 @@
 
 .ui-row[data-field] > .ui-label { color: var(--muted-foreground); font: calc(0.5625 * var(--u-type))/1.2 ui-monospace, SFMono-Regular, Consolas, monospace; letter-spacing: 0.07em; text-transform: uppercase; }
 .ui-row[data-field] > small { color: color-mix(in oklch, var(--foreground), transparent 45%); font-size: calc(0.8125 * var(--u-type)); }
+
+/* Nav list: the sidebar's rows on the ground, not in a popover. A group has
+   a label; a row an icon, its label, an optional toggle at its end, and an
+   indent when it sits under another row (a chat under its project). Sizes
+   are the app's sidebar, per density. */
+.ui-nav-group { display: flex; flex-direction: column; }
+.ui-nav-label { padding: var(--nav-label-pad); color: color-mix(in oklch, var(--foreground), transparent 52%); font-size: var(--nav-label); font-weight: 700; letter-spacing: 0.02em; }
+.ui-nav-row { display: flex; width: 100%; min-width: 0; min-height: var(--nav-min); align-items: center; gap: var(--nav-gap); border: 0; border-radius: 8px; background: transparent; padding: var(--nav-pad); color: color-mix(in oklch, var(--foreground), transparent 32%); font-size: var(--nav-text); text-align: left; }
+.ui-nav-row[data-indent] { padding-left: var(--nav-indent); }
+.ui-nav-row > .ui-nav-icon { display: inline-grid; width: var(--nav-icon); height: var(--nav-icon); flex: none; place-items: center; color: var(--muted-foreground); }
+.ui-nav-row > .ui-nav-icon > * { width: 100%; height: 100%; }
+.ui-nav-row > .ui-nav-icon > .harness-mark { height: 75%; }
+.ui-nav-row > span:not(.ui-nav-icon, .ui-nav-toggle) { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ui-nav-row:hover, .ui-nav-row[aria-current="page"] { color: var(--foreground); }
+.ui-nav-row:hover { background: var(--accent); }
+.ui-nav-row[aria-current="page"] { font-weight: 660; }
+.ui-nav-toggle { display: grid; width: calc(var(--nav-icon) + 9px); height: calc(var(--nav-icon) + 9px); flex: none; place-items: center; border-radius: 6px; color: var(--muted-foreground); }
+.ui-nav-toggle svg { width: var(--nav-icon); height: var(--nav-icon); }

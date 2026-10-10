@@ -5,7 +5,7 @@ import "../client/chat/composer-geometry.css";
 import "../client/styles.css";
 import "./gallery.css";
 import { ChatScreen } from "./stories";
-import { LiveDesktop, LivePhone } from "./live";
+import { LiveDesktop, LivePhone, LivePhoneSidebar } from "./live";
 import { SidebarScreen } from "./sidebar-story";
 import { atoms, phoneAtoms, type Atom } from "./atoms";
 import { libraryGroups } from "./library";
@@ -44,7 +44,8 @@ function Piece(props: { atom: Atom; side?: boolean }) {
 
 function Canvas() {
   const [tune, setTune] = createSignal(read());
-  const [preview, setPreview] = createSignal<"desktop" | "phone" | "sidebar" | "library" | "library-desktop">("sidebar");
+  const [preview, setPreview] = createSignal<"phone" | "sidebar" | "desktop">("phone");
+  const [source, setSource] = createSignal<"live" | "library">("live");
   const [tuning, setTuning] = createSignal(false);
   const update = (css: string) => {
     setTune(css);
@@ -74,19 +75,26 @@ function Canvas() {
       </div>
     </section>
     <aside class="g-right">
-      <div class="g-toggle" role="group" aria-label="Preview">
-        <button type="button" aria-pressed={preview() === "phone"} onClick={() => setPreview("phone")}>Phone</button>
-        <button type="button" aria-pressed={preview() === "sidebar"} onClick={() => setPreview("sidebar")}>Phone sidebar</button>
-        <button type="button" aria-pressed={preview() === "desktop"} onClick={() => setPreview("desktop")}>Desktop</button>
-        <button type="button" aria-pressed={preview() === "library"} onClick={() => setPreview("library")}>Phone · library</button>
-        <button type="button" aria-pressed={preview() === "library-desktop"} onClick={() => setPreview("library-desktop")}>Desktop · library</button>
+      <div class="g-toggles">
+        <div class="g-toggle" role="group" aria-label="Preview">
+          <button type="button" aria-pressed={preview() === "phone"} onClick={() => setPreview("phone")}>Phone</button>
+          <button type="button" aria-pressed={preview() === "sidebar"} onClick={() => setPreview("sidebar")}>Phone sidebar</button>
+          <button type="button" aria-pressed={preview() === "desktop"} onClick={() => setPreview("desktop")}>Desktop</button>
+        </div>
+        <div class="g-toggle" role="group" aria-label="Drawn with">
+          <button type="button" aria-pressed={source() === "live"} onClick={() => setSource("live")}>Live</button>
+          <button type="button" aria-pressed={source() === "library"} onClick={() => setSource("library")}>Library</button>
+        </div>
       </div>
-      <Show when={preview() === "sidebar"}><iframe class="g-phone" title="Phone sidebar" src="/gallery.html?frame=sidebar" onLoad={tuneFrame} /></Show>
-      <Show when={preview() === "library"}><LivePhone /></Show>
-      <Show when={preview() === "library-desktop"}><LiveDesktop /></Show>
-      <Show when={preview() === "desktop"}><div class="g-desktop-screen"><ChatScreen /></div></Show>
-      <Show when={preview() === "phone"}>
-        <iframe class="g-phone" title="Phone preview" src="/gallery.html?frame=phone" onLoad={tuneFrame} />
+      <Show when={source() === "live"}>
+        <Show when={preview() === "phone"}><iframe class="g-phone" title="Phone" src="/gallery.html?frame=phone" onLoad={tuneFrame} /></Show>
+        <Show when={preview() === "sidebar"}><iframe class="g-phone" title="Phone sidebar" src="/gallery.html?frame=sidebar" onLoad={tuneFrame} /></Show>
+        <Show when={preview() === "desktop"}><div class="g-desktop-screen"><ChatScreen /></div></Show>
+      </Show>
+      <Show when={source() === "library"}>
+        <Show when={preview() === "phone"}><LivePhone /></Show>
+        <Show when={preview() === "sidebar"}><LivePhoneSidebar /></Show>
+        <Show when={preview() === "desktop"}><LiveDesktop /></Show>
       </Show>
     </aside>
   </div>;

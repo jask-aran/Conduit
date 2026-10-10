@@ -9,7 +9,7 @@ const at = (hours: number) => new Date(Date.UTC(2026, 9, 10, 20 - hours)).toISOS
 const chat = (projectId: string, id: string, title: string, hours: number): ChatSummary =>
   ({ id, projectId, title, status: "active", harnessId: "conduit", createdAt: at(hours), updatedAt: at(hours), lastUserMessageAt: at(hours) }) as ChatSummary;
 const TITLES = ["Lorem ipsum file", "Plan the trip", "Fix the build", "Quarterly numbers", "Rename the folders"];
-const projects = (): Project[] => [
+export const projects = (): Project[] => [
   { id: "chat", slug: "chat", name: "Chats", kind: "unstructured", origin: "managed", workingRoot: "/home/you/chat", sessions: TITLES.slice(0, 4).map((title, index) => chat("chat", `c${index}`, title, index * 3 + 1)) } as Project,
   ...PROJECTS.map((project, p) => ({ ...project, sessions: TITLES.slice(0, 2 + (p % 3)).map((title, index) => chat(project.id, `${project.id}-${index}`, title, p * 5 + index * 2 + 2)) })),
 ];
