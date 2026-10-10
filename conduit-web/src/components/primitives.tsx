@@ -8,6 +8,7 @@ import { ContextMenu as KContextMenu } from "@kobalte/core/context-menu";
 import { Popover as KPopover } from "@kobalte/core/popover";
 import * as KTooltip from "@kobalte/core/tooltip";
 import { ChevronRightIcon, LoaderCircleIcon, XIcon } from "lucide-solid";
+import { useLibrary } from "@/components/ui/swap";
 import { cn } from "@/lib/utils";
 
 type ButtonProps = JSX.ButtonHTMLAttributes<HTMLButtonElement> & {
@@ -62,6 +63,13 @@ export const menuContentClass = "z-[100] min-w-40 rounded-lg bg-popover p-1 text
 export const menuSubContentClass = "z-[100] min-w-28 rounded-lg bg-popover p-1 text-popover-foreground shadow-md ring-1 ring-foreground/10 outline-none";
 export const menuItemClass = "relative flex cursor-default select-none items-center gap-1.5 rounded-md px-1.5 py-1 text-sm outline-none data-[highlighted]:bg-accent data-[highlighted]:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50 data-[variant=destructive]:text-destructive data-[variant=destructive]:data-[highlighted]:bg-destructive/15";
 
+/* In the gallery's Library previews (components/ui/swap.ts) a menu is the
+   library's: its frost shell, rows and titles (library.css). */
+const libraryMenu = "ui-frost ui-menu";
+const contentClass = (base: string) => useLibrary() ? libraryMenu : base;
+const itemClass = () => useLibrary() ? "ui-row" : menuItemClass;
+const libraryShell = () => useLibrary() ? { "data-surface": "frost", "data-lift": "raised" } : {};
+
 export const Menu = KMenu;
 export const MenuTrigger = KMenu.Trigger;
 export const MenuGroup = KMenu.Group;
@@ -69,10 +77,10 @@ export const MenuRadioGroup = KMenu.RadioGroup;
 
 export function MenuContent(props: ParentProps<{ class?: string; onOpenAutoFocus?: (event: Event) => void; onCloseAutoFocus?: (event: Event) => void; onFocusOutside?: (event: FocusOutsideEvent) => void; onPointerDown?: (event: PointerEvent) => void; onClick?: (event: MouseEvent) => void; "data-settling"?: boolean; onPointerDownOutside?: (event: Event) => void }>) {
   const portalMount = createFullscreenPortalMount();
-  return <KMenu.Portal mount={portalMount()}><KMenu.Content data-slot="menu-content" data-settling={props["data-settling"]} onPointerDownOutside={props.onPointerDownOutside} onOpenAutoFocus={props.onOpenAutoFocus} onCloseAutoFocus={props.onCloseAutoFocus} onFocusOutside={props.onFocusOutside} onPointerDown={props.onPointerDown} onClick={props.onClick} class={cn(menuContentClass, props.class)}>{props.children}</KMenu.Content></KMenu.Portal>;
+  return <KMenu.Portal mount={portalMount()}><KMenu.Content data-slot="menu-content" {...libraryShell()} data-settling={props["data-settling"]} onPointerDownOutside={props.onPointerDownOutside} onOpenAutoFocus={props.onOpenAutoFocus} onCloseAutoFocus={props.onCloseAutoFocus} onFocusOutside={props.onFocusOutside} onPointerDown={props.onPointerDown} onClick={props.onClick} class={cn(contentClass(menuContentClass), props.class)}>{props.children}</KMenu.Content></KMenu.Portal>;
 }
 export function MenuItem(props: ParentProps<{ class?: string; disabled?: boolean; closeOnSelect?: boolean; variant?: "destructive"; onSelect?: () => void; textValue?: string; "aria-label"?: string }>) {
-  return <KMenu.Item disabled={props.disabled} closeOnSelect={props.closeOnSelect} onSelect={props.onSelect} textValue={props.textValue} aria-label={props["aria-label"]} data-variant={props.variant} class={cn(menuItemClass, props.class)}>{props.children}</KMenu.Item>;
+  return <KMenu.Item disabled={props.disabled} closeOnSelect={props.closeOnSelect} onSelect={props.onSelect} textValue={props.textValue} aria-label={props["aria-label"]} data-variant={props.variant} class={cn(itemClass(), props.class)}>{props.children}</KMenu.Item>;
 }
 /* The current choice is the row's wash and a heavier weight -- never a tick,
    which costs a column the label could use. */
@@ -81,18 +89,18 @@ const checkedItemClass = "";
 export function MenuRadioItem(props: ParentProps<{ class?: string; value: string; disabled?: boolean; closeOnSelect?: boolean; onSelect?: () => void }>) {
   /* Conduit menus close after a selection by default; persistent pickers can
      opt out so the user can change several values before clicking away. */
-  return <KMenu.RadioItem value={props.value} disabled={props.disabled} closeOnSelect={props.closeOnSelect ?? true} onSelect={props.onSelect} class={cn(menuItemClass, checkedItemClass, props.class)}>{props.children}</KMenu.RadioItem>;
+  return <KMenu.RadioItem value={props.value} disabled={props.disabled} closeOnSelect={props.closeOnSelect ?? true} onSelect={props.onSelect} class={cn(itemClass(), checkedItemClass, props.class)}>{props.children}</KMenu.RadioItem>;
 }
 export const MenuSub = KMenu.Sub;
-export function MenuSubTrigger(props: ParentProps<{ class?: string; disabled?: boolean }>) { return <KMenu.SubTrigger disabled={props.disabled} class={cn(menuItemClass, "data-[expanded]:bg-accent", props.class)}>{props.children}<ChevronRightIcon class="menu-chevron" /></KMenu.SubTrigger>; }
+export function MenuSubTrigger(props: ParentProps<{ class?: string; disabled?: boolean }>) { return <KMenu.SubTrigger disabled={props.disabled} class={cn(itemClass(), "data-[expanded]:bg-accent", props.class)}>{props.children}<ChevronRightIcon class="menu-chevron" /></KMenu.SubTrigger>; }
 export function MenuSubContent(props: ParentProps<{ class?: string }>) {
   const portalMount = createFullscreenPortalMount();
-  return <KMenu.Portal mount={portalMount()}><KMenu.SubContent data-slot="menu-sub-content" class={cn(menuSubContentClass, props.class)}>{props.children}</KMenu.SubContent></KMenu.Portal>;
+  return <KMenu.Portal mount={portalMount()}><KMenu.SubContent data-slot="menu-sub-content" {...libraryShell()} class={cn(contentClass(menuSubContentClass), props.class)}>{props.children}</KMenu.SubContent></KMenu.Portal>;
 }
 export const menuLabelClass = "px-1.5 py-1.5 text-xs font-medium text-muted-foreground";
 export const menuSeparatorClass = "-mx-1 my-1 h-px bg-border";
-export function MenuLabel(props: ParentProps<{ class?: string }>) { return <KMenu.GroupLabel class={cn(menuLabelClass, props.class)}>{props.children}</KMenu.GroupLabel>; }
-export function MenuSeparator() { return <KMenu.Separator class={menuSeparatorClass} />; }
+export function MenuLabel(props: ParentProps<{ class?: string }>) { return <KMenu.GroupLabel class={cn(useLibrary() ? "ui-title" : menuLabelClass, props.class)}>{props.children}</KMenu.GroupLabel>; }
+export function MenuSeparator() { return <KMenu.Separator class={useLibrary() ? "ui-rule" : menuSeparatorClass} />; }
 
 /*
  * A floating surface for something to be edited in place -- the menu's
@@ -106,7 +114,7 @@ export function Popover(props: ParentProps<{ open?: boolean; onOpenChange?: (ope
 export const PopoverTrigger = KPopover.Trigger;
 export function PopoverContent(props: ParentProps<{ class?: string; "aria-label"?: string; onPointerDownOutside?: (event: Event & { target: EventTarget | null }) => void; onOpenAutoFocus?: (event: Event) => void; onCloseAutoFocus?: (event: Event) => void }>) {
   const portalMount = createFullscreenPortalMount();
-  return <KPopover.Portal mount={portalMount()}><KPopover.Content data-slot="popover-content" aria-label={props["aria-label"]} onPointerDownOutside={props.onPointerDownOutside} onOpenAutoFocus={props.onOpenAutoFocus} onCloseAutoFocus={props.onCloseAutoFocus} class={cn(menuContentClass, props.class)}>{props.children}</KPopover.Content></KPopover.Portal>;
+  return <KPopover.Portal mount={portalMount()}><KPopover.Content data-slot="popover-content" {...libraryShell()} aria-label={props["aria-label"]} onPointerDownOutside={props.onPointerDownOutside} onOpenAutoFocus={props.onOpenAutoFocus} onCloseAutoFocus={props.onCloseAutoFocus} class={cn(contentClass(menuContentClass), props.class)}>{props.children}</KPopover.Content></KPopover.Portal>;
 }
 
 /**
@@ -188,13 +196,13 @@ export const ContextMenuTrigger = ((props: Record<string, unknown>) => {
   return <Dynamic component={(local.as as ValidComponent | undefined) || "div"} {...rest} />;
 }) as typeof KContextMenu.Trigger;
 export const ContextMenuGroup = KContextMenu.Group;
-export function ContextMenuContent(props: ParentProps<{ class?: string; shortcutScope?: string }>) { if (useContext(RowMenuDeferred)) return null; return <KContextMenu.Portal><KContextMenu.Content data-slot="context-menu-content" data-shortcut-scope={props.shortcutScope} class={cn(menuContentClass, props.class)}>{props.children}</KContextMenu.Content></KContextMenu.Portal>; }
-export function ContextMenuItem(props: ParentProps<{ disabled?: boolean; variant?: "destructive"; onSelect?: () => void; class?: string }>) { return <KContextMenu.Item disabled={props.disabled} onSelect={props.onSelect} data-variant={props.variant} class={cn(menuItemClass, props.class)}>{props.children}</KContextMenu.Item>; }
+export function ContextMenuContent(props: ParentProps<{ class?: string; shortcutScope?: string }>) { if (useContext(RowMenuDeferred)) return null; return <KContextMenu.Portal><KContextMenu.Content data-slot="context-menu-content" data-shortcut-scope={props.shortcutScope} {...libraryShell()} class={cn(contentClass(menuContentClass), props.class)}>{props.children}</KContextMenu.Content></KContextMenu.Portal>; }
+export function ContextMenuItem(props: ParentProps<{ disabled?: boolean; variant?: "destructive"; onSelect?: () => void; class?: string }>) { return <KContextMenu.Item disabled={props.disabled} onSelect={props.onSelect} data-variant={props.variant} class={cn(itemClass(), props.class)}>{props.children}</KContextMenu.Item>; }
 export const ContextMenuSub = KContextMenu.Sub;
-export function ContextMenuSubTrigger(props: ParentProps<{ disabled?: boolean }>) { return <KContextMenu.SubTrigger disabled={props.disabled} class={cn(menuItemClass, "data-[expanded]:bg-accent")}>{props.children}<ChevronRightIcon class="menu-chevron" /></KContextMenu.SubTrigger>; }
-export function ContextMenuSubContent(props: ParentProps<{ class?: string }>) { return <KContextMenu.Portal><KContextMenu.SubContent data-slot="context-menu-sub-content" class={cn(menuSubContentClass, "pointer-events-auto", props.class)}>{props.children}</KContextMenu.SubContent></KContextMenu.Portal>; }
+export function ContextMenuSubTrigger(props: ParentProps<{ disabled?: boolean }>) { return <KContextMenu.SubTrigger disabled={props.disabled} class={cn(itemClass(), "data-[expanded]:bg-accent")}>{props.children}<ChevronRightIcon class="menu-chevron" /></KContextMenu.SubTrigger>; }
+export function ContextMenuSubContent(props: ParentProps<{ class?: string }>) { return <KContextMenu.Portal><KContextMenu.SubContent data-slot="context-menu-sub-content" {...libraryShell()} class={cn(contentClass(menuSubContentClass), "pointer-events-auto", props.class)}>{props.children}</KContextMenu.SubContent></KContextMenu.Portal>; }
 export const ContextMenuRadioGroup = KContextMenu.RadioGroup;
-export function ContextMenuRadioItem(props: ParentProps<{ value: string }>) { return <KContextMenu.RadioItem value={props.value} closeOnSelect={true} class={cn(menuItemClass, checkedItemClass)}>{props.children}</KContextMenu.RadioItem>; }
+export function ContextMenuRadioItem(props: ParentProps<{ value: string }>) { return <KContextMenu.RadioItem value={props.value} closeOnSelect={true} class={cn(itemClass(), checkedItemClass)}>{props.children}</KContextMenu.RadioItem>; }
 export function ContextMenuSeparator() { return <KContextMenu.Separator class="-mx-1 my-1 h-px bg-border" />; }
 
 export function Tooltip(props: ParentProps) { return <KTooltip.Root placement="right" openDelay={350}>{props.children}</KTooltip.Root>; }

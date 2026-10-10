@@ -1,6 +1,8 @@
 import { createSignal, onCleanup } from "solid-js";
+import { useLibrary } from "@/components/ui/swap";
 
-export type ComposerSurfaceMode = "static" | "frosted-live";
+// "library": the gallery's Library previews only (components/ui/swap.ts), never stored or offered.
+export type ComposerSurfaceMode = "static" | "frosted-live" | "library";
 
 export const COMPOSER_SURFACE_STORAGE_KEY = "conduit:composer-surface";
 export const COMPOSER_SURFACE_CHANGE_EVENT = "conduit:composer-surface-change";
@@ -25,6 +27,7 @@ export const COMPOSER_SURFACE_OPTIONS: readonly {
 const isComposerSurfaceMode = (value: string | null): value is ComposerSurfaceMode => value === "static" || value === "frosted-live";
 
 export function selectedComposerSurface(storage: Pick<Storage, "getItem"> = localStorage): ComposerSurfaceMode {
+  if (useLibrary()) return "library";
   const selected = storage.getItem(COMPOSER_SURFACE_STORAGE_KEY);
   return isComposerSurfaceMode(selected) ? selected : "frosted-live";
 }
