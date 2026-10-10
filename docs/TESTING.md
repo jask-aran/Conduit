@@ -49,7 +49,7 @@ node scripts/conduit-auth.mjs mint-session \
 
 ## Component gallery
 
-For component and styling changes, check the gallery before the app. Run `npm run gallery` in `conduit-web`; it builds the gallery like the app (into `dist-gallery/`) and serves `http://localhost:5180/gallery.html`. `npm run gallery:dev` serves it unbundled with hot reload, which is much slower to load and needs no server, sign-in or fixtures. It holds the frosted family: real components, live, on one canvas. Each card has an anchor (`#menu`). The phone screen is `gallery.html?frame=phone` at 412px wide, which passes for a phone (`src/gallery/phone-emulation.ts`), so a headless screenshot of it needs no touch emulation. The microphone is a synthetic one, so the real mic is never opened. The gallery is dev-only and never built into `dist`.
+For component and styling changes, check the gallery before the app. Run `npm run gallery` in `conduit-web`; it builds the gallery like the app (into `dist-gallery/`) and serves `http://localhost:5180/gallery.html`. `npm run gallery:dev` serves it unbundled with hot reload, which is much slower to load. Neither needs a server, sign-in or fixtures. It holds the frosted family: real components, live, on one canvas. Each card has an anchor (`#menu`). The phone screen is `gallery.html?frame=phone` at 412px wide, which passes for a phone (`src/gallery/phone-emulation.ts`), so a headless screenshot of it needs no touch emulation. The microphone is a synthetic one, so the real mic is never opened. The gallery is dev-only and never built into `dist`.
 
 ## Browser surfaces
 
