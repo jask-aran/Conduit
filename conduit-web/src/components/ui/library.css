@@ -20,19 +20,19 @@
  *   .ui-card               raised frost card: dialogs and overlays
  *   .ui-bubble             the user's message
  */
-/* Density, measured from the app (desktop menus against the phone + menu):
-   text grows 1.25x on a phone, spacing ~1.8x to make finger-sized rows,
-   icons barely. Sizes below are written in desktop px over 12.8. */
+/* Density, measured from the app: text and general spacing grow 1.25x on a
+   phone, icons barely; popover rows and the frost pill take their own
+   measured sizes (rows ~1.8x, for a finger). Sizes below are written in desktop px over 12.8. */
 :root, [data-density="desktop"] {
   --u-type: 12.8px; --u-space: 12.8px; --u-icon: 12.8px;
   --frost-radius: 8px; --frost-inset: 3.2px; --row-pad: 3.2px 4.8px; --row-min: 21.2px; --row-gap: 4.8px; --row-radius: 6.4px;
 }
 [data-density="phone"] {
-  --u-type: 16px; --u-space: 22.4px; --u-icon: 14px;
+  --u-type: 16px; --u-space: 16px; --u-icon: 14px;
   --frost-radius: 14px; --frost-inset: 5px; --row-pad: 8px 9px; --row-min: 38px; --row-gap: 8px; --row-radius: 9px;
 }
 @media (--conduit-phone-layout) { :root {
-  --u-type: 16px; --u-space: 22.4px; --u-icon: 14px;
+  --u-type: 16px; --u-space: 16px; --u-icon: 14px;
   --frost-radius: 14px; --frost-inset: 5px; --row-pad: 8px 9px; --row-min: 38px; --row-gap: 8px; --row-radius: 9px;
 } }
 [data-density] { font-size: calc(var(--u-type) * 0.875); }
@@ -60,10 +60,10 @@
 .ui-frost[data-core] { background: linear-gradient(var(--frost-fill), var(--frost-fill)), var(--frost-core-ground); }
 
 /* Pill: icon slots in a capsule, 1px from its edge. */
-.ui-pill { display: inline-flex; height: calc(2.75 * var(--u-space)); align-items: center; gap: calc(0.125 * var(--u-space)); padding: 0 1px; border-radius: 999px; }
-.ui-pill > button { display: grid; width: calc(2.125 * var(--u-space)); height: calc(2.5 * var(--u-space)); place-items: center; border: 0; border-radius: 999px; background: transparent; color: inherit; }
+.ui-pill { display: inline-flex; height: 44px; align-items: center; gap: 2px; padding: 0 1px; border-radius: 999px; }
+.ui-pill > button { display: grid; width: 34px; height: 40px; place-items: center; border: 0; border-radius: 999px; background: transparent; color: inherit; }
 .ui-pill > button:hover { background: var(--frost-wash); }
-.ui-pill > button svg { width: calc(1.125 * var(--u-icon)); height: calc(1.125 * var(--u-icon)); }
+.ui-pill > button svg { width: 18px; height: 18px; }
 
 /* Menu: a raised container; rows sit concentric inside it. */
 .ui-menu { display: flex; min-width: calc(12 * var(--u-type)); flex-direction: column; border-radius: var(--frost-radius); padding: var(--frost-inset); }
@@ -106,7 +106,7 @@
 .ui-card > p { margin: calc(-0.5 * var(--u-space)) 0 0; color: var(--muted-foreground); font-size: calc(0.875 * var(--u-type)); }
 .ui-card-actions { display: flex; justify-content: flex-end; gap: calc(0.5 * var(--u-space)); }
 
-.ui-bubble { max-width: 80%; margin-left: auto; border-radius: calc(1.1 * var(--u-space)); padding: calc(0.625 * var(--u-space)) calc(0.8125 * var(--u-space)); font-size: calc(0.875 * var(--u-type)); white-space: pre-wrap; overflow-wrap: anywhere; }
+.ui-bubble { max-width: 80%; margin-left: auto; border-radius: calc(0.9375 * var(--u-type)); padding: calc(0.625 * var(--u-type)) calc(0.8125 * var(--u-type)); font-size: var(--u-type); line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
 
 
 /* Button: a rounded rectangle. On the ground, outline is a filled well; on
@@ -154,9 +154,9 @@
 .ui-seg[data-icons] button { width: calc(2.25 * var(--u-space)); padding: 0; }
 [data-surface="frost"] .ui-seg { border-color: oklch(1 0 0 / 14%); }
 [data-surface="frost"] .ui-seg-thumb { background: var(--frost-wash); }
-.ui-seg[data-pill] { height: calc(2.75 * var(--u-space)); gap: 2px; border-color: var(--frost-stroke); border-radius: 999px; background: var(--frost-fill); padding: 1px; }
-.ui-seg[data-pill] .ui-seg-thumb { top: 1px; bottom: 1px; left: 1px; width: calc(2.125 * var(--u-space)); border-radius: 999px; background: var(--frost-wash); }
-.ui-seg[data-pill] button { width: calc(2.125 * var(--u-space)); min-height: calc(2.5 * var(--u-space)); border-radius: 999px; padding: 0; }
+.ui-seg[data-pill] { height: 44px; gap: 2px; border-color: var(--frost-stroke); border-radius: 999px; background: var(--frost-fill); padding: 1px; }
+.ui-seg[data-pill] .ui-seg-thumb { top: 1px; bottom: 1px; left: 1px; width: 34px; border-radius: 999px; background: var(--frost-wash); }
+.ui-seg[data-pill] button { width: 34px; min-height: 40px; border-radius: 999px; padding: 0; }
 @media (prefers-reduced-motion: reduce) { .ui-seg-thumb { transition: none; } }
 
 /* Slider: the label is a section title, the value an item (one that opens,
