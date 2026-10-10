@@ -1,0 +1,42 @@
+/* The gallery's own chrome. Kept plain and out of the app's names (g-*). */
+html, body { background: var(--frame, #08090a); color: var(--foreground); }
+#root { height: auto; }
+.g-canvas { display: grid; grid-template-columns: 260px 1fr; min-height: 100vh; font-family: "Geist Variable", sans-serif; }
+.g-panel { position: sticky; top: 0; display: flex; height: 100vh; flex-direction: column; gap: 10px; overflow: auto; border-right: 1px solid var(--border); padding: 16px; font-size: 12px; }
+.g-panel h1 { font-size: 15px; font-weight: 600; }
+.g-panel h2 { margin-top: 8px; color: var(--muted-foreground); font-size: 11px; }
+.g-panel p { color: var(--muted-foreground); }
+.g-panel nav { display: flex; flex-direction: column; gap: 2px; }
+.g-panel nav a { color: var(--foreground); text-decoration: none; padding: 2px 0; }
+.g-panel textarea { min-height: 220px; resize: vertical; border: 1px solid var(--border); border-radius: 6px; background: transparent; padding: 8px; color: var(--foreground); font: 11px ui-monospace, monospace; }
+.g-panel > button, .g-filter button { border: 1px solid var(--border); border-radius: 6px; background: transparent; padding: 4px 8px; color: var(--foreground); }
+.g-filter { display: flex; gap: 4px; }
+.g-filter button[aria-pressed="true"] { background: var(--accent); }
+.g-board { padding: 16px 24px 80px; }
+.g-group { margin: 24px 0 12px; font-size: 13px; color: var(--muted-foreground); }
+.g-grid { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start; }
+.g-card { border: 1px solid var(--border); border-radius: 10px; background: var(--background); padding: 12px; scroll-margin-top: 16px; }
+.g-card > header { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 6px; }
+.g-card h3 { font-size: 13px; font-weight: 600; }
+.g-card code { color: var(--muted-foreground); font-size: 10px; }
+.g-note { max-width: 520px; margin-bottom: 8px; color: var(--muted-foreground); font-size: 11px; }
+.g-tag { border-radius: 999px; padding: 1px 7px; background: var(--muted); font-size: 10px; }
+.g-tag[data-kind="mismatch"] { background: color-mix(in oklch, var(--destructive), transparent 60%); }
+.g-tag[data-kind="one-off"] { background: color-mix(in oklch, #d99a22, transparent 65%); }
+.g-renders { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-start; }
+.g-desktop, .g-frame { position: relative; padding-top: 16px; }
+.g-desktop::before, .g-frame::before { content: attr(data-label); position: absolute; top: 0; left: 0; color: var(--muted-foreground); font-size: 10px; }
+.g-desktop { display: flex; min-width: 200px; flex-direction: column; gap: 8px; }
+.g-phone { display: block; width: 412px; border: 1px solid var(--border); border-radius: 12px; background: var(--background); }
+.g-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.g-solo-body #root { height: 100vh; }
+.g-solo { position: relative; height: 100vh; overflow: hidden; padding: 12px; }
+.g-solo:has(> .g-surface, > .conduit-sidebar) { padding: 0; }
+.g-surface { position: relative; height: 100%; min-height: 120px; overflow: hidden; }
+.g-backdrop { padding: 64px 16px 16px; color: var(--foreground); font-size: 14px; line-height: 1.5; }
+.g-backdrop pre { margin: 10px 0; color: #98c379; font-size: 12px; }
+.g-materials { min-width: 380px; min-height: 340px; }
+.g-materials .g-backdrop { padding-top: 12px; }
+.g-swatches { position: absolute; inset: 12px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.g-swatch { display: flex; min-height: 70px; align-items: flex-end; border-radius: 14px; padding: 8px; font-size: 10px; }
+.g-disclosure-header { cursor: pointer; }

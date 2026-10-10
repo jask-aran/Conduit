@@ -1,6 +1,6 @@
 # Component system, gallery workbench, and generative UI
 
-Status: decisions agreed 2026-10-08; milestone 0 done 2026-10-10.
+Status: decisions agreed 2026-10-08; milestone 0 done 2026-10-10; milestone 1 started (gallery canvas in `src/gallery/`).
 Supersedes the earlier long-form plan (see git history of this file for the
 per-file TSX/CSS inventory, Storybook setup notes and the iframe-artifact
 security discussion).
