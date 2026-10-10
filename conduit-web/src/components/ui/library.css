@@ -165,6 +165,10 @@
 .ui-seg[data-pill] { height: 44px; gap: 2px; border-color: var(--frost-stroke); border-radius: 999px; background: var(--frost-fill); padding: 1px; }
 .ui-seg[data-pill] .ui-seg-thumb { top: 1px; bottom: 1px; left: 1px; width: 34px; border-radius: 999px; background: var(--frost-wash); }
 .ui-seg[data-pill] button { width: 34px; min-height: 40px; border-radius: 999px; padding: 0; }
+.ui-seg[data-pill] button svg { width: var(--u-icon); height: var(--u-icon); }
+/* On the frame (the sidebar) controls take the sidebar's own ink. */
+[data-surface="frame"] :is(.ui-pill > button, .ui-seg[data-pill] button[aria-checked="true"]) { color: var(--sidebar-accent-foreground); }
+[data-surface="frame"] .ui-seg[data-pill] .ui-seg-thumb { background: var(--sidebar-accent); }
 @media (prefers-reduced-motion: reduce) { .ui-seg-thumb { transition: none; } }
 
 /* Slider: the label is a section title, the value an item (one that opens,
@@ -204,16 +208,19 @@
    a label; a row an icon, its label, an optional toggle at its end, and an
    indent when it sits under another row (a chat under its project). Sizes
    are the app's sidebar, per density. */
-.ui-nav-group { display: flex; flex-direction: column; }
-.ui-nav-label { padding: var(--nav-label-pad); color: color-mix(in oklch, var(--sidebar-foreground), transparent 52%); font-size: var(--nav-label); font-weight: 700; letter-spacing: 0.02em; }
-.ui-nav-row { display: flex; width: 100%; min-width: 0; min-height: var(--nav-min); align-items: center; gap: var(--nav-gap); border: 0; border-radius: 8px; background: transparent; padding: var(--nav-pad); color: color-mix(in oklch, var(--sidebar-foreground), transparent 32%); font-size: var(--nav-text); text-align: left; }
+.ui-nav-group { display: flex; flex-direction: column; gap: 1px; }
+.ui-nav-group:not(:has(> .ui-nav-label)) { gap: 0; }
+.ui-nav-label { align-self: flex-start; padding: var(--nav-label-pad); color: color-mix(in oklch, var(--sidebar-foreground), transparent 52%); font-size: var(--nav-label); line-height: 1.5; font-weight: 700; letter-spacing: 0.02em; }
+.ui-nav-row { display: flex; width: 100%; min-width: 0; min-height: var(--nav-min); align-items: center; gap: var(--nav-gap); border: 0; border-radius: 8px; background: transparent; padding: var(--nav-pad); color: color-mix(in oklch, var(--sidebar-foreground), transparent 32%); font-size: var(--nav-text); line-height: 1.5; text-align: left; }
 .ui-nav-row[data-indent] { padding-left: var(--nav-indent); }
 .ui-nav-row > .ui-nav-icon { display: inline-grid; width: var(--nav-icon); height: var(--nav-icon); flex: none; place-items: center; color: var(--muted-foreground); }
 .ui-nav-row > .ui-nav-icon > * { width: 100%; height: 100%; }
+.ui-nav-icon:has(> .harness-mark) { width: calc(var(--nav-icon) - 1px); }
 .ui-nav-row > .ui-nav-icon > .harness-mark { width: calc(var(--nav-icon) - 1px); height: calc(0.75 * (var(--nav-icon) - 1px)); }
 .ui-nav-row > span:not(.ui-nav-icon, .ui-nav-toggle) { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ui-nav-row:hover, .ui-nav-row[aria-current="page"] { color: var(--sidebar-accent-foreground); }
 .ui-nav-row:hover { background: var(--sidebar-accent); }
 .ui-nav-row[aria-current="page"] { font-weight: 660; }
-.ui-nav-toggle { display: grid; width: calc(var(--nav-icon) + 9px); height: calc(var(--nav-icon) + 9px); flex: none; place-items: center; border-radius: 6px; color: var(--muted-foreground); }
+.ui-nav-row:is(:hover, [aria-current="page"]) > .ui-nav-icon { color: var(--foreground); }
+.ui-nav-toggle { margin-right: -6px; display: grid; width: calc(var(--nav-icon) + 9px); height: calc(var(--nav-icon) + 9px); flex: none; place-items: center; border-radius: 6px; color: var(--muted-foreground); }
 .ui-nav-toggle svg { width: var(--nav-icon); height: var(--nav-icon); }

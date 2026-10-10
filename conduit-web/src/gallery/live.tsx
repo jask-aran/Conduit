@@ -1,4 +1,4 @@
-import { createSignal, For, Show, type JSX } from "solid-js";
+import { createSignal, For, onMount, Show, type JSX } from "solid-js";
 import { MessageSquarePlusIcon, EllipsisIcon, FolderPlusIcon, LayoutDashboardIcon, MicIcon, PanelLeftIcon, PanelRightIcon, PaperclipIcon, PlusIcon, QrCodeIcon, RefreshCwIcon, SearchIcon, ShareIcon, SquarePenIcon, TerminalIcon, ChevronDownIcon, CameraIcon, KeyboardIcon, ArrowUpIcon, Trash2Icon, PencilIcon, ShieldCheckIcon, CircleIcon } from "lucide-solid";
 import { Bubble, Button, Item, Menu, NavGroup, NavRow, Pill, Section } from "@/components/ui";
 import { projects } from "./sidebar-story";
@@ -125,18 +125,23 @@ export function LivePhoneSidebar() {
   const list = projects();
   const chats = list.find((project) => project.slug === "chat")!;
   const folders = list.filter((project) => project.slug !== "chat" && project.kind === "project");
-  return <div class="g-live g-live-sb" data-density="phone">
+  let scroller!: HTMLElement;
+  // As the app does: the current chat scrolled into view (block: nearest), within the list only.
+  onMount(() => requestAnimationFrame(() => { const row = scroller.querySelector<HTMLElement>("[aria-current]"); if (!row) return;
+    const bottom = row.offsetTop + row.offsetHeight - scroller.offsetTop; if (bottom > scroller.scrollTop + scroller.clientHeight) scroller.scrollTop = bottom - scroller.clientHeight; }));
+  return <div class="g-live g-live-sb" data-density="phone" data-surface="frame">
     <header class="g-live-sb-head">
       <Pill icons={[{ label: "Toggle Sidebar", icon: <PanelLeftIcon /> }]} />
-      <span class="g-live-brand">Conduit</span>
-      <button type="button" class="g-live-sb-server"><span><strong>localhost:5180</strong><small>Connected</small></span><span class="g-live-dot" /></button>
+      <button type="button" class="g-live-brand"><span>Conduit</span></button>
+      <div class="g-live-sb-server"><button type="button"><span><strong>localhost:5180</strong><small>Connected</small></span><span class="g-live-sb-dot"><i /></span></button></div>
       <SegmentedIcons pill />
     </header>
-    <nav class="g-live-sb-list">
-      <NavGroup label="Projects"><For each={folders}>{(project) => <>
+    <nav class="g-live-sb-list" ref={scroller}>
+      <NavGroup><NavRow icon={<LayoutDashboardIcon />}>Conduit Dashboard</NavRow><NavRow icon={<SquarePenIcon />}>New chat</NavRow><NavRow icon={<FolderPlusIcon />}>New project</NavRow></NavGroup>
+      <NavGroup label="Projects"><For each={folders}>{(project) => <div>
         <NavRow icon={<PlaceGlyph project={project} />} toggle={<ChevronDownIcon />}>{project.name}</NavRow>
         <For each={project.sessions}>{(chat) => <NavRow indent icon={<HarnessMark id="conduit" />}>{chat.title}</NavRow>}</For>
-      </>}</For></NavGroup>
+      </div>}</For></NavGroup>
       <NavGroup label="Chats"><For each={chats.sessions}>{(chat, index) => <NavRow current={index() === 0} icon={<HarnessMark id="conduit" />}>{chat.title}</NavRow>}</For></NavGroup>
     </nav>
   </div>;
