@@ -216,7 +216,8 @@
 .ui-nav-row > .ui-nav-icon { display: inline-grid; width: var(--nav-icon); height: var(--nav-icon); flex: none; place-items: center; color: var(--muted-foreground); }
 .ui-nav-row > .ui-nav-icon > * { width: 100%; height: 100%; }
 .ui-nav-icon:has(> .harness-mark) { width: calc(var(--nav-icon) - 1px); }
-.ui-nav-row > .ui-nav-icon > .harness-mark { width: calc(var(--nav-icon) - 1px); height: calc(0.75 * (var(--nav-icon) - 1px)); }
+.ui-nav-row > .ui-nav-icon > .harness-mark { width: calc(var(--nav-icon) - 1px); height: calc(0.75 * (var(--nav-icon) - 1px));; opacity: .78; transition: opacity 150ms ease; }
+.ui-nav-row:is(:hover, [aria-current="page"]) > .ui-nav-icon > .harness-mark { opacity: 1; }
 .ui-nav-row > span:not(.ui-nav-icon, .ui-nav-toggle) { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ui-nav-row:hover, .ui-nav-row[aria-current="page"] { color: var(--sidebar-accent-foreground); }
 .ui-nav-row:hover { background: var(--sidebar-accent); }
