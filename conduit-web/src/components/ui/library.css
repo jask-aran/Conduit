@@ -119,8 +119,9 @@
 
 /* Button: a rounded rectangle. On the ground, outline is a filled well; on
    frost it is a hairline with nothing inside. Ghost is text until washed. */
-.ui-button { display: inline-flex; height: calc(2.25 * var(--u-space)); flex: none; align-items: center; justify-content: center; gap: calc(0.375 * var(--u-space)); border: 1px solid transparent; border-radius: calc(0.5 * var(--u-space)); padding: 0 calc(1 * var(--u-space)); font-size: calc(0.875 * var(--u-type)); font-weight: 550; white-space: nowrap; cursor: pointer; transition: background-color .12s ease, border-color .12s ease, filter .12s ease; outline: none; }
-.ui-button svg { width: calc(1 * var(--u-icon)); height: calc(1 * var(--u-icon)); flex: none; }
+:where(.ui-button) { display: inline-flex; height: calc(2.25 * var(--u-space)); flex: none; align-items: center; justify-content: center; gap: calc(0.375 * var(--u-space)); border: 1px solid transparent; border-radius: calc(0.5 * var(--u-space)); padding: 0 calc(1 * var(--u-space)); font-size: calc(0.875 * var(--u-type)); font-weight: 550; white-space: nowrap; cursor: pointer; transition: background-color .12s ease, border-color .12s ease, filter .12s ease; outline: none; }
+/* Zero-specificity: where the button sits sets its icon (a header, a composer), as in the app. */
+:where(.ui-button) svg { width: calc(1 * var(--u-icon)); height: calc(1 * var(--u-icon)); flex: none; }
 .ui-button:focus-visible { box-shadow: 0 0 0 2px color-mix(in oklch, var(--foreground), transparent 55%); }
 .ui-button:disabled { opacity: 0.45; pointer-events: none; }
 .ui-button[data-variant="primary"] { background: var(--foreground); color: var(--background); }
@@ -133,9 +134,12 @@
 .ui-button[data-variant="destructive"]:hover { filter: brightness(1.1); }
 [data-surface="frost"] .ui-button[data-variant="outline"] { border-color: oklch(1 0 0 / 20%); background: transparent; }
 [data-surface="frost"] .ui-button:is([data-variant="outline"], [data-variant="ghost"]):hover { background: var(--frost-wash); }
-.ui-button[data-size="sm"] { height: calc(1.875 * var(--u-space)); padding: 0 calc(0.75 * var(--u-space)); font-size: calc(0.8125 * var(--u-type)); }
-.ui-button[data-size="icon"] { width: calc(2.25 * var(--u-space)); padding: 0; }
-.ui-button[data-size="icon-sm"] { width: calc(1.875 * var(--u-space)); height: calc(1.875 * var(--u-space)); padding: 0; }
+:where(.ui-button[data-size="sm"]) { height: calc(1.875 * var(--u-space)); padding: 0 calc(0.75 * var(--u-space)); font-size: calc(0.8125 * var(--u-type)); }
+:where(.ui-button[data-size="icon"]) { width: calc(2.25 * var(--u-space)); padding: 0; }
+/* icon-xs: a row of small actions under a message (time, copy, edit), round as the app draws them. */
+:where(.ui-button[data-size="icon-xs"]) { width: calc(1.5 * var(--u-space)); height: calc(1.5 * var(--u-space)); border-radius: 999px; padding: 0; }
+:where(.ui-button[data-size="icon-xs"]) svg { width: calc(0.875 * var(--u-icon)); height: calc(0.875 * var(--u-icon)); }
+:where(.ui-button[data-size="icon-sm"]) { width: calc(1.875 * var(--u-space)); height: calc(1.875 * var(--u-space)); padding: 0; }
 
 /* Field: an input or a select's trigger. A well on the ground, a hairline on
    frost; the bare select is just its value and a chevron. */

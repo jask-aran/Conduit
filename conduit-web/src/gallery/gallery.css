@@ -141,5 +141,13 @@ html, body { background: var(--frame, #08090a); color: var(--foreground); }
 .g-live-desk-composer { left: 50%; right: auto; width: min(608px, calc(100% - 40px)); transform: translateX(-50%); }
 .g-live-sb-list .ui-nav-group + .ui-nav-group { margin-top: 12px; }
 .g-view { display: contents; } .g-view[hidden] { display: none; }
-/* The answer is the app markdown, sized in rem: on a phone the root is 16px, on this page 12.8. */
-.g-live[data-density="phone"] .g-live-answer { zoom: 1.25; }
+
+/* In its own frame a library screen is the whole phone, as the live one is. */
+.g-solo-body .g-live { width: 100%; height: 100vh; border: 0; border-radius: 0; }
+/* The phone screen in flow, as the app lays it: header, then the conversation (transcript over the composer stack). */
+.g-solo-body .g-live > .g-live-header { position: relative; height: 56px; flex: none; padding: 8px 10px 4px; }
+.g-solo-body .g-live > .work-area { min-height: 0; flex: 1; }
+.g-solo-body .g-live .composer-stack > .g-live-composer { position: static; }
+/* The composer row where the app puts its composer: 10px under the transcript, 12px in from each side, 54 tall. */
+.g-solo-body .g-live .composer-stack { padding: 0; }
+.g-solo-body .g-live .composer-stack > .g-live-composer { height: 54px; margin: 10px 12px 12px; padding: 6px 1px 4px; }
