@@ -98,7 +98,18 @@ export function LivePhone() {
   </div>;
 }
 
-type DesktopPopover = "plus" | "model" | "chat" | null;
+type DesktopPopover = "plus" | "context" | "profile" | "model" | null;
+
+/** Opens above its trigger, aligned to its start (or end), as the app's desktop popovers do. */
+function Above(props: { anchor: HTMLElement; align?: "start" | "end"; width: number; children: JSX.Element }) {
+  const box = () => { const host = props.anchor.closest<HTMLElement>(".g-live-desktop")!; const screen = host.getBoundingClientRect(); const at = props.anchor.getBoundingClientRect();
+    // positioned against the padding box: inside the screen's border
+    return { position: "absolute" as const, "z-index": 30, width: `${props.width}px`, bottom: `${screen.bottom - host.clientTop - at.top}px`,
+      ...(props.align === "end" ? { right: `${screen.right - host.clientLeft - at.right}px` } : { left: `${at.left - screen.left - host.clientLeft}px` }) }; };
+  return <div style={box()} onClick={(event) => event.stopPropagation()}>{props.children}</div>;
+}
+const DESKTOP_MODELS = [["Google: Gemini 3.8 Flash", "openrouter"], ["Free Models Router", "openrouter"], ["Meta: Muse Spark 1.3 Contributor", "openrouter"], ["Grok 4.6", "xai"], ["Claude Opus 5.5", "anthropic"], ["Claude Sonnet 5.5", "anthropic"], ["GPT-6", "openai"]] as const;
+const DESKTOP_PROFILES = [["Assistant", "conduit_pi", "conduit"], ["Coder", "conduit_pi", "conduit"], ["Claude Code", "claude_code", "claude_code"], ["Codex", "codex", "codex"]] as const;
 
 /**
  * The desktop chat screen in the app's structure (the inset chat-main, its
@@ -110,7 +121,11 @@ type DesktopPopover = "plus" | "model" | "chat" | null;
  */
 export function LiveDesktop() {
   const [open, setOpen] = createSignal<DesktopPopover>(null);
-  const toggle = (which: DesktopPopover) => (event: MouseEvent) => { event.stopPropagation(); setOpen(open() === which ? null : which); };
+  const [anchor, setAnchor] = createSignal<HTMLElement>();
+  const [model, setModel] = createSignal("Meta: Muse Spark 1.3 Contributor");
+  const [profile, setProfile] = createSignal("Assistant");
+  const toggle = (which: DesktopPopover) => (event: MouseEvent) => { event.stopPropagation(); setAnchor(event.currentTarget as HTMLElement); setOpen(open() === which ? null : which); };
+  const close = () => setOpen(null);
   return <div class="g-desktop-screen g-live-desktop" data-density="desktop" onClick={() => setOpen(null)}>
     <main class="chat-main" data-slot="sidebar-inset" data-region="chat">
       <header class="chat-header">
@@ -125,9 +140,9 @@ export function LiveDesktop() {
             <div class="composer-actions">
               <div class="composer-actions-left">
                 <button type="button" class="composer-plus-trigger" aria-label="Attach and more" onClick={toggle("plus")}><PlusIcon /></button>
-                <div class="composer-desktop-setting"><button type="button" class="chat-context-trigger" aria-label="Context usage: 0%"><svg class="chat-context-gauge" viewBox="0 0 24 24" aria-hidden="true"><circle class="chat-context-gauge-track" cx="12" cy="12" r="9" pathLength="100" /><circle class="chat-context-gauge-value" cx="12" cy="12" r="9" pathLength="100" style="stroke-dasharray: 0 100" /></svg></button></div>
-                <div class="composer-desktop-setting"><button type="button" class="model-trigger composer-profile-trigger" aria-label="Profile Assistant"><HarnessMark id="conduit" class="size-4" /><ChevronDownIcon /></button></div>
-                <div class="composer-desktop-setting"><button type="button" class="model-trigger" onClick={toggle("model")}><span>Meta: Muse Spark 1.3 Contributor</span><span class="text-muted-foreground">medium</span><ChevronDownIcon /></button></div>
+                <div class="composer-desktop-setting"><button type="button" class="chat-context-trigger" aria-label="Context usage: 0%" onClick={toggle("context")}><svg class="chat-context-gauge" viewBox="0 0 24 24" aria-hidden="true"><circle class="chat-context-gauge-track" cx="12" cy="12" r="9" pathLength="100" /><circle class="chat-context-gauge-value" cx="12" cy="12" r="9" pathLength="100" style="stroke-dasharray: 0 100" /></svg></button></div>
+                <div class="composer-desktop-setting"><button type="button" class="model-trigger composer-profile-trigger" aria-label={`Profile ${profile()}`} onClick={toggle("profile")}><HarnessMark id="conduit" class="size-4" /><ChevronDownIcon /></button></div>
+                <div class="composer-desktop-setting"><button type="button" class="model-trigger" aria-label={model()} onClick={toggle("model")}><span>{model()}</span><span class="text-muted-foreground">medium</span><ChevronDownIcon /></button></div>
               </div>
               <div class="composer-actions-right">
                 <Button variant="ghost" size="icon-sm" aria-label="Start voice dictation"><MicIcon /></Button>
@@ -136,15 +151,24 @@ export function LiveDesktop() {
             </div>
           </div></Frost>
         </div>
-        <Show when={open() === "model"}><div class="g-live-anchor" data-at="model" onClick={(event) => event.stopPropagation()}><Menu class="g-live-desk-menu"><ModelList keys={["⌘", "⇧", "X"]} /><Section kind="slider"><Levels /></Section></Menu></div></Show>
-        <Show when={open() === "plus"}><div class="g-live-anchor" data-at="plus" onClick={(event) => event.stopPropagation()}><Menu class="g-live-desk-menu">
-          <Section><Item meta="Muse Spark 1.3" opens>Model</Item><Item icon={<HarnessMark id="conduit" class="size-4" />} meta="Assistant" opens>Profile</Item><Item icon={<ShieldCheckIcon />} meta="Default" opens>Permissions</Item></Section>
-          <Section><Item icon={<PlaceGlyph project={null} />} meta="None" opens>Project</Item></Section>
-          <Section><Item icon={<PaperclipIcon />}>Attach files</Item></Section>
-        </Menu></div></Show>
         </div></div>
       </section></div>
     </main>
+    <Show when={open() === "plus"}><Above anchor={anchor()!} width={220}><Menu>
+      <Section><Item icon={<PlaceGlyph project={null} />} meta="None" opens>Project</Item></Section>
+      <Section><Item icon={<PaperclipIcon />} onClick={close}>Attach files</Item></Section>
+    </Menu></Above></Show>
+    <Show when={open() === "context"}><Above anchor={anchor()!} align="end" width={240}><Menu>
+      <Section kind="slider"><div class="ui-slider"><div class="ui-slider-head"><span class="ui-title-text">Context</span><span class="ui-slider-value">Unavailable</span></div></div></Section>
+      <Section><Item onClick={close}>Compact now</Item></Section>
+    </Menu></Above></Show>
+    <Show when={open() === "profile"}><Above anchor={anchor()!} width={230}><Menu>
+      <Section title="Profile"><For each={DESKTOP_PROFILES}>{([label, meta, mark]) => <Item icon={<HarnessMark id={mark} class="size-4" />} meta={meta} checked={profile() === label} onClick={() => { setProfile(label); close(); }}>{label}</Item>}</For></Section>
+    </Menu></Above></Show>
+    <Show when={open() === "model"}><Above anchor={anchor()!} width={230}><Menu class="g-live-model-menu">
+      <Section><For each={DESKTOP_MODELS}>{([label, meta]) => <Item meta={meta} checked={model() === label} onClick={() => { setModel(label); close(); }}>{label}</Item>}</For></Section>
+      <Section kind="slider"><Levels /></Section>
+    </Menu></Above></Show>
   </div>;
 }
 
