@@ -1,4 +1,4 @@
-import { For, Show, type JSX } from "solid-js";
+import { createSignal, For, Show, type JSX } from "solid-js";
 import { ChevronRightIcon } from "lucide-solid";
 import { cn } from "@/lib/utils";
 import "./library.css";
@@ -22,13 +22,26 @@ export function Menu(props: { class?: string; core?: boolean; children: JSX.Elem
   return <div role="menu" class={cn("ui-frost ui-menu", props.class)} data-lift="raised" data-core={props.core ? "" : undefined}>{props.children}</div>;
 }
 
-export function Title(props: { children: JSX.Element; aside?: JSX.Element }) {
-  return <div class="ui-title"><span>{props.children}</span><Show when={props.aside}><small>{props.aside}</small></Show></div>;
+/** A menu's section: a list of items (the default) or a slider, with an optional title and a note beside it. */
+export function Section(props: { title?: string; note?: JSX.Element; kind?: "list" | "slider"; children: JSX.Element }) {
+  return <div role="group" aria-label={props.title} class="ui-section" data-kind={props.kind ?? "list"}>
+    <Show when={props.title}><div class="ui-title"><span>{props.title}</span><Show when={props.note}><small>{props.note}</small></Show></div></Show>
+    {props.children}
+  </div>;
 }
 
-export const Sep = () => <div role="separator" class="ui-sep" />;
+/** A section whose field filters its items. */
+export function SearchSection<T>(props: { title?: string; placeholder: string; items: T[]; matches: (item: T, needle: string) => boolean; children: (item: T) => JSX.Element }) {
+  const [query, setQuery] = createSignal("");
+  const shown = () => { const needle = query().trim().toLowerCase(); return needle ? props.items.filter((item) => props.matches(item, needle)) : props.items; };
+  return <Section title={props.title}>
+    <input class="ui-search" placeholder={props.placeholder} value={query()} onInput={(event) => setQuery(event.currentTarget.value)} />
+    <For each={shown()} fallback={<div class="ui-empty">Nothing matches</div>}>{props.children}</For>
+  </Section>;
+}
 
-export function Row(props: {
+/** An item in a list section. Icon, meta, keys and opens are its parts; checked, disabled and destructive its states. */
+export function Item(props: {
   icon?: JSX.Element; meta?: JSX.Element; keys?: string[]; opens?: boolean;
   checked?: boolean; disabled?: boolean; destructive?: boolean; children: JSX.Element;
 }) {
