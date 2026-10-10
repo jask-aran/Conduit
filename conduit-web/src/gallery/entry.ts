@@ -5,7 +5,9 @@
  * screen, and a desktop browser's frame is only narrow.
  */
 import { emulatePhone } from "./phone-emulation";
+import { fakeMicrophone } from "./fake-mic";
 
 const frame = new URLSearchParams(location.search).get("frame");
+fakeMicrophone();
 if (frame) emulatePhone();
 void import("./canvas").then((module) => module.mount(frame));

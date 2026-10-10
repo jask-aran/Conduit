@@ -40,7 +40,9 @@ function materialIconManifestPlugin() {
   };
 }
 
-export default defineConfig(() => {
+export default defineConfig(({ mode }) => {
+  // `npm run gallery`: the component gallery, built like the app so it runs at the app's speed.
+  const gallery = mode === "gallery";
   const serverPort = process.env.CONDUIT_PORT || "4310";
   const serverTarget = `http://127.0.0.1:${serverPort}`;
   const solidComponents = solidComponentsViteOptions();
@@ -56,7 +58,7 @@ export default defineConfig(() => {
       tailwindcss(),
       // Production-only installability: the client owns SW registration so
       // updates can reload the current page. Dev keeps HMR free of a worker.
-      VitePWA({
+      !gallery && VitePWA({
         // Prompt, not autoUpdate: autoUpdate attaches its own `activated`
         // listener that reloads the page the moment a build installs, which is
         // the decision `pwa-update.ts` exists to make. Under prompt it hands
@@ -120,9 +122,10 @@ export default defineConfig(() => {
       : undefined,
     define: { __CONDUIT_BUILD__: JSON.stringify(buildStamp()) },
     build: {
-      outDir: "dist",
+      outDir: gallery ? "dist-gallery" : "dist",
       emptyOutDir: true,
       rollupOptions: {
+        input: gallery ? { gallery: path.resolve(import.meta.dirname, "gallery.html") } : undefined,
         output: {
           // The file icons in a folder of their own, so the worker can leave them out.
           assetFileNames: (asset) => (asset.originalFileNames || []).some((name) => name.includes("material-icon-theme/icons/"))
