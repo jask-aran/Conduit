@@ -56,11 +56,11 @@ export function createFullscreenPortalMount() {
 /* Menus share one dark, solid surface profile: --popover ground, hairline ring,
    rounded-lg shell over rounded-md items. Keep menus separate from composer
    material styling. */
-const menuContentClass = "z-[100] min-w-40 rounded-lg bg-popover p-1 text-popover-foreground shadow-md ring-1 ring-foreground/10 outline-none";
+export const menuContentClass = "z-[100] min-w-40 rounded-lg bg-popover p-1 text-popover-foreground shadow-md ring-1 ring-foreground/10 outline-none";
 /* Submenus get a smaller min-width so a flipped submenu can still fit beside
    its parent on narrow viewports instead of overflowing offscreen. */
-const menuSubContentClass = "z-[100] min-w-28 rounded-lg bg-popover p-1 text-popover-foreground shadow-md ring-1 ring-foreground/10 outline-none";
-const menuItemClass = "relative flex cursor-default select-none items-center gap-1.5 rounded-md px-1.5 py-1 text-sm outline-none data-[highlighted]:bg-accent data-[highlighted]:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50 data-[variant=destructive]:text-destructive data-[variant=destructive]:data-[highlighted]:bg-destructive/15";
+export const menuSubContentClass = "z-[100] min-w-28 rounded-lg bg-popover p-1 text-popover-foreground shadow-md ring-1 ring-foreground/10 outline-none";
+export const menuItemClass = "relative flex cursor-default select-none items-center gap-1.5 rounded-md px-1.5 py-1 text-sm outline-none data-[highlighted]:bg-accent data-[highlighted]:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50 data-[variant=destructive]:text-destructive data-[variant=destructive]:data-[highlighted]:bg-destructive/15";
 
 export const Menu = KMenu;
 export const MenuTrigger = KMenu.Trigger;
@@ -89,8 +89,10 @@ export function MenuSubContent(props: ParentProps<{ class?: string }>) {
   const portalMount = createFullscreenPortalMount();
   return <KMenu.Portal mount={portalMount()}><KMenu.SubContent data-slot="menu-sub-content" class={cn(menuSubContentClass, props.class)}>{props.children}</KMenu.SubContent></KMenu.Portal>;
 }
-export function MenuLabel(props: ParentProps<{ class?: string }>) { return <KMenu.GroupLabel class={cn("px-1.5 py-1.5 text-xs font-medium text-muted-foreground", props.class)}>{props.children}</KMenu.GroupLabel>; }
-export function MenuSeparator() { return <KMenu.Separator class="-mx-1 my-1 h-px bg-border" />; }
+export const menuLabelClass = "px-1.5 py-1.5 text-xs font-medium text-muted-foreground";
+export const menuSeparatorClass = "-mx-1 my-1 h-px bg-border";
+export function MenuLabel(props: ParentProps<{ class?: string }>) { return <KMenu.GroupLabel class={cn(menuLabelClass, props.class)}>{props.children}</KMenu.GroupLabel>; }
+export function MenuSeparator() { return <KMenu.Separator class={menuSeparatorClass} />; }
 
 /*
  * A floating surface for something to be edited in place -- the menu's

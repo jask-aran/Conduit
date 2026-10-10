@@ -8,8 +8,8 @@ import { ChatScreen } from "./stories";
 import { atoms, phoneAtoms, type Atom } from "./atoms";
 
 /*
- * Components on the left, placed on a sheet of text so frost has something
- * under it, each with a bubble naming it. The preview on the right is the app's
+ * Components on the left, each centred in a cell of one grid with a bubble
+ * naming it, primitives first. The preview on the right is the app's
  * own chat screen, desktop or phone. Phone-only pieces sit in a frame of this
  * page that passes for a phone (phone-emulation.ts). The tuning box applies CSS
  * everywhere at once and never writes source.
@@ -27,13 +27,10 @@ function applyTune(doc: Document, css: string) {
 const frames = () => Array.from(document.querySelectorAll<HTMLIFrameElement>("iframe"));
 const tuneFrame = (event: Event) => { const doc = (event.currentTarget as HTMLIFrameElement).contentDocument; if (doc) applyTune(doc, read()); };
 
-const Backdrop = () => <div class="g-sheet-text" aria-hidden="true"><For each={Array.from({ length: 60 })}>{() =>
-  <p>Conduit keeps the answer, the trace and the files in one place. <code>createComposerSurfaceSignal()</code> follows the setting, and every pill, bubble and menu here is drawn by the app's own code over this text.</p>}</For></div>;
-
 function Piece(props: { atom: Atom }) {
-  return <figure class="g-piece" id={props.atom.id}>
-    <figcaption class="g-tag"><strong>{props.atom.name}</strong><span>{props.atom.scope}</span><span data-kind={props.atom.kind}>{props.atom.kind}</span><code>{props.atom.source}</code></figcaption>
-    {props.atom.render()}
+  return <figure class="g-cell" id={props.atom.id}>
+    <figcaption class="g-tag" title={props.atom.source}><strong>{props.atom.name}</strong><span>{props.atom.scope}</span><span data-kind={props.atom.kind}>{props.atom.kind}</span></figcaption>
+    <div class="g-cell-body">{props.atom.render()}</div>
   </figure>;
 }
 
@@ -57,16 +54,11 @@ function Canvas() {
       </div>
       <Show when={tuning()}><textarea class="g-tune" spellcheck={false} value={tune()} onInput={(event) => update(event.currentTarget.value)}
         placeholder={".composer-surface-material[data-composer-surface=\"frosted-live\"] {\n  backdrop-filter: blur(30px);\n}"} /></Show>
-      <div class="g-sheet">
-        <Backdrop />
-        <div class="g-grid">
-          <For each={atoms}>{(atom) => <Piece atom={atom} />}</For>
-          <figure class="g-piece g-wide" id="phone-parts">
-            <figcaption class="g-tag"><strong>Phone parts</strong><span>phone</span><code>drawn in a phone frame</code></figcaption>
-            <iframe class="g-parts" title="Phone parts" src="/gallery.html?frame=parts" onLoad={tuneFrame} />
-          </figure>
-        </div>
+      <div class="g-grid">
+        <For each={atoms}>{(atom) => <Piece atom={atom} />}</For>
       </div>
+      <h2 class="g-heading">Phone only</h2>
+      <iframe class="g-parts" title="Phone parts" src="/gallery.html?frame=parts" loading="lazy" onLoad={tuneFrame} />
     </section>
     <aside class="g-right">
       <div class="g-toggle" role="group" aria-label="Preview">
@@ -82,7 +74,7 @@ function Canvas() {
 
 /** The phone-only pieces, alone in a phone frame. */
 function Parts() {
-  return <div class="g-sheet g-parts-sheet"><Backdrop /><div class="g-grid"><For each={phoneAtoms}>{(atom) => <Piece atom={atom} />}</For></div></div>;
+  return <div class="g-grid g-parts-grid"><For each={phoneAtoms}>{(atom) => <Piece atom={atom} />}</For></div>;
 }
 
 export function mount(frame: string | null) {
