@@ -14,8 +14,9 @@ export function Frost(props: { lift?: Lift; core?: boolean; class?: string; styl
   return <div class={cn("ui-frost", props.class)} data-surface="frost" data-lift={props.lift ?? "rest"} data-core={props.core ? "" : undefined} style={props.style}>{props.children}</div>;
 }
 
-export function Pill(props: { icons: { label: string; icon: JSX.Element }[] }) {
-  return <div class="ui-frost ui-pill"><For each={props.icons}>{(item) => <button type="button" aria-label={item.label} title={item.label}>{item.icon}</button>}</For></div>;
+export function Pill(props: { icons: { label: string; icon: JSX.Element }[]; onPick?: (label: string) => void }) {
+  return <div class="ui-frost ui-pill"><For each={props.icons}>{(item) => <button type="button" aria-label={item.label} title={item.label}
+    onClick={(event) => { if (props.onPick) { event.stopPropagation(); props.onPick(item.label); } }}>{item.icon}</button>}</For></div>;
 }
 
 /**
@@ -46,12 +47,22 @@ export function SearchSection(props: { placeholder: string; value?: string; keys
   </div>;
 }
 
+/** A heading section: what the popover is about -- a title and a line under it (the chat menu's top). */
+export function HeadingSection(props: { title: string; detail?: JSX.Element; children?: JSX.Element }) {
+  return <div class="ui-section ui-heading" data-kind="heading">
+    <div class="ui-heading-title">{props.title}</div><Show when={props.detail}><div class="ui-heading-detail">{props.detail}</div></Show>
+    {props.children}
+  </div>;
+}
+
 /** An item in a list section. Icon, meta, keys and opens are its parts; checked, disabled and destructive its states. */
 export function Item(props: {
   icon?: JSX.Element; meta?: JSX.Element; keys?: string[]; opens?: boolean; active?: boolean;
+  /** field: the label is a field name (title type) and meta its value, as in "CONTEXT  Unavailable ›". */
+  field?: boolean; onClick?: () => void;
   checked?: boolean; disabled?: boolean; destructive?: boolean; children: JSX.Element;
 }) {
-  return <div role={props.checked !== undefined ? "menuitemradio" : "menuitem"} class="ui-row" aria-checked={props.checked}
+  return <div role={props.checked !== undefined ? "menuitemradio" : "menuitem"} class="ui-row" aria-checked={props.checked} data-field={props.field ? "" : undefined} onClick={props.onClick}
     data-highlighted={props.active ? "" : undefined} data-checked={props.checked ? "" : undefined} data-disabled={props.disabled ? "" : undefined} data-destructive={props.destructive ? "" : undefined}>
     <Show when={props.icon}><span class="ui-icon">{props.icon}</span></Show><span class="ui-label">{props.children}</span>
     <Show when={props.meta}><small>{props.meta}</small></Show>

@@ -70,3 +70,31 @@ html, body { background: var(--frame, #08090a); color: var(--foreground); }
 /* The building blocks share one popover width per variant, as the app's popovers do. */
 .g-side > [data-density="desktop"] .ui-menu { width: 224px; }
 .g-side > [data-density="phone"] .ui-menu { width: 280px; }
+/* The phone built from the library. */
+.g-live { position: relative; display: flex; flex: none; width: 414px; height: min(860px, calc(100vh - 60px)); flex-direction: column; overflow: hidden; border: 1px solid var(--border); border-radius: 18px; background: var(--background); font-family: "Geist Variable", sans-serif; }
+.g-live-header { position: absolute; inset: 0 0 auto; z-index: 2; display: flex; justify-content: space-between; padding: 8px 10px; }
+.g-live-transcript { display: flex; flex: 1; flex-direction: column; gap: 14px; overflow: auto; padding: 68px 14px 90px; font-size: 15px; line-height: 1.5; }
+.g-live-answer { margin: 0; }
+.g-live-answer code { border-radius: 4px; background: var(--accent); padding: 1px 5px; font-size: 13px; }
+.g-live-composer { position: absolute; inset: auto 0 0; display: flex; align-items: center; gap: 8px; padding: 10px 12px 14px; }
+.g-live-mic { display: grid; height: 44px; flex: 1; place-items: center; border-radius: 999px; color: var(--muted-foreground); }
+.g-live-mic svg { width: 18px; height: 18px; }
+.g-live-float { position: absolute; z-index: 20; }
+.g-live-float[data-at="top-right"] { top: 58px; right: 10px; }
+.g-live-float[data-at="top-left"] { top: 58px; left: 10px; }
+.g-live-float[data-at="bottom-left"] { bottom: 66px; left: 10px; }
+.g-live-menu { width: 280px; max-height: 70vh; overflow: auto; }
+.g-live-panels { position: relative; }
+.g-live-parent { transition: opacity .16s ease, filter .16s ease; }
+.g-live-panels[data-panel-open] .g-live-parent { opacity: .38; filter: saturate(.6); }
+.g-live-panel { position: absolute; inset: 0; display: flex; align-items: flex-end; padding-left: 51px; }
+.g-live-panel .g-live-menu { width: 260px; max-height: 360px; }
+.g-live-backdrop { position: absolute; inset: 0; z-index: 9; background: rgb(0 0 0 / 45%); }
+.g-live-sidebar { position: absolute; inset: 0 auto 0 0; z-index: 10; display: flex; width: 86%; flex-direction: column; background: var(--frame); box-shadow: 8px 0 40px rgb(0 0 0 / 40%); animation: g-live-in .22s cubic-bezier(.2,.8,.2,1); }
+@keyframes g-live-in { from { transform: translateX(-100%); } }
+.g-live-sidebar-head { display: flex; align-items: center; gap: 8px; padding: 8px 10px; }
+.g-live-server { display: flex; min-width: 0; flex: 1; align-items: center; gap: 6px; border: 0; background: transparent; color: var(--foreground); font-size: 14px; font-weight: 600; }
+.g-live-server svg { width: 14px; height: 14px; color: var(--muted-foreground); }
+.g-live-dot { width: 7px; height: 7px; border-radius: 999px; background: oklch(0.62 0.17 145); }
+.g-live-sidebar-list { display: flex; flex-direction: column; gap: 6px; overflow: auto; padding: 4px 8px 16px; }
+.g-live-sidebar-list .ui-section + .ui-section { border-top: 0; }

@@ -5,6 +5,7 @@ import "../client/chat/composer-geometry.css";
 import "../client/styles.css";
 import "./gallery.css";
 import { ChatScreen } from "./stories";
+import { LivePhone } from "./live";
 import { atoms, phoneAtoms, type Atom } from "./atoms";
 import { libraryGroups } from "./library";
 
@@ -42,7 +43,7 @@ function Piece(props: { atom: Atom; side?: boolean }) {
 
 function Canvas() {
   const [tune, setTune] = createSignal(read());
-  const [preview, setPreview] = createSignal<"desktop" | "phone">("phone");
+  const [preview, setPreview] = createSignal<"desktop" | "phone" | "library">("library");
   const [tuning, setTuning] = createSignal(false);
   const update = (css: string) => {
     setTune(css);
@@ -75,8 +76,11 @@ function Canvas() {
       <div class="g-toggle" role="group" aria-label="Preview">
         <button type="button" aria-pressed={preview() === "phone"} onClick={() => setPreview("phone")}>Phone</button>
         <button type="button" aria-pressed={preview() === "desktop"} onClick={() => setPreview("desktop")}>Desktop</button>
+        <button type="button" aria-pressed={preview() === "library"} onClick={() => setPreview("library")}>Phone · library</button>
       </div>
-      <Show when={preview() === "phone"} fallback={<div class="g-desktop-screen"><ChatScreen /></div>}>
+      <Show when={preview() === "library"}><LivePhone /></Show>
+      <Show when={preview() === "desktop"}><div class="g-desktop-screen"><ChatScreen /></div></Show>
+      <Show when={preview() === "phone"}>
         <iframe class="g-phone" title="Phone preview" src="/gallery.html?frame=phone" onLoad={tuneFrame} />
       </Show>
     </aside>

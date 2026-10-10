@@ -1,7 +1,7 @@
 import { createSignal, For, type JSX } from "solid-js";
-import { ClipboardCopyIcon, Columns2Icon, CopyIcon, FolderIcon, FolderInputIcon, LayoutDashboardIcon, MenuIcon, MonitorIcon, PaperclipIcon, PencilIcon, PinIcon, PlusIcon, QrCodeIcon, RefreshCwIcon, SearchIcon, ShareIcon, ShieldCheckIcon, SquarePenIcon, TerminalIcon, Trash2Icon } from "lucide-solid";
+import { PanelRightIcon, ClipboardCopyIcon, Columns2Icon, CopyIcon, FolderIcon, FolderInputIcon, LayoutDashboardIcon, MenuIcon, MonitorIcon, PaperclipIcon, PencilIcon, PinIcon, PlusIcon, QrCodeIcon, RefreshCwIcon, SearchIcon, ShareIcon, ShieldCheckIcon, SquarePenIcon, TerminalIcon, Trash2Icon } from "lucide-solid";
 import { Spinner } from "@/components/primitives";
-import { Bubble, Button, Card, Frost, Input, Item, Keycap, Menu, Pill, SearchSection, Section, Segmented, SelectTrigger, Slider } from "@/components/ui";
+import { Bubble, Button, Card, Frost, Input, Item, Keycap, Menu, Pill, HeadingSection, SearchSection, Section, Segmented, SelectTrigger, Slider } from "@/components/ui";
 import { Switch } from "../client/settings/settings-controls";
 import { HarnessMark } from "../client/harness-brand";
 import { PlaceGlyph } from "../client/chat/place-picker";
@@ -26,20 +26,20 @@ const lib = (id: string, name: string, scope: Scope, layer: string, source: stri
 /** both: each piece drawn in a desktop and a phone layout. layout: the group stands in that layout, which its popovers inherit. */
 export interface Group { title: string; note: string; atoms: Atom[]; both?: boolean; layout?: "desktop" | "phone" }
 
-const thinking = ["off", "minimal", "low", "medium", "high", "xhigh"].map((value) => ({ value, label: value[0]!.toUpperCase() + value.slice(1) }));
+export const thinking = ["off", "minimal", "low", "medium", "high", "xhigh"].map((value) => ({ value, label: value[0]!.toUpperCase() + value.slice(1) }));
 /** The app's slider as its popovers use it: a label, and a value that opens the levels. */
-function Levels(props: { label?: string }) {
+export function Levels(props: { label?: string; onOpen?: () => void }) {
   const [value, setValue] = createSignal("medium");
-  return <Slider label={props.label ?? "Thinking"} options={thinking} value={value()} onChange={setValue} onOpen={() => {}} />;
+  return <Slider label={props.label ?? "Thinking"} options={thinking} value={value()} onChange={setValue} onOpen={props.onOpen ?? (() => {})} />;
 }
 function SwitchDemo() { const [on, setOn] = createSignal(true); return <Switch label="Example" checked={on()} onChange={setOn} />; }
 function SegmentedText() { const [value, setValue] = createSignal("cloud"); return <Segmented label="Source" value={value()} onChange={setValue} options={[{ value: "off", label: "Off" }, { value: "local", label: "Local" }, { value: "cloud", label: "Cloud" }]} />; }
 function SegmentedCount() { const [value, setValue] = createSignal("all"); return <Segmented label="Show" value={value()} onChange={setValue} options={[{ value: "all", label: "All", count: 0 }, { value: "unread", label: "Unread", count: 0 }]} />; }
 const areas = () => [{ value: "dashboard", label: "Dashboard", icon: <LayoutDashboardIcon /> }, { value: "computer", label: "Computer", icon: <MonitorIcon /> }];
-function SegmentedIcons(props: { pill?: boolean }) { const [value, setValue] = createSignal("dashboard"); return <Segmented icons pill={props.pill} label="Sidebar section" value={value()} onChange={setValue} options={areas()} />; }
+export function SegmentedIcons(props: { pill?: boolean }) { const [value, setValue] = createSignal("dashboard"); return <Segmented icons pill={props.pill} label="Sidebar section" value={value()} onChange={setValue} options={areas()} />; }
 
 /** A search section filtering the list section after it. */
-function ModelList(props: { keys?: string[]; title?: string }) {
+export function ModelList(props: { keys?: string[]; title?: string }) {
   const [query, setQuery] = createSignal("");
   const [current, setCurrent] = createSignal(MODELS[2]!.spec);
   const shown = () => { const needle = query().trim().toLowerCase(); return needle ? MODELS.filter((model) => model.label.toLowerCase().includes(needle)) : MODELS; };
@@ -48,9 +48,9 @@ function ModelList(props: { keys?: string[]; title?: string }) {
     <Section title={props.title}><For each={shown()}>{(model) => <div onClick={() => setCurrent(model.spec)}><Item meta={model.provider} checked={model.spec === current()}>{model.label}</Item></div>}</For></Section>
   </>;
 }
-const Profiles = () => <Section title="Profile"><For each={PROFILES}>{(profile, index) => <Item checked={index() === 0} icon={<HarnessMark id={profile.implementation || "conduit"} class="size-4" />} meta={profile.implementation}>{profile.label}</Item>}</For></Section>;
-const Projects = () => <Section title="Project"><Item icon={<FolderIcon />}>No folder</Item><For each={PROJECTS.slice(2, 7)}>{(project) => <Item icon={<PlaceGlyph project={project} />}>{project.name}</Item>}</For></Section>;
-const ChatTitle = () => <Section title="Lorem ipsum file"><Item meta="12% used" opens>Context</Item></Section>;
+export const Profiles = () => <Section title="Profile"><For each={PROFILES}>{(profile, index) => <Item checked={index() === 0} icon={<HarnessMark id={profile.implementation || "conduit"} class="size-4" />} meta={profile.implementation}>{profile.label}</Item>}</For></Section>;
+export const Projects = () => <Section title="Project"><Item icon={<FolderIcon />}>No folder</Item><For each={PROJECTS.slice(2, 7)}>{(project) => <Item icon={<PlaceGlyph project={project} />}>{project.name}</Item>}</For></Section>;
+export const ChatTitle = () => <HeadingSection title="Lorem ipsum file" detail="Chats · Assistant"><Item field meta="Unavailable" opens>Context</Item></HeadingSection>;
 
 /** The same piece on each surface it sits on: the frame (sidebar), the ground (chat, dashboard) and frost. */
 function Surfaces(props: { frame?: boolean; children: () => JSX.Element }) {
@@ -71,6 +71,7 @@ export const libraryGroups: Group[] = [
     lib("section-list", "List", "both", "section", "Section", () => <Menu><Section title="Project" note="5"><For each={PROJECTS.slice(2, 6)}>{(project) => <Item icon={<PlaceGlyph project={project} />}>{project.name}</Item>}</For></Section></Menu>),
     lib("section-search", "Search", "both", "section", "SearchSection", () => <Menu><SearchSection placeholder="Search all models…" keys={["⌘", "⇧", "X"]} /></Menu>),
     lib("section-slider", "Slider", "both", "section", "Section kind=slider + Slider", () => <Menu><Section kind="slider"><Levels /></Section></Menu>),
+    lib("section-heading", "Heading", "both", "section", "HeadingSection + Item field", () => <Menu><ChatTitle /></Menu>),
     lib("item", "Item · parts and states", "both", "item", "Item icon meta keys opens · checked disabled destructive", () => <Menu><Section>
       <Item>Plain</Item>
       <Item icon={<PaperclipIcon />}>icon</Item>
@@ -116,7 +117,7 @@ export const libraryGroups: Group[] = [
     lib("p-profiles", "+ menu › Profile", "phone", "popover", "chat/mobile-composer-options.tsx", () => <Menu class="g-w16"><Profiles /></Menu>),
     lib("p-effort", "+ menu › Effort", "phone", "popover", "chat/mobile-composer-options.tsx", () => <Menu class="g-w12"><Section title="Effort"><For each={thinking}>{(level) => <Item checked={level.value === "medium"}>{level.label}</Item>}</For></Section></Menu>),
     lib("p-projects", "+ menu › Project", "phone", "popover", "chat/mobile-composer-options.tsx", () => <Menu class="g-w16"><Projects /></Menu>),
-    lib("p-chat", "Chat menu", "phone", "popover", "chat/chat-screen.tsx", () => <Menu class="g-w16"><ChatTitle /><Section><Item icon={<RefreshCwIcon />}>Update app</Item></Section><Section><Item icon={<Columns2Icon />}>Workspace panel</Item><Item icon={<ShareIcon />}>Share</Item><Item icon={<PencilIcon />}>Rename</Item><Item icon={<Trash2Icon />} destructive>Delete</Item></Section></Menu>),
+    lib("p-chat", "Chat menu", "phone", "popover", "chat/chat-screen.tsx", () => <Menu class="g-w16"><ChatTitle /><Section><Item icon={<RefreshCwIcon />}>Update app</Item></Section><Section><Item icon={<PanelRightIcon />}>Workspace panel</Item><Item icon={<ShareIcon />}>Share</Item><Item icon={<PencilIcon />}>Rename</Item><Item icon={<Trash2Icon />} destructive>Delete</Item></Section></Menu>),
   ] },
   { title: "Cards", note: "the popover's frost at dialog padding", atoms: [
     lib("confirm", "Confirm", "both", "card", "Card", () => <Card title="Delete this chat?" detail="It can't be brought back." class="g-card" actions={<><Button variant="outline">Cancel</Button><Button variant="destructive">Delete</Button></>} />),

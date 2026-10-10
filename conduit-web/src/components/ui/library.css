@@ -182,3 +182,11 @@
 /* A phone variant has no keyboard: shortcut keys are off wherever they sit. */
 [data-density="phone"] .ui-keys { display: none; }
 @media (--conduit-phone-layout) { .ui-keys { display: none; } }
+
+/* Heading section: the popover's subject, then items about it (a field row). */
+.ui-heading { padding: calc(0.375 * var(--u-type)) calc(0.5 * var(--u-type)) 0; }
+.ui-heading-title { color: var(--foreground); font-size: calc(0.875 * var(--u-type)); font-weight: 650; }
+.ui-heading-detail { margin-top: calc(0.25 * var(--u-type)); color: var(--muted-foreground); font-size: calc(0.75 * var(--u-type)); }
+.ui-heading > .ui-row { margin: calc(0.25 * var(--u-type)) calc(-0.5 * var(--u-type)) 0; width: auto; }
+.ui-row[data-field] > .ui-label { color: var(--muted-foreground); font: calc(0.5625 * var(--u-type))/1.2 ui-monospace, SFMono-Regular, Consolas, monospace; letter-spacing: 0.07em; text-transform: uppercase; }
+.ui-row[data-field] > small { color: color-mix(in oklch, var(--foreground), transparent 45%); font-size: calc(0.8125 * var(--u-type)); }
