@@ -81,3 +81,28 @@
 .ui-card-actions { display: flex; justify-content: flex-end; gap: 0.5rem; }
 
 .ui-bubble { max-width: 80%; margin-left: auto; border-radius: 1.1rem; padding: 0.625rem 0.8125rem; font-size: 0.875rem; white-space: pre-wrap; overflow-wrap: anywhere; }
+
+/* Button: primary is solid, frost sits on the material, ghost is bare until
+   the cursor washes it, destructive is the one red. Sizes in rem. */
+.ui-button { display: inline-flex; height: 2.25rem; flex: none; align-items: center; justify-content: center; gap: 0.375rem; border: 1px solid transparent; border-radius: 999px; padding: 0 1rem; font-size: 0.875rem; font-weight: 550; white-space: nowrap; cursor: pointer; transition: background-color .12s ease, border-color .12s ease, filter .12s ease; outline: none; }
+.ui-button svg { width: 1rem; height: 1rem; flex: none; }
+.ui-button:focus-visible { box-shadow: 0 0 0 2px color-mix(in oklch, var(--foreground), transparent 55%); }
+.ui-button:disabled { opacity: 0.45; pointer-events: none; }
+.ui-button[data-variant="primary"] { background: var(--foreground); color: var(--background); }
+.ui-button[data-variant="primary"]:hover { filter: brightness(0.88); }
+.ui-button[data-variant="frost"] { border-color: var(--frost-stroke); background: var(--frost-fill); box-shadow: var(--frost-highlight); color: var(--foreground); }
+.ui-button[data-variant="frost"]:hover { background: color-mix(in oklch, var(--frost-fill), white 8%); }
+.ui-button[data-variant="ghost"] { background: transparent; color: color-mix(in oklch, var(--foreground), transparent 25%); }
+.ui-button[data-variant="ghost"]:hover { background: var(--frost-wash); color: var(--foreground); }
+.ui-button[data-variant="destructive"] { background: var(--destructive); color: white; }
+.ui-button[data-variant="destructive"]:hover { filter: brightness(1.1); }
+.ui-button[data-size="sm"] { height: 1.875rem; padding: 0 0.75rem; font-size: 0.8125rem; }
+.ui-button[data-size="icon"] { width: 2.25rem; padding: 0; }
+.ui-button[data-size="icon-sm"] { width: 1.875rem; height: 1.875rem; padding: 0; }
+
+/* Input: a well cut into the frost, its edge brightening on focus. */
+.ui-input { width: 100%; height: 2.25rem; border: 1px solid var(--frost-rule); border-radius: calc(var(--frost-radius) - var(--frost-inset)); background: oklch(0 0 0 / 18%); padding: 0 0.75rem; color: var(--foreground); font-size: 0.875rem; outline: none; transition: border-color .12s ease, background-color .12s ease; }
+.ui-input::placeholder { color: var(--muted-foreground); }
+.ui-input:hover { border-color: oklch(1 0 0 / 18%); }
+.ui-input:focus { border-color: var(--frost-stroke); background: oklch(0 0 0 / 24%); }
+.ui-input:disabled { opacity: 0.5; }

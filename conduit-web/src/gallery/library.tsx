@@ -1,7 +1,7 @@
 import { createSignal, For } from "solid-js";
 import { CopyIcon, FolderIcon, MenuIcon, PaperclipIcon, PencilIcon, PlusIcon, SearchIcon, ShareIcon, SquarePenIcon, Trash2Icon } from "lucide-solid";
-import { Button, Input, Spinner } from "@/components/primitives";
-import { Bubble, Card, Frost, Item, Keycap, Menu, Pill, SearchSection, Section } from "@/components/ui";
+import { Spinner } from "@/components/primitives";
+import { Bubble, Button, Card, Input, Frost, Item, Keycap, Menu, Pill, SearchSection, Section } from "@/components/ui";
 import { StepSlider } from "../client/chat/step-slider";
 import { Segmented, Switch } from "../client/settings/settings-controls";
 import { HarnessMark } from "../client/harness-brand";
@@ -30,9 +30,9 @@ export const libraryAtoms: Atom[] = [
   lib("frost", "Frost · rest", "Frost", () => <Frost class="g-swatch" />),
   lib("frost-raised", "Frost · raised", "Frost lift=raised", () => <Frost lift="raised" class="g-swatch" />),
   lib("frost-core", "Frost · core", "Frost core", () => <Frost lift="raised" core class="g-swatch" />),
-  lib("buttons", "Button", "Button", () => <div class="g-row"><Button>Default</Button><Button variant="outline">Outline</Button><Button variant="ghost">Ghost</Button><Button variant="destructive">Delete</Button></div>),
-  lib("icon-button", "Icon button", "Button size=icon-sm", () => <div class="g-row"><Button variant="ghost" size="icon-sm" aria-label="Copy"><CopyIcon /></Button><Button variant="ghost" size="icon-sm" aria-label="Share"><ShareIcon /></Button></div>),
-  lib("input", "Input", "Input", () => <div style={{ width: "200px" }}><Input placeholder="My project" /></div>),
+  lib("buttons", "Button", "Button variant size", () => <div class="g-row"><Button>Primary</Button><Button variant="frost">Frost</Button><Button variant="ghost">Ghost</Button><Button variant="destructive">Delete</Button><Button size="sm" variant="frost">Small</Button></div>),
+  lib("icon-button", "Icon button", "Button size=icon-sm", () => <div class="g-row"><Button variant="ghost" size="icon-sm" aria-label="Copy"><CopyIcon /></Button><Button variant="ghost" size="icon-sm" aria-label="Share"><ShareIcon /></Button><Button variant="frost" size="icon" aria-label="Add"><PlusIcon /></Button></div>),
+  lib("input", "Input", "Input", () => <div style={{ width: "200px" }}><div style={{ display: "grid", gap: "8px" }}><Input placeholder="My project" /><Input value="Lorem ipsum file" /></div></div>),
   lib("switch", "Switch", "Switch", () => <SwitchDemo />),
   lib("segmented", "Segmented choice", "Segmented", () => <SegmentedDemo />),
   lib("slider", "Slider", "StepSlider", () => <div style={{ width: "220px" }}><Effort /></div>),
@@ -42,7 +42,7 @@ export const libraryAtoms: Atom[] = [
   // Containers.
   lib("pill", "Pill", "Pill", () => <div class="g-row"><Pill icons={[{ label: "Menu", icon: <MenuIcon /> }]} /><Pill icons={[{ label: "Menu", icon: <MenuIcon /> }, { label: "New chat", icon: <SquarePenIcon /> }]} /><Pill icons={[{ label: "Search", icon: <SearchIcon /> }, { label: "Folder", icon: <FolderIcon /> }, { label: "Share", icon: <ShareIcon /> }]} /></div>),
   lib("bubble", "User message", "Bubble", () => <div style={{ width: "240px" }}><Bubble>write a .txt file with lorem ipsum</Bubble></div>),
-  lib("card", "Card", "Card", () => <Card title="Delete this chat?" detail="It can't be brought back." class="g-card" actions={<><Button variant="outline">Cancel</Button><Button variant="destructive">Delete</Button></>} />),
+  lib("card", "Card", "Card", () => <Card title="Delete this chat?" detail="It can't be brought back." class="g-card" actions={<><Button variant="frost">Cancel</Button><Button variant="destructive">Delete</Button></>} />),
   lib("menu", "Menu", "Menu", () => <Menu><Section><Item>One section</Item></Section><Section><Item>Another</Item></Section></Menu>),
 
   // Sections, and the item with each of its parts and states.
@@ -65,5 +65,5 @@ export const libraryAtoms: Atom[] = [
   lib("profiles", "Profile picker", "Menu", () => <Menu><Section title="Profile"><For each={PROFILES}>{(profile, index) => <Item checked={index() === 0} icon={<HarnessMark id={profile.implementation || "conduit"} class="size-4" />} meta={profile.implementation}>{profile.label}</Item>}</For></Section></Menu>),
   lib("server", "Server menu", "Menu", () => <Menu><Section title="Servers"><Item checked>Desktop-Dev</Item><Item checked={false}>Laptop</Item></Section><Section><Item opens>Route</Item><Item>Manage settings</Item><Item>Sign out</Item></Section></Menu>),
   lib("chat", "Chat menu", "Menu", () => <Menu><Section title="Lorem ipsum file"><Item icon={<ShareIcon />}>Share</Item><Item icon={<PencilIcon />}>Rename</Item><Item icon={<CopyIcon />}>Copy link</Item></Section><Section><Item icon={<Trash2Icon />} destructive>Delete</Item></Section></Menu>),
-  lib("prompt", "Prompt card", "Card + Input", () => <Card title="Rename chat" class="g-card" actions={<><Button variant="outline">Cancel</Button><Button>Save</Button></>}><Input value="Lorem ipsum file" /></Card>),
+  lib("prompt", "Prompt card", "Card + Input", () => <Card title="Rename chat" class="g-card" actions={<><Button variant="frost">Cancel</Button><Button>Save</Button></>}><Input value="Lorem ipsum file" /></Card>),
 ];
