@@ -6,8 +6,10 @@
  */
 import { emulatePhone } from "./phone-emulation";
 import { fakeMicrophone } from "./fake-mic";
+import { fakeSockets } from "./fake-socket";
 
 const frame = new URLSearchParams(location.search).get("frame");
 fakeMicrophone();
+fakeSockets();
 if (frame) emulatePhone();
 void import("./canvas").then((module) => module.mount(frame));

@@ -43,8 +43,3 @@ export function fakeChat() {
 export function fakeAttachments() {
   return { items: () => [], pendingIds: () => [], addFiles: () => {}, remove: () => {}, retry: () => {} } as never;
 }
-
-export function fakeModels() {
-  const model = { spec: "anthropic/opus", label: "Opus 5.5" };
-  return { models: () => [model], model: () => model.spec, effort: () => "medium", notice: () => "", chooseModel: () => {}, chooseEffort: () => {} } as never;
-}
