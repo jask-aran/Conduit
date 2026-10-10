@@ -63,8 +63,6 @@ function Canvas() {
       <div class="g-grid">
         <For each={atoms}>{(atom) => <Piece atom={atom} />}</For>
       </div>
-      <h2 class="g-heading">On a phone: library, then the app now</h2>
-      <iframe class="g-parts" title="Phone parts" src="/gallery.html?frame=parts" loading="lazy" onLoad={tuneFrame} />
     </section>
     <aside class="g-right">
       <div class="g-toggle" role="group" aria-label="Preview">
@@ -80,7 +78,7 @@ function Canvas() {
 
 /** The phone-only pieces, alone in a phone frame. */
 function Parts() {
-  return <div class="g-grid g-parts-grid"><For each={[...libraryAtoms, ...phoneAtoms]}>{(atom) => <Piece atom={atom} />}</For></div>;
+  return <div class="g-grid g-parts-grid"><For each={phoneAtoms}>{(atom) => <Piece atom={atom} />}</For></div>;
 }
 
 export function mount(frame: string | null) {

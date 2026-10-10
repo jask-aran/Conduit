@@ -1,40 +1,69 @@
-import { For } from "solid-js";
+import { createSignal, For } from "solid-js";
 import { CopyIcon, FolderIcon, MenuIcon, PaperclipIcon, PencilIcon, PlusIcon, SearchIcon, ShareIcon, SquarePenIcon, Trash2Icon } from "lucide-solid";
-import { Button, Input } from "@/components/primitives";
-import { Bubble, Card, Frost, Menu, Pill, Row, Sep, Title } from "@/components/ui";
+import { Button, Input, Spinner } from "@/components/primitives";
+import { Bubble, Card, Frost, Item, Keycap, Menu, Pill, SearchSection, Section } from "@/components/ui";
+import { StepSlider } from "../client/chat/step-slider";
+import { Segmented, Switch } from "../client/settings/settings-controls";
 import { HarnessMark } from "../client/harness-brand";
 import { PlaceGlyph } from "../client/chat/place-picker";
 import type { Atom } from "./atoms";
 import { MODELS, PROFILES, PROJECTS } from "./seed";
 
-/* The unified library, piece by piece, primitives first. Same pieces on desktop and in the phone frame. */
+/*
+ * The unified library, primitives first. A menu holds sections; a section is
+ * a list, a search or a slider and may have a title; an item's icon, meta,
+ * keys and submenu chevron are its parts, not pieces of their own.
+ */
 
 const lib = (id: string, name: string, source: string, render: Atom["render"]): Atom => ({ id: `ui-${id}`, name, scope: "both", kind: "component", source, render });
 
+const effort = ["off", "minimal", "low", "medium", "high", "xhigh"].map((value) => ({ value, label: value[0]!.toUpperCase() + value.slice(1) }));
+function Effort() { const [value, setValue] = createSignal("medium"); return <StepSlider label="Effort" options={effort} value={value()} onChange={setValue} />; }
+function SegmentedDemo() { const [value, setValue] = createSignal("fade"); return <Segmented label="Streaming" value={value()} onChange={setValue} options={[{ value: "off", label: "Off" }, { value: "fade", label: "Fade" }, { value: "type", label: "Type" }]} />; }
+function SwitchDemo() { const [on, setOn] = createSignal(true); return <Switch label="Example" checked={on()} onChange={setOn} />; }
+const Models = () => <SearchSection placeholder="Search all models…" items={MODELS} matches={(model, needle) => model.label.toLowerCase().includes(needle)}>
+  {(model) => <Item meta={model.provider} checked={model === MODELS[2]}>{model.label}</Item>}
+</SearchSection>;
+
 export const libraryAtoms: Atom[] = [
+  // Primitives.
   lib("frost", "Frost · rest", "Frost", () => <Frost class="g-swatch" />),
   lib("frost-raised", "Frost · raised", "Frost lift=raised", () => <Frost lift="raised" class="g-swatch" />),
   lib("frost-core", "Frost · core", "Frost core", () => <Frost lift="raised" core class="g-swatch" />),
-  lib("pill-one", "Pill · one", "Pill", () => <Pill icons={[{ label: "Menu", icon: <MenuIcon /> }]} />),
-  lib("pill-many", "Pill · several", "Pill", () => <div class="g-row"><Pill icons={[{ label: "Menu", icon: <MenuIcon /> }, { label: "New chat", icon: <SquarePenIcon /> }]} /><Pill icons={[{ label: "Search", icon: <SearchIcon /> }, { label: "Folder", icon: <FolderIcon /> }, { label: "Share", icon: <ShareIcon /> }]} /></div>),
+  lib("buttons", "Button", "Button", () => <div class="g-row"><Button>Default</Button><Button variant="outline">Outline</Button><Button variant="ghost">Ghost</Button><Button variant="destructive">Delete</Button></div>),
+  lib("icon-button", "Icon button", "Button size=icon-sm", () => <div class="g-row"><Button variant="ghost" size="icon-sm" aria-label="Copy"><CopyIcon /></Button><Button variant="ghost" size="icon-sm" aria-label="Share"><ShareIcon /></Button></div>),
+  lib("input", "Input", "Input", () => <div style={{ width: "200px" }}><Input placeholder="My project" /></div>),
+  lib("switch", "Switch", "Switch", () => <SwitchDemo />),
+  lib("segmented", "Segmented choice", "Segmented", () => <SegmentedDemo />),
+  lib("slider", "Slider", "StepSlider", () => <div style={{ width: "220px" }}><Effort /></div>),
+  lib("keycap", "Keycap", "Keycap", () => <div class="g-row"><Keycap>Ctrl</Keycap><Keycap>K</Keycap><Keycap>Esc</Keycap></div>),
+  lib("spinner", "Spinner", "Spinner", () => <Spinner />),
+
+  // Containers.
+  lib("pill", "Pill", "Pill", () => <div class="g-row"><Pill icons={[{ label: "Menu", icon: <MenuIcon /> }]} /><Pill icons={[{ label: "Menu", icon: <MenuIcon /> }, { label: "New chat", icon: <SquarePenIcon /> }]} /><Pill icons={[{ label: "Search", icon: <SearchIcon /> }, { label: "Folder", icon: <FolderIcon /> }, { label: "Share", icon: <ShareIcon /> }]} /></div>),
   lib("bubble", "User message", "Bubble", () => <div style={{ width: "240px" }}><Bubble>write a .txt file with lorem ipsum</Bubble></div>),
-  lib("title", "Section title", "Title", () => <Menu><Title aside="12% context">Profile</Title></Menu>),
-  lib("rows", "Row kinds", "Row", () => <Menu>
-    <Row>Manage settings</Row>
-    <Row icon={<PaperclipIcon />}>Attach files</Row>
-    <Row meta="xai">Grok 4.6</Row>
-    <Row icon={<SearchIcon />} keys={["Ctrl", "K"]}>Search</Row>
-    <Row opens>Route</Row>
-    <Row icon={<HarnessMark id="conduit" class="size-4" />} opens>Assistant</Row>
-    <Row checked>Muse Spark 1.3</Row>
-    <Row disabled meta="offline">Laptop</Row>
-    <Row icon={<Trash2Icon />} destructive>Delete</Row>
-  </Menu>),
-  lib("list", "List section", "Title + Row", () => <Menu><Title>Project</Title><For each={PROJECTS.slice(2, 6)}>{(project) => <Row icon={<PlaceGlyph project={project} />}>{project.name}</Row>}</For><Sep /><Row icon={<PlusIcon />}>New project</Row></Menu>),
-  lib("choice", "Choice section", "Title + Row checked", () => <Menu><Title>Model</Title><For each={MODELS.slice(0, 4)}>{(model, index) => <Row checked={index() === 2} meta={model.provider}>{model.label}</Row>}</For></Menu>),
-  lib("profiles", "Profiles", "Row + HarnessMark", () => <Menu><Title>Profile</Title><For each={PROFILES}>{(profile, index) => <Row checked={index() === 0} icon={<HarnessMark id={profile.implementation || "conduit"} class="size-4" />} meta={profile.implementation}>{profile.label}</Row>}</For></Menu>),
-  lib("server", "Server menu", "Menu", () => <Menu><Title>Servers</Title><Row checked>Desktop-Dev</Row><Row checked={false}>Laptop</Row><Sep /><Row opens>Route</Row><Row>Manage settings</Row><Row>Sign out</Row></Menu>),
-  lib("chat", "Chat menu", "Menu", () => <Menu><Title>Lorem ipsum file</Title><Row icon={<ShareIcon />}>Share</Row><Row icon={<PencilIcon />}>Rename</Row><Row icon={<CopyIcon />}>Copy link</Row><Sep /><Row icon={<Trash2Icon />} destructive>Delete</Row></Menu>),
-  lib("confirm", "Confirm card", "Card", () => <Card title="Delete this chat?" detail="It can't be brought back." class="g-card" actions={<><Button variant="outline">Cancel</Button><Button variant="destructive">Delete</Button></>} />),
+  lib("card", "Card", "Card", () => <Card title="Delete this chat?" detail="It can't be brought back." class="g-card" actions={<><Button variant="outline">Cancel</Button><Button variant="destructive">Delete</Button></>} />),
+  lib("menu", "Menu", "Menu", () => <Menu><Section><Item>One section</Item></Section><Section><Item>Another</Item></Section></Menu>),
+
+  // Sections, and the item with each of its parts and states.
+  lib("item", "Item · parts and states", "Item icon meta keys opens checked disabled destructive", () => <Menu><Section>
+    <Item>Plain</Item>
+    <Item icon={<PaperclipIcon />}>icon</Item>
+    <Item meta="xai">meta</Item>
+    <Item icon={<SearchIcon />} keys={["Ctrl", "K"]}>keys</Item>
+    <Item opens>opens</Item>
+    <Item checked>checked</Item>
+    <Item disabled meta="offline">disabled</Item>
+    <Item icon={<Trash2Icon />} destructive>destructive</Item>
+  </Section></Menu>),
+  lib("section-list", "Section · list", "Section", () => <Menu><Section title="Project" note="5"><For each={PROJECTS.slice(2, 6)}>{(project) => <Item icon={<PlaceGlyph project={project} />}>{project.name}</Item>}</For></Section><Section><Item icon={<PlusIcon />}>New project</Item></Section></Menu>),
+  lib("section-search", "Section · search", "SearchSection", () => <Menu class="g-search"><Models /></Menu>),
+  lib("section-slider", "Section · slider", "Section kind=slider", () => <Menu><Section kind="slider"><Effort /></Section></Menu>),
+
+  // Assembled.
+  lib("plus", "+ menu", "Menu", () => <Menu><Section title="Profile" note="12% context"><Item icon={<HarnessMark id="conduit" class="size-4" />} opens>Assistant</Item></Section><Section title="Model"><Item opens>Muse Spark 1.3</Item></Section><Section kind="slider"><Effort /></Section></Menu>),
+  lib("profiles", "Profile picker", "Menu", () => <Menu><Section title="Profile"><For each={PROFILES}>{(profile, index) => <Item checked={index() === 0} icon={<HarnessMark id={profile.implementation || "conduit"} class="size-4" />} meta={profile.implementation}>{profile.label}</Item>}</For></Section></Menu>),
+  lib("server", "Server menu", "Menu", () => <Menu><Section title="Servers"><Item checked>Desktop-Dev</Item><Item checked={false}>Laptop</Item></Section><Section><Item opens>Route</Item><Item>Manage settings</Item><Item>Sign out</Item></Section></Menu>),
+  lib("chat", "Chat menu", "Menu", () => <Menu><Section title="Lorem ipsum file"><Item icon={<ShareIcon />}>Share</Item><Item icon={<PencilIcon />}>Rename</Item><Item icon={<CopyIcon />}>Copy link</Item></Section><Section><Item icon={<Trash2Icon />} destructive>Delete</Item></Section></Menu>),
   lib("prompt", "Prompt card", "Card + Input", () => <Card title="Rename chat" class="g-card" actions={<><Button variant="outline">Cancel</Button><Button>Save</Button></>}><Input value="Lorem ipsum file" /></Card>),
 ];
