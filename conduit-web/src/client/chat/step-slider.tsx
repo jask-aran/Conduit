@@ -4,6 +4,16 @@ import { useLibrary } from "@/components/ui/swap";
 
 export type StepOption = { value: string; label: string };
 
+/** The slider's parts by name, for the pieces built from them (the context
+ *  breakdown, the value that opens the levels): the library's in the gallery's
+ *  Library previews (components/ui/swap.ts), the app's otherwise. */
+export function sliderParts() {
+  const lib = useLibrary();
+  return lib
+    ? { root: "ui-slider", header: "ui-slider-head", label: "ui-title-text", value: "ui-slider-value", input: "ui-slider-input", ticks: "ui-slider-ticks" }
+    : { root: "step-slider", header: "step-slider-header", label: undefined, value: "step-slider-value", input: "step-slider-input", ticks: "step-slider-ticks" };
+}
+
 /**
  * One choice from an ordered list, set by sliding along it.
  *

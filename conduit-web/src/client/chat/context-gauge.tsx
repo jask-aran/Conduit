@@ -1,3 +1,6 @@
+import { libraryPiece } from "@/components/ui/swap";
+import { sliderParts } from "./step-slider";
+import { useLibrary } from "@/components/ui/swap";
 import { createEffect, createMemo, createSignal, For, on, onCleanup, Show } from "solid-js";
 import { ChevronRightIcon } from "lucide-solid";
 import { Popover, PopoverContent } from "@/components/primitives";
@@ -52,7 +55,7 @@ export function ContextGauge(props: { chat: ActiveChatStore; compact?: boolean; 
 
   createEffect(on(held, (open) => { if (open) props.chat.refreshContext(); }, { defer: true }));
   return <Popover open={held()} onOpenChange={(open) => { if (!open) close(); }} anchorRef={() => trigger} placement="top-end">
-    <button ref={trigger} type="button" class="chat-context-trigger" data-state={tone()} aria-label={`Context usage: ${Math.round(percent())}%`}
+    <button ref={trigger} type="button" {...libraryPiece("icon-button").data} class={`chat-context-trigger ${libraryPiece("icon-button").class}`.trim()} data-state={tone()} aria-label={`Context usage: ${Math.round(percent())}%`}
       aria-expanded={held()} onClick={() => { if (held()) close(); else setHeld(true); }}>
       <svg class="chat-context-gauge" viewBox="0 0 24 24" aria-hidden="true">
         <circle class="chat-context-gauge-track" cx="12" cy="12" r="9" pathLength="100" />
@@ -128,10 +131,15 @@ export function ContextBreakdown(props: { chat: ActiveChatStore; bare?: boolean;
   const copySession = () => void navigator.clipboard?.writeText(sessionId()).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1200); });
   /* Built from the model menu's parts: the slider's header for each section,
      its track for the bar, the model rows for the categories. */
+  const part = sliderParts();
+  // Library previews: library rows and rules (components/ui/swap.ts).
+  const lib = useLibrary();
+  const row = (app: string) => lib ? "ui-row" : app;
+  const rule = lib ? "ui-rule" : "context-breakdown-separator";
   return <div class="context-breakdown">
-    <div class="step-slider context-breakdown-section">
-      <Show when={!props.bare}><div class="step-slider-header"><label>Context</label>
-        <span class="step-slider-value">{reported() == null ? "Unavailable" : `${Math.round(reported()!)}% used`}</span></div></Show>
+    <div class={`${part.root} context-breakdown-section`}>
+      <Show when={!props.bare}><div class={part.header}><label class={part.label}>Context</label>
+        <span class={part.value}>{reported() == null ? "Unavailable" : `${Math.round(reported()!)}% used`}</span></div></Show>
       <ContextBar chat={props.chat} />
       <Show when={contextTokens(usage()) != null}>
         <div class="context-breakdown-total"><span>{compactTokens(contextTokens(usage())!)}{window() ? ` of ${compactTokens(window()!)}` : ""} tokens</span>
@@ -139,9 +147,9 @@ export function ContextBreakdown(props: { chat: ActiveChatStore; bare?: boolean;
       </Show>
     </div>
     <Show when={categories().length}>
-      <div class="context-breakdown-separator" />
+      <div class={rule} />
       <Show when={usage()?.breakdown === "loadable" && !usage()?.categories?.length}>
-        <button type="button" class="menu-row context-breakdown-load" disabled={loading()} onClick={load}>
+        <button type="button" class={row("menu-row context-breakdown-load")} disabled={loading()} onClick={load}>
           <span>{loading() ? "Asking Claude Code…" : failed() ? "Could not load the breakdown" : "Load breakdown"}</span>
           <small>starts Claude Code</small>
         </button>
@@ -152,42 +160,42 @@ export function ContextBreakdown(props: { chat: ActiveChatStore; bare?: boolean;
             <span>{category.label}<Show when={category.items?.length}> ({category.items!.length})</Show></span>
             <small>{compactTokens(category.tokens)}</small>
             <small class="context-breakdown-share">{category.kind === "deferred" ? "" : share(category.tokens)}</small></>;
-          return <Show when={category.items?.length} fallback={<div class="menu-row composer-model-option context-breakdown-row">{cells}</div>}>
-            <details class="context-breakdown-group"><summary class="menu-row composer-model-option context-breakdown-row">{cells}<ChevronRightIcon class="context-breakdown-chevron" /></summary>
-              <For each={category.items}>{(item) => <div class="menu-row composer-model-option context-breakdown-row context-breakdown-item"><i class="context-breakdown-dot" /><span>{item.label}</span><small>{compactTokens(item.tokens)}</small><small class="context-breakdown-share" /></div>}</For>
+          return <Show when={category.items?.length} fallback={<div class={row("menu-row composer-model-option context-breakdown-row")}>{cells}</div>}>
+            <details class="context-breakdown-group"><summary class={row("menu-row composer-model-option context-breakdown-row")}>{cells}<ChevronRightIcon class="context-breakdown-chevron" /></summary>
+              <For each={category.items}>{(item) => <div class={row("menu-row composer-model-option context-breakdown-row context-breakdown-item")}><i class="context-breakdown-dot" /><span>{item.label}</span><small>{compactTokens(item.tokens)}</small><small class="context-breakdown-share" /></div>}</For>
             </details>
           </Show>;
         }}</For>
       </div>
     </Show>
     <Show when={cache() != null || eligible() != null}>
-      <div class="context-breakdown-separator" />
-      <div class="step-slider context-breakdown-section" title="Share of input served from cache; of what the previous request already sent, how much was reused">
-        <div class="step-slider-header"><label>Cache</label>
-          <span class="step-slider-value">{uncached() ? "No reads yet" : cache() != null ? `${Math.round(cache()!)}% of input` : `${Math.round(eligible()! * 100)}% reused`}</span></div>
+      <div class={rule} />
+      <div class={`${part.root} context-breakdown-section`} title="Share of input served from cache; of what the previous request already sent, how much was reused">
+        <div class={part.header}><label class={part.label}>Cache</label>
+          <span class={part.value}>{uncached() ? "No reads yet" : cache() != null ? `${Math.round(cache()!)}% of input` : `${Math.round(eligible()! * 100)}% reused`}</span></div>
         <Show when={!uncached() && cache() != null && eligible() != null}>
           <div class="context-breakdown-total"><span>Of what could be reused</span><span>{Math.round(eligible()! * 100)}%</span></div>
         </Show>
       </div>
     </Show>
     <Show when={plan()}>{(current) => <>
-      <div class="context-breakdown-separator" />
-      <div class="step-slider context-breakdown-section">
-        <div class="step-slider-header"><label>Plan{current().name ? ` · ${current().name}` : ""}</label>
-          <span class="step-slider-value">{Math.round(Math.max(...current().windows.map((window) => window.usedPercent)))}% used</span></div>
+      <div class={rule} />
+      <div class={`${part.root} context-breakdown-section`}>
+        <div class={part.header}><label class={part.label}>Plan{current().name ? ` · ${current().name}` : ""}</label>
+          <span class={part.value}>{Math.round(Math.max(...current().windows.map((window) => window.usedPercent)))}% used</span></div>
         <For each={current().windows}>{(window) => <div class="context-breakdown-total">
           <span>{window.label}</span><span>{Math.round(window.usedPercent)}%<Show when={window.resetsAt}> · resets {resetText(window.resetsAt!)}</Show></span>
         </div>}</For>
       </div>
     </>}</Show>
-    <div class="context-breakdown-separator" />
-    <button type="button" class="menu-row context-breakdown-load" disabled={!props.canCompact || busy()} onClick={() => void props.chat.compact()}
+    <div class={rule} />
+    <button type="button" class={row("menu-row context-breakdown-load")} disabled={!props.canCompact || busy()} onClick={() => void props.chat.compact()}
       title={props.canCompact ? "Summarise the conversation so far to free the window" : "This harness cannot be asked to compact"}>
       <span>{props.chat.compacting() ? "Compacting…" : "Compact now"}</span>
       <small>{compactions() ? `${compactions()} so far` : props.canCompact ? "" : "not supported"}</small>
     </button>
     <Show when={model() || sessionId()}>
-      <div class="context-breakdown-separator" />
+      <div class={rule} />
       <div class="context-breakdown-footer">
         <span>{model()}</span>
         <Show when={sessionId()}><button type="button" class="composer-menu-shortcut context-breakdown-session" title={`Copy session ID ${sessionId()}`} onClick={copySession}>

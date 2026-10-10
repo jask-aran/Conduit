@@ -1,11 +1,12 @@
 import { isMobileLayout } from "../client/navigation/mobile-layout";
 import { installedClientKind } from "../client/platform/installed-client";
 
-const menus = '[data-slot="menu-content"], [data-slot="menu-sub-content"], [data-slot="context-menu-content"], [data-slot="context-menu-sub-content"], [data-slot="popover-content"]';
+// ui-*: the same menus drawn by the library (components/ui/swap.ts).
+const menus = '[data-slot="menu-content"], [data-slot="menu-sub-content"], [data-slot="context-menu-content"], [data-slot="context-menu-sub-content"], [data-slot="popover-content"], [data-slot^="ui-"]';
 const visibleMenus = () => [...document.querySelectorAll<HTMLElement>(menus)].filter((element) => element.checkVisibility());
 export const phoneLayerOpen = () => visibleMenus().length > 0;
 const escape = () => {
-  const child = visibleMenus().findLast((element) => element.matches('[data-slot="menu-sub-content"], [data-slot="context-menu-sub-content"]') && element.getAttribute("role") === "menu");
+  const child = visibleMenus().findLast((element) => element.matches('[data-slot="menu-sub-content"], [data-slot="ui-menu-sub-content"], [data-slot="ui-context-menu-sub-content"], [data-slot="context-menu-sub-content"]') && element.getAttribute("role") === "menu");
   if (child) {
     child.dispatchEvent(new KeyboardEvent("keydown", { key: getComputedStyle(child).direction === "rtl" ? "ArrowRight" : "ArrowLeft", bubbles: true, cancelable: true }));
     if (!child.isConnected || !child.checkVisibility()) return true;

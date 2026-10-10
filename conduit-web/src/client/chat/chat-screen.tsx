@@ -132,7 +132,7 @@ export function ChatHeader(props: {
                 // Opens in place: a submenu has nowhere to go beside a menu that fills a phone.
                 const [expanded, setExpanded] = createSignal(false);
                 const used = () => contextUsagePercent(chat().contextUsage());
-                return <div class="chat-header-menu-context-block">
+                return <div class={useLibrary() ? undefined : "chat-header-menu-context-block"}>
                   <Show when={useLibrary()}><div role="menuitem" class="ui-row" data-field="" aria-expanded={expanded()} onClick={() => { if (!expanded()) chat().refreshContext(); setExpanded(!expanded()); }}>
                     <span class="ui-label">Context</span><small>{used() == null ? "Unavailable" : `${Math.round(used()!)}% used`}</small><ChevronRightIcon class="ui-chevron" /></div></Show>
                   <Show when={!useLibrary()}><button type="button" class="chat-header-menu-context-trigger" aria-expanded={expanded()}

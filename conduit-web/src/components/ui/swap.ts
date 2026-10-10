@@ -10,3 +10,14 @@ import { createContext, useContext } from "solid-js";
  */
 export const LibraryContext = createContext(false);
 export const useLibrary = () => useContext(LibraryContext);
+
+
+/** What an app trigger adds to be a library piece in the Library previews: a
+ *  ghost icon button, or a small ghost button (a picker showing its value).
+ *  Spread it, and add `.class` to the trigger's own classes. */
+export function libraryPiece(piece: "icon-button" | "select") {
+  if (!useLibrary()) return { class: "", data: {} };
+  return piece === "select"
+    ? { class: "ui-button", data: { "data-variant": "ghost", "data-size": "sm" } }
+    : { class: "ui-button", data: { "data-variant": "ghost", "data-size": "icon-sm" } };
+}
