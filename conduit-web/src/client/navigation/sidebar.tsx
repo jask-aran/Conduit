@@ -1156,6 +1156,13 @@ export function Sidebar(props: {
     else toggleSidebar();
   };
 
+  const serverSwitcher = () => <ServerSwitcher connectivity={props.connectivity} pwaUpdating={props.pwaUpdating}
+    downloads={phoneLayout() && installedClientKind === "browser"}
+    onOpenSettings={() => { closeMobile(); props.onOpenSettings(); }}
+    onUpdatePwa={() => props.onUpdatePwa()}
+    onAddServer={() => { closeMobile(); props.onAddServer?.(); }}
+    onLogout={() => props.onLogout?.()} />;
+
   return <>
     <Show when={props.mobileOpen}>
       <button type="button" class="mobile-panel-backdrop" data-mobile-backdrop="sidebar" data-for="sidebar" aria-label="Dismiss sidebar" onClick={closeMobile} />
@@ -1167,6 +1174,12 @@ export function Sidebar(props: {
           <Button variant="ghost" size="icon-sm" data-sidebar="trigger" aria-label="Toggle Sidebar" aria-expanded={isMobileLayout() ? props.mobileOpen : !collapsed()} onClick={onSidebarTrigger}><PanelLeftIcon /></Button>
           </div>
           <button data-sidebar="brand" aria-label="Conduit" onClick={() => { setArea("conduit"); closeMobile(); props.onOpenDashboard(); enterPane(); }}><span>Conduit</span></button>
+          <Show when={phoneLayout()}>
+            <div class="sidebar-header-server">
+              {serverSwitcher()}
+              <UpdateNotice state={props.updateState} onTake={props.onTakeUpdate} />
+            </div>
+          </Show>
           <div class={`sidebar-area-toggle ${phoneLayout() ? "composer-surface-material" : ""}`} data-composer-surface={phoneLayout() ? headerSurface() : undefined} data-area={area()} role="group" aria-label="Sidebar section">
             <button type="button" aria-label="Conduit" title="Conduit" aria-pressed={area() === "conduit"} onClick={() => setArea("conduit")}><LayoutDashboardIcon /></button>
             <button type="button" aria-label="Computer" title="Computer" aria-pressed={area() === "computer"} onClick={() => setArea("computer")}><MonitorIcon /></button>
@@ -1256,6 +1269,8 @@ export function Sidebar(props: {
             <Group label="Chats" projects={[]} chatRoot={chats()} />
           </Show>
         </div>
+        {/* A phone has no footer: the server sits in the header, so the list runs to the bottom. */}
+        <Show when={!phoneLayout()}>
         <div data-sidebar="footer">
           {/*
             * Above the server row rather than inside the menu, because the menu
@@ -1275,12 +1290,9 @@ export function Sidebar(props: {
             */}
           <UpdateNotice state={props.updateState} onTake={props.onTakeUpdate} />
           <Show when={installedClientKind === "browser"}><InstallerDownloads /></Show>
-          <ServerSwitcher connectivity={props.connectivity} pwaUpdating={props.pwaUpdating}
-          onOpenSettings={() => { closeMobile(); props.onOpenSettings(); }}
-          onUpdatePwa={() => props.onUpdatePwa()}
-          onAddServer={() => { closeMobile(); props.onAddServer?.(); }}
-          onLogout={() => props.onLogout?.()} />
+          {serverSwitcher()}
         </div>
+        </Show>
       </div>
     </aside>
 
