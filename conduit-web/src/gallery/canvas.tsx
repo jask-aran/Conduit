@@ -5,7 +5,7 @@ import "../client/chat/composer-geometry.css";
 import "../client/styles.css";
 import "./gallery.css";
 import { ChatScreen } from "./stories";
-import { LiveDesktop, LivePhone, LivePhoneSidebar } from "./live";
+import { LibraryContext } from "@/components/ui/swap";
 import { SidebarScreen } from "./sidebar-story";
 import { atoms, phoneAtoms, type Atom } from "./atoms";
 import { libraryGroups } from "./library";
@@ -54,7 +54,7 @@ function Canvas() {
     { key: "desktop-live", render: () => <div class="g-desktop-screen"><ChatScreen /></div> },
     { key: "phone-library", render: () => <iframe class="g-phone" title="Phone · library" src="/gallery.html?frame=library-phone" onLoad={tuneFrame} /> },
     { key: "sidebar-library", render: () => <iframe class="g-phone" title="Phone sidebar · library" src="/gallery.html?frame=library-sidebar" onLoad={tuneFrame} /> },
-    { key: "desktop-library", render: () => <LiveDesktop /> },
+    { key: "desktop-library", render: () => <div class="g-desktop-screen"><LibraryContext.Provider value={true}><ChatScreen /></LibraryContext.Provider></div> },
   ];
   const [tuning, setTuning] = createSignal(false);
   const update = (css: string) => {
@@ -115,8 +115,9 @@ export function mount(frame: string | null) {
   try { localStorage.setItem("conduit:composer-surface", "frosted-live"); localStorage.setItem("conduit:phone-composer", "bar"); } catch { /* private window */ }
   if (frame === "parts") { document.body.classList.add("g-parts-body"); render(() => <Parts />, root); }
   // The library's phone screens, in the same kind of frame as the live ones: a phone's root size and media rules.
-  else if (frame === "library-phone") { document.body.classList.add("g-solo-body"); render(() => <LivePhone />, root); }
-  else if (frame === "library-sidebar") { document.body.classList.add("g-solo-body"); render(() => <LivePhoneSidebar />, root); }
+  // The same real screens, their frosted pieces and menus drawn by the library (components/ui/swap.ts).
+  else if (frame === "library-phone") { document.body.classList.add("g-solo-body"); render(() => <LibraryContext.Provider value={true}><ChatScreen /></LibraryContext.Provider>, root); }
+  else if (frame === "library-sidebar") { document.body.classList.add("g-solo-body"); render(() => <LibraryContext.Provider value={true}><SidebarScreen /></LibraryContext.Provider>, root); }
   else if (frame === "sidebar") { document.body.classList.add("g-solo-body"); render(() => <SidebarScreen />, root); }
   else if (frame) { document.body.classList.add("g-solo-body"); render(() => <ChatScreen />, root); }
   else {

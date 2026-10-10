@@ -229,3 +229,19 @@
 .ui-nav-row:is(:hover, [aria-current="page"]) > .ui-nav-icon { color: var(--foreground); }
 .ui-nav-toggle { margin-right: -6px; display: grid; width: calc(var(--nav-icon) + 9px); height: calc(var(--nav-icon) + 9px); flex: none; place-items: center; border-radius: 6px; color: var(--muted-foreground); }
 .ui-nav-toggle svg { width: var(--nav-icon); height: var(--nav-icon); }
+
+/* The app's own pieces, drawn with the library (components/ui/swap.ts): the
+   app keeps its geometry; the material is the library's frost. Same targets
+   as the app's material rule in styles.css. */
+.composer-surface-material[data-composer-surface="library"],
+[data-phone-layout="bar"] .composer[data-composer-surface="library"] :is(.composer-actions [data-slot="button"], .composer-plus-trigger),
+[data-phone-layout] .composer[data-composer-surface="library"] .composer-input-shell,
+[data-phone-layout="surface"] .composer[data-composer-surface="library"]::before {
+  border: 1px solid var(--frost-stroke);
+  background: var(--frost-fill);
+  -webkit-backdrop-filter: var(--frost-blur);
+  backdrop-filter: var(--frost-blur);
+  box-shadow: var(--frost-lift-rest), var(--frost-highlight);
+}
+/* A rule between groups of an app menu's rows, where a library menu has sections. */
+.ui-menu > .ui-rule { height: 1px; margin: var(--frost-inset) calc(-1 * var(--frost-inset)); border: 0; background: var(--frost-rule); }
