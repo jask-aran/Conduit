@@ -22,7 +22,8 @@ import { MODELS, PROFILES, PROJECTS } from "./seed";
  */
 
 const lib = (id: string, name: string, source: string, render: Atom["render"]): Atom => ({ id: `ui-${id}`, name, scope: "both", kind: "component", source, render });
-export interface Group { title: string; note: string; atoms: Atom[] }
+/** side: each piece drawn at desktop and phone density side by side, whatever the toggle says. */
+export interface Group { title: string; note: string; atoms: Atom[]; side?: boolean }
 
 const effort = ["off", "minimal", "low", "medium", "high", "xhigh"].map((value) => ({ value, label: value[0]!.toUpperCase() + value.slice(1) }));
 function Effort() { const [value, setValue] = createSignal("medium"); return <StepSlider label="Effort" options={effort} value={value()} onChange={setValue} />; }
@@ -69,9 +70,11 @@ export const libraryGroups: Group[] = [
       <Menu><Section><Item checked>Automatic</Item><Item checked={false}>Local network</Item><Item checked={false}>Internet</Item></Section></Menu>
     </div>),
   ] },
-  { title: "Popovers in the app", note: "assembled from the pieces above, nothing else", atoms: [
+  { title: "Popovers in the app", note: "desktop and phone side by side, the same pieces at two densities", side: true, atoms: [
     lib("plus", "+ menu", "Menu", () => <Menu><Section title="Profile" note="12% context"><Item icon={<HarnessMark id="conduit" class="size-4" />} opens>Assistant</Item></Section><Section title="Model"><Item opens>Muse Spark 1.3</Item></Section><Section kind="slider"><Effort /></Section></Menu>),
     lib("profiles", "Profile picker", "Menu", () => <Menu><Section title="Profile"><For each={PROFILES}>{(profile, index) => <Item checked={index() === 0} icon={<HarnessMark id={profile.implementation || "conduit"} class="size-4" />} meta={profile.implementation}>{profile.label}</Item>}</For></Section></Menu>),
+    lib("server", "Server menu", "Menu", () => <Menu><Section title="Servers"><Item checked>Desktop-Dev</Item><Item checked={false}>Laptop</Item></Section><Section><Item opens>Route</Item><Item>Manage settings</Item><Item>Sign out</Item></Section></Menu>),
+    lib("models", "Model picker", "Menu + SearchSection", () => <Menu class="g-search"><Models /></Menu>),
     lib("chat", "Chat menu", "Menu", () => <Menu><Section title="Lorem ipsum file"><Item icon={<ShareIcon />}>Share</Item><Item icon={<PencilIcon />}>Rename</Item><Item icon={<CopyIcon />}>Copy link</Item></Section><Section><Item icon={<Trash2Icon />} destructive>Delete</Item></Section></Menu>),
   ] },
   { title: "Cards", note: "the popover's frost at dialog padding", atoms: [
