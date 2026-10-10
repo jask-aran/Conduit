@@ -474,6 +474,42 @@ A "sizzle", text that shifts and settles, is a broken rule here, not a tuning ma
 
 **Held focus** — a region reached by a go-to-region shortcut shows a thin line along its bottom edge in the near-neutral `{colors.ring}` tone, fading at both ends; the regions' bottoms line up, so it reads as one baseline with the held region lit. On arrival the rest of the app dims briefly around it. It stays while focus is in that region or in none (a menu, a dialog), and goes when focus reaches another region any other way; a click or Tab never lights one. Not on a phone.
 
+# Catalogue
+
+Every canonical component, where it lives and what varies. A change to one updates its source, its gallery entry and its row here together. "Gallery" is filled in as the gallery lands.
+
+| Component | Source | Surface | Variants | Gallery |
+| --- | --- | --- | --- | --- |
+| Button | `components/primitives.tsx` | any | ghost, outline, default; icon sizes | — |
+| Spinner | `components/primitives.tsx` | any | size | — |
+| Menu, ContextMenu (+ Sub, Radio, Label, Separator) | `components/primitives.tsx` | frost | phone panels via `PhoneMenuSubmenu` | — |
+| Popover, PopoverSearchList | `components/primitives.tsx` | frost | — | — |
+| Tooltip | `components/primitives.tsx` | frost | — | — |
+| Field, FieldGroup, FieldLabel, Input, Textarea | `components/primitives.tsx` | pane, frost | bordered, quiet | — |
+| FrostDialog, FrostOverlay | `components/frost.tsx` | frost | narrow, wide | — |
+| Keycap | `components/frost.tsx` | frost | — | — |
+| Frost material | `.composer-surface-material` + `chat/composer-surface.ts` | frost | static, frosted-live | — |
+| Segmented choice | `settings/settings-controls.tsx` | pane | 2-4 options | — |
+| Switch | `settings/settings-controls.tsx` | pane | — | — |
+| Disclosure | `chat/disclosure.tsx` | transcript, pane | — | — |
+| StepSlider | `chat/step-slider.tsx` | frost, pane | — | — |
+| Runtime dot | `navigation/runtime-indicator.tsx` | any | success, warn, danger, muted, busy | — |
+
+## Intentional exceptions
+
+A component drawn its own way on purpose, with the reason. Format: **where** -- what differs -- why.
+
+- **Phone header pills** (`main.tsx` `headerPill`, sidebar header) -- buttons sharing a pill are capsules narrower than tall, concentric with it -- several controls read as one floating object over the transcript.
+
+## Known mismatches
+
+Hand-rolled copies of a canonical component, to fold in when touched. Different from Being migrated, which is about surfaces.
+
+- **Segmented choice** re-drawn as `.sidebar-area-toggle` (sidebar), `.split-heading-switches` (three dashboards) and `.workspace-history-toggle`.
+- **Menu rows** outside menus as the `.menu-row` class (terminal pane, leader palette, context gauge) without a component.
+- **Raw `<button>`s** with local styling instead of `Button`: most in the terminal pane, sidebar, `main.tsx`, command menu and Computer dashboard.
+- **Badge** is exported and unused.
+
 # Being migrated
 
 Surfaces that do not match the language yet. Do not copy them; when you touch one, move it towards its target, and take it off this list once it is there.

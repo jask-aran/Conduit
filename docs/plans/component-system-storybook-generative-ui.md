@@ -1,6 +1,6 @@
 # Component system, gallery workbench, and generative UI
 
-Status: shaping; decisions agreed 2026-10-08, **nothing implemented**.
+Status: decisions agreed 2026-10-08; milestone 0 done 2026-10-10.
 Supersedes the earlier long-form plan (see git history of this file for the
 per-file TSX/CSS inventory, Storybook setup notes and the iframe-artifact
 security discussion).
@@ -32,9 +32,17 @@ components in answers. One canonical component set serves all four.
    portals working. Features: co-located `*.story.tsx` files, desktop/phone
    viewport presets, prop controls, real app compositions via deterministic
    fixtures (no live server).
-4. **Built for me and agents equally.** Every story has a stable URL so
-   agents can screenshot it via agent-browser to verify UI changes instead
-   of clicking through the app.
+4. **One canvas, live propagation (revised 2026-10-10).** The gallery is a
+   single page: a canvas laying out every base component, real and
+   rendered, beside example surfaces from the app (phone header, sidebar
+   header, composer, settings list) showing those components in their
+   customised state. Everything is in one document on one stylesheet, so
+   tuning a base component re-renders its customised uses on the same
+   canvas live. Each component and surface is an addressable region
+   (anchor) so agents can screenshot one at desktop and phone widths
+   instead of clicking through the app; there is no per-story page.
+   For propagation to work, a customisation must be expressed as overrides
+   of the base's tokens, not a re-drawn copy (Known mismatches).
 5. **Token tuning exports a CSS patch.** A token panel edits CSS variables
    live on the story root, with reset and before/after compare, and copies a
    CSS diff. The browser never writes source. Styles not yet token-driven are
@@ -85,6 +93,33 @@ components in answers. One canonical component set serves all four.
 5. **First render tools** (`render_table` first) via the registry.
 6. **Ongoing dedup** of one-offs; Markdown/KaTeX, transcript virtualisation,
    terminal and editor internals stay specialised.
+
+## Milestone 0 record (2026-10-10)
+
+Seeded in `DESIGN.md` under Catalogue, Intentional exceptions and Known
+mismatches. Snapshot of what it found:
+
+- **Shared components:** `components/primitives.tsx` (Button, Spinner,
+  Badge, Menu/ContextMenu families, Popover, PopoverSearchList, Tooltip,
+  Field family, Input, Textarea), `components/frost.tsx` (FrostDialog,
+  FrostOverlay, Keycap), `components/phone-menu-panels.tsx`. Outside
+  `components/`: Segmented and Switch (`settings/settings-controls.tsx`),
+  Disclosure, StepSlider, runtime indicator, frost material.
+- **Importers (files):** Button 20, Spinner 14, Menu 11, FrostDialog 9,
+  ContextMenu 6, Segmented/Switch 6, Input 5, Popover 3, Field 2,
+  Disclosure 2, StepSlider 2, Tooltip 1, Textarea 1, Keycap 1, Badge 0.
+  The frost material class is used in 8 files, the runtime indicator in 9.
+- **Duplicated controls:** segmented choice drawn four ways; `.menu-row`
+  without a component; raw `<button>` most in terminal pane (23), sidebar
+  (17), `main.tsx` (14), command menu (12), Computer dashboard (12).
+- **Hardcoded values:** about 7.6k lines of CSS across 9+ files
+  (`styles.css` 2.9k). 55 custom properties on `:root`; colours mostly
+  tokens (a few `#000`/`#fff` and syntax/warning hexes). Radii are mostly
+  literal (999px 60, 6px 47, 4px 28, 7/8/5px 22-23, 10px 19); font sizes are
+  literal across ~15 values (12px 87, 9.6px 73, 11px 71, 10.4px 58, 13px 57,
+  8.8px 55), partly from the density-duplicate blocks. These are the token
+  consolidation targets for milestone 4, and the gallery's live propagation
+  depends on them.
 
 ## Guardrails
 
