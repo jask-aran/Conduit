@@ -33,8 +33,8 @@ function Piece(props: { atom: Atom; side?: boolean }) {
     <figcaption class="g-tag" title={props.atom.source}><strong>{props.atom.name}</strong><span data-scope={props.atom.scope}>{props.atom.scope === "both" ? "desktop + phone" : props.atom.scope + " only"}</span><span data-kind={props.atom.kind}>{props.atom.kind}</span></figcaption>
     <Show when={props.side} fallback={<div class="g-cell-body">{props.atom.render()}</div>}>
       <div class="g-cell-body g-side">
-        <div data-density="desktop"><small>desktop</small>{props.atom.render()}</div>
-        <div data-density="phone"><small>phone</small>{props.atom.render()}</div>
+        <div data-density="desktop"><small>desktop variant</small>{props.atom.render()}</div>
+        <div data-density="phone"><small>phone variant</small>{props.atom.render()}</div>
       </div>
     </Show>
   </figure>;
@@ -44,8 +44,6 @@ function Canvas() {
   const [tune, setTune] = createSignal(read());
   const [preview, setPreview] = createSignal<"desktop" | "phone">("phone");
   const [tuning, setTuning] = createSignal(false);
-  const [density, setDensity] = createSignal<"desktop" | "phone">((() => { try { return localStorage.getItem("conduit:gallery-density") === "phone" ? "phone" : "desktop"; } catch { return "desktop"; } })());
-  const pickDensity = (value: "desktop" | "phone") => { setDensity(value); try { localStorage.setItem("conduit:gallery-density", value); } catch { /* private window */ } };
   const update = (css: string) => {
     setTune(css);
     try { localStorage.setItem(TUNE_KEY, css); } catch { /* private window */ }
@@ -57,10 +55,6 @@ function Canvas() {
     <section class="g-left">
       <div class="g-bar">
         <h1>Gallery</h1>
-        <div class="g-toggle" role="group" aria-label="Library density">
-          <button type="button" aria-pressed={density() === "desktop"} onClick={() => pickDensity("desktop")}>Desktop</button>
-          <button type="button" aria-pressed={density() === "phone"} onClick={() => pickDensity("phone")}>Phone</button>
-        </div>
         <button type="button" aria-pressed={tuning()} onClick={() => setTuning(!tuning())}>Tune CSS</button>
         <Show when={tuning()}><button type="button" onClick={() => void navigator.clipboard.writeText(tune())}>Copy</button></Show>
       </div>
@@ -68,8 +62,8 @@ function Canvas() {
         placeholder={".composer-surface-material[data-composer-surface=\"frosted-live\"] {\n  backdrop-filter: blur(30px);\n}"} /></Show>
       <For each={libraryGroups}>{(group) => <>
         <h2 class="g-heading">{group.title} <small>{group.note}</small></h2>
-        <div class="g-grid" data-density={group.density ?? density()}>
-          <For each={group.atoms}>{(atom) => <Piece atom={atom} />}</For>
+        <div class="g-grid">
+          <For each={group.atoms}>{(atom) => <Piece atom={atom} side={group.both} />}</For>
         </div>
       </>}</For>
       <h2 class="g-heading">In the app now</h2>

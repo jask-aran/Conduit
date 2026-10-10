@@ -18,8 +18,11 @@ export function Pill(props: { icons: { label: string; icon: JSX.Element }[] }) {
   return <div class="ui-frost ui-pill"><For each={props.icons}>{(item) => <button type="button" aria-label={item.label} title={item.label}>{item.icon}</button>}</For></div>;
 }
 
-export function Menu(props: { class?: string; core?: boolean; children: JSX.Element }) {
-  return <div role="menu" class={cn("ui-frost ui-menu", props.class)} data-surface="frost" data-lift="raised" data-core={props.core ? "" : undefined}>{props.children}</div>;
+/** desktop or phone: the rules its sections and items are built at. Unset, it follows the layout it is in. */
+export type Density = "desktop" | "phone";
+
+export function Menu(props: { class?: string; core?: boolean; density?: Density; children: JSX.Element }) {
+  return <div role="menu" class={cn("ui-frost ui-menu", props.class)} data-density={props.density} data-surface="frost" data-lift="raised" data-core={props.core ? "" : undefined}>{props.children}</div>;
 }
 
 /** A menu's section: a list of items (the default) or a slider, with an optional title and a note beside it. */
@@ -54,8 +57,8 @@ export function Item(props: {
 
 export const Keycap = (props: { children: JSX.Element }) => <kbd class="ui-keycap">{props.children}</kbd>;
 
-export function Card(props: { title: string; detail?: string; class?: string; core?: boolean; actions?: JSX.Element; children?: JSX.Element }) {
-  return <div role="dialog" aria-label={props.title} class={cn("ui-frost ui-card", props.class)} data-surface="frost" data-lift="raised" data-core={props.core ? "" : undefined}>
+export function Card(props: { title: string; detail?: string; class?: string; core?: boolean; density?: Density; actions?: JSX.Element; children?: JSX.Element }) {
+  return <div role="dialog" aria-label={props.title} class={cn("ui-frost ui-card", props.class)} data-density={props.density} data-surface="frost" data-lift="raised" data-core={props.core ? "" : undefined}>
     <h3>{props.title}</h3><Show when={props.detail}><p>{props.detail}</p></Show>
     {props.children}
     <Show when={props.actions}><div class="ui-card-actions">{props.actions}</div></Show>
