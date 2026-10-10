@@ -18,7 +18,12 @@ export function Pill(props: { icons: { label: string; icon: JSX.Element }[] }) {
   return <div class="ui-frost ui-pill"><For each={props.icons}>{(item) => <button type="button" aria-label={item.label} title={item.label}>{item.icon}</button>}</For></div>;
 }
 
-/** desktop or phone: the rules its sections and items are built at. Unset, it follows the layout it is in. */
+/**
+ * desktop or phone: the rules a shell's sections and items are built at. The
+ * layout sets it once (the phone layout's media rule in library.css, or
+ * data-density on an ancestor); a shell inherits it and its sections follow.
+ * The prop is an override, for drawing one layout inside another.
+ */
 export type Density = "desktop" | "phone";
 
 export function Menu(props: { class?: string; core?: boolean; density?: Density; children: JSX.Element }) {

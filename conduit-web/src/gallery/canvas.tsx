@@ -33,8 +33,8 @@ function Piece(props: { atom: Atom; side?: boolean }) {
     <figcaption class="g-tag" title={props.atom.source}><strong>{props.atom.name}</strong><span data-scope={props.atom.scope}>{props.atom.scope === "both" ? "desktop + phone" : props.atom.scope + " only"}</span><span data-kind={props.atom.kind}>{props.atom.kind}</span></figcaption>
     <Show when={props.side} fallback={<div class="g-cell-body">{props.atom.render()}</div>}>
       <div class="g-cell-body g-side">
-        <div data-density="desktop"><small>desktop variant</small>{props.atom.render()}</div>
-        <div data-density="phone"><small>phone variant</small>{props.atom.render()}</div>
+        <div data-density="desktop"><small>desktop layout</small>{props.atom.render()}</div>
+        <div data-density="phone"><small>phone layout</small>{props.atom.render()}</div>
       </div>
     </Show>
   </figure>;
@@ -62,7 +62,7 @@ function Canvas() {
         placeholder={".composer-surface-material[data-composer-surface=\"frosted-live\"] {\n  backdrop-filter: blur(30px);\n}"} /></Show>
       <For each={libraryGroups}>{(group) => <>
         <h2 class="g-heading">{group.title} <small>{group.note}</small></h2>
-        <div class="g-grid">
+        <div class="g-grid" data-layout={group.layout} data-density={group.layout}>
           <For each={group.atoms}>{(atom) => <Piece atom={atom} side={group.both} />}</For>
         </div>
       </>}</For>

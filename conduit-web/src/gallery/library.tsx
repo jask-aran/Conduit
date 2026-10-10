@@ -23,8 +23,8 @@ import { MODELS, PROFILES, PROJECTS } from "./seed";
 
 /** The tag: where the piece is used, and which layer of the library it is. */
 const lib = (id: string, name: string, scope: Scope, layer: string, source: string, render: Atom["render"]): Atom => ({ id: `ui-${id}`, name, scope, kind: layer, source, render });
-/** both: each piece is built twice, as the desktop and the phone variant. */
-export interface Group { title: string; note: string; atoms: Atom[]; both?: boolean }
+/** both: each piece drawn in a desktop and a phone layout. layout: the group stands in that layout, which its popovers inherit. */
+export interface Group { title: string; note: string; atoms: Atom[]; both?: boolean; layout?: "desktop" | "phone" }
 
 const thinking = ["off", "minimal", "low", "medium", "high", "xhigh"].map((value) => ({ value, label: value[0]!.toUpperCase() + value.slice(1) }));
 /** The app's slider as its popovers use it: a label, and a value that opens the levels. */
@@ -86,37 +86,37 @@ export const libraryGroups: Group[] = [
       <Menu><Section><Item checked>Automatic</Item><Item checked={false}>Local network</Item><Item checked={false}>Internet</Item></Section></Menu>
     </div>),
   ] },
-  { title: "Desktop popovers", note: "the app's own, rebuilt from the pieces above, at desktop size", atoms: [
-    lib("d-model", "Model picker", "desktop", "popover", "chat/model-selector.tsx", () => <Menu density="desktop" class="g-w18"><ModelList keys={["⌘", "⇧", "X"]} /><Section kind="slider"><Levels /></Section></Menu>),
-    lib("d-plus", "+ menu", "desktop", "popover", "chat/composer-plus-menu.tsx", () => <Menu density="desktop" class="g-w18">
+  { title: "Desktop popovers", note: "the app's own, rebuilt from the pieces above, in a desktop layout", layout: "desktop", atoms: [
+    lib("d-model", "Model picker", "desktop", "popover", "chat/model-selector.tsx", () => <Menu class="g-w18"><ModelList keys={["⌘", "⇧", "X"]} /><Section kind="slider"><Levels /></Section></Menu>),
+    lib("d-plus", "+ menu", "desktop", "popover", "chat/composer-plus-menu.tsx", () => <Menu class="g-w18">
       <Section><Item meta="Muse Spark 1.3" opens>Model</Item><Item icon={<HarnessMark id="conduit" class="size-4" />} meta="Assistant" opens>Profile</Item><Item icon={<ShieldCheckIcon />} meta="Default" opens>Permissions</Item></Section>
       <Section><Item icon={<PlaceGlyph project={null} />} meta="None" opens>Project</Item></Section>
       <Section><Item icon={<PaperclipIcon />}>Attach files</Item></Section>
     </Menu>),
-    lib("d-profile", "+ menu › Profile", "desktop", "popover", "chat/composer-plus-menu.tsx", () => <Menu density="desktop" class="g-w18"><Profiles /></Menu>),
-    lib("d-chat", "Chat menu", "desktop", "popover", "chat/chat-screen.tsx", () => <Menu density="desktop" class="g-w18"><ChatTitle /><Section><Item icon={<RefreshCwIcon />}>Update app</Item></Section><Section><Item icon={<ShareIcon />}>Share</Item><Item icon={<PencilIcon />}>Rename</Item><Item icon={<Trash2Icon />} destructive>Delete</Item></Section></Menu>),
+    lib("d-profile", "+ menu › Profile", "desktop", "popover", "chat/composer-plus-menu.tsx", () => <Menu class="g-w18"><Profiles /></Menu>),
+    lib("d-chat", "Chat menu", "desktop", "popover", "chat/chat-screen.tsx", () => <Menu class="g-w18"><ChatTitle /><Section><Item icon={<RefreshCwIcon />}>Update app</Item></Section><Section><Item icon={<ShareIcon />}>Share</Item><Item icon={<PencilIcon />}>Rename</Item><Item icon={<Trash2Icon />} destructive>Delete</Item></Section></Menu>),
     lib("d-sidebar", "Chat in the sidebar (right-click)", "desktop", "popover", "navigation/sidebar.tsx", () => <div class="g-row g-top g-submenu">
-      <Menu density="desktop" class="g-w18"><Section><Item icon={<PencilIcon />}>Rename</Item><Item icon={<FolderInputIcon />} opens active>Move to folder…</Item><Item icon={<ClipboardCopyIcon />}>Copy transcript</Item><Item icon={<Columns2Icon />}>Open beside</Item><Item icon={<TerminalIcon />}>Open terminal</Item><Item icon={<PinIcon />}>Pin to sidebar</Item></Section><Section><Item icon={<Trash2Icon />} destructive>Delete chat</Item></Section></Menu>
-      <Menu density="desktop"><Section><For each={PROJECTS.slice(2, 6)}>{(project, index) => <Item checked={index() === 0}>{project.name}</Item>}</For></Section></Menu>
+      <Menu class="g-w18"><Section><Item icon={<PencilIcon />}>Rename</Item><Item icon={<FolderInputIcon />} opens active>Move to folder…</Item><Item icon={<ClipboardCopyIcon />}>Copy transcript</Item><Item icon={<Columns2Icon />}>Open beside</Item><Item icon={<TerminalIcon />}>Open terminal</Item><Item icon={<PinIcon />}>Pin to sidebar</Item></Section><Section><Item icon={<Trash2Icon />} destructive>Delete chat</Item></Section></Menu>
+      <Menu><Section><For each={PROJECTS.slice(2, 6)}>{(project, index) => <Item checked={index() === 0}>{project.name}</Item>}</For></Section></Menu>
     </div>),
     lib("d-server", "Server menu", "desktop", "popover", "navigation/server-switcher.tsx", () => <div class="g-row g-top g-submenu">
-      <Menu density="desktop" class="g-w18"><Section title="Servers"><Item checked meta="12 ms">Desktop-Dev</Item><Item checked={false} meta="48 ms">Laptop</Item></Section><Section><Item meta="LAN · 192.168.1.4" opens active>Route</Item></Section><Section><Item icon={<QrCodeIcon />}>Pair a device</Item><Item icon={<PlusIcon />}>Add server</Item></Section></Menu>
-      <Menu density="desktop"><Section><Item checked>Automatic</Item><Item checked={false}>Local network</Item><Item checked={false}>Internet</Item></Section></Menu>
+      <Menu class="g-w18"><Section title="Servers"><Item checked meta="12 ms">Desktop-Dev</Item><Item checked={false} meta="48 ms">Laptop</Item></Section><Section><Item meta="LAN · 192.168.1.4" opens active>Route</Item></Section><Section><Item icon={<QrCodeIcon />}>Pair a device</Item><Item icon={<PlusIcon />}>Add server</Item></Section></Menu>
+      <Menu><Section><Item checked>Automatic</Item><Item checked={false}>Local network</Item><Item checked={false}>Internet</Item></Section></Menu>
     </div>),
   ] },
-  { title: "Phone popovers", note: "the app's own, rebuilt, at phone size; submenus open as panels over the dimmed parent", atoms: [
-    lib("p-plus", "+ menu", "phone", "popover", "chat/mobile-composer-options.tsx", () => <Menu density="phone" class="g-w16">
+  { title: "Phone popovers", note: "the app's own, rebuilt, in a phone layout; submenus open as panels over the dimmed parent", layout: "phone", atoms: [
+    lib("p-plus", "+ menu", "phone", "popover", "chat/mobile-composer-options.tsx", () => <Menu class="g-w16">
       <Section title="Profile"><Item icon={<HarnessMark id="conduit" class="size-4" />} opens>Assistant</Item></Section>
       <Section title="Model"><Item opens>Meta: Muse Spark 1.3 Contributor</Item></Section>
       <Section kind="slider"><Levels label="Effort" /></Section>
       <Section><Item icon={<PaperclipIcon />}>Attach files</Item></Section>
       <Section title="Project"><Item icon={<PlaceGlyph project={null} />} opens>Add to a project folder</Item></Section>
     </Menu>),
-    lib("p-models", "+ menu › Model", "phone", "popover", "chat/mobile-composer-options.tsx", () => <Menu density="phone" class="g-w16"><ModelList title="Model" /></Menu>),
-    lib("p-profiles", "+ menu › Profile", "phone", "popover", "chat/mobile-composer-options.tsx", () => <Menu density="phone" class="g-w16"><Profiles /></Menu>),
-    lib("p-effort", "+ menu › Effort", "phone", "popover", "chat/mobile-composer-options.tsx", () => <Menu density="phone" class="g-w12"><Section title="Effort"><For each={thinking}>{(level) => <Item checked={level.value === "medium"}>{level.label}</Item>}</For></Section></Menu>),
-    lib("p-projects", "+ menu › Project", "phone", "popover", "chat/mobile-composer-options.tsx", () => <Menu density="phone" class="g-w16"><Projects /></Menu>),
-    lib("p-chat", "Chat menu", "phone", "popover", "chat/chat-screen.tsx", () => <Menu density="phone" class="g-w16"><ChatTitle /><Section><Item icon={<RefreshCwIcon />}>Update app</Item></Section><Section><Item icon={<Columns2Icon />}>Workspace panel</Item><Item icon={<ShareIcon />}>Share</Item><Item icon={<PencilIcon />}>Rename</Item><Item icon={<Trash2Icon />} destructive>Delete</Item></Section></Menu>),
+    lib("p-models", "+ menu › Model", "phone", "popover", "chat/mobile-composer-options.tsx", () => <Menu class="g-w16"><ModelList title="Model" /></Menu>),
+    lib("p-profiles", "+ menu › Profile", "phone", "popover", "chat/mobile-composer-options.tsx", () => <Menu class="g-w16"><Profiles /></Menu>),
+    lib("p-effort", "+ menu › Effort", "phone", "popover", "chat/mobile-composer-options.tsx", () => <Menu class="g-w12"><Section title="Effort"><For each={thinking}>{(level) => <Item checked={level.value === "medium"}>{level.label}</Item>}</For></Section></Menu>),
+    lib("p-projects", "+ menu › Project", "phone", "popover", "chat/mobile-composer-options.tsx", () => <Menu class="g-w16"><Projects /></Menu>),
+    lib("p-chat", "Chat menu", "phone", "popover", "chat/chat-screen.tsx", () => <Menu class="g-w16"><ChatTitle /><Section><Item icon={<RefreshCwIcon />}>Update app</Item></Section><Section><Item icon={<Columns2Icon />}>Workspace panel</Item><Item icon={<ShareIcon />}>Share</Item><Item icon={<PencilIcon />}>Rename</Item><Item icon={<Trash2Icon />} destructive>Delete</Item></Section></Menu>),
   ] },
   { title: "Cards", note: "the popover's frost at dialog padding", atoms: [
     lib("confirm", "Confirm", "both", "card", "Card", () => <Card title="Delete this chat?" detail="It can't be brought back." class="g-card" actions={<><Button variant="outline">Cancel</Button><Button variant="destructive">Delete</Button></>} />),
