@@ -1,7 +1,8 @@
 import { createSignal, For, type JSX } from "solid-js";
 import { Composer } from "../client/chat/composer";
 import { loadVoiceDictationSettings } from "../client/chat/voice-dictation.js";
-import { fakeAttachments, fakeChat, fakeModels } from "./fake-chat";
+import { fakeAttachments, fakeChat } from "./fake-chat";
+import { seededModels, seededPlace, seededProfile } from "./seed";
 import { ChatHeader, Conversation } from "../client/chat/chat-screen";
 import { Transcript } from "../client/chat/transcript";
 import { selectedMarkdownRenderer } from "../client/chat/markdown-settings";
@@ -15,9 +16,8 @@ import { createComposerSurfaceSignal } from "../client/chat/composer-surface";
  * a phone, because their styles only apply on one.
  */
 
-export interface Entry { id: string; name: string; source: string; note?: string; render: () => JSX.Element }
+export interface Entry { id: string; name: string; render: () => JSX.Element }
 
-const Text = () => <p class="g-text">Conduit keeps the answer, the trace and the files in one place. Frost needs something under it, so this text runs behind every entry.</p>;
 
 /** A menu held open, anchored where it is drawn: the real Menu, so its rows hover and choose. */
 function OpenMenu() {
@@ -60,40 +60,27 @@ export function UserBubble(props: { text: string }) {
   </article>;
 }
 
-function Swatches() {
-  return <div class="g-under"><Text />
-    <div class="g-swatches">
-      <div class="g-swatch composer-surface-material" data-composer-surface="frosted-live"><span>frosted-live</span></div>
-    </div>
-  </div>;
-}
-
-export const desktop: Entry[] = [
-  { id: "material", name: "Frost material", source: ".composer-surface-material (styles.css)",
-    note: "The base: what the composer, the user message and the phone pills wear.",
-    render: () => <Swatches /> },
-  { id: "bubble", name: "User message", source: "chat/transcript.tsx", note: "The material at the bubble's radius. Same component on the phone.",
-    render: () => <div class="g-under"><Text /><div class="g-over"><UserBubble text="write a .txt file in this folder that contains lorem ipsum text" /></div></div> },
-  { id: "menu", name: "Menu and submenu", source: "components/primitives.tsx",
-    note: "Not the base material: a rule of its own in styles.css with the same fill and stroke, a 24px blur and its own shadow. Hover Route for the submenu.",
-    render: () => <div class="g-under g-tall"><Text /><div class="g-over"><OpenMenu /></div></div> },
-  { id: "search", name: "Popover · search list", source: "components/primitives.tsx (PopoverSearchList)", note: "Type to filter; arrows and Enter choose.",
-    render: () => <div class="g-under g-tall"><Text /><div class="g-over"><OpenSearchList /></div></div> },
-  { id: "slider", name: "Popover · slider", source: "chat/step-slider.tsx",
-    render: () => <div class="g-under"><Text /><div class="g-over"><OpenSlider /></div></div> },
-  { id: "card", name: "Overlay card", source: ".frost-card (components/frost.tsx)", note: "Dialogs, palette, settings. Its own rule again: 24px blur, a deeper shadow.",
-    render: () => <div class="g-under"><Text /><div class="g-over"><div class="frost-card g-card-demo"><strong>Delete this chat?</strong><div class="g-row"><Button variant="outline">Cancel</Button><Button variant="destructive">Delete</Button></div></div></div></div> },
+export const pieces: Entry[] = [
+  { id: "material", name: "Frost material", render: () => <div class="g-swatch composer-surface-material" data-composer-surface="frosted-live" /> },
+  { id: "bubble", name: "User message", render: () => <div style={{ width: "360px" }}><UserBubble text="write a .txt file in this folder that contains lorem ipsum text" /></div> },
+  { id: "menu", name: "Menu · submenu", render: () => <div class="g-menu-slot"><OpenMenu /></div> },
+  { id: "search", name: "Popover · search", render: () => <OpenSearchList /> },
+  { id: "slider", name: "Popover · slider", render: () => <OpenSlider /> },
+  { id: "card", name: "Overlay card", render: () => <div class="frost-card g-card-demo"><strong>Delete this chat?</strong><div class="g-row"><Button variant="outline">Cancel</Button><Button variant="destructive">Delete</Button></div></div> },
 ];
 
-/** The phone screen: the app's own header, transcript and composer over a seeded chat, not wired to a server. */
-export function PhoneScreen() {
+/** A chat screen of the app's own header, transcript and composer over a seeded chat, not wired to a server. */
+export function ChatScreen() {
   const chat = fakeChat();
+  const models = seededModels();
+  const place = seededPlace();
+  const profile = seededProfile();
   return <main data-slot="sidebar-inset" data-region="chat" class="chat-main">
-    <ChatHeader title="Lorem ipsum file" chat={chat} panelOpen={false} mobileSidebarOpen={false} connectivity="online"
+    <ChatHeader title="Lorem ipsum file" chat={chat} profile={profile.active()} panelOpen={false} mobileSidebarOpen={false} connectivity="online"
       onToggleMobileSidebar={() => {}} onNewChat={() => {}} onOpenPalette={() => {}} onOpenSearch={() => {}} onTogglePanel={() => {}} onShare={() => {}} onUpdatePwa={() => {}} pwaUpdating={() => false} />
     <Conversation chat={chat}
-      transcript={<Transcript chat={chat} supports={() => true} partialContinue={false} markdownRenderer={selectedMarkdownRenderer()} />}
-      composer={<Composer chat={chat} attachments={fakeAttachments()} models={fakeModels()} profiles={[]} serverOnline voiceSettings={loadVoiceDictationSettings()}
-        onChooseProfile={() => {}} onOpenSettings={() => {}} onOpenAttachments={() => {}} />} />
+      transcript={<Transcript chat={chat} supports={() => true} partialContinue={false} markdownRenderer={selectedMarkdownRenderer()} profileLabel={profile.active().label} />}
+      composer={<Composer chat={chat} attachments={fakeAttachments()} models={models} profiles={profile.profiles} activeProfile={profile.active()} place={place} serverOnline voiceSettings={loadVoiceDictationSettings()}
+        onChooseProfile={profile.choose} onOpenSettings={() => {}} onOpenAttachments={() => {}} />} />
   </main>;
 }

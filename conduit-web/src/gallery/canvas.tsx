@@ -4,7 +4,7 @@ import "../client/project/dashboard.css";
 import "../client/chat/composer-geometry.css";
 import "../client/styles.css";
 import "./gallery.css";
-import { desktop, PhoneScreen } from "./stories";
+import { ChatScreen, pieces } from "./stories";
 
 /*
  * The frosted family on one canvas, live: desktop pieces drawn here, the phone
@@ -43,20 +43,17 @@ function Canvas() {
         placeholder={".composer-surface-material[data-composer-surface=\"frosted-live\"] {\n  backdrop-filter: blur(30px);\n}"} />
       <button type="button" onClick={() => void navigator.clipboard.writeText(tune())}>Copy CSS</button>
     </aside>
-    <main class="g-board">
-      <section class="g-column">
-        <h2>Desktop</h2>
-        <For each={desktop}>{(entry) => <section class="g-card" id={entry.id}>
-          <header><h3>{entry.name}</h3><code>{entry.source}</code></header>
-          {entry.note && <p class="g-note">{entry.note}</p>}
-          {entry.render()}
-        </section>}</For>
-      </section>
-      <section class="g-column g-phone-column">
-        <h2>Phone</h2>
-        <p class="g-note">The app's own header, transcript and composer over a seeded chat, not wired to a server. Type and send to add a seeded reply.</p>
-        <iframe class="g-phone" title="Phone" src="/gallery.html?frame=phone" onLoad={(event) => applyTune(event.currentTarget.contentDocument!, read())} />
-      </section>
+    <main class="g-sheet">
+      {/* Text under everything: frost reads as frost only over something. */}
+      <div class="g-sheet-text" aria-hidden="true"><For each={Array.from({ length: 40 })}>{() =>
+        <p>Conduit keeps the answer, the trace and the files in one place. <code>createComposerSurfaceSignal()</code> follows the setting, and every pill, bubble and menu here is drawn by the app's own code over this text.</p>}</For></div>
+      <div class="g-pieces">
+        <For each={pieces}>{(piece) => <figure class="g-piece" id={piece.id}>{piece.render()}<figcaption>{piece.name}</figcaption></figure>}</For>
+      </div>
+      <div class="g-screens">
+        <figure class="g-piece" id="desktop"><div class="g-desktop-screen"><ChatScreen /></div><figcaption>Desktop</figcaption></figure>
+        <figure class="g-piece" id="phone"><iframe class="g-phone" title="Phone" src="/gallery.html?frame=phone" onLoad={(event) => applyTune(event.currentTarget.contentDocument!, read())} /><figcaption>Phone</figcaption></figure>
+      </div>
     </main>
   </div>;
 }
@@ -65,6 +62,6 @@ export function mount(frame: string | null) {
   const root = document.getElementById("root")!;
   // Frosted only: the static material is on its way out.
   try { localStorage.setItem("conduit:composer-surface", "frosted-live"); localStorage.setItem("conduit:phone-composer", "bar"); } catch { /* private window */ }
-  if (frame) { document.body.classList.add("g-solo-body"); render(() => <PhoneScreen />, root); }
+  if (frame) { document.body.classList.add("g-solo-body"); render(() => <ChatScreen />, root); }
   else render(() => <Canvas />, root);
 }

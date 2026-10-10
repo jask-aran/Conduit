@@ -8,31 +8,24 @@ html, body { background: var(--frame, #08090a); color: var(--foreground); }
 .g-panel > button, .g-filter button { border: 1px solid var(--border); border-radius: 6px; background: transparent; padding: 4px 8px; color: var(--foreground); }
 .g-filter { display: flex; gap: 4px; }
 .g-filter button[aria-pressed="true"] { background: var(--accent); }
-.g-board { display: flex; flex-wrap: wrap; gap: 32px; align-items: flex-start; padding: 16px 24px 80px; }
-.g-column { display: flex; width: 560px; flex-direction: column; gap: 16px; }
-.g-phone-column { width: 414px; }
-.g-column > h2 { color: var(--muted-foreground); font-size: 13px; }
-.g-card { border: 1px solid var(--border); border-radius: 10px; background: var(--background); padding: 12px; }
-.g-card > header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; margin-bottom: 4px; }
-.g-card h3 { font-size: 13px; font-weight: 600; }
-.g-card code { color: var(--muted-foreground); font-size: 10px; }
-.g-note { margin-bottom: 8px; color: var(--muted-foreground); font-size: 11px; }
+.g-sheet { position: relative; min-height: 100vh; overflow: hidden; padding: 24px; }
+.g-sheet-text { position: absolute; inset: 0; columns: 3 320px; column-gap: 32px; padding: 16px 24px; color: var(--foreground); font-size: 14px; line-height: 1.6; opacity: .9; pointer-events: none; }
+.g-sheet-text p { margin-bottom: 14px; }
+.g-sheet-text code { color: #98c379; font-size: 12px; }
+.g-pieces, .g-screens { position: relative; display: flex; flex-wrap: wrap; align-items: flex-start; gap: 28px; }
+.g-screens { margin-top: 40px; }
+.g-piece { display: flex; flex-direction: column; gap: 6px; margin: 0; }
+.g-piece > figcaption { color: var(--muted-foreground); font-size: 10px; }
+.g-swatch { width: 160px; height: 110px; border-radius: 17.6px; }
+.g-menu-slot { width: 200px; height: 190px; }
 .g-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-.g-under { position: relative; min-height: 120px; overflow: visible; }
-.g-tall { min-height: 250px; }
-.g-text { color: var(--foreground); font-size: 14px; line-height: 1.5; }
-.g-over { position: absolute; inset: 8px 8px auto; }
-.g-swatches { position: absolute; inset: 8px 8px auto; display: grid; grid-template-columns: 1fr; gap: 12px; }
-.g-swatch { display: flex; height: 90px; align-items: flex-end; border-radius: 17.6px; padding: 10px; font-size: 11px; }
 .g-card-demo { display: flex; width: 280px; flex-direction: column; gap: 14px; padding: 16px; }
+.g-desktop-screen { --app-height: 860px; display: flex; width: 760px; height: 860px; overflow: hidden; border: 1px solid var(--border); border-radius: 12px; background: var(--background); }
+.g-desktop-screen > .chat-main { flex: 1; }
 .g-phone { display: block; width: 414px; height: 860px; border: 1px solid var(--border); border-radius: 18px; background: var(--background); }
 /* The phone screen. */
 .g-solo-body #root { height: 100vh; }
-.g-phone-screen { position: relative; display: flex; height: 100vh; flex-direction: column; overflow: hidden; background: var(--background); }
-.g-phone-screen > .chat-header { position: absolute; inset: 0 0 auto; z-index: 2; }
-.g-phone-thread { display: flex; flex: 1; min-height: 0; flex-direction: column; gap: 8px; overflow: auto; padding: 72px 16px 96px; }
-.g-answer { margin-top: 16px; font-size: 16px; line-height: 1.55; }
-.g-answer code { border-radius: 4px; background: var(--muted); padding: 1px 5px; }
 .g-panel-inline { display: inline-block; min-width: 10rem; border-radius: var(--radius-lg); padding: 4px; color: var(--popover-foreground); }
 /* The app locks body scrolling; the canvas is a page that scrolls. */
 body:not(.g-solo-body) { overflow: auto; }
+.g-desktop-screen .chat-main { height: 100%; min-height: 0; }
