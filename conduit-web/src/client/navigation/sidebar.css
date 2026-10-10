@@ -279,7 +279,7 @@
   .conduit-sidebar [data-sidebar="header"],
   .conduit-sidebar[data-state="collapsed"] [data-sidebar="header"] { min-height: 56px; justify-content: space-between; padding: 8px 10px 4px; }
   .sidebar-header-pill.composer-surface-material { display: flex; height: 44px; align-items: center; padding: 0 1px; border-radius: 999px; }
-  .sidebar-header-pill > [data-sidebar="trigger"] { width: 40px; height: 40px; border-radius: 999px; background: transparent; }
+  .sidebar-header-pill > [data-sidebar="trigger"] { width: 34px; height: 40px; border-radius: 999px; background: transparent; }
   .conduit-sidebar [data-sidebar="header"] [data-sidebar="brand"] { flex: none; height: 40px; padding: 0 10px; }
   /* The server, between the wordmark and the toggle: its text gives way first. */
   .sidebar-header-server { display: flex; order: 1; min-width: 0; flex: 1; flex-direction: column; justify-content: center; }
@@ -287,10 +287,10 @@
   .sidebar-header-server > .sidebar-update { margin: 0; padding: 0 8px; border: 0; background: transparent; font-size: 11px; }
   .sidebar-header-server > .sidebar-update > svg { width: 12px; height: 12px; }
   .conduit-sidebar .sidebar-content { padding-bottom: 12px; }
-  .sidebar-area-toggle.composer-surface-material { height: 44px; grid-template-columns: 38px 38px; align-items: center; padding: 3px; border-radius: 999px; }
-  .sidebar-area-toggle.composer-surface-material button { height: 36px; border-radius: 999px; }
-  .sidebar-area-toggle.composer-surface-material::before { inset: 3px auto 3px 3px; width: 38px; border-radius: 999px; }
-  .sidebar-area-toggle.composer-surface-material[data-area="computer"]::before { transform: translateX(40px); }
+  .sidebar-area-toggle.composer-surface-material { height: 44px; grid-template-columns: 34px 34px; align-items: center; padding: 1px; border-radius: 999px; }
+  .sidebar-area-toggle.composer-surface-material button { height: 40px; border-radius: 999px; }
+  .sidebar-area-toggle.composer-surface-material::before { inset: 1px auto 1px 1px; width: 34px; border-radius: 999px; }
+  .sidebar-area-toggle.composer-surface-material[data-area="computer"]::before { transform: translateX(36px); }
 }
 
 @media (--conduit-wide-layout) {
