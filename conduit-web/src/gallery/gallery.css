@@ -56,3 +56,9 @@ html, body { background: var(--frame, #08090a); color: var(--foreground); }
 .g-submenu { gap: 4px; }
 .g-submenu > .ui-menu:last-child { margin-top: 118px; }
 .g-field > .ui-seg { justify-self: start; }
+/* Library density: the grid takes the toggle; side-by-side cells show both. */
+.g-grid[data-density] { font-size: 13px; }
+.g-cell[data-side] { grid-column: span 2; }
+.g-side { display: flex; align-items: flex-start; gap: 28px; }
+.g-side > div { display: grid; justify-items: center; gap: 6px; }
+.g-side > div > small { color: var(--muted-foreground); font: 9px ui-monospace, monospace; letter-spacing: .07em; text-transform: uppercase; }
