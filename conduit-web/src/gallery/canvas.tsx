@@ -30,7 +30,7 @@ const tuneFrame = (event: Event) => { const doc = (event.currentTarget as HTMLIF
 
 function Piece(props: { atom: Atom; side?: boolean }) {
   return <figure class="g-cell" id={props.atom.id} data-side={props.side ? "" : undefined}>
-    <figcaption class="g-tag" title={props.atom.source}><strong>{props.atom.name}</strong><span>{props.atom.scope}</span><span data-kind={props.atom.kind}>{props.atom.kind}</span></figcaption>
+    <figcaption class="g-tag" title={props.atom.source}><strong>{props.atom.name}</strong><span data-scope={props.atom.scope}>{props.atom.scope === "both" ? "desktop + phone" : props.atom.scope + " only"}</span><span data-kind={props.atom.kind}>{props.atom.kind}</span></figcaption>
     <Show when={props.side} fallback={<div class="g-cell-body">{props.atom.render()}</div>}>
       <div class="g-cell-body g-side">
         <div data-density="desktop"><small>desktop</small>{props.atom.render()}</div>
@@ -68,8 +68,8 @@ function Canvas() {
         placeholder={".composer-surface-material[data-composer-surface=\"frosted-live\"] {\n  backdrop-filter: blur(30px);\n}"} /></Show>
       <For each={libraryGroups}>{(group) => <>
         <h2 class="g-heading">{group.title} <small>{group.note}</small></h2>
-        <div class="g-grid" data-density={group.side ? undefined : density()}>
-          <For each={group.atoms}>{(atom) => <Piece atom={atom} side={group.side} />}</For>
+        <div class="g-grid" data-density={group.density ?? density()}>
+          <For each={group.atoms}>{(atom) => <Piece atom={atom} />}</For>
         </div>
       </>}</For>
       <h2 class="g-heading">In the app now</h2>

@@ -14,7 +14,7 @@
  *     [data-core]          a phone full-screen bubble, nothing dimmed round it
  *   .ui-pill               frost capsule of one or more icon slots
  *   .ui-menu               raised frost container; holds only sections
- *     .ui-section          list, search or slider; optional title; a rule
+ *     .ui-section          list, search or slider; a list may have a title; a rule
  *                          comes between sections by itself
  *       .ui-row            an item: icon, label, meta, keys, chevron
  *   .ui-card               raised frost card: dialogs and overlays
@@ -71,9 +71,12 @@
 .ui-title small { font-size: inherit; font-weight: 400; }
 .ui-section { display: flex; flex-direction: column; }
 .ui-section + .ui-section { margin-top: var(--frost-inset); border-top: 1px solid var(--frost-rule); margin-inline: calc(-1 * var(--frost-inset)); padding: var(--frost-inset) var(--frost-inset) 0; }
-.ui-section[data-kind="slider"] { padding: calc(0.25 * var(--u-space)) calc(0.5 * var(--u-space)) calc(0.5 * var(--u-space)); }
+.ui-section[data-kind="slider"] { padding: 0; }
 .ui-section + .ui-section[data-kind="slider"] { padding: calc(0.5 * var(--u-space)) calc(0.75 * var(--u-space)) calc(0.5 * var(--u-space)); }
-.ui-search { width: 100%; min-height: calc(2.25 * var(--u-space)); margin-bottom: var(--frost-inset); border: 0; border-bottom: 1px solid var(--frost-rule); background: transparent; padding: calc(0.375 * var(--u-space)) calc(0.5 * var(--u-space)); color: var(--foreground); font-size: calc(0.875 * var(--u-type)); outline: none; }
+.ui-search-section { flex-direction: row; align-items: center; gap: var(--row-gap); padding: var(--row-pad); }
+.ui-search-section > svg { width: calc(1 * var(--u-icon)); height: calc(1 * var(--u-icon)); flex: none; color: var(--muted-foreground); }
+.ui-search-section .ui-keys { display: inline-flex; flex: none; gap: 2px; }
+.ui-search { min-width: 0; flex: 1; border: 0; background: transparent; padding: 0; color: var(--foreground); font-size: calc(0.875 * var(--u-type)); outline: none; }
 .ui-search::placeholder { color: var(--muted-foreground); }
 .ui-empty { padding: calc(0.5 * var(--u-space)); color: var(--muted-foreground); font-size: calc(0.8125 * var(--u-type)); }
 
@@ -152,3 +155,8 @@
 .ui-seg[data-pill] .ui-seg-thumb { top: 1px; bottom: 1px; left: 1px; width: calc(2.125 * var(--u-space)); border-radius: 999px; background: var(--frost-wash); }
 .ui-seg[data-pill] button { width: calc(2.125 * var(--u-space)); min-height: calc(2.5 * var(--u-space)); border-radius: 999px; padding: 0; }
 @media (prefers-reduced-motion: reduce) { .ui-seg-thumb { transition: none; } }
+
+/* The slider's value opens its levels, so it reads as an item that opens:
+   the item's muted colour and weight, its size at either density. */
+.ui-section[data-kind="slider"] .step-slider-value { color: color-mix(in oklch, var(--foreground), transparent 38%); font-size: calc(0.875 * var(--u-type)); font-weight: 450; }
+.ui-section[data-kind="slider"] .step-slider-value:hover { color: var(--foreground); background: var(--frost-wash); }

@@ -24,7 +24,7 @@ import { MODELS, PROFILES, PROJECTS } from "./seed";
 
 export type Scope = "both" | "desktop" | "phone";
 /** component: a shared component. class: shared CSS, no component. one-off: drawn where it is used. */
-export type Kind = "component" | "class" | "one-off";
+export type Kind = string;
 export interface Atom { id: string; name: string; scope: Scope; kind: Kind; source: string; render: () => JSX.Element }
 
 const hover = (event: PointerEvent, on: boolean) => {

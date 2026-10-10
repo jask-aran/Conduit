@@ -1,5 +1,5 @@
-import { createSignal, For, Show, splitProps, type JSX } from "solid-js";
-import { ChevronDownIcon, ChevronRightIcon } from "lucide-solid";
+import { For, Show, splitProps, type JSX } from "solid-js";
+import { ChevronDownIcon, ChevronRightIcon, SearchIcon } from "lucide-solid";
 import { cn } from "@/lib/utils";
 import "./library.css";
 
@@ -30,14 +30,12 @@ export function Section(props: { title?: string; note?: JSX.Element; kind?: "lis
   </div>;
 }
 
-/** A section whose field filters its items. */
-export function SearchSection<T>(props: { title?: string; placeholder: string; items: T[]; matches: (item: T, needle: string) => boolean; children: (item: T) => JSX.Element }) {
-  const [query, setQuery] = createSignal("");
-  const shown = () => { const needle = query().trim().toLowerCase(); return needle ? props.items.filter((item) => props.matches(item, needle)) : props.items; };
-  return <Section title={props.title}>
-    <input class="ui-search" placeholder={props.placeholder} value={query()} onInput={(event) => setQuery(event.currentTarget.value)} />
-    <For each={shown()} fallback={<div class="ui-empty">Nothing matches</div>}>{props.children}</For>
-  </Section>;
+/** A search section: the field alone. It filters the list section after it, or opens a full search (keys). */
+export function SearchSection(props: { placeholder: string; value?: string; keys?: string[]; onInput?: (value: string) => void }) {
+  return <div role="search" class="ui-section ui-search-section" data-kind="search">
+    <SearchIcon /><input class="ui-search" placeholder={props.placeholder} value={props.value ?? ""} onInput={(event) => props.onInput?.(event.currentTarget.value)} />
+    <Show when={props.keys}><span class="ui-keys"><For each={props.keys}>{(key) => <kbd class="ui-keycap">{key}</kbd>}</For></span></Show>
+  </div>;
 }
 
 /** An item in a list section. Icon, meta, keys and opens are its parts; checked, disabled and destructive its states. */
