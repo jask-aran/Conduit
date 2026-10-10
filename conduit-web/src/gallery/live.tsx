@@ -1,6 +1,7 @@
 import { createSignal, For, Show, type JSX } from "solid-js";
 import { EllipsisIcon, FolderPlusIcon, LayoutDashboardIcon, MicIcon, PanelLeftIcon, PanelRightIcon, PaperclipIcon, PlusIcon, QrCodeIcon, RefreshCwIcon, SearchIcon, ShareIcon, SquarePenIcon, TerminalIcon, ChevronDownIcon, CameraIcon, KeyboardIcon, ArrowUpIcon, Trash2Icon, PencilIcon, ShieldCheckIcon, CircleIcon } from "lucide-solid";
-import { Bubble, Button, Item, Menu, Pill, Section } from "@/components/ui";
+import { Bubble, Button, Item, Menu, NavGroup, NavRow, Pill, Section } from "@/components/ui";
+import { projects } from "./sidebar-story";
 import { HarnessMark } from "../client/harness-brand";
 import { PlaceGlyph } from "../client/chat/place-picker";
 import { ChatTitle, Levels, ModelList, Profiles, Projects, SegmentedIcons, thinking } from "./library";
@@ -21,13 +22,12 @@ function Float(props: { at: "top-right" | "bottom-left" | "top-left"; children: 
 
 export function LivePhone() {
   const [open, setOpen] = createSignal<Popover>(null);
-  const [sidebar, setSidebar] = createSignal(false);
   const toggle = (which: Popover) => setOpen(open() === which ? null : which);
   const plusPanel = () => open()?.startsWith("plus-");
 
   return <div class="g-live" data-density="phone" onClick={() => setOpen(null)}>
     <header class="g-live-header">
-      <Pill icons={[{ label: "Sidebar", icon: <PanelLeftIcon /> }, { label: "New chat", icon: <SquarePenIcon /> }]} onPick={(label) => label === "Sidebar" && setSidebar(true)} />
+      <Pill icons={[{ label: "Sidebar", icon: <PanelLeftIcon /> }, { label: "New chat", icon: <SquarePenIcon /> }]} />
       <Pill icons={[{ label: "Search", icon: <SearchIcon /> }, { label: "Palette", icon: <TerminalIcon /> }, { label: "More", icon: <EllipsisIcon /> }]} onPick={(label) => label === "More" && toggle("chat")} />
     </header>
     <main class="g-live-transcript">
@@ -67,28 +67,6 @@ export function LivePhone() {
       </div>
     </Float></Show>
 
-    <Show when={sidebar()}>
-      <div class="g-live-backdrop" onClick={(event) => { event.stopPropagation(); setSidebar(false); setOpen(null); }} />
-      <aside class="g-live-sidebar" onClick={(event) => { event.stopPropagation(); setOpen(null); }}>
-        <header class="g-live-sidebar-head">
-          <Pill icons={[{ label: "Close sidebar", icon: <PanelLeftIcon /> }]} onPick={() => setSidebar(false)} />
-          <button type="button" class="g-live-server" onClick={(event) => { event.stopPropagation(); toggle("server"); }}><span class="g-live-dot" />Desktop-Dev<ChevronDownIcon /></button>
-          <SegmentedIcons pill />
-        </header>
-        <nav class="g-live-sidebar-list">
-          <Section><Item icon={<LayoutDashboardIcon />}>Dashboard</Item><Item icon={<FolderPlusIcon />}>New project</Item></Section>
-          <For each={PROJECTS.slice(2, 5)}>{(project, index) => <Section title={project.name}>
-            <Item icon={<PlaceGlyph project={project} />} checked={index() === 0}>Lorem ipsum file</Item>
-            <Item icon={<PlaceGlyph project={project} />}>Plan the trip</Item>
-          </Section>}</For>
-        </nav>
-        <Show when={open() === "server"}><Float at="top-left"><Menu class="g-live-menu">
-          <Section title="Servers"><Item checked meta="12 ms">Desktop-Dev</Item><Item checked={false} meta="48 ms">Laptop</Item></Section>
-          <Section><Item opens>Route</Item></Section>
-          <Section><Item icon={<QrCodeIcon />}>Pair a device</Item><Item icon={<PlusIcon />}>Add server</Item></Section>
-        </Menu></Float></Show>
-      </aside>
-    </Show>
   </div>;
 }
 
@@ -99,20 +77,11 @@ export function LiveDesktop() {
   const [open, setOpen] = createSignal<DesktopPopover>(null);
   const toggle = (which: DesktopPopover) => (event: MouseEvent) => { event.stopPropagation(); setOpen(open() === which ? null : which); };
   return <div class="g-live g-live-desktop" data-density="desktop" onClick={() => setOpen(null)}>
-    <aside class="g-live-rail">
-      <Section><Item icon={<LayoutDashboardIcon />}>Dashboard</Item><Item icon={<FolderPlusIcon />}>New project</Item></Section>
-      <For each={PROJECTS.slice(2, 5)}>{(project, index) => <Section title={project.name}>
-        <Item icon={<PlaceGlyph project={project} />} checked={index() === 0}>Lorem ipsum file</Item>
-        <Item icon={<PlaceGlyph project={project} />}>Plan the trip</Item>
-      </Section>}</For>
-    </aside>
     <div class="g-live-main">
       <header class="g-live-desk-head">
-        <Button variant="ghost" size="icon-sm" aria-label="Sidebar"><PanelLeftIcon /></Button>
-        <strong>Lorem ipsum file</strong>
+        <span class="g-live-place">Chats</span><strong>Lorem ipsum file</strong>
         <span class="g-live-grow" />
         <Button variant="ghost" size="icon-sm" aria-label="Share"><ShareIcon /></Button>
-        <Button variant="ghost" size="icon-sm" aria-label="More" onClick={toggle("chat")}><EllipsisIcon /></Button>
       </header>
       <main class="g-live-transcript g-live-desk-transcript">
         <Bubble>write a .txt file in this folder that contains lorem ipsum text</Bubble>
@@ -143,5 +112,27 @@ export function LiveDesktop() {
         <Section><Item icon={<ShareIcon />}>Share</Item><Item icon={<PencilIcon />}>Rename</Item><Item icon={<Trash2Icon />} destructive>Delete</Item></Section>
       </Menu></div></Show>
     </div>
+  </div>;
+}
+
+/** The phone sidebar, built from the library: the same screen as the app's (header pill, brand, server, area toggle; then nav rows). */
+export function LivePhoneSidebar() {
+  const list = projects();
+  const chats = list.find((project) => project.slug === "chat")!;
+  const folders = list.filter((project) => project.slug !== "chat" && project.kind === "project");
+  return <div class="g-live g-live-sb" data-density="phone">
+    <header class="g-live-sb-head">
+      <Pill icons={[{ label: "Toggle Sidebar", icon: <PanelLeftIcon /> }]} />
+      <span class="g-live-brand">Conduit</span>
+      <button type="button" class="g-live-sb-server"><span><strong>localhost:5180</strong><small>Connected</small></span><span class="g-live-dot" /></button>
+      <SegmentedIcons pill />
+    </header>
+    <nav class="g-live-sb-list">
+      <NavGroup label="Projects"><For each={folders}>{(project) => <>
+        <NavRow icon={<PlaceGlyph project={project} />} toggle={<ChevronDownIcon />}>{project.name}</NavRow>
+        <For each={project.sessions}>{(chat) => <NavRow indent icon={<HarnessMark id="conduit" />}>{chat.title}</NavRow>}</For>
+      </>}</For></NavGroup>
+      <NavGroup label="Chats"><For each={chats.sessions}>{(chat, index) => <NavRow current={index() === 0} icon={<HarnessMark id="conduit" />}>{chat.title}</NavRow>}</For></NavGroup>
+    </nav>
   </div>;
 }

@@ -120,3 +120,18 @@ html, body { background: var(--frame, #08090a); color: var(--foreground); }
 .g-live-anchor[data-at="chat"] { top: 40px; right: 10px; }
 .g-live-desk-menu { width: 260px; }
 .g-live-chat-menu { width: 274px; }
+.g-toggles { display: flex; gap: 12px; }
+.g-live-place { color: var(--foreground); font: 700 10px/1 "Geist Variable", sans-serif; letter-spacing: .04em; text-transform: uppercase; margin-left: 4px; }
+/* The library's phone sidebar: the app's header geometry (56px, pill, brand, server, toggle), then the list. */
+.g-live-sb { background: var(--frame); }
+.g-live-sb-head { display: flex; height: 56px; flex: none; align-items: center; gap: 2px; padding: 8px 10px 4px; }
+.g-live-brand { display: flex; height: 40px; flex: 1; align-items: center; padding: 0 10px; font: 18px/1 "Conduit Wordmark", sans-serif; }
+.g-live-sb-server { display: flex; align-items: center; gap: 8px; border: 0; border-radius: 8px; background: transparent; padding: 6px 8px; color: var(--foreground); text-align: left; }
+.g-live-sb-server > span:first-child { display: grid; }
+.g-live-sb-server strong { font-size: 10.5px; font-weight: 580; }
+.g-live-sb-server small { color: var(--muted-foreground); font-size: 8.5px; }
+.g-live-sb-list { display: flex; flex-direction: column; gap: 12px; overflow: auto; padding: 24px 8px 12px; }
+.g-live-desk-head { padding: 14px 14px 8px; }
+.g-live-desk-transcript { width: min(540px, 100%); margin-inline: auto; padding-inline: 0; }
+.g-live-desk-composer { left: 50%; right: auto; width: min(608px, calc(100% - 40px)); transform: translateX(-50%); }
+.g-live-sb-list { gap: 0; } .g-live-sb-list .ui-nav-group + .ui-nav-group { margin-top: 12px; }
