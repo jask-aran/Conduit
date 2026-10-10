@@ -1,4 +1,4 @@
-import { createSignal, For, Show, type JSX } from "solid-js";
+import { createSignal, For, Show, splitProps, type JSX } from "solid-js";
 import { ChevronRightIcon } from "lucide-solid";
 import { cn } from "@/lib/utils";
 import "./library.css";
@@ -65,3 +65,14 @@ export function Card(props: { title: string; detail?: string; class?: string; co
 }
 
 export const Bubble = (props: { children: JSX.Element }) => <div class="ui-frost ui-bubble">{props.children}</div>;
+
+export type ButtonVariant = "primary" | "frost" | "ghost" | "destructive";
+export function Button(props: JSX.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: ButtonVariant; size?: "default" | "sm" | "icon" | "icon-sm" }) {
+  const [local, rest] = splitProps(props, ["class", "variant", "size"]);
+  return <button type="button" {...rest} class={cn("ui-button", local.class)} data-variant={local.variant ?? "primary"} data-size={local.size ?? "default"} />;
+}
+
+export function Input(props: JSX.InputHTMLAttributes<HTMLInputElement>) {
+  const [local, rest] = splitProps(props, ["class"]);
+  return <input {...rest} class={cn("ui-input", local.class)} />;
+}
