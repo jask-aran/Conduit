@@ -1,4 +1,4 @@
-import { createSignal, For, Show } from "solid-js";
+import { createEffect, createSignal, For, Show } from "solid-js";
 import { render } from "solid-js/web";
 import "../client/project/dashboard.css";
 import "../client/chat/composer-geometry.css";
@@ -46,6 +46,16 @@ function Canvas() {
   const [tune, setTune] = createSignal(read());
   const [preview, setPreview] = createSignal<"phone" | "sidebar" | "desktop">("phone");
   const [source, setSource] = createSignal<"live" | "library">("live");
+  const [seen, setSeen] = createSignal(new Set<string>(["phone-live"]));
+  createEffect(() => { const key = `${preview()}-${source()}`; if (!seen().has(key)) setSeen(new Set([...seen(), key])); });
+  const views = [
+    { key: "phone-live", render: () => <iframe class="g-phone" title="Phone" src="/gallery.html?frame=phone" onLoad={tuneFrame} /> },
+    { key: "sidebar-live", render: () => <iframe class="g-phone" title="Phone sidebar" src="/gallery.html?frame=sidebar" onLoad={tuneFrame} /> },
+    { key: "desktop-live", render: () => <div class="g-desktop-screen"><ChatScreen /></div> },
+    { key: "phone-library", render: () => <LivePhone /> },
+    { key: "sidebar-library", render: () => <LivePhoneSidebar /> },
+    { key: "desktop-library", render: () => <LiveDesktop /> },
+  ];
   const [tuning, setTuning] = createSignal(false);
   const update = (css: string) => {
     setTune(css);
@@ -86,16 +96,10 @@ function Canvas() {
           <button type="button" aria-pressed={source() === "library"} onClick={() => setSource("library")}>Library</button>
         </div>
       </div>
-      <Show when={source() === "live"}>
-        <Show when={preview() === "phone"}><iframe class="g-phone" title="Phone" src="/gallery.html?frame=phone" onLoad={tuneFrame} /></Show>
-        <Show when={preview() === "sidebar"}><iframe class="g-phone" title="Phone sidebar" src="/gallery.html?frame=sidebar" onLoad={tuneFrame} /></Show>
-        <Show when={preview() === "desktop"}><div class="g-desktop-screen"><ChatScreen /></div></Show>
-      </Show>
-      <Show when={source() === "library"}>
-        <Show when={preview() === "phone"}><LivePhone /></Show>
-        <Show when={preview() === "sidebar"}><LivePhoneSidebar /></Show>
-        <Show when={preview() === "desktop"}><LiveDesktop /></Show>
-      </Show>
+      {/* Every view stays mounted once opened, so switching is instant: no frame reloads. */}
+      <For each={views}>{(view) => <Show when={seen().has(view.key)}>
+        <div class="g-view" hidden={`${preview()}-${source()}` !== view.key}>{view.render()}</div>
+      </Show>}</For>
     </aside>
   </div>;
 }
@@ -112,5 +116,16 @@ export function mount(frame: string | null) {
   if (frame === "parts") { document.body.classList.add("g-parts-body"); render(() => <Parts />, root); }
   else if (frame === "sidebar") { document.body.classList.add("g-solo-body"); render(() => <SidebarScreen />, root); }
   else if (frame) { document.body.classList.add("g-solo-body"); render(() => <ChatScreen />, root); }
-  else render(() => <Canvas />, root);
+  else {
+    render(() => <Canvas />, root);
+    // The chat screens scroll themselves to their latest message as they
+    // mount, which pulls the gallery to the bottom; hold it at the top until
+    // the first thing the viewer does.
+    const left = () => document.querySelector<HTMLElement>(".g-left");
+    const hold = () => { left()?.scrollTo(0, 0); window.scrollTo(0, 0); };
+    const stop = () => { clearInterval(timer); for (const type of ["wheel", "pointerdown", "keydown", "touchstart"]) removeEventListener(type, stop, true); };
+    const timer = setInterval(hold, 50);
+    setTimeout(stop, 2500);
+    for (const type of ["wheel", "pointerdown", "keydown", "touchstart"]) addEventListener(type, stop, true);
+  }
 }

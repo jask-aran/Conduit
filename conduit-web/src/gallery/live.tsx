@@ -1,11 +1,22 @@
 import { createSignal, For, Show, type JSX } from "solid-js";
-import { EllipsisIcon, FolderPlusIcon, LayoutDashboardIcon, MicIcon, PanelLeftIcon, PanelRightIcon, PaperclipIcon, PlusIcon, QrCodeIcon, RefreshCwIcon, SearchIcon, ShareIcon, SquarePenIcon, TerminalIcon, ChevronDownIcon, CameraIcon, KeyboardIcon, ArrowUpIcon, Trash2Icon, PencilIcon, ShieldCheckIcon, CircleIcon } from "lucide-solid";
+import { MessageSquarePlusIcon, EllipsisIcon, FolderPlusIcon, LayoutDashboardIcon, MicIcon, PanelLeftIcon, PanelRightIcon, PaperclipIcon, PlusIcon, QrCodeIcon, RefreshCwIcon, SearchIcon, ShareIcon, SquarePenIcon, TerminalIcon, ChevronDownIcon, CameraIcon, KeyboardIcon, ArrowUpIcon, Trash2Icon, PencilIcon, ShieldCheckIcon, CircleIcon } from "lucide-solid";
 import { Bubble, Button, Item, Menu, NavGroup, NavRow, Pill, Section } from "@/components/ui";
 import { projects } from "./sidebar-story";
+import { SEED } from "./fake-chat";
+import { ChatMarkdown } from "../client/chat/markdown";
+import { selectedMarkdownRenderer } from "../client/chat/markdown-settings";
 import { HarnessMark } from "../client/harness-brand";
 import { PlaceGlyph } from "../client/chat/place-picker";
 import { ChatTitle, Levels, ModelList, Profiles, Projects, SegmentedIcons, thinking } from "./library";
 import { PROJECTS } from "./seed";
+
+/** The same seeded messages the live screens show (fake-chat.ts SEED). The
+ *  answer's markdown is the app's renderer: it is content, not chrome. */
+function SeededTranscript() {
+  return <For each={SEED}>{(message) => message.role === "user"
+    ? <Bubble>{String(message.content)}</Bubble>
+    : <div class="g-live-answer"><ChatMarkdown renderer={selectedMarkdownRenderer()}>{String(message.content)}</ChatMarkdown></div>}</For>;
+}
 
 /*
  * The phone, built only from the library: header pills, the transcript's
@@ -27,14 +38,11 @@ export function LivePhone() {
 
   return <div class="g-live" data-density="phone" onClick={() => setOpen(null)}>
     <header class="g-live-header">
-      <Pill icons={[{ label: "Sidebar", icon: <PanelLeftIcon /> }, { label: "New chat", icon: <SquarePenIcon /> }]} />
+      <Pill icons={[{ label: "Sidebar", icon: <PanelLeftIcon /> }, { label: "New chat", icon: <MessageSquarePlusIcon /> }]} />
       <Pill icons={[{ label: "Search", icon: <SearchIcon /> }, { label: "Palette", icon: <TerminalIcon /> }, { label: "More", icon: <EllipsisIcon /> }]} onPick={(label) => label === "More" && toggle("chat")} />
     </header>
     <main class="g-live-transcript">
-      <Bubble>write a .txt file in this folder that contains lorem ipsum text</Bubble>
-      <p class="g-live-answer">Created <code>lorem_ipsum.txt</code> in this folder with lorem ipsum text.</p>
-      <Bubble>and make the second paragraph shorter</Bubble>
-      <p class="g-live-answer">Done. The second paragraph is now two sentences.</p>
+      <SeededTranscript />
     </main>
     <footer class="g-live-composer">
       <Pill icons={[{ label: "Attach and more", icon: <PlusIcon /> }]} solo onPick={() => toggle("plus")} />
@@ -84,10 +92,7 @@ export function LiveDesktop() {
         <Button variant="ghost" size="icon-sm" aria-label="Share"><ShareIcon /></Button>
       </header>
       <main class="g-live-transcript g-live-desk-transcript">
-        <Bubble>write a .txt file in this folder that contains lorem ipsum text</Bubble>
-        <p class="g-live-answer">Created <code>lorem_ipsum.txt</code> in this folder with lorem ipsum text.</p>
-        <Bubble>and make the second paragraph shorter</Bubble>
-        <p class="g-live-answer">Done. The second paragraph is now two sentences.</p>
+        <SeededTranscript />
       </main>
       <footer class="ui-frost g-live-desk-composer">
         <textarea placeholder="Send a message…" rows={1} />
