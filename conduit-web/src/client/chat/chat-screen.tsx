@@ -13,7 +13,7 @@ import { isWorkspace } from "./place-picker";
 import { harnessLabelFor } from "../harness-brand";
 import { isInstalledClient } from "../platform/installed-client.ts";
 import { isMobileLayout } from "../navigation/mobile-layout";
-import { headerPill, HeaderActions } from "../navigation/header-pill";
+import { headerPill, HeaderActions, PillShell } from "../navigation/header-pill";
 /*
  * A chat's screen: its header, and its transcript with the composer over it.
  * Out of main.tsx so the gallery draws the same ones.
@@ -93,10 +93,10 @@ export function ChatHeader(props: {
   return <>
     <header class="chat-header">
       <Show when={!props.mobileSidebarOpen}>
-        <div class={`mobile-header-leading ${leadingPill().class ?? ""}`} data-composer-surface={leadingPill()["data-composer-surface"]}>
+        <PillShell pill={leadingPill} class="mobile-header-leading">
           <Button variant="ghost" size="icon-sm" class="mobile-sidebar-trigger" data-mobile-open="false" aria-label="Toggle Sidebar" aria-expanded={false} onClick={props.onToggleMobileSidebar}><PanelLeftIcon /></Button>
           <Button variant="ghost" size="icon-sm" class="mobile-new-chat-trigger" aria-label="New chat" title="New chat" onClick={props.onNewChat}><MessageSquarePlusIcon /></Button>
-        </div>
+        </PillShell>
       </Show>
       {/* A project or workspace page is that place, named as the sidebar names it; a
           chat or the Conduit dashboard sits under its place. */}
