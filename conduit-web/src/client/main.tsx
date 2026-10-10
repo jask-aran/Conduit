@@ -22,6 +22,7 @@ import "@jask-aran/solid-components/meteor-shower.css";
 import { phoneLayerOpen } from "@/components/phone-overlays";
 import { attachRowMenus, Button, Menu, MenuContent, MenuGroup, MenuItem, MenuLabel, MenuSeparator, MenuTrigger, Spinner } from "@/components/primitives";
 import { ContextBar, ContextBreakdown } from "./chat/context-gauge";
+import { headerPill, HeaderActions } from "./navigation/header-pill";
 import { contextUsagePercent } from "./chat/context-metrics";
 import { api, apiWhenServed, asList, pathChatId, pathProjectId, projectMatchesPath, projectPath } from "./api/client";
 import { buildHttpUrl, loginUrl, logoutUrl, normalizeServerOrigin, transcriptUrl } from "./api/transport";
@@ -620,20 +621,6 @@ function Conversation(props: { chat: ActiveChatStore; busy?: boolean; transcript
         {props.composer}
       </div>
     </section>
-  </div>;
-}
-
-/* On a phone the header's two control groups are pills of the composer's own
-   material, floating over the transcript like the composer below. */
-function headerPill() {
-  const surface = createComposerSurfaceSignal();
-  return () => isMobileLayout() ? { class: "composer-surface-material", "data-composer-surface": surface() } : {};
-}
-
-function HeaderActions(props: { children: JSX.Element }) {
-  const pill = headerPill();
-  return <div class={`chat-header-actions ${pill().class ?? ""}`} data-composer-surface={pill()["data-composer-surface"]}>
-    {props.children}
   </div>;
 }
 

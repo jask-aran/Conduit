@@ -47,6 +47,10 @@ node scripts/conduit-auth.mjs mint-session \
 - Omit `--output` to write to stdout. Output files use mode `0600`.
 - Agent Browser and Windows DevTools mint and install their own sessions.
 
+## Component gallery
+
+For component and styling changes, check the gallery before the app. `npm run gallery` in `conduit-web` serves it at `http://localhost:5180/gallery.html`: every catalogued component and a few app surfaces, real and live, on one canvas. It needs no server, sign-in or fixtures. Each entry has an anchor (`#phone-header`). Its phone render is `gallery.html?frame=<id>` at 412px wide, which passes for a phone (`src/gallery/phone-emulation.ts`), so a headless screenshot or geometry read of that URL needs no touch emulation. First load is slow while Vite optimises dependencies, so wait about 6s. The gallery is dev-only and never built into `dist`.
+
 ## Browser surfaces
 
 | Surface | Use |
