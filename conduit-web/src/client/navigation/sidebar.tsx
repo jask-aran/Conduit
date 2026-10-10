@@ -1,3 +1,4 @@
+import { headerPill, PillShell } from "./header-pill";
 import { isConduitManagedProject } from "./sidebar-preferences";
 import { ServerSwitcher } from "./server-switcher";
 import { createComposerSurfaceSignal } from "../chat/composer-surface";
@@ -380,6 +381,7 @@ export function Sidebar(props: {
   });
   const [phoneLayout, setPhoneLayout] = createSignal(isMobileLayout());
   const headerSurface = createComposerSurfaceSignal();
+  const triggerPill = headerPill(1);
   onMount(() => {
     const media = typeof matchMedia === "function" ? matchMedia(MOBILE_LAYOUT_QUERY) : null;
     if (!media) return;
@@ -1170,9 +1172,9 @@ export function Sidebar(props: {
     <aside ref={sidebarRoot} data-slot="sidebar" data-region="sidebar" data-state={phoneLayout() ? "expanded" : collapsed() ? "collapsed" : "expanded"} data-visual-state={phoneLayout() ? "expanded" : visualCollapsed() ? "collapsed" : "expanded"} data-mobile-open={props.mobileOpen} class="conduit-sidebar" style={{ width: phoneLayout() ? undefined : `${shellWidth()}px` }} aria-hidden={phoneLayout() && !props.mobileOpen ? true : undefined} inert={phoneLayout() && !props.mobileOpen ? true : undefined} onTransitionEnd={(event) => { if (event.target === sidebarRoot && event.propertyName === "width") finishSidebarMotion?.(); }} onTransitionCancel={(event) => { if (event.target === sidebarRoot && event.propertyName === "width") finishSidebarMotion?.(); }}>
       <div ref={sidebarSurface} data-slot="sidebar-container" class="sidebar-container">
         <div data-sidebar="header">
-          <div class={`sidebar-header-pill ${phoneLayout() ? "composer-surface-material" : ""}`} data-composer-surface={phoneLayout() ? headerSurface() : undefined}>
+          <PillShell pill={triggerPill} class="sidebar-header-pill">
           <Button variant="ghost" size="icon-sm" data-sidebar="trigger" aria-label="Toggle Sidebar" aria-expanded={isMobileLayout() ? props.mobileOpen : !collapsed()} onClick={onSidebarTrigger}><PanelLeftIcon /></Button>
-          </div>
+          </PillShell>
           <button data-sidebar="brand" aria-label="Conduit" onClick={() => { setArea("conduit"); closeMobile(); props.onOpenDashboard(); enterPane(); }}><span>Conduit</span></button>
           <Show when={phoneLayout()}>
             <div class="sidebar-header-server">

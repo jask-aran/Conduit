@@ -62,14 +62,18 @@
 .ui-frost[data-lift="raised"] { box-shadow: var(--frost-lift-raised), var(--frost-highlight); }
 .ui-frost[data-core] { background: linear-gradient(var(--frost-fill), var(--frost-fill)), var(--frost-core-ground); }
 
-/* Pill: icon slots in a capsule, 1px from its edge. */
-.ui-pill { display: inline-flex; height: 44px; align-items: center; gap: 2px; padding: 0 1px; border-radius: 999px; }
-.ui-pill > button { display: grid; width: 34px; height: 40px; place-items: center; border: 0; border-radius: 999px; background: transparent; color: inherit; }
-.ui-pill[data-solo] { width: 44px; justify-content: center; padding: 0; }
+/* Pill: the phone's floating frost controls -- one family for the header's
+   groups, the sidebar's toggle and the composer's buttons. One icon is a
+   circle; more share a capsule, each slot a pill-shaped target 1px from its
+   edge. Its tokens size every member. */
+:root { --pill-size: 44px; --pill-slot: 34px; --pill-slot-height: 40px; --pill-gap: 2px; --pill-icon: var(--u-icon); --pill-solo-icon: calc(1.125 * var(--u-icon)); }
+.ui-pill { display: inline-flex; height: var(--pill-size); align-items: center; gap: var(--pill-gap); padding: 0 1px; border-radius: 999px; }
+.ui-pill > button { display: grid; width: var(--pill-slot); height: var(--pill-slot-height); place-items: center; border: 0; border-radius: 999px; background: transparent; color: inherit; }
+.ui-pill[data-solo] { width: var(--pill-size); justify-content: center; padding: 0; }
 .ui-pill[data-solo] > button { width: 100%; height: 100%; }
-.ui-pill[data-solo] > button svg { width: calc(1.125 * var(--u-icon)); height: calc(1.125 * var(--u-icon)); }
+.ui-pill[data-solo] > button svg { width: var(--pill-solo-icon); height: var(--pill-solo-icon); }
 .ui-pill > button:hover { background: var(--frost-wash); }
-.ui-pill > button svg { width: var(--u-icon); height: var(--u-icon); }
+.ui-pill > button svg { width: var(--pill-icon); height: var(--pill-icon); }
 
 /* Menu: a raised container; rows sit concentric inside it. */
 .ui-menu { outline: none; display: flex; min-width: calc(12 * var(--u-type)); flex-direction: column; border-radius: var(--frost-radius); padding: var(--frost-inset); }
@@ -255,3 +259,16 @@
 /* An item's detail: a second line under its label (a route's address). */
 .ui-row > .ui-label[data-stacked] { display: flex; flex-direction: column; }
 .ui-label > .ui-detail { overflow: hidden; color: var(--muted-foreground); font: 400 calc(0.6875 * var(--u-type))/1.3 inherit; font-family: inherit; text-overflow: ellipsis; white-space: nowrap; }
+/* The Pill wins over an app pill's own rules (it stands in for them in the Library previews). */
+.ui-frost.ui-pill[data-surface] { display: inline-flex; flex: none; }
+.ui-pill[data-surface] > :is(button, [data-slot="button"]) { width: var(--pill-slot); min-width: var(--pill-slot); height: var(--pill-slot-height); padding: 0; border-radius: 999px; }
+.ui-pill[data-surface][data-solo] > :is(button, [data-slot="button"]) { width: 100%; min-width: 0; height: 100%; }
+.ui-pill[data-surface][data-solo] > :is(button, [data-slot="button"]) svg { width: var(--pill-solo-icon); height: var(--pill-solo-icon); }
+/* The phone composer's buttons are solo Pills: one frost circle each (the mic
+   stretched across the row). Specificity sits between the app's sizing rule
+   and its hide rules; a folded button (send with nothing to send, latest,
+   stop-and-send) is left to the app, which folds it to nothing. */
+:where([data-phone-layout] .composer)[data-composer-surface="library"] :is(.composer-actions button[data-slot="button"], button.composer-plus-trigger):not(:is([data-primary-hidden] .composer-send-trigger, .composer-latest-trigger:not([data-shown]), .composer-stop-send:not([data-shown]))) { width: var(--pill-size); min-width: var(--pill-size); height: var(--pill-size); }
+:where([data-phone-layout] .composer)[data-composer-surface="library"] :is(.composer-actions button[data-slot="button"], button.composer-plus-trigger) svg { width: var(--pill-solo-icon); height: var(--pill-solo-icon); }
+:where([data-phone-layout] .composer)[data-composer-surface="library"] :is(.composer-actions button[data-slot="button"], button.composer-plus-trigger):hover { background: linear-gradient(var(--frost-wash), var(--frost-wash)), var(--frost-fill); }
+[data-phone-layout] .composer[data-composer-surface="library"] :is([data-primary-hidden] .composer-send-trigger, .composer-latest-trigger:not([data-shown]), .composer-stop-send:not([data-shown])) { border-width: 0; }
