@@ -1,10 +1,11 @@
-import { createSignal, For, lazy, onCleanup, Show } from "solid-js";
+import { createSignal, For, lazy, onCleanup, onMount, Show } from "solid-js";
 import { ChevronRightIcon, ExternalLinkIcon, PlusIcon, QrCodeIcon, RefreshCwIcon } from "lucide-solid";
 import { Menu, MenuContent, MenuGroup, MenuItem, MenuLabel, MenuRadioGroup, MenuRadioItem, MenuSeparator, MenuSub, MenuSubContent, MenuSubTrigger, MenuTrigger, Spinner } from "@/components/primitives";
 import { createPhoneMenuPanels, PhoneMenuSubmenu } from "@/components/phone-menu-panels";
 import { isMobileLayout } from "./mobile-layout";
 import { buildHttpUrl } from "../api/transport";
 import { proveServer } from "../platform/server-proof";
+import { latestRelease, type PublishedRelease } from "../platform/github-release";
 const PairDialog = lazy(() => import("./pair-dialog").then((module) => ({ default: module.PairDialog })));
 
 /** Not an address: the row that hands the choice back to the client. */
@@ -52,7 +53,13 @@ export function ServerSwitcher(props: {
   onUpdatePwa: () => void;
   onAddServer: () => void;
   onLogout: () => void;
+  /** The installers, for a phone's browser: its sidebar has no footer to hold them. */
+  downloads?: boolean;
 }) {
+  const [release, setRelease] = createSignal<PublishedRelease | null>(null);
+  const releasesPage = "https://github.com/jask-aran/Conduit/releases/latest";
+  onMount(() => { if (props.downloads) void latestRelease().then(setRelease).catch(() => setRelease(null)); });
+  const download = (url?: string | null) => window.open(url || releasesPage, "_blank", "noopener,noreferrer");
   const [latency, setLatency] = createSignal<Record<string, number | null>>({});
   const [probing, setProbing] = createSignal(false);
   const [checking, setChecking] = createSignal("");
@@ -296,6 +303,10 @@ export function ServerSwitcher(props: {
         <RefreshCwIcon class={props.pwaUpdating ? "pwa-update-icon pwa-update-icon-active" : "pwa-update-icon"} />
         {props.pwaUpdating ? "Checking for updates…" : "Check for updates"}
       </MenuItem>
+      <Show when={props.downloads}>
+        <MenuItem onSelect={() => download(release()?.windowsUrl)}>Download for Windows</MenuItem>
+        <MenuItem onSelect={() => download(release()?.apkUrl)}>Download for Android</MenuItem>
+      </Show>
       <MenuItem onSelect={props.onLogout}>{servers().length > 1 ? `Sign out of ${serverName()}` : "Sign out"}</MenuItem>
       </div>
       <Show when={panel() === "routes"}>
