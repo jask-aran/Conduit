@@ -52,8 +52,8 @@ function Canvas() {
     { key: "phone-live", render: () => <iframe class="g-phone" title="Phone" src="/gallery.html?frame=phone" onLoad={tuneFrame} /> },
     { key: "sidebar-live", render: () => <iframe class="g-phone" title="Phone sidebar" src="/gallery.html?frame=sidebar" onLoad={tuneFrame} /> },
     { key: "desktop-live", render: () => <div class="g-desktop-screen"><ChatScreen /></div> },
-    { key: "phone-library", render: () => <LivePhone /> },
-    { key: "sidebar-library", render: () => <LivePhoneSidebar /> },
+    { key: "phone-library", render: () => <iframe class="g-phone" title="Phone · library" src="/gallery.html?frame=library-phone" onLoad={tuneFrame} /> },
+    { key: "sidebar-library", render: () => <iframe class="g-phone" title="Phone sidebar · library" src="/gallery.html?frame=library-sidebar" onLoad={tuneFrame} /> },
     { key: "desktop-library", render: () => <LiveDesktop /> },
   ];
   const [tuning, setTuning] = createSignal(false);
@@ -114,6 +114,9 @@ export function mount(frame: string | null) {
   // Frosted only: the static material is on its way out.
   try { localStorage.setItem("conduit:composer-surface", "frosted-live"); localStorage.setItem("conduit:phone-composer", "bar"); } catch { /* private window */ }
   if (frame === "parts") { document.body.classList.add("g-parts-body"); render(() => <Parts />, root); }
+  // The library's phone screens, in the same kind of frame as the live ones: a phone's root size and media rules.
+  else if (frame === "library-phone") { document.body.classList.add("g-solo-body"); render(() => <LivePhone />, root); }
+  else if (frame === "library-sidebar") { document.body.classList.add("g-solo-body"); render(() => <LivePhoneSidebar />, root); }
   else if (frame === "sidebar") { document.body.classList.add("g-solo-body"); render(() => <SidebarScreen />, root); }
   else if (frame) { document.body.classList.add("g-solo-body"); render(() => <ChatScreen />, root); }
   else {

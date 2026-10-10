@@ -89,9 +89,9 @@ export const Bubble = (props: { children: JSX.Element }) => <div class="ui-frost
 /* What sits on a surface: the look follows [data-surface] above it (library.css). */
 
 export type ButtonVariant = "primary" | "outline" | "ghost" | "destructive";
-export function Button(props: JSX.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: ButtonVariant; size?: "default" | "sm" | "icon" | "icon-sm" }) {
+export function Button(props: JSX.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: ButtonVariant; size?: "default" | "sm" | "icon" | "icon-sm" | "icon-xs" }) {
   const [local, rest] = splitProps(props, ["class", "variant", "size"]);
-  return <button type="button" {...rest} class={cn("ui-button", local.class)} data-variant={local.variant ?? "primary"} data-size={local.size ?? "default"} />;
+  return <button type="button" data-slot="button" {...rest} class={cn("ui-button", local.class)} data-variant={local.variant ?? "primary"} data-size={local.size ?? "default"} />;
 }
 
 export function Input(props: JSX.InputHTMLAttributes<HTMLInputElement>) {
