@@ -63,7 +63,7 @@ html, body { background: var(--frame, #08090a); color: var(--foreground); }
 .g-side > div { display: grid; justify-items: center; gap: 6px; }
 .g-side > div > small { color: var(--muted-foreground); font: 9px ui-monospace, monospace; letter-spacing: .07em; text-transform: uppercase; }
 .g-w12 { width: 12rem; } .g-w16 { width: 17rem; } .g-w18 { width: 18rem; }
-.g-grid[data-density="desktop"] .g-w12 { width: 154px; } .g-grid[data-density="desktop"] .g-w16, .g-grid[data-density="desktop"] .g-w18 { width: 240px; }
-.g-grid[data-density="phone"] .g-w12 { width: 190px; } .g-grid[data-density="phone"] .g-w16, .g-grid[data-density="phone"] .g-w18 { width: 300px; }
+.g-grid[data-density="desktop"] .g-w12 { width: 154px; } .g-grid[data-density="desktop"] .g-w16, .g-grid[data-density="desktop"] .g-w18 { width: 224px; }
+.g-grid[data-density="phone"] .g-w12 { width: 190px; } .g-grid[data-density="phone"] .g-w16, .g-grid[data-density="phone"] .g-w18 { width: 280px; }
 .g-tag [data-scope="desktop"] { color: #7aa2f7; } .g-tag [data-scope="phone"] { color: #9ece6a; }
 .g-tag [data-kind] { color: var(--muted-foreground); font-style: italic; }

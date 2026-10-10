@@ -1,4 +1,4 @@
-import { For, Show, splitProps, type JSX } from "solid-js";
+import { createEffect, createSignal, createUniqueId, For, Show, splitProps, type JSX } from "solid-js";
 import { ChevronDownIcon, ChevronRightIcon, SearchIcon } from "lucide-solid";
 import { cn } from "@/lib/utils";
 import "./library.css";
@@ -90,5 +90,32 @@ export function Segmented<T extends string>(props: { label: string; value: T; op
     <span class="ui-seg-thumb" aria-hidden="true" />
     <For each={props.options}>{(option) => <button type="button" role="radio" aria-checked={option.value === props.value} aria-label={props.icons || props.pill ? option.label : undefined} title={props.icons || props.pill ? option.label : undefined}
       onClick={() => props.onChange(option.value)}>{option.icon}{props.icons || props.pill ? null : <span>{option.label}</span>}{option.count !== undefined && <small>{option.count}</small>}</button>}</For>
+  </div>;
+}
+
+/**
+ * One choice from an ordered list, set by sliding along it (the app's
+ * StepSlider, at the library's density). The value follows the thumb and is
+ * chosen on release; with onOpen the value is an item that opens the levels.
+ */
+export function Slider(props: { label: string; options: { value: string; label: string }[]; value: string; disabled?: boolean; onChange: (value: string) => void; onOpen?: () => void }) {
+  const id = createUniqueId();
+  const indexOf = (value: string) => Math.max(0, props.options.findIndex((option) => option.value === value));
+  const [preview, setPreview] = createSignal(indexOf(props.value));
+  createEffect(() => setPreview(indexOf(props.value)));
+  const shown = () => props.options[preview()]?.label ?? "";
+  const commit = (index: number) => { const option = props.options[index]; if (option && option.value !== props.value) props.onChange(option.value); };
+  return <div class="ui-slider" data-disabled={props.disabled ? "" : undefined}
+    onKeyDown={(event) => { if (event.target instanceof HTMLInputElement && event.key !== "Escape" && event.key !== "Tab") event.stopPropagation(); }}>
+    <div class="ui-slider-head">
+      <label for={id} class="ui-title-text">{props.label}</label>
+      <Show when={props.onOpen} fallback={<span class="ui-slider-value">{shown()}</span>}>
+        <button type="button" class="ui-slider-value" data-opens disabled={props.disabled} onClick={() => props.onOpen?.()}>{shown()}<ChevronRightIcon /></button>
+      </Show>
+    </div>
+    <input id={id} class="ui-slider-input" type="range" min={0} max={Math.max(0, props.options.length - 1)} step={1} value={preview()} disabled={props.disabled} aria-valuetext={shown()}
+      style={{ "--fill": `${props.options.length > 1 ? (preview() / (props.options.length - 1)) * 100 : 0}%` }}
+      onInput={(event) => setPreview(Number(event.currentTarget.value))} onChange={(event) => commit(Number(event.currentTarget.value))} />
+    <div class="ui-slider-ticks" aria-hidden="true"><For each={props.options}>{(_, index) => <i data-reached={index() <= preview() ? "" : undefined} />}</For></div>
   </div>;
 }

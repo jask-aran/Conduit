@@ -1,8 +1,7 @@
 import { createSignal, For, type JSX } from "solid-js";
-import { ChevronRightIcon, ClipboardCopyIcon, Columns2Icon, CopyIcon, FolderIcon, FolderInputIcon, LayoutDashboardIcon, MenuIcon, MonitorIcon, PaperclipIcon, PencilIcon, PinIcon, PlusIcon, QrCodeIcon, RefreshCwIcon, SearchIcon, ShareIcon, ShieldCheckIcon, SquarePenIcon, TerminalIcon, Trash2Icon } from "lucide-solid";
+import { ClipboardCopyIcon, Columns2Icon, CopyIcon, FolderIcon, FolderInputIcon, LayoutDashboardIcon, MenuIcon, MonitorIcon, PaperclipIcon, PencilIcon, PinIcon, PlusIcon, QrCodeIcon, RefreshCwIcon, SearchIcon, ShareIcon, ShieldCheckIcon, SquarePenIcon, TerminalIcon, Trash2Icon } from "lucide-solid";
 import { Spinner } from "@/components/primitives";
-import { Bubble, Button, Card, Frost, Input, Item, Keycap, Menu, Pill, SearchSection, Section, Segmented, SelectTrigger } from "@/components/ui";
-import { StepSlider } from "../client/chat/step-slider";
+import { Bubble, Button, Card, Frost, Input, Item, Keycap, Menu, Pill, SearchSection, Section, Segmented, SelectTrigger, Slider } from "@/components/ui";
 import { Switch } from "../client/settings/settings-controls";
 import { HarnessMark } from "../client/harness-brand";
 import { PlaceGlyph } from "../client/chat/place-picker";
@@ -31,8 +30,7 @@ const thinking = ["off", "minimal", "low", "medium", "high", "xhigh"].map((value
 /** The app's slider as its popovers use it: a label, and a value that opens the levels. */
 function Levels(props: { label?: string }) {
   const [value, setValue] = createSignal("medium");
-  return <StepSlider label={props.label ?? "Thinking"} options={thinking} value={value()} onChange={setValue}
-    valueControl={(label) => <button type="button" class="step-slider-value">{label()}<ChevronRightIcon /></button>} />;
+  return <Slider label={props.label ?? "Thinking"} options={thinking} value={value()} onChange={setValue} onOpen={() => {}} />;
 }
 function SwitchDemo() { const [on, setOn] = createSignal(true); return <Switch label="Example" checked={on()} onChange={setOn} />; }
 function SegmentedText() { const [value, setValue] = createSignal("cloud"); return <Segmented label="Source" value={value()} onChange={setValue} options={[{ value: "off", label: "Off" }, { value: "local", label: "Local" }, { value: "cloud", label: "Cloud" }]} />; }
@@ -52,7 +50,7 @@ function ModelList(props: { keys?: string[]; title?: string }) {
 }
 const Profiles = () => <Section title="Profile"><For each={PROFILES}>{(profile, index) => <Item checked={index() === 0} icon={<HarnessMark id={profile.implementation || "conduit"} class="size-4" />} meta={profile.implementation}>{profile.label}</Item>}</For></Section>;
 const Projects = () => <Section title="Project"><Item icon={<FolderIcon />}>No folder</Item><For each={PROJECTS.slice(2, 7)}>{(project) => <Item icon={<PlaceGlyph project={project} />}>{project.name}</Item>}</For></Section>;
-const ChatTitle = () => <Section title="Lorem ipsum file" note="Assistant · 2h"><Item meta="12% used" opens>Context</Item></Section>;
+const ChatTitle = () => <Section title="Lorem ipsum file"><Item meta="12% used" opens>Context</Item></Section>;
 
 /** The same piece on each surface it sits on: the frame (sidebar), the ground (chat, dashboard) and frost. */
 function Surfaces(props: { frame?: boolean; children: () => JSX.Element }) {
@@ -72,7 +70,7 @@ export const libraryGroups: Group[] = [
     </Menu></div>),
     lib("section-list", "List", "both", "section", "Section", () => <Menu><Section title="Project" note="5"><For each={PROJECTS.slice(2, 6)}>{(project) => <Item icon={<PlaceGlyph project={project} />}>{project.name}</Item>}</For></Section></Menu>),
     lib("section-search", "Search", "both", "section", "SearchSection", () => <Menu><SearchSection placeholder="Search all models…" keys={["⌘", "⇧", "X"]} /></Menu>),
-    lib("section-slider", "Slider", "both", "section", "Section kind=slider + StepSlider", () => <Menu><Section kind="slider"><Levels /></Section></Menu>),
+    lib("section-slider", "Slider", "both", "section", "Section kind=slider + Slider", () => <Menu><Section kind="slider"><Levels /></Section></Menu>),
     lib("item", "Item · parts and states", "both", "item", "Item icon meta keys opens · checked disabled destructive", () => <Menu><Section>
       <Item>Plain</Item>
       <Item icon={<PaperclipIcon />}>icon</Item>
@@ -108,7 +106,7 @@ export const libraryGroups: Group[] = [
   ] },
   { title: "Phone popovers", note: "the app's own, rebuilt, at phone size; submenus open as panels over the dimmed parent", density: "phone", atoms: [
     lib("p-plus", "+ menu", "phone", "popover", "chat/mobile-composer-options.tsx", () => <Menu class="g-w16">
-      <Section title="Profile" note="12% context"><Item icon={<HarnessMark id="conduit" class="size-4" />} opens>Assistant</Item></Section>
+      <Section title="Profile"><Item icon={<HarnessMark id="conduit" class="size-4" />} opens>Assistant</Item></Section>
       <Section title="Model"><Item opens>Meta: Muse Spark 1.3 Contributor</Item></Section>
       <Section kind="slider"><Levels label="Effort" /></Section>
       <Section><Item icon={<PaperclipIcon />}>Attach files</Item></Section>
@@ -136,7 +134,7 @@ export const libraryGroups: Group[] = [
     lib("input", "Input", "both", "control", "Input", () => <Surfaces>{() => <div class="g-field"><Input placeholder="Replace" /><Input value="Lorem ipsum file" /></div>}</Surfaces>),
     lib("select", "Select", "both", "control", "SelectTrigger bare", () => <Surfaces>{() => <div class="g-field"><SelectTrigger value="System default" /><div class="g-row"><span>Provider</span><SelectTrigger bare value="OpenAI" /></div></div>}</Surfaces>),
     lib("icon-button", "Icon button", "both", "control", "Button size=icon-sm", () => <Surfaces>{() => <div class="g-row"><Button variant="ghost" size="icon-sm" aria-label="Copy"><CopyIcon /></Button><Button variant="ghost" size="icon-sm" aria-label="Share"><ShareIcon /></Button><Button variant="outline" size="icon" aria-label="Add"><PlusIcon /></Button></div>}</Surfaces>),
-    lib("slider", "Slider", "both", "control", "StepSlider", () => <div style={{ width: "240px" }}><Levels /></div>),
+    lib("slider", "Slider", "both", "control", "Slider", () => <div style={{ width: "240px" }}><Levels /></div>),
     lib("switch", "Switch", "both", "control", "Switch", () => <SwitchDemo />),
     lib("keycap", "Keycap", "desktop", "control", "Keycap", () => <div class="g-row"><Keycap>Ctrl</Keycap><Keycap>K</Keycap><Keycap>Esc</Keycap></div>),
     lib("spinner", "Spinner", "both", "control", "Spinner", () => <Spinner />),
