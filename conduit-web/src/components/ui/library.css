@@ -25,15 +25,15 @@
    icons barely. Sizes below are written in desktop px over 12.8. */
 :root, [data-density="desktop"] {
   --u-type: 12.8px; --u-space: 12.8px; --u-icon: 12.8px;
-  --frost-radius: 8px; --frost-inset: 3.2px; --row-pad: 3.2px 4.8px; --row-gap: 4.8px; --row-radius: 6.4px;
+  --frost-radius: 8px; --frost-inset: 3.2px; --row-pad: 3.2px 4.8px; --row-min: 21.2px; --row-gap: 4.8px; --row-radius: 6.4px;
 }
 [data-density="phone"] {
   --u-type: 16px; --u-space: 22.4px; --u-icon: 14px;
-  --frost-radius: 14px; --frost-inset: 5px; --row-pad: 8px 9px; --row-gap: 8px; --row-radius: 9px;
+  --frost-radius: 14px; --frost-inset: 5px; --row-pad: 8px 9px; --row-min: 38px; --row-gap: 8px; --row-radius: 9px;
 }
 @media (--conduit-phone-layout) { :root {
   --u-type: 16px; --u-space: 22.4px; --u-icon: 14px;
-  --frost-radius: 14px; --frost-inset: 5px; --row-pad: 8px 9px; --row-gap: 8px; --row-radius: 9px;
+  --frost-radius: 14px; --frost-inset: 5px; --row-pad: 8px 9px; --row-min: 38px; --row-gap: 8px; --row-radius: 9px;
 } }
 [data-density] { font-size: calc(var(--u-type) * 0.875); }
 :root {
@@ -79,7 +79,7 @@
 .ui-search::placeholder { color: var(--muted-foreground); }
 .ui-empty { padding: calc(0.5 * var(--u-space)); color: var(--muted-foreground); font-size: calc(0.8125 * var(--u-type)); }
 
-.ui-row { display: flex; width: 100%; align-items: center; gap: var(--row-gap); border: 0; border-radius: var(--row-radius); background: transparent; padding: var(--row-pad); color: color-mix(in oklch, var(--foreground), transparent 38%); font-size: calc(0.8125 * var(--u-type)); font-weight: 450; line-height: 1.43; text-align: left; cursor: default; user-select: none; outline: none; }
+.ui-row { display: flex; width: 100%; min-height: var(--row-min); align-items: center; gap: var(--row-gap); border: 0; border-radius: var(--row-radius); background: transparent; padding: var(--row-pad); color: color-mix(in oklch, var(--foreground), transparent 38%); font-size: calc(0.8125 * var(--u-type)); font-weight: 450; line-height: 1.43; text-align: left; cursor: default; user-select: none; outline: none; }
 /* The icon slot: every leading mark -- a lucide icon, a workspace glyph, a
    harness mark -- fills one icon-sized square. */
 .ui-icon { display: inline-grid; width: var(--u-icon); height: var(--u-icon); flex: none; place-items: center; }
