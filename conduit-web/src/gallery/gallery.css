@@ -1,31 +1,41 @@
 /* The gallery's own chrome. Kept plain and out of the app's names (g-*). */
 html, body { background: var(--frame, #08090a); color: var(--foreground); }
 #root { height: auto; }
-.g-canvas { display: grid; grid-template-columns: 240px 1fr; min-height: 100vh; font-family: "Geist Variable", sans-serif; }
-.g-panel { position: sticky; top: 0; display: flex; height: 100vh; flex-direction: column; gap: 10px; border-right: 1px solid var(--border); padding: 16px; font-size: 12px; }
-.g-panel h1 { font-size: 15px; font-weight: 600; }
-.g-panel textarea { min-height: 260px; resize: vertical; border: 1px solid var(--border); border-radius: 6px; background: transparent; padding: 8px; color: var(--foreground); font: 11px ui-monospace, monospace; }
-.g-panel > button, .g-filter button { border: 1px solid var(--border); border-radius: 6px; background: transparent; padding: 4px 8px; color: var(--foreground); }
-.g-filter { display: flex; gap: 4px; }
-.g-filter button[aria-pressed="true"] { background: var(--accent); }
-.g-sheet { position: relative; min-height: 100vh; overflow: hidden; padding: 24px; }
-.g-sheet-text { position: absolute; inset: 0; columns: 3 320px; column-gap: 32px; padding: 16px 24px; color: var(--foreground); font-size: 14px; line-height: 1.6; opacity: .9; pointer-events: none; }
+/* The app locks body scrolling; the gallery's left side scrolls instead. */
+.g-canvas { display: grid; grid-template-columns: 1fr auto; height: 100vh; font-family: "Geist Variable", sans-serif; }
+.g-left { min-width: 0; overflow: auto; }
+.g-bar { position: sticky; top: 0; z-index: 200; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid var(--border); background: var(--frame); padding: 8px 16px; font-size: 12px; }
+.g-bar h1 { margin-right: auto; font-size: 14px; font-weight: 600; }
+.g-bar button, .g-toggle button { border: 1px solid var(--border); border-radius: 6px; background: transparent; padding: 3px 9px; color: var(--foreground); font-size: 12px; }
+:is(.g-bar, .g-toggle) button[aria-pressed="true"] { background: var(--accent); }
+.g-tune { display: block; width: calc(100% - 32px); height: 160px; margin: 8px 16px; border: 1px solid var(--border); border-radius: 6px; background: transparent; padding: 8px; color: var(--foreground); font: 11px ui-monospace, monospace; }
+.g-sheet { position: relative; min-height: 100%; overflow: hidden; padding: 20px; }
+.g-sheet-text { position: absolute; inset: 0; columns: 3 300px; column-gap: 28px; padding: 12px 20px; color: var(--foreground); font-size: 14px; line-height: 1.6; pointer-events: none; }
 .g-sheet-text p { margin-bottom: 14px; }
 .g-sheet-text code { color: #98c379; font-size: 12px; }
-.g-pieces, .g-screens { position: relative; display: flex; flex-wrap: wrap; align-items: flex-start; gap: 28px; }
-.g-screens { margin-top: 40px; }
-.g-piece { display: flex; flex-direction: column; gap: 6px; margin: 0; }
-.g-piece > figcaption { color: var(--muted-foreground); font-size: 10px; }
+.g-grid { position: relative; display: flex; flex-wrap: wrap; align-items: flex-start; gap: 36px 28px; }
+.g-piece { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; margin: 0; }
+.g-wide { flex-basis: 100%; }
+/* The name bubble beside each piece. */
+.g-tag { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; border: 1px solid var(--border); border-radius: 999px; background: color-mix(in oklch, var(--frame), transparent 8%); padding: 2px 9px; color: var(--muted-foreground); font-size: 10px; }
+.g-tag strong { color: var(--foreground); font-weight: 600; }
+.g-tag code { font-size: 9.5px; }
+.g-tag [data-kind="one-off"] { color: #d99a22; }
+.g-tag [data-kind="class"] { color: #e5c07b; }
+.g-held { position: relative; min-width: 40px; min-height: 20px; }
+.g-anchor { position: absolute; top: 0; left: 0; width: 0; height: 0; }
 .g-swatch { width: 160px; height: 110px; border-radius: 17.6px; }
-.g-menu-slot { width: 200px; height: 190px; }
 .g-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .g-card-demo { display: flex; width: 280px; flex-direction: column; gap: 14px; padding: 16px; }
-.g-desktop-screen { --app-height: 860px; display: flex; width: 760px; height: 860px; overflow: hidden; border: 1px solid var(--border); border-radius: 12px; background: var(--background); }
-.g-desktop-screen > .chat-main { flex: 1; }
-.g-phone { display: block; width: 414px; height: 860px; border: 1px solid var(--border); border-radius: 18px; background: var(--background); }
-/* The phone screen. */
-.g-solo-body #root { height: 100vh; }
 .g-panel-inline { display: inline-block; min-width: 10rem; border-radius: var(--radius-lg); padding: 4px; color: var(--popover-foreground); }
-/* The app locks body scrolling; the canvas is a page that scrolls. */
-body:not(.g-solo-body) { overflow: auto; }
-.g-desktop-screen .chat-main { height: 100%; min-height: 0; }
+.g-search { width: 300px; }
+.g-parts { display: block; width: 412px; height: 1100px; border: 1px solid var(--border); border-radius: 18px; background: var(--background); }
+/* The preview. */
+.g-right { display: flex; flex-direction: column; align-items: center; gap: 10px; overflow: auto; border-left: 1px solid var(--border); padding: 10px 16px; }
+.g-toggle { display: flex; gap: 4px; }
+.g-phone { display: block; flex: none; width: 414px; height: min(860px, calc(100vh - 60px)); border: 1px solid var(--border); border-radius: 18px; background: var(--background); }
+.g-desktop-screen { --app-height: calc(100vh - 60px); display: flex; flex: none; width: min(900px, 60vw); height: calc(100vh - 60px); overflow: hidden; border: 1px solid var(--border); border-radius: 12px; background: var(--background); }
+.g-desktop-screen .chat-main { flex: 1; height: 100%; min-height: 0; }
+.g-solo-body #root, .g-parts-body #root { height: 100vh; }
+.g-parts-body { overflow: auto; }
+.g-parts-sheet .g-sheet-text { columns: 1; }
