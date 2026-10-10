@@ -67,12 +67,11 @@
 
 /* Menu: a raised container; rows sit concentric inside it. */
 .ui-menu { display: flex; min-width: calc(12 * var(--u-type)); flex-direction: column; border-radius: var(--frost-radius); padding: var(--frost-inset); }
-.ui-title { display: flex; align-items: baseline; justify-content: space-between; gap: var(--row-gap); padding: var(--row-pad); color: var(--muted-foreground); font-size: calc(0.75 * var(--u-type)); font-weight: 500; }
-.ui-title small { font-size: inherit; font-weight: 400; }
+.ui-title, .ui-title-text { color: var(--muted-foreground); font: calc(0.625 * var(--u-type))/1.2 ui-monospace, SFMono-Regular, Consolas, monospace; letter-spacing: 0.07em; text-transform: uppercase; }
+.ui-title { display: flex; align-items: baseline; justify-content: space-between; gap: var(--row-gap); padding: calc(0.375 * var(--u-type)) calc(0.5 * var(--u-type)) calc(0.3125 * var(--u-type)); }
+.ui-title small { font-size: inherit; letter-spacing: 0; text-transform: none; }
 .ui-section { display: flex; flex-direction: column; }
 .ui-section + .ui-section { margin-top: var(--frost-inset); border-top: 1px solid var(--frost-rule); margin-inline: calc(-1 * var(--frost-inset)); padding: var(--frost-inset) var(--frost-inset) 0; }
-.ui-section[data-kind="slider"] { padding: 0; }
-.ui-section + .ui-section[data-kind="slider"] { padding: calc(0.5 * var(--u-space)) calc(0.75 * var(--u-space)) calc(0.5 * var(--u-space)); }
 .ui-search-section { flex-direction: row; align-items: center; gap: var(--row-gap); padding: var(--row-pad); }
 .ui-search-section > svg { width: calc(1 * var(--u-icon)); height: calc(1 * var(--u-icon)); flex: none; color: var(--muted-foreground); }
 .ui-search-section .ui-keys { display: inline-flex; flex: none; gap: 2px; }
@@ -80,7 +79,7 @@
 .ui-search::placeholder { color: var(--muted-foreground); }
 .ui-empty { padding: calc(0.5 * var(--u-space)); color: var(--muted-foreground); font-size: calc(0.8125 * var(--u-type)); }
 
-.ui-row { display: flex; width: 100%; align-items: center; gap: var(--row-gap); border: 0; border-radius: var(--row-radius); background: transparent; padding: var(--row-pad); color: color-mix(in oklch, var(--foreground), transparent 38%); font-size: calc(0.875 * var(--u-type)); font-weight: 450; text-align: left; cursor: default; user-select: none; outline: none; }
+.ui-row { display: flex; width: 100%; align-items: center; gap: var(--row-gap); border: 0; border-radius: var(--row-radius); background: transparent; padding: var(--row-pad); color: color-mix(in oklch, var(--foreground), transparent 38%); font-size: calc(0.8125 * var(--u-type)); font-weight: 450; text-align: left; cursor: default; user-select: none; outline: none; }
 .ui-row > svg { width: calc(1 * var(--u-icon)); height: calc(1 * var(--u-icon)); flex: none; }
 .ui-row > .ui-label { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ui-row > small { flex: none; color: var(--muted-foreground); font-weight: 400; font-size: calc(0.75 * var(--u-type)); }
@@ -156,7 +155,22 @@
 .ui-seg[data-pill] button { width: calc(2.125 * var(--u-space)); min-height: calc(2.5 * var(--u-space)); border-radius: 999px; padding: 0; }
 @media (prefers-reduced-motion: reduce) { .ui-seg-thumb { transition: none; } }
 
-/* The slider's value opens its levels, so it reads as an item that opens:
-   the item's muted colour and weight, its size at either density. */
-.ui-section[data-kind="slider"] .step-slider-value { color: color-mix(in oklch, var(--foreground), transparent 38%); font-size: calc(0.875 * var(--u-type)); font-weight: 450; }
-.ui-section[data-kind="slider"] .step-slider-value:hover { color: var(--foreground); background: var(--frost-wash); }
+/* Slider: the label is a section title, the value an item (one that opens,
+   when it opens the levels); track, thumb and ticks follow density. */
+.ui-slider { display: grid; gap: calc(0.375 * var(--u-type)); padding: calc(0.375 * var(--u-type)) calc(0.5 * var(--u-type)) calc(0.5 * var(--u-type)); }
+.ui-slider[data-disabled] { opacity: 0.5; }
+.ui-slider-head { display: flex; align-items: center; justify-content: space-between; gap: var(--row-gap); }
+.ui-slider-value { display: inline-flex; align-items: center; gap: calc(0.25 * var(--u-type)); border: 0; border-radius: var(--row-radius); background: transparent; padding: calc(0.1875 * var(--u-type)) calc(0.25 * var(--u-type)) calc(0.1875 * var(--u-type)) calc(0.375 * var(--u-type)); color: color-mix(in oklch, var(--foreground), transparent 38%); font-size: calc(0.75 * var(--u-type)); font-weight: 450; }
+.ui-slider-value[data-opens]:hover { background: var(--frost-wash); color: var(--foreground); }
+.ui-slider-value svg { width: calc(0.75 * var(--u-type)); height: calc(0.75 * var(--u-type)); color: var(--muted-foreground); }
+.ui-slider-input { --thumb: calc(1.25 * var(--u-icon)); --track: 4px; width: 100%; height: calc(1.25 * var(--u-type)); margin: 0; appearance: none; -webkit-appearance: none; background: transparent; cursor: pointer; touch-action: pan-y; }
+.ui-slider-input:focus-visible { outline: 0; }
+.ui-slider-input::-webkit-slider-runnable-track { height: var(--track); border-radius: 999px; background: linear-gradient(to right, var(--foreground) var(--fill), var(--frost-rule) var(--fill)); }
+.ui-slider-input::-moz-range-track { height: var(--track); border-radius: 999px; background: var(--frost-rule); }
+.ui-slider-input::-moz-range-progress { height: var(--track); border-radius: 999px; background: var(--foreground); }
+.ui-slider-input::-webkit-slider-thumb { width: var(--thumb); height: var(--thumb); margin-top: calc((var(--track) - var(--thumb)) / 2); border: 2px solid oklch(0.3 0.005 264); border-radius: 50%; background: var(--foreground); -webkit-appearance: none; box-shadow: 0 1px 4px rgb(0 0 0 / 35%); }
+.ui-slider-input::-moz-range-thumb { width: var(--thumb); height: var(--thumb); border: 2px solid oklch(0.3 0.005 264); border-radius: 50%; background: var(--foreground); box-shadow: 0 1px 4px rgb(0 0 0 / 35%); }
+.ui-slider-input:focus-visible::-webkit-slider-thumb { box-shadow: 0 1px 4px rgb(0 0 0 / 35%), 0 0 0 5px oklch(1 0 0 / 12%); }
+.ui-slider-ticks { display: flex; justify-content: space-between; margin-top: -4px; padding-inline: calc(var(--thumb, calc(1.25 * var(--u-icon))) / 2 - 1px); }
+.ui-slider-ticks i { width: 2px; height: 4px; border-radius: 1px; background: var(--frost-rule); }
+.ui-slider-ticks i[data-reached] { background: var(--muted-foreground); }
