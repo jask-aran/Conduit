@@ -37,13 +37,13 @@ export function LivePhone() {
       <p class="g-live-answer">Done. The second paragraph is now two sentences.</p>
     </main>
     <footer class="g-live-composer">
-      <Pill icons={[{ label: "Attach and more", icon: <PlusIcon /> }]} onPick={() => toggle("plus")} />
-      <Pill icons={[{ label: "Camera", icon: <CameraIcon /> }]} />
-      <Pill icons={[{ label: "Keyboard", icon: <KeyboardIcon /> }]} />
+      <Pill icons={[{ label: "Attach and more", icon: <PlusIcon /> }]} solo onPick={() => toggle("plus")} />
+      <Pill icons={[{ label: "Camera", icon: <CameraIcon /> }]} solo />
+      <Pill icons={[{ label: "Keyboard", icon: <KeyboardIcon /> }]} solo />
       <div class="ui-frost g-live-mic"><MicIcon /></div>
     </footer>
 
-    <Show when={open() === "chat"}><Float at="top-right"><Menu class="g-live-menu">
+    <Show when={open() === "chat"}><Float at="top-right"><Menu class="g-live-menu g-live-chat-menu">
       <ChatTitle />
       <Section><Item icon={<RefreshCwIcon />}>Update app</Item></Section>
       <Section><Item icon={<PanelRightIcon />}>Workspace panel</Item><Item icon={<ShareIcon />}>Share</Item></Section>
