@@ -294,7 +294,11 @@
   --cmp-slot: calc(1.75 * var(--u-space)); --cmp-slot-radius: calc(0.625 * var(--u-space)); --cmp-slot-gap: calc(0.1875 * var(--u-space)); --cmp-icon: var(--u-icon);
   --cmp-rider-gap: calc(0.375 * var(--u-space));
 }
-.ui-composer-stack { display: grid; width: 100%; gap: var(--cmp-rider-gap); }
+.ui-composer-stack { display: grid; gap: var(--cmp-rider-gap); }
+/* Its width: the pane it sits in declares --composer-width on its root (a
+   chat's centred column, a dashboard's full column); unset, its own default.
+   It never shrinks past its pane: min(.., 100%), so no breakpoint is needed. */
+.ui-composer-width { width: min(var(--composer-width, 47.5rem), 100%); margin-inline: auto; }
 .ui-frost.ui-desktop-composer { position: relative; display: block; width: 100%; border-radius: var(--cmp-radius); padding: 0; }
 .ui-field { position: relative; }
 .ui-field-input { display: block; width: 100%; min-height: var(--cmp-field-min); max-height: var(--cmp-field-max); resize: none; overflow-y: auto; border: 0; outline: 0; background: transparent; padding: var(--cmp-field-pad); color: inherit; font: inherit; font-size: var(--u-type); line-height: 1.45; field-sizing: content; }
@@ -417,3 +421,6 @@
 /* An app row's own icon, placed straight in the row (not in an icon slot), is sized as one. */
 .ui-row > :is(svg, .workspace-glyph, .harness-mark, img):not(.ui-chevron) { width: var(--u-icon); height: var(--u-icon); flex: none; }
 .ui-row > .harness-mark { width: calc(0.875 * var(--u-type)); height: calc(0.875 * var(--u-type)); }
+/* The app's composer wrapper, drawn as a DesktopComposer: its width is the pane's too
+   (the app's own rule loads later, at equal weight). */
+.composer-wrap.ui-composer-width { width: min(var(--composer-width, 47.5rem), 100%); }

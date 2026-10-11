@@ -107,10 +107,11 @@ export function Card(props: { title: string; detail?: string; class?: string; co
 /*
  * DesktopComposer: resting frost holding a Field above a Toolbar, desktop only
  * (a phone's composer is Pills). Field is shared with PillField. Geometry is
- * tokens (--cmp-*), measured from the app and scaled by density.
+ * tokens (--cmp-*), measured from the app and scaled by density; its width is
+ * the pane's to declare (--composer-width).
  */
 export function DesktopComposer(props: { riders?: JSX.Element; class?: string; children: JSX.Element }) {
-  return <div class="ui-composer-stack">{props.riders}<div class={cn("ui-frost ui-desktop-composer", props.class)} data-surface="frost" data-lift="rest">{props.children}</div></div>;
+  return <div class="ui-composer-stack ui-composer-width">{props.riders}<div class={cn("ui-frost ui-desktop-composer", props.class)} data-surface="frost" data-lift="rest">{props.children}</div></div>;
 }
 /** The text box, frost-free: its own textarea, or the caller's (the app's, with its behaviour) as children. */
 export function Field(props: { placeholder?: string; value?: string; onInput?: (value: string) => void; class?: string; children?: JSX.Element }) {
