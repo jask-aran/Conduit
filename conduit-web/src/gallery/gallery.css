@@ -178,3 +178,14 @@ html, body { background: var(--frame, #08090a); color: var(--foreground); }
 .g-slot { border: 1px dashed #d99a2299; border-radius: 6px; padding: 14px; color: var(--muted-foreground); text-align: center; }
 .g-dense .g-cell:has(.g-cell-toggle) .g-tag { right: 112px; flex-wrap: nowrap; overflow: hidden; white-space: nowrap; }
 .g-dense .g-cell:has(.g-cell-toggle) .g-tag [data-scope] { display: none; }
+.g-composer { width: 460px; max-width: 100%; }
+.g-cell-body:has(> .g-composer) { width: 100%; }
+.g-stack { display: grid; gap: 8px; }
+.g-rider { display: flex; align-items: center; gap: 8px; padding: 6px 8px; font-size: var(--u-type); }
+.g-rider svg { width: var(--u-icon); height: var(--u-icon); color: var(--muted-foreground); }
+.g-chip { display: inline-flex; align-items: center; gap: 5px; border-radius: 8px; background: var(--frost-wash); padding: 3px 7px; }
+.g-muted { color: var(--muted-foreground); font-weight: 400; }
+.g-picker { gap: 6px; }
+.g-picker svg { width: calc(0.875 * var(--u-icon)); height: calc(0.875 * var(--u-icon)); color: var(--muted-foreground); }
+.g-anatomy :is(.ui-field, .ui-toolbar, .ui-rider) { outline: 1px dashed #d99a2299; outline-offset: -1px; }
+.g-anatomy :is(.ui-toolbar-start, .ui-toolbar-end) { outline: 1px dotted #7aa2f799; outline-offset: -2px; }

@@ -132,6 +132,8 @@ export function Composer(props: {
   };
   let refocusing = false;
   const voiceFirst = () => phoneLayout() && phoneComposer() !== "classic";
+  // components v2 draws the desktop composer in the gallery's Library previews; a phone's is Pills.
+  const v2 = () => composerSurface() === "library" && !voiceFirst();
   const phoneMode = () => !voiceFirst() ? undefined
     // Finishing and transcribing still look like listening, so stopping goes
     // straight to the result instead of flashing through the text row.
@@ -848,16 +850,17 @@ export function Composer(props: {
       <AttachmentStrip items={props.attachments.items()} chatId={props.chat.loadedId()} surface={composerSurface()} onRemove={(item) => props.attachments.remove(item)} onRetry={(item) => props.attachments.retry(item)} />
     </Show>
     <div class="composer-surface-shell" data-composer-surface={composerSurface()}>
-      <div class="composer composer-surface-material" data-composer-surface={composerSurface()}>
+      {/* Library previews on a desktop: components v2's Composer -- its frost, Field and Toolbar (components/ui/swap.ts). */}
+      <div class={v2() ? "composer ui-frost ui-composer" : "composer composer-surface-material"} data-composer-surface={composerSurface()} data-surface={v2() ? "frost" : undefined} data-lift={v2() ? "rest" : undefined}>
                 <Show when={voiceFirst()}><div ref={snapWaveform} class="composer-voice-track" onClick={() => { if (phoneMode() === "listening") toggleDictation(); }}><div class="composer-voice-glow" aria-hidden="true"><i /><i /><i /><i /></div><VoiceWaveform class="chat-status-waveform composer-voice-waveform" history={dictationWaveform.history} level={dictationWaveform.level} peak={dictationWaveform.peak} state={recorderMonitorState()} variant="compact" barDensity={4} gain={2.5} ariaLabel="Microphone input level" /></div></Show>
         <div class="composer-content">
           <MobileComposerOptions composer={props} />
           {/* Library previews: the field is the library's PillField round the same textarea (components/ui/swap.ts). */}
-          <Show when={useLibrary() && voiceFirst()} fallback={<div class="composer-input-shell">{field()}</div>}><PillField class="composer-input-shell">{field()}</PillField></Show>
-          <div ref={actionsRow} class="composer-actions" data-mobile-actions-stacked={mobileActionsStacked()}
+          <Show when={useLibrary() && voiceFirst()} fallback={<div class={v2() ? "ui-field" : "composer-input-shell"}>{field()}</div>}><PillField class="composer-input-shell">{field()}</PillField></Show>
+          <div ref={actionsRow} class={v2() ? "ui-toolbar" : "composer-actions"} data-mobile-actions-stacked={mobileActionsStacked()}
             onPointerDown={(event) => { const control = (event.target as Element).closest("button"); if (control) control.dataset.pointerOpened = ""; }}
             onKeyDown={(event) => { if (["Enter", " ", "ArrowDown", "ArrowUp"].includes(event.key)) delete (event.target as HTMLElement).dataset?.pointerOpened; }}>
-            <div ref={actionsLeft} class="composer-actions-left">
+            <div ref={actionsLeft} class={v2() ? "ui-toolbar-start" : "composer-actions-left"}>
               <Show when={voiceFirst() && props.attachmentsSupported !== false}>
                 {/* Tap: the camera, through the platform's own capture. Hold:
                     the same picker as Attach files. */}
@@ -879,7 +882,7 @@ export function Composer(props: {
               <Show when={(props.permissions?.profiles().length || props.serviceLevels?.levels().length) && shows("permissions")}><div class="composer-desktop-setting" data-composer-fold="permissions"><Menu><MenuTrigger {...libraryPiece("select").data} class={`model-trigger composer-permission-trigger ${libraryPiece("select").class}`.trim()} aria-label="Session settings" disabled={!props.serverOnline || !interactive()}><ShieldCheckIcon /><span>{props.permissions?.profiles().find((profile) => profile.id === props.permissions?.selected())?.label || "Settings"}</span><ChevronDownIcon /></MenuTrigger><MenuContent class="w-72"><Show when={props.permissions?.profiles().length}><MenuGroup><MenuLabel>Permissions</MenuLabel><MenuRadioGroup value={props.permissions?.selected() || ""} onChange={(value) => void props.permissions?.choose(value)}><For each={props.permissions?.profiles() || []}>{(profile) => <MenuRadioItem value={profile.id} disabled={!profile.allowed}><span class="shrink-0 whitespace-nowrap">{profile.label}</span><Show when={profile.description}><span class="ml-auto max-w-40 truncate text-xs text-muted-foreground">{profile.description}</span></Show></MenuRadioItem>}</For></MenuRadioGroup></MenuGroup></Show><Show when={props.serviceLevels?.levels().length}><Show when={props.permissions?.profiles().length}><MenuSeparator /></Show><MenuGroup><MenuLabel>Service level</MenuLabel><MenuRadioGroup value={props.serviceLevels?.selected() || ""} onChange={(value) => void props.serviceLevels?.choose(value)}><For each={props.serviceLevels?.levels() || []}>{(level) => <MenuRadioItem value={level.id}>{level.label}</MenuRadioItem>}</For></MenuRadioGroup></MenuGroup></Show></MenuContent></Menu></div></Show>
             </div>
             <Show when={recording() && !phoneLayout()}><VoiceWaveform class="composer-status-waveform composer-actions-waveform" history={dictationWaveform.history} level={dictationWaveform.level} peak={dictationWaveform.peak} state={recorderMonitorState()} variant="compact" barDensity={3} ariaLabel={dictationLabel() || "Microphone input level"} /></Show>
-            <div ref={mobileActions} class="composer-actions-right">
+            <div ref={mobileActions} class={v2() ? "ui-toolbar-end" : "composer-actions-right"}>
               <Show when={!recording() && (dictationLabel() || (activity()?.label && activity()?.label !== "Ready"))}><span class="composer-status-state composer-actions-status" role="status" aria-live="polite"><Show when={dictationLabel()} fallback={<><Show when={SPINNING_ACTIVITY.has(activity()?.kind || "")}><Spinner /></Show><Show when={["request_failed", "runtime_failed"].includes(activity()?.kind || "")}><TriangleAlertIcon aria-hidden="true" /></Show>{activity()?.label || "Ready"}</>}>{dictationLabel()}</Show></span></Show>
               <Button variant="ghost" size="icon-sm" class="dictation-trigger" data-state={dictationState()} aria-label={["starting", "listening"].includes(dictationState()) ? "Stop voice dictation" : "Start voice dictation"} aria-pressed={dictating()} title={`Voice dictation (${props.voiceSettings.shortcut})`} disabled={!props.serverOnline || !interactive()} onPointerDown={captureDictationLaunch} onClick={toggleDictation}><Show when={voiceFirst()} fallback={<Show when={dictationState() === "starting"} fallback={<MicIcon />}><Spinner /></Show>}><Show when={phoneComposer() === "bar"}><div class="composer-voice-glow" aria-hidden="true"><i /><i /><i /><i /></div></Show><span class="composer-voice-mic"><MicIcon /></span><ThinkingOrb state="listening" class="composer-voice-orb" paused={phoneMode() !== "listening"} /></Show></Button>
               {/* One primary slot, so nothing beside it moves. While the agent

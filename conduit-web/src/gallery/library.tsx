@@ -1,8 +1,8 @@
-import { PanelLeftIcon, MessageSquarePlusIcon, EllipsisIcon, CameraIcon, KeyboardIcon, MicIcon, ArrowUpIcon } from "lucide-solid";
+import { PanelLeftIcon, MessageSquarePlusIcon, EllipsisIcon, CameraIcon, KeyboardIcon, MicIcon, ArrowUpIcon, ChevronDownIcon, CircleIcon, FileTextIcon, XIcon, ClockIcon } from "lucide-solid";
 import { createSignal, For, onMount, type JSX } from "solid-js";
 import { PanelRightIcon, ClipboardCopyIcon, Columns2Icon, CopyIcon, FolderIcon, FolderInputIcon, LayoutDashboardIcon, MenuIcon, MonitorIcon, PaperclipIcon, PencilIcon, PinIcon, PlusIcon, QrCodeIcon, RefreshCwIcon, SearchIcon, ShareIcon, ShieldCheckIcon, SquarePenIcon, TerminalIcon, Trash2Icon } from "lucide-solid";
 import { Spinner } from "@/components/primitives";
-import { Bubble, Button, Card, Frost, Input, Item, Keycap, Menu, PillButton, PillField, PillGroup, PillSwitch, HeadingSection, SearchSection, Section, Segmented, SelectTrigger, Slider } from "@/components/ui";
+import { Bubble, Button, Card, Composer, Field, Rider, Toolbar, Frost, Input, Item, Keycap, Menu, PillButton, PillField, PillGroup, PillSwitch, HeadingSection, SearchSection, Section, Segmented, SelectTrigger, Slider } from "@/components/ui";
 import { Switch } from "../client/settings/settings-controls";
 import { HarnessMark } from "../client/harness-brand";
 import { PlaceGlyph } from "../client/chat/place-picker";
@@ -72,6 +72,14 @@ function FrostTokens() {
 }
 
 function Area() { const [value, setValue] = createSignal("dashboard"); return <PillSwitch label="Sidebar section" value={value()} onChange={setValue} options={areas()} />; }
+
+/* The desktop composer's controls, as components v2 draws them: ghost icon buttons and small ghost pickers. */
+const ghost = (label: string, glyph: JSX.Element) => <Button variant="ghost" size="icon-sm" aria-label={label} title={label}>{glyph}</Button>;
+const picker = (children: JSX.Element) => <Button variant="ghost" size="sm" class="g-picker">{children}<ChevronDownIcon /></Button>;
+const toolbarStart = () => <>{ghost("Attach and more", <PlusIcon />)}{ghost("Context usage", <CircleIcon />)}{picker(<HarnessMark id="conduit" class="size-4" />)}{picker(<><strong>Meta: Muse Spark 1.3</strong><span class="g-muted">medium</span></>)}</>;
+const toolbarEnd = () => <>{ghost("Start voice dictation", <MicIcon />)}{ghost("Send message", <ArrowUpIcon />)}</>;
+const attachments = () => <Rider label="Attachments" class="g-rider"><span class="g-chip"><FileTextIcon />notes.txt<XIcon /></span><span class="g-chip"><FileTextIcon />lorem_ipsum.txt<XIcon /></span></Rider>;
+const queued = () => <Rider label="Queued" class="g-rider"><ClockIcon /><span>and make the second paragraph shorter</span><span class="g-muted">queued</span></Rider>;
 
 export const libraryFamilies: Family[] = [
   { title: "Frost", note: "the material: fill, edge, blur, highlight. Lift: rest sits on the page, raised floats above it; core is a solid backing for busy content", groups: [{ atoms: [
@@ -152,6 +160,21 @@ export const libraryFamilies: Family[] = [
     { title: "Assembled", atoms: [
       lib("confirm", "FrostDialog alert", "both", "card", "Card", () => <Card title="Delete this chat?" detail="It can't be brought back." class="g-card" actions={<><Button variant="outline">Cancel</Button><Button variant="destructive">Delete</Button></>} />),
       lib("prompt", "FrostDialog", "both", "card", "Card + Input", () => <Card title="Rename chat" class="g-card" actions={<><Button variant="outline">Cancel</Button><Button>Save</Button></>}><Input value="Lorem ipsum file" /></Card>),
+    ] },
+  ] },
+  { title: "Composer", note: "resting frost holding a Field above a Toolbar; Riders sit on its top edge. The phone's composer is Pills", groups: [
+    { atoms: [
+      lib("composer-anatomy", "Anatomy", "both", "composer", "Composer > riders · Field · Toolbar (start · end)", () => <div class="g-anatomy g-composer"><Composer riders={<Rider label="Rider" class="g-rider"><span class="g-muted">Rider: attachments, queued messages, a question</span></Rider>}>
+        <Field placeholder="Field" />
+        <Toolbar start={<>{ghost("Icon button", <PlusIcon />)}{picker(<span>Picker</span>)}</>} end={ghost("Primary", <ArrowUpIcon />)} />
+      </Composer></div>, true),
+      lib("composer-field", "Field", "both", "composer", "Field: the text box, no frost of its own (PillField wraps it too)", () => <div class="g-composer"><Composer><Field placeholder="Send a message…" /></Composer></div>, true),
+      lib("composer-toolbar", "Toolbar", "both", "composer", "Toolbar start · end: ghost icon buttons, pickers, the primary", () => <div class="g-composer"><Composer><Toolbar start={toolbarStart()} end={toolbarEnd()} /></Composer></div>, true),
+      lib("composer-riders", "Rider", "both", "composer", "Rider: frost on the composer's top edge", () => <div class="g-composer g-stack">{attachments()}{queued()}</div>, true),
+    ] },
+    { title: "Assembled", atoms: [
+      lib("composer", "Composer", "desktop", "composer", "chat/composer.tsx", () => <div class="g-composer"><Composer><Field placeholder="Send a message…" /><Toolbar start={toolbarStart()} end={toolbarEnd()} /></Composer></div>, true),
+      lib("composer-ridden", "Composer · AttachmentStrip + QueuedMessages", "desktop", "composer", "chat/composer.tsx, attachment-strip.tsx, queued-messages.tsx", () => <div class="g-composer"><Composer riders={<>{queued()}{attachments()}</>}><Field value="see the attached notes" /><Toolbar start={toolbarStart()} end={toolbarEnd()} /></Composer></div>, true),
     ] },
   ] },
   { title: "Pill", note: "resting frost floating over the page, the phone's controls. The kind sets the shape: a button is a circle, a group a capsule", groups: [
