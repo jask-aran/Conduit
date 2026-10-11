@@ -22,12 +22,13 @@
 .question-card { display: grid; width: min(var(--composer-desktop-reference-width), 100%); gap: 6px; margin-inline: auto; border-radius: 16px; padding: 8px 8px 8px; color: var(--foreground); outline: 0; }
 
 .question-top { display: flex; min-height: 26px; align-items: center; gap: 6px; }
-.question-title { min-width: 0; flex: 1; overflow: hidden; padding-left: 8px; color: var(--muted-foreground); font: 9px/1.2 ui-monospace, SFMono-Regular, Consolas, monospace; letter-spacing: .07em; text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; }
+.question-title { min-width: 0; flex: 1; overflow: hidden; padding-left: 8px; text-overflow: ellipsis; white-space: nowrap; color: color-mix(in oklch, var(--foreground), transparent 52%); font-family: inherit; font-size: 9.6px; font-weight: 700; line-height: 1.5; letter-spacing: 0.02em; text-transform: none; }
 .question-tabs { display: flex; min-width: 0; flex: 1; gap: 2px; overflow-x: auto; scrollbar-width: none; }
 .question-tabs::-webkit-scrollbar { display: none; }
 .question-tabs button { display: inline-flex; height: 26px; flex: none; align-items: center; gap: 4px; border: 0; border-radius: 8px; background: transparent; padding: 0 9px; color: var(--muted-foreground); font-size: 12px; font-weight: 500; cursor: pointer; }
-.question-tabs button:hover { color: var(--foreground); }
-.question-tabs button[aria-selected="true"] { background: var(--accent); color: var(--foreground); font-weight: 600; }
+.question-tabs button:hover { background: var(--accent); color: var(--foreground); }
+.question-tabs button[aria-selected="true"] { color: var(--foreground); font-weight: 660; }
+.question-tabs button[aria-selected="true"] svg { stroke-width: 3; }
 .question-tabs svg { width: 11px; height: 11px; }
 .question-close { display: grid; width: 26px; height: 26px; flex: none; margin-left: auto; place-items: center; border: 0; border-radius: 8px; background: transparent; color: var(--muted-foreground); cursor: pointer; }
 .question-close:hover { background: var(--accent); color: var(--foreground); }
@@ -78,4 +79,5 @@
   .question-option { min-height: 40px; flex-wrap: wrap; row-gap: 0; }
   .question-option-description { flex-basis: 100%; order: 4; padding-left: 22px; white-space: normal; }
   .question-check { order: 3; }
+  .question-title { font-size: 13px; }
 }
