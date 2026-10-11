@@ -1,6 +1,6 @@
 import { createSignal, For, onCleanup, onMount, type JSX } from "solid-js";
 import { CopyIcon, FolderIcon, MonitorIcon, PaperclipIcon, SearchIcon, SettingsIcon } from "lucide-solid";
-import { Bubble, Frost, HeadingSection, Item, Menu, NavGroup, NavRow, OverlayHints, Section, TextArea } from "@/components/ui";
+import { Segmented, Bubble, Frost, HeadingSection, Item, Menu, NavGroup, NavRow, OverlayHints, Section, TextArea } from "@/components/ui";
 import { lib, type Family } from "./library";
 import "katex/dist/katex.min.css";
 import terminalFontUrl from "../client/assets/MesloLGSNerdFontMono-Regular.ttf";
@@ -106,18 +106,47 @@ function TerminalFace() {
   return <Face family={'"Conduit Terminal Font", monospace'} sample="~/Conduit $ ls  │ ├─ └─ ✓ ✗  0123" uses={["The terminal pane: Meslo LG S Nerd Font Mono, for its box drawing and icons"]} />;
 }
 
+/** The faces the section labels may take: each shipped, the system's mono after it. */
+const LABEL_FACES = [
+  { value: "inconsolata", label: "Inconsolata", family: '"Inconsolata Variable"' },
+  { value: "paper", label: "Paper Mono", family: '"Paper Mono"' },
+  { value: "system", label: "System mono", family: "" },
+] as const;
+type LabelFace = (typeof LABEL_FACES)[number]["value"];
+const LABEL_KEY = "gallery:label-face";
+const storedFace = (): LabelFace => { try { return (LABEL_FACES.find((face) => face.value === localStorage.getItem(LABEL_KEY))?.value) ?? "inconsolata"; } catch { return "inconsolata"; } };
+/** Sets --font-label to the face picked here (the gallery's and its phone frames'); library.css's default otherwise. */
+export function applyLabelFace(doc: Document, face = storedFace()) {
+  const family = LABEL_FACES.find((option) => option.value === face)!.family;
+  doc.documentElement.style.setProperty("--font-label", `${family ? family + ", " : ""}ui-monospace, SFMono-Regular, Consolas, monospace`);
+}
+function LabelFace() {
+  const [face, setFace] = createSignal(storedFace());
+  const pick = (next: LabelFace) => {
+    setFace(next);
+    try { localStorage.setItem(LABEL_KEY, next); } catch { /* private window */ }
+    for (const doc of [document, ...Array.from(document.querySelectorAll("iframe"), (frame) => frame.contentDocument)]) if (doc) applyLabelFace(doc, next);
+    dispatchEvent(new Event("gallery:tune"));
+  };
+  return <Spec read={(scope) => [...roles(["Section label", ".ui-title"])(scope), ["Face", getComputedStyle(scope.querySelector(".ui-title")!).fontFamily]]}>
+    <Segmented label="Section label face" value={face()} onChange={pick} options={LABEL_FACES.map(({ value, label }) => ({ value, label }))} />
+    <Menu><Section title="Profile"><Item icon={<FolderIcon />}>Assistant</Item></Section><Section title="Model"><Item>GPT-6 Luna</Item></Section></Menu>
+  </Spec>;
+}
+
 export const foundationFamilies: Family[] = [
-  { title: "Fonts", rail: "Foundations", note: "the typefaces, and where each is used. Conduit ships its own: Geist for all UI, Inconsolata for labels and what is read as data; the rest each have one job", groups: [{ layout: "desktop", atoms: [
+  { title: "Fonts", rail: "Foundations", note: "the typefaces, and where each is used. Geist for all UI; a shipped mono for section labels; the system\'s mono for what is read as data; the rest each have one job", groups: [{ layout: "desktop", atoms: [
     lib("font-geist", "Geist Variable", "both", "font", "@fontsource-variable/geist · --font-sans", () => <Face family="var(--font-sans)" weights={[400, 450, 500, 550, 560, 600, 650, 660, 700]}
       uses={["All UI: rows, labels, headings, buttons, menus, cards, overlays", "The transcript and the composer's text, by default (Settings → Appearance)", "The weights above are the ones the app uses: rest 400–500, current 660, labels 700"]} />, true),
-    lib("font-mono", "Inconsolata Variable", "both", "font", "@fontsource-variable/inconsolata · --font-mono", () => <Face family="var(--font-mono)" weights={[400, 500, 550, 600, 700]} sample="claude-opus-5-5  ~/src  12:04  Ctrl K"
-      uses={["Conduit's own mono, shipped like Geist so it looks the same on every system (OFL); the system's ui-monospace only until it loads", "Section labels: muted caps over every section -- popovers, cards, riders, the sidebar -- and the leader's crumbs", "Data: model ids, paths, keycaps, times and counts in meta, status, waveforms (tabular figures)"]} />),
-    lib("font-consolas", "Consolas", "both", "font", "local only: Windows and Office", () => <Face family="Consolas, var(--font-mono)" sample="claude-opus-5-5  ~/src  12:04  Ctrl K"
-      uses={["What the live site's mono labels draw on Windows (its ui-monospace stack lands on Consolas there)", "Microsoft's, licensed with Windows and Office, so Conduit cannot ship it: Inconsolata is the open face drawn after it", "Shown from this machine's own copy; elsewhere it falls back to Inconsolata"]} />),
+    lib("font-label", "Section label face", "both", "font", "library.css --font-label", () => <LabelFace />, true),
+    lib("font-inconsolata", "Inconsolata Variable", "both", "font", "@fontsource-variable/inconsolata", () => <Face family={'"Inconsolata Variable", monospace'} weights={[400, 500, 600, 700]}
+      uses={["Shipped for the section labels (OFL), drawn after Consolas: so a label looks the same on every system", "Nothing else: meta, keycaps and code stay the system's mono"]} />),
+    lib("font-consolas", "Consolas", "both", "font", "local only: Windows and Office", () => <Face family="Consolas, monospace" sample="claude-opus-5-5  ~/src  12:04  Ctrl K"
+      uses={["What the live site's mono draws on Windows (its ui-monospace stack lands on Consolas there)", "Microsoft's, licensed with Windows and Office, so Conduit cannot ship it", "Shown from this machine's own copy"]} />),
     lib("font-system-mono", "ui-monospace", "both", "font", "ui-monospace, SFMono-Regular, Consolas, monospace", () => <Face family="ui-monospace, SFMono-Regular, Consolas, monospace" sample="claude-opus-5-5  ~/src  12:04  Ctrl K"
-      uses={["The system's own mono: SF Mono on Apple, Consolas on Windows, Droid Sans Mono on Android", "The live site's mono today (code, meta, keycaps, its labels); in components v2, only the fallback"]} />),
+      uses={["The system's own mono: SF Mono on Apple, Consolas on Windows, Droid Sans Mono on Android", "Data: model ids, paths, keycaps, times and counts in meta, status, waveforms (tabular figures)", "Code: inline code, code blocks and artifacts, the file editor", "The section labels' fallback, until their face loads"]} />),
     lib("font-paper", "Paper Mono", "both", "font", "client/fonts/PaperMono-Variable.woff2", () => <Face family={'"Paper Mono", ui-monospace, monospace'} weights={[400, 500, 600, 700]}
-      uses={["Optional: the transcript face when chosen in Settings → Appearance", "Then the messages, the composer's text and the voice captions; the rest of the UI stays Geist"]} />),
+      uses={["Optional: the transcript face when chosen in Settings → Appearance; a candidate for the section labels", "Then the messages, the composer's text and the voice captions; the rest of the UI stays Geist"]} />),
     lib("font-wordmark", "Conduit Wordmark", "both", "font", "client/assets/fonts/druk-wide-web-super.woff2", () => <Face family={'"Conduit Wordmark", sans-serif'} sample="Conduit"
       uses={["Druk Wide Super, for the brand only: the wordmark at the top of the sidebar"]} />),
     lib("font-terminal", "Conduit Terminal Font", "both", "font", "client/assets/MesloLGSNerdFontMono-Regular.ttf", () => <TerminalFace />),
