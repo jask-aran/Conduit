@@ -19,8 +19,8 @@ const WorkspaceFileIcon = lazy(() => import("../workspace/file-type-icon").then(
 const FileMark = (props: { name: string }) => <Suspense fallback={<FileIcon />}><WorkspaceFileIcon name={props.name} /></Suspense>;
 
 /** Upload progress over a chip's media: a thin ring, filled as it goes. */
-function ProgressRing(props: { progress: number }) {
-  return <svg class="attachment-chip-ring" viewBox="0 0 24 24" aria-hidden="true">
+function ProgressRing(props: { progress: number; v2?: boolean }) {
+  return <svg class={props.v2 ? "ui-chip-ring" : "attachment-chip-ring"} viewBox="0 0 24 24" aria-hidden="true">
     <circle cx="12" cy="12" r="9" />
     <circle cx="12" cy="12" r="9" stroke-dasharray={`${RING}`} stroke-dashoffset={RING * (1 - Math.min(100, props.progress) / 100)} />
   </svg>;
@@ -33,24 +33,26 @@ function AttachmentChip(props: {
   onOpen: () => void;
   onRemove: (chip: HTMLElement) => void;
   onRetry: () => void;
+  v2?: boolean;
 }) {
   let chip!: HTMLDivElement;
+  const k = (app: string, v2: string) => props.v2 ? v2 : app;
   const failed = () => props.item.status === "error";
   const busy = () => props.item.status === "uploading" || props.item.status === "queued";
   const retryable = () => failed() && Boolean(props.item.file);
   const source = previewOf(props.item, props.chatId);
-  return <div ref={chip} class="attachment-chip" data-kind={isImage(props.item) ? "image" : "file"} data-status={props.item.status} data-entering={props.entering || undefined} title={failed() ? `${props.item.name}: ${props.item.error || "Upload failed"}` : props.item.name}>
-    <button type="button" class="attachment-chip-body" aria-label={retryable() ? `Retry ${props.item.name}` : `Show ${props.item.name}`} onClick={() => retryable() ? props.onRetry() : props.onOpen()}>
-      <span class="attachment-chip-media">
+  return <div ref={chip} class={k("attachment-chip", "ui-chip")} data-kind={isImage(props.item) ? "image" : "file"} data-status={props.item.status} data-entering={props.entering || undefined} title={failed() ? `${props.item.name}: ${props.item.error || "Upload failed"}` : props.item.name}>
+    <button type="button" class={k("attachment-chip-body", "ui-chip-body")} aria-label={retryable() ? `Retry ${props.item.name}` : `Show ${props.item.name}`} onClick={() => retryable() ? props.onRetry() : props.onOpen()}>
+      <span class={k("attachment-chip-media", "ui-chip-media")}>
         <Show when={source} fallback={<FileMark name={props.item.name} />}><AttachmentImage src={source!} /></Show>
-        <Show when={busy()}><ProgressRing progress={props.item.progress} /></Show>
-        <Show when={retryable()}><RotateCwIcon class="attachment-chip-retry" /></Show>
+        <Show when={busy()}><ProgressRing progress={props.item.progress} v2={props.v2} /></Show>
+        <Show when={retryable()}><RotateCwIcon class={k("attachment-chip-retry", "ui-chip-retry")} /></Show>
       </span>
       <Show when={!isImage(props.item)}>
-        <span class="attachment-chip-copy"><strong>{props.item.name}</strong><small>{failed() ? props.item.error || "Upload failed" : sizeLabel(props.item.size)}</small></span>
+        <span class={k("attachment-chip-copy", "ui-chip-copy")}><strong>{props.item.name}</strong><small>{failed() ? props.item.error || "Upload failed" : sizeLabel(props.item.size)}</small></span>
       </Show>
     </button>
-    <button type="button" class="attachment-chip-remove" aria-label={`Remove ${props.item.name}`} onClick={() => props.onRemove(chip)}><XIcon /></button>
+    <button type="button" class={k("attachment-chip-remove", "ui-chip-remove")} aria-label={`Remove ${props.item.name}`} onClick={() => props.onRemove(chip)}><XIcon /></button>
   </div>;
 }
 
@@ -108,6 +110,8 @@ export function AttachmentStrip(props: {
 }) {
   // Sent, the strip drops into the composer. The last chip removed by hand
   // takes the strip with it, faded in place.
+  // components v2 in the gallery's Library previews (components/ui/swap.ts): a strip Rider of Chips.
+  const v2 = () => props.surface === "library";
   const [exit, setExit] = createSignal<CardExit>("drop");
   // Removing everything fades the strip at once, not chip by chip as each
   // removal lands; one that fails brings the strip back with what is left.
@@ -175,14 +179,14 @@ export function AttachmentStrip(props: {
 
   return <>
     <Show when={shown.value().length}>
-      <div class={props.surface === "library" ? "attachment-strip ui-frost ui-rider composer-card" : "attachment-strip composer-surface-material composer-card"} data-composer-surface={props.surface} data-surface={props.surface === "library" ? "frost" : undefined} data-lift={props.surface === "library" ? "rest" : undefined} data-leaving={(clearing() ? "fade" : shown.leaving()) || undefined} role="group" aria-label="Attachments">
-        <div ref={attach} class="attachment-strip-scroller" data-fade-start={fades().start || undefined} data-fade-end={fades().end || undefined} onScroll={measure}>
+      <div class={v2() ? "attachment-strip ui-frost ui-rider composer-card" : "attachment-strip composer-surface-material composer-card"} data-composer-surface={props.surface} data-surface={v2() ? "frost" : undefined} data-lift={v2() ? "rest" : undefined} data-layout={v2() ? "strip" : undefined} data-leaving={(clearing() ? "fade" : shown.leaving()) || undefined} role="group" aria-label="Attachments">
+        <div ref={attach} class={v2() ? "ui-chips" : "attachment-strip-scroller"} data-fade-start={fades().start || undefined} data-fade-end={fades().end || undefined} onScroll={measure}>
           <For each={ids()}>{(id) => {
             const item = createMemo<UploadAttachment>((last) => byId().get(id) ?? last, byId().get(id)!);
-            return <AttachmentChip item={item()} chatId={props.chatId} entering={risen} onOpen={() => setOpen(true)} onRemove={(chip) => void remove(chip, item())} onRetry={() => props.onRetry(item())} />;
+            return <AttachmentChip item={item()} chatId={props.chatId} entering={risen} onOpen={() => setOpen(true)} onRemove={(chip) => void remove(chip, item())} onRetry={() => props.onRetry(item())} v2={v2()} />;
           }}</For>
         </div>
-        <div class="attachment-strip-actions">
+        <div class={v2() ? "ui-rider-actions" : "attachment-strip-actions"} data-stack={v2() ? "" : undefined}>
           <Button variant="ghost" size="icon-sm" aria-label="Show all attachments" title="Show all attachments" onClick={() => setOpen(true)}><Maximize2Icon /></Button>
           <Button variant="ghost" size="icon-sm" aria-label="Remove all attachments" title="Remove all" onClick={() => void removeAll()}><Trash2Icon /></Button>
         </div>

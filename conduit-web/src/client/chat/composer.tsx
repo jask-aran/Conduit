@@ -850,8 +850,8 @@ export function Composer(props: {
       <AttachmentStrip items={props.attachments.items()} chatId={props.chat.loadedId()} surface={composerSurface()} onRemove={(item) => props.attachments.remove(item)} onRetry={(item) => props.attachments.retry(item)} />
     </Show>
     <div class="composer-surface-shell" data-composer-surface={composerSurface()}>
-      {/* Library previews on a desktop: components v2's Composer -- its frost, Field and Toolbar (components/ui/swap.ts). */}
-      <div class={v2() ? "composer ui-frost ui-composer" : "composer composer-surface-material"} data-composer-surface={composerSurface()} data-surface={v2() ? "frost" : undefined} data-lift={v2() ? "rest" : undefined}>
+      {/* Library previews on a desktop: components v2's DesktopComposer -- its frost, Field and Toolbar (components/ui/swap.ts). */}
+      <div class={v2() ? "composer ui-frost ui-desktop-composer" : "composer composer-surface-material"} data-composer-surface={composerSurface()} data-surface={v2() ? "frost" : undefined} data-lift={v2() ? "rest" : undefined}>
                 <Show when={voiceFirst()}><div ref={snapWaveform} class="composer-voice-track" onClick={() => { if (phoneMode() === "listening") toggleDictation(); }}><div class="composer-voice-glow" aria-hidden="true"><i /><i /><i /><i /></div><VoiceWaveform class="chat-status-waveform composer-voice-waveform" history={dictationWaveform.history} level={dictationWaveform.level} peak={dictationWaveform.peak} state={recorderMonitorState()} variant="compact" barDensity={4} gain={2.5} ariaLabel="Microphone input level" /></div></Show>
         <div class="composer-content">
           <MobileComposerOptions composer={props} />

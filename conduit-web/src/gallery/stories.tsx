@@ -27,12 +27,13 @@ export function ChatScreen() {
   const models = seededModels();
   const place = seededPlace();
   const profile = seededProfile();
+  const attachments = fakeAttachments();
   return <main data-slot="sidebar-inset" data-region="chat" class="chat-main">
     <ChatHeader title="Lorem ipsum file" chat={chat} profile={profile.active()} panelOpen={false} mobileSidebarOpen={false} connectivity="online"
       onToggleMobileSidebar={() => {}} onNewChat={() => {}} onOpenPalette={() => {}} onOpenSearch={() => {}} onTogglePanel={() => {}} onShare={() => {}} onUpdatePwa={() => {}} pwaUpdating={() => false} />
     <Conversation chat={chat}
       transcript={<Transcript chat={chat} supports={() => true} partialContinue={false} markdownRenderer={selectedMarkdownRenderer()} profileLabel={profile.active().label} />}
-      composer={<Composer chat={chat} attachments={fakeAttachments()} models={models} profiles={profile.profiles} activeProfile={profile.active()} place={place} serverOnline voiceSettings={loadVoiceDictationSettings()}
+      composer={<Composer chat={chat} attachments={attachments} models={models} profiles={profile.profiles} activeProfile={profile.active()} place={place} serverOnline voiceSettings={loadVoiceDictationSettings()}
         onChooseProfile={profile.choose} onOpenSettings={() => {}} onOpenAttachments={() => {}} />} />
   </main>;
 }

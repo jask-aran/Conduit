@@ -134,11 +134,14 @@ export function QuestionCard(props: { request: HostUiRequest; dismissLabel?: str
   ];
   const preview = () => current()?.options[cursor()]?.preview;
 
-  return <section ref={root} class={surface() === "library" ? "question-card ui-frost ui-rider" : "question-card composer-surface-material"} data-composer-surface={surface()} data-surface={surface() === "library" ? "frost" : undefined} data-lift={surface() === "library" ? "rest" : undefined}
+  // components v2 in the gallery's Library previews (components/ui/swap.ts): a card Rider of Choices.
+  const v2 = () => surface() === "library";
+  const k = (app: string, v2Class: string) => v2() ? v2Class : app;
+  return <section ref={root} class={v2() ? "question-card ui-frost ui-rider" : "question-card composer-surface-material"} data-composer-surface={surface()} data-surface={v2() ? "frost" : undefined} data-lift={v2() ? "rest" : undefined} data-layout={v2() ? "card" : undefined}
     tabIndex={-1} aria-label={props.request.title || "The agent has a question"} onKeyDown={keydown}>
-    <div class="question-top">
-      <Show when={pages() > 1} fallback={<span class="question-title">{current()?.header || props.request.title}</span>}>
-        <div class="question-tabs" role="tablist">
+    <div class={k("question-top", "ui-rider-top")}>
+      <Show when={pages() > 1} fallback={<span class={k("question-title", "ui-title-text")}>{current()?.header || props.request.title}</span>}>
+        <div class={k("question-tabs", "ui-tabs")} role="tablist">
           <For each={questions()}>{(question, index) => <button type="button" role="tab" aria-selected={page() === index()}
             tabIndex={-1} onClick={() => go(index())}>
             <Show when={answered(draft(question))}><CheckIcon aria-label="Answered" /></Show>
@@ -148,57 +151,57 @@ export function QuestionCard(props: { request: HostUiRequest; dismissLabel?: str
             onClick={() => go(questions().length)}>Submit</button></Show>
         </div>
       </Show>
-      <button type="button" class="question-close" tabIndex={-1} aria-label={props.dismissLabel === "deny" ? "Deny" : "Dismiss"} onClick={dismiss}><XIcon /></button>
+      <button type="button" class={k("question-close", "ui-button")} data-variant={v2() ? "ghost" : undefined} data-size={v2() ? "icon-sm" : undefined} tabIndex={-1} aria-label={props.dismissLabel === "deny" ? "Deny" : "Dismiss"} onClick={dismiss}><XIcon /></button>
     </div>
 
     <Show when={current()} keyed fallback={
-      <div class="question-summary">
+      <div class={k("question-summary", "ui-summary")}>
         <For each={questions()}>{(question, index) => <button type="button" tabIndex={-1} onClick={() => go(index())}>
-          <span class="question-summary-header">{question.header || question.prompt}</span>
-          <span class="question-summary-answer" data-empty={answered(draft(question)) ? undefined : "true"}>
+          <span class={k("question-summary-header", "")}>{question.header || question.prompt}</span>
+          <span class={k("question-summary-answer", "")} data-empty={answered(draft(question)) ? undefined : "true"}>
             {answered(draft(question)) ? answerText(question) : question.required ? "Needs an answer" : "Not answered"}</span>
         </button>}</For>
       </div>}>
-      {(question) => <div class="question-page">
-        <p class="question-prompt">{question.prompt}<Show when={question.multiSelect}><span> · pick any</span></Show></p>
-        <div class="question-options" role="listbox" aria-multiselectable={question.multiSelect}>
+      {(question) => <div class={k("question-page", "ui-choices-page")}>
+        <p class={k("question-prompt", "ui-prompt")}>{question.prompt}<Show when={question.multiSelect}><span> · pick any</span></Show></p>
+        <div class={k("question-options", "ui-choices")} role="listbox" aria-multiselectable={question.multiSelect}>
           <For each={question.options}>{(option, index) => {
             const chosen = () => draft(question).optionIds.includes(option.id);
-            return <div role="option" class="question-option" aria-selected={chosen()} data-active={cursor() === index()}
+            return <div role="option" class={k("question-option", "ui-choice")} aria-selected={chosen()} data-active={cursor() === index()}
               title={option.description || undefined} onPointerMove={() => setCursor(index())} onClick={() => choose(question, index())}>
-              <span class="question-number">{index() + 1}</span>
-              <span class="question-option-label">{option.label}</span>
-              <Show when={option.description}><span class="question-option-description">{option.description}</span></Show>
-              <span class="question-check" data-multi={question.multiSelect ? "true" : undefined}><Show when={chosen()}><CheckIcon /></Show></span>
+              <span class={k("question-number", "ui-choice-key")}>{index() + 1}</span>
+              <span class={k("question-option-label", "ui-choice-label")}>{option.label}</span>
+              <Show when={option.description}><span class={k("question-option-description", "ui-choice-detail")}>{option.description}</span></Show>
+              <span class={k("question-check", "ui-choice-check")} data-multi={question.multiSelect ? "true" : undefined}><Show when={chosen()}><CheckIcon /></Show></span>
             </div>;
           }}</For>
           <Show when={question.freeform}>{(freeform) => {
             const placeholder = freeform().placeholder || (question.options.length ? "Type your own answer" : "Type your answer");
             const input = (event: InputEvent & { currentTarget: HTMLInputElement | HTMLTextAreaElement }) => type(question, event.currentTarget.value);
-            return <div class="question-option question-own" data-active={cursor() === question.options.length}
+            return <div class={k("question-option question-own", "ui-choice")} data-active={cursor() === question.options.length}
               onPointerMove={() => setCursor(question.options.length)} onClick={() => own?.focus()}>
-              <span class="question-number">{question.options.length + 1}</span>
+              <span class={k("question-number", "ui-choice-key")}>{question.options.length + 1}</span>
               {freeform().multiline
-                ? <textarea ref={(element) => { own = element; }} rows={2} class="question-own-input" placeholder={placeholder} aria-label={placeholder}
+                ? <textarea ref={(element) => { own = element; }} rows={2} class={k("question-own-input", "ui-choice-input")} placeholder={placeholder} aria-label={placeholder}
                   value={draft(question).freeform} onInput={input} onFocus={() => setCursor(question.options.length)} />
-                : <input ref={(element) => { own = element; }} class="question-own-input" placeholder={placeholder} aria-label={placeholder}
+                : <input ref={(element) => { own = element; }} class={k("question-own-input", "ui-choice-input")} placeholder={placeholder} aria-label={placeholder}
                   type={question.secret ? "password" : "text"} inputmode={freeform().numeric ? "decimal" : undefined}
                   value={draft(question).freeform} onInput={input} onFocus={() => setCursor(question.options.length)} />}
-              <span class="question-check"><Show when={draft(question).freeform.trim()}><CheckIcon /></Show></span>
+              <span class={k("question-check", "ui-choice-check")}><Show when={draft(question).freeform.trim()}><CheckIcon /></Show></span>
             </div>;
           }}</Show>
         </div>
-        <Show when={preview()}>{(shown) => <pre class="question-preview" data-format={shown().format}>{shown().text}</pre>}</Show>
+        <Show when={preview()}>{(shown) => <pre class={k("question-preview", "ui-preview")} data-format={shown().format}>{shown().text}</pre>}</Show>
         <Show when={props.request.notes && answered(draft(question))}>
-          <input class="question-note" placeholder="Add a note (optional)" aria-label="Note"
+          <input class={k("question-note", "ui-input")} data-note={v2() ? "" : undefined} placeholder="Add a note (optional)" aria-label="Note"
             value={draft(question).note} onInput={(event) => setDrafts(question.id, "note", event.currentTarget.value)} />
         </Show>
       </div>}
     </Show>
 
-    <div class="question-footer">
-      <div class="question-hints" aria-hidden="true">
-        <For each={hints()}>{([key, label]) => <span><kbd class="command-hint-key">{key}</kbd>{label}</span>}</For>
+    <div class={k("question-footer", "ui-rider-foot")}>
+      <div class={k("question-hints", "ui-hints")} aria-hidden="true">
+        <For each={hints()}>{([key, label]) => <span><kbd class={k("command-hint-key", "ui-keycap")}>{key}</kbd>{label}</span>}</For>
       </div>
       <Show when={props.onStop}>
         <Button variant="ghost" size="sm" class="question-stop" tabIndex={-1} onClick={() => props.onStop?.()}>Stop</Button>
