@@ -70,7 +70,7 @@ rounded:
   sm: 5px
   md: 8px
   lg: 10px
-  pop: 11px
+  pop: 8px
   bubble: 15px
   xl: 16px
   composer: 22px
