@@ -39,7 +39,7 @@ export function PillSwitch<T extends string>(props: { label: string; value: T; o
 }
 /** Its own textarea, or the caller's field as children (the composer's, with its behaviour). */
 export function PillField(props: { placeholder?: string; value?: string; onInput?: (value: string) => void; class?: string; children?: JSX.Element }) {
-  return <div class={cn("ui-frost ui-pill ui-pill-field", props.class)}><Show when={props.children} fallback={<textarea class="ui-field-input" rows={1} placeholder={props.placeholder} value={props.value ?? ""} onInput={(event) => props.onInput?.(event.currentTarget.value)} />}>{props.children}</Show></div>;
+  return <div class={cn("ui-frost ui-pill ui-pill-field", props.class)}><Show when={props.children} fallback={<TextArea placeholder={props.placeholder} value={props.value} onInput={props.onInput} />}>{props.children}</Show></div>;
 }
 
 /**
@@ -106,17 +106,15 @@ export function Card(props: { title: string; detail?: string; class?: string; co
 
 /*
  * DesktopComposer: resting frost holding a Field above a Toolbar, desktop only
- * (a phone's composer is Pills). Field is shared with PillField. Geometry is
+ * (a phone's composer is Pills). Its field is a TextArea (a control), which it pads. Geometry is
  * tokens (--cmp-*), measured from the app and scaled by density; its width is
  * the pane's to declare (--composer-width).
  */
 export function DesktopComposer(props: { riders?: JSX.Element; class?: string; children: JSX.Element }) {
   return <div class="ui-composer-stack ui-composer-width">{props.riders}<div class={cn("ui-frost ui-desktop-composer", props.class)} data-surface="frost" data-lift="rest">{props.children}</div></div>;
 }
-/** The text box, frost-free: its own textarea, or the caller's (the app's, with its behaviour) as children. */
-export function Field(props: { placeholder?: string; value?: string; onInput?: (value: string) => void; class?: string; children?: JSX.Element }) {
-  return <div class={cn("ui-field", props.class)}><Show when={props.children} fallback={<textarea class="ui-field-input" rows={1} placeholder={props.placeholder} value={props.value ?? ""} onInput={(event) => props.onInput?.(event.currentTarget.value)} />}>{props.children}</Show></div>;
-}
+/** The composer's field slot: where its TextArea (or the app's, with its behaviour) sits, padded by the composer. */
+export const ComposerField = (props: { children: JSX.Element }) => <div class="ui-composer-field">{props.children}</div>;
 /** A row of controls: start (leading) and end (trailing) groups. */
 export function Toolbar(props: { start?: JSX.Element; end?: JSX.Element; class?: string }) {
   return <div class={cn("ui-toolbar", props.class)}><div class="ui-toolbar-start">{props.start}</div><div class="ui-toolbar-end">{props.end}</div></div>;
@@ -167,6 +165,11 @@ export type ButtonVariant = "primary" | "outline" | "ghost" | "destructive";
 export function Button(props: JSX.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: ButtonVariant; size?: "default" | "sm" | "icon" | "icon-sm" | "icon-xs" }) {
   const [local, rest] = splitProps(props, ["class", "variant", "size"]);
   return <button type="button" data-slot="button" {...rest} class={cn("ui-button", local.class)} data-variant={local.variant ?? "primary"} data-size={local.size ?? "default"} />;
+}
+
+/** Multi-line text that grows with its lines: bare, the type's size, no geometry of its own -- what holds it pads it (DesktopComposer, PillField). */
+export function TextArea(props: { placeholder?: string; value?: string; onInput?: (value: string) => void; class?: string }) {
+  return <textarea class={cn("ui-textarea", props.class)} rows={1} placeholder={props.placeholder} value={props.value ?? ""} onInput={(event) => props.onInput?.(event.currentTarget.value)} />;
 }
 
 export function Input(props: JSX.InputHTMLAttributes<HTMLInputElement>) {

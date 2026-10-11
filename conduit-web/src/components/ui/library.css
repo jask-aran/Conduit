@@ -77,8 +77,8 @@
 .ui-pill[data-stretch] > button { width: 100%; }
 /* Field: text in the capsule; it grows with its lines. */
 .ui-pill-field { display: flex; width: 100%; height: auto; min-height: calc(var(--pill-size) + 2px); align-items: center; border-radius: var(--pill-field-radius); padding: 0 var(--pill-field-pad); }
-.ui-pill-field .ui-field-input { width: 100%; max-height: 220px; border: 0; background: transparent; padding: 11px 0; color: inherit; font: inherit; font-size: var(--u-type); line-height: 1.4; resize: none; outline: none; field-sizing: content; }
-.ui-pill-field .ui-field-input::placeholder { color: var(--muted-foreground); }
+.ui-pill-field .ui-textarea { width: 100%; max-height: 220px; border: 0; background: transparent; padding: 11px 0; color: inherit; font: inherit; font-size: var(--u-type); line-height: 1.4; resize: none; outline: none; field-sizing: content; }
+.ui-pill-field .ui-textarea::placeholder { color: var(--muted-foreground); }
 .ui-pill > button svg { width: var(--pill-icon); height: var(--pill-icon); }
 
 /* Menu: a raised container; rows sit concentric inside it. */
@@ -285,7 +285,7 @@
 
 /* DesktopComposer: resting frost holding a field above a toolbar, riders on its top
    edge. Measured from the app's composer, in units of the density (u). */
-.ui-composer-stack, .ui-desktop-composer, .ui-field, .ui-toolbar, .ui-rider {
+.ui-composer-stack, .ui-desktop-composer, .ui-composer-field, .ui-toolbar, .ui-rider {
   --cmp-radius: calc(1.375 * var(--u-space));
   --cmp-field-min: calc(2.75 * var(--u-space)); --cmp-field-max: calc(12 * var(--u-space));
   --cmp-field-pad: calc(0.6875 * var(--u-space)) calc(0.75 * var(--u-space)) calc(0.125 * var(--u-space));
@@ -300,12 +300,11 @@
    It never shrinks past its pane: min(.., 100%), so no breakpoint is needed. */
 .ui-composer-width { width: min(var(--composer-width, 47.5rem), 100%); margin-inline: auto; }
 .ui-frost.ui-desktop-composer { position: relative; display: block; width: 100%; border-radius: var(--cmp-radius); padding: 0; }
-.ui-field { position: relative; }
-.ui-field-input { display: block; width: 100%; min-height: var(--cmp-field-min); max-height: var(--cmp-field-max); resize: none; overflow-y: auto; border: 0; outline: 0; background: transparent; padding: var(--cmp-field-pad); color: inherit; font: inherit; font-size: var(--u-type); line-height: 1.45; field-sizing: content; }
-.ui-field-input::placeholder { color: var(--muted-foreground); }
-/* The app pins an empty field's height (!important); the library's token wins it back. */
-.ui-desktop-composer .ui-field textarea { min-height: var(--cmp-field-min); max-height: var(--cmp-field-max); padding: var(--cmp-field-pad); font-size: var(--u-type); }
-.ui-desktop-composer .ui-field textarea:placeholder-shown { height: var(--cmp-field-min) !important; }
+.ui-composer-field { position: relative; }
+/* The composer pads its TextArea and bounds its height (the app pins an empty
+   field's height with !important; the composer's token wins it back). */
+.ui-composer-field > textarea { min-height: var(--cmp-field-min); max-height: var(--cmp-field-max); padding: var(--cmp-field-pad); font-size: var(--u-type); }
+.ui-composer-field > textarea:placeholder-shown { height: var(--cmp-field-min) !important; }
 .ui-toolbar { position: relative; z-index: 2; display: flex; min-height: var(--cmp-bar-min); align-items: center; justify-content: space-between; gap: var(--cmp-bar-gap); padding: var(--cmp-bar-pad); }
 .ui-toolbar-start, .ui-toolbar-end { display: flex; min-width: 0; align-items: center; gap: var(--cmp-slot-gap); }
 .ui-toolbar-start { flex: 0 1 auto; }
@@ -424,3 +423,7 @@
 /* The app's composer wrapper, drawn as a DesktopComposer: its width is the pane's too
    (the app's own rule loads later, at equal weight). */
 .composer-wrap.ui-composer-width { width: min(var(--composer-width, 47.5rem), 100%); }
+
+/* TextArea: multi-line text that grows with its lines; bare, so what holds it pads it. */
+.ui-textarea { display: block; width: 100%; resize: none; overflow-y: auto; border: 0; outline: 0; background: transparent; padding: 0; color: inherit; font: inherit; font-size: var(--u-type); line-height: 1.45; field-sizing: content; }
+.ui-textarea::placeholder { color: var(--muted-foreground); }
