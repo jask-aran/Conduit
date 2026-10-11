@@ -86,9 +86,10 @@
 /* A group label (DESIGN Typography): the sidebar's -- sentence case, bold,
    about half the text colour. Every group heading in a list, menu, palette or
    card is this; the breadcrumb's place caps are the one uppercase label. */
-.ui-title, .ui-title-text { color: color-mix(in oklch, var(--foreground), transparent 52%); font-family: inherit; font-size: var(--nav-label); font-weight: 700; line-height: 1.5; letter-spacing: 0.02em; text-transform: none; }
+/* The section label, one for every section: popovers, cards, riders, the sidebar. Muted mono caps (Consolas on Windows). */
+.ui-title, .ui-title-text, .ui-nav-label { color: var(--muted-foreground); font: 400 calc(0.625 * var(--u-type))/1.5 ui-monospace, SFMono-Regular, Consolas, monospace; letter-spacing: .07em; text-transform: uppercase; }
 .ui-title { display: flex; align-items: baseline; justify-content: space-between; gap: var(--row-gap); padding: calc(0.375 * var(--u-type)) calc(0.5 * var(--u-type)) calc(0.3125 * var(--u-type)); }
-.ui-title small { font-weight: 400; letter-spacing: 0; }
+.ui-title small { font-weight: 400; letter-spacing: 0; text-transform: none; }
 .ui-section { display: flex; flex-direction: column; }
 .ui-section + .ui-section { margin-top: var(--frost-inset); border-top: 1px solid var(--frost-rule); margin-inline: calc(-1 * var(--frost-inset)); padding: var(--frost-inset) var(--frost-inset) 0; }
 .ui-search-section { flex-direction: row; align-items: center; gap: var(--row-gap); padding: var(--row-pad); }
@@ -246,7 +247,7 @@
    are the app's sidebar, per density. */
 .ui-nav-group { display: flex; flex-direction: column; gap: 1px; }
 .ui-nav-group:not(:has(> .ui-nav-label)) { gap: 0; }
-.ui-nav-label { align-self: flex-start; padding: var(--nav-label-pad); color: color-mix(in oklch, var(--sidebar-foreground), transparent 52%); font-size: var(--nav-label); line-height: 1.5; font-weight: 700; letter-spacing: 0.02em; }
+.ui-nav-label { align-self: flex-start; padding: var(--nav-label-pad); }
 .ui-nav-row { display: flex; width: 100%; min-width: 0; min-height: var(--nav-min); align-items: center; gap: var(--nav-gap); border: 0; border-radius: 8px; background: transparent; padding: var(--nav-pad); color: color-mix(in oklch, var(--sidebar-foreground), transparent 32%); font-size: var(--nav-text); line-height: 1.5; text-align: left; }
 .ui-nav-row[data-indent] { padding-left: var(--nav-indent); }
 .ui-nav-row > .ui-nav-icon { display: inline-grid; width: var(--nav-icon); height: var(--nav-icon); flex: none; place-items: center; color: var(--muted-foreground); }
