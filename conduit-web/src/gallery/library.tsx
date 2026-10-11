@@ -16,11 +16,11 @@ import { MODELS, PROFILES, PROJECTS } from "./seed";
 
 export type Scope = "both" | "desktop" | "phone";
 /** A cell: kind is the layer of the library it shows; source, where it lives in the code. */
-export interface Atom { id: string; name: string; scope: Scope; kind: string; source: string; render: () => JSX.Element; wide?: boolean }
+export interface Atom { id: string; name: string; scope: Scope; kind: string; source: string; render: () => JSX.Element; wide?: boolean | "row" }
 
-/** The tag: where the piece is used, and which layer of the library it is. wide: spans two cells.
+/** The tag: where the piece is used, and which layer of the library it is. wide: spans two cells; "row": the whole row.
  *  An assembled piece is named as the app's code names it (component, then the part within it). */
-const lib = (id: string, name: string, scope: Scope, layer: string, source: string, render: Atom["render"], wide?: boolean): Atom => ({ id: `ui-${id}`, name, scope, kind: layer, source, render, wide });
+const lib = (id: string, name: string, scope: Scope, layer: string, source: string, render: Atom["render"], wide?: Atom["wide"]): Atom => ({ id: `ui-${id}`, name, scope, kind: layer, source, render, wide });
 /** A run of cells; layout: fixed at that layout (no per-cell toggle). */
 export interface Group { title?: string; note?: string; atoms: Atom[]; layout?: "desktop" | "phone" }
 export interface Family { title: string; note: string; groups: Group[] }
@@ -178,8 +178,8 @@ export const libraryFamilies: Family[] = [
         <Field placeholder="Field" />
         <Toolbar start={<>{ghost("Icon button", <PlusIcon />)}{picker(<span>Picker</span>)}</>} end={ghost("Primary", <ArrowUpIcon />)} />
       </DesktopComposer></div>, true),
-      lib("composer-field", "Field", "both", "composer", "Field: the text box, no frost of its own; PillField wraps it on a phone", () => <div class="g-composer"><DesktopComposer><Field placeholder="Send a message…" /></DesktopComposer></div>, true),
-      lib("composer-toolbar", "Toolbar", "desktop", "composer", "Toolbar start · end: ghost icon buttons, pickers, the primary", () => <div class="g-composer"><DesktopComposer><Toolbar start={toolbarStart()} end={toolbarEnd()} /></DesktopComposer></div>, true),
+      lib("composer-field", "Field", "both", "composer", "Field: the text box, no frost of its own (the DesktopComposer's, or PillField's on a phone)", () => <div class="g-composer g-part"><Field placeholder="Send a message…" /></div>, true),
+      lib("composer-toolbar", "Toolbar", "desktop", "composer", "Toolbar start · end, no frost of its own: ghost icon buttons, pickers, the primary", () => <div class="g-composer g-part"><Toolbar start={toolbarStart()} end={toolbarEnd()} /></div>, "row"),
     ] },
     { title: "Assembled", atoms: [
       lib("composer", "Composer", "desktop", "composer", "chat/composer.tsx", () => <div class="g-composer"><DesktopComposer><Field placeholder="Send a message…" /><Toolbar start={toolbarStart()} end={toolbarEnd()} /></DesktopComposer></div>, true),
