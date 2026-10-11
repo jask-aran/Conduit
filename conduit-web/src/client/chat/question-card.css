@@ -39,13 +39,20 @@
 .question-prompt span { color: var(--muted-foreground); font-size: 12px; font-weight: 400; }
 
 .question-options { display: grid; gap: 1px; }
-.question-option { display: flex; min-height: 32px; align-items: center; gap: 10px; border-radius: 9px; padding: 4px 8px; cursor: pointer; }
-.question-option[data-active="true"] { background: var(--accent); }
+/* Answers follow DESIGN Interaction: grey at rest; the cursor is the wash, white;
+   the chosen answer is white at the current weight, no tick; several chosen
+   (pick any) are the wash on each, the cursor brightening one a step. */
+.question-option { display: flex; min-height: 32px; align-items: center; gap: 10px; border-radius: 8px; padding: 4px 8px; color: color-mix(in oklch, var(--foreground), transparent 28%); cursor: pointer; }
+.question-option[data-active="true"] { background: var(--accent); color: var(--foreground); }
+.question-option[aria-selected="true"] { color: var(--foreground); }
+.question-options:not([aria-multiselectable="true"]) > .question-option[aria-selected="true"] .question-option-label { font-weight: 660; }
+.question-options[aria-multiselectable="true"] > .question-option[aria-selected="true"] { background: var(--accent); }
+.question-options[aria-multiselectable="true"] > .question-option[aria-selected="true"][data-active="true"] { background: oklch(1 0 0 / 14%); }
 .question-number { width: 12px; flex: none; color: var(--muted-foreground); font: 11px/1 ui-monospace, SFMono-Regular, Consolas, monospace; text-align: right; }
 .question-option[data-active="true"] .question-number { color: var(--foreground); }
-.question-option-label { flex: none; font-size: 13px; font-weight: 560; }
+.question-option-label { flex: none; font-size: 10.4px; font-weight: 500; }
 .question-option-description { min-width: 0; flex: 1; overflow: hidden; color: var(--muted-foreground); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
-.question-check { display: grid; width: 16px; height: 16px; flex: none; margin-left: auto; place-items: center; color: var(--foreground); }
+.question-check { display: none !important; width: 16px; height: 16px; flex: none; margin-left: auto; place-items: center; color: var(--foreground); }
 .question-check svg { width: 14px; height: 14px; }
 /* Several answers: a box that fills when chosen. */
 .question-check[data-multi="true"] { width: 14px; height: 14px; border: 1.5px solid var(--muted-foreground); border-radius: 4px; }
@@ -80,4 +87,5 @@
   .question-option-description { flex-basis: 100%; order: 4; padding-left: 22px; white-space: normal; }
   .question-check { order: 3; }
   .question-title { font-size: 13px; }
+  .question-option-label { font-size: 14.5px; }
 }
