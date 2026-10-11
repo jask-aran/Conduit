@@ -4,6 +4,8 @@ import "../client/project/dashboard.css";
 import "../client/chat/composer-geometry.css";
 import "../client/styles.css";
 import "./gallery.css";
+// The library's styles load with the gallery only; the app never ships them until it adopts the library.
+import "@/components/ui/library.css";
 import { ChatScreen } from "./stories";
 import { LibraryContext } from "@/components/ui/swap";
 import { SidebarScreen } from "./sidebar-story";

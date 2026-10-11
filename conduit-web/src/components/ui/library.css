@@ -76,9 +76,9 @@
 .ui-pill[data-stretch] { width: auto; flex: 1 1 auto; }
 .ui-pill[data-stretch] > button { width: 100%; }
 /* Field: text in the capsule; it grows with its lines. */
-.ui-pill-field { display: flex; width: 100%; height: auto; min-height: var(--pill-size); align-items: center; border-radius: var(--pill-field-radius); padding: 0 var(--pill-field-pad); }
-.ui-pill-field > textarea { width: 100%; max-height: 220px; border: 0; background: transparent; padding: 11px 0; color: inherit; font: inherit; font-size: var(--u-type); line-height: 1.4; resize: none; outline: none; field-sizing: content; }
-.ui-pill-field > textarea::placeholder { color: var(--muted-foreground); }
+.ui-pill-field { display: flex; width: 100%; height: auto; min-height: calc(var(--pill-size) + 2px); align-items: center; border-radius: var(--pill-field-radius); padding: 0 var(--pill-field-pad); }
+.ui-pill-field-input { width: 100%; max-height: 220px; border: 0; background: transparent; padding: 11px 0; color: inherit; font: inherit; font-size: var(--u-type); line-height: 1.4; resize: none; outline: none; field-sizing: content; }
+.ui-pill-field-input::placeholder { color: var(--muted-foreground); }
 .ui-pill > button svg { width: var(--pill-icon); height: var(--pill-icon); }
 
 /* Menu: a raised container; rows sit concentric inside it. */
@@ -278,3 +278,7 @@
 :where([data-phone-layout] .composer)[data-composer-surface="library"] :is(.composer-actions button[data-slot="button"], button.composer-plus-trigger) svg { width: var(--pill-solo-icon); height: var(--pill-solo-icon); }
 :where([data-phone-layout] .composer)[data-composer-surface="library"] :is(.composer-actions button[data-slot="button"], button.composer-plus-trigger):hover { background: linear-gradient(var(--frost-wash), var(--frost-wash)), var(--frost-fill); }
 [data-phone-layout] .composer[data-composer-surface="library"] :is([data-primary-hidden] .composer-send-trigger, .composer-latest-trigger:not([data-shown]), .composer-stop-send:not([data-shown])) { border-width: 0; }
+/* The composer's field as a PillField: the app keeps its folding (min-height
+   and height while idle or listening); the field's shape is the library's. */
+.composer .composer-input-shell.ui-pill-field { display: block; height: auto; align-items: initial; border-radius: var(--pill-field-radius); padding: 0 var(--pill-field-pad); }
+[data-phone-mode="typing"] .composer-input-shell.ui-pill-field { min-height: calc(var(--pill-size) + 2px); }

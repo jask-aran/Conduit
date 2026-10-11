@@ -2,7 +2,6 @@ import { createEffect, createSignal, createUniqueId, For, Show, splitProps, type
 import { ChevronDownIcon, ChevronRightIcon, SearchIcon } from "lucide-solid";
 export { ChevronDownIcon };
 import { cn } from "@/lib/utils";
-import "./library.css";
 
 /*
  * The unified library (library.css). Shapes only: no behaviour, so the same
@@ -36,8 +35,9 @@ export function PillGroup(props: { actions: PillAction[]; onPick?: (label: strin
 export function PillSwitch<T extends string>(props: { label: string; value: T; options: ReadonlyArray<{ value: T; label: string; icon: JSX.Element }>; onChange: (value: T) => void }) {
   return <Segmented pill icons label={props.label} value={props.value} options={props.options} onChange={props.onChange} />;
 }
-export function PillField(props: { placeholder?: string; value?: string; onInput?: (value: string) => void }) {
-  return <label class="ui-frost ui-pill ui-pill-field"><textarea rows={1} placeholder={props.placeholder} value={props.value ?? ""} onInput={(event) => props.onInput?.(event.currentTarget.value)} /></label>;
+/** Its own textarea, or the caller's field as children (the composer's, with its behaviour). */
+export function PillField(props: { placeholder?: string; value?: string; onInput?: (value: string) => void; class?: string; children?: JSX.Element }) {
+  return <div class={cn("ui-frost ui-pill ui-pill-field", props.class)}><Show when={props.children} fallback={<textarea class="ui-pill-field-input" rows={1} placeholder={props.placeholder} value={props.value ?? ""} onInput={(event) => props.onInput?.(event.currentTarget.value)} />}>{props.children}</Show></div>;
 }
 
 /**

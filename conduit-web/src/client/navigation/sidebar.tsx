@@ -1,3 +1,5 @@
+import { useLibrary } from "@/components/ui/swap";
+import { PillSwitch } from "@/components/ui";
 import { headerPill, PillShell } from "./header-pill";
 import { isConduitManagedProject } from "./sidebar-preferences";
 import { ServerSwitcher } from "./server-switcher";
@@ -1182,10 +1184,15 @@ export function Sidebar(props: {
               <UpdateNotice state={props.updateState} onTake={props.onTakeUpdate} />
             </div>
           </Show>
-          <div class={`sidebar-area-toggle ${phoneLayout() ? "composer-surface-material" : ""}`} data-composer-surface={phoneLayout() ? headerSurface() : undefined} data-area={area()} role="group" aria-label="Sidebar section">
+          {/* Library previews: the library's PillSwitch, the same choice (components/ui/swap.ts). */}
+          <Show when={useLibrary() && phoneLayout()} fallback={
+            <div class={`sidebar-area-toggle ${phoneLayout() ? "composer-surface-material" : ""}`} data-composer-surface={phoneLayout() ? headerSurface() : undefined} data-area={area()} role="group" aria-label="Sidebar section">
             <button type="button" aria-label="Conduit" title="Conduit" aria-pressed={area() === "conduit"} onClick={() => setArea("conduit")}><LayoutDashboardIcon /></button>
             <button type="button" aria-label="Computer" title="Computer" aria-pressed={area() === "computer"} onClick={() => setArea("computer")}><MonitorIcon /></button>
-          </div>
+          </div>}>
+            <div style={{ order: 2, flex: "none" }}><PillSwitch label="Sidebar section" value={area()} onChange={setArea}
+              options={[{ value: "conduit", label: "Conduit", icon: <LayoutDashboardIcon /> }, { value: "computer", label: "Computer", icon: <MonitorIcon /> }]} /></div>
+          </Show>
         </div>
         <div ref={sidebarList} data-sidebar="content" class="sidebar-content">
           <div data-sidebar="rail-actions" class="sidebar-rail-actions" aria-label="Quick navigation">
