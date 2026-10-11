@@ -907,13 +907,10 @@ svg.lucide { stroke-width: 2.4; }
   [data-slot="menu-content"].composer-options-menu .composer-options-label,
   [data-slot="menu-sub-content"].composer-options-submenu .composer-options-label {
     padding: 4.8px 6.4px 4px;
-    color: color-mix(in oklch, var(--foreground), transparent 52%);
-    font-family: inherit;
-    font-size: 9.6px;
-    font-weight: 700;
-    line-height: 1.5;
-    letter-spacing: 0.02em;
-    text-transform: none;
+    color: var(--muted-foreground);
+    font: 8px/1.2 ui-monospace, SFMono-Regular, Consolas, monospace;
+    letter-spacing: .07em;
+    text-transform: uppercase;
   }
   .composer-options-submenu .composer-option-note { margin: 0 6.4px 4px; color: var(--muted-foreground); font-size: 8.8px; line-height: 1.4; }
   .mobile-header-leading > .mobile-sidebar-trigger,
@@ -1705,13 +1702,10 @@ svg.lucide { stroke-width: 2.4; }
   [data-slot="menu-content"].composer-options-menu .composer-options-label,
   [data-slot="menu-sub-content"].composer-options-submenu .composer-options-label {
     padding: 6px 8px 5px;
-    color: color-mix(in oklch, var(--foreground), transparent 52%);
-    font-family: inherit;
-    font-size: 13px;
-    font-weight: 700;
-    line-height: 1.5;
-    letter-spacing: 0.02em;
-    text-transform: none;
+    color: var(--muted-foreground);
+    font: 10px/1.2 ui-monospace, SFMono-Regular, Consolas, monospace;
+    letter-spacing: .07em;
+    text-transform: uppercase;
   }
   .composer-options-submenu .composer-option-note { margin: 0 8px 5px; color: var(--muted-foreground); font-size: 11px; line-height: 1.4; }
   .mobile-header-leading > .mobile-sidebar-trigger,
