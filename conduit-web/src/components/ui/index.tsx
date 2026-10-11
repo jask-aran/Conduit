@@ -108,6 +108,12 @@ export function Item(props: {
   </div>;
 }
 
+/** Typing lights the match: the matched letters white and heavier, the rest of the label muted. A keyword-only match stays plain. */
+export function Match(props: { text: string; query: string }) {
+  const at = () => props.query ? props.text.toLowerCase().indexOf(props.query.toLowerCase()) : -1;
+  return <Show when={at() >= 0} fallback={props.text}><span class="ui-match">{props.text.slice(0, at())}<b>{props.text.slice(at(), at() + props.query.length)}</b>{props.text.slice(at() + props.query.length)}</span></Show>;
+}
+
 export const Keycap = (props: { children: JSX.Element }) => <kbd class="ui-keycap">{props.children}</kbd>;
 
 export function Card(props: { title: string; detail?: string; class?: string; core?: boolean; density?: Density; actions?: JSX.Element; children?: JSX.Element }) {
@@ -222,10 +228,11 @@ export function OverlayRail(props: { title: string; foot?: JSX.Element; children
     <Show when={props.foot}><div class="ui-overlay-rail-foot">{props.foot}</div></Show></nav>;
 }
 
-/** The page beside a rail: its title, close, and SettingGroups. */
-export function OverlayPage(props: { title: string; onClose?: () => void; children: JSX.Element }) {
+/** The page beside a rail: its title, its save status (Saving, Saved, Not saved: settings save as they change), close, and SettingGroups. */
+export function OverlayPage(props: { title: string; status?: string; failed?: boolean; onClose?: () => void; children: JSX.Element }) {
   return <main class="ui-overlay-page">
     <div class="ui-overlay-page-head"><h2 class="ui-overlay-title">{props.title}</h2>
+      <Show when={props.status}><span class="ui-overlay-status" data-failed={props.failed ? "" : undefined}>{props.status}</span></Show>
       <Show when={props.onClose}><Button variant="ghost" size="icon-sm" aria-label="Close" onClick={() => props.onClose?.()}><XIcon /></Button></Show></div>
     {props.children}
   </main>;
@@ -235,9 +242,9 @@ export function OverlayPage(props: { title: string; onClose?: () => void; childr
 export const SettingGroup = (props: { title: string; children: JSX.Element }) =>
   <section class="ui-setting-group" aria-label={props.title}><div class="ui-nav-label">{props.title}</div>{props.children}</section>;
 
-/** A setting: its name, then its control at the end (a SelectTrigger, a Switch, an Input). */
-export const SettingLine = (props: { label: string; children: JSX.Element }) =>
-  <label class="ui-setting-line"><span>{props.label}</span><span class="ui-setting-control">{props.children}</span></label>;
+/** A setting: its name (state that matters muted after it), then its control in the one control column. */
+export const SettingLine = (props: { label: string; state?: string; children: JSX.Element }) =>
+  <label class="ui-setting-line"><span>{props.label}<Show when={props.state}><small>{props.state}</small></Show></span><span class="ui-setting-control">{props.children}</span></label>;
 
 export const Bubble = (props: { children: JSX.Element }) => <div class="ui-frost ui-bubble">{props.children}</div>;
 

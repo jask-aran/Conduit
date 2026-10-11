@@ -2,7 +2,7 @@ import { PanelLeftIcon, MessageSquarePlusIcon, EllipsisIcon, CameraIcon, Keyboar
 import { createSignal, For, onMount, type JSX } from "solid-js";
 import { PanelRightIcon, ClipboardCopyIcon, Columns2Icon, CopyIcon, FolderIcon, FolderInputIcon, LayoutDashboardIcon, MenuIcon, MonitorIcon, PaperclipIcon, PencilIcon, PinIcon, PlusIcon, QrCodeIcon, RefreshCwIcon, SearchIcon, ShareIcon, ShieldCheckIcon, SquarePenIcon, TerminalIcon, Trash2Icon } from "lucide-solid";
 import { Spinner } from "@/components/primitives";
-import { Choices, OverlayBar, OverlayHints, OverlayList, OverlayPage, OverlayRail, OverlaySplit, Overlay, Scrim, SettingGroup, SettingLine, NavGroup, NavRow, Segmented, SelectTrigger, Bubble, Button, Card, Chip, Choice, ComposerField, DesktopComposer, Line, TextArea, Rider, RiderActions, RiderTitle, Toolbar, Frost, Input, Item, Keycap, Menu, PillButton, PillField, PillGroup, PillSwitch, HeadingSection, SearchSection, Section, Slider } from "@/components/ui";
+import { Match, Choices, OverlayBar, OverlayHints, OverlayList, OverlayPage, OverlayRail, OverlaySplit, Overlay, Scrim, SettingGroup, SettingLine, NavGroup, NavRow, Segmented, SelectTrigger, Bubble, Button, Card, Chip, Choice, ComposerField, DesktopComposer, Line, TextArea, Rider, RiderActions, RiderTitle, Toolbar, Frost, Input, Item, Keycap, Menu, PillButton, PillField, PillGroup, PillSwitch, HeadingSection, SearchSection, Section, Slider } from "@/components/ui";
 import { Switch } from "../client/settings/settings-controls";
 import { HarnessMark } from "../client/harness-brand";
 import { PlaceGlyph } from "../client/chat/place-picker";
@@ -41,14 +41,12 @@ function SegmentedCount() { const [value, setValue] = createSignal("all"); retur
 const areas = () => [{ value: "dashboard", label: "Dashboard", icon: <LayoutDashboardIcon /> }, { value: "computer", label: "Computer", icon: <MonitorIcon /> }];
 function SegmentedIcons(props: { pill?: boolean }) { const [value, setValue] = createSignal("dashboard"); return <Segmented icons pill={props.pill} label="Sidebar section" value={value()} onChange={setValue} options={areas()} />; }
 
-/** A search section filtering the list section after it. */
+/** A menu over a long list starts with a Search all… row that opens the palette (DESIGN Dropdown menu), then the list; the current choice is bold. */
 export function ModelList(props: { keys?: string[]; title?: string }) {
-  const [query, setQuery] = createSignal("");
   const [current, setCurrent] = createSignal(MODELS[2]!.spec);
-  const shown = () => { const needle = query().trim().toLowerCase(); return needle ? MODELS.filter((model) => model.label.toLowerCase().includes(needle)) : MODELS; };
   return <>
-    <SearchSection placeholder="Search all models…" keys={props.keys} value={query()} onInput={setQuery} />
-    <Section title={props.title}><For each={shown()}>{(model) => <div onClick={() => setCurrent(model.spec)}><Item meta={model.provider} checked={model.spec === current()}>{model.label}</Item></div>}</For></Section>
+    <Section><Item icon={<SearchIcon />} keys={props.keys}>Search all models…</Item></Section>
+    <Section title={props.title}><For each={MODELS}>{(model) => <Item meta={model.provider} checked={model.spec === current()} onClick={() => setCurrent(model.spec)}>{model.label}</Item>}</For></Section>
   </>;
 }
 export const Profiles = () => <Section title="Profile"><For each={PROFILES}>{(profile, index) => <Item checked={index() === 0} icon={<HarnessMark id={profile.implementation || "conduit"} class="size-4" />} meta={profile.implementation}>{profile.label}</Item>}</For></Section>;
@@ -119,8 +117,8 @@ const paletteList = () => <OverlayList>
 </OverlayList>;
 const paletteHints = () => <OverlayHints start={[[["↑", "↓"], "Navigate"], [["Enter"], "Open"]]} end={[[["Esc"], "Close"]]} />;
 const SortToggle = () => { const [sort, setSort] = createSignal<"latest" | "created">("created"); return <Segmented label="Chat sort" size="sm" value={sort()} onChange={setSort} options={[{ value: "latest", label: "Latest" }, { value: "created", label: "Created" }]} />; };
-const chatRows = () => <OverlayList>
-  <Section title="Recent"><Item icon={<SquarePenIcon />} meta="18:29" active>Untitled chat</Item><Item icon={<HarnessMark id="opencode" />} meta="9 Oct">Short Sprint Workout Plan</Item><Item icon={<HarnessMark id="opencode" />} meta="8 Oct">Wispah V3 Lodge</Item></Section>
+const chatRows = (query = "") => <OverlayList>
+  <Section title="Recent"><Item icon={<SquarePenIcon />} meta="18:29" active><Match text="Untitled chat" query={query} /></Item><Item icon={<HarnessMark id="opencode" />} meta="9 Oct"><Match text="Short Sprint Workout Plan" query={query} /></Item><Item icon={<HarnessMark id="opencode" />} meta="8 Oct"><Match text="Wispah V3 Lodge" query={query} /></Item></Section>
   <Section title="Folders"><Item icon={<FolderIcon />} meta="3 · 25 Sept" opens>Japan</Item><Item icon={<FolderIcon />} meta="0" opens>NHP</Item><Item icon={<FolderIcon />} meta="3 · 26 Sept" opens>Conduit</Item></Section>
 </OverlayList>;
 const chatPreview = () => <div class="g-stack"><Item icon={<SquarePenIcon />} detail="OpenCode · Chats · 18:30">Untitled chat</Item><div style={{ "align-self": "flex-end" }}><Bubble>ask me a question using the question tool</Bubble></div><p class="g-muted">I'll ask you a question using the question tool.</p></div>;
@@ -131,8 +129,8 @@ const settingsRail = () => <OverlayRail title="Settings" foot={<span>Interface 0
   <NavGroup label="System"><NavRow icon={<ActivityIcon />}>Runtime</NavRow><NavRow icon={<ServerIcon />}>Servers</NavRow></NavGroup>
   <NavGroup label="Services"><NavRow icon={<VoiceIcon />}>Voice</NavRow><NavRow icon={<GlobeIcon />}>Web search</NavRow></NavGroup>
 </OverlayRail>;
-const settingsPage = () => <OverlayPage title="Appearance" onClose={() => {}}>
-  <SettingGroup title="Interface"><SettingLine label="Scale"><SelectTrigger value="75%" bare /></SettingLine><SettingLine label="Sidebar chats"><Input value="20" style={{ width: "8rem" }} /></SettingLine><SettingLine label="Tab row"><SwitchDemo /></SettingLine><SettingLine label="Streaming"><SelectTrigger value="Adaptive" bare /></SettingLine></SettingGroup>
+const settingsPage = () => <OverlayPage title="Appearance" status="Saved" onClose={() => {}}>
+  <SettingGroup title="Interface"><SettingLine label="Scale"><SelectTrigger value="75%" bare /></SettingLine><SettingLine label="Sidebar chats"><Input value="20" /></SettingLine><SettingLine label="Tab row"><SwitchDemo /></SettingLine><SettingLine label="Streaming" state="paused while hidden"><SelectTrigger value="Adaptive" bare /></SettingLine></SettingGroup>
   <SettingGroup title="Reading"><SettingLine label="Transcript width"><SelectTrigger value="Compact" bare /></SettingLine><SettingLine label="Wide blocks"><SelectTrigger value="Off" bare /></SettingLine></SettingGroup>
 </OverlayPage>;
 
@@ -152,8 +150,8 @@ export const libraryFamilies: Family[] = [
         <Section kind="slider"><Levels label="Section · slider" /></Section>
       </Menu></div>),
       lib("section-heading", "Heading", "both", "section", "HeadingSection + Item field", () => <Menu><ChatTitle /></Menu>),
-      lib("section-search", "Search", "both", "section", "SearchSection", () => <Menu><SearchSection placeholder="Search all models…" keys={["⌘", "⇧", "X"]} /></Menu>),
-      lib("item", "List · items", "both", "section", "Section + Item: icon meta detail keys opens field · checked disabled destructive", () => <Menu><Section title="Title" note="note">
+      lib("section-search", "Search", "both", "section", "SearchSection: heads a pick list (PopoverSearchList). A menu over a long list starts with a Search all… row that opens the palette instead", () => <Menu><SearchSection placeholder="Search all models…" keys={["⌘", "⇧", "X"]} /></Menu>),
+      lib("item", "List · items", "both", "section", "Section + Item: icon meta detail keys opens field · checked (current: bold, no tick) disabled destructive", () => <Menu><Section title="Title" note="note">
         <Item>Plain</Item>
         <Item icon={<PaperclipIcon />}>icon</Item>
         <Item meta="xai">meta</Item>
@@ -163,7 +161,7 @@ export const libraryFamilies: Family[] = [
         <Item field meta="Unavailable" opens>Field</Item>
         <Item checked>checked</Item>
         <Item active>highlighted</Item>
-        <Item disabled meta="offline">disabled</Item>
+        <Item disabled>disabled: dimmer, struck through, no note</Item>
         <Item icon={<Trash2Icon />} destructive>destructive</Item>
       </Section></Menu>),
       lib("section-slider", "Slider", "both", "section", "Section kind=slider + Slider", () => <Menu><Section kind="slider"><Levels /></Section></Menu>),
@@ -241,8 +239,8 @@ export const libraryFamilies: Family[] = [
       lib("o-palette", "CommandMenu", "desktop", "overlay", "navigation/command-menu.tsx", () => <Scrim class="g-scrim"><Overlay label="Command palette" style={{ "--overlay-height": "480px" }}>
         <OverlayBar lead={glyph()} placeholder="Run a command…" onClose={() => {}} />{paletteList()}{paletteHints()}</Overlay></Scrim>, "row"),
       lib("o-search", "CommandMenu · chat search", "desktop", "overlay", "navigation/command-menu.tsx", () => <Scrim class="g-scrim"><Overlay label="Chat search" style={{ "--overlay-width": "calc(81.25 * var(--u-space))", "--overlay-height": "576px" }}>
-        <OverlayBar lead={<SearchIcon />} placeholder="Search chats, projects, workspaces…" end={<SortToggle />} onClose={() => {}} />
-        <OverlaySplit aside={chatPreview()}>{chatRows()}</OverlaySplit>{searchHints()}</Overlay></Scrim>, "row"),
+        <OverlayBar lead={<SearchIcon />} placeholder="Search chats, projects, workspaces…" value="t" end={<SortToggle />} onClose={() => {}} />
+        <OverlaySplit aside={chatPreview()}>{chatRows("t")}</OverlaySplit>{searchHints()}</Overlay></Scrim>, "row"),
       lib("o-settings", "Settings", "desktop", "overlay", "settings/settings-core.tsx", () => <Scrim class="g-scrim" placement="center"><Overlay label="Settings" layout="rail" style={{ "--overlay-width": "calc(70.3125 * var(--u-space))", "--overlay-height": "560px" }}>
         {settingsRail()}{settingsPage()}</Overlay></Scrim>, "row"),
     ] },
@@ -260,7 +258,7 @@ export const libraryFamilies: Family[] = [
       lib("composer-ridden", "Composer · QueuedMessages + AttachmentStrip", "desktop", "composer", "chat/composer.tsx, queued-messages.tsx, attachment-strip.tsx", () => <div class="g-composer"><DesktopComposer riders={<>{queued()}{attachments()}</>}><ComposerField><TextArea value="see the attached notes" /></ComposerField><Toolbar start={toolbarStart()} end={toolbarEnd()} /></DesktopComposer></div>, true),
     ] },
   ] },
-  { title: "Rider", note: "resting frost on a composer's top edge, either composer's: a row, a strip or a card", groups: [
+  { title: "Rider", note: "resting frost at a composer, either composer's: a row or a strip on its top edge (queued messages, attachments), or a card that takes over its slot in its material (the question: the composer takeover)", groups: [
     { atoms: [
       lib("rider-anatomy", "Anatomy", "both", "rider", "Rider layout=row: RiderTitle · body · RiderActions", () => <div class="g-anatomy g-composer"><Rider label="Rider"><RiderTitle>Title</RiderTitle><ul class="ui-lines"><Line text="Body: lines, chips or choices" /></ul><RiderActions>{ghost("Action", <PencilIcon />)}{ghost("Action", <XIcon />)}</RiderActions></Rider></div>, true),
       lib("rider-line", "Line", "both", "rider", "Line: waiting text, one line until opened", () => <div class="g-composer"><Rider><ul class="ui-lines"><Line text="and make the second paragraph shorter" /><Line text="then rename the file to lorem.txt, and add a heading at the top that says what it is, and then read it back to me" clipped /></ul></Rider></div>, true),
@@ -271,7 +269,7 @@ export const libraryFamilies: Family[] = [
     { title: "Assembled", atoms: [
       lib("rider-queued", "QueuedMessages", "both", "rider", "chat/queued-messages.tsx", () => <div class="g-composer">{queued()}</div>, true),
       lib("rider-attachments", "AttachmentStrip", "both", "rider", "chat/attachment-strip.tsx", () => <div class="g-composer">{attachments()}</div>, true),
-      lib("rider-question", "QuestionCard", "both", "rider", "chat/question-card.tsx · one question: its title, Choices, own answer, Stop · Submit", () => questionCard([LANGUAGE]), true),
+      lib("rider-question", "QuestionCard", "both", "rider", "chat/question-card.tsx · the composer takeover: in the composer's slot and material. One question: its title, Choices, own answer, Stop · Submit", () => questionCard([LANGUAGE]), true),
       lib("rider-question-tabs", "QuestionCard · tabs", "both", "rider", "chat/question-card.tsx · tabs (ticked when answered), pick any, a preview, a multi-line own answer, notes", () => questionCard(TABS, { notes: true }), true),
       lib("rider-question-submit", "QuestionCard · Submit page", "both", "rider", "chat/question-card.tsx · the review page; a secret answer", () => questionCard(SUMMARY, { page: "submit" }), true),
     ] },
