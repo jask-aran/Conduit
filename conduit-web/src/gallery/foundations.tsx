@@ -107,11 +107,15 @@ function TerminalFace() {
 }
 
 export const foundationFamilies: Family[] = [
-  { title: "Fonts", rail: "Foundations", note: "the typefaces, and where each is used. Geist for all UI; the system's mono for what is read as data; the rest each have one job", groups: [{ layout: "desktop", atoms: [
+  { title: "Fonts", rail: "Foundations", note: "the typefaces, and where each is used. Conduit ships its own: Geist for all UI, Inconsolata for labels and what is read as data; the rest each have one job", groups: [{ layout: "desktop", atoms: [
     lib("font-geist", "Geist Variable", "both", "font", "@fontsource-variable/geist · --font-sans", () => <Face family="var(--font-sans)" weights={[400, 450, 500, 550, 560, 600, 650, 660, 700]}
       uses={["All UI: rows, labels, headings, buttons, menus, cards, overlays", "The transcript and the composer's text, by default (Settings → Appearance)", "The weights above are the ones the app uses: rest 400–500, current 660, labels 700"]} />, true),
-    lib("font-mono", "ui-monospace", "both", "font", "ui-monospace, SFMono-Regular, Consolas, monospace", () => <Face family="ui-monospace, SFMono-Regular, Consolas, monospace" sample="claude-opus-5-5  ~/src  12:04  Ctrl K"
-      uses={["The system's own mono, not a webfont: SF Mono on Apple, Consolas on Windows, Droid Sans Mono on Android", "Data: model ids, paths, keycaps, times and counts in meta, status, waveforms (tabular figures)", "Code: inline code, code blocks and artifacts, the file editor", "Section labels: muted caps over every section -- popovers, cards, riders, the sidebar -- and the leader's crumbs"]} />),
+    lib("font-mono", "Inconsolata Variable", "both", "font", "@fontsource-variable/inconsolata · --font-mono", () => <Face family="var(--font-mono)" weights={[400, 500, 550, 600, 700]} sample="claude-opus-5-5  ~/src  12:04  Ctrl K"
+      uses={["Conduit's own mono, shipped like Geist so it looks the same on every system (OFL); the system's ui-monospace only until it loads", "Section labels: muted caps over every section -- popovers, cards, riders, the sidebar -- and the leader's crumbs", "Data: model ids, paths, keycaps, times and counts in meta, status, waveforms (tabular figures)"]} />),
+    lib("font-consolas", "Consolas", "both", "font", "local only: Windows and Office", () => <Face family="Consolas, var(--font-mono)" sample="claude-opus-5-5  ~/src  12:04  Ctrl K"
+      uses={["What the live site's mono labels draw on Windows (its ui-monospace stack lands on Consolas there)", "Microsoft's, licensed with Windows and Office, so Conduit cannot ship it: Inconsolata is the open face drawn after it", "Shown from this machine's own copy; elsewhere it falls back to Inconsolata"]} />),
+    lib("font-system-mono", "ui-monospace", "both", "font", "ui-monospace, SFMono-Regular, Consolas, monospace", () => <Face family="ui-monospace, SFMono-Regular, Consolas, monospace" sample="claude-opus-5-5  ~/src  12:04  Ctrl K"
+      uses={["The system's own mono: SF Mono on Apple, Consolas on Windows, Droid Sans Mono on Android", "The live site's mono today (code, meta, keycaps, its labels); in components v2, only the fallback"]} />),
     lib("font-paper", "Paper Mono", "both", "font", "client/fonts/PaperMono-Variable.woff2", () => <Face family={'"Paper Mono", ui-monospace, monospace'} weights={[400, 500, 600, 700]}
       uses={["Optional: the transcript face when chosen in Settings → Appearance", "Then the messages, the composer's text and the voice captions; the rest of the UI stays Geist"]} />),
     lib("font-wordmark", "Conduit Wordmark", "both", "font", "client/assets/fonts/druk-wide-web-super.woff2", () => <Face family={'"Conduit Wordmark", sans-serif'} sample="Conduit"
