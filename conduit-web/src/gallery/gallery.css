@@ -236,3 +236,8 @@ html, body { background: var(--frame, #08090a); color: var(--foreground); }
 .g-icon-sizes { display: flex; align-items: flex-end; gap: 22px; }
 .g-icon-sizes span { display: grid; place-items: center; }
 .g-icon-sizes svg { width: 100%; height: 100%; }
+.g-face { display: grid; width: 100%; gap: 10px; }
+.g-face-specimen { font-size: 28px; line-height: 1.15; overflow-wrap: anywhere; }
+.g-face-sample { color: var(--muted-foreground); font-size: 14px; }
+.g-face-weights { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 15px; }
+.g-face-uses { margin: 0; padding-left: 16px; color: var(--muted-foreground); font-size: 12px; line-height: 1.5; }
