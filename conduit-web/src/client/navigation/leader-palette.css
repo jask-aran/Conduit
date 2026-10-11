@@ -62,8 +62,8 @@
   text-transform: uppercase;
   cursor: pointer;
 }
-.leader-menu-path button:hover:not(:disabled) { color: var(--foreground); }
-.leader-menu-path button[aria-current="true"] { background: oklch(1 0 0 / 10%); color: var(--foreground); }
+.leader-menu-path button:hover:not(:disabled) { background: oklch(1 0 0 / 10%); color: var(--foreground); }
+.leader-menu-path button[aria-current="true"] { color: var(--foreground); font-weight: 700; }
 .leader-menu-path button:disabled { opacity: .55; cursor: default; }
 .leader-menu-separator { color: var(--muted-foreground); font-size: 10px; opacity: .6; }
 
@@ -116,7 +116,7 @@
 }
 .leader-menu-top { min-height: 38px; border-bottom-color: oklch(1 0 0 / 10%); padding: 6px 10px; }
 .leader-menu-path button { font-size: 9.5px; font-weight: 500; letter-spacing: .07em; }
-.leader-menu-path button[aria-current="true"] { background: oklch(1 0 0 / 12%); }
+
 .leader-menu-rows { padding: 6px; }
 .leader-menu-row { min-height: 30px; gap: 10px; border-radius: 9px; padding: 4px 8px; color: color-mix(in oklch, var(--foreground), transparent 12%); }
 .leader-menu-row:hover, .leader-menu-row:focus-visible { background: oklch(1 0 0 / 10%); color: var(--foreground); }

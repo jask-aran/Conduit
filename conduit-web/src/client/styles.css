@@ -2381,7 +2381,7 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
      background, blur or shadow belongs here. */
   border-radius: var(--composer-radius, 12px);
 }
-.queued-float-title { flex: none; color: var(--muted-foreground); font-size: 9.6px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; }
+.queued-float-title { flex: none; color: color-mix(in oklch, var(--foreground), transparent 52%); font-family: inherit; font-size: 9.6px; font-weight: 700; line-height: 1.5; letter-spacing: 0.02em; text-transform: none; }
 
 .queued-float-list { display: flex; min-width: 0; flex: 1; flex-direction: column; gap: 3px; margin: 0; padding: 0; list-style: none; }
 .queued-line { display: flex; align-items: flex-start; gap: 6px; min-width: 0; }
