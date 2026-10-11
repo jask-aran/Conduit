@@ -2,11 +2,16 @@
 html, body { background: var(--frame, #08090a); color: var(--foreground); }
 #root { height: auto; }
 /* The app locks body scrolling; the gallery's left side scrolls instead. */
-.g-canvas { display: grid; flex: 1; min-width: 0; grid-template-columns: 1fr auto; height: 100vh; font-family: "Geist Variable", sans-serif; }
+.g-canvas { display: grid; flex: 1; min-width: 0; grid-template-columns: auto 1fr auto; height: 100vh; font-family: "Geist Variable", sans-serif; }
 .g-left { min-width: 0; overflow: auto; }
 .g-bar { position: sticky; top: 0; z-index: 200; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid var(--border); background: var(--frame); padding: 8px 16px; font-size: 12px; }
-.g-bar h1 { margin-right: 8px; font-size: 14px; font-weight: 600; }
-.g-bar > .g-toggle { margin-right: auto; }
+/* The rail: one family at a time instead of one long scroll. */
+.g-rail { display: flex; flex-direction: column; gap: 1px; width: 150px; overflow: auto; border-right: 1px solid var(--border); padding: 10px 8px; font-size: 12.5px; }
+.g-rail h1 { margin: 0 8px 6px; font-size: 14px; font-weight: 600; }
+.g-rail h2 { margin: 12px 8px 4px; color: var(--muted-foreground); font-size: 11px; font-weight: 600; }
+.g-rail button { border: 0; border-radius: 6px; background: transparent; padding: 5px 8px; color: var(--muted-foreground); text-align: left; }
+.g-rail button:hover { background: var(--accent); }
+.g-rail button[aria-current="true"] { color: var(--foreground); font-weight: 600; }
 .g-bar button, .g-toggle button { border: 1px solid var(--border); border-radius: 6px; background: transparent; padding: 3px 9px; color: var(--foreground); font-size: 12px; }
 :is(.g-bar, .g-toggle) button[aria-pressed="true"] { background: var(--accent); }
 .g-tune { display: block; width: calc(100% - 32px); height: 160px; margin: 8px 16px; border: 1px solid var(--border); border-radius: 6px; background: transparent; padding: 8px; color: var(--foreground); font: 11px ui-monospace, monospace; }
@@ -160,7 +165,6 @@ html, body { background: var(--frame, #08090a); color: var(--foreground); }
 .g-live-model-menu .ui-row > small { font-size: 11px; }
 
 /* The library as a tree: each family a section, its cells dense. */
-.g-family { margin-top: 12px; border-top: 1px solid var(--border); }
 .g-family-title { margin: 20px 16px 4px; font-size: 15px; font-weight: 650; }
 .g-family-title small, .g-heading small { margin-left: 6px; color: var(--muted-foreground); font-size: 11px; font-weight: 400; }
 .g-dense { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); grid-auto-flow: dense; font-size: 13px; }
