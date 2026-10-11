@@ -56,6 +56,10 @@ function Canvas() {
     { key: "desktop", render: () => <div class="g-desktop-screen"><LibraryContext.Provider value={true}><ChatScreen /></LibraryContext.Provider></div> },
   ];
   const [tuning, setTuning] = createSignal(false);
+  // Components v2 is the frosted family, plus Controls, which sit on any surface: a tab each.
+  const [tab, setTab] = createSignal<"frost" | "controls">((() => { try { return localStorage.getItem("gallery:tab") === "controls" ? "controls" : "frost"; } catch { return "frost"; } })());
+  const pick = (next: "frost" | "controls") => { setTab(next); try { localStorage.setItem("gallery:tab", next); } catch { /* private window */ } };
+  const shown = () => libraryFamilies.filter((family) => (family.title === "Controls") === (tab() === "controls"));
   const update = (css: string) => {
     setTune(css);
     try { localStorage.setItem(TUNE_KEY, css); } catch { /* private window */ }
@@ -67,12 +71,16 @@ function Canvas() {
     <section class="g-left">
       <div class="g-bar">
         <h1>Gallery</h1>
+        <div class="g-toggle" role="tablist" aria-label="Library">
+          <button type="button" role="tab" aria-selected={tab() === "frost"} aria-pressed={tab() === "frost"} onClick={() => pick("frost")}>Frosted</button>
+          <button type="button" role="tab" aria-selected={tab() === "controls"} aria-pressed={tab() === "controls"} onClick={() => pick("controls")}>Controls</button>
+        </div>
         <button type="button" aria-pressed={tuning()} onClick={() => setTuning(!tuning())}>Tune CSS</button>
         <Show when={tuning()}><button type="button" onClick={() => void navigator.clipboard.writeText(tune())}>Copy</button></Show>
       </div>
       <Show when={tuning()}><textarea class="g-tune" spellcheck={false} value={tune()} onInput={(event) => update(event.currentTarget.value)}
         placeholder={".composer-surface-material[data-composer-surface=\"frosted-live\"] {\n  backdrop-filter: blur(30px);\n}"} /></Show>
-      <For each={libraryFamilies}>{(family) => <section class="g-family">
+      <For each={shown()}>{(family) => <section class="g-family">
         <h2 class="g-family-title">{family.title} <small>{family.note}</small></h2>
         <For each={family.groups}>{(group) => <>
           <Show when={group.title}><h3 class="g-heading">{group.title} <small>{group.note}</small></h3></Show>
