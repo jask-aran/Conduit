@@ -2,6 +2,8 @@ import { createSignal, For, onCleanup, onMount, type JSX } from "solid-js";
 import { CopyIcon, FolderIcon, MonitorIcon, PaperclipIcon, SearchIcon, SettingsIcon } from "lucide-solid";
 import { Bubble, Frost, HeadingSection, Item, Menu, NavGroup, NavRow, OverlayHints, Section, TextArea } from "@/components/ui";
 import { lib, type Family } from "./library";
+import "katex/dist/katex.min.css";
+import terminalFontUrl from "../client/assets/MesloLGSNerdFontMono-Regular.ttf";
 
 /*
  * Foundations: what every family is built from -- type, colour, space,
@@ -89,7 +91,35 @@ function Space() {
 
 const sizes: [string, string][] = [["--u-icon", "row, toolbar"], ["--nav-icon", "sidebar"], ["--pill-icon", "pill"], ["--pill-solo-icon", "lone pill"]];
 
+/** A typeface: a specimen in it, and where the app uses it. */
+function Face(props: { family: string; weights?: number[]; sample?: string; uses: string[] }) {
+  return <div class="g-face">
+    <div class="g-face-specimen" style={{ "font-family": props.family }}>{props.sample ?? "Aa Bb Gg 0123456789"}</div>
+    <div class="g-face-sample" style={{ "font-family": props.family }}>The quick brown fox jumps over the lazy dog</div>
+    {props.weights && <div class="g-face-weights"><For each={props.weights}>{(weight) => <span style={{ "font-family": props.family, "font-weight": weight }}>{weight}</span>}</For></div>}
+    <ul class="g-face-uses"><For each={props.uses}>{(use) => <li>{use}</li>}</For></ul>
+  </div>;
+}
+/** The terminal's face is loaded by the terminal when it opens; here, when its cell does. */
+function TerminalFace() {
+  onMount(() => { const font = new FontFace("Conduit Terminal Font", `url(${terminalFontUrl}) format('truetype')`); void font.load().then((loaded) => document.fonts.add(loaded)); });
+  return <Face family={'"Conduit Terminal Font", monospace'} sample="~/Conduit $ ls  │ ├─ └─ ✓ ✗  0123" uses={["The terminal pane: Meslo LG S Nerd Font Mono, for its box drawing and icons"]} />;
+}
+
 export const foundationFamilies: Family[] = [
+  { title: "Fonts", rail: "Foundations", note: "the typefaces, and where each is used. Geist for all UI; the system's mono for what is read as data; the rest each have one job", groups: [{ layout: "desktop", atoms: [
+    lib("font-geist", "Geist Variable", "both", "font", "@fontsource-variable/geist · --font-sans", () => <Face family="var(--font-sans)" weights={[400, 450, 500, 550, 560, 600, 650, 660, 700]}
+      uses={["All UI: rows, labels, headings, buttons, menus, cards, overlays", "The transcript and the composer's text, by default (Settings → Appearance)", "The weights above are the ones the app uses: rest 400–500, current 660, labels 700"]} />, true),
+    lib("font-mono", "ui-monospace", "both", "font", "ui-monospace, SFMono-Regular, Consolas, monospace", () => <Face family="ui-monospace, SFMono-Regular, Consolas, monospace" sample="claude-opus-5-5  ~/src  12:04  Ctrl K"
+      uses={["The system's own mono, not a webfont: SF Mono on Apple, Consolas on Windows", "Data: model ids, paths, keycaps, times and counts in meta, status, waveforms (tabular figures)", "Code: inline code, code blocks and artifacts, the file editor", "The crumbs' place caps, the one uppercase label"]} />),
+    lib("font-paper", "Paper Mono", "both", "font", "client/fonts/PaperMono-Variable.woff2", () => <Face family={'"Paper Mono", ui-monospace, monospace'} weights={[400, 500, 600, 700]}
+      uses={["Optional: the transcript face when chosen in Settings → Appearance", "Then the messages, the composer's text and the voice captions; the rest of the UI stays Geist"]} />),
+    lib("font-wordmark", "Conduit Wordmark", "both", "font", "client/assets/fonts/druk-wide-web-super.woff2", () => <Face family={'"Conduit Wordmark", sans-serif'} sample="Conduit"
+      uses={["Druk Wide Super, for the brand only: the wordmark at the top of the sidebar"]} />),
+    lib("font-terminal", "Conduit Terminal Font", "both", "font", "client/assets/MesloLGSNerdFontMono-Regular.ttf", () => <TerminalFace />),
+    lib("font-katex", "KaTeX", "both", "font", "katex/dist/katex.min.css", () => <Face family="KaTeX_Main, serif" sample="∑ x² + ∫ f(t) dt = π"
+      uses={["Math in messages, typeset by KaTeX in its own serif faces (KaTeX_Main, _Math, _Size…)"]} />),
+  ] }] },
   { title: "Type", rail: "Foundations", note: "the roles, each as the library draws it and as it computes. Rest is grey; current is white at 660, never a fill; over frost a row is a touch heavier and brighter. Labels are sentence case and bold at half the text colour -- the crumbs the one uppercase", groups: [{ atoms: [
     lib("type-frost", "Rows over frost", "both", "type", "Menu > Section > Item", () => <Spec read={roles(["Group label", ".ui-title"], ["Row · rest", ".ui-row:not([data-checked])"], ["Row · current", ".ui-row[data-checked]"], ["Meta", ".ui-row > small"], ["Keycap", ".ui-keycap"])}>
       <Menu><Section title="Group label"><Item icon={<FolderIcon />} meta="2m">Row at rest</Item><Item icon={<MonitorIcon />} checked>Current row</Item><Item icon={<SearchIcon />} keys={["Ctrl", "K"]}>Row with keys</Item></Section></Menu>
