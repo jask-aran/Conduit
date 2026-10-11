@@ -285,7 +285,7 @@
 
 /* DesktopComposer: resting frost holding a field above a toolbar, riders on its top
    edge. Measured from the app's composer, in units of the density (u). */
-.ui-composer-stack, .ui-desktop-composer, .ui-rider {
+.ui-composer-stack, .ui-desktop-composer, .ui-field, .ui-toolbar, .ui-rider {
   --cmp-radius: calc(1.375 * var(--u-space));
   --cmp-field-min: calc(2.75 * var(--u-space)); --cmp-field-max: calc(12 * var(--u-space));
   --cmp-field-pad: calc(0.6875 * var(--u-space)) calc(0.75 * var(--u-space)) calc(0.125 * var(--u-space));

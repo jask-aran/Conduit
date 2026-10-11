@@ -34,7 +34,7 @@ const tuneFrame = (event: Event) => { const doc = (event.currentTarget as HTMLIF
 function Piece(props: { atom: Atom; fixed?: "desktop" | "phone" }) {
   const toggles = () => !props.fixed && props.atom.scope === "both";
   const [density, setDensity] = createSignal<"desktop" | "phone">(props.fixed ?? (props.atom.scope === "phone" ? "phone" : "desktop"));
-  return <figure class="g-cell" id={props.atom.id} data-wide={props.atom.wide ? "" : undefined}>
+  return <figure class="g-cell" id={props.atom.id} data-wide={props.atom.wide === "row" ? "row" : props.atom.wide ? "" : undefined}>
     <figcaption class="g-tag" title={props.atom.source}><strong>{props.atom.name}</strong><span data-scope={props.atom.scope}>{props.atom.scope === "both" ? "desktop + phone" : props.atom.scope + " only"}</span><span data-kind={props.atom.kind}>{props.atom.kind}</span></figcaption>
     <Show when={toggles()}><div class="g-cell-toggle" role="group" aria-label="Layout">
       <button type="button" aria-pressed={density() === "desktop"} onClick={() => setDensity("desktop")}>Desktop</button>
