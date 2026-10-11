@@ -203,8 +203,7 @@
 /* The cursor on the chosen segment (already washed) brightens that wash a step. */
 .ui-seg button[aria-checked="true"]:hover { background: oklch(1 0 0 / 6%); }
 /* A small segmented choice, for a bar's end (chat search's sort). */
-.ui-seg[data-size="sm"] { padding: 1.6px; gap: 1.6px; border-color: oklch(1 0 0 / 12%); border-radius: calc(0.546875 * var(--u-space)); }
-.ui-seg[data-size="sm"] .ui-seg-thumb { top: 1.6px; bottom: 1.6px; left: 1.6px; border-radius: calc(0.390625 * var(--u-space)); }
+/* Only its size changes: the same hairline, thumb and type as the Segmented it scales. */
 .ui-seg[data-size="sm"] button { min-height: calc(1.40625 * var(--u-space)); padding: 2px calc(0.546875 * var(--u-space)); font-size: calc(0.75 * var(--u-type)); }
 
 /* Slider: the label is a section title, the value an item (one that opens,
@@ -471,7 +470,8 @@
 .ui-frost.ui-overlay { display: flex; width: min(var(--overlay-width, calc(40 * var(--u-space))), 100%); max-height: var(--overlay-height, none); flex-direction: column; overflow: hidden; border-radius: calc(1.09375 * var(--u-space)); padding: 0; color: var(--foreground); font-size: calc(0.9375 * var(--u-type)); }
 .ui-overlay[data-layout="rail"] { flex-direction: row; }
 .ui-overlay-bar { display: flex; min-height: calc(3.4375 * var(--u-space)); flex: none; align-items: center; gap: calc(0.625 * var(--u-space)); border-bottom: 1px solid var(--frost-rule); padding: calc(0.3125 * var(--u-space)) calc(0.859375 * var(--u-space)); }
-.ui-overlay-lead { display: inline-grid; flex: none; place-items: center; color: var(--foreground); font-size: calc(1.25 * var(--u-type)); font-weight: 600; line-height: 1; }
+/* The lead is one mark at one size and colour, whichever it is (search, the command prompt, back). */
+.ui-overlay-lead { display: inline-grid; flex: none; place-items: center; color: var(--muted-foreground); }
 .ui-overlay-lead svg { width: calc(1.09375 * var(--u-icon)); height: calc(1.09375 * var(--u-icon)); color: var(--muted-foreground); }
 .ui-overlay-input { min-width: 0; height: calc(2.8125 * var(--u-space)); flex: 1; border: 0; outline: 0; background: transparent; padding: 0; color: var(--foreground); font-size: calc(1.015625 * var(--u-type)); font-weight: 450; line-height: 1.5; }
 .ui-overlay-input::placeholder { color: var(--muted-foreground); }
