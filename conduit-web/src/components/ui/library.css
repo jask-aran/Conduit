@@ -30,12 +30,12 @@
 }
 [data-density="phone"] {
   --u-type: 16px; --u-space: 16px; --u-icon: 16px;
-  --frost-radius: 14px; --frost-inset: 5px; --row-pad: 8px 9px; --row-min: 38px; --row-gap: 8px; --row-radius: 9px;
+  --frost-radius: 14px; --frost-inset: 5px; --row-pad: 8px 9px; --row-min: 38px; --row-gap: 8px; --row-radius: 8px;
   --nav-min: 44px; --nav-pad: 6px 9px; --nav-gap: 8px; --nav-text: 14.5px; --nav-icon: 17px; --nav-label: 13px; --nav-label-pad: 5px 9px; --nav-indent: 30px;
 }
 @media (--conduit-phone-layout) { :root {
   --u-type: 16px; --u-space: 16px; --u-icon: 16px;
-  --frost-radius: 14px; --frost-inset: 5px; --row-pad: 8px 9px; --row-min: 38px; --row-gap: 8px; --row-radius: 9px;
+  --frost-radius: 14px; --frost-inset: 5px; --row-pad: 8px 9px; --row-min: 38px; --row-gap: 8px; --row-radius: 8px;
   --nav-min: 44px; --nav-pad: 6px 9px; --nav-gap: 8px; --nav-text: 14.5px; --nav-icon: 17px; --nav-label: 13px; --nav-label-pad: 5px 9px; --nav-indent: 30px;
 } }
 [data-density] { font-size: calc(var(--u-type) * 0.875); }
@@ -83,10 +83,12 @@
 
 /* Menu: a raised container; rows sit concentric inside it. */
 .ui-menu { outline: none; display: flex; min-width: calc(12 * var(--u-type)); flex-direction: column; border-radius: var(--frost-radius); padding: var(--frost-inset); }
-.ui-title-text { font-size: calc(0.5625 * var(--u-type)) !important; }
-.ui-title, .ui-title-text { color: var(--muted-foreground); font: calc(0.625 * var(--u-type))/1.2 ui-monospace, SFMono-Regular, Consolas, monospace; letter-spacing: 0.07em; text-transform: uppercase; }
+/* A group label (DESIGN Typography): the sidebar's -- sentence case, bold,
+   about half the text colour. Every group heading in a list, menu, palette or
+   card is this; the breadcrumb's place caps are the one uppercase label. */
+.ui-title, .ui-title-text { color: color-mix(in oklch, var(--foreground), transparent 52%); font-family: inherit; font-size: var(--nav-label); font-weight: 700; line-height: 1.5; letter-spacing: 0.02em; text-transform: none; }
 .ui-title { display: flex; align-items: baseline; justify-content: space-between; gap: var(--row-gap); padding: calc(0.375 * var(--u-type)) calc(0.5 * var(--u-type)) calc(0.3125 * var(--u-type)); }
-.ui-title small { font-size: inherit; letter-spacing: 0; text-transform: none; }
+.ui-title small { font-weight: 400; letter-spacing: 0; }
 .ui-section { display: flex; flex-direction: column; }
 .ui-section + .ui-section { margin-top: var(--frost-inset); border-top: 1px solid var(--frost-rule); margin-inline: calc(-1 * var(--frost-inset)); padding: var(--frost-inset) var(--frost-inset) 0; }
 .ui-search-section { flex-direction: row; align-items: center; gap: var(--row-gap); padding: var(--row-pad); }
@@ -104,15 +106,24 @@
 .ui-icon > .workspace-glyph svg { width: 100%; height: 100%; }
 .ui-icon:has(> .harness-mark) { width: calc(0.875 * var(--u-type)); height: calc(0.875 * var(--u-type)); }
 .ui-row > .ui-label { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ui-row > :is(small, .ui-meta) { flex: none; margin-left: auto; color: var(--muted-foreground); font-weight: 400; font-size: calc(0.75 * var(--u-type)); }
+/* Meta: muted mono beside the title, right-aligned, tabular. */
+.ui-row > :is(small, .ui-meta) { flex: none; margin-left: auto; color: var(--muted-foreground); font: 400 calc(0.71875 * var(--u-type)) ui-monospace, SFMono-Regular, Consolas, monospace; font-variant-numeric: tabular-nums; }
 .ui-row > .ui-keys { display: inline-flex; flex: none; gap: calc(0.1875 * var(--u-space)); }
 .ui-row > .ui-chevron { width: calc(0.875 * var(--u-type)); height: calc(0.875 * var(--u-type)); color: var(--muted-foreground); }
 /* The cursor (DESIGN Interaction): one row at a time, the wash, white, no change of weight.
    The pointer moves it (moveCursor), as the keyboard does; hover alone never washes a second row. */
 .ui-row:is([data-highlighted], [data-expanded]) { background: var(--frost-wash); color: var(--foreground); }
-.ui-row[data-checked] { color: var(--foreground); font-weight: 660; }
-.ui-row[data-checked] > svg { stroke-width: 3; }
-.ui-row[data-disabled] { pointer-events: none; color: color-mix(in oklch, var(--foreground), transparent 22%); text-decoration: line-through 1.5px; }
+.ui-row[data-checked], [data-surface="frost"] .ui-row[data-checked] { color: var(--foreground); font-weight: 660; }
+/* Over frost the row reads a touch heavier and brighter (text over frost reads thinner). */
+[data-surface="frost"] .ui-row { color: color-mix(in oklch, var(--foreground), transparent 28%); font-weight: 500; }
+/* Icons muted at rest, white on the cursor; a current icon is drawn an eighth of its size (3 units), not a tenth. */
+.ui-row > .ui-icon { color: var(--muted-foreground); }
+.ui-row:is([data-highlighted], [data-checked]) > .ui-icon { color: var(--foreground); }
+:is(.ui-row[data-checked] > .ui-icon, .ui-nav-row[aria-current="page"] > .ui-nav-icon, .ui-tabs > [aria-selected="true"]) svg.lucide { stroke-width: 3; }
+/* A harness mark rests greyed with its row and shows its colour on the cursor or the current row. */
+.ui-row .harness-mark { filter: grayscale(1); opacity: .78; }
+.ui-row:is([data-highlighted], [data-checked]) .harness-mark { filter: none; opacity: 1; }
+.ui-row[data-disabled], [data-surface="frost"] .ui-row[data-disabled] { pointer-events: none; color: color-mix(in oklch, var(--foreground), transparent 62%); text-decoration: line-through 1.5px; }
 .ui-row[data-disabled] > small { text-decoration: none; }
 .ui-row[data-destructive] { color: var(--destructive); }
 .ui-row[data-destructive][data-highlighted] { background: color-mix(in oklch, var(--destructive), transparent 85%); }
@@ -226,8 +237,9 @@
 .ui-heading-title { color: var(--foreground); font-size: calc(0.875 * var(--u-type)); font-weight: 650; }
 .ui-heading-detail { color: var(--muted-foreground); font-size: calc(0.75 * var(--u-type)); }
 
-.ui-row[data-field] > .ui-label { color: var(--muted-foreground); font: calc(0.5625 * var(--u-type))/1.2 ui-monospace, SFMono-Regular, Consolas, monospace; letter-spacing: 0.07em; text-transform: uppercase; }
-.ui-row[data-field] > small { color: color-mix(in oklch, var(--foreground), transparent 45%); font-size: calc(0.8125 * var(--u-type)); }
+/* A field row: its name muted at the row role (never uppercase), its value after it. */
+.ui-row[data-field] > .ui-label { color: var(--muted-foreground); }
+.ui-row[data-field] > small { color: color-mix(in oklch, var(--foreground), transparent 45%); font-family: inherit; font-size: calc(0.8125 * var(--u-type)); }
 
 /* Nav list: the sidebar's rows on the ground, not in a popover. A group has
    a label; a row an icon, its label, an optional toggle at its end, and an
@@ -409,7 +421,7 @@
 .ui-choice-check { display: none !important; }
 .ui-choice-key { width: calc(1 * var(--u-space)); flex: none; color: var(--muted-foreground); font: calc(0.859375 * var(--u-type))/1 ui-monospace, SFMono-Regular, Consolas, monospace; text-align: right; }
 .ui-choice[data-active="true"] .ui-choice-key { color: var(--foreground); }
-.ui-choice-label { flex: none; font-size: calc(1.015625 * var(--u-type)); font-weight: 450; }
+.ui-choice-label { flex: none; font-size: calc(0.8125 * var(--u-type)); font-weight: 500; }
 .ui-choice-detail { min-width: 0; flex: 1; overflow: hidden; color: var(--muted-foreground); font-size: calc(0.9375 * var(--u-type)); text-overflow: ellipsis; white-space: nowrap; }
 .ui-choice-check { display: grid; width: var(--u-icon); height: var(--u-icon); flex: none; margin-left: auto; place-items: center; color: var(--foreground); }
 .ui-choice-check svg { width: calc(0.875 * var(--u-icon)); height: calc(0.875 * var(--u-icon)); }
@@ -465,13 +477,11 @@
 .ui-overlay-input::placeholder { color: var(--muted-foreground); }
 .ui-overlay-bar .ui-seg { flex: none; }
 /* Its rows: a popover's Items at the overlay's scale, full colour; its group titles plain, not ruled. */
-.ui-overlay-list { --row-pad: calc(0.3125 * var(--u-space)) calc(0.625 * var(--u-space)); --row-min: calc(2.34375 * var(--u-space)); --row-gap: calc(0.78125 * var(--u-space)); --row-radius: calc(0.703125 * var(--u-space));
+.ui-overlay-list { --row-pad: calc(0.3125 * var(--u-space)) calc(0.625 * var(--u-space)); --row-min: calc(2.34375 * var(--u-space)); --row-gap: calc(0.78125 * var(--u-space)); --row-radius: 8px;
   min-height: 0; flex: 1; overflow: auto; padding: calc(0.390625 * var(--u-space)) calc(0.46875 * var(--u-space)); }
-.ui-overlay-list .ui-row { font-size: calc(0.9375 * var(--u-type)); font-weight: 520; }
 .ui-overlay-list .ui-row > .ui-icon { width: calc(1.09375 * var(--u-icon)); height: calc(1.09375 * var(--u-icon)); color: var(--muted-foreground); }
-.ui-overlay-list .ui-row > small { font-size: calc(0.78125 * var(--u-type)); }
 .ui-overlay-list .ui-section + .ui-section { margin: calc(0.25 * var(--u-space)) 0 0; border: 0; padding: 0; }
-.ui-overlay-list .ui-title { color: color-mix(in oklch, var(--foreground), transparent 50%); font-family: inherit; font-size: calc(0.75 * var(--u-type)); font-weight: 700; line-height: 1.5; letter-spacing: 0; text-transform: none; padding: calc(0.5 * var(--u-space)) calc(0.625 * var(--u-space)) calc(0.25 * var(--u-space)); }
+.ui-overlay-list .ui-title { padding: calc(0.5 * var(--u-space)) calc(0.625 * var(--u-space)) calc(0.25 * var(--u-space)); }
 .ui-overlay-split { display: grid; min-height: 0; flex: 1; grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr); }
 .ui-overlay-aside { min-width: 0; overflow: auto; border-left: 1px solid var(--frost-rule); padding: calc(1 * var(--u-space)); }
 .ui-overlay-hints { display: flex; min-height: calc(2.65625 * var(--u-space)); flex: none; flex-wrap: wrap; align-items: center; gap: calc(0.3125 * var(--u-space)) calc(0.9375 * var(--u-space)); border-top: 1px solid var(--frost-rule); padding: calc(0.46875 * var(--u-space)) calc(0.78125 * var(--u-space)); color: var(--muted-foreground); font-size: calc(0.78125 * var(--u-type)); }
@@ -487,11 +497,26 @@
 .ui-overlay .ui-nav-row[aria-current="page"]:not(:hover) { background: transparent; }
 .ui-overlay-rail-foot { margin-top: auto; color: var(--muted-foreground); font-size: var(--nav-text); }
 .ui-overlay-page { display: flex; min-width: 0; flex: 1; flex-direction: column; overflow: auto; padding: calc(1.25 * var(--u-space)) calc(1.875 * var(--u-space)) calc(1.875 * var(--u-space)); }
-.ui-overlay-page-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: calc(0.75 * var(--u-space)); padding-left: calc(0.5 * var(--u-space)); }
+.ui-overlay-page-head { display: flex; align-items: center; gap: calc(0.75 * var(--u-space)); margin-bottom: calc(0.75 * var(--u-space)); padding-left: calc(0.5 * var(--u-space)); }
 .ui-setting-group { display: flex; flex-direction: column; gap: 1px; }
 .ui-setting-group + .ui-setting-group { margin-top: calc(0.75 * var(--u-space)); border-top: 1px solid var(--frost-rule); padding-top: calc(0.9375 * var(--u-space)); }
 .ui-setting-line { display: flex; min-height: calc(2.1875 * var(--u-space)); align-items: center; gap: calc(0.9375 * var(--u-space)); border-radius: calc(0.5 * var(--u-space)); padding: 2px calc(0.3125 * var(--u-space)) 2px calc(0.5 * var(--u-space)); font-size: var(--nav-text); }
 /* Focus anywhere in a row is the row's wash. */
 .ui-setting-line:is(:hover, :focus-within) { background: var(--frost-wash); }
-.ui-setting-line > span:first-child { min-width: 0; flex: 1; }
-.ui-setting-control { display: inline-flex; flex: none; align-items: center; }
+.ui-setting-line > span:first-child { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ui-setting-line > span:first-child > small { margin-left: calc(0.5 * var(--u-space)); color: var(--muted-foreground); font-size: inherit; }
+/* Every row's control sits in one column of one width, so they line up. */
+.ui-setting-control { display: inline-flex; width: var(--setting-control-width, calc(18.75 * var(--u-space))); max-width: 50%; flex: none; align-items: center; justify-content: flex-end; }
+.ui-setting-control > .ui-input:not([data-bare]) { width: 100%; }
+
+/* Tabular figures wherever numbers tick or line up. */
+:is(.ui-keycap, .ui-choice-key, .ui-hints, .ui-overlay-hints, .ui-chip-copy small, .ui-seg small, .ui-slider-value) { font-variant-numeric: tabular-nums; }
+.ui-overlay-page-head > .ui-overlay-title { flex: 1; }
+.ui-overlay-status { color: var(--muted-foreground); font-size: var(--nav-text); }
+.ui-overlay-status[data-failed] { color: var(--destructive); }
+/* On a phone an overlay is a full-screen bubble on the darker core: nothing round it is dimmed. */
+[data-density="phone"] .ui-scrim, .ui-scrim[data-density="phone"] { padding: var(--phone-overlay-padding, 8px); background: transparent; }
+:is([data-density="phone"] .ui-frost.ui-overlay, .ui-frost.ui-overlay[data-density="phone"]) { width: 100%; background: linear-gradient(var(--frost-fill), var(--frost-fill)), var(--frost-core-ground); }
+[data-density="phone"] .ui-overlay-hints { display: none; }
+.ui-match { color: var(--muted-foreground); }
+.ui-match > b { color: var(--foreground); font-weight: 660; }
