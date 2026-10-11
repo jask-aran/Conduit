@@ -182,7 +182,7 @@ export function QuestionCard(props: { request: HostUiRequest; dismissLabel?: str
               onPointerMove={() => setCursor(question.options.length)} onClick={() => own?.focus()}>
               <span class={k("question-number", "ui-choice-key")}>{question.options.length + 1}</span>
               {freeform().multiline
-                ? <textarea ref={(element) => { own = element; }} rows={2} class={k("question-own-input", "ui-choice-input")} placeholder={placeholder} aria-label={placeholder}
+                ? <textarea ref={(element) => { own = element; }} rows={2} class={k("question-own-input", "ui-textarea")} placeholder={placeholder} aria-label={placeholder}
                   value={draft(question).freeform} onInput={input} onFocus={() => setCursor(question.options.length)} />
                 : <input ref={(element) => { own = element; }} class={k("question-own-input", "ui-choice-input")} placeholder={placeholder} aria-label={placeholder}
                   type={question.secret ? "password" : "text"} inputmode={freeform().numeric ? "decimal" : undefined}

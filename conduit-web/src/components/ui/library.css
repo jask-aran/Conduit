@@ -427,3 +427,5 @@
 /* TextArea: multi-line text that grows with its lines; bare, so what holds it pads it. */
 .ui-textarea { display: block; width: 100%; resize: none; overflow-y: auto; border: 0; outline: 0; background: transparent; padding: 0; color: inherit; font: inherit; font-size: var(--u-type); line-height: 1.45; field-sizing: content; }
 .ui-textarea::placeholder { color: var(--muted-foreground); }
+/* A Choice holding its own answer: a TextArea (several lines) or a bare input (one), set as the label is. */
+.ui-choice > .ui-textarea { min-width: 0; flex: 1; font-size: calc(1.015625 * var(--u-type)); line-height: 1.4; }
