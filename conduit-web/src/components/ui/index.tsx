@@ -4,7 +4,9 @@ export { ChevronDownIcon };
 import { cn } from "@/lib/utils";
 
 /*
- * The unified library (library.css). Shapes only: no behaviour, so the same
+ * Components v2 (conduit-components-v2): the unified library (library.css).
+ * UI that is "components v2" is built from these pieces and their tokens alone,
+ * so a change to a base token reaches every use. Shapes only: no behaviour, so the same
  * pieces can later sit inside Kobalte menus, popovers and dialogs.
  */
 

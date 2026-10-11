@@ -6,7 +6,6 @@ import { Bubble, Button, Card, Frost, Input, Item, Keycap, Menu, PillButton, Pil
 import { Switch } from "../client/settings/settings-controls";
 import { HarnessMark } from "../client/harness-brand";
 import { PlaceGlyph } from "../client/chat/place-picker";
-import type { Atom, Scope } from "./atoms";
 import { MODELS, PROFILES, PROJECTS } from "./seed";
 
 /*
@@ -14,6 +13,10 @@ import { MODELS, PROFILES, PROJECTS } from "./seed";
  * and Message are what it makes. Each is a section of the gallery: the base
  * piece, then its constituents, then the app's own pieces assembled from them.
  */
+
+export type Scope = "both" | "desktop" | "phone";
+/** A cell: kind is the layer of the library it shows; source, where it lives in the code. */
+export interface Atom { id: string; name: string; scope: Scope; kind: string; source: string; render: () => JSX.Element; wide?: boolean }
 
 /** The tag: where the piece is used, and which layer of the library it is. wide: spans two cells.
  *  An assembled piece is named as the app's code names it (component, then the part within it). */

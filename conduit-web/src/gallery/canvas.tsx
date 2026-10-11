@@ -9,15 +9,13 @@ import "@/components/ui/library.css";
 import { ChatScreen } from "./stories";
 import { LibraryContext } from "@/components/ui/swap";
 import { SidebarScreen } from "./sidebar-story";
-import { atoms, phoneAtoms, type Atom } from "./atoms";
-import { libraryFamilies } from "./library";
+import { libraryFamilies, type Atom } from "./library";
 
 /*
- * Components on the left, each centred in a cell of one grid with a bubble
- * naming it, primitives first. The preview on the right is the app's
- * own chat screen, desktop or phone. Phone-only pieces sit in a frame of this
- * page that passes for a phone (phone-emulation.ts). The tuning box applies CSS
- * everywhere at once and never writes source.
+ * Components v2 (components/ui) on the left, by family: the base piece, its
+ * constituents, then the app's pieces assembled from them. On the right the
+ * app's own screens, desktop or phone, drawn with components v2. The tuning
+ * box applies CSS everywhere at once and never writes source.
  */
 
 const TUNE_KEY = "conduit:gallery-tune";
@@ -49,16 +47,13 @@ function Piece(props: { atom: Atom; fixed?: "desktop" | "phone" }) {
 function Canvas() {
   const [tune, setTune] = createSignal(read());
   const [preview, setPreview] = createSignal<"phone" | "sidebar" | "desktop">("phone");
-  const [source, setSource] = createSignal<"live" | "library">("live");
-  const [seen, setSeen] = createSignal(new Set<string>(["phone-live"]));
-  createEffect(() => { const key = `${preview()}-${source()}`; if (!seen().has(key)) setSeen(new Set([...seen(), key])); });
+  const [seen, setSeen] = createSignal(new Set<string>(["phone"]));
+  createEffect(() => { const key = preview(); if (!seen().has(key)) setSeen(new Set([...seen(), key])); });
+  // The app's real screens, drawn with components v2 (components/ui/swap.ts); phones in a frame that passes for one.
   const views = [
-    { key: "phone-live", render: () => <iframe class="g-phone" title="Phone" src="/gallery.html?frame=phone" onLoad={tuneFrame} /> },
-    { key: "sidebar-live", render: () => <iframe class="g-phone" title="Phone sidebar" src="/gallery.html?frame=sidebar" onLoad={tuneFrame} /> },
-    { key: "desktop-live", render: () => <div class="g-desktop-screen"><ChatScreen /></div> },
-    { key: "phone-library", render: () => <iframe class="g-phone" title="Phone · library" src="/gallery.html?frame=library-phone" onLoad={tuneFrame} /> },
-    { key: "sidebar-library", render: () => <iframe class="g-phone" title="Phone sidebar · library" src="/gallery.html?frame=library-sidebar" onLoad={tuneFrame} /> },
-    { key: "desktop-library", render: () => <div class="g-desktop-screen"><LibraryContext.Provider value={true}><ChatScreen /></LibraryContext.Provider></div> },
+    { key: "phone", render: () => <iframe class="g-phone" title="Phone" src="/gallery.html?frame=phone" onLoad={tuneFrame} /> },
+    { key: "sidebar", render: () => <iframe class="g-phone" title="Phone sidebar" src="/gallery.html?frame=sidebar" onLoad={tuneFrame} /> },
+    { key: "desktop", render: () => <div class="g-desktop-screen"><LibraryContext.Provider value={true}><ChatScreen /></LibraryContext.Provider></div> },
   ];
   const [tuning, setTuning] = createSignal(false);
   const update = (css: string) => {
@@ -84,10 +79,6 @@ function Canvas() {
           <div class="g-grid g-dense"><For each={group.atoms}>{(atom) => <Piece atom={atom} fixed={group.layout} />}</For></div>
         </>}</For>
       </section>}</For>
-      <h2 class="g-heading">In the app now</h2>
-      <div class="g-grid">
-        <For each={atoms}>{(atom) => <Piece atom={atom} />}</For>
-      </div>
     </section>
     <aside class="g-right">
       <div class="g-toggles">
@@ -96,35 +87,22 @@ function Canvas() {
           <button type="button" aria-pressed={preview() === "sidebar"} onClick={() => setPreview("sidebar")}>Phone sidebar</button>
           <button type="button" aria-pressed={preview() === "desktop"} onClick={() => setPreview("desktop")}>Desktop</button>
         </div>
-        <div class="g-toggle" role="group" aria-label="Drawn with">
-          <button type="button" aria-pressed={source() === "live"} onClick={() => setSource("live")}>Live</button>
-          <button type="button" aria-pressed={source() === "library"} onClick={() => setSource("library")}>Library</button>
-        </div>
       </div>
       {/* Every view stays mounted once opened, so switching is instant: no frame reloads. */}
       <For each={views}>{(view) => <Show when={seen().has(view.key)}>
-        <div class="g-view" hidden={`${preview()}-${source()}` !== view.key}>{view.render()}</div>
+        <div class="g-view" hidden={preview() !== view.key}>{view.render()}</div>
       </Show>}</For>
     </aside>
   </div>;
-}
-
-/** The phone-only pieces, alone in a phone frame. */
-function Parts() {
-  return <div class="g-grid g-parts-grid"><For each={phoneAtoms}>{(atom) => <Piece atom={atom} />}</For></div>;
 }
 
 export function mount(frame: string | null) {
   const root = document.getElementById("root")!;
   // Frosted only: the static material is on its way out.
   try { localStorage.setItem("conduit:composer-surface", "frosted-live"); localStorage.setItem("conduit:phone-composer", "bar"); } catch { /* private window */ }
-  if (frame === "parts") { document.body.classList.add("g-parts-body"); render(() => <Parts />, root); }
-  // The library's phone screens, in the same kind of frame as the live ones: a phone's root size and media rules.
-  // The same real screens, their frosted pieces and menus drawn by the library (components/ui/swap.ts).
-  else if (frame === "library-phone") { document.body.classList.add("g-solo-body"); render(() => <LibraryContext.Provider value={true}><ChatScreen /></LibraryContext.Provider>, root); }
-  else if (frame === "library-sidebar") { document.body.classList.add("g-solo-body"); render(() => <LibraryContext.Provider value={true}><SidebarScreen /></LibraryContext.Provider>, root); }
-  else if (frame === "sidebar") { document.body.classList.add("g-solo-body"); render(() => <SidebarScreen />, root); }
-  else if (frame) { document.body.classList.add("g-solo-body"); render(() => <ChatScreen />, root); }
+  // The phone screens, drawn with components v2, in a frame with a phone's root size and media rules.
+  if (frame === "sidebar") { document.body.classList.add("g-solo-body"); render(() => <LibraryContext.Provider value={true}><SidebarScreen /></LibraryContext.Provider>, root); }
+  else if (frame) { document.body.classList.add("g-solo-body"); render(() => <LibraryContext.Provider value={true}><ChatScreen /></LibraryContext.Provider>, root); }
   else {
     render(() => <Canvas />, root);
     // The chat screens scroll themselves to their latest message as they
