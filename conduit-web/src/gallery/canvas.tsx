@@ -71,10 +71,13 @@ function Canvas() {
       leaderBottom: `${frame.bottom - box.top + 12}px` };
   };
   const overlays: [OverlayView, string][] = [["leader", "Leader"], ["palette", "Command palette"], ["search", "Chat search"], ["settings", "Settings"]];
-  // Components v2 is the frosted family, plus Controls, which sit on any surface: a tab each.
-  const [tab, setTab] = createSignal<"frost" | "controls">((() => { try { return localStorage.getItem("gallery:tab") === "controls" ? "controls" : "frost"; } catch { return "frost"; } })());
-  const pick = (next: "frost" | "controls") => { setTab(next); try { localStorage.setItem("gallery:tab", next); } catch { /* private window */ } };
-  const shown = () => libraryFamilies.filter((family) => (family.title === "Controls") === (tab() === "controls"));
+  // One family at a time, picked from the rail: the frosted ones, then Controls, which sit on any surface.
+  const stored = (() => { try { return localStorage.getItem("gallery:family"); } catch { return null; } })();
+  const [current, setCurrent] = createSignal(libraryFamilies.find((family) => family.title === stored)?.title ?? libraryFamilies[0].title);
+  let left!: HTMLElement;
+  const pick = (title: string) => { setCurrent(title); left.scrollTop = 0; try { localStorage.setItem("gallery:family", title); } catch { /* private window */ } };
+  const shown = () => libraryFamilies.filter((family) => family.title === current());
+  const rail: [string, typeof libraryFamilies][] = [["Frosted", libraryFamilies.filter((family) => family.title !== "Controls")], ["Any surface", libraryFamilies.filter((family) => family.title === "Controls")]];
   const update = (css: string) => {
     setTune(css);
     try { localStorage.setItem(TUNE_KEY, css); } catch { /* private window */ }
@@ -83,13 +86,15 @@ function Canvas() {
   };
   applyTune(document, tune());
   return <div class="g-canvas" data-preview={preview()}>
-    <section class="g-left">
+    <nav class="g-rail" aria-label="Families">
+      <h1>Gallery</h1>
+      <For each={rail}>{([label, families]) => <>
+        <h2>{label}</h2>
+        <For each={families}>{(family) => <button type="button" aria-current={current() === family.title} onClick={() => pick(family.title)}>{family.title}</button>}</For>
+      </>}</For>
+    </nav>
+    <section class="g-left" ref={left}>
       <div class="g-bar">
-        <h1>Gallery</h1>
-        <div class="g-toggle" role="tablist" aria-label="Library">
-          <button type="button" role="tab" aria-selected={tab() === "frost"} aria-pressed={tab() === "frost"} onClick={() => pick("frost")}>Frosted</button>
-          <button type="button" role="tab" aria-selected={tab() === "controls"} aria-pressed={tab() === "controls"} onClick={() => pick("controls")}>Controls</button>
-        </div>
         <button type="button" aria-pressed={tuning()} onClick={() => setTuning(!tuning())}>Tune CSS</button>
         <Show when={tuning()}><button type="button" onClick={() => void navigator.clipboard.writeText(tune())}>Copy</button></Show>
       </div>
