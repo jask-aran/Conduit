@@ -7,6 +7,9 @@ import { Switch } from "../client/settings/settings-controls";
 import { HarnessMark } from "../client/harness-brand";
 import { PlaceGlyph } from "../client/chat/place-picker";
 import { MODELS, PROFILES, PROJECTS } from "./seed";
+import { QuestionCard } from "../client/chat/question-card";
+import type { Question } from "../client/api/contracts";
+import { LibraryContext } from "@/components/ui/swap";
 
 /*
  * The unified library, as a tree: Frost is the material; Popover, Card, Pill
@@ -84,12 +87,27 @@ const attachments = () => <Rider label="Attachments" layout="strip"><div class="
   <RiderActions stack>{ghost("Show all attachments", <Maximize2Icon />)}{ghost("Remove all attachments", <Trash2Icon />)}</RiderActions></Rider>;
 const queued = () => <Rider label="Queued"><RiderTitle>Steering</RiderTitle><ul class="ui-lines"><Line text="and make the second paragraph shorter" /><Line text="then rename the file to lorem.txt, and add a heading at the top that says what it is" clipped /></ul>
   <RiderActions>{ghost("Interrupt and send now", <SendHorizontalIcon />)}{ghost("Edit", <PencilIcon />)}{ghost("Discard", <XIcon />)}</RiderActions></Rider>;
-const question = () => <Rider label="Question" layout="card">
-  <div class="ui-rider-top"><div class="ui-tabs" role="tablist"><button type="button" role="tab" aria-selected="false"><CheckIcon />Format</button><button type="button" role="tab" aria-selected="true">Length</button><button type="button" role="tab">Submit</button></div>{ghost("Dismiss", <XIcon />)}</div>
-  <div class="ui-choices-page"><p class="ui-prompt">How long should the second paragraph be?</p>
-    <div class="ui-choices" role="listbox"><Choice n={1} label="Two sentences" detail="the shortest that keeps its point" chosen active /><Choice n={2} label="Half as long" /><Choice n={3} label="Keep it" detail="leave the paragraph as it is" /></div></div>
-  <div class="ui-rider-foot"><div class="ui-hints"><span><kbd class="ui-keycap">1–3</kbd>choose</span><span><kbd class="ui-keycap">↵</kbd>next</span></div><Button variant="ghost" size="sm">Stop</Button><Button size="sm">Next</Button></div>
-</Rider>;
+// The real QuestionCard, drawn with components v2, so the cell shows all the live card can: a
+// single question's title, tabs with their ticks, pick-any, an option's preview,
+// one's own answer, a note, the Submit page, the hints, Stop and Submit.
+const q = (id: string, header: string, prompt: string, options: [string, string, Question["options"][number]["preview"]?][], more: Partial<Question> = {}): Question =>
+  ({ id, header, prompt, multiSelect: false, secret: false, required: true, freeform: { placeholder: "Type your own answer" }, ...more,
+    options: options.map(([label, description, preview], i) => ({ id: `${id}${i}`, label, description, preview })) });
+const questionCard = (questions: Question[], extra: { notes?: boolean; page?: "submit" } = {}) => {
+  let box!: HTMLDivElement;
+  onMount(() => { if (extra.page === "submit") box.querySelector<HTMLButtonElement>("[role=tab]:last-child")?.click(); });
+  return <div ref={box} class="g-composer"><LibraryContext.Provider value={true}>
+    <QuestionCard request={{ id: questions[0].id, kind: "question", questions, notes: extra.notes }} onStop={() => {}} onRespond={() => {}} />
+  </LibraryContext.Provider></div>;
+};
+const LANGUAGE = q("lang", "Preferred language", "Which programming language should I use for this task?",
+  [["Python", "Use Python for the task"], ["TypeScript", "Use TypeScript for the task"], ["Rust", "Use Rust for the task"]]);
+const TABS = [
+  q("fmt", "Format", "Which sections should the file have?", [["A heading", "a title line at the top"], ["Paragraphs", ""], ["A list", "the main points, bulleted"]], { multiSelect: true, freeform: false }),
+  q("len", "Length", "How long should the second paragraph be?", [["Two sentences", "the shortest that keeps its point", { format: "monospace", text: "Lorem ipsum dolor sit amet.\nConsectetur adipiscing elit." }], ["Half as long", ""], ["Keep it", "leave the paragraph as it is"]],
+    { freeform: { placeholder: "Or say how long", multiline: true } }),
+];
+const SUMMARY = [q("name", "File name", "What should the file be called?", [], { freeform: { initial: "lorem.txt" } }), q("key", "API key", "Paste the key it should use", [], { secret: true, required: false })];
 
 export const libraryFamilies: Family[] = [
   { title: "Frost", note: "the material: fill, edge, blur, highlight. Lift: rest sits on the page, raised floats above it; core is a solid backing for busy content", groups: [{ atoms: [
@@ -195,7 +213,9 @@ export const libraryFamilies: Family[] = [
     { title: "Assembled", atoms: [
       lib("rider-queued", "QueuedMessages", "both", "rider", "chat/queued-messages.tsx", () => <div class="g-composer">{queued()}</div>, true),
       lib("rider-attachments", "AttachmentStrip", "both", "rider", "chat/attachment-strip.tsx", () => <div class="g-composer">{attachments()}</div>, true),
-      lib("rider-question", "QuestionCard", "both", "rider", "chat/question-card.tsx", () => <div class="g-composer">{question()}</div>, true),
+      lib("rider-question", "QuestionCard", "both", "rider", "chat/question-card.tsx · one question: its title, Choices, own answer, Stop · Submit", () => questionCard([LANGUAGE]), true),
+      lib("rider-question-tabs", "QuestionCard · tabs", "both", "rider", "chat/question-card.tsx · tabs (ticked when answered), pick any, a preview, a multi-line own answer, notes", () => questionCard(TABS, { notes: true }), true),
+      lib("rider-question-submit", "QuestionCard · Submit page", "both", "rider", "chat/question-card.tsx · the review page; a secret answer", () => questionCard(SUMMARY, { page: "submit" }), true),
     ] },
   ] },
   { title: "Pill", note: "resting frost floating over the page, the phone's controls. The kind sets the shape: a button is a circle, a group a capsule", groups: [
