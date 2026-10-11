@@ -9,6 +9,7 @@ import "@/components/ui/library.css";
 import { ChatScreen } from "./stories";
 import { LibraryContext } from "@/components/ui/swap";
 import { SidebarScreen } from "./sidebar-story";
+import { foundationFamilies } from "./foundations";
 import { libraryFamilies, overlayViews, type Atom, type OverlayView } from "./library";
 
 /*
@@ -71,18 +72,20 @@ function Canvas() {
       leaderBottom: `${frame.bottom - box.top + 12}px` };
   };
   const overlays: [OverlayView, string][] = [["leader", "Leader"], ["palette", "Command palette"], ["search", "Chat search"], ["settings", "Settings"]];
-  // One family at a time, picked from the rail: the frosted ones, then Controls, which sit on any surface.
+  // One family at a time, picked from the rail: Foundations, the frosted families, then Controls, which sit on any surface.
+  const families = [...foundationFamilies, ...libraryFamilies];
   const stored = (() => { try { return localStorage.getItem("gallery:family"); } catch { return null; } })();
-  const [current, setCurrent] = createSignal(libraryFamilies.find((family) => family.title === stored)?.title ?? libraryFamilies[0].title);
+  const [current, setCurrent] = createSignal(families.find((family) => family.title === stored)?.title ?? libraryFamilies[0]!.title);
   let left!: HTMLElement;
   const pick = (title: string) => { setCurrent(title); left.scrollTop = 0; try { localStorage.setItem("gallery:family", title); } catch { /* private window */ } };
-  const shown = () => libraryFamilies.filter((family) => family.title === current());
-  const rail: [string, typeof libraryFamilies][] = [["Frosted", libraryFamilies.filter((family) => family.title !== "Controls")], ["Any surface", libraryFamilies.filter((family) => family.title === "Controls")]];
+  const shown = () => families.filter((family) => family.title === current());
+  const rail = [...new Set(families.map((family) => family.rail ?? "Frosted"))].map((label) => [label, families.filter((family) => (family.rail ?? "Frosted") === label)] as const);
   const update = (css: string) => {
     setTune(css);
     try { localStorage.setItem(TUNE_KEY, css); } catch { /* private window */ }
     applyTune(document, css);
     for (const frame of frames()) if (frame.contentDocument) applyTune(frame.contentDocument, css);
+    dispatchEvent(new Event("gallery:tune"));
   };
   applyTune(document, tune());
   return <div class="g-canvas" data-preview={preview()}>

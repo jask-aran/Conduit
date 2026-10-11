@@ -24,10 +24,11 @@ export interface Atom { id: string; name: string; scope: Scope; kind: string; so
 
 /** The tag: where the piece is used, and which layer of the library it is. wide: spans two cells; "row": the whole row.
  *  An assembled piece is named as the app's code names it (component, then the part within it). */
-const lib = (id: string, name: string, scope: Scope, layer: string, source: string, render: Atom["render"], wide?: Atom["wide"]): Atom => ({ id: `ui-${id}`, name, scope, kind: layer, source, render, wide });
+export const lib = (id: string, name: string, scope: Scope, layer: string, source: string, render: Atom["render"], wide?: Atom["wide"]): Atom => ({ id: `ui-${id}`, name, scope, kind: layer, source, render, wide });
 /** A run of cells; layout: fixed at that layout (no per-cell toggle). */
 export interface Group { title?: string; note?: string; atoms: Atom[]; layout?: "desktop" | "phone" }
-export interface Family { title: string; note: string; groups: Group[] }
+/** rail: the heading it sits under in the rail (Frosted by default). */
+export interface Family { title: string; note: string; rail?: string; groups: Group[] }
 
 export const thinking = ["off", "minimal", "low", "medium", "high", "xhigh"].map((value) => ({ value, label: value[0]!.toUpperCase() + value.slice(1) }));
 /** The app's slider as its popovers use it: a label, and a value that opens the levels. */
@@ -66,7 +67,7 @@ const icon = (label: string, glyph: JSX.Element) => ({ label, icon: glyph });
 
 /** The material's CSS, read live, so a tuned value shows here too. */
 function FrostTokens() {
-  const names = ["--frost-fill", "--frost-stroke", "--frost-blur", "--frost-highlight", "--frost-lift-rest", "--frost-lift-raised", "--frost-wash", "--frost-rule", "--frost-radius", "--frost-inset"];
+  const names = ["--frost-fill", "--frost-stroke", "--frost-blur", "--frost-highlight", "--frost-lift-rest", "--frost-lift-raised", "--frost-wash", "--frost-rule"];
   const [values, setValues] = createSignal<string[]>([]);
   let el!: HTMLDListElement;
   onMount(() => { const style = getComputedStyle(el); setValues(names.map((name) => style.getPropertyValue(name).trim())); });
@@ -320,7 +321,7 @@ export const libraryFamilies: Family[] = [
   { title: "Message", note: "the simplest: resting frost around text", groups: [{ atoms: [
     lib("bubble", "User message", "both", "message", "Bubble", () => <div style={{ width: "240px" }}><Bubble>write a .txt file with lorem ipsum</Bubble></div>),
   ] }] },
-  { title: "Controls", note: "not frost: what sits on any surface, shown on each", groups: [{ atoms: [
+  { title: "Controls", note: "not frost: what sits on any surface, shown on each", rail: "Any surface", groups: [{ atoms: [
     lib("buttons", "Button", "both", "control", "Button variant size", () => <Surfaces>{() => <div class="g-row"><Button>Primary</Button><Button variant="outline">Outline</Button><Button variant="ghost">Ghost</Button><Button variant="destructive">Delete</Button></div>}</Surfaces>),
     lib("segmented", "Segmented choice", "both", "control", "Segmented", () => <Surfaces frame>{() => <div class="g-field"><SegmentedText /><SegmentedCount /><SegmentedIcons /></div>}</Surfaces>),
     lib("input", "Input", "both", "control", "Input", () => <Surfaces>{() => <div class="g-field"><Input placeholder="Replace" /><Input value="Lorem ipsum file" /></div>}</Surfaces>),
