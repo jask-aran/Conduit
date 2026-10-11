@@ -9,7 +9,7 @@ import "@/components/ui/library.css";
 import { ChatScreen } from "./stories";
 import { LibraryContext } from "@/components/ui/swap";
 import { SidebarScreen } from "./sidebar-story";
-import { foundationFamilies } from "./foundations";
+import { applyLabelFace, foundationFamilies } from "./foundations";
 import { libraryFamilies, overlayViews, type Atom, type OverlayView } from "./library";
 
 /*
@@ -132,6 +132,7 @@ function Canvas() {
 
 export function mount(frame: string | null) {
   const root = document.getElementById("root")!;
+  applyLabelFace(document);
   // Frosted only: the static material is on its way out.
   try { localStorage.setItem("conduit:composer-surface", "frosted-live"); localStorage.setItem("conduit:phone-composer", "bar"); } catch { /* private window */ }
   // The phone screens, drawn with components v2, in a frame with a phone's root size and media rules.
