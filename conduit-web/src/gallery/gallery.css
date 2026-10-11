@@ -177,3 +177,4 @@ html, body { background: var(--frame, #08090a); color: var(--foreground); }
 .g-composer-demo { display: grid; width: 380px; gap: 8px; }
 .g-slot { border: 1px dashed #d99a2299; border-radius: 6px; padding: 14px; color: var(--muted-foreground); text-align: center; }
 .g-dense .g-cell:has(.g-cell-toggle) .g-tag { right: 112px; flex-wrap: nowrap; overflow: hidden; white-space: nowrap; }
+.g-dense .g-cell:has(.g-cell-toggle) .g-tag [data-scope] { display: none; }
