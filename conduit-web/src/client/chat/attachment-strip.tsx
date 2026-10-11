@@ -175,7 +175,7 @@ export function AttachmentStrip(props: {
 
   return <>
     <Show when={shown.value().length}>
-      <div class="attachment-strip composer-surface-material composer-card" data-composer-surface={props.surface} data-leaving={(clearing() ? "fade" : shown.leaving()) || undefined} role="group" aria-label="Attachments">
+      <div class={props.surface === "library" ? "attachment-strip ui-frost ui-rider composer-card" : "attachment-strip composer-surface-material composer-card"} data-composer-surface={props.surface} data-surface={props.surface === "library" ? "frost" : undefined} data-lift={props.surface === "library" ? "rest" : undefined} data-leaving={(clearing() ? "fade" : shown.leaving()) || undefined} role="group" aria-label="Attachments">
         <div ref={attach} class="attachment-strip-scroller" data-fade-start={fades().start || undefined} data-fade-end={fades().end || undefined} onScroll={measure}>
           <For each={ids()}>{(id) => {
             const item = createMemo<UploadAttachment>((last) => byId().get(id) ?? last, byId().get(id)!);

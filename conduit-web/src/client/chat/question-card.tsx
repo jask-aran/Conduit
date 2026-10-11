@@ -134,7 +134,7 @@ export function QuestionCard(props: { request: HostUiRequest; dismissLabel?: str
   ];
   const preview = () => current()?.options[cursor()]?.preview;
 
-  return <section ref={root} class="question-card composer-surface-material" data-composer-surface={surface()}
+  return <section ref={root} class={surface() === "library" ? "question-card ui-frost ui-rider" : "question-card composer-surface-material"} data-composer-surface={surface()} data-surface={surface() === "library" ? "frost" : undefined} data-lift={surface() === "library" ? "rest" : undefined}
     tabIndex={-1} aria-label={props.request.title || "The agent has a question"} onKeyDown={keydown}>
     <div class="question-top">
       <Show when={pages() > 1} fallback={<span class="question-title">{current()?.header || props.request.title}</span>}>

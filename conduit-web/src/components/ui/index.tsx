@@ -39,7 +39,7 @@ export function PillSwitch<T extends string>(props: { label: string; value: T; o
 }
 /** Its own textarea, or the caller's field as children (the composer's, with its behaviour). */
 export function PillField(props: { placeholder?: string; value?: string; onInput?: (value: string) => void; class?: string; children?: JSX.Element }) {
-  return <div class={cn("ui-frost ui-pill ui-pill-field", props.class)}><Show when={props.children} fallback={<textarea class="ui-pill-field-input" rows={1} placeholder={props.placeholder} value={props.value ?? ""} onInput={(event) => props.onInput?.(event.currentTarget.value)} />}>{props.children}</Show></div>;
+  return <div class={cn("ui-frost ui-pill ui-pill-field", props.class)}><Show when={props.children} fallback={<textarea class="ui-field-input" rows={1} placeholder={props.placeholder} value={props.value ?? ""} onInput={(event) => props.onInput?.(event.currentTarget.value)} />}>{props.children}</Show></div>;
 }
 
 /**
@@ -102,6 +102,27 @@ export function Card(props: { title: string; detail?: string; class?: string; co
     {props.children}
     <Show when={props.actions}><div class="ui-card-actions">{props.actions}</div></Show>
   </div>;
+}
+
+/*
+ * Composer: resting frost holding a field above a toolbar; riders are frost
+ * cards that sit on its top edge (attachments, queued messages, a question).
+ * Its geometry is tokens (--cmp-*), measured from the app and scaled by density.
+ */
+export function Composer(props: { riders?: JSX.Element; class?: string; children: JSX.Element }) {
+  return <div class="ui-composer-stack">{props.riders}<div class={cn("ui-frost ui-composer", props.class)} data-surface="frost" data-lift="rest">{props.children}</div></div>;
+}
+/** The text box, frost-free: its own textarea, or the caller's (the app's, with its behaviour) as children. */
+export function Field(props: { placeholder?: string; value?: string; onInput?: (value: string) => void; class?: string; children?: JSX.Element }) {
+  return <div class={cn("ui-field", props.class)}><Show when={props.children} fallback={<textarea class="ui-field-input" rows={1} placeholder={props.placeholder} value={props.value ?? ""} onInput={(event) => props.onInput?.(event.currentTarget.value)} />}>{props.children}</Show></div>;
+}
+/** A row of controls: start (leading) and end (trailing) groups. */
+export function Toolbar(props: { start?: JSX.Element; end?: JSX.Element; class?: string }) {
+  return <div class={cn("ui-toolbar", props.class)}><div class="ui-toolbar-start">{props.start}</div><div class="ui-toolbar-end">{props.end}</div></div>;
+}
+/** Frost riding on the composer's top edge. */
+export function Rider(props: { label?: string; class?: string; children: JSX.Element }) {
+  return <div class={cn("ui-frost ui-rider", props.class)} data-surface="frost" data-lift="rest" role="group" aria-label={props.label}>{props.children}</div>;
 }
 
 export const Bubble = (props: { children: JSX.Element }) => <div class="ui-frost ui-bubble">{props.children}</div>;

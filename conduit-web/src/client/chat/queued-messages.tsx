@@ -63,7 +63,7 @@ export function QueuedMessages(props: {
   const shown = createLeaving(lines, (list) => list.length > 0, exit);
 
   return <Show when={shown.value().length}>
-    <aside class="queued-float composer-surface-material composer-card" data-composer-surface={props.surface} data-leaving={shown.leaving() || undefined} aria-label="Messages waiting for the agent">
+    <aside class={props.surface === "library" ? "queued-float ui-frost ui-rider composer-card" : "queued-float composer-surface-material composer-card"} data-composer-surface={props.surface} data-surface={props.surface === "library" ? "frost" : undefined} data-lift={props.surface === "library" ? "rest" : undefined} data-leaving={shown.leaving() || undefined} aria-label="Messages waiting for the agent">
       <span class="queued-float-title" title={hint()}>{props.busy ? "Steering" : "Queued"}</span>
       <ul class="queued-float-list"><For each={shown.value()}>{(text) => <QueuedLine text={text} />}</For></ul>
       <div class="queued-float-actions">

@@ -77,8 +77,8 @@
 .ui-pill[data-stretch] > button { width: 100%; }
 /* Field: text in the capsule; it grows with its lines. */
 .ui-pill-field { display: flex; width: 100%; height: auto; min-height: calc(var(--pill-size) + 2px); align-items: center; border-radius: var(--pill-field-radius); padding: 0 var(--pill-field-pad); }
-.ui-pill-field-input { width: 100%; max-height: 220px; border: 0; background: transparent; padding: 11px 0; color: inherit; font: inherit; font-size: var(--u-type); line-height: 1.4; resize: none; outline: none; field-sizing: content; }
-.ui-pill-field-input::placeholder { color: var(--muted-foreground); }
+.ui-pill-field .ui-field-input { width: 100%; max-height: 220px; border: 0; background: transparent; padding: 11px 0; color: inherit; font: inherit; font-size: var(--u-type); line-height: 1.4; resize: none; outline: none; field-sizing: content; }
+.ui-pill-field .ui-field-input::placeholder { color: var(--muted-foreground); }
 .ui-pill > button svg { width: var(--pill-icon); height: var(--pill-icon); }
 
 /* Menu: a raised container; rows sit concentric inside it. */
@@ -282,3 +282,30 @@
    and height while idle or listening); the field's shape is the library's. */
 .composer .composer-input-shell.ui-pill-field { display: block; height: auto; align-items: initial; border-radius: var(--pill-field-radius); padding: 0 var(--pill-field-pad); }
 [data-phone-mode="typing"] .composer-input-shell.ui-pill-field { min-height: calc(var(--pill-size) + 2px); }
+
+/* Composer: resting frost holding a field above a toolbar, riders on its top
+   edge. Measured from the app's composer, in units of the density (u). */
+.ui-composer-stack, .ui-composer, .ui-rider {
+  --cmp-radius: calc(1.375 * var(--u-space));
+  --cmp-field-min: calc(2.75 * var(--u-space)); --cmp-field-max: calc(12 * var(--u-space));
+  --cmp-field-pad: calc(0.6875 * var(--u-space)) calc(0.75 * var(--u-space)) calc(0.125 * var(--u-space));
+  --cmp-bar-min: calc(2.25 * var(--u-space)); --cmp-bar-gap: calc(0.75 * var(--u-space));
+  --cmp-bar-pad: calc(0.125 * var(--u-space)) calc(0.4375 * var(--u-space)) calc(0.375 * var(--u-space)) calc(0.5 * var(--u-space));
+  --cmp-slot: calc(1.75 * var(--u-space)); --cmp-slot-radius: calc(0.625 * var(--u-space)); --cmp-slot-gap: calc(0.1875 * var(--u-space)); --cmp-icon: var(--u-icon);
+  --cmp-rider-gap: calc(0.375 * var(--u-space));
+}
+.ui-composer-stack { display: grid; width: 100%; gap: var(--cmp-rider-gap); }
+.ui-frost.ui-composer { position: relative; display: block; width: 100%; border-radius: var(--cmp-radius); padding: 0; }
+.ui-field { position: relative; }
+.ui-field-input { display: block; width: 100%; min-height: var(--cmp-field-min); max-height: var(--cmp-field-max); resize: none; overflow-y: auto; border: 0; outline: 0; background: transparent; padding: var(--cmp-field-pad); color: inherit; font: inherit; font-size: var(--u-type); line-height: 1.45; field-sizing: content; }
+.ui-field-input::placeholder { color: var(--muted-foreground); }
+/* The app pins an empty field's height (!important); the library's token wins it back. */
+.ui-composer .ui-field textarea { min-height: var(--cmp-field-min); max-height: var(--cmp-field-max); padding: var(--cmp-field-pad); font-size: var(--u-type); }
+.ui-composer .ui-field textarea:placeholder-shown { height: var(--cmp-field-min) !important; }
+.ui-toolbar { position: relative; z-index: 2; display: flex; min-height: var(--cmp-bar-min); align-items: center; justify-content: space-between; gap: var(--cmp-bar-gap); padding: var(--cmp-bar-pad); }
+.ui-toolbar-start, .ui-toolbar-end { display: flex; min-width: 0; align-items: center; gap: var(--cmp-slot-gap); }
+.ui-toolbar-start { flex: 0 1 auto; }
+.ui-toolbar-end { flex: 0 0 auto; }
+.ui-toolbar .ui-button[data-size^="icon"] { width: var(--cmp-slot); min-width: var(--cmp-slot); height: var(--cmp-slot); border-radius: var(--cmp-slot-radius); padding: 0; }
+.ui-toolbar .ui-button[data-size^="icon"] svg { width: var(--cmp-icon); height: var(--cmp-icon); }
+.ui-frost.ui-rider { border-radius: var(--cmp-radius); }
