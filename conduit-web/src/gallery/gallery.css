@@ -153,3 +153,27 @@ html, body { background: var(--frame, #08090a); color: var(--foreground); }
 .g-solo-body .g-live .composer-stack > .g-live-composer { height: 54px; margin: 10px 12px 12px; padding: 6px 1px 4px; }
 .g-live-desktop { position: relative; }
 .g-live-model-menu .ui-row > small { font-size: 11px; }
+
+/* The library as a tree: each family a section, its cells dense. */
+.g-family { margin-top: 12px; border-top: 1px solid var(--border); }
+.g-family-title { margin: 20px 16px 4px; font-size: 15px; font-weight: 650; }
+.g-family-title small, .g-heading small { margin-left: 6px; color: var(--muted-foreground); font-size: 11px; font-weight: 400; }
+.g-dense { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); grid-auto-flow: dense; font-size: 13px; }
+.g-dense .g-cell { min-height: 200px; padding: 44px 12px 16px; }
+.g-dense .g-cell[data-wide] { grid-column: span 2; }
+.g-cell-toggle { position: absolute; top: 8px; right: 8px; display: flex; gap: 2px; }
+.g-cell-toggle button { border: 1px solid var(--border); border-radius: 5px; background: transparent; padding: 1px 6px; color: var(--muted-foreground); font-size: 10px; }
+.g-cell-toggle button[aria-pressed="true"] { background: var(--accent); color: var(--foreground); }
+.g-cell-body[data-density="desktop"] :is(.g-w16, .g-w18) { width: 224px; } .g-cell-body[data-density="desktop"] .g-w12 { width: 154px; }
+.g-cell-body[data-density="phone"] :is(.g-w16, .g-w18) { width: 280px; } .g-cell-body[data-density="phone"] .g-w12 { width: 190px; }
+.g-cell-body[data-density="desktop"] > .ui-menu, .g-cell-body[data-density="desktop"] > .g-anatomy .ui-menu { width: 224px; }
+.g-cell-body[data-density="phone"] > .ui-menu, .g-cell-body[data-density="phone"] > .g-anatomy .ui-menu { width: 280px; }
+.g-cell-body { max-width: 100%; }
+.g-tokens { display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; margin: 0; font: 10.5px/1.4 ui-monospace, monospace; }
+.g-tokens dt { color: var(--muted-foreground); }
+.g-tokens dd { margin: 0; overflow-wrap: anywhere; }
+.g-fill { width: 260px; }
+.g-bar-demo { display: flex; width: 380px; align-items: center; justify-content: space-between; gap: 8px; }
+.g-composer-demo { display: grid; width: 380px; gap: 8px; }
+.g-slot { border: 1px dashed #d99a2299; border-radius: 6px; padding: 14px; color: var(--muted-foreground); text-align: center; }
+.g-dense .g-cell:has(.g-cell-toggle) .g-tag { right: 112px; flex-wrap: nowrap; overflow: hidden; white-space: nowrap; }

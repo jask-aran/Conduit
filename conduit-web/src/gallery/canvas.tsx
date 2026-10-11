@@ -8,7 +8,7 @@ import { ChatScreen } from "./stories";
 import { LibraryContext } from "@/components/ui/swap";
 import { SidebarScreen } from "./sidebar-story";
 import { atoms, phoneAtoms, type Atom } from "./atoms";
-import { libraryGroups } from "./library";
+import { libraryFamilies } from "./library";
 
 /*
  * Components on the left, each centred in a cell of one grid with a bubble
@@ -30,15 +30,17 @@ function applyTune(doc: Document, css: string) {
 const frames = () => Array.from(document.querySelectorAll<HTMLIFrameElement>("iframe"));
 const tuneFrame = (event: Event) => { const doc = (event.currentTarget as HTMLIFrameElement).contentDocument; if (doc) applyTune(doc, read()); };
 
-function Piece(props: { atom: Atom; side?: boolean }) {
-  return <figure class="g-cell" id={props.atom.id} data-side={props.side ? "" : undefined}>
+/** A cell. A piece used in both layouts gets a toggle to draw it at either; fixed: drawn at that layout only. */
+function Piece(props: { atom: Atom; fixed?: "desktop" | "phone" }) {
+  const toggles = () => !props.fixed && props.atom.scope === "both";
+  const [density, setDensity] = createSignal<"desktop" | "phone">(props.fixed ?? (props.atom.scope === "phone" ? "phone" : "desktop"));
+  return <figure class="g-cell" id={props.atom.id} data-wide={props.atom.wide ? "" : undefined}>
     <figcaption class="g-tag" title={props.atom.source}><strong>{props.atom.name}</strong><span data-scope={props.atom.scope}>{props.atom.scope === "both" ? "desktop + phone" : props.atom.scope + " only"}</span><span data-kind={props.atom.kind}>{props.atom.kind}</span></figcaption>
-    <Show when={props.side} fallback={<div class="g-cell-body">{props.atom.render()}</div>}>
-      <div class="g-cell-body g-side">
-        <div data-density="desktop"><small>desktop layout</small>{props.atom.render()}</div>
-        <div data-density="phone"><small>phone layout</small>{props.atom.render()}</div>
-      </div>
-    </Show>
+    <Show when={toggles()}><div class="g-cell-toggle" role="group" aria-label="Layout">
+      <button type="button" aria-pressed={density() === "desktop"} onClick={() => setDensity("desktop")}>Desktop</button>
+      <button type="button" aria-pressed={density() === "phone"} onClick={() => setDensity("phone")}>Phone</button>
+    </div></Show>
+    <div class="g-cell-body" data-density={density()}>{props.atom.render()}</div>
   </figure>;
 }
 
@@ -73,12 +75,13 @@ function Canvas() {
       </div>
       <Show when={tuning()}><textarea class="g-tune" spellcheck={false} value={tune()} onInput={(event) => update(event.currentTarget.value)}
         placeholder={".composer-surface-material[data-composer-surface=\"frosted-live\"] {\n  backdrop-filter: blur(30px);\n}"} /></Show>
-      <For each={libraryGroups}>{(group) => <>
-        <h2 class="g-heading">{group.title} <small>{group.note}</small></h2>
-        <div class="g-grid" data-layout={group.layout} data-density={group.layout}>
-          <For each={group.atoms}>{(atom) => <Piece atom={atom} side={group.both} />}</For>
-        </div>
-      </>}</For>
+      <For each={libraryFamilies}>{(family) => <section class="g-family">
+        <h2 class="g-family-title">{family.title} <small>{family.note}</small></h2>
+        <For each={family.groups}>{(group) => <>
+          <Show when={group.title}><h3 class="g-heading">{group.title} <small>{group.note}</small></h3></Show>
+          <div class="g-grid g-dense"><For each={group.atoms}>{(atom) => <Piece atom={atom} fixed={group.layout} />}</For></div>
+        </>}</For>
+      </section>}</For>
       <h2 class="g-heading">In the app now</h2>
       <div class="g-grid">
         <For each={atoms}>{(atom) => <Piece atom={atom} />}</For>
