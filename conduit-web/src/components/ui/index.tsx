@@ -15,10 +15,29 @@ export function Frost(props: { lift?: Lift; core?: boolean; class?: string; styl
   return <div class={cn("ui-frost", props.class)} data-surface="frost" data-lift={props.lift ?? "rest"} data-core={props.core ? "" : undefined} style={props.style}>{props.children}</div>;
 }
 
-/** One icon is a circle (the composer's +); more share a capsule, each slot a pill-shaped target. */
-export function Pill(props: { icons: { label: string; icon: JSX.Element }[]; onPick?: (label: string) => void }) {
-  return <div class="ui-frost ui-pill" data-solo={props.icons.length === 1 ? "" : undefined}><For each={props.icons}>{(item) => <button type="button" aria-label={item.label} title={item.label}
-    onClick={(event) => { if (props.onPick) { event.stopPropagation(); props.onPick(item.label); } }}>{item.icon}</button>}</For></div>;
+/*
+ * Pill: the phone's floating frost controls, one family on shared tokens
+ * (--pill-*). The kind decides the shape, never a prop:
+ *   PillButton  one action: a circle (stretch: across its row, as the mic)
+ *   PillGroup   several actions in one capsule, a pill-shaped target each
+ *   PillSwitch  a group where one slot is chosen, under a sliding thumb
+ *   PillField   a capsule holding text (the phone composer's field)
+ */
+type PillAction = { label: string; icon: JSX.Element };
+const pillSlot = (item: PillAction, onPick?: (label: string) => void) => <button type="button" aria-label={item.label} title={item.label}
+  onClick={(event) => { if (onPick) { event.stopPropagation(); onPick(item.label); } }}>{item.icon}</button>;
+
+export function PillButton(props: PillAction & { stretch?: boolean; onPick?: (label: string) => void }) {
+  return <div class="ui-frost ui-pill" data-solo="" data-stretch={props.stretch ? "" : undefined}>{pillSlot(props, props.onPick)}</div>;
+}
+export function PillGroup(props: { actions: PillAction[]; onPick?: (label: string) => void }) {
+  return <div class="ui-frost ui-pill"><For each={props.actions}>{(item) => pillSlot(item, props.onPick)}</For></div>;
+}
+export function PillSwitch<T extends string>(props: { label: string; value: T; options: ReadonlyArray<{ value: T; label: string; icon: JSX.Element }>; onChange: (value: T) => void }) {
+  return <Segmented pill icons label={props.label} value={props.value} options={props.options} onChange={props.onChange} />;
+}
+export function PillField(props: { placeholder?: string; value?: string; onInput?: (value: string) => void }) {
+  return <label class="ui-frost ui-pill ui-pill-field"><textarea rows={1} placeholder={props.placeholder} value={props.value ?? ""} onInput={(event) => props.onInput?.(event.currentTarget.value)} /></label>;
 }
 
 /**
