@@ -2,12 +2,13 @@ import { PanelLeftIcon, MessageSquarePlusIcon, EllipsisIcon, CameraIcon, Keyboar
 import { createSignal, For, onMount, type JSX } from "solid-js";
 import { PanelRightIcon, ClipboardCopyIcon, Columns2Icon, CopyIcon, FolderIcon, FolderInputIcon, LayoutDashboardIcon, MenuIcon, MonitorIcon, PaperclipIcon, PencilIcon, PinIcon, PlusIcon, QrCodeIcon, RefreshCwIcon, SearchIcon, ShareIcon, ShieldCheckIcon, SquarePenIcon, TerminalIcon, Trash2Icon } from "lucide-solid";
 import { Spinner } from "@/components/primitives";
-import { Bubble, Button, Card, Chip, Choice, ComposerField, DesktopComposer, Line, TextArea, Rider, RiderActions, RiderTitle, Toolbar, Frost, Input, Item, Keycap, Menu, PillButton, PillField, PillGroup, PillSwitch, HeadingSection, SearchSection, Section, Segmented, SelectTrigger, Slider } from "@/components/ui";
+import { OverlayBar, OverlayHints, OverlayList, OverlayPage, OverlayRail, OverlaySplit, Overlay, Scrim, SettingGroup, SettingLine, NavGroup, NavRow, Segmented, SelectTrigger, Bubble, Button, Card, Chip, Choice, ComposerField, DesktopComposer, Line, TextArea, Rider, RiderActions, RiderTitle, Toolbar, Frost, Input, Item, Keycap, Menu, PillButton, PillField, PillGroup, PillSwitch, HeadingSection, SearchSection, Section, Slider } from "@/components/ui";
 import { Switch } from "../client/settings/settings-controls";
 import { HarnessMark } from "../client/harness-brand";
 import { PlaceGlyph } from "../client/chat/place-picker";
 import { MODELS, PROFILES, PROJECTS } from "./seed";
 import { QuestionCard } from "../client/chat/question-card";
+import { ActivityIcon, BrainIcon, ChevronRightIcon, GlobeIcon, MessageSquareIcon, MicIcon as VoiceIcon, NotebookTextIcon, PanelLeftCloseIcon, ServerIcon } from "lucide-solid";
 import type { Question } from "../client/api/contracts";
 import { LibraryContext } from "@/components/ui/swap";
 
@@ -109,6 +110,32 @@ const TABS = [
 ];
 const SUMMARY = [q("name", "File name", "What should the file be called?", [], { freeform: { initial: "lorem.txt" } }), q("key", "API key", "Paste the key it should use", [], { secret: true, required: false })];
 
+// Overlay: the app's large surfaces, drawn from the library's pieces.
+const glyph = () => <span>&gt;</span>;
+const paletteList = () => <OverlayList>
+  <Section title="This chat"><Item icon={<PaperclipIcon />} active>Attach files</Item><Item icon={<FileTextIcon />} keys={["Ctrl", "Shift", "S"]}>Stash prompt</Item><Item icon={<PencilIcon />}>Rename chat</Item><Item icon={<CopyIcon />}>Copy last response</Item></Section>
+  <Section title="Go to"><Item icon={<SquarePenIcon />} opens keys={["Ctrl", ","]}>Settings…</Item><Item icon={<MessageSquareIcon />} opens keys={["Ctrl", "Shift", "K"]}>Search chats…</Item><Item icon={<PanelLeftIcon />} opens>Workspace views…</Item></Section>
+  <Section title="View"><Item icon={<PanelLeftCloseIcon />} keys={["Ctrl", "B"]}>Toggle sidebar</Item><Item icon={<PanelRightIcon />} keys={["Ctrl", "."]}>Toggle workspace panel</Item></Section>
+</OverlayList>;
+const paletteHints = () => <OverlayHints start={[[["↑", "↓"], "Navigate"], [["Enter"], "Open"]]} end={[[["Esc"], "Close"]]} />;
+const SortToggle = () => { const [sort, setSort] = createSignal<"latest" | "created">("created"); return <Segmented label="Chat sort" size="sm" value={sort()} onChange={setSort} options={[{ value: "latest", label: "Latest" }, { value: "created", label: "Created" }]} />; };
+const chatRows = () => <OverlayList>
+  <Section title="Recent"><Item icon={<SquarePenIcon />} meta="18:29" active>Untitled chat</Item><Item icon={<HarnessMark id="opencode" />} meta="9 Oct">Short Sprint Workout Plan</Item><Item icon={<HarnessMark id="opencode" />} meta="8 Oct">Wispah V3 Lodge</Item></Section>
+  <Section title="Folders"><Item icon={<FolderIcon />} meta="3 · 25 Sept" opens>Japan</Item><Item icon={<FolderIcon />} meta="0" opens>NHP</Item><Item icon={<FolderIcon />} meta="3 · 26 Sept" opens>Conduit</Item></Section>
+</OverlayList>;
+const chatPreview = () => <div class="g-stack"><Item icon={<SquarePenIcon />} detail="OpenCode · Chats · 18:30">Untitled chat</Item><div style={{ "align-self": "flex-end" }}><Bubble>ask me a question using the question tool</Bubble></div><p class="g-muted">I'll ask you a question using the question tool.</p></div>;
+const searchHints = () => <OverlayHints start={[[["Ctrl", "E"], "Edit"], [["Alt", "R"], "Rename"], [["Ctrl", "K", "D"], "Delete"]]} end={[[["/"], "Search in"], [["Ctrl", "P"], "Preview"], [["Enter"], "Open"], [["Esc"], "Close"]]} />;
+const settingsRail = () => <OverlayRail title="Settings" foot={<span>Interface 0.8.1-dev</span>}>
+  <NavGroup label="Personal"><NavRow icon={<MonitorIcon />} current>Appearance</NavRow><NavRow icon={<KeyboardIcon />}>Shortcuts</NavRow></NavGroup>
+  <NavGroup label="AI"><NavRow icon={<BrainIcon />}>Models &amp; accounts</NavRow><NavRow icon={<NotebookTextIcon />}>Prompts</NavRow></NavGroup>
+  <NavGroup label="System"><NavRow icon={<ActivityIcon />}>Runtime</NavRow><NavRow icon={<ServerIcon />}>Servers</NavRow></NavGroup>
+  <NavGroup label="Services"><NavRow icon={<VoiceIcon />}>Voice</NavRow><NavRow icon={<GlobeIcon />}>Web search</NavRow></NavGroup>
+</OverlayRail>;
+const settingsPage = () => <OverlayPage title="Appearance" onClose={() => {}}>
+  <SettingGroup title="Interface"><SettingLine label="Scale"><SelectTrigger value="75%" bare /></SettingLine><SettingLine label="Sidebar chats"><Input value="20" style={{ width: "8rem" }} /></SettingLine><SettingLine label="Tab row"><SwitchDemo /></SettingLine><SettingLine label="Streaming"><SelectTrigger value="Adaptive" bare /></SettingLine></SettingGroup>
+  <SettingGroup title="Reading"><SettingLine label="Transcript width"><SelectTrigger value="Compact" bare /></SettingLine><SettingLine label="Wide blocks"><SelectTrigger value="Off" bare /></SettingLine></SettingGroup>
+</OverlayPage>;
+
 export const libraryFamilies: Family[] = [
   { title: "Frost", note: "the material: fill, edge, blur, highlight. Lift: rest sits on the page, raised floats above it; core is a solid backing for busy content", groups: [{ atoms: [
     lib("frost-rest", "Rest", "both", "material", "Frost lift=rest", () => <Frost class="g-swatch" />),
@@ -188,6 +215,36 @@ export const libraryFamilies: Family[] = [
     { title: "Assembled", atoms: [
       lib("confirm", "FrostDialog alert", "both", "card", "Card", () => <Card title="Delete this chat?" detail="It can't be brought back." class="g-card" actions={<><Button variant="outline">Cancel</Button><Button variant="destructive">Delete</Button></>} />),
       lib("prompt", "FrostDialog", "both", "card", "Card + Input", () => <Card title="Rename chat" class="g-card" actions={<><Button variant="outline">Cancel</Button><Button>Save</Button></>}><Input value="Lorem ipsum file" /></Card>),
+    ] },
+  ] },
+  { title: "Overlay", note: "raised frost over a dimmed page, the large surfaces: sections edge to edge, ruled off -- a Bar, a body (a List, a List beside an aside, or a Rail beside a Page), Hints. Its rows are the popover's Items at its scale; its Rail is the sidebar's NavGroups", groups: [
+    { atoms: [
+      lib("overlay-anatomy", "Anatomy", "both", "overlay", "Scrim > Overlay > OverlayBar · OverlayList (Sections of Items) · OverlayHints", () => <div class="g-anatomy g-overlay-demo"><Overlay label="Anatomy">
+        <OverlayBar lead={glyph()} placeholder="OverlayBar: lead · input · end · close" onClose={() => {}} />
+        <OverlayList><Section title="OverlayList · Section"><Item icon={<PaperclipIcon />} active>Item</Item><Item icon={<SearchIcon />} keys={["Ctrl", "K"]}>Item with keys</Item><Item opens>Item that opens a page</Item></Section></OverlayList>
+        <OverlayHints start={[[["↑", "↓"], "OverlayHints"]]} end={[[["Esc"], "Close"]]} />
+      </Overlay></div>, true),
+      lib("overlay-anatomy-rail", "Anatomy · rail", "desktop", "overlay", "Overlay layout=rail > OverlayRail (NavGroups) · OverlayPage (SettingGroups of SettingLines)", () => <div class="g-anatomy g-overlay-demo"><Overlay label="Anatomy" layout="rail" style={{ "--overlay-width": "100%" }}>
+        <OverlayRail title="OverlayRail"><NavGroup label="NavGroup"><NavRow icon={<MonitorIcon />} current>NavRow</NavRow><NavRow icon={<KeyboardIcon />}>NavRow</NavRow></NavGroup></OverlayRail>
+        <OverlayPage title="OverlayPage" onClose={() => {}}><SettingGroup title="SettingGroup"><SettingLine label="SettingLine"><SelectTrigger value="Control" bare /></SettingLine><SettingLine label="SettingLine"><SwitchDemo /></SettingLine></SettingGroup></OverlayPage>
+      </Overlay></div>, true),
+      lib("overlay-bar", "OverlayBar", "both", "overlay", "OverlayBar lead · input · end · close", () => <div class="g-stack g-overlay-demo">
+        <Overlay label="Bar"><OverlayBar lead={glyph()} placeholder="Run a command…" onClose={() => {}} /></Overlay>
+        <Overlay label="Bar"><OverlayBar lead={<SearchIcon />} placeholder="Search chats, projects, workspaces…" end={<SortToggle />} onClose={() => {}} /></Overlay>
+      </div>, true),
+      lib("overlay-list", "OverlayList", "both", "overlay", "OverlayList > Section (a group title) > Item: icon · keys · opens · meta", () => <div class="g-overlay-demo"><Overlay label="List">{paletteList()}</Overlay></div>, true),
+      lib("overlay-hints", "OverlayHints", "desktop", "overlay", "OverlayHints start · end: keys and what they do", () => <div class="g-stack g-overlay-demo"><Overlay label="Hints">{paletteHints()}</Overlay><Overlay label="Hints">{searchHints()}</Overlay></div>, true),
+      lib("overlay-split", "OverlaySplit", "desktop", "overlay", "OverlaySplit: a List beside an aside", () => <div class="g-overlay-demo"><Overlay label="Split" style={{ "--overlay-width": "100%" }}><OverlaySplit aside={chatPreview()}>{chatRows()}</OverlaySplit></Overlay></div>, true),
+      lib("overlay-settings", "SettingGroup · SettingLine", "both", "overlay", "SettingGroup > SettingLine: a name, its control", () => <div class="g-overlay-demo"><Overlay label="Settings" layout="rail" style={{ "--overlay-width": "100%" }}>{settingsPage()}</Overlay></div>, true),
+    ] },
+    { title: "Assembled", note: "the app's own, at their sizes", layout: "desktop", atoms: [
+      lib("o-palette", "CommandMenu", "desktop", "overlay", "navigation/command-menu.tsx", () => <Scrim class="g-scrim"><Overlay label="Command palette" style={{ "--overlay-height": "480px" }}>
+        <OverlayBar lead={glyph()} placeholder="Run a command…" onClose={() => {}} />{paletteList()}{paletteHints()}</Overlay></Scrim>, "row"),
+      lib("o-search", "CommandMenu · chat search", "desktop", "overlay", "navigation/command-menu.tsx", () => <Scrim class="g-scrim"><Overlay label="Chat search" style={{ "--overlay-width": "calc(81.25 * var(--u-space))", "--overlay-height": "576px" }}>
+        <OverlayBar lead={<SearchIcon />} placeholder="Search chats, projects, workspaces…" end={<SortToggle />} onClose={() => {}} />
+        <OverlaySplit aside={chatPreview()}>{chatRows()}</OverlaySplit>{searchHints()}</Overlay></Scrim>, "row"),
+      lib("o-settings", "Settings", "desktop", "overlay", "settings/settings-core.tsx", () => <Scrim class="g-scrim" placement="center"><Overlay label="Settings" layout="rail" style={{ "--overlay-width": "calc(70.3125 * var(--u-space))", "--overlay-height": "560px" }}>
+        {settingsRail()}{settingsPage()}</Overlay></Scrim>, "row"),
     ] },
   ] },
   { title: "DesktopComposer", note: "desktop only, one integrated piece: resting frost holding a TextArea above a Toolbar, with Riders on its top edge. A phone's composer is Pills, sharing the TextArea and the Riders", groups: [
