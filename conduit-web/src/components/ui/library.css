@@ -24,11 +24,14 @@
 /* Density, measured from the app: text and general spacing grow 1.25x on a
    phone, icons barely; popover rows and the frost pill take their own
    measured sizes (rows ~1.8x, for a finger). Sizes below are written in desktop px over 12.8. */
-/* The section label's face: a curated mono Conduit ships (Inconsolata, or Paper
-   Mono from the app's styles), so labels look the same on every system; the
-   system's mono only as the fallback. Labels only: other mono (meta, keycaps,
-   code) stays the system's. */
-:root { --font-label: "Inconsolata Variable", ui-monospace, SFMono-Regular, Consolas, monospace; }
+/* The faces, by role (Foundations · Fonts switches them; --font-sans, the main UI's, is styles.css's).
+   Section labels take a mono Conduit ships (Paper Mono, from the app's styles), so they look
+   the same on every system, the system's mono only as the fallback; meta and keycaps stay the system's. */
+:root {
+  --font-label: "Paper Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  --font-code: ui-monospace, SFMono-Regular, Consolas, monospace;
+  --font-wordmark: "Conduit Wordmark", sans-serif;
+}
 :root, [data-density="desktop"] {
   --u-type: 12.8px; --u-space: 12.8px; --u-icon: 12.8px;
   --frost-radius: 8px; --frost-inset: 3.2px; --row-pad: 3.2px 4.8px; --row-min: 21.2px; --row-gap: 4.8px; --row-radius: 6.4px;
@@ -44,7 +47,7 @@
   --frost-radius: 14px; --frost-inset: 5px; --row-pad: 8px 9px; --row-min: 38px; --row-gap: 8px; --row-radius: 8px;
   --nav-min: 44px; --nav-pad: 6px 9px; --nav-gap: 8px; --nav-text: 14.5px; --nav-icon: 17px; --nav-label: 13px; --nav-label-pad: 5px 9px; --nav-indent: 30px;
 } }
-[data-density] { font-size: calc(var(--u-type) * 0.875); }
+[data-density] { font-family: var(--font-sans); font-size: calc(var(--u-type) * 0.875); }
 :root {
   --frost-stroke: #ffffff4d;
   --frost-fill: #ffffff2b;
@@ -436,7 +439,7 @@
 .ui-choice-check[data-multi="true"] svg { width: calc(0.6875 * var(--u-icon)); height: calc(0.6875 * var(--u-icon)); stroke-width: 4.4; }
 .ui-choice-input { min-width: 0; flex: 1; border: 0; background: transparent; padding: 0; color: var(--foreground); font: inherit; font-size: calc(1.015625 * var(--u-type)); line-height: 1.4; outline: 0; resize: none; }
 .ui-choice-input::placeholder { color: var(--muted-foreground); }
-.ui-preview { max-height: calc(14 * var(--u-space)); margin: 2px calc(0.5 * var(--u-space)); overflow: auto; border: 1px solid var(--frost-rule); border-radius: calc(0.625 * var(--u-space)); padding: calc(0.5 * var(--u-space)) calc(0.75 * var(--u-space)); font: calc(0.859375 * var(--u-type))/1.45 ui-monospace, SFMono-Regular, Consolas, monospace; white-space: pre; }
+.ui-preview { max-height: calc(14 * var(--u-space)); margin: 2px calc(0.5 * var(--u-space)); overflow: auto; border: 1px solid var(--frost-rule); border-radius: calc(0.625 * var(--u-space)); padding: calc(0.5 * var(--u-space)) calc(0.75 * var(--u-space)); font: calc(0.859375 * var(--u-type))/1.45 var(--font-code); white-space: pre; }
 .ui-preview[data-format="markdown"] { font-family: inherit; white-space: pre-wrap; }
 .ui-rider .ui-input[data-note] { width: auto; height: calc(2.25 * var(--u-space)); margin: 2px calc(0.5 * var(--u-space)) 0 calc(2.375 * var(--u-space)); }
 .ui-summary { display: grid; gap: 1px; }

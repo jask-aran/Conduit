@@ -91,68 +91,82 @@ function Space() {
 
 const sizes: [string, string][] = [["--u-icon", "row, toolbar"], ["--nav-icon", "sidebar"], ["--pill-icon", "pill"], ["--pill-solo-icon", "lone pill"]];
 
-/** A typeface: a specimen in it, and where the app uses it. */
-function Face(props: { family: string; weights?: number[]; sample?: string; uses: string[] }) {
+/** A typeface in the library: a specimen, the weights shipped, where it comes from. */
+function Face(props: { family: string; weights?: number[]; sample?: string; source: string }) {
   return <div class="g-face">
     <div class="g-face-specimen" style={{ "font-family": props.family }}>{props.sample ?? "Aa Bb Gg 0123456789"}</div>
     <div class="g-face-sample" style={{ "font-family": props.family }}>The quick brown fox jumps over the lazy dog</div>
     {props.weights && <div class="g-face-weights"><For each={props.weights}>{(weight) => <span style={{ "font-family": props.family, "font-weight": weight }}>{weight}</span>}</For></div>}
-    <ul class="g-face-uses"><For each={props.uses}>{(use) => <li>{use}</li>}</For></ul>
+    <small class="g-face-source">{props.source}</small>
   </div>;
 }
-/** The terminal's face is loaded by the terminal when it opens; here, when its cell does. */
-function TerminalFace() {
-  onMount(() => { const font = new FontFace("Conduit Terminal Font", `url(${terminalFontUrl}) format('truetype')`); void font.load().then((loaded) => document.fonts.add(loaded)); });
-  return <Face family={'"Conduit Terminal Font", monospace'} sample="~/Conduit $ ls  │ ├─ └─ ✓ ✗  0123" uses={["The terminal pane: Meslo LG S Nerd Font Mono, for its box drawing and icons"]} />;
-}
 
-/** The faces the section labels may take: each shipped, the system's mono after it. */
-const LABEL_FACES = [
-  { value: "inconsolata", label: "Inconsolata", family: '"Inconsolata Variable"' },
-  { value: "paper", label: "Paper Mono", family: '"Paper Mono"' },
-  { value: "system", label: "System mono", family: "" },
-] as const;
-type LabelFace = (typeof LABEL_FACES)[number]["value"];
-const LABEL_KEY = "gallery:label-face";
-const storedFace = (): LabelFace => { try { return (LABEL_FACES.find((face) => face.value === localStorage.getItem(LABEL_KEY))?.value) ?? "inconsolata"; } catch { return "inconsolata"; } };
-/** Sets --font-label to the face picked here (the gallery's and its phone frames'); library.css's default otherwise. */
-export function applyLabelFace(doc: Document, face = storedFace()) {
-  const family = LABEL_FACES.find((option) => option.value === face)!.family;
-  doc.documentElement.style.setProperty("--font-label", `${family ? family + ", " : ""}ui-monospace, SFMono-Regular, Consolas, monospace`);
+/*
+ * The roles: each a token the library draws with, and a switcher over the faces
+ * it may take. library.css holds each default (the first option); a pick sets
+ * the token on the gallery and its phone frames, and is remembered.
+ */
+const SANS = "sans-serif";
+const MONO = "ui-monospace, SFMono-Regular, Consolas, monospace";
+const option = (value: string, label: string, family: string) => ({ value, label, family });
+const GEIST = '"Geist Variable"', PAPER = '"Paper Mono"', INCONSOLATA = '"Inconsolata Variable"', MESLO = '"Conduit Terminal Font"', WORDMARK = '"Conduit Wordmark"';
+interface FontRole { token: string; title: string; fallback: string; options: ReturnType<typeof option>[]; uses: string; preview: () => JSX.Element }
+const ROLES: FontRole[] = [
+  { token: "--font-sans", title: "Main UI", fallback: SANS, uses: "Rows, headings, buttons, menus, cards, overlays; messages and the composer's text", options: [option("geist", "Geist", GEIST), option("paper", "Paper Mono", PAPER), option("system", "System", "system-ui")],
+    preview: () => <><Menu><Section><Item icon={<FolderIcon />}>Add to a project folder</Item><Item icon={<MonitorIcon />} checked>Assistant</Item></Section></Menu><Bubble>A message in the main face</Bubble></> },
+  { token: "--font-label", title: "Section labels", fallback: MONO, uses: "Muted caps over every section: popovers, cards, riders, the slider, the sidebar's groups", options: [option("paper", "Paper Mono", PAPER), option("inconsolata", "Inconsolata", INCONSOLATA), option("system", "System", "")],
+    preview: () => <Menu><Section title="Profile"><Item icon={<FolderIcon />}>Assistant</Item></Section><Section title="Model"><Item>GPT-6 Luna</Item></Section></Menu> },
+  { token: "--font-code", title: "Code", fallback: MONO, uses: "Code blocks, previews and artifacts, the file editor; the terminal draws in Meslo today", options: [option("system", "System", ""), option("meslo", "Meslo", MESLO), option("paper", "Paper Mono", PAPER), option("inconsolata", "Inconsolata", INCONSOLATA)],
+    preview: () => <Frost class="g-entry"><pre class="ui-preview">{"~/Conduit $ npm run build\n✓ built in 10.4s  │ ├─ └─\nconst x = { a: 1, b: [2, 3] };"}</pre></Frost> },
+  { token: "--font-wordmark", title: "Wordmark", fallback: SANS, uses: "The brand at the top of the sidebar", options: [option("druk", "Druk", WORDMARK), option("geist", "Geist", GEIST), option("paper", "Paper Mono", PAPER)],
+    preview: () => <Ground><span class="g-wordmark">Conduit</span></Ground> },
+];
+const roleKey = (role: FontRole) => `gallery:face${role.token}`;
+const stored = (role: FontRole) => { try { return role.options.find((option) => option.value === localStorage.getItem(roleKey(role)))?.value ?? role.options[0]!.value; } catch { return role.options[0]!.value; } };
+function applyRole(doc: Document, role: FontRole, value = stored(role)) {
+  const family = role.options.find((option) => option.value === value)!.family;
+  if (value === role.options[0]!.value) doc.documentElement.style.removeProperty(role.token);
+  else doc.documentElement.style.setProperty(role.token, `${family ? family + ", " : ""}${role.fallback}`);
 }
-function LabelFace() {
-  const [face, setFace] = createSignal(storedFace());
-  const pick = (next: LabelFace) => {
-    setFace(next);
-    try { localStorage.setItem(LABEL_KEY, next); } catch { /* private window */ }
-    for (const doc of [document, ...Array.from(document.querySelectorAll("iframe"), (frame) => frame.contentDocument)]) if (doc) applyLabelFace(doc, next);
+/** The picks, on a document: the gallery's at mount, each phone frame's at its own. */
+export function applyFaces(doc: Document) { for (const role of ROLES) applyRole(doc, role); }
+/** Faces loaded by script rather than CSS: the terminal's, which the terminal loads when it opens. */
+function loadTerminalFace() { if (![...document.fonts].some((font) => font.family === "Conduit Terminal Font")) void new FontFace("Conduit Terminal Font", `url(${terminalFontUrl}) format('truetype')`).load().then((font) => document.fonts.add(font)); }
+
+function Role(props: { role: FontRole }) {
+  const [value, setValue] = createSignal(stored(props.role));
+  onMount(loadTerminalFace);
+  const pick = (next: string) => {
+    setValue(next);
+    try { localStorage.setItem(roleKey(props.role), next); } catch { /* private window */ }
+    for (const doc of [document, ...Array.from(document.querySelectorAll("iframe"), (frame) => frame.contentDocument)]) if (doc) applyRole(doc, props.role, next);
     dispatchEvent(new Event("gallery:tune"));
   };
-  return <Spec read={(scope) => [...roles(["Section label", ".ui-title"])(scope), ["Face", getComputedStyle(scope.querySelector(".ui-title")!).fontFamily]]}>
-    <Segmented label="Section label face" value={face()} onChange={pick} options={LABEL_FACES.map(({ value, label }) => ({ value, label }))} />
-    <Menu><Section title="Profile"><Item icon={<FolderIcon />}>Assistant</Item></Section><Section title="Model"><Item>GPT-6 Luna</Item></Section></Menu>
-  </Spec>;
+  return <div class="g-role">
+    <Segmented size="sm" label={props.role.title} value={value()} onChange={pick} options={props.role.options.map(({ value, label }) => ({ value, label }))} />
+    <div class="g-role-preview">{props.role.preview()}</div>
+    <p class="g-role-uses">{props.role.uses}</p>
+    <Readout read={(scope) => [[props.role.token, getComputedStyle(scope).getPropertyValue(props.role.token).trim() || "—"]]} />
+  </div>;
 }
 
 export const foundationFamilies: Family[] = [
-  { title: "Fonts", rail: "Foundations", note: "the typefaces, and where each is used. Geist for all UI; a shipped mono for section labels; the system\'s mono for what is read as data; the rest each have one job", groups: [{ layout: "desktop", atoms: [
-    lib("font-geist", "Geist Variable", "both", "font", "@fontsource-variable/geist · --font-sans", () => <Face family="var(--font-sans)" weights={[400, 450, 500, 550, 560, 600, 650, 660, 700]}
-      uses={["All UI: rows, labels, headings, buttons, menus, cards, overlays", "The transcript and the composer's text, by default (Settings → Appearance)", "The weights above are the ones the app uses: rest 400–500, current 660, labels 700"]} />, true),
-    lib("font-label", "Section label face", "both", "font", "library.css --font-label", () => <LabelFace />, true),
-    lib("font-inconsolata", "Inconsolata Variable", "both", "font", "@fontsource-variable/inconsolata", () => <Face family={'"Inconsolata Variable", monospace'} weights={[400, 500, 600, 700]}
-      uses={["Shipped for the section labels (OFL), drawn after Consolas: so a label looks the same on every system", "Nothing else: meta, keycaps and code stay the system's mono"]} />),
-    lib("font-consolas", "Consolas", "both", "font", "local only: Windows and Office", () => <Face family="Consolas, monospace" sample="claude-opus-5-5  ~/src  12:04  Ctrl K"
-      uses={["What the live site's mono draws on Windows (its ui-monospace stack lands on Consolas there)", "Microsoft's, licensed with Windows and Office, so Conduit cannot ship it", "Shown from this machine's own copy"]} />),
-    lib("font-system-mono", "ui-monospace", "both", "font", "ui-monospace, SFMono-Regular, Consolas, monospace", () => <Face family="ui-monospace, SFMono-Regular, Consolas, monospace" sample="claude-opus-5-5  ~/src  12:04  Ctrl K"
-      uses={["The system's own mono: SF Mono on Apple, Consolas on Windows, Droid Sans Mono on Android", "Data: model ids, paths, keycaps, times and counts in meta, status, waveforms (tabular figures)", "Code: inline code, code blocks and artifacts, the file editor", "The section labels' fallback, until their face loads"]} />),
-    lib("font-paper", "Paper Mono", "both", "font", "client/fonts/PaperMono-Variable.woff2", () => <Face family={'"Paper Mono", ui-monospace, monospace'} weights={[400, 500, 600, 700]}
-      uses={["Optional: the transcript face when chosen in Settings → Appearance; a candidate for the section labels", "Then the messages, the composer's text and the voice captions; the rest of the UI stays Geist"]} />),
-    lib("font-wordmark", "Conduit Wordmark", "both", "font", "client/assets/fonts/druk-wide-web-super.woff2", () => <Face family={'"Conduit Wordmark", sans-serif'} sample="Conduit"
-      uses={["Druk Wide Super, for the brand only: the wordmark at the top of the sidebar"]} />),
-    lib("font-terminal", "Conduit Terminal Font", "both", "font", "client/assets/MesloLGSNerdFontMono-Regular.ttf", () => <TerminalFace />),
-    lib("font-katex", "KaTeX", "both", "font", "katex/dist/katex.min.css", () => <Face family="KaTeX_Main, serif" sample="∑ x² + ∫ f(t) dt = π"
-      uses={["Math in messages, typeset by KaTeX in its own serif faces (KaTeX_Main, _Math, _Size…)"]} />),
-  ] }] },
+  { title: "Fonts", rail: "Foundations", note: "first the roles, each with a switcher over the faces it may take; then every face Conduit ships; then the system's own, the fallbacks", groups: [
+    { title: "Roles", note: "a token each; the first option is library.css's default", atoms: ROLES.map((role) => lib(`font-role${role.token}`, role.title, "both", "font", `${role.token} · library.css :root`, () => <Role role={role} />)) },
+    { title: "Shipped", note: "the faces Conduit ships, so it looks the same on every system", layout: "desktop", atoms: [
+      lib("font-geist", "Geist Variable", "both", "font", "@fontsource-variable/geist", () => <Face family={GEIST} weights={[400, 450, 500, 560, 600, 660, 700]} source="@fontsource-variable/geist · OFL" />),
+      lib("font-paper", "Paper Mono", "both", "font", "client/fonts/PaperMono-Variable.woff2", () => <Face family={PAPER} weights={[400, 500, 600, 700]} source="client/fonts/PaperMono-Variable.woff2 · OFL · also the optional transcript face" />),
+      lib("font-inconsolata", "Inconsolata Variable", "both", "font", "@fontsource-variable/inconsolata", () => <Face family={INCONSOLATA} weights={[400, 500, 600, 700]} source="@fontsource-variable/inconsolata · OFL · drawn after Consolas" />),
+      lib("font-meslo", "Meslo LG S Nerd Font Mono", "both", "font", "client/assets/MesloLGSNerdFontMono-Regular.ttf", () => { onMount(loadTerminalFace); return <Face family={MESLO} sample="~/Conduit $ ls  │ ├─ └─ ✓ ✗" source="client/assets/MesloLGSNerdFontMono-Regular.ttf · the terminal's, for box drawing and icons" />; }),
+      lib("font-wordmark", "Druk Wide Super", "both", "font", "client/assets/fonts/druk-wide-web-super.woff2", () => <Face family={WORDMARK} sample="Conduit" source="client/assets/fonts/druk-wide-web-super.woff2 · as Conduit Wordmark" />),
+      lib("font-katex", "KaTeX", "both", "font", "katex/dist/katex.min.css", () => <Face family="KaTeX_Main, serif" sample="∑ x² + ∫ f(t) dt = π" source="katex · math in messages, in its own serif faces" />),
+    ] },
+    { title: "Fallbacks", note: "the system's own: not shipped, so they differ by system; each role falls back to one", layout: "desktop", atoms: [
+      lib("font-system-sans", "System sans", "both", "font", "system-ui, sans-serif", () => <Face family="system-ui, sans-serif" source="Segoe UI on Windows, SF Pro on Apple, Roboto on Android" />),
+      lib("font-system-mono", "System mono", "both", "font", MONO, () => <Face family={MONO} sample="claude-opus-5-5  ~/src  12:04" source="SF Mono on Apple, Consolas on Windows, Droid Sans Mono on Android · meta, keycaps and times" />),
+      lib("font-consolas", "Consolas", "both", "font", "local only", () => <Face family="Consolas, monospace" sample="claude-opus-5-5  ~/src  12:04" source="Microsoft's, with Windows and Office: not ours to ship · shown from this machine's copy" />),
+    ] },
+  ] },
   { title: "Type", rail: "Foundations", note: "the roles, each as the library draws it and as it computes. Rest is grey; current is white at 660, never a fill; over frost a row is a touch heavier and brighter. Section labels are muted mono caps, one style everywhere", groups: [{ atoms: [
     lib("type-frost", "Rows over frost", "both", "type", "Menu > Section > Item", () => <Spec read={roles(["Group label", ".ui-title"], ["Row · rest", ".ui-row:not([data-checked])"], ["Row · current", ".ui-row[data-checked]"], ["Meta", ".ui-row > small"], ["Keycap", ".ui-keycap"])}>
       <Menu><Section title="Group label"><Item icon={<FolderIcon />} meta="2m">Row at rest</Item><Item icon={<MonitorIcon />} checked>Current row</Item><Item icon={<SearchIcon />} keys={["Ctrl", "K"]}>Row with keys</Item></Section></Menu>
