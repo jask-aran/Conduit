@@ -50,8 +50,22 @@ export function PillField(props: { placeholder?: string; value?: string; onInput
  */
 export type Density = "desktop" | "phone";
 
+/**
+ * The one cursor (DESIGN Interaction): the pointer moves it, as the keyboard
+ * does, so only one row of a list is ever washed. A list's container passes
+ * this to onPointerOver; a row is a ui-row (data-highlighted) or a ui-choice (data-active).
+ */
+export function moveCursor(event: PointerEvent & { currentTarget: Element }) {
+  const row = (event.target as Element).closest(".ui-row, .ui-choice");
+  if (!row || !event.currentTarget.contains(row) || row.hasAttribute("data-disabled")) return;
+  const attr = row.classList.contains("ui-choice") ? "data-active" : "data-highlighted";
+  if (row.getAttribute(attr) === (attr === "data-active" ? "true" : "")) return;
+  event.currentTarget.querySelectorAll(`[${attr}]`).forEach((other) => other.removeAttribute(attr));
+  row.setAttribute(attr, attr === "data-active" ? "true" : "");
+}
+
 export function Menu(props: { class?: string; core?: boolean; density?: Density; children: JSX.Element }) {
-  return <div role="menu" class={cn("ui-frost ui-menu", props.class)} data-density={props.density} data-surface="frost" data-lift="raised" data-core={props.core ? "" : undefined}>{props.children}</div>;
+  return <div role="menu" class={cn("ui-frost ui-menu", props.class)} onPointerOver={moveCursor} data-density={props.density} data-surface="frost" data-lift="raised" data-core={props.core ? "" : undefined}>{props.children}</div>;
 }
 
 /** A menu's section: a list of items (the default) or a slider, with an optional title and a note beside it. */
@@ -148,6 +162,10 @@ export function Chip(props: { name: string; detail?: string; image?: string; ico
   </div>;
 }
 /** A numbered answer: label, description, and a check (a box when several may be chosen). */
+/** A list of Choices: one answer, or several (pick any). */
+export const Choices = (props: { multi?: boolean; children: JSX.Element }) =>
+  <div class="ui-choices" role="listbox" aria-multiselectable={props.multi ? "true" : undefined} onPointerOver={moveCursor}>{props.children}</div>;
+
 export function Choice(props: { n: number; label: string; detail?: string; chosen?: boolean; active?: boolean; multi?: boolean }) {
   return <div role="option" class="ui-choice" aria-selected={props.chosen} data-active={props.active ? "true" : undefined}>
     <span class="ui-choice-key">{props.n}</span><span class="ui-choice-label">{props.label}</span>
@@ -184,7 +202,7 @@ export function OverlayBar(props: { lead?: JSX.Element; placeholder: string; val
 }
 
 /** The scrolling body: Sections of Items, titled as groups. */
-export const OverlayList = (props: { children: JSX.Element }) => <div class="ui-overlay-list" role="listbox">{props.children}</div>;
+export const OverlayList = (props: { children: JSX.Element }) => <div class="ui-overlay-list" role="listbox" onPointerOver={moveCursor}>{props.children}</div>;
 
 /** A list beside an aside (a preview of what the list has selected). */
 export const OverlaySplit = (props: { aside: JSX.Element; children: JSX.Element }) =>
