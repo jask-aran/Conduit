@@ -156,6 +156,71 @@ export function Choice(props: { n: number; label: string; detail?: string; chose
   </div>;
 }
 
+/*
+ * Overlay: raised frost over a dimmed page -- the app's large surfaces (the
+ * command palette, chat search, settings). Its sections run edge to edge,
+ * divided by rules: a Bar (the field), a body -- a List, a List beside an
+ * aside (OverlaySplit), or a Rail beside a Page -- and Hints. Its rows are
+ * the popover's Items at the overlay's scale; the Rail is the sidebar's
+ * NavGroups. Its width is the caller's (--overlay-width).
+ */
+export function Scrim(props: { placement?: "top" | "center"; class?: string; children: JSX.Element }) {
+  return <div class={cn("ui-scrim", props.class)} data-placement={props.placement ?? "top"}>{props.children}</div>;
+}
+
+export function Overlay(props: { label: string; layout?: "stack" | "rail"; core?: boolean; density?: Density; class?: string; style?: JSX.CSSProperties; children: JSX.Element }) {
+  return <div role="dialog" aria-label={props.label} class={cn("ui-frost ui-overlay", props.class)} style={props.style} data-layout={props.layout ?? "stack"}
+    data-surface="frost" data-lift="raised" data-core={props.core ? "" : undefined} data-density={props.density}>{props.children}</div>;
+}
+
+/** The field across the top: a lead (a prompt glyph, a search icon, a back button), the input, then end controls and close. */
+export function OverlayBar(props: { lead?: JSX.Element; placeholder: string; value?: string; onInput?: (value: string) => void; end?: JSX.Element; onClose?: () => void }) {
+  return <div class="ui-overlay-bar">
+    <Show when={props.lead}><span class="ui-overlay-lead">{props.lead}</span></Show>
+    <input class="ui-overlay-input" placeholder={props.placeholder} value={props.value ?? ""} onInput={(event) => props.onInput?.(event.currentTarget.value)} />
+    {props.end}
+    <Show when={props.onClose}><Button variant="ghost" size="icon-sm" aria-label="Close" onClick={() => props.onClose?.()}><XIcon /></Button></Show>
+  </div>;
+}
+
+/** The scrolling body: Sections of Items, titled as groups. */
+export const OverlayList = (props: { children: JSX.Element }) => <div class="ui-overlay-list" role="listbox">{props.children}</div>;
+
+/** A list beside an aside (a preview of what the list has selected). */
+export const OverlaySplit = (props: { aside: JSX.Element; children: JSX.Element }) =>
+  <div class="ui-overlay-split">{props.children}<aside class="ui-overlay-aside">{props.aside}</aside></div>;
+
+/** The keys along the foot: [keys, what they do], at the start and the end. */
+export type Hint = [string[], string];
+export function OverlayHints(props: { start: Hint[]; end?: Hint[] }) {
+  const hint = ([keys, label]: Hint) => <span><For each={keys}>{(key) => <kbd class="ui-keycap">{key}</kbd>}</For>{label}</span>;
+  return <div class="ui-overlay-hints" aria-hidden="true"><For each={props.start}>{hint}</For>
+    <Show when={props.end}><span class="ui-overlay-hints-end"><For each={props.end}>{hint}</For></span></Show></div>;
+}
+
+/** A rail of sections down the side: a title, NavGroups, and a foot. */
+export function OverlayRail(props: { title: string; foot?: JSX.Element; children: JSX.Element }) {
+  return <nav class="ui-overlay-rail"><h2 class="ui-overlay-title">{props.title}</h2>{props.children}
+    <Show when={props.foot}><div class="ui-overlay-rail-foot">{props.foot}</div></Show></nav>;
+}
+
+/** The page beside a rail: its title, close, and SettingGroups. */
+export function OverlayPage(props: { title: string; onClose?: () => void; children: JSX.Element }) {
+  return <main class="ui-overlay-page">
+    <div class="ui-overlay-page-head"><h2 class="ui-overlay-title">{props.title}</h2>
+      <Show when={props.onClose}><Button variant="ghost" size="icon-sm" aria-label="Close" onClick={() => props.onClose?.()}><XIcon /></Button></Show></div>
+    {props.children}
+  </main>;
+}
+
+/** A titled group of SettingLines; groups after the first are ruled off. */
+export const SettingGroup = (props: { title: string; children: JSX.Element }) =>
+  <section class="ui-setting-group" aria-label={props.title}><div class="ui-nav-label">{props.title}</div>{props.children}</section>;
+
+/** A setting: its name, then its control at the end (a SelectTrigger, a Switch, an Input). */
+export const SettingLine = (props: { label: string; children: JSX.Element }) =>
+  <label class="ui-setting-line"><span>{props.label}</span><span class="ui-setting-control">{props.children}</span></label>;
+
 export const Bubble = (props: { children: JSX.Element }) => <div class="ui-frost ui-bubble">{props.children}</div>;
 
 
@@ -182,9 +247,9 @@ export function SelectTrigger(props: { value: string; bare?: boolean; onClick?: 
   return <button type="button" class="ui-input" data-bare={props.bare ? "" : undefined} onClick={props.onClick}><span>{props.value}</span><ChevronDownIcon /></button>;
 }
 
-export function Segmented<T extends string>(props: { label: string; value: T; options: ReadonlyArray<{ value: T; label: string; icon?: JSX.Element; count?: number }>; onChange: (value: T) => void; pill?: boolean; icons?: boolean }) {
+export function Segmented<T extends string>(props: { label: string; value: T; options: ReadonlyArray<{ value: T; label: string; icon?: JSX.Element; count?: number }>; onChange: (value: T) => void; size?: "sm"; pill?: boolean; icons?: boolean }) {
   const index = () => Math.max(0, props.options.findIndex((option) => option.value === props.value));
-  return <div role="radiogroup" aria-label={props.label} class={props.pill ? "ui-seg ui-frost" : "ui-seg"} data-pill={props.pill ? "" : undefined} data-icons={props.icons || props.pill ? "" : undefined}
+  return <div role="radiogroup" aria-label={props.label} class={props.pill ? "ui-seg ui-frost" : "ui-seg"} data-pill={props.pill ? "" : undefined} data-icons={props.icons || props.pill ? "" : undefined} data-size={props.size}
     style={{ "--segments": props.options.length, "--segment": index() }}>
     <span class="ui-seg-thumb" aria-hidden="true" />
     <For each={props.options}>{(option) => <button type="button" role="radio" aria-checked={option.value === props.value} aria-label={props.icons || props.pill ? option.label : undefined} title={props.icons || props.pill ? option.label : undefined}

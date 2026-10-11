@@ -185,6 +185,7 @@ html, body { background: var(--frame, #08090a); color: var(--foreground); }
 .g-dense .g-cell:has(.g-cell-toggle) .g-tag [data-scope] { display: none; }
 .g-composer { width: 460px; max-width: 100%; }
 .g-cell-body:has(> .g-composer) { width: 100%; }
+.g-cell-body:has(> :is(.g-scrim, .g-overlay-demo)) { width: 100%; }
 .g-stack { display: grid; gap: 8px; }
 .g-muted { color: var(--muted-foreground); font-weight: 400; }
 .g-picker { gap: 6px; }
@@ -195,3 +196,7 @@ html, body { background: var(--frame, #08090a); color: var(--foreground); }
 .g-dense .g-cell[data-wide="row"] { grid-column: 1 / -1; }
 /* A frost-free part, alone: its bounds dashed, on the cell's ground. */
 .g-part { outline: 1px dashed #ffffff33; outline-offset: 2px; border-radius: 4px; }
+.g-overlay-demo { width: 100%; max-width: 640px; }
+.g-overlay-demo .ui-overlay { margin-inline: auto; }
+.g-scrim { width: 100%; border-radius: 10px; padding: 24px 12px; }
+.g-anatomy :is(.ui-overlay-bar, .ui-overlay-list, .ui-overlay-hints, .ui-overlay-rail, .ui-overlay-page, .ui-setting-group) { outline: 1px dashed #d99a2299; outline-offset: -1px; }

@@ -184,6 +184,10 @@
 [data-surface="frame"] :is(.ui-pill > button, .ui-seg[data-pill] button[aria-checked="true"]) { color: var(--sidebar-accent-foreground); }
 [data-surface="frame"] .ui-seg[data-pill] .ui-seg-thumb { background: var(--sidebar-accent); }
 @media (prefers-reduced-motion: reduce) { .ui-seg-thumb { transition: none; } }
+/* A small segmented choice, for a bar's end (chat search's sort). */
+.ui-seg[data-size="sm"] { padding: 1.6px; gap: 1.6px; border-color: oklch(1 0 0 / 12%); border-radius: calc(0.546875 * var(--u-space)); }
+.ui-seg[data-size="sm"] .ui-seg-thumb { top: 1.6px; bottom: 1.6px; left: 1.6px; border-radius: calc(0.390625 * var(--u-space)); }
+.ui-seg[data-size="sm"] button { min-height: calc(1.40625 * var(--u-space)); padding: 2px calc(0.546875 * var(--u-space)); font-size: calc(0.75 * var(--u-type)); }
 
 /* Slider: the label is a section title, the value an item (one that opens,
    when it opens the levels); track, thumb and ticks follow density. */
@@ -429,3 +433,44 @@
 .ui-textarea::placeholder { color: var(--muted-foreground); }
 /* A Choice holding its own answer: a TextArea (several lines) or a bare input (one), set as the label is. */
 .ui-choice > .ui-textarea { min-width: 0; flex: 1; font-size: calc(1.015625 * var(--u-type)); line-height: 1.4; }
+
+/* Overlay: raised frost over a dimmed page (palette, chat search, settings).
+   Sizes measured from the app at desktop, written over 12.8 so a phone scales. */
+.ui-scrim { display: grid; grid-template-columns: minmax(0, 1fr); justify-items: center; align-items: start; background: rgb(0 0 0 / 42%); padding: calc(1 * var(--u-space)); }
+.ui-scrim[data-placement="center"] { align-items: center; }
+.ui-frost.ui-overlay { display: flex; width: min(var(--overlay-width, calc(40 * var(--u-space))), 100%); max-height: var(--overlay-height, none); flex-direction: column; overflow: hidden; border-radius: calc(1.09375 * var(--u-space)); padding: 0; color: var(--foreground); font-size: calc(0.9375 * var(--u-type)); }
+.ui-overlay[data-layout="rail"] { flex-direction: row; }
+.ui-overlay-bar { display: flex; min-height: calc(3.4375 * var(--u-space)); flex: none; align-items: center; gap: calc(0.625 * var(--u-space)); border-bottom: 1px solid var(--frost-rule); padding: calc(0.3125 * var(--u-space)) calc(0.859375 * var(--u-space)); }
+.ui-overlay-lead { display: inline-grid; flex: none; place-items: center; color: var(--foreground); font-size: calc(1.25 * var(--u-type)); font-weight: 600; line-height: 1; }
+.ui-overlay-lead svg { width: calc(1.09375 * var(--u-icon)); height: calc(1.09375 * var(--u-icon)); color: var(--muted-foreground); }
+.ui-overlay-input { min-width: 0; height: calc(2.8125 * var(--u-space)); flex: 1; border: 0; outline: 0; background: transparent; padding: 0; color: var(--foreground); font-size: calc(1.015625 * var(--u-type)); font-weight: 450; line-height: 1.5; }
+.ui-overlay-input::placeholder { color: var(--muted-foreground); }
+.ui-overlay-bar .ui-seg { flex: none; }
+/* Its rows: a popover's Items at the overlay's scale, full colour; its group titles plain, not ruled. */
+.ui-overlay-list { --row-pad: calc(0.3125 * var(--u-space)) calc(0.625 * var(--u-space)); --row-min: calc(2.34375 * var(--u-space)); --row-gap: calc(0.78125 * var(--u-space)); --row-radius: calc(0.703125 * var(--u-space));
+  min-height: 0; flex: 1; overflow: auto; padding: calc(0.390625 * var(--u-space)) calc(0.46875 * var(--u-space)); }
+.ui-overlay-list .ui-row { color: var(--foreground); font-size: calc(0.9375 * var(--u-type)); font-weight: 520; }
+.ui-overlay-list .ui-row > .ui-icon { width: calc(1.09375 * var(--u-icon)); height: calc(1.09375 * var(--u-icon)); color: var(--muted-foreground); }
+.ui-overlay-list .ui-row > small { font-size: calc(0.78125 * var(--u-type)); }
+.ui-overlay-list .ui-section + .ui-section { margin: calc(0.25 * var(--u-space)) 0 0; border: 0; padding: 0; }
+.ui-overlay-list .ui-title { color: color-mix(in oklch, var(--foreground), transparent 50%); font-family: inherit; font-size: calc(0.75 * var(--u-type)); font-weight: 700; line-height: 1.5; letter-spacing: 0; text-transform: none; padding: calc(0.5 * var(--u-space)) calc(0.625 * var(--u-space)) calc(0.25 * var(--u-space)); }
+.ui-overlay-split { display: grid; min-height: 0; flex: 1; grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr); }
+.ui-overlay-aside { min-width: 0; overflow: auto; border-left: 1px solid var(--frost-rule); padding: calc(1 * var(--u-space)); }
+.ui-overlay-hints { display: flex; min-height: calc(2.65625 * var(--u-space)); flex: none; flex-wrap: wrap; align-items: center; gap: calc(0.3125 * var(--u-space)) calc(0.9375 * var(--u-space)); border-top: 1px solid var(--frost-rule); padding: calc(0.46875 * var(--u-space)) calc(0.78125 * var(--u-space)); color: var(--muted-foreground); font-size: calc(0.78125 * var(--u-type)); }
+.ui-overlay-hints span { display: inline-flex; align-items: center; gap: calc(0.25 * var(--u-space)); white-space: nowrap; }
+.ui-overlay-hints-end { margin-left: auto; gap: calc(0.9375 * var(--u-space)) !important; }
+.ui-overlay-title { margin: 0; font-size: calc(1.40625 * var(--u-type)); font-weight: 600; line-height: 1.5; letter-spacing: -0.02em; }
+/* The rail beside a page: the sidebar's NavGroups, washed as a popover's rows are. */
+.ui-overlay-rail { display: flex; width: calc(14.84375 * var(--u-space)); flex: none; flex-direction: column; gap: calc(0.1875 * var(--u-space)); overflow: auto; border-right: 1px solid var(--frost-rule); padding: calc(1.25 * var(--u-space)) calc(0.78125 * var(--u-space)); }
+.ui-overlay-rail > .ui-overlay-title { margin-bottom: calc(0.5 * var(--u-space)); padding-left: calc(0.5 * var(--u-space)); }
+.ui-overlay-rail .ui-nav-group + .ui-nav-group { margin-top: calc(0.5 * var(--u-space)); }
+.ui-overlay .ui-nav-row:is(:hover, [aria-current="page"]) { background: var(--frost-wash); color: var(--foreground); }
+.ui-overlay-rail-foot { margin-top: auto; color: var(--muted-foreground); font-size: var(--nav-text); }
+.ui-overlay-page { display: flex; min-width: 0; flex: 1; flex-direction: column; overflow: auto; padding: calc(1.25 * var(--u-space)) calc(1.875 * var(--u-space)) calc(1.875 * var(--u-space)); }
+.ui-overlay-page-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: calc(0.75 * var(--u-space)); padding-left: calc(0.5 * var(--u-space)); }
+.ui-setting-group { display: flex; flex-direction: column; gap: 1px; }
+.ui-setting-group + .ui-setting-group { margin-top: calc(0.75 * var(--u-space)); border-top: 1px solid var(--frost-rule); padding-top: calc(0.9375 * var(--u-space)); }
+.ui-setting-line { display: flex; min-height: calc(2.1875 * var(--u-space)); align-items: center; gap: calc(0.9375 * var(--u-space)); border-radius: calc(0.5 * var(--u-space)); padding: 2px calc(0.3125 * var(--u-space)) 2px calc(0.5 * var(--u-space)); font-size: var(--nav-text); }
+.ui-setting-line:hover { background: var(--frost-wash); }
+.ui-setting-line > span:first-child { min-width: 0; flex: 1; }
+.ui-setting-control { display: inline-flex; flex: none; align-items: center; }
