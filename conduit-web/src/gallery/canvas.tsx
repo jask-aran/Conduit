@@ -9,7 +9,7 @@ import "@/components/ui/library.css";
 import { ChatScreen } from "./stories";
 import { LibraryContext } from "@/components/ui/swap";
 import { SidebarScreen } from "./sidebar-story";
-import { libraryFamilies, type Atom } from "./library";
+import { libraryFamilies, overlayViews, type Atom, type OverlayView } from "./library";
 
 /*
  * Components v2 (components/ui) on the left, by family: the base piece, its
@@ -53,9 +53,24 @@ function Canvas() {
   const views = [
     { key: "phone", render: () => <iframe class="g-phone" title="Phone" src="/gallery.html?frame=phone" onLoad={tuneFrame} /> },
     { key: "sidebar", render: () => <iframe class="g-phone" title="Phone sidebar" src="/gallery.html?frame=sidebar" onLoad={tuneFrame} /> },
-    { key: "desktop", render: () => <div class="g-desktop-screen"><LibraryContext.Provider value={true}><ChatScreen /></LibraryContext.Provider></div> },
+    { key: "desktop", render: () => <div ref={desktop} class="g-desktop-screen" onKeyDown={(event) => { if (event.key === "Escape") setOverlay(null); }}>
+      <LibraryContext.Provider value={true}><ChatScreen /></LibraryContext.Provider>
+      <Show when={overlay()} keyed>{(view) => <div class="g-desktop-overlay" onPointerDown={(event) => { if ((event.target as Element).classList.contains("ui-scrim")) setOverlay(null); }}>
+        <LibraryContext.Provider value={true}>{overlayViews[view]({ close: () => setOverlay(null), class: "g-preview-scrim", ...(view === "leader" ? litComposer() : {}) })}</LibraryContext.Provider>
+      </div>}</Show>
+    </div> },
   ];
   const [tuning, setTuning] = createSignal(false);
+  // One desktop preview; its overlays open over it from buttons, not as copies of it.
+  const [overlay, setOverlay] = createSignal<OverlayView | null>(null);
+  let desktop: HTMLDivElement | undefined;
+  const litComposer = () => {
+    const wrap = desktop?.querySelector(".composer-wrap"); if (!desktop || !wrap) return undefined;
+    const frame = desktop.getBoundingClientRect(), box = wrap.getBoundingClientRect();
+    return { lit: { top: `${box.top - frame.top}px`, left: `${box.left - frame.left}px`, width: `${box.width}px`, height: `${box.height}px`, radius: getComputedStyle(wrap.querySelector(".composer") ?? wrap).borderRadius },
+      leaderBottom: `${frame.bottom - box.top + 12}px` };
+  };
+  const overlays: [OverlayView, string][] = [["leader", "Leader"], ["palette", "Command palette"], ["search", "Chat search"], ["settings", "Settings"]];
   // Components v2 is the frosted family, plus Controls, which sit on any surface: a tab each.
   const [tab, setTab] = createSignal<"frost" | "controls">((() => { try { return localStorage.getItem("gallery:tab") === "controls" ? "controls" : "frost"; } catch { return "frost"; } })());
   const pick = (next: "frost" | "controls") => { setTab(next); try { localStorage.setItem("gallery:tab", next); } catch { /* private window */ } };
@@ -95,6 +110,9 @@ function Canvas() {
           <button type="button" aria-pressed={preview() === "sidebar"} onClick={() => setPreview("sidebar")}>Phone sidebar</button>
           <button type="button" aria-pressed={preview() === "desktop"} onClick={() => setPreview("desktop")}>Desktop</button>
         </div>
+        <Show when={preview() === "desktop"}><div class="g-toggle" role="group" aria-label="Open over the desktop">
+          <For each={overlays}>{([view, label]) => <button type="button" aria-pressed={overlay() === view} onClick={() => setOverlay(overlay() === view ? null : view)}>{label}</button>}</For>
+        </div></Show>
       </div>
       {/* Every view stays mounted once opened, so switching is instant: no frame reloads. */}
       <For each={views}>{(view) => <Show when={seen().has(view.key)}>

@@ -133,10 +133,25 @@ const settingsRail = () => <OverlayRail title="Settings" foot={<span>Interface 0
   <NavGroup label="System"><NavRow icon={<ActivityIcon />}>Runtime</NavRow><NavRow icon={<ServerIcon />}>Servers</NavRow></NavGroup>
   <NavGroup label="Services"><NavRow icon={<VoiceIcon />}>Voice</NavRow><NavRow icon={<GlobeIcon />}>Web search</NavRow></NavGroup>
 </OverlayRail>;
-const settingsPage = () => <OverlayPage title="Appearance" status="Saved" onClose={() => {}}>
+const settingsPage = (close: () => void = () => {}) => <OverlayPage title="Appearance" status="Saved" onClose={close}>
   <SettingGroup title="Interface"><SettingLine label="Scale"><SelectTrigger value="75%" bare /></SettingLine><SettingLine label="Sidebar chats"><Input value="20" /></SettingLine><SettingLine label="Tab row"><SwitchDemo /></SettingLine><SettingLine label="Streaming" state="paused while hidden"><SelectTrigger value="Adaptive" bare /></SettingLine></SettingGroup>
   <SettingGroup title="Reading"><SettingLine label="Transcript width"><SelectTrigger value="Compact" bare /></SettingLine><SettingLine label="Wide blocks"><SelectTrigger value="Off" bare /></SettingLine></SettingGroup>
 </OverlayPage>;
+
+/** The app's overlays, assembled: drawn in their gallery cells and over the desktop preview. */
+export type OverlayView = "leader" | "palette" | "search" | "settings";
+type Lit = { top: string; left: string; width: string; height: string; radius?: string };
+export const overlayViews: Record<OverlayView, (props: { close: () => void; class?: string; lit?: Lit; leaderBottom?: string }) => JSX.Element> = {
+  palette: (props) => <Scrim class={props.class}><Overlay label="Command palette" style={{ "--overlay-height": "480px" }}>
+    <OverlayBar lead={glyph()} placeholder="Run a command…" onClose={props.close} />{paletteList()}{paletteHints()}</Overlay></Scrim>,
+  search: (props) => <Scrim class={props.class}><Overlay label="Chat search" style={{ "--overlay-width": "calc(81.25 * var(--u-space))", "--overlay-height": "576px" }}>
+    <OverlayBar lead={<SearchIcon />} placeholder="Search chats, projects, workspaces…" value="t" end={<SortToggle />} onClose={props.close} />
+    <OverlaySplit aside={chatPreview()}>{chatRows("t")}</OverlaySplit>{searchHints()}</Overlay></Scrim>,
+  settings: (props) => <Scrim class={props.class} placement="center"><Overlay label="Settings" layout="rail" style={{ "--overlay-width": "calc(70.3125 * var(--u-space))", "--overlay-height": "560px" }}>
+    {settingsRail()}{settingsPage(props.close)}</Overlay></Scrim>,
+  leader: (props) => <><Spotlight lit={props.lit} /><div class="g-page-leader" style={props.leaderBottom ? { bottom: props.leaderBottom } : undefined}><Leader leader="Ctrl G" path={<LeaderPath />} hints={leaderHints()}>{leaderRows()}</Leader></div></>,
+};
+const noop = () => {};
 
 export const libraryFamilies: Family[] = [
   { title: "Frost", note: "the material: fill, edge, blur, highlight. Lift: rest sits on the page, raised floats above it; core is a solid backing for busy content", groups: [{ atoms: [
@@ -246,15 +261,10 @@ export const libraryFamilies: Family[] = [
     ] },
     { title: "Assembled", note: "the app's own, at their sizes", layout: "desktop", atoms: [
       lib("o-leader", "LeaderPalette", "desktop", "overlay", "navigation/leader-palette.tsx · the composer region lit", () => <div class="g-page"><div class="g-page-pane" /><div class="g-page-composer" />
-        <Spotlight lit={{ top: "calc(100% - 76px)", left: "calc(50% - 230px)", width: "460px", height: "56px", radius: "17.6px" }} />
-        <div class="g-page-leader"><Leader leader="Ctrl G" path={<LeaderPath />} hints={leaderHints()}>{leaderRows()}</Leader></div></div>, "row"),
-      lib("o-palette", "CommandMenu", "desktop", "overlay", "navigation/command-menu.tsx", () => <Scrim class="g-scrim"><Overlay label="Command palette" style={{ "--overlay-height": "480px" }}>
-        <OverlayBar lead={glyph()} placeholder="Run a command…" onClose={() => {}} />{paletteList()}{paletteHints()}</Overlay></Scrim>, "row"),
-      lib("o-search", "CommandMenu · chat search", "desktop", "overlay", "navigation/command-menu.tsx", () => <Scrim class="g-scrim"><Overlay label="Chat search" style={{ "--overlay-width": "calc(81.25 * var(--u-space))", "--overlay-height": "576px" }}>
-        <OverlayBar lead={<SearchIcon />} placeholder="Search chats, projects, workspaces…" value="t" end={<SortToggle />} onClose={() => {}} />
-        <OverlaySplit aside={chatPreview()}>{chatRows("t")}</OverlaySplit>{searchHints()}</Overlay></Scrim>, "row"),
-      lib("o-settings", "Settings", "desktop", "overlay", "settings/settings-core.tsx", () => <Scrim class="g-scrim" placement="center"><Overlay label="Settings" layout="rail" style={{ "--overlay-width": "calc(70.3125 * var(--u-space))", "--overlay-height": "560px" }}>
-        {settingsRail()}{settingsPage()}</Overlay></Scrim>, "row"),
+        {overlayViews.leader({ close: noop, lit: { top: "calc(100% - 76px)", left: "calc(50% - 230px)", width: "460px", height: "56px", radius: "17.6px" } })}</div>, "row"),
+      lib("o-palette", "CommandMenu", "desktop", "overlay", "navigation/command-menu.tsx", () => overlayViews.palette({ close: noop, class: "g-scrim" }), "row"),
+      lib("o-search", "CommandMenu · chat search", "desktop", "overlay", "navigation/command-menu.tsx", () => overlayViews.search({ close: noop, class: "g-scrim" }), "row"),
+      lib("o-settings", "Settings", "desktop", "overlay", "settings/settings-core.tsx", () => overlayViews.settings({ close: noop, class: "g-scrim" }), "row"),
     ] },
   ] },
   { title: "DesktopComposer", note: "desktop only, one integrated piece: resting frost holding a TextArea above a Toolbar, with Riders on its top edge. A phone's composer is Pills, sharing the TextArea and the Riders", groups: [
