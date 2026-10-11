@@ -184,7 +184,14 @@ export function QuestionCard(props: { request: HostUiRequest; dismissLabel?: str
               {freeform().multiline
                 ? <textarea ref={(element) => { own = element; }} rows={2} class={k("question-own-input", "ui-textarea")} placeholder={placeholder} aria-label={placeholder}
                   value={draft(question).freeform} onInput={input} onFocus={() => setCursor(question.options.length)} />
-                : <input ref={(element) => { own = element; }} class={k("question-own-input", "ui-choice-input")} placeholder={placeholder} aria-label={placeholder}
+                : v2() && !question.secret
+                  // components v2: one line is a TextArea too, held to one line (a secret stays a masked input).
+                  ? <textarea ref={(element) => { own = element; }} rows={1} class="ui-textarea" placeholder={placeholder} aria-label={placeholder}
+                    inputmode={freeform().numeric ? "decimal" : undefined} value={draft(question).freeform}
+                    onKeyDown={(event) => { if (event.key === "Enter") event.preventDefault(); }}
+                    onInput={(event) => { if (event.currentTarget.value.includes("\n")) event.currentTarget.value = event.currentTarget.value.replace(/\n/g, " "); input(event); }}
+                    onFocus={() => setCursor(question.options.length)} />
+                  : <input ref={(element) => { own = element; }} class={k("question-own-input", "ui-choice-input")} placeholder={placeholder} aria-label={placeholder}
                   type={question.secret ? "password" : "text"} inputmode={freeform().numeric ? "decimal" : undefined}
                   value={draft(question).freeform} onInput={input} onFocus={() => setCursor(question.options.length)} />}
               <span class={k("question-check", "ui-choice-check")}><Show when={draft(question).freeform.trim()}><CheckIcon /></Show></span>
