@@ -520,3 +520,22 @@
 [data-density="phone"] .ui-overlay-hints { display: none; }
 .ui-match { color: var(--muted-foreground); }
 .ui-match > b { color: var(--foreground); font-weight: 660; }
+
+/* Leader: a small overlay card above the composer, measured from the app's (360 wide). */
+.ui-frost.ui-leader { --overlay-width: calc(28.125 * var(--u-space)); }
+.ui-overlay-bar[data-head] { min-height: calc(2.96875 * var(--u-space)); gap: calc(0.46875 * var(--u-space)); padding: calc(0.46875 * var(--u-space)) calc(0.78125 * var(--u-space)); }
+.ui-keys[data-first] { display: inline-flex; min-width: calc(3.125 * var(--u-space)); flex: none; gap: calc(0.1875 * var(--u-space)); }
+.ui-leader .ui-keys[data-first] .ui-keycap { color: var(--foreground); }
+/* Crumbs: the breadcrumb's place caps; the current place white, no fill. */
+.ui-crumbs { display: flex; min-width: 0; flex: 1; align-items: center; justify-content: flex-end; gap: 2px; overflow: hidden; }
+.ui-crumbs > button { flex: none; border: 0; border-radius: calc(0.46875 * var(--u-space)); background: transparent; padding: 2px calc(0.390625 * var(--u-space)); color: var(--muted-foreground); font: 500 calc(0.7421875 * var(--u-type))/1.2 ui-monospace, SFMono-Regular, Consolas, monospace; letter-spacing: .07em; text-transform: uppercase; cursor: pointer; }
+.ui-crumbs > button:hover:not(:disabled) { background: var(--frost-wash); color: var(--foreground); }
+.ui-crumbs > button[aria-current="true"] { color: var(--foreground); font-weight: 700; }
+.ui-crumbs > button:disabled { opacity: .55; cursor: default; }
+.ui-crumbs-sep { color: var(--muted-foreground); font-size: calc(0.78125 * var(--u-type)); opacity: .6; }
+/* Spotlight: the dim is the shadow round the lit region. */
+.ui-spotlight { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+.ui-spotlight-lit { position: absolute; box-shadow: 0 0 0 200vmax rgb(0 0 0 / 48%); transition: top 200ms cubic-bezier(.2, .8, .2, 1), left 200ms cubic-bezier(.2, .8, .2, 1), width 200ms cubic-bezier(.2, .8, .2, 1), height 200ms cubic-bezier(.2, .8, .2, 1); }
+.ui-spotlight-lit[data-whole] { top: 50%; left: 50%; width: 0; height: 0; }
+@media (prefers-reduced-motion: reduce) { .ui-spotlight-lit { transition: none; } }
+.ui-leader .ui-overlay-hints { gap: calc(0.234375 * var(--u-space)) calc(0.625 * var(--u-space)); }

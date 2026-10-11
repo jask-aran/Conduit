@@ -97,13 +97,16 @@ export function Item(props: {
   icon?: JSX.Element; meta?: JSX.Element; detail?: JSX.Element; keys?: string[]; opens?: boolean; active?: boolean;
   /** field: the label is a field name (title type) and meta its value, as in "CONTEXT  Unavailable ›". */
   field?: boolean; onClick?: () => void;
+  /** keysFirst: the keycaps lead the row (the leader menu, where the key is what you read first). */
+  keysFirst?: boolean;
   checked?: boolean; disabled?: boolean; destructive?: boolean; children: JSX.Element;
 }) {
   return <div role={props.checked !== undefined ? "menuitemradio" : "menuitem"} class="ui-row" aria-checked={props.checked} data-field={props.field ? "" : undefined} onClick={props.onClick}
     data-highlighted={props.active ? "" : undefined} data-checked={props.checked ? "" : undefined} data-disabled={props.disabled ? "" : undefined} data-destructive={props.destructive ? "" : undefined}>
+    <Show when={props.keysFirst && props.keys}><span class="ui-keys" data-first><For each={props.keys}>{(key) => <kbd class="ui-keycap">{key}</kbd>}</For></span></Show>
     <Show when={props.icon}><span class="ui-icon">{props.icon}</span></Show><span class="ui-label" data-stacked={props.detail ? "" : undefined}><Show when={props.detail} fallback={props.children}><span>{props.children}</span><small class="ui-detail">{props.detail}</small></Show></span>
     <Show when={props.meta}><small>{props.meta}</small></Show>
-    <Show when={props.keys}><span class="ui-keys"><For each={props.keys}>{(key) => <kbd class="ui-keycap">{key}</kbd>}</For></span></Show>
+    <Show when={!props.keysFirst && props.keys}><span class="ui-keys"><For each={props.keys}>{(key) => <kbd class="ui-keycap">{key}</kbd>}</For></span></Show>
     <Show when={props.opens}><ChevronRightIcon class="ui-chevron" /></Show>
   </div>;
 }
@@ -245,6 +248,39 @@ export const SettingGroup = (props: { title: string; children: JSX.Element }) =>
 /** A setting: its name (state that matters muted after it), then its control in the one control column. */
 export const SettingLine = (props: { label: string; state?: string; children: JSX.Element }) =>
   <label class="ui-setting-line"><span>{props.label}<Show when={props.state}><small>{props.state}</small></Show></span><span class="ui-setting-control">{props.children}</span></label>;
+
+/** An overlay's head without a field: what it is about (the leader's key and path). */
+export const OverlayHead = (props: { children: JSX.Element }) => <div class="ui-overlay-bar" data-head>{props.children}</div>;
+
+/**
+ * A breadcrumb of places: the one uppercase label (DESIGN Typography). The
+ * current place is white with no fill; the cursor washes the others.
+ */
+export function Crumbs(props: { label: string; items: { label: string; current?: boolean; disabled?: boolean; onClick?: () => void }[] }) {
+  return <nav class="ui-crumbs" aria-label={props.label}><For each={props.items}>{(item, index) => <>
+    <Show when={index() > 0}><span class="ui-crumbs-sep" aria-hidden="true">›</span></Show>
+    <button type="button" aria-current={item.current ? "true" : undefined} disabled={item.disabled} onClick={() => item.onClick?.()}>{item.label}</button>
+  </>}</For></nav>;
+}
+
+/**
+ * The leader menu (Ctrl+G): a small raised frost card that floats without
+ * covering the page, above the composer. Its head is the leader's key and the
+ * region path; its rows lead with their keys; its rail holds the go-to chords
+ * and Esc. The page dims round it all but the current region (Spotlight).
+ */
+export function Leader(props: { leader: string; path: JSX.Element; hints: JSX.Element; children: JSX.Element }) {
+  return <Overlay label="Leader" class="ui-leader"><OverlayHead><kbd class="ui-keycap">{props.leader}</kbd>{props.path}</OverlayHead>
+    <OverlayList>{props.children}</OverlayList>{props.hints}</Overlay>;
+}
+
+/** The dim over the page with one region left lit, cut out with its own corners; no region lights nothing. */
+export function Spotlight(props: { lit?: { top: string; left: string; width: string; height: string; radius?: string }; class?: string; children?: JSX.Element }) {
+  return <div class={cn("ui-spotlight", props.class)} aria-hidden="true">
+    <div class="ui-spotlight-lit" data-whole={props.lit ? undefined : ""} style={props.lit ? { top: props.lit.top, left: props.lit.left, width: props.lit.width, height: props.lit.height, "border-radius": props.lit.radius } : {}} />
+    {props.children}
+  </div>;
+}
 
 export const Bubble = (props: { children: JSX.Element }) => <div class="ui-frost ui-bubble">{props.children}</div>;
 

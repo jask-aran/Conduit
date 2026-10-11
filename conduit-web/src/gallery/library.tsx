@@ -2,7 +2,7 @@ import { PanelLeftIcon, MessageSquarePlusIcon, EllipsisIcon, CameraIcon, Keyboar
 import { createSignal, For, onMount, type JSX } from "solid-js";
 import { PanelRightIcon, ClipboardCopyIcon, Columns2Icon, CopyIcon, FolderIcon, FolderInputIcon, LayoutDashboardIcon, MenuIcon, MonitorIcon, PaperclipIcon, PencilIcon, PinIcon, PlusIcon, QrCodeIcon, RefreshCwIcon, SearchIcon, ShareIcon, ShieldCheckIcon, SquarePenIcon, TerminalIcon, Trash2Icon } from "lucide-solid";
 import { Spinner } from "@/components/primitives";
-import { Match, Choices, OverlayBar, OverlayHints, OverlayList, OverlayPage, OverlayRail, OverlaySplit, Overlay, Scrim, SettingGroup, SettingLine, NavGroup, NavRow, Segmented, SelectTrigger, Bubble, Button, Card, Chip, Choice, ComposerField, DesktopComposer, Line, TextArea, Rider, RiderActions, RiderTitle, Toolbar, Frost, Input, Item, Keycap, Menu, PillButton, PillField, PillGroup, PillSwitch, HeadingSection, SearchSection, Section, Slider } from "@/components/ui";
+import { Leader, Crumbs, Spotlight, OverlayHead, Match, Choices, OverlayBar, OverlayHints, OverlayList, OverlayPage, OverlayRail, OverlaySplit, Overlay, Scrim, SettingGroup, SettingLine, NavGroup, NavRow, Segmented, SelectTrigger, Bubble, Button, Card, Chip, Choice, ComposerField, DesktopComposer, Line, TextArea, Rider, RiderActions, RiderTitle, Toolbar, Frost, Input, Item, Keycap, Menu, PillButton, PillField, PillGroup, PillSwitch, HeadingSection, SearchSection, Section, Slider } from "@/components/ui";
 import { Switch } from "../client/settings/settings-controls";
 import { HarnessMark } from "../client/harness-brand";
 import { PlaceGlyph } from "../client/chat/place-picker";
@@ -123,6 +123,10 @@ const chatRows = (query = "") => <OverlayList>
 </OverlayList>;
 const chatPreview = () => <div class="g-stack"><Item icon={<SquarePenIcon />} detail="OpenCode · Chats · 18:30">Untitled chat</Item><div style={{ "align-self": "flex-end" }}><Bubble>ask me a question using the question tool</Bubble></div><p class="g-muted">I'll ask you a question using the question tool.</p></div>;
 const searchHints = () => <OverlayHints start={[[["Ctrl", "E"], "Edit"], [["Alt", "R"], "Rename"], [["Ctrl", "K", "D"], "Delete"]]} end={[[["/"], "Search in"], [["Ctrl", "P"], "Preview"], [["Enter"], "Open"], [["Esc"], "Close"]]} />;
+const LeaderPath = () => { const [at, setAt] = createSignal(2); const levels = ["Conduit", "Chat", "Composer"];
+  return <Crumbs label="Where you are" items={levels.map((label, index) => ({ label, current: index === at(), onClick: () => setAt(index) }))} />; };
+const leaderRows = () => <Section><Item keysFirst keys={["1"]} active>Model</Item><Item keysFirst keys={["2"]}>Thinking level</Item><Item keysFirst keys={["A"]}>Attach files</Item><Item keysFirst keys={["S"]}>Stash prompt</Item><Item keysFirst keys={["V"]}>Toggle voice dictation</Item></Section>;
+const leaderHints = () => <OverlayHints start={[[["←", "→"], "level"], [["Ctrl+Shift+1"], "Sidebar"], [["Ctrl+Shift+2"], "Main"]]} end={[[["Esc"], "cancel"]]} />;
 const settingsRail = () => <OverlayRail title="Settings" foot={<span>Interface 0.8.1-dev</span>}>
   <NavGroup label="Personal"><NavRow icon={<MonitorIcon />} current>Appearance</NavRow><NavRow icon={<KeyboardIcon />}>Shortcuts</NavRow></NavGroup>
   <NavGroup label="AI"><NavRow icon={<BrainIcon />}>Models &amp; accounts</NavRow><NavRow icon={<NotebookTextIcon />}>Prompts</NavRow></NavGroup>
@@ -235,7 +239,15 @@ export const libraryFamilies: Family[] = [
       lib("overlay-split", "OverlaySplit", "desktop", "overlay", "OverlaySplit: a List beside an aside", () => <div class="g-overlay-demo"><Overlay label="Split" style={{ "--overlay-width": "100%" }}><OverlaySplit aside={chatPreview()}>{chatRows()}</OverlaySplit></Overlay></div>, true),
       lib("overlay-settings", "SettingGroup · SettingLine", "both", "overlay", "SettingGroup > SettingLine: a name, its control", () => <div class="g-overlay-demo"><Overlay label="Settings" layout="rail" style={{ "--overlay-width": "100%" }}>{settingsPage()}</Overlay></div>, true),
     ] },
+    { title: "Leader", note: "a small card above the composer that does not cover the page: the page dims all but the current region", atoms: [
+      lib("leader-crumbs", "Crumbs", "both", "overlay", "Crumbs: the breadcrumb's place caps, the one uppercase label; the current place white with no fill, the cursor washing the others", () => <div class="g-overlay-demo"><Overlay label="Crumbs" class="ui-leader"><OverlayHead><kbd class="ui-keycap">Ctrl G</kbd><LeaderPath /></OverlayHead></Overlay></div>, true),
+      lib("leader-rows", "Item keysFirst", "both", "overlay", "Item keysFirst: the key leads the row, in the text colour", () => <div class="g-overlay-demo"><Overlay label="Rows" class="ui-leader"><OverlayList>{leaderRows()}</OverlayList></Overlay></div>, true),
+      lib("leader-spotlight", "Spotlight", "desktop", "overlay", "Spotlight: the dim is the shadow round the lit region, cut out with its corners", () => <div class="g-page"><div class="g-page-pane" /><div class="g-page-composer" /><Spotlight lit={{ top: "12px", left: "12px", width: "calc(100% - 24px)", height: "calc(100% - 24px)", radius: "16px" }} /></div>, true),
+    ] },
     { title: "Assembled", note: "the app's own, at their sizes", layout: "desktop", atoms: [
+      lib("o-leader", "LeaderPalette", "desktop", "overlay", "navigation/leader-palette.tsx · the composer region lit", () => <div class="g-page"><div class="g-page-pane" /><div class="g-page-composer" />
+        <Spotlight lit={{ top: "calc(100% - 76px)", left: "calc(50% - 230px)", width: "460px", height: "56px", radius: "17.6px" }} />
+        <div class="g-page-leader"><Leader leader="Ctrl G" path={<LeaderPath />} hints={leaderHints()}>{leaderRows()}</Leader></div></div>, "row"),
       lib("o-palette", "CommandMenu", "desktop", "overlay", "navigation/command-menu.tsx", () => <Scrim class="g-scrim"><Overlay label="Command palette" style={{ "--overlay-height": "480px" }}>
         <OverlayBar lead={glyph()} placeholder="Run a command…" onClose={() => {}} />{paletteList()}{paletteHints()}</Overlay></Scrim>, "row"),
       lib("o-search", "CommandMenu · chat search", "desktop", "overlay", "navigation/command-menu.tsx", () => <Scrim class="g-scrim"><Overlay label="Chat search" style={{ "--overlay-width": "calc(81.25 * var(--u-space))", "--overlay-height": "576px" }}>
