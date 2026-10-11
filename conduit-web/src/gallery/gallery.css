@@ -137,7 +137,7 @@ html, body { background: var(--frame, #08090a); color: var(--foreground); }
 /* The app's phone sidebar header: pill, brand and server sharing the width, the area toggle. */
 .g-live-sb-head { display: flex; height: 56px; flex: none; align-items: center; gap: 2px; padding: 8px 10px 4px; }
 .g-live-brand { display: flex; min-width: 0; height: 40px; flex: none; align-items: stretch; border: 0; border-radius: 8px; background: transparent; padding: 0 10px; color: inherit; }
-.g-live-brand > span { display: flex; align-items: center; font: 18px/1 "Conduit Wordmark", sans-serif; transform: translateY(0.16em); }
+.g-live-brand > span { display: flex; align-items: center; font: 18px/1 var(--font-wordmark); transform: translateY(0.16em); }
 .g-live-sb-server { display: flex; min-width: 0; flex: 1; flex-direction: column; justify-content: center; }
 .g-live-sb-server > button { display: flex; min-width: 0; align-items: center; gap: 8px; border: 0; border-radius: 8px; background: transparent; padding: 6px 8px; color: inherit; text-align: left; }
 .g-live-sb-server > button > span:first-child { display: flex; min-width: 0; flex: 1; flex-direction: column; }
@@ -240,4 +240,9 @@ html, body { background: var(--frame, #08090a); color: var(--foreground); }
 .g-face-specimen { font-size: 28px; line-height: 1.15; overflow-wrap: anywhere; }
 .g-face-sample { color: var(--muted-foreground); font-size: 14px; }
 .g-face-weights { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 15px; }
-.g-face-uses { margin: 0; padding-left: 16px; color: var(--muted-foreground); font-size: 12px; line-height: 1.5; }
+.g-face-source { color: var(--muted-foreground); font-size: 11px; }
+.g-role { display: grid; width: 100%; gap: 14px; justify-items: center; }
+.g-role-preview { display: grid; min-height: 120px; place-items: center; gap: 10px; }
+.g-role-uses { margin: 0; color: var(--muted-foreground); font-size: 12px; text-align: center; }
+.g-role > .g-tokens { justify-self: stretch; }
+.g-wordmark { font: 18px/1 var(--font-wordmark); }
