@@ -107,7 +107,7 @@
 .ui-row > :is(small, .ui-meta) { flex: none; margin-left: auto; color: var(--muted-foreground); font-weight: 400; font-size: calc(0.75 * var(--u-type)); }
 .ui-row > .ui-keys { display: inline-flex; flex: none; gap: calc(0.1875 * var(--u-space)); }
 .ui-row > .ui-chevron { width: calc(0.875 * var(--u-type)); height: calc(0.875 * var(--u-type)); color: var(--muted-foreground); }
-.ui-row:is(:hover, [data-highlighted]) { background: var(--frost-wash); color: var(--foreground); }
+.ui-row:is(:hover, [data-highlighted], [data-expanded]) { background: var(--frost-wash); color: var(--foreground); }
 .ui-row[data-checked] { color: var(--foreground); font-weight: 660; }
 .ui-row[data-checked] > svg { stroke-width: 3; }
 .ui-row[data-disabled] { pointer-events: none; color: color-mix(in oklch, var(--foreground), transparent 22%); text-decoration: line-through 1.5px; }
@@ -414,3 +414,6 @@
   .ui-choice-check { order: 3; }
 }
 .ui-choices-page { display: grid; gap: calc(0.25 * var(--u-space)); }
+/* An app row's own icon, placed straight in the row (not in an icon slot), is sized as one. */
+.ui-row > :is(svg, .workspace-glyph, .harness-mark, img):not(.ui-chevron) { width: var(--u-icon); height: var(--u-icon); flex: none; }
+.ui-row > .harness-mark { width: calc(0.875 * var(--u-type)); height: calc(0.875 * var(--u-type)); }
