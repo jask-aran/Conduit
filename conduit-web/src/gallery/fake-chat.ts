@@ -1,5 +1,6 @@
 import type { Message } from "../client/api/contracts";
 import { createSignal } from "solid-js";
+import type { UploadAttachment } from "../client/state/attachments";
 
 /*
  * Just enough of a chat for the real Composer to mount in the gallery: a
@@ -40,6 +41,14 @@ export function fakeChat() {
   return new Proxy(named, { get: (target, key: string) => key in target ? target[key] : () => undefined }) as never;
 }
 
+/** Files attached in the gallery stay in the page: added at once, as if uploaded. */
 export function fakeAttachments() {
-  return { items: () => [], pendingIds: () => [], addFiles: () => {}, remove: () => {}, retry: () => {} } as never;
+  const [items, setItems] = createSignal<UploadAttachment[]>([]);
+  let next = 0;
+  const addFiles = (files: File[]) => setItems((list) => [...list, ...files.map((file) => ({
+    id: `fake-${next++}`, name: file.name, type: file.type, size: file.size, file,
+    objectUrl: file.type.startsWith("image/") ? URL.createObjectURL(file) : null, status: "done" as const, progress: 100,
+  }))]);
+  const remove = (item: UploadAttachment) => setItems((list) => list.filter((entry) => entry.id !== item.id));
+  return { items, pendingIds: () => [], addFiles, remove, retry: () => {}, clear: () => setItems([]) } as never;
 }

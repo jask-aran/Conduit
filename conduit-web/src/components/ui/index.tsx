@@ -1,5 +1,5 @@
 import { createEffect, createSignal, createUniqueId, For, Show, splitProps, type JSX } from "solid-js";
-import { ChevronDownIcon, ChevronRightIcon, SearchIcon } from "lucide-solid";
+import { CheckIcon, ChevronDownIcon, ChevronRightIcon, SearchIcon, XIcon } from "lucide-solid";
 export { ChevronDownIcon };
 import { cn } from "@/lib/utils";
 
@@ -105,12 +105,12 @@ export function Card(props: { title: string; detail?: string; class?: string; co
 }
 
 /*
- * Composer: resting frost holding a field above a toolbar; riders are frost
- * cards that sit on its top edge (attachments, queued messages, a question).
- * Its geometry is tokens (--cmp-*), measured from the app and scaled by density.
+ * DesktopComposer: resting frost holding a Field above a Toolbar, desktop only
+ * (a phone's composer is Pills). Field is shared with PillField. Geometry is
+ * tokens (--cmp-*), measured from the app and scaled by density.
  */
-export function Composer(props: { riders?: JSX.Element; class?: string; children: JSX.Element }) {
-  return <div class="ui-composer-stack">{props.riders}<div class={cn("ui-frost ui-composer", props.class)} data-surface="frost" data-lift="rest">{props.children}</div></div>;
+export function DesktopComposer(props: { riders?: JSX.Element; class?: string; children: JSX.Element }) {
+  return <div class="ui-composer-stack">{props.riders}<div class={cn("ui-frost ui-desktop-composer", props.class)} data-surface="frost" data-lift="rest">{props.children}</div></div>;
 }
 /** The text box, frost-free: its own textarea, or the caller's (the app's, with its behaviour) as children. */
 export function Field(props: { placeholder?: string; value?: string; onInput?: (value: string) => void; class?: string; children?: JSX.Element }) {
@@ -120,9 +120,41 @@ export function Field(props: { placeholder?: string; value?: string; onInput?: (
 export function Toolbar(props: { start?: JSX.Element; end?: JSX.Element; class?: string }) {
   return <div class={cn("ui-toolbar", props.class)}><div class="ui-toolbar-start">{props.start}</div><div class="ui-toolbar-end">{props.end}</div></div>;
 }
-/** Frost riding on the composer's top edge. */
-export function Rider(props: { label?: string; class?: string; children: JSX.Element }) {
-  return <div class={cn("ui-frost ui-rider", props.class)} data-surface="frost" data-lift="rest" role="group" aria-label={props.label}>{props.children}</div>;
+
+/*
+ * Rider: frost on a composer's top edge, either composer's. A row (title,
+ * body, actions), a strip (chips, actions) or a card (the question).
+ */
+export function Rider(props: { label?: string; layout?: "row" | "strip" | "card"; class?: string; children: JSX.Element }) {
+  return <div class={cn("ui-frost ui-rider", props.class)} data-surface="frost" data-lift="rest" data-layout={props.layout ?? "row"} role="group" aria-label={props.label}>{props.children}</div>;
+}
+export const RiderTitle = (props: { children: JSX.Element }) => <span class="ui-title-text">{props.children}</span>;
+export const RiderActions = (props: { stack?: boolean; children: JSX.Element }) => <div class="ui-rider-actions" data-stack={props.stack ? "" : undefined}>{props.children}</div>;
+/** A line of waiting text, one line until opened. */
+export function Line(props: { text: string; clipped?: boolean }) {
+  const [open, setOpen] = createSignal(false);
+  return <li class="ui-line" data-expanded={open() ? "true" : "false"}><p class="ui-line-body">{props.text}</p>
+    <Show when={props.clipped}><button type="button" class="ui-line-more" aria-label={open() ? "Show less" : "Show more"} onClick={() => setOpen(!open())}><ChevronDownIcon /></button></Show></li>;
+}
+/** An attached thing: an image's thumbnail, or a file's mark, name and size. */
+export function Chip(props: { name: string; detail?: string; image?: string; icon?: JSX.Element; status?: "uploading" | "error" | "done"; progress?: number }) {
+  const ring = 2 * Math.PI * 9;
+  return <div class="ui-chip" data-kind={props.image ? "image" : "file"} data-status={props.status ?? "done"}>
+    <button type="button" class="ui-chip-body" aria-label={`Show ${props.name}`}>
+      <span class="ui-chip-media"><Show when={props.image} fallback={props.icon}><img src={props.image} alt="" /></Show>
+        <Show when={props.status === "uploading"}><svg class="ui-chip-ring" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" /><circle cx="12" cy="12" r="9" stroke-dasharray={`${ring}`} stroke-dashoffset={ring * (1 - (props.progress ?? 40) / 100)} /></svg></Show></span>
+      <Show when={!props.image}><span class="ui-chip-copy"><strong>{props.name}</strong><small>{props.detail}</small></span></Show>
+    </button>
+    <button type="button" class="ui-chip-remove" aria-label={`Remove ${props.name}`}><XIcon /></button>
+  </div>;
+}
+/** A numbered answer: label, description, and a check (a box when several may be chosen). */
+export function Choice(props: { n: number; label: string; detail?: string; chosen?: boolean; active?: boolean; multi?: boolean }) {
+  return <div role="option" class="ui-choice" aria-selected={props.chosen} data-active={props.active ? "true" : undefined}>
+    <span class="ui-choice-key">{props.n}</span><span class="ui-choice-label">{props.label}</span>
+    <Show when={props.detail}><span class="ui-choice-detail">{props.detail}</span></Show>
+    <span class="ui-choice-check" data-multi={props.multi ? "true" : undefined}><Show when={props.chosen}><CheckIcon /></Show></span>
+  </div>;
 }
 
 export const Bubble = (props: { children: JSX.Element }) => <div class="ui-frost ui-bubble">{props.children}</div>;
