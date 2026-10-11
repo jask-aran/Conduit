@@ -107,16 +107,18 @@
 .ui-row > :is(small, .ui-meta) { flex: none; margin-left: auto; color: var(--muted-foreground); font-weight: 400; font-size: calc(0.75 * var(--u-type)); }
 .ui-row > .ui-keys { display: inline-flex; flex: none; gap: calc(0.1875 * var(--u-space)); }
 .ui-row > .ui-chevron { width: calc(0.875 * var(--u-type)); height: calc(0.875 * var(--u-type)); color: var(--muted-foreground); }
-.ui-row:is(:hover, [data-highlighted], [data-expanded]) { background: var(--frost-wash); color: var(--foreground); }
+/* The cursor (DESIGN Interaction): one row at a time, the wash, white, no change of weight.
+   The pointer moves it (moveCursor), as the keyboard does; hover alone never washes a second row. */
+.ui-row:is([data-highlighted], [data-expanded]) { background: var(--frost-wash); color: var(--foreground); }
 .ui-row[data-checked] { color: var(--foreground); font-weight: 660; }
 .ui-row[data-checked] > svg { stroke-width: 3; }
 .ui-row[data-disabled] { pointer-events: none; color: color-mix(in oklch, var(--foreground), transparent 22%); text-decoration: line-through 1.5px; }
 .ui-row[data-disabled] > small { text-decoration: none; }
 .ui-row[data-destructive] { color: var(--destructive); }
-.ui-row[data-destructive]:hover { background: color-mix(in oklch, var(--destructive), transparent 85%); }
+.ui-row[data-destructive][data-highlighted] { background: color-mix(in oklch, var(--destructive), transparent 85%); }
 
 .ui-keycap { display: inline-grid; min-width: calc(1.25 * var(--u-space)); height: calc(1.25 * var(--u-space)); place-items: center; border: 1px solid oklch(1 0 0 / 16%); border-radius: calc(0.3125 * var(--u-space)); background: oklch(0 0 0 / 12%); padding: 0 calc(0.3125 * var(--u-space)); color: var(--muted-foreground); font: 550 calc(0.6875 * var(--u-type))/1 ui-monospace, SFMono-Regular, Menlo, monospace; }
-.ui-row:hover .ui-keycap { color: var(--foreground); }
+.ui-row[data-highlighted] .ui-keycap { color: var(--foreground); }
 
 /* Card: the menu's container at dialog padding. */
 .ui-card { display: flex; flex-direction: column; gap: calc(1 * var(--u-space)); border-radius: var(--frost-radius); padding: calc(1.25 * var(--u-space)); }
@@ -132,7 +134,10 @@
 :where(.ui-button) { display: inline-flex; height: calc(2.25 * var(--u-space)); flex: none; align-items: center; justify-content: center; gap: calc(0.375 * var(--u-space)); border: 1px solid transparent; border-radius: calc(0.5 * var(--u-space)); padding: 0 calc(1 * var(--u-space)); font-size: calc(0.875 * var(--u-type)); font-weight: 550; white-space: nowrap; cursor: pointer; transition: background-color .12s ease, border-color .12s ease, filter .12s ease; outline: none; }
 /* Zero-specificity: where the button sits sets its icon (a header, a composer), as in the app. */
 :where(.ui-button) svg { width: calc(1 * var(--u-icon)); height: calc(1 * var(--u-icon)); flex: none; }
-.ui-button:focus-visible { box-shadow: 0 0 0 2px color-mix(in oklch, var(--foreground), transparent 55%); }
+/* Keyboard focus is the wash and nothing else: never a ring. */
+.ui-button:focus-visible { outline: 0; background: var(--accent); }
+[data-surface="frost"] .ui-button:focus-visible { background: var(--frost-wash); }
+.ui-button[data-variant="primary"]:focus-visible { background: var(--primary); filter: brightness(0.88); }
 .ui-button:disabled { opacity: 0.45; pointer-events: none; }
 .ui-button[data-variant="primary"] { background: var(--foreground); color: var(--background); }
 .ui-button[data-variant="primary"]:hover { filter: brightness(0.88); }
@@ -184,6 +189,8 @@
 [data-surface="frame"] :is(.ui-pill > button, .ui-seg[data-pill] button[aria-checked="true"]) { color: var(--sidebar-accent-foreground); }
 [data-surface="frame"] .ui-seg[data-pill] .ui-seg-thumb { background: var(--sidebar-accent); }
 @media (prefers-reduced-motion: reduce) { .ui-seg-thumb { transition: none; } }
+/* The cursor on the chosen segment (already washed) brightens that wash a step. */
+.ui-seg button[aria-checked="true"]:hover { background: oklch(1 0 0 / 6%); }
 /* A small segmented choice, for a bar's end (chat search's sort). */
 .ui-seg[data-size="sm"] { padding: 1.6px; gap: 1.6px; border-color: oklch(1 0 0 / 12%); border-radius: calc(0.546875 * var(--u-space)); }
 .ui-seg[data-size="sm"] .ui-seg-thumb { top: 1.6px; bottom: 1.6px; left: 1.6px; border-radius: calc(0.390625 * var(--u-space)); }
@@ -204,7 +211,7 @@
 .ui-slider-input::-moz-range-progress { height: var(--track); border-radius: 999px; background: var(--foreground); }
 .ui-slider-input::-webkit-slider-thumb { width: var(--thumb); height: var(--thumb); margin-top: calc((var(--track) - var(--thumb)) / 2); border: 2px solid oklch(0.3 0.005 264); border-radius: 50%; background: var(--foreground); -webkit-appearance: none; box-shadow: 0 1px 4px rgb(0 0 0 / 35%); }
 .ui-slider-input::-moz-range-thumb { width: var(--thumb); height: var(--thumb); border: 2px solid oklch(0.3 0.005 264); border-radius: 50%; background: var(--foreground); box-shadow: 0 1px 4px rgb(0 0 0 / 35%); }
-.ui-slider-input:focus-visible::-webkit-slider-thumb { box-shadow: 0 1px 4px rgb(0 0 0 / 35%), 0 0 0 5px oklch(1 0 0 / 12%); }
+.ui-slider-input:focus-visible::-webkit-slider-thumb { box-shadow: 0 1px 4px rgb(0 0 0 / 35%); filter: brightness(1.1); }
 .ui-slider-ticks { display: flex; justify-content: space-between; margin-top: -4px; padding-inline: calc(var(--thumb, calc(1.25 * var(--u-icon))) / 2 - 1px); }
 .ui-slider-ticks i { width: 2px; height: 4px; border-radius: 1px; background: var(--frost-rule); }
 .ui-slider-ticks i[data-reached] { background: var(--muted-foreground); }
@@ -382,16 +389,27 @@
 .ui-tabs::-webkit-scrollbar { display: none; }
 .ui-tabs > button { display: inline-flex; height: calc(2 * var(--u-space)); flex: none; align-items: center; gap: calc(0.25 * var(--u-space)); border: 0; border-radius: var(--cmp-slot-radius); background: transparent; padding: 0 calc(0.7 * var(--u-space)); color: var(--muted-foreground); font-size: calc(0.9375 * var(--u-type)); font-weight: 500; cursor: pointer; }
 .ui-tabs > button:hover { color: var(--foreground); }
-.ui-tabs > button[aria-selected="true"] { background: var(--frost-wash); color: var(--foreground); font-weight: 600; }
+/* The current tab: white at the current weight, no fill (the wash is only the pointer). */
+.ui-tabs > button[aria-selected="true"] { color: var(--foreground); font-weight: 660; }
+.ui-tabs > button:hover { background: var(--frost-wash); }
 .ui-tabs svg { width: calc(0.875 * var(--u-icon)); height: calc(0.875 * var(--u-icon)); }
 .ui-prompt { margin: 2px calc(0.5 * var(--u-space)) calc(0.25 * var(--u-space)); font-size: calc(1.09375 * var(--u-type)); font-weight: 560; line-height: 1.4; letter-spacing: -.005em; overflow-wrap: anywhere; }
 .ui-prompt span { color: var(--muted-foreground); font-size: calc(0.9375 * var(--u-type)); font-weight: 400; }
 .ui-choices { display: grid; gap: 1px; }
 .ui-choice { display: flex; min-height: calc(2.5 * var(--u-space)); align-items: center; gap: calc(0.78125 * var(--u-space)); border-radius: var(--row-radius); padding: calc(0.3125 * var(--u-space)) calc(0.625 * var(--u-space)); cursor: pointer; }
-.ui-choice[data-active="true"] { background: var(--frost-wash); }
+/* A choice follows Interaction: grey at rest; the cursor is the wash, white;
+   the current choice is white at the current weight, no tick; several chosen
+   (pick any) are the wash on each, and the cursor on one brightens it a step. */
+.ui-choice { color: color-mix(in oklch, var(--foreground), transparent 38%); }
+.ui-choice[data-active="true"] { background: var(--frost-wash); color: var(--foreground); }
+.ui-choice[aria-selected="true"] { color: var(--foreground); }
+.ui-choices:not([aria-multiselectable="true"]) > .ui-choice[aria-selected="true"] .ui-choice-label { font-weight: 660; }
+.ui-choices[aria-multiselectable="true"] > .ui-choice[aria-selected="true"] { background: var(--frost-wash); }
+.ui-choices[aria-multiselectable="true"] > .ui-choice[aria-selected="true"][data-active="true"] { background: oklch(1 0 0 / 16%); }
+.ui-choice-check { display: none !important; }
 .ui-choice-key { width: calc(1 * var(--u-space)); flex: none; color: var(--muted-foreground); font: calc(0.859375 * var(--u-type))/1 ui-monospace, SFMono-Regular, Consolas, monospace; text-align: right; }
 .ui-choice[data-active="true"] .ui-choice-key { color: var(--foreground); }
-.ui-choice-label { flex: none; font-size: calc(1.015625 * var(--u-type)); font-weight: 560; }
+.ui-choice-label { flex: none; font-size: calc(1.015625 * var(--u-type)); font-weight: 450; }
 .ui-choice-detail { min-width: 0; flex: 1; overflow: hidden; color: var(--muted-foreground); font-size: calc(0.9375 * var(--u-type)); text-overflow: ellipsis; white-space: nowrap; }
 .ui-choice-check { display: grid; width: var(--u-icon); height: var(--u-icon); flex: none; margin-left: auto; place-items: center; color: var(--foreground); }
 .ui-choice-check svg { width: calc(0.875 * var(--u-icon)); height: calc(0.875 * var(--u-icon)); }
@@ -449,7 +467,7 @@
 /* Its rows: a popover's Items at the overlay's scale, full colour; its group titles plain, not ruled. */
 .ui-overlay-list { --row-pad: calc(0.3125 * var(--u-space)) calc(0.625 * var(--u-space)); --row-min: calc(2.34375 * var(--u-space)); --row-gap: calc(0.78125 * var(--u-space)); --row-radius: calc(0.703125 * var(--u-space));
   min-height: 0; flex: 1; overflow: auto; padding: calc(0.390625 * var(--u-space)) calc(0.46875 * var(--u-space)); }
-.ui-overlay-list .ui-row { color: var(--foreground); font-size: calc(0.9375 * var(--u-type)); font-weight: 520; }
+.ui-overlay-list .ui-row { font-size: calc(0.9375 * var(--u-type)); font-weight: 520; }
 .ui-overlay-list .ui-row > .ui-icon { width: calc(1.09375 * var(--u-icon)); height: calc(1.09375 * var(--u-icon)); color: var(--muted-foreground); }
 .ui-overlay-list .ui-row > small { font-size: calc(0.78125 * var(--u-type)); }
 .ui-overlay-list .ui-section + .ui-section { margin: calc(0.25 * var(--u-space)) 0 0; border: 0; padding: 0; }
@@ -464,13 +482,16 @@
 .ui-overlay-rail { display: flex; width: calc(14.84375 * var(--u-space)); flex: none; flex-direction: column; gap: calc(0.1875 * var(--u-space)); overflow: auto; border-right: 1px solid var(--frost-rule); padding: calc(1.25 * var(--u-space)) calc(0.78125 * var(--u-space)); }
 .ui-overlay-rail > .ui-overlay-title { margin-bottom: calc(0.5 * var(--u-space)); padding-left: calc(0.5 * var(--u-space)); }
 .ui-overlay-rail .ui-nav-group + .ui-nav-group { margin-top: calc(0.5 * var(--u-space)); }
-.ui-overlay .ui-nav-row:is(:hover, [aria-current="page"]) { background: var(--frost-wash); color: var(--foreground); }
+/* The current section is white and bold with no fill; the wash is only the cursor. */
+.ui-overlay .ui-nav-row:hover { background: var(--frost-wash); }
+.ui-overlay .ui-nav-row[aria-current="page"]:not(:hover) { background: transparent; }
 .ui-overlay-rail-foot { margin-top: auto; color: var(--muted-foreground); font-size: var(--nav-text); }
 .ui-overlay-page { display: flex; min-width: 0; flex: 1; flex-direction: column; overflow: auto; padding: calc(1.25 * var(--u-space)) calc(1.875 * var(--u-space)) calc(1.875 * var(--u-space)); }
 .ui-overlay-page-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: calc(0.75 * var(--u-space)); padding-left: calc(0.5 * var(--u-space)); }
 .ui-setting-group { display: flex; flex-direction: column; gap: 1px; }
 .ui-setting-group + .ui-setting-group { margin-top: calc(0.75 * var(--u-space)); border-top: 1px solid var(--frost-rule); padding-top: calc(0.9375 * var(--u-space)); }
 .ui-setting-line { display: flex; min-height: calc(2.1875 * var(--u-space)); align-items: center; gap: calc(0.9375 * var(--u-space)); border-radius: calc(0.5 * var(--u-space)); padding: 2px calc(0.3125 * var(--u-space)) 2px calc(0.5 * var(--u-space)); font-size: var(--nav-text); }
-.ui-setting-line:hover { background: var(--frost-wash); }
+/* Focus anywhere in a row is the row's wash. */
+.ui-setting-line:is(:hover, :focus-within) { background: var(--frost-wash); }
 .ui-setting-line > span:first-child { min-width: 0; flex: 1; }
 .ui-setting-control { display: inline-flex; flex: none; align-items: center; }
