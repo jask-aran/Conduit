@@ -229,7 +229,7 @@ function ChatSearch(props: { close: () => void }) {
 const cardScene = () => <div class="g-card-scene"><Card title="Destroy Japan?" detail="Type Japan to confirm." actions={<><Button variant="ghost" outline>Cancel</Button><Button variant="destructive">Destroy</Button></>}><Input placeholder="Japan" /></Card></div>;
 const typeOf = (el: HTMLElement) => { const s = getComputedStyle(el); return px(`${s.fontSize} · ${s.fontWeight}`); };
 const CARD_MARKS: Mark[] = [
-  { selector: ".ui-card", label: "--card-edge: padding all round, every box meets it (1.25 units; a phone 1)", read: (el) => px(getComputedStyle(el).paddingTop) },
+  { selector: ".ui-card", label: "--card-edge: padding all round, every box meets it (1.25 units)", read: (el) => px(getComputedStyle(el).paddingTop) },
   { selector: ".ui-card > h3", label: "title: the Heading role (--text-body · --weight-strong)", read: typeOf },
   { selector: ".ui-card > p", label: "detail: the Caption role (--text-caption · muted), --card-pair under the title", read: (el) => `${typeOf(el)} · ${px(`${el.getBoundingClientRect().top - el.previousElementSibling!.getBoundingClientRect().bottom}px`)} under` },
   { selector: ".ui-card .ui-input", label: "body: the library's Input, its box on the edge, --card-gap from what is above and below", read: (el) => { const card = el.closest<HTMLElement>(".ui-card")!.getBoundingClientRect(); const r = el.getBoundingClientRect(); return `${px(`${r.left - card.left}px`)} / ${px(`${card.right - r.right}px`)} from the sides · ${px(`${r.top - el.previousElementSibling!.getBoundingClientRect().bottom}px`)} gap`; } },
@@ -353,7 +353,7 @@ export const libraryFamilies: Family[] = [
     { title: "In use", note: "a confirm, measured: pink is the card's edge (--card-edge), green the gaps between its parts (--card-gap, --card-pair title to detail, half a unit between actions)", layout: "desktop", atoms: [
       lib("card-inuse", "Card in use", "both", "card", "Card title detail children actions", () => <InUse scene={cardScene} marks={CARD_MARKS} spacing={[".ui-card", ".ui-card-actions"]} />, "row"),
     ] },
-    { title: "Forms", note: "each form at each density -- the phone's a phone wide. Every card: --frost-* raised, corner --radius-surface, and spacing it declares: --card-edge all round, which every box meets (1.25 units; a phone 1), --card-gap between parts (1; a phone 0.75), --card-pair title to detail (0.5); text trimmed to its glyphs; actions share the widest's width. A phone's card is the screen's width", layout: "desktop", atoms: [
+    { title: "Forms", note: "each form at each density -- the phone's a phone wide. Every card: --frost-* raised, corner --radius-surface, and spacing it declares: --card-edge all round, which every box meets (1.25 units), --card-gap between parts (1 unit), --card-pair title to detail (0.5); text trimmed to its glyphs; actions share the widest's width. A phone's card is the screen's width", layout: "desktop", atoms: [
       lib("card-forms", "Card · forms × densities", "both", "card", "Card", () => <FormTable rows={CARDS} on={["desktop", "phone"]} widths={["200px", "minmax(0, 1fr)", "360px"]} />, "row"),
     ] },
     { title: "In the app", note: "every dialog the app opens (FrostDialog), drawn with v2 as far as it goes: under each, its file, what v2 has for it and what it still needs. Missing across them: close (a ×), wide (a card that holds content), a list or a text area hung into the padding", layout: "desktop", atoms: [

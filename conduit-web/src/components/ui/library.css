@@ -190,12 +190,12 @@
 /* Card: a dialog, at most 30 units wide (384px on desktop) and never wider than its room. It
    declares its spacing and every part sits on it: --card-edge all round (every box, a field
    or the actions, meets that edge), --card-gap between its parts, --card-pair from the title to its
-   detail. Text is trimmed to its glyphs, so a gap is the space you see. A phone's card is the
-   screen's width, edge and gap a step tighter, not the desktop's scaled up. */
+   detail. Text is trimmed to its glyphs, so a gap is the space you see. Spacing is in units, so a
+   phone's is the desktop's scaled with its type; a phone's card differs only in being the screen's width. */
 .ui-card { --card-edge: calc(1.25 * var(--u-space)); --card-gap: var(--u-space); --card-pair: calc(0.5 * var(--u-space));
   display: flex; width: min(100%, calc(30 * var(--u-space))); flex-direction: column; gap: var(--card-gap); border-radius: var(--frost-radius); padding: var(--card-edge); }
-:is([data-density="phone"] .ui-card, .ui-card[data-density="phone"]) { --card-edge: var(--u-space); --card-gap: calc(0.75 * var(--u-space)); width: 100%; }
-@media (--conduit-phone-layout) { .ui-card:not([data-density="desktop"]) { --card-edge: var(--u-space); --card-gap: calc(0.75 * var(--u-space)); width: 100%; } }
+:is([data-density="phone"] .ui-card, .ui-card[data-density="phone"]) { width: 100%; }
+@media (--conduit-phone-layout) { .ui-card:not([data-density="desktop"]) { width: 100%; } }
 .ui-card > * { min-width: 0; margin: 0; }
 .ui-card > :is(h3, p) { text-box: trim-both cap alphabetic; }
 /* Its title is the Heading role, its detail the Caption role (Type). */
