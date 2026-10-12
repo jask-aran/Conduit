@@ -132,7 +132,7 @@ function Canvas() {
         </div></Show>
         <For each={family.groups}>{(group) => <>
           <Show when={group.title}><h3 class="g-heading">{group.title} <small>{group.note}</small></h3></Show>
-          <div class="g-grid g-dense"><For each={group.atoms}>{(atom) => <Piece atom={atom} fixed={group.staged ? staged(atom) : group.layout} surface={group.staged ? surface() : undefined} />}</For></div>
+          <div class="g-grid g-dense"><For each={group.atoms}>{(atom) => <Piece atom={atom} fixed={group.staged ? staged(atom) : group.layout} surface={group.staged === true ? surface() : undefined} />}</For></div>
         </>}</For>
       </section>}</For>
     </section>

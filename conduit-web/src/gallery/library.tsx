@@ -24,8 +24,8 @@ export interface Atom { id: string; name: string; scope: Scope; kind: string; so
 /** The tag: where the piece is used, and which layer of the library it is. wide: spans two cells; "row": the whole row.
  *  An assembled piece is named as the app's code names it (component, then the part within it). */
 export const lib = (id: string, name: string, scope: Scope, layer: string, source: string, render: Atom["render"], wide?: Atom["wide"]): Atom => ({ id: `ui-${id}`, name, scope, kind: layer, source, render, wide });
-/** A run of cells; layout: fixed at that layout (no per-cell toggle); staged: drawn on the page's surface, at its density. */
-export interface Group { title?: string; note?: string; atoms: Atom[]; layout?: "desktop" | "phone"; staged?: boolean }
+/** A run of cells; layout: fixed at that layout (no per-cell toggle); staged: drawn on the page's surface at its density, or "density": at its density only (the cell draws its own surfaces). */
+export interface Group { title?: string; note?: string; atoms: Atom[]; layout?: "desktop" | "phone"; staged?: boolean | "density" }
 /** rail: the heading it sits under in the rail (Frosted by default); stage: the page picks one surface and density for its staged groups. */
 export interface Family { title: string; note: string; rail?: string; stage?: boolean; groups: Group[] }
 
@@ -219,14 +219,14 @@ export const libraryFamilies: Family[] = [
   ] },
   { title: "Card", note: "raised frost at dialog padding: title · detail · body · actions", groups: [
     { atoms: [
-      lib("card-anatomy", "Anatomy", "both", "card", "Card title detail children actions", () => <div class="g-anatomy"><Card title="Title" detail="Detail: a line under the title" class="g-card" actions={<><Button variant="outline">Action</Button><Button>Action</Button></>}><div class="g-slot">Body</div></Card></div>),
+      lib("card-anatomy", "Anatomy", "both", "card", "Card title detail children actions", () => <div class="g-anatomy"><Card title="Title" detail="Detail: a line under the title" class="g-card" actions={<><Button variant="secondary">Action</Button><Button>Action</Button></>}><div class="g-slot">Body</div></Card></div>),
       lib("card-head", "Title · detail", "both", "card", "Card title detail", () => <Card title="Delete this chat?" detail="It can't be brought back." class="g-card" />),
       lib("card-body", "Body", "both", "card", "Card children", () => <Card title="Rename chat" class="g-card"><Input value="Lorem ipsum file" /></Card>),
-      lib("card-actions", "Actions", "both", "card", "Card actions", () => <Card title="Actions" class="g-card" actions={<><Button variant="outline">Cancel</Button><Button>Save</Button><Button variant="destructive">Delete</Button></>} />),
+      lib("card-actions", "Actions", "both", "card", "Card actions", () => <Card title="Actions" class="g-card" actions={<><Button variant="secondary">Cancel</Button><Button>Save</Button><Button variant="destructive">Delete</Button></>} />),
     ] },
     { title: "Assembled", atoms: [
-      lib("confirm", "FrostDialog alert", "both", "card", "Card", () => <Card title="Delete this chat?" detail="It can't be brought back." class="g-card" actions={<><Button variant="outline">Cancel</Button><Button variant="destructive">Delete</Button></>} />),
-      lib("prompt", "FrostDialog", "both", "card", "Card + Input", () => <Card title="Rename chat" class="g-card" actions={<><Button variant="outline">Cancel</Button><Button>Save</Button></>}><Input value="Lorem ipsum file" /></Card>),
+      lib("confirm", "FrostDialog alert", "both", "card", "Card", () => <Card title="Delete this chat?" detail="It can't be brought back." class="g-card" actions={<><Button variant="secondary">Cancel</Button><Button variant="destructive">Delete</Button></>} />),
+      lib("prompt", "FrostDialog", "both", "card", "Card + Input", () => <Card title="Rename chat" class="g-card" actions={<><Button variant="secondary">Cancel</Button><Button>Save</Button></>}><Input value="Lorem ipsum file" /></Card>),
     ] },
   ] },
   { title: "Overlay", note: "raised frost over a dimmed page, the large surfaces: sections edge to edge, ruled off -- a Bar, a body (a List, a List beside an aside, or a Rail beside a Page), Hints. Its rows are the popover's Items at its scale; its Rail is the sidebar's NavGroups", groups: [

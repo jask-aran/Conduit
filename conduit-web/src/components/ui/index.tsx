@@ -288,10 +288,11 @@ export const Bubble = (props: { children: JSX.Element }) => <div class="ui-frost
 
 /* What sits on a surface: the look follows [data-surface] above it (library.css). */
 
-export type ButtonVariant = "primary" | "outline" | "ghost" | "destructive";
-export function Button(props: JSX.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: ButtonVariant; size?: "default" | "sm" | "icon" | "icon-sm" | "icon-xs" }) {
-  const [local, rest] = splitProps(props, ["class", "variant", "size"]);
-  return <button type="button" data-slot="button" {...rest} class={cn("ui-button", local.class)} data-variant={local.variant ?? "primary"} data-size={local.size ?? "default"} />;
+export type ButtonVariant = "primary" | "secondary" | "ghost" | "destructive";
+/** outline: the variant as a line in its colour with nothing inside (primary, ghost, destructive; secondary is already a line round a well). */
+export function Button(props: JSX.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: ButtonVariant; outline?: boolean; size?: "default" | "sm" | "icon" | "icon-sm" | "icon-xs" }) {
+  const [local, rest] = splitProps(props, ["class", "variant", "outline", "size"]);
+  return <button type="button" data-slot="button" {...rest} class={cn("ui-button", local.class)} data-variant={local.variant ?? "primary"} data-outline={local.outline ? "" : undefined} data-size={local.size ?? "default"} />;
 }
 
 /** Multi-line text that grows with its lines: bare, the type's size, no geometry of its own -- what holds it pads it (DesktopComposer, PillField). */
