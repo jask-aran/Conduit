@@ -344,7 +344,6 @@ const ANSWER_FORMS: FormRow[] = [
   form("lists", "bulleted and numbered", () => <Answer html={"<ol><li>Pack the night before.</li><li>Leave by seven.</li></ol><ul><li>Water</li><li>Rail pass</li></ul>"} />, "ul · ol", "1.5em in · 2xs between items"),
   form("quote", "quoted text", () => <Answer html={"<blockquote><p>Lorem ipsum dolor sit amet.</p></blockquote>"} />, "blockquote", "a --tint line · muted"),
   form("table", "scrolls inside itself when wide", () => <Answer html={"<table><thead><tr><th>Day</th><th>Where</th><th>Time</th></tr></thead><tbody><tr><td>1</td><td>Fushimi Inari</td><td>06:00</td></tr><tr><td>2</td><td>Arashiyama</td><td>08:30</td></tr></tbody></table>"} />, "table", "Row role · --tint cells · sm md padding"),
-  form("code block", "its language and Copy over numbered lines", () => <CodeBlock lang="ts" code={"const total = items.reduce(\n  (sum, item) => sum + item.size, 0);"} />, '<CodeBlock lang code>', "a box · caption bar · code face, Row role"),
 ];
 const TRACE_FORMS: FormRow[] = [
   form("live", "a turn running: what it is doing, ticking", () => <TraceHeader orb={liveOrb()} status="Reading" time="12s" work="3 reads" latest="Reading src/client/chat/transcript.tsx" opens />, "<TraceHeader status time work latest opens>", "Row role · status strong · time tabular"),
@@ -361,6 +360,24 @@ function DisclosureDemo() {
 }
 /** Forms drawn as what is read: in the transcript's scope (its scale, a row a step under the body). */
 const reading = (rows: FormRow[]) => rows.map((row) => ({ ...row, sample: () => <div class="ui-read g-read">{row.sample()}</div> }));
+const SNIPPET = "const total = items.reduce(\n  (sum, item) => sum + item.size, 0);";
+const LONG = Array.from({ length: 20 }, (_, i) => i % 5 === 0 ? `// step ${i / 5 + 1}` : `  run(${i}, { size: ${i * 64}, cached: ${i % 2 === 0} });`).join("\n");
+const WIDE = "npx vite build --mode gallery --outDir dist-gallery --emptyOutDir --logLevel info && node scripts/run-windows-chrome-devtools.mjs start";
+/** One that does what the app's does: Copy says Copied for a moment, the fold opens and closes. */
+function LiveCode() {
+  const [copied, setCopied] = createSignal(false), [open, setOpen] = createSignal(false);
+  return <CodeBlock lang="ts" code={LONG} fold={6} open={open()} onToggle={() => setOpen(!open())} copied={copied()} onCopy={() => { setCopied(true); setTimeout(() => setCopied(false), 1200); }} />;
+}
+const CODE_FORMS: FormRow[] = [
+  form("short", "its language and Copy over numbered lines", () => <CodeBlock lang="ts" code={SNIPPET} />, "<CodeBlock lang code>", "a box · caption bar (Caption, data face) · code face, Row role · numbers muted, tabular"),
+  form("no language", "a fence that names none reads text", () => <CodeBlock code={"412 lorem_ipsum.txt"} />, "<CodeBlock code>", "lang ?? \"text\""),
+  form("wide", "a long line scrolls sideways, the numbers with it", () => <CodeBlock lang="sh" code={WIDE} />, "", "pre overflow-x: auto · no wrap"),
+  form("folded", "past the fold: cut and fading, the lines it hides counted under it, a chevron in the caption", () => <CodeBlock lang="ts" code={LONG} fold={6} />, "<CodeBlock fold>", "fold lines · fade 2.4em · foot control-sm, Caption · chevron icon-xs ghost"),
+  form("opened", "all of it; the foot folds it again", () => <CodeBlock lang="ts" code={LONG.split("\n").slice(0, 9).join("\n")} fold={6} open />, "<CodeBlock fold open onToggle>", "foot \"Collapse\" · chevron turned"),
+  form("copied", "Copy's moment after a press", () => <CodeBlock lang="ts" code={SNIPPET} copied />, "<CodeBlock copied onCopy>", "\"Copied\" in --foreground, 1.2s"),
+  form("writing", "folded while still being written: the foot pulses as the count climbs", () => <CodeBlock lang="ts" code={LONG} fold={6} streaming />, "<CodeBlock fold streaming>", "foot opacity 1 ↔ .45, 1.6s · none on reduced motion"),
+  form("live", "press Copy, open and fold it", () => <LiveCode />, "", ""),
+];
 const conversation = () => <Transcript>
   <Message time="22:14" actions={<Button variant="ghost" size="icon-xs" aria-label="Edit"><PencilIcon /></Button>}>write a .txt file in this folder that contains lorem ipsum text</Message>
   <Turn><TraceHeader orb={orb(true)} status="Done" time="2m 00s" work="1 edit" latest="Edited lorem_ipsum.txt" opens /><Answer html={"<p>Created <code>lorem_ipsum.txt</code> in this folder with lorem ipsum text.</p>"} /><MessageFoot time="22:16">{copyRetry()}</MessageFoot></Turn>
@@ -577,6 +594,11 @@ export const libraryFamilies: Family[] = [
       lib("pill-composer", "Composer · bar layout", "phone", "pill", "chat/composer.tsx (bar)", () => <div class="g-composer-demo"><PillField placeholder="Send a message…" /><div class="g-bar-demo">
         <PillButton {...icon("Message options", <PlusIcon />)} /><PillButton {...icon("Take a photo", <CameraIcon />)} /><PillButton {...icon("Type a message", <KeyboardIcon />)} /><PillButton stretch {...icon("Dictate", <MicIcon />)} /><PillButton {...icon("Send", <ArrowUpIcon />)} />
       </div></div>, true),
+    ] },
+  ] },
+  { title: "CodeBlock", rail: "Transcript", note: "a fenced block in an answer: not frosted, it reads in the transcript's units and scale", groups: [
+    { title: "Forms", note: "each state at each density, in the transcript's scope", layout: "desktop", atoms: [
+      lib("code-forms", "CodeBlock · states × densities", "both", "transcript", "CodeBlock", () => <FormTable rows={reading(CODE_FORMS)} on={["desktop", "phone"]} widths={["180px", "minmax(0, 1fr)", "minmax(0, 1fr)"]} />, "row"),
     ] },
   ] },
   { title: "Transcript", rail: "Transcript", note: "what is read, at the transcript's scale (Space · Scale, Settings · Text size); a row's text there (a trace, a trail) is a step under the body on both densities: the user's Message (a Bubble and its foot) and a Turn (its trace header, the answer, the answer's foot). The answer is Markdown with no bubble in the Body role, one gap between blocks; the trail sits a step under it", groups: [

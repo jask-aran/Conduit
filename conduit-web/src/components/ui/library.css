@@ -671,10 +671,20 @@
 .ui-answer :is(th, td) { border: 1px solid var(--tint); padding: var(--space-sm) var(--space-md); text-align: left; vertical-align: top; }
 .ui-answer th { font-weight: var(--weight-strong); }
 /* A code block: a box, its language and Copy over the lines; each line numbered, muted, out of the selection. */
-.ui-code { width: 100%; min-width: 0; margin: 0; overflow: hidden; }
-.ui-code > figcaption { display: flex; height: var(--control-sm); align-items: center; justify-content: space-between; border-bottom: 1px solid var(--tint); padding: 0 var(--space-2xs) 0 var(--space-lg); color: var(--muted-foreground); font: var(--text-caption) var(--font-data); }
+/* clip, not hidden: the caption pins against the transcript as a long block scrolls by. */
+.ui-code { width: 100%; min-width: 0; margin: 0; overflow: clip; }
+.ui-code > figcaption { position: sticky; top: 0; z-index: 1; background: var(--background); display: flex; height: var(--control-sm); align-items: center; justify-content: space-between; border-bottom: 1px solid var(--tint); padding: 0 var(--space-2xs) 0 var(--space-lg); color: var(--muted-foreground); font: var(--text-caption) var(--font-data); }
 .ui-code > pre { margin: 0; overflow-x: auto; padding: var(--space-sm) 0; font: var(--text-row)/1.6 var(--font-code); }
 .ui-code-line { display: block; padding-inline: var(--space-lg); white-space: pre; }
+.ui-code-actions { display: flex; align-items: center; gap: var(--space-2xs); }
+.ui-code-actions [data-copied] { color: var(--foreground); }
+/* Folded: the lines past the fold are cut, the last of them fading; the foot opens it. */
+.ui-code[data-folded] > pre { max-height: calc(var(--code-fold) * 1.6em + 2 * var(--space-sm)); overflow-y: hidden; mask-image: linear-gradient(to bottom, #000 calc(100% - 2.4em), transparent); }
+.ui-code-more { display: block; width: 100%; min-height: var(--control-sm); border: 0; border-top: 1px solid var(--tint); background: transparent; color: var(--muted-foreground); font: var(--text-caption) var(--font-sans); cursor: pointer; }
+.ui-code-more:is(:hover, :focus-visible) { background: var(--tint); color: var(--foreground); }
+.ui-code[data-folded][data-streaming] .ui-code-more { animation: ui-code-writing 1.6s ease-in-out infinite; }
+@keyframes ui-code-writing { 50% { opacity: .45; } }
+@media (prefers-reduced-motion: reduce) { .ui-code[data-folded][data-streaming] .ui-code-more { animation: none; } }
 .ui-code-n { display: inline-block; min-width: 2ch; margin-right: var(--space-lg); color: var(--muted-foreground); font-variant-numeric: tabular-nums; text-align: right; user-select: none; }
 /* The trace header: the orb, Status · time · work, a chevron when there is a trail; the latest line under it. */
 .ui-trace { display: grid; width: 100%; grid-template-columns: var(--icon-xl) minmax(0, 1fr) auto; align-items: center; gap: var(--space-2xs) var(--row-gap); border: 0; background: transparent; padding: 0; color: var(--muted-foreground); font: var(--weight-rest) var(--text-row)/1.4 var(--font-sans); text-align: left; }
@@ -873,8 +883,12 @@
 .ui-read .turn-trace .tool-group-steps { gap: var(--space-2xs); margin-left: calc(var(--space-sm) + var(--icon-sm) / 2); padding-left: var(--space-sm); border-left-color: var(--tint); }
 /* The app's code block (its Markdown's .artifact) drawn as a CodeBlock: a box, the caption bar, the code face. */
 .ui-answer .chat-markdown .artifact { border: 1px solid var(--tint); border-radius: var(--radius-control); background: transparent; }
-.ui-answer .chat-markdown .artifact-header { min-height: var(--control-sm); border-bottom: 1px solid var(--tint); background: transparent; padding: 0 var(--space-2xs) 0 var(--space-lg); color: var(--muted-foreground); font: var(--text-caption) var(--font-data); }
+.ui-answer .chat-markdown .artifact-header { min-height: var(--control-sm); border-bottom: 1px solid var(--tint); background: var(--background); padding: 0 var(--space-2xs) 0 var(--space-lg); color: var(--muted-foreground); font: var(--text-caption) var(--font-data); }
 .ui-answer .chat-markdown .artifact pre { padding: var(--space-sm) var(--space-lg); background: transparent; font: var(--text-row)/1.6 var(--font-code); }
+.ui-answer .chat-markdown .artifact-expand { min-height: var(--control-sm); border-top: 1px solid var(--tint); padding: 0; font: var(--text-caption) var(--font-sans); }
+.ui-answer .chat-markdown .artifact-expand:is(:hover, :focus-visible) { background: var(--tint); }
+.ui-answer .chat-markdown .artifact-toggle { width: var(--control-xs); height: var(--control-xs); border-radius: var(--radius-round); }
+.ui-answer .chat-markdown .artifact-toggle:is(:hover, :focus-visible) { background: var(--tint); }
 .ui-answer .chat-markdown .artifact-copy { height: var(--control-xs); border-radius: var(--radius-control); padding: 0 var(--space-md); font-size: var(--text-caption); }
 /* In the gallery's previews the app's scroll-to-latest and cancel editing draw as RiderButtons: the
    app keeps where they sit, the library how they look. */
