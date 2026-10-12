@@ -267,3 +267,22 @@ html, body { background: var(--frame, #08090a); color: var(--foreground); }
 .g-glyph { display: grid; place-items: center; }
 .g-glyph svg { width: 100%; height: 100%; }
 .g-scale .g-radius { width: 56px; height: 36px; }
+/* Foundations · In use: a scene per density, numbered where each foundation shows. */
+.g-inuse { display: grid; width: 100%; gap: 18px; }
+.g-inuse-scenes { display: flex; flex-wrap: wrap; justify-content: center; gap: 32px; }
+.g-inuse-col { display: grid; gap: 8px; justify-items: center; align-content: start; }
+.g-inuse-head { color: var(--muted-foreground); font-size: 11px; font-weight: 600; }
+.g-inuse-scene { position: relative; display: grid; justify-items: center; margin-left: 72px; }
+.g-lead { position: absolute; z-index: 4; height: 1px; background: oklch(0.7 0.15 250 / 55%); pointer-events: none; }
+.g-badge { position: absolute; z-index: 5; display: grid; width: 16px; height: 16px; place-items: center; translate: -8px -8px; border-radius: 50%; background: oklch(0.7 0.15 250); color: #fff; font: 600 9.5px/1 "Geist Variable", sans-serif; pointer-events: none; }
+.g-badge[data-static] { position: static; translate: none; }
+.g-inuse-legend { display: grid; width: min(100%, 860px); justify-self: center; gap: 6px; }
+.g-inuse-row { display: grid; grid-template-columns: 16px minmax(0, 1fr) 160px 160px; align-items: center; gap: 12px; font-size: 12px; }
+.g-inuse-legend[data-columns="1"] .g-inuse-row { grid-template-columns: 16px minmax(0, 1fr) 260px; }
+.g-inuse-row code { color: var(--muted-foreground); font: 10.5px ui-monospace, monospace; }
+.g-scene-frame { display: grid; padding: 18px; border-radius: 12px; background: var(--frame); box-shadow: inset 0 0 0 1px var(--border); }
+.g-scene-pane { display: grid; justify-items: start; gap: 14px; padding: 22px; border-radius: 12px; background: var(--background); }
+.g-scene-stack { display: grid; width: 300px; justify-items: center; gap: 14px; }
+.g-scene-stack > .ui-overlay { width: 100%; }
+.g-scene-row { display: flex; width: 100%; align-items: center; gap: 8px; }
+.g-scene-row > .ui-pill-field { flex: 1; }

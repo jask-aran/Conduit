@@ -1,6 +1,6 @@
 import { createSignal, For, onCleanup, onMount, type JSX } from "solid-js";
-import { CopyIcon, FolderIcon, MonitorIcon, PaperclipIcon, SettingsIcon } from "lucide-solid";
-import { Segmented, Bubble, Frost, HeadingSection, Item, Menu, NavRow, Section } from "@/components/ui";
+import { ArrowUpIcon, CameraIcon, CopyIcon, FolderIcon, MicIcon, MonitorIcon, PaperclipIcon, PlusIcon, SettingsIcon, Trash2Icon } from "lucide-solid";
+import { Segmented, Bubble, Button, Frost, HeadingSection, Item, Menu, NavRow, Overlay, OverlayBar, PillButton, PillField, PillGroup, Section, Toolbar } from "@/components/ui";
 import { lib, type Family } from "./library";
 import "katex/dist/katex.min.css";
 
@@ -81,10 +81,128 @@ function TokenTable(props: { groups: TokenGroup[]; density?: boolean }) {
     </>}</For>
   </div>;
 }
+/*
+ * In use: a small scene drawn by the library, each place a foundation shows numbered
+ * on it, and what it computes to beside the number -- at desktop and phone.
+ */
+interface Mark { selector: string; label: string; read: (el: HTMLElement) => string }
+function InUse(props: { scene: () => JSX.Element; marks: Mark[]; density?: boolean }) {
+  const columns = props.density === false ? [undefined] : (["desktop", "phone"] as const);
+  const [values, setValues] = createSignal<string[][]>(columns.map(() => []));
+  const Scene = (scene: { column: number; density?: "desktop" | "phone" }) => {
+    const [spots, setSpots] = createSignal<({ x: number; y: number; to: number } | null)[]>([]);
+    let el!: HTMLDivElement;
+    const measure = () => requestAnimationFrame(() => {
+      const box = el.getBoundingClientRect();
+      const found = props.marks.map((mark) => el.querySelector<HTMLElement>(mark.selector));
+      // Each number in the gutter left of the scene, level with what it marks, a line out to it; marks on one line queue leftward.
+      const placed: { x: number; y: number; to: number }[] = [];
+      setSpots(found.map((node) => {
+        if (!node) return null;
+        const rect = node.getBoundingClientRect();
+        const y = rect.top - box.top + Math.min(rect.height / 2, 12);
+        const x = -26 - 20 * placed.filter((spot) => Math.abs(spot.y - y) < 16).length;
+        const spot = { x, y, to: rect.left - box.left };
+        placed.push(spot);
+        return spot;
+      }));
+      setValues((all) => all.map((row, index) => index === scene.column ? found.map((node, at) => node ? props.marks[at]!.read(node) : "—") : row));
+    });
+    onMount(() => {
+      const observer = new ResizeObserver(measure); observer.observe(el);
+      addEventListener("gallery:tune", measure);
+      onCleanup(() => { observer.disconnect(); removeEventListener("gallery:tune", measure); });
+    });
+    return <div class="g-inuse-col" data-density={scene.density}>
+      {scene.density && <small class="g-inuse-head">{scene.density === "desktop" ? "Desktop" : "Phone"}</small>}
+      <div ref={el} class="g-inuse-scene">{props.scene()}
+        <For each={spots()}>{(spot, index) => spot && <>
+          <i class="g-lead" style={{ left: `${spot.x + 8}px`, top: `${spot.y}px`, width: `${Math.max(0, spot.to - spot.x - 8)}px` }} />
+          <span class="g-badge" style={{ left: `${spot.x}px`, top: `${spot.y}px` }}>{index() + 1}</span>
+        </>}</For>
+      </div>
+    </div>;
+  };
+  return <div class="g-inuse">
+    <div class="g-inuse-scenes"><For each={[...columns]}>{(density, index) => <Scene column={index()} density={density} />}</For></div>
+    <div class="g-inuse-legend" data-columns={columns.length}>
+      <For each={props.marks}>{(mark, index) => <div class="g-inuse-row">
+        <span class="g-badge" data-static="">{index() + 1}</span><span>{mark.label}</span>
+        <For each={values()}>{(column) => <code>{column[index()] ?? ""}</code>}</For>
+      </div>}</For>
+    </div>
+  </div>;
+}
+const style = (el: HTMLElement) => getComputedStyle(el);
+const bg = (el: HTMLElement) => style(el).backgroundColor;
+const fg = (el: HTMLElement) => style(el).color;
+const edge = (el: HTMLElement) => style(el).borderTopColor;
+const rounding = (el: HTMLElement) => px(style(el).borderTopLeftRadius);
+const tall = (el: HTMLElement) => px(`${el.getBoundingClientRect().height}px`);
+const icon = (el: HTMLElement) => `${px(`${el.getBoundingClientRect().width}px`)} · stroke ${style(el).strokeWidth.replace("px", "")}`;
+
+const COLOUR_MARKS: Mark[] = [
+  { selector: ".g-scene-frame", label: "--frame: the frame, behind the panes", read: bg },
+  { selector: ".g-scene-pane", label: "--background: a pane", read: bg },
+  { selector: ".ui-menu", label: "--frost-fill: frost", read: bg },
+  { selector: ".ui-menu", label: "--frost-stroke: frost's edge", read: edge },
+  { selector: ".ui-title", label: "--muted-foreground: a section label (and meta, icons at rest)", read: fg },
+  { selector: ".ui-row[data-checked]", label: "--foreground: the current row", read: fg },
+  { selector: ".ui-row[data-highlighted]", label: "--frost-tint: the cursor's wash", read: bg },
+  { selector: ".ui-section + .ui-section", label: "--frost-tint: a rule between sections", read: edge },
+  { selector: ".ui-row[data-destructive]", label: "--destructive: a destructive row", read: fg },
+  { selector: ".ui-button[data-variant='outline']", label: "--tint: a control's line, on the ground", read: edge },
+];
+const colourScene = () => <div class="g-scene-frame"><div class="g-scene-pane">
+  <Menu><Section title="Section"><Item icon={<MonitorIcon />} checked>Current</Item><Item icon={<FolderIcon />} active>Cursor</Item><Item meta="2m">At rest</Item></Section><Section><Item icon={<Trash2Icon />} destructive>Delete</Item></Section></Menu>
+  <Button variant="outline" size="sm">Control</Button>
+</div></div>;
+
+const SPACE_MARKS: Mark[] = [
+  { selector: ".ui-menu", label: "a popover's inset round its rows (--frost-inset)", read: (el) => px(style(el).paddingTop) },
+  { selector: ".ui-row", label: "a row's height (--row-min)", read: tall },
+  { selector: ".ui-row", label: "its padding, top and side (--row-pad)", read: (el) => `${px(style(el).paddingTop)} ${px(style(el).paddingLeft)}` },
+  { selector: ".ui-row", label: "icon to label (--row-gap)", read: (el) => px(style(el).columnGap) },
+  { selector: ".ui-row .ui-icon svg", label: "the icon (--u-icon)", read: (el) => px(`${el.getBoundingClientRect().width}px`) },
+  { selector: ".ui-row .ui-label", label: "its text (--row-text)", read: (el) => px(style(el).fontSize) },
+  { selector: ".ui-title", label: "a section label's height", read: tall },
+];
+const spaceScene = () => <Menu><Section title="Section"><Item icon={<FolderIcon />} meta="2m">A row</Item><Item icon={<MonitorIcon />}>Another</Item></Section></Menu>;
+
+const RADIUS_MARKS: Mark[] = [
+  { selector: ".ui-menu", label: "a popover or card", read: rounding },
+  { selector: ".ui-overlay", label: "an overlay", read: rounding },
+  { selector: ".ui-row[data-highlighted]", label: "a row", read: rounding },
+  { selector: ".ui-keycap", label: "a keycap", read: rounding },
+  { selector: ".ui-bubble", label: "the user's message", read: rounding },
+  { selector: ".ui-pill-field", label: "the phone's composer field (the desktop composer takes the same step)", read: rounding },
+  { selector: ".ui-pill[data-solo]", label: "a pill: a capsule", read: rounding },
+];
+const radiusScene = () => <div class="g-scene-stack">
+  <Menu><Section><Item icon={<FolderIcon />} active keys={["Ctrl", "K"]}>A row</Item><Item>Another</Item></Section></Menu>
+  <Overlay label="Overlay" style={{ "--overlay-width": "100%" }}><OverlayBar lead={<PlusIcon />} placeholder="An overlay" /></Overlay>
+  <Bubble>A message</Bubble>
+  <div class="g-scene-row"><PillButton label="Camera" icon={<CameraIcon />} /><PillField placeholder="Message" /></div>
+</div>;
+
+const ICON_MARKS: Mark[] = [
+  { selector: ".ui-row:not([data-checked]) .ui-icon svg", label: "a row's, at rest", read: icon },
+  { selector: ".ui-row[data-checked] .ui-icon svg", label: "a current row's: the heavier stroke", read: icon },
+  { selector: ".ui-nav-row svg", label: "the sidebar's", read: icon },
+  { selector: ".ui-toolbar svg", label: "the composer toolbar's", read: icon },
+  { selector: ".ui-pill:not([data-solo]) svg", label: "a pill group's", read: icon },
+  { selector: ".ui-pill[data-solo] svg", label: "a lone pill's: a touch larger", read: icon },
+];
+const iconScene = () => <div class="g-scene-stack">
+  <Menu><Section><Item icon={<PaperclipIcon />}>At rest</Item><Item icon={<MonitorIcon />} checked>Current</Item></Section></Menu>
+  <div class="g-ground"><NavRow icon={<SettingsIcon />}>Sidebar</NavRow></div>
+  <Frost class="g-entry"><Toolbar start={<Button variant="ghost" size="icon-sm" aria-label="Attach"><PlusIcon /></Button>} end={<><Button variant="ghost" size="icon-sm" aria-label="Voice"><MicIcon /></Button><Button variant="ghost" size="icon-sm" aria-label="Send"><ArrowUpIcon /></Button></>} /></Frost>
+  <div class="g-scene-row"><PillGroup actions={[{ label: "Attach", icon: <PlusIcon /> }, { label: "Camera", icon: <CameraIcon /> }]} /><PillButton label="Voice" icon={<MicIcon />} /></div>
+</div>;
+
 const swatch = (name: string) => () => <i class="g-swatch-chip" style={{ background: `var(${name})` }} />;
 const bar = (name: string) => () => <i class="g-bar-chip" style={{ width: `var(${name})` }} />;
 const corner = (name: string) => () => <Frost class="g-radius" style={{ "border-radius": `var(${name})` }} />;
-const glyph = (size: string) => () => <span class="g-glyph" style={{ width: size, height: size }}><CopyIcon /></span>;
 const tok = (name: string, use: string, read: TokenRow["read"], sample?: TokenRow["sample"]): TokenRow => ({ name, use, read, sample });
 
 const COLOURS: TokenGroup[] = [
@@ -109,13 +227,6 @@ const RADII: TokenGroup[] = [
     tok("--radius-xl", "overlays", length("--radius-xl"), corner("--radius-xl")),
     tok("--radius-composer", "the composer and the phone's field", length("--radius-composer"), corner("--radius-composer")),
     tok("--radius-pill", "pills: the phone's controls, the segmented pill", length("--radius-pill"), corner("--radius-pill")),
-  ] },
-];
-const ICONS: TokenGroup[] = [
-  { title: "Sizes", rows: [tok("--u-icon", "every row's, the toolbar's, the sidebar's, a pill's", length("--u-icon"), glyph("var(--u-icon)")), tok("--pill-solo-icon", "a lone pill's, a touch larger", length("--pill-solo-icon"), glyph("var(--pill-solo-icon)"))] },
-  { title: "Stroke: a tenth of the icon at rest, an eighth when current (DESIGN.md Icons)", rows: [
-    tok("At rest", "muted", (cell) => { const svg = cell.querySelector(".ui-row svg"); return svg ? `stroke ${getComputedStyle(svg).strokeWidth} of 24` : "—"; }, () => <Menu><Section><Item icon={<PaperclipIcon />}>At rest</Item></Section></Menu>),
-    tok("Current", "white", (cell) => { const svg = cell.querySelector(".ui-row svg"); return svg ? `stroke ${getComputedStyle(svg).strokeWidth} of 24` : "—"; }, () => <Menu><Section><Item icon={<MonitorIcon />} checked>Current</Item></Section></Menu>),
   ] },
 ];
 
@@ -229,6 +340,9 @@ export const foundationFamilies: Family[] = [
     { title: "Scale", note: "each role once, as DESIGN.md names it: drawn by the library at both densities, and what it computes to. Rest is grey, current white at 660 with no fill; text over frost is a touch heavier and brighter", layout: "desktop", atoms: [
       lib("type-scale", "Roles", "both", "type", "DESIGN.md Typography · library.css", () => <Scale />, "row"),
     ] },
+    { title: "Icons", note: "Lucide at the type unit, so an icon is sized with the text beside it; muted at rest, its stroke a tenth of its size, an eighth when current (DESIGN.md Icons)", layout: "desktop", atoms: [
+      lib("icon-inuse", "Icons in use", "both", "icon", "svg.lucide · --u-icon · --pill-solo-icon", () => <InUse scene={iconScene} marks={ICON_MARKS} />, "row"),
+    ] },
     { title: "Shipped", note: "the faces Conduit ships, so it looks the same on every system", layout: "desktop", atoms: [
       lib("font-geist", "Geist Variable", "both", "font", "@fontsource-variable/geist", () => <Face family={GEIST} weights={[400, 450, 500, 560, 600, 660, 700]} source="@fontsource-variable/geist · OFL" />),
       lib("font-paper", "Paper Mono", "both", "font", "components/ui/fonts/PaperMono-Variable.woff2", () => <Face family={PAPER} weights={[400, 500, 600, 700]} source="components/ui/fonts/PaperMono-Variable.woff2 · OFL · the section labels; also the app's optional transcript face" />),
@@ -243,16 +357,19 @@ export const foundationFamilies: Family[] = [
       lib("font-consolas", "Consolas", "both", "font", "local only", () => <Face family="Consolas, monospace" sample="claude-opus-5-5  ~/src  12:04" source="Microsoft's, with Windows and Office: not ours to ship · shown from this machine's copy" />),
     ] },
   ] },
-  { title: "Colour", rail: "Foundations", note: "every colour once: grounds, text, one tint per surface for its lines and washes, frost's own, state. Text tones by role are in Type · Scale", groups: [{ layout: "desktop", atoms: [
+  { title: "Colour", rail: "Foundations", note: "every colour once: grounds, text, one tint per surface for its lines and washes, frost's own, state. Text tones by role are in Type · Scale", groups: [{ title: "In use", note: "every colour in one scene: the frame, a pane, a popover on it", layout: "desktop", atoms: [
+    lib("colour-inuse", "Colour in use", "both", "colour", "Menu · Section · Item · Button", () => <InUse scene={colourScene} marks={COLOUR_MARKS} density={false} />, "row"),
+  ] }, { title: "Tokens", layout: "desktop", atoms: [
     lib("colour-tokens", "Colours", "both", "colour", "styles.css :root · library.css :root", () => <TokenTable groups={COLOURS} density={false} />, "row"),
   ] }] },
-  { title: "Space", rail: "Foundations", note: "the density: every size a multiple of the unit, 12.8px on desktop and 16px on a phone; rows take their own measured sizes, for a finger on a phone", groups: [{ layout: "desktop", atoms: [
+  { title: "Space", rail: "Foundations", note: "the density: every size a multiple of the unit, 12.8px on desktop and 16px on a phone; rows take their own measured sizes, for a finger on a phone", groups: [{ title: "In use", note: "one popover, measured: what each number shapes. Everything is in the unit, so the phone's is the desktop's at 1.25x; rows take more, for a finger", layout: "desktop", atoms: [
+    lib("space-inuse", "Space in use", "both", "space", "Menu · Section · Item", () => <InUse scene={spaceScene} marks={SPACE_MARKS} />, "row"),
+  ] }, { title: "Tokens", note: "for reference", layout: "desktop", atoms: [
     lib("space-tokens", "Space", "both", "space", "library.css [data-density]", () => <TokenTable groups={SPACE} />, "row"),
   ] }] },
-  { title: "Radius", rail: "Foundations", note: "one scale, DESIGN.md's rounded, its values a phone's and desktop's 0.8x; every piece takes a step", groups: [{ layout: "desktop", atoms: [
+  { title: "Radius", rail: "Foundations", note: "one scale, DESIGN.md's rounded, its values a phone's and desktop's 0.8x; every piece takes a step", groups: [{ title: "In use", note: "each shape the library draws, and its corner", layout: "desktop", atoms: [
+    lib("radius-inuse", "Radius in use", "both", "radius", "Menu · Overlay · Bubble · PillField · PillButton", () => <InUse scene={radiusScene} marks={RADIUS_MARKS} />, "row"),
+  ] }, { title: "Tokens", layout: "desktop", atoms: [
     lib("radius-tokens", "Radii", "both", "radius", "library.css --radius-*", () => <TokenTable groups={RADII} />, "row"),
-  ] }] },
-  { title: "Icons", rail: "Foundations", note: "Lucide, at the icon unit, muted at rest", groups: [{ layout: "desktop", atoms: [
-    lib("icon-tokens", "Icons", "both", "icon", "library.css --u-icon · svg.lucide", () => <TokenTable groups={ICONS} />, "row"),
   ] }] },
 ];
