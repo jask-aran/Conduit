@@ -191,8 +191,8 @@ const ICON_MARKS: Mark[] = [
   { selector: ".ui-row[data-checked] .ui-icon svg", label: "a current row's: the heavier stroke", read: icon },
   { selector: ".ui-nav-row svg", label: "the sidebar's", read: icon },
   { selector: ".ui-toolbar svg", label: "the composer toolbar's", read: icon },
-  { selector: ".ui-pill:not([data-solo]) svg", label: "a pill group's", read: icon },
-  { selector: ".ui-pill[data-solo] svg", label: "a lone pill's: a touch larger", read: icon },
+  { selector: ".ui-pill:not([data-solo]) svg", label: "a pill group's: --pill-icon, a touch larger", read: icon },
+  { selector: ".ui-pill[data-solo] svg", label: "a lone pill's: the same", read: icon },
 ];
 const iconScene = () => <div class="g-scene-stack">
   <Menu><Section><Item icon={<PaperclipIcon />}>At rest</Item><Item icon={<MonitorIcon />} checked>Current</Item></Section></Menu>
@@ -418,7 +418,7 @@ export const foundationFamilies: Family[] = [
       lib("type-weights", "Weights", "both", "type", "library.css --weight-*", () => <TokenTable groups={WEIGHTS} density={false} />),
     ] },
     { title: "Icons", note: "Lucide at the type unit, so an icon is sized with the text beside it; muted at rest, its stroke a tenth of its size, an eighth when current (DESIGN.md Icons)", layout: "desktop", atoms: [
-      lib("icon-inuse", "Icons in use", "both", "icon", "svg.lucide · --u-icon · --pill-solo-icon", () => <InUse scene={iconScene} marks={ICON_MARKS} />, "row"),
+      lib("icon-inuse", "Icons in use", "both", "icon", "svg.lucide · --u-icon · --pill-icon", () => <InUse scene={iconScene} marks={ICON_MARKS} />, "row"),
     ] },
     { title: "Shipped", note: "the faces Conduit ships, so it looks the same on every system", layout: "desktop", atoms: [
       lib("font-geist", "Geist Variable", "both", "font", "@fontsource-variable/geist", () => <Face family={GEIST} weights={[400, 450, 500, 560, 600, 660, 700]} source="@fontsource-variable/geist · OFL" />),
@@ -467,7 +467,7 @@ export const foundationFamilies: Family[] = [
     { title: "Small", staged: true, atoms: [
       lib("slider", "Slider", "both", "control", "Slider", () => <div style={{ width: "240px" }}><Levels /></div>),
       lib("switch", "Switch", "both", "control", "Switch", () => <SwitchDemo />),
-      lib("keycap", "Keycap", "desktop", "control", "Keycap", () => <div class="g-row"><Keycap>Ctrl</Keycap><Keycap>K</Keycap><Keycap>Esc</Keycap></div>),
+      lib("keycap", "Keycap", "desktop", "control", "Keycap · onClick, onRemove: editable (Settings · Shortcuts)", () => <div class="g-field"><div class="g-row"><Keycap>Ctrl</Keycap><Keycap>K</Keycap><Keycap>Esc</Keycap></div><div class="g-row"><Keycap label="Ctrl K" onClick={() => {}} onRemove={() => {}}>Ctrl K</Keycap><Keycap label="Ctrl Shift K" onClick={() => {}}>Ctrl Shift K</Keycap></div></div>),
       lib("spinner", "Spinner", "both", "control", "Spinner", () => <Spinner />),
     ] },
   ] },

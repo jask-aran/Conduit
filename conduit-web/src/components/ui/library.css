@@ -71,7 +71,7 @@
   --text-label: calc(0.625 * var(--u-type)); --text-caption: calc(0.75 * var(--u-type));
   --text-row: var(--row-text); --text-body: var(--u-type); --text-heading: calc(1.40625 * var(--u-type));
   --frost-radius: var(--radius-surface); --row-radius: var(--radius-control);
-  --pill-solo-icon: calc(1.125 * var(--u-icon)); --pill-field-radius: var(--radius-message);
+  --pill-icon: calc(1.125 * var(--u-icon)); --pill-field-radius: var(--radius-message);
 }
 [data-density] { font-family: var(--font-sans); font-size: var(--text-row); }
 :root {
@@ -111,12 +111,13 @@
    circle; more share a capsule, each slot a pill-shaped target 1px from its
    edge. Its tokens size every member. */
 /* One height for every pill: group, lone button, the field at one line. */
-:root { --pill-size: 44px; --pill-slot: 34px; --pill-slot-height: 40px; --pill-gap: 2px; --pill-field-pad: 14px; }
+:root { --pill-size: 44px; --pill-slot: 40px; --pill-slot-height: 40px; --pill-gap: 2px; --pill-field-pad: 14px; }
 .ui-pill { display: inline-flex; height: var(--pill-size); align-items: center; gap: var(--pill-gap); padding: 0 1px; border-radius: var(--radius-round); }
 .ui-pill > button { display: grid; width: var(--pill-slot); height: var(--pill-slot-height); place-items: center; border: 0; border-radius: var(--radius-round); background: transparent; color: inherit; }
 .ui-pill[data-solo] { width: var(--pill-size); justify-content: center; padding: 0; }
 .ui-pill[data-solo] > button { width: 100%; height: 100%; }
-.ui-pill[data-solo] > button svg { width: var(--pill-solo-icon); height: var(--pill-solo-icon); }
+/* One icon size in every pill, alone or grouped, each in a 40px circle: as far from the sides as from the top. */
+.ui-pill > button svg, .ui-pill[data-surface] > :is(button, [data-slot="button"]) svg { width: var(--pill-icon); height: var(--pill-icon); }
 .ui-pill > button:hover { background: var(--tint); }
 .ui-pill[data-stretch] { width: auto; flex: 1 1 auto; }
 .ui-pill[data-stretch] > button { width: 100%; }
@@ -253,7 +254,7 @@
 .ui-seg[data-pill] { height: var(--pill-size); gap: var(--pill-gap); border-color: var(--frost-stroke); border-radius: var(--radius-round); background: var(--frost-fill); padding: 1px; }
 .ui-seg[data-pill] .ui-seg-thumb { top: 1px; bottom: 1px; width: var(--pill-slot); left: calc(1px + (var(--pill-slot) + var(--pill-gap)) * var(--segment)); border-radius: var(--radius-round); background: var(--tint); }
 .ui-seg[data-pill] button { width: var(--pill-slot); min-height: var(--pill-slot-height); border-radius: var(--radius-round); padding: 0; }
-.ui-seg[data-pill] button svg { width: var(--u-icon); height: var(--u-icon); }
+.ui-seg[data-pill] button svg { width: var(--pill-icon); height: var(--pill-icon); }
 /* On the frame (the sidebar) controls take the sidebar's own ink. */
 [data-surface="frame"] :is(.ui-pill > button, .ui-seg[data-pill] button[aria-checked="true"]) { color: var(--sidebar-accent-foreground); }
 [data-surface="frame"] .ui-seg[data-pill] .ui-seg-thumb { background: var(--sidebar-accent); }
@@ -287,6 +288,9 @@
 /* A phone variant has no keyboard: shortcut keys are off wherever they sit. */
 [data-density="phone"] .ui-keys { display: none; }
 @media (--conduit-phone-layout) { .ui-keys { display: none; } }
+/* In the phone previews the header's pills sit at the full-screen overlay's inset (8px, inside the
+   safe area), as the app's own header does round its frosted pills. */
+@media (--conduit-phone-layout) { .chat-header:has(> .ui-pill) { height: calc(56px + var(--safe-area-inset-top, env(safe-area-inset-top, 0px))); padding: calc(8px + var(--safe-area-inset-top, env(safe-area-inset-top, 0px))) 8px 4px; background: linear-gradient(to bottom, var(--background) 0 60%, transparent 100%); } }
 
 /* Heading section: the popover's subject, then items about it (a field row). */
 .ui-heading { padding: 0; }
@@ -349,13 +353,12 @@
 .ui-frost.ui-pill[data-surface] { display: inline-flex; flex: none; }
 .ui-pill[data-surface] > :is(button, [data-slot="button"]) { width: var(--pill-slot); min-width: var(--pill-slot); height: var(--pill-slot-height); padding: 0; border-radius: var(--radius-round); }
 .ui-pill[data-surface][data-solo] > :is(button, [data-slot="button"]) { width: 100%; min-width: 0; height: 100%; }
-.ui-pill[data-surface][data-solo] > :is(button, [data-slot="button"]) svg { width: var(--pill-solo-icon); height: var(--pill-solo-icon); }
 /* The phone composer's buttons are solo Pills: one frost circle each (the mic
    stretched across the row). Specificity sits between the app's sizing rule
    and its hide rules; a folded button (send with nothing to send, latest,
    stop-and-send) is left to the app, which folds it to nothing. */
 :where([data-phone-layout] .composer)[data-composer-surface="library"] :is(.composer-actions button[data-slot="button"], button.composer-plus-trigger):not(:is([data-primary-hidden] .composer-send-trigger, .composer-latest-trigger:not([data-shown]), .composer-stop-send:not([data-shown]))) { width: var(--pill-size); min-width: var(--pill-size); height: var(--pill-size); }
-:where([data-phone-layout] .composer)[data-composer-surface="library"] :is(.composer-actions button[data-slot="button"], button.composer-plus-trigger) svg { width: var(--pill-solo-icon); height: var(--pill-solo-icon); }
+:where([data-phone-layout] .composer)[data-composer-surface="library"] :is(.composer-actions button[data-slot="button"], button.composer-plus-trigger) svg { width: var(--pill-icon); height: var(--pill-icon); }
 :where([data-phone-layout] .composer)[data-composer-surface="library"] :is(.composer-actions button[data-slot="button"], button.composer-plus-trigger):hover { background: linear-gradient(var(--tint), var(--tint)), var(--frost-fill); }
 [data-phone-layout] .composer[data-composer-surface="library"] :is([data-primary-hidden] .composer-send-trigger, .composer-latest-trigger:not([data-shown]), .composer-stop-send:not([data-shown])) { border-width: 0; }
 /* The composer's field as a PillField: the app keeps its folding (min-height
