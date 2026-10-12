@@ -224,6 +224,7 @@
 .ui-card-actions { display: grid; width: fit-content; grid-auto-columns: 1fr; grid-auto-flow: column; gap: calc(0.5 * var(--u-space)); margin-left: auto; }
 
 .ui-bubble { width: fit-content; max-width: min(calc(40 * var(--u-type)), 88cqw); margin-left: auto; border-radius: var(--radius-message); padding: calc(0.625 * var(--u-type)) calc(0.8125 * var(--u-type)); font-size: var(--text-body); line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
+.ui-bubble[data-editing="true"] { color: var(--muted-foreground); font-style: italic; }
 
 
 /* Button: a rounded rectangle. Secondary is the surface's well inside its line (on frost, a
