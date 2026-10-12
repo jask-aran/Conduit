@@ -69,7 +69,7 @@ typography:
     letterSpacing: 0.07em
     textTransform: uppercase
   keycap:
-    fontFamily: ui-monospace, SFMono-Regular, Menlo, monospace
+    fontFamily: Paper Mono, ui-monospace, SFMono-Regular, Consolas, monospace
     fontSize: 8px
     fontWeight: 500
 rounded:
@@ -229,7 +229,7 @@ That blue treatment is leftover frontend-design skill output. Do not encode, cop
 
 # Typography
 
-Geist Variable everywhere for UI, except the section label, which is Paper Mono. `ui-monospace` (not Geist Mono) for model ids, paths, keycaps, times and counts in meta, status, waveforms. Tabular figures wherever numbers tick or line up.
+Geist Variable everywhere for UI, except the section label and the keycap, which are Paper Mono. `ui-monospace` (not Geist Mono) for model ids, paths, keycaps, times and counts in meta, status, waveforms. Tabular figures wherever numbers tick or line up.
 
 A handful of roles, each defined once in `styles.css`; components name a role rather than a size:
 
@@ -240,7 +240,7 @@ A handful of roles, each defined once in `styles.css`; components name a role ra
 - **section label** — Paper Mono (shipped, so it reads the same on every system; the system's mono only as the fallback), uppercase, small, letter-spaced, muted. Every section heading is this: a list, menu, palette, card, rider or slider, and the sidebar's groups; the breadcrumb's places share it.
 - **caption** — section subtitles, timestamps, empty copy.
 - **meta** — muted mono beside a row's title, right-aligned, truncating before the title does.
-- **keycap** — small mono in a rounded hairline square, muted; in the text colour on the cursor row or a clickable rail action.
+- **keycap** — small, in the section label's face (Paper Mono), in a rounded hairline square, muted; in the text colour on the cursor row or a clickable rail action.
 
 Two weights carry state: the resting weight and the **current weight** (semibold). Every surface uses the same pair; a match lit while typing is the one heavier step. Do not invent further sizes or weights per component. No serif except the Capacitor first-launch wordmark (legacy).
 
