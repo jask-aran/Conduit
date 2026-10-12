@@ -62,8 +62,9 @@
   --u-base: 16px; --row-min-floor: 44px; --row-min-units: 2.75; --row-text-units: 0.90625;
   --frost-inset: var(--space-sm); --nav-label-pad: var(--space-sm) var(--space-md);
 } }
-/* What you read takes the transcript's scale: the units below are worked out again inside it. */
-.ui-transcript, .ui-read, .ui-bubble, .ui-answer { --scale-ui: var(--scale-transcript); }
+/* What you read takes the transcript's scale: the units below are worked out again inside it. There a row's
+   text (a trace, a trail, a table) is a step under the body on both densities, not a finger list's. */
+.ui-transcript, .ui-read, .ui-bubble, .ui-answer { --scale-ui: var(--scale-transcript); --row-text-units: 0.8125; }
 :root, [data-density], .ui-transcript, .ui-read, .ui-bubble, .ui-answer {
   --u-space: calc(var(--u-base) * var(--scale-ui)); --u-type: var(--u-space); --u-icon: var(--u-space);
   /* Space: nine steps, in the unit. */
@@ -676,21 +677,31 @@
 .ui-code-line { display: block; padding-inline: var(--space-lg); white-space: pre; }
 .ui-code-n { display: inline-block; min-width: 2ch; margin-right: var(--space-lg); color: var(--muted-foreground); font-variant-numeric: tabular-nums; text-align: right; user-select: none; }
 /* The trace header: the orb, Status · time · work, a chevron when there is a trail; the latest line under it. */
-.ui-trace { display: grid; width: 100%; grid-template-columns: var(--icon) minmax(0, 1fr) auto; align-items: center; gap: var(--space-2xs) var(--row-gap); border: 0; background: transparent; padding: 0; color: var(--muted-foreground); font: var(--weight-rest) var(--text-row)/1.4 var(--font-sans); text-align: left; }
+.ui-trace { display: grid; width: 100%; grid-template-columns: var(--icon-xl) minmax(0, 1fr) auto; align-items: center; gap: var(--space-2xs) var(--row-gap); border: 0; background: transparent; padding: 0; color: var(--muted-foreground); font: var(--weight-rest) var(--text-row)/1.4 var(--font-sans); text-align: left; }
 .ui-trace:not(:disabled) { cursor: pointer; }
-.ui-trace-orb { display: grid; width: var(--icon); height: var(--icon); grid-area: 1 / 1; }
+.ui-trace-orb { display: grid; width: var(--icon-xl); height: var(--icon-xl); grid-area: 1 / 1 / 3; align-self: center; }
 .ui-trace-orb > * { width: 100%; height: 100%; }
 .ui-trace-line { min-width: 0; grid-area: 1 / 2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ui-trace-line > :is(b, .ui-trace-status) { color: var(--foreground); font-weight: var(--weight-strong); }
 /* A header whose line and latest come wrapped (the app's) lays them out as if they were not. */
 .ui-trace-preview { display: contents; }
 .ui-trace-time { font-variant-numeric: tabular-nums; }
-.ui-trace-chevron, .ui-trace > .disclosure-chevron { width: var(--icon-sm); height: var(--icon-sm); grid-area: 1 / 3; transition: rotate .15s ease; }
-.ui-trace[aria-expanded="true"] .ui-trace-chevron { rotate: 180deg; }
-.ui-trace:is(:hover, :focus-visible) :is(.ui-trace-chevron, .disclosure-chevron) { color: var(--foreground); }
+.ui-trace > .ui-disclosure-chevron { grid-area: 1 / 3; }
+
 .ui-trace-latest { min-width: 0; grid-area: 2 / 2 / 3 / 4; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Disclosure (DESIGN Transcript): everything that folds -- a header, one turning chevron, a body. Its
+   unfolding is the caller's (the app's Disclosure animates it); this is its shape. */
+.ui-disclosure { display: grid; min-width: 0; gap: var(--space-2xs); }
+.ui-disclosure-header { display: flex; width: 100%; min-width: 0; align-items: center; gap: var(--row-gap); border: 0; border-radius: var(--radius-control); background: transparent; padding: 0; color: var(--muted-foreground); font: var(--weight-rest) var(--text-row)/1.4 var(--font-sans); text-align: left; }
+.ui-disclosure-header:not(:disabled) { cursor: pointer; }
+.ui-disclosure-chevron { width: var(--icon-sm); height: var(--icon-sm); flex: none; margin-left: auto; transition: rotate .15s ease; }
+[aria-expanded="true"] > .ui-disclosure-chevron { rotate: 180deg; }
+:is(.ui-disclosure-header, .ui-trace):is(:hover, :focus-visible) > .ui-disclosure-chevron { color: var(--foreground); }
+@media (prefers-reduced-motion: reduce) { .ui-disclosure-chevron { transition: none; } }
+.ui-disclosure-body { min-width: 0; }
+
 /* The trail: one light line per step, no boxes, under the header's text; a step under the answer's size. */
-.ui-trail { display: grid; gap: var(--space-2xs); margin: 0; padding: 0 0 0 calc(var(--icon) + var(--row-gap)); color: var(--muted-foreground); font-size: var(--text-row); list-style: none; }
+.ui-trail { display: grid; gap: var(--space-2xs); margin: 0; padding: 0 0 0 calc(var(--icon-xl) + var(--row-gap)); color: var(--muted-foreground); font-size: var(--text-row); list-style: none; }
 .ui-step { display: flex; min-width: 0; min-height: var(--control-xs); align-items: center; gap: var(--row-gap); }
 .ui-step-icon { display: grid; width: var(--icon-sm); height: var(--icon-sm); flex: none; place-items: center; }
 .ui-step-icon > svg { width: 100%; height: 100%; }
@@ -841,14 +852,21 @@
 .ui-answer .chat-markdown :is(th, td) { border-color: var(--tint); padding: var(--space-sm) var(--space-md); }
 /* The app's opened trail drawn as a Trail of Steps: in the transcript's units (its own rules are in rem),
    its lines under the header's text, the step's icon, verb, mono subject and time. */
-.ui-read .turn-trace .turn-trace-body { display: grid; gap: var(--space-2xs); margin: var(--space-2xs) 0 0; padding-left: calc(var(--icon) + var(--row-gap) - var(--space-sm)); }
+.ui-read .turn-trace .turn-trace-body { display: grid; gap: var(--space-2xs); margin: var(--space-2xs) 0 0; padding-left: calc(var(--icon-xl) + var(--row-gap) - var(--space-sm)); }
 .ui-read .turn-trace .trail-row-header { min-height: var(--control-xs); gap: var(--row-gap); border-radius: var(--radius-control); padding: 0 var(--space-sm); font-size: var(--text-row); }
 .ui-read .turn-trace .trail-row-header:is(:hover, :focus-visible) { background: var(--tint); }
 .ui-read .turn-trace .trail-row-header .trail-icon { width: var(--icon-sm); height: var(--icon-sm); }
 .ui-read .turn-trace .trail-verb { color: var(--foreground); font-weight: var(--weight-rest); }
 .ui-read .turn-trace .trail-subject { font: var(--text-caption) var(--font-code); }
 .ui-read .turn-trace .trail-meta { gap: var(--space-md); font-size: var(--text-caption); }
-.ui-read .turn-trace .trail-row-header .disclosure-chevron { width: var(--icon-sm); height: var(--icon-sm); }
+/* The header's latest line, when it is Markdown (the app's), reads inline at the line's size. */
+.ui-trace-latest .chat-markdown { display: contents; font-size: inherit; line-height: inherit; }
+.ui-trace-latest :is(.chat-markdown, .incremark) > * { display: inline; margin: 0; }
+.ui-trace-latest :is(.chat-markdown, .incremark) > *:not(:last-child)::after { content: " "; }
+.ui-read .turn-trace .trail-row-header .ui-disclosure-chevron { opacity: 0; }
+.ui-read .turn-trace .trail-meta + .ui-disclosure-chevron { margin-left: 0; }
+.ui-read .turn-trace .trail-row-header:is(:hover, :focus-visible, [aria-expanded="true"]) .ui-disclosure-chevron { opacity: 1; }
+.ui-read .turn-trace[data-empty] .ui-disclosure-chevron { visibility: hidden; }
 .ui-read .turn-trace :is(.tool-step-content, .text-step-content) { margin: var(--space-2xs) 0 var(--space-sm) calc(var(--space-sm) + var(--icon-sm) + var(--row-gap)); }
 .ui-read .turn-trace .tool-step-content pre { border: 1px solid var(--tint); border-radius: var(--radius-control); background: transparent; padding: var(--space-sm) var(--space-lg); font: var(--text-caption)/1.6 var(--font-code); }
 .ui-read .turn-trace .text-step-content .chat-markdown { font-size: var(--text-row); }

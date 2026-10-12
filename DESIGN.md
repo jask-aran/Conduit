@@ -471,11 +471,11 @@ A "sizzle", text that shifts and settles, is a broken rule here, not a tuning ma
 
 **Thinking orb** — the trace header's mark: a dotted orb whose motion says what the turn is doing (connecting, thinking, searching, reading, editing, running, writing). Changes hold briefly and crossfade, so a burst of tool calls does not flicker it and there is never an empty frame. Settled, it turns slowly for Done and sputters in `{colors.destructive}` for Interrupted and Failed. Every orb shares one frame loop and a settled one draws at a low rate. Reduced motion is a still frame. The frames are catalogued in `docs/design/orb-catalogue/contact-sheet.html`.
 
-**Trace trail** — the opened trace: one light line per step, no boxes. A tool step is its kind's icon (a spinner while running), a verb in present or past tense, its subject in muted mono and its duration right-aligned; failed and stopped steps say so. Repeated steps of one kind in a row are one line. Any line opens in place to its output or full text. Sizes sit a step under the answer, in rem so desktop and phone each place it.
+**Trace trail** — the opened trace: one light line per step, no boxes. A tool step is its kind's icon (a spinner while running), a verb in present or past tense, its subject in muted mono and its duration right-aligned; failed and stopped steps say so. Repeated steps of one kind in a row are one line. Any line opens in place to its output or full text. Sizes sit a step under the answer (0.8125 of the unit on both densities, at the transcript's scale), the orb a ring's size centred on the header's two lines.
 
 **Harness prompt** — a turn the harness started itself opens on one muted line with a bell where the prompt sits, right-aligned, with no bubble and no actions.
 
-**Disclosure** — one component for everything that folds (`chat/disclosure.tsx`): a header, one turning chevron, and a body that unfolds in height and folds to nothing, gap included. Opened at the transcript's tail it lets go of the tail rather than being chased.
+**Disclosure** — one component for everything that folds (`chat/disclosure.tsx`; its shape is v2's `Disclosure`, its unfolding the app's): a header, one turning chevron, and a body that unfolds in height and folds to nothing, gap included. Opened at the transcript's tail it lets go of the tail rather than being chased.
 
 ## Anywhere
 
