@@ -165,11 +165,13 @@
 .ui-row:is([data-highlighted], [data-checked]) .harness-mark { filter: none; opacity: 1; }
 .ui-row[data-disabled], [data-surface="frost"] .ui-row[data-disabled] { pointer-events: none; color: color-mix(in oklch, var(--foreground), transparent 62%); text-decoration: line-through 1.5px; }
 .ui-row[data-disabled] > small { text-decoration: none; }
-.ui-row[data-destructive] { color: var(--destructive); }
+.ui-row[data-destructive], .ui-row[data-destructive] > .ui-icon { color: var(--destructive); }
 .ui-row[data-destructive][data-highlighted] { background: color-mix(in oklch, var(--destructive), transparent 85%); }
 
-.ui-keycap { display: inline-grid; min-width: calc(1.25 * var(--u-space)); height: calc(1.25 * var(--u-space)); place-items: center; border: 1px solid oklch(1 0 0 / 16%); border-radius: var(--radius-control); background: oklch(0 0 0 / 12%); padding: 0 calc(0.3125 * var(--u-space)); color: var(--muted-foreground); font: var(--weight-lift) var(--text-meta)/1 var(--font-label); }
+.ui-keycap { display: inline-grid; min-width: calc(1.25 * var(--u-space)); height: calc(1.25 * var(--u-space)); place-items: center; border-radius: var(--radius-control); background: var(--tint); padding: 0 calc(0.3125 * var(--u-space)); color: var(--muted-foreground); font: var(--weight-lift) var(--text-meta)/1 var(--font-label); }
 .ui-row[data-highlighted] .ui-keycap { color: var(--foreground); }
+/* A keycap is the surface's tint, as a hovered row or button is: --tint on the ground, --frost-tint over frost. */
+[data-surface="frost"] .ui-keycap { background: var(--frost-tint); }
 
 /* Card: the menu's container at dialog padding. */
 .ui-card { display: flex; flex-direction: column; gap: calc(1 * var(--u-space)); border-radius: var(--frost-radius); padding: calc(1.25 * var(--u-space)); }
