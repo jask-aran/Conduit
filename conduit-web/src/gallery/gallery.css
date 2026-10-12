@@ -293,3 +293,8 @@ html, body { background: var(--frame, #08090a); color: var(--foreground); }
 .g-busy > .ui-frost { position: relative; }
 .g-material { display: grid; width: 100%; gap: 14px; }
 .g-cell-body:has(> .g-material) { width: 100%; }
+.g-cell-body:has(> .g-phone-stage) { width: 100%; }
+.g-phone-stage { position: relative; width: min(360px, 100%); height: 640px; margin-inline: auto; overflow: hidden; border-radius: 28px; background: var(--background); box-shadow: inset 0 0 0 1px var(--border); }
+.g-phone-stage > p { margin: 0; padding: 56px 16px; color: var(--foreground); font-size: 16px; line-height: 1.55; }
+.g-stage-scrim { position: absolute; inset: 0; }
+.g-stage-scrim > .ui-overlay { height: 100%; }

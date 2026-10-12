@@ -16,7 +16,7 @@
  *
  *   .ui-frost              the material: stroke, fill, blur, highlight
  *     [data-lift=raised]   what floats over the app: menus, popovers, cards
- *     [data-core]          a solid backing under the fill, for what covers busy content: overlays
+ *     [data-core]          a solid backing under the fill, for the phone's full-screen overlays (off for now)
  *   .ui-pill               frost circle (one action), capsule (several), switch or field
  *   .ui-menu               raised frost container; holds only sections
  *     .ui-section          list, search or slider; a list may have a title; a rule
@@ -555,9 +555,13 @@
 .ui-overlay-page-head > .ui-overlay-title { flex: 1; }
 .ui-overlay-status { color: var(--muted-foreground); font-size: var(--text-row); }
 .ui-overlay-status[data-failed] { color: var(--destructive); }
-/* On a phone an overlay is a full-screen bubble on the darker core: nothing round it is dimmed. */
+/* On a phone an overlay is full screen, nothing round it dimmed: one column, the split's aside
+   and the hints gone, settings' rail a screen of its own. */
 [data-density="phone"] .ui-scrim, .ui-scrim[data-density="phone"] { padding: var(--phone-overlay-padding, 8px); background: transparent; }
-:is([data-density="phone"] .ui-frost.ui-overlay, .ui-frost.ui-overlay[data-density="phone"]) { width: 100%; }
+:is([data-density="phone"] .ui-frost.ui-overlay, .ui-frost.ui-overlay[data-density="phone"]) { width: 100%; height: 100%; max-height: none; }
+[data-density="phone"] .ui-overlay-split { grid-template-columns: minmax(0, 1fr); }
+[data-density="phone"] .ui-overlay-aside { display: none; }
+[data-density="phone"] .ui-overlay-rail { width: 100%; border-right: 0; }
 [data-density="phone"] .ui-overlay-hints { display: none; }
 .ui-match { color: var(--muted-foreground); }
 .ui-match > b { color: var(--foreground); font-weight: var(--weight-current); }

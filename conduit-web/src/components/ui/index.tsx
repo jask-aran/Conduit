@@ -195,10 +195,10 @@ export function Scrim(props: { placement?: "top" | "center"; class?: string; chi
   return <div class={cn("ui-scrim", props.class)} data-placement={props.placement ?? "top"}>{props.children}</div>;
 }
 
-/** Always core: an overlay covers whatever the page holds, so its frost has a solid backing. */
-export function Overlay(props: { label: string; layout?: "stack" | "rail"; density?: Density; class?: string; style?: JSX.CSSProperties; children: JSX.Element }) {
+/** core: frost on a solid backing, kept for the phone's full-screen overlays should the page behind them be too busy -- off for now. */
+export function Overlay(props: { label: string; layout?: "stack" | "rail"; core?: boolean; density?: Density; class?: string; style?: JSX.CSSProperties; children: JSX.Element }) {
   return <div role="dialog" aria-label={props.label} class={cn("ui-frost ui-overlay", props.class)} style={props.style} data-layout={props.layout ?? "stack"}
-    data-surface="frost" data-lift="raised" data-core="" data-density={props.density}>{props.children}</div>;
+    data-surface="frost" data-lift="raised" data-core={props.core ? "" : undefined} data-density={props.density}>{props.children}</div>;
 }
 
 /** The field across the top: a lead (a prompt glyph, a search icon, a back button), the input, then end controls and close. */
