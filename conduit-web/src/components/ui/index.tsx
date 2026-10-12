@@ -1,5 +1,5 @@
 import { createEffect, createSignal, createUniqueId, For, Show, splitProps, type JSX } from "solid-js";
-import { CheckIcon, ChevronDownIcon, ChevronRightIcon, SearchIcon, XIcon } from "lucide-solid";
+import { CheckIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, SearchIcon, XIcon } from "lucide-solid";
 export { ChevronDownIcon };
 import { cn } from "@/lib/utils";
 
@@ -233,9 +233,9 @@ export function OverlayRail(props: { title: string; foot?: JSX.Element; children
 }
 
 /** The page beside a rail: its title, its save status (Saving, Saved, Not saved: settings save as they change), close, and SettingGroups. */
-export function OverlayPage(props: { title: string; status?: string; failed?: boolean; onClose?: () => void; children: JSX.Element }) {
+export function OverlayPage(props: { title: string; status?: string; failed?: boolean; onBack?: () => void; onClose?: () => void; children: JSX.Element }) {
   return <main class="ui-overlay-page">
-    <div class="ui-overlay-page-head"><h2 class="ui-overlay-title">{props.title}</h2>
+    <div class="ui-overlay-page-head"><Show when={props.onBack}><Button variant="ghost" size="icon-sm" aria-label="All settings" onClick={() => props.onBack?.()}><ChevronLeftIcon /></Button></Show><h2 class="ui-overlay-title">{props.title}</h2>
       <Show when={props.status}><span class="ui-overlay-status" data-failed={props.failed ? "" : undefined}>{props.status}</span></Show>
       <Show when={props.onClose}><Button variant="ghost" size="icon-sm" aria-label="Close" onClick={() => props.onClose?.()}><XIcon /></Button></Show></div>
     {props.children}
@@ -246,9 +246,26 @@ export function OverlayPage(props: { title: string; status?: string; failed?: bo
 export const SettingGroup = (props: { title: string; children: JSX.Element }) =>
   <section class="ui-setting-group" aria-label={props.title}><div class="ui-nav-label">{props.title}</div>{props.children}</section>;
 
-/** A setting: its name (state that matters muted after it), then its control in the one control column. */
-export const SettingLine = (props: { label: string; state?: string; children: JSX.Element }) =>
-  <label class="ui-setting-line"><span>{props.label}<Show when={props.state}><small>{props.state}</small></Show></span><span class="ui-setting-control">{props.children}</span></label>;
+/** A setting: its name (state that matters muted after it), then its control in the one control column.
+ *  plain: what it holds is buttons, a value or a link, not one field, so the line is not that field's label. */
+export const SettingLine = (props: { label: string; state?: string; plain?: boolean; children: JSX.Element }) => {
+  const inner = () => <><span>{props.label}<Show when={props.state}><small>{props.state}</small></Show></span><span class="ui-setting-control">{props.children}</span></>;
+  return props.plain ? <div class="ui-setting-line">{inner()}</div> : <label class="ui-setting-line">{inner()}</label>;
+};
+/** A setting's value that is read, not set; mono for ids, addresses and versions. */
+export const SettingValue = (props: { mono?: boolean; children: JSX.Element }) => <span class="ui-setting-value" data-mono={props.mono ? "" : undefined}>{props.children}</span>;
+/** A link out, as a setting's control: Docs, Open sign-in. */
+export const SettingLink = (props: { href: string; children: JSX.Element }) => <a class="ui-setting-link" href={props.href} target="_blank" rel="noreferrer">{props.children}</a>;
+/** A line under a setting: what went wrong (error), or a quiet note. */
+export const SettingNote = (props: { tone?: "quiet" | "error"; children: JSX.Element }) => <p class="ui-setting-note" data-tone={props.tone ?? "quiet"} role={props.tone === "error" ? "alert" : undefined}>{props.children}</p>;
+/** More about a setting, folded under it until asked for. */
+export const SettingDetails = (props: { summary: string; children: JSX.Element }) => <details class="ui-setting-details"><summary>{props.summary}</summary>{props.children}</details>;
+/** Something a setting needs the page's width for: a prompt's text, a download's progress. */
+export const SettingWide = (props: { children: JSX.Element }) => <div class="ui-setting-wide">{props.children}</div>;
+/** Progress that is measured: a track and its fill, the slider's. */
+export const Progress = (props: { value: number; max: number; label: string }) => <progress class="ui-progress" aria-label={props.label} value={props.value} max={props.max} />;
+/** Waiting on what a page shows. */
+export const SettingLoading = (props: { children: JSX.Element }) => <div class="ui-setting-loading"><span class="ui-spinner" aria-hidden="true" />{props.children}</div>;
 
 /** An overlay's head without a field: what it is about (the leader's key and path). */
 export const OverlayHead = (props: { children: JSX.Element }) => <div class="ui-overlay-bar" data-head>{props.children}</div>;

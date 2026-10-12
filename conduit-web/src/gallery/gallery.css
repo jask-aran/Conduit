@@ -306,3 +306,7 @@ html, body { background: var(--frame, #08090a); color: var(--foreground); }
 /* Forms × surfaces (Controls): each cell a small surface, the sample centred in it. */
 .g-forms .g-scale-row { padding: 6px 4px; }
 .g-form-surface { min-width: 0; min-height: 64px; border-radius: 10px; padding: 12px; }
+.g-keys { display: inline-flex; gap: calc(0.1875 * var(--u-space)); }
+/* An overlay over the phone preview: full screen at the phone density, over its chat. */
+.g-phone-overlay { position: fixed; inset: 0; z-index: 400; display: grid; }
+.g-phone-overlay > .ui-scrim { min-height: 0; }
