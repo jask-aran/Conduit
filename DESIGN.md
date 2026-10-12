@@ -76,7 +76,7 @@ rounded:
   sm: 5px
   md: 8px
   lg: 10px
-  pop: 8px
+  pop: 10px
   bubble: 15px
   xl: 16px
   composer: 22px
@@ -344,6 +344,7 @@ No stacked card shadows, no colored glows, no frost on a row or a list. One exce
 - Inset panes: the large radius (`{rounded.xl}`).
 - Tiles (legacy, dashboard and workspace panel only): `{rounded.lg}`.
 - Rows and small controls: `{rounded.md}` or smaller.
+- The scale is a phone's; desktop draws it at 0.8x with the density, so a row is 6.4px, a popover 8px and the composer 17.6px there. Every piece takes a step of the scale (components v2: `--radius-*`); none sets its own.
 - Composer and header pill: `{rounded.composer}` (squircle, not a circle, not a sharp box). Overlay cards sit between rows and the composer.
 - Pills only for true pills (scope toggle, runtime dots). Do not pill section titles or metadata.
 

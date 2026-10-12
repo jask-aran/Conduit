@@ -40,19 +40,28 @@
 }
 :root, [data-density="desktop"] {
   --u-type: 12.8px; --u-space: 12.8px; --u-icon: 12.8px;
-  --frost-radius: 8px; --frost-inset: 3.2px; --row-pad: 3.2px 4.8px; --row-min: 21.2px; --row-gap: 4.8px; --row-radius: 6.4px;
-  --nav-min: 24px; --nav-pad: 4px 6.4px; --nav-gap: 6.4px; --row-text: 10.4px; --nav-text: var(--row-text); --nav-icon: 12px; --nav-label: 9.6px; --nav-label-pad: 3.2px 6.4px; --nav-indent: 24px;
+  --frost-inset: 3.2px; --row-text: 10.4px; --row-min: 24px; --row-pad: 4px 6.4px; --row-gap: 6.4px;
+  --nav-label-pad: 3.2px 6.4px; --nav-indent: 24px;
 }
 [data-density="phone"] {
   --u-type: 16px; --u-space: 16px; --u-icon: 16px;
-  --frost-radius: 14px; --frost-inset: 5px; --row-pad: 8px 9px; --row-min: 38px; --row-gap: 8px; --row-radius: 8px;
-  --nav-min: 44px; --nav-pad: 6px 9px; --nav-gap: 8px; --row-text: 14.5px; --nav-text: var(--row-text); --nav-icon: 17px; --nav-label: 13px; --nav-label-pad: 5px 9px; --nav-indent: 30px;
+  --frost-inset: 5px; --row-text: 14.5px; --row-min: 44px; --row-pad: 6px 9px; --row-gap: 8px;
+  --nav-label-pad: 5px 9px; --nav-indent: 30px;
 }
 @media (--conduit-phone-layout) { :root {
   --u-type: 16px; --u-space: 16px; --u-icon: 16px;
-  --frost-radius: 14px; --frost-inset: 5px; --row-pad: 8px 9px; --row-min: 38px; --row-gap: 8px; --row-radius: 8px;
-  --nav-min: 44px; --nav-pad: 6px 9px; --nav-gap: 8px; --row-text: 14.5px; --nav-text: var(--row-text); --nav-icon: 17px; --nav-label: 13px; --nav-label-pad: 5px 9px; --nav-indent: 30px;
+  --frost-inset: 5px; --row-text: 14.5px; --row-min: 44px; --row-pad: 6px 9px; --row-gap: 8px;
+  --nav-label-pad: 5px 9px; --nav-indent: 30px;
 } }
+/* The radius scale (DESIGN.md rounded), drawn in the density unit: its values are a
+   phone's, desktop draws them at 0.8x (a row 6.4px, a popover 8px). Every piece takes a step. */
+:root, [data-density] {
+  --radius-sm: calc(0.3125 * var(--u-space)); --radius-md: calc(0.5 * var(--u-space)); --radius-lg: calc(0.625 * var(--u-space));
+  --radius-pop: var(--radius-lg); --radius-bubble: calc(0.9375 * var(--u-space)); --radius-xl: calc(1 * var(--u-space));
+  --radius-composer: calc(1.375 * var(--u-space)); --radius-pill: 999px;
+  --frost-radius: var(--radius-pop); --row-radius: var(--radius-md);
+  --pill-solo-icon: calc(1.125 * var(--u-icon));
+}
 [data-density] { font-family: var(--font-sans); font-size: calc(var(--u-type) * 0.875); }
 :root {
   --frost-stroke: #ffffff4d;
@@ -62,8 +71,11 @@
   --frost-lift-rest: 0 8px 32px rgb(0 0 0 / 10%);
   --frost-lift-raised: 0 24px 70px rgb(0 0 0 / 38%);
   --frost-core-ground: oklch(0.19 0.005 264 / 72%);
-  --frost-wash: oklch(1 0 0 / 10%);
-  --frost-rule: oklch(1 0 0 / 10%);
+  /* One tint per surface for both its washes and its lines: --tint on the ground (the app's --border, which --accent matches), --frost-tint over frost. */
+  --tint: var(--border);
+  --frost-tint: oklch(1 0 0 / 10%);
+  /* State: a runtime dot, a warning. */
+  --live: oklch(0.62 0.17 145); --warn: oklch(0.75 0.15 75);
 }
 
 .ui-frost {
@@ -81,20 +93,20 @@
    groups, the sidebar's toggle and the composer's buttons. One icon is a
    circle; more share a capsule, each slot a pill-shaped target 1px from its
    edge. Its tokens size every member. */
-:root { --pill-size: 44px; --pill-slot: 34px; --pill-slot-height: 40px; --pill-gap: 2px; --pill-icon: var(--u-icon); --pill-solo-icon: calc(1.125 * var(--u-icon)); --pill-field-radius: 22px; --pill-field-pad: 14px; }
-.ui-pill { display: inline-flex; height: var(--pill-size); align-items: center; gap: var(--pill-gap); padding: 0 1px; border-radius: 999px; }
-.ui-pill > button { display: grid; width: var(--pill-slot); height: var(--pill-slot-height); place-items: center; border: 0; border-radius: 999px; background: transparent; color: inherit; }
+:root { --pill-size: 44px; --pill-slot: 34px; --pill-slot-height: 40px; --pill-gap: 2px; --pill-field-radius: var(--radius-composer); --pill-field-pad: 14px; }
+.ui-pill { display: inline-flex; height: var(--pill-size); align-items: center; gap: var(--pill-gap); padding: 0 1px; border-radius: var(--radius-pill); }
+.ui-pill > button { display: grid; width: var(--pill-slot); height: var(--pill-slot-height); place-items: center; border: 0; border-radius: var(--radius-pill); background: transparent; color: inherit; }
 .ui-pill[data-solo] { width: var(--pill-size); justify-content: center; padding: 0; }
 .ui-pill[data-solo] > button { width: 100%; height: 100%; }
 .ui-pill[data-solo] > button svg { width: var(--pill-solo-icon); height: var(--pill-solo-icon); }
-.ui-pill > button:hover { background: var(--frost-wash); }
+.ui-pill > button:hover { background: var(--frost-tint); }
 .ui-pill[data-stretch] { width: auto; flex: 1 1 auto; }
 .ui-pill[data-stretch] > button { width: 100%; }
 /* Field: text in the capsule; it grows with its lines. */
 .ui-pill-field { display: flex; width: 100%; height: auto; min-height: calc(var(--pill-size) + 2px); align-items: center; border-radius: var(--pill-field-radius); padding: 0 var(--pill-field-pad); }
 .ui-pill-field .ui-textarea { width: 100%; max-height: 220px; border: 0; background: transparent; padding: 11px 0; color: inherit; font: inherit; font-size: var(--u-type); line-height: 1.4; resize: none; outline: none; field-sizing: content; }
 .ui-pill-field .ui-textarea::placeholder { color: var(--muted-foreground); }
-.ui-pill > button svg { width: var(--pill-icon); height: var(--pill-icon); }
+.ui-pill > button svg { width: var(--u-icon); height: var(--u-icon); }
 
 /* Menu: a raised container; rows sit concentric inside it. */
 .ui-menu { outline: none; display: flex; min-width: calc(12 * var(--u-type)); flex-direction: column; border-radius: var(--frost-radius); padding: var(--frost-inset); }
@@ -106,7 +118,7 @@
 .ui-title { display: flex; align-items: baseline; justify-content: space-between; gap: var(--row-gap); padding: calc(0.375 * var(--u-type)) calc(0.5 * var(--u-type)) calc(0.3125 * var(--u-type)); }
 .ui-title small { font-weight: 400; letter-spacing: 0; text-transform: none; }
 .ui-section { display: flex; flex-direction: column; }
-.ui-section + .ui-section { margin-top: var(--frost-inset); border-top: 1px solid var(--frost-rule); margin-inline: calc(-1 * var(--frost-inset)); padding: var(--frost-inset) var(--frost-inset) 0; }
+.ui-section + .ui-section { margin-top: var(--frost-inset); border-top: 1px solid var(--frost-tint); margin-inline: calc(-1 * var(--frost-inset)); padding: var(--frost-inset) var(--frost-inset) 0; }
 .ui-search-section { flex-direction: row; align-items: center; gap: var(--row-gap); padding: var(--row-pad); }
 .ui-search-section > svg { width: calc(1 * var(--u-icon)); height: calc(1 * var(--u-icon)); flex: none; color: var(--muted-foreground); }
 .ui-search-section .ui-keys { display: inline-flex; flex: none; gap: 2px; }
@@ -128,7 +140,7 @@
 .ui-row > .ui-chevron { width: calc(0.875 * var(--u-type)); height: calc(0.875 * var(--u-type)); color: var(--muted-foreground); }
 /* The cursor (DESIGN Interaction): one row at a time, the wash, white, no change of weight.
    The pointer moves it (moveCursor), as the keyboard does; hover alone never washes a second row. */
-.ui-row:is([data-highlighted], [data-expanded]) { background: var(--frost-wash); color: var(--foreground); }
+.ui-row:is([data-highlighted], [data-expanded]) { background: var(--frost-tint); color: var(--foreground); }
 .ui-row[data-checked], [data-surface="frost"] .ui-row[data-checked] { color: var(--foreground); font-weight: 660; }
 /* Over frost the row reads a touch heavier and brighter (text over frost reads thinner). */
 /* The row role, one for every row (list, menu, palette, settings, the sidebar): over frost a touch heavier and brighter, since text there reads thinner. */
@@ -145,7 +157,7 @@
 .ui-row[data-destructive] { color: var(--destructive); }
 .ui-row[data-destructive][data-highlighted] { background: color-mix(in oklch, var(--destructive), transparent 85%); }
 
-.ui-keycap { display: inline-grid; min-width: calc(1.25 * var(--u-space)); height: calc(1.25 * var(--u-space)); place-items: center; border: 1px solid oklch(1 0 0 / 16%); border-radius: calc(0.3125 * var(--u-space)); background: oklch(0 0 0 / 12%); padding: 0 calc(0.3125 * var(--u-space)); color: var(--muted-foreground); font: 550 calc(0.6875 * var(--u-type))/1 var(--font-label); }
+.ui-keycap { display: inline-grid; min-width: calc(1.25 * var(--u-space)); height: calc(1.25 * var(--u-space)); place-items: center; border: 1px solid oklch(1 0 0 / 16%); border-radius: var(--radius-sm); background: oklch(0 0 0 / 12%); padding: 0 calc(0.3125 * var(--u-space)); color: var(--muted-foreground); font: 550 calc(0.6875 * var(--u-type))/1 var(--font-label); }
 .ui-row[data-highlighted] .ui-keycap { color: var(--foreground); }
 
 /* Card: the menu's container at dialog padding. */
@@ -154,39 +166,39 @@
 .ui-card > p { margin: calc(-0.5 * var(--u-space)) 0 0; color: var(--muted-foreground); font-size: calc(0.875 * var(--u-type)); }
 .ui-card-actions { display: flex; justify-content: flex-end; gap: calc(0.5 * var(--u-space)); }
 
-.ui-bubble { width: fit-content; max-width: min(calc(40 * var(--u-type)), 88cqw); margin-left: auto; border-radius: calc(0.9375 * var(--u-type)); padding: calc(0.625 * var(--u-type)) calc(0.8125 * var(--u-type)); font-size: var(--u-type); line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
+.ui-bubble { width: fit-content; max-width: min(calc(40 * var(--u-type)), 88cqw); margin-left: auto; border-radius: var(--radius-bubble); padding: calc(0.625 * var(--u-type)) calc(0.8125 * var(--u-type)); font-size: var(--u-type); line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
 
 
 /* Button: a rounded rectangle. On the ground, outline is a filled well; on
    frost it is a hairline with nothing inside. Ghost is text until washed. */
-:where(.ui-button) { display: inline-flex; height: calc(2.25 * var(--u-space)); flex: none; align-items: center; justify-content: center; gap: calc(0.375 * var(--u-space)); border: 1px solid transparent; border-radius: calc(0.5 * var(--u-space)); padding: 0 calc(1 * var(--u-space)); font-size: calc(0.875 * var(--u-type)); font-weight: 550; white-space: nowrap; cursor: pointer; transition: background-color .12s ease, border-color .12s ease, filter .12s ease; outline: none; }
+:where(.ui-button) { display: inline-flex; height: calc(2.25 * var(--u-space)); flex: none; align-items: center; justify-content: center; gap: calc(0.375 * var(--u-space)); border: 1px solid transparent; border-radius: var(--radius-md); padding: 0 calc(1 * var(--u-space)); font-size: calc(0.875 * var(--u-type)); font-weight: 550; white-space: nowrap; cursor: pointer; transition: background-color .12s ease, border-color .12s ease, filter .12s ease; outline: none; }
 /* Zero-specificity: where the button sits sets its icon (a header, a composer), as in the app. */
 :where(.ui-button) svg { width: calc(1 * var(--u-icon)); height: calc(1 * var(--u-icon)); flex: none; }
 /* Keyboard focus is the wash and nothing else: never a ring. */
-.ui-button:focus-visible { outline: 0; background: var(--accent); }
-[data-surface="frost"] .ui-button:focus-visible { background: var(--frost-wash); }
+.ui-button:focus-visible { outline: 0; background: var(--tint); }
+[data-surface="frost"] .ui-button:focus-visible { background: var(--frost-tint); }
 .ui-button[data-variant="primary"]:focus-visible { background: var(--primary); filter: brightness(0.88); }
 .ui-button:disabled { opacity: 0.45; pointer-events: none; }
 .ui-button[data-variant="primary"] { background: var(--foreground); color: var(--background); }
 .ui-button[data-variant="primary"]:hover { filter: brightness(0.88); }
-.ui-button[data-variant="outline"] { border-color: var(--border); background: color-mix(in oklch, var(--background), black 25%); color: var(--foreground); }
-.ui-button[data-variant="outline"]:hover { background: var(--accent); }
+.ui-button[data-variant="outline"] { border-color: var(--tint); background: color-mix(in oklch, var(--background), black 25%); color: var(--foreground); }
+.ui-button[data-variant="outline"]:hover { background: var(--tint); }
 .ui-button[data-variant="ghost"] { background: transparent; color: var(--foreground); }
-.ui-button[data-variant="ghost"]:hover { background: var(--accent); }
+.ui-button[data-variant="ghost"]:hover { background: var(--tint); }
 .ui-button[data-variant="destructive"] { background: var(--destructive); color: white; }
 .ui-button[data-variant="destructive"]:hover { filter: brightness(1.1); }
 [data-surface="frost"] .ui-button[data-variant="outline"] { border-color: oklch(1 0 0 / 20%); background: transparent; }
-[data-surface="frost"] .ui-button:is([data-variant="outline"], [data-variant="ghost"]):hover { background: var(--frost-wash); }
+[data-surface="frost"] .ui-button:is([data-variant="outline"], [data-variant="ghost"]):hover { background: var(--frost-tint); }
 :where(.ui-button[data-size="sm"]) { height: calc(1.875 * var(--u-space)); padding: 0 calc(0.75 * var(--u-space)); font-size: calc(0.8125 * var(--u-type)); }
 :where(.ui-button[data-size="icon"]) { width: calc(2.25 * var(--u-space)); padding: 0; }
 /* icon-xs: a row of small actions under a message (time, copy, edit), round as the app draws them. */
-:where(.ui-button[data-size="icon-xs"]) { width: calc(1.5 * var(--u-space)); height: calc(1.5 * var(--u-space)); border-radius: 999px; padding: 0; }
+:where(.ui-button[data-size="icon-xs"]) { width: calc(1.5 * var(--u-space)); height: calc(1.5 * var(--u-space)); border-radius: var(--radius-pill); padding: 0; }
 :where(.ui-button[data-size="icon-xs"]) svg { width: calc(0.875 * var(--u-icon)); height: calc(0.875 * var(--u-icon)); }
 :where(.ui-button[data-size="icon-sm"]) { width: calc(1.875 * var(--u-space)); height: calc(1.875 * var(--u-space)); padding: 0; }
 
 /* Field: an input or a select's trigger. A well on the ground, a hairline on
    frost; the bare select is just its value and a chevron. */
-.ui-input { display: flex; width: 100%; height: calc(2.25 * var(--u-space)); align-items: center; gap: calc(0.5 * var(--u-space)); border: 1px solid var(--border); border-radius: calc(0.5 * var(--u-space)); background: color-mix(in oklch, var(--background), black 25%); padding: 0 calc(0.75 * var(--u-space)); color: var(--foreground); font-size: calc(0.875 * var(--u-type)); text-align: left; outline: none; transition: border-color .12s ease; }
+.ui-input { display: flex; width: 100%; height: calc(2.25 * var(--u-space)); align-items: center; gap: calc(0.5 * var(--u-space)); border: 1px solid var(--tint); border-radius: var(--radius-md); background: color-mix(in oklch, var(--background), black 25%); padding: 0 calc(0.75 * var(--u-space)); color: var(--foreground); font-size: calc(0.875 * var(--u-type)); text-align: left; outline: none; transition: border-color .12s ease; }
 .ui-input::placeholder { color: var(--muted-foreground); }
 .ui-input:is(:hover, :focus, [aria-expanded="true"]) { border-color: color-mix(in oklch, var(--foreground), transparent 70%); }
 [data-surface="frost"] .ui-input { border-color: oklch(1 0 0 / 14%); background: transparent; }
@@ -200,19 +212,19 @@
    settings and dashboard filters). The accent is translucent, so the same
    rules read on the frame and the ground; on frost the thumb is a wash. The
    pill form is the phone header's: the track is itself frost. */
-.ui-seg { position: relative; display: inline-grid; grid-template-columns: repeat(var(--segments), minmax(0, 1fr)); gap: 2px; border: 1px solid var(--border); border-radius: calc(0.5 * var(--u-space)); background: transparent; padding: 2px; }
-.ui-seg-thumb { position: absolute; top: 2px; bottom: 2px; left: 2px; width: calc((100% - 4px - 2px * (var(--segments) - 1)) / var(--segments)); border-radius: calc(0.375 * var(--u-space)); background: var(--accent); transform: translateX(calc((100% + 2px) * var(--segment))); transition: transform 200ms cubic-bezier(.2, .8, .2, 1); }
-.ui-seg button { position: relative; display: inline-flex; min-width: 0; min-height: calc(1.75 * var(--u-space)); align-items: center; justify-content: center; gap: calc(0.375 * var(--u-space)); border: 0; border-radius: calc(0.375 * var(--u-space)); background: transparent; padding: 0 calc(0.75 * var(--u-space)); color: var(--muted-foreground); font-size: calc(0.8125 * var(--u-type)); font-weight: 560; cursor: pointer; }
+.ui-seg { position: relative; display: inline-grid; grid-template-columns: repeat(var(--segments), minmax(0, 1fr)); gap: 2px; border: 1px solid var(--tint); border-radius: var(--radius-md); background: transparent; padding: 2px; }
+.ui-seg-thumb { position: absolute; top: 2px; bottom: 2px; left: 2px; width: calc((100% - 4px - 2px * (var(--segments) - 1)) / var(--segments)); border-radius: var(--radius-sm); background: var(--tint); transform: translateX(calc((100% + 2px) * var(--segment))); transition: transform 200ms cubic-bezier(.2, .8, .2, 1); }
+.ui-seg button { position: relative; display: inline-flex; min-width: 0; min-height: calc(1.75 * var(--u-space)); align-items: center; justify-content: center; gap: calc(0.375 * var(--u-space)); border: 0; border-radius: var(--radius-sm); background: transparent; padding: 0 calc(0.75 * var(--u-space)); color: var(--muted-foreground); font-size: calc(0.8125 * var(--u-type)); font-weight: 560; cursor: pointer; }
 .ui-seg button svg { width: calc(1.125 * var(--u-icon)); height: calc(1.125 * var(--u-icon)); }
 .ui-seg button small { color: var(--muted-foreground); font: 400 calc(0.6875 * var(--u-type)) var(--font-data); }
 .ui-seg button:is(:hover, [aria-checked="true"]) { color: var(--foreground); }
 .ui-seg[data-icons] button { width: calc(2.25 * var(--u-space)); padding: 0; }
 [data-surface="frost"] .ui-seg { border-color: oklch(1 0 0 / 14%); }
-[data-surface="frost"] .ui-seg-thumb { background: var(--frost-wash); }
-.ui-seg[data-pill] { height: var(--pill-size); gap: var(--pill-gap); border-color: var(--frost-stroke); border-radius: 999px; background: var(--frost-fill); padding: 1px; }
-.ui-seg[data-pill] .ui-seg-thumb { top: 1px; bottom: 1px; left: 1px; width: var(--pill-slot); transform: translateX(calc((100% + var(--pill-gap)) * var(--segment))); border-radius: 999px; background: var(--frost-wash); }
-.ui-seg[data-pill] button { width: var(--pill-slot); min-height: var(--pill-slot-height); border-radius: 999px; padding: 0; }
-.ui-seg[data-pill] button svg { width: var(--pill-icon); height: var(--pill-icon); }
+[data-surface="frost"] .ui-seg-thumb { background: var(--frost-tint); }
+.ui-seg[data-pill] { height: var(--pill-size); gap: var(--pill-gap); border-color: var(--frost-stroke); border-radius: var(--radius-pill); background: var(--frost-fill); padding: 1px; }
+.ui-seg[data-pill] .ui-seg-thumb { top: 1px; bottom: 1px; left: 1px; width: var(--pill-slot); transform: translateX(calc((100% + var(--pill-gap)) * var(--segment))); border-radius: var(--radius-pill); background: var(--frost-tint); }
+.ui-seg[data-pill] button { width: var(--pill-slot); min-height: var(--pill-slot-height); border-radius: var(--radius-pill); padding: 0; }
+.ui-seg[data-pill] button svg { width: var(--u-icon); height: var(--u-icon); }
 /* On the frame (the sidebar) controls take the sidebar's own ink. */
 [data-surface="frame"] :is(.ui-pill > button, .ui-seg[data-pill] button[aria-checked="true"]) { color: var(--sidebar-accent-foreground); }
 [data-surface="frame"] .ui-seg[data-pill] .ui-seg-thumb { background: var(--sidebar-accent); }
@@ -228,19 +240,19 @@
 .ui-slider { display: grid; gap: calc(0.375 * var(--u-type)); padding: calc(0.375 * var(--u-type)) calc(0.5 * var(--u-type)) calc(0.5 * var(--u-type)); }
 .ui-slider[data-disabled] { opacity: 0.5; }
 .ui-slider-head { display: flex; align-items: center; justify-content: space-between; gap: var(--row-gap); }
-.ui-slider-value { display: inline-flex; align-items: center; gap: calc(0.25 * var(--u-type)); border: 0; border-radius: calc(0.375 * var(--u-type)); background: transparent; padding: calc(0.1875 * var(--u-type)) calc(0.25 * var(--u-type)) calc(0.1875 * var(--u-type)) calc(0.375 * var(--u-type)); color: color-mix(in oklch, var(--foreground), transparent 38%); font-size: calc(0.75 * var(--u-type)); font-weight: 450; }
-.ui-slider-value[data-opens]:hover { background: var(--frost-wash); color: var(--foreground); }
+.ui-slider-value { display: inline-flex; align-items: center; gap: calc(0.25 * var(--u-type)); border: 0; border-radius: var(--radius-sm); background: transparent; padding: calc(0.1875 * var(--u-type)) calc(0.25 * var(--u-type)) calc(0.1875 * var(--u-type)) calc(0.375 * var(--u-type)); color: color-mix(in oklch, var(--foreground), transparent 38%); font-size: calc(0.75 * var(--u-type)); font-weight: 450; }
+.ui-slider-value[data-opens]:hover { background: var(--frost-tint); color: var(--foreground); }
 .ui-slider-value svg { width: calc(0.75 * var(--u-type)); height: calc(0.75 * var(--u-type)); color: var(--muted-foreground); }
 .ui-slider-input { --thumb: calc(1.25 * var(--u-icon)); --track: 4px; width: 100%; height: calc(1.25 * var(--u-type)); margin: 0; appearance: none; -webkit-appearance: none; background: transparent; cursor: pointer; touch-action: pan-y; }
 .ui-slider-input:focus-visible { outline: 0; }
-.ui-slider-input::-webkit-slider-runnable-track { height: var(--track); border-radius: 999px; background: linear-gradient(to right, var(--foreground) var(--fill), var(--frost-rule) var(--fill)); }
-.ui-slider-input::-moz-range-track { height: var(--track); border-radius: 999px; background: var(--frost-rule); }
-.ui-slider-input::-moz-range-progress { height: var(--track); border-radius: 999px; background: var(--foreground); }
+.ui-slider-input::-webkit-slider-runnable-track { height: var(--track); border-radius: var(--radius-pill); background: linear-gradient(to right, var(--foreground) var(--fill), var(--frost-tint) var(--fill)); }
+.ui-slider-input::-moz-range-track { height: var(--track); border-radius: var(--radius-pill); background: var(--frost-tint); }
+.ui-slider-input::-moz-range-progress { height: var(--track); border-radius: var(--radius-pill); background: var(--foreground); }
 .ui-slider-input::-webkit-slider-thumb { width: var(--thumb); height: var(--thumb); margin-top: calc((var(--track) - var(--thumb)) / 2); border: 2px solid oklch(0.3 0.005 264); border-radius: 50%; background: var(--foreground); -webkit-appearance: none; box-shadow: 0 1px 4px rgb(0 0 0 / 35%); }
 .ui-slider-input::-moz-range-thumb { width: var(--thumb); height: var(--thumb); border: 2px solid oklch(0.3 0.005 264); border-radius: 50%; background: var(--foreground); box-shadow: 0 1px 4px rgb(0 0 0 / 35%); }
 .ui-slider-input:focus-visible::-webkit-slider-thumb { box-shadow: 0 1px 4px rgb(0 0 0 / 35%); filter: brightness(1.1); }
 .ui-slider-ticks { display: flex; justify-content: space-between; margin-top: -4px; padding-inline: calc(var(--thumb, calc(1.25 * var(--u-icon))) / 2 - 1px); }
-.ui-slider-ticks i { width: 2px; height: 4px; border-radius: 1px; background: var(--frost-rule); }
+.ui-slider-ticks i { width: 2px; height: 4px; border-radius: 1px; background: var(--frost-tint); }
 .ui-slider-ticks i[data-reached] { background: var(--muted-foreground); }
 
 /* A phone variant has no keyboard: shortcut keys are off wherever they sit. */
@@ -264,20 +276,20 @@
 .ui-nav-group { display: flex; flex-direction: column; gap: 1px; }
 .ui-nav-group:not(:has(> .ui-nav-label)) { gap: 0; }
 .ui-nav-label { align-self: flex-start; padding: var(--nav-label-pad); }
-.ui-nav-row { display: flex; width: 100%; min-width: 0; min-height: var(--nav-min); align-items: center; gap: var(--nav-gap); border: 0; border-radius: 8px; background: transparent; padding: var(--nav-pad); color: color-mix(in oklch, var(--foreground), transparent 32%); font-size: var(--nav-text); line-height: 1.5; text-align: left; }
+.ui-nav-row { display: flex; width: 100%; min-width: 0; min-height: var(--row-min); align-items: center; gap: var(--row-gap); border: 0; border-radius: var(--radius-md); background: transparent; padding: var(--row-pad); color: color-mix(in oklch, var(--foreground), transparent 32%); font-size: var(--row-text); line-height: 1.5; text-align: left; }
 .ui-nav-row[data-indent] { padding-left: var(--nav-indent); }
-.ui-nav-row > .ui-nav-icon { display: inline-grid; width: var(--nav-icon); height: var(--nav-icon); flex: none; place-items: center; color: var(--muted-foreground); }
+.ui-nav-row > .ui-nav-icon { display: inline-grid; width: var(--u-icon); height: var(--u-icon); flex: none; place-items: center; color: var(--muted-foreground); }
 .ui-nav-row > .ui-nav-icon > * { width: 100%; height: 100%; }
-.ui-nav-icon:has(> .harness-mark) { width: calc(var(--nav-icon) - 1px); }
-.ui-nav-row > .ui-nav-icon > .harness-mark { width: calc(var(--nav-icon) - 1px); height: calc(0.75 * (var(--nav-icon) - 1px));; opacity: .78; transition: opacity 150ms ease; }
+.ui-nav-icon:has(> .harness-mark) { width: calc(var(--u-icon) - 1px); }
+.ui-nav-row > .ui-nav-icon > .harness-mark { width: calc(var(--u-icon) - 1px); height: calc(0.75 * (var(--u-icon) - 1px));; opacity: .78; transition: opacity 150ms ease; }
 .ui-nav-row:is(:hover, [aria-current="page"]) > .ui-nav-icon > .harness-mark { opacity: 1; }
 .ui-nav-row > span:not(.ui-nav-icon, .ui-nav-toggle) { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ui-nav-row:hover, .ui-nav-row[aria-current="page"] { color: var(--foreground); }
 .ui-nav-row:hover { background: var(--sidebar-accent); }
 .ui-nav-row[aria-current="page"] { font-weight: 660; }
 .ui-nav-row:is(:hover, [aria-current="page"]) > .ui-nav-icon { color: var(--foreground); }
-.ui-nav-toggle { margin-right: -6px; display: grid; width: calc(var(--nav-icon) + 9px); height: calc(var(--nav-icon) + 9px); flex: none; place-items: center; border-radius: 6px; color: var(--muted-foreground); }
-.ui-nav-toggle svg { width: var(--nav-icon); height: var(--nav-icon); }
+.ui-nav-toggle { margin-right: -6px; display: grid; width: calc(var(--u-icon) + 9px); height: calc(var(--u-icon) + 9px); flex: none; place-items: center; border-radius: var(--radius-sm); color: var(--muted-foreground); }
+.ui-nav-toggle svg { width: var(--u-icon); height: var(--u-icon); }
 
 /* The app's own pieces, drawn with the library (components/ui/swap.ts): the
    app keeps its geometry; the material is the library's frost. Same targets
@@ -293,7 +305,7 @@
   box-shadow: var(--frost-lift-rest), var(--frost-highlight);
 }
 /* A rule between groups of an app menu's rows, where a library menu has sections. */
-.ui-menu .ui-rule { height: 1px; margin: var(--frost-inset) calc(-1 * var(--frost-inset)); border: 0; background: var(--frost-rule); }
+.ui-menu .ui-rule { height: 1px; margin: var(--frost-inset) calc(-1 * var(--frost-inset)); border: 0; background: var(--frost-tint); }
 /* A menu keeps its caller's class for its width and placement; its shell
    (inset, radius, lift) is the library's. */
 .ui-frost.ui-menu { padding: var(--frost-inset); border-radius: var(--frost-radius); }
@@ -306,7 +318,7 @@
 .ui-label > .ui-detail { overflow: hidden; color: var(--muted-foreground); font: 400 calc(0.6875 * var(--u-type))/1.3 inherit; font-family: inherit; text-overflow: ellipsis; white-space: nowrap; }
 /* The Pill wins over an app pill's own rules (it stands in for them in the Library previews). */
 .ui-frost.ui-pill[data-surface] { display: inline-flex; flex: none; }
-.ui-pill[data-surface] > :is(button, [data-slot="button"]) { width: var(--pill-slot); min-width: var(--pill-slot); height: var(--pill-slot-height); padding: 0; border-radius: 999px; }
+.ui-pill[data-surface] > :is(button, [data-slot="button"]) { width: var(--pill-slot); min-width: var(--pill-slot); height: var(--pill-slot-height); padding: 0; border-radius: var(--radius-pill); }
 .ui-pill[data-surface][data-solo] > :is(button, [data-slot="button"]) { width: 100%; min-width: 0; height: 100%; }
 .ui-pill[data-surface][data-solo] > :is(button, [data-slot="button"]) svg { width: var(--pill-solo-icon); height: var(--pill-solo-icon); }
 /* The phone composer's buttons are solo Pills: one frost circle each (the mic
@@ -315,7 +327,7 @@
    stop-and-send) is left to the app, which folds it to nothing. */
 :where([data-phone-layout] .composer)[data-composer-surface="library"] :is(.composer-actions button[data-slot="button"], button.composer-plus-trigger):not(:is([data-primary-hidden] .composer-send-trigger, .composer-latest-trigger:not([data-shown]), .composer-stop-send:not([data-shown]))) { width: var(--pill-size); min-width: var(--pill-size); height: var(--pill-size); }
 :where([data-phone-layout] .composer)[data-composer-surface="library"] :is(.composer-actions button[data-slot="button"], button.composer-plus-trigger) svg { width: var(--pill-solo-icon); height: var(--pill-solo-icon); }
-:where([data-phone-layout] .composer)[data-composer-surface="library"] :is(.composer-actions button[data-slot="button"], button.composer-plus-trigger):hover { background: linear-gradient(var(--frost-wash), var(--frost-wash)), var(--frost-fill); }
+:where([data-phone-layout] .composer)[data-composer-surface="library"] :is(.composer-actions button[data-slot="button"], button.composer-plus-trigger):hover { background: linear-gradient(var(--frost-tint), var(--frost-tint)), var(--frost-fill); }
 [data-phone-layout] .composer[data-composer-surface="library"] :is([data-primary-hidden] .composer-send-trigger, .composer-latest-trigger:not([data-shown]), .composer-stop-send:not([data-shown])) { border-width: 0; }
 /* The composer's field as a PillField: the app keeps its folding (min-height
    and height while idle or listening); the field's shape is the library's. */
@@ -325,12 +337,12 @@
 /* DesktopComposer: resting frost holding a field above a toolbar, riders on its top
    edge. Measured from the app's composer, in units of the density (u). */
 .ui-composer-stack, .ui-desktop-composer, .ui-composer-field, .ui-toolbar, .ui-rider {
-  --cmp-radius: calc(1.375 * var(--u-space));
+  --cmp-radius: var(--radius-composer);
   --cmp-field-min: calc(2.75 * var(--u-space)); --cmp-field-max: calc(12 * var(--u-space));
   --cmp-field-pad: calc(0.6875 * var(--u-space)) calc(0.75 * var(--u-space)) calc(0.125 * var(--u-space));
   --cmp-bar-min: calc(2.25 * var(--u-space)); --cmp-bar-gap: calc(0.75 * var(--u-space));
   --cmp-bar-pad: calc(0.125 * var(--u-space)) calc(0.4375 * var(--u-space)) calc(0.375 * var(--u-space)) calc(0.5 * var(--u-space));
-  --cmp-slot: calc(1.75 * var(--u-space)); --cmp-slot-radius: calc(0.625 * var(--u-space)); --cmp-slot-gap: calc(0.1875 * var(--u-space)); --cmp-icon: var(--u-icon);
+  --cmp-slot: calc(1.75 * var(--u-space)); --cmp-slot-radius: var(--radius-lg); --cmp-slot-gap: calc(0.1875 * var(--u-space)); --cmp-icon: var(--u-icon);
   --cmp-rider-gap: calc(0.375 * var(--u-space));
 }
 .ui-composer-stack { display: grid; gap: var(--cmp-rider-gap); }
@@ -370,8 +382,8 @@
 .ui-line { display: flex; min-width: 0; align-items: flex-start; gap: calc(0.375 * var(--u-space)); }
 .ui-line-body { display: -webkit-box; min-width: 0; flex: 1; margin: 0; overflow: hidden; font-size: calc(0.9375 * var(--u-type)); line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; -webkit-box-orient: vertical; -webkit-line-clamp: 1; }
 .ui-line[data-expanded="true"] .ui-line-body { overflow: visible; -webkit-line-clamp: unset; }
-.ui-line-more { display: inline-flex; width: calc(1.25 * var(--u-space)); height: calc(1.25 * var(--u-space)); flex: none; align-items: center; justify-content: center; margin-top: 1px; border: 0; border-radius: calc(0.3125 * var(--u-space)); background: transparent; padding: 0; color: var(--muted-foreground); cursor: pointer; }
-.ui-line-more:hover { background: var(--frost-wash); color: inherit; }
+.ui-line-more { display: inline-flex; width: calc(1.25 * var(--u-space)); height: calc(1.25 * var(--u-space)); flex: none; align-items: center; justify-content: center; margin-top: 1px; border: 0; border-radius: var(--radius-sm); background: transparent; padding: 0; color: var(--muted-foreground); cursor: pointer; }
+.ui-line-more:hover { background: var(--frost-tint); color: inherit; }
 .ui-line-more svg { width: calc(0.9375 * var(--u-icon)); height: calc(0.9375 * var(--u-icon)); }
 
 /* Chips: things attached, scrolling sideways with faded edges. An image is its
@@ -382,10 +394,10 @@
 .ui-chips[data-fade-start] { --fade-start: calc(1.5 * var(--u-space)); }
 .ui-chips[data-fade-end] { --fade-end: calc(1.5 * var(--u-space)); }
 .ui-chip { position: relative; flex: none; scroll-snap-align: start; }
-.ui-chip-body { display: flex; height: calc(3.75 * var(--u-space)); align-items: center; gap: calc(0.5 * var(--u-space)); overflow: hidden; border: 1px solid var(--frost-rule); border-radius: calc(0.625 * var(--u-space)); background: var(--frost-wash); padding: 0; color: inherit; text-align: left; cursor: pointer; }
+.ui-chip-body { display: flex; height: calc(3.75 * var(--u-space)); align-items: center; gap: calc(0.5 * var(--u-space)); overflow: hidden; border: 1px solid var(--frost-tint); border-radius: var(--radius-lg); background: var(--frost-tint); padding: 0; color: inherit; text-align: left; cursor: pointer; }
 .ui-chip[data-kind="file"] .ui-chip-body { height: calc(2.8125 * var(--u-space)); gap: calc(0.375 * var(--u-space)); padding: 0 calc(0.625 * var(--u-space)) 0 calc(0.5 * var(--u-space)); }
 .ui-chip-body:focus-visible { outline: none; filter: brightness(1.12); }
-.ui-chip-media { position: relative; display: grid; width: calc(3.75 * var(--u-space) - 2px); height: calc(3.75 * var(--u-space) - 2px); flex: none; place-items: center; background: var(--frost-wash); color: var(--muted-foreground); }
+.ui-chip-media { position: relative; display: grid; width: calc(3.75 * var(--u-space) - 2px); height: calc(3.75 * var(--u-space) - 2px); flex: none; place-items: center; background: var(--frost-tint); color: var(--muted-foreground); }
 .ui-chip[data-kind="file"] .ui-chip-media { width: auto; height: auto; background: none; }
 .ui-chip-media :is(.workspace-file-icon, .workspace-file-icon-generic, svg:not(.ui-chip-ring, .ui-chip-retry)) { display: block; width: var(--u-icon); height: var(--u-icon); }
 .ui-chip-media img { width: 100%; height: 100%; object-fit: cover; }
@@ -400,7 +412,7 @@
 .ui-chip[data-status="error"] .ui-chip-body { border-color: var(--destructive); }
 .ui-chip[data-status="error"] .ui-chip-media img { opacity: 0.4; }
 .ui-chip-retry { position: absolute; width: calc(1.125 * var(--u-icon)); height: calc(1.125 * var(--u-icon)); color: var(--foreground); filter: drop-shadow(0 0 2px rgb(0 0 0 / 70%)); }
-.ui-chip-remove { position: absolute; top: 3px; right: 3px; display: grid; width: calc(1.125 * var(--u-icon)); height: calc(1.125 * var(--u-icon)); place-items: center; border: 0; border-radius: 999px; background: rgb(0 0 0 / 62%); padding: 0; color: #fff; cursor: pointer; opacity: 0; transition: opacity 120ms ease; }
+.ui-chip-remove { position: absolute; top: 3px; right: 3px; display: grid; width: calc(1.125 * var(--u-icon)); height: calc(1.125 * var(--u-icon)); place-items: center; border: 0; border-radius: var(--radius-pill); background: rgb(0 0 0 / 62%); padding: 0; color: #fff; cursor: pointer; opacity: 0; transition: opacity 120ms ease; }
 .ui-chip-remove svg { width: calc(0.6875 * var(--u-icon)); height: calc(0.6875 * var(--u-icon)); }
 .ui-chip:is(:hover, :focus-within) .ui-chip-remove { opacity: 1; }
 @media (hover: none) { .ui-chip-remove { opacity: 1; } }
@@ -419,7 +431,7 @@
 .ui-tabs > button:hover { color: var(--foreground); }
 /* The current tab: white at the current weight, no fill (the wash is only the pointer). */
 .ui-tabs > button[aria-selected="true"] { color: var(--foreground); font-weight: 660; }
-.ui-tabs > button:hover { background: var(--frost-wash); }
+.ui-tabs > button:hover { background: var(--frost-tint); }
 .ui-tabs svg { width: calc(0.875 * var(--u-icon)); height: calc(0.875 * var(--u-icon)); }
 .ui-prompt { margin: 2px calc(0.5 * var(--u-space)) calc(0.25 * var(--u-space)); font-size: calc(1.09375 * var(--u-type)); font-weight: 560; line-height: 1.4; letter-spacing: -.005em; overflow-wrap: anywhere; }
 .ui-prompt span { color: var(--muted-foreground); font-size: calc(0.9375 * var(--u-type)); font-weight: 400; }
@@ -429,10 +441,10 @@
    the current choice is white at the current weight, no tick; several chosen
    (pick any) are the wash on each, and the cursor on one brightens it a step. */
 .ui-choice { color: color-mix(in oklch, var(--foreground), transparent 38%); }
-.ui-choice[data-active="true"] { background: var(--frost-wash); color: var(--foreground); }
+.ui-choice[data-active="true"] { background: var(--frost-tint); color: var(--foreground); }
 .ui-choice[aria-selected="true"] { color: var(--foreground); }
 .ui-choices:not([aria-multiselectable="true"]) > .ui-choice[aria-selected="true"] .ui-choice-label { font-weight: 660; }
-.ui-choices[aria-multiselectable="true"] > .ui-choice[aria-selected="true"] { background: var(--frost-wash); }
+.ui-choices[aria-multiselectable="true"] > .ui-choice[aria-selected="true"] { background: var(--frost-tint); }
 .ui-choices[aria-multiselectable="true"] > .ui-choice[aria-selected="true"][data-active="true"] { background: oklch(1 0 0 / 16%); }
 .ui-choice-check { display: none !important; }
 .ui-choice-key { width: calc(1 * var(--u-space)); flex: none; color: var(--muted-foreground); font: calc(0.859375 * var(--u-type))/1 var(--font-label); text-align: right; }
@@ -441,17 +453,17 @@
 .ui-choice-detail { min-width: 0; flex: 1; overflow: hidden; color: var(--muted-foreground); font-size: calc(0.9375 * var(--u-type)); text-overflow: ellipsis; white-space: nowrap; }
 .ui-choice-check { display: grid; width: var(--u-icon); height: var(--u-icon); flex: none; margin-left: auto; place-items: center; color: var(--foreground); }
 .ui-choice-check svg { width: calc(0.875 * var(--u-icon)); height: calc(0.875 * var(--u-icon)); }
-.ui-choice-check[data-multi="true"] { width: calc(0.875 * var(--u-icon)); height: calc(0.875 * var(--u-icon)); border: 1.5px solid var(--muted-foreground); border-radius: 4px; }
+.ui-choice-check[data-multi="true"] { width: calc(0.875 * var(--u-icon)); height: calc(0.875 * var(--u-icon)); border: 1.5px solid var(--muted-foreground); border-radius: var(--radius-sm); }
 .ui-choice[aria-selected="true"] .ui-choice-check[data-multi="true"] { border-color: var(--foreground); background: var(--foreground); color: var(--background); }
 .ui-choice-check[data-multi="true"] svg { width: calc(0.6875 * var(--u-icon)); height: calc(0.6875 * var(--u-icon)); stroke-width: 4.4; }
 .ui-choice-input { min-width: 0; flex: 1; border: 0; background: transparent; padding: 0; color: var(--foreground); font: inherit; font-size: calc(1.015625 * var(--u-type)); line-height: 1.4; outline: 0; resize: none; }
 .ui-choice-input::placeholder { color: var(--muted-foreground); }
-.ui-preview { max-height: calc(14 * var(--u-space)); margin: 2px calc(0.5 * var(--u-space)); overflow: auto; border: 1px solid var(--frost-rule); border-radius: calc(0.625 * var(--u-space)); padding: calc(0.5 * var(--u-space)) calc(0.75 * var(--u-space)); font: calc(0.859375 * var(--u-type))/1.45 var(--font-code); white-space: pre; }
+.ui-preview { max-height: calc(14 * var(--u-space)); margin: 2px calc(0.5 * var(--u-space)); overflow: auto; border: 1px solid var(--frost-tint); border-radius: var(--radius-lg); padding: calc(0.5 * var(--u-space)) calc(0.75 * var(--u-space)); font: calc(0.859375 * var(--u-type))/1.45 var(--font-code); white-space: pre; }
 .ui-preview[data-format="markdown"] { font-family: inherit; white-space: pre-wrap; }
 .ui-rider .ui-input[data-note] { width: auto; height: calc(2.25 * var(--u-space)); margin: 2px calc(0.5 * var(--u-space)) 0 calc(2.375 * var(--u-space)); }
 .ui-summary { display: grid; gap: 1px; }
 .ui-summary > button { display: grid; min-height: calc(2.375 * var(--u-space)); grid-template-columns: minmax(0, 9rem) minmax(0, 1fr); align-items: center; gap: calc(0.75 * var(--u-space)); border: 0; border-radius: var(--row-radius); background: transparent; padding: calc(0.3125 * var(--u-space)) calc(0.625 * var(--u-space)); color: var(--foreground); font-size: calc(1.015625 * var(--u-type)); text-align: left; cursor: pointer; }
-.ui-summary > button:hover { background: var(--frost-wash); }
+.ui-summary > button:hover { background: var(--frost-tint); }
 .ui-summary > button > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ui-summary > button > span:first-child { color: var(--muted-foreground); }
 .ui-summary > button > span:last-child { font-weight: 560; }
@@ -484,9 +496,9 @@
    Sizes measured from the app at desktop, written over 12.8 so a phone scales. */
 .ui-scrim { display: grid; grid-template-columns: minmax(0, 1fr); justify-items: center; align-items: start; background: rgb(0 0 0 / 42%); padding: calc(1 * var(--u-space)); }
 .ui-scrim[data-placement="center"] { align-items: center; }
-.ui-frost.ui-overlay { display: flex; width: min(var(--overlay-width, calc(40 * var(--u-space))), 100%); max-height: var(--overlay-height, none); flex-direction: column; overflow: hidden; border-radius: calc(1.09375 * var(--u-space)); padding: 0; color: var(--foreground); font-size: calc(0.9375 * var(--u-type)); }
+.ui-frost.ui-overlay { display: flex; width: min(var(--overlay-width, calc(40 * var(--u-space))), 100%); max-height: var(--overlay-height, none); flex-direction: column; overflow: hidden; border-radius: var(--radius-xl); padding: 0; color: var(--foreground); font-size: calc(0.9375 * var(--u-type)); }
 .ui-overlay[data-layout="rail"] { flex-direction: row; }
-.ui-overlay-bar { display: flex; min-height: calc(3.4375 * var(--u-space)); flex: none; align-items: center; gap: calc(0.625 * var(--u-space)); border-bottom: 1px solid var(--frost-rule); padding: calc(0.3125 * var(--u-space)) calc(0.859375 * var(--u-space)); }
+.ui-overlay-bar { display: flex; min-height: calc(3.4375 * var(--u-space)); flex: none; align-items: center; gap: calc(0.625 * var(--u-space)); border-bottom: 1px solid var(--frost-tint); padding: calc(0.3125 * var(--u-space)) calc(0.859375 * var(--u-space)); }
 /* The lead is one mark at one size and colour, whichever it is (search, the command prompt, back). */
 .ui-overlay-lead { display: inline-grid; flex: none; place-items: center; color: var(--muted-foreground); }
 .ui-overlay-lead svg { width: calc(1.09375 * var(--u-icon)); height: calc(1.09375 * var(--u-icon)); color: var(--muted-foreground); }
@@ -494,32 +506,32 @@
 .ui-overlay-input::placeholder { color: var(--muted-foreground); }
 .ui-overlay-bar .ui-seg { flex: none; }
 /* Its rows: a popover's Items at the overlay's scale, full colour; its group titles plain, not ruled. */
-.ui-overlay-list { --row-pad: calc(0.3125 * var(--u-space)) calc(0.625 * var(--u-space)); --row-min: calc(2.34375 * var(--u-space)); --row-gap: calc(0.78125 * var(--u-space)); --row-radius: 8px;
+.ui-overlay-list { --row-pad: calc(0.3125 * var(--u-space)) calc(0.625 * var(--u-space)); --row-min: calc(2.34375 * var(--u-space)); --row-gap: calc(0.78125 * var(--u-space)); --row-radius: var(--radius-lg);
   min-height: 0; flex: 1; overflow: auto; padding: calc(0.390625 * var(--u-space)) calc(0.46875 * var(--u-space)); }
 .ui-overlay-list .ui-row > .ui-icon { width: calc(1.09375 * var(--u-icon)); height: calc(1.09375 * var(--u-icon)); color: var(--muted-foreground); }
 .ui-overlay-list .ui-section + .ui-section { margin: calc(0.25 * var(--u-space)) 0 0; border: 0; padding: 0; }
 .ui-overlay-list .ui-title { padding: calc(0.5 * var(--u-space)) calc(0.625 * var(--u-space)) calc(0.25 * var(--u-space)); }
 .ui-overlay-split { display: grid; min-height: 0; flex: 1; grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr); }
-.ui-overlay-aside { min-width: 0; overflow: auto; border-left: 1px solid var(--frost-rule); padding: calc(1 * var(--u-space)); }
-.ui-overlay-hints { display: flex; min-height: calc(2.65625 * var(--u-space)); flex: none; flex-wrap: wrap; align-items: center; gap: calc(0.3125 * var(--u-space)) calc(0.9375 * var(--u-space)); border-top: 1px solid var(--frost-rule); padding: calc(0.46875 * var(--u-space)) calc(0.78125 * var(--u-space)); color: var(--muted-foreground); font-size: calc(0.78125 * var(--u-type)); }
+.ui-overlay-aside { min-width: 0; overflow: auto; border-left: 1px solid var(--frost-tint); padding: calc(1 * var(--u-space)); }
+.ui-overlay-hints { display: flex; min-height: calc(2.65625 * var(--u-space)); flex: none; flex-wrap: wrap; align-items: center; gap: calc(0.3125 * var(--u-space)) calc(0.9375 * var(--u-space)); border-top: 1px solid var(--frost-tint); padding: calc(0.46875 * var(--u-space)) calc(0.78125 * var(--u-space)); color: var(--muted-foreground); font-size: calc(0.78125 * var(--u-type)); }
 .ui-overlay-hints span { display: inline-flex; align-items: center; gap: calc(0.25 * var(--u-space)); white-space: nowrap; }
 .ui-overlay-hints-end { margin-left: auto; gap: calc(0.9375 * var(--u-space)) !important; }
 .ui-overlay-title { margin: 0; font-size: calc(1.40625 * var(--u-type)); font-weight: 600; line-height: 1.5; letter-spacing: -0.02em; }
 /* The rail beside a page: the sidebar's NavGroups, washed as a popover's rows are. */
-.ui-overlay-rail { display: flex; width: calc(14.84375 * var(--u-space)); flex: none; flex-direction: column; gap: calc(0.1875 * var(--u-space)); overflow: auto; border-right: 1px solid var(--frost-rule); padding: calc(1.25 * var(--u-space)) calc(0.78125 * var(--u-space)); }
+.ui-overlay-rail { display: flex; width: calc(14.84375 * var(--u-space)); flex: none; flex-direction: column; gap: calc(0.1875 * var(--u-space)); overflow: auto; border-right: 1px solid var(--frost-tint); padding: calc(1.25 * var(--u-space)) calc(0.78125 * var(--u-space)); }
 .ui-overlay-rail > .ui-overlay-title { margin-bottom: calc(0.5 * var(--u-space)); padding-left: calc(0.5 * var(--u-space)); }
 .ui-overlay-rail .ui-nav-group + .ui-nav-group { margin-top: calc(0.5 * var(--u-space)); }
 /* The current section is white and bold with no fill; the wash is only the cursor. */
-.ui-overlay .ui-nav-row:hover { background: var(--frost-wash); }
+.ui-overlay .ui-nav-row:hover { background: var(--frost-tint); }
 .ui-overlay .ui-nav-row[aria-current="page"]:not(:hover) { background: transparent; }
-.ui-overlay-rail-foot { margin-top: auto; color: var(--muted-foreground); font-size: var(--nav-text); }
+.ui-overlay-rail-foot { margin-top: auto; color: var(--muted-foreground); font-size: var(--row-text); }
 .ui-overlay-page { display: flex; min-width: 0; flex: 1; flex-direction: column; overflow: auto; padding: calc(1.25 * var(--u-space)) calc(1.875 * var(--u-space)) calc(1.875 * var(--u-space)); }
 .ui-overlay-page-head { display: flex; align-items: center; gap: calc(0.75 * var(--u-space)); margin-bottom: calc(0.75 * var(--u-space)); padding-left: calc(0.5 * var(--u-space)); }
 .ui-setting-group { display: flex; flex-direction: column; gap: 1px; }
-.ui-setting-group + .ui-setting-group { margin-top: calc(0.75 * var(--u-space)); border-top: 1px solid var(--frost-rule); padding-top: calc(0.9375 * var(--u-space)); }
-.ui-setting-line { display: flex; min-height: calc(2.1875 * var(--u-space)); align-items: center; gap: calc(0.9375 * var(--u-space)); border-radius: calc(0.5 * var(--u-space)); padding: 2px calc(0.3125 * var(--u-space)) 2px calc(0.5 * var(--u-space)); font-size: var(--nav-text); }
+.ui-setting-group + .ui-setting-group { margin-top: calc(0.75 * var(--u-space)); border-top: 1px solid var(--frost-tint); padding-top: calc(0.9375 * var(--u-space)); }
+.ui-setting-line { display: flex; min-height: calc(2.1875 * var(--u-space)); align-items: center; gap: calc(0.9375 * var(--u-space)); border-radius: var(--radius-md); padding: 2px calc(0.3125 * var(--u-space)) 2px calc(0.5 * var(--u-space)); font-size: var(--row-text); }
 /* Focus anywhere in a row is the row's wash. */
-.ui-setting-line:is(:hover, :focus-within) { background: var(--frost-wash); }
+.ui-setting-line:is(:hover, :focus-within) { background: var(--frost-tint); }
 .ui-setting-line > span:first-child { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ui-setting-line > span:first-child > small { margin-left: calc(0.5 * var(--u-space)); color: var(--muted-foreground); font-size: inherit; }
 /* Every row's control sits in one column of one width, so they line up. */
@@ -529,7 +541,7 @@
 /* Tabular figures wherever numbers tick or line up. */
 :is(.ui-keycap, .ui-choice-key, .ui-hints, .ui-overlay-hints, .ui-chip-copy small, .ui-seg small, .ui-slider-value) { font-variant-numeric: tabular-nums; }
 .ui-overlay-page-head > .ui-overlay-title { flex: 1; }
-.ui-overlay-status { color: var(--muted-foreground); font-size: var(--nav-text); }
+.ui-overlay-status { color: var(--muted-foreground); font-size: var(--row-text); }
 .ui-overlay-status[data-failed] { color: var(--destructive); }
 /* On a phone an overlay is a full-screen bubble on the darker core: nothing round it is dimmed. */
 [data-density="phone"] .ui-scrim, .ui-scrim[data-density="phone"] { padding: var(--phone-overlay-padding, 8px); background: transparent; }
@@ -545,8 +557,8 @@
 .ui-leader .ui-keys[data-first] .ui-keycap { color: var(--foreground); }
 /* Crumbs: the breadcrumb's place caps; the current place white, no fill. */
 .ui-crumbs { display: flex; min-width: 0; flex: 1; align-items: center; justify-content: flex-end; gap: 2px; overflow: hidden; }
-.ui-crumbs > button { flex: none; border: 0; border-radius: calc(0.46875 * var(--u-space)); background: transparent; padding: 2px calc(0.390625 * var(--u-space)); color: var(--muted-foreground); font: 500 calc(0.7421875 * var(--u-type))/1.2 var(--font-label); letter-spacing: .07em; text-transform: uppercase; cursor: pointer; }
-.ui-crumbs > button:hover:not(:disabled) { background: var(--frost-wash); color: var(--foreground); }
+.ui-crumbs > button { flex: none; border: 0; border-radius: var(--radius-md); background: transparent; padding: 2px calc(0.390625 * var(--u-space)); color: var(--muted-foreground); font: 500 calc(0.7421875 * var(--u-type))/1.2 var(--font-label); letter-spacing: .07em; text-transform: uppercase; cursor: pointer; }
+.ui-crumbs > button:hover:not(:disabled) { background: var(--frost-tint); color: var(--foreground); }
 .ui-crumbs > button[aria-current="true"] { color: var(--foreground); font-weight: 700; }
 .ui-crumbs > button:disabled { opacity: .55; cursor: default; }
 .ui-crumbs-sep { color: var(--muted-foreground); font-size: calc(0.78125 * var(--u-type)); opacity: .6; }
