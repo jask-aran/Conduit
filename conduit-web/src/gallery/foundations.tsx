@@ -247,7 +247,7 @@ const RADII: TokenGroup[] = [
  * --well (the fill under an input or a secondary button); a control reads only those.
  */
 const controls = () => <>
-  <div class="g-scene-row"><Button variant="secondary" size="sm">Cancel</Button><Button size="sm">Save</Button></div>
+  <div class="g-scene-row"><Button variant="ghost" size="sm">Cancel</Button><Button size="sm">Save</Button><Button variant="secondary" size="sm">Browse…</Button></div>
   <Input value="Lorem ipsum file" />
   <SegmentedText />
   <div class="g-scene-row"><Keycap>Ctrl</Keycap><Keycap>K</Keycap></div>
@@ -288,13 +288,11 @@ function FormTable(props: { rows: FormRow[]; on: Where[] }) {
 }
 const form = (name: string, use: string, sample: FormRow["sample"], code?: string, tokens?: string): FormRow => ({ name, use, sample, code, tokens });
 const BUTTONS: FormRow[] = [
-  form("primary", "the one action: Save, Send, Continue", () => <Button>Save</Button>, "<Button>", "fill --foreground · text --background"),
-  form("primary · outline", "the main action, quieter: a line in the text colour", () => <Button outline>Continue</Button>, "<Button outline>", "line and text --foreground · --tint washed"),
-  form("secondary", "a second action beside primary: Cancel, Back. The surface's well inside its line (over frost, no well: a hairline)", () => <Button variant="secondary">Cancel</Button>, '<Button variant="secondary">', "fill --well · line --tint · --tint washed"),
-  form("ghost", "toolbars and headers: text until washed", () => <Button variant="ghost">Skip</Button>, '<Button variant="ghost">', "nothing · --tint washed"),
-  form("ghost · outline", "a hairline with nothing inside, on any surface", () => <Button variant="ghost" outline>Details</Button>, '<Button variant="ghost" outline>', "line --tint · --tint washed"),
-  form("destructive", "confirms what cannot be undone, in a dialog", () => <Button variant="destructive">Delete</Button>, '<Button variant="destructive">', "fill --destructive · text --foreground"),
-  form("destructive · outline", "offers it, before the confirm: Delete chat on a settings page", () => <Button variant="destructive" outline>Delete chat</Button>, '<Button variant="destructive" outline>', "line and text --destructive · --destructive at 15% washed"),
+  form("primary", "the confirm: Save, Send, Continue -- beside a ghost Cancel", () => <Button>Save</Button>, "<Button>", "line and text --foreground · --tint washed"),
+  form("ghost", "Cancel beside a confirm; toolbars and headers: text until washed", () => <Button variant="ghost">Cancel</Button>, '<Button variant="ghost">', "nothing · --tint washed"),
+  form("ghost · outline", "a hairline with nothing inside, on any surface: an action that needs its edge", () => <Button variant="ghost" outline>Details</Button>, '<Button variant="ghost" outline>', "line --tint · --tint washed"),
+  form("destructive", "a destructive confirm, or offering one: Delete, Forget", () => <Button variant="destructive">Delete</Button>, '<Button variant="destructive">', "line and text --destructive · --destructive at 15% washed"),
+  form("secondary", "a form's control on the ground: the well inside its line (over frost, no well: the hairline of ghost · outline)", () => <Button variant="secondary">Browse…</Button>, '<Button variant="secondary">', "fill --well · line --tint · --tint washed"),
   form("icon", "an icon alone: ghost in toolbars and headers (icon-sm), secondary to stand out (icon)", () => <div class="g-row"><Button variant="ghost" size="icon-sm" aria-label="Copy"><CopyIcon /></Button><Button variant="ghost" size="icon-sm" aria-label="Share"><ShareIcon /></Button><Button variant="secondary" size="icon" aria-label="Add"><PlusIcon /></Button></div>, 'size="icon-sm" | "icon" | "icon-xs"', "1.875 / 2.25 / 1.5 units square · icon --u-icon"),
 ];
 const BUTTON_ALL = "every form: 2.25 units tall · corner --radius-control · --text-row at --weight-strong";
@@ -463,7 +461,7 @@ export const foundationFamilies: Family[] = [
     { title: "In use", note: "the same controls on the ground and over frost: what each takes from the surface under it", layout: "desktop", atoms: [
       lib("controls-inuse", "Controls in use", "both", "control", "Button · Input · Segmented · Keycap on [data-surface]", () => <InUse scene={controlsScene} marks={CONTROL_MARKS} />, "row"),
     ] },
-    { title: "Button", note: "each form on each surface; outline draws primary, ghost or destructive as a line in its colour. Every form: 2.25 units tall, corner --radius-control, --text-row at --weight-strong", staged: "density", atoms: [
+    { title: "Button", note: "each form on each surface; never a solid fill: the confirm is a line, Cancel beside it text. Every form: 2.25 units tall, corner --radius-control, --text-row at --weight-strong", staged: "density", atoms: [
       lib("button-forms", "Button · forms × surfaces", "both", "control", BUTTON_ALL, () => <FormTable rows={BUTTONS} on={["ground", "frost"]} />, "row"),
     ] },
     { title: "Segmented choice", note: "the frame too: the sidebar's sections", staged: "density", atoms: [

@@ -119,8 +119,9 @@ components:
     textColor: "{colors.foreground}"
     rounded: "{rounded.control}"
   button-primary:
-    backgroundColor: "{colors.primary}"
-    textColor: "{colors.primary-foreground}"
+    backgroundColor: "transparent"
+    borderColor: "{colors.foreground}"
+    textColor: "{colors.foreground}"
     rounded: "{rounded.control}"
   button-ghost:
     backgroundColor: "transparent"
@@ -209,7 +210,7 @@ The charcoal is cool-neutral at chroma ~0.004–0.006. That gray is the brand. D
 - **border** — 1px hairlines: inputs, a header or footer rule, and dividers. Grouping is a heading and space, with at most one hairline between groups -- not a hairline box and not a fill. Panes have no edge hairline.
 - **accent** — white at 6–7% opacity. This is hover, pressed, and selected. Selection is a gray wash, never a hue.
 - **card / popover** — slightly raised solids, left on tool cards. Overlays are frost (Surfaces).
-- **primary** — near-white. Default buttons and the one bright action.
+- **primary** — near-white. The app's default; in components v2 no button is filled with it (Shapes · buttons).
 - **destructive** — errors and destructive actions only.
 - **live / warn** — tiny runtime dots and git-ish status. Never as fills, rails, or card washes.
 - **frost-fill / frost-stroke / glass-bg / glass-border** — the signature floating material (Elevation & Depth).
@@ -334,7 +335,7 @@ Almost none on listed content. Frosted glass carries the depth.
 - Panes and lists: nothing -- no edge hairline, no shadow.
 - Overlays: the composer's frost, one dark outer shadow and a subtle edge. Dropdown menus included.
 - Frost chrome (the signature): translucent `frost-fill`, a 1px white-alpha `frost-stroke`, a strong blur, optional top specular inset, no heavy drop. Composer, user bubble (`glass-bg` + blur), header pill and future floating toolbars share this one material — do not redeclare it per component.
-- Primary buttons: top specular inset and a short lift. Ghost buttons: no fill until hover.
+- Buttons are never a solid fill. The confirm (primary) is a 1px line in the text colour with white text; Cancel beside it is ghost, text until the wash; a destructive confirm is a line in red. A ghost button that needs its edge takes a hairline (ghost outline); secondary, a well inside a hairline, is for a form's control on the ground.
 
 No stacked card shadows, no colored glows, no frost on a row or a list. One exception: while the phone's voice-first composer is listening, soft colour fields swell with the input level inside its orb pill (or, in the one-surface layout, the composer), clipped to that surface and gone when it stops.
 
