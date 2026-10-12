@@ -1,4 +1,4 @@
-import type { Message } from "../client/api/contracts";
+import type { Message, ToolItem } from "../client/api/contracts";
 import { createSignal } from "solid-js";
 import type { UploadAttachment } from "../client/state/attachments";
 
@@ -20,7 +20,15 @@ export const SEED: Message[] = [
   { id: "u1", role: "user", content: "write a .txt file in this folder that contains lorem ipsum text", timestamp: at(14), outcome: "complete" },
   { id: "a1", role: "assistant", answers: "u1", interim: false, content: "Created `lorem_ipsum.txt` in this folder with lorem ipsum text.", timestamp: at(16) },
   { id: "u2", role: "user", content: "and make the second paragraph shorter", timestamp: at(18), outcome: "complete" },
-  { id: "a2", role: "assistant", answers: "u2", interim: false, content: "Done. The second paragraph is now two sentences:\n\n> Lorem ipsum dolor sit amet. Consectetur adipiscing elit.\n\n```txt\nlorem_ipsum.txt  412 bytes\n```", timestamp: at(19) },
+  // A turn with a trail (thinking, a read, an edit, a command), so the trace header opens.
+  { id: "a2", role: "assistant", answers: "u2", interim: false, blocks: [{ kind: "thinking", text: "The second paragraph has four sentences; keep the first two." }, { kind: "tool_call", toolCallId: "t1" }, { kind: "tool_call", toolCallId: "t2" }, { kind: "tool_call", toolCallId: "t3" }] as Message["blocks"], content: "Done. The second paragraph is now two sentences:\n\n> Lorem ipsum dolor sit amet. Consectetur adipiscing elit.\n\n```txt\nlorem_ipsum.txt  412 bytes\n```", timestamp: at(19) },
+];
+
+/** The tools the seeded turn ran. */
+const TOOLS: ToolItem[] = [
+  { toolCallId: "t1", name: "read", kind: "read", subject: "lorem_ipsum.txt", input: { path: "lorem_ipsum.txt" }, output: "Lorem ipsum dolor sit amet. Consectetur adipiscing elit. Sed do eiusmod tempor. Ut enim ad minim veniam.", done: true, timestamp: at(18), completedAt: at(18) },
+  { toolCallId: "t2", name: "edit", kind: "edit", subject: "lorem_ipsum.txt", input: { path: "lorem_ipsum.txt" }, output: "1 edit", done: true, timestamp: at(18), completedAt: at(19) },
+  { toolCallId: "t3", name: "bash", kind: "command", subject: "wc -c lorem_ipsum.txt", input: { command: "wc -c lorem_ipsum.txt" }, output: "412 lorem_ipsum.txt", done: true, timestamp: at(19), completedAt: at(19) },
 ];
 
 export function fakeChat() {
@@ -38,7 +46,7 @@ export function fakeChat() {
     editingEntryId,
     edit: (message: Message) => { if (editingEntryId() === message.id) { setEditingEntryId(null); setDraft(""); return; } setEditingEntryId(message.id); setDraft(typeof message.content === "string" ? message.content : ""); },
     cancelEdit: () => { setEditingEntryId(null); setDraft(""); },
-    messages, hostUiRequests: () => [], pendingMessages: () => [], harnessCommands: () => [], tools: () => [],
+    messages, hostUiRequests: () => [], pendingMessages: () => [], harnessCommands: () => [], tools: () => TOOLS,
     title: () => "Lorem ipsum file", status: () => "active", presentation: () => ({ kind: "ready" }),
     send: async () => {
       const text = draft().trim();

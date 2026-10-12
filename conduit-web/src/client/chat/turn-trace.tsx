@@ -8,6 +8,10 @@ import "./turn-trail.css";
 import { ORBITS_TRAILED, PLAIN_SPHERE, SPUTTERING_SPHERE } from "./orb-frames";
 import { ThinkingOrb, type ModeFrame, type OrbState, settledOrbRate } from "./thinking-orb";
 import { Disclosure } from "./disclosure";
+import { useLibrary } from "@/components/ui/swap";
+
+/* The gallery's previews draw a turn's header as the library's TraceHeader (its classes); the app keeps its own. */
+const traceClass = (library: boolean) => (app: string, piece: string) => library ? piece : app;
 import type { MarkdownRendererId } from "./markdown-settings";
 import type { IncremarkPacingMode } from "./incremark-pacing";
 
@@ -332,27 +336,28 @@ export function TurnTrace(props: { trace: TurnTraceData; writing?: boolean; sess
   // A turn with no thinking and no tools has nothing to open: its header is
   // not a button, and it is one line.
   const empty = () => props.trace.segments.length === 0;
-  return <Disclosure class="turn-trace" data-active={props.trace.active ? "true" : "false"} data-empty={empty() ? "true" : undefined} headerClass="turn-trace-header" bodyClass="turn-trace-body"
+  const c = traceClass(useLibrary());
+  return <Disclosure class="turn-trace" data-active={props.trace.active ? "true" : "false"} data-empty={empty() ? "true" : undefined} headerClass={c("turn-trace-header", "ui-trace")} bodyClass="turn-trace-body"
     initialOpen={props.initialOpen} onOpenChange={props.onOpenChange} triggerProps={{ get disabled() { return empty(); } }}
     header={<>
       {/* One box, live and settled, so nothing beside it moves when the turn
           ends. A turn that did not finish -- stopped or failed -- tints the
           orb. */}
-      <span class="turn-trace-mark">
+      <span class={c("turn-trace-mark", "ui-trace-orb")}>
         <ThinkingOrb state={preview().status.orb} frame={preview().status.frame} tint={unfinished() ? "var(--destructive)" : undefined} rate={props.trace.active ? undefined : settledOrbRate(unfinished())} />
       </span>
-      <div class="turn-trace-preview">
+      <div class={c("turn-trace-preview", "ui-trace-preview")}>
         {/* Two lines: what it is doing, and its latest step. The first is
             fixed slots, so the ticking time never re-renders the rest; the
             second is held open while the turn runs, so the first step to
             arrive moves nothing below. */}
-        <div class="turn-trace-line">
-          <span class="turn-trace-status" data-status={props.trace.status}>{preview().status.verb}</span>
-          <Show when={time()}>{(text) => <span class="turn-trace-time">{"\u00a0· "}{text()}</span>}</Show>
-          <Show when={preview().work}>{(text) => <span class="turn-trace-work">{"\u00a0· "}{text()}</span>}</Show>
+        <div class={c("turn-trace-line", "ui-trace-line")}>
+          <span class={c("turn-trace-status", "ui-trace-status")} data-status={props.trace.status}>{preview().status.verb}</span>
+          <Show when={time()}>{(text) => <span class={c("turn-trace-time", "ui-trace-time")}>{"\u00a0· "}{text()}</span>}</Show>
+          <Show when={preview().work}>{(text) => <span class={c("turn-trace-work", "ui-trace-work")}>{"\u00a0· "}{text()}</span>}</Show>
         </div>
         <Show when={preview().detail || props.trace.active}>
-          <div class="turn-trace-summary">
+          <div class={c("turn-trace-summary", "ui-trace-latest")}>
             {/* A tool's line is plain text -- a path's underscores are not emphasis. */}
             <Show when={preview().detail} fallback={"\u00a0"}>{(detail) =>
               <Show when={detail().markdown} fallback={detail().text}>
@@ -382,15 +387,16 @@ export function TurnTrace(props: { trace: TurnTraceData; writing?: boolean; sess
 export function TraceStarting(props: { startedAt?: string; label?: string }) {
   const time = turnTime(() => ({ active: true, startedAt: props.startedAt }));
   const label = () => props.label || "Starting";
+  const c = traceClass(useLibrary());
   return <div class="turn-trace turn-trace-starting" data-active="true" role="status" aria-label={label()}>
-    <div class="turn-trace-header">
-      <span class="turn-trace-mark"><ThinkingOrb state="connecting" /></span>
-      <div class="turn-trace-preview">
-        <div class="turn-trace-line">
-          <span class="turn-trace-status">{label()}</span>
-          <Show when={time()}>{(text) => <span class="turn-trace-time">{"\u00a0· "}{text()}</span>}</Show>
+    <div class={c("turn-trace-header", "ui-trace")}>
+      <span class={c("turn-trace-mark", "ui-trace-orb")}><ThinkingOrb state="connecting" /></span>
+      <div class={c("turn-trace-preview", "ui-trace-preview")}>
+        <div class={c("turn-trace-line", "ui-trace-line")}>
+          <span class={c("turn-trace-status", "ui-trace-status")}>{label()}</span>
+          <Show when={time()}>{(text) => <span class={c("turn-trace-time", "ui-trace-time")}>{"\u00a0· "}{text()}</span>}</Show>
         </div>
-        <div class="turn-trace-summary">{"\u00a0"}</div>
+        <div class={c("turn-trace-summary", "ui-trace-latest")}>{"\u00a0"}</div>
       </div>
     </div>
   </div>;

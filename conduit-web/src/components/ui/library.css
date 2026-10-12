@@ -63,8 +63,8 @@
   --frost-inset: var(--space-sm); --nav-label-pad: var(--space-sm) var(--space-md);
 } }
 /* What you read takes the transcript's scale: the units below are worked out again inside it. */
-.ui-transcript, .ui-bubble, .ui-answer { --scale-ui: var(--scale-transcript); }
-:root, [data-density], .ui-transcript, .ui-bubble, .ui-answer {
+.ui-transcript, .ui-read, .ui-bubble, .ui-answer { --scale-ui: var(--scale-transcript); }
+:root, [data-density], .ui-transcript, .ui-read, .ui-bubble, .ui-answer {
   --u-space: calc(var(--u-base) * var(--scale-ui)); --u-type: var(--u-space); --u-icon: var(--u-space);
   /* Space: nine steps, in the unit. */
   --space-2xs: calc(0.125 * var(--u-space)); --space-xs: calc(0.25 * var(--u-space)); --space-sm: calc(0.375 * var(--u-space));
@@ -84,7 +84,7 @@
    message: the composer (the phone's field too) and the user's message, one value on phone
    and desktop -- a capsule at one line, held as the composer grows; round: fully round at any
    size -- the phone's pill groups and buttons, which never grow, and small bits inside controls. */
-:root, [data-density], .ui-transcript, .ui-bubble, .ui-answer {
+:root, [data-density], .ui-transcript, .ui-read, .ui-bubble, .ui-answer {
   --radius-control: calc(0.5 * var(--u-space)); --radius-surface: calc(var(--radius-control) + var(--frost-inset));
   --radius-message: calc(22px * var(--scale-transcript)); --radius-round: 999px;
   /* Five type sizes, by role (Type · Scale): label, the section label and keycaps; caption, details,
@@ -643,9 +643,12 @@
 .ui-turn { display: grid; min-width: 0; gap: var(--space-md); }
 .ui-message { display: grid; min-width: 0; justify-items: end; gap: var(--space-xs); }
 /* The foot: the time first, muted and tabular, then icon buttons; under a user's message, at the right. */
-.ui-message-foot { display: flex; align-items: center; gap: var(--space-2xs); color: var(--muted-foreground); font: var(--weight-rest) var(--text-caption) var(--font-sans); }
+.ui-message-foot { display: flex; min-height: var(--control-xs); align-items: center; gap: var(--space-2xs); color: var(--muted-foreground); font: var(--weight-rest) var(--text-caption) var(--font-sans); }
 .ui-message-foot > time { margin-right: var(--space-xs); font-variant-numeric: tabular-nums; }
 .ui-message-foot[data-end] { justify-content: flex-end; }
+/* Its buttons are the smallest icon buttons, whatever size they were asked for. */
+.ui-message-foot .ui-button[data-size^="icon"] { width: var(--control-xs); height: var(--control-xs); border-radius: var(--radius-round); padding: 0; }
+.ui-message-foot .ui-button[data-size^="icon"] svg { width: var(--icon-sm); height: var(--icon-sm); }
 /* The answer: no bubble, the Body role, one gap between blocks and none outside the first and last. */
 .ui-answer { --answer-gap: var(--space-lg); min-width: 0; color: var(--foreground); font-size: var(--text-body); line-height: 1.66; overflow-wrap: anywhere; }
 .ui-answer :where(p, ul, ol, blockquote, pre, table, hr, figure, h1, h2, h3, h4) { margin: 0; }
@@ -678,11 +681,13 @@
 .ui-trace-orb { display: grid; width: var(--icon); height: var(--icon); grid-area: 1 / 1; }
 .ui-trace-orb > * { width: 100%; height: 100%; }
 .ui-trace-line { min-width: 0; grid-area: 1 / 2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ui-trace-line > b { color: var(--foreground); font-weight: var(--weight-strong); }
+.ui-trace-line > :is(b, .ui-trace-status) { color: var(--foreground); font-weight: var(--weight-strong); }
+/* A header whose line and latest come wrapped (the app's) lays them out as if they were not. */
+.ui-trace-preview { display: contents; }
 .ui-trace-time { font-variant-numeric: tabular-nums; }
-.ui-trace-chevron { width: var(--icon-sm); height: var(--icon-sm); grid-area: 1 / 3; transition: rotate .15s ease; }
+.ui-trace-chevron, .ui-trace > .disclosure-chevron { width: var(--icon-sm); height: var(--icon-sm); grid-area: 1 / 3; transition: rotate .15s ease; }
 .ui-trace[aria-expanded="true"] .ui-trace-chevron { rotate: 180deg; }
-.ui-trace:is(:hover, :focus-visible) .ui-trace-chevron { color: var(--foreground); }
+.ui-trace:is(:hover, :focus-visible) :is(.ui-trace-chevron, .disclosure-chevron) { color: var(--foreground); }
 .ui-trace-latest { min-width: 0; grid-area: 2 / 2 / 3 / 4; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* The trail: one light line per step, no boxes, under the header's text; a step under the answer's size. */
 .ui-trail { display: grid; gap: var(--space-2xs); margin: 0; padding: 0 0 0 calc(var(--icon) + var(--row-gap)); color: var(--muted-foreground); font-size: var(--text-row); list-style: none; }
@@ -834,6 +839,25 @@
 .ui-answer .chat-markdown blockquote { border-left-color: var(--tint); padding-left: var(--space-lg); }
 .ui-answer .chat-markdown :not(pre) > code { border-radius: calc(0.6 * var(--radius-control)); background: var(--tint); padding: 0 var(--space-xs); font: 0.9em var(--font-code); }
 .ui-answer .chat-markdown :is(th, td) { border-color: var(--tint); padding: var(--space-sm) var(--space-md); }
+/* The app's opened trail drawn as a Trail of Steps: in the transcript's units (its own rules are in rem),
+   its lines under the header's text, the step's icon, verb, mono subject and time. */
+.ui-read .turn-trace .turn-trace-body { display: grid; gap: var(--space-2xs); margin: var(--space-2xs) 0 0; padding-left: calc(var(--icon) + var(--row-gap) - var(--space-sm)); }
+.ui-read .turn-trace .trail-row-header { min-height: var(--control-xs); gap: var(--row-gap); border-radius: var(--radius-control); padding: 0 var(--space-sm); font-size: var(--text-row); }
+.ui-read .turn-trace .trail-row-header:is(:hover, :focus-visible) { background: var(--tint); }
+.ui-read .turn-trace .trail-row-header .trail-icon { width: var(--icon-sm); height: var(--icon-sm); }
+.ui-read .turn-trace .trail-verb { color: var(--foreground); font-weight: var(--weight-rest); }
+.ui-read .turn-trace .trail-subject { font: var(--text-caption) var(--font-code); }
+.ui-read .turn-trace .trail-meta { gap: var(--space-md); font-size: var(--text-caption); }
+.ui-read .turn-trace .trail-row-header .disclosure-chevron { width: var(--icon-sm); height: var(--icon-sm); }
+.ui-read .turn-trace :is(.tool-step-content, .text-step-content) { margin: var(--space-2xs) 0 var(--space-sm) calc(var(--space-sm) + var(--icon-sm) + var(--row-gap)); }
+.ui-read .turn-trace .tool-step-content pre { border: 1px solid var(--tint); border-radius: var(--radius-control); background: transparent; padding: var(--space-sm) var(--space-lg); font: var(--text-caption)/1.6 var(--font-code); }
+.ui-read .turn-trace .text-step-content .chat-markdown { font-size: var(--text-row); }
+.ui-read .turn-trace .tool-group-steps { gap: var(--space-2xs); margin-left: calc(var(--space-sm) + var(--icon-sm) / 2); padding-left: var(--space-sm); border-left-color: var(--tint); }
+/* The app's code block (its Markdown's .artifact) drawn as a CodeBlock: a box, the caption bar, the code face. */
+.ui-answer .chat-markdown .artifact { border: 1px solid var(--tint); border-radius: var(--radius-control); background: transparent; }
+.ui-answer .chat-markdown .artifact-header { min-height: var(--control-sm); border-bottom: 1px solid var(--tint); background: transparent; padding: 0 var(--space-2xs) 0 var(--space-lg); color: var(--muted-foreground); font: var(--text-caption) var(--font-data); }
+.ui-answer .chat-markdown .artifact pre { padding: var(--space-sm) var(--space-lg); background: transparent; font: var(--text-row)/1.6 var(--font-code); }
+.ui-answer .chat-markdown .artifact-copy { height: var(--control-xs); border-radius: var(--radius-control); padding: 0 var(--space-md); font-size: var(--text-caption); }
 /* In the gallery's previews the app's scroll-to-latest and cancel editing draw as RiderButtons: the
    app keeps where they sit, the library how they look. */
 .message-scroller-button.ui-rider-button[data-slot="button"] { width: var(--control-lg); min-height: 0; height: var(--control-lg); border-radius: var(--radius-surface); background: var(--frost-fill); color: var(--foreground); }
