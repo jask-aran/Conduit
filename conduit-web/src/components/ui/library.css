@@ -188,7 +188,8 @@
 .ui-keycap[data-editable] > button:is(:hover, :focus-visible) { outline: 0; background: var(--tint); color: var(--foreground); }
 
 /* Card: the menu's container at dialog padding. */
-.ui-card { display: flex; flex-direction: column; gap: calc(1 * var(--u-space)); border-radius: var(--frost-radius); padding: calc(1.25 * var(--u-space)); }
+/* Card: a dialog's width (30 units: 384px on desktop, 480 on a phone, as the app's), never wider than its room. */
+.ui-card { display: flex; width: min(100%, calc(30 * var(--u-space))); flex-direction: column; gap: calc(1 * var(--u-space)); border-radius: var(--frost-radius); padding: calc(1.25 * var(--u-space)); }
 .ui-card > h3 { margin: 0; font-size: var(--text-body); font-weight: var(--weight-strong); }
 .ui-card > p { margin: calc(-0.5 * var(--u-space)) 0 0; color: var(--muted-foreground); font-size: var(--text-row); }
 .ui-card-actions { display: flex; justify-content: flex-end; gap: calc(0.5 * var(--u-space)); }
