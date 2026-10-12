@@ -230,8 +230,8 @@ const cardScene = () => <div class="g-card-scene"><Card title="Destroy Japan?" d
 const typeOf = (el: HTMLElement) => { const s = getComputedStyle(el); return px(`${s.fontSize} · ${s.fontWeight}`); };
 const CARD_MARKS: Mark[] = [
   { selector: ".ui-card", label: "--card-edge: padding all round, every box meets it (1.25 units; a phone 1)", read: (el) => px(getComputedStyle(el).paddingTop) },
-  { selector: ".ui-card > h3", label: "title: --text-body at --weight-strong", read: typeOf },
-  { selector: ".ui-card > p", label: "detail: --text-row, --muted-foreground, --card-pair under the title (half a unit)", read: (el) => `${typeOf(el)} · ${px(`${el.getBoundingClientRect().top - el.previousElementSibling!.getBoundingClientRect().bottom}px`)} under` },
+  { selector: ".ui-card > h3", label: "title: the Heading role (--text-body · --weight-strong)", read: typeOf },
+  { selector: ".ui-card > p", label: "detail: the Caption role (--text-caption · muted), --card-pair under the title", read: (el) => `${typeOf(el)} · ${px(`${el.getBoundingClientRect().top - el.previousElementSibling!.getBoundingClientRect().bottom}px`)} under` },
   { selector: ".ui-card .ui-input", label: "body: the library's Input, its box on the edge, --card-gap from what is above and below", read: (el) => { const card = el.closest<HTMLElement>(".ui-card")!.getBoundingClientRect(); const r = el.getBoundingClientRect(); return `${px(`${r.left - card.left}px`)} / ${px(`${card.right - r.right}px`)} from the sides · ${px(`${r.top - el.previousElementSibling!.getBoundingClientRect().bottom}px`)} gap`; } },
   { selector: ".ui-card-actions", label: "actions: right-aligned, half a unit apart, each the widest's width", read: (el) => `${px(getComputedStyle(el).columnGap)} apart · ${[...el.children].map((b) => px(`${b.getBoundingClientRect().width}px`)).join(" = ")}` },
   { selector: ".ui-card .ui-button[data-variant='ghost']", label: "a secondary action: ghost outline, a --tint hairline", read: edge },
@@ -239,8 +239,8 @@ const CARD_MARKS: Mark[] = [
   { selector: ".ui-card", label: "corner --radius-surface; at most 30 units wide (a phone: its width)", read: (el) => `${rounding(el)} · ${px(`${el.getBoundingClientRect().width}px`)} wide` },
 ];
 const CARDS: FormRow[] = [
-  form("title", "a card says what it is about", () => <Card title="Delete this chat?" />, "<Card title>", "--text-body at --weight-strong"),
-  form("title · detail", "a line --card-pair under the title, only when it asks something of you: never what the title already says", () => <Card title="Destroy Japan?" detail="Type Japan to confirm." />, "<Card title detail>", "--text-row, --muted-foreground, half a unit under the title"),
+  form("title", "a card says what it is about", () => <Card title="Delete this chat?" />, "<Card title>", "Heading: --text-body · --weight-strong"),
+  form("title · detail", "a line --card-pair under the title, only when it asks something of you: never what the title already says", () => <Card title="Destroy Japan?" detail="Type Japan to confirm." />, "<Card title detail>", "Caption: --text-caption · muted, --card-pair under the title"),
   form("body", "what the card holds: one field, a list, a preview", () => <Card title="Rename chat"><Input value="Lorem ipsum file" /></Card>, "<Card title>{children}</Card>", "1 unit between parts; the Input's well and line are the surface's"),
   form("actions", "its buttons, right-aligned: the place picks each form", () => <Card title="Save changes?" actions={<><Button variant="ghost" outline>Cancel</Button><Button outline>Save</Button></>} />, "<Card actions={<>…</>}>", "half a unit apart · primary outline, ghost outline"),
   form("alert", "confirms what cannot be undone (FrostDialog alert)", () => <Card title="Delete this chat?" actions={<><Button variant="ghost" outline>Cancel</Button><Button variant="destructive">Delete</Button></>} />, "<Card title detail actions>", "the confirm destructive, filled"),

@@ -293,19 +293,20 @@ function Role(props: { role: FontRole }) {
 }
 
 /** A type role: its specimen, drawn by the library, and the element in it that carries the role. */
-interface TypeRole { name: string; rule: string; selector: string; sample: () => JSX.Element }
+/** tokens: what the role reads, so it can be named and tuned. */
+interface TypeRole { name: string; tokens: string; rule: string; selector: string; sample: () => JSX.Element }
 const onFrost = (children: JSX.Element) => <Menu>{children}</Menu>;
 const onGround = (children: JSX.Element) => <div class="g-ground">{children}</div>;
 const TYPE_ROLES: TypeRole[] = [
-  { name: "Section label", rule: "every section heading", selector: ".ui-title", sample: () => onFrost(<Section title="Section label"><Item>Row</Item></Section>) },
-  { name: "Row", rule: "every list, menu, palette and settings row; over frost", selector: ".ui-row:not([data-checked])", sample: () => onFrost(<Section><Item icon={<FolderIcon />}>Row at rest</Item></Section>) },
-  { name: "Row · current", rule: "where you are: white at the current weight", selector: ".ui-row[data-checked]", sample: () => onFrost(<Section><Item icon={<MonitorIcon />} checked>Current row</Item></Section>) },
-  { name: "Row · off frost", rule: "the same row on the ground, the sidebar's included: a touch lighter and dimmer", selector: ".ui-nav-row", sample: () => onGround(<NavRow icon={<MonitorIcon />}>Row at rest</NavRow>) },
-  { name: "Meta", rule: "beside a row's title, right-aligned", selector: ".ui-row > small", sample: () => onFrost(<Section><Item meta="2m ago">Row</Item></Section>) },
-  { name: "Keycap", rule: "a key, on the surface's tint", selector: ".ui-keycap", sample: () => onFrost(<Section><Item keys={["Ctrl", "K"]}>Row</Item></Section>) },
-  { name: "Heading", rule: "a popover's or card's title", selector: ".ui-heading-title", sample: () => onFrost(<HeadingSection title="A heading" />) },
-  { name: "Caption", rule: "a heading's detail, hints, empty copy", selector: ".ui-heading-detail", sample: () => onFrost(<HeadingSection title="A heading" detail="Its detail, muted" />) },
-  { name: "Body", rule: "messages and what you type: the type unit", selector: ".ui-bubble", sample: () => <Bubble>A message</Bubble> },
+  { name: "Section label", tokens: "--text-label · --weight-rest · --font-label caps · muted", rule: "every section heading", selector: ".ui-title", sample: () => onFrost(<Section title="Section label"><Item>Row</Item></Section>) },
+  { name: "Row", tokens: "--text-row · --weight-rest · text at 68%", rule: "every list, menu, palette and settings row; over frost", selector: ".ui-row:not([data-checked])", sample: () => onFrost(<Section><Item icon={<FolderIcon />}>Row at rest</Item></Section>) },
+  { name: "Row · current", tokens: "--text-row · --weight-current · text", rule: "where you are: white at the current weight", selector: ".ui-row[data-checked]", sample: () => onFrost(<Section><Item icon={<MonitorIcon />} checked>Current row</Item></Section>) },
+  { name: "Row · off frost", tokens: "--text-row · --weight-lift", rule: "the same row on the ground, the sidebar's included: a touch lighter and dimmer", selector: ".ui-nav-row", sample: () => onGround(<NavRow icon={<MonitorIcon />}>Row at rest</NavRow>) },
+  { name: "Meta", tokens: "--text-caption · muted", rule: "beside a row's title, right-aligned", selector: ".ui-row > small", sample: () => onFrost(<Section><Item meta="2m ago">Row</Item></Section>) },
+  { name: "Keycap", tokens: "--text-label · --weight-lift · --font-label", rule: "a key, on the surface's tint", selector: ".ui-keycap", sample: () => onFrost(<Section><Item keys={["Ctrl", "K"]}>Row</Item></Section>) },
+  { name: "Heading", tokens: "--text-body · --weight-strong · text", rule: "a popover's or card's title", selector: ".ui-heading-title", sample: () => onFrost(<HeadingSection title="A heading" />) },
+  { name: "Caption", tokens: "--text-caption · --weight-rest · muted", rule: "a heading's or card's detail, hints, empty copy", selector: ".ui-heading-detail", sample: () => onFrost(<HeadingSection title="A heading" detail="Its detail, muted" />) },
+  { name: "Body", tokens: "--text-body · --weight-rest", rule: "messages and what you type: the type unit", selector: ".ui-bubble", sample: () => <Bubble>A message</Bubble> },
 ];
 /** What a role computes to, in words: size/leading · weight · face, and its colour as the text colour, a share of it, or muted. */
 function spec(el: Element | null) {
@@ -330,7 +331,7 @@ function Scale() {
   return <div class="g-scale">
     <div class="g-scale-head"><span>Role</span><span>Desktop</span><span>Phone</span></div>
     <For each={TYPE_ROLES}>{(role) => <div class="g-scale-row">
-      <div class="g-scale-name"><strong>{role.name}</strong><small>{role.rule}</small></div>
+      <div class="g-scale-name"><strong>{role.name}</strong><small>{role.rule}</small><small class="g-form-tokens">{role.tokens}</small></div>
       <ScaleCell role={role} density="desktop" /><ScaleCell role={role} density="phone" />
     </div>}</For>
   </div>;
