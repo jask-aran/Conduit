@@ -823,9 +823,17 @@
 .ui-glance-answer[data-math] .katex-display { margin: .55em 0; overflow: hidden; text-align: left; }
 .ui-glance-empty { margin: 0; padding-top: var(--space-4xl); text-align: center; }
 .ui-glance .ui-section { margin-inline: calc(-1 * var(--space-md)); }
-/* In the gallery's previews the app's answer (its own markdown, until it is ported) takes the transcript's
-   scale whole: zoom scales its type, spacing and code alike, as the units do for what the library draws. */
-.ui-read { zoom: var(--scale-transcript); }
+/* In the gallery's previews the app's answer (its own Markdown renderer) is drawn as an Answer: its blocks
+   take the Answer's type, gap and pieces, outranking the app's .chat-markdown rules, so it follows Text size. */
+.ui-answer .chat-markdown { font-size: inherit; line-height: inherit; }
+.ui-answer :is(.chat-markdown, .chat-markdown > .incremark) > * { margin-block: 0; }
+.ui-answer :is(.chat-markdown, .chat-markdown > .incremark) > * + * { margin-top: var(--answer-gap); }
+.ui-answer .chat-markdown :is(h1, h2, h3) { letter-spacing: normal; }
+.ui-answer .chat-markdown h1 { font-size: var(--text-heading); }
+.ui-answer .chat-markdown :is(h2, h3) { font-size: var(--text-body); }
+.ui-answer .chat-markdown blockquote { border-left-color: var(--tint); padding-left: var(--space-lg); }
+.ui-answer .chat-markdown :not(pre) > code { border-radius: calc(0.6 * var(--radius-control)); background: var(--tint); padding: 0 var(--space-xs); font: 0.9em var(--font-code); }
+.ui-answer .chat-markdown :is(th, td) { border-color: var(--tint); padding: var(--space-sm) var(--space-md); }
 /* In the gallery's previews the app's scroll-to-latest and cancel editing draw as RiderButtons: the
    app keeps where they sit, the library how they look. */
 .message-scroller-button.ui-rider-button[data-slot="button"] { width: var(--control-lg); min-height: 0; height: var(--control-lg); border-radius: var(--radius-surface); background: var(--frost-fill); color: var(--foreground); }

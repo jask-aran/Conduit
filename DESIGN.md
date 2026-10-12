@@ -448,7 +448,7 @@ Choosing in a menu:
 
 ## Transcript
 
-**Answer** — the assistant's Markdown, with no bubble, filling the reading column. A gutter keeps it off the pane's edges, and the composer shares that gutter, so an answer and the composer line up on both sides.
+**Answer** — the assistant's Markdown, with no bubble, filling the reading column, in the Body role: the user's message's size, so both follow Text size together. A gutter keeps it off the pane's edges, and the composer shares that gutter, so an answer and the composer line up on both sides.
 
 - *Rhythm.* There is one gap between blocks, everywhere. An answer's first and last blocks have no outer margin, so its height is its content and the action row sits the same distance below every answer.
 - *Wide content.* A table or a wide code block may grow past the reading column, up to a set multiple of it. It stays centred on the column, and it never goes past the gutters the composer keeps. A block narrower than the column fills it, so its edges line up with the prose. Anything still too wide scrolls inside itself; the page never scrolls sideways.
