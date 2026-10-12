@@ -80,7 +80,7 @@ export function Section(props: { title?: string; note?: JSX.Element; kind?: "lis
 export function SearchSection(props: { placeholder: string; value?: string; keys?: string[]; onInput?: (value: string) => void }) {
   return <div role="search" class="ui-section ui-search-section" data-kind="search">
     <SearchIcon /><input class="ui-search" placeholder={props.placeholder} value={props.value ?? ""} onInput={(event) => props.onInput?.(event.currentTarget.value)} />
-    <Show when={props.keys}><span class="ui-keys"><For each={props.keys}>{(key) => <kbd class="ui-keycap">{key}</kbd>}</For></span></Show>
+    <Show when={props.keys}><Keys keys={props.keys!} /></Show>
   </div>;
 }
 
@@ -105,10 +105,10 @@ export function Item(props: {
 }) {
   return <div role={props.checked !== undefined ? "menuitemradio" : "menuitem"} class="ui-row" aria-checked={props.checked} data-field={props.field ? "" : undefined} onClick={props.onClick}
     data-highlighted={props.active ? "" : undefined} data-checked={props.checked ? "" : undefined} data-disabled={props.disabled ? "" : undefined} data-destructive={props.destructive ? "" : undefined}>
-    <Show when={props.keysFirst && props.keys}><span class="ui-keys" data-first><For each={props.keys}>{(key) => <kbd class="ui-keycap">{key}</kbd>}</For></span></Show>
+    <Show when={props.keysFirst && props.keys}><Keys keys={props.keys!} first /></Show>
     <Show when={props.icon}><span class="ui-icon">{props.icon}</span></Show><span class="ui-label" data-stacked={props.detail ? "" : undefined}><Show when={props.detail} fallback={props.children}><span>{props.children}</span><small class="ui-detail">{props.detail}</small></Show></span>
     <Show when={props.meta}><small>{props.meta}</small></Show>
-    <Show when={!props.keysFirst && props.keys}><span class="ui-keys"><For each={props.keys}>{(key) => <kbd class="ui-keycap">{key}</kbd>}</For></span></Show>
+    <Show when={!props.keysFirst && props.keys}><Keys keys={props.keys!} /></Show>
     <Show when={props.opens}><ChevronRightIcon class="ui-chevron" /></Show>
     <Show when={props.end}><span class="ui-row-end">{props.end}</span></Show>
   </div>;
@@ -121,13 +121,16 @@ export function Match(props: { text: string; query: string }) {
 }
 
 /** A key or a chord. onClick: it can be pressed (to record another); onRemove: a × beside it clears it (Settings · Shortcuts). */
-export function Keycap(props: { children: JSX.Element; label?: string; onClick?: () => void; onRemove?: () => void }) {
-  if (!props.onClick && !props.onRemove) return <kbd class="ui-keycap">{props.children}</kbd>;
+export function Keycap(props: { children: JSX.Element; label?: string; class?: string; onClick?: () => void; onRemove?: () => void }) {
+  if (!props.onClick && !props.onRemove) return <kbd class={cn("ui-keycap", props.class)}>{props.children}</kbd>;
   return <span class="ui-keycap" data-editable="">
     <button type="button" aria-label={props.label ? `Change ${props.label}` : undefined} onClick={() => props.onClick?.()}>{props.children}</button>
     <Show when={props.onRemove}><button type="button" class="ui-keycap-remove" aria-label={props.label ? `Remove ${props.label}` : "Remove"} onClick={() => props.onRemove?.()}><XIcon /></button></Show>
   </span>;
 }
+
+/** A run of keys, a keycap each; first: they lead the row (the leader). */
+const Keys = (props: { keys: string[]; first?: boolean }) => <span class="ui-keys" data-first={props.first ? "" : undefined}><For each={props.keys}>{(key) => <Keycap>{key}</Keycap>}</For></span>;
 
 /** size wide: a card that holds content (a list, an excerpt, an editor). close: a × in its corner, for a card with no Cancel. */
 export function Card(props: { title: string; detail?: JSX.Element; class?: string; density?: Density; size?: "wide"; close?: boolean | (() => void); actions?: JSX.Element; children?: JSX.Element }) {
@@ -241,7 +244,7 @@ export const OverlaySplit = (props: { aside?: JSX.Element; children: JSX.Element
 /** The keys along the foot: [keys, what they do], at the start and the end. */
 export type Hint = [string[], string];
 export function OverlayHints(props: { start: Hint[]; end?: Hint[] }) {
-  const hint = ([keys, label]: Hint) => <span><For each={keys}>{(key) => <kbd class="ui-keycap">{key}</kbd>}</For>{label}</span>;
+  const hint = ([keys, label]: Hint) => <span><For each={keys}>{(key) => <Keycap>{key}</Keycap>}</For>{label}</span>;
   return <div class="ui-overlay-hints" aria-hidden="true"><For each={props.start}>{hint}</For>
     <Show when={props.end}><span class="ui-overlay-hints-end"><For each={props.end}>{hint}</For></span></Show></div>;
 }
@@ -287,9 +290,9 @@ export const SettingRecorder = (props: { keys?: string[]; onSave?: () => void; o
   <div class="ui-setting-recorder" role="status" aria-live="polite">
     <span class="ui-recorder-dot" aria-hidden="true" />
     <Show when={props.keys?.length} fallback={<span class="ui-recorder-prompt">Press a shortcut</span>}>
-      <kbd class="ui-keycap ui-recorder-keys">{props.keys!.join(" ")}</kbd>
+      <Keycap class="ui-recorder-keys">{props.keys!.join(" ")}</Keycap>
     </Show>
-    <span class="ui-recorder-hints"><kbd class="ui-keycap">Esc</kbd>cancel<kbd class="ui-keycap">Backspace</kbd>clear</span>
+    <span class="ui-recorder-hints"><Keycap>Esc</Keycap>cancel<Keycap>Backspace</Keycap>clear</span>
     <Button size="sm" outline disabled={!props.keys?.length} onClick={() => props.onSave?.()}>Save</Button>
   </div>;
 

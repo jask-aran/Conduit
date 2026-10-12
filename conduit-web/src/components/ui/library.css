@@ -187,6 +187,13 @@
 .ui-keycap-remove svg { width: calc(0.625 * var(--u-icon)); height: calc(0.625 * var(--u-icon)); }
 .ui-keycap[data-editable] > button:is(:hover, :focus-visible) { outline: 0; background: var(--tint); color: var(--foreground); }
 
+/* The box: what holds a value is a --tint line at the control corner -- an input, a text area in a
+   card or a setting, the code preview, a chip, a segmented track. What you type into fills with the
+   surface's well; a text area and the preview pad their text half a unit by three quarters. */
+.ui-input, .ui-card .ui-textarea, .ui-setting-wide > .ui-textarea, .ui-preview, .ui-chip-body, .ui-seg { border: 1px solid var(--tint); border-radius: var(--radius-control); }
+.ui-input, .ui-card .ui-textarea, .ui-setting-wide > .ui-textarea { background: var(--well); }
+.ui-card .ui-textarea, .ui-setting-wide > .ui-textarea, .ui-preview { padding: calc(0.5 * var(--u-space)) calc(0.75 * var(--u-space)); }
+
 /* Card: a dialog, at most 30 units wide (384px on desktop) and never wider than its room. It
    declares its spacing and every part sits on it: --card-edge all round (every box, a field
    or the actions, meets that edge), --card-gap between its parts, --card-pair from the title to its
@@ -212,7 +219,7 @@
    its content with the title instead: a list's rows hang out by their inset, an icon button by its pad. */
 .ui-card > .ui-preview { margin: 0; }
 .ui-card > .ui-section { margin-inline: calc(-1 * var(--row-inset)); }
-.ui-card .ui-textarea { min-height: calc(4.5 * var(--u-space)); border: 1px solid var(--tint); border-radius: var(--radius-control); background: var(--well); padding: calc(0.5 * var(--u-space)) calc(0.75 * var(--u-space)); }
+.ui-card .ui-textarea { min-height: calc(4.5 * var(--u-space)); }
 .ui-field { display: flex; min-width: 0; flex-direction: column; gap: var(--card-pair, calc(0.5 * var(--u-space))); }
 .ui-field-label { color: var(--muted-foreground); font-size: var(--text-caption); font-weight: var(--weight-lift); text-box: trim-both cap alphabetic; }
 .ui-row > .ui-row-end { display: inline-flex; flex: none; margin-left: auto; margin-right: calc((var(--u-icon) - 1.875 * var(--u-space)) / 2); }
@@ -258,9 +265,9 @@
 :where(.ui-button[data-size="icon-xs"]) svg { width: calc(0.875 * var(--u-icon)); height: calc(0.875 * var(--u-icon)); }
 :where(.ui-button[data-size="icon-sm"]) { width: calc(1.875 * var(--u-space)); height: calc(1.875 * var(--u-space)); padding: 0; }
 
-/* Field: an input or a select's trigger: the surface's well inside its line; the bare
-   select is just its value and a chevron. */
-.ui-input { display: flex; width: 100%; height: calc(2.25 * var(--u-space)); align-items: center; gap: calc(0.5 * var(--u-space)); border: 1px solid var(--tint); border-radius: var(--radius-control); background: var(--well); padding: 0 calc(0.75 * var(--u-space)); color: var(--foreground); font-size: var(--text-row); text-align: left; outline: none; transition: border-color .12s ease; }
+/* Input: an input or a select's trigger, a box (above) a control tall; the bare
+   select is just its value and a chevron. Field, below the Card, names one. */
+.ui-input { display: flex; width: 100%; height: calc(2.25 * var(--u-space)); align-items: center; gap: calc(0.5 * var(--u-space)); padding: 0 calc(0.75 * var(--u-space)); color: var(--foreground); font-size: var(--text-row); text-align: left; outline: none; transition: border-color .12s ease; }
 .ui-input::placeholder { color: var(--muted-foreground); }
 .ui-input:is(:hover, :focus, [aria-expanded="true"]) { border-color: color-mix(in oklch, var(--foreground), transparent 70%); }
 .ui-input > span { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -273,7 +280,7 @@
    pill form is the phone header's: the track is itself frost. */
 /* The track at --radius-control; the wash and segments 2px in (its line and 1px), so their corner is
    the track's less those 2px: the space round the wash is even, corners included. Segments touch. */
-.ui-seg { --seg-pad: 1px; --seg-inner: calc(var(--radius-control) - 1px - var(--seg-pad)); position: relative; display: inline-grid; grid-template-columns: repeat(var(--segments), minmax(0, 1fr)); gap: 0; border: 1px solid var(--tint); border-radius: var(--radius-control); background: transparent; padding: var(--seg-pad); }
+.ui-seg { --seg-pad: 1px; --seg-inner: calc(var(--radius-control) - 1px - var(--seg-pad)); position: relative; display: inline-grid; grid-template-columns: repeat(var(--segments), minmax(0, 1fr)); gap: 0; background: transparent; padding: var(--seg-pad); }
 /* The thumb slides by left, not transform: a transform puts it on a layer of its own and the labels over it
    on others, where Windows draws their text without ClearType, so they dim while it moves. */
 .ui-seg-thumb { position: absolute; top: var(--seg-pad); bottom: var(--seg-pad); left: calc(var(--seg-pad) + (100% - 2 * var(--seg-pad)) / var(--segments) * var(--segment)); width: calc((100% - 2 * var(--seg-pad)) / var(--segments)); border-radius: var(--seg-inner); background: var(--tint); transition: left 200ms cubic-bezier(.2, .8, .2, 1); }
@@ -457,7 +464,7 @@
 .ui-chips[data-fade-start] { --fade-start: calc(1.5 * var(--u-space)); }
 .ui-chips[data-fade-end] { --fade-end: calc(1.5 * var(--u-space)); }
 .ui-chip { position: relative; flex: none; scroll-snap-align: start; }
-.ui-chip-body { display: flex; height: calc(3.75 * var(--u-space)); align-items: center; gap: calc(0.5 * var(--u-space)); overflow: hidden; border: 1px solid var(--tint); border-radius: var(--radius-control); background: var(--tint); padding: 0; color: inherit; text-align: left; cursor: pointer; }
+.ui-chip-body { display: flex; height: calc(3.75 * var(--u-space)); align-items: center; gap: calc(0.5 * var(--u-space)); overflow: hidden; background: var(--tint); padding: 0; color: inherit; text-align: left; cursor: pointer; }
 .ui-chip[data-kind="file"] .ui-chip-body { height: calc(2.8125 * var(--u-space)); gap: calc(0.375 * var(--u-space)); padding: 0 calc(0.625 * var(--u-space)) 0 calc(0.5 * var(--u-space)); }
 .ui-chip-body:focus-visible { outline: none; filter: brightness(1.12); }
 .ui-chip-media { position: relative; display: grid; width: calc(3.75 * var(--u-space) - 2px); height: calc(3.75 * var(--u-space) - 2px); flex: none; place-items: center; background: var(--tint); color: var(--muted-foreground); }
@@ -521,7 +528,7 @@
 .ui-choice-check[data-multi="true"] svg { width: calc(0.6875 * var(--u-icon)); height: calc(0.6875 * var(--u-icon)); stroke-width: 4.4; }
 .ui-choice-input { min-width: 0; flex: 1; border: 0; background: transparent; padding: 0; color: var(--foreground); font: inherit; font-size: var(--text-body); line-height: 1.4; outline: 0; resize: none; }
 .ui-choice-input::placeholder { color: var(--muted-foreground); }
-.ui-preview { max-height: calc(14 * var(--u-space)); margin: 2px calc(0.5 * var(--u-space)); overflow: auto; border: 1px solid var(--tint); border-radius: var(--radius-control); padding: calc(0.5 * var(--u-space)) calc(0.75 * var(--u-space)); font: var(--text-row)/1.45 var(--font-code); white-space: pre; }
+.ui-preview { max-height: calc(14 * var(--u-space)); margin: 2px calc(0.5 * var(--u-space)); overflow: auto; font: var(--text-row)/1.45 var(--font-code); white-space: pre; }
 .ui-preview[data-format="markdown"] { font-family: inherit; white-space: pre-wrap; }
 .ui-rider .ui-input[data-note] { width: auto; height: calc(2.25 * var(--u-space)); margin: 2px calc(0.5 * var(--u-space)) 0 calc(2.375 * var(--u-space)); }
 .ui-summary { display: grid; gap: 1px; }
@@ -595,7 +602,9 @@
 .ui-setting-group { display: flex; flex-direction: column; gap: 1px; }
 .ui-setting-group + .ui-setting-group { margin-top: calc(0.75 * var(--u-space)); border-top: 1px solid var(--tint); padding-top: calc(0.9375 * var(--u-space)); }
 /* At least a row's height: a finger's on a phone, as every row is there. */
-.ui-setting-line { display: flex; min-height: max(calc(2.1875 * var(--u-space)), var(--row-min)); align-items: center; gap: calc(0.9375 * var(--u-space)); border-radius: var(--radius-control); padding: 2px calc(0.3125 * var(--u-space)) 2px calc(0.5 * var(--u-space)); font-size: var(--text-row); }
+/* A settings line's height, at least a row's (a finger's on a phone): the setting line and the recorder under it. */
+:root, [data-density] { --line-min: max(calc(2.1875 * var(--u-space)), var(--row-min)); }
+.ui-setting-line { display: flex; min-height: var(--line-min); align-items: center; gap: calc(0.9375 * var(--u-space)); border-radius: var(--radius-control); padding: 2px calc(0.3125 * var(--u-space)) 2px calc(0.5 * var(--u-space)); font-size: var(--text-row); }
 /* Focus anywhere in a row is the row's wash. */
 .ui-setting-line:is(:hover, :focus-within) { background: var(--tint); }
 /* Toast: raised frost, --radius-surface, 25 units wide at most (a phone: the screen's, inside the
@@ -617,7 +626,7 @@
 .ui-toast-close { color: var(--muted-foreground); }
 .ui-toast-close.ui-button[data-size="icon-xs"] { margin-top: calc((1.875 * var(--u-space) - 1.5 * var(--u-space)) / 2); }
 /* The recorder: a second line as tall as a setting line, inset under its label, a dashed --tint line round it. */
-.ui-setting-recorder { display: flex; min-height: max(calc(2.1875 * var(--u-space)), var(--row-min)); align-items: center; gap: calc(0.5 * var(--u-space)); border: 1px dashed var(--tint); border-radius: var(--radius-control); padding: 2px calc(0.3125 * var(--u-space)) 2px calc(0.5 * var(--u-space)); font-size: var(--text-row); }
+.ui-setting-recorder { display: flex; min-height: var(--line-min); align-items: center; gap: calc(0.5 * var(--u-space)); border: 1px dashed var(--tint); border-radius: var(--radius-control); padding: 2px calc(0.3125 * var(--u-space)) 2px calc(0.5 * var(--u-space)); font-size: var(--text-row); }
 .ui-recorder-dot { width: calc(0.375 * var(--u-space)); height: calc(0.375 * var(--u-space)); flex: none; border-radius: var(--radius-round); background: var(--destructive); animation: ui-recorder-pulse 1.2s ease-in-out infinite; }
 @keyframes ui-recorder-pulse { 50% { opacity: .35; } }
 @media (prefers-reduced-motion: reduce) { .ui-recorder-dot { animation: none; } }
@@ -648,7 +657,7 @@
 .ui-setting-details ol { padding-left: var(--u-space); }
 .ui-setting-details code { font: var(--text-caption) var(--font-data); }
 .ui-setting-wide { display: flex; flex-direction: column; gap: calc(0.5 * var(--u-space)); padding: 2px calc(0.5 * var(--u-space)) calc(0.5 * var(--u-space)); }
-.ui-setting-wide > .ui-textarea { min-height: calc(6 * var(--u-space)); border: 1px solid var(--tint); border-radius: var(--radius-control); background: var(--well); padding: calc(0.5 * var(--u-space)) calc(0.75 * var(--u-space)); font-size: var(--text-row); line-height: 1.5; }
+.ui-setting-wide > .ui-textarea { min-height: calc(6 * var(--u-space)); font-size: var(--text-row); line-height: 1.5; }
 .ui-setting-wide > .ui-textarea:focus { border-color: color-mix(in oklch, var(--foreground), transparent 70%); }
 .ui-setting-loading { display: flex; align-items: center; gap: var(--row-gap); padding: calc(0.5 * var(--u-space)); color: var(--muted-foreground); font-size: var(--text-row); }
 /* Progress: the slider's track and fill. */
