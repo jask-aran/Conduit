@@ -81,8 +81,9 @@ const On = (props: { where: Column; children: JSX.Element }) => props.where === 
   ? <div class="g-form-density" data-density={props.where}>{props.children}</div>
   : props.where === "frost" ? <Frost class="g-surface g-form-surface">{props.children}</Frost>
   : <div class="g-surface g-form-surface" data-surface={props.where}>{props.children}</div>;
-export function FormTable(props: { rows: FormRow[]; on: Column[] }) {
-  const columns = { "grid-template-columns": `300px repeat(${props.on.length}, minmax(0, 1fr))` };
+/** widths: every column's, the form's first (a phone column a phone wide, for what fills its width). */
+export function FormTable(props: { rows: FormRow[]; on: Column[]; widths?: string[] }) {
+  const columns = { "grid-template-columns": props.widths?.join(" ") ?? `300px repeat(${props.on.length}, minmax(0, 1fr))` };
   return <div class="g-scale g-forms">
     <div class="g-scale-head" style={columns}><span>Form</span><For each={props.on}>{(where) => <span>{where[0]!.toUpperCase() + where.slice(1)}</span>}</For></div>
     <For each={props.rows}>{(row) => <div class="g-scale-row" style={columns}>

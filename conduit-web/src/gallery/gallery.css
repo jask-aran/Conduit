@@ -316,5 +316,6 @@ html, body { background: var(--frame, #08090a); color: var(--foreground); }
 .g-form-code { width: fit-content; margin-top: 4px; border-radius: 4px; background: var(--border); padding: 1px 5px; color: var(--foreground); font: 10.5px/1.4 ui-monospace, monospace; }
 .g-form-tokens { font: 10.5px/1.45 ui-monospace, monospace !important; }
 .g-forms .g-scale-head, .g-forms .g-scale-row { grid-template-columns: 300px repeat(2, minmax(0, 1fr)); }
-.g-form-density { display: grid; min-width: 0; place-items: center; padding: 8px; font-size: 13px; }
+.g-form-density { display: grid; min-width: 0; grid-template-columns: minmax(0, 1fr); place-items: center; padding: 8px; font-size: 13px; }
 .g-card-scene { display: grid; width: 500px; max-width: 100%; justify-items: center; }
+.g-inuse-col[data-density="phone"] .g-card-scene { width: 380px; }
