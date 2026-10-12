@@ -81,6 +81,12 @@ function Canvas() {
       leaderBottom: `${frame.bottom - box.top + 12}px` };
   };
   const overlays: [OverlayView, string][] = [["leader", "Leader"], ["palette", "Command palette"], ["search", "Chat search"], ["settings", "Settings"]];
+  // The phone's overlays open full screen inside its frame; the leader is a desktop key.
+  const phoneOverlays = overlays.filter(([view]) => view !== "leader");
+  const [phoneOverlay, setPhoneOverlay] = createSignal<OverlayView | null>(null);
+  const phoneFrame = () => document.querySelector<HTMLIFrameElement>('iframe[title="Phone"]');
+  const openOnPhone = (view: OverlayView | null) => { setPhoneOverlay(view); phoneFrame()?.contentWindow?.postMessage({ galleryOverlay: view }, location.origin); };
+  addEventListener("message", (event) => { if (event.origin === location.origin && event.data?.galleryOverlayClosed) setPhoneOverlay(null); });
   // One family at a time, picked from the rail: Foundations (Controls among them), then the frosted families.
   const families = [...foundationFamilies, ...libraryFamilies];
   const stored = (() => { try { return localStorage.getItem("gallery:family"); } catch { return null; } })();
@@ -146,6 +152,9 @@ function Canvas() {
         <Show when={preview() === "desktop"}><div class="g-toggle" role="group" aria-label="Open over the desktop">
           <For each={overlays}>{([view, label]) => <button type="button" aria-pressed={overlay() === view} onClick={() => setOverlay(overlay() === view ? null : view)}>{label}</button>}</For>
         </div></Show>
+        <Show when={preview() === "phone"}><div class="g-toggle" role="group" aria-label="Open over the phone">
+          <For each={phoneOverlays}>{([view, label]) => <button type="button" aria-pressed={phoneOverlay() === view} onClick={() => openOnPhone(phoneOverlay() === view ? null : view)}>{label}</button>}</For>
+        </div></Show>
       </div>
       {/* Every view stays mounted once opened, so switching is instant: no frame reloads. */}
       <For each={views}>{(view) => <Show when={seen().has(view.key)}>
@@ -155,6 +164,16 @@ function Canvas() {
   </div>;
 }
 
+/** In the phone frame: the overlay the gallery opened, full screen over the chat; closing tells the gallery. */
+function PhoneOverlay() {
+  const [view, setView] = createSignal<OverlayView | null>(null);
+  addEventListener("message", (event) => { if (event.origin === location.origin && "galleryOverlay" in (event.data ?? {})) setView(event.data.galleryOverlay); });
+  const close = () => { setView(null); parent.postMessage({ galleryOverlayClosed: true }, location.origin); };
+  return <Show when={view()} keyed>{(open) => <div class="g-phone-overlay" data-density="phone" onKeyDown={(event) => { if (event.key === "Escape") close(); }}>
+    {overlayViews[open]({ close, phone: true })}
+  </div>}</Show>;
+}
+
 export function mount(frame: string | null) {
   const root = document.getElementById("root")!;
   applyFaces(document);
@@ -162,7 +181,7 @@ export function mount(frame: string | null) {
   try { localStorage.setItem("conduit:composer-surface", "frosted-live"); localStorage.setItem("conduit:phone-composer", "bar"); } catch { /* private window */ }
   // The phone screens, drawn with components v2, in a frame with a phone's root size and media rules.
   if (frame === "sidebar") { document.body.classList.add("g-solo-body"); render(() => <LibraryContext.Provider value={true}><SidebarScreen /></LibraryContext.Provider>, root); }
-  else if (frame) { document.body.classList.add("g-solo-body"); render(() => <LibraryContext.Provider value={true}><ChatScreen /></LibraryContext.Provider>, root); }
+  else if (frame) { document.body.classList.add("g-solo-body"); render(() => <LibraryContext.Provider value={true}><ChatScreen /><PhoneOverlay /></LibraryContext.Provider>, root); }
   else {
     render(() => <Canvas />, root);
     // The chat screens scroll themselves to their latest message as they

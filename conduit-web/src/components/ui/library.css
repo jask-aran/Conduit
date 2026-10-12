@@ -552,14 +552,44 @@
 .ui-overlay-page-head { display: flex; align-items: center; gap: calc(0.75 * var(--u-space)); margin-bottom: calc(0.75 * var(--u-space)); padding-left: calc(0.5 * var(--u-space)); }
 .ui-setting-group { display: flex; flex-direction: column; gap: 1px; }
 .ui-setting-group + .ui-setting-group { margin-top: calc(0.75 * var(--u-space)); border-top: 1px solid var(--tint); padding-top: calc(0.9375 * var(--u-space)); }
-.ui-setting-line { display: flex; min-height: calc(2.1875 * var(--u-space)); align-items: center; gap: calc(0.9375 * var(--u-space)); border-radius: var(--radius-control); padding: 2px calc(0.3125 * var(--u-space)) 2px calc(0.5 * var(--u-space)); font-size: var(--text-row); }
+/* At least a row's height: a finger's on a phone, as every row is there. */
+.ui-setting-line { display: flex; min-height: max(calc(2.1875 * var(--u-space)), var(--row-min)); align-items: center; gap: calc(0.9375 * var(--u-space)); border-radius: var(--radius-control); padding: 2px calc(0.3125 * var(--u-space)) 2px calc(0.5 * var(--u-space)); font-size: var(--text-row); }
 /* Focus anywhere in a row is the row's wash. */
 .ui-setting-line:is(:hover, :focus-within) { background: var(--tint); }
 .ui-setting-line > span:first-child { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ui-setting-line > span:first-child > small { margin-left: calc(0.5 * var(--u-space)); color: var(--muted-foreground); font-size: inherit; }
 /* Every row's control sits in one column of one width, so they line up. */
-.ui-setting-control { display: inline-flex; width: var(--setting-control-width, calc(18.75 * var(--u-space))); max-width: 50%; flex: none; align-items: center; justify-content: flex-end; }
+.ui-setting-control { display: inline-flex; width: var(--setting-control-width, calc(18.75 * var(--u-space))); max-width: 50%; flex: none; align-items: center; justify-content: flex-end; gap: calc(0.25 * var(--u-space)); }
 .ui-setting-control > .ui-input:not([data-bare]) { width: 100%; }
+.ui-setting-control > .ui-seg { width: 100%; }
+/* What a line holds besides a field: a value read, not set; a link out; a note or details under
+   it; something at the page's width; waiting. All in the row's voice, muted, on the surface's tint. */
+.ui-setting-value { min-width: 0; overflow: hidden; color: var(--muted-foreground); text-overflow: ellipsis; white-space: nowrap; }
+.ui-setting-value[data-mono] { font: var(--weight-rest) var(--text-caption) var(--font-data); }
+.ui-setting-link { border-radius: var(--radius-control); padding: 2px calc(0.5 * var(--u-space)); color: var(--muted-foreground); text-decoration: none; }
+.ui-setting-link:is(:hover, :focus-visible) { outline: none; color: var(--foreground); }
+.ui-setting-note { margin: 0; padding: 0 calc(0.5 * var(--u-space)) calc(0.5 * var(--u-space)); color: var(--muted-foreground); font-size: var(--text-caption); }
+.ui-setting-note[data-tone="error"] { color: var(--destructive); }
+.ui-setting-details { padding: 0 calc(0.5 * var(--u-space)) calc(0.5 * var(--u-space)); color: var(--muted-foreground); font-size: var(--text-caption); line-height: 1.5; }
+.ui-setting-details > summary { width: fit-content; list-style: none; cursor: pointer; }
+.ui-setting-details > summary::-webkit-details-marker { display: none; }
+.ui-setting-details > summary:is(:hover, :focus-visible) { outline: none; color: var(--foreground); }
+.ui-setting-details :is(ol, p) { margin: calc(0.25 * var(--u-space)) 0 0; }
+.ui-setting-details ol { padding-left: var(--u-space); }
+.ui-setting-details code { font: var(--text-caption) var(--font-data); }
+.ui-setting-wide { display: flex; flex-direction: column; gap: calc(0.5 * var(--u-space)); padding: 2px calc(0.5 * var(--u-space)) calc(0.5 * var(--u-space)); }
+.ui-setting-wide > .ui-textarea { min-height: calc(6 * var(--u-space)); border: 1px solid var(--tint); border-radius: var(--radius-control); background: var(--well); padding: calc(0.5 * var(--u-space)) calc(0.75 * var(--u-space)); font-size: var(--text-row); line-height: 1.5; }
+.ui-setting-wide > .ui-textarea:focus { border-color: color-mix(in oklch, var(--foreground), transparent 70%); }
+.ui-setting-loading { display: flex; align-items: center; gap: var(--row-gap); padding: calc(0.5 * var(--u-space)); color: var(--muted-foreground); font-size: var(--text-row); }
+/* Progress: the slider's track and fill. */
+.ui-progress { width: 100%; height: 4px; appearance: none; -webkit-appearance: none; overflow: hidden; border: 0; border-radius: var(--radius-round); background: var(--tint); }
+.ui-progress::-webkit-progress-bar { background: var(--tint); }
+.ui-progress::-webkit-progress-value { border-radius: var(--radius-round); background: var(--foreground); }
+.ui-progress::-moz-progress-bar { border-radius: var(--radius-round); background: var(--foreground); }
+/* A spinner: a ring in the surface's tint, a quarter of it in the text colour, turning. */
+.ui-spinner { width: var(--u-icon); height: var(--u-icon); flex: none; border: 1.5px solid var(--tint); border-top-color: var(--foreground); border-radius: var(--radius-round); animation: ui-spin 800ms linear infinite; }
+@keyframes ui-spin { to { transform: rotate(1turn); } }
+@media (prefers-reduced-motion: reduce) { .ui-spinner { animation-duration: 2400ms; } }
 
 /* Tabular figures wherever numbers tick or line up. */
 :is(.ui-keycap, .ui-choice-key, .ui-hints, .ui-overlay-hints, .ui-chip-copy small, .ui-seg small, .ui-slider-value) { font-variant-numeric: tabular-nums; }
