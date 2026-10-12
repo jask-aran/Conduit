@@ -13,16 +13,45 @@ export const px = (value: string) => value.replace(/(\d+\.\d+)px/g, (_, n: strin
  * on it, and what it computes to beside the number -- at desktop and phone.
  */
 export interface Mark { selector: string; label: string; read: (el: HTMLElement) => string }
-export function InUse(props: { scene: () => JSX.Element; marks: Mark[]; density?: boolean }) {
+/** A box of space drawn over a scene: a container's padding (edge) or the gap between two of its parts. */
+type Band = { x: number; y: number; w: number; h: number; kind: "edge" | "gap"; label: string };
+/** The bands of each container in the scene: its padding all round, and the gap between each pair of its children. */
+const bandsOf = (scene: Element, selectors: string[]): Band[] => {
+  const box = scene.getBoundingClientRect();
+  const bands: Band[] = [];
+  const add = (x: number, y: number, w: number, h: number, kind: Band["kind"]) => {
+    if (w < 0.5 || h < 0.5) return;
+    bands.push({ x: x - box.left, y: y - box.top, w, h, kind, label: px(`${w > h ? h : w}px`) });
+  };
+  for (const el of selectors.flatMap((selector) => [...scene.querySelectorAll(selector)])) {
+    // Inside its border: the edge is the padding alone.
+    const s = getComputedStyle(el); const line = parseFloat(s.borderTopWidth); const outer = el.getBoundingClientRect();
+    const r = new DOMRect(outer.left + line, outer.top + line, outer.width - 2 * line, outer.height - 2 * line);
+    const [t, rt, b, l] = [s.paddingTop, s.paddingRight, s.paddingBottom, s.paddingLeft].map(parseFloat);
+    add(r.left, r.top, r.width, t!, "edge"); add(r.left, r.bottom - b!, r.width, b!, "edge");
+    add(r.left, r.top + t!, l!, r.height - t! - b!, "edge"); add(r.right - rt!, r.top + t!, rt!, r.height - t! - b!, "edge");
+    const kids = [...el.children].map((child) => child.getBoundingClientRect()).filter((rect) => rect.width && rect.height);
+    for (let i = 1; i < kids.length; i++) {
+      const a = kids[i - 1]!, c = kids[i]!;
+      if (c.top >= a.bottom - 0.5) add(r.left + l!, a.bottom, r.width - l! - rt!, c.top - a.bottom, "gap");
+      else add(a.right, Math.min(a.top, c.top), c.left - a.right, Math.max(a.bottom, c.bottom) - Math.min(a.top, c.top), "gap");
+    }
+  }
+  return bands;
+};
+/** spacing: containers whose padding and gaps are drawn over the scene, each band labelled with its size. */
+export function InUse(props: { scene: () => JSX.Element; marks: Mark[]; density?: boolean; spacing?: string[] }) {
   const columns = props.density === false ? [undefined] : (["desktop", "phone"] as const);
   const [values, setValues] = createSignal<string[][]>(columns.map(() => []));
   const Scene = (scene: { column: number; density?: "desktop" | "phone" }) => {
     const [spots, setSpots] = createSignal<({ x: number; y: number; to: number } | null)[]>([]);
+    const [bands, setBands] = createSignal<Band[]>([]);
     let el!: HTMLDivElement;
     const measure = () => requestAnimationFrame(() => {
       const box = el.getBoundingClientRect();
       const found = props.marks.map((mark) => el.querySelector<HTMLElement>(mark.selector));
       // Each number in the gutter left of the scene, level with what it marks, a line out to it; marks on one line queue leftward.
+      if (props.spacing) setBands(bandsOf(el, props.spacing));
       const placed: { x: number; y: number; to: number }[] = [];
       setSpots(found.map((node) => {
         if (!node) return null;
@@ -43,6 +72,7 @@ export function InUse(props: { scene: () => JSX.Element; marks: Mark[]; density?
     return <div class="g-inuse-col" data-density={scene.density}>
       {scene.density && <small class="g-inuse-head">{scene.density === "desktop" ? "Desktop" : "Phone"}</small>}
       <div ref={el} class="g-inuse-scene">{props.scene()}
+        <For each={bands()}>{(band) => <i class="g-band" data-kind={band.kind} style={{ left: `${band.x}px`, top: `${band.y}px`, width: `${band.w}px`, height: `${band.h}px` }}><small>{band.label}</small></i>}</For>
         <For each={spots()}>{(spot, index) => spot && <>
           <i class="g-lead" style={{ left: `${spot.x + 8}px`, top: `${spot.y}px`, width: `${Math.max(0, spot.to - spot.x - 8)}px` }} />
           <span class="g-badge" style={{ left: `${spot.x}px`, top: `${spot.y}px` }}>{index() + 1}</span>

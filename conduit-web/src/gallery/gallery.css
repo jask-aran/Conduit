@@ -319,3 +319,8 @@ html, body { background: var(--frame, #08090a); color: var(--foreground); }
 .g-form-density { display: grid; min-width: 0; grid-template-columns: minmax(0, 1fr); place-items: center; padding: 8px; font-size: 13px; }
 .g-card-scene { display: grid; width: 500px; max-width: 100%; justify-items: center; }
 .g-inuse-col[data-density="phone"] .g-card-scene { width: 380px; }
+/* Spacing drawn over an In use scene: a container's padding (edge) and the gaps between its parts, each with its size. */
+.g-band { position: absolute; z-index: 3; display: grid; place-items: center; overflow: visible; pointer-events: none; }
+.g-band[data-kind="edge"] { background: oklch(0.7 0.16 350 / 14%); }
+.g-band[data-kind="gap"] { background: oklch(0.75 0.14 150 / 18%); }
+.g-band small { color: #fff; font: 600 9px/1 ui-monospace, monospace; text-shadow: 0 0 3px #000, 0 0 3px #000; white-space: nowrap; }

@@ -187,23 +187,23 @@
 .ui-keycap-remove svg { width: calc(0.625 * var(--u-icon)); height: calc(0.625 * var(--u-icon)); }
 .ui-keycap[data-editable] > button:is(:hover, :focus-visible) { outline: 0; background: var(--tint); color: var(--foreground); }
 
-/* Card: the menu's container at dialog padding. */
-/* Card: a dialog's width (30 units: 384px on desktop, 480 on a phone, as the app's), never wider than its room. */
-.ui-card { display: flex; width: min(100%, calc(30 * var(--u-space))); flex-direction: column; gap: calc(1 * var(--u-space)); border-radius: var(--frost-radius); padding: calc(1.25 * var(--u-space)); }
-.ui-card > h3 { margin: 0; font-size: var(--text-body); font-weight: var(--weight-strong); }
-.ui-card > p { margin: calc(-0.5 * var(--u-space)) 0 0; color: var(--muted-foreground); font-size: var(--text-row); }
-/* A card's text runs down one edge: a field hangs into the padding by its own inset and line, so
-   what is typed lines up with the title and detail above it. */
-.ui-card > :is(.ui-input, .ui-seg) { width: calc(100% + 2 * (0.75 * var(--u-space) + 1px)); margin-inline: calc(-0.75 * var(--u-space) - 1px); }
-.ui-card > * { min-width: 0; }
+/* Card: a dialog, at most 30 units wide (384px on desktop) and never wider than its room. It
+   declares its spacing and every part sits on it: --card-edge all round (every box, a field
+   or the actions, meets that edge), --card-gap between its parts, --card-pair from the title to its
+   detail. Text is trimmed to its glyphs, so a gap is the space you see. A phone's card is the
+   screen's width, edge and gap a step tighter, not the desktop's scaled up. */
+.ui-card { --card-edge: calc(1.25 * var(--u-space)); --card-gap: var(--u-space); --card-pair: calc(0.5 * var(--u-space));
+  display: flex; width: min(100%, calc(30 * var(--u-space))); flex-direction: column; gap: var(--card-gap); border-radius: var(--frost-radius); padding: var(--card-edge); }
+:is([data-density="phone"] .ui-card, .ui-card[data-density="phone"]) { --card-edge: var(--u-space); --card-gap: calc(0.75 * var(--u-space)); width: 100%; }
+@media (--conduit-phone-layout) { .ui-card:not([data-density="desktop"]) { --card-edge: var(--u-space); --card-gap: calc(0.75 * var(--u-space)); width: 100%; } }
+.ui-card > * { min-width: 0; margin: 0; }
+.ui-card > :is(h3, p) { text-box: trim-both cap alphabetic; }
+.ui-card > h3 { font-size: var(--text-body); font-weight: var(--weight-strong); }
+.ui-card > p { color: var(--muted-foreground); font-size: var(--text-row); }
+.ui-card > h3 + p { margin-top: calc(var(--card-pair) - var(--card-gap)); }
 .ui-card > pre { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* Actions share one width, the widest's, at the card's right edge. */
 .ui-card-actions { display: grid; width: fit-content; grid-auto-columns: 1fr; grid-auto-flow: column; gap: calc(0.5 * var(--u-space)); margin-left: auto; }
-/* On a phone a card is the screen's width (inside the overlay inset), not the desktop's scaled up:
-   a unit's padding, three quarters between its parts. */
-:is([data-density="phone"] .ui-card, .ui-card[data-density="phone"]) { width: 100%; gap: calc(0.75 * var(--u-space)); padding: var(--u-space); }
-:is([data-density="phone"] .ui-card, .ui-card[data-density="phone"]) > p { margin-top: calc(-0.375 * var(--u-space)); }
-@media (--conduit-phone-layout) { .ui-card:not([data-density="desktop"]) { width: 100%; gap: calc(0.75 * var(--u-space)); padding: var(--u-space); } }
 
 .ui-bubble { width: fit-content; max-width: min(calc(40 * var(--u-type)), 88cqw); margin-left: auto; border-radius: var(--radius-message); padding: calc(0.625 * var(--u-type)) calc(0.8125 * var(--u-type)); font-size: var(--text-body); line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
 
