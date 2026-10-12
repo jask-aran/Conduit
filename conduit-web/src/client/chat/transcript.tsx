@@ -228,7 +228,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
   let thread!: HTMLDivElement;
   let latestButton: HTMLButtonElement | undefined;
   let cancelEditButton: HTMLButtonElement | undefined;
-  // The gallery's previews draw these two as the library's RiderButtons; the app keeps its own.
+  // The gallery's previews draw these two as the library's RiderButtons, and the user's message as its Bubble; the app keeps its own.
   const library = useLibrary();
   let scheduleLatestButtonAnchor = () => {};
   let panelMotion: ReturnType<typeof mountTranscriptPanelMotion> | null = null;
@@ -1265,7 +1265,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
           return <div ref={row} data-slot="message-scroller-item" data-message-id={message().id} data-arrived={arrive ? "" : undefined} style={arrive}>
             <article data-slot="message" data-align={user() ? "end" : "start"} class={user() ? "message-user" : "message-assistant"}>
               <div data-slot="message-content" data-incremark={!user() && rendererUsesTypewriter() ? "" : undefined}>
-                <Show when={!user() || review().text}><div data-slot="bubble" data-align={user() ? "end" : "start"} data-error={failed() ? "true" : undefined} data-editing={props.chat.editingEntryId() === message().id ? "true" : "false"} data-composer-surface={user() ? composerSurface() : undefined} class={user() ? "bubble bubble-user composer-surface-material" : "bubble bubble-assistant"}>
+                <Show when={!user() || review().text}><div data-slot="bubble" data-align={user() ? "end" : "start"} data-error={failed() ? "true" : undefined} data-editing={props.chat.editingEntryId() === message().id ? "true" : "false"} data-composer-surface={user() ? composerSurface() : undefined} class={user() ? (library ? "ui-frost ui-bubble" : "bubble bubble-user composer-surface-material") : "bubble bubble-assistant"}>
                   <div data-slot="bubble-content">
                     <Show when={user()} fallback={<>
                       <Show when={message().content}>
