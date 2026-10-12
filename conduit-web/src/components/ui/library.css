@@ -198,8 +198,9 @@
 @media (--conduit-phone-layout) { .ui-card:not([data-density="desktop"]) { --card-edge: var(--u-space); --card-gap: calc(0.75 * var(--u-space)); width: 100%; } }
 .ui-card > * { min-width: 0; margin: 0; }
 .ui-card > :is(h3, p) { text-box: trim-both cap alphabetic; }
-.ui-card > h3 { font-size: var(--text-body); font-weight: var(--weight-strong); }
-.ui-card > p { color: var(--muted-foreground); font-size: var(--text-row); }
+/* Its title is the Heading role, its detail the Caption role (Type). */
+.ui-card > h3 { color: var(--foreground); font-size: var(--text-body); font-weight: var(--weight-strong); }
+.ui-card > p { color: var(--muted-foreground); font-size: var(--text-caption); font-weight: var(--weight-rest); }
 .ui-card > h3 + p { margin-top: calc(var(--card-pair) - var(--card-gap)); }
 .ui-card > pre { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* Actions share one width, the widest's, at the card's right edge. */
