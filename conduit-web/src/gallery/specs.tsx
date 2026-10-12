@@ -1,5 +1,5 @@
-import { For, createSignal, onCleanup, onMount, type JSX } from "solid-js";
-import { Frost } from "@/components/ui";
+import { For, Show, createSignal, onCleanup, onMount, type JSX } from "solid-js";
+import { Button, Frost, type Motion } from "@/components/ui";
 
 /*
  * The gallery's ways of showing a piece: In use (a scene, each place numbered, what it computes
@@ -128,3 +128,20 @@ export function FormTable(props: { rows: FormRow[]; on: Column[]; widths?: strin
   </div>;
 }
 export const form = (name: string, use: string, sample: FormRow["sample"], code?: string, tokens?: string): FormRow => ({ name, use, sample, code, tokens });
+
+/** A token's value in ms, read from :root. */
+const msOf = (name: string) => { const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim(); return parseFloat(v) * (v.endsWith("ms") ? 1 : 1000); };
+/**
+ * A piece's own moves, played (each piece draws its moves; Foundations · Motion holds the tokens). Arrive draws it
+ * again entering; each of `leaves` plays that leaving, then it arrives again.
+ */
+export function Replay(props: { leaves?: Motion[]; children: (motion: () => Motion | undefined) => JSX.Element }) {
+  const [run, setRun] = createSignal(1), [motion, setMotion] = createSignal<Motion | undefined>(undefined), [shown, setShown] = createSignal(true);
+  const arrive = () => { setMotion("entering"); setShown(true); setRun(run() + 1); };
+  const leave = (move: Motion) => { setMotion(move); setTimeout(() => { setShown(false); setTimeout(arrive, 400); }, msOf("--duration-quick")); };
+  return <div class="g-replay">
+    <div class="g-replay-bar"><Button size="sm" variant="ghost" outline onClick={arrive}>Arrive</Button>
+      <For each={props.leaves ?? []}>{(move) => <Button size="sm" variant="ghost" outline onClick={() => leave(move)}>{move === "removing" ? "Remove" : "Leave"}</Button>}</For></div>
+    <div class="g-replay-stage"><Show when={shown() && run()} keyed>{(_) => props.children(motion)}</Show></div>
+  </div>;
+}
