@@ -60,7 +60,7 @@
   --radius-pop: var(--radius-lg); --radius-bubble: calc(0.9375 * var(--u-space)); --radius-xl: calc(1 * var(--u-space));
   --radius-composer: calc(1.375 * var(--u-space)); --radius-pill: 999px;
   --frost-radius: var(--radius-pop); --row-radius: var(--radius-md);
-  --pill-solo-icon: calc(1.125 * var(--u-icon));
+  --pill-solo-icon: calc(1.125 * var(--u-icon)); --pill-field-radius: var(--radius-composer);
 }
 [data-density] { font-family: var(--font-sans); font-size: calc(var(--u-type) * 0.875); }
 :root {
@@ -93,7 +93,7 @@
    groups, the sidebar's toggle and the composer's buttons. One icon is a
    circle; more share a capsule, each slot a pill-shaped target 1px from its
    edge. Its tokens size every member. */
-:root { --pill-size: 44px; --pill-slot: 34px; --pill-slot-height: 40px; --pill-gap: 2px; --pill-field-radius: var(--radius-composer); --pill-field-pad: 14px; }
+:root { --pill-size: 44px; --pill-slot: 34px; --pill-slot-height: 40px; --pill-gap: 2px; --pill-field-pad: 14px; }
 .ui-pill { display: inline-flex; height: var(--pill-size); align-items: center; gap: var(--pill-gap); padding: 0 1px; border-radius: var(--radius-pill); }
 .ui-pill > button { display: grid; width: var(--pill-slot); height: var(--pill-slot-height); place-items: center; border: 0; border-radius: var(--radius-pill); background: transparent; color: inherit; }
 .ui-pill[data-solo] { width: var(--pill-size); justify-content: center; padding: 0; }
