@@ -1,7 +1,7 @@
 import { ArrowDownIcon, PanelLeftIcon, MessageSquarePlusIcon, EllipsisIcon, CameraIcon, KeyboardIcon, MicIcon, ArrowUpIcon, ChevronDownIcon, CircleIcon, FileTextIcon, ClockIcon, Maximize2Icon, SendHorizontalIcon, XIcon, CheckIcon } from "lucide-solid";
 import { createSignal, For, onCleanup, onMount, Show, type JSX } from "solid-js";
 import { PanelRightIcon, ClipboardCopyIcon, Columns2Icon, CopyIcon, FolderIcon, FolderInputIcon, LayoutDashboardIcon, MenuIcon, MonitorIcon, PaperclipIcon, PencilIcon, PinIcon, PlusIcon, QrCodeIcon, RefreshCwIcon, SearchIcon, ShareIcon, ShieldCheckIcon, SquarePenIcon, TerminalIcon, Trash2Icon } from "lucide-solid";
-import { SettingRecorder, Field, Leader, Crumbs, Spotlight, OverlayHead, Match, Choices, OverlayBar, OverlayHints, OverlayList, OverlayPage, OverlayRail, OverlaySplit, Glance, GlanceHead, GlancePrompt, GlanceTurn, GlanceAnswer, GlanceEmpty, RiderButton, Overlay, Scrim, SettingGroup, SettingLine, SettingValue, SettingLink, SettingNote, SettingDetails, SettingWide, SettingLoading, Progress, Keycap, NavGroup, NavRow, Segmented, SelectTrigger, Bubble, Button, Card, Chip, Choice, ComposerField, DesktopComposer, Line, TextArea, Rider, RiderActions, RiderTitle, Toolbar, Frost, Input, Item, Menu, PillButton, PillField, PillGroup, PillSwitch, HeadingSection, SearchSection, Section, Slider } from "@/components/ui";
+import { Toast, Toaster, SettingRecorder, Field, Leader, Crumbs, Spotlight, OverlayHead, Match, Choices, OverlayBar, OverlayHints, OverlayList, OverlayPage, OverlayRail, OverlaySplit, Glance, GlanceHead, GlancePrompt, GlanceTurn, GlanceAnswer, GlanceEmpty, RiderButton, Overlay, Scrim, SettingGroup, SettingLine, SettingValue, SettingLink, SettingNote, SettingDetails, SettingWide, SettingLoading, Progress, Keycap, NavGroup, NavRow, Segmented, SelectTrigger, Bubble, Button, Card, Chip, Choice, ComposerField, DesktopComposer, Line, TextArea, Rider, RiderActions, RiderTitle, Toolbar, Frost, Input, Item, Menu, PillButton, PillField, PillGroup, PillSwitch, HeadingSection, SearchSection, Section, Slider } from "@/components/ui";
 import { Switch } from "../client/settings/settings-controls";
 import { HarnessMark } from "../client/harness-brand";
 import { PlaceGlyph } from "../client/chat/place-picker";
@@ -283,6 +283,34 @@ const IN_APP: FormRow[] = [
   form("Workspace identity", "a short mark or an icon, then its colour", () => <Card size="wide" close title="Workspace identity" actions={<Button outline>Save</Button>}><Segmented label="Kind" value="mark" options={[{ value: "mark", label: "Mark" }, { value: "icon", label: "Icon" }]} onChange={() => {}} /><Field label="Mark"><Input value="JP" /></Field></Card>, "main.tsx · project/dashboard.tsx (WorkspaceAppearanceEditor)", status("the icon picker and colour swatches")),
 ];
 
+/* Toast: measured in use, each kind and form at each density, and every toast the app raises. */
+const toastScene = () => <div class="g-card-scene"><Toaster><Toast kind="info" action={{ label: "Open workspace" }}>This folder is the Japan workspace.</Toast><Toast kind="success">Renamed chat to Trip notes</Toast></Toaster></div>;
+const TOAST_MARKS: Mark[] = [
+  { selector: ".ui-toast", label: "raised frost, --radius-surface; at most 25 units wide (a phone: its width)", read: (el) => `${rounding(el)} · ${px(`${el.getBoundingClientRect().width}px`)} wide` },
+  { selector: ".ui-toast-icon", label: "its kind: a glyph in the state's colour, on the first line", read: (el) => fg(el) },
+  { selector: ".ui-toast-text", label: "the sentence: the Row role, wrapping under its own start", read: (el) => typeOf(el) },
+  { selector: ".ui-toast .ui-button[data-outline]", label: "an action, when there is one thing to do: ghost outline, sm, under the sentence", read: (el) => `${px(`${el.getBoundingClientRect().height}px`)} tall` },
+  { selector: ".ui-toast-close", label: "dismiss: a ghost ×, muted", read: (el) => px(`${el.getBoundingClientRect().width}px`) },
+  { selector: ".ui-toaster", label: "the stack: newest at the edge, 0.375 units apart", read: (el) => px(getComputedStyle(el).rowGap) },
+];
+const TOASTS: FormRow[] = [
+  form("success", "something you did, done", () => <Toast kind="success">Renamed chat to Trip notes</Toast>, '<Toast kind="success">', "glyph --live"),
+  form("info", "worth knowing, nothing wrong", () => <Toast kind="info">Workspace files updated</Toast>, '<Toast kind="info">', "glyph --muted-foreground"),
+  form("warning", "it went ahead another way", () => <Toast kind="warning">gpt-5 is unavailable. Using gpt-5-mini.</Toast>, '<Toast kind="warning">', "glyph --warn"),
+  form("error", "it did not happen: an alert", () => <Toast kind="error">Could not reach the server to update.</Toast>, '<Toast kind="error">', "glyph --destructive · role alert"),
+  form("action", "one thing to do about it", () => <Toast kind="error" action={{ label: "Ask Runtime" }}>The model stopped: context window exceeded.</Toast>, "<Toast action={{ label, onClick }}>", "Button ghost outline sm, under the sentence"),
+  form("long", "a path or names wrap; nothing is cut", () => <Toast kind="success">Moved src/client/chat/attachment-strip.tsx to src/client/composer/</Toast>, "<Toast>", "overflow-wrap anywhere"),
+];
+const TOASTS_IN_APP: FormRow[] = [
+  form("Files", "the workspace's own file actions, and changes it notices", () => <Toaster><Toast kind="info">Workspace files updated</Toast><Toast kind="success">Deleted notes/draft.md</Toast></Toaster>, "workspace/workspace-files.tsx · workspace-poll.ts", "success, info · no action"),
+  form("Copied and renamed", "what a menu action did", () => <Toast kind="success">3 chat links copied</Toast>, "main.tsx", "success · no action"),
+  form("Model fallbacks", "a model or thinking level that is gone, and what replaced it; one at a time (id)", () => <Toast kind="warning">This chat's previous model gpt-5 is no longer scoped. It resumed with gpt-5-mini.</Toast>, "main.tsx · state/model-settings.ts", "warning, info · 6–8 s · deduped by id"),
+  form("Request failed", "a turn's error, with a way to ask about it", () => <Toast kind="error" action={{ label: "Ask Runtime" }}>The model stopped: context window exceeded.</Toast>, "main.tsx (diagnostic)", "error · 12 s · action"),
+  form("A folder that is a workspace", "an offer: open it", () => <Toast kind="info" action={{ label: "Open workspace" }}>This folder is the Japan workspace.</Toast>, "main.tsx", "info · action · deduped by id"),
+  form("Panes and layout", "why a pane could not open or move", () => <Toast kind="info">There is no room for another pane.</Toast>, "main.tsx", "info · no action"),
+  form("Settings and voice", "a setting not saved, a microphone gone", () => <Toast kind="error">Voice not saved: the selected microphone is no longer available.</Toast>, "settings/settings-core.tsx · chat/composer.tsx", "error · no action"),
+];
+
 /** The app's overlays, assembled: drawn in their gallery cells and over the desktop preview. */
 export type OverlayView = "leader" | "palette" | "search" | "settings";
 type Lit = { top: string; left: string; width: string; height: string; radius?: string };
@@ -376,6 +404,17 @@ export const libraryFamilies: Family[] = [
     ] },
     { title: "In the app", note: "every dialog the app opens (FrostDialog), rebuilt from its real content with v2 alone: Card (wide, close), Field, Input, TextArea, Chip, Section and Items, the code preview, Segmented, Buttons. Under each, its file and what v2 still lacks for it", layout: "desktop", atoms: [
       lib("card-in-app", "FrostDialog · in the app", "both", "card", "client/**/FrostDialog", () => <FormTable rows={IN_APP} on={["desktop", "phone"]} widths={["minmax(0, 1fr)", "360px"]} stacked />, "row"),
+    ] },
+  ] },
+  { title: "Toast", note: "raised frost at the window's edge, one sentence about what just happened: its kind a glyph in the state's colour, an action under it when there is one thing to do, a × to dismiss. Desktop: bottom right, above nothing; a phone: the top, inside the overlay's inset, clear of the composer and keyboard", groups: [
+    { title: "In use", note: "two toasts stacked, measured", layout: "desktop", atoms: [
+      lib("toast-inuse", "Toast in use", "both", "toast", "Toaster > Toast kind action", () => <InUse scene={toastScene} marks={TOAST_MARKS} spacing={[".ui-toast"]} />, "row"),
+    ] },
+    { title: "Forms", note: "each kind and form at each density", layout: "desktop", atoms: [
+      lib("toast-forms", "Toast · forms × densities", "both", "toast", "Toast", () => <FormTable rows={TOASTS} on={["desktop", "phone"]} widths={["200px", "minmax(0, 1fr)", "360px"]} />, "row"),
+    ] },
+    { title: "In the app", note: "the app raises 42 toasts (solid-sonner): success 16, info 12, error 12, warning 2. One sentence each, never a second line; two carry an action; some set a longer duration or an id, so a repeat replaces the one showing. Grouped by where they come from", layout: "desktop", atoms: [
+      lib("toast-in-app", "Toast · in the app", "both", "toast", "client/** toast.*", () => <FormTable rows={TOASTS_IN_APP} on={["desktop", "phone"]} widths={["minmax(0, 1fr)", "360px"]} stacked />, "row"),
     ] },
   ] },
   { title: "Overlay", note: "raised frost over a dimmed page, the large surfaces: sections edge to edge, ruled off -- a Bar, a body (a List, a List beside an aside, or a Rail beside a Page), Hints. Its rows are the popover's Items at its scale; its Rail is the sidebar's NavGroups", groups: [
