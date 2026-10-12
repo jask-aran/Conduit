@@ -1,5 +1,7 @@
 @import "@fontsource-variable/inconsolata";
 /* Paper Mono (OFL, fonts/PaperMono-OFL.txt), shipped by the library: the section labels' face. */
+/* Meslo LG S Nerd Font Mono (fonts/MesloLGSNerdFont-LICENSE.txt), the terminal's default: Nerd Font glyphs. Fetched only once something draws in it. */
+@font-face { font-family: "Meslo Nerd Font Mono"; src: url("./fonts/MesloLGSNerdFontMono-Regular.ttf") format("truetype"); font-weight: 400; font-style: normal; font-display: swap; }
 @font-face { font-family: "Paper Mono"; src: url("./fonts/PaperMono-Variable.woff2") format("woff2"); font-weight: 100 800; font-style: normal; font-display: swap; }
 /*
  * The unified component library (gallery only until it replaces the app's
@@ -28,11 +30,12 @@
    measured sizes (rows ~1.8x, for a finger). Sizes below are written in desktop px over 12.8. */
 /* The faces, by role (Foundations · Fonts switches them; --font-sans, the main UI's, is styles.css's).
    Section labels take a mono the library ships (Paper Mono, above), so they look
-   the same on every system, the system's mono only as the fallback; keycaps and the leader's crumbs take it too. Data (meta, counts) takes --font-data, Paper Mono too by default. */
+   the same on every system, the system's mono only as the fallback; keycaps and the leader's crumbs take it too. Data (meta, counts) and code take Paper Mono too by default; the terminal, Meslo for its Nerd Font glyphs. */
 :root {
   --font-label: "Paper Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
   --font-data: "Paper Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
-  --font-code: ui-monospace, SFMono-Regular, Consolas, monospace;
+  --font-code: "Paper Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  --font-terminal: "Meslo Nerd Font Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
   --font-wordmark: "Conduit Wordmark", sans-serif;
 }
 :root, [data-density="desktop"] {
