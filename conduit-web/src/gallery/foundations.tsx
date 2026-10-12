@@ -270,36 +270,46 @@ const CONTROL_MARKS: Mark[] = (["ground", "frost"] as const).flatMap((where) => 
  * library on that surface, at the page's density.
  */
 type Where = "frame" | "ground" | "frost";
-interface FormRow { name: string; use: string; sample: () => JSX.Element }
+/** code: how to write it; tokens: what it reads, so a form can be named and tuned. */
+interface FormRow { name: string; use: string; code?: string; tokens?: string; sample: () => JSX.Element }
 const On = (props: { where: Where; children: JSX.Element }) => props.where === "frost"
   ? <Frost class="g-surface g-form-surface">{props.children}</Frost>
   : <div class="g-surface g-form-surface" data-surface={props.where}>{props.children}</div>;
 function FormTable(props: { rows: FormRow[]; on: Where[] }) {
-  const columns = { "grid-template-columns": `200px repeat(${props.on.length}, minmax(0, 1fr))` };
+  const columns = { "grid-template-columns": `300px repeat(${props.on.length}, minmax(0, 1fr))` };
   return <div class="g-scale g-forms">
     <div class="g-scale-head" style={columns}><span>Form</span><For each={props.on}>{(where) => <span>{where[0]!.toUpperCase() + where.slice(1)}</span>}</For></div>
     <For each={props.rows}>{(row) => <div class="g-scale-row" style={columns}>
-      <div class="g-scale-name"><strong>{row.name}</strong><small>{row.use}</small></div>
+      <div class="g-scale-name"><strong>{row.name}</strong><small>{row.use}</small>
+        {row.code && <code class="g-form-code">{row.code}</code>}{row.tokens && <small class="g-form-tokens">{row.tokens}</small>}</div>
       <For each={props.on}>{(where) => <On where={where}>{row.sample()}</On>}</For>
     </div>}</For>
   </div>;
 }
-const form = (name: string, use: string, sample: FormRow["sample"]): FormRow => ({ name, use, sample });
+const form = (name: string, use: string, sample: FormRow["sample"], code?: string, tokens?: string): FormRow => ({ name, use, sample, code, tokens });
 const BUTTONS: FormRow[] = [
-  form("primary", "the one action: Save, Send, Continue", () => <Button>Save</Button>),
-  form("primary · outline", "the main action, quieter: a line in the text colour", () => <Button outline>Continue</Button>),
-  form("secondary", "a second action beside primary: Cancel, Back. The surface's well inside its line (over frost, no well: a hairline)", () => <Button variant="secondary">Cancel</Button>),
-  form("ghost", "toolbars and headers: text until washed", () => <Button variant="ghost">Skip</Button>),
-  form("ghost · outline", "a hairline with nothing inside, on any surface", () => <Button variant="ghost" outline>Details</Button>),
-  form("destructive", "confirms what cannot be undone, in a dialog", () => <Button variant="destructive">Delete</Button>),
-  form("destructive · outline", "offers it, before the confirm: Delete chat on a settings page", () => <Button variant="destructive" outline>Delete chat</Button>),
-  form("icon", "an icon alone: ghost in toolbars and headers (icon-sm), secondary to stand out (icon)", () => <div class="g-row"><Button variant="ghost" size="icon-sm" aria-label="Copy"><CopyIcon /></Button><Button variant="ghost" size="icon-sm" aria-label="Share"><ShareIcon /></Button><Button variant="secondary" size="icon" aria-label="Add"><PlusIcon /></Button></div>),
+  form("primary", "the one action: Save, Send, Continue", () => <Button>Save</Button>, "<Button>", "fill --foreground · text --background"),
+  form("primary · outline", "the main action, quieter: a line in the text colour", () => <Button outline>Continue</Button>, "<Button outline>", "line and text --foreground · --tint washed"),
+  form("secondary", "a second action beside primary: Cancel, Back. The surface's well inside its line (over frost, no well: a hairline)", () => <Button variant="secondary">Cancel</Button>, '<Button variant="secondary">', "fill --well · line --tint · --tint washed"),
+  form("ghost", "toolbars and headers: text until washed", () => <Button variant="ghost">Skip</Button>, '<Button variant="ghost">', "nothing · --tint washed"),
+  form("ghost · outline", "a hairline with nothing inside, on any surface", () => <Button variant="ghost" outline>Details</Button>, '<Button variant="ghost" outline>', "line --tint · --tint washed"),
+  form("destructive", "confirms what cannot be undone, in a dialog", () => <Button variant="destructive">Delete</Button>, '<Button variant="destructive">', "fill --destructive · text --foreground"),
+  form("destructive · outline", "offers it, before the confirm: Delete chat on a settings page", () => <Button variant="destructive" outline>Delete chat</Button>, '<Button variant="destructive" outline>', "line and text --destructive · --destructive at 15% washed"),
+  form("icon", "an icon alone: ghost in toolbars and headers (icon-sm), secondary to stand out (icon)", () => <div class="g-row"><Button variant="ghost" size="icon-sm" aria-label="Copy"><CopyIcon /></Button><Button variant="ghost" size="icon-sm" aria-label="Share"><ShareIcon /></Button><Button variant="secondary" size="icon" aria-label="Add"><PlusIcon /></Button></div>, 'size="icon-sm" | "icon" | "icon-xs"', "1.875 / 2.25 / 1.5 units square · icon --u-icon"),
 ];
+const BUTTON_ALL = "every form: 2.25 units tall · corner --radius-control · --text-row at --weight-strong";
 const SEGMENTED: FormRow[] = [
-  form("text", "two to four named peers: a settings choice", () => <SegmentedText />),
-  form("counts", "a filter, each choice with its count: the dashboard's", () => <SegmentedCount />),
-  form("icons", "icons alone: the sidebar's sections", () => <SegmentedIcons />),
-  form("small", "at a bar's end: chat search's sort", () => <SmallSegmented />),
+  form("text", "two to four named peers: a settings choice", () => <SegmentedText />, "<Segmented options>", "track: line --tint, corner --radius-control · thumb --tint, corner --radius-control − 2px · labels --text-row --weight-lift, --muted-foreground, chosen --foreground"),
+  form("counts", "a filter, each choice with its count: the dashboard's", () => <SegmentedCount />, "options: { count }", "count --text-caption --font-data, --muted-foreground"),
+  form("icons", "icons alone: the sidebar's sections", () => <SegmentedIcons />, "<Segmented icons>", "2.25-unit squares · icon 1.125 × --u-icon"),
+  form("small", "at a bar's end: chat search's sort", () => <SmallSegmented />, 'size="sm"', "labels --text-caption · 1.40625 units tall"),
+];
+const KEYCAPS: FormRow[] = [
+  form("key", "a key or a chord beside a row, muted", () => <div class="g-row"><Keycap>Ctrl</Keycap><Keycap>K</Keycap></div>, "<Keycap>K</Keycap>", "1.125 units tall · corner 0.6 × --radius-control · fill --tint · --text-label --font-label --weight-lift · --muted-foreground"),
+  form("on the cursor", "on the row the cursor is on, white", () => <Menu><Section><Item keys={["Ctrl", "K"]} active>Command palette</Item></Section></Menu>, "<Item keys={[…]} active>", ".ui-row[data-highlighted] .ui-keycap · --foreground"),
+  form("leading", "the leader's key, at the row's start: white in the leader", () => <Menu class="ui-leader"><Section><Item keysFirst keys={["A"]}>Attach files</Item></Section></Menu>, "<Item keysFirst keys={[…]}> in <Leader>", ".ui-leader .ui-keys[data-first] · --foreground"),
+  form("editable", "Settings · Shortcuts: pressed to record another, × clears it", () => <Keycap label="Ctrl K" onClick={() => {}} onRemove={() => {}}>Ctrl K</Keycap>, "<Keycap onClick onRemove>", "1.5625 units tall · --text-caption · --foreground · × --muted-foreground behind a --tint line · each part --tint washed"),
+  form("pressable", "pressed to record another, not cleared here", () => <Keycap label="Ctrl Shift K" onClick={() => {}}>Ctrl Shift K</Keycap>, "<Keycap onClick>", "as editable, without the ×"),
 ];
 function SmallSegmented() { const [value, setValue] = createSignal("recent"); return <Segmented size="sm" label="Sort" value={value()} onChange={setValue} options={[{ value: "recent", label: "Recent" }, { value: "relevant", label: "Relevant" }]} />; }
 
@@ -453,11 +463,14 @@ export const foundationFamilies: Family[] = [
     { title: "In use", note: "the same controls on the ground and over frost: what each takes from the surface under it", layout: "desktop", atoms: [
       lib("controls-inuse", "Controls in use", "both", "control", "Button · Input · Segmented · Keycap on [data-surface]", () => <InUse scene={controlsScene} marks={CONTROL_MARKS} />, "row"),
     ] },
-    { title: "Button", note: "each form on each surface; outline draws primary, ghost or destructive as a line in its colour", staged: "density", atoms: [
-      lib("button-forms", "Button · forms × surfaces", "both", "control", "Button variant outline size", () => <FormTable rows={BUTTONS} on={["ground", "frost"]} />, "row"),
+    { title: "Button", note: "each form on each surface; outline draws primary, ghost or destructive as a line in its colour. Every form: 2.25 units tall, corner --radius-control, --text-row at --weight-strong", staged: "density", atoms: [
+      lib("button-forms", "Button · forms × surfaces", "both", "control", BUTTON_ALL, () => <FormTable rows={BUTTONS} on={["ground", "frost"]} />, "row"),
     ] },
     { title: "Segmented choice", note: "the frame too: the sidebar's sections", staged: "density", atoms: [
       lib("segmented-forms", "Segmented · forms × surfaces", "both", "control", "Segmented icons size", () => <FormTable rows={SEGMENTED} on={["frame", "ground", "frost"]} />, "row"),
+    ] },
+    { title: "Keycap", note: "each form on each surface", staged: "density", atoms: [
+      lib("keycap-forms", "Keycap · forms × surfaces", "desktop", "control", "Keycap · Item keys", () => <FormTable rows={KEYCAPS} on={["ground", "frost"]} />, "row"),
     ] },
     { title: "Fields", staged: true, atoms: [
       lib("input", "Input", "both", "control", "Input", () => <div class="g-field"><Input placeholder="Replace" /><Input value="Lorem ipsum file" /></div>),
@@ -467,7 +480,6 @@ export const foundationFamilies: Family[] = [
     { title: "Small", staged: true, atoms: [
       lib("slider", "Slider", "both", "control", "Slider", () => <div style={{ width: "240px" }}><Levels /></div>),
       lib("switch", "Switch", "both", "control", "Switch", () => <SwitchDemo />),
-      lib("keycap", "Keycap", "desktop", "control", "Keycap · onClick, onRemove: editable (Settings · Shortcuts)", () => <div class="g-field"><div class="g-row"><Keycap>Ctrl</Keycap><Keycap>K</Keycap><Keycap>Esc</Keycap></div><div class="g-row"><Keycap label="Ctrl K" onClick={() => {}} onRemove={() => {}}>Ctrl K</Keycap><Keycap label="Ctrl Shift K" onClick={() => {}}>Ctrl Shift K</Keycap></div></div>),
       lib("spinner", "Spinner", "both", "control", "Spinner", () => <Spinner />),
     ] },
   ] },

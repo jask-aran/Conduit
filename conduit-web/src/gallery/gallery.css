@@ -313,3 +313,6 @@ html, body { background: var(--frame, #08090a); color: var(--foreground); }
 .g-contents { display: contents; }
 /* A glance in its column, as the search overlay draws it. */
 .g-glance { width: 300px; padding: 16px; }
+.g-form-code { width: fit-content; margin-top: 4px; border-radius: 4px; background: var(--border); padding: 1px 5px; color: var(--foreground); font: 10.5px/1.4 ui-monospace, monospace; }
+.g-form-tokens { font: 10.5px/1.45 ui-monospace, monospace !important; }
+.g-forms .g-scale-head, .g-forms .g-scale-row { grid-template-columns: 300px repeat(2, minmax(0, 1fr)); }
