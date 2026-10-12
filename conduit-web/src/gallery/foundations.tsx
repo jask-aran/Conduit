@@ -205,6 +205,21 @@ const bar = (name: string) => () => <i class="g-bar-chip" style={{ width: `var($
 const corner = (name: string) => () => <Frost class="g-radius" style={{ "border-radius": `var(${name})` }} />;
 const tok = (name: string, use: string, read: TokenRow["read"], sample?: TokenRow["sample"]): TokenRow => ({ name, use, read, sample });
 
+const SIZES: TokenGroup[] = [{ title: "Six sizes, by role", rows: [
+  tok("--text-label", "the section label", length("--text-label")),
+  tok("--text-meta", "data and keys: meta, keycaps, counts, crumbs", length("--text-meta")),
+  tok("--text-caption", "details and hints: a heading's detail, the slider's value, key hints", length("--text-caption")),
+  tok("--text-row", "every row and control: rows, buttons, inputs, the segmented", length("--text-row")),
+  tok("--text-body", "messages, what you type, answers; titles too, at the strong weight", length("--text-body")),
+  tok("--text-heading", "a page's title (settings)", length("--text-heading")),
+] }];
+const weight = (name: string) => (cell: HTMLElement) => getComputedStyle(cell).getPropertyValue(name).trim();
+const WEIGHTS: TokenGroup[] = [{ title: "Four weights", rows: [
+  tok("--weight-rest", "text at rest, on the ground", weight("--weight-rest"), () => <span style={{ "font-weight": "var(--weight-rest)" }}>Rest</span>),
+  tok("--weight-lift", "a touch heavier: text over frost, which reads thinner there; small controls", weight("--weight-lift"), () => <span style={{ "font-weight": "var(--weight-lift)" }}>Lift</span>),
+  tok("--weight-strong", "headings and titles, buttons, values", weight("--weight-strong"), () => <span style={{ "font-weight": "var(--weight-strong)" }}>Strong</span>),
+  tok("--weight-current", "where you are; a match lit while typing", weight("--weight-current"), () => <span style={{ "font-weight": "var(--weight-current)" }}>Current</span>),
+] }];
 const COLOURS: TokenGroup[] = [
   { title: "Grounds", rows: [tok("--frame", "the frame: the sidebar, behind the panes", colour("--frame"), swatch("--frame")), tok("--background", "a pane", colour("--background"), swatch("--background"))] },
   { title: "Text", rows: [tok("--foreground", "text, and the current item", colour("--foreground"), swatch("--foreground")), tok("--muted-foreground", "muted: labels, meta, captions, icons at rest", colour("--muted-foreground"), swatch("--muted-foreground"))] },
@@ -336,6 +351,10 @@ export const foundationFamilies: Family[] = [
     { title: "Faces", note: "a token per role; the first option is library.css's default, a pick applies across the gallery", atoms: ROLES.map((role) => lib(`font-role${role.token}`, role.title, "both", "font", `${role.token} · library.css :root`, () => <Role role={role} />)) },
     { title: "Scale", note: "each role once, as DESIGN.md names it: drawn by the library at both densities, and what it computes to. Rest is grey, current white at 660 with no fill; text over frost is a touch heavier and brighter", layout: "desktop", atoms: [
       lib("type-scale", "Roles", "both", "type", "DESIGN.md Typography · library.css", () => <Scale />, "row"),
+    ] },
+    { title: "Sizes and weights", note: "the tokens Scale's roles are made of: every size and weight in the library is one of these", layout: "desktop", atoms: [
+      lib("type-sizes", "Sizes", "both", "type", "library.css --text-*", () => <TokenTable groups={SIZES} />, true),
+      lib("type-weights", "Weights", "both", "type", "library.css --weight-*", () => <TokenTable groups={WEIGHTS} density={false} />),
     ] },
     { title: "Icons", note: "Lucide at the type unit, so an icon is sized with the text beside it; muted at rest, its stroke a tenth of its size, an eighth when current (DESIGN.md Icons)", layout: "desktop", atoms: [
       lib("icon-inuse", "Icons in use", "both", "icon", "svg.lucide · --u-icon · --pill-solo-icon", () => <InUse scene={iconScene} marks={ICON_MARKS} />, "row"),

@@ -239,7 +239,7 @@ A handful of roles, each defined once in `styles.css`; components name a role ra
 - **meta** — muted Paper Mono beside a row's title, right-aligned, truncating before the title does.
 - **keycap** — small, in the section label's face (Paper Mono), in a rounded hairline square, muted; in the text colour on the cursor row or a clickable rail action.
 
-Two weights carry state: the resting weight and the **current weight** (semibold). Every surface uses the same pair; a match lit while typing is the one heavier step. Do not invent further sizes or weights per component. No serif except the Capacitor first-launch wordmark (legacy).
+Four weights, no others: **rest** (400); **lift** (500), a touch heavier for text over frost, which reads thinner there; **strong** (600), for titles, headings, buttons and values; and the **current weight** (660), which carries state with rest -- where you are, and a match lit while typing. Six sizes, one per role: label, meta, caption, row, body (messages, input, and titles at strong), heading. Do not invent further sizes or weights per component (components v2: `--text-*`, `--weight-*`). No serif except the Capacitor first-launch wordmark (legacy).
 
 # Layout
 
