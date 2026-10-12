@@ -157,10 +157,9 @@ const onFrost = (children: JSX.Element) => <Menu>{children}</Menu>;
 const onGround = (children: JSX.Element) => <div class="g-ground">{children}</div>;
 const TYPE_ROLES: TypeRole[] = [
   { name: "Section label", rule: "every section heading", selector: ".ui-title", sample: () => onFrost(<Section title="Section label"><Item>Row</Item></Section>) },
-  { name: "Row", rule: "list, menu, palette, settings rows; over frost", selector: ".ui-row:not([data-checked])", sample: () => onFrost(<Section><Item icon={<FolderIcon />}>Row at rest</Item></Section>) },
+  { name: "Row", rule: "every list, menu, palette and settings row; over frost", selector: ".ui-row:not([data-checked])", sample: () => onFrost(<Section><Item icon={<FolderIcon />}>Row at rest</Item></Section>) },
   { name: "Row · current", rule: "where you are: white at the current weight", selector: ".ui-row[data-checked]", sample: () => onFrost(<Section><Item icon={<MonitorIcon />} checked>Current row</Item></Section>) },
-  { name: "Row · on the ground", rule: "the same row off frost: lighter, dimmer", selector: ".ui-row", sample: () => onGround(<Item icon={<FolderIcon />}>Row at rest</Item>) },
-  { name: "Sidebar row", rule: "the sidebar's rows and its groups", selector: ".ui-nav-row", sample: () => onGround(<NavRow icon={<MonitorIcon />}>Sidebar row</NavRow>) },
+  { name: "Row · off frost", rule: "the same row on the ground, the sidebar's included: a touch lighter and dimmer", selector: ".ui-nav-row", sample: () => onGround(<NavRow icon={<MonitorIcon />}>Row at rest</NavRow>) },
   { name: "Meta", rule: "beside a row's title, right-aligned", selector: ".ui-row > small", sample: () => onFrost(<Section><Item meta="2m ago">Row</Item></Section>) },
   { name: "Keycap", rule: "a key, in a hairline square", selector: ".ui-keycap", sample: () => onFrost(<Section><Item keys={["Ctrl", "K"]}>Row</Item></Section>) },
   { name: "Heading", rule: "a popover's or card's title", selector: ".ui-heading-title", sample: () => onFrost(<HeadingSection title="A heading" />) },
