@@ -43,6 +43,31 @@
   --font-wordmark: "Conduit Wordmark", sans-serif;
 }
 /*
+ * Motion (DESIGN Motion): three curves and six durations, by what is moving. Arriving settles (a long,
+ * gentle curve); leaving accelerates away, quicker; a change in place (a wash, a turn, a colour) is
+ * plain ease. Something that rises comes up --space-md, and leaves the way it came. Reduced motion
+ * removes the moves; the end state is the same.
+ */
+:root {
+  --ease-arrive: cubic-bezier(.2, .8, .2, 1);
+  --ease-leave: cubic-bezier(.4, 0, 1, 1);
+  --ease-change: ease;
+  --duration-change: 150ms;  /* in place: a hover wash, a chevron's turn, a colour, a thumb's fade */
+  --duration-leave: 200ms;   /* leaving, folding away: quick, accelerating */
+  --duration-arrive: 220ms;  /* a surface arriving, a fold opening: a popover, a card, an overlay, a code block */
+  --duration-settle: 300ms;  /* content rising into place: a card out of the composer, a step, a chip, a page */
+  --duration-wash: 700ms;    /* a flash fading: copied */
+  --duration-pulse: 1.6s;    /* one breath of something still going: a fence being written, a recording */
+}
+/* The shared moves: a surface or a piece marks itself entering (it rises in) or leaving (it drops back). */
+@keyframes ui-rise { from { opacity: 0; transform: translateY(var(--space-md)); } }
+@keyframes ui-drop { to { opacity: 0; transform: translateY(var(--space-md)); } }
+/* Only the library's pieces: the app's own entering and leaving keep their rules. */
+:where([class*="ui-"][data-entering]) { animation: ui-rise var(--duration-arrive) var(--ease-arrive) backwards; }
+:where([class*="ui-"][data-entering="settle"]) { animation-duration: var(--duration-settle); }
+:where([class*="ui-"][data-leaving]) { animation: ui-drop var(--duration-leave) var(--ease-leave) forwards; pointer-events: none; }
+@media (prefers-reduced-motion: reduce) { :where([class*="ui-"]:is([data-entering], [data-leaving])) { animation: none; } }
+/*
  * Scale: everything is drawn from a few numbers. A density gives its unit (12.8px on desktop, 16px on
  * a phone); --scale-ui scales it for everything, --scale-transcript for what you read (a message), so
  * the app holds together at any setting. Every gap, padding and margin is one of nine Space steps,
@@ -311,7 +336,7 @@
 .ui-seg { --seg-pad: 1px; --seg-inner: calc(var(--radius-control) - 1px - var(--seg-pad)); position: relative; display: inline-grid; grid-template-columns: repeat(var(--segments), minmax(0, 1fr)); gap: 0; background: transparent; padding: var(--seg-pad); }
 /* The thumb slides by left, not transform: a transform puts it on a layer of its own and the labels over it
    on others, where Windows draws their text without ClearType, so they dim while it moves. */
-.ui-seg-thumb { position: absolute; top: var(--seg-pad); bottom: var(--seg-pad); left: calc(var(--seg-pad) + (100% - 2 * var(--seg-pad)) / var(--segments) * var(--segment)); width: calc((100% - 2 * var(--seg-pad)) / var(--segments)); border-radius: var(--seg-inner); background: var(--tint); transition: left 200ms cubic-bezier(.2, .8, .2, 1); }
+.ui-seg-thumb { position: absolute; top: var(--seg-pad); bottom: var(--seg-pad); left: calc(var(--seg-pad) + (100% - 2 * var(--seg-pad)) / var(--segments) * var(--segment)); width: calc((100% - 2 * var(--seg-pad)) / var(--segments)); border-radius: var(--seg-inner); background: var(--tint); transition: left var(--duration-arrive) var(--ease-arrive); }
 .ui-seg button { position: relative; display: inline-flex; min-width: 0; min-height: calc(1.75 * var(--u-space)); align-items: center; justify-content: center; gap: var(--space-sm); border: 0; border-radius: var(--seg-inner); background: transparent; padding: 0 var(--space-lg); color: var(--muted-foreground); font-size: var(--text-row); font-weight: var(--weight-lift); cursor: pointer; }
 .ui-seg button svg { width: var(--icon-lg); height: var(--icon-lg); }
 .ui-seg button small { color: var(--muted-foreground); font: var(--weight-rest) var(--text-caption) var(--font-data); }
@@ -380,7 +405,7 @@
 .ui-nav-row > .ui-nav-icon { display: inline-grid; width: var(--icon); height: var(--icon); flex: none; place-items: center; color: var(--muted-foreground); }
 .ui-nav-row > .ui-nav-icon > * { width: 100%; height: 100%; }
 .ui-nav-icon:has(> .harness-mark) { width: calc(var(--u-icon) - 1px); }
-.ui-nav-row > .ui-nav-icon > .harness-mark { width: calc(var(--u-icon) - 1px); height: calc(0.75 * (var(--u-icon) - 1px));; opacity: .78; transition: opacity 150ms ease; }
+.ui-nav-row > .ui-nav-icon > .harness-mark { width: calc(var(--u-icon) - 1px); height: calc(0.75 * (var(--u-icon) - 1px));; opacity: .78; transition: opacity var(--duration-change) var(--ease-change); }
 .ui-nav-row:is(:hover, :focus-visible, [aria-current="page"]) > .ui-nav-icon > .harness-mark { opacity: 1; }
 .ui-nav-row > span:not(.ui-nav-icon, .ui-nav-toggle) { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ui-nav-row:is(:hover, :focus-visible), .ui-nav-row[aria-current="page"] { color: var(--foreground); }
@@ -514,7 +539,7 @@
 .ui-chip-remove svg { width: var(--icon-xs); height: var(--icon-xs); }
 .ui-chip:is(:hover, :focus-within) .ui-chip-remove { opacity: 1; }
 @media (hover: none) { .ui-chip-remove { opacity: 1; } }
-.ui-chip[data-entering] { animation: ui-chip-in 300ms cubic-bezier(.2, .8, .2, 1) backwards; }
+.ui-chip[data-entering] { animation: ui-chip-in var(--duration-settle) var(--ease-arrive) backwards; }
 @keyframes ui-chip-in { from { opacity: 0; transform: scale(.85); } }
 @media (prefers-reduced-motion: reduce) { .ui-chip[data-entering] { animation: none; } }
 
@@ -678,19 +703,20 @@
 /* Its buttons' icons are the caption's size, not a row's. */
 .ui-code > figcaption .ui-button svg { width: var(--icon-xs); height: var(--icon-xs); }
 .ui-code-lang { margin-right: auto; }
-.ui-code > pre { margin: 0; overflow-x: auto; padding: var(--space-md) 0; font: var(--text-row)/1.6 var(--font-code); }
+.ui-code > pre { height: auto; margin: 0; overflow: auto hidden; interpolate-size: allow-keywords; transition: height var(--duration-arrive) var(--ease-arrive); padding: var(--space-md) 0; font: var(--text-row)/1.6 var(--font-code); }
 /* Folded: the lines past the fold are cut, the last of them fading; the foot opens it. */
-.ui-code[data-folded] > pre { max-height: calc(var(--code-fold) * 1.6em + 2 * var(--space-md)); overflow-y: hidden; mask-image: linear-gradient(to bottom, #000 calc(100% - 2.4em), transparent); }
+/* Opening unfolds (arrive); folding goes back quicker (leave). */
+.ui-code[data-folded] > pre { height: calc(var(--code-fold) * 1.6em + 2 * var(--space-md)); transition: height var(--duration-leave) var(--ease-leave); mask-image: linear-gradient(to bottom, #000 calc(100% - 2.4em), transparent); }
 .ui-code-more { display: block; width: 100%; height: var(--control-sm); border: 0; border-top: 1px solid var(--tint); background: transparent; color: var(--muted-foreground); font: var(--text-caption) var(--font-sans); cursor: pointer; }
 .ui-code-more:is(:hover, :focus-visible) { background: var(--tint); color: var(--foreground); }
-.ui-code[data-folded][data-streaming] .ui-code-more { animation: ui-code-writing 1.6s ease-in-out infinite; }
+.ui-code[data-folded][data-streaming] .ui-code-more { animation: ui-code-writing var(--duration-pulse) ease-in-out infinite; }
 @keyframes ui-code-writing { 50% { opacity: .45; } }
-@media (prefers-reduced-motion: reduce) { .ui-code[data-folded][data-streaming] .ui-code-more { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .ui-code[data-folded][data-streaming] .ui-code-more, .ui-code > pre { animation: none; transition: none; } }
 /* Copied: the button's check in the foreground, and what was copied washes --tint and fades (no ring, ever).
 .ui-copy[data-copied] { color: var(--foreground); }
    The wash is laid over the whole region (a pinned caption included), so all of it flashes as one. */
 :where([data-copied]):not(.ui-button), .ui-read [data-copy-flash="true"] { position: relative; }
-:where([data-copied]):not(.ui-button)::after, .ui-read [data-copy-flash="true"]::after { position: absolute; z-index: 2; inset: 0; border-radius: inherit; background: var(--tint); content: ""; opacity: 0; pointer-events: none; animation: ui-copied .7s ease-out; }
+:where([data-copied]):not(.ui-button)::after, .ui-read [data-copy-flash="true"]::after { position: absolute; z-index: 2; inset: 0; border-radius: inherit; background: var(--tint); content: ""; opacity: 0; pointer-events: none; animation: ui-copied var(--duration-wash) ease-out; }
 @keyframes ui-copied { from { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { :where([data-copied]):not(.ui-button)::after, .ui-read [data-copy-flash="true"]::after { animation: none; } }
 .ui-code-line { display: block; padding-inline: var(--space-lg); white-space: pre; }
@@ -713,7 +739,7 @@
 .ui-disclosure { display: grid; min-width: 0; gap: var(--space-2xs); }
 .ui-disclosure-header { display: flex; width: 100%; min-width: 0; align-items: center; gap: var(--row-gap); border: 0; border-radius: var(--radius-control); background: transparent; padding: 0; color: var(--muted-foreground); font: var(--weight-rest) var(--text-row)/1.4 var(--font-sans); text-align: left; }
 .ui-disclosure-header:not(:disabled) { cursor: pointer; }
-.ui-disclosure-chevron { width: var(--icon-sm); height: var(--icon-sm); flex: none; margin-left: auto; transition: rotate .15s ease; }
+.ui-disclosure-chevron { width: var(--icon-sm); height: var(--icon-sm); flex: none; margin-left: auto; transition: rotate var(--duration-change) var(--ease-change); }
 [aria-expanded="true"] > .ui-disclosure-chevron { rotate: 180deg; }
 :is(.ui-disclosure-header, .ui-trace):is(:hover, :focus-visible) > .ui-disclosure-chevron { color: var(--foreground); }
 @media (prefers-reduced-motion: reduce) { .ui-disclosure-chevron { transition: none; } }
@@ -825,7 +851,7 @@
 .ui-crumbs-sep { color: var(--muted-foreground); font-size: var(--text-label); opacity: .6; }
 /* Spotlight: the dim is the shadow round the lit region. */
 .ui-spotlight { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
-.ui-spotlight-lit { position: absolute; box-shadow: 0 0 0 200vmax var(--dim); transition: top 200ms cubic-bezier(.2, .8, .2, 1), left 200ms cubic-bezier(.2, .8, .2, 1), width 200ms cubic-bezier(.2, .8, .2, 1), height 200ms cubic-bezier(.2, .8, .2, 1); }
+.ui-spotlight-lit { position: absolute; box-shadow: 0 0 0 200vmax var(--dim); transition: top var(--duration-arrive) var(--ease-arrive), left var(--duration-arrive) var(--ease-arrive), width var(--duration-arrive) var(--ease-arrive), height var(--duration-arrive) var(--ease-arrive); }
 .ui-spotlight-lit[data-whole] { top: 50%; left: 50%; width: 0; height: 0; }
 @media (prefers-reduced-motion: reduce) { .ui-spotlight-lit { transition: none; } }
 .ui-leader .ui-overlay-hints { gap: var(--space-xs) var(--space-lg); }
@@ -905,6 +931,9 @@
 .ui-answer .chat-markdown .artifact-copy::before { width: var(--icon-xs); height: var(--icon-xs); background: currentColor; content: ""; mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect width='14' height='14' x='8' y='8' rx='2'/%3E%3Cpath d='M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2'/%3E%3C/svg%3E") center / contain no-repeat; }
 .ui-answer .chat-markdown .artifact-copy[data-copied="true"]::before { mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 6 9 17l-5-5'/%3E%3C/svg%3E"); }
 .ui-answer .chat-markdown .artifact-header { padding-right: calc(var(--space-lg) - (var(--control-xs) - var(--icon-xs)) / 2); }
+/* It unfolds and folds as the CodeBlock does. */
+.ui-answer .chat-markdown .artifact > pre { height: auto; overflow-y: hidden; interpolate-size: allow-keywords; transition: height var(--duration-arrive) var(--ease-arrive); }
+.ui-answer .chat-markdown .artifact[data-collapsed="true"] > pre { height: calc(var(--code-collapse-lines, 15) * 1.6em + 2 * var(--space-md)); max-height: none; transition: height var(--duration-leave) var(--ease-leave); }
 /* Its numbers as wide as the last one (two digits past nine), so the language and the numbers start together. */
 .ui-answer .chat-markdown .artifact .code-line::before { width: 2ch; margin-right: var(--space-lg); }
 .ui-answer .chat-markdown .artifact[data-lines="1"] .code-line::before, .ui-answer .chat-markdown .artifact[data-lines="2"] .code-line::before, .ui-answer .chat-markdown .artifact[data-lines="3"] .code-line::before, .ui-answer .chat-markdown .artifact[data-lines="4"] .code-line::before, .ui-answer .chat-markdown .artifact[data-lines="5"] .code-line::before, .ui-answer .chat-markdown .artifact[data-lines="6"] .code-line::before, .ui-answer .chat-markdown .artifact[data-lines="7"] .code-line::before, .ui-answer .chat-markdown .artifact[data-lines="8"] .code-line::before, .ui-answer .chat-markdown .artifact[data-lines="9"] .code-line::before { width: 1ch; }

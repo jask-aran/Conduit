@@ -341,3 +341,23 @@ html, body { background: var(--frame, #08090a); color: var(--foreground); }
 .g-transcript-stage[data-phone] { width: min(100%, 360px); }
 .g-feet { display: grid; width: 100%; gap: 8px; }
 .g-read { display: grid; width: 100%; justify-items: stretch; }
+/* Motion: moves played on pieces, a dot running a token's pace. */
+.g-moves { display: grid; }
+.g-move { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 24px; align-items: center; border-top: 1px solid var(--border); padding: 16px 0; }
+.g-move .g-scale-name code { margin-top: 6px; color: var(--muted-foreground); font: 11px var(--font-data); }
+.g-move-demo { display: grid; max-width: 420px; min-height: 64px; align-items: center; }
+.g-motion-stage { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 16px; align-items: center; min-height: 120px; }
+.g-motion-piece { display: grid; min-width: 0; justify-items: start; }
+.g-motion-row { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+.g-motion-note { color: var(--muted-foreground); font-size: var(--text-caption); }
+.g-run { position: relative; width: 140px; height: 8px; border-radius: 4px; background: var(--tint, rgb(255 255 255 / .06)); }
+.g-run > span { position: absolute; top: 0; left: 0; width: 8px; height: 8px; border-radius: 4px; background: var(--foreground); animation: g-run 1s infinite alternate; }
+@keyframes g-run { to { left: calc(100% - 8px); } }
+.g-app-moves { display: grid; }
+.g-app-moves .g-scale-head, .g-app-move { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1.2fr) minmax(0, 1fr) 150px; gap: 16px; }
+.g-app-move { align-items: baseline; border-top: 1px solid var(--border); padding: 8px 0; font-size: 12.5px; }
+.g-app-move code { color: var(--muted-foreground); font: 11px var(--font-data); }
+.g-app-move [data-state] { font: 11px var(--font-data); }
+.g-app-move [data-state="done"] { color: var(--foreground); }
+.g-app-move [data-state="port"] { color: var(--warn, #e0b062); }
+.g-app-move [data-state="app"] { color: var(--muted-foreground); }
