@@ -1174,9 +1174,10 @@ export function Sidebar(props: {
     <aside ref={sidebarRoot} data-slot="sidebar" data-region="sidebar" data-state={phoneLayout() ? "expanded" : collapsed() ? "collapsed" : "expanded"} data-visual-state={phoneLayout() ? "expanded" : visualCollapsed() ? "collapsed" : "expanded"} data-mobile-open={props.mobileOpen} class="conduit-sidebar" style={{ width: phoneLayout() ? undefined : `${shellWidth()}px` }} aria-hidden={phoneLayout() && !props.mobileOpen ? true : undefined} inert={phoneLayout() && !props.mobileOpen ? true : undefined} onTransitionEnd={(event) => { if (event.target === sidebarRoot && event.propertyName === "width") finishSidebarMotion?.(); }} onTransitionCancel={(event) => { if (event.target === sidebarRoot && event.propertyName === "width") finishSidebarMotion?.(); }}>
       <div ref={sidebarSurface} data-slot="sidebar-container" class="sidebar-container">
         <div data-sidebar="header">
-          <PillShell pill={triggerPill} class="sidebar-header-pill">
+          {/* Library previews: no toggle in the phone's open sidebar; a swipe or the backdrop closes it. */}
+          <Show when={!(useLibrary() && phoneLayout())}><PillShell pill={triggerPill} class="sidebar-header-pill">
           <Button variant="ghost" size="icon-sm" data-sidebar="trigger" aria-label="Toggle Sidebar" aria-expanded={isMobileLayout() ? props.mobileOpen : !collapsed()} onClick={onSidebarTrigger}><PanelLeftIcon /></Button>
-          </PillShell>
+          </PillShell></Show>
           <button data-sidebar="brand" aria-label="Conduit" onClick={() => { setArea("conduit"); closeMobile(); props.onOpenDashboard(); enterPane(); }}><span>Conduit</span></button>
           <Show when={phoneLayout()}>
             <div class="sidebar-header-server">
