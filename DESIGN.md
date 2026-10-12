@@ -239,9 +239,9 @@ A handful of roles, each defined once in `styles.css`; components name a role ra
 - **section label** — Paper Mono (shipped, so it reads the same on every system; the system's mono only as the fallback), uppercase, small, letter-spaced, muted. Every section heading is this: a list, menu, palette, card, rider or slider, and the sidebar's groups; the breadcrumb's places share it.
 - **caption** — section subtitles, timestamps, empty copy.
 - **meta** — muted Paper Mono beside a row's title, right-aligned, truncating before the title does.
-- **keycap** — small, in the section label's face (Paper Mono), on the surface's tint at `{rounded.control}`, muted; in the text colour on the cursor row or a clickable rail action.
+- **keycap** — small, in the section label's face (Paper Mono), at the label size, on the surface's tint, its corner a share of `{rounded.control}` (about 4px on desktop), muted; in the text colour on the cursor row or a clickable rail action.
 
-Four weights, no others: **rest** (400); **lift** (500), a touch heavier for text over frost, which reads thinner there; **strong** (600), for titles, headings, buttons and values; and the **current weight** (660), which carries state with rest -- where you are, and a match lit while typing. Six sizes, one per role: label, meta, caption, row, body (messages, input, and titles at strong), heading. Do not invent further sizes or weights per component (components v2: `--text-*`, `--weight-*`). No serif except the Capacitor first-launch wordmark (legacy).
+Four weights, no others: **rest** (400); **lift** (500), a touch heavier for text over frost, which reads thinner there; **strong** (600), for titles, headings, buttons and values; and the **current weight** (660), which carries state with rest -- where you are, and a match lit while typing. Five sizes, one per role: label (and keycaps), caption (and data: meta, counts), row, body (messages, input, and titles at strong), heading. Do not invent further sizes or weights per component (components v2: `--text-*`, `--weight-*`). No serif except the Capacitor first-launch wordmark (legacy).
 
 # Layout
 

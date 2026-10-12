@@ -65,10 +65,10 @@
 :root, [data-density] {
   --radius-control: calc(0.5 * var(--u-space)); --radius-surface: calc(var(--radius-control) + var(--frost-inset));
   --radius-message: 22px; --radius-round: 999px;
-  /* Six type sizes, by role (Type · Scale): label, the section label; meta, data and keys; caption,
-     details and hints; row, every row and control; body, messages, what you type, titles (titles
-     at the strong weight); heading, a page's title. */
-  --text-label: calc(0.625 * var(--u-type)); --text-meta: calc(0.71875 * var(--u-type)); --text-caption: calc(0.75 * var(--u-type));
+  /* Five type sizes, by role (Type · Scale): label, the section label and keycaps; caption, details,
+     hints and data (meta, counts, crumbs); row, every row and control; body, messages, what you
+     type, titles (titles at the strong weight); heading, a page's title. */
+  --text-label: calc(0.625 * var(--u-type)); --text-caption: calc(0.75 * var(--u-type));
   --text-row: var(--row-text); --text-body: var(--u-type); --text-heading: calc(1.40625 * var(--u-type));
   --frost-radius: var(--radius-surface); --row-radius: var(--radius-control);
   --pill-solo-icon: calc(1.125 * var(--u-icon)); --pill-field-radius: var(--radius-message);
@@ -153,7 +153,7 @@
 .ui-icon:has(> .harness-mark) { width: calc(0.875 * var(--u-type)); height: calc(0.875 * var(--u-type)); }
 .ui-row > .ui-label { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* Meta: muted mono beside the title, right-aligned, tabular. */
-.ui-row > :is(small, .ui-meta) { flex: none; margin-left: auto; color: var(--muted-foreground); font: var(--weight-rest) var(--text-meta) var(--font-data); font-variant-numeric: tabular-nums; }
+.ui-row > :is(small, .ui-meta) { flex: none; margin-left: auto; color: var(--muted-foreground); font: var(--weight-rest) var(--text-caption) var(--font-data); font-variant-numeric: tabular-nums; }
 .ui-row > .ui-keys { display: inline-flex; flex: none; gap: calc(0.1875 * var(--u-space)); }
 .ui-row > .ui-chevron { width: calc(0.875 * var(--u-type)); height: calc(0.875 * var(--u-type)); color: var(--muted-foreground); }
 /* The cursor (DESIGN Interaction): one row at a time, the wash, white, no change of weight.
@@ -175,7 +175,8 @@
 .ui-row[data-destructive], .ui-row[data-destructive] > .ui-icon { color: var(--destructive); }
 .ui-row[data-destructive][data-highlighted] { background: color-mix(in oklch, var(--destructive), transparent 85%); }
 
-.ui-keycap { display: inline-grid; min-width: calc(1.25 * var(--u-space)); height: calc(1.25 * var(--u-space)); place-items: center; border-radius: var(--radius-control); background: var(--tint); padding: 0 calc(0.3125 * var(--u-space)); color: var(--muted-foreground); font: var(--weight-lift) var(--text-meta)/1 var(--font-label); }
+/* A keycap is small inside a row, so its corner is a share of the control radius (~4px on desktop), and its text the label size. */
+.ui-keycap { display: inline-grid; min-width: calc(1.25 * var(--u-space)); height: calc(1.25 * var(--u-space)); place-items: center; border-radius: calc(0.6 * var(--radius-control)); background: var(--tint); padding: 0 calc(0.3125 * var(--u-space)); color: var(--muted-foreground); font: var(--weight-lift) var(--text-label)/1 var(--font-label); }
 .ui-row[data-highlighted] .ui-keycap { color: var(--foreground); }
 
 /* Card: the menu's container at dialog padding. */
@@ -239,7 +240,7 @@
 .ui-seg-thumb { position: absolute; top: var(--seg-pad); bottom: var(--seg-pad); left: calc(var(--seg-pad) + (100% - 2 * var(--seg-pad)) / var(--segments) * var(--segment)); width: calc((100% - 2 * var(--seg-pad)) / var(--segments)); border-radius: var(--seg-inner); background: var(--tint); transition: left 200ms cubic-bezier(.2, .8, .2, 1); }
 .ui-seg button { position: relative; display: inline-flex; min-width: 0; min-height: calc(1.75 * var(--u-space)); align-items: center; justify-content: center; gap: calc(0.375 * var(--u-space)); border: 0; border-radius: var(--seg-inner); background: transparent; padding: 0 calc(0.75 * var(--u-space)); color: var(--muted-foreground); font-size: var(--text-row); font-weight: var(--weight-lift); cursor: pointer; }
 .ui-seg button svg { width: calc(1.125 * var(--u-icon)); height: calc(1.125 * var(--u-icon)); }
-.ui-seg button small { color: var(--muted-foreground); font: var(--weight-rest) var(--text-meta) var(--font-data); }
+.ui-seg button small { color: var(--muted-foreground); font: var(--weight-rest) var(--text-caption) var(--font-data); }
 .ui-seg button:is(:hover, [aria-checked="true"]) { color: var(--foreground); }
 .ui-seg[data-icons] button { width: calc(2.25 * var(--u-space)); padding: 0; }
 .ui-seg[data-pill] { height: var(--pill-size); gap: var(--pill-gap); border-color: var(--frost-stroke); border-radius: var(--radius-round); background: var(--frost-fill); padding: 1px; }
@@ -424,7 +425,7 @@
 .ui-chip-media img { width: 100%; height: 100%; object-fit: cover; }
 .ui-chip-copy { display: grid; min-width: 0; max-width: calc(11.25 * var(--u-space)); line-height: 1.3; }
 .ui-chip-copy strong { overflow: hidden; font-size: var(--text-row); font-weight: var(--weight-strong); text-overflow: ellipsis; white-space: nowrap; }
-.ui-chip-copy small { overflow: hidden; color: var(--muted-foreground); font-size: var(--text-meta); text-overflow: ellipsis; white-space: nowrap; }
+.ui-chip-copy small { overflow: hidden; color: var(--muted-foreground); font-size: var(--text-caption); text-overflow: ellipsis; white-space: nowrap; }
 .ui-chip:is([data-status="uploading"], [data-status="queued"]) .ui-chip-media img { opacity: 0.55; }
 .ui-chip[data-kind="file"]:is([data-status="uploading"], [data-status="queued"]) .ui-chip-media > :not(.ui-chip-ring) { opacity: 0.4; }
 .ui-chip-ring { position: absolute; width: calc(1.5 * var(--u-icon)); height: calc(1.5 * var(--u-icon)); transform: rotate(-90deg); fill: none; stroke-width: 2.5; filter: drop-shadow(0 0 2px rgb(0 0 0 / 60%)); }
@@ -468,7 +469,7 @@
 .ui-choices[aria-multiselectable="true"] > .ui-choice[aria-selected="true"] { background: var(--tint); }
 .ui-choices[aria-multiselectable="true"] > .ui-choice[aria-selected="true"][data-active="true"] { background: linear-gradient(var(--tint), var(--tint)), var(--tint); }
 .ui-choice-check { display: none !important; }
-.ui-choice-key { width: calc(1 * var(--u-space)); flex: none; color: var(--muted-foreground); font: var(--text-meta)/1 var(--font-label); text-align: right; }
+.ui-choice-key { width: calc(1 * var(--u-space)); flex: none; color: var(--muted-foreground); font: var(--text-caption)/1 var(--font-label); text-align: right; }
 .ui-choice[data-active="true"] .ui-choice-key { color: var(--foreground); }
 .ui-choice-label { flex: none; font-size: var(--text-row); font-weight: var(--weight-lift); }
 .ui-choice-detail { min-width: 0; flex: 1; overflow: hidden; color: var(--muted-foreground); font-size: var(--text-body); text-overflow: ellipsis; white-space: nowrap; }
@@ -583,11 +584,11 @@
 .ui-leader .ui-keys[data-first] .ui-keycap { color: var(--foreground); }
 /* Crumbs: the breadcrumb's place caps; the current place white, no fill. */
 .ui-crumbs { display: flex; min-width: 0; flex: 1; align-items: center; justify-content: flex-end; gap: 2px; overflow: hidden; }
-.ui-crumbs > button { flex: none; border: 0; border-radius: var(--radius-control); background: transparent; padding: 2px calc(0.390625 * var(--u-space)); color: var(--muted-foreground); font: var(--weight-lift) var(--text-meta)/1.2 var(--font-label); letter-spacing: .07em; text-transform: uppercase; cursor: pointer; }
+.ui-crumbs > button { flex: none; border: 0; border-radius: var(--radius-control); background: transparent; padding: 2px calc(0.390625 * var(--u-space)); color: var(--muted-foreground); font: var(--weight-lift) var(--text-caption)/1.2 var(--font-label); letter-spacing: .07em; text-transform: uppercase; cursor: pointer; }
 .ui-crumbs > button:hover:not(:disabled) { background: var(--tint); color: var(--foreground); }
 .ui-crumbs > button[aria-current="true"] { color: var(--foreground); font-weight: var(--weight-current); }
 .ui-crumbs > button:disabled { opacity: .55; cursor: default; }
-.ui-crumbs-sep { color: var(--muted-foreground); font-size: var(--text-meta); opacity: .6; }
+.ui-crumbs-sep { color: var(--muted-foreground); font-size: var(--text-caption); opacity: .6; }
 /* Spotlight: the dim is the shadow round the lit region. */
 .ui-spotlight { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
 .ui-spotlight-lit { position: absolute; box-shadow: 0 0 0 200vmax var(--dim); transition: top 200ms cubic-bezier(.2, .8, .2, 1), left 200ms cubic-bezier(.2, .8, .2, 1), width 200ms cubic-bezier(.2, .8, .2, 1), height 200ms cubic-bezier(.2, .8, .2, 1); }
