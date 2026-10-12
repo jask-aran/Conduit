@@ -6,6 +6,7 @@ import { Switch } from "../client/settings/settings-controls";
 import { HarnessMark } from "../client/harness-brand";
 import { PlaceGlyph } from "../client/chat/place-picker";
 import { MODELS, PROFILES, PROJECTS } from "./seed";
+import { scaleOf, setScale } from "./foundations";
 import { QuestionCard } from "../client/chat/question-card";
 import { ImageIcon, ActivityIcon, BrainIcon, ChevronRightIcon, GlobeIcon, MessageSquareIcon, MicIcon as VoiceIcon, NotebookTextIcon, PanelLeftCloseIcon, ServerIcon } from "lucide-solid";
 import type { Question } from "../client/api/contracts";
@@ -156,8 +157,8 @@ const reset = () => <Button variant="ghost" size="icon-sm" aria-label="Reset to 
 const keys = (...names: string[]) => <span class="g-keys">{names.map((name) => <Keycap>{name}</Keycap>)}</span>;
 const SETTING_PAGES: Record<SettingsSection, { status?: string; failed?: boolean; body: () => JSX.Element }> = {
   appearance: { status: "Saved", body: () => <>
-    <SettingGroup title="Interface"><SettingLine label="Theme"><Theme /></SettingLine><SettingLine label="Scale"><SelectTrigger value="75%" bare /></SettingLine><SettingLine label="Sidebar chats"><Input value="20" /></SettingLine><SettingLine label="Tab row"><SwitchDemo /></SettingLine><SettingLine label="Streaming" state="paused while hidden"><SelectTrigger value="Adaptive" bare /></SettingLine></SettingGroup>
-    <SettingGroup title="Reading"><SettingLine label="Transcript width"><SelectTrigger value="Compact" bare /></SettingLine><SettingLine label="Wide blocks"><SelectTrigger value="Off" bare /></SettingLine><SettingLine label="Terminal font"><SelectTrigger value="Meslo" bare /></SettingLine></SettingGroup>
+    <SettingGroup title="Interface"><SettingLine label="Theme"><Theme /></SettingLine><SettingLine label="Interface size"><ScaleSetting token="--scale-ui" /></SettingLine><SettingLine label="Sidebar chats"><Input value="20" /></SettingLine><SettingLine label="Tab row"><SwitchDemo /></SettingLine><SettingLine label="Streaming" state="paused while hidden"><SelectTrigger value="Adaptive" bare /></SettingLine></SettingGroup>
+    <SettingGroup title="Reading"><SettingLine label="Text size"><ScaleSetting token="--scale-transcript" /></SettingLine><SettingLine label="Transcript width"><SelectTrigger value="Compact" bare /></SettingLine><SettingLine label="Wide blocks"><SelectTrigger value="Off" bare /></SettingLine><SettingLine label="Terminal font"><SelectTrigger value="Meslo" bare /></SettingLine></SettingGroup>
   </> },
   shortcuts: { status: "Saved", body: () => <Shortcuts /> },
   models: { status: "Not saved", failed: true, body: () => <>
@@ -211,6 +212,14 @@ function Shortcuts() {
       </Show>{add(command)}</SettingLine>
       <Show when={recording() === command}><SettingRecorder keys={heard()} onSave={() => { setBound((all) => ({ ...all, [command]: [...all[command]!, heard().join(" ")] })); setRecording(null); }} /></Show></>}</For></SettingGroup>
   </>;
+}
+
+/** A scale as a setting: the app's Appearance sets the two coefficients; here they move the whole gallery. */
+const SCALE_STEPS = [["0.875", "88%"], ["1", "100%"], ["1.125", "113%"], ["1.25", "125%"]] as const;
+function ScaleSetting(props: { token: "--scale-ui" | "--scale-transcript" }) {
+  const options = SCALE_STEPS.map(([value, label]) => ({ value, label }));
+  const value = () => SCALE_STEPS.find(([step]) => Number(step) === scaleOf(props.token))?.[0] ?? "1";
+  return <Segmented size="sm" label={props.token === "--scale-ui" ? "Interface size" : "Text size"} value={value()} options={options} onChange={(next) => setScale(props.token, Number(next))} />;
 }
 
 /** Settings: on a desktop the rail beside the page; on a phone one at a time, the page with Back to the rail. */
