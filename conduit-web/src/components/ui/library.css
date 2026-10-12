@@ -229,9 +229,8 @@
 /* Segmented choice: a hairline track and a sliding thumb (the app's
    settings and dashboard filters): the surface's tint for both. The
    pill form is the phone header's: the track is itself frost. */
-/* The track holds its segments as a surface holds its rows: --frost-inset in (its line and padding),
-   at --radius-surface, the segments and thumb at --radius-control, so the corners are concentric. */
-.ui-seg { --seg-pad: calc(var(--frost-inset) - 1px); position: relative; display: inline-grid; grid-template-columns: repeat(var(--segments), minmax(0, 1fr)); gap: 2px; border: 1px solid var(--tint); border-radius: var(--radius-surface); background: transparent; padding: var(--seg-pad); }
+/* Track, thumb and segments all at --radius-control: a sharper edge than a surface's. */
+.ui-seg { --seg-pad: 2px; position: relative; display: inline-grid; grid-template-columns: repeat(var(--segments), minmax(0, 1fr)); gap: 2px; border: 1px solid var(--tint); border-radius: var(--radius-control); background: transparent; padding: var(--seg-pad); }
 .ui-seg-thumb { position: absolute; top: var(--seg-pad); bottom: var(--seg-pad); left: var(--seg-pad); width: calc((100% - 2 * var(--seg-pad) - 2px * (var(--segments) - 1)) / var(--segments)); border-radius: var(--radius-control); background: var(--tint); transform: translateX(calc((100% + 2px) * var(--segment))); transition: transform 200ms cubic-bezier(.2, .8, .2, 1); }
 .ui-seg button { position: relative; display: inline-flex; min-width: 0; min-height: calc(1.75 * var(--u-space)); align-items: center; justify-content: center; gap: calc(0.375 * var(--u-space)); border: 0; border-radius: var(--radius-control); background: transparent; padding: 0 calc(0.75 * var(--u-space)); color: var(--muted-foreground); font-size: var(--text-row); font-weight: var(--weight-lift); cursor: pointer; }
 .ui-seg button svg { width: calc(1.125 * var(--u-icon)); height: calc(1.125 * var(--u-icon)); }
