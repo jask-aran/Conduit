@@ -44,17 +44,17 @@
 }
 :root, [data-density="desktop"] {
   --u-type: 12.8px; --u-space: 12.8px; --u-icon: 12.8px;
-  --frost-inset: 3.2px; --row-text: 10.4px; --row-min: 24px; --row-pad: 4px 6.4px; --row-gap: 6.4px;
+  --frost-inset: 3.2px; --row-text: 10.4px; --row-min: 24px; --row-inset: 6.4px; --row-pad: 4px var(--row-inset); --row-gap: 6.4px;
   --nav-label-pad: 3.2px 6.4px; --nav-indent: 24px;
 }
 [data-density="phone"] {
   --u-type: 16px; --u-space: 16px; --u-icon: 16px;
-  --frost-inset: 5px; --row-text: 14.5px; --row-min: 44px; --row-pad: 6px 9px; --row-gap: 8px;
+  --frost-inset: 5px; --row-text: 14.5px; --row-min: 44px; --row-inset: 9px; --row-pad: 6px var(--row-inset); --row-gap: 8px;
   --nav-label-pad: 5px 9px; --nav-indent: 30px;
 }
 @media (--conduit-phone-layout) { :root {
   --u-type: 16px; --u-space: 16px; --u-icon: 16px;
-  --frost-inset: 5px; --row-text: 14.5px; --row-min: 44px; --row-pad: 6px 9px; --row-gap: 8px;
+  --frost-inset: 5px; --row-text: 14.5px; --row-min: 44px; --row-inset: 9px; --row-pad: 6px var(--row-inset); --row-gap: 8px;
   --nav-label-pad: 5px 9px; --nav-indent: 30px;
 } }
 /* Four radii (DESIGN.md rounded). control: rows, buttons, inputs, keycaps, chips, in the
@@ -202,7 +202,20 @@
 .ui-card > h3 { color: var(--foreground); font-size: var(--text-body); font-weight: var(--weight-strong); }
 .ui-card > p { color: var(--muted-foreground); font-size: var(--text-caption); font-weight: var(--weight-rest); }
 .ui-card > h3 + p { margin-top: calc(var(--card-pair) - var(--card-gap)); }
-.ui-card > pre { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ui-card > pre { overflow: hidden; text-overflow: ellipsis; }
+.ui-card { position: relative; }
+.ui-card[data-size="wide"] { width: min(100%, calc(37.5 * var(--u-space))); }
+/* The × sits in the corner, its box the edge's half in; the title keeps clear of it. */
+.ui-card-close { position: absolute; top: calc(var(--card-edge) / 2); right: calc(var(--card-edge) / 2); }
+.ui-card[data-close] > h3 { padding-right: calc(2 * var(--u-space)); }
+/* A box you see meets the edge (a field, an excerpt, a button); what has no box at rest lines up
+   its content with the title instead: a list's rows hang out by their inset, an icon button by its pad. */
+.ui-card > .ui-preview { margin: 0; }
+.ui-card > .ui-section { margin-inline: calc(-1 * var(--row-inset)); }
+.ui-card .ui-textarea { min-height: calc(4.5 * var(--u-space)); border: 1px solid var(--tint); border-radius: var(--radius-control); background: var(--well); padding: calc(0.5 * var(--u-space)) calc(0.75 * var(--u-space)); }
+.ui-field { display: flex; min-width: 0; flex-direction: column; gap: var(--card-pair, calc(0.5 * var(--u-space))); }
+.ui-field-label { color: var(--muted-foreground); font-size: var(--text-caption); font-weight: var(--weight-lift); text-box: trim-both cap alphabetic; }
+.ui-row > .ui-row-end { display: inline-flex; flex: none; margin-left: auto; margin-right: calc((var(--u-icon) - 1.875 * var(--u-space)) / 2); }
 /* Actions share one width, the widest's, at the card's right edge. */
 .ui-card-actions { display: grid; width: fit-content; grid-auto-columns: 1fr; grid-auto-flow: column; gap: calc(0.5 * var(--u-space)); margin-left: auto; }
 
@@ -357,7 +370,7 @@
 .ui-frost.ui-menu { padding: var(--frost-inset); border-radius: var(--frost-radius); }
 .ui-frost.ui-menu[data-lift="raised"] { box-shadow: var(--frost-lift-raised), var(--frost-highlight); }
 /* An app row's own text runs out in an ellipsis, as a library label does. */
-.ui-row > span:not(.ui-icon, .ui-keys, .ui-meta) { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ui-row > span:not(.ui-icon, .ui-keys, .ui-meta, .ui-row-end) { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* An item's detail: a second line under its label (a route's address). */
 .ui-row > .ui-label[data-stacked] { display: flex; flex-direction: column; }
