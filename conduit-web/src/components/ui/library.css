@@ -37,17 +37,17 @@
 :root, [data-density="desktop"] {
   --u-type: 12.8px; --u-space: 12.8px; --u-icon: 12.8px;
   --frost-radius: 8px; --frost-inset: 3.2px; --row-pad: 3.2px 4.8px; --row-min: 21.2px; --row-gap: 4.8px; --row-radius: 6.4px;
-  --nav-min: 24px; --nav-pad: 4px 6.4px; --nav-gap: 6.4px; --nav-text: 10.4px; --nav-icon: 12px; --nav-label: 9.6px; --nav-label-pad: 3.2px 6.4px; --nav-indent: 24px;
+  --nav-min: 24px; --nav-pad: 4px 6.4px; --nav-gap: 6.4px; --row-text: 10.4px; --nav-text: var(--row-text); --nav-icon: 12px; --nav-label: 9.6px; --nav-label-pad: 3.2px 6.4px; --nav-indent: 24px;
 }
 [data-density="phone"] {
   --u-type: 16px; --u-space: 16px; --u-icon: 16px;
   --frost-radius: 14px; --frost-inset: 5px; --row-pad: 8px 9px; --row-min: 38px; --row-gap: 8px; --row-radius: 8px;
-  --nav-min: 44px; --nav-pad: 6px 9px; --nav-gap: 8px; --nav-text: 14.5px; --nav-icon: 17px; --nav-label: 13px; --nav-label-pad: 5px 9px; --nav-indent: 30px;
+  --nav-min: 44px; --nav-pad: 6px 9px; --nav-gap: 8px; --row-text: 14.5px; --nav-text: var(--row-text); --nav-icon: 17px; --nav-label: 13px; --nav-label-pad: 5px 9px; --nav-indent: 30px;
 }
 @media (--conduit-phone-layout) { :root {
   --u-type: 16px; --u-space: 16px; --u-icon: 16px;
   --frost-radius: 14px; --frost-inset: 5px; --row-pad: 8px 9px; --row-min: 38px; --row-gap: 8px; --row-radius: 8px;
-  --nav-min: 44px; --nav-pad: 6px 9px; --nav-gap: 8px; --nav-text: 14.5px; --nav-icon: 17px; --nav-label: 13px; --nav-label-pad: 5px 9px; --nav-indent: 30px;
+  --nav-min: 44px; --nav-pad: 6px 9px; --nav-gap: 8px; --row-text: 14.5px; --nav-text: var(--row-text); --nav-icon: 17px; --nav-label: 13px; --nav-label-pad: 5px 9px; --nav-indent: 30px;
 } }
 [data-density] { font-family: var(--font-sans); font-size: calc(var(--u-type) * 0.875); }
 :root {
@@ -110,7 +110,7 @@
 .ui-search::placeholder { color: var(--muted-foreground); }
 .ui-empty { padding: calc(0.5 * var(--u-space)); color: var(--muted-foreground); font-size: calc(0.8125 * var(--u-type)); }
 
-.ui-row { display: flex; width: 100%; min-height: var(--row-min); align-items: center; gap: var(--row-gap); border: 0; border-radius: var(--row-radius); background: transparent; padding: var(--row-pad); color: color-mix(in oklch, var(--foreground), transparent 38%); font-size: calc(0.8125 * var(--u-type)); font-weight: 450; line-height: 1.43; text-align: left; cursor: default; user-select: none; outline: none; }
+.ui-row { display: flex; width: 100%; min-height: var(--row-min); align-items: center; gap: var(--row-gap); border: 0; border-radius: var(--row-radius); background: transparent; padding: var(--row-pad); color: color-mix(in oklch, var(--foreground), transparent 32%); font-size: var(--row-text); font-weight: 400; line-height: 1.5; text-align: left; cursor: default; user-select: none; outline: none; }
 /* The icon slot: every leading mark -- a lucide icon, a workspace glyph, a
    harness mark -- fills one icon-sized square. */
 .ui-icon { display: inline-grid; width: var(--u-icon); height: var(--u-icon); flex: none; place-items: center; }
@@ -127,7 +127,8 @@
 .ui-row:is([data-highlighted], [data-expanded]) { background: var(--frost-wash); color: var(--foreground); }
 .ui-row[data-checked], [data-surface="frost"] .ui-row[data-checked] { color: var(--foreground); font-weight: 660; }
 /* Over frost the row reads a touch heavier and brighter (text over frost reads thinner). */
-[data-surface="frost"] .ui-row { color: color-mix(in oklch, var(--foreground), transparent 28%); font-weight: 500; }
+/* The row role, one for every row (list, menu, palette, settings, the sidebar): over frost a touch heavier and brighter, since text there reads thinner. */
+[data-surface="frost"] :is(.ui-row, .ui-nav-row) { color: color-mix(in oklch, var(--foreground), transparent 28%); font-weight: 500; }
 /* Icons muted at rest, white on the cursor; a current icon is drawn an eighth of its size (3 units), not a tenth. */
 .ui-row > .ui-icon { color: var(--muted-foreground); }
 .ui-row:is([data-highlighted], [data-checked]) > .ui-icon { color: var(--foreground); }
@@ -259,7 +260,7 @@
 .ui-nav-group { display: flex; flex-direction: column; gap: 1px; }
 .ui-nav-group:not(:has(> .ui-nav-label)) { gap: 0; }
 .ui-nav-label { align-self: flex-start; padding: var(--nav-label-pad); }
-.ui-nav-row { display: flex; width: 100%; min-width: 0; min-height: var(--nav-min); align-items: center; gap: var(--nav-gap); border: 0; border-radius: 8px; background: transparent; padding: var(--nav-pad); color: color-mix(in oklch, var(--sidebar-foreground), transparent 32%); font-size: var(--nav-text); line-height: 1.5; text-align: left; }
+.ui-nav-row { display: flex; width: 100%; min-width: 0; min-height: var(--nav-min); align-items: center; gap: var(--nav-gap); border: 0; border-radius: 8px; background: transparent; padding: var(--nav-pad); color: color-mix(in oklch, var(--foreground), transparent 32%); font-size: var(--nav-text); line-height: 1.5; text-align: left; }
 .ui-nav-row[data-indent] { padding-left: var(--nav-indent); }
 .ui-nav-row > .ui-nav-icon { display: inline-grid; width: var(--nav-icon); height: var(--nav-icon); flex: none; place-items: center; color: var(--muted-foreground); }
 .ui-nav-row > .ui-nav-icon > * { width: 100%; height: 100%; }
@@ -267,7 +268,7 @@
 .ui-nav-row > .ui-nav-icon > .harness-mark { width: calc(var(--nav-icon) - 1px); height: calc(0.75 * (var(--nav-icon) - 1px));; opacity: .78; transition: opacity 150ms ease; }
 .ui-nav-row:is(:hover, [aria-current="page"]) > .ui-nav-icon > .harness-mark { opacity: 1; }
 .ui-nav-row > span:not(.ui-nav-icon, .ui-nav-toggle) { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ui-nav-row:hover, .ui-nav-row[aria-current="page"] { color: var(--sidebar-accent-foreground); }
+.ui-nav-row:hover, .ui-nav-row[aria-current="page"] { color: var(--foreground); }
 .ui-nav-row:hover { background: var(--sidebar-accent); }
 .ui-nav-row[aria-current="page"] { font-weight: 660; }
 .ui-nav-row:is(:hover, [aria-current="page"]) > .ui-nav-icon { color: var(--foreground); }
