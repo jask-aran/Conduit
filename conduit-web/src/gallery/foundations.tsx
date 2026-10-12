@@ -170,13 +170,13 @@ const SPACE_MARKS: Mark[] = [
 const spaceScene = () => <Menu><Section title="Section"><Item icon={<FolderIcon />} meta="2m">A row</Item><Item icon={<MonitorIcon />}>Another</Item></Section></Menu>;
 
 const RADIUS_MARKS: Mark[] = [
-  { selector: ".ui-menu", label: "a popover or card", read: rounding },
-  { selector: ".ui-overlay", label: "an overlay", read: rounding },
-  { selector: ".ui-row[data-highlighted]", label: "a row", read: rounding },
-  { selector: ".ui-keycap", label: "a keycap", read: rounding },
-  { selector: ".ui-bubble", label: "the user's message", read: rounding },
-  { selector: ".ui-pill-field", label: "the phone's composer field (the desktop composer takes the same step)", read: rounding },
-  { selector: ".ui-pill[data-solo]", label: "a pill: a capsule", read: rounding },
+  { selector: ".ui-menu", label: "surface: a popover or card", read: rounding },
+  { selector: ".ui-overlay", label: "surface: an overlay", read: rounding },
+  { selector: ".ui-row[data-highlighted]", label: "control: a row", read: rounding },
+  { selector: ".ui-keycap", label: "control: a keycap", read: rounding },
+  { selector: ".ui-bubble", label: "message: the user's message", read: rounding },
+  { selector: ".ui-pill-field", label: "message: the composer (the phone's field here; the desktop composer the same)", read: rounding },
+  { selector: ".ui-pill[data-solo]", label: "pill: a capsule", read: rounding },
 ];
 const radiusScene = () => <div class="g-scene-stack">
   <Menu><Section><Item icon={<FolderIcon />} active keys={["Ctrl", "K"]}>A row</Item><Item>Another</Item></Section></Menu>
@@ -219,14 +219,11 @@ const SPACE: TokenGroup[] = [
   { title: "Composer", rows: [tok("--composer-width", "declared by the pane, not the composer", (cell) => { const el = document.createElement("div"); el.style.position = "absolute"; el.style.width = "var(--composer-width, 47.5rem)"; cell.append(el); const value = getComputedStyle(el).width; el.remove(); return `${px(value)} (47.5rem unless the pane says)`; }), tok("--cmp-field-min", "the field's least height", classLength("ui-composer-field", "--cmp-field-min")), tok("--cmp-bar-min", "the toolbar's height", classLength("ui-toolbar", "--cmp-bar-min")), tok("--cmp-slot", "a toolbar button", classLength("ui-toolbar", "--cmp-slot"))] },
 ];
 const RADII: TokenGroup[] = [
-  { title: "The scale (DESIGN.md rounded), in the density unit", rows: [
-    tok("--radius-sm", "keycaps, the segmented thumb, small checks", length("--radius-sm"), corner("--radius-sm")),
-    tok("--radius-md", "rows, buttons, inputs", length("--radius-md"), corner("--radius-md")),
-    tok("--radius-lg · pop", "popovers and cards, chips, toolbar buttons", length("--radius-lg"), corner("--radius-lg")),
-    tok("--radius-bubble", "the user's message", length("--radius-bubble"), corner("--radius-bubble")),
-    tok("--radius-xl", "overlays", length("--radius-xl"), corner("--radius-xl")),
-    tok("--radius-composer", "the composer and the phone's field", length("--radius-composer"), corner("--radius-composer")),
-    tok("--radius-pill", "pills: the phone's controls, the segmented pill", length("--radius-pill"), corner("--radius-pill")),
+  { title: "Four radii (DESIGN.md rounded)", rows: [
+    tok("--radius-control", "rows, buttons, inputs, keycaps, chips: in the density unit", length("--radius-control"), corner("--radius-control")),
+    tok("--radius-surface", "popovers, cards, overlays: a control's plus the inset, so rows nest", length("--radius-surface"), corner("--radius-surface")),
+    tok("--radius-message", "the composer and the user's message: one value on both; a capsule at one line, held as it grows", length("--radius-message"), corner("--radius-message")),
+    tok("--radius-pill", "pills: capsules", length("--radius-pill"), corner("--radius-pill")),
   ] },
 ];
 
@@ -367,7 +364,7 @@ export const foundationFamilies: Family[] = [
   ] }, { title: "Tokens", note: "for reference", layout: "desktop", atoms: [
     lib("space-tokens", "Space", "both", "space", "library.css [data-density]", () => <TokenTable groups={SPACE} />, "row"),
   ] }] },
-  { title: "Radius", rail: "Foundations", note: "one scale, DESIGN.md's rounded, its values a phone's and desktop's 0.8x; every piece takes a step", groups: [{ title: "In use", note: "each shape the library draws, and its corner", layout: "desktop", atoms: [
+  { title: "Radius", rail: "Foundations", note: "four radii: control, surface (a control's plus the inset, so rows nest), message (the composer and the user's message, one value everywhere), pill", groups: [{ title: "In use", note: "each shape the library draws, and its corner", layout: "desktop", atoms: [
     lib("radius-inuse", "Radius in use", "both", "radius", "Menu · Overlay · Bubble · PillField · PillButton", () => <InUse scene={radiusScene} marks={RADIUS_MARKS} />, "row"),
   ] }, { title: "Tokens", layout: "desktop", atoms: [
     lib("radius-tokens", "Radii", "both", "radius", "library.css --radius-*", () => <TokenTable groups={RADII} />, "row"),
