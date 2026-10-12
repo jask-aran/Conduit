@@ -168,7 +168,9 @@ function Actions(props: { message: Message; precedingUserId?: string; chat: Tran
      when the agent kept what it had written. */
   const continuable = () => props.partialContinue && Boolean(props.message.stopped) && !props.message.discarded
     && Boolean(props.message.content) && !props.chat.streaming() && props.chat.messages().at(-1)?.id === props.message.id;
-  return <div class="response-actions" data-reveal={props.reveal ? "" : undefined}>
+  // The gallery's previews draw it as the library's MessageFoot; the app keeps its own.
+  const library = useLibrary();
+  return <div class={library ? "ui-message-foot" : "response-actions"} data-end={library && !assistant() ? "" : undefined} data-reveal={props.reveal ? "" : undefined}>
     <MessageTime timestamp={props.message.timestamp} />
     <Show when={status()}>{(label) => <span class="marker response-status turn-trace-status" data-status={label() === "Interrupted" ? "interrupted" : undefined}>{label()}</span>}</Show>
     {/* A prompt offers editing. Regenerating it is the same act as regenerating
@@ -1202,7 +1204,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
   return <div ref={transcriptRoot} class="transcript" data-part="transcript" data-slot="message-scroller" data-markdown-renderer={markdownRenderer()} data-markdown-typewriter={rendererUsesTypewriter() ? "true" : undefined} data-incremark-pacing={rendererUsesTypewriter() ? incremarkPacing() : undefined}>
     <div ref={motionShell} class="transcript-motion-shell">
       <div ref={viewport} class="message-scroller-viewport" data-slot="message-scroller-viewport" tabIndex={-1} aria-label="Transcript">
-        <div ref={thread} class="thread" data-slot="message-scroller-content">
+        <div ref={thread} class={library ? "thread ui-read" : "thread"} data-slot="message-scroller-content">
         <Show when={props.chat.loadingOlder()}>
           <div data-slot="message-scroller-item" class="flex justify-center" role="status" aria-label="Loading earlier messages"><Spinner /></div>
         </Show>
@@ -1294,7 +1296,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
 
                 <Show when={user() && message().attachments?.length}><AttachmentCards items={message().attachments!} chatId={props.chat.loadedId()} label="Message attachments" /></Show>
                 <Show when={user() && review().comments.length}><ReviewCommentCards items={review().comments} chatId={props.chat.loadedId() ?? ""} label="Code references" /></Show>
-                <Show when={actionsShown()} fallback={<div class="response-actions" aria-hidden="true" />}><Actions message={message()} precedingUserId={precedingUserId()} chat={props.chat} supports={props.supports} partialContinue={props.partialContinue} artifact={artifact()} traced={item.traced} reveal={!user() && streamed()} /></Show>
+                <Show when={actionsShown()} fallback={<div class={library ? "ui-message-foot" : "response-actions"} aria-hidden="true" />}><Actions message={message()} precedingUserId={precedingUserId()} chat={props.chat} supports={props.supports} partialContinue={props.partialContinue} artifact={artifact()} traced={item.traced} reveal={!user() && streamed()} /></Show>
               </div>
             </article>
           </div>;
