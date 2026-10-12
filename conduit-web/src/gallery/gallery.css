@@ -298,3 +298,8 @@ html, body { background: var(--frame, #08090a); color: var(--foreground); }
 .g-phone-stage > p { margin: 0; padding: 56px 16px; color: var(--foreground); font-size: 16px; line-height: 1.55; }
 .g-stage-scrim { position: absolute; inset: 0; }
 .g-stage-scrim > .ui-overlay { height: 100%; }
+/* A staged page's switches (Controls): one surface and one density for the page. */
+.g-stage { position: sticky; top: 41px; z-index: 2; display: flex; gap: 12px; margin: 0 16px; padding: 8px 0; background: var(--frame); }
+.g-stage-surface { width: 100%; min-width: 0; padding: 20px 16px; }
+.g-scene-surface { width: 100%; min-width: 0; justify-items: start; gap: 10px; padding: 16px; }
+.g-variants .g-scale-name small + small { font: 10.5px/1.4 ui-monospace, monospace; }

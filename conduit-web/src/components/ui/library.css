@@ -9,10 +9,11 @@
  * unit (--u-type, --u-space, --u-icon); [data-density] sets them on any
  * subtree, so one set of rules draws desktop and phone.
  *
- *   Surfaces: a component's look follows what it sits on. [data-surface=frost]
- *   is set by Frost, Menu and Card; everything else is the ground (the app's
- *   background). Buttons, inputs and segmented choices have a ground look
- *   and a frost look; buttons on frost are hairlines, never frosted.
+ *   Surfaces: a surface sets two values and the controls on it read only
+ *   those: --tint, its lines and washes, and --well, the fill under an input
+ *   or an outline button. The ground is the default; [data-surface=frost]
+ *   (set by Frost, Menu, Card and the rest) brings frost's. No control has a
+ *   rule of its own per surface; buttons on frost are hairlines, never frosted.
  *
  *   .ui-frost              the material: stroke, fill, blur, highlight
  *     [data-lift=raised]   what floats over the app: menus, popovers, cards
@@ -81,12 +82,16 @@
   --frost-lift-rest: 0 8px 32px rgb(0 0 0 / 10%);
   --frost-lift-raised: 0 24px 70px rgb(0 0 0 / 38%);
   --frost-core-ground: oklch(0.3 0.006 264 / 90%); /* a mid grey, nearly opaque: it stops what is behind, without going dark */
-  /* One tint per surface for both its washes and its lines: --tint on the ground (the app's --border, which --accent matches), --frost-tint over frost. */
-  --tint: var(--border);
   --frost-tint: oklch(1 0 0 / 10%);
   /* State: a runtime dot, a warning. */
   --live: oklch(0.62 0.17 145); --warn: oklch(0.75 0.15 75);
 }
+
+/* What a surface gives the controls on it. --tint, one value for its washes and its lines (the
+   ground's is the app's --border, which --accent matches); --well, the fill under an input or an
+   outline button: a step darker than the ground, nothing over frost, which is its own fill. */
+:root, [data-surface="ground"] { --tint: var(--border); --well: color-mix(in oklch, var(--background), black 25%); }
+[data-surface="frost"] { --tint: var(--frost-tint); --well: transparent; }
 
 .ui-frost {
   border: 1px solid var(--frost-stroke);
@@ -170,8 +175,6 @@
 
 .ui-keycap { display: inline-grid; min-width: calc(1.25 * var(--u-space)); height: calc(1.25 * var(--u-space)); place-items: center; border-radius: var(--radius-control); background: var(--tint); padding: 0 calc(0.3125 * var(--u-space)); color: var(--muted-foreground); font: var(--weight-lift) var(--text-meta)/1 var(--font-label); }
 .ui-row[data-highlighted] .ui-keycap { color: var(--foreground); }
-/* A keycap is the surface's tint, as a hovered row or button is: --tint on the ground, --frost-tint over frost. */
-[data-surface="frost"] .ui-keycap { background: var(--frost-tint); }
 
 /* Card: the menu's container at dialog padding. */
 .ui-card { display: flex; flex-direction: column; gap: calc(1 * var(--u-space)); border-radius: var(--frost-radius); padding: calc(1.25 * var(--u-space)); }
@@ -182,26 +185,23 @@
 .ui-bubble { width: fit-content; max-width: min(calc(40 * var(--u-type)), 88cqw); margin-left: auto; border-radius: var(--radius-message); padding: calc(0.625 * var(--u-type)) calc(0.8125 * var(--u-type)); font-size: var(--text-body); line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
 
 
-/* Button: a rounded rectangle. On the ground, outline is a filled well; on
-   frost it is a hairline with nothing inside. Ghost is text until washed. */
+/* Button: a rounded rectangle. Outline is the surface's well inside its line (on frost, a
+   hairline with nothing inside); ghost is text until washed. */
 :where(.ui-button) { display: inline-flex; height: calc(2.25 * var(--u-space)); flex: none; align-items: center; justify-content: center; gap: calc(0.375 * var(--u-space)); border: 1px solid transparent; border-radius: var(--radius-control); padding: 0 calc(1 * var(--u-space)); font-size: var(--text-row); font-weight: var(--weight-strong); white-space: nowrap; cursor: pointer; transition: background-color .12s ease, border-color .12s ease, filter .12s ease; outline: none; }
 /* Zero-specificity: where the button sits sets its icon (a header, a composer), as in the app. */
 :where(.ui-button) svg { width: calc(1 * var(--u-icon)); height: calc(1 * var(--u-icon)); flex: none; }
 /* Keyboard focus is the wash and nothing else: never a ring. */
 .ui-button:focus-visible { outline: 0; background: var(--tint); }
-[data-surface="frost"] .ui-button:focus-visible { background: var(--frost-tint); }
 .ui-button[data-variant="primary"]:focus-visible { background: var(--primary); filter: brightness(0.88); }
 .ui-button:disabled { opacity: 0.45; pointer-events: none; }
 .ui-button[data-variant="primary"] { background: var(--foreground); color: var(--background); }
 .ui-button[data-variant="primary"]:hover { filter: brightness(0.88); }
-.ui-button[data-variant="outline"] { border-color: var(--tint); background: color-mix(in oklch, var(--background), black 25%); color: var(--foreground); }
+.ui-button[data-variant="outline"] { border-color: var(--tint); background: var(--well); color: var(--foreground); }
 .ui-button[data-variant="outline"]:hover { background: var(--tint); }
 .ui-button[data-variant="ghost"] { background: transparent; color: var(--foreground); }
 .ui-button[data-variant="ghost"]:hover { background: var(--tint); }
 .ui-button[data-variant="destructive"] { background: var(--destructive); color: white; }
 .ui-button[data-variant="destructive"]:hover { filter: brightness(1.1); }
-[data-surface="frost"] .ui-button[data-variant="outline"] { border-color: oklch(1 0 0 / 20%); background: transparent; }
-[data-surface="frost"] .ui-button:is([data-variant="outline"], [data-variant="ghost"]):hover { background: var(--frost-tint); }
 :where(.ui-button[data-size="sm"]) { height: calc(1.875 * var(--u-space)); padding: 0 calc(0.75 * var(--u-space)); font-size: var(--text-row); }
 :where(.ui-button[data-size="icon"]) { width: calc(2.25 * var(--u-space)); padding: 0; }
 /* icon-xs: a row of small actions under a message (time, copy, edit), round as the app draws them. */
@@ -209,21 +209,18 @@
 :where(.ui-button[data-size="icon-xs"]) svg { width: calc(0.875 * var(--u-icon)); height: calc(0.875 * var(--u-icon)); }
 :where(.ui-button[data-size="icon-sm"]) { width: calc(1.875 * var(--u-space)); height: calc(1.875 * var(--u-space)); padding: 0; }
 
-/* Field: an input or a select's trigger. A well on the ground, a hairline on
-   frost; the bare select is just its value and a chevron. */
-.ui-input { display: flex; width: 100%; height: calc(2.25 * var(--u-space)); align-items: center; gap: calc(0.5 * var(--u-space)); border: 1px solid var(--tint); border-radius: var(--radius-control); background: color-mix(in oklch, var(--background), black 25%); padding: 0 calc(0.75 * var(--u-space)); color: var(--foreground); font-size: var(--text-row); text-align: left; outline: none; transition: border-color .12s ease; }
+/* Field: an input or a select's trigger: the surface's well inside its line; the bare
+   select is just its value and a chevron. */
+.ui-input { display: flex; width: 100%; height: calc(2.25 * var(--u-space)); align-items: center; gap: calc(0.5 * var(--u-space)); border: 1px solid var(--tint); border-radius: var(--radius-control); background: var(--well); padding: 0 calc(0.75 * var(--u-space)); color: var(--foreground); font-size: var(--text-row); text-align: left; outline: none; transition: border-color .12s ease; }
 .ui-input::placeholder { color: var(--muted-foreground); }
 .ui-input:is(:hover, :focus, [aria-expanded="true"]) { border-color: color-mix(in oklch, var(--foreground), transparent 70%); }
-[data-surface="frost"] .ui-input { border-color: oklch(1 0 0 / 14%); background: transparent; }
-[data-surface="frost"] .ui-input:is(:hover, :focus) { border-color: oklch(1 0 0 / 30%); }
 .ui-input > span { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ui-input > svg { width: calc(1 * var(--u-icon)); height: calc(1 * var(--u-icon)); flex: none; color: var(--muted-foreground); }
 .ui-input[data-bare] { width: auto; height: auto; border: 0; background: transparent; padding: calc(0.25 * var(--u-space)) 0; color: var(--muted-foreground); }
 .ui-input[data-bare]:hover { color: var(--foreground); }
 
 /* Segmented choice: a hairline track and a sliding thumb (the app's
-   settings and dashboard filters). The accent is translucent, so the same
-   rules read on the frame and the ground; on frost the thumb is a wash. The
+   settings and dashboard filters): the surface's tint for both. The
    pill form is the phone header's: the track is itself frost. */
 .ui-seg { position: relative; display: inline-grid; grid-template-columns: repeat(var(--segments), minmax(0, 1fr)); gap: 2px; border: 1px solid var(--tint); border-radius: var(--radius-control); background: transparent; padding: 2px; }
 .ui-seg-thumb { position: absolute; top: 2px; bottom: 2px; left: 2px; width: calc((100% - 4px - 2px * (var(--segments) - 1)) / var(--segments)); border-radius: var(--radius-control); background: var(--tint); transform: translateX(calc((100% + 2px) * var(--segment))); transition: transform 200ms cubic-bezier(.2, .8, .2, 1); }
@@ -232,8 +229,6 @@
 .ui-seg button small { color: var(--muted-foreground); font: var(--weight-rest) var(--text-meta) var(--font-data); }
 .ui-seg button:is(:hover, [aria-checked="true"]) { color: var(--foreground); }
 .ui-seg[data-icons] button { width: calc(2.25 * var(--u-space)); padding: 0; }
-[data-surface="frost"] .ui-seg { border-color: oklch(1 0 0 / 14%); }
-[data-surface="frost"] .ui-seg-thumb { background: var(--frost-tint); }
 .ui-seg[data-pill] { height: var(--pill-size); gap: var(--pill-gap); border-color: var(--frost-stroke); border-radius: var(--radius-round); background: var(--frost-fill); padding: 1px; }
 .ui-seg[data-pill] .ui-seg-thumb { top: 1px; bottom: 1px; left: 1px; width: var(--pill-slot); transform: translateX(calc((100% + var(--pill-gap)) * var(--segment))); border-radius: var(--radius-round); background: var(--frost-tint); }
 .ui-seg[data-pill] button { width: var(--pill-slot); min-height: var(--pill-slot-height); border-radius: var(--radius-round); padding: 0; }

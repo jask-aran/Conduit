@@ -1,4 +1,4 @@
-import { createEffect, createSignal, For, Show } from "solid-js";
+import { createEffect, createSignal, For, Show, type JSX } from "solid-js";
 import { render } from "solid-js/web";
 import "../client/project/dashboard.css";
 import "../client/chat/composer-geometry.css";
@@ -7,6 +7,7 @@ import "./gallery.css";
 // The library's styles load with the gallery only; the app never ships them until it adopts the library.
 import "@/components/ui/library.css";
 import { ChatScreen } from "./stories";
+import { Frost } from "@/components/ui";
 import { LibraryContext } from "@/components/ui/swap";
 import { SidebarScreen } from "./sidebar-story";
 import { applyFaces, foundationFamilies } from "./foundations";
@@ -31,17 +32,25 @@ function applyTune(doc: Document, css: string) {
 const frames = () => Array.from(document.querySelectorAll<HTMLIFrameElement>("iframe"));
 const tuneFrame = (event: Event) => { const doc = (event.currentTarget as HTMLIFrameElement).contentDocument; if (doc) applyTune(doc, read()); };
 
-/** A cell. A piece used in both layouts gets a toggle to draw it at either; fixed: drawn at that layout only. */
-function Piece(props: { atom: Atom; fixed?: "desktop" | "phone" }) {
+type Density = "desktop" | "phone";
+type Surface = "ground" | "frost";
+/** The surface a staged cell is drawn on: the ground, or a raised frost. */
+const OnSurface = (props: { surface: Surface; children: () => JSX.Element }) => <>{props.surface === "frost"
+  ? <Frost lift="raised" class="g-surface g-stage-surface">{props.children()}</Frost>
+  : <div class="g-surface g-stage-surface" data-surface="ground">{props.children()}</div>}</>;
+
+/** A cell. A piece used in both layouts gets a toggle to draw it at either; fixed: drawn at that layout only; surface: drawn on it. */
+function Piece(props: { atom: Atom; fixed?: Density; surface?: Surface }) {
   const toggles = () => !props.fixed && props.atom.scope === "both";
-  const [density, setDensity] = createSignal<"desktop" | "phone">(props.fixed ?? (props.atom.scope === "phone" ? "phone" : "desktop"));
+  const [own, setDensity] = createSignal<Density>(props.atom.scope === "phone" ? "phone" : "desktop");
+  const density = () => props.fixed ?? own();
   return <figure class="g-cell" id={props.atom.id} data-wide={props.atom.wide === "row" ? "row" : props.atom.wide ? "" : undefined}>
     <figcaption class="g-tag" title={props.atom.source}><strong>{props.atom.name}</strong><span data-scope={props.atom.scope}>{props.atom.scope === "both" ? "desktop + phone" : props.atom.scope + " only"}</span><span data-kind={props.atom.kind}>{props.atom.kind}</span></figcaption>
     <Show when={toggles()}><div class="g-cell-toggle" role="group" aria-label="Layout">
       <button type="button" aria-pressed={density() === "desktop"} onClick={() => setDensity("desktop")}>Desktop</button>
       <button type="button" aria-pressed={density() === "phone"} onClick={() => setDensity("phone")}>Phone</button>
     </div></Show>
-    <div class="g-cell-body" data-density={density()}>{props.atom.render()}</div>
+    <div class="g-cell-body" data-density={density()}>{props.surface ? <OnSurface surface={props.surface}>{() => props.atom.render()}</OnSurface> : props.atom.render()}</div>
   </figure>;
 }
 
@@ -72,13 +81,21 @@ function Canvas() {
       leaderBottom: `${frame.bottom - box.top + 12}px` };
   };
   const overlays: [OverlayView, string][] = [["leader", "Leader"], ["palette", "Command palette"], ["search", "Chat search"], ["settings", "Settings"]];
-  // One family at a time, picked from the rail: Foundations, the frosted families, then Controls, which sit on any surface.
+  // One family at a time, picked from the rail: Foundations (Controls among them), then the frosted families.
   const families = [...foundationFamilies, ...libraryFamilies];
   const stored = (() => { try { return localStorage.getItem("gallery:family"); } catch { return null; } })();
   const [current, setCurrent] = createSignal(families.find((family) => family.title === stored)?.title ?? libraryFamilies[0]!.title);
   let left!: HTMLElement;
   const pick = (title: string) => { setCurrent(title); left.scrollTop = 0; try { localStorage.setItem("gallery:family", title); } catch { /* private window */ } };
   const shown = () => families.filter((family) => family.title === current());
+  // A staged page (Controls) draws its staged groups once, on one surface at one density, picked at its top and remembered.
+  const remembered = <T extends string>(key: string, values: T[]) => { try { const value = localStorage.getItem(key) as T; return values.includes(value) ? value : values[0]!; } catch { return values[0]!; } };
+  const [surface, setSurface] = createSignal(remembered<Surface>("gallery:stage-surface", ["ground", "frost"]));
+  const [stageDensity, setStageDensity] = createSignal(remembered<Density>("gallery:stage-density", ["desktop", "phone"]));
+  const stage = <T extends string>(set: (value: T) => void, key: string) => (value: T) => { set(value); try { localStorage.setItem(key, value); } catch { /* private window */ } };
+  const pickSurface = stage(setSurface, "gallery:stage-surface"), pickDensity = stage(setStageDensity, "gallery:stage-density");
+  // A piece for one layout only keeps it on a staged page.
+  const staged = (atom: Atom): Density => atom.scope === "both" ? stageDensity() : atom.scope;
   const rail = [...new Set(families.map((family) => family.rail ?? "Frosted"))].map((label) => [label, families.filter((family) => (family.rail ?? "Frosted") === label)] as const);
   const update = (css: string) => {
     setTune(css);
@@ -105,9 +122,17 @@ function Canvas() {
         placeholder={".composer-surface-material[data-composer-surface=\"frosted-live\"] {\n  backdrop-filter: blur(30px);\n}"} /></Show>
       <For each={shown()}>{(family) => <section class="g-family">
         <h2 class="g-family-title">{family.title} <small>{family.note}</small></h2>
+        <Show when={family.stage}><div class="g-stage">
+          <div class="g-toggle" role="group" aria-label="Surface">
+            <For each={["ground", "frost"] as Surface[]}>{(value) => <button type="button" aria-pressed={surface() === value} onClick={() => pickSurface(value)}>{value === "ground" ? "Ground" : "Frost"}</button>}</For>
+          </div>
+          <div class="g-toggle" role="group" aria-label="Density">
+            <For each={["desktop", "phone"] as Density[]}>{(value) => <button type="button" aria-pressed={stageDensity() === value} onClick={() => pickDensity(value)}>{value === "desktop" ? "Desktop" : "Phone"}</button>}</For>
+          </div>
+        </div></Show>
         <For each={family.groups}>{(group) => <>
           <Show when={group.title}><h3 class="g-heading">{group.title} <small>{group.note}</small></h3></Show>
-          <div class="g-grid g-dense"><For each={group.atoms}>{(atom) => <Piece atom={atom} fixed={group.layout} />}</For></div>
+          <div class="g-grid g-dense"><For each={group.atoms}>{(atom) => <Piece atom={atom} fixed={group.staged ? staged(atom) : group.layout} surface={group.staged ? surface() : undefined} />}</For></div>
         </>}</For>
       </section>}</For>
     </section>
