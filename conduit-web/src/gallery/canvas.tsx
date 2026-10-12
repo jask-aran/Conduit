@@ -7,7 +7,7 @@ import "./gallery.css";
 // The library's styles load with the gallery only; the app never ships them until it adopts the library.
 import "@/components/ui/library.css";
 import { ChatScreen } from "./stories";
-import { Frost } from "@/components/ui";
+import { NavGroup, NavRow, Frost } from "@/components/ui";
 import { LibraryContext } from "@/components/ui/swap";
 import { SidebarScreen } from "./sidebar-story";
 import { applyFaces, applyScale, foundationFamilies } from "./foundations";
@@ -87,7 +87,7 @@ function Canvas() {
   const phoneFrame = () => document.querySelector<HTMLIFrameElement>('iframe[title="Phone"]');
   const openOnPhone = (view: OverlayView | null) => { setPhoneOverlay(view); phoneFrame()?.contentWindow?.postMessage({ galleryOverlay: view }, location.origin); };
   addEventListener("message", (event) => { if (event.origin === location.origin && event.data?.galleryOverlayClosed) setPhoneOverlay(null); });
-  // One family at a time, picked from the rail: Foundations (Controls among them), then the frosted families.
+  // One family at a time, picked from the rail: Foundations (Controls among them), the frosted families, then the Transcript.
   const families = [...foundationFamilies, ...libraryFamilies];
   const stored = (() => { try { return localStorage.getItem("gallery:family"); } catch { return null; } })();
   const [current, setCurrent] = createSignal(families.find((family) => family.title === stored)?.title ?? libraryFamilies[0]!.title);
@@ -112,12 +112,12 @@ function Canvas() {
   };
   applyTune(document, tune());
   return <div class="g-canvas" data-preview={preview()}>
-    <nav class="g-rail" aria-label="Families">
-      <h1>Gallery</h1>
-      <For each={rail}>{([label, families]) => <>
-        <h2>{label}</h2>
-        <For each={families}>{(family) => <button type="button" aria-current={current() === family.title} onClick={() => pick(family.title)}>{family.title}</button>}</For>
-      </>}</For>
+    {/* The rail is drawn as the sidebar is, with the library's NavGroups and NavRows, at the desktop's density. */}
+    <nav class="g-rail" aria-label="Families" data-density="desktop">
+      <div class="g-rail-head"><strong>Gallery</strong><small>components v2</small></div>
+      <For each={rail}>{([label, families]) => <NavGroup label={label}>
+        <For each={families}>{(family) => <NavRow current={current() === family.title} onClick={() => pick(family.title)}>{family.title}</NavRow>}</For>
+      </NavGroup>}</For>
     </nav>
     <section class="g-left" ref={left}>
       <div class="g-bar">
