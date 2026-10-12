@@ -418,6 +418,8 @@ Choosing in a menu:
 
 **Attachment strip** — every attachment for the draft in one short strip directly above the composer, in the queued pill's width and material: images as cropped thumbnails, files as chips with type icon, name and size. Remove on hover or focus (always on touch); uploading a thin progress ring; failed a red outline with retry. More chips scroll sideways with a fade at the edge; a quiet ⤢ opens the full list (a bottom sheet on a phone).
 
+**Toast** — one sentence about what just happened, raised frost at the window's edge: bottom right on desktop, the top on a phone (clear of the composer and keyboard). Its kind is a glyph in the state's colour, never a fill (success live, warning warn, error destructive, info muted); an action under the sentence when there is one thing to do; a × to dismiss. Never a second line or a title.
+
 **Dialog** (`FrostDialog`) — confirms and small prompts: a narrow frost card over the dim, centred, small on a phone too. The title and the choice, nothing else: no line saying what the title already does ("It can't be brought back" under Delete); a detail only when it asks something (type the name to confirm); a one-field prompt drops its label. An input is a faint hairline that brightens on focus, never a ring. Its buttons: the primary action (Save, Continue) a white outline, the others (Cancel, Back) a ghost outline, a destructive confirm (Delete) filled red.
 
 **Input-quiet** — borderless inside frost composer or palette search.
