@@ -1,4 +1,6 @@
 @import "@fontsource-variable/inconsolata";
+/* Paper Mono (OFL, fonts/PaperMono-OFL.txt), shipped by the library: the section labels' face. */
+@font-face { font-family: "Paper Mono"; src: url("./fonts/PaperMono-Variable.woff2") format("woff2"); font-weight: 100 800; font-style: normal; font-display: swap; }
 /*
  * The unified component library (gallery only until it replaces the app's
  * copies). One frost material, two lifts; every size is a multiple of a density
@@ -25,7 +27,7 @@
    phone, icons barely; popover rows and the frost pill take their own
    measured sizes (rows ~1.8x, for a finger). Sizes below are written in desktop px over 12.8. */
 /* The faces, by role (Foundations · Fonts switches them; --font-sans, the main UI's, is styles.css's).
-   Section labels take a mono Conduit ships (Paper Mono, from the app's styles), so they look
+   Section labels take a mono the library ships (Paper Mono, above), so they look
    the same on every system, the system's mono only as the fallback; meta and keycaps stay the system's. */
 :root {
   --font-label: "Paper Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
