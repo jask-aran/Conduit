@@ -73,13 +73,10 @@ typography:
     fontSize: 8px
     fontWeight: 500
 rounded:
-  sm: 5px
-  md: 8px
-  lg: 10px
-  pop: 10px
-  bubble: 15px
-  xl: 16px
-  composer: 22px
+  control: 8px
+  surface: 13px
+  message: 22px
+  pane: 16px
   pill: 999px
 spacing:
   xs: 4px
@@ -92,51 +89,51 @@ components:
   pane:
     backgroundColor: "{colors.background}"
     textColor: "{colors.foreground}"
-    rounded: "{rounded.xl}"
+    rounded: "{rounded.pane}"
   tile:
     backgroundColor: "transparent"
     textColor: "{colors.foreground}"
-    rounded: "{rounded.lg}"
+    rounded: "{rounded.surface}"
   card:
     backgroundColor: "{colors.card}"
     textColor: "{colors.foreground}"
-    rounded: "{rounded.lg}"
+    rounded: "{rounded.surface}"
   popover:
     backgroundColor: "{colors.popover}"
     textColor: "{colors.foreground}"
-    rounded: "{rounded.pop}"
+    rounded: "{rounded.surface}"
   frost-chrome:
     backgroundColor: "{colors.frost-fill}"
     textColor: "{colors.foreground}"
-    rounded: "{rounded.composer}"
+    rounded: "{rounded.message}"
   user-bubble:
     backgroundColor: "{colors.glass-bg}"
     textColor: "{colors.foreground}"
-    rounded: "{rounded.bubble}"
+    rounded: "{rounded.message}"
   row-hover:
     backgroundColor: "{colors.accent}"
     textColor: "{colors.accent-foreground}"
-    rounded: "{rounded.md}"
+    rounded: "{rounded.control}"
   row-selected:
     backgroundColor: "{colors.accent}"
     textColor: "{colors.foreground}"
-    rounded: "{rounded.md}"
+    rounded: "{rounded.control}"
   button-primary:
     backgroundColor: "{colors.primary}"
     textColor: "{colors.primary-foreground}"
-    rounded: "{rounded.md}"
+    rounded: "{rounded.control}"
   button-ghost:
     backgroundColor: "transparent"
     textColor: "{colors.foreground}"
-    rounded: "{rounded.md}"
+    rounded: "{rounded.control}"
   input-quiet:
     backgroundColor: "transparent"
     textColor: "{colors.foreground}"
-    rounded: "{rounded.md}"
+    rounded: "{rounded.control}"
   input-bordered:
     backgroundColor: "transparent"
     textColor: "{colors.foreground}"
-    rounded: "{rounded.md}"
+    rounded: "{rounded.control}"
 ---
 
 
@@ -341,12 +338,15 @@ No stacked card shadows, no colored glows, no frost on a row or a list. One exce
 
 # Shapes
 
-- Inset panes: the large radius (`{rounded.xl}`).
-- Tiles (legacy, dashboard and workspace panel only): `{rounded.lg}`.
-- Rows and small controls: `{rounded.md}` or smaller.
-- The scale is a phone's; desktop draws it at 0.8x with the density, so a row is 6.4px, a popover 8px and the composer 17.6px there. Every piece takes a step of the scale (components v2: `--radius-*`); none sets its own.
-- Composer and header pill: `{rounded.composer}` (squircle, not a circle, not a sharp box). Overlay cards sit between rows and the composer.
-- Pills only for true pills (scope toggle, runtime dots). Do not pill section titles or metadata.
+Four radii, and a pane's:
+
+- **control** (`{rounded.control}`): rows, buttons, inputs, keycaps, chips. In the density unit, so 6.4px on desktop.
+- **surface** (`{rounded.surface}`): popovers, cards, overlays. A control's radius plus the surface's inset, so the rows inside nest (9.6px on desktop).
+- **message** (`{rounded.message}`): the composer and the user's message, one value on phone and desktop. A capsule at one line, held as the composer grows.
+- **pill**: capsules. Pills only for true pills (pill controls, scope toggle, runtime dots); do not pill section titles or metadata.
+- Inset panes take `{rounded.pane}`. Tiles (legacy, dashboard and workspace panel only) take surface.
+
+Nothing sets its own radius (components v2: `--radius-*`).
 
 **Icons** are Lucide, muted at rest, one size per context (the top of the app shares one size and one line). **An icon's stroke is a tenth of its size** (2.4 in Lucide's 24-unit box, `svg.lucide`), so weight scales with the icon and no size needs tuning; a current or selected icon is an eighth (3 units). Rules that set a stroke set it in those units; nothing overrides the ratio for one component. Artwork that is not Lucide (harness marks, the context gauge) draws its own weight. The composer's + and mic wear the text colour rather than muted, because they are live actions.
 
@@ -395,7 +395,7 @@ Grouped by the surface they live on (Surfaces). Every row in every group follows
 
 **Leader menu** — what Ctrl+G can do from where you are, shown after a pause. The page dims except the current region, which stays lit. A small frost card above the composer: the region path as a breadcrumb at the top, action rows with keycaps at the left, the go-to chords and Esc in the rail.
 
-**Dropdown menu** — the common case: sessions, shortcuts, overflow, context menus, submenus and popovers. The overlays' frost and `{rounded.pop}`. A section label, then one-line rows: an optional leading mark, the title at the row role, muted meta inline at the right, trailing icon actions that appear with the row on hover or focus (always on touch). The whole row takes the wash. A single footer action ("+ New …") under a hairline. Something edited in place opens as an inline form in its row and saves on Done; use a popover rather than a menu when rows hold inputs. A one-field rename stays a dialog.
+**Dropdown menu** — the common case: sessions, shortcuts, overflow, context menus, submenus and popovers. The overlays' frost and `{rounded.surface}`. A section label, then one-line rows: an optional leading mark, the title at the row role, muted meta inline at the right, trailing icon actions that appear with the row on hover or focus (always on touch). The whole row takes the wash. A single footer action ("+ New …") under a hairline. Something edited in place opens as an inline form in its row and saves on Done; use a popover rather than a menu when rows hold inputs. A one-field rename stays a dialog.
 
 Choosing in a menu:
 
@@ -412,7 +412,7 @@ Choosing in a menu:
 
 **Composer takeover** — anything the agent is blocked on until the user answers: questions, approvals, choices. It replaces the composer in its slot and material rather than stacking above it, and never scrolls inside itself. One question at a time: several are tabs ending in a Submit tab that summarises the answers; answers are numbered one-line rows, a typed answer the last of them. It takes the keyboard while up -- arrows, a number or Enter chooses, Tab turns the page, Esc dismisses (a dismissed approval is a denial). A single question with a single answer skips tabs: choosing is answering.
 
-**User bubble** — frosted glass, `{rounded.bubble}`, right-aligned, in the composer's material family. A message being edited goes muted and italic in its bubble with no outline, and a frost "Cancel editing" pill floats above the composer. Assistant text has no bubble.
+**User bubble** — frosted glass, `{rounded.message}`, right-aligned, in the composer's material family. A message being edited goes muted and italic in its bubble with no outline, and a frost "Cancel editing" pill floats above the composer. Assistant text has no bubble.
 
 **Attachment strip** — every attachment for the draft in one short strip directly above the composer, in the queued pill's width and material: images as cropped thumbnails, files as chips with type icon, name and size. Remove on hover or focus (always on touch); uploading a thin progress ring; failed a red outline with retry. More chips scroll sideways with a fade at the edge; a quiet ⤢ opens the full list (a bottom sheet on a phone).
 
@@ -422,7 +422,7 @@ Choosing in a menu:
 
 ## Pane
 
-**List row** — transparent, `{rounded.md}`, follows Interaction exactly. In the sidebar every row rests at one weight; the current row and the folder or workspace holding it are white at the current weight, so where you are reads up the tree. A pinned row looks exactly like its unpinned row. Never an inset coloured bar.
+**List row** — transparent, `{rounded.control}`, follows Interaction exactly. In the sidebar every row rests at one weight; the current row and the folder or workspace holding it are white at the current weight, so where you are reads up the tree. A pinned row looks exactly like its unpinned row. Never an inset coloured bar.
 
 **Sidebar action** — an action of the sidebar is a row, not a small button beside a heading, and is also on the collapsed rail.
 
@@ -432,13 +432,13 @@ Choosing in a menu:
 
 **Switch** — on or off: a small pill, near-white track with a dark knob when on, gray when off. A checkbox is for choosing items, not settings.
 
-**Input-bordered** — 1px hairline inside settings and forms, `{rounded.md}`, as tall as its row needs.
+**Input-bordered** — 1px hairline inside settings and forms, `{rounded.control}`, as tall as its row needs.
 
 **Workspace rail** — mirrors the sidebar's collapsed rail on the right edge, on the frame: one icon per tool, grey at rest, the wash as the cursor, the dock's tool current. Below a short hairline, chat search and the command palette; while panes are open, Equalise and Layouts at its foot. It is out of the tab order; the tool keys and Ctrl+Shift+3 reach the dock.
 
 **Pane header** — shares the top line of the app. A document's name or its tab row at the left; its modes as a segmented switch; quiet ghost controls at the right in the order they are reached for, grouped by short hairlines, folding into a ⋯ rather than scrolling; the pane's swap and close last.
 
-**Tiled pane (legacy)** — hairline, `{rounded.lg}`, flat. Being retired for lists; not for new surfaces.
+**Tiled pane (legacy)** — hairline, `{rounded.surface}`, flat. Being retired for lists; not for new surfaces.
 
 ## Transcript
 
