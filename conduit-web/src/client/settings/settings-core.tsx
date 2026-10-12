@@ -18,6 +18,7 @@ import { createVoiceWaveformController, VoiceWaveform } from "../chat/voice-wave
 import { ModelSelector } from "../chat/model-selector";
 import { saveTabFrost, tabFrost } from "../preferences/tab-frost";
 import { saveTranscriptFont, TRANSCRIPT_FONT_OPTIONS, transcriptFont, type TranscriptFont } from "../preferences/transcript-font";
+import { saveTerminalFont, TERMINAL_FONT_OPTIONS, terminalFont, type TerminalFont } from "../preferences/terminal-font";
 import { PHONE_COMPOSER_OPTIONS, phoneComposerLayout, savePhoneComposerLayout, type PhoneComposerLayout } from "../preferences/phone-composer";
 import { saveStreamFade, saveStreamMathFade, STREAM_FADE_OPTIONS, streamFadeMs, streamMathFade } from "../preferences/stream-fade";
 import { INCREMARK_PACING_OPTIONS, saveIncremarkPacing, selectedIncremarkPacing, type IncremarkPacingMode } from "../chat/incremark-pacing";
@@ -250,6 +251,7 @@ export function Settings(props: {
   const [frosted, setFrosted] = createSignal(tabFrost());
   const [phoneComposer, setPhoneComposer] = createSignal(phoneComposerLayout());
   const [transcriptFontChoice, setTranscriptFontChoice] = createSignal(transcriptFont());
+  const [terminalFontChoice, setTerminalFontChoice] = createSignal(terminalFont());
   const [fadeMs, setFadeMs] = createSignal(streamFadeMs());
   // On a phone, a field holding a text input or model picker stacks its
   // control under the label. Marked here rather than with
@@ -1170,6 +1172,11 @@ export function Settings(props: {
                   <label class="settings-line" for="transcript-font"><span>Transcript font</span>
                     <Select id="transcript-font" aria-label="Transcript font" value={transcriptFontChoice()} onChange={(event) => setTranscriptFontChoice(saveTranscriptFont(event.currentTarget.value as TranscriptFont))}>
                       <For each={TRANSCRIPT_FONT_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
+                    </Select>
+                  </label>
+                  <label class="settings-line" for="terminal-font"><span>Terminal font</span>
+                    <Select id="terminal-font" aria-label="Terminal font" value={terminalFontChoice()} onChange={(event) => setTerminalFontChoice(saveTerminalFont(event.currentTarget.value as TerminalFont))}>
+                      <For each={TERMINAL_FONT_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
                     </Select>
                   </label>
                   <label class="settings-line" for="sidebar-chat-limit"><span>Sidebar chats</span>

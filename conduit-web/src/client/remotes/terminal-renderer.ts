@@ -1,4 +1,5 @@
 import terminalFontUrl from "../assets/MesloLGSNerdFontMono-Regular.ttf";
+import { terminalFontFamily } from "../preferences/terminal-font";
 import { isMobileLayout } from "../navigation/mobile-layout";
 import "./terminal-pane.css";
 
@@ -265,7 +266,7 @@ async function createXtermRenderer(host: HTMLElement, options: TerminalRendererO
   ]);
   const terminal = new Terminal({
     fontSize: terminalFontSize(),
-    fontFamily: '"Conduit Terminal Font", monospace',
+    fontFamily: terminalFontFamily(),
     cursorBlink: false,
     altClickMovesCursor: false,
     scrollback: 1000,
