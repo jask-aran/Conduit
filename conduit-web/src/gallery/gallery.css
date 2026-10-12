@@ -99,7 +99,7 @@ html, body { background: var(--frame, #08090a); color: var(--foreground); }
 .g-live-panels[data-panel-open] .g-live-parent { opacity: .38; filter: saturate(.6); }
 .g-live-panel { position: absolute; inset: 0; display: flex; align-items: flex-end; padding-left: 51px; }
 .g-live-panel .g-live-menu { width: 260px; max-height: 360px; }
-.g-live-backdrop { position: absolute; inset: 0; z-index: 9; background: rgb(0 0 0 / 45%); }
+.g-live-backdrop { position: absolute; inset: 0; z-index: 9; background: var(--dim); }
 .g-live-sidebar { position: absolute; inset: 0 auto 0 0; z-index: 10; display: flex; width: 86%; flex-direction: column; background: var(--frame); box-shadow: 8px 0 40px rgb(0 0 0 / 40%); animation: g-live-in .22s cubic-bezier(.2,.8,.2,1); }
 @keyframes g-live-in { from { transform: translateX(-100%); } }
 .g-live-sidebar-head { display: flex; align-items: center; gap: 8px; padding: 8px 10px; }

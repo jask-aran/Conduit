@@ -83,7 +83,7 @@
   --frost-lift-raised: 0 24px 70px rgb(0 0 0 / 38%);
   --frost-core-ground: oklch(0.3 0.006 264 / 90%); /* a mid grey, nearly opaque: it stops what is behind, without going dark */
   --frost-tint: oklch(1 0 0 / 10%);
-  /* The dim over the page behind a desktop overlay (the scrim) or round the leader's lit composer (the spotlight). */
+  /* The dim over what is behind: a desktop overlay (the scrim), the leader's lit composer (the spotlight), the phone's open sidebar. */
   --dim: rgb(0 0 0 / 42%);
   /* State: a runtime dot, a warning. */
   --live: oklch(0.62 0.17 145); --warn: oklch(0.75 0.15 75);
