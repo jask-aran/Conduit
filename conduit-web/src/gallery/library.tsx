@@ -579,7 +579,7 @@ export const libraryFamilies: Family[] = [
       </div></div>, true),
     ] },
   ] },
-  { title: "Transcript", note: "what is read, at the transcript's scale (Space · Scale, Settings · Text size); a row's text there (a trace, a trail) is a step under the body on both densities: the user's Message (a Bubble and its foot) and a Turn (its trace header, the answer, the answer's foot). The answer is Markdown with no bubble in the Body role, one gap between blocks; the trail sits a step under it", groups: [
+  { title: "Transcript", rail: "Transcript", note: "what is read, at the transcript's scale (Space · Scale, Settings · Text size); a row's text there (a trace, a trail) is a step under the body on both densities: the user's Message (a Bubble and its foot) and a Turn (its trace header, the answer, the answer's foot). The answer is Markdown with no bubble in the Body role, one gap between blocks; the trail sits a step under it", groups: [
     { title: "In use", note: "a turn, measured: green the gaps (a turn's parts half a unit apart, blocks three quarters)", layout: "desktop", atoms: [
       lib("transcript-inuse", "Turn in use", "both", "transcript", "Turn > TraceHeader · Answer · MessageFoot", () => <InUse scene={turnScene} marks={TURN_MARKS} spacing={[".ui-turn", ".ui-answer"]} />, "row"),
     ] },
