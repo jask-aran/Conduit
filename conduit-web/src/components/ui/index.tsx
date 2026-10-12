@@ -100,6 +100,8 @@ export function Item(props: {
   /** keysFirst: the keycaps lead the row (the leader menu, where the key is what you read first). */
   keysFirst?: boolean;
   checked?: boolean; disabled?: boolean; destructive?: boolean; children: JSX.Element;
+  /** end: a control at the row's end, after its meta (a remove ×). */
+  end?: JSX.Element;
 }) {
   return <div role={props.checked !== undefined ? "menuitemradio" : "menuitem"} class="ui-row" aria-checked={props.checked} data-field={props.field ? "" : undefined} onClick={props.onClick}
     data-highlighted={props.active ? "" : undefined} data-checked={props.checked ? "" : undefined} data-disabled={props.disabled ? "" : undefined} data-destructive={props.destructive ? "" : undefined}>
@@ -108,6 +110,7 @@ export function Item(props: {
     <Show when={props.meta}><small>{props.meta}</small></Show>
     <Show when={!props.keysFirst && props.keys}><span class="ui-keys"><For each={props.keys}>{(key) => <kbd class="ui-keycap">{key}</kbd>}</For></span></Show>
     <Show when={props.opens}><ChevronRightIcon class="ui-chevron" /></Show>
+    <Show when={props.end}><span class="ui-row-end">{props.end}</span></Show>
   </div>;
 }
 
@@ -126,9 +129,11 @@ export function Keycap(props: { children: JSX.Element; label?: string; onClick?:
   </span>;
 }
 
-export function Card(props: { title: string; detail?: string; class?: string; density?: Density; actions?: JSX.Element; children?: JSX.Element }) {
-  return <div role="dialog" aria-label={props.title} class={cn("ui-frost ui-card", props.class)} data-density={props.density} data-surface="frost" data-lift="raised">
+/** size wide: a card that holds content (a list, an excerpt, an editor). close: a × in its corner, for a card with no Cancel. */
+export function Card(props: { title: string; detail?: JSX.Element; class?: string; density?: Density; size?: "wide"; close?: boolean | (() => void); actions?: JSX.Element; children?: JSX.Element }) {
+  return <div role="dialog" aria-label={props.title} class={cn("ui-frost ui-card", props.class)} data-density={props.density} data-size={props.size} data-close={props.close ? "" : undefined} data-surface="frost" data-lift="raised">
     <h3>{props.title}</h3><Show when={props.detail}><p>{props.detail}</p></Show>
+    <Show when={props.close}><Button variant="ghost" size="icon-sm" class="ui-card-close" aria-label="Close" onClick={() => typeof props.close === "function" && props.close()}><XIcon /></Button></Show>
     {props.children}
     <Show when={props.actions}><div class="ui-card-actions">{props.actions}</div></Show>
   </div>;
@@ -351,6 +356,11 @@ export function Button(props: JSX.ButtonHTMLAttributes<HTMLButtonElement> & { va
 /** Multi-line text that grows with its lines: bare, the type's size, no geometry of its own -- what holds it pads it (DesktopComposer, PillField). */
 export function TextArea(props: { placeholder?: string; value?: string; onInput?: (value: string) => void; class?: string }) {
   return <textarea class={cn("ui-textarea", props.class)} rows={1} placeholder={props.placeholder} value={props.value ?? ""} onInput={(event) => props.onInput?.(event.currentTarget.value)} />;
+}
+
+/** A field's name over its control: Caption type, --card-pair above it. */
+export function Field(props: { label: string; children: JSX.Element }) {
+  return <label class="ui-field"><span class="ui-field-label">{props.label}</span>{props.children}</label>;
 }
 
 export function Input(props: JSX.InputHTMLAttributes<HTMLInputElement>) {

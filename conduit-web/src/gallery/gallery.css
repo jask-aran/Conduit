@@ -324,3 +324,6 @@ html, body { background: var(--frame, #08090a); color: var(--foreground); }
 .g-band[data-kind="edge"] { background: oklch(0.7 0.16 350 / 14%); }
 .g-band[data-kind="gap"] { background: oklch(0.75 0.14 150 / 18%); }
 .g-band small { color: #fff; font: 600 9px/1 ui-monospace, monospace; text-shadow: 0 0 3px #000, 0 0 3px #000; white-space: nowrap; }
+.g-qr { width: 160px; height: 160px; align-self: center; }
+.g-scale-row[data-stacked] > .g-scale-name { grid-column: 1 / -1; }
+.g-scale-row[data-stacked] > .g-scale-name small { display: inline; margin-left: 8px; }
