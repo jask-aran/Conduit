@@ -176,7 +176,7 @@ const RADIUS_MARKS: Mark[] = [
   { selector: ".ui-keycap", label: "control: a keycap", read: rounding },
   { selector: ".ui-bubble", label: "message: the user's message", read: rounding },
   { selector: ".ui-pill-field", label: "message: the composer (the phone's field here; the desktop composer the same)", read: rounding },
-  { selector: ".ui-pill[data-solo]", label: "pill: a capsule", read: rounding },
+  { selector: ".ui-pill[data-solo]", label: "message: a pill (a circle at 44px)", read: rounding },
 ];
 const radiusScene = () => <div class="g-scene-stack">
   <Menu><Section><Item icon={<FolderIcon />} active keys={["Ctrl", "K"]}>A row</Item><Item>Another</Item></Section></Menu>
@@ -222,8 +222,8 @@ const RADII: TokenGroup[] = [
   { title: "Four radii (DESIGN.md rounded)", rows: [
     tok("--radius-control", "rows, buttons, inputs, keycaps, chips: in the density unit", length("--radius-control"), corner("--radius-control")),
     tok("--radius-surface", "popovers, cards, overlays: a control's plus the inset, so rows nest", length("--radius-surface"), corner("--radius-surface")),
-    tok("--radius-message", "the composer and the user's message: one value on both; a capsule at one line, held as it grows", length("--radius-message"), corner("--radius-message")),
-    tok("--radius-pill", "pills: capsules", length("--radius-pill"), corner("--radius-pill")),
+    tok("--radius-message", "the composer, the user's message, the phone's pills: one value on both; a capsule at one line (a 44px pill, a circle), held as it grows", length("--radius-message"), corner("--radius-message")),
+    tok("--radius-round", "small fully round bits inside controls: the slider, a pill's buttons, a chip's remove", length("--radius-round"), corner("--radius-round")),
   ] },
 ];
 
@@ -364,7 +364,7 @@ export const foundationFamilies: Family[] = [
   ] }, { title: "Tokens", note: "for reference", layout: "desktop", atoms: [
     lib("space-tokens", "Space", "both", "space", "library.css [data-density]", () => <TokenTable groups={SPACE} />, "row"),
   ] }] },
-  { title: "Radius", rail: "Foundations", note: "four radii: control, surface (a control's plus the inset, so rows nest), message (the composer and the user's message, one value everywhere), pill", groups: [{ title: "In use", note: "each shape the library draws, and its corner", layout: "desktop", atoms: [
+  { title: "Radius", rail: "Foundations", note: "four radii: control, surface (a control's plus the inset, so rows nest), message (the composer, the user's message and the phone's pills, one value everywhere), round", groups: [{ title: "In use", note: "each shape the library draws, and its corner", layout: "desktop", atoms: [
     lib("radius-inuse", "Radius in use", "both", "radius", "Menu · Overlay · Bubble · PillField · PillButton", () => <InUse scene={radiusScene} marks={RADIUS_MARKS} />, "row"),
   ] }, { title: "Tokens", layout: "desktop", atoms: [
     lib("radius-tokens", "Radii", "both", "radius", "library.css --radius-*", () => <TokenTable groups={RADII} />, "row"),
