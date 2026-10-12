@@ -375,7 +375,7 @@ function codeScene() {
 const CODE_MARKS: Mark[] = [
   { selector: ".ui-code", label: "a box: a --tint line at the control corner, no fill", read: (el) => rounding(el) },
   { selector: ".ui-code-lang", label: "the language, where the numbers start: Caption, the data face", read: (el) => typeOf(el) },
-  { selector: ".ui-code .ui-copy", label: "Copy, and the fold's chevron beside it: icon-xs ghost, the caption's inset all round", read: (el) => px(`${el.getBoundingClientRect().width}px`) },
+  { selector: ".ui-code .ui-copy", label: "Copy, and the fold's chevron beside it: icon-xs ghost buttons with caption-sized icons, their glyphs as far from the end as the language is from the start", read: (el) => px(`${el.getBoundingClientRect().width}px`) },
   { selector: ".ui-code-n", label: "line numbers: muted, tabular, as wide as the last one", read: (el) => fg(el) },
   { selector: ".ui-code > pre", label: "the code: the code face in the Row role, at 1.6", read: (el) => typeOf(el) },
   { selector: ".ui-code-more", label: "folded: the cut fades, the foot counts what it hides", read: (el) => px(`${el.getBoundingClientRect().height}px`) },

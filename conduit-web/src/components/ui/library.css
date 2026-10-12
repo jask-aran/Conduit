@@ -672,13 +672,15 @@
 .ui-answer th { font-weight: var(--weight-strong); }
 /* A code block: a box, its language and Copy over the lines; each line numbered, muted, out of the selection. */
 /* clip, not hidden: the caption pins against the transcript as a long block scrolls by. */
-.ui-code { width: 100%; min-width: 0; margin: 0; overflow: clip; }
+.ui-code { width: 100%; min-width: 0; margin: 0; overflow: clip; background: var(--background); }
 /* The caption: the language where the numbers start, Copy (and the fold's chevron) at the end, one size of icon button. */
-.ui-code > figcaption { position: sticky; top: 0; z-index: 1; display: flex; height: var(--control-sm); align-items: center; gap: var(--space-2xs); border-bottom: 1px solid var(--tint); background: var(--background); padding: 0 calc((var(--control-sm) - var(--control-xs)) / 2) 0 var(--space-lg); color: var(--muted-foreground); font: var(--text-caption) var(--font-data); }
+.ui-code > figcaption { position: sticky; top: 0; z-index: 1; display: flex; height: var(--control-sm); align-items: center; gap: var(--space-2xs); border-bottom: 1px solid var(--tint); background: linear-gradient(var(--tint), var(--tint)), var(--background); padding: 0 calc(var(--space-lg) - (var(--control-xs) - var(--icon-xs)) / 2) 0 var(--space-lg); color: var(--muted-foreground); font: var(--text-caption) var(--font-data); }
+/* Its buttons' icons are the caption's size, not a row's. */
+.ui-code > figcaption .ui-button svg { width: var(--icon-xs); height: var(--icon-xs); }
 .ui-code-lang { margin-right: auto; }
-.ui-code > pre { margin: 0; overflow-x: auto; padding: var(--space-sm) 0; font: var(--text-row)/1.6 var(--font-code); }
+.ui-code > pre { margin: 0; overflow-x: auto; padding: var(--space-md) 0; font: var(--text-row)/1.6 var(--font-code); }
 /* Folded: the lines past the fold are cut, the last of them fading; the foot opens it. */
-.ui-code[data-folded] > pre { max-height: calc(var(--code-fold) * 1.6em + 2 * var(--space-sm)); overflow-y: hidden; mask-image: linear-gradient(to bottom, #000 calc(100% - 2.4em), transparent); }
+.ui-code[data-folded] > pre { max-height: calc(var(--code-fold) * 1.6em + 2 * var(--space-md)); overflow-y: hidden; mask-image: linear-gradient(to bottom, #000 calc(100% - 2.4em), transparent); }
 .ui-code-more { display: block; width: 100%; height: var(--control-sm); border: 0; border-top: 1px solid var(--tint); background: transparent; color: var(--muted-foreground); font: var(--text-caption) var(--font-sans); cursor: pointer; }
 .ui-code-more:is(:hover, :focus-visible) { background: var(--tint); color: var(--foreground); }
 .ui-code[data-folded][data-streaming] .ui-code-more { animation: ui-code-writing 1.6s ease-in-out infinite; }
@@ -690,13 +692,6 @@
 @keyframes ui-copied { from { background-color: var(--tint); } }
 @media (prefers-reduced-motion: reduce) { :where([data-copied]):not(.ui-button) { animation: none; } }
 .ui-code-line { display: block; padding-inline: var(--space-lg); white-space: pre; }
-/* Folded: the lines past the fold are cut, the last of them fading; the foot opens it. */
-.ui-code[data-folded] > pre { max-height: calc(var(--code-fold) * 1.6em + 2 * var(--space-sm)); overflow-y: hidden; mask-image: linear-gradient(to bottom, #000 calc(100% - 2.4em), transparent); }
-.ui-code-more { display: block; width: 100%; min-height: var(--control-sm); border: 0; border-top: 1px solid var(--tint); background: transparent; color: var(--muted-foreground); font: var(--text-caption) var(--font-sans); cursor: pointer; }
-.ui-code-more:is(:hover, :focus-visible) { background: var(--tint); color: var(--foreground); }
-.ui-code[data-folded][data-streaming] .ui-code-more { animation: ui-code-writing 1.6s ease-in-out infinite; }
-@keyframes ui-code-writing { 50% { opacity: .45; } }
-@media (prefers-reduced-motion: reduce) { .ui-code[data-folded][data-streaming] .ui-code-more { animation: none; } }
 .ui-code-n { display: inline-block; min-width: calc(var(--code-digits, 2) * 1ch); margin-right: var(--space-lg); color: var(--muted-foreground); font-variant-numeric: tabular-nums; text-align: right; user-select: none; }
 /* The trace header: the orb, Status · time · work, a chevron when there is a trail; the latest line under it. */
 .ui-trace { display: grid; width: 100%; grid-template-columns: var(--icon-xl) minmax(0, 1fr) auto; align-items: center; gap: var(--space-2xs) var(--row-gap); border: 0; background: transparent; padding: 0; color: var(--muted-foreground); font: var(--weight-rest) var(--text-row)/1.4 var(--font-sans); text-align: left; }
@@ -894,9 +889,9 @@
 .ui-read .turn-trace .text-step-content .chat-markdown { font-size: var(--text-row); }
 .ui-read .turn-trace .tool-group-steps { gap: var(--space-2xs); margin-left: calc(var(--space-sm) + var(--icon-sm) / 2); padding-left: var(--space-sm); border-left-color: var(--tint); }
 /* The app's code block (its Markdown's .artifact) drawn as a CodeBlock: a box, the caption bar, the code face. */
-.ui-answer .chat-markdown .artifact { border: 1px solid var(--tint); border-radius: var(--radius-control); background: transparent; }
-.ui-answer .chat-markdown .artifact-header { min-height: var(--control-sm); border-bottom: 1px solid var(--tint); background: var(--background); padding: 0 var(--space-2xs) 0 var(--space-lg); color: var(--muted-foreground); font: var(--text-caption) var(--font-data); }
-.ui-answer .chat-markdown .artifact pre { padding: var(--space-sm) var(--space-lg); background: transparent; font: var(--text-row)/1.6 var(--font-code); }
+.ui-answer .chat-markdown .artifact { border: 1px solid var(--tint); border-radius: var(--radius-control); background: var(--background); }
+.ui-answer .chat-markdown .artifact-header { min-height: var(--control-sm); border-bottom: 1px solid var(--tint); background: linear-gradient(var(--tint), var(--tint)), var(--background); padding: 0 var(--space-2xs) 0 var(--space-lg); color: var(--muted-foreground); font: var(--text-caption) var(--font-data); }
+.ui-answer .chat-markdown .artifact pre { padding: var(--space-md) var(--space-lg); background: transparent; font: var(--text-row)/1.6 var(--font-code); }
 .ui-answer .chat-markdown .artifact-expand { min-height: var(--control-sm); border-top: 1px solid var(--tint); padding: 0; font: var(--text-caption) var(--font-sans); }
 .ui-answer .chat-markdown .artifact-expand:is(:hover, :focus-visible) { background: var(--tint); }
 .ui-answer .chat-markdown .artifact-toggle { width: var(--control-xs); height: var(--control-xs); border-radius: var(--radius-round); }
@@ -905,9 +900,9 @@
 .ui-answer .chat-markdown .artifact-copy { display: grid; width: var(--control-xs); height: var(--control-xs); place-items: center; border-radius: var(--radius-round); padding: 0; }
 .ui-answer .chat-markdown .artifact-copy:is(:hover, :focus-visible) { background: var(--tint); color: var(--foreground); }
 .ui-answer .chat-markdown .artifact-copy-label { display: none; }
-.ui-answer .chat-markdown .artifact-copy::before { width: var(--icon-sm); height: var(--icon-sm); background: currentColor; content: ""; mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect width='14' height='14' x='8' y='8' rx='2'/%3E%3Cpath d='M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2'/%3E%3C/svg%3E") center / contain no-repeat; }
+.ui-answer .chat-markdown .artifact-copy::before { width: var(--icon-xs); height: var(--icon-xs); background: currentColor; content: ""; mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect width='14' height='14' x='8' y='8' rx='2'/%3E%3Cpath d='M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2'/%3E%3C/svg%3E") center / contain no-repeat; }
 .ui-answer .chat-markdown .artifact-copy[data-copied="true"]::before { mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 6 9 17l-5-5'/%3E%3C/svg%3E"); }
-.ui-answer .chat-markdown .artifact-header { padding-right: calc((var(--control-sm) - var(--control-xs)) / 2); }
+.ui-answer .chat-markdown .artifact-header { padding-right: calc(var(--space-lg) - (var(--control-xs) - var(--icon-xs)) / 2); }
 /* Its numbers as wide as the last one (two digits past nine), so the language and the numbers start together. */
 .ui-answer .chat-markdown .artifact .code-line::before { width: 2ch; margin-right: var(--space-lg); }
 .ui-answer .chat-markdown .artifact[data-lines="1"] .code-line::before, .ui-answer .chat-markdown .artifact[data-lines="2"] .code-line::before, .ui-answer .chat-markdown .artifact[data-lines="3"] .code-line::before, .ui-answer .chat-markdown .artifact[data-lines="4"] .code-line::before, .ui-answer .chat-markdown .artifact[data-lines="5"] .code-line::before, .ui-answer .chat-markdown .artifact[data-lines="6"] .code-line::before, .ui-answer .chat-markdown .artifact[data-lines="7"] .code-line::before, .ui-answer .chat-markdown .artifact[data-lines="8"] .code-line::before, .ui-answer .chat-markdown .artifact[data-lines="9"] .code-line::before { width: 1ch; }
