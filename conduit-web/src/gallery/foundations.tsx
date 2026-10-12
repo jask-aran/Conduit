@@ -149,8 +149,8 @@ const COLOUR_MARKS: Mark[] = [
   { selector: ".ui-menu", label: "--frost-stroke: frost's edge", read: edge },
   { selector: ".ui-title", label: "--muted-foreground: a section label (and meta, icons at rest)", read: fg },
   { selector: ".ui-row[data-checked]", label: "--foreground: the current row", read: fg },
-  { selector: ".ui-row[data-highlighted]", label: "--frost-tint: the cursor's wash", read: bg },
-  { selector: ".ui-section + .ui-section", label: "--frost-tint: a rule between sections", read: edge },
+  { selector: ".ui-row[data-highlighted]", label: "--tint (frost's): the cursor's wash", read: bg },
+  { selector: ".ui-section + .ui-section", label: "--tint (frost's): a rule between sections", read: edge },
   { selector: ".ui-row[data-destructive]", label: "--destructive: a destructive row", read: fg },
   { selector: ".ui-button[data-variant='secondary']", label: "--tint: a control's line, on the ground (Controls has each surface's)", read: edge },
 ];
