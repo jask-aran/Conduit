@@ -10,6 +10,7 @@ import { QuestionCard } from "../client/chat/question-card";
 import { ActivityIcon, BrainIcon, ChevronRightIcon, GlobeIcon, MessageSquareIcon, MicIcon as VoiceIcon, NotebookTextIcon, PanelLeftCloseIcon, ServerIcon } from "lucide-solid";
 import type { Question } from "../client/api/contracts";
 import { LibraryContext } from "@/components/ui/swap";
+import { InUse, FormTable, form, px, rounding, edge, fg, type Mark, type FormRow } from "./specs";
 import katex from "katex";
 import { ThinkingOrb, settledOrbRate } from "../client/chat/thinking-orb";
 import { PLAIN_SPHERE, SPUTTERING_SPHERE } from "../client/chat/orb-frames";
@@ -224,6 +225,28 @@ function ChatSearch(props: { close: () => void }) {
     </div></Overlay>;
 }
 
+/* Card: its parts measured in a prompt, then each form at each density. */
+const cardScene = () => <div class="g-card-scene"><Card title="Rename chat" detail="A new name for this chat." actions={<><Button variant="ghost" outline>Cancel</Button><Button outline>Save</Button></>}><Input value="Lorem ipsum file" /></Card></div>;
+const typeOf = (el: HTMLElement) => { const s = getComputedStyle(el); return px(`${s.fontSize} · ${s.fontWeight}`); };
+const CARD_MARKS: Mark[] = [
+  { selector: ".ui-card", label: "padding round its parts: 1.25 units", read: (el) => px(getComputedStyle(el).paddingTop) },
+  { selector: ".ui-card > h3", label: "title: --text-body at --weight-strong", read: typeOf },
+  { selector: ".ui-card > p", label: "detail: --text-row, --muted-foreground, half a unit under the title", read: (el) => `${typeOf(el)} · ${fg(el)}` },
+  { selector: ".ui-card .ui-input", label: "body: the library's Input, the surface's well and line (over frost: no well)", read: (el) => `${px(`${el.getBoundingClientRect().height}px`)} tall · line ${edge(el)}` },
+  { selector: ".ui-card-actions", label: "actions: right-aligned, half a unit apart", read: (el) => px(getComputedStyle(el).columnGap) },
+  { selector: ".ui-card .ui-button[data-variant='ghost']", label: "a secondary action: ghost outline, a --tint hairline", read: edge },
+  { selector: ".ui-card .ui-button[data-variant='primary']", label: "the primary action: primary outline, a --foreground line", read: edge },
+  { selector: ".ui-card", label: "corner --radius-surface; width at most 30 units", read: (el) => `${rounding(el)} · ${px(`${el.getBoundingClientRect().width}px`)} wide` },
+];
+const CARDS: FormRow[] = [
+  form("title", "a card says what it is about", () => <Card title="Delete this chat?" />, "<Card title>", "--text-body at --weight-strong"),
+  form("title · detail", "a line under the title: what follows from it", () => <Card title="Delete this chat?" detail="It can't be brought back." />, "<Card title detail>", "--text-row, --muted-foreground, half a unit under the title"),
+  form("body", "what the card holds: one field, a list, a preview", () => <Card title="Rename chat"><Input value="Lorem ipsum file" /></Card>, "<Card title>{children}</Card>", "1 unit between parts; the Input's well and line are the surface's"),
+  form("actions", "its buttons, right-aligned: the place picks each form", () => <Card title="Save changes?" actions={<><Button variant="ghost" outline>Cancel</Button><Button outline>Save</Button></>} />, "<Card actions={<>…</>}>", "half a unit apart · primary outline, ghost outline"),
+  form("alert", "confirms what cannot be undone (FrostDialog alert)", () => <Card title="Delete this chat?" detail="It can't be brought back." actions={<><Button variant="ghost" outline>Cancel</Button><Button variant="destructive">Delete</Button></>} />, "<Card title detail actions>", "the confirm destructive, filled"),
+  form("prompt", "one field and its answer (FrostDialog)", () => <Card title="Rename chat" actions={<><Button variant="ghost" outline>Cancel</Button><Button outline>Save</Button></>}><Input value="Lorem ipsum file" /></Card>, "<Card title actions>{<Input />}</Card>", "a one-field prompt drops its label"),
+];
+
 /** The app's overlays, assembled: drawn in their gallery cells and over the desktop preview. */
 export type OverlayView = "leader" | "palette" | "search" | "settings";
 type Lit = { top: string; left: string; width: string; height: string; radius?: string };
@@ -308,16 +331,12 @@ export const libraryFamilies: Family[] = [
     lib("p-chat", "ChatHeader › menu", "phone", "popover", "chat/chat-screen.tsx", () => <Menu class="g-w16"><ChatTitle /><Section><Item icon={<RefreshCwIcon />}>Update app</Item></Section><Section><Item icon={<PanelRightIcon />}>Workspace panel</Item><Item icon={<ShareIcon />}>Share</Item><Item icon={<PencilIcon />}>Rename</Item><Item icon={<Trash2Icon />} destructive>Delete</Item></Section></Menu>, true),
     ] },
   ] },
-  { title: "Card", note: "raised frost at dialog padding: title · detail · body · actions. Its actions: the primary one a white outline (Button outline), the others ghost outline, a destructive confirm filled red", groups: [
-    { atoms: [
-      lib("card-anatomy", "Anatomy", "both", "card", "Card title detail children actions", () => <div class="g-anatomy"><Card title="Title" detail="Detail: a line under the title" class="g-card" actions={<><Button variant="secondary">Action</Button><Button>Action</Button></>}><div class="g-slot">Body</div></Card></div>),
-      lib("card-head", "Title · detail", "both", "card", "Card title detail", () => <Card title="Delete this chat?" detail="It can't be brought back." class="g-card" />),
-      lib("card-body", "Body", "both", "card", "Card children", () => <Card title="Rename chat" class="g-card"><Input value="Lorem ipsum file" /></Card>),
-      lib("card-actions", "Actions", "both", "card", "Card actions", () => <Card title="Actions" class="g-card" actions={<><Button variant="ghost" outline>Cancel</Button><Button outline>Save</Button><Button variant="destructive">Delete</Button></>} />),
+  { title: "Card", note: "raised frost at a dialog's width and padding: title · detail · body · actions, drawn from the library's Input and Buttons. Its actions: the primary one a white outline, the others ghost outline, a destructive confirm filled red", groups: [
+    { title: "In use", note: "a prompt, measured: what each number shapes", layout: "desktop", atoms: [
+      lib("card-inuse", "Card in use", "both", "card", "Card title detail children actions", () => <InUse scene={cardScene} marks={CARD_MARKS} />, "row"),
     ] },
-    { title: "Assembled", atoms: [
-      lib("confirm", "FrostDialog alert", "both", "card", "Card", () => <Card title="Delete this chat?" detail="It can't be brought back." class="g-card" actions={<><Button variant="ghost" outline>Cancel</Button><Button variant="destructive">Delete</Button></>} />),
-      lib("prompt", "FrostDialog", "both", "card", "Card + Input", () => <Card title="Rename chat" class="g-card" actions={<><Button variant="ghost" outline>Cancel</Button><Button outline>Save</Button></>}><Input value="Lorem ipsum file" /></Card>),
+    { title: "Forms", note: "each form at each density. Every card: --frost-* raised, corner --radius-surface, padding 1.25 units, 1 unit between its parts, at most 30 units wide", layout: "desktop", atoms: [
+      lib("card-forms", "Card · forms × densities", "both", "card", "Card", () => <FormTable rows={CARDS} on={["desktop", "phone"]} />, "row"),
     ] },
   ] },
   { title: "Overlay", note: "raised frost over a dimmed page, the large surfaces: sections edge to edge, ruled off -- a Bar, a body (a List, a List beside an aside, or a Rail beside a Page), Hints. Its rows are the popover's Items at its scale; its Rail is the sidebar's NavGroups", groups: [
