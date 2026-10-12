@@ -3,7 +3,6 @@ import { CopyIcon, FolderIcon, MonitorIcon, PaperclipIcon, SettingsIcon } from "
 import { Segmented, Bubble, Frost, HeadingSection, Item, Menu, NavGroup, NavRow, Section } from "@/components/ui";
 import { lib, type Family } from "./library";
 import "katex/dist/katex.min.css";
-import terminalFontUrl from "../client/assets/MesloLGSNerdFontMono-Regular.ttf";
 
 /*
  * Foundations: what every family is built from -- type, colour, space,
@@ -110,7 +109,7 @@ function Face(props: { family: string; weights?: number[]; sample?: string; sour
 const SANS = "sans-serif";
 const MONO = "ui-monospace, SFMono-Regular, Consolas, monospace";
 const option = (value: string, label: string, family: string) => ({ value, label, family });
-const GEIST = '"Geist Variable"', PAPER = '"Paper Mono"', INCONSOLATA = '"Inconsolata Variable"', MESLO = '"Conduit Terminal Font"', WORDMARK = '"Conduit Wordmark"';
+const GEIST = '"Geist Variable"', PAPER = '"Paper Mono"', INCONSOLATA = '"Inconsolata Variable"', MESLO = '"Meslo Nerd Font Mono"', WORDMARK = '"Conduit Wordmark"';
 interface FontRole { token: string; title: string; fallback: string; options: ReturnType<typeof option>[]; uses: string; preview: () => JSX.Element }
 const ROLES: FontRole[] = [
   { token: "--font-sans", title: "Main UI", fallback: SANS, uses: "Rows, headings, buttons, menus, cards, overlays; messages and the composer's text", options: [option("geist", "Geist", GEIST), option("paper", "Paper Mono", PAPER), option("system", "System", "system-ui")],
@@ -119,8 +118,10 @@ const ROLES: FontRole[] = [
     preview: () => <Menu><Section title="Profile"><Item icon={<FolderIcon />} keys={["Ctrl", "P"]}>Assistant</Item></Section><Section title="Model"><Item>GPT-6 Luna</Item></Section></Menu> },
   { token: "--font-data", title: "Data", fallback: MONO, uses: "Meta beside a row's title: times, counts, model ids, sizes; tabular, so numbers line up", options: [option("paper", "Paper Mono", PAPER), option("inconsolata", "Inconsolata", INCONSOLATA), option("system", "System", "")],
     preview: () => <Menu><Section><Item meta="2m ago">Lorem ipsum file</Item><Item meta="gpt-6-luna">Model</Item><Item meta="1,024">Tokens</Item></Section></Menu> },
-  { token: "--font-code", title: "Code", fallback: MONO, uses: "Code blocks, previews and artifacts, the file editor; the terminal draws in Meslo today", options: [option("system", "System", ""), option("meslo", "Meslo", MESLO), option("paper", "Paper Mono", PAPER), option("inconsolata", "Inconsolata", INCONSOLATA)],
+  { token: "--font-code", title: "Code", fallback: MONO, uses: "Code blocks, previews and artifacts, the file editor", options: [option("paper", "Paper Mono", PAPER), option("inconsolata", "Inconsolata", INCONSOLATA), option("system", "System", "")],
     preview: () => <Frost class="g-entry"><pre class="ui-preview">{"~/Conduit $ npm run build\n✓ built in 10.4s  │ ├─ └─\nconst x = { a: 1, b: [2, 3] };"}</pre></Frost> },
+  { token: "--font-terminal", title: "Terminal", fallback: MONO, uses: "The terminal pane: Meslo by default for its Nerd Font glyphs (prompt segments, file icons); yours to change", options: [option("meslo", "Meslo", MESLO), option("paper", "Paper Mono", PAPER), option("inconsolata", "Inconsolata", INCONSOLATA), option("system", "System", "")],
+    preview: () => <pre class="g-terminal">{"\ue0b6 ~/Conduit \ue0b0 \ue0a0 main \ue0b4\n$ ls\n\uf07b src  \uf07b dist  \ue718 package.json  \uf48a README.md"}</pre> },
   { token: "--font-wordmark", title: "Wordmark", fallback: SANS, uses: "The brand at the top of the sidebar", options: [option("druk", "Druk", WORDMARK), option("geist", "Geist", GEIST), option("paper", "Paper Mono", PAPER)],
     preview: () => <Ground><span class="g-wordmark">Conduit</span></Ground> },
 ];
@@ -133,12 +134,9 @@ function applyRole(doc: Document, role: FontRole, value = stored(role)) {
 }
 /** The picks, on a document: the gallery's at mount, each phone frame's at its own. */
 export function applyFaces(doc: Document) { for (const role of ROLES) applyRole(doc, role); }
-/** Faces loaded by script rather than CSS: the terminal's, which the terminal loads when it opens. */
-function loadTerminalFace() { if (![...document.fonts].some((font) => font.family === "Conduit Terminal Font")) void new FontFace("Conduit Terminal Font", `url(${terminalFontUrl}) format('truetype')`).load().then((font) => document.fonts.add(font)); }
 
 function Role(props: { role: FontRole }) {
   const [value, setValue] = createSignal(stored(props.role));
-  onMount(loadTerminalFace);
   const pick = (next: string) => {
     setValue(next);
     try { localStorage.setItem(roleKey(props.role), next); } catch { /* private window */ }
@@ -207,7 +205,7 @@ export const foundationFamilies: Family[] = [
       lib("font-geist", "Geist Variable", "both", "font", "@fontsource-variable/geist", () => <Face family={GEIST} weights={[400, 450, 500, 560, 600, 660, 700]} source="@fontsource-variable/geist · OFL" />),
       lib("font-paper", "Paper Mono", "both", "font", "components/ui/fonts/PaperMono-Variable.woff2", () => <Face family={PAPER} weights={[400, 500, 600, 700]} source="components/ui/fonts/PaperMono-Variable.woff2 · OFL · the section labels; also the app's optional transcript face" />),
       lib("font-inconsolata", "Inconsolata Variable", "both", "font", "@fontsource-variable/inconsolata", () => <Face family={INCONSOLATA} weights={[400, 500, 600, 700]} source="@fontsource-variable/inconsolata · OFL · drawn after Consolas" />),
-      lib("font-meslo", "Meslo LG S Nerd Font Mono", "both", "font", "client/assets/MesloLGSNerdFontMono-Regular.ttf", () => { onMount(loadTerminalFace); return <Face family={MESLO} sample="~/Conduit $ ls  │ ├─ └─ ✓ ✗" source="client/assets/MesloLGSNerdFontMono-Regular.ttf · the terminal's, for box drawing and icons" />; }),
+      lib("font-meslo", "Meslo LG S Nerd Font Mono", "both", "font", "components/ui/fonts/MesloLGSNerdFontMono-Regular.ttf", () => <Face family={MESLO} sample="~/Conduit $ ls  │ ├─ └─ ✓ ✗" source="components/ui/fonts/MesloLGSNerdFontMono-Regular.ttf · the terminal's default, for its Nerd Font glyphs" />),
       lib("font-wordmark", "Druk Wide Super", "both", "font", "client/assets/fonts/druk-wide-web-super.woff2", () => <Face family={WORDMARK} sample="Conduit" source="client/assets/fonts/druk-wide-web-super.woff2 · as Conduit Wordmark" />),
       lib("font-katex", "KaTeX", "both", "font", "katex/dist/katex.min.css", () => <Face family="KaTeX_Main, serif" sample="∑ x² + ∫ f(t) dt = π" source="katex · math in messages, in its own serif faces" />),
     ] },

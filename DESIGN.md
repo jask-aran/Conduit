@@ -229,7 +229,7 @@ That blue treatment is leftover frontend-design skill output. Do not encode, cop
 
 # Typography
 
-Geist Variable everywhere for UI. Paper Mono, which Conduit ships, for the section label, the keycap and data: model ids, paths, times and counts in meta, status, waveforms. The system's `ui-monospace` only as its fallback, and for code. Tabular figures wherever numbers tick or line up.
+Geist Variable everywhere for UI. Paper Mono, which Conduit ships, for the section label, the keycap and data: model ids, paths, times and counts in meta, status, waveforms. Code is Paper Mono too. The terminal is Meslo LG S Nerd Font Mono, for its Nerd Font glyphs, and is the one face the user is expected to change. The system's `ui-monospace` only as the fallback. Tabular figures wherever numbers tick or line up.
 
 A handful of roles, each defined once in `styles.css`; components name a role rather than a size:
 
