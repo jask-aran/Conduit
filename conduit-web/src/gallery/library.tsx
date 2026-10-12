@@ -10,7 +10,7 @@ import { QuestionCard } from "../client/chat/question-card";
 import { ActivityIcon, BrainIcon, ChevronRightIcon, GlobeIcon, MessageSquareIcon, MicIcon as VoiceIcon, NotebookTextIcon, PanelLeftCloseIcon, ServerIcon } from "lucide-solid";
 import type { Question } from "../client/api/contracts";
 import { LibraryContext } from "@/components/ui/swap";
-import { InUse, FormTable, form, px, rounding, edge, fg, type Mark, type FormRow } from "./specs";
+import { InUse, FormTable, form, px, rounding, edge, fg, bg, type Mark, type FormRow } from "./specs";
 import katex from "katex";
 import { ThinkingOrb, settledOrbRate } from "../client/chat/thinking-orb";
 import { PLAIN_SPHERE, SPUTTERING_SPHERE } from "../client/chat/orb-frames";
@@ -226,25 +226,43 @@ function ChatSearch(props: { close: () => void }) {
 }
 
 /* Card: its parts measured in a prompt, then each form at each density. */
-const cardScene = () => <div class="g-card-scene"><Card title="Rename chat" detail="A new name for this chat." actions={<><Button variant="ghost" outline>Cancel</Button><Button outline>Save</Button></>}><Input value="Lorem ipsum file" /></Card></div>;
+const cardScene = () => <div class="g-card-scene"><Card title="Destroy Japan?" detail="Type Japan to confirm." actions={<><Button variant="ghost" outline>Cancel</Button><Button variant="destructive">Destroy</Button></>}><Input placeholder="Japan" /></Card></div>;
 const typeOf = (el: HTMLElement) => { const s = getComputedStyle(el); return px(`${s.fontSize} · ${s.fontWeight}`); };
 const CARD_MARKS: Mark[] = [
-  { selector: ".ui-card", label: "padding round its parts: 1.25 units", read: (el) => px(getComputedStyle(el).paddingTop) },
+  { selector: ".ui-card", label: "padding round its parts: 1.25 units (a phone: 1)", read: (el) => px(getComputedStyle(el).paddingTop) },
   { selector: ".ui-card > h3", label: "title: --text-body at --weight-strong", read: typeOf },
   { selector: ".ui-card > p", label: "detail: --text-row, --muted-foreground, half a unit under the title", read: (el) => `${typeOf(el)} · ${fg(el)}` },
-  { selector: ".ui-card .ui-input", label: "body: the library's Input, the surface's well and line (over frost: no well)", read: (el) => `${px(`${el.getBoundingClientRect().height}px`)} tall · line ${edge(el)}` },
-  { selector: ".ui-card-actions", label: "actions: right-aligned, half a unit apart", read: (el) => px(getComputedStyle(el).columnGap) },
+  { selector: ".ui-card .ui-input", label: "body: the library's Input, hung into the padding so its text lines up with the title", read: (el) => { const card = el.closest(".ui-card")!.querySelector("h3")!.getBoundingClientRect().left; const text = el.getBoundingClientRect().left + parseFloat(getComputedStyle(el).paddingLeft) + 1; return `text ${px(`${text - card}px`)} from the title's edge`; } },
+  { selector: ".ui-card-actions", label: "actions: right-aligned, half a unit apart, each the widest's width", read: (el) => `${px(getComputedStyle(el).columnGap)} apart · ${[...el.children].map((b) => px(`${b.getBoundingClientRect().width}px`)).join(" = ")}` },
   { selector: ".ui-card .ui-button[data-variant='ghost']", label: "a secondary action: ghost outline, a --tint hairline", read: edge },
-  { selector: ".ui-card .ui-button[data-variant='primary']", label: "the primary action: primary outline, a --foreground line", read: edge },
-  { selector: ".ui-card", label: "corner --radius-surface; width at most 30 units", read: (el) => `${rounding(el)} · ${px(`${el.getBoundingClientRect().width}px`)} wide` },
+  { selector: ".ui-card .ui-button[data-variant='destructive']", label: "the confirm: destructive, filled red", read: bg },
+  { selector: ".ui-card", label: "corner --radius-surface; at most 30 units wide (a phone: its width)", read: (el) => `${rounding(el)} · ${px(`${el.getBoundingClientRect().width}px`)} wide` },
 ];
 const CARDS: FormRow[] = [
   form("title", "a card says what it is about", () => <Card title="Delete this chat?" />, "<Card title>", "--text-body at --weight-strong"),
-  form("title · detail", "a line under the title: what follows from it", () => <Card title="Delete this chat?" detail="It can't be brought back." />, "<Card title detail>", "--text-row, --muted-foreground, half a unit under the title"),
+  form("title · detail", "a line under the title, only when it asks something of you: never what the title already says", () => <Card title="Destroy Japan?" detail="Type Japan to confirm." />, "<Card title detail>", "--text-row, --muted-foreground, half a unit under the title"),
   form("body", "what the card holds: one field, a list, a preview", () => <Card title="Rename chat"><Input value="Lorem ipsum file" /></Card>, "<Card title>{children}</Card>", "1 unit between parts; the Input's well and line are the surface's"),
   form("actions", "its buttons, right-aligned: the place picks each form", () => <Card title="Save changes?" actions={<><Button variant="ghost" outline>Cancel</Button><Button outline>Save</Button></>} />, "<Card actions={<>…</>}>", "half a unit apart · primary outline, ghost outline"),
-  form("alert", "confirms what cannot be undone (FrostDialog alert)", () => <Card title="Delete this chat?" detail="It can't be brought back." actions={<><Button variant="ghost" outline>Cancel</Button><Button variant="destructive">Delete</Button></>} />, "<Card title detail actions>", "the confirm destructive, filled"),
+  form("alert", "confirms what cannot be undone (FrostDialog alert)", () => <Card title="Delete this chat?" actions={<><Button variant="ghost" outline>Cancel</Button><Button variant="destructive">Delete</Button></>} />, "<Card title detail actions>", "the confirm destructive, filled"),
   form("prompt", "one field and its answer (FrostDialog)", () => <Card title="Rename chat" actions={<><Button variant="ghost" outline>Cancel</Button><Button outline>Save</Button></>}><Input value="Lorem ipsum file" /></Card>, "<Card title actions>{<Input />}</Card>", "a one-field prompt drops its label"),
+];
+
+/* In the app: every dialog the app opens, drawn with v2 as far as v2 goes, and what it still needs. */
+const status = (have: string, needs?: string) => needs ? `Have: ${have}. Needs: ${needs}` : `Have: all of it (${have})`;
+const actions = (confirm: JSX.Element, cancel = "Cancel") => <><Button variant="ghost" outline>{cancel}</Button>{confirm}</>;
+const IN_APP: FormRow[] = [
+  form("Rename chat · folder", "the sidebar's rename", () => <Card title="Rename chat" actions={actions(<Button outline>Rename</Button>)}><Input value="Lorem ipsum file" /></Card>, "navigation/sidebar.tsx", status("Card, Input, Button")),
+  form("Rename terminal", "a terminal pane's rename", () => <Card title="Rename terminal" actions={actions(<Button outline>Rename</Button>)}><Input value="zsh" /></Card>, "remotes/terminal-pane.tsx", status("Card, Input, Button")),
+  form("Delete chat", "the sidebar's and chat search's delete", () => <Card title="Delete this chat?" actions={actions(<Button variant="destructive">Delete</Button>)} />, "navigation/sidebar.tsx · navigation/command-menu.tsx", status("Card alert, Button destructive")),
+  form("Destroy workspace", "type its name to confirm; Delete waits until it matches", () => <Card title="Destroy Japan?" detail="Type Japan to confirm." actions={actions(<Button variant="destructive" disabled>Destroy</Button>)}><Input placeholder="Japan" /></Card>, "project/dashboard.tsx", status("Card, Input, a disabled destructive")),
+  form("Open external link", "a link out, shown before it opens", () => <Card title="Open this link?" actions={actions(<Button outline>Open link</Button>)}><pre class="ui-preview">https://example.com/a/long/path?q=1</pre></Card>, "chat/external-link-dialog.tsx", status("Card, the code preview for the address", "the address hanging into the padding as fields do")),
+  form("New folder · workspace", "a name, then create; a × to leave", () => <Card title="New folder" actions={actions(<Button outline>Create</Button>)}><Input placeholder="Folder name" /></Card>, "navigation/sidebar.tsx", status("Card, Input, Button", "close: a × in the card's corner")),
+  form("Move chat", "pick the folder it goes to", () => <Card title="Move chat" actions={<Button variant="ghost" outline>Cancel</Button>}><Section><Item icon={<FolderIcon />} checked>Chats</Item><Item icon={<FolderIcon />}>Japan</Item><Item icon={<FolderIcon />}>Conduit</Item></Section></Card>, "navigation/sidebar.tsx", status("Card, Section and Items for the folders", "a list in a card: its rows hung into the padding (they are ghost buttons in the app)")),
+  form("Attachments", "every file on the draft: remove one, remove all", () => <Card title="Attachments" actions={<><Button variant="ghost" outline>Remove all</Button><Button outline>Done</Button></>}><Section><Item icon={<FileTextIcon />} meta="2.1 KB">notes.txt</Item><Item icon={<FileTextIcon />} meta="412 B">lorem_ipsum.txt</Item></Section></Card>, "chat/attachment-strip.tsx", status("Card, Items, Buttons", "wide: a card that holds content (size=\"wide\")")),
+  form("Edit review comment", "a comment's text, edited in place", () => <Card title="Edit comment" actions={actions(<Button outline>Save comment</Button>)}><TextArea value="This paragraph could be shorter." /></Card>, "chat/review-comment-cards.tsx", status("Card, TextArea, Buttons", "wide; close; the TextArea's well and line in a card (settings' SettingWide has one)")),
+  form("Pair a device", "a QR code and the address to scan", () => <Card title="Pair a device"><div class="g-slot">QR code</div></Card>, "navigation/pair-dialog.tsx", status("Card", "wide; close; the QR code and its address as a body")),
+  form("Add server", "a server's address and how to reach it", () => <Card title="Add server" actions={actions(<Button outline>Add</Button>)}><Input placeholder="https://…" /></Card>, "main.tsx", status("Card, Input, Button", "wide; close; a form of several labelled fields")),
+  form("Workspace identity", "a workspace's name, glyph and colour", () => <Card title="Workspace identity"><div class="g-slot">glyph · colour · name</div></Card>, "main.tsx · project/dashboard.tsx", status("Card", "wide; close; the appearance editor (glyph and colour pickers) in v2")),
 ];
 
 /** The app's overlays, assembled: drawn in their gallery cells and over the desktop preview. */
@@ -335,8 +353,11 @@ export const libraryFamilies: Family[] = [
     { title: "In use", note: "a prompt, measured: what each number shapes", layout: "desktop", atoms: [
       lib("card-inuse", "Card in use", "both", "card", "Card title detail children actions", () => <InUse scene={cardScene} marks={CARD_MARKS} />, "row"),
     ] },
-    { title: "Forms", note: "each form at each density. Every card: --frost-* raised, corner --radius-surface, padding 1.25 units, 1 unit between its parts, at most 30 units wide", layout: "desktop", atoms: [
-      lib("card-forms", "Card · forms × densities", "both", "card", "Card", () => <FormTable rows={CARDS} on={["desktop", "phone"]} />, "row"),
+    { title: "Forms", note: "each form at each density -- the phone's a phone wide. Every card: --frost-* raised, corner --radius-surface; a field hangs into the padding so its text lines up with the title; actions share the widest's width. Desktop: padding 1.25 units, 1 between parts, at most 30 units wide. Phone: the screen's width, padding 1 unit, 0.75 between parts", layout: "desktop", atoms: [
+      lib("card-forms", "Card · forms × densities", "both", "card", "Card", () => <FormTable rows={CARDS} on={["desktop", "phone"]} widths={["200px", "minmax(0, 1fr)", "360px"]} />, "row"),
+    ] },
+    { title: "In the app", note: "every dialog the app opens (FrostDialog), drawn with v2 as far as it goes: under each, its file, what v2 has for it and what it still needs. Missing across them: close (a ×), wide (a card that holds content), a list or a text area hung into the padding", layout: "desktop", atoms: [
+      lib("card-in-app", "FrostDialog · in the app", "both", "card", "client/**/FrostDialog", () => <FormTable rows={IN_APP} on={["desktop", "phone"]} widths={["220px", "minmax(0, 1fr)", "360px"]} />, "row"),
     ] },
   ] },
   { title: "Overlay", note: "raised frost over a dimmed page, the large surfaces: sections edge to edge, ruled off -- a Bar, a body (a List, a List beside an aside, or a Rail beside a Page), Hints. Its rows are the popover's Items at its scale; its Rail is the sidebar's NavGroups", groups: [
