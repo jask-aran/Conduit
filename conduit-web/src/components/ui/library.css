@@ -128,6 +128,11 @@
 .ui-frost[data-lift="raised"] { box-shadow: var(--frost-lift-raised), var(--frost-highlight); }
 .ui-frost[data-core] { background: linear-gradient(var(--frost-fill), var(--frost-fill)), var(--frost-core-ground); }
 
+/* Never a ring (DESIGN Interaction): no outline or focus ring from the browser or any component, in any
+   colour, on anything the library is loaded under. The one rule, so no piece can forget it; keyboard focus
+   is the wash, which each piece draws on :focus-visible as on :hover. */
+:focus, :focus-visible { outline: none !important; --tw-ring-shadow: 0 0 #0000 !important; --tw-ring-offset-shadow: 0 0 #0000 !important; }
+
 /* Pill: the phone's floating frost controls -- one family for the header's
    groups, the sidebar's toggle and the composer's buttons. One icon is a
    circle; more share a capsule, each slot a pill-shaped target 1px from its
@@ -140,7 +145,7 @@
 .ui-pill[data-solo] > button { width: 100%; height: 100%; }
 /* One icon size in every pill, alone or grouped, each in a 40px circle: as far from the sides as from the top. */
 .ui-pill > button svg, .ui-pill[data-surface] > :is(button, [data-slot="button"]) svg { width: var(--pill-icon); height: var(--pill-icon); }
-.ui-pill > button:hover { background: var(--tint); }
+.ui-pill > button:is(:hover, :focus-visible) { background: var(--tint); }
 .ui-pill[data-stretch] { width: auto; flex: 1 1 auto; }
 .ui-pill[data-stretch] > button { width: 100%; }
 /* Field: text in the capsule; it grows with its lines. */
@@ -267,13 +272,13 @@
 .ui-button[data-variant="primary"]:focus-visible { background: var(--primary); filter: brightness(0.88); }
 .ui-button:disabled { opacity: 0.45; pointer-events: none; }
 .ui-button[data-variant="primary"] { background: var(--foreground); color: var(--background); }
-.ui-button[data-variant="primary"]:hover { filter: brightness(0.88); }
+.ui-button[data-variant="primary"]:is(:hover, :focus-visible) { filter: brightness(0.88); }
 .ui-button[data-variant="secondary"] { border-color: var(--tint); background: var(--well); color: var(--foreground); }
-.ui-button[data-variant="secondary"]:hover { background: var(--tint); }
+.ui-button[data-variant="secondary"]:is(:hover, :focus-visible) { background: var(--tint); }
 .ui-button[data-variant="ghost"] { background: transparent; color: var(--foreground); }
-.ui-button[data-variant="ghost"]:hover { background: var(--tint); }
+.ui-button[data-variant="ghost"]:is(:hover, :focus-visible) { background: var(--tint); }
 .ui-button[data-variant="destructive"] { background: var(--destructive); color: var(--foreground); }
-.ui-button[data-variant="destructive"]:hover { filter: brightness(1.1); }
+.ui-button[data-variant="destructive"]:is(:hover, :focus-visible) { filter: brightness(1.1); }
 .ui-button[data-outline] { background: transparent; }
 .ui-button[data-outline]:is(:hover, :focus-visible) { background: var(--tint); filter: none; }
 .ui-button[data-variant="primary"][data-outline] { border-color: var(--foreground); color: var(--foreground); }
@@ -295,7 +300,7 @@
 .ui-input > span { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ui-input > svg { width: var(--icon); height: var(--icon); flex: none; color: var(--muted-foreground); }
 .ui-input[data-bare] { width: auto; height: auto; border: 0; background: transparent; padding: var(--space-xs) 0; color: var(--muted-foreground); }
-.ui-input[data-bare]:hover { color: var(--foreground); }
+.ui-input[data-bare]:is(:hover, :focus-visible) { color: var(--foreground); }
 
 /* Segmented choice: a hairline track and a sliding thumb (the app's
    settings and dashboard filters): the surface's tint for both. The
@@ -309,7 +314,7 @@
 .ui-seg button { position: relative; display: inline-flex; min-width: 0; min-height: calc(1.75 * var(--u-space)); align-items: center; justify-content: center; gap: var(--space-sm); border: 0; border-radius: var(--seg-inner); background: transparent; padding: 0 var(--space-lg); color: var(--muted-foreground); font-size: var(--text-row); font-weight: var(--weight-lift); cursor: pointer; }
 .ui-seg button svg { width: var(--icon-lg); height: var(--icon-lg); }
 .ui-seg button small { color: var(--muted-foreground); font: var(--weight-rest) var(--text-caption) var(--font-data); }
-.ui-seg button:is(:hover, [aria-checked="true"]) { color: var(--foreground); }
+.ui-seg button:is(:hover, :focus-visible, [aria-checked="true"]) { color: var(--foreground); }
 .ui-seg[data-icons] button { width: var(--control); padding: 0; }
 .ui-seg[data-pill] { height: var(--pill-size); gap: var(--pill-gap); border-color: var(--frost-stroke); border-radius: var(--radius-round); background: var(--frost-fill); padding: 1px; }
 .ui-seg[data-pill] .ui-seg-thumb { top: 1px; bottom: 1px; width: var(--pill-slot); left: calc(1px + (var(--pill-slot) + var(--pill-gap)) * var(--segment)); border-radius: var(--radius-round); background: var(--tint); }
@@ -320,7 +325,7 @@
 [data-surface="frame"] .ui-seg[data-pill] .ui-seg-thumb { background: var(--sidebar-accent); }
 @media (prefers-reduced-motion: reduce) { .ui-seg-thumb { transition: none; } }
 /* The cursor on the chosen segment (already washed) brightens that wash a step: a second tint over the thumb's. */
-.ui-seg button[aria-checked="true"]:hover { background: var(--tint); }
+.ui-seg button[aria-checked="true"]:is(:hover, :focus-visible) { background: var(--tint); }
 /* A small segmented choice, for a bar's end (chat search's sort). */
 /* Only its size changes: the same hairline, thumb and type as the Segmented it scales. */
 .ui-seg[data-size="sm"] button { min-height: calc(1.40625 * var(--u-space)); padding: var(--space-2xs) var(--space-md); font-size: var(--text-caption); }
@@ -331,7 +336,7 @@
 .ui-slider[data-disabled] { opacity: 0.5; }
 .ui-slider-head { display: flex; align-items: center; justify-content: space-between; gap: var(--row-gap); }
 .ui-slider-value { display: inline-flex; align-items: center; gap: var(--space-xs); border: 0; border-radius: var(--radius-control); background: transparent; padding: var(--space-xs) var(--space-xs) var(--space-xs) var(--space-sm); color: color-mix(in oklch, var(--foreground), transparent 38%); font-size: var(--text-caption); font-weight: var(--weight-rest); }
-.ui-slider-value[data-opens]:hover { background: var(--tint); color: var(--foreground); }
+.ui-slider-value[data-opens]:is(:hover, :focus-visible) { background: var(--tint); color: var(--foreground); }
 .ui-slider-value svg { width: var(--icon-xs); height: var(--icon-xs); color: var(--muted-foreground); }
 .ui-slider-input { --thumb: calc(1.25 * var(--u-icon)); --track: 4px; width: 100%; height: var(--thumb); margin: 0; appearance: none; -webkit-appearance: none; background: transparent; cursor: pointer; touch-action: pan-y; }
 .ui-slider-input:focus-visible { outline: 0; }
@@ -375,12 +380,12 @@
 .ui-nav-row > .ui-nav-icon > * { width: 100%; height: 100%; }
 .ui-nav-icon:has(> .harness-mark) { width: calc(var(--u-icon) - 1px); }
 .ui-nav-row > .ui-nav-icon > .harness-mark { width: calc(var(--u-icon) - 1px); height: calc(0.75 * (var(--u-icon) - 1px));; opacity: .78; transition: opacity 150ms ease; }
-.ui-nav-row:is(:hover, [aria-current="page"]) > .ui-nav-icon > .harness-mark { opacity: 1; }
+.ui-nav-row:is(:hover, :focus-visible, [aria-current="page"]) > .ui-nav-icon > .harness-mark { opacity: 1; }
 .ui-nav-row > span:not(.ui-nav-icon, .ui-nav-toggle) { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ui-nav-row:hover, .ui-nav-row[aria-current="page"] { color: var(--foreground); }
-.ui-nav-row:hover { background: var(--sidebar-accent); }
+.ui-nav-row:is(:hover, :focus-visible), .ui-nav-row[aria-current="page"] { color: var(--foreground); }
+.ui-nav-row:is(:hover, :focus-visible) { background: var(--sidebar-accent); }
 .ui-nav-row[aria-current="page"] { font-weight: var(--weight-current); }
-.ui-nav-row:is(:hover, [aria-current="page"]) > .ui-nav-icon { color: var(--foreground); }
+.ui-nav-row:is(:hover, :focus-visible, [aria-current="page"]) > .ui-nav-icon { color: var(--foreground); }
 .ui-nav-toggle { margin-right: -6px; display: grid; width: calc(var(--u-icon) + 9px); height: calc(var(--u-icon) + 9px); flex: none; place-items: center; border-radius: var(--radius-control); color: var(--muted-foreground); }
 .ui-nav-toggle svg { width: var(--icon); height: var(--icon); }
 
@@ -466,7 +471,7 @@
 .ui-rider-actions { display: flex; flex: none; align-items: center; gap: var(--space-2xs); }
 .ui-rider-actions[data-stack] { flex-direction: column; }
 :is(.ui-rider-actions, .ui-rider-top) .ui-button[data-size^="icon"] { width: var(--rider-slot); min-width: var(--rider-slot); height: var(--rider-slot); border-radius: var(--cmp-slot-radius); padding: 0; color: var(--muted-foreground); }
-:is(.ui-rider-actions, .ui-rider-top) .ui-button[data-size^="icon"]:hover { color: var(--foreground); }
+:is(.ui-rider-actions, .ui-rider-top) .ui-button[data-size^="icon"]:is(:hover, :focus-visible) { color: var(--foreground); }
 :is(.ui-rider-actions, .ui-rider-top) .ui-button[data-size^="icon"] svg { width: var(--icon); height: var(--icon); }
 
 /* Lines: text that waits (the queued messages), one line each until opened. */
@@ -475,7 +480,7 @@
 .ui-line-body { display: -webkit-box; min-width: 0; flex: 1; margin: 0; overflow: hidden; font-size: var(--text-body); line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; -webkit-box-orient: vertical; -webkit-line-clamp: 1; }
 .ui-line[data-expanded="true"] .ui-line-body { overflow: visible; -webkit-line-clamp: unset; }
 .ui-line-more { display: inline-flex; width: calc(1.25 * var(--u-space)); height: calc(1.25 * var(--u-space)); flex: none; align-items: center; justify-content: center; margin-top: 1px; border: 0; border-radius: var(--radius-control); background: transparent; padding: 0; color: var(--muted-foreground); cursor: pointer; }
-.ui-line-more:hover { background: var(--tint); color: inherit; }
+.ui-line-more:is(:hover, :focus-visible) { background: var(--tint); color: inherit; }
 .ui-line-more svg { width: var(--icon); height: var(--icon); }
 
 /* Chips: things attached, scrolling sideways with faded edges. An image is its
@@ -520,10 +525,10 @@
 .ui-tabs { display: flex; min-width: 0; flex: 1; gap: 2px; overflow-x: auto; scrollbar-width: none; }
 .ui-tabs::-webkit-scrollbar { display: none; }
 .ui-tabs > button { display: inline-flex; height: calc(2 * var(--u-space)); flex: none; align-items: center; gap: var(--space-xs); border: 0; border-radius: var(--cmp-slot-radius); background: transparent; padding: 0 var(--space-lg); color: var(--muted-foreground); font-size: var(--text-body); font-weight: var(--weight-lift); cursor: pointer; }
-.ui-tabs > button:hover { color: var(--foreground); }
+.ui-tabs > button:is(:hover, :focus-visible) { color: var(--foreground); }
 /* The current tab: white at the current weight, no fill (the wash is only the pointer). */
 .ui-tabs > button[aria-selected="true"] { color: var(--foreground); font-weight: var(--weight-current); }
-.ui-tabs > button:hover { background: var(--tint); }
+.ui-tabs > button:is(:hover, :focus-visible) { background: var(--tint); }
 .ui-tabs svg { width: var(--icon-sm); height: var(--icon-sm); }
 .ui-prompt { margin: var(--space-2xs) var(--space-md) var(--space-xs); font-size: var(--text-body); font-weight: var(--weight-strong); line-height: 1.4; letter-spacing: -.005em; overflow-wrap: anywhere; }
 .ui-prompt span { color: var(--muted-foreground); font-size: var(--text-body); font-weight: var(--weight-rest); }
@@ -558,7 +563,7 @@
 .ui-rider .ui-input[data-note] { width: auto; height: var(--control); margin: var(--space-2xs) var(--space-md) 0 calc(var(--space-lg) + var(--choice-label)); }
 .ui-summary { display: grid; gap: 1px; }
 .ui-summary > button { display: grid; min-height: calc(2.375 * var(--u-space)); grid-template-columns: minmax(0, 9rem) minmax(0, 1fr); align-items: center; gap: var(--space-lg); border: 0; border-radius: var(--row-radius); background: transparent; padding: var(--space-sm) var(--space-lg); color: var(--foreground); font-size: var(--text-body); text-align: left; cursor: pointer; }
-.ui-summary > button:hover { background: var(--tint); }
+.ui-summary > button:is(:hover, :focus-visible) { background: var(--tint); }
 .ui-summary > button > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ui-summary > button > span:first-child { color: var(--muted-foreground); }
 .ui-summary > button > span:last-child { font-weight: var(--weight-strong); }
@@ -619,7 +624,7 @@
 .ui-overlay-rail > .ui-overlay-title { margin-bottom: var(--space-md); padding-left: var(--space-md); }
 .ui-overlay-rail .ui-nav-group + .ui-nav-group { margin-top: var(--space-md); }
 /* The current section is white and bold with no fill; the wash is only the cursor. */
-.ui-overlay .ui-nav-row:hover { background: var(--tint); }
+.ui-overlay .ui-nav-row:is(:hover, :focus-visible) { background: var(--tint); }
 .ui-overlay .ui-nav-row[aria-current="page"]:not(:hover) { background: transparent; }
 .ui-overlay-rail-foot { margin-top: auto; color: var(--muted-foreground); font-size: var(--text-row); }
 .ui-overlay-page { display: flex; min-width: 0; flex: 1; flex-direction: column; overflow: auto; padding: var(--space-2xl) var(--space-4xl) var(--space-4xl); }
@@ -720,7 +725,7 @@
 .ui-crumbs { display: flex; min-width: 0; flex: 1; align-items: center; justify-content: flex-start; gap: 2px; overflow: hidden; }
 /* A crumb is a section label you can press (its type is .ui-title's): the wash on hover, the current place white at the current weight. */
 .ui-crumbs > button { flex: none; border: 0; border-radius: var(--radius-control); background: transparent; padding: var(--space-2xs) var(--space-sm); cursor: pointer; }
-.ui-crumbs > button:hover:not(:disabled) { background: var(--tint); color: var(--foreground); }
+.ui-crumbs > button:is(:hover, :focus-visible):not(:disabled) { background: var(--tint); color: var(--foreground); }
 .ui-crumbs > button[aria-current="true"] { color: var(--foreground); font-weight: var(--weight-current); }
 .ui-crumbs > button:disabled { opacity: .55; cursor: default; }
 .ui-crumbs-sep { color: var(--muted-foreground); font-size: var(--text-label); opacity: .6; }
