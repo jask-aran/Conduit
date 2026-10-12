@@ -2,6 +2,7 @@ import { createEffect, createSignal, on, Show, splitProps, untrack, type JSX, ty
 import { Dynamic } from "solid-js/web";
 import { ChevronDownIcon } from "lucide-solid";
 import "./disclosure.css";
+import { useLibrary } from "@/components/ui/swap";
 
 const reduced = () => typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
 const GENTLE = "cubic-bezier(.2, .8, .2, 1)";
@@ -88,6 +89,7 @@ export function Disclosure(props: {
   const [local, root] = splitProps(props, ["class", "headerClass", "bodyClass", "header", "body", "initialOpen", "onOpenChange", "trigger", "triggerProps", "title", "label", "children"]);
   const [open, setOpen] = createSignal(Boolean(local.initialOpen));
   const reveal = createReveal(open);
+  const library = useLibrary();
   let row!: HTMLDivElement;
   const toggle = () => {
     const next = !open();
@@ -100,7 +102,8 @@ export function Disclosure(props: {
   return <div ref={row} class={local.class} data-open={open() ? "true" : "false"} {...root}>
     <Dynamic component={local.trigger ?? "button"} type="button" class={local.headerClass} aria-expanded={open()} aria-label={local.label} title={local.title} onClick={toggle} {...local.triggerProps}>
       {local.header}
-      <ChevronDownIcon class="disclosure-chevron" data-open={open() ? "true" : "false"} />
+      {/* The gallery's previews draw its chevron as the library's Disclosure chevron. */}
+      <ChevronDownIcon class={library ? "ui-disclosure-chevron" : "disclosure-chevron"} data-open={open() ? "true" : "false"} />
     </Dynamic>
     <Show when={reveal.mounted()}>
       <div ref={reveal.ref} class="disclosure-body"><div class={local.bodyClass}>{untrack(local.body)}</div></div>

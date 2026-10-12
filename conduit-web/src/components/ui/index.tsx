@@ -397,9 +397,16 @@ export function TraceHeader(props: { orb?: JSX.Element; status: string; time?: s
   return <button type="button" class="ui-trace" data-tone={props.tone} aria-expanded={props.opens ? Boolean(props.open) : undefined} disabled={!props.opens} onClick={() => props.onToggle?.()}>
     <span class="ui-trace-orb">{props.orb}</span>
     <span class="ui-trace-line"><b>{props.status}</b><Show when={props.time}><span class="ui-trace-time"> · {props.time}</span></Show><Show when={props.work}><span> · {props.work}</span></Show></span>
-    <Show when={props.opens}><ChevronDownIcon class="ui-trace-chevron" /></Show>
+    <Show when={props.opens}><ChevronDownIcon class="ui-disclosure-chevron" /></Show>
     <Show when={props.latest}><span class="ui-trace-latest">{props.latest}</span></Show>
   </button>;
+}
+/** Anything that folds: a header, one turning chevron, a body. Shape only: the caller opens it (and animates it). */
+export function Disclosure(props: { header: JSX.Element; open?: boolean; onToggle?: () => void; disabled?: boolean; children?: JSX.Element }) {
+  return <div class="ui-disclosure" data-open={props.open ? "true" : "false"}>
+    <button type="button" class="ui-disclosure-header" aria-expanded={Boolean(props.open)} disabled={props.disabled} onClick={() => props.onToggle?.()}>{props.header}<ChevronDownIcon class="ui-disclosure-chevron" /></button>
+    <Show when={props.open}><div class="ui-disclosure-body">{props.children}</div></Show>
+  </div>;
 }
 /** The opened trail: one light line per step. */
 export const Trail = (props: { children: JSX.Element }) => <ol class="ui-trail">{props.children}</ol>;

@@ -340,3 +340,4 @@ html, body { background: var(--frame, #08090a); color: var(--foreground); }
 .g-transcript-stage { width: min(100%, 720px); padding: 8px 0; }
 .g-transcript-stage[data-phone] { width: min(100%, 360px); }
 .g-feet { display: grid; width: 100%; gap: 8px; }
+.g-read { display: grid; width: 100%; justify-items: stretch; }

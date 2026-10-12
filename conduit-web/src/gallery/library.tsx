@@ -1,7 +1,7 @@
 import { ArrowDownIcon, PanelLeftIcon, MessageSquarePlusIcon, EllipsisIcon, CameraIcon, KeyboardIcon, MicIcon, ArrowUpIcon, ChevronDownIcon, CircleIcon, FileTextIcon, ClockIcon, Maximize2Icon, SendHorizontalIcon, XIcon, CheckIcon } from "lucide-solid";
 import { createSignal, For, onCleanup, onMount, Show, type JSX } from "solid-js";
 import { PanelRightIcon, ClipboardCopyIcon, Columns2Icon, CopyIcon, FolderIcon, FolderInputIcon, LayoutDashboardIcon, MenuIcon, MonitorIcon, PaperclipIcon, PencilIcon, PinIcon, PlusIcon, QrCodeIcon, RefreshCwIcon, SearchIcon, ShareIcon, ShieldCheckIcon, SquarePenIcon, TerminalIcon, Trash2Icon } from "lucide-solid";
-import { Transcript, Message, Turn, TraceHeader, Trail, Step, Answer, CodeBlock, MessageFoot, Toast, Toaster, SettingRecorder, Field, Leader, Crumbs, Spotlight, OverlayHead, Match, Choices, OverlayBar, OverlayHints, OverlayList, OverlayPage, OverlayRail, OverlaySplit, Glance, GlanceHead, GlancePrompt, GlanceTurn, GlanceAnswer, GlanceEmpty, RiderButton, Overlay, Scrim, SettingGroup, SettingLine, SettingValue, SettingLink, SettingNote, SettingDetails, SettingWide, SettingLoading, Progress, Keycap, NavGroup, NavRow, Segmented, SelectTrigger, Bubble, Button, Card, Chip, Choice, ComposerField, DesktopComposer, Line, TextArea, Rider, RiderActions, RiderTitle, Toolbar, Frost, Input, Item, Menu, PillButton, PillField, PillGroup, PillSwitch, HeadingSection, SearchSection, Section, Slider } from "@/components/ui";
+import { Disclosure, Transcript, Message, Turn, TraceHeader, Trail, Step, Answer, CodeBlock, MessageFoot, Toast, Toaster, SettingRecorder, Field, Leader, Crumbs, Spotlight, OverlayHead, Match, Choices, OverlayBar, OverlayHints, OverlayList, OverlayPage, OverlayRail, OverlaySplit, Glance, GlanceHead, GlancePrompt, GlanceTurn, GlanceAnswer, GlanceEmpty, RiderButton, Overlay, Scrim, SettingGroup, SettingLine, SettingValue, SettingLink, SettingNote, SettingDetails, SettingWide, SettingLoading, Progress, Keycap, NavGroup, NavRow, Segmented, SelectTrigger, Bubble, Button, Card, Chip, Choice, ComposerField, DesktopComposer, Line, TextArea, Rider, RiderActions, RiderTitle, Toolbar, Frost, Input, Item, Menu, PillButton, PillField, PillGroup, PillSwitch, HeadingSection, SearchSection, Section, Slider } from "@/components/ui";
 import { Switch } from "../client/settings/settings-controls";
 import { HarnessMark } from "../client/harness-brand";
 import { PlaceGlyph } from "../client/chat/place-picker";
@@ -351,9 +351,16 @@ const TRACE_FORMS: FormRow[] = [
   form("done", "settled", () => <TraceHeader orb={orb(true)} status="Done" time="2m 00s" work="1 edit · 2 reads" latest="Edited lorem_ipsum.txt" opens />, "", "the orb turns slowly"),
   form("interrupted", "stopped by the reader", () => <TraceHeader orb={orb(false)} status="Interrupted" time="41s" work="2 commands" opens />, "", "the orb sputters in --destructive"),
   form("no trail", "no thinking or tools: the first line alone, nothing to open", () => <TraceHeader orb={orb(true)} status="Done" time="3s" />, "<TraceHeader> without opens", "not a button you can press"),
+  form("disclosure", "anything that folds: a header, one turning chevron, a body (the caller animates it)", () => <DisclosureDemo />, "<Disclosure header open onToggle>", "Row role, muted · chevron icon-sm, turns 180°"),
   form("trail", "the opened trace: a light line a step", () => <><TraceHeader orb={orb(true)} status="Done" time="2m 00s" work="1 edit · 2 reads" opens open /><Trail><Step icon={<FileTextIcon />} verb="Read" subject="src/main.tsx" time="0.4s" /><Step icon={<PencilIcon />} verb="Edited" subject="lorem_ipsum.txt" time="1.2s" /><Step icon={<TerminalIcon />} verb="Ran" subject="npm test" time="14s" state="failed" /><Step verb="Running" subject="npm run build" state="running" /></Trail></>, "<Trail><Step icon verb subject time state>", "Row role · subject code face, muted · failed in --destructive"),
   form("foot", "an answer's: time, Copy, Retry; a message's: time, Edit, at the right", () => <div class="g-feet"><MessageFoot time="22:16">{copyRetry()}</MessageFoot><MessageFoot time="22:14" end><Button variant="ghost" size="icon-xs" aria-label="Edit"><PencilIcon /></Button></MessageFoot></div>, "<MessageFoot time end>", "caption · tabular · icon-xs ghost"),
 ];
+function DisclosureDemo() {
+  const [open, setOpen] = createSignal(true);
+  return <Disclosure header={<span>The second paragraph has four sentences</span>} open={open()} onToggle={() => setOpen(!open())}><Answer html={"<p>Keep the first two; they carry the point.</p>"} /></Disclosure>;
+}
+/** Forms drawn as what is read: in the transcript's scope (its scale, a row a step under the body). */
+const reading = (rows: FormRow[]) => rows.map((row) => ({ ...row, sample: () => <div class="ui-read g-read">{row.sample()}</div> }));
 const conversation = () => <Transcript>
   <Message time="22:14" actions={<Button variant="ghost" size="icon-xs" aria-label="Edit"><PencilIcon /></Button>}>write a .txt file in this folder that contains lorem ipsum text</Message>
   <Turn><TraceHeader orb={orb(true)} status="Done" time="2m 00s" work="1 edit" latest="Edited lorem_ipsum.txt" opens /><Answer html={"<p>Created <code>lorem_ipsum.txt</code> in this folder with lorem ipsum text.</p>"} /><MessageFoot time="22:16">{copyRetry()}</MessageFoot></Turn>
@@ -572,13 +579,13 @@ export const libraryFamilies: Family[] = [
       </div></div>, true),
     ] },
   ] },
-  { title: "Transcript", note: "what is read, at the transcript's scale (Space · Scale, Settings · Text size): the user's Message (a Bubble and its foot) and a Turn (its trace header, the answer, the answer's foot). The answer is Markdown with no bubble in the Body role, one gap between blocks; the trail sits a step under it", groups: [
+  { title: "Transcript", note: "what is read, at the transcript's scale (Space · Scale, Settings · Text size); a row's text there (a trace, a trail) is a step under the body on both densities: the user's Message (a Bubble and its foot) and a Turn (its trace header, the answer, the answer's foot). The answer is Markdown with no bubble in the Body role, one gap between blocks; the trail sits a step under it", groups: [
     { title: "In use", note: "a turn, measured: green the gaps (a turn's parts half a unit apart, blocks three quarters)", layout: "desktop", atoms: [
       lib("transcript-inuse", "Turn in use", "both", "transcript", "Turn > TraceHeader · Answer · MessageFoot", () => <InUse scene={turnScene} marks={TURN_MARKS} spacing={[".ui-turn", ".ui-answer"]} />, "row"),
     ] },
     { title: "Forms", note: "each piece at each density", layout: "desktop", atoms: [
-      lib("transcript-answer", "Answer · blocks × densities", "both", "transcript", "Answer", () => <FormTable rows={ANSWER_FORMS} on={["desktop", "phone"]} widths={["200px", "minmax(0, 1fr)", "360px"]} />, "row"),
-      lib("transcript-trace", "TraceHeader · Trail · MessageFoot", "both", "transcript", "TraceHeader · Trail · Step · MessageFoot", () => <FormTable rows={TRACE_FORMS} on={["desktop", "phone"]} widths={["200px", "minmax(0, 1fr)", "360px"]} />, "row"),
+      lib("transcript-answer", "Answer · blocks × densities", "both", "transcript", "Answer", () => <FormTable rows={reading(ANSWER_FORMS)} on={["desktop", "phone"]} widths={["200px", "minmax(0, 1fr)", "360px"]} />, "row"),
+      lib("transcript-trace", "TraceHeader · Trail · MessageFoot", "both", "transcript", "TraceHeader · Trail · Step · MessageFoot", () => <FormTable rows={reading(TRACE_FORMS)} on={["desktop", "phone"]} widths={["200px", "minmax(0, 1fr)", "360px"]} />, "row"),
     ] },
     { title: "Assembled", note: "a conversation, drawn with v2 alone", atoms: [
       lib("transcript-desktop", "Transcript", "desktop", "transcript", "Transcript > Message · Turn", () => <div class="g-transcript-stage">{conversation()}</div>, "row"),
