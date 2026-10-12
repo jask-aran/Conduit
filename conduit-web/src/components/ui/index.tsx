@@ -64,9 +64,9 @@ export function moveCursor(event: PointerEvent & { currentTarget: Element }) {
   row.setAttribute(attr, attr === "data-active" ? "true" : "");
 }
 
-/** A piece's move (Foundations · Motion): entering rises in (a surface), settling rises in slower (content), leaving drops back. */
-export type Motion = "entering" | "settling" | "leaving";
-const motionOf = (motion?: Motion) => ({ "data-entering": motion === "entering" ? "" : motion === "settling" ? "settle" : undefined, "data-leaving": motion === "leaving" ? "" : undefined });
+/** A piece's move, drawn by the piece from Foundations · Motion: entering, leaving (back the way it came), removing (fades in place). */
+export type Motion = "entering" | "leaving" | "removing";
+const motionOf = (motion?: Motion) => ({ "data-entering": motion === "entering" ? "" : undefined, "data-leaving": motion === "leaving" ? "" : motion === "removing" ? "remove" : undefined });
 
 export function Menu(props: { class?: string; density?: Density; motion?: Motion; children: JSX.Element }) {
   return <div role="menu" class={cn("ui-frost ui-menu", props.class)} onPointerOver={moveCursor} data-density={props.density} data-surface="frost" data-lift="raised" {...motionOf(props.motion)}>{props.children}</div>;
@@ -137,8 +137,8 @@ export function Keycap(props: { children: JSX.Element; label?: string; class?: s
 const Keys = (props: { keys: string[]; first?: boolean }) => <span class="ui-keys" data-first={props.first ? "" : undefined}><For each={props.keys}>{(key) => <Keycap>{key}</Keycap>}</For></span>;
 
 /** size wide: a card that holds content (a list, an excerpt, an editor). close: a × in its corner, for a card with no Cancel. */
-export function Card(props: { title: string; detail?: JSX.Element; class?: string; density?: Density; size?: "wide"; close?: boolean | (() => void); actions?: JSX.Element; children?: JSX.Element }) {
-  return <div role="dialog" aria-label={props.title} class={cn("ui-frost ui-card", props.class)} data-density={props.density} data-size={props.size} data-close={props.close ? "" : undefined} data-surface="frost" data-lift="raised">
+export function Card(props: { title: string; detail?: JSX.Element; class?: string; density?: Density; size?: "wide"; close?: boolean | (() => void); actions?: JSX.Element; motion?: Motion; children?: JSX.Element }) {
+  return <div role="dialog" aria-label={props.title} class={cn("ui-frost ui-card", props.class)} data-density={props.density} data-size={props.size} data-close={props.close ? "" : undefined} data-surface="frost" data-lift="raised" {...motionOf(props.motion)}>
     <h3>{props.title}</h3><Show when={props.detail}><p>{props.detail}</p></Show>
     <Show when={props.close}><Button variant="ghost" size="icon-sm" class="ui-card-close" aria-label="Close" onClick={() => typeof props.close === "function" && props.close()}><XIcon /></Button></Show>
     {props.children}
@@ -166,8 +166,8 @@ export function Toolbar(props: { start?: JSX.Element; end?: JSX.Element; class?:
  * Rider: frost on a composer's top edge, either composer's. A row (title,
  * body, actions), a strip (chips, actions) or a card (the question).
  */
-export function Rider(props: { label?: string; layout?: "row" | "strip" | "card"; class?: string; children: JSX.Element }) {
-  return <div class={cn("ui-frost ui-rider", props.class)} data-surface="frost" data-lift="rest" data-layout={props.layout ?? "row"} role="group" aria-label={props.label}>{props.children}</div>;
+export function Rider(props: { label?: string; layout?: "row" | "strip" | "card"; class?: string; motion?: Motion; children: JSX.Element }) {
+  return <div class={cn("ui-frost ui-rider", props.class)} data-surface="frost" data-lift="rest" data-layout={props.layout ?? "row"} role="group" aria-label={props.label} {...motionOf(props.motion)}>{props.children}</div>;
 }
 export const RiderTitle = (props: { children: JSX.Element }) => <span class="ui-title-text">{props.children}</span>;
 /** A button riding over the transcript just above the composer: scroll to latest (an icon alone), cancel an edit
@@ -217,14 +217,14 @@ export function Choice(props: { n: number; label: string; detail?: string; chose
  * the popover's Items at the overlay's scale; the Rail is the sidebar's
  * NavGroups. Its width is the caller's (--overlay-width).
  */
-export function Scrim(props: { placement?: "top" | "center"; class?: string; children: JSX.Element }) {
-  return <div class={cn("ui-scrim", props.class)} data-placement={props.placement ?? "top"}>{props.children}</div>;
+export function Scrim(props: { placement?: "top" | "center"; class?: string; motion?: Motion; children: JSX.Element }) {
+  return <div class={cn("ui-scrim", props.class)} data-placement={props.placement ?? "top"} {...motionOf(props.motion)}>{props.children}</div>;
 }
 
 /** core: frost on a solid backing, kept for the phone's full-screen overlays should the page behind them be too busy -- off for now. */
-export function Overlay(props: { label: string; layout?: "stack" | "rail"; core?: boolean; density?: Density; class?: string; style?: JSX.CSSProperties; children: JSX.Element }) {
+export function Overlay(props: { label: string; layout?: "stack" | "rail"; core?: boolean; density?: Density; class?: string; style?: JSX.CSSProperties; motion?: Motion; children: JSX.Element }) {
   return <div role="dialog" aria-label={props.label} class={cn("ui-frost ui-overlay", props.class)} style={props.style} data-layout={props.layout ?? "stack"}
-    data-surface="frost" data-lift="raised" data-core={props.core ? "" : undefined} data-density={props.density}>{props.children}</div>;
+    data-surface="frost" data-lift="raised" data-core={props.core ? "" : undefined} data-density={props.density} {...motionOf(props.motion)}>{props.children}</div>;
 }
 
 /** The field across the top: a lead (a prompt glyph, a search icon, a back button), the input, then end controls and close. */
@@ -366,8 +366,8 @@ export function Crumbs(props: { label: string; items: { label: string; current?:
  * region path; its rows lead with their keys; its rail holds the go-to chords
  * and Esc. The page dims round it all but the current region (Spotlight).
  */
-export function Leader(props: { path: JSX.Element; hints: JSX.Element; children: JSX.Element }) {
-  return <Overlay label="Leader" class="ui-leader"><OverlayHead>{props.path}</OverlayHead>
+export function Leader(props: { path: JSX.Element; hints: JSX.Element; motion?: Motion; children: JSX.Element }) {
+  return <Overlay label="Leader" class="ui-leader" motion={props.motion}><OverlayHead>{props.path}</OverlayHead>
     <OverlayList>{props.children}</OverlayList>{props.hints}</Overlay>;
 }
 
@@ -433,14 +433,14 @@ export function TraceHeader(props: { orb?: JSX.Element; status: string; time?: s
 export function Disclosure(props: { header: JSX.Element; open?: boolean; onToggle?: () => void; disabled?: boolean; children?: JSX.Element }) {
   return <div class="ui-disclosure" data-open={props.open ? "true" : "false"}>
     <button type="button" class="ui-disclosure-header" aria-expanded={Boolean(props.open)} disabled={props.disabled} onClick={() => props.onToggle?.()}>{props.header}<ChevronDownIcon class="ui-disclosure-chevron" /></button>
-    <Show when={props.open}><div class="ui-disclosure-body">{props.children}</div></Show>
+    <div class="ui-disclosure-body" aria-hidden={!props.open}>{props.children}</div>
   </div>;
 }
 /** The opened trail: one light line per step. */
 export const Trail = (props: { children: JSX.Element }) => <ol class="ui-trail">{props.children}</ol>;
 /** A step: its kind's icon (a spinner while running), a verb, its subject in muted mono, its duration at the end. */
-export function Step(props: { icon?: JSX.Element; verb: string; subject?: string; time?: string; state?: "running" | "failed" | "stopped" }) {
-  return <li class="ui-step" data-state={props.state}>
+export function Step(props: { icon?: JSX.Element; verb: string; subject?: string; time?: string; state?: "running" | "failed" | "stopped"; motion?: Motion }) {
+  return <li class="ui-step" data-state={props.state} {...motionOf(props.motion)}>
     <span class="ui-step-icon"><Show when={props.state === "running"} fallback={props.icon}><span class="ui-spinner" aria-hidden="true" /></Show></span>
     <span class="ui-step-verb">{props.verb}</span><Show when={props.subject}><code class="ui-step-subject">{props.subject}</code></Show>
     <Show when={props.state === "failed" || props.state === "stopped"}><span class="ui-step-state">{props.state === "failed" ? "Failed" : "Stopped"}</span></Show>
@@ -448,13 +448,13 @@ export function Step(props: { icon?: JSX.Element; verb: string; subject?: string
   </li>;
 }
 /** A message's action row: its time first, muted and tabular, then its actions (icon-xs ghost buttons). */
-export const MessageFoot = (props: { time: string; end?: boolean; children?: JSX.Element }) =>
-  <div class="ui-message-foot" data-end={props.end ? "" : undefined}><time>{props.time}</time>{props.children}</div>;
+export const MessageFoot = (props: { time: string; end?: boolean; motion?: Motion; children?: JSX.Element }) =>
+  <div class="ui-message-foot" data-end={props.end ? "" : undefined} {...motionOf(props.motion)}><time>{props.time}</time>{props.children}</div>;
 /** A turn: the trace header, the answer and its foot, one gap apart. */
 export const Turn = (props: { children: JSX.Element }) => <article class="ui-turn">{props.children}</article>;
 /** The user's message: its Bubble and, under it at the right, its foot. */
-export const Message = (props: { time: string; actions?: JSX.Element; children: JSX.Element }) =>
-  <article class="ui-message"><Bubble>{props.children}</Bubble><MessageFoot time={props.time} end>{props.actions}</MessageFoot></article>;
+export const Message = (props: { time: string; actions?: JSX.Element; motion?: Motion; children: JSX.Element }) =>
+  <article class="ui-message" {...motionOf(props.motion)}><Bubble>{props.children}</Bubble><MessageFoot time={props.time} end>{props.actions}</MessageFoot></article>;
 /** The reading column: the composer's width, its gutter, one gap between messages. */
 export const Transcript = (props: { children: JSX.Element; class?: string }) => <div class={cn("ui-transcript", props.class)}>{props.children}</div>;
 

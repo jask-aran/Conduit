@@ -1,7 +1,7 @@
 import { ArrowDownIcon, PanelLeftIcon, MessageSquarePlusIcon, EllipsisIcon, CameraIcon, KeyboardIcon, MicIcon, ArrowUpIcon, ChevronDownIcon, CircleIcon, FileTextIcon, ClockIcon, Maximize2Icon, SendHorizontalIcon, XIcon, CheckIcon } from "lucide-solid";
 import { createSignal, For, onCleanup, onMount, Show, type JSX } from "solid-js";
 import { PanelRightIcon, ClipboardCopyIcon, Columns2Icon, CopyIcon, FolderIcon, FolderInputIcon, LayoutDashboardIcon, MenuIcon, MonitorIcon, PaperclipIcon, PencilIcon, PinIcon, PlusIcon, QrCodeIcon, RefreshCwIcon, SearchIcon, ShareIcon, ShieldCheckIcon, SquarePenIcon, TerminalIcon, Trash2Icon } from "lucide-solid";
-import { Disclosure, Transcript, Message, Turn, TraceHeader, Trail, Step, Answer, CodeBlock, CopyButton, MessageFoot, Toast, Toaster, SettingRecorder, Field, Leader, Crumbs, Spotlight, OverlayHead, Match, Choices, OverlayBar, OverlayHints, OverlayList, OverlayPage, OverlayRail, OverlaySplit, Glance, GlanceHead, GlancePrompt, GlanceTurn, GlanceAnswer, GlanceEmpty, RiderButton, Overlay, Scrim, SettingGroup, SettingLine, SettingValue, SettingLink, SettingNote, SettingDetails, SettingWide, SettingLoading, Progress, Keycap, NavGroup, NavRow, Segmented, SelectTrigger, Bubble, Button, Card, Chip, Choice, ComposerField, DesktopComposer, Line, TextArea, Rider, RiderActions, RiderTitle, Toolbar, Frost, Input, Item, Menu, PillButton, PillField, PillGroup, PillSwitch, HeadingSection, SearchSection, Section, Slider } from "@/components/ui";
+import { type Motion, Disclosure, Transcript, Message, Turn, TraceHeader, Trail, Step, Answer, CodeBlock, CopyButton, MessageFoot, Toast, Toaster, SettingRecorder, Field, Leader, Crumbs, Spotlight, OverlayHead, Match, Choices, OverlayBar, OverlayHints, OverlayList, OverlayPage, OverlayRail, OverlaySplit, Glance, GlanceHead, GlancePrompt, GlanceTurn, GlanceAnswer, GlanceEmpty, RiderButton, Overlay, Scrim, SettingGroup, SettingLine, SettingValue, SettingLink, SettingNote, SettingDetails, SettingWide, SettingLoading, Progress, Keycap, NavGroup, NavRow, Segmented, SelectTrigger, Bubble, Button, Card, Chip, Choice, ComposerField, DesktopComposer, Line, TextArea, Rider, RiderActions, RiderTitle, Toolbar, Frost, Input, Item, Menu, PillButton, PillField, PillGroup, PillSwitch, HeadingSection, SearchSection, Section, Slider } from "@/components/ui";
 import { Switch } from "../client/settings/settings-controls";
 import { HarnessMark } from "../client/harness-brand";
 import { PlaceGlyph } from "../client/chat/place-picker";
@@ -11,7 +11,7 @@ import { QuestionCard } from "../client/chat/question-card";
 import { ImageIcon, ActivityIcon, BrainIcon, ChevronRightIcon, GlobeIcon, MessageSquareIcon, MicIcon as VoiceIcon, NotebookTextIcon, PanelLeftCloseIcon, ServerIcon } from "lucide-solid";
 import type { Question } from "../client/api/contracts";
 import { LibraryContext } from "@/components/ui/swap";
-import { InUse, FormTable, form, px, rounding, edge, fg, bg, type Mark, type FormRow } from "./specs";
+import { InUse, FormTable, form, px, rounding, edge, fg, bg, Replay, type Mark, type FormRow } from "./specs";
 import katex from "katex";
 import { ThinkingOrb, settledOrbRate } from "../client/chat/thinking-orb";
 import { PLAIN_SPHERE, SPUTTERING_SPHERE } from "../client/chat/orb-frames";
@@ -78,9 +78,9 @@ const toolbarStart = () => <>{ghost("Attach and more", <PlusIcon />)}{ghost("Con
 const toolbarEnd = () => <>{ghost("Start voice dictation", <MicIcon />)}{ghost("Send message", <ArrowUpIcon />)}</>;
 const thumb = "data:image/svg+xml," + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><defs><linearGradient id="g" x2="1" y2="1"><stop offset="0" stop-color="#6b8afd"/><stop offset="1" stop-color="#d97706"/></linearGradient></defs><rect width="48" height="48" fill="url(#g)"/></svg>');
 /** The app's riders, as components v2 builds them. */
-const attachments = () => <Rider label="Attachments" layout="strip"><div class="ui-chips"><Chip name="photo.png" image={thumb} /><Chip name="notes.txt" detail="2.1 KB" icon={<FileTextIcon />} /><Chip name="lorem_ipsum.txt" detail="412 bytes" icon={<FileTextIcon />} status="uploading" progress={60} /></div>
+const attachments = (motion?: Motion) => <Rider label="Attachments" layout="strip" motion={motion}><div class="ui-chips"><Chip name="photo.png" image={thumb} /><Chip name="notes.txt" detail="2.1 KB" icon={<FileTextIcon />} /><Chip name="lorem_ipsum.txt" detail="412 bytes" icon={<FileTextIcon />} status="uploading" progress={60} /></div>
   <RiderActions stack>{ghost("Show all attachments", <Maximize2Icon />)}{ghost("Remove all attachments", <Trash2Icon />)}</RiderActions></Rider>;
-const queued = () => <Rider label="Queued"><RiderTitle>Steering</RiderTitle><ul class="ui-lines"><Line text="and make the second paragraph shorter" /><Line text="then rename the file to lorem.txt, and add a heading at the top that says what it is" clipped /></ul>
+const queued = (motion?: Motion) => <Rider label="Queued" motion={motion}><RiderTitle>Steering</RiderTitle><ul class="ui-lines"><Line text="and make the second paragraph shorter" /><Line text="then rename the file to lorem.txt, and add a heading at the top that says what it is" clipped /></ul>
   <RiderActions>{ghost("Interrupt and send now", <SendHorizontalIcon />)}{ghost("Edit", <PencilIcon />)}{ghost("Discard", <XIcon />)}</RiderActions></Rider>;
 // The real QuestionCard, drawn with components v2, so the cell shows all the live card can: a
 // single question's title, tabs with their ticks, pick-any, an option's preview,
@@ -372,6 +372,8 @@ function codeScene() {
     <MessageFoot time="22:16"><CopyButton copied={answer()} label="Copy answer" onCopy={copyAnswer} /></MessageFoot>
   </Turn></Transcript></div>;
 }
+function FoldDemo() { const [open, setOpen] = createSignal(false); return <CodeBlock lang="ts" code={LONG} fold={4} open={open()} onToggle={() => setOpen(!open())} />; }
+function LiveCopy() { const [copied, copy] = useCopied(); return <CodeBlock lang="sh" code={"npm run gallery"} copied={copied()} onCopy={copy} />; }
 const CODE_MARKS: Mark[] = [
   { selector: ".ui-code", label: "a box: a --tint line at the control corner, no fill", read: (el) => rounding(el) },
   { selector: ".ui-code-lang", label: "the language, where the numbers start: Caption, the data face", read: (el) => typeOf(el) },
@@ -480,6 +482,9 @@ export const libraryFamilies: Family[] = [
     lib("p-projects", "MobileComposerOptions › places", "phone", "popover", "chat/mobile-composer-options.tsx", () => <Menu class="g-w16"><Projects /></Menu>, true),
     lib("p-chat", "ChatHeader › menu", "phone", "popover", "chat/chat-screen.tsx", () => <Menu class="g-w16"><ChatTitle /><Section><Item icon={<RefreshCwIcon />}>Update app</Item></Section><Section><Item icon={<PanelRightIcon />}>Workspace panel</Item><Item icon={<ShareIcon />}>Share</Item><Item icon={<PencilIcon />}>Rename</Item><Item icon={<Trash2Icon />} destructive>Delete</Item></Section></Menu>, true),
     ] },
+    { title: "Motion", note: "its own moves, from Foundations · Motion: it rises in with a fade and drops back the way it came; nothing in it answers the pointer as it goes. The app's popovers and menus (frost-arrive, 220ms) take these", layout: "desktop", atoms: [
+      lib("popover-motion", "Popover · motion", "both", "popover", "Menu motion", () => <FormTable rows={[form("arrives · leaves", "rises --space-md with a fade; drops back", () => <Replay leaves={["leaving"]}>{(m) => <Menu motion={m()}><Section><Item icon={<FolderIcon />}>Open</Item><Item icon={<CopyIcon />}>Copy link</Item></Section></Menu>}</Replay>, "<Menu motion>", "in: --duration-gentle · --ease-arrive · out: --duration-quick · --ease-leave")]} on={["desktop", "phone"]} widths={["200px", "minmax(0, 1fr)", "minmax(0, 1fr)"]} />, "row"),
+    ] },
   ] },
   { title: "Card", note: "raised frost at a dialog's width and padding: title · detail · body · actions, drawn from the library's Input and Buttons. Its actions: the primary one a white outline, the others ghost outline, a destructive confirm filled red", groups: [
     { title: "In use", note: "a confirm, measured: pink is the card's edge (--card-edge), green the gaps between its parts (--card-gap, --card-pair title to detail, half a unit between actions)", layout: "desktop", atoms: [
@@ -491,6 +496,9 @@ export const libraryFamilies: Family[] = [
     { title: "In the app", note: "every dialog the app opens (FrostDialog), rebuilt from its real content with v2 alone: Card (wide, close), Field, Input, TextArea, Chip, Section and Items, the code preview, Segmented, Buttons. Under each, its file and what v2 still lacks for it", layout: "desktop", atoms: [
       lib("card-in-app", "FrostDialog · in the app", "both", "card", "client/**/FrostDialog", () => <FormTable rows={IN_APP} on={["desktop", "phone"]} widths={["minmax(0, 1fr)", "360px"]} stacked />, "row"),
     ] },
+    { title: "Motion", note: "its own moves: a card rises in over the page and drops back when it closes", layout: "desktop", atoms: [
+      lib("card-motion", "Card · motion", "both", "card", "Card motion", () => <FormTable rows={[form("arrives · leaves", "rises --space-md with a fade; drops back", () => <Replay leaves={["leaving"]}>{(m) => <Card title="Delete 3 chats?" motion={m()} actions={<><Button variant="ghost" outline>Cancel</Button><Button variant="destructive">Delete</Button></>} />}</Replay>, "<Card motion>", "in: --duration-gentle · --ease-arrive · out: --duration-quick · --ease-leave")]} on={["desktop", "phone"]} widths={["200px", "minmax(0, 1fr)", "minmax(0, 1fr)"]} />, "row"),
+    ] },
   ] },
   { title: "Toast", note: "raised frost at the window's edge, one sentence about what just happened: its kind a glyph in the state's colour, an action under it when there is one thing to do, a × to dismiss. Desktop: bottom right, above nothing; a phone: the top, inside the overlay's inset, clear of the composer and keyboard", groups: [
     { title: "In use", note: "two toasts stacked, measured", layout: "desktop", atoms: [
@@ -501,6 +509,9 @@ export const libraryFamilies: Family[] = [
     ] },
     { title: "In the app", note: "the app raises 42 toasts (solid-sonner): success 16, info 12, error 12, warning 2. One sentence each, never a second line; two carry an action; some set a longer duration or an id, so a repeat replaces the one showing. Grouped by where they come from", layout: "desktop", atoms: [
       lib("toast-in-app", "Toast · in the app", "both", "toast", "client/** toast.*", () => <FormTable rows={TOASTS_IN_APP} on={["desktop", "phone"]} widths={["minmax(0, 1fr)", "360px"]} stacked />, "row"),
+    ] },
+    { title: "Motion", note: "its own moves: it comes in from its edge and leaves back to it, so on a phone (the top) it comes down", layout: "desktop", atoms: [
+      lib("toast-motion", "Toast · motion", "both", "toast", "Toast motion", () => <FormTable rows={[form("arrives · leaves", "from its edge, back to it", () => <Replay leaves={["leaving"]}>{(m) => <Toast kind="success" motion={m()}>Saved to Downloads</Toast>}</Replay>, "<Toast motion>", "in: --duration-gentle · --ease-arrive · out: --duration-quick · --ease-leave")]} on={["desktop", "phone"]} widths={["200px", "minmax(0, 1fr)", "minmax(0, 1fr)"]} />, "row"),
     ] },
   ] },
   { title: "Overlay", note: "raised frost over a dimmed page, the large surfaces: sections edge to edge, ruled off -- a Bar, a body (a List, a List beside an aside, or a Rail beside a Page), Hints. Its rows are the popover's Items at its scale; its Rail is the sidebar's NavGroups", groups: [
@@ -548,6 +559,9 @@ export const libraryFamilies: Family[] = [
       lib("o-settings-phone", "Settings · sections", "phone", "overlay", "settings/settings-core.tsx · a section opens over the rail, Back returns", () => <PhoneStage><Settings close={noop} phone /></PhoneStage>),
       lib("o-settings-page-phone", "Settings · a section", "phone", "overlay", "settings/settings-core.tsx · Back to the sections", () => <PhoneStage><Settings close={noop} phone start="models" /></PhoneStage>),
     ] },
+    { title: "Motion", note: "its own moves: the scrim dims in and out; the overlay on it rises in and drops back", layout: "desktop", atoms: [
+      lib("overlay-motion", "Overlay · motion", "both", "overlay", "Scrim motion · Overlay motion", () => <FormTable rows={[form("arrives · leaves", "the scrim fades; the overlay rises and drops back", () => <Replay leaves={["leaving"]}>{(m) => <Scrim placement="center" motion={m()}><Overlay label="Overlay" motion={m()}><OverlayList>{leaderRows()}</OverlayList></Overlay></Scrim>}</Replay>, "<Scrim motion> · <Overlay motion>", "the scrim: a fade, --ease-change · " + "in: --duration-gentle · --ease-arrive · out: --duration-quick · --ease-leave")]} on={["desktop", "phone"]} widths={["200px", "minmax(0, 1fr)", "minmax(0, 1fr)"]} />, "row"),
+    ] },
   ] },
   { title: "Leader", note: "a small Overlay card above the composer that does not cover the page: the page dims all but the current region", groups: [
     { atoms: [
@@ -558,6 +572,9 @@ export const libraryFamilies: Family[] = [
     { title: "Assembled", note: "the app's own, at its size", layout: "desktop", atoms: [
       lib("o-leader", "LeaderPalette", "desktop", "overlay", "navigation/leader-palette.tsx · the composer region lit", () => <div class="g-page"><div class="g-page-pane" /><div class="g-page-composer" />
         {overlayViews.leader({ close: noop, lit: { top: "calc(100% - 76px)", left: "calc(50% - 230px)", width: "460px", height: "56px", radius: "17.6px" } })}</div>, "row"),
+    ] },
+    { title: "Motion", note: "an Overlay's moves: it rises above the composer and drops back (the app's leader: 220ms in, 150ms out)", layout: "desktop", atoms: [
+      lib("leader-motion", "Leader · motion", "both", "overlay", "Leader motion", () => <FormTable rows={[form("arrives · leaves", "rises --space-md with a fade; drops back", () => <Replay leaves={["leaving"]}>{(m) => <Overlay label="Leader" class="ui-leader" motion={m()}><OverlayList>{leaderRows()}</OverlayList></Overlay>}</Replay>, "<Leader motion>", "in: --duration-gentle · --ease-arrive · out: --duration-quick · --ease-leave")]} on={["desktop"]} widths={["200px", "minmax(0, 1fr)"]} />, "row"),
     ] },
   ] },
   { title: "DesktopComposer", note: "desktop only, one integrated piece: resting frost holding a TextArea above a Toolbar, with Riders on its top edge. A phone's composer is Pills, sharing the TextArea and the Riders", groups: [
@@ -591,6 +608,12 @@ export const libraryFamilies: Family[] = [
       lib("rider-question-tabs", "QuestionCard · tabs", "both", "rider", "chat/question-card.tsx · tabs (ticked when answered), pick any, a preview, a multi-line own answer, notes", () => questionCard(TABS, { notes: true }), true),
       lib("rider-question-submit", "QuestionCard · Submit page", "both", "rider", "chat/question-card.tsx · the review page; a secret answer", () => questionCard(SUMMARY, { page: "submit" }), true),
     ] },
+    { title: "Motion", note: "its own moves: a rider rises out of the composer and drops back into it when the composer takes it; removed by hand, it fades in place. A chip arrives growing from 85%", layout: "desktop", atoms: [
+      lib("rider-motion", "Rider · motion", "both", "rider", "Rider motion · Chip motion", () => <FormTable rows={[
+        form("arrives · taken · removed", "rises out of the composer; drops back into it; fades in place", () => <Replay leaves={["leaving", "removing"]}>{(m) => <div class="g-composer">{queued(m())}</div>}</Replay>, "<Rider motion>", "in: --duration-gentle · --ease-arrive · out: --duration-quick · --ease-leave"),
+        form("a chip", "grows in from 85%; removed, it fades", () => <Replay leaves={["removing"]}>{(m) => <div class="g-row"><Chip name="notes.txt" detail="2.1 KB" icon={<FileTextIcon />} motion={m()} /></div>}</Replay>, "<Chip motion>", "--duration-gentle · --ease-arrive · out: --duration-quick"),
+      ]} on={["desktop", "phone"]} widths={["200px", "minmax(0, 1fr)", "minmax(0, 1fr)"]} />, "row"),
+    ] },
   ] },
   { title: "Pill", note: "resting frost floating over the page, the phone's controls. The kind sets the shape: a button is a circle, a group a capsule", groups: [
     { layout: "phone", atoms: [
@@ -618,6 +641,13 @@ export const libraryFamilies: Family[] = [
     { title: "In the app", note: "where the app draws one", layout: "desktop", atoms: [
       lib("code-in-app", "CodeBlock · in the app", "both", "transcript", "chat/code-block.ts", () => <FormTable rows={reading(CODE_IN_APP)} on={["desktop", "phone"]} widths={["minmax(0, 1fr)", "minmax(0, 1fr)"]} stacked />, "row"),
     ] },
+    { title: "Motion", note: "its own moves: it unfolds (gentle) and folds back (quick); Copied washes it; a folded fence still being written breathes", layout: "desktop", atoms: [
+      lib("code-motion", "CodeBlock · motion", "both", "transcript", "CodeBlock fold · copied · streaming", () => <FormTable rows={reading([
+        form("unfolds · folds", "in height: the one move that pushes what is below", () => <FoldDemo />, "<CodeBlock fold open onToggle>", "in: --duration-gentle · --ease-arrive · out: --duration-quick · --ease-leave"),
+        form("copied", "a --tint wash over all of it, fading", () => <LiveCopy />, "<CodeBlock copied>", ".7s ease-out"),
+        form("writing", "the foot breathes while the fence is written", () => <CodeBlock lang="ts" code={LONG} fold={4} streaming />, "<CodeBlock streaming>", "1.6s ease-in-out"),
+      ])} on={["desktop", "phone"]} widths={["200px", "minmax(0, 1fr)", "minmax(0, 1fr)"]} />, "row"),
+    ] },
   ] },
   { title: "Transcript", rail: "Transcript", note: "what is read, at the transcript's scale (Space · Scale, Settings · Text size); a row's text there (a trace, a trail) is a step under the body on both densities: the user's Message (a Bubble and its foot) and a Turn (its trace header, the answer, the answer's foot). The answer is Markdown with no bubble in the Body role, one gap between blocks; the trail sits a step under it", groups: [
     { title: "In use", note: "a turn, measured: green the gaps (a turn's parts half a unit apart, blocks three quarters)", layout: "desktop", atoms: [
@@ -630,6 +660,14 @@ export const libraryFamilies: Family[] = [
     { title: "Assembled", note: "a conversation, drawn with v2 alone", atoms: [
       lib("transcript-desktop", "Transcript", "desktop", "transcript", "Transcript > Message · Turn", () => <div class="g-transcript-stage">{conversation()}</div>, "row"),
       lib("transcript-phone", "Transcript", "phone", "transcript", "Transcript > Message · Turn", () => <div class="g-transcript-stage" data-phone>{conversation()}</div>),
+    ] },
+    { title: "Motion", note: "its pieces' own moves: a step arriving in an open trail rises a little (its height at once, so nothing above moves); a sent message fades in where it lands; an answer's foot fades in when it is done; a Disclosure unfolds", layout: "desktop", atoms: [
+      lib("transcript-motion", "Transcript · motion", "both", "transcript", "Step motion · Message motion · MessageFoot motion · Disclosure", () => <FormTable rows={reading([
+        form("a step arrives", "rises --space-xs with a fade", () => <Replay>{(m) => <Trail><Step icon={<FileTextIcon />} verb="Read" subject="src/main.tsx" time="0.4s" /><Step icon={<FileTextIcon />} verb="Read" subject="src/app.tsx" time="0.2s" motion={m()} /></Trail>}</Replay>, "<Step motion>", "--duration-gentle · --ease-arrive"),
+        form("a message lands", "fades in where it lands", () => <Replay>{(m) => <Message time="22:18" motion={m()}>and make the second paragraph shorter</Message>}</Replay>, "<Message motion>", "--duration-gentle · --ease-arrive"),
+        form("the foot", "fades in when the answer is done", () => <Replay>{(m) => <MessageFoot time="22:19" motion={m()}>{copyRetry()}</MessageFoot>}</Replay>, "<MessageFoot motion>", "--duration-gentle · --ease-arrive"),
+        form("a disclosure", "unfolds in height; folds away quicker", () => <DisclosureDemo />, "<Disclosure open onToggle>", "in: --duration-gentle · --ease-arrive · out: --duration-quick · --ease-leave"),
+      ])} on={["desktop", "phone"]} widths={["200px", "minmax(0, 1fr)", "minmax(0, 1fr)"]} />, "row"),
     ] },
   ] },
 ];
