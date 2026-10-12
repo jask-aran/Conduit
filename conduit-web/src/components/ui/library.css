@@ -598,6 +598,16 @@
 .ui-setting-line { display: flex; min-height: max(calc(2.1875 * var(--u-space)), var(--row-min)); align-items: center; gap: calc(0.9375 * var(--u-space)); border-radius: var(--radius-control); padding: 2px calc(0.3125 * var(--u-space)) 2px calc(0.5 * var(--u-space)); font-size: var(--text-row); }
 /* Focus anywhere in a row is the row's wash. */
 .ui-setting-line:is(:hover, :focus-within) { background: var(--tint); }
+/* The recorder: a second line as tall as a setting line, inset under its label, a dashed --tint line round it. */
+.ui-setting-recorder { display: flex; min-height: max(calc(2.1875 * var(--u-space)), var(--row-min)); align-items: center; gap: calc(0.5 * var(--u-space)); border: 1px dashed var(--tint); border-radius: var(--radius-control); padding: 2px calc(0.3125 * var(--u-space)) 2px calc(0.5 * var(--u-space)); font-size: var(--text-row); }
+.ui-recorder-dot { width: calc(0.375 * var(--u-space)); height: calc(0.375 * var(--u-space)); flex: none; border-radius: var(--radius-round); background: var(--destructive); animation: ui-recorder-pulse 1.2s ease-in-out infinite; }
+@keyframes ui-recorder-pulse { 50% { opacity: .35; } }
+@media (prefers-reduced-motion: reduce) { .ui-recorder-dot { animation: none; } }
+.ui-recorder-prompt { color: var(--muted-foreground); }
+.ui-keycap.ui-recorder-keys { color: var(--foreground); }
+.ui-recorder-hints { display: inline-flex; align-items: center; gap: calc(0.25 * var(--u-space)); margin-left: auto; color: var(--muted-foreground); font-size: var(--text-caption); }
+.ui-recorder-hints > .ui-keycap + * { margin-left: 0; }
+.ui-recorder-hints > .ui-keycap:not(:first-child) { margin-left: calc(0.5 * var(--u-space)); }
 .ui-setting-line > span:first-child { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ui-setting-line > span:first-child > small { margin-left: calc(0.5 * var(--u-space)); color: var(--muted-foreground); font-size: inherit; }
 /* Every row's control sits in one column of one width, so they line up. */
