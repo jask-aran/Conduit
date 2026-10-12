@@ -10,7 +10,7 @@ import { ChatScreen } from "./stories";
 import { Frost } from "@/components/ui";
 import { LibraryContext } from "@/components/ui/swap";
 import { SidebarScreen } from "./sidebar-story";
-import { applyFaces, foundationFamilies } from "./foundations";
+import { applyFaces, applyScale, foundationFamilies } from "./foundations";
 import { libraryFamilies, overlayViews, type Atom, type OverlayView } from "./library";
 
 /*
@@ -177,6 +177,7 @@ function PhoneOverlay() {
 export function mount(frame: string | null) {
   const root = document.getElementById("root")!;
   applyFaces(document);
+  applyScale(document);
   // Frosted only: the static material is on its way out.
   try { localStorage.setItem("conduit:composer-surface", "frosted-live"); localStorage.setItem("conduit:phone-composer", "bar"); } catch { /* private window */ }
   // The phone screens, drawn with components v2, in a frame with a phone's root size and media rules.

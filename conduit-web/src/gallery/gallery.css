@@ -329,3 +329,10 @@ html, body { background: var(--frame, #08090a); color: var(--foreground); }
 .g-stack-name > p { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; margin: 0; }
 .g-stack-name > p + p { margin-top: 6px; }
 .g-stack-name :is(small, code) { margin: 0; }
+/* Space · Scale: a slider per coefficient. */
+.g-scale-control { display: grid; width: min(100%, 640px); gap: 12px; }
+.g-scale-control label { display: grid; grid-template-columns: 200px minmax(0, 1fr) 56px auto; align-items: center; gap: 16px; }
+.g-scale-control label > span { display: grid; }
+.g-scale-control small { color: var(--muted-foreground); }
+.g-scale-control button { border: 1px solid var(--border); border-radius: 6px; background: transparent; padding: 4px 10px; color: inherit; }
+.g-scale-control button:disabled { opacity: .4; }
