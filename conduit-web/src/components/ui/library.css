@@ -196,24 +196,30 @@
 .ui-bubble { width: fit-content; max-width: min(calc(40 * var(--u-type)), 88cqw); margin-left: auto; border-radius: var(--radius-message); padding: calc(0.625 * var(--u-type)) calc(0.8125 * var(--u-type)); font-size: var(--text-body); line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
 
 
-/* Button: a rounded rectangle, never a solid fill. Primary, the confirm, is a line in the text
-   colour; destructive a line in its red; ghost is text until washed (outline: a --tint hairline);
-   secondary is the surface's well inside its line, for a form on the ground. */
+/* Button: a rounded rectangle. Secondary is the surface's well inside its line (on frost, a
+   hairline with nothing inside); ghost is text until washed. Outline draws primary, ghost or
+   destructive as a line in its colour with nothing inside. */
 :where(.ui-button) { display: inline-flex; height: calc(2.25 * var(--u-space)); flex: none; align-items: center; justify-content: center; gap: calc(0.375 * var(--u-space)); border: 1px solid transparent; border-radius: var(--radius-control); padding: 0 calc(1 * var(--u-space)); font-size: var(--text-row); font-weight: var(--weight-strong); white-space: nowrap; cursor: pointer; transition: background-color .12s ease, border-color .12s ease, filter .12s ease; outline: none; }
 /* Zero-specificity: where the button sits sets its icon (a header, a composer), as in the app. */
 :where(.ui-button) svg { width: calc(1 * var(--u-icon)); height: calc(1 * var(--u-icon)); flex: none; }
 /* Keyboard focus is the wash and nothing else: never a ring. */
 .ui-button:focus-visible { outline: 0; background: var(--tint); }
+.ui-button[data-variant="primary"]:focus-visible { background: var(--primary); filter: brightness(0.88); }
 .ui-button:disabled { opacity: 0.45; pointer-events: none; }
-.ui-button[data-variant="primary"] { border-color: var(--foreground); background: transparent; color: var(--foreground); }
-.ui-button[data-variant="primary"]:hover { background: var(--tint); }
+.ui-button[data-variant="primary"] { background: var(--foreground); color: var(--background); }
+.ui-button[data-variant="primary"]:hover { filter: brightness(0.88); }
 .ui-button[data-variant="secondary"] { border-color: var(--tint); background: var(--well); color: var(--foreground); }
 .ui-button[data-variant="secondary"]:hover { background: var(--tint); }
 .ui-button[data-variant="ghost"] { background: transparent; color: var(--foreground); }
 .ui-button[data-variant="ghost"]:hover { background: var(--tint); }
-.ui-button[data-variant="destructive"] { border-color: var(--destructive); background: transparent; color: var(--destructive); }
-.ui-button[data-variant="destructive"]:is(:hover, :focus-visible) { background: color-mix(in oklch, var(--destructive), transparent 85%); }
+.ui-button[data-variant="destructive"] { background: var(--destructive); color: var(--foreground); }
+.ui-button[data-variant="destructive"]:hover { filter: brightness(1.1); }
+.ui-button[data-outline] { background: transparent; }
+.ui-button[data-outline]:is(:hover, :focus-visible) { background: var(--tint); filter: none; }
+.ui-button[data-variant="primary"][data-outline] { border-color: var(--foreground); color: var(--foreground); }
 .ui-button[data-variant="ghost"][data-outline] { border-color: var(--tint); }
+.ui-button[data-variant="destructive"][data-outline] { border-color: var(--destructive); color: var(--destructive); }
+.ui-button[data-variant="destructive"][data-outline]:is(:hover, :focus-visible) { background: color-mix(in oklch, var(--destructive), transparent 85%); }
 :where(.ui-button[data-size="sm"]) { height: calc(1.875 * var(--u-space)); padding: 0 calc(0.75 * var(--u-space)); font-size: var(--text-row); }
 :where(.ui-button[data-size="icon"]) { width: calc(2.25 * var(--u-space)); padding: 0; }
 /* icon-xs: a row of small actions under a message (time, copy, edit), round as the app draws them. */

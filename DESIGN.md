@@ -119,9 +119,8 @@ components:
     textColor: "{colors.foreground}"
     rounded: "{rounded.control}"
   button-primary:
-    backgroundColor: "transparent"
-    borderColor: "{colors.foreground}"
-    textColor: "{colors.foreground}"
+    backgroundColor: "{colors.primary}"
+    textColor: "{colors.primary-foreground}"
     rounded: "{rounded.control}"
   button-ghost:
     backgroundColor: "transparent"
@@ -210,7 +209,7 @@ The charcoal is cool-neutral at chroma ~0.004–0.006. That gray is the brand. D
 - **border** — 1px hairlines: inputs, a header or footer rule, and dividers. Grouping is a heading and space, with at most one hairline between groups -- not a hairline box and not a fill. Panes have no edge hairline.
 - **accent** — white at 6–7% opacity. This is hover, pressed, and selected. Selection is a gray wash, never a hue.
 - **card / popover** — slightly raised solids, left on tool cards. Overlays are frost (Surfaces).
-- **primary** — near-white. The app's default; in components v2 no button is filled with it (Shapes · buttons).
+- **primary** — near-white. Default buttons and the one bright action.
 - **destructive** — errors and destructive actions only.
 - **live / warn** — tiny runtime dots and git-ish status. Never as fills, rails, or card washes.
 - **frost-fill / frost-stroke / glass-bg / glass-border** — the signature floating material (Elevation & Depth).
@@ -335,7 +334,7 @@ Almost none on listed content. Frosted glass carries the depth.
 - Panes and lists: nothing -- no edge hairline, no shadow.
 - Overlays: the composer's frost, one dark outer shadow and a subtle edge. Dropdown menus included.
 - Frost chrome (the signature): translucent `frost-fill`, a 1px white-alpha `frost-stroke`, a strong blur, optional top specular inset, no heavy drop. Composer, user bubble (`glass-bg` + blur), header pill and future floating toolbars share this one material — do not redeclare it per component.
-- Buttons are never a solid fill. The confirm (primary) is a 1px line in the text colour with white text; Cancel beside it is ghost, text until the wash; a destructive confirm is a line in red. A ghost button that needs its edge takes a hairline (ghost outline); secondary, a well inside a hairline, is for a form's control on the ground.
+- Buttons offer forms (components v2: filled or outlined primary and destructive, ghost and its hairline outline, secondary's well); the place that holds them picks one (a dialog, Components · Dialog). Ghost buttons: no fill until hover.
 
 No stacked card shadows, no colored glows, no frost on a row or a list. One exception: while the phone's voice-first composer is listening, soft colour fields swell with the input level inside its orb pill (or, in the one-surface layout, the composer), clipped to that surface and gone when it stops.
 
@@ -419,7 +418,7 @@ Choosing in a menu:
 
 **Attachment strip** — every attachment for the draft in one short strip directly above the composer, in the queued pill's width and material: images as cropped thumbnails, files as chips with type icon, name and size. Remove on hover or focus (always on touch); uploading a thin progress ring; failed a red outline with retry. More chips scroll sideways with a fade at the edge; a quiet ⤢ opens the full list (a bottom sheet on a phone).
 
-**Dialog** (`FrostDialog`) — confirms and small prompts: a narrow frost card over the dim, centred, small on a phone too. The title and the choice, nothing else; a one-field prompt drops its label. An input is a faint hairline that brightens on focus, never a ring.
+**Dialog** (`FrostDialog`) — confirms and small prompts: a narrow frost card over the dim, centred, small on a phone too. The title and the choice, nothing else; a one-field prompt drops its label. An input is a faint hairline that brightens on focus, never a ring. Its buttons: the primary action (Save, Continue) a white outline, the others (Cancel, Back) a ghost outline, a destructive confirm (Delete) filled red.
 
 **Input-quiet** — borderless inside frost composer or palette search.
 

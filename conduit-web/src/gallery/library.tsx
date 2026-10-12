@@ -173,8 +173,8 @@ const SETTING_PAGES: Record<SettingsSection, { status?: string; failed?: boolean
   </> },
   servers: { body: () => <>
     <SettingGroup title="This server"><SettingLine label="Name" plain><SettingValue>Desktop-Dev</SettingValue></SettingLine><SettingLine label="Address" plain><SettingValue mono>a91f03c2 · TLS verified</SettingValue></SettingLine></SettingGroup>
-    <SettingGroup title="Others"><SettingLine label="Laptop" state="9 ms" plain><Button variant="ghost" size="sm">Switch to</Button><Button variant="destructive" size="sm">Forget</Button></SettingLine>
-      <SettingLine label="VPS" state="offline" plain><Button variant="ghost" size="sm">Switch to</Button><Button variant="destructive" size="sm">Forget</Button></SettingLine><SettingNote tone="error">Couldn't reach VPS: the connection timed out.</SettingNote></SettingGroup>
+    <SettingGroup title="Others"><SettingLine label="Laptop" state="9 ms" plain><Button variant="ghost" size="sm">Switch to</Button><Button variant="destructive" outline size="sm">Forget</Button></SettingLine>
+      <SettingLine label="VPS" state="offline" plain><Button variant="ghost" size="sm">Switch to</Button><Button variant="destructive" outline size="sm">Forget</Button></SettingLine><SettingNote tone="error">Couldn't reach VPS: the connection timed out.</SettingNote></SettingGroup>
   </> },
   voice: { status: "Saved", body: () => <>
     <SettingGroup title="Dictation"><SettingLine label="Shortcut"><Input value="Ctrl+Space" readOnly title="Focus and press a shortcut" /></SettingLine><SettingLine label="Engine"><SelectTrigger value="Local" bare /></SettingLine><SettingLine label="Live captions"><SwitchDemo /></SettingLine></SettingGroup>
@@ -308,16 +308,16 @@ export const libraryFamilies: Family[] = [
     lib("p-chat", "ChatHeader › menu", "phone", "popover", "chat/chat-screen.tsx", () => <Menu class="g-w16"><ChatTitle /><Section><Item icon={<RefreshCwIcon />}>Update app</Item></Section><Section><Item icon={<PanelRightIcon />}>Workspace panel</Item><Item icon={<ShareIcon />}>Share</Item><Item icon={<PencilIcon />}>Rename</Item><Item icon={<Trash2Icon />} destructive>Delete</Item></Section></Menu>, true),
     ] },
   ] },
-  { title: "Card", note: "raised frost at dialog padding: title · detail · body · actions", groups: [
+  { title: "Card", note: "raised frost at dialog padding: title · detail · body · actions. Its actions: the primary one a white outline (Button outline), the others ghost outline, a destructive confirm filled red", groups: [
     { atoms: [
       lib("card-anatomy", "Anatomy", "both", "card", "Card title detail children actions", () => <div class="g-anatomy"><Card title="Title" detail="Detail: a line under the title" class="g-card" actions={<><Button variant="secondary">Action</Button><Button>Action</Button></>}><div class="g-slot">Body</div></Card></div>),
       lib("card-head", "Title · detail", "both", "card", "Card title detail", () => <Card title="Delete this chat?" detail="It can't be brought back." class="g-card" />),
       lib("card-body", "Body", "both", "card", "Card children", () => <Card title="Rename chat" class="g-card"><Input value="Lorem ipsum file" /></Card>),
-      lib("card-actions", "Actions", "both", "card", "Card actions", () => <Card title="Actions" class="g-card" actions={<><Button variant="ghost">Cancel</Button><Button>Save</Button><Button variant="destructive">Delete</Button></>} />),
+      lib("card-actions", "Actions", "both", "card", "Card actions", () => <Card title="Actions" class="g-card" actions={<><Button variant="ghost" outline>Cancel</Button><Button outline>Save</Button><Button variant="destructive">Delete</Button></>} />),
     ] },
     { title: "Assembled", atoms: [
-      lib("confirm", "FrostDialog alert", "both", "card", "Card", () => <Card title="Delete this chat?" detail="It can't be brought back." class="g-card" actions={<><Button variant="ghost">Cancel</Button><Button variant="destructive">Delete</Button></>} />),
-      lib("prompt", "FrostDialog", "both", "card", "Card + Input", () => <Card title="Rename chat" class="g-card" actions={<><Button variant="ghost">Cancel</Button><Button>Save</Button></>}><Input value="Lorem ipsum file" /></Card>),
+      lib("confirm", "FrostDialog alert", "both", "card", "Card", () => <Card title="Delete this chat?" detail="It can't be brought back." class="g-card" actions={<><Button variant="ghost" outline>Cancel</Button><Button variant="destructive">Delete</Button></>} />),
+      lib("prompt", "FrostDialog", "both", "card", "Card + Input", () => <Card title="Rename chat" class="g-card" actions={<><Button variant="ghost" outline>Cancel</Button><Button outline>Save</Button></>}><Input value="Lorem ipsum file" /></Card>),
     ] },
   ] },
   { title: "Overlay", note: "raised frost over a dimmed page, the large surfaces: sections edge to edge, ruled off -- a Bar, a body (a List, a List beside an aside, or a Rail beside a Page), Hints. Its rows are the popover's Items at its scale; its Rail is the sidebar's NavGroups", groups: [
@@ -340,7 +340,7 @@ export const libraryFamilies: Family[] = [
       lib("overlay-split", "OverlaySplit", "desktop", "overlay", "OverlaySplit: a List beside an aside", () => <div class="g-overlay-demo"><Overlay label="Split" style={{ "--overlay-width": "100%" }}><OverlaySplit aside={chatPreview()}>{chatRows()}</OverlaySplit></Overlay></div>, true),
       lib("overlay-settings", "SettingGroup · SettingLine · every kind", "both", "overlay", "SettingGroup > SettingLine (a field, or plain: a value, link, buttons, keys) · SettingNote · SettingDetails · SettingWide (TextArea, Progress) · SettingLoading", () => <div class="g-overlay-demo"><Overlay label="Settings" layout="rail" style={{ "--overlay-width": "100%" }}><OverlayPage title="Every kind of line">
         <SettingGroup title="Fields"><SettingLine label="Select"><SelectTrigger value="Compact" bare /></SettingLine><SettingLine label="Input"><Input value="20" /></SettingLine><SettingLine label="Switch"><SwitchDemo /></SettingLine><SettingLine label="Segmented"><Theme /></SettingLine><SettingLine label="With its state" state="paused while hidden"><SelectTrigger value="Adaptive" bare /></SettingLine></SettingGroup>
-        <SettingGroup title="Plain lines"><SettingLine label="SettingValue" plain><SettingValue>Signed in</SettingValue></SettingLine><SettingLine label="SettingValue mono" plain><SettingValue mono>a91f03c2 · TLS verified</SettingValue></SettingLine><SettingLine label="SettingLink" plain><SettingLink href="#">Docs</SettingLink></SettingLine><SettingLine label="Buttons" plain><Button variant="ghost" size="sm">Switch to</Button><Button variant="destructive" size="sm">Forget</Button></SettingLine><SettingLine label="Keys" plain>{keys("Ctrl", "K")}{reset()}</SettingLine></SettingGroup>
+        <SettingGroup title="Plain lines"><SettingLine label="SettingValue" plain><SettingValue>Signed in</SettingValue></SettingLine><SettingLine label="SettingValue mono" plain><SettingValue mono>a91f03c2 · TLS verified</SettingValue></SettingLine><SettingLine label="SettingLink" plain><SettingLink href="#">Docs</SettingLink></SettingLine><SettingLine label="Buttons" plain><Button variant="ghost" size="sm">Switch to</Button><Button variant="destructive" outline size="sm">Forget</Button></SettingLine><SettingLine label="Keys" plain>{keys("Ctrl", "K")}{reset()}</SettingLine></SettingGroup>
         <SettingGroup title="Under a line"><SettingLine label="A field"><Input value="sk-or-••••3f2a" /></SettingLine><SettingNote tone="error">SettingNote error: that key was turned down (401).</SettingNote><SettingNote>SettingNote quiet: click a shortcut, then press its keys.</SettingNote><SettingDetails summary="SettingDetails"><p>Folded until asked for.</p></SettingDetails></SettingGroup>
         <SettingGroup title="Page width"><SettingWide><TextArea value="SettingWide > TextArea: a prompt's text." /></SettingWide><SettingWide><Progress label="Download" value={1.2} max={3.1} /></SettingWide><SettingLoading>SettingLoading…</SettingLoading></SettingGroup>
       </OverlayPage></Overlay></div>, true),
