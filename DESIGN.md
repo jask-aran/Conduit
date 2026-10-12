@@ -59,7 +59,7 @@ typography:
     fontSize: 10.5px
     fontWeight: 580
   meta:
-    fontFamily: ui-monospace, SFMono-Regular, Consolas, monospace
+    fontFamily: Paper Mono, ui-monospace, SFMono-Regular, Consolas, monospace
     fontSize: 11px
     fontWeight: 400
   section-label:
@@ -229,7 +229,7 @@ That blue treatment is leftover frontend-design skill output. Do not encode, cop
 
 # Typography
 
-Geist Variable everywhere for UI, except the section label and the keycap, which are Paper Mono. `ui-monospace` (not Geist Mono) for model ids, paths, keycaps, times and counts in meta, status, waveforms. Tabular figures wherever numbers tick or line up.
+Geist Variable everywhere for UI. Paper Mono, which Conduit ships, for the section label, the keycap and data: model ids, paths, times and counts in meta, status, waveforms. The system's `ui-monospace` only as its fallback, and for code. Tabular figures wherever numbers tick or line up.
 
 A handful of roles, each defined once in `styles.css`; components name a role rather than a size:
 
@@ -239,7 +239,7 @@ A handful of roles, each defined once in `styles.css`; components name a role ra
 - **row** — the sidebar row: every list, menu, palette and settings row takes it (a touch larger on a phone, a touch heavier and brighter over frost, since text over frost reads thinner).
 - **section label** — Paper Mono (shipped, so it reads the same on every system; the system's mono only as the fallback), uppercase, small, letter-spaced, muted. Every section heading is this: a list, menu, palette, card, rider or slider, and the sidebar's groups; the breadcrumb's places share it.
 - **caption** — section subtitles, timestamps, empty copy.
-- **meta** — muted mono beside a row's title, right-aligned, truncating before the title does.
+- **meta** — muted Paper Mono beside a row's title, right-aligned, truncating before the title does.
 - **keycap** — small, in the section label's face (Paper Mono), in a rounded hairline square, muted; in the text colour on the cursor row or a clickable rail action.
 
 Two weights carry state: the resting weight and the **current weight** (semibold). Every surface uses the same pair; a match lit while typing is the one heavier step. Do not invent further sizes or weights per component. No serif except the Capacitor first-launch wordmark (legacy).

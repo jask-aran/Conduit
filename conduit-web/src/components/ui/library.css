@@ -28,9 +28,10 @@
    measured sizes (rows ~1.8x, for a finger). Sizes below are written in desktop px over 12.8. */
 /* The faces, by role (Foundations · Fonts switches them; --font-sans, the main UI's, is styles.css's).
    Section labels take a mono the library ships (Paper Mono, above), so they look
-   the same on every system, the system's mono only as the fallback; keycaps and the leader's crumbs take it too; meta stays the system's. */
+   the same on every system, the system's mono only as the fallback; keycaps and the leader's crumbs take it too. Data (meta, counts) takes --font-data, Paper Mono too by default. */
 :root {
   --font-label: "Paper Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  --font-data: "Paper Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
   --font-code: ui-monospace, SFMono-Regular, Consolas, monospace;
   --font-wordmark: "Conduit Wordmark", sans-serif;
 }
@@ -119,7 +120,7 @@
 .ui-icon:has(> .harness-mark) { width: calc(0.875 * var(--u-type)); height: calc(0.875 * var(--u-type)); }
 .ui-row > .ui-label { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* Meta: muted mono beside the title, right-aligned, tabular. */
-.ui-row > :is(small, .ui-meta) { flex: none; margin-left: auto; color: var(--muted-foreground); font: 400 calc(0.71875 * var(--u-type)) ui-monospace, SFMono-Regular, Consolas, monospace; font-variant-numeric: tabular-nums; }
+.ui-row > :is(small, .ui-meta) { flex: none; margin-left: auto; color: var(--muted-foreground); font: 400 calc(0.71875 * var(--u-type)) var(--font-data); font-variant-numeric: tabular-nums; }
 .ui-row > .ui-keys { display: inline-flex; flex: none; gap: calc(0.1875 * var(--u-space)); }
 .ui-row > .ui-chevron { width: calc(0.875 * var(--u-type)); height: calc(0.875 * var(--u-type)); color: var(--muted-foreground); }
 /* The cursor (DESIGN Interaction): one row at a time, the wash, white, no change of weight.
@@ -200,7 +201,7 @@
 .ui-seg-thumb { position: absolute; top: 2px; bottom: 2px; left: 2px; width: calc((100% - 4px - 2px * (var(--segments) - 1)) / var(--segments)); border-radius: calc(0.375 * var(--u-space)); background: var(--accent); transform: translateX(calc((100% + 2px) * var(--segment))); transition: transform 200ms cubic-bezier(.2, .8, .2, 1); }
 .ui-seg button { position: relative; display: inline-flex; min-width: 0; min-height: calc(1.75 * var(--u-space)); align-items: center; justify-content: center; gap: calc(0.375 * var(--u-space)); border: 0; border-radius: calc(0.375 * var(--u-space)); background: transparent; padding: 0 calc(0.75 * var(--u-space)); color: var(--muted-foreground); font-size: calc(0.8125 * var(--u-type)); font-weight: 560; cursor: pointer; }
 .ui-seg button svg { width: calc(1.125 * var(--u-icon)); height: calc(1.125 * var(--u-icon)); }
-.ui-seg button small { color: var(--muted-foreground); font: 400 calc(0.6875 * var(--u-type)) ui-monospace, monospace; }
+.ui-seg button small { color: var(--muted-foreground); font: 400 calc(0.6875 * var(--u-type)) var(--font-data); }
 .ui-seg button:is(:hover, [aria-checked="true"]) { color: var(--foreground); }
 .ui-seg[data-icons] button { width: calc(2.25 * var(--u-space)); padding: 0; }
 [data-surface="frost"] .ui-seg { border-color: oklch(1 0 0 / 14%); }
@@ -431,7 +432,7 @@
 .ui-choices[aria-multiselectable="true"] > .ui-choice[aria-selected="true"] { background: var(--frost-wash); }
 .ui-choices[aria-multiselectable="true"] > .ui-choice[aria-selected="true"][data-active="true"] { background: oklch(1 0 0 / 16%); }
 .ui-choice-check { display: none !important; }
-.ui-choice-key { width: calc(1 * var(--u-space)); flex: none; color: var(--muted-foreground); font: calc(0.859375 * var(--u-type))/1 ui-monospace, SFMono-Regular, Consolas, monospace; text-align: right; }
+.ui-choice-key { width: calc(1 * var(--u-space)); flex: none; color: var(--muted-foreground); font: calc(0.859375 * var(--u-type))/1 var(--font-label); text-align: right; }
 .ui-choice[data-active="true"] .ui-choice-key { color: var(--foreground); }
 .ui-choice-label { flex: none; font-size: calc(0.8125 * var(--u-type)); font-weight: 500; }
 .ui-choice-detail { min-width: 0; flex: 1; overflow: hidden; color: var(--muted-foreground); font-size: calc(0.9375 * var(--u-type)); text-overflow: ellipsis; white-space: nowrap; }
