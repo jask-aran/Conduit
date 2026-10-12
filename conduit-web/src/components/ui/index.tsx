@@ -386,10 +386,24 @@ export const Bubble = (props: { children: JSX.Element }) => <div class="ui-frost
 export const Answer = (props: { html?: string; children?: JSX.Element }) =>
   <Show when={props.html !== undefined} fallback={<div class="ui-answer">{props.children}</div>}><div class="ui-answer" innerHTML={props.html} /></Show>;
 /** A fenced block: its language and Copy over the lines, numbered. */
-export function CodeBlock(props: { lang?: string; code: string; onCopy?: () => void }) {
-  return <figure class="ui-code">
-    <figcaption><span>{props.lang ?? "text"}</span><Button variant="ghost" size="sm" onClick={() => props.onCopy?.()}>Copy</Button></figcaption>
-    <pre><For each={props.code.split("\n")}>{(line, index) => <span class="ui-code-line"><span class="ui-code-n">{index() + 1}</span><code>{line || " "}</code></span>}</For></pre>
+/**
+ * A fenced block: a box, its language and Copy over numbered lines that scroll sideways. A long one folds to
+ * `fold` lines, fading at the cut, with "Show N more lines" under it and a chevron in the caption (pinned while
+ * the block scrolls by, so it is the one way out part-way down); opened, the foot says Collapse. `copied` is
+ * Copy's moment of "Copied"; `streaming` pulses the foot of a folded block still being written.
+ */
+export function CodeBlock(props: { lang?: string; code: string; onCopy?: () => void; copied?: boolean; fold?: number; open?: boolean; onToggle?: () => void; streaming?: boolean }) {
+  const lines = () => props.code.split("\n");
+  const folds = () => props.fold != null && lines().length > props.fold;
+  const folded = () => folds() && !props.open;
+  const hidden = () => lines().length - (props.fold ?? 0);
+  return <figure class="ui-code" data-folded={folded() ? "" : undefined} data-streaming={props.streaming ? "" : undefined} style={folds() ? { "--code-fold": props.fold } : undefined}>
+    <figcaption><span>{props.lang ?? "text"}</span><span class="ui-code-actions">
+      <Button variant="ghost" size="sm" data-copied={props.copied ? "" : undefined} onClick={() => props.onCopy?.()}>{props.copied ? "Copied" : "Copy"}</Button>
+      <Show when={folds()}><Button variant="ghost" size="icon-xs" aria-label={folded() ? "Expand code" : "Collapse code"} aria-expanded={!folded()} onClick={() => props.onToggle?.()}><ChevronDownIcon class="ui-disclosure-chevron" /></Button></Show>
+    </span></figcaption>
+    <pre><For each={lines()}>{(line, index) => <span class="ui-code-line"><span class="ui-code-n">{index() + 1}</span><code>{line || " "}</code></span>}</For></pre>
+    <Show when={folds()}><button type="button" class="ui-code-more" onClick={() => props.onToggle?.()}>{folded() ? `Show ${hidden()} more ${hidden() === 1 ? "line" : "lines"}` : "Collapse"}</button></Show>
   </figure>;
 }
 /** A turn's head: the orb, then Status · time · work, and under it the trail's latest line. opens: a trail to open. */
