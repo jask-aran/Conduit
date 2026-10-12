@@ -270,8 +270,8 @@ export function Crumbs(props: { label: string; items: { label: string; current?:
  * region path; its rows lead with their keys; its rail holds the go-to chords
  * and Esc. The page dims round it all but the current region (Spotlight).
  */
-export function Leader(props: { leader: string; path: JSX.Element; hints: JSX.Element; children: JSX.Element }) {
-  return <Overlay label="Leader" class="ui-leader"><OverlayHead><kbd class="ui-keycap">{props.leader}</kbd>{props.path}</OverlayHead>
+export function Leader(props: { path: JSX.Element; hints: JSX.Element; children: JSX.Element }) {
+  return <Overlay label="Leader" class="ui-leader"><OverlayHead>{props.path}</OverlayHead>
     <OverlayList>{props.children}</OverlayList>{props.hints}</Overlay>;
 }
 

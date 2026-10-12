@@ -118,7 +118,7 @@ const searchHints = () => <OverlayHints start={[[["Ctrl", "E"], "Edit"], [["Alt"
 const LeaderPath = () => { const [at, setAt] = createSignal(2); const levels = ["Conduit", "Chat", "Composer"];
   return <Crumbs label="Where you are" items={levels.map((label, index) => ({ label, current: index === at(), onClick: () => setAt(index) }))} />; };
 const leaderRows = () => <Section><Item keysFirst keys={["1"]} active>Model</Item><Item keysFirst keys={["2"]}>Thinking level</Item><Item keysFirst keys={["A"]}>Attach files</Item><Item keysFirst keys={["S"]}>Stash prompt</Item><Item keysFirst keys={["V"]}>Toggle voice dictation</Item></Section>;
-const leaderHints = () => <OverlayHints start={[[["←", "→"], "level"], [["Ctrl+Shift+1"], "Sidebar"], [["Ctrl+Shift+2"], "Main"]]} end={[[["Esc"], "cancel"]]} />;
+const leaderHints = () => <OverlayHints start={[[["←", "→"], "level"], [["Ctrl+Shift+1"], "Sidebar"], [["Ctrl+Shift+2"], "Main"]]} />;
 const settingsRail = () => <OverlayRail title="Settings" foot={<span>Interface 0.8.1-dev</span>}>
   <NavGroup label="Personal"><NavRow icon={<MonitorIcon />} current>Appearance</NavRow><NavRow icon={<KeyboardIcon />}>Shortcuts</NavRow></NavGroup>
   <NavGroup label="AI"><NavRow icon={<BrainIcon />}>Models &amp; accounts</NavRow><NavRow icon={<NotebookTextIcon />}>Prompts</NavRow></NavGroup>
@@ -141,7 +141,7 @@ export const overlayViews: Record<OverlayView, (props: { close: () => void; clas
     <OverlaySplit aside={chatPreview()}>{chatRows("t")}</OverlaySplit>{searchHints()}</Overlay></Scrim>,
   settings: (props) => <Scrim class={props.class} placement="center"><Overlay label="Settings" layout="rail" style={{ "--overlay-width": "calc(70.3125 * var(--u-space))", "--overlay-height": "560px" }}>
     {settingsRail()}{settingsPage(props.close)}</Overlay></Scrim>,
-  leader: (props) => <><Spotlight lit={props.lit} /><div class="g-page-leader" style={props.leaderBottom ? { bottom: props.leaderBottom } : undefined}><Leader leader="Ctrl G" path={<LeaderPath />} hints={leaderHints()}>{leaderRows()}</Leader></div></>,
+  leader: (props) => <><Spotlight lit={props.lit} /><div class="g-page-leader" style={props.leaderBottom ? { bottom: props.leaderBottom } : undefined}><Leader path={<LeaderPath />} hints={leaderHints()}>{leaderRows()}</Leader></div></>,
 };
 const noop = () => {};
 /** A phone's screen, a chat's transcript on it, an overlay drawn full screen over it. */
@@ -263,7 +263,7 @@ export const libraryFamilies: Family[] = [
   ] },
   { title: "Leader", note: "a small Overlay card above the composer that does not cover the page: the page dims all but the current region", groups: [
     { atoms: [
-      lib("leader-crumbs", "Crumbs", "both", "overlay", "Crumbs: the breadcrumb's places in the section label's caps; the current place white with no fill, the cursor washing the others", () => <div class="g-overlay-demo"><Overlay label="Crumbs" class="ui-leader"><OverlayHead><kbd class="ui-keycap">Ctrl G</kbd><LeaderPath /></OverlayHead></Overlay></div>, true),
+      lib("leader-crumbs", "Crumbs", "both", "overlay", "Crumbs: the breadcrumb's places in the section label's caps; the current place white with no fill, the cursor washing the others", () => <div class="g-overlay-demo"><Overlay label="Crumbs" class="ui-leader"><OverlayHead><LeaderPath /></OverlayHead></Overlay></div>, true),
       lib("leader-rows", "Item keysFirst", "both", "overlay", "Item keysFirst: the key leads the row, in the text colour", () => <div class="g-overlay-demo"><Overlay label="Rows" class="ui-leader"><OverlayList>{leaderRows()}</OverlayList></Overlay></div>, true),
       lib("leader-spotlight", "Spotlight", "desktop", "overlay", "Spotlight: the dim is the shadow round the lit region, cut out with its corners", () => <div class="g-page"><div class="g-page-pane" /><div class="g-page-composer" /><Spotlight lit={{ top: "12px", left: "12px", width: "calc(100% - 24px)", height: "calc(100% - 24px)", radius: "16px" }} /></div>, true),
     ] },
