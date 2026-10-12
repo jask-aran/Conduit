@@ -57,6 +57,12 @@ const classLength = (classes: string, name: string) => (cell: HTMLElement) => {
   cell.append(host); const value = getComputedStyle(el).width; host.remove();
   return px(value);
 };
+/** A two-value padding token (block, inline), each resolved in the cell's density. */
+const pad = (name: string) => (cell: HTMLElement) => {
+  const el = document.createElement("div"); el.style.position = "absolute"; el.style.padding = `var(${name})`;
+  cell.append(el); const style = getComputedStyle(el); const value = `${style.paddingTop} ${style.paddingLeft}`; el.remove();
+  return px(value);
+};
 const colour = (name: string) => (cell: HTMLElement) => getComputedStyle(cell).getPropertyValue(name).trim();
 function TokenCell(props: { row: TokenRow; density?: "desktop" | "phone" }) {
   const [value, setValue] = createSignal("");
@@ -168,9 +174,39 @@ const COLOURS: TokenGroup[] = [
   { title: "Frost", rows: [tok("--frost-fill", "the material's fill (Frost has its blur, highlight and lifts)", colour("--frost-fill"), swatch("--frost-fill")), tok("--frost-core-ground", "core: a solid backing for busy content", colour("--frost-core-ground"), swatch("--frost-core-ground")), tok("--dim", "over what is behind: a desktop overlay (Scrim), the leader's lit composer (Spotlight), the phone's open sidebar; not behind a phone overlay, which fills the screen", colour("--dim"), swatch("--dim"))] },
   { title: "State", rows: [tok("--destructive", "a destructive action", colour("--destructive"), swatch("--destructive")), tok("--live", "a runtime dot: live", colour("--live"), swatch("--live")), tok("--warn", "a runtime dot: warning", colour("--warn"), swatch("--warn"))] },
 ];
+/*
+ * The scale: the coefficients, set on every document (the gallery's, each phone frame's at its own
+ * mount) and remembered, so the whole gallery can be checked at any setting.
+ */
+const SCALES = [["--scale-ui", "UI scale", "everything"], ["--scale-transcript", "Transcript scale", "what you read"]] as const;
+const storedScale = (token: string) => { try { return Number(localStorage.getItem(`gallery:${token}`)) || 1; } catch { return 1; } };
+export function applyScale(doc: Document) {
+  for (const [token] of SCALES) { const value = storedScale(token); if (value === 1) doc.documentElement.style.removeProperty(token); else doc.documentElement.style.setProperty(token, String(value)); }
+}
+function ScaleControl() {
+  const [values, setValues] = createSignal(SCALES.map(([token]) => storedScale(token)));
+  const set = (index: number, value: number) => {
+    try { localStorage.setItem(`gallery:${SCALES[index]![0]}`, String(value)); } catch { /* private window */ }
+    setValues((all) => all.map((old, at) => at === index ? value : old));
+    for (const doc of [document, ...Array.from(document.querySelectorAll("iframe"), (frame) => frame.contentDocument)]) if (doc) applyScale(doc);
+    dispatchEvent(new Event("gallery:tune"));
+  };
+  return <div class="g-scale-control"><For each={[...SCALES]}>{([, label, use], index) => <label>
+    <span><strong>{label}</strong><small>{use}</small></span>
+    <input type="range" min="0.75" max="1.5" step="0.05" value={values()[index()]} onInput={(event) => set(index(), Number(event.currentTarget.value))} />
+    <code>{values()[index()]!.toFixed(2)}×</code>
+    <button type="button" disabled={values()[index()] === 1} onClick={() => set(index(), 1)}>Reset</button>
+  </label>}</For></div>;
+}
+const number = (name: string) => (cell: HTMLElement) => `${Number(getComputedStyle(cell).getPropertyValue(name).trim() || 1)}×`;
+const STEPS = ["2xs", "xs", "sm", "md", "lg", "xl", "2xl", "3xl", "4xl"];
+const STEP_USE: Record<string, string> = { "2xs": "0.125 units: a hairline's room (a field's 2px)", xs: "0.25: keys apart, a popover's inset (desktop)", sm: "0.375: a row's padding, a button's gap", md: "0.5: the commonest gap; a row's inset", lg: "0.75: a field's text inset, a choice's gap", xl: "1 unit: a card's gap, a list's indent", "2xl": "1.25: a card's edge, a page's top", "3xl": "1.5", "4xl": "2: a page's sides" };
 const SPACE: TokenGroup[] = [
-  { title: "The unit", rows: [tok("--u-type", "type: every size is a multiple", length("--u-type"), bar("--u-type")), tok("--u-space", "space: paddings, gaps, heights", length("--u-space"), bar("--u-space")), tok("--u-icon", "icons", length("--u-icon"), bar("--u-icon"))] },
-  { title: "Rows: every list, menu, palette and settings row, and the sidebar's", rows: [tok("--row-min", "a row's height", length("--row-min"), bar("--row-min")), tok("--row-pad", "its padding", length("--row-pad")), tok("--row-gap", "between icon, label and meta", length("--row-gap"), bar("--row-gap")), tok("--nav-indent", "a sidebar row under another", length("--nav-indent"), bar("--nav-indent")), tok("--nav-label-pad", "a sidebar group's label", length("--nav-label-pad"))] },
+  { title: "Scale: the coefficients everything is drawn from (the sliders above)", rows: [tok("--scale-ui", "the whole UI: the unit times this", number("--scale-ui")), tok("--scale-transcript", "what you read: a message, its text, padding and corner", number("--scale-transcript"))] },
+  { title: "The unit: the density's (12.8px desktop, 16px phone) times the UI scale", rows: [tok("--u-space", "space and controls", length("--u-space"), bar("--u-space")), tok("--u-type", "type: every size a multiple", length("--u-type"), bar("--u-type")), tok("--u-icon", "icons", length("--u-icon"), bar("--u-icon"))] },
+  { title: "Space: nine steps, every gap, padding and margin", rows: STEPS.map((step) => tok(`--space-${step}`, STEP_USE[step]!, length(`--space-${step}`), bar(`--space-${step}`))) },
+  { title: "Controls: four heights", rows: [tok("--control-xs", "an icon-xs button, a toast's ×", length("--control-xs"), bar("--control-xs")), tok("--control-sm", "a small button, an icon-sm button", length("--control-sm"), bar("--control-sm")), tok("--control", "a button, an input", length("--control"), bar("--control")), tok("--control-lg", "a rider button, a choice", length("--control-lg"), bar("--control-lg"))] },
+  { title: "Rows: every list, menu, palette and settings row, and the sidebar's", rows: [tok("--row-min", "a row's height", length("--row-min"), bar("--row-min")), tok("--row-pad", "its padding", pad("--row-pad")), tok("--row-gap", "between icon, label and meta", length("--row-gap"), bar("--row-gap")), tok("--nav-indent", "a sidebar row under another", length("--nav-indent"), bar("--nav-indent")), tok("--nav-label-pad", "a sidebar group's label", pad("--nav-label-pad"))] },
   { title: "Frost", rows: [tok("--frost-inset", "a popover's padding round its rows", length("--frost-inset"), bar("--frost-inset"))] },
   { title: "Composer", rows: [tok("--composer-width", "declared by the pane, not the composer", (cell) => { const el = document.createElement("div"); el.style.position = "absolute"; el.style.width = "var(--composer-width, 47.5rem)"; cell.append(el); const value = getComputedStyle(el).width; el.remove(); return `${px(value)} (47.5rem unless the pane says)`; }), tok("--cmp-field-min", "the field's least height", classLength("ui-composer-field", "--cmp-field-min")), tok("--cmp-bar-min", "the toolbar's height", classLength("ui-toolbar", "--cmp-bar-min")), tok("--cmp-slot", "a toolbar button", classLength("ui-toolbar", "--cmp-slot"))] },
 ];
@@ -369,7 +405,9 @@ export const foundationFamilies: Family[] = [
   ] }, { title: "Tokens", layout: "desktop", atoms: [
     lib("colour-tokens", "Colours", "both", "colour", "styles.css :root · library.css :root", () => <TokenTable groups={COLOURS} density={false} />, "row"),
   ] }] },
-  { title: "Space", rail: "Foundations", note: "the density: every size a multiple of the unit, 12.8px on desktop and 16px on a phone; rows take their own measured sizes, for a finger on a phone", groups: [{ title: "In use", note: "one popover, measured: what each number shapes. Everything is in the unit, so the phone's is the desktop's at 1.25x; rows take more, for a finger", layout: "desktop", atoms: [
+  { title: "Space", rail: "Foundations", note: "everything from a few numbers: the density's unit (12.8px desktop, 16px phone) times the UI scale, or the transcript scale for what you read. Every gap, padding and margin is one of nine steps; every control one of four heights; rows keep their measured height and text, in the unit (a phone's never below 44px). Move the scales and every page follows", groups: [{ title: "Scale", note: "the coefficients, remembered and applied to the whole gallery, its phone frames too: try any page at another setting", layout: "desktop", atoms: [
+    lib("space-scale", "Scale", "both", "space", "library.css :root --scale-ui · --scale-transcript", () => <ScaleControl />, "row"),
+  ] }, { title: "In use", note: "one popover, measured: what each number shapes. Everything is in the unit, so the phone's is the desktop's at 1.25x; rows take more, for a finger", layout: "desktop", atoms: [
     lib("space-inuse", "Space in use", "both", "space", "Menu · Section · Item", () => <InUse scene={spaceScene} marks={SPACE_MARKS} />, "row"),
   ] }, { title: "Tokens", note: "for reference", layout: "desktop", atoms: [
     lib("space-tokens", "Space", "both", "space", "library.css [data-density]", () => <TokenTable groups={SPACE} />, "row"),

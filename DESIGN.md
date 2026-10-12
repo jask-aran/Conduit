@@ -267,6 +267,8 @@ Desktop is a darker **frame** with **inset rounded panes**, separated by the fra
 
 **Settings** is a frost overlay, centred since it does not filter. Its rail is drawn as the sidebar is, About in quiet lines at its foot; on a phone the rail is a screen of its own. Content is the Settings list (Components). **Settings save as they change**: no Save button; the header says Saving, Saved, or Not saved with Retry in the danger colour; a value not valid yet says why under its field. Credentials and one-off actions keep their own buttons.
 
+**Spacing (components v2)** -- everything is drawn from a few numbers. A density gives the unit (12.8px on desktop, 16px on a phone); **UI scale** multiplies it for everything, **transcript scale** for what you read (a message: its text, padding and corner), so the app holds together at any setting. Every gap, padding and margin is one of nine **Space** steps in the unit: 2xs 0.125, xs 0.25, sm 0.375, md 0.5, lg 0.75, xl 1, 2xl 1.25, 3xl 1.5, 4xl 2. Every control is one of four heights: xs 1.5, sm 1.875, default 2.25, lg 2.5. Rows keep their measured height and text (a finger's on a phone, never below 44px), written in the unit so they scale too. An offset that lines something up with something else (a wrapped detail under its label) is worked out from what it lines up with, never picked. Never a one-off multiplier or a px gap.
+
 # Panes and windows
 
 How panes, tabs, the dock and the window behave. Every arrangement follows these; a new one follows them before it gets rules of its own. The panes smoke and `file-tabs` tests assert the current behaviour.

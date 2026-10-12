@@ -6,7 +6,8 @@ import { Frost } from "@/components/ui";
  * to) and a forms table (each form down the side, where it sits across, its code and tokens).
  * Shared by Foundations and the families.
  */
-export const px = (value: string) => value.replace(/(\d+\.\d+)px/g, (_, n: string) => `${Number(Number(n).toFixed(2))}px`);
+/** A length as read, to a tenth (layout works in 64ths, so 6.4 reads back 6.39). */
+export const px = (value: string) => value.replace(/(\d+\.\d+)px/g, (_, n: string) => `${Number(Number(n).toFixed(1))}px`);
 
 /*
  * In use: a small scene drawn by the library, each place a foundation shows numbered
