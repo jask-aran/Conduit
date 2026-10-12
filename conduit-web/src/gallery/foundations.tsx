@@ -1,7 +1,7 @@
 import { createSignal, For, onCleanup, onMount, type JSX } from "solid-js";
 import { ArrowUpIcon, CameraIcon, CopyIcon, FolderIcon, MicIcon, MonitorIcon, PaperclipIcon, PlusIcon, SettingsIcon, ShareIcon, Trash2Icon } from "lucide-solid";
 import { Spinner } from "@/components/primitives";
-import { Segmented, Bubble, Button, Frost, HeadingSection, Input, Item, Keycap, Menu, NavRow, Overlay, OverlayBar, PillButton, PillField, PillGroup, Section, SelectTrigger, TextArea, Toolbar, type ButtonVariant } from "@/components/ui";
+import { Segmented, Bubble, Button, Frost, HeadingSection, Input, Item, Keycap, Menu, NavRow, Overlay, OverlayBar, PillButton, PillField, PillGroup, Section, SelectTrigger, TextArea, Toolbar } from "@/components/ui";
 import { lib, Levels, SegmentedCount, SegmentedIcons, SegmentedText, SwitchDemo, type Family } from "./library";
 import "katex/dist/katex.min.css";
 
@@ -152,11 +152,11 @@ const COLOUR_MARKS: Mark[] = [
   { selector: ".ui-row[data-highlighted]", label: "--frost-tint: the cursor's wash", read: bg },
   { selector: ".ui-section + .ui-section", label: "--frost-tint: a rule between sections", read: edge },
   { selector: ".ui-row[data-destructive]", label: "--destructive: a destructive row", read: fg },
-  { selector: ".ui-button[data-variant='outline']", label: "--tint: a control's line, on the ground (Controls has each surface's)", read: edge },
+  { selector: ".ui-button[data-variant='secondary']", label: "--tint: a control's line, on the ground (Controls has each surface's)", read: edge },
 ];
 const colourScene = () => <div class="g-scene-frame"><div class="g-scene-pane">
   <Menu><Section title="Section"><Item icon={<MonitorIcon />} checked>Current</Item><Item icon={<FolderIcon />} active>Cursor</Item><Item meta="2m">At rest</Item></Section><Section><Item icon={<Trash2Icon />} destructive>Delete</Item></Section></Menu>
-  <Button variant="outline" size="sm">Control</Button>
+  <Button variant="secondary" size="sm">Control</Button>
 </div></div>;
 
 const SPACE_MARKS: Mark[] = [
@@ -245,10 +245,10 @@ const RADII: TokenGroup[] = [
 
 /*
  * Controls: what sits on any surface. A surface sets --tint (its lines and washes) and
- * --well (the fill under an input or an outline button); a control reads only those.
+ * --well (the fill under an input or a secondary button); a control reads only those.
  */
 const controls = () => <>
-  <div class="g-scene-row"><Button variant="outline" size="sm">Cancel</Button><Button size="sm">Save</Button></div>
+  <div class="g-scene-row"><Button variant="secondary" size="sm">Cancel</Button><Button size="sm">Save</Button></div>
   <Input value="Lorem ipsum file" />
   <SegmentedText />
   <div class="g-scene-row"><Keycap>Ctrl</Keycap><Keycap>K</Keycap></div>
@@ -260,35 +260,49 @@ const controlsScene = () => <div class="g-scene-stack">
 const none = (colour: string) => colour === "rgba(0, 0, 0, 0)" ? "none" : colour;
 const onSurface = (where: "ground" | "frost", what: string, selector: string, read: Mark["read"]): Mark => ({ selector: `.g-scene-${where} ${selector}`, label: `${where}: ${what}`, read: (el) => none(read(el)) });
 const CONTROL_MARKS: Mark[] = (["ground", "frost"] as const).flatMap((where) => [
-  onSurface(where, "an outline button's line (--tint)", ".ui-button[data-variant='outline']", edge),
+  onSurface(where, "a secondary button's line (--tint)", ".ui-button[data-variant='secondary']", edge),
   onSurface(where, "an input's well (--well)", ".ui-input", bg),
   onSurface(where, "the segmented's line and thumb (--tint)", ".ui-seg", (el) => bg(el.querySelector<HTMLElement>(".ui-seg-thumb") ?? el)),
   onSurface(where, "a keycap (--tint)", ".ui-keycap", bg),
 ]);
 
-/** Button's variants, one row each: drawn on the page's surface, and what each reads from it. */
-const VARIANTS: { variant: ButtonVariant; label: string; use: string; reads: string }[] = [
-  { variant: "primary", label: "Primary", use: "the one action: Save, Send, Continue", reads: "--foreground, its text the ground" },
-  { variant: "outline", label: "Outline", use: "a second action beside it: Cancel, Back", reads: "--well inside a --tint line; --tint washed" },
-  { variant: "ghost", label: "Ghost", use: "toolbars and headers: text until the pointer washes it", reads: "nothing; --tint washed" },
-  { variant: "destructive", label: "Delete", use: "destructive: confirms what cannot be undone, in a dialog; filled", reads: "--destructive, white text" },
-];
-function VariantCell(props: { variant: ButtonVariant; label: string }) {
-  const [value, setValue] = createSignal(["", ""]);
-  let el!: HTMLDivElement;
-  const measure = () => requestAnimationFrame(() => { const button = el.querySelector<HTMLElement>(".ui-button"); if (button) setValue([`fill ${none(bg(button))}`, `line ${none(edge(button))}`]); });
-  onMount(() => { measure(); addEventListener("gallery:tune", measure); onCleanup(() => removeEventListener("gallery:tune", measure)); });
-  return <div ref={el} class="g-scale-cell">
-    <div class="g-scale-sample"><Button variant={props.variant}>{props.label}</Button></div>
-    <div class="g-scale-spec"><span>{value()[0]}</span><small>{value()[1]}</small></div>
+/*
+ * A control's forms down the side, the surfaces it sits on across: each cell drawn by the
+ * library on that surface, at the page's density.
+ */
+type Where = "frame" | "ground" | "frost";
+interface FormRow { name: string; use: string; sample: () => JSX.Element }
+const On = (props: { where: Where; children: JSX.Element }) => props.where === "frost"
+  ? <Frost class="g-surface g-form-surface">{props.children}</Frost>
+  : <div class="g-surface g-form-surface" data-surface={props.where}>{props.children}</div>;
+function FormTable(props: { rows: FormRow[]; on: Where[] }) {
+  const columns = { "grid-template-columns": `200px repeat(${props.on.length}, minmax(0, 1fr))` };
+  return <div class="g-scale g-forms">
+    <div class="g-scale-head" style={columns}><span>Form</span><For each={props.on}>{(where) => <span>{where[0]!.toUpperCase() + where.slice(1)}</span>}</For></div>
+    <For each={props.rows}>{(row) => <div class="g-scale-row" style={columns}>
+      <div class="g-scale-name"><strong>{row.name}</strong><small>{row.use}</small></div>
+      <For each={props.on}>{(where) => <On where={where}>{row.sample()}</On>}</For>
+    </div>}</For>
   </div>;
 }
-const Variants = () => <div class="g-scale g-variants" data-columns="2">
-  <For each={VARIANTS}>{(row) => <div class="g-scale-row">
-    <div class="g-scale-name"><strong>{row.variant}</strong><small>{row.use}</small><small>reads {row.reads}</small></div>
-    <VariantCell variant={row.variant} label={row.label} />
-  </div>}</For>
-</div>;
+const form = (name: string, use: string, sample: FormRow["sample"]): FormRow => ({ name, use, sample });
+const BUTTONS: FormRow[] = [
+  form("primary", "the one action: Save, Send, Continue", () => <Button>Save</Button>),
+  form("primary · outline", "the main action, quieter: a line in the text colour", () => <Button outline>Continue</Button>),
+  form("secondary", "a second action beside primary: Cancel, Back. The surface's well inside its line (over frost, no well: a hairline)", () => <Button variant="secondary">Cancel</Button>),
+  form("ghost", "toolbars and headers: text until washed", () => <Button variant="ghost">Skip</Button>),
+  form("ghost · outline", "a hairline with nothing inside, on any surface", () => <Button variant="ghost" outline>Details</Button>),
+  form("destructive", "confirms what cannot be undone, in a dialog", () => <Button variant="destructive">Delete</Button>),
+  form("destructive · outline", "offers it, before the confirm: Delete chat on a settings page", () => <Button variant="destructive" outline>Delete chat</Button>),
+  form("icon", "an icon alone: ghost in toolbars and headers (icon-sm), secondary to stand out (icon)", () => <div class="g-row"><Button variant="ghost" size="icon-sm" aria-label="Copy"><CopyIcon /></Button><Button variant="ghost" size="icon-sm" aria-label="Share"><ShareIcon /></Button><Button variant="secondary" size="icon" aria-label="Add"><PlusIcon /></Button></div>),
+];
+const SEGMENTED: FormRow[] = [
+  form("text", "two to four named peers: a settings choice", () => <SegmentedText />),
+  form("counts", "a filter, each choice with its count: the dashboard's", () => <SegmentedCount />),
+  form("icons", "icons alone: the sidebar's sections", () => <SegmentedIcons />),
+  form("small", "at a bar's end: chat search's sort", () => <SmallSegmented />),
+];
+function SmallSegmented() { const [value, setValue] = createSignal("recent"); return <Segmented size="sm" label="Sort" value={value()} onChange={setValue} options={[{ value: "recent", label: "Recent" }, { value: "relevant", label: "Relevant" }]} />; }
 
 /** A typeface in the library: a specimen, the weights shipped, where it comes from. */
 function Face(props: { family: string; weights?: number[]; sample?: string; source: string }) {
@@ -440,12 +454,13 @@ export const foundationFamilies: Family[] = [
     { title: "In use", note: "the same controls on the ground and over frost: what each takes from the surface under it", layout: "desktop", atoms: [
       lib("controls-inuse", "Controls in use", "both", "control", "Button · Input · Segmented · Keycap on [data-surface]", () => <InUse scene={controlsScene} marks={CONTROL_MARKS} />, "row"),
     ] },
-    { title: "Buttons", staged: true, atoms: [
-      lib("button-variants", "Button · variants", "both", "control", "Button variant", () => <Variants />, true),
-      lib("icon-button", "Icon button", "both", "control", "Button size=icon-sm · icon", () => <div class="g-row"><Button variant="ghost" size="icon-sm" aria-label="Copy"><CopyIcon /></Button><Button variant="ghost" size="icon-sm" aria-label="Share"><ShareIcon /></Button><Button variant="outline" size="icon" aria-label="Add"><PlusIcon /></Button></div>),
+    { title: "Button", note: "each form on each surface; outline draws primary, ghost or destructive as a line in its colour", staged: "density", atoms: [
+      lib("button-forms", "Button · forms × surfaces", "both", "control", "Button variant outline size", () => <FormTable rows={BUTTONS} on={["ground", "frost"]} />, "row"),
     ] },
-    { title: "Fields and choices", staged: true, atoms: [
-      lib("segmented", "Segmented choice", "both", "control", "Segmented", () => <div class="g-field"><SegmentedText /><SegmentedCount /><SegmentedIcons /></div>),
+    { title: "Segmented choice", note: "the frame too: the sidebar's sections", staged: "density", atoms: [
+      lib("segmented-forms", "Segmented · forms × surfaces", "both", "control", "Segmented icons size", () => <FormTable rows={SEGMENTED} on={["frame", "ground", "frost"]} />, "row"),
+    ] },
+    { title: "Fields", staged: true, atoms: [
       lib("input", "Input", "both", "control", "Input", () => <div class="g-field"><Input placeholder="Replace" /><Input value="Lorem ipsum file" /></div>),
       lib("textarea", "TextArea", "both", "control", "TextArea: multi-line, grows with its lines, bare -- what holds it pads it", () => <div class="g-field"><TextArea placeholder="Type several lines…" /><TextArea value={"Lorem ipsum dolor sit amet,\nconsectetur adipiscing elit."} /></div>),
       lib("select", "Select", "both", "control", "SelectTrigger bare", () => <div class="g-field"><SelectTrigger value="System default" /><div class="g-row"><span>Provider</span><SelectTrigger bare value="OpenAI" /></div></div>),

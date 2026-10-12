@@ -303,3 +303,6 @@ html, body { background: var(--frame, #08090a); color: var(--foreground); }
 .g-stage-surface { width: 100%; min-width: 0; padding: 20px 16px; }
 .g-scene-surface { width: 100%; min-width: 0; justify-items: start; gap: 10px; padding: 16px; }
 .g-variants .g-scale-name small + small { font: 10.5px/1.4 ui-monospace, monospace; }
+/* Forms × surfaces (Controls): each cell a small surface, the sample centred in it. */
+.g-forms .g-scale-row { padding: 6px 4px; }
+.g-form-surface { min-width: 0; min-height: 64px; border-radius: 10px; padding: 12px; }
