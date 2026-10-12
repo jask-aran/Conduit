@@ -1,6 +1,6 @@
 import { createSignal, For, onCleanup, onMount, type JSX } from "solid-js";
-import { CopyIcon, FolderIcon, MonitorIcon, PaperclipIcon, SearchIcon, SettingsIcon } from "lucide-solid";
-import { Segmented, Bubble, Frost, HeadingSection, Item, Menu, NavGroup, NavRow, OverlayHints, Section, TextArea } from "@/components/ui";
+import { CopyIcon, FolderIcon, MonitorIcon, PaperclipIcon, SettingsIcon } from "lucide-solid";
+import { Segmented, Bubble, Frost, HeadingSection, Item, Menu, NavGroup, NavRow, Section } from "@/components/ui";
 import { lib, type Family } from "./library";
 import "katex/dist/katex.min.css";
 import terminalFontUrl from "../client/assets/MesloLGSNerdFontMono-Regular.ttf";
@@ -151,27 +151,56 @@ function Role(props: { role: FontRole }) {
   </div>;
 }
 
+/** A type role: its specimen, drawn by the library, and the element in it that carries the role. */
+interface TypeRole { name: string; rule: string; selector: string; sample: () => JSX.Element }
+const onFrost = (children: JSX.Element) => <Menu>{children}</Menu>;
+const onGround = (children: JSX.Element) => <div class="g-ground">{children}</div>;
+const TYPE_ROLES: TypeRole[] = [
+  { name: "Section label", rule: "every section heading", selector: ".ui-title", sample: () => onFrost(<Section title="Section label"><Item>Row</Item></Section>) },
+  { name: "Row", rule: "list, menu, palette, settings rows; over frost", selector: ".ui-row:not([data-checked])", sample: () => onFrost(<Section><Item icon={<FolderIcon />}>Row at rest</Item></Section>) },
+  { name: "Row · current", rule: "where you are: white at the current weight", selector: ".ui-row[data-checked]", sample: () => onFrost(<Section><Item icon={<MonitorIcon />} checked>Current row</Item></Section>) },
+  { name: "Row · on the ground", rule: "the same row off frost: lighter, dimmer", selector: ".ui-row", sample: () => onGround(<Item icon={<FolderIcon />}>Row at rest</Item>) },
+  { name: "Sidebar row", rule: "the sidebar's rows and its groups", selector: ".ui-nav-row", sample: () => onGround(<NavRow icon={<MonitorIcon />}>Sidebar row</NavRow>) },
+  { name: "Meta", rule: "beside a row's title, right-aligned", selector: ".ui-row > small", sample: () => onFrost(<Section><Item meta="2m ago">Row</Item></Section>) },
+  { name: "Keycap", rule: "a key, in a hairline square", selector: ".ui-keycap", sample: () => onFrost(<Section><Item keys={["Ctrl", "K"]}>Row</Item></Section>) },
+  { name: "Heading", rule: "a popover's or card's title", selector: ".ui-heading-title", sample: () => onFrost(<HeadingSection title="A heading" />) },
+  { name: "Caption", rule: "a heading's detail, hints, empty copy", selector: ".ui-heading-detail", sample: () => onFrost(<HeadingSection title="A heading" detail="Its detail, muted" />) },
+  { name: "Body", rule: "messages and what you type: the type unit", selector: ".ui-bubble", sample: () => <Bubble>A message</Bubble> },
+];
+/** What a role computes to, in words: size/leading · weight · face, and its colour as the text colour, a share of it, or muted. */
+function spec(el: Element | null) {
+  if (!el) return ["—", ""];
+  const style = getComputedStyle(el);
+  const caps = style.textTransform === "uppercase" ? " caps" : "";
+  const alpha = /\/ ([\d.]+)\)$/.exec(style.color);
+  const colour = alpha ? `text at ${Math.round(Number(alpha[1]) * 100)}%` : /oklch\(0\.[0-7]/.test(style.color) ? "muted" : "text";
+  return [px(`${style.fontSize}/${style.lineHeight} · ${style.fontWeight}`), `${face(style.fontFamily)}${caps} · ${colour}`];
+}
+function ScaleCell(props: { role: TypeRole; density: "desktop" | "phone" }) {
+  const [value, setValue] = createSignal(["", ""]);
+  let el!: HTMLDivElement;
+  const measure = () => requestAnimationFrame(() => setValue(spec(el.querySelector(props.role.selector))));
+  onMount(() => { measure(); addEventListener("gallery:tune", measure); onCleanup(() => removeEventListener("gallery:tune", measure)); });
+  return <div class="g-scale-cell" data-density={props.density}>
+    <div ref={el} class="g-scale-sample">{props.role.sample()}</div>
+    <div class="g-scale-spec"><span>{value()[0]}</span><small>{value()[1]}</small></div>
+  </div>;
+}
+function Scale() {
+  return <div class="g-scale">
+    <div class="g-scale-head"><span>Role</span><span>Desktop</span><span>Phone</span></div>
+    <For each={TYPE_ROLES}>{(role) => <div class="g-scale-row">
+      <div class="g-scale-name"><strong>{role.name}</strong><small>{role.rule}</small></div>
+      <ScaleCell role={role} density="desktop" /><ScaleCell role={role} density="phone" />
+    </div>}</For>
+  </div>;
+}
+
 export const foundationFamilies: Family[] = [
   { title: "Type", rail: "Foundations", note: "the text, top to bottom: the face each role takes, with a switcher; the scale, each role as the library draws it and as it computes; then every face Conduit ships, and the system's own last", groups: [
     { title: "Faces", note: "a token per role; the first option is library.css's default, a pick applies across the gallery", atoms: ROLES.map((role) => lib(`font-role${role.token}`, role.title, "both", "font", `${role.token} · library.css :root`, () => <Role role={role} />)) },
-    { title: "Scale", note: "rest is grey; current is white at 660, never a fill; over frost a row is a touch heavier and brighter; section labels are muted caps in their face, one style everywhere", atoms: [
-    lib("type-frost", "Rows over frost", "both", "type", "Menu > Section > Item", () => <Spec read={roles(["Group label", ".ui-title"], ["Row · rest", ".ui-row:not([data-checked])"], ["Row · current", ".ui-row[data-checked]"], ["Meta", ".ui-row > small"], ["Keycap", ".ui-keycap"])}>
-      <Menu><Section title="Group label"><Item icon={<FolderIcon />} meta="2m">Row at rest</Item><Item icon={<MonitorIcon />} checked>Current row</Item><Item icon={<SearchIcon />} keys={["Ctrl", "K"]}>Row with keys</Item></Section></Menu>
-    </Spec>),
-    lib("type-ground", "Rows on the ground", "both", "type", "Section > Item, outside frost", () => <Spec read={roles(["Group label", ".ui-title"], ["Row · rest", ".ui-row:not([data-checked])"], ["Row · current", ".ui-row[data-checked]"])}>
-      <Ground><Section title="Group label"><Item icon={<FolderIcon />}>Row at rest</Item><Item icon={<MonitorIcon />} checked>Current row</Item></Section></Ground>
-    </Spec>),
-    lib("type-sidebar", "Sidebar", "both", "type", "NavGroup > NavRow", () => <Spec read={roles(["Group label", ".ui-nav-label"], ["Row · rest", ".ui-nav-row:not([aria-current])"], ["Row · current", ".ui-nav-row[aria-current]"])}>
-      <Ground><NavGroup label="Group label"><NavRow icon={<MonitorIcon />}>Row at rest</NavRow><NavRow icon={<SettingsIcon />} current>Current row</NavRow></NavGroup></Ground>
-    </Spec>),
-    lib("type-headings", "Headings", "both", "type", "HeadingSection · Card", () => <Spec read={roles(["Heading", ".ui-heading-title"], ["Detail", ".ui-heading-detail"])}>
-      <Menu><HeadingSection title="A heading" detail="Its detail · muted" /></Menu>
-    </Spec>),
-    lib("type-text", "Text", "both", "type", "Bubble · TextArea · OverlayHints", () => <Spec read={roles(["Message", ".ui-bubble"], ["Entry", ".ui-textarea"], ["Hints", ".ui-overlay-hints"])}>
-      <Bubble>A message, at the type unit</Bubble>
-      <Frost class="g-entry"><TextArea value="What you type, at the type unit" /></Frost>
-      <Frost class="g-entry"><OverlayHints start={[[["↑", "↓"], "Move"], [["Enter"], "Open"]]} /></Frost>
-    </Spec>, true),
+    { title: "Scale", note: "each role once, as DESIGN.md names it: drawn by the library at both densities, and what it computes to. Rest is grey, current white at 660 with no fill; text over frost is a touch heavier and brighter", layout: "desktop", atoms: [
+      lib("type-scale", "Roles", "both", "type", "DESIGN.md Typography · library.css", () => <Scale />, "row"),
     ] },
     { title: "Shipped", note: "the faces Conduit ships, so it looks the same on every system", layout: "desktop", atoms: [
       lib("font-geist", "Geist Variable", "both", "font", "@fontsource-variable/geist", () => <Face family={GEIST} weights={[400, 450, 500, 560, 600, 660, 700]} source="@fontsource-variable/geist · OFL" />),
