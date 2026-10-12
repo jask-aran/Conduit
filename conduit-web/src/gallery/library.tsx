@@ -67,7 +67,7 @@ const icon = (label: string, glyph: JSX.Element) => ({ label, icon: glyph });
 
 /** The material's CSS, read live, so a tuned value shows here too. */
 function FrostTokens() {
-  const names = ["--frost-fill", "--frost-stroke", "--frost-blur", "--frost-highlight", "--frost-lift-rest", "--frost-lift-raised", "--frost-wash", "--frost-rule"];
+  const names = ["--frost-blur", "--frost-highlight", "--frost-lift-rest", "--frost-lift-raised"];
   const [values, setValues] = createSignal<string[]>([]);
   let el!: HTMLDListElement;
   onMount(() => { const style = getComputedStyle(el); setValues(names.map((name) => style.getPropertyValue(name).trim())); });
@@ -160,7 +160,7 @@ export const libraryFamilies: Family[] = [
     lib("frost-rest", "Rest", "both", "material", "Frost lift=rest", () => <Frost class="g-swatch" />),
     lib("frost-raised", "Raised", "both", "material", "Frost lift=raised", () => <Frost lift="raised" class="g-swatch" />),
     lib("frost-core", "Core", "both", "material", "Frost core", () => <Frost lift="raised" core class="g-swatch" />),
-    lib("frost-css", "The material's CSS", "both", "material", "library.css :root", () => <FrostTokens />, true),
+    lib("frost-css", "The material's CSS", "both", "material", "library.css :root · its colours are in Colour", () => <FrostTokens />, true),
   ] }] },
   { title: "Popover", note: "raised frost holding sections, separated by rules; a submenu is another popover", groups: [
     { atoms: [

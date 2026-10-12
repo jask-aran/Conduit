@@ -260,3 +260,10 @@ html, body { background: var(--frame, #08090a); color: var(--foreground); }
 .g-scale-spec small { color: var(--muted-foreground); font-size: inherit; }
 .g-ground { border-radius: 10px; background: var(--background); box-shadow: inset 0 0 0 1px var(--border); padding: 4px; }
 .g-terminal { max-width: 100%; overflow: hidden; margin: 0; border-radius: 8px; background: #000; padding: 10px 12px; color: #e6e6e6; font: 12px/1.5 var(--font-terminal); white-space: pre; }
+.g-scale[data-columns="2"] :is(.g-scale-head, .g-scale-row) { grid-template-columns: 320px 1fr; }
+.g-scale-group { padding: 18px 4px 6px; color: var(--muted-foreground); font-size: 11px; font-weight: 600; }
+.g-swatch-chip { display: block; width: 44px; height: 28px; border-radius: 6px; box-shadow: inset 0 0 0 1px oklch(1 0 0 / 10%); }
+.g-bar-chip { display: block; min-width: 1px; height: 10px; border-radius: 2px; background: var(--frost-stroke); }
+.g-glyph { display: grid; place-items: center; }
+.g-glyph svg { width: 100%; height: 100%; }
+.g-scale .g-radius { width: 56px; height: 36px; }
