@@ -229,10 +229,11 @@
 /* Segmented choice: a hairline track and a sliding thumb (the app's
    settings and dashboard filters): the surface's tint for both. The
    pill form is the phone header's: the track is itself frost. */
-/* Track, thumb and segments all at --radius-control: a sharper edge than a surface's. */
-.ui-seg { --seg-pad: 2px; position: relative; display: inline-grid; grid-template-columns: repeat(var(--segments), minmax(0, 1fr)); gap: 2px; border: 1px solid var(--tint); border-radius: var(--radius-control); background: transparent; padding: var(--seg-pad); }
-.ui-seg-thumb { position: absolute; top: var(--seg-pad); bottom: var(--seg-pad); left: var(--seg-pad); width: calc((100% - 2 * var(--seg-pad) - 2px * (var(--segments) - 1)) / var(--segments)); border-radius: var(--radius-control); background: var(--tint); transform: translateX(calc((100% + 2px) * var(--segment))); transition: transform 200ms cubic-bezier(.2, .8, .2, 1); }
-.ui-seg button { position: relative; display: inline-flex; min-width: 0; min-height: calc(1.75 * var(--u-space)); align-items: center; justify-content: center; gap: calc(0.375 * var(--u-space)); border: 0; border-radius: var(--radius-control); background: transparent; padding: 0 calc(0.75 * var(--u-space)); color: var(--muted-foreground); font-size: var(--text-row); font-weight: var(--weight-lift); cursor: pointer; }
+/* The track at --radius-control; the wash and segments 2px in (its line and 1px), so their corner is
+   the track's less those 2px: the space round the wash is even, corners included. Segments touch. */
+.ui-seg { --seg-pad: 1px; --seg-inner: calc(var(--radius-control) - 1px - var(--seg-pad)); position: relative; display: inline-grid; grid-template-columns: repeat(var(--segments), minmax(0, 1fr)); gap: 0; border: 1px solid var(--tint); border-radius: var(--radius-control); background: transparent; padding: var(--seg-pad); }
+.ui-seg-thumb { position: absolute; top: var(--seg-pad); bottom: var(--seg-pad); left: var(--seg-pad); width: calc((100% - 2 * var(--seg-pad)) / var(--segments)); border-radius: var(--seg-inner); background: var(--tint); transform: translateX(calc(100% * var(--segment))); transition: transform 200ms cubic-bezier(.2, .8, .2, 1); }
+.ui-seg button { position: relative; display: inline-flex; min-width: 0; min-height: calc(1.75 * var(--u-space)); align-items: center; justify-content: center; gap: calc(0.375 * var(--u-space)); border: 0; border-radius: var(--seg-inner); background: transparent; padding: 0 calc(0.75 * var(--u-space)); color: var(--muted-foreground); font-size: var(--text-row); font-weight: var(--weight-lift); cursor: pointer; }
 .ui-seg button svg { width: calc(1.125 * var(--u-icon)); height: calc(1.125 * var(--u-icon)); }
 .ui-seg button small { color: var(--muted-foreground); font: var(--weight-rest) var(--text-meta) var(--font-data); }
 .ui-seg button:is(:hover, [aria-checked="true"]) { color: var(--foreground); }
