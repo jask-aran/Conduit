@@ -206,10 +206,9 @@ const bar = (name: string) => () => <i class="g-bar-chip" style={{ width: `var($
 const corner = (name: string) => () => <Frost class="g-radius" style={{ "border-radius": `var(${name})` }} />;
 const tok = (name: string, use: string, read: TokenRow["read"], sample?: TokenRow["sample"]): TokenRow => ({ name, use, read, sample });
 
-const SIZES: TokenGroup[] = [{ title: "Six sizes, by role", rows: [
-  tok("--text-label", "the section label", length("--text-label")),
-  tok("--text-meta", "data and keys: meta, keycaps, counts, crumbs", length("--text-meta")),
-  tok("--text-caption", "details and hints: a heading's detail, the slider's value, key hints", length("--text-caption")),
+const SIZES: TokenGroup[] = [{ title: "Five sizes, by role", rows: [
+  tok("--text-label", "the section label, keycaps", length("--text-label")),
+  tok("--text-caption", "details, hints and data: a heading's detail, the slider's value, key hints; meta, counts, crumbs", length("--text-caption")),
   tok("--text-row", "every row and control: rows, buttons, inputs, the segmented", length("--text-row")),
   tok("--text-body", "messages, what you type, answers; titles too, at the strong weight", length("--text-body")),
   tok("--text-heading", "a page's title (settings)", length("--text-heading")),
