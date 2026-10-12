@@ -216,6 +216,10 @@
 .ui-field { display: flex; min-width: 0; flex-direction: column; gap: var(--card-pair, calc(0.5 * var(--u-space))); }
 .ui-field-label { color: var(--muted-foreground); font-size: var(--text-caption); font-weight: var(--weight-lift); text-box: trim-both cap alphabetic; }
 .ui-row > .ui-row-end { display: inline-flex; flex: none; margin-left: auto; margin-right: calc((var(--u-icon) - 1.875 * var(--u-space)) / 2); }
+/* Attachments in a card: the composer's chips, one under another at the card's width. */
+.ui-card > .ui-chips { flex-direction: column; overflow: visible; padding: 0; mask: none; }
+.ui-card .ui-chip-body { width: 100%; }
+.ui-card .ui-chip-copy { max-width: none; text-align: left; }
 /* Actions share one width, the widest's, at the card's right edge. */
 .ui-card-actions { display: grid; width: fit-content; grid-auto-columns: 1fr; grid-auto-flow: column; gap: calc(0.5 * var(--u-space)); margin-left: auto; }
 
