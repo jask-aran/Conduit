@@ -117,7 +117,14 @@ export function Match(props: { text: string; query: string }) {
   return <Show when={at() >= 0} fallback={props.text}><span class="ui-match">{props.text.slice(0, at())}<b>{props.text.slice(at(), at() + props.query.length)}</b>{props.text.slice(at() + props.query.length)}</span></Show>;
 }
 
-export const Keycap = (props: { children: JSX.Element }) => <kbd class="ui-keycap">{props.children}</kbd>;
+/** A key or a chord. onClick: it can be pressed (to record another); onRemove: a × beside it clears it (Settings · Shortcuts). */
+export function Keycap(props: { children: JSX.Element; label?: string; onClick?: () => void; onRemove?: () => void }) {
+  if (!props.onClick && !props.onRemove) return <kbd class="ui-keycap">{props.children}</kbd>;
+  return <span class="ui-keycap" data-editable="">
+    <button type="button" aria-label={props.label ? `Change ${props.label}` : undefined} onClick={() => props.onClick?.()}>{props.children}</button>
+    <Show when={props.onRemove}><button type="button" class="ui-keycap-remove" aria-label={props.label ? `Remove ${props.label}` : "Remove"} onClick={() => props.onRemove?.()}><XIcon /></button></Show>
+  </span>;
+}
 
 export function Card(props: { title: string; detail?: string; class?: string; density?: Density; actions?: JSX.Element; children?: JSX.Element }) {
   return <div role="dialog" aria-label={props.title} class={cn("ui-frost ui-card", props.class)} data-density={props.density} data-surface="frost" data-lift="raised">
@@ -286,7 +293,7 @@ export const GlanceHead = (props: { mark?: JSX.Element; title: string; facts: st
   <For each={props.facts}>{(fact) => <div class="ui-glance-facts" title={fact}>{fact}</div>}</For>
 </>;
 /** The last prompt, as the user's message is drawn, clamped to four lines. */
-export const GlancePrompt = (props: { children: JSX.Element }) => <p class="ui-frost ui-glance-prompt" data-lift="rest">{props.children}</p>;
+export const GlancePrompt = (props: { children: JSX.Element }) => <p class="ui-frost ui-bubble ui-glance-prompt">{props.children}</p>;
 /** How the turn ended: an orb (the app's), the outcome, how long and what it did. */
 export const GlanceTurn = (props: { orb?: JSX.Element; outcome: string; detail?: string }) =>
   <div class="ui-glance-turn"><Show when={props.orb}><span class="ui-glance-orb">{props.orb}</span></Show><span><b>{props.outcome}</b>{props.detail ? ` · ${props.detail}` : ""}</span></div>;

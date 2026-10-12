@@ -10,7 +10,13 @@ import type { UploadAttachment } from "../client/state/attachments";
  */
 const at = (minutes: number) => new Date(Date.UTC(2026, 9, 10, 11, minutes)).toISOString();
 /** The transcript the screen opens on. */
+const EARLIER = "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.";
 export const SEED: Message[] = [
+  // Earlier turns, so the transcript scrolls and scroll-to-latest can show.
+  ...[1, 2, 3].flatMap((n) => [
+    { id: `e${n}`, role: "user" as const, content: `earlier question ${n}: what goes in a lorem ipsum file?`, timestamp: at(n), outcome: "complete" as const },
+    { id: `e${n}a`, role: "assistant" as const, answers: `e${n}`, interim: false, content: `${EARLIER}\n\n${EARLIER}\n\n${EARLIER}`, timestamp: at(n + 1) },
+  ]),
   { id: "u1", role: "user", content: "write a .txt file in this folder that contains lorem ipsum text", timestamp: at(14), outcome: "complete" },
   { id: "a1", role: "assistant", answers: "u1", interim: false, content: "Created `lorem_ipsum.txt` in this folder with lorem ipsum text.", timestamp: at(16) },
   { id: "u2", role: "user", content: "and make the second paragraph shorter", timestamp: at(18), outcome: "complete" },
@@ -20,6 +26,8 @@ export const SEED: Message[] = [
 export function fakeChat() {
   const [draft, setDraft] = createSignal("");
   const [messages, setMessages] = createSignal<Message[]>(SEED);
+  // Editing an earlier message: its text into the draft, and the way out the transcript shows over the composer.
+  const [editingEntryId, setEditingEntryId] = createSignal<string | null>(null);
   let next = 0;
   const named: Record<string, unknown> = {
     draft, setDraft,
@@ -27,6 +35,9 @@ export function fakeChat() {
     generation: () => "idle",
     interactionReady: () => true,
     capabilities: () => ({}),
+    editingEntryId,
+    edit: (message: Message) => { if (editingEntryId() === message.id) { setEditingEntryId(null); setDraft(""); return; } setEditingEntryId(message.id); setDraft(typeof message.content === "string" ? message.content : ""); },
+    cancelEdit: () => { setEditingEntryId(null); setDraft(""); },
     messages, hostUiRequests: () => [], pendingMessages: () => [], harnessCommands: () => [], tools: () => [],
     title: () => "Lorem ipsum file", status: () => "active", presentation: () => ({ kind: "ready" }),
     send: async () => {
