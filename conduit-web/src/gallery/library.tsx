@@ -65,14 +65,14 @@ function Surfaces(props: { frame?: boolean; children: () => JSX.Element }) {
 
 const icon = (label: string, glyph: JSX.Element) => ({ label, icon: glyph });
 
-/** The material's CSS, read live, so a tuned value shows here too. */
-function FrostTokens() {
-  const names = ["--frost-blur", "--frost-highlight", "--frost-lift-rest", "--frost-lift-raised"];
+/** A material's own CSS, read live, so a tuned value shows here too. */
+function FrostTokens(props: { names: string[] }) {
   const [values, setValues] = createSignal<string[]>([]);
   let el!: HTMLDListElement;
-  onMount(() => { const style = getComputedStyle(el); setValues(names.map((name) => style.getPropertyValue(name).trim())); });
-  return <dl ref={el} class="g-tokens"><For each={names}>{(name, index) => <><dt>{name}</dt><dd>{values()[index()]}</dd></>}</For></dl>;
+  onMount(() => { const style = getComputedStyle(el); setValues(props.names.map((name) => style.getPropertyValue(name).trim())); });
+  return <dl ref={el} class="g-tokens"><For each={props.names}>{(name, index) => <><dt>{name}</dt><dd>{values()[index()]}</dd></>}</For></dl>;
 }
+const FROST_CSS = ["--frost-fill", "--frost-stroke", "--frost-blur", "--frost-highlight", "--frost-lift-rest", "--frost-lift-raised"];
 
 function Area() { const [value, setValue] = createSignal("dashboard"); return <PillSwitch label="Sidebar section" value={value()} onChange={setValue} options={areas()} />; }
 
@@ -159,9 +159,8 @@ const Busy = (props: { children: JSX.Element }) => <div class="g-busy"><p>{"Crea
 
 export const libraryFamilies: Family[] = [
   { title: "Frost", note: "two materials: frost, and core -- frost on a solid backing, for what covers busy content (overlays). Over a plain ground they look alike; over text the difference shows. Lift is not a material, only its shadow: rest sits on the page, raised floats above it", groups: [{ atoms: [
-    lib("frost", "Frost", "both", "material", "Frost", () => <Busy><Frost lift="raised" class="g-swatch" /></Busy>),
-    lib("frost-core", "Core", "both", "material", "Frost core · Overlay", () => <Busy><Frost lift="raised" core class="g-swatch" /></Busy>),
-    lib("frost-css", "The material's CSS", "both", "material", "library.css :root · its colours are in Colour", () => <FrostTokens />, true),
+    lib("frost", "Frost", "both", "material", "Frost", () => <div class="g-material"><Busy><Frost lift="raised" class="g-swatch" /></Busy><FrostTokens names={FROST_CSS} /></div>, true),
+    lib("frost-core", "Core", "both", "material", "Frost core · Overlay", () => <div class="g-material"><Busy><Frost lift="raised" core class="g-swatch" /></Busy><FrostTokens names={["--frost-core-ground", ...FROST_CSS]} /></div>, true),
   ] }] },
   { title: "Popover", note: "raised frost holding sections, separated by rules; a submenu is another popover", groups: [
     { atoms: [

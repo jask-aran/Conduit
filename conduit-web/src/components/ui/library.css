@@ -80,7 +80,7 @@
   --frost-highlight: inset 0 1px 0 rgb(255 255 255 / 50%), inset 0 -1px 0 rgb(255 255 255 / 10%);
   --frost-lift-rest: 0 8px 32px rgb(0 0 0 / 10%);
   --frost-lift-raised: 0 24px 70px rgb(0 0 0 / 38%);
-  --frost-core-ground: oklch(0.19 0.005 264 / 72%);
+  --frost-core-ground: oklch(0.3 0.006 264 / 90%); /* a mid grey, nearly opaque: it stops what is behind, without going dark */
   /* One tint per surface for both its washes and its lines: --tint on the ground (the app's --border, which --accent matches), --frost-tint over frost. */
   --tint: var(--border);
   --frost-tint: oklch(1 0 0 / 10%);

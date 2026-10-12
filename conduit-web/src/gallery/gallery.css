@@ -291,3 +291,5 @@ html, body { background: var(--frame, #08090a); color: var(--foreground); }
 .g-busy > p { position: absolute; inset: 0; margin: 0; padding: 10px; color: var(--foreground); font-size: 15px; font-weight: 600; line-height: 1.45; }
 .g-busy::before { position: absolute; top: 40%; left: 30%; width: 40%; height: 26px; border-radius: 13px; background: oklch(0.85 0.12 250); content: ""; }
 .g-busy > .ui-frost { position: relative; }
+.g-material { display: grid; width: 100%; gap: 14px; }
+.g-cell-body:has(> .g-material) { width: 100%; }
