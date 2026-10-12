@@ -154,12 +154,13 @@ export const overlayViews: Record<OverlayView, (props: { close: () => void; clas
   leader: (props) => <><Spotlight lit={props.lit} /><div class="g-page-leader" style={props.leaderBottom ? { bottom: props.leaderBottom } : undefined}><Leader leader="Ctrl G" path={<LeaderPath />} hints={leaderHints()}>{leaderRows()}</Leader></div></>,
 };
 const noop = () => {};
+/** Busy content behind a swatch, as a chat's text is behind an overlay. */
+const Busy = (props: { children: JSX.Element }) => <div class="g-busy"><p>{"Created lorem_ipsum.txt in this folder. The second paragraph is now two sentences: lorem ipsum dolor sit amet, consectetur adipiscing elit. ".repeat(4)}</p>{props.children}</div>;
 
 export const libraryFamilies: Family[] = [
-  { title: "Frost", note: "the material: fill, edge, blur, highlight. Lift: rest sits on the page, raised floats above it; core is a solid backing for busy content", groups: [{ atoms: [
-    lib("frost-rest", "Rest", "both", "material", "Frost lift=rest", () => <Frost class="g-swatch" />),
-    lib("frost-raised", "Raised", "both", "material", "Frost lift=raised", () => <Frost lift="raised" class="g-swatch" />),
-    lib("frost-core", "Core", "both", "material", "Frost core", () => <Frost lift="raised" core class="g-swatch" />),
+  { title: "Frost", note: "two materials: frost, and core -- frost on a solid backing, for what covers busy content (overlays). Over a plain ground they look alike; over text the difference shows. Lift is not a material, only its shadow: rest sits on the page, raised floats above it", groups: [{ atoms: [
+    lib("frost", "Frost", "both", "material", "Frost", () => <Busy><Frost lift="raised" class="g-swatch" /></Busy>),
+    lib("frost-core", "Core", "both", "material", "Frost core · Overlay", () => <Busy><Frost lift="raised" core class="g-swatch" /></Busy>),
     lib("frost-css", "The material's CSS", "both", "material", "library.css :root · its colours are in Colour", () => <FrostTokens />, true),
   ] }] },
   { title: "Popover", note: "raised frost holding sections, separated by rules; a submenu is another popover", groups: [

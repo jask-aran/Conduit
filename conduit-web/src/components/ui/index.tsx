@@ -64,8 +64,8 @@ export function moveCursor(event: PointerEvent & { currentTarget: Element }) {
   row.setAttribute(attr, attr === "data-active" ? "true" : "");
 }
 
-export function Menu(props: { class?: string; core?: boolean; density?: Density; children: JSX.Element }) {
-  return <div role="menu" class={cn("ui-frost ui-menu", props.class)} onPointerOver={moveCursor} data-density={props.density} data-surface="frost" data-lift="raised" data-core={props.core ? "" : undefined}>{props.children}</div>;
+export function Menu(props: { class?: string; density?: Density; children: JSX.Element }) {
+  return <div role="menu" class={cn("ui-frost ui-menu", props.class)} onPointerOver={moveCursor} data-density={props.density} data-surface="frost" data-lift="raised">{props.children}</div>;
 }
 
 /** A menu's section: a list of items (the default) or a slider, with an optional title and a note beside it. */
@@ -119,8 +119,8 @@ export function Match(props: { text: string; query: string }) {
 
 export const Keycap = (props: { children: JSX.Element }) => <kbd class="ui-keycap">{props.children}</kbd>;
 
-export function Card(props: { title: string; detail?: string; class?: string; core?: boolean; density?: Density; actions?: JSX.Element; children?: JSX.Element }) {
-  return <div role="dialog" aria-label={props.title} class={cn("ui-frost ui-card", props.class)} data-density={props.density} data-surface="frost" data-lift="raised" data-core={props.core ? "" : undefined}>
+export function Card(props: { title: string; detail?: string; class?: string; density?: Density; actions?: JSX.Element; children?: JSX.Element }) {
+  return <div role="dialog" aria-label={props.title} class={cn("ui-frost ui-card", props.class)} data-density={props.density} data-surface="frost" data-lift="raised">
     <h3>{props.title}</h3><Show when={props.detail}><p>{props.detail}</p></Show>
     {props.children}
     <Show when={props.actions}><div class="ui-card-actions">{props.actions}</div></Show>
@@ -195,9 +195,10 @@ export function Scrim(props: { placement?: "top" | "center"; class?: string; chi
   return <div class={cn("ui-scrim", props.class)} data-placement={props.placement ?? "top"}>{props.children}</div>;
 }
 
-export function Overlay(props: { label: string; layout?: "stack" | "rail"; core?: boolean; density?: Density; class?: string; style?: JSX.CSSProperties; children: JSX.Element }) {
+/** Always core: an overlay covers whatever the page holds, so its frost has a solid backing. */
+export function Overlay(props: { label: string; layout?: "stack" | "rail"; density?: Density; class?: string; style?: JSX.CSSProperties; children: JSX.Element }) {
   return <div role="dialog" aria-label={props.label} class={cn("ui-frost ui-overlay", props.class)} style={props.style} data-layout={props.layout ?? "stack"}
-    data-surface="frost" data-lift="raised" data-core={props.core ? "" : undefined} data-density={props.density}>{props.children}</div>;
+    data-surface="frost" data-lift="raised" data-core="" data-density={props.density}>{props.children}</div>;
 }
 
 /** The field across the top: a lead (a prompt glyph, a search icon, a back button), the input, then end controls and close. */

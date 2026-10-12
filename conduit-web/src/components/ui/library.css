@@ -16,7 +16,7 @@
  *
  *   .ui-frost              the material: stroke, fill, blur, highlight
  *     [data-lift=raised]   what floats over the app: menus, popovers, cards
- *     [data-core]          a phone full-screen bubble, nothing dimmed round it
+ *     [data-core]          a solid backing under the fill, for what covers busy content: overlays
  *   .ui-pill               frost circle (one action), capsule (several), switch or field
  *   .ui-menu               raised frost container; holds only sections
  *     .ui-section          list, search or slider; a list may have a title; a rule
@@ -557,7 +557,7 @@
 .ui-overlay-status[data-failed] { color: var(--destructive); }
 /* On a phone an overlay is a full-screen bubble on the darker core: nothing round it is dimmed. */
 [data-density="phone"] .ui-scrim, .ui-scrim[data-density="phone"] { padding: var(--phone-overlay-padding, 8px); background: transparent; }
-:is([data-density="phone"] .ui-frost.ui-overlay, .ui-frost.ui-overlay[data-density="phone"]) { width: 100%; background: linear-gradient(var(--frost-fill), var(--frost-fill)), var(--frost-core-ground); }
+:is([data-density="phone"] .ui-frost.ui-overlay, .ui-frost.ui-overlay[data-density="phone"]) { width: 100%; }
 [data-density="phone"] .ui-overlay-hints { display: none; }
 .ui-match { color: var(--muted-foreground); }
 .ui-match > b { color: var(--foreground); font-weight: var(--weight-current); }
