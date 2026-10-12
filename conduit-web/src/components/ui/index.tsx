@@ -377,6 +377,52 @@ export function Spotlight(props: { lit?: { top: string; left: string; width: str
 
 export const Bubble = (props: { children: JSX.Element }) => <div class="ui-frost ui-bubble">{props.children}</div>;
 
+/*
+ * Transcript (DESIGN Transcript): what is read, at the transcript's scale. A Turn is its trace header, the
+ * answer and the answer's foot; the user's Message is a Bubble and its foot. Shapes only: the orb, the
+ * markdown and every action are the caller's.
+ */
+/** The answer: Markdown with no bubble, the Body role, one gap between blocks. html for rendered Markdown. */
+export const Answer = (props: { html?: string; children?: JSX.Element }) =>
+  <Show when={props.html !== undefined} fallback={<div class="ui-answer">{props.children}</div>}><div class="ui-answer" innerHTML={props.html} /></Show>;
+/** A fenced block: its language and Copy over the lines, numbered. */
+export function CodeBlock(props: { lang?: string; code: string; onCopy?: () => void }) {
+  return <figure class="ui-code">
+    <figcaption><span>{props.lang ?? "text"}</span><Button variant="ghost" size="sm" onClick={() => props.onCopy?.()}>Copy</Button></figcaption>
+    <pre><For each={props.code.split("\n")}>{(line, index) => <span class="ui-code-line"><span class="ui-code-n">{index() + 1}</span><code>{line || " "}</code></span>}</For></pre>
+  </figure>;
+}
+/** A turn's head: the orb, then Status · time · work, and under it the trail's latest line. opens: a trail to open. */
+export function TraceHeader(props: { orb?: JSX.Element; status: string; time?: string; work?: string; latest?: string; tone?: "failed"; opens?: boolean; open?: boolean; onToggle?: () => void }) {
+  return <button type="button" class="ui-trace" data-tone={props.tone} aria-expanded={props.opens ? Boolean(props.open) : undefined} disabled={!props.opens} onClick={() => props.onToggle?.()}>
+    <span class="ui-trace-orb">{props.orb}</span>
+    <span class="ui-trace-line"><b>{props.status}</b><Show when={props.time}><span class="ui-trace-time"> · {props.time}</span></Show><Show when={props.work}><span> · {props.work}</span></Show></span>
+    <Show when={props.opens}><ChevronDownIcon class="ui-trace-chevron" /></Show>
+    <Show when={props.latest}><span class="ui-trace-latest">{props.latest}</span></Show>
+  </button>;
+}
+/** The opened trail: one light line per step. */
+export const Trail = (props: { children: JSX.Element }) => <ol class="ui-trail">{props.children}</ol>;
+/** A step: its kind's icon (a spinner while running), a verb, its subject in muted mono, its duration at the end. */
+export function Step(props: { icon?: JSX.Element; verb: string; subject?: string; time?: string; state?: "running" | "failed" | "stopped" }) {
+  return <li class="ui-step" data-state={props.state}>
+    <span class="ui-step-icon"><Show when={props.state === "running"} fallback={props.icon}><span class="ui-spinner" aria-hidden="true" /></Show></span>
+    <span class="ui-step-verb">{props.verb}</span><Show when={props.subject}><code class="ui-step-subject">{props.subject}</code></Show>
+    <Show when={props.state === "failed" || props.state === "stopped"}><span class="ui-step-state">{props.state === "failed" ? "Failed" : "Stopped"}</span></Show>
+    <Show when={props.time}><span class="ui-step-time">{props.time}</span></Show>
+  </li>;
+}
+/** A message's action row: its time first, muted and tabular, then its actions (icon-xs ghost buttons). */
+export const MessageFoot = (props: { time: string; end?: boolean; children?: JSX.Element }) =>
+  <div class="ui-message-foot" data-end={props.end ? "" : undefined}><time>{props.time}</time>{props.children}</div>;
+/** A turn: the trace header, the answer and its foot, one gap apart. */
+export const Turn = (props: { children: JSX.Element }) => <article class="ui-turn">{props.children}</article>;
+/** The user's message: its Bubble and, under it at the right, its foot. */
+export const Message = (props: { time: string; actions?: JSX.Element; children: JSX.Element }) =>
+  <article class="ui-message"><Bubble>{props.children}</Bubble><MessageFoot time={props.time} end>{props.actions}</MessageFoot></article>;
+/** The reading column: the composer's width, its gutter, one gap between messages. */
+export const Transcript = (props: { children: JSX.Element; class?: string }) => <div class={cn("ui-transcript", props.class)}>{props.children}</div>;
+
 
 /* What sits on a surface: the look follows [data-surface] above it (library.css). */
 

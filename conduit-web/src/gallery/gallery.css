@@ -336,3 +336,7 @@ html, body { background: var(--frame, #08090a); color: var(--foreground); }
 .g-scale-control small { color: var(--muted-foreground); }
 .g-scale-control button { border: 1px solid var(--border); border-radius: 6px; background: transparent; padding: 4px 10px; color: inherit; }
 .g-scale-control button:disabled { opacity: .4; }
+/* Transcript: a conversation at a pane's width, and at a phone's. */
+.g-transcript-stage { width: min(100%, 720px); padding: 8px 0; }
+.g-transcript-stage[data-phone] { width: min(100%, 360px); }
+.g-feet { display: grid; width: 100%; gap: 8px; }
