@@ -1,7 +1,7 @@
 import { ArrowDownIcon, PanelLeftIcon, MessageSquarePlusIcon, EllipsisIcon, CameraIcon, KeyboardIcon, MicIcon, ArrowUpIcon, ChevronDownIcon, CircleIcon, FileTextIcon, ClockIcon, Maximize2Icon, SendHorizontalIcon, XIcon, CheckIcon } from "lucide-solid";
 import { createSignal, For, onCleanup, onMount, Show, type JSX } from "solid-js";
 import { PanelRightIcon, ClipboardCopyIcon, Columns2Icon, CopyIcon, FolderIcon, FolderInputIcon, LayoutDashboardIcon, MenuIcon, MonitorIcon, PaperclipIcon, PencilIcon, PinIcon, PlusIcon, QrCodeIcon, RefreshCwIcon, SearchIcon, ShareIcon, ShieldCheckIcon, SquarePenIcon, TerminalIcon, Trash2Icon } from "lucide-solid";
-import { Disclosure, Transcript, Message, Turn, TraceHeader, Trail, Step, Answer, CodeBlock, MessageFoot, Toast, Toaster, SettingRecorder, Field, Leader, Crumbs, Spotlight, OverlayHead, Match, Choices, OverlayBar, OverlayHints, OverlayList, OverlayPage, OverlayRail, OverlaySplit, Glance, GlanceHead, GlancePrompt, GlanceTurn, GlanceAnswer, GlanceEmpty, RiderButton, Overlay, Scrim, SettingGroup, SettingLine, SettingValue, SettingLink, SettingNote, SettingDetails, SettingWide, SettingLoading, Progress, Keycap, NavGroup, NavRow, Segmented, SelectTrigger, Bubble, Button, Card, Chip, Choice, ComposerField, DesktopComposer, Line, TextArea, Rider, RiderActions, RiderTitle, Toolbar, Frost, Input, Item, Menu, PillButton, PillField, PillGroup, PillSwitch, HeadingSection, SearchSection, Section, Slider } from "@/components/ui";
+import { Disclosure, Transcript, Message, Turn, TraceHeader, Trail, Step, Answer, CodeBlock, CopyButton, MessageFoot, Toast, Toaster, SettingRecorder, Field, Leader, Crumbs, Spotlight, OverlayHead, Match, Choices, OverlayBar, OverlayHints, OverlayList, OverlayPage, OverlayRail, OverlaySplit, Glance, GlanceHead, GlancePrompt, GlanceTurn, GlanceAnswer, GlanceEmpty, RiderButton, Overlay, Scrim, SettingGroup, SettingLine, SettingValue, SettingLink, SettingNote, SettingDetails, SettingWide, SettingLoading, Progress, Keycap, NavGroup, NavRow, Segmented, SelectTrigger, Bubble, Button, Card, Chip, Choice, ComposerField, DesktopComposer, Line, TextArea, Rider, RiderActions, RiderTitle, Toolbar, Frost, Input, Item, Menu, PillButton, PillField, PillGroup, PillSwitch, HeadingSection, SearchSection, Section, Slider } from "@/components/ui";
 import { Switch } from "../client/settings/settings-controls";
 import { HarnessMark } from "../client/harness-brand";
 import { PlaceGlyph } from "../client/chat/place-picker";
@@ -361,22 +361,34 @@ function DisclosureDemo() {
 /** Forms drawn as what is read: in the transcript's scope (its scale, a row a step under the body). */
 const reading = (rows: FormRow[]) => rows.map((row) => ({ ...row, sample: () => <div class="ui-read g-read">{row.sample()}</div> }));
 const SNIPPET = "const total = items.reduce(\n  (sum, item) => sum + item.size, 0);";
-const LONG = Array.from({ length: 20 }, (_, i) => i % 5 === 0 ? `// step ${i / 5 + 1}` : `  run(${i}, { size: ${i * 64}, cached: ${i % 2 === 0} });`).join("\n");
-const WIDE = "npx vite build --mode gallery --outDir dist-gallery --emptyOutDir --logLevel info && node scripts/run-windows-chrome-devtools.mjs start";
-/** One that does what the app's does: Copy says Copied for a moment, the fold opens and closes. */
-function LiveCode() {
-  const [copied, setCopied] = createSignal(false), [open, setOpen] = createSignal(false);
-  return <CodeBlock lang="ts" code={LONG} fold={6} open={open()} onToggle={() => setOpen(!open())} copied={copied()} onCopy={() => { setCopied(true); setTimeout(() => setCopied(false), 1200); }} />;
+const LONG = Array.from({ length: 20 }, (_, i) => i % 5 === 0 ? `// step ${i / 5 + 1}` : `  run(${i}, { size: ${i * 64} });`).join("\n");
+/** Copy says so for a moment, as the app's does. */
+const useCopied = () => { const [copied, setCopied] = createSignal(false); return [copied, () => { setCopied(true); setTimeout(() => setCopied(false), 1200); }] as const; };
+/** A turn with a fence, live: Copy it, open and fold it, copy the answer. */
+function codeScene() {
+  const [code, copyCode] = useCopied(), [answer, copyAnswer] = useCopied(), [open, setOpen] = createSignal(false);
+  return <div class="g-card-scene"><Transcript><Turn>
+    <Answer><p>Each step runs in order; the build caches what it can.</p><CodeBlock lang="ts" code={LONG} fold={6} open={open()} onToggle={() => setOpen(!open())} copied={code()} onCopy={copyCode} /></Answer>
+    <MessageFoot time="22:16"><CopyButton copied={answer()} label="Copy answer" onCopy={copyAnswer} /></MessageFoot>
+  </Turn></Transcript></div>;
 }
+const CODE_MARKS: Mark[] = [
+  { selector: ".ui-code", label: "a box: a --tint line at the control corner, no fill", read: (el) => rounding(el) },
+  { selector: ".ui-code-lang", label: "the language, where the numbers start: Caption, the data face", read: (el) => typeOf(el) },
+  { selector: ".ui-code .ui-copy", label: "Copy, and the fold's chevron beside it: icon-xs ghost, the caption's inset all round", read: (el) => px(`${el.getBoundingClientRect().width}px`) },
+  { selector: ".ui-code-n", label: "line numbers: muted, tabular, as wide as the last one", read: (el) => fg(el) },
+  { selector: ".ui-code > pre", label: "the code: the code face in the Row role, at 1.6", read: (el) => typeOf(el) },
+  { selector: ".ui-code-more", label: "folded: the cut fades, the foot counts what it hides", read: (el) => px(`${el.getBoundingClientRect().height}px`) },
+];
 const CODE_FORMS: FormRow[] = [
-  form("short", "its language and Copy over numbered lines", () => <CodeBlock lang="ts" code={SNIPPET} />, "<CodeBlock lang code>", "a box · caption bar (Caption, data face) · code face, Row role · numbers muted, tabular"),
-  form("no language", "a fence that names none reads text", () => <CodeBlock code={"412 lorem_ipsum.txt"} />, "<CodeBlock code>", "lang ?? \"text\""),
-  form("wide", "a long line scrolls sideways, the numbers with it", () => <CodeBlock lang="sh" code={WIDE} />, "", "pre overflow-x: auto · no wrap"),
-  form("folded", "past the fold: cut and fading, the lines it hides counted under it, a chevron in the caption", () => <CodeBlock lang="ts" code={LONG} fold={6} />, "<CodeBlock fold>", "fold lines · fade 2.4em · foot control-sm, Caption · chevron icon-xs ghost"),
-  form("opened", "all of it; the foot folds it again", () => <CodeBlock lang="ts" code={LONG.split("\n").slice(0, 9).join("\n")} fold={6} open />, "<CodeBlock fold open onToggle>", "foot \"Collapse\" · chevron turned"),
-  form("copied", "Copy's moment after a press", () => <CodeBlock lang="ts" code={SNIPPET} copied />, "<CodeBlock copied onCopy>", "\"Copied\" in --foreground, 1.2s"),
-  form("writing", "folded while still being written: the foot pulses as the count climbs", () => <CodeBlock lang="ts" code={LONG} fold={6} streaming />, "<CodeBlock fold streaming>", "foot opacity 1 ↔ .45, 1.6s · none on reduced motion"),
-  form("live", "press Copy, open and fold it", () => <LiveCode />, "", ""),
+  form("short", "a fence under the fold: no foot", () => <CodeBlock lang="ts" code={SNIPPET} />, "<CodeBlock lang code onCopy>"),
+  form("folded", "past the fold: cut and fading, a chevron beside Copy", () => <CodeBlock lang="ts" code={LONG} fold={6} />, "<CodeBlock fold onToggle>"),
+  form("copied", "the check, and the code washing --tint as it fades", () => <CodeBlock lang="ts" code={SNIPPET} copied />, "<CodeBlock copied>"),
+];
+const CODE_IN_APP: FormRow[] = [
+  form("A fence in an answer", "the Markdown's fenced code (marked and Incremark): the language as written, numbered lines", () => <CodeBlock lang="sh" code={"npm run gallery"} />),
+  form("Folded by Settings · Code blocks", "long ones (past 15 lines, or every one) fold; one opened by hand stays open", () => <CodeBlock lang="ts" code={LONG} fold={15} />),
+  form("Still being written, folded", "the fold holds while the model writes into it, and the foot pulses as its count climbs", () => <CodeBlock lang="ts" code={LONG} fold={6} streaming />),
 ];
 const conversation = () => <Transcript>
   <Message time="22:14" actions={<Button variant="ghost" size="icon-xs" aria-label="Edit"><PencilIcon /></Button>}>write a .txt file in this folder that contains lorem ipsum text</Message>
@@ -596,9 +608,15 @@ export const libraryFamilies: Family[] = [
       </div></div>, true),
     ] },
   ] },
-  { title: "CodeBlock", rail: "Transcript", note: "a fenced block in an answer: not frosted, it reads in the transcript's units and scale", groups: [
-    { title: "Forms", note: "each state at each density, in the transcript's scope", layout: "desktop", atoms: [
-      lib("code-forms", "CodeBlock · states × densities", "both", "transcript", "CodeBlock", () => <FormTable rows={reading(CODE_FORMS)} on={["desktop", "phone"]} widths={["180px", "minmax(0, 1fr)", "minmax(0, 1fr)"]} />, "row"),
+  { title: "CodeBlock", rail: "Transcript", note: "a fenced block in an answer: a box, its language and Copy, numbered lines; a long one folds. Not frosted: it reads in the transcript's units and scale", groups: [
+    { title: "In use", note: "in an answer, measured; Copy it, open and fold it", layout: "desktop", atoms: [
+      lib("code-inuse", "CodeBlock in use", "both", "transcript", "Answer > CodeBlock · MessageFoot > CopyButton", () => <InUse scene={codeScene} marks={CODE_MARKS} spacing={[".ui-answer"]} />, "row"),
+    ] },
+    { title: "Forms", note: "each form at each density", layout: "desktop", atoms: [
+      lib("code-forms", "CodeBlock · forms × densities", "both", "transcript", "CodeBlock", () => <FormTable rows={reading(CODE_FORMS)} on={["desktop", "phone"]} widths={["180px", "minmax(0, 1fr)", "minmax(0, 1fr)"]} />, "row"),
+    ] },
+    { title: "In the app", note: "where the app draws one", layout: "desktop", atoms: [
+      lib("code-in-app", "CodeBlock · in the app", "both", "transcript", "chat/code-block.ts", () => <FormTable rows={reading(CODE_IN_APP)} on={["desktop", "phone"]} widths={["minmax(0, 1fr)", "minmax(0, 1fr)"]} stacked />, "row"),
     ] },
   ] },
   { title: "Transcript", rail: "Transcript", note: "what is read, at the transcript's scale (Space · Scale, Settings · Text size); a row's text there (a trace, a trail) is a step under the body on both densities: the user's Message (a Bubble and its foot) and a Turn (its trace header, the answer, the answer's foot). The answer is Markdown with no bubble in the Body role, one gap between blocks; the trail sits a step under it", groups: [
