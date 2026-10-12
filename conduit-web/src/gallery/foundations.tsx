@@ -1,7 +1,7 @@
-import { createSignal, For, onCleanup, onMount, type JSX } from "solid-js";
+import { createSignal, For, onCleanup, onMount, Show, type JSX } from "solid-js";
 import { ArrowUpIcon, CameraIcon, CopyIcon, FolderIcon, MicIcon, MonitorIcon, PaperclipIcon, PlusIcon, SettingsIcon, ShareIcon, Trash2Icon } from "lucide-solid";
 import { Spinner } from "@/components/primitives";
-import { Segmented, Bubble, Button, Frost, HeadingSection, Input, Item, Keycap, Menu, NavRow, Overlay, OverlayBar, PillButton, PillField, PillGroup, Section, SelectTrigger, TextArea, Toolbar } from "@/components/ui";
+import { Segmented, Bubble, Button, Frost, Chip, CodeBlock, CopyButton, Disclosure, Toast, type Motion as Move, HeadingSection, Input, Item, Keycap, Menu, NavRow, Overlay, OverlayBar, PillButton, PillField, PillGroup, Section, SelectTrigger, TextArea, Toolbar } from "@/components/ui";
 import { px, InUse, style, bg, fg, edge, rounding, tall, icon, FormTable, form, type Mark, type FormRow } from "./specs";
 import { lib, Levels, SegmentedCount, SegmentedIcons, SegmentedText, SwitchDemo, type Family } from "./library";
 import "katex/dist/katex.min.css";
@@ -216,6 +216,87 @@ const SPACE: TokenGroup[] = [
   { title: "Frost", rows: [tok("--frost-inset", "a popover's padding round its rows", length("--frost-inset"), bar("--frost-inset"))] },
   { title: "Composer", rows: [tok("--composer-width", "declared by the pane, not the composer", (cell) => { const el = document.createElement("div"); el.style.position = "absolute"; el.style.width = "var(--composer-width, 47.5rem)"; cell.append(el); const value = getComputedStyle(el).width; el.remove(); return `${px(value)} (47.5rem unless the pane says)`; }), tok("--cmp-field-min", "the field's least height", classLength("ui-composer-field", "--cmp-field-min")), tok("--cmp-bar-min", "the toolbar's height", classLength("ui-toolbar", "--cmp-bar-min")), tok("--cmp-slot", "a toolbar button", classLength("ui-toolbar", "--cmp-slot"))] },
 ];
+/* Motion: the moves, played on the library's own pieces; the tokens; and the app's moves against them. */
+const ms = (name: string) => parseFloat(getComputedStyle(document.documentElement).getPropertyValue(name)) * (getComputedStyle(document.documentElement).getPropertyValue(name).includes("ms") ? 1 : 1000);
+/** A piece that arrives (entering or settling) each time it is played, and on Leave drops back, then returns. */
+function Arrival(props: { move: Move; children: (move: () => Move | undefined) => JSX.Element; leave?: boolean }) {
+  const [run, setRun] = createSignal(1), [move, setMove] = createSignal<Move | undefined>(undefined), [shown, setShown] = createSignal(true);
+  const play = () => {
+    if (!props.leave) { setMove(props.move); setRun(run() + 1); return; }
+    setMove("leaving");
+    setTimeout(() => { setShown(false); setTimeout(() => { setMove("entering"); setShown(true); setRun(run() + 1); }, 500); }, ms("--duration-leave"));
+  };
+  return <div class="g-motion-stage">
+    <Button size="sm" variant="ghost" outline onClick={play}>{props.leave ? "Leave" : "Play"}</Button>
+    <div class="g-motion-piece"><Show when={shown() && run()} keyed>{(_) => props.children(move)}</Show></div>
+  </div>;
+}
+const LONG_CODE = Array.from({ length: 12 }, (_, i) => `  step(${i + 1});`).join("\n");
+function UnfoldDemo() { const [open, setOpen] = createSignal(false); return <CodeBlock lang="ts" code={LONG_CODE} fold={4} open={open()} onToggle={() => setOpen(!open())} />; }
+function TurnDemo() { const [open, setOpen] = createSignal(false); return <Disclosure header={<span>Thinking · 3s</span>} open={open()} onToggle={() => setOpen(!open())}><span class="g-motion-note">A chevron turns in place.</span></Disclosure>; }
+function CopiedDemo() { const [copied, setCopied] = createSignal(false); return <CodeBlock lang="sh" code={"npm run gallery"} copied={copied()} onCopy={() => { setCopied(true); setTimeout(() => setCopied(false), 1200); }} />; }
+function SegDemo() { const [v, setV] = createSignal<"a" | "b" | "c">("a"); return <Segmented label="Demo" value={v()} options={[{ value: "a", label: "Day" }, { value: "b", label: "Week" }, { value: "c", label: "Month" }]} onChange={setV} />; }
+const menu = (move: () => Move | undefined) => <Menu motion={move()}><Section><Item icon={<FolderIcon />}>Open</Item><Item icon={<CopyIcon />}>Copy link</Item></Section></Menu>;
+interface MoveRow { name: string; use: string; rule: string; demo: () => JSX.Element }
+const MOVES: MoveRow[] = [
+  { name: "Arrive", use: "a surface arriving: a popover, a card, an overlay, a toast. It rises --space-md with a fade and settles", rule: "--duration-arrive · --ease-arrive · motion=\"entering\"", demo: () => <Arrival move="entering">{menu}</Arrival> },
+  { name: "Leave", use: "quick, accelerating, back the way it came; nothing in it answers the pointer while it goes. One leaves, then the other arrives", rule: "--duration-leave · --ease-leave · motion=\"leaving\"", demo: () => <Arrival move="entering" leave>{(m) => <Toast kind="success" motion={m()}>Saved to Downloads</Toast>}</Arrival> },
+  { name: "Settle", use: "content rising into place, slower than a surface: a card out of the composer, a chip, a step, a page's first fade", rule: "--duration-settle · --ease-arrive · motion=\"settling\"", demo: () => <Arrival move="settling">{(m) => <div class="g-motion-row"><Chip name="notes.md" detail="2 KB" motion={m()} /><Chip name="plan.pdf" detail="140 KB" motion={m()} /></div>}</Arrival> },
+  { name: "Unfold · fold", use: "a row the reader opens pushes what is below (the one height move); it folds back quicker", rule: "--duration-arrive · --ease-arrive, then --duration-leave · --ease-leave", demo: () => <UnfoldDemo /> },
+  { name: "Change", use: "in place, nothing moves: a hover wash, a chevron's turn, a colour; a segmented thumb slides to its pick", rule: "--duration-change · --ease-change (the thumb: --duration-arrive · --ease-arrive)", demo: () => <div class="g-motion-row"><TurnDemo /><SegDemo /></div> },
+  { name: "Copied", use: "Copy's check, and a --tint wash over what was copied, fading", rule: "--duration-wash · ease-out", demo: () => <CopiedDemo /> },
+  { name: "Pulse", use: "one breath of something still going: a folded fence still being written", rule: "--duration-pulse · ease-in-out, infinite", demo: () => <CodeBlock lang="ts" code={LONG_CODE} fold={3} streaming /> },
+];
+function Moves() {
+  return <div class="g-moves"><For each={MOVES}>{(row) => <div class="g-move">
+    <div class="g-scale-name"><strong>{row.name}</strong><small>{row.use}</small><code>{row.rule}</code></div>
+    <div class="g-move-demo" data-density="desktop">{row.demo()}</div>
+  </div>}</For></div>;
+}
+/** A dot crossing a track, again and again, at the token's pace or along its curve. */
+const run = (duration: string, easing: string) => () => <div class="g-run"><span style={{ "animation-duration": `calc(${duration} * 1)`, "animation-timing-function": easing }} /></div>;
+const MOTION: TokenGroup[] = [
+  { title: "Three curves", rows: [
+    tok("--ease-arrive", "arriving, opening, rising: long and gentle, it settles", colour("--ease-arrive"), run("1.2s", "var(--ease-arrive)")),
+    tok("--ease-leave", "leaving, folding away: it accelerates out", colour("--ease-leave"), run("1.2s", "var(--ease-leave)")),
+    tok("--ease-change", "a change in place: a wash, a turn, a colour", colour("--ease-change"), run("1.2s", "var(--ease-change)")),
+  ] },
+  { title: "Six durations, by what moves", rows: [
+    tok("--duration-change", "in place: a hover wash, a chevron's turn, a colour", colour("--duration-change"), run("var(--duration-change)", "var(--ease-change)")),
+    tok("--duration-leave", "leaving, folding away", colour("--duration-leave"), run("var(--duration-leave)", "var(--ease-leave)")),
+    tok("--duration-arrive", "a surface arriving, a fold opening", colour("--duration-arrive"), run("var(--duration-arrive)", "var(--ease-arrive)")),
+    tok("--duration-settle", "content rising into place", colour("--duration-settle"), run("var(--duration-settle)", "var(--ease-arrive)")),
+    tok("--duration-wash", "a flash fading: copied", colour("--duration-wash"), run("var(--duration-wash)", "ease-out")),
+    tok("--duration-pulse", "one breath of something still going", colour("--duration-pulse"), run("var(--duration-pulse)", "ease-in-out")),
+  ] },
+];
+/** The app's moves, what they are now and what they take in v2: the port's list. */
+const APP_MOVES: [string, string, string, string][] = [
+  ["The first open: every region fades in once", "motion-rules.ts · 300ms gentle", "settle (a fade, no rise)", "app"],
+  ["A route: the main pane leaves, then arrives", "motion-rules.ts · 200ms quick, 300ms gentle", "leave, then settle", "app"],
+  ["Frost arriving: a popover, a menu, the bubble", "frost-arrive · 220ms gentle, 8px", "arrive", "Menu, Toast motion"],
+  ["The leader: rises in, drops back; its scrim dims", "leader-menu-* · 220ms in, 150ms out", "arrive · leave (the scrim: change)", "port"],
+  ["Composer cards: rise out of it, drop back, fade on remove", "composer-card-* · 300ms, 200ms, 150ms", "settle · leave · change", "port"],
+  ["A question card rises above the composer", "question-rise · 300ms, 32px, after 150ms", "settle, a beat after the composer moves", "port"],
+  ["An attachment chip arrives", "attachment-chip-in · 300ms, from 85%", "settle", "Chip motion"],
+  ["A trace step arrives in an open trace", "turn-trace-step-in · 300ms, 4px", "settle", "port (Step)"],
+  ["A Disclosure unfolds and folds", "disclosure.tsx · 200ms gentle / 200ms quick", "unfold · fold", "CodeBlock; Disclosure: port"],
+  ["A code block opens and folds", "none (it jumps)", "unfold · fold", "CodeBlock"],
+  ["An answer's actions fade in", "response-actions-in · 240ms ease-out", "arrive (a fade)", "port (MessageFoot)"],
+  ["A sent message arrives", "message-arrive · 180ms ease-out", "change (a fade)", "port"],
+  ["The composer's send / stop slot", "composer-slot-in · 150ms, from 60%; aside 200ms", "change · arrive", "port"],
+  ["The sidebar's rail fades in when it collapses", "sidebar-rail-in · 180ms ease", "change", "port"],
+  ["Panes ease to their widths", "--panel-motion-duration · 160ms ease", "arrive (a width, one of the exceptions)", "port"],
+  ["Segmented thumb, spotlight", "200ms gentle", "arrive", "Segmented, Spotlight"],
+  ["Copied", "conduit-copy-flash · a ring, 620ms", "the copied wash", "CopyButton"],
+  ["A fence still being written, folded", "artifact-streaming-pulse · 1.6s", "pulse", "CodeBlock"],
+  ["Streaming words, the orb, dictation, the voice composer", "their own pacing (a setting, the orb's frames, the input level)", "theirs: not a move", "app"],
+];
+const AppMoves = () => <div class="g-app-moves">
+  <div class="g-scale-head"><span>Move</span><span>In the app now</span><span>Takes</span><span>In v2</span></div>
+  <For each={APP_MOVES}>{([move, now, takes, v2]) => <div class="g-app-move"><span>{move}</span><code>{now}</code><span>{takes}</span><span data-state={v2 === "port" || v2.includes("port") ? "port" : v2 === "app" ? "app" : "done"}>{v2}</span></div>}</For>
+</div>;
+
 const RADII: TokenGroup[] = [
   { title: "Four radii (DESIGN.md rounded)", rows: [
     tok("--radius-control", "rows, buttons, inputs, keycaps, chips: in the density unit", length("--radius-control"), corner("--radius-control")),
@@ -422,6 +503,13 @@ export const foundationFamilies: Family[] = [
     lib("radius-inuse", "Radius in use", "both", "radius", "Menu · Overlay · Bubble · PillField · PillButton", () => <InUse scene={radiusScene} marks={RADIUS_MARKS} />, "row"),
   ] }, { title: "Tokens", layout: "desktop", atoms: [
     lib("radius-tokens", "Radii", "both", "radius", "library.css --radius-*", () => <TokenTable groups={RADII} />, "row"),
+  ] }] },
+  { title: "Motion", rail: "Foundations", note: "motion explains a change of place (DESIGN Motion): arriving settles, leaving is quicker and accelerates, a change in place eases; only transform and opacity, but for a fold the reader opens. Three curves and six durations, by what moves; reduced motion keeps the end state and drops the move", groups: [{ title: "In use", note: "each move, played on the library's own pieces", layout: "desktop", atoms: [
+    lib("motion-moves", "Moves", "both", "motion", "library.css --ease-* · --duration-* · [data-entering] · [data-leaving]", () => <Moves />, "row"),
+  ] }, { title: "Tokens", layout: "desktop", atoms: [
+    lib("motion-tokens", "Motion", "both", "motion", "library.css :root", () => <TokenTable groups={MOTION} density={false} />, "row"),
+  ] }, { title: "In the app", note: "every move the app makes, what it is now and what it takes: the port's list. Values the app tunes per move (120, 160, 180, 240ms) fold onto the tokens", layout: "desktop", atoms: [
+    lib("motion-in-app", "Motion · in the app", "both", "motion", "client/**/*.css @keyframes · transition", () => <AppMoves />, "row"),
   ] }] },
   { title: "Controls", rail: "Foundations", stage: true, note: "what sits on any surface. A surface sets two values, --tint (its lines and washes) and --well (the fill under an input or an outline button), and a control reads only those; so each is drawn once, on the surface and at the density picked above", groups: [
     { title: "In use", note: "the same controls on the ground and over frost: what each takes from the surface under it", layout: "desktop", atoms: [

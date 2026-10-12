@@ -64,8 +64,12 @@ export function moveCursor(event: PointerEvent & { currentTarget: Element }) {
   row.setAttribute(attr, attr === "data-active" ? "true" : "");
 }
 
-export function Menu(props: { class?: string; density?: Density; children: JSX.Element }) {
-  return <div role="menu" class={cn("ui-frost ui-menu", props.class)} onPointerOver={moveCursor} data-density={props.density} data-surface="frost" data-lift="raised">{props.children}</div>;
+/** A piece's move (Foundations · Motion): entering rises in (a surface), settling rises in slower (content), leaving drops back. */
+export type Motion = "entering" | "settling" | "leaving";
+const motionOf = (motion?: Motion) => ({ "data-entering": motion === "entering" ? "" : motion === "settling" ? "settle" : undefined, "data-leaving": motion === "leaving" ? "" : undefined });
+
+export function Menu(props: { class?: string; density?: Density; motion?: Motion; children: JSX.Element }) {
+  return <div role="menu" class={cn("ui-frost ui-menu", props.class)} onPointerOver={moveCursor} data-density={props.density} data-surface="frost" data-lift="raised" {...motionOf(props.motion)}>{props.children}</div>;
 }
 
 /** A menu's section: a list of items (the default) or a slider, with an optional title and a note beside it. */
@@ -181,9 +185,9 @@ export function Line(props: { text: string; clipped?: boolean }) {
     <Show when={props.clipped}><button type="button" class="ui-line-more" aria-label={open() ? "Show less" : "Show more"} onClick={() => setOpen(!open())}><ChevronDownIcon /></button></Show></li>;
 }
 /** An attached thing: an image's thumbnail, or a file's mark, name and size. */
-export function Chip(props: { name: string; detail?: string; image?: string; icon?: JSX.Element; status?: "uploading" | "error" | "done"; progress?: number }) {
+export function Chip(props: { name: string; detail?: string; image?: string; icon?: JSX.Element; status?: "uploading" | "error" | "done"; progress?: number; motion?: Motion }) {
   const ring = 2 * Math.PI * 9;
-  return <div class="ui-chip" data-kind={props.image ? "image" : "file"} data-status={props.status ?? "done"}>
+  return <div class="ui-chip" data-kind={props.image ? "image" : "file"} data-status={props.status ?? "done"} {...motionOf(props.motion)}>
     <button type="button" class="ui-chip-body" aria-label={`Show ${props.name}`}>
       <span class="ui-chip-media"><Show when={props.image} fallback={props.icon}><img src={props.image} alt="" /></Show>
         <Show when={props.status === "uploading"}><svg class="ui-chip-ring" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" /><circle cx="12" cy="12" r="9" stroke-dasharray={`${ring}`} stroke-dashoffset={ring * (1 - (props.progress ?? 40) / 100)} /></svg></Show></span>
@@ -272,9 +276,9 @@ export function OverlayPage(props: { title: string; status?: string; failed?: bo
  */
 export type ToastKind = "success" | "info" | "warning" | "error";
 const TOAST_ICONS: Record<ToastKind, () => JSX.Element> = { success: () => <CircleCheckIcon />, info: () => <InfoIcon />, warning: () => <TriangleAlertIcon />, error: () => <CircleXIcon /> };
-export function Toast(props: { kind?: ToastKind; children: JSX.Element; action?: { label: string; onClick?: () => void }; onDismiss?: () => void; density?: Density }) {
+export function Toast(props: { kind?: ToastKind; children: JSX.Element; action?: { label: string; onClick?: () => void }; onDismiss?: () => void; density?: Density; motion?: Motion }) {
   const kind = () => props.kind ?? "info";
-  return <div role={kind() === "error" ? "alert" : "status"} class="ui-frost ui-toast" data-kind={kind()} data-density={props.density} data-surface="frost" data-lift="raised">
+  return <div role={kind() === "error" ? "alert" : "status"} class="ui-frost ui-toast" data-kind={kind()} data-density={props.density} data-surface="frost" data-lift="raised" {...motionOf(props.motion)}>
     <span class="ui-toast-icon">{TOAST_ICONS[kind()]()}</span>
     <p class="ui-toast-text">{props.children}</p>
     <Show when={props.action}>{(action) => <Button variant="ghost" outline size="sm" onClick={() => action().onClick?.()}>{action().label}</Button>}</Show>
