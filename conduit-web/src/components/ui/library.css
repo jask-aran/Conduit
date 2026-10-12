@@ -28,7 +28,7 @@
    measured sizes (rows ~1.8x, for a finger). Sizes below are written in desktop px over 12.8. */
 /* The faces, by role (Foundations · Fonts switches them; --font-sans, the main UI's, is styles.css's).
    Section labels take a mono the library ships (Paper Mono, above), so they look
-   the same on every system, the system's mono only as the fallback; meta and keycaps stay the system's. */
+   the same on every system, the system's mono only as the fallback; keycaps and the leader's crumbs take it too; meta stays the system's. */
 :root {
   --font-label: "Paper Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
   --font-code: ui-monospace, SFMono-Regular, Consolas, monospace;
@@ -141,7 +141,7 @@
 .ui-row[data-destructive] { color: var(--destructive); }
 .ui-row[data-destructive][data-highlighted] { background: color-mix(in oklch, var(--destructive), transparent 85%); }
 
-.ui-keycap { display: inline-grid; min-width: calc(1.25 * var(--u-space)); height: calc(1.25 * var(--u-space)); place-items: center; border: 1px solid oklch(1 0 0 / 16%); border-radius: calc(0.3125 * var(--u-space)); background: oklch(0 0 0 / 12%); padding: 0 calc(0.3125 * var(--u-space)); color: var(--muted-foreground); font: 550 calc(0.6875 * var(--u-type))/1 ui-monospace, SFMono-Regular, Menlo, monospace; }
+.ui-keycap { display: inline-grid; min-width: calc(1.25 * var(--u-space)); height: calc(1.25 * var(--u-space)); place-items: center; border: 1px solid oklch(1 0 0 / 16%); border-radius: calc(0.3125 * var(--u-space)); background: oklch(0 0 0 / 12%); padding: 0 calc(0.3125 * var(--u-space)); color: var(--muted-foreground); font: 550 calc(0.6875 * var(--u-type))/1 var(--font-label); }
 .ui-row[data-highlighted] .ui-keycap { color: var(--foreground); }
 
 /* Card: the menu's container at dialog padding. */
@@ -541,7 +541,7 @@
 .ui-leader .ui-keys[data-first] .ui-keycap { color: var(--foreground); }
 /* Crumbs: the breadcrumb's place caps; the current place white, no fill. */
 .ui-crumbs { display: flex; min-width: 0; flex: 1; align-items: center; justify-content: flex-end; gap: 2px; overflow: hidden; }
-.ui-crumbs > button { flex: none; border: 0; border-radius: calc(0.46875 * var(--u-space)); background: transparent; padding: 2px calc(0.390625 * var(--u-space)); color: var(--muted-foreground); font: 500 calc(0.7421875 * var(--u-type))/1.2 ui-monospace, SFMono-Regular, Consolas, monospace; letter-spacing: .07em; text-transform: uppercase; cursor: pointer; }
+.ui-crumbs > button { flex: none; border: 0; border-radius: calc(0.46875 * var(--u-space)); background: transparent; padding: 2px calc(0.390625 * var(--u-space)); color: var(--muted-foreground); font: 500 calc(0.7421875 * var(--u-type))/1.2 var(--font-label); letter-spacing: .07em; text-transform: uppercase; cursor: pointer; }
 .ui-crumbs > button:hover:not(:disabled) { background: var(--frost-wash); color: var(--foreground); }
 .ui-crumbs > button[aria-current="true"] { color: var(--foreground); font-weight: 700; }
 .ui-crumbs > button:disabled { opacity: .55; cursor: default; }
