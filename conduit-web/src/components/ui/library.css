@@ -83,6 +83,8 @@
   --frost-lift-raised: 0 24px 70px rgb(0 0 0 / 38%);
   --frost-core-ground: oklch(0.3 0.006 264 / 90%); /* a mid grey, nearly opaque: it stops what is behind, without going dark */
   --frost-tint: oklch(1 0 0 / 10%);
+  /* The dim over the page behind a desktop overlay (the scrim) or round the leader's lit composer (the spotlight). */
+  --dim: rgb(0 0 0 / 42%);
   /* State: a runtime dot, a warning. */
   --live: oklch(0.62 0.17 145); --warn: oklch(0.75 0.15 75);
 }
@@ -511,7 +513,7 @@
 
 /* Overlay: raised frost over a dimmed page (palette, chat search, settings).
    Sizes measured from the app at desktop, written over 12.8 so a phone scales. */
-.ui-scrim { display: grid; grid-template-columns: minmax(0, 1fr); justify-items: center; align-items: start; background: rgb(0 0 0 / 42%); padding: calc(1 * var(--u-space)); }
+.ui-scrim { display: grid; grid-template-columns: minmax(0, 1fr); justify-items: center; align-items: start; background: var(--dim); padding: calc(1 * var(--u-space)); }
 .ui-scrim[data-placement="center"] { align-items: center; }
 .ui-frost.ui-overlay { display: flex; width: min(var(--overlay-width, calc(40 * var(--u-space))), 100%); max-height: var(--overlay-height, none); flex-direction: column; overflow: hidden; border-radius: var(--radius-surface); padding: 0; color: var(--foreground); font-size: var(--text-body); }
 .ui-overlay[data-layout="rail"] { flex-direction: row; }
@@ -586,7 +588,7 @@
 .ui-crumbs-sep { color: var(--muted-foreground); font-size: var(--text-meta); opacity: .6; }
 /* Spotlight: the dim is the shadow round the lit region. */
 .ui-spotlight { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
-.ui-spotlight-lit { position: absolute; box-shadow: 0 0 0 200vmax rgb(0 0 0 / 48%); transition: top 200ms cubic-bezier(.2, .8, .2, 1), left 200ms cubic-bezier(.2, .8, .2, 1), width 200ms cubic-bezier(.2, .8, .2, 1), height 200ms cubic-bezier(.2, .8, .2, 1); }
+.ui-spotlight-lit { position: absolute; box-shadow: 0 0 0 200vmax var(--dim); transition: top 200ms cubic-bezier(.2, .8, .2, 1), left 200ms cubic-bezier(.2, .8, .2, 1), width 200ms cubic-bezier(.2, .8, .2, 1), height 200ms cubic-bezier(.2, .8, .2, 1); }
 .ui-spotlight-lit[data-whole] { top: 50%; left: 50%; width: 0; height: 0; }
 @media (prefers-reduced-motion: reduce) { .ui-spotlight-lit { transition: none; } }
 .ui-leader .ui-overlay-hints { gap: calc(0.234375 * var(--u-space)) calc(0.625 * var(--u-space)); }
