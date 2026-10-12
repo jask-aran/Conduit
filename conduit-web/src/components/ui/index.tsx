@@ -262,6 +262,18 @@ export function OverlayPage(props: { title: string; status?: string; failed?: bo
   </main>;
 }
 
+/** Recording a shortcut: a second line under the setting, the same height, in place of a panel. A red dot and
+ *  "Press a shortcut" until keys arrive, then the chord as one keycap, as the list shows it; the keys that steer it, and Save once there is something to save. */
+export const SettingRecorder = (props: { keys?: string[]; onSave?: () => void; onCancel?: () => void }) =>
+  <div class="ui-setting-recorder" role="status" aria-live="polite">
+    <span class="ui-recorder-dot" aria-hidden="true" />
+    <Show when={props.keys?.length} fallback={<span class="ui-recorder-prompt">Press a shortcut</span>}>
+      <kbd class="ui-keycap ui-recorder-keys">{props.keys!.join(" ")}</kbd>
+    </Show>
+    <span class="ui-recorder-hints"><kbd class="ui-keycap">Esc</kbd>cancel<kbd class="ui-keycap">Backspace</kbd>clear</span>
+    <Button size="sm" outline disabled={!props.keys?.length} onClick={() => props.onSave?.()}>Save</Button>
+  </div>;
+
 /** A titled group of SettingLines; groups after the first are ruled off. */
 export const SettingGroup = (props: { title: string; children: JSX.Element }) =>
   <section class="ui-setting-group" aria-label={props.title}><div class="ui-nav-label">{props.title}</div>{props.children}</section>;
