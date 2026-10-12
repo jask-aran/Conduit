@@ -176,7 +176,7 @@
 .ui-row[data-destructive][data-highlighted] { background: color-mix(in oklch, var(--destructive), transparent 85%); }
 
 /* A keycap is small inside a row, so its corner is a share of the control radius (~4px on desktop), and its text the label size. */
-.ui-keycap { display: inline-grid; min-width: calc(1.25 * var(--u-space)); height: calc(1.25 * var(--u-space)); place-items: center; border-radius: calc(0.6 * var(--radius-control)); background: var(--tint); padding: 0 calc(0.3125 * var(--u-space)); color: var(--muted-foreground); font: var(--weight-lift) var(--text-label)/1 var(--font-label); }
+.ui-keycap { display: inline-grid; min-width: calc(1.125 * var(--u-space)); height: calc(1.125 * var(--u-space)); place-items: center; border-radius: calc(0.6 * var(--radius-control)); background: var(--tint); padding: 0 calc(0.25 * var(--u-space)); color: var(--muted-foreground); font: var(--weight-lift) var(--text-label)/1 var(--font-label); }
 .ui-row[data-highlighted] .ui-keycap { color: var(--foreground); }
 
 /* Card: the menu's container at dialog padding. */
