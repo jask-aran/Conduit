@@ -246,3 +246,16 @@ html, body { background: var(--frame, #08090a); color: var(--foreground); }
 .g-role-uses { margin: 0; color: var(--muted-foreground); font-size: 12px; text-align: center; }
 .g-role > .g-tokens { justify-self: stretch; }
 .g-wordmark { font: 18px/1 var(--font-wordmark); }
+
+/* Type · Scale: a role per row, desktop beside phone. */
+.g-scale { display: grid; width: 100%; }
+.g-scale-head, .g-scale-row { display: grid; grid-template-columns: 200px 1fr 1fr; align-items: center; gap: 16px; border-bottom: 1px solid var(--border); padding: 10px 4px; }
+.g-scale-head { color: var(--muted-foreground); font-size: 11px; font-weight: 600; }
+.g-scale-name { display: grid; gap: 2px; font-size: 12.5px; }
+.g-scale-name small { color: var(--muted-foreground); font-size: 11px; }
+.g-scale-cell { display: flex; align-items: center; gap: 16px; font-size: inherit; }
+.g-scale-sample { display: flex; min-width: 0; flex: none; }
+.g-scale-sample .ui-menu { min-width: 0; }
+.g-scale-spec { display: grid; gap: 1px; font: 10.5px/1.4 ui-monospace, monospace; }
+.g-scale-spec small { color: var(--muted-foreground); font-size: inherit; }
+.g-ground { border-radius: 10px; background: var(--background); box-shadow: inset 0 0 0 1px var(--border); padding: 4px; }
