@@ -70,6 +70,8 @@
   --space-2xs: calc(0.125 * var(--u-space)); --space-xs: calc(0.25 * var(--u-space)); --space-sm: calc(0.375 * var(--u-space));
   --space-md: calc(0.5 * var(--u-space)); --space-lg: calc(0.75 * var(--u-space)); --space-xl: var(--u-space);
   --space-2xl: calc(1.25 * var(--u-space)); --space-3xl: calc(1.5 * var(--u-space)); --space-4xl: calc(2 * var(--u-space));
+  /* Icons: five sizes -- a × in a tiny control, a chevron, the icon, a pill's, a ring. */
+  --icon-xs: calc(0.6875 * var(--u-icon)); --icon-sm: calc(0.875 * var(--u-icon)); --icon: var(--u-icon); --icon-lg: calc(1.125 * var(--u-icon)); --icon-xl: calc(1.5 * var(--u-icon));
   /* Controls: four heights (an icon button is as wide as it is tall). */
   --control-xs: calc(1.5 * var(--u-space)); --control-sm: calc(1.875 * var(--u-space)); --control: calc(2.25 * var(--u-space)); --control-lg: calc(2.5 * var(--u-space));
   /* Rows: their measured height and text, in the unit; inset, pad and gap are steps. */
@@ -82,7 +84,7 @@
    message: the composer (the phone's field too) and the user's message, one value on phone
    and desktop -- a capsule at one line, held as the composer grows; round: fully round at any
    size -- the phone's pill groups and buttons, which never grow, and small bits inside controls. */
-:root, [data-density] {
+:root, [data-density], .ui-bubble {
   --radius-control: calc(0.5 * var(--u-space)); --radius-surface: calc(var(--radius-control) + var(--frost-inset));
   --radius-message: calc(22px * var(--scale-transcript)); --radius-round: 999px;
   /* Five type sizes, by role (Type · Scale): label, the section label and keycaps; caption, details,
@@ -91,7 +93,7 @@
   --text-label: calc(0.625 * var(--u-type)); --text-caption: calc(0.75 * var(--u-type));
   --text-row: var(--row-text); --text-body: var(--u-type); --text-heading: calc(1.40625 * var(--u-type));
   --frost-radius: var(--radius-surface); --row-radius: var(--radius-control);
-  --pill-icon: calc(1.125 * var(--u-icon)); --pill-field-radius: var(--radius-message);
+  --pill-icon: var(--icon-lg); --pill-field-radius: var(--radius-message);
 }
 [data-density] { font-family: var(--font-sans); font-size: var(--text-row); }
 :root {
@@ -145,7 +147,7 @@
 .ui-pill-field { display: flex; width: 100%; height: auto; min-height: var(--pill-size); align-items: center; border-radius: var(--pill-field-radius); padding: 0 var(--pill-field-pad); }
 .ui-pill-field .ui-textarea { width: 100%; max-height: 220px; border: 0; background: transparent; padding: calc((var(--pill-size) - var(--space-2xs) - 1.4em) / 2) 0; color: inherit; font: inherit; font-size: var(--text-body); line-height: 1.4; resize: none; outline: none; field-sizing: content; }
 .ui-pill-field .ui-textarea::placeholder { color: var(--muted-foreground); }
-.ui-pill > button svg { width: var(--u-icon); height: var(--u-icon); }
+.ui-pill > button svg { width: var(--icon); height: var(--icon); }
 
 /* Menu: a raised container; rows sit concentric inside it. */
 .ui-menu { outline: none; display: flex; min-width: calc(12 * var(--u-type)); flex-direction: column; border-radius: var(--frost-radius); padding: var(--frost-inset); }
@@ -159,7 +161,7 @@
 .ui-section { display: flex; flex-direction: column; }
 .ui-section + .ui-section { margin-top: var(--frost-inset); border-top: 1px solid var(--tint); margin-inline: calc(-1 * var(--frost-inset)); padding: var(--frost-inset) var(--frost-inset) 0; }
 .ui-search-section { flex-direction: row; align-items: center; gap: var(--row-gap); padding: var(--row-pad); }
-.ui-search-section > svg { width: calc(1 * var(--u-icon)); height: calc(1 * var(--u-icon)); flex: none; color: var(--muted-foreground); }
+.ui-search-section > svg { width: var(--icon); height: var(--icon); flex: none; color: var(--muted-foreground); }
 .ui-search-section .ui-keys { display: inline-flex; flex: none; gap: 2px; }
 .ui-search { min-width: 0; flex: 1; border: 0; background: transparent; padding: 0; color: var(--foreground); font-size: var(--text-row); outline: none; }
 .ui-search::placeholder { color: var(--muted-foreground); }
@@ -168,15 +170,15 @@
 .ui-row { display: flex; width: 100%; min-height: var(--row-min); align-items: center; gap: var(--row-gap); border: 0; border-radius: var(--row-radius); background: transparent; padding: var(--row-pad); color: color-mix(in oklch, var(--foreground), transparent 32%); font-size: var(--text-row); font-weight: var(--weight-rest); line-height: 1.5; text-align: left; cursor: default; user-select: none; outline: none; }
 /* The icon slot: every leading mark -- a lucide icon, a workspace glyph, a
    harness mark -- fills one icon-sized square. */
-.ui-icon { display: inline-grid; width: var(--u-icon); height: var(--u-icon); flex: none; place-items: center; }
+.ui-icon { display: inline-grid; width: var(--icon); height: var(--icon); flex: none; place-items: center; }
 .ui-icon > * { width: 100% !important; height: 100% !important; }
 .ui-icon > .workspace-glyph svg { width: 100%; height: 100%; }
-.ui-icon:has(> .harness-mark) { width: calc(0.875 * var(--u-type)); height: calc(0.875 * var(--u-type)); }
+.ui-icon:has(> .harness-mark) { width: var(--icon-sm); height: var(--icon-sm); }
 .ui-row > .ui-label { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* Meta: muted mono beside the title, right-aligned, tabular. */
 .ui-row > :is(small, .ui-meta) { flex: none; margin-left: auto; color: var(--muted-foreground); font: var(--weight-rest) var(--text-caption) var(--font-data); font-variant-numeric: tabular-nums; }
 .ui-row > .ui-keys { display: inline-flex; flex: none; gap: var(--space-xs); }
-.ui-row > .ui-chevron { width: calc(0.875 * var(--u-type)); height: calc(0.875 * var(--u-type)); color: var(--muted-foreground); }
+.ui-row > .ui-chevron { width: var(--icon-sm); height: var(--icon-sm); color: var(--muted-foreground); }
 /* The cursor (DESIGN Interaction): one row at a time, the wash, white, no change of weight.
    The pointer moves it (moveCursor), as the keyboard does; hover alone never washes a second row. */
 .ui-row:is([data-highlighted], [data-expanded]) { background: var(--tint); color: var(--foreground); }
@@ -204,7 +206,7 @@
 .ui-keycap[data-editable] { display: inline-flex; height: calc(1.5625 * var(--u-space)); overflow: hidden; padding: 0; color: var(--foreground); font-size: var(--text-caption); }
 .ui-keycap[data-editable] > button { display: inline-flex; height: 100%; align-items: center; border: 0; background: transparent; padding: 0 var(--space-sm); color: inherit; font: inherit; cursor: pointer; }
 .ui-keycap[data-editable] > .ui-keycap-remove { width: calc(1.25 * var(--u-space)); justify-content: center; border-left: 1px solid var(--tint); padding: 0; color: var(--muted-foreground); }
-.ui-keycap-remove svg { width: calc(0.625 * var(--u-icon)); height: calc(0.625 * var(--u-icon)); }
+.ui-keycap-remove svg { width: var(--icon-xs); height: var(--icon-xs); }
 .ui-keycap[data-editable] > button:is(:hover, :focus-visible) { outline: 0; background: var(--tint); color: var(--foreground); }
 
 /* The box: what holds a value is a --tint line at the control corner -- an input, a text area in a
@@ -259,7 +261,7 @@
    destructive as a line in its colour with nothing inside. */
 :where(.ui-button) { display: inline-flex; height: var(--control); flex: none; align-items: center; justify-content: center; gap: var(--space-sm); border: 1px solid transparent; border-radius: var(--radius-control); padding: 0 var(--space-xl); font-size: var(--text-row); font-weight: var(--weight-strong); white-space: nowrap; cursor: pointer; transition: background-color .12s ease, border-color .12s ease, filter .12s ease; outline: none; }
 /* Zero-specificity: where the button sits sets its icon (a header, a composer), as in the app. */
-:where(.ui-button) svg { width: calc(1 * var(--u-icon)); height: calc(1 * var(--u-icon)); flex: none; }
+:where(.ui-button) svg { width: var(--icon); height: var(--icon); flex: none; }
 /* Keyboard focus is the wash and nothing else: never a ring. */
 .ui-button:focus-visible { outline: 0; background: var(--tint); }
 .ui-button[data-variant="primary"]:focus-visible { background: var(--primary); filter: brightness(0.88); }
@@ -282,7 +284,7 @@
 :where(.ui-button[data-size="icon"]) { width: var(--control); padding: 0; }
 /* icon-xs: a row of small actions under a message (time, copy, edit), round as the app draws them. */
 :where(.ui-button[data-size="icon-xs"]) { width: var(--control-xs); height: var(--control-xs); border-radius: var(--radius-round); padding: 0; }
-:where(.ui-button[data-size="icon-xs"]) svg { width: calc(0.875 * var(--u-icon)); height: calc(0.875 * var(--u-icon)); }
+:where(.ui-button[data-size="icon-xs"]) svg { width: var(--icon-sm); height: var(--icon-sm); }
 :where(.ui-button[data-size="icon-sm"]) { width: var(--control-sm); height: var(--control-sm); padding: 0; }
 
 /* Input: an input or a select's trigger, a box (above) a control tall; the bare
@@ -291,7 +293,7 @@
 .ui-input::placeholder { color: var(--muted-foreground); }
 .ui-input:is(:hover, :focus, [aria-expanded="true"]) { border-color: color-mix(in oklch, var(--foreground), transparent 70%); }
 .ui-input > span { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ui-input > svg { width: calc(1 * var(--u-icon)); height: calc(1 * var(--u-icon)); flex: none; color: var(--muted-foreground); }
+.ui-input > svg { width: var(--icon); height: var(--icon); flex: none; color: var(--muted-foreground); }
 .ui-input[data-bare] { width: auto; height: auto; border: 0; background: transparent; padding: var(--space-xs) 0; color: var(--muted-foreground); }
 .ui-input[data-bare]:hover { color: var(--foreground); }
 
@@ -305,7 +307,7 @@
    on others, where Windows draws their text without ClearType, so they dim while it moves. */
 .ui-seg-thumb { position: absolute; top: var(--seg-pad); bottom: var(--seg-pad); left: calc(var(--seg-pad) + (100% - 2 * var(--seg-pad)) / var(--segments) * var(--segment)); width: calc((100% - 2 * var(--seg-pad)) / var(--segments)); border-radius: var(--seg-inner); background: var(--tint); transition: left 200ms cubic-bezier(.2, .8, .2, 1); }
 .ui-seg button { position: relative; display: inline-flex; min-width: 0; min-height: calc(1.75 * var(--u-space)); align-items: center; justify-content: center; gap: var(--space-sm); border: 0; border-radius: var(--seg-inner); background: transparent; padding: 0 var(--space-lg); color: var(--muted-foreground); font-size: var(--text-row); font-weight: var(--weight-lift); cursor: pointer; }
-.ui-seg button svg { width: calc(1.125 * var(--u-icon)); height: calc(1.125 * var(--u-icon)); }
+.ui-seg button svg { width: var(--icon-lg); height: var(--icon-lg); }
 .ui-seg button small { color: var(--muted-foreground); font: var(--weight-rest) var(--text-caption) var(--font-data); }
 .ui-seg button:is(:hover, [aria-checked="true"]) { color: var(--foreground); }
 .ui-seg[data-icons] button { width: var(--control); padding: 0; }
@@ -330,8 +332,8 @@
 .ui-slider-head { display: flex; align-items: center; justify-content: space-between; gap: var(--row-gap); }
 .ui-slider-value { display: inline-flex; align-items: center; gap: var(--space-xs); border: 0; border-radius: var(--radius-control); background: transparent; padding: var(--space-xs) var(--space-xs) var(--space-xs) var(--space-sm); color: color-mix(in oklch, var(--foreground), transparent 38%); font-size: var(--text-caption); font-weight: var(--weight-rest); }
 .ui-slider-value[data-opens]:hover { background: var(--tint); color: var(--foreground); }
-.ui-slider-value svg { width: calc(0.75 * var(--u-type)); height: calc(0.75 * var(--u-type)); color: var(--muted-foreground); }
-.ui-slider-input { --thumb: calc(1.25 * var(--u-icon)); --track: 4px; width: 100%; height: calc(1.25 * var(--u-type)); margin: 0; appearance: none; -webkit-appearance: none; background: transparent; cursor: pointer; touch-action: pan-y; }
+.ui-slider-value svg { width: var(--icon-xs); height: var(--icon-xs); color: var(--muted-foreground); }
+.ui-slider-input { --thumb: calc(1.25 * var(--u-icon)); --track: 4px; width: 100%; height: var(--thumb); margin: 0; appearance: none; -webkit-appearance: none; background: transparent; cursor: pointer; touch-action: pan-y; }
 .ui-slider-input:focus-visible { outline: 0; }
 .ui-slider-input::-webkit-slider-runnable-track { height: var(--track); border-radius: var(--radius-round); background: linear-gradient(to right, var(--foreground) var(--fill), var(--tint) var(--fill)); }
 .ui-slider-input::-moz-range-track { height: var(--track); border-radius: var(--radius-round); background: var(--tint); }
@@ -369,7 +371,7 @@
 .ui-nav-label { align-self: flex-start; padding: var(--nav-label-pad); }
 .ui-nav-row { display: flex; width: 100%; min-width: 0; min-height: var(--row-min); align-items: center; gap: var(--row-gap); border: 0; border-radius: var(--radius-control); background: transparent; padding: var(--row-pad); color: color-mix(in oklch, var(--foreground), transparent 32%); font-size: var(--text-row); line-height: 1.5; text-align: left; }
 .ui-nav-row[data-indent] { padding-left: var(--nav-indent); }
-.ui-nav-row > .ui-nav-icon { display: inline-grid; width: var(--u-icon); height: var(--u-icon); flex: none; place-items: center; color: var(--muted-foreground); }
+.ui-nav-row > .ui-nav-icon { display: inline-grid; width: var(--icon); height: var(--icon); flex: none; place-items: center; color: var(--muted-foreground); }
 .ui-nav-row > .ui-nav-icon > * { width: 100%; height: 100%; }
 .ui-nav-icon:has(> .harness-mark) { width: calc(var(--u-icon) - 1px); }
 .ui-nav-row > .ui-nav-icon > .harness-mark { width: calc(var(--u-icon) - 1px); height: calc(0.75 * (var(--u-icon) - 1px));; opacity: .78; transition: opacity 150ms ease; }
@@ -380,7 +382,7 @@
 .ui-nav-row[aria-current="page"] { font-weight: var(--weight-current); }
 .ui-nav-row:is(:hover, [aria-current="page"]) > .ui-nav-icon { color: var(--foreground); }
 .ui-nav-toggle { margin-right: -6px; display: grid; width: calc(var(--u-icon) + 9px); height: calc(var(--u-icon) + 9px); flex: none; place-items: center; border-radius: var(--radius-control); color: var(--muted-foreground); }
-.ui-nav-toggle svg { width: var(--u-icon); height: var(--u-icon); }
+.ui-nav-toggle svg { width: var(--icon); height: var(--icon); }
 
 /* The app's own pieces, drawn with the library (components/ui/swap.ts): the
    app keeps its geometry; the material is the library's frost. Same targets
@@ -465,7 +467,7 @@
 .ui-rider-actions[data-stack] { flex-direction: column; }
 :is(.ui-rider-actions, .ui-rider-top) .ui-button[data-size^="icon"] { width: var(--rider-slot); min-width: var(--rider-slot); height: var(--rider-slot); border-radius: var(--cmp-slot-radius); padding: 0; color: var(--muted-foreground); }
 :is(.ui-rider-actions, .ui-rider-top) .ui-button[data-size^="icon"]:hover { color: var(--foreground); }
-:is(.ui-rider-actions, .ui-rider-top) .ui-button[data-size^="icon"] svg { width: var(--u-icon); height: var(--u-icon); }
+:is(.ui-rider-actions, .ui-rider-top) .ui-button[data-size^="icon"] svg { width: var(--icon); height: var(--icon); }
 
 /* Lines: text that waits (the queued messages), one line each until opened. */
 .ui-lines { display: flex; min-width: 0; flex: 1; flex-direction: column; gap: var(--space-xs); margin: 0; padding: 0; list-style: none; }
@@ -474,7 +476,7 @@
 .ui-line[data-expanded="true"] .ui-line-body { overflow: visible; -webkit-line-clamp: unset; }
 .ui-line-more { display: inline-flex; width: calc(1.25 * var(--u-space)); height: calc(1.25 * var(--u-space)); flex: none; align-items: center; justify-content: center; margin-top: 1px; border: 0; border-radius: var(--radius-control); background: transparent; padding: 0; color: var(--muted-foreground); cursor: pointer; }
 .ui-line-more:hover { background: var(--tint); color: inherit; }
-.ui-line-more svg { width: calc(0.9375 * var(--u-icon)); height: calc(0.9375 * var(--u-icon)); }
+.ui-line-more svg { width: var(--icon); height: var(--icon); }
 
 /* Chips: things attached, scrolling sideways with faded edges. An image is its
    thumbnail; a file its mark, name and size. Uploading: a ring; failed: red, a retry mark. */
@@ -489,21 +491,21 @@
 .ui-chip-body:focus-visible { outline: none; filter: brightness(1.12); }
 .ui-chip-media { position: relative; display: grid; width: calc(3.75 * var(--u-space) - 2px); height: calc(3.75 * var(--u-space) - 2px); flex: none; place-items: center; background: var(--tint); color: var(--muted-foreground); }
 .ui-chip[data-kind="file"] .ui-chip-media { width: auto; height: auto; background: none; }
-.ui-chip-media :is(.workspace-file-icon, .workspace-file-icon-generic, svg:not(.ui-chip-ring, .ui-chip-retry)) { display: block; width: var(--u-icon); height: var(--u-icon); }
+.ui-chip-media :is(.workspace-file-icon, .workspace-file-icon-generic, svg:not(.ui-chip-ring, .ui-chip-retry)) { display: block; width: var(--icon); height: var(--icon); }
 .ui-chip-media img { width: 100%; height: 100%; object-fit: cover; }
 .ui-chip-copy { display: grid; min-width: 0; max-width: calc(11.25 * var(--u-space)); line-height: 1.3; }
 .ui-chip-copy strong { overflow: hidden; font-size: var(--text-row); font-weight: var(--weight-strong); text-overflow: ellipsis; white-space: nowrap; }
 .ui-chip-copy small { overflow: hidden; color: var(--muted-foreground); font-size: var(--text-caption); text-overflow: ellipsis; white-space: nowrap; }
 .ui-chip:is([data-status="uploading"], [data-status="queued"]) .ui-chip-media img { opacity: 0.55; }
 .ui-chip[data-kind="file"]:is([data-status="uploading"], [data-status="queued"]) .ui-chip-media > :not(.ui-chip-ring) { opacity: 0.4; }
-.ui-chip-ring { position: absolute; width: calc(1.5 * var(--u-icon)); height: calc(1.5 * var(--u-icon)); transform: rotate(-90deg); fill: none; stroke-width: 2.5; filter: drop-shadow(0 0 2px rgb(0 0 0 / 60%)); }
+.ui-chip-ring { position: absolute; width: var(--icon-xl); height: var(--icon-xl); transform: rotate(-90deg); fill: none; stroke-width: 2.5; filter: drop-shadow(0 0 2px rgb(0 0 0 / 60%)); }
 .ui-chip-ring circle:first-child { stroke: var(--frost-stroke); }
 .ui-chip-ring circle:last-child { stroke: var(--foreground); stroke-linecap: round; transition: stroke-dashoffset 150ms linear; }
 .ui-chip[data-status="error"] .ui-chip-body { border-color: var(--destructive); }
 .ui-chip[data-status="error"] .ui-chip-media img { opacity: 0.4; }
-.ui-chip-retry { position: absolute; width: calc(1.125 * var(--u-icon)); height: calc(1.125 * var(--u-icon)); color: var(--foreground); filter: drop-shadow(0 0 2px rgb(0 0 0 / 70%)); }
-.ui-chip-remove { position: absolute; top: 3px; right: 3px; display: grid; width: calc(1.125 * var(--u-icon)); height: calc(1.125 * var(--u-icon)); place-items: center; border: 0; border-radius: var(--radius-round); background: rgb(0 0 0 / 62%); padding: 0; color: #fff; cursor: pointer; opacity: 0; transition: opacity 120ms ease; }
-.ui-chip-remove svg { width: calc(0.6875 * var(--u-icon)); height: calc(0.6875 * var(--u-icon)); }
+.ui-chip-retry { position: absolute; width: var(--icon-lg); height: var(--icon-lg); color: var(--foreground); filter: drop-shadow(0 0 2px rgb(0 0 0 / 70%)); }
+.ui-chip-remove { position: absolute; top: 3px; right: 3px; display: grid; width: var(--icon-lg); height: var(--icon-lg); place-items: center; border: 0; border-radius: var(--radius-round); background: rgb(0 0 0 / 62%); padding: 0; color: #fff; cursor: pointer; opacity: 0; transition: opacity 120ms ease; }
+.ui-chip-remove svg { width: var(--icon-xs); height: var(--icon-xs); }
 .ui-chip:is(:hover, :focus-within) .ui-chip-remove { opacity: 1; }
 @media (hover: none) { .ui-chip-remove { opacity: 1; } }
 .ui-chip[data-entering] { animation: ui-chip-in 300ms cubic-bezier(.2, .8, .2, 1) backwards; }
@@ -522,7 +524,7 @@
 /* The current tab: white at the current weight, no fill (the wash is only the pointer). */
 .ui-tabs > button[aria-selected="true"] { color: var(--foreground); font-weight: var(--weight-current); }
 .ui-tabs > button:hover { background: var(--tint); }
-.ui-tabs svg { width: calc(0.875 * var(--u-icon)); height: calc(0.875 * var(--u-icon)); }
+.ui-tabs svg { width: var(--icon-sm); height: var(--icon-sm); }
 .ui-prompt { margin: var(--space-2xs) var(--space-md) var(--space-xs); font-size: var(--text-body); font-weight: var(--weight-strong); line-height: 1.4; letter-spacing: -.005em; overflow-wrap: anywhere; }
 .ui-prompt span { color: var(--muted-foreground); font-size: var(--text-body); font-weight: var(--weight-rest); }
 .ui-choices { display: grid; gap: 1px; }
@@ -544,11 +546,11 @@
 .ui-choice[data-active="true"] .ui-choice-key { color: var(--foreground); }
 .ui-choice-label { flex: none; font-size: var(--text-row); font-weight: var(--weight-lift); }
 .ui-choice-detail { min-width: 0; flex: 1; overflow: hidden; color: var(--muted-foreground); font-size: var(--text-body); text-overflow: ellipsis; white-space: nowrap; }
-.ui-choice-check { display: grid; width: var(--u-icon); height: var(--u-icon); flex: none; margin-left: auto; place-items: center; color: var(--foreground); }
-.ui-choice-check svg { width: calc(0.875 * var(--u-icon)); height: calc(0.875 * var(--u-icon)); }
-.ui-choice-check[data-multi="true"] { width: calc(0.875 * var(--u-icon)); height: calc(0.875 * var(--u-icon)); border: 1.5px solid var(--muted-foreground); border-radius: var(--radius-control); }
+.ui-choice-check { display: grid; width: var(--icon); height: var(--icon); flex: none; margin-left: auto; place-items: center; color: var(--foreground); }
+.ui-choice-check svg { width: var(--icon-sm); height: var(--icon-sm); }
+.ui-choice-check[data-multi="true"] { width: var(--icon-sm); height: var(--icon-sm); border: 1.5px solid var(--muted-foreground); border-radius: var(--radius-control); }
 .ui-choice[aria-selected="true"] .ui-choice-check[data-multi="true"] { border-color: var(--foreground); background: var(--foreground); color: var(--background); }
-.ui-choice-check[data-multi="true"] svg { width: calc(0.6875 * var(--u-icon)); height: calc(0.6875 * var(--u-icon)); stroke-width: 4.4; }
+.ui-choice-check[data-multi="true"] svg { width: var(--icon-xs); height: var(--icon-xs); stroke-width: 4.4; }
 .ui-choice-input { min-width: 0; flex: 1; border: 0; background: transparent; padding: 0; color: var(--foreground); font: inherit; font-size: var(--text-body); line-height: 1.4; outline: 0; resize: none; }
 .ui-choice-input::placeholder { color: var(--muted-foreground); }
 .ui-preview { max-height: calc(14 * var(--u-space)); margin: var(--space-2xs) var(--space-md); overflow: auto; font: var(--text-row)/1.45 var(--font-code); white-space: pre; }
@@ -573,8 +575,8 @@
 }
 .ui-choices-page { display: grid; gap: var(--space-xs); }
 /* An app row's own icon, placed straight in the row (not in an icon slot), is sized as one. */
-.ui-row > :is(svg, .workspace-glyph, .harness-mark, img):not(.ui-chevron) { width: var(--u-icon); height: var(--u-icon); flex: none; }
-.ui-row > .harness-mark { width: calc(0.875 * var(--u-type)); height: calc(0.875 * var(--u-type)); }
+.ui-row > :is(svg, .workspace-glyph, .harness-mark, img):not(.ui-chevron) { width: var(--icon); height: var(--icon); flex: none; }
+.ui-row > .harness-mark { width: var(--icon-sm); height: var(--icon-sm); }
 /* The app's composer wrapper, drawn as a DesktopComposer: its width is the pane's too
    (the app's own rule loads later, at equal weight). */
 .composer-wrap.ui-composer-width { width: min(var(--composer-width, 47.5rem), 100%); }
@@ -594,7 +596,7 @@
 .ui-overlay-bar { display: flex; min-height: calc(3.4375 * var(--u-space)); flex: none; align-items: center; gap: var(--space-lg); border-bottom: 1px solid var(--tint); padding: var(--space-sm) var(--space-lg); }
 /* The lead is one mark at one size and colour, whichever it is (search, the command prompt, back). */
 .ui-overlay-lead { display: inline-grid; flex: none; place-items: center; color: var(--muted-foreground); }
-.ui-overlay-lead svg { width: calc(1.09375 * var(--u-icon)); height: calc(1.09375 * var(--u-icon)); color: var(--muted-foreground); }
+.ui-overlay-lead svg { width: var(--icon-lg); height: var(--icon-lg); color: var(--muted-foreground); }
 .ui-overlay-input { min-width: 0; height: calc(2.8125 * var(--u-space)); flex: 1; border: 0; outline: 0; background: transparent; padding: 0; color: var(--foreground); font-size: var(--text-body); font-weight: var(--weight-rest); line-height: 1.5; }
 .ui-overlay-input::placeholder { color: var(--muted-foreground); }
 .ui-overlay-bar .ui-seg { flex: none; }
@@ -639,7 +641,7 @@
 .ui-toast-close { grid-area: 1 / 3; }
 .ui-toast > .ui-button[data-outline] { grid-area: 2 / 2; justify-self: start; }
 .ui-toast-icon { display: grid; height: var(--control-sm); place-items: center; }
-.ui-toast-icon svg { width: var(--u-icon); height: var(--u-icon); }
+.ui-toast-icon svg { width: var(--icon); height: var(--icon); }
 .ui-toast[data-kind="success"] .ui-toast-icon { color: var(--live); }
 .ui-toast[data-kind="warning"] .ui-toast-icon { color: var(--warn); }
 .ui-toast[data-kind="error"] .ui-toast-icon { color: var(--destructive); }
@@ -689,7 +691,7 @@
 .ui-progress::-webkit-progress-value { border-radius: var(--radius-round); background: var(--foreground); }
 .ui-progress::-moz-progress-bar { border-radius: var(--radius-round); background: var(--foreground); }
 /* A spinner: a ring in the surface's tint, a quarter of it in the text colour, turning. */
-.ui-spinner { width: var(--u-icon); height: var(--u-icon); flex: none; border: 1.5px solid var(--tint); border-top-color: var(--foreground); border-radius: var(--radius-round); animation: ui-spin 800ms linear infinite; }
+.ui-spinner { width: var(--icon); height: var(--icon); flex: none; border: 1.5px solid var(--tint); border-top-color: var(--foreground); border-radius: var(--radius-round); animation: ui-spin 800ms linear infinite; }
 @keyframes ui-spin { to { transform: rotate(1turn); } }
 @media (prefers-reduced-motion: reduce) { .ui-spinner { animation-duration: 2400ms; } }
 
@@ -732,9 +734,9 @@
 /* RiderButton: rides over the transcript above the composer (scroll to latest, cancel an edit):
    resting frost, a square of 2.5 units at the surface radius, or its words beside the icon. */
 .ui-frost.ui-rider-button { display: inline-flex; width: var(--control-lg); height: var(--control-lg); flex: none; align-items: center; justify-content: center; gap: var(--space-sm); border-radius: var(--radius-surface); padding: 0; color: var(--foreground); font: var(--weight-lift) var(--text-row) var(--font-sans); white-space: nowrap; cursor: pointer; transition: filter .12s ease; }
-.ui-rider-button svg { width: calc(1.125 * var(--u-icon)); height: calc(1.125 * var(--u-icon)); flex: none; }
+.ui-rider-button svg { width: var(--icon-lg); height: var(--icon-lg); flex: none; }
 .ui-frost.ui-rider-button[data-labelled] { width: auto; padding: 0 var(--space-xl) 0 var(--space-lg); }
-.ui-rider-button[data-labelled] svg { width: calc(0.9375 * var(--u-icon)); height: calc(0.9375 * var(--u-icon)); }
+.ui-rider-button[data-labelled] svg { width: var(--icon); height: var(--icon); }
 .ui-rider-button:is(:hover, :focus-visible) { outline: 0; filter: brightness(1.12); }
 
 /* Glance: chat search's preview column, in the row's voice: the title at the strong weight, facts in
@@ -742,14 +744,14 @@
 .ui-glance { display: grid; min-width: 0; align-content: start; gap: var(--space-lg); color: var(--muted-foreground); font-size: var(--text-caption); }
 .ui-glance > * { min-width: 0; }
 .ui-glance-title { display: flex; align-items: flex-start; gap: var(--row-gap); color: var(--foreground); font: var(--weight-strong) var(--text-row)/1.3 var(--font-sans); }
-.ui-glance-title > :first-child:not(span) { width: var(--u-icon); height: var(--u-icon); flex: none; }
+.ui-glance-title > :first-child:not(span) { width: var(--icon); height: var(--icon); flex: none; }
 .ui-glance-title + .ui-glance-facts { margin-top: calc(-1 * var(--space-sm)); }
 .ui-glance-facts { overflow: hidden; font: var(--weight-rest) var(--text-caption)/1.5 var(--font-data); text-overflow: ellipsis; white-space: nowrap; }
 .ui-glance-facts + .ui-glance-facts { margin-top: calc(-1 * var(--space-lg)); }
 /* The prompt is the user's message (Bubble), smaller and clamped to four lines. */
 .ui-frost.ui-bubble.ui-glance-prompt { display: -webkit-box; max-width: 92%; margin: 0 0 0 auto; overflow: hidden; font-size: var(--text-row); white-space: normal; -webkit-box-orient: vertical; -webkit-line-clamp: 4; }
 .ui-glance-turn { display: flex; align-items: center; gap: var(--row-gap); }
-.ui-glance-orb { display: inline-grid; width: var(--u-icon); height: var(--u-icon); flex: none; }
+.ui-glance-orb { display: inline-grid; width: var(--icon); height: var(--icon); flex: none; }
 .ui-glance-orb > * { width: 100%; height: 100%; }
 .ui-glance-turn b { color: var(--foreground); font-weight: var(--weight-lift); }
 .ui-glance-answer { display: -webkit-box; margin: 0; overflow: hidden; color: color-mix(in oklch, var(--foreground), transparent 20%); font-size: var(--text-row); line-height: 1.5; -webkit-box-orient: vertical; -webkit-line-clamp: 7; }
@@ -757,9 +759,12 @@
 .ui-glance-answer[data-math] .katex-display { margin: .55em 0; overflow: hidden; text-align: left; }
 .ui-glance-empty { margin: 0; padding-top: var(--space-4xl); text-align: center; }
 .ui-glance .ui-section { margin-inline: calc(-1 * var(--space-md)); }
+/* In the gallery's previews the app's answer (its own markdown, until it is ported) takes the transcript's
+   scale whole: zoom scales its type, spacing and code alike, as the units do for what the library draws. */
+.ui-read { zoom: var(--scale-transcript); }
 /* In the gallery's previews the app's scroll-to-latest and cancel editing draw as RiderButtons: the
    app keeps where they sit, the library how they look. */
 .message-scroller-button.ui-rider-button[data-slot="button"] { width: var(--control-lg); min-height: 0; height: var(--control-lg); border-radius: var(--radius-surface); background: var(--frost-fill); color: var(--foreground); }
 .message-scroller-button.ui-rider-button[data-labelled][data-slot="button"] { width: auto; gap: var(--space-sm); padding: 0 var(--space-xl) 0 var(--space-lg); font: var(--weight-lift) var(--text-row) var(--font-sans); }
-.message-scroller-button.ui-rider-button[data-slot="button"] svg { width: calc(1.125 * var(--u-icon)); height: calc(1.125 * var(--u-icon)); }
-.message-scroller-button.ui-rider-button[data-labelled][data-slot="button"] svg { width: calc(0.9375 * var(--u-icon)); height: calc(0.9375 * var(--u-icon)); }
+.message-scroller-button.ui-rider-button[data-slot="button"] svg { width: var(--icon-lg); height: var(--icon-lg); }
+.message-scroller-button.ui-rider-button[data-labelled][data-slot="button"] svg { width: var(--icon); height: var(--icon); }

@@ -149,6 +149,8 @@ const iconScene = () => <div class="g-scene-stack">
 </div>;
 
 const swatch = (name: string) => () => <i class="g-swatch-chip" style={{ background: `var(${name})` }} />;
+/** An icon drawn at a size token. */
+const glyph = (name: string) => () => <FolderIcon style={{ width: `var(${name})`, height: `var(${name})` }} />;
 const bar = (name: string) => () => <i class="g-bar-chip" style={{ width: `var(${name})` }} />;
 const corner = (name: string) => () => <Frost class="g-radius" style={{ "border-radius": `var(${name})` }} />;
 const tok = (name: string, use: string, read: TokenRow["read"], sample?: TokenRow["sample"]): TokenRow => ({ name, use, read, sample });
@@ -183,19 +185,22 @@ const storedScale = (token: string) => { try { return Number(localStorage.getIte
 export function applyScale(doc: Document) {
   for (const [token] of SCALES) { const value = storedScale(token); if (value === 1) doc.documentElement.style.removeProperty(token); else doc.documentElement.style.setProperty(token, String(value)); }
 }
+/** The scales as one signal, shared by the Space page's sliders and the gallery's Settings (Appearance). */
+const [scales, setScales] = createSignal<number[]>(SCALES.map(([token]) => storedScale(token)));
+export const scaleOf = (token: (typeof SCALES)[number][0]) => scales()[SCALES.findIndex(([name]) => name === token)]!;
+export function setScale(token: (typeof SCALES)[number][0], value: number) {
+  const index = SCALES.findIndex(([name]) => name === token);
+  try { localStorage.setItem(`gallery:${token}`, String(value)); } catch { /* private window */ }
+  setScales((all) => all.map((old, at) => at === index ? value : old));
+  for (const doc of [document, ...Array.from(document.querySelectorAll("iframe"), (frame) => frame.contentDocument)]) if (doc) applyScale(doc);
+  dispatchEvent(new Event("gallery:tune"));
+}
 function ScaleControl() {
-  const [values, setValues] = createSignal(SCALES.map(([token]) => storedScale(token)));
-  const set = (index: number, value: number) => {
-    try { localStorage.setItem(`gallery:${SCALES[index]![0]}`, String(value)); } catch { /* private window */ }
-    setValues((all) => all.map((old, at) => at === index ? value : old));
-    for (const doc of [document, ...Array.from(document.querySelectorAll("iframe"), (frame) => frame.contentDocument)]) if (doc) applyScale(doc);
-    dispatchEvent(new Event("gallery:tune"));
-  };
-  return <div class="g-scale-control"><For each={[...SCALES]}>{([, label, use], index) => <label>
+  return <div class="g-scale-control"><For each={[...SCALES]}>{([token, label, use]) => <label>
     <span><strong>{label}</strong><small>{use}</small></span>
-    <input type="range" min="0.75" max="1.5" step="0.05" value={values()[index()]} onInput={(event) => set(index(), Number(event.currentTarget.value))} />
-    <code>{values()[index()]!.toFixed(2)}×</code>
-    <button type="button" disabled={values()[index()] === 1} onClick={() => set(index(), 1)}>Reset</button>
+    <input type="range" min="0.75" max="1.5" step="0.05" value={scaleOf(token)} onInput={(event) => setScale(token, Number(event.currentTarget.value))} />
+    <code>{scaleOf(token).toFixed(2)}×</code>
+    <button type="button" disabled={scaleOf(token) === 1} onClick={() => setScale(token, 1)}>Reset</button>
   </label>}</For></div>;
 }
 const number = (name: string) => (cell: HTMLElement) => `${Number(getComputedStyle(cell).getPropertyValue(name).trim() || 1)}×`;
@@ -205,6 +210,7 @@ const SPACE: TokenGroup[] = [
   { title: "Scale: the coefficients everything is drawn from (the sliders above)", rows: [tok("--scale-ui", "the whole UI: the unit times this", number("--scale-ui")), tok("--scale-transcript", "what you read: a message, its text, padding and corner", number("--scale-transcript"))] },
   { title: "The unit: the density's (12.8px desktop, 16px phone) times the UI scale", rows: [tok("--u-space", "space and controls", length("--u-space"), bar("--u-space")), tok("--u-type", "type: every size a multiple", length("--u-type"), bar("--u-type")), tok("--u-icon", "icons", length("--u-icon"), bar("--u-icon"))] },
   { title: "Space: nine steps, every gap, padding and margin", rows: STEPS.map((step) => tok(`--space-${step}`, STEP_USE[step]!, length(`--space-${step}`), bar(`--space-${step}`))) },
+  { title: "Icons: five sizes", rows: [tok("--icon-xs", "a × in a tiny control: a chip's or a keycap's remove", length("--icon-xs"), glyph("--icon-xs")), tok("--icon-sm", "a chevron, a small control's glyph", length("--icon-sm"), glyph("--icon-sm")), tok("--icon", "the icon: a row's, a button's", length("--icon"), glyph("--icon")), tok("--icon-lg", "a pill's, a slider's value", length("--icon-lg"), glyph("--icon-lg")), tok("--icon-xl", "a ring: an upload's progress", length("--icon-xl"), glyph("--icon-xl"))] },
   { title: "Controls: four heights", rows: [tok("--control-xs", "an icon-xs button, a toast's ×", length("--control-xs"), bar("--control-xs")), tok("--control-sm", "a small button, an icon-sm button", length("--control-sm"), bar("--control-sm")), tok("--control", "a button, an input", length("--control"), bar("--control")), tok("--control-lg", "a rider button, a choice", length("--control-lg"), bar("--control-lg"))] },
   { title: "Rows: every list, menu, palette and settings row, and the sidebar's", rows: [tok("--row-min", "a row's height", length("--row-min"), bar("--row-min")), tok("--row-pad", "its padding", pad("--row-pad")), tok("--row-gap", "between icon, label and meta", length("--row-gap"), bar("--row-gap")), tok("--nav-indent", "a sidebar row under another", length("--nav-indent"), bar("--nav-indent")), tok("--nav-label-pad", "a sidebar group's label", pad("--nav-label-pad"))] },
   { title: "Frost", rows: [tok("--frost-inset", "a popover's padding round its rows", length("--frost-inset"), bar("--frost-inset"))] },
