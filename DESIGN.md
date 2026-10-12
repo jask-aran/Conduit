@@ -168,6 +168,8 @@ Every surface is one of three materials. Choose it first, before any colour, bor
 
 Inside frost, content follows the pane's rules: one-line rows, headings and space, no boxes, and never frost on a row of its own.
 
+**Controls take their look from the surface under them.** A surface gives its controls two values and they read only those: its **tint**, for lines and washes (a hairline, a segmented choice's thumb, a keycap, the wash under the pointer), and its **well**, the fill under an input or an outline button. On the frame and a pane the tint is the app's border and the well a step darker than the pane; over frost the tint is frost's own and there is no well, so an input or outline button there is a hairline with nothing inside. No control is styled per surface (components v2: `--tint`, `--well`).
+
 **Build an overlay from the shared pieces in `components/frost.tsx`**, never a copy of another overlay -- the build fails on a hand-rolled Kobalte dialog:
 
 | Building | Use |
@@ -237,7 +239,7 @@ A handful of roles, each defined once in `styles.css`; components name a role ra
 - **section label** — Paper Mono (shipped, so it reads the same on every system; the system's mono only as the fallback), uppercase, small, letter-spaced, muted. Every section heading is this: a list, menu, palette, card, rider or slider, and the sidebar's groups; the breadcrumb's places share it.
 - **caption** — section subtitles, timestamps, empty copy.
 - **meta** — muted Paper Mono beside a row's title, right-aligned, truncating before the title does.
-- **keycap** — small, in the section label's face (Paper Mono), in a rounded hairline square, muted; in the text colour on the cursor row or a clickable rail action.
+- **keycap** — small, in the section label's face (Paper Mono), on the surface's tint at `{rounded.control}`, muted; in the text colour on the cursor row or a clickable rail action.
 
 Four weights, no others: **rest** (400); **lift** (500), a touch heavier for text over frost, which reads thinner there; **strong** (600), for titles, headings, buttons and values; and the **current weight** (660), which carries state with rest -- where you are, and a match lit while typing. Six sizes, one per role: label, meta, caption, row, body (messages, input, and titles at strong), heading. Do not invent further sizes or weights per component (components v2: `--text-*`, `--weight-*`). No serif except the Capacitor first-launch wordmark (legacy).
 

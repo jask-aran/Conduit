@@ -1,7 +1,8 @@
 import { createSignal, For, onCleanup, onMount, type JSX } from "solid-js";
-import { ArrowUpIcon, CameraIcon, CopyIcon, FolderIcon, MicIcon, MonitorIcon, PaperclipIcon, PlusIcon, SettingsIcon, Trash2Icon } from "lucide-solid";
-import { Segmented, Bubble, Button, Frost, HeadingSection, Item, Menu, NavRow, Overlay, OverlayBar, PillButton, PillField, PillGroup, Section, Toolbar } from "@/components/ui";
-import { lib, type Family } from "./library";
+import { ArrowUpIcon, CameraIcon, CopyIcon, FolderIcon, MicIcon, MonitorIcon, PaperclipIcon, PlusIcon, SettingsIcon, ShareIcon, Trash2Icon } from "lucide-solid";
+import { Spinner } from "@/components/primitives";
+import { Segmented, Bubble, Button, Frost, HeadingSection, Input, Item, Keycap, Menu, NavRow, Overlay, OverlayBar, PillButton, PillField, PillGroup, Section, SelectTrigger, TextArea, Toolbar, type ButtonVariant } from "@/components/ui";
+import { lib, Levels, SegmentedCount, SegmentedIcons, SegmentedText, SwitchDemo, type Family } from "./library";
 import "katex/dist/katex.min.css";
 
 /*
@@ -151,7 +152,7 @@ const COLOUR_MARKS: Mark[] = [
   { selector: ".ui-row[data-highlighted]", label: "--frost-tint: the cursor's wash", read: bg },
   { selector: ".ui-section + .ui-section", label: "--frost-tint: a rule between sections", read: edge },
   { selector: ".ui-row[data-destructive]", label: "--destructive: a destructive row", read: fg },
-  { selector: ".ui-button[data-variant='outline']", label: "--tint: a control's line, on the ground", read: edge },
+  { selector: ".ui-button[data-variant='outline']", label: "--tint: a control's line, on the ground (Controls has each surface's)", read: edge },
 ];
 const colourScene = () => <div class="g-scene-frame"><div class="g-scene-pane">
   <Menu><Section title="Section"><Item icon={<MonitorIcon />} checked>Current</Item><Item icon={<FolderIcon />} active>Cursor</Item><Item meta="2m">At rest</Item></Section><Section><Item icon={<Trash2Icon />} destructive>Delete</Item></Section></Menu>
@@ -223,7 +224,7 @@ const WEIGHTS: TokenGroup[] = [{ title: "Four weights", rows: [
 const COLOURS: TokenGroup[] = [
   { title: "Grounds", rows: [tok("--frame", "the frame: the sidebar, behind the panes", colour("--frame"), swatch("--frame")), tok("--background", "a pane", colour("--background"), swatch("--background"))] },
   { title: "Text", rows: [tok("--foreground", "text, and the current item", colour("--foreground"), swatch("--foreground")), tok("--muted-foreground", "muted: labels, meta, captions, icons at rest", colour("--muted-foreground"), swatch("--muted-foreground"))] },
-  { title: "Tints", rows: [tok("--tint", "the ground's lines and washes (the app's --border and --accent, the same value)", colour("--tint"), swatch("--tint")), tok("--frost-tint", "frost's lines and washes: rules, the cursor", colour("--frost-tint"), swatch("--frost-tint")), tok("--frost-stroke", "frost's edge", colour("--frost-stroke"), swatch("--frost-stroke"))] },
+  { title: "Tints", rows: [tok("--tint", "a surface's lines and washes, which its controls read: the app's --border (and --accent, the same value) on the ground, --frost-tint over frost", colour("--tint"), swatch("--tint")), tok("--well", "a surface's well, under an input or an outline button: a step darker than the ground, nothing over frost", colour("--well"), swatch("--well")), tok("--frost-tint", "frost's lines and washes: rules, the cursor", colour("--frost-tint"), swatch("--frost-tint")), tok("--frost-stroke", "frost's edge", colour("--frost-stroke"), swatch("--frost-stroke"))] },
   { title: "Frost", rows: [tok("--frost-fill", "the material's fill (Frost has its blur, highlight and lifts)", colour("--frost-fill"), swatch("--frost-fill")), tok("--frost-core-ground", "core: a solid backing for busy content", colour("--frost-core-ground"), swatch("--frost-core-ground"))] },
   { title: "State", rows: [tok("--destructive", "a destructive action", colour("--destructive"), swatch("--destructive")), tok("--live", "a runtime dot: live", colour("--live"), swatch("--live")), tok("--warn", "a runtime dot: warning", colour("--warn"), swatch("--warn"))] },
 ];
@@ -241,6 +242,53 @@ const RADII: TokenGroup[] = [
     tok("--radius-round", "fully round at any size: the phone's pill groups and buttons (they never grow), the slider, a chip's remove", length("--radius-round"), corner("--radius-round")),
   ] },
 ];
+
+/*
+ * Controls: what sits on any surface. A surface sets --tint (its lines and washes) and
+ * --well (the fill under an input or an outline button); a control reads only those.
+ */
+const controls = () => <>
+  <div class="g-scene-row"><Button variant="outline" size="sm">Cancel</Button><Button size="sm">Save</Button></div>
+  <Input value="Lorem ipsum file" />
+  <SegmentedText />
+  <div class="g-scene-row"><Keycap>Ctrl</Keycap><Keycap>K</Keycap></div>
+</>;
+const controlsScene = () => <div class="g-scene-stack">
+  <div class="g-surface g-scene-surface g-scene-ground" data-surface="ground">{controls()}</div>
+  <Frost lift="raised" class="g-surface g-scene-surface g-scene-frost">{controls()}</Frost>
+</div>;
+const none = (colour: string) => colour === "rgba(0, 0, 0, 0)" ? "none" : colour;
+const onSurface = (where: "ground" | "frost", what: string, selector: string, read: Mark["read"]): Mark => ({ selector: `.g-scene-${where} ${selector}`, label: `${where}: ${what}`, read: (el) => none(read(el)) });
+const CONTROL_MARKS: Mark[] = (["ground", "frost"] as const).flatMap((where) => [
+  onSurface(where, "an outline button's line (--tint)", ".ui-button[data-variant='outline']", edge),
+  onSurface(where, "an input's well (--well)", ".ui-input", bg),
+  onSurface(where, "the segmented's line and thumb (--tint)", ".ui-seg", (el) => bg(el.querySelector<HTMLElement>(".ui-seg-thumb") ?? el)),
+  onSurface(where, "a keycap (--tint)", ".ui-keycap", bg),
+]);
+
+/** Button's variants, one row each: drawn on the page's surface, and what each reads from it. */
+const VARIANTS: { variant: ButtonVariant; label: string; use: string; reads: string }[] = [
+  { variant: "primary", label: "Primary", use: "the one action: Save, Send, Continue", reads: "--foreground, its text the ground" },
+  { variant: "outline", label: "Outline", use: "a second action beside it: Cancel, Back", reads: "--well inside a --tint line; --tint washed" },
+  { variant: "ghost", label: "Ghost", use: "toolbars and headers: text until the pointer washes it", reads: "nothing; --tint washed" },
+  { variant: "destructive", label: "Delete", use: "destructive: confirms what cannot be undone, in a dialog; filled", reads: "--destructive, white text" },
+];
+function VariantCell(props: { variant: ButtonVariant; label: string }) {
+  const [value, setValue] = createSignal(["", ""]);
+  let el!: HTMLDivElement;
+  const measure = () => requestAnimationFrame(() => { const button = el.querySelector<HTMLElement>(".ui-button"); if (button) setValue([`fill ${none(bg(button))}`, `line ${none(edge(button))}`]); });
+  onMount(() => { measure(); addEventListener("gallery:tune", measure); onCleanup(() => removeEventListener("gallery:tune", measure)); });
+  return <div ref={el} class="g-scale-cell">
+    <div class="g-scale-sample"><Button variant={props.variant}>{props.label}</Button></div>
+    <div class="g-scale-spec"><span>{value()[0]}</span><small>{value()[1]}</small></div>
+  </div>;
+}
+const Variants = () => <div class="g-scale g-variants" data-columns="2">
+  <For each={VARIANTS}>{(row) => <div class="g-scale-row">
+    <div class="g-scale-name"><strong>{row.variant}</strong><small>{row.use}</small><small>reads {row.reads}</small></div>
+    <VariantCell variant={row.variant} label={row.label} />
+  </div>}</For>
+</div>;
 
 /** A typeface in the library: a specimen, the weights shipped, where it comes from. */
 function Face(props: { family: string; weights?: number[]; sample?: string; source: string }) {
@@ -312,7 +360,7 @@ const TYPE_ROLES: TypeRole[] = [
   { name: "Row · current", rule: "where you are: white at the current weight", selector: ".ui-row[data-checked]", sample: () => onFrost(<Section><Item icon={<MonitorIcon />} checked>Current row</Item></Section>) },
   { name: "Row · off frost", rule: "the same row on the ground, the sidebar's included: a touch lighter and dimmer", selector: ".ui-nav-row", sample: () => onGround(<NavRow icon={<MonitorIcon />}>Row at rest</NavRow>) },
   { name: "Meta", rule: "beside a row's title, right-aligned", selector: ".ui-row > small", sample: () => onFrost(<Section><Item meta="2m ago">Row</Item></Section>) },
-  { name: "Keycap", rule: "a key, in a hairline square", selector: ".ui-keycap", sample: () => onFrost(<Section><Item keys={["Ctrl", "K"]}>Row</Item></Section>) },
+  { name: "Keycap", rule: "a key, on the surface's tint", selector: ".ui-keycap", sample: () => onFrost(<Section><Item keys={["Ctrl", "K"]}>Row</Item></Section>) },
   { name: "Heading", rule: "a popover's or card's title", selector: ".ui-heading-title", sample: () => onFrost(<HeadingSection title="A heading" />) },
   { name: "Caption", rule: "a heading's detail, hints, empty copy", selector: ".ui-heading-detail", sample: () => onFrost(<HeadingSection title="A heading" detail="Its detail, muted" />) },
   { name: "Body", rule: "messages and what you type: the type unit", selector: ".ui-bubble", sample: () => <Bubble>A message</Bubble> },
@@ -388,4 +436,25 @@ export const foundationFamilies: Family[] = [
   ] }, { title: "Tokens", layout: "desktop", atoms: [
     lib("radius-tokens", "Radii", "both", "radius", "library.css --radius-*", () => <TokenTable groups={RADII} />, "row"),
   ] }] },
+  { title: "Controls", rail: "Foundations", stage: true, note: "what sits on any surface. A surface sets two values, --tint (its lines and washes) and --well (the fill under an input or an outline button), and a control reads only those; so each is drawn once, on the surface and at the density picked above", groups: [
+    { title: "In use", note: "the same controls on the ground and over frost: what each takes from the surface under it", layout: "desktop", atoms: [
+      lib("controls-inuse", "Controls in use", "both", "control", "Button · Input · Segmented · Keycap on [data-surface]", () => <InUse scene={controlsScene} marks={CONTROL_MARKS} />, "row"),
+    ] },
+    { title: "Buttons", staged: true, atoms: [
+      lib("button-variants", "Button · variants", "both", "control", "Button variant", () => <Variants />, true),
+      lib("icon-button", "Icon button", "both", "control", "Button size=icon-sm · icon", () => <div class="g-row"><Button variant="ghost" size="icon-sm" aria-label="Copy"><CopyIcon /></Button><Button variant="ghost" size="icon-sm" aria-label="Share"><ShareIcon /></Button><Button variant="outline" size="icon" aria-label="Add"><PlusIcon /></Button></div>),
+    ] },
+    { title: "Fields and choices", staged: true, atoms: [
+      lib("segmented", "Segmented choice", "both", "control", "Segmented", () => <div class="g-field"><SegmentedText /><SegmentedCount /><SegmentedIcons /></div>),
+      lib("input", "Input", "both", "control", "Input", () => <div class="g-field"><Input placeholder="Replace" /><Input value="Lorem ipsum file" /></div>),
+      lib("textarea", "TextArea", "both", "control", "TextArea: multi-line, grows with its lines, bare -- what holds it pads it", () => <div class="g-field"><TextArea placeholder="Type several lines…" /><TextArea value={"Lorem ipsum dolor sit amet,\nconsectetur adipiscing elit."} /></div>),
+      lib("select", "Select", "both", "control", "SelectTrigger bare", () => <div class="g-field"><SelectTrigger value="System default" /><div class="g-row"><span>Provider</span><SelectTrigger bare value="OpenAI" /></div></div>),
+    ] },
+    { title: "Small", staged: true, atoms: [
+      lib("slider", "Slider", "both", "control", "Slider", () => <div style={{ width: "240px" }}><Levels /></div>),
+      lib("switch", "Switch", "both", "control", "Switch", () => <SwitchDemo />),
+      lib("keycap", "Keycap", "desktop", "control", "Keycap", () => <div class="g-row"><Keycap>Ctrl</Keycap><Keycap>K</Keycap><Keycap>Esc</Keycap></div>),
+      lib("spinner", "Spinner", "both", "control", "Spinner", () => <Spinner />),
+    ] },
+  ] },
 ];
