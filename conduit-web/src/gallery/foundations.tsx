@@ -31,7 +31,8 @@ function Readout(props: { read: Read }) {
 }
 
 const px = (value: string) => value.replace(/(\d+\.\d{2})\d+px/g, "$1px");
-const face = (family: string) => /mono|consolas|menlo/i.test(family) ? "mono" : "sans";
+/** The face a role resolves to: the first family of its stack (the one drawn once it loads). */
+const face = (family: string) => family.split(",")[0]!.trim().replace(/^"|"$/g, "");
 /** A role as it computes: size/leading · weight · face, and its colour. */
 const role = (label: string, selector: string): Read => (scope) => {
   const el = scope.querySelector(selector);
@@ -151,23 +152,9 @@ function Role(props: { role: FontRole }) {
 }
 
 export const foundationFamilies: Family[] = [
-  { title: "Fonts", rail: "Foundations", note: "first the roles, each with a switcher over the faces it may take; then every face Conduit ships; then the system's own, the fallbacks", groups: [
-    { title: "Roles", note: "a token each; the first option is library.css's default", atoms: ROLES.map((role) => lib(`font-role${role.token}`, role.title, "both", "font", `${role.token} · library.css :root`, () => <Role role={role} />)) },
-    { title: "Shipped", note: "the faces Conduit ships, so it looks the same on every system", layout: "desktop", atoms: [
-      lib("font-geist", "Geist Variable", "both", "font", "@fontsource-variable/geist", () => <Face family={GEIST} weights={[400, 450, 500, 560, 600, 660, 700]} source="@fontsource-variable/geist · OFL" />),
-      lib("font-paper", "Paper Mono", "both", "font", "components/ui/fonts/PaperMono-Variable.woff2", () => <Face family={PAPER} weights={[400, 500, 600, 700]} source="components/ui/fonts/PaperMono-Variable.woff2 · OFL · the section labels; also the app's optional transcript face" />),
-      lib("font-inconsolata", "Inconsolata Variable", "both", "font", "@fontsource-variable/inconsolata", () => <Face family={INCONSOLATA} weights={[400, 500, 600, 700]} source="@fontsource-variable/inconsolata · OFL · drawn after Consolas" />),
-      lib("font-meslo", "Meslo LG S Nerd Font Mono", "both", "font", "client/assets/MesloLGSNerdFontMono-Regular.ttf", () => { onMount(loadTerminalFace); return <Face family={MESLO} sample="~/Conduit $ ls  │ ├─ └─ ✓ ✗" source="client/assets/MesloLGSNerdFontMono-Regular.ttf · the terminal's, for box drawing and icons" />; }),
-      lib("font-wordmark", "Druk Wide Super", "both", "font", "client/assets/fonts/druk-wide-web-super.woff2", () => <Face family={WORDMARK} sample="Conduit" source="client/assets/fonts/druk-wide-web-super.woff2 · as Conduit Wordmark" />),
-      lib("font-katex", "KaTeX", "both", "font", "katex/dist/katex.min.css", () => <Face family="KaTeX_Main, serif" sample="∑ x² + ∫ f(t) dt = π" source="katex · math in messages, in its own serif faces" />),
-    ] },
-    { title: "Fallbacks", note: "the system's own: not shipped, so they differ by system; each role falls back to one", layout: "desktop", atoms: [
-      lib("font-system-sans", "System sans", "both", "font", "system-ui, sans-serif", () => <Face family="system-ui, sans-serif" source="Segoe UI on Windows, SF Pro on Apple, Roboto on Android" />),
-      lib("font-system-mono", "System mono", "both", "font", MONO, () => <Face family={MONO} sample="claude-opus-5-5  ~/src  12:04" source="SF Mono on Apple, Consolas on Windows, Droid Sans Mono on Android · meta, keycaps and times" />),
-      lib("font-consolas", "Consolas", "both", "font", "local only", () => <Face family="Consolas, monospace" sample="claude-opus-5-5  ~/src  12:04" source="Microsoft's, with Windows and Office: not ours to ship · shown from this machine's copy" />),
-    ] },
-  ] },
-  { title: "Type", rail: "Foundations", note: "the roles, each as the library draws it and as it computes. Rest is grey; current is white at 660, never a fill; over frost a row is a touch heavier and brighter. Section labels are muted mono caps, one style everywhere", groups: [{ atoms: [
+  { title: "Type", rail: "Foundations", note: "the text, top to bottom: the face each role takes, with a switcher; the scale, each role as the library draws it and as it computes; then every face Conduit ships, and the system's own last", groups: [
+    { title: "Faces", note: "a token per role; the first option is library.css's default, a pick applies across the gallery", atoms: ROLES.map((role) => lib(`font-role${role.token}`, role.title, "both", "font", `${role.token} · library.css :root`, () => <Role role={role} />)) },
+    { title: "Scale", note: "rest is grey; current is white at 660, never a fill; over frost a row is a touch heavier and brighter; section labels are muted caps in their face, one style everywhere", atoms: [
     lib("type-frost", "Rows over frost", "both", "type", "Menu > Section > Item", () => <Spec read={roles(["Group label", ".ui-title"], ["Row · rest", ".ui-row:not([data-checked])"], ["Row · current", ".ui-row[data-checked]"], ["Meta", ".ui-row > small"], ["Keycap", ".ui-keycap"])}>
       <Menu><Section title="Group label"><Item icon={<FolderIcon />} meta="2m">Row at rest</Item><Item icon={<MonitorIcon />} checked>Current row</Item><Item icon={<SearchIcon />} keys={["Ctrl", "K"]}>Row with keys</Item></Section></Menu>
     </Spec>),
@@ -185,7 +172,21 @@ export const foundationFamilies: Family[] = [
       <Frost class="g-entry"><TextArea value="What you type, at the type unit" /></Frost>
       <Frost class="g-entry"><OverlayHints start={[[["↑", "↓"], "Move"], [["Enter"], "Open"]]} /></Frost>
     </Spec>, true),
-  ] }] },
+    ] },
+    { title: "Shipped", note: "the faces Conduit ships, so it looks the same on every system", layout: "desktop", atoms: [
+      lib("font-geist", "Geist Variable", "both", "font", "@fontsource-variable/geist", () => <Face family={GEIST} weights={[400, 450, 500, 560, 600, 660, 700]} source="@fontsource-variable/geist · OFL" />),
+      lib("font-paper", "Paper Mono", "both", "font", "components/ui/fonts/PaperMono-Variable.woff2", () => <Face family={PAPER} weights={[400, 500, 600, 700]} source="components/ui/fonts/PaperMono-Variable.woff2 · OFL · the section labels; also the app's optional transcript face" />),
+      lib("font-inconsolata", "Inconsolata Variable", "both", "font", "@fontsource-variable/inconsolata", () => <Face family={INCONSOLATA} weights={[400, 500, 600, 700]} source="@fontsource-variable/inconsolata · OFL · drawn after Consolas" />),
+      lib("font-meslo", "Meslo LG S Nerd Font Mono", "both", "font", "client/assets/MesloLGSNerdFontMono-Regular.ttf", () => { onMount(loadTerminalFace); return <Face family={MESLO} sample="~/Conduit $ ls  │ ├─ └─ ✓ ✗" source="client/assets/MesloLGSNerdFontMono-Regular.ttf · the terminal's, for box drawing and icons" />; }),
+      lib("font-wordmark", "Druk Wide Super", "both", "font", "client/assets/fonts/druk-wide-web-super.woff2", () => <Face family={WORDMARK} sample="Conduit" source="client/assets/fonts/druk-wide-web-super.woff2 · as Conduit Wordmark" />),
+      lib("font-katex", "KaTeX", "both", "font", "katex/dist/katex.min.css", () => <Face family="KaTeX_Main, serif" sample="∑ x² + ∫ f(t) dt = π" source="katex · math in messages, in its own serif faces" />),
+    ] },
+    { title: "Fallbacks", note: "the system's own: not shipped, so they differ by system; each role falls back to one", layout: "desktop", atoms: [
+      lib("font-system-sans", "System sans", "both", "font", "system-ui, sans-serif", () => <Face family="system-ui, sans-serif" source="Segoe UI on Windows, SF Pro on Apple, Roboto on Android" />),
+      lib("font-system-mono", "System mono", "both", "font", MONO, () => <Face family={MONO} sample="claude-opus-5-5  ~/src  12:04" source="SF Mono on Apple, Consolas on Windows, Droid Sans Mono on Android · meta, keycaps and times" />),
+      lib("font-consolas", "Consolas", "both", "font", "local only", () => <Face family="Consolas, monospace" sample="claude-opus-5-5  ~/src  12:04" source="Microsoft's, with Windows and Office: not ours to ship · shown from this machine's copy" />),
+    ] },
+  ] },
   { title: "Colour", rail: "Foundations", note: "the grounds and frost's tints, read from :root; text tones are mixes of the text colour, read off the pieces that use them", groups: [{ atoms: [
     lib("colour-grounds", "Grounds and lines", "both", "colour", "styles.css :root · library.css :root", () => <Spec read={tokens("--frame", "--background", "--border", "--accent", "--foreground", "--muted-foreground", "--destructive")}>
       <div class="g-chips"><For each={["--frame", "--background", "--border", "--accent", "--foreground", "--muted-foreground", "--destructive"]}>{(name) => <i style={{ background: `var(${name})` }} title={name} />}</For></div>
