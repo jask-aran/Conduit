@@ -62,6 +62,12 @@ typography:
     fontFamily: ui-monospace, SFMono-Regular, Consolas, monospace
     fontSize: 11px
     fontWeight: 400
+  section-label:
+    fontFamily: Paper Mono, ui-monospace, SFMono-Regular, Consolas, monospace
+    fontSize: 8px
+    fontWeight: 400
+    letterSpacing: 0.07em
+    textTransform: uppercase
   keycap:
     fontFamily: ui-monospace, SFMono-Regular, Menlo, monospace
     fontSize: 8px
@@ -223,7 +229,7 @@ That blue treatment is leftover frontend-design skill output. Do not encode, cop
 
 # Typography
 
-Geist Variable everywhere for UI. `ui-monospace` (not Geist Mono) for model ids, paths, keycaps, times and counts in meta, status, waveforms. Tabular figures wherever numbers tick or line up.
+Geist Variable everywhere for UI, except the section label, which is Paper Mono. `ui-monospace` (not Geist Mono) for model ids, paths, keycaps, times and counts in meta, status, waveforms. Tabular figures wherever numbers tick or line up.
 
 A handful of roles, each defined once in `styles.css`; components name a role rather than a size:
 
@@ -231,7 +237,7 @@ A handful of roles, each defined once in `styles.css`; components name a role ra
 - **heading** — settings and dialog titles.
 - **body** — chat, answers, inputs.
 - **row** — the sidebar row: every list, menu, palette and settings row takes it (a touch larger on a phone, a touch heavier and brighter over frost, since text over frost reads thinner).
-- **group label** — the sidebar's: sentence case, bold, about half the text colour. Every group heading in a list, menu or palette is this; the breadcrumb's place caps are the one uppercase label.
+- **section label** — Paper Mono (shipped, so it reads the same on every system; the system's mono only as the fallback), uppercase, small, letter-spaced, muted. Every section heading is this: a list, menu, palette, card, rider or slider, and the sidebar's groups; the breadcrumb's places share it.
 - **caption** — section subtitles, timestamps, empty copy.
 - **meta** — muted mono beside a row's title, right-aligned, truncating before the title does.
 - **keycap** — small mono in a rounded hairline square, muted; in the text colour on the cursor row or a clickable rail action.
@@ -388,7 +394,7 @@ Grouped by the surface they live on (Surfaces). Every row in every group follows
 
 **Leader menu** — what Ctrl+G can do from where you are, shown after a pause. The page dims except the current region, which stays lit. A small frost card above the composer: the region path as a breadcrumb at the top, action rows with keycaps at the left, the go-to chords and Esc in the rail.
 
-**Dropdown menu** — the common case: sessions, shortcuts, overflow, context menus, submenus and popovers. The overlays' frost and `{rounded.pop}`. A group label, then one-line rows: an optional leading mark, the title at the row role, muted meta inline at the right, trailing icon actions that appear with the row on hover or focus (always on touch). The whole row takes the wash. A single footer action ("+ New …") under a hairline. Something edited in place opens as an inline form in its row and saves on Done; use a popover rather than a menu when rows hold inputs. A one-field rename stays a dialog.
+**Dropdown menu** — the common case: sessions, shortcuts, overflow, context menus, submenus and popovers. The overlays' frost and `{rounded.pop}`. A section label, then one-line rows: an optional leading mark, the title at the row role, muted meta inline at the right, trailing icon actions that appear with the row on hover or focus (always on touch). The whole row takes the wash. A single footer action ("+ New …") under a hairline. Something edited in place opens as an inline form in its row and saves on Done; use a popover rather than a menu when rows hold inputs. A one-field rename stays a dialog.
 
 Choosing in a menu:
 
@@ -419,7 +425,7 @@ Choosing in a menu:
 
 **Sidebar action** — an action of the sidebar is a row, not a small button beside a heading, and is also on the collapsed rail.
 
-**Settings list** — the sidebar's language, not tiles: no box, no dividers between rows, one light hairline between groups. Group labels over one-line rows at the row role. A value is quiet (a select is its value in muted text and a small chevron); state that matters sits muted after the name; descriptions go in a title. Every row's control sits in one column of one width so they line up, and the name truncates before the control does. Buttons are ghost unless they are the one action waiting. Focus anywhere in a row is the row's wash.
+**Settings list** — the sidebar's language, not tiles: no box, no dividers between rows, one light hairline between groups. Section labels over one-line rows at the row role. A value is quiet (a select is its value in muted text and a small chevron); state that matters sits muted after the name; descriptions go in a title. Every row's control sits in one column of one width so they line up, and the name truncates before the control does. Buttons are ghost unless they are the one action waiting. Focus anywhere in a row is the row's wash.
 
 **Segmented choice** — two to four named peer choices: a hairline box, the current option under the gray wash, which slides to the next. Never a colour, never a tick. A long or open list stays a select.
 
@@ -516,7 +522,7 @@ Surfaces that do not match the language yet. Do not copy them; when you touch on
 
 - **Workspace panel, Computer page**: hairline tiles (Tiled pane) → the pane.
 - **Focus rings** in the workspace panel, the Computer page, and project and workspace pages (`project/dashboard.css`) → the wash.
-- **Uppercase group labels** in menus and the leader → the sentence-case group label.
+- **Group labels** in the system's mono (menus, the leader) or sentence-case Geist (the sidebar, the question card, the slider) → the Paper Mono section label.
 - **Leftover blue** (Forbidden color) wherever it is found.
 
 # Do's and Don'ts
