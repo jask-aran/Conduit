@@ -58,9 +58,9 @@
 } }
 /* Four radii (DESIGN.md rounded). control: rows, buttons, inputs, keycaps, chips, in the
    density unit; surface: popovers, cards, overlays, nesting their rows (control + inset);
-   message: the composer, the user's message and the phone's pills, one value on phone and
-   desktop -- a capsule at one line (a 44px pill, a circle), held as the composer grows;
-   round: small fully round bits inside controls (slider, slots, chip remove). */
+   message: the composer (the phone's field too) and the user's message, one value on phone
+   and desktop -- a capsule at one line, held as the composer grows; round: fully round at any
+   size -- the phone's pill groups and buttons, which never grow, and small bits inside controls. */
 :root, [data-density] {
   --radius-control: calc(0.5 * var(--u-space)); --radius-surface: calc(var(--radius-control) + var(--frost-inset));
   --radius-message: 22px; --radius-round: 999px;
@@ -103,8 +103,9 @@
    groups, the sidebar's toggle and the composer's buttons. One icon is a
    circle; more share a capsule, each slot a pill-shaped target 1px from its
    edge. Its tokens size every member. */
+/* One height for every pill: group, lone button, the field at one line. */
 :root { --pill-size: 44px; --pill-slot: 34px; --pill-slot-height: 40px; --pill-gap: 2px; --pill-field-pad: 14px; }
-.ui-pill { display: inline-flex; height: var(--pill-size); align-items: center; gap: var(--pill-gap); padding: 0 1px; border-radius: var(--radius-message); }
+.ui-pill { display: inline-flex; height: var(--pill-size); align-items: center; gap: var(--pill-gap); padding: 0 1px; border-radius: var(--radius-round); }
 .ui-pill > button { display: grid; width: var(--pill-slot); height: var(--pill-slot-height); place-items: center; border: 0; border-radius: var(--radius-round); background: transparent; color: inherit; }
 .ui-pill[data-solo] { width: var(--pill-size); justify-content: center; padding: 0; }
 .ui-pill[data-solo] > button { width: 100%; height: 100%; }
@@ -113,8 +114,8 @@
 .ui-pill[data-stretch] { width: auto; flex: 1 1 auto; }
 .ui-pill[data-stretch] > button { width: 100%; }
 /* Field: text in the capsule; it grows with its lines. */
-.ui-pill-field { display: flex; width: 100%; height: auto; min-height: calc(var(--pill-size) + 2px); align-items: center; border-radius: var(--pill-field-radius); padding: 0 var(--pill-field-pad); }
-.ui-pill-field .ui-textarea { width: 100%; max-height: 220px; border: 0; background: transparent; padding: 11px 0; color: inherit; font: inherit; font-size: var(--text-body); line-height: 1.4; resize: none; outline: none; field-sizing: content; }
+.ui-pill-field { display: flex; width: 100%; height: auto; min-height: var(--pill-size); align-items: center; border-radius: var(--pill-field-radius); padding: 0 var(--pill-field-pad); }
+.ui-pill-field .ui-textarea { width: 100%; max-height: 220px; border: 0; background: transparent; padding: calc((var(--pill-size) - 2px - 1.4em) / 2) 0; color: inherit; font: inherit; font-size: var(--text-body); line-height: 1.4; resize: none; outline: none; field-sizing: content; }
 .ui-pill-field .ui-textarea::placeholder { color: var(--muted-foreground); }
 .ui-pill > button svg { width: var(--u-icon); height: var(--u-icon); }
 
@@ -342,7 +343,7 @@
 /* The composer's field as a PillField: the app keeps its folding (min-height
    and height while idle or listening); the field's shape is the library's. */
 .composer .composer-input-shell.ui-pill-field { display: block; height: auto; align-items: initial; border-radius: var(--pill-field-radius); padding: 0 var(--pill-field-pad); }
-[data-phone-mode="typing"] .composer-input-shell.ui-pill-field { min-height: calc(var(--pill-size) + 2px); }
+[data-phone-mode="typing"] .composer-input-shell.ui-pill-field { min-height: var(--pill-size); }
 
 /* DesktopComposer: resting frost holding a field above a toolbar, riders on its top
    edge. Measured from the app's composer, in units of the density (u). */
