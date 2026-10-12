@@ -49,6 +49,7 @@ import {
 import { captureTranscriptAnchor, restoreTranscriptAnchor } from "./transcript-anchor";
 import { api } from "../api/client";
 import { requestTurnArtifactNavigation } from "./turn-artifact-navigation";
+import { useLibrary } from "@/components/ui/swap";
 
 const ChatMarkdown = lazy(() => import("./markdown").then((module) => ({ default: module.ChatMarkdown })));
 const fullDateTime = (value?: string) => {
@@ -227,6 +228,8 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
   let thread!: HTMLDivElement;
   let latestButton: HTMLButtonElement | undefined;
   let cancelEditButton: HTMLButtonElement | undefined;
+  // The gallery's previews draw these two as the library's RiderButtons; the app keeps its own.
+  const library = useLibrary();
   let scheduleLatestButtonAnchor = () => {};
   let panelMotion: ReturnType<typeof mountTranscriptPanelMotion> | null = null;
   let transcriptVisibility: ReturnType<typeof mountTranscriptVisibility> | null = null;
@@ -1311,10 +1314,10 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
         */}
       {/* Always mounted, so it fades out as well as in: when pressed, and when
            somebody scrolls back down themselves. */}
-      <Button ref={(element) => { latestButton = element; scheduleLatestButtonAnchor(); }} variant="ghost" size="icon-sm" class="message-scroller-button composer-surface-material" data-composer-surface={composerSurface()} data-shown={!following() && latestDistance() >= TAIL_NEAR_LATEST_PX ? "" : undefined} tabIndex={!following() && latestDistance() >= TAIL_NEAR_LATEST_PX ? 0 : -1} aria-hidden={!following() && latestDistance() >= TAIL_NEAR_LATEST_PX ? undefined : "true"} aria-label="Scroll to latest" title="Scroll to latest" onMouseDown={(event) => event.preventDefault()} onClick={() => viewport.scrollTo({ top: viewport.scrollHeight, behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" })}><ArrowDownIcon /></Button>
+      <Button ref={(element) => { latestButton = element; scheduleLatestButtonAnchor(); }} variant="ghost" size="icon-sm" class={`message-scroller-button ${library ? "ui-frost ui-rider-button" : "composer-surface-material"}`} {...(library ? { "data-surface": "frost", "data-lift": "rest" } : {})} data-composer-surface={composerSurface()} data-shown={!following() && latestDistance() >= TAIL_NEAR_LATEST_PX ? "" : undefined} tabIndex={!following() && latestDistance() >= TAIL_NEAR_LATEST_PX ? 0 : -1} aria-hidden={!following() && latestDistance() >= TAIL_NEAR_LATEST_PX ? undefined : "true"} aria-label="Scroll to latest" title="Scroll to latest" onMouseDown={(event) => event.preventDefault()} onClick={() => viewport.scrollTo({ top: viewport.scrollHeight, behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" })}><ArrowDownIcon /></Button>
       {/* Editing an earlier message: a way out that is always there, floating
           over the composer where the edit happens, as the pencil would. */}
-      <Show when={props.chat.editingEntryId()}><Button ref={(element) => { cancelEditButton = element; scheduleLatestButtonAnchor(); }} variant="ghost" size="sm" class="message-scroller-button message-cancel-edit composer-surface-material" data-composer-surface={composerSurface()} data-beside-latest={!following() && latestDistance() >= TAIL_NEAR_LATEST_PX ? "" : undefined} onMouseDown={(event) => event.preventDefault()} onClick={() => { props.chat.cancelEdit(); focusComposerSoon(); }}><XIcon />Cancel editing</Button></Show>
+      <Show when={props.chat.editingEntryId()}><Button ref={(element) => { cancelEditButton = element; scheduleLatestButtonAnchor(); }} variant="ghost" size="sm" class={`message-scroller-button message-cancel-edit ${library ? "ui-frost ui-rider-button" : "composer-surface-material"}`} {...(library ? { "data-surface": "frost", "data-lift": "rest", "data-labelled": "" } : {})} data-composer-surface={composerSurface()} data-beside-latest={!following() && latestDistance() >= TAIL_NEAR_LATEST_PX ? "" : undefined} onMouseDown={(event) => event.preventDefault()} onClick={() => { props.chat.cancelEdit(); focusComposerSoon(); }}><XIcon />Cancel editing</Button></Show>
     </div>
   </div>;
 }

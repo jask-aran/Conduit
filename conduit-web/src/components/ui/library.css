@@ -178,6 +178,13 @@
 /* A keycap is small inside a row, so its corner is a share of the control radius (~4px on desktop), and its text the label size. */
 .ui-keycap { display: inline-grid; min-width: calc(1.125 * var(--u-space)); height: calc(1.125 * var(--u-space)); place-items: center; border-radius: calc(0.6 * var(--radius-control)); background: var(--tint); padding: 0 calc(0.25 * var(--u-space)); color: var(--muted-foreground); font: var(--weight-lift) var(--text-label)/1 var(--font-label); }
 .ui-row[data-highlighted] .ui-keycap { color: var(--foreground); }
+/* A keycap that can be pressed (to record another) and cleared: taller, for a pointer and a finger, the
+   chord and a × each a button, a second tint under the one the cursor is on. */
+.ui-keycap[data-editable] { display: inline-flex; height: calc(1.5625 * var(--u-space)); overflow: hidden; padding: 0; color: var(--foreground); font-size: var(--text-caption); }
+.ui-keycap[data-editable] > button { display: inline-flex; height: 100%; align-items: center; border: 0; background: transparent; padding: 0 calc(0.375 * var(--u-space)); color: inherit; font: inherit; cursor: pointer; }
+.ui-keycap[data-editable] > .ui-keycap-remove { width: calc(1.25 * var(--u-space)); justify-content: center; border-left: 1px solid var(--tint); padding: 0; color: var(--muted-foreground); }
+.ui-keycap-remove svg { width: calc(0.625 * var(--u-icon)); height: calc(0.625 * var(--u-icon)); }
+.ui-keycap[data-editable] > button:is(:hover, :focus-visible) { outline: 0; background: var(--tint); color: var(--foreground); }
 
 /* Card: the menu's container at dialog padding. */
 .ui-card { display: flex; flex-direction: column; gap: calc(1 * var(--u-space)); border-radius: var(--frost-radius); padding: calc(1.25 * var(--u-space)); }
@@ -645,7 +652,8 @@
 .ui-glance-title + .ui-glance-facts { margin-top: calc(-0.375 * var(--u-space)); }
 .ui-glance-facts { overflow: hidden; font: var(--weight-rest) var(--text-caption)/1.5 var(--font-data); text-overflow: ellipsis; white-space: nowrap; }
 .ui-glance-facts + .ui-glance-facts { margin-top: calc(-0.625 * var(--u-space)); }
-.ui-frost.ui-glance-prompt { display: -webkit-box; justify-self: end; max-width: 92%; margin: 0; overflow: hidden; border-radius: var(--radius-message); padding: calc(0.375 * var(--u-space)) calc(0.75 * var(--u-space)); font-size: var(--text-row); line-height: 1.45; -webkit-box-orient: vertical; -webkit-line-clamp: 4; }
+/* The prompt is the user's message (Bubble), smaller and clamped to four lines. */
+.ui-frost.ui-bubble.ui-glance-prompt { display: -webkit-box; max-width: 92%; margin: 0 0 0 auto; overflow: hidden; font-size: var(--text-row); white-space: normal; -webkit-box-orient: vertical; -webkit-line-clamp: 4; }
 .ui-glance-turn { display: flex; align-items: center; gap: var(--row-gap); }
 .ui-glance-orb { display: inline-grid; width: var(--u-icon); height: var(--u-icon); flex: none; }
 .ui-glance-orb > * { width: 100%; height: 100%; }
@@ -655,3 +663,9 @@
 .ui-glance-answer[data-math] .katex-display { margin: .55em 0; overflow: hidden; text-align: left; }
 .ui-glance-empty { margin: 0; padding-top: calc(2 * var(--u-space)); text-align: center; }
 .ui-glance .ui-section { margin-inline: calc(-0.5 * var(--u-space)); }
+/* In the gallery's previews the app's scroll-to-latest and cancel editing draw as RiderButtons: the
+   app keeps where they sit, the library how they look. */
+.message-scroller-button.ui-rider-button[data-slot="button"] { width: calc(2.5 * var(--u-space)); min-height: 0; height: calc(2.5 * var(--u-space)); border-radius: var(--radius-surface); background: var(--frost-fill); color: var(--foreground); }
+.message-scroller-button.ui-rider-button[data-labelled][data-slot="button"] { width: auto; gap: calc(0.375 * var(--u-space)); padding: 0 calc(0.9375 * var(--u-space)) 0 calc(0.78125 * var(--u-space)); font: var(--weight-lift) var(--text-row) var(--font-sans); }
+.message-scroller-button.ui-rider-button[data-slot="button"] svg { width: calc(1.125 * var(--u-icon)); height: calc(1.125 * var(--u-icon)); }
+.message-scroller-button.ui-rider-button[data-labelled][data-slot="button"] svg { width: calc(0.9375 * var(--u-icon)); height: calc(0.9375 * var(--u-icon)); }

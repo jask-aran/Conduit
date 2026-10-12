@@ -158,10 +158,7 @@ const SETTING_PAGES: Record<SettingsSection, { status?: string; failed?: boolean
     <SettingGroup title="Interface"><SettingLine label="Theme"><Theme /></SettingLine><SettingLine label="Scale"><SelectTrigger value="75%" bare /></SettingLine><SettingLine label="Sidebar chats"><Input value="20" /></SettingLine><SettingLine label="Tab row"><SwitchDemo /></SettingLine><SettingLine label="Streaming" state="paused while hidden"><SelectTrigger value="Adaptive" bare /></SettingLine></SettingGroup>
     <SettingGroup title="Reading"><SettingLine label="Transcript width"><SelectTrigger value="Compact" bare /></SettingLine><SettingLine label="Wide blocks"><SelectTrigger value="Off" bare /></SettingLine><SettingLine label="Terminal font"><SelectTrigger value="Meslo" bare /></SettingLine></SettingGroup>
   </> },
-  shortcuts: { body: () => <>
-    <SettingGroup title="Global"><SettingLine label="Command palette" plain>{keys("Ctrl", "K")}</SettingLine><SettingLine label="Search chats" plain>{keys("Ctrl", "Shift", "K")}</SettingLine><SettingLine label="Leader" plain>{keys("Ctrl", "G")}</SettingLine><SettingLine label="Toggle sidebar" state="changed" plain>{keys("Ctrl", "B")}{reset()}</SettingLine></SettingGroup>
-    <SettingNote>Click a shortcut, then press the keys for it.</SettingNote>
-  </> },
+  shortcuts: { status: "Saved", body: () => <Shortcuts /> },
   models: { status: "Not saved", failed: true, body: () => <>
     <SettingGroup title="Accounts"><SettingLine label="OpenAI" plain><SettingValue>Signed in</SettingValue><Button variant="ghost" size="sm">Sign out</Button></SettingLine><SettingLine label="Anthropic" plain><SettingLink href="#">Open sign-in</SettingLink></SettingLine>
       <SettingLine label="OpenRouter key"><Input value="sk-or-••••••••3f2a" /></SettingLine><SettingNote tone="error">That key was turned down (401). Check it has credit.</SettingNote>
@@ -185,6 +182,22 @@ const SETTING_PAGES: Record<SettingsSection, { status?: string; failed?: boolean
   </> },
   web: { body: () => <SettingGroup title="Search"><SettingLine label="Web search"><SwitchDemo /></SettingLine><SettingLine label="Provider"><SelectTrigger value="Brave" bare /></SettingLine><SettingLine label="Brave" plain><SettingLink href="#">Docs</SettingLink></SettingLine></SettingGroup> },
 };
+/** Settings · Shortcuts: a command per line, its chords as keycaps that can be pressed to record another and cleared, and + to add one. */
+function Shortcuts() {
+  const [bound, setBound] = createSignal<Record<string, string[]>>({ "Open command palette": ["Ctrl K"], "Search chats…": ["Ctrl Shift K"], "Settings…": ["Ctrl ,"], "Model selector…": ["Ctrl Shift X"], "Workspace views…": [], "New chat": ["Ctrl Shift C"], "New folder": [], "Stash prompt": ["Ctrl Shift S"], "Toggle sidebar": ["Ctrl B"] });
+  const clear = (command: string, chord: string) => setBound((all) => ({ ...all, [command]: all[command]!.filter((key) => key !== chord) }));
+  const add = () => <Button variant="ghost" size="icon-xs" aria-label="Add a shortcut"><PlusIcon /></Button>;
+  return <>
+    <SettingGroup title="Keyboard"><SettingLine label="Keys for" state="Chrome · Windows · Browser tab" plain><Button variant="ghost" size="sm"><RefreshCwIcon />Reset all</Button></SettingLine>
+      <SettingLine label="Leader menu" state="Ctrl G"><SelectTrigger value="After a pause" bare /></SettingLine>
+      <Input placeholder="Search commands, contexts, or keys…" /></SettingGroup>
+    <SettingGroup title="Application"><For each={Object.keys(bound())}>{(command) => <SettingLine label={command} plain>
+      <Show when={bound()[command]!.length} fallback={<SettingValue>Not assigned</SettingValue>}>
+        <For each={bound()[command]}>{(chord) => <Keycap label={`${command}: ${chord}`} onClick={() => {}} onRemove={() => clear(command, chord)}>{chord}</Keycap>}</For>
+      </Show>{add()}</SettingLine>}</For></SettingGroup>
+  </>;
+}
+
 /** Settings: on a desktop the rail beside the page; on a phone one at a time, the page with Back to the rail. */
 function Settings(props: { close: () => void; phone?: boolean; start?: SettingsSection | null }) {
   const [section, setSection] = createSignal<SettingsSection | null>(props.start === undefined ? (props.phone ? null : "appearance") : props.start);
