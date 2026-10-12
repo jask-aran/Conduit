@@ -154,13 +154,16 @@ export const overlayViews: Record<OverlayView, (props: { close: () => void; clas
   leader: (props) => <><Spotlight lit={props.lit} /><div class="g-page-leader" style={props.leaderBottom ? { bottom: props.leaderBottom } : undefined}><Leader leader="Ctrl G" path={<LeaderPath />} hints={leaderHints()}>{leaderRows()}</Leader></div></>,
 };
 const noop = () => {};
+/** A phone's screen, a chat's transcript on it, an overlay drawn full screen over it. */
+const PhoneStage = (props: { children: JSX.Element }) => <div class="g-phone-stage"><p>{"Created lorem_ipsum.txt in this folder. The second paragraph is now two sentences: lorem ipsum dolor sit amet, consectetur adipiscing elit. ".repeat(6)}</p>
+  <Scrim class="g-stage-scrim">{props.children}</Scrim></div>;
 /** Busy content behind a swatch, as a chat's text is behind an overlay. */
 const Busy = (props: { children: JSX.Element }) => <div class="g-busy"><p>{"Created lorem_ipsum.txt in this folder. The second paragraph is now two sentences: lorem ipsum dolor sit amet, consectetur adipiscing elit. ".repeat(4)}</p>{props.children}</div>;
 
 export const libraryFamilies: Family[] = [
-  { title: "Frost", note: "two materials: frost, and core -- frost on a solid backing, for what covers busy content (overlays). Over a plain ground they look alike; over text the difference shows. Lift is not a material, only its shadow: rest sits on the page, raised floats above it", groups: [{ atoms: [
+  { title: "Frost", note: "two materials: frost, and core -- frost on a solid backing, kept for the phone's full-screen overlays should what is behind them be too busy (off for now; nothing uses it). Over a plain ground they look alike; over text the difference shows. Lift is not a material, only its shadow: rest sits on the page, raised floats above it", groups: [{ atoms: [
     lib("frost", "Frost", "both", "material", "Frost", () => <div class="g-material"><Busy><Frost lift="raised" class="g-swatch" /></Busy><FrostTokens names={FROST_CSS} /></div>, true),
-    lib("frost-core", "Core", "both", "material", "Frost core · Overlay", () => <div class="g-material"><Busy><Frost lift="raised" core class="g-swatch" /></Busy><FrostTokens names={["--frost-core-ground", ...FROST_CSS]} /></div>, true),
+    lib("frost-core", "Core", "both", "material", "Frost core · Overlay core (off for now)", () => <div class="g-material"><Busy><Frost lift="raised" core class="g-swatch" /></Busy><FrostTokens names={["--frost-core-ground", ...FROST_CSS]} /></div>, true),
   ] }] },
   { title: "Popover", note: "raised frost holding sections, separated by rules; a submenu is another popover", groups: [
     { atoms: [
@@ -260,6 +263,12 @@ export const libraryFamilies: Family[] = [
       lib("o-palette", "CommandMenu", "desktop", "overlay", "navigation/command-menu.tsx", () => overlayViews.palette({ close: noop, class: "g-scrim" }), "row"),
       lib("o-search", "CommandMenu · chat search", "desktop", "overlay", "navigation/command-menu.tsx", () => overlayViews.search({ close: noop, class: "g-scrim" }), "row"),
       lib("o-settings", "Settings", "desktop", "overlay", "settings/settings-core.tsx", () => overlayViews.settings({ close: noop, class: "g-scrim" }), "row"),
+    ] },
+    { title: "Phone", note: "full screen, nothing round them dimmed; frost, not core -- the transcript shows through blurred. One column: search's preview and the hints go, settings' rail is a screen of its own", layout: "phone", atoms: [
+      lib("o-palette-phone", "CommandMenu", "phone", "overlay", "navigation/command-menu.tsx", () => <PhoneStage><Overlay label="Command palette"><OverlayBar lead={glyph()} placeholder="Run a command…" onClose={noop} />{paletteList()}</Overlay></PhoneStage>),
+      lib("o-search-phone", "CommandMenu · chat search", "phone", "overlay", "navigation/command-menu.tsx", () => <PhoneStage><Overlay label="Chat search"><OverlayBar lead={<SearchIcon />} placeholder="Search chats…" value="t" end={<SortToggle />} onClose={noop} /><OverlaySplit aside={chatPreview()}>{chatRows("t")}</OverlaySplit></Overlay></PhoneStage>),
+      lib("o-settings-phone", "Settings · sections", "phone", "overlay", "settings/settings-core.tsx", () => <PhoneStage><Overlay label="Settings" layout="rail">{settingsRail()}</Overlay></PhoneStage>),
+      lib("o-settings-page-phone", "Settings · a section", "phone", "overlay", "settings/settings-core.tsx", () => <PhoneStage><Overlay label="Settings" layout="rail">{settingsPage(noop)}</Overlay></PhoneStage>),
     ] },
   ] },
   { title: "Leader", note: "a small Overlay card above the composer that does not cover the page: the page dims all but the current region", groups: [
