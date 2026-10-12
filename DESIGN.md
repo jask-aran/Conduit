@@ -77,7 +77,7 @@ rounded:
   surface: 13px
   message: 22px
   pane: 16px
-  pill: 999px
+  round: 999px
 spacing:
   xs: 4px
   sm: 8px
@@ -342,8 +342,8 @@ Four radii, and a pane's:
 
 - **control** (`{rounded.control}`): rows, buttons, inputs, keycaps, chips. In the density unit, so 6.4px on desktop.
 - **surface** (`{rounded.surface}`): popovers, cards, overlays. A control's radius plus the surface's inset, so the rows inside nest (9.6px on desktop).
-- **message** (`{rounded.message}`): the composer and the user's message, one value on phone and desktop. A capsule at one line, held as the composer grows.
-- **pill**: capsules. Pills only for true pills (pill controls, scope toggle, runtime dots); do not pill section titles or metadata.
+- **message** (`{rounded.message}`): the composer, the user's message and the phone's pills, one value on phone and desktop. A capsule at one line (a 44px pill is a capsule, a lone one a circle), held as the composer grows.
+- **round** (`{rounded.round}`): small fully round bits inside controls -- the slider's track and thumb, a pill's buttons, a chip's remove, runtime dots. Do not round section titles or metadata.
 - Inset panes take `{rounded.pane}`. Tiles (legacy, dashboard and workspace panel only) take surface.
 
 Nothing sets its own radius (components v2: `--radius-*`).
