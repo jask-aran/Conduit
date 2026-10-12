@@ -395,7 +395,7 @@ Grouped by the surface they live on (Surfaces). Every row in every group follows
 
 **Frost chrome (signature, use more of it)** — composer, user bubbles, header pill, scroll-to-latest, and future floating toolbars or hero surfaces. When something floats over content or marks the primary action area, default to frosted glass before a solid card. Do not frost a list, a tree or a row.
 
-**Leader menu** — what Ctrl+G can do from where you are, shown after a pause. The page dims except the current region, which stays lit. A small frost card above the composer: the region path as a breadcrumb at the top, action rows with keycaps at the left, the go-to chords and Esc in the rail.
+**Leader menu** — what Ctrl+G can do from where you are, shown after a pause. The page dims except the current region, which stays lit. A small frost card above the composer: the region path as a breadcrumb along the top, left-aligned and alone (no leader keycap), action rows with keycaps at the left, the go-to chords in the rail (no Esc: leaving needs no prompt).
 
 **Dropdown menu** — the common case: sessions, shortcuts, overflow, context menus, submenus and popovers. The overlays' frost and `{rounded.surface}`. A section label, then one-line rows: an optional leading mark, the title at the row role, muted meta inline at the right, trailing icon actions that appear with the row on hover or focus (always on touch). The whole row takes the wash. A single footer action ("+ New …") under a hairline. Something edited in place opens as an inline form in its row and saves on Done; use a popover rather than a menu when rows hold inputs. A one-field rename stays a dialog.
 
