@@ -310,3 +310,6 @@ html, body { background: var(--frame, #08090a); color: var(--foreground); }
 /* An overlay over the phone preview: full screen at the phone density, over its chat. */
 .g-phone-overlay { position: fixed; inset: 0; z-index: 400; display: grid; }
 .g-phone-overlay > .ui-scrim { min-height: 0; }
+.g-contents { display: contents; }
+/* A glance in its column, as the search overlay draws it. */
+.g-glance { width: 300px; padding: 16px; }

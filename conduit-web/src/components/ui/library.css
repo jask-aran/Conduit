@@ -534,7 +534,8 @@
 .ui-overlay-list .ui-row > .ui-icon { color: var(--muted-foreground); }
 .ui-overlay-list .ui-section + .ui-section { margin: calc(0.25 * var(--u-space)) 0 0; border: 0; padding: 0; }
 .ui-overlay-list .ui-title { padding: calc(0.5 * var(--u-space)) calc(0.625 * var(--u-space)) calc(0.25 * var(--u-space)); }
-.ui-overlay-split { display: grid; min-height: 0; flex: 1; grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr); }
+.ui-overlay-split { display: grid; min-height: 0; flex: 1; grid-template-columns: minmax(0, 1fr); }
+.ui-overlay-split[data-aside] { grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr); }
 .ui-overlay-aside { min-width: 0; overflow: auto; border-left: 1px solid var(--tint); padding: calc(1 * var(--u-space)); }
 .ui-overlay-hints { display: flex; min-height: calc(2.65625 * var(--u-space)); flex: none; flex-wrap: wrap; align-items: center; gap: calc(0.3125 * var(--u-space)) calc(0.9375 * var(--u-space)); border-top: 1px solid var(--tint); padding: calc(0.46875 * var(--u-space)) calc(0.78125 * var(--u-space)); color: var(--muted-foreground); font-size: var(--text-caption); }
 .ui-overlay-hints span { display: inline-flex; align-items: center; gap: calc(0.25 * var(--u-space)); white-space: nowrap; }
@@ -626,3 +627,31 @@
 .ui-spotlight-lit[data-whole] { top: 50%; left: 50%; width: 0; height: 0; }
 @media (prefers-reduced-motion: reduce) { .ui-spotlight-lit { transition: none; } }
 .ui-leader .ui-overlay-hints { gap: calc(0.234375 * var(--u-space)) calc(0.625 * var(--u-space)); }
+
+/* RiderButton: rides over the transcript above the composer (scroll to latest, cancel an edit):
+   resting frost, a square of 2.5 units at the surface radius, or its words beside the icon. */
+.ui-frost.ui-rider-button { display: inline-flex; width: calc(2.5 * var(--u-space)); height: calc(2.5 * var(--u-space)); flex: none; align-items: center; justify-content: center; gap: calc(0.375 * var(--u-space)); border-radius: var(--radius-surface); padding: 0; color: var(--foreground); font: var(--weight-lift) var(--text-row) var(--font-sans); white-space: nowrap; cursor: pointer; transition: filter .12s ease; }
+.ui-rider-button svg { width: calc(1.125 * var(--u-icon)); height: calc(1.125 * var(--u-icon)); flex: none; }
+.ui-frost.ui-rider-button[data-labelled] { width: auto; padding: 0 calc(0.9375 * var(--u-space)) 0 calc(0.78125 * var(--u-space)); }
+.ui-rider-button[data-labelled] svg { width: calc(0.9375 * var(--u-icon)); height: calc(0.9375 * var(--u-icon)); }
+.ui-rider-button:is(:hover, :focus-visible) { outline: 0; filter: brightness(1.12); }
+
+/* Glance: chat search's preview column, in the row's voice: the title at the strong weight, facts in
+   the data face, the prompt as the user's message is drawn, the answer a step under the text colour. */
+.ui-glance { display: grid; min-width: 0; align-content: start; gap: calc(0.625 * var(--u-space)); color: var(--muted-foreground); font-size: var(--text-caption); }
+.ui-glance > * { min-width: 0; }
+.ui-glance-title { display: flex; align-items: flex-start; gap: var(--row-gap); color: var(--foreground); font: var(--weight-strong) var(--text-row)/1.3 var(--font-sans); }
+.ui-glance-title > :first-child:not(span) { width: var(--u-icon); height: var(--u-icon); flex: none; }
+.ui-glance-title + .ui-glance-facts { margin-top: calc(-0.375 * var(--u-space)); }
+.ui-glance-facts { overflow: hidden; font: var(--weight-rest) var(--text-caption)/1.5 var(--font-data); text-overflow: ellipsis; white-space: nowrap; }
+.ui-glance-facts + .ui-glance-facts { margin-top: calc(-0.625 * var(--u-space)); }
+.ui-frost.ui-glance-prompt { display: -webkit-box; justify-self: end; max-width: 92%; margin: 0; overflow: hidden; border-radius: var(--radius-message); padding: calc(0.375 * var(--u-space)) calc(0.75 * var(--u-space)); font-size: var(--text-row); line-height: 1.45; -webkit-box-orient: vertical; -webkit-line-clamp: 4; }
+.ui-glance-turn { display: flex; align-items: center; gap: var(--row-gap); }
+.ui-glance-orb { display: inline-grid; width: var(--u-icon); height: var(--u-icon); flex: none; }
+.ui-glance-orb > * { width: 100%; height: 100%; }
+.ui-glance-turn b { color: var(--foreground); font-weight: var(--weight-lift); }
+.ui-glance-answer { display: -webkit-box; margin: 0; overflow: hidden; color: color-mix(in oklch, var(--foreground), transparent 20%); font-size: var(--text-row); line-height: 1.5; -webkit-box-orient: vertical; -webkit-line-clamp: 7; }
+.ui-glance-answer[data-math] { display: block; max-height: 15em; -webkit-line-clamp: unset; mask-image: linear-gradient(to bottom, #000 12.5em, transparent 15em); }
+.ui-glance-answer[data-math] .katex-display { margin: .55em 0; overflow: hidden; text-align: left; }
+.ui-glance-empty { margin: 0; padding-top: calc(2 * var(--u-space)); text-align: center; }
+.ui-glance .ui-section { margin-inline: calc(-0.5 * var(--u-space)); }

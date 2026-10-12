@@ -151,6 +151,13 @@ export function Rider(props: { label?: string; layout?: "row" | "strip" | "card"
   return <div class={cn("ui-frost ui-rider", props.class)} data-surface="frost" data-lift="rest" data-layout={props.layout ?? "row"} role="group" aria-label={props.label}>{props.children}</div>;
 }
 export const RiderTitle = (props: { children: JSX.Element }) => <span class="ui-title-text">{props.children}</span>;
+/** A button riding over the transcript just above the composer: scroll to latest (an icon alone), cancel an edit
+ *  (an icon and its words). Resting frost at the surface radius. */
+export function RiderButton(props: JSX.ButtonHTMLAttributes<HTMLButtonElement> & { icon: JSX.Element; label: string; show?: "icon" | "label" }) {
+  const [local, rest] = splitProps(props, ["icon", "label", "show", "class"]);
+  return <button type="button" {...rest} class={cn("ui-frost ui-rider-button", local.class)} data-surface="frost" data-lift="rest" data-labelled={local.show === "label" ? "" : undefined}
+    aria-label={local.show === "label" ? undefined : local.label} title={local.show === "label" ? undefined : local.label}>{local.icon}<Show when={local.show === "label"}><span>{local.label}</span></Show></button>;
+}
 export const RiderActions = (props: { stack?: boolean; children: JSX.Element }) => <div class="ui-rider-actions" data-stack={props.stack ? "" : undefined}>{props.children}</div>;
 /** A line of waiting text, one line until opened. */
 export function Line(props: { text: string; clipped?: boolean }) {
@@ -215,8 +222,9 @@ export function OverlayBar(props: { lead?: JSX.Element; placeholder: string; val
 export const OverlayList = (props: { children: JSX.Element }) => <div class="ui-overlay-list" role="listbox" onPointerOver={moveCursor}>{props.children}</div>;
 
 /** A list beside an aside (a preview of what the list has selected). */
-export const OverlaySplit = (props: { aside: JSX.Element; children: JSX.Element }) =>
-  <div class="ui-overlay-split">{props.children}<aside class="ui-overlay-aside">{props.aside}</aside></div>;
+/** aside: optional, so a preview that can be hidden (chat search's Ctrl+P) leaves the list the whole width. */
+export const OverlaySplit = (props: { aside?: JSX.Element; children: JSX.Element }) =>
+  <div class="ui-overlay-split" data-aside={props.aside ? "" : undefined}>{props.children}<Show when={props.aside}><aside class="ui-overlay-aside">{props.aside}</aside></Show></div>;
 
 /** The keys along the foot: [keys, what they do], at the start and the end. */
 export type Hint = [string[], string];
@@ -266,6 +274,27 @@ export const SettingWide = (props: { children: JSX.Element }) => <div class="ui-
 export const Progress = (props: { value: number; max: number; label: string }) => <progress class="ui-progress" aria-label={props.label} value={props.value} max={props.max} />;
 /** Waiting on what a page shows. */
 export const SettingLoading = (props: { children: JSX.Element }) => <div class="ui-setting-loading"><span class="ui-spinner" aria-hidden="true" />{props.children}</div>;
+
+/*
+ * Glance: what chat search's cursor rests on, told apart without opening it -- a chat's title and
+ * facts, its last prompt, how that turn ended and the start of its answer; or a folder and its
+ * latest chats. The app reads the chat; these only draw what it read.
+ */
+export const Glance = (props: { label: string; children: JSX.Element }) => <div class="ui-glance" aria-label={props.label} aria-live="polite">{props.children}</div>;
+export const GlanceHead = (props: { mark?: JSX.Element; title: string; facts: string[] }) => <>
+  <div class="ui-glance-title">{props.mark}<span>{props.title}</span></div>
+  <For each={props.facts}>{(fact) => <div class="ui-glance-facts" title={fact}>{fact}</div>}</For>
+</>;
+/** The last prompt, as the user's message is drawn, clamped to four lines. */
+export const GlancePrompt = (props: { children: JSX.Element }) => <p class="ui-frost ui-glance-prompt" data-lift="rest">{props.children}</p>;
+/** How the turn ended: an orb (the app's), the outcome, how long and what it did. */
+export const GlanceTurn = (props: { orb?: JSX.Element; outcome: string; detail?: string }) =>
+  <div class="ui-glance-turn"><Show when={props.orb}><span class="ui-glance-orb">{props.orb}</span></Show><span><b>{props.outcome}</b>{props.detail ? ` · ${props.detail}` : ""}</span></div>;
+/** The start of the answer, clamped; html: the app's rendered math, faded where it is cut. */
+export const GlanceAnswer = (props: { html?: string; children?: JSX.Element }) => props.html !== undefined
+  ? <div class="ui-glance-answer" data-math="" innerHTML={props.html} />
+  : <p class="ui-glance-answer">{props.children}</p>;
+export const GlanceEmpty = (props: { children: JSX.Element }) => <p class="ui-glance-empty">{props.children}</p>;
 
 /** An overlay's head without a field: what it is about (the leader's key and path). */
 export const OverlayHead = (props: { children: JSX.Element }) => <div class="ui-overlay-bar" data-head>{props.children}</div>;
