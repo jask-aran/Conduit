@@ -132,7 +132,7 @@
    about half the text colour. Every group heading in a list, menu, palette or
    card is this; the breadcrumb's place caps are the one uppercase label. */
 /* The section label, one for every section: popovers, cards, riders, the sidebar. Muted caps in the label face. */
-.ui-title, .ui-title-text, .ui-nav-label { color: var(--muted-foreground); font: var(--weight-rest) var(--text-label)/1.5 var(--font-label); letter-spacing: .07em; text-transform: uppercase; }
+.ui-title, .ui-title-text, .ui-nav-label, .ui-crumbs > button { color: var(--muted-foreground); font: var(--weight-rest) var(--text-label)/1.5 var(--font-label); letter-spacing: .07em; text-transform: uppercase; }
 .ui-title { display: flex; align-items: baseline; justify-content: space-between; gap: var(--row-gap); padding: calc(0.375 * var(--u-type)) calc(0.5 * var(--u-type)) calc(0.3125 * var(--u-type)); }
 .ui-title small { font-weight: var(--weight-rest); letter-spacing: 0; text-transform: none; }
 .ui-section { display: flex; flex-direction: column; }
@@ -582,13 +582,14 @@
 .ui-overlay-bar[data-head] { min-height: calc(2.96875 * var(--u-space)); gap: calc(0.46875 * var(--u-space)); padding: calc(0.46875 * var(--u-space)) calc(0.78125 * var(--u-space)); }
 .ui-keys[data-first] { display: inline-flex; min-width: calc(3.125 * var(--u-space)); flex: none; gap: calc(0.1875 * var(--u-space)); }
 .ui-leader .ui-keys[data-first] .ui-keycap { color: var(--foreground); }
-/* Crumbs: the breadcrumb's place caps; the current place white, no fill. */
+/* Crumbs: the leader's path, in the section label's type. */
 .ui-crumbs { display: flex; min-width: 0; flex: 1; align-items: center; justify-content: flex-end; gap: 2px; overflow: hidden; }
-.ui-crumbs > button { flex: none; border: 0; border-radius: var(--radius-control); background: transparent; padding: 2px calc(0.390625 * var(--u-space)); color: var(--muted-foreground); font: var(--weight-lift) var(--text-caption)/1.2 var(--font-label); letter-spacing: .07em; text-transform: uppercase; cursor: pointer; }
+/* A crumb is a section label you can press (its type is .ui-title's): the wash on hover, the current place white at the current weight. */
+.ui-crumbs > button { flex: none; border: 0; border-radius: var(--radius-control); background: transparent; padding: 2px calc(0.390625 * var(--u-space)); cursor: pointer; }
 .ui-crumbs > button:hover:not(:disabled) { background: var(--tint); color: var(--foreground); }
 .ui-crumbs > button[aria-current="true"] { color: var(--foreground); font-weight: var(--weight-current); }
 .ui-crumbs > button:disabled { opacity: .55; cursor: default; }
-.ui-crumbs-sep { color: var(--muted-foreground); font-size: var(--text-caption); opacity: .6; }
+.ui-crumbs-sep { color: var(--muted-foreground); font-size: var(--text-label); opacity: .6; }
 /* Spotlight: the dim is the shadow round the lit region. */
 .ui-spotlight { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
 .ui-spotlight-lit { position: absolute; box-shadow: 0 0 0 200vmax var(--dim); transition: top 200ms cubic-bezier(.2, .8, .2, 1), left 200ms cubic-bezier(.2, .8, .2, 1), width 200ms cubic-bezier(.2, .8, .2, 1), height 200ms cubic-bezier(.2, .8, .2, 1); }
