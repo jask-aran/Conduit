@@ -1,4 +1,4 @@
-import { For, Show, createSignal, onCleanup, onMount, type JSX } from "solid-js";
+import { For, Show, createEffect, createSignal, on, onCleanup, onMount, type JSX } from "solid-js";
 import { Button, Frost, type Motion } from "@/components/ui";
 
 /*
@@ -144,4 +144,24 @@ export function Replay(props: { leaves?: Motion[]; children: (motion: () => Moti
       <For each={props.leaves ?? []}>{(move) => <Button size="sm" variant="ghost" outline onClick={() => leave(move)}>{move === "removing" ? "Remove" : "Leave"}</Button>}</For></div>
     <div class="g-replay-stage"><Show when={shown() && run()} keyed>{(_) => props.children(motion)}</Show></div>
   </div>;
+}
+
+/** A piece's states, switched by hand: a button each, the piece drawn for the one chosen (it plays its own moves). */
+export function States<T extends string>(props: { states: readonly T[]; children: (state: () => T) => JSX.Element }) {
+  const [state, setState] = createSignal<T>(props.states[0]!);
+  return <div class="g-replay">
+    <div class="g-replay-bar"><For each={props.states}>{(name) => <Button size="sm" variant="ghost" outline={state() === name} aria-pressed={state() === name} onClick={() => setState(() => name)}>{name}</Button>}</For></div>
+    <div class="g-replay-stage">{props.children(state)}</div>
+  </div>;
+}
+/** Shows its child while `when`, arriving as it comes and playing its leave (default: back the way it came) before it goes. */
+export function Presence(props: { when: boolean; leave?: Motion; children: (motion: () => Motion) => JSX.Element }) {
+  const [shown, setShown] = createSignal(props.when), [motion, setMotion] = createSignal<Motion>("entering");
+  createEffect(on(() => props.when, (when) => {
+    if (when) { setMotion("entering"); setShown(true); return; }
+    setMotion(props.leave ?? "leaving");
+    const timer = setTimeout(() => setShown(false), msOf("--duration-quick"));
+    onCleanup(() => clearTimeout(timer));
+  }, { defer: true }));
+  return <Show when={shown()}>{props.children(motion)}</Show>;
 }

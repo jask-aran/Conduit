@@ -1,4 +1,4 @@
-import { createSignal, For, onCleanup, onMount, type JSX } from "solid-js";
+import { createSignal, For, onCleanup, onMount, Show, type JSX } from "solid-js";
 import { ArrowUpIcon, CameraIcon, CopyIcon, FolderIcon, MicIcon, MonitorIcon, PaperclipIcon, PlusIcon, SettingsIcon, ShareIcon, Trash2Icon } from "lucide-solid";
 import { Spinner } from "@/components/primitives";
 import { Segmented, Bubble, Button, Frost, HeadingSection, Input, Item, Keycap, Menu, NavRow, Overlay, OverlayBar, PillButton, PillField, PillGroup, Section, SelectTrigger, TextArea, Toolbar } from "@/components/ui";
@@ -218,6 +218,20 @@ const SPACE: TokenGroup[] = [
 ];
 /** A dot crossing a track, again and again, at a token's pace or along its curve. */
 const run = (duration: string, easing: string) => () => <div class="g-run"><span style={{ "animation-duration": duration, "animation-timing-function": easing }} /></div>;
+/** The page's moves, on a sketch of it: sidebar, reading, and the composer that stays put. */
+function PageMoves() {
+  const [run, setRun] = createSignal<"open" | "leave" | "arrive">("arrive"), [n, setN] = createSignal(0);
+  const play = (move: "open" | "leave") => { setRun(move); setN(n() + 1); if (move === "leave") setTimeout(() => setRun("arrive"), parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--duration-quick"))); };
+  return <div class="g-replay">
+    <div class="g-replay-bar"><Button size="sm" variant="ghost" outline onClick={() => play("open")}>First open</Button><Button size="sm" variant="ghost" outline onClick={() => play("leave")}>Change route</Button></div>
+    <Show when={n() + 1} keyed>{(_) => <div class="g-sketch" data-run={run()}>
+      <div class="g-sketch-side"><NavRow current>Chats</NavRow><NavRow>Japan</NavRow><NavRow>Conduit</NavRow></div>
+      <div class="g-sketch-main"><div class="g-sketch-read"><Bubble>make the second paragraph shorter</Bubble><p class="g-muted">Done -- the paragraph is two sentences now.</p></div>
+        <Frost class="g-sketch-composer">Send a message…</Frost></div>
+    </div>}</Show>
+  </div>;
+}
+
 const MOTION: TokenGroup[] = [
   { title: "Three curves", rows: [
     tok("--ease-arrive", "arriving, opening, settling: long and gentle", colour("--ease-arrive"), run("1.2s", "var(--ease-arrive)")),
@@ -439,6 +453,8 @@ export const foundationFamilies: Family[] = [
   ] }] },
   { title: "Motion", rail: "Foundations", note: "motion explains a change of place (DESIGN Motion): quick out, gentle in; a change in place is quick and plain. Only transform and opacity, but for a fold the reader opens. The foundation is these tokens and four shapes (a fade in or out, a rise, a drop back the way it came); each piece owns its moves, shown on its own page under Motion. Reduced motion keeps the end state", groups: [{ title: "Tokens", note: "a dot runs each curve, and each duration at its curve", layout: "desktop", atoms: [
     lib("motion-tokens", "Motion", "both", "motion", "library.css :root --ease-* · --duration-*", () => <TokenTable groups={MOTION} density={false} />, "row"),
+  ] }, { title: "The page", note: "no piece's own: the page's regions fade on the tokens, and the composer never moves. The first open fades in everything but the composer; a route (a dashboard's send opening its chat) fades the reading out quick, then the new one in gentle. The app's motion-rules.ts takes these at the port", layout: "desktop", atoms: [
+    lib("motion-page", "The page", "desktop", "motion", "ui-fade-in · ui-fade-out on the page's regions", () => <PageMoves />, "row"),
   ] }] },
   { title: "Controls", rail: "Foundations", stage: true, note: "what sits on any surface. A surface sets two values, --tint (its lines and washes) and --well (the fill under an input or an outline button), and a control reads only those; so each is drawn once, on the surface and at the density picked above", groups: [
     { title: "In use", note: "the same controls on the ground and over frost: what each takes from the surface under it", layout: "desktop", atoms: [

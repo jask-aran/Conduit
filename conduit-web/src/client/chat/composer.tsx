@@ -890,9 +890,9 @@ export function Composer(props: {
                   which queues the message for the agent -- and Stop steps to
                   its left. Each change scales the new action in. */}
               <Show when={stoppable() && newDraft()}>
-                <Button variant="ghost" size="icon-sm" class="composer-stop-aside" aria-label="Stop response" onClick={props.chat.stop}><Show when={props.chat.stopping()} fallback={<SquareIcon />}><Spinner /></Show></Button>
+                <Button variant="ghost" size="icon-sm" class={v2() ? "composer-stop-aside ui-toolbar-aside" : "composer-stop-aside"} aria-label="Stop response" onClick={props.chat.stop}><Show when={props.chat.stopping()} fallback={<SquareIcon />}><Spinner /></Show></Button>
               </Show>
-              <Show when={voiceFirst() || !(phoneMode() === "idle" && !stoppable())}><span class="composer-primary-slot">
+              <Show when={voiceFirst() || !(phoneMode() === "idle" && !stoppable())}><span class={v2() ? "ui-toolbar-primary" : "composer-primary-slot"}>
                 <Show when={voiceFirst()}>
                   <Button variant="ghost" size="icon-sm" class="composer-stop-send" data-shown={phoneMode() === "listening" ? "" : undefined} aria-hidden={phoneMode() === "listening" ? undefined : "true"} tabIndex={phoneMode() === "listening" ? 0 : -1} aria-label="Stop and send" title="Stop dictating and send" onPointerDown={(event) => event.preventDefault()} onClick={stopAndSend}><ArrowUpIcon /></Button>
                 </Show>

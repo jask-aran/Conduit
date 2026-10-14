@@ -1,4 +1,4 @@
-import { createEffect, createSignal, createUniqueId, For, Show, splitProps, type JSX } from "solid-js";
+import { children, createEffect, createSignal, createUniqueId, For, Show, splitProps, type JSX } from "solid-js";
 import { CheckIcon, ChevronDownIcon, CopyIcon, ChevronLeftIcon, ChevronRightIcon, CircleCheckIcon, CircleXIcon, InfoIcon, SearchIcon, TriangleAlertIcon, XIcon } from "lucide-solid";
 export { ChevronDownIcon };
 import { cn } from "@/lib/utils";
@@ -28,8 +28,9 @@ type PillAction = { label: string; icon: JSX.Element };
 const pillSlot = (item: PillAction, onPick?: (label: string) => void) => <button type="button" aria-label={item.label} title={item.label}
   onClick={(event) => { if (onPick) { event.stopPropagation(); onPick(item.label); } }}>{item.icon}</button>;
 
-export function PillButton(props: PillAction & { stretch?: boolean; onPick?: (label: string) => void }) {
-  return <div class="ui-frost ui-pill" data-solo="" data-stretch={props.stretch ? "" : undefined}>{pillSlot(props, props.onPick)}</div>;
+/** motion: a circle that comes and goes in a row (Send beside the mic) grows from nothing and shrinks back, so its neighbours make room. */
+export function PillButton(props: PillAction & { stretch?: boolean; motion?: Motion; onPick?: (label: string) => void }) {
+  return <div class="ui-frost ui-pill" data-solo="" data-stretch={props.stretch ? "" : undefined} {...motionOf(props.motion)}>{pillSlot(props, props.onPick)}</div>;
 }
 export function PillGroup(props: { actions: PillAction[]; onPick?: (label: string) => void }) {
   return <div class="ui-frost ui-pill"><For each={props.actions}>{(item) => pillSlot(item, props.onPick)}</For></div>;
@@ -68,8 +69,9 @@ export function moveCursor(event: PointerEvent & { currentTarget: Element }) {
 export type Motion = "entering" | "leaving" | "removing";
 const motionOf = (motion?: Motion) => ({ "data-entering": motion === "entering" ? "" : undefined, "data-leaving": motion === "leaving" ? "" : motion === "removing" ? "remove" : undefined });
 
-export function Menu(props: { class?: string; density?: Density; motion?: Motion; children: JSX.Element }) {
-  return <div role="menu" class={cn("ui-frost ui-menu", props.class)} onPointerOver={moveCursor} data-density={props.density} data-surface="frost" data-lift="raised" {...motionOf(props.motion)}>{props.children}</div>;
+/** under: a phone's submenu is open as a panel over it, so it dims and takes no taps. */
+export function Menu(props: { class?: string; density?: Density; motion?: Motion; under?: boolean; children: JSX.Element }) {
+  return <div role="menu" class={cn("ui-frost ui-menu", props.class)} onPointerOver={moveCursor} data-density={props.density} data-surface="frost" data-lift="raised" data-under={props.under ? "" : undefined} {...motionOf(props.motion)}>{props.children}</div>;
 }
 
 /** A menu's section: a list of items (the default) or a slider, with an optional title and a note beside it. */
@@ -152,14 +154,22 @@ export function Card(props: { title: string; detail?: JSX.Element; class?: strin
  * tokens (--cmp-*), measured from the app and scaled by density; its width is
  * the pane's to declare (--composer-width).
  */
-export function DesktopComposer(props: { riders?: JSX.Element; class?: string; children: JSX.Element }) {
-  return <div class="ui-composer-stack ui-composer-width">{props.riders}<div class={cn("ui-frost ui-desktop-composer", props.class)} data-surface="frost" data-lift="rest">{props.children}</div></div>;
+/** takeover: a card Rider (the question) that takes the composer's place: the composer drops out of the pane but
+ *  keeps its room, and the card rises into the slot. */
+export function DesktopComposer(props: { riders?: JSX.Element; takeover?: JSX.Element; class?: string; children: JSX.Element }) {
+  const takeover = children(() => props.takeover);
+  return <div class="ui-composer-slot ui-composer-width" data-taken={takeover() ? "" : undefined}>
+    <div class="ui-composer-stack">{props.riders}<div class={cn("ui-frost ui-desktop-composer", props.class)} data-surface="frost" data-lift="rest">{props.children}</div></div>{takeover()}</div>;
 }
 /** The composer's field slot: where its TextArea (or the app's, with its behaviour) sits, padded by the composer. */
 export const ComposerField = (props: { children: JSX.Element }) => <div class="ui-composer-field">{props.children}</div>;
-/** A row of controls: start (leading) and end (trailing) groups. */
-export function Toolbar(props: { start?: JSX.Element; end?: JSX.Element; class?: string }) {
-  return <div class={cn("ui-toolbar", props.class)}><div class="ui-toolbar-start">{props.start}</div><div class="ui-toolbar-end">{props.end}</div></div>;
+/** A row of controls: start (leading) and end (trailing) groups. primary: the end's one slot (Send, or Stop while
+ *  the agent works), each action scaling in where the last was; aside: what steps in beside it (Stop, when a draft
+ *  is typed during a turn). */
+export function Toolbar(props: { start?: JSX.Element; end?: JSX.Element; aside?: JSX.Element; primary?: JSX.Element; class?: string }) {
+  const aside = children(() => props.aside);
+  return <div class={cn("ui-toolbar", props.class)}><div class="ui-toolbar-start">{props.start}</div><div class="ui-toolbar-end">{props.end}
+    <Show when={aside()}><span class="ui-toolbar-aside">{aside()}</span></Show><Show when={props.primary !== undefined}><span class="ui-toolbar-primary">{props.primary}</span></Show></div></div>;
 }
 
 /*
@@ -172,9 +182,9 @@ export function Rider(props: { label?: string; layout?: "row" | "strip" | "card"
 export const RiderTitle = (props: { children: JSX.Element }) => <span class="ui-title-text">{props.children}</span>;
 /** A button riding over the transcript just above the composer: scroll to latest (an icon alone), cancel an edit
  *  (an icon and its words). Resting frost at the surface radius. */
-export function RiderButton(props: JSX.ButtonHTMLAttributes<HTMLButtonElement> & { icon: JSX.Element; label: string; show?: "icon" | "label" }) {
-  const [local, rest] = splitProps(props, ["icon", "label", "show", "class"]);
-  return <button type="button" {...rest} class={cn("ui-frost ui-rider-button", local.class)} data-surface="frost" data-lift="rest" data-labelled={local.show === "label" ? "" : undefined}
+export function RiderButton(props: JSX.ButtonHTMLAttributes<HTMLButtonElement> & { icon: JSX.Element; label: string; show?: "icon" | "label"; motion?: Motion }) {
+  const [local, rest] = splitProps(props, ["icon", "label", "show", "class", "motion"]);
+  return <button type="button" {...rest} {...motionOf(local.motion)} class={cn("ui-frost ui-rider-button", local.class)} data-surface="frost" data-lift="rest" data-labelled={local.show === "label" ? "" : undefined}
     aria-label={local.show === "label" ? undefined : local.label} title={local.show === "label" ? undefined : local.label}>{local.icon}<Show when={local.show === "label"}><span>{local.label}</span></Show></button>;
 }
 export const RiderActions = (props: { stack?: boolean; children: JSX.Element }) => <div class="ui-rider-actions" data-stack={props.stack ? "" : undefined}>{props.children}</div>;

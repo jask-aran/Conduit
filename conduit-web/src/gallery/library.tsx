@@ -1,5 +1,6 @@
 import { ArrowDownIcon, PanelLeftIcon, MessageSquarePlusIcon, EllipsisIcon, CameraIcon, KeyboardIcon, MicIcon, ArrowUpIcon, ChevronDownIcon, CircleIcon, FileTextIcon, ClockIcon, Maximize2Icon, SendHorizontalIcon, XIcon, CheckIcon } from "lucide-solid";
 import { createSignal, For, onCleanup, onMount, Show, type JSX } from "solid-js";
+import { SquareIcon } from "lucide-solid";
 import { PanelRightIcon, ClipboardCopyIcon, Columns2Icon, CopyIcon, FolderIcon, FolderInputIcon, LayoutDashboardIcon, MenuIcon, MonitorIcon, PaperclipIcon, PencilIcon, PinIcon, PlusIcon, QrCodeIcon, RefreshCwIcon, SearchIcon, ShareIcon, ShieldCheckIcon, SquarePenIcon, TerminalIcon, Trash2Icon } from "lucide-solid";
 import { type Motion, Disclosure, Transcript, Message, Turn, TraceHeader, Trail, Step, Answer, CodeBlock, CopyButton, MessageFoot, Toast, Toaster, SettingRecorder, Field, Leader, Crumbs, Spotlight, OverlayHead, Match, Choices, OverlayBar, OverlayHints, OverlayList, OverlayPage, OverlayRail, OverlaySplit, Glance, GlanceHead, GlancePrompt, GlanceTurn, GlanceAnswer, GlanceEmpty, RiderButton, Overlay, Scrim, SettingGroup, SettingLine, SettingValue, SettingLink, SettingNote, SettingDetails, SettingWide, SettingLoading, Progress, Keycap, NavGroup, NavRow, Segmented, SelectTrigger, Bubble, Button, Card, Chip, Choice, ComposerField, DesktopComposer, Line, TextArea, Rider, RiderActions, RiderTitle, Toolbar, Frost, Input, Item, Menu, PillButton, PillField, PillGroup, PillSwitch, HeadingSection, SearchSection, Section, Slider } from "@/components/ui";
 import { Switch } from "../client/settings/settings-controls";
@@ -11,7 +12,7 @@ import { QuestionCard } from "../client/chat/question-card";
 import { ImageIcon, ActivityIcon, BrainIcon, ChevronRightIcon, GlobeIcon, MessageSquareIcon, MicIcon as VoiceIcon, NotebookTextIcon, PanelLeftCloseIcon, ServerIcon } from "lucide-solid";
 import type { Question } from "../client/api/contracts";
 import { LibraryContext } from "@/components/ui/swap";
-import { InUse, FormTable, form, px, rounding, edge, fg, bg, Replay, type Mark, type FormRow } from "./specs";
+import { InUse, FormTable, form, px, rounding, edge, fg, bg, Replay, States, Presence, type Mark, type FormRow } from "./specs";
 import katex from "katex";
 import { ThinkingOrb, settledOrbRate } from "../client/chat/thinking-orb";
 import { PLAIN_SPHERE, SPUTTERING_SPHERE } from "../client/chat/orb-frames";
@@ -75,7 +76,8 @@ function Area() { const [value, setValue] = createSignal("dashboard"); return <P
 const ghost = (label: string, glyph: JSX.Element) => <Button variant="ghost" size="icon-sm" aria-label={label} title={label}>{glyph}</Button>;
 const picker = (children: JSX.Element) => <Button variant="ghost" size="sm" class="g-picker">{children}<ChevronDownIcon /></Button>;
 const toolbarStart = () => <>{ghost("Attach and more", <PlusIcon />)}{ghost("Context usage", <CircleIcon />)}{picker(<HarnessMark id="conduit" class="size-4" />)}{picker(<><strong>Meta: Muse Spark 1.3</strong><span class="g-muted">medium</span></>)}</>;
-const toolbarEnd = () => <>{ghost("Start voice dictation", <MicIcon />)}{ghost("Send message", <ArrowUpIcon />)}</>;
+const toolbarEnd = () => ghost("Start voice dictation", <MicIcon />);
+const send = () => ghost("Send message", <ArrowUpIcon />);
 const thumb = "data:image/svg+xml," + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><defs><linearGradient id="g" x2="1" y2="1"><stop offset="0" stop-color="#6b8afd"/><stop offset="1" stop-color="#d97706"/></linearGradient></defs><rect width="48" height="48" fill="url(#g)"/></svg>');
 /** The app's riders, as components v2 builds them. */
 const attachments = (motion?: Motion) => <Rider label="Attachments" layout="strip" motion={motion}><div class="ui-chips"><Chip name="photo.png" image={thumb} /><Chip name="notes.txt" detail="2.1 KB" icon={<FileTextIcon />} /><Chip name="lorem_ipsum.txt" detail="412 bytes" icon={<FileTextIcon />} status="uploading" progress={60} /></div>
@@ -484,6 +486,10 @@ export const libraryFamilies: Family[] = [
     ] },
     { title: "Motion", note: "its own moves, from Foundations · Motion: it rises in with a fade and drops back the way it came; nothing in it answers the pointer as it goes. The app's popovers and menus (frost-arrive, 220ms) take these", layout: "desktop", atoms: [
       lib("popover-motion", "Popover · motion", "both", "popover", "Menu motion", () => <FormTable rows={[form("arrives · leaves", "rises --space-md with a fade; drops back", () => <Replay leaves={["leaving"]}>{(m) => <Menu motion={m()}><Section><Item icon={<FolderIcon />}>Open</Item><Item icon={<CopyIcon />}>Copy link</Item></Section></Menu>}</Replay>, "<Menu motion>", "in: --duration-gentle · --ease-arrive · out: --duration-quick · --ease-leave")]} on={["desktop", "phone"]} widths={["200px", "minmax(0, 1fr)", "minmax(0, 1fr)"]} />, "row"),
+      lib("popover-submenu-motion", "Popover · a phone's submenu", "phone", "popover", "Menu under · Menu motion", () => <FormTable rows={[form("a submenu", "opens as a panel over its parent, which dims where it stands and takes no taps", () => <States states={["Menu", "Submenu open"] as const}>{(s) => <div class="g-panel-over">
+        <Menu class="g-w16" under={s() === "Submenu open"}><Section title="Model"><Item opens>Meta: Muse Spark 1.3 Contributor</Item></Section><Section><Item icon={<PaperclipIcon />}>Attach files</Item></Section></Menu>
+        <Presence when={s() === "Submenu open"}>{(m) => <Menu class="g-w12 g-panel-over-panel" motion={m()}><Section title="Effort"><For each={thinking}>{(level) => <Item checked={level.value === "medium"}>{level.label}</Item>}</For></Section></Menu>}</Presence></div>}</States>,
+        "<Menu under> · <Menu motion>", "the dim: --duration-quick · --ease-change")]} on={["phone"]} widths={["200px", "minmax(0, 1fr)"]} />, "row"),
     ] },
   ] },
   { title: "Card", note: "raised frost at a dialog's width and padding: title · detail · body · actions, drawn from the library's Input and Buttons. Its actions: the primary one a white outline, the others ghost outline, a destructive confirm filled red", groups: [
@@ -579,15 +585,28 @@ export const libraryFamilies: Family[] = [
   ] },
   { title: "DesktopComposer", note: "desktop only, one integrated piece: resting frost holding a TextArea above a Toolbar, with Riders on its top edge. A phone's composer is Pills, sharing the TextArea and the Riders", groups: [
     { atoms: [
-      lib("composer-anatomy", "Anatomy", "desktop", "composer", "DesktopComposer > riders · ComposerField (a TextArea) · Toolbar (start · end)", () => <div class="g-anatomy g-composer"><DesktopComposer riders={<Rider label="Rider"><span class="g-muted">Rider (its own section below)</span></Rider>}>
+      lib("composer-anatomy", "Anatomy", "desktop", "composer", "DesktopComposer > riders · ComposerField (a TextArea) · Toolbar (start · end · primary)", () => <div class="g-anatomy g-composer"><DesktopComposer riders={<Rider label="Rider"><span class="g-muted">Rider (its own section below)</span></Rider>}>
         <ComposerField><TextArea placeholder="TextArea (a control), padded by the composer" /></ComposerField>
-        <Toolbar start={<>{ghost("Icon button", <PlusIcon />)}{picker(<span>Picker</span>)}</>} end={ghost("Primary", <ArrowUpIcon />)} />
+        <Toolbar start={<>{ghost("Icon button", <PlusIcon />)}{picker(<span>Picker</span>)}</>} end={ghost("Icon button", <MicIcon />)} primary={ghost("Primary", <ArrowUpIcon />)} />
       </DesktopComposer></div>, true),
-      lib("composer-toolbar", "Toolbar", "desktop", "composer", "Toolbar start · end, no frost of its own: ghost icon buttons, pickers, the primary", () => <div class="g-composer g-part"><Toolbar start={toolbarStart()} end={toolbarEnd()} /></div>, "row"),
+      lib("composer-toolbar", "Toolbar", "desktop", "composer", "Toolbar start · end · aside · primary, no frost of its own: ghost icon buttons, pickers; the primary its own slot (Send, or Stop while the agent works), Stop stepping in beside it as the aside", () => <div class="g-composer g-part"><Toolbar start={toolbarStart()} end={toolbarEnd()} primary={send()} /></div>, "row"),
     ] },
     { title: "Assembled", atoms: [
-      lib("composer", "Composer", "desktop", "composer", "chat/composer.tsx", () => <div class="g-composer"><DesktopComposer><ComposerField><TextArea placeholder="Send a message…" /></ComposerField><Toolbar start={toolbarStart()} end={toolbarEnd()} /></DesktopComposer></div>, true),
-      lib("composer-ridden", "Composer · QueuedMessages + AttachmentStrip", "desktop", "composer", "chat/composer.tsx, queued-messages.tsx, attachment-strip.tsx", () => <div class="g-composer"><DesktopComposer riders={<>{queued()}{attachments()}</>}><ComposerField><TextArea value="see the attached notes" /></ComposerField><Toolbar start={toolbarStart()} end={toolbarEnd()} /></DesktopComposer></div>, true),
+      lib("composer", "Composer", "desktop", "composer", "chat/composer.tsx", () => <div class="g-composer"><DesktopComposer><ComposerField><TextArea placeholder="Send a message…" /></ComposerField><Toolbar start={toolbarStart()} end={toolbarEnd()} primary={send()} /></DesktopComposer></div>, true),
+      lib("composer-ridden", "Composer · QueuedMessages + AttachmentStrip", "desktop", "composer", "chat/composer.tsx, queued-messages.tsx, attachment-strip.tsx", () => <div class="g-composer"><DesktopComposer riders={<>{queued()}{attachments()}</>}><ComposerField><TextArea value="see the attached notes" /></ComposerField><Toolbar start={toolbarStart()} end={toolbarEnd()} primary={send()} /></DesktopComposer></div>, true),
+    ] },
+    { title: "Motion", note: "its own moves: the primary slot scales each action in where the last was, so nothing beside it moves, and Stop steps in beside Send when a draft is typed during a turn; dictating, the mic breathes; a question takes the composer's place -- the composer drops out of the pane keeping its room, and the card rises into the slot once it has gone", layout: "desktop", atoms: [
+      lib("composer-motion", "DesktopComposer · motion", "desktop", "composer", "Toolbar primary · aside · DesktopComposer takeover", () => <FormTable rows={[
+        form("the primary slot", "each action grows in from 60% where the last was; the aside steps in from the slot's side", () => <States states={["Ready", "Working", "Draft in a turn"] as const}>{(s) =>
+          <div class="g-composer g-part"><Toolbar start={toolbarStart()} end={toolbarEnd()} aside={<Show when={s() === "Draft in a turn"}>{ghost("Stop response", <SquareIcon />)}</Show>}
+            primary={<Show when={s() === "Working"} fallback={send()}>{ghost("Stop response", <SquareIcon />)}</Show>} /></div>}</States>, "<Toolbar primary aside>", "--duration-quick · --ease-arrive · the aside: --duration-gentle"),
+        form("dictating", "the held mic breathes from the text colour to muted and back", () => <States states={["Off", "Dictating"] as const}>{(s) =>
+          <div class="g-composer g-part"><Toolbar start={toolbarStart()} end={<Button variant="ghost" size="icon-sm" aria-label="Voice dictation" aria-pressed={s() === "Dictating"}><MicIcon /></Button>} primary={send()} /></div>}</States>, "aria-pressed in Toolbar end", "1.6s, its own"),
+        form("a question takes over", "the composer drops out keeping its room; the card rises 2 units into the slot after it", () => <States states={["Composer", "Question"] as const}>{(s) =>
+          <div class="g-composer"><DesktopComposer riders={queued()} takeover={<Show when={s() === "Question"}><Rider layout="card" label="Question" motion="entering"><span class="ui-title-text">Preferred language</span>
+            <Choices><Choice n={1} label="Python" detail="Use Python for the task" chosen active /><Choice n={2} label="TypeScript" detail="Use TypeScript for the task" /><Choice n={3} label="Rust" detail="Use Rust for the task" /></Choices></Rider></Show>}>
+            <ComposerField><TextArea placeholder="Send a message…" /></ComposerField><Toolbar start={toolbarStart()} end={toolbarEnd()} primary={send()} /></DesktopComposer></div>}</States>, "<DesktopComposer takeover>", "out: --duration-quick · --ease-leave · in: --duration-gentle · --ease-arrive, the card after --duration-quick"),
+      ]} on={["desktop"]} widths={["200px", "minmax(0, 1fr)"]} />, "row"),
     ] },
   ] },
   { title: "Rider", note: "resting frost at a composer, either composer's: a row or a strip on its top edge (queued messages, attachments), or a card that takes over its slot in its material (the question: the composer takeover)", groups: [
@@ -608,9 +627,10 @@ export const libraryFamilies: Family[] = [
       lib("rider-question-tabs", "QuestionCard · tabs", "both", "rider", "chat/question-card.tsx · tabs (ticked when answered), pick any, a preview, a multi-line own answer, notes", () => questionCard(TABS, { notes: true }), true),
       lib("rider-question-submit", "QuestionCard · Submit page", "both", "rider", "chat/question-card.tsx · the review page; a secret answer", () => questionCard(SUMMARY, { page: "submit" }), true),
     ] },
-    { title: "Motion", note: "its own moves: a rider rises out of the composer and drops back into it when the composer takes it; removed by hand, it fades in place. A chip arrives growing from 85%", layout: "desktop", atoms: [
+    { title: "Motion", note: "its own moves: a rider rises out of the composer and drops back into it when the composer takes it; removed by hand, it fades in place. A takeover card rises further (2 units), once the composer has gone (DesktopComposer · Motion). A RiderButton fades. A chip arrives growing from 85%", layout: "desktop", atoms: [
       lib("rider-motion", "Rider · motion", "both", "rider", "Rider motion · Chip motion", () => <FormTable rows={[
         form("arrives · taken · removed", "rises out of the composer; drops back into it; fades in place", () => <Replay leaves={["leaving", "removing"]}>{(m) => <div class="g-composer">{queued(m())}</div>}</Replay>, "<Rider motion>", "in: --duration-gentle · --ease-arrive · out: --duration-quick · --ease-leave"),
+        form("RiderButton", "fades in where it rides when there is more below, out when there is not", () => <States states={["At the latest", "Scrolled up"] as const}>{(s) => <div class="g-row"><Presence when={s() === "Scrolled up"}>{(m) => <RiderButton icon={<ArrowDownIcon />} label="Scroll to latest" motion={m()} />}</Presence></div>}</States>, "<RiderButton motion>", "in: --duration-gentle · out: --duration-quick"),
         form("a chip", "grows in from 85%; removed, it fades", () => <Replay leaves={["removing"]}>{(m) => <div class="g-row"><Chip name="notes.txt" detail="2.1 KB" icon={<FileTextIcon />} motion={m()} /></div>}</Replay>, "<Chip motion>", "--duration-gentle · --ease-arrive · out: --duration-quick"),
       ]} on={["desktop", "phone"]} widths={["200px", "minmax(0, 1fr)", "minmax(0, 1fr)"]} />, "row"),
     ] },
@@ -629,6 +649,12 @@ export const libraryFamilies: Family[] = [
       lib("pill-composer", "Composer · bar layout", "phone", "pill", "chat/composer.tsx (bar)", () => <div class="g-composer-demo"><PillField placeholder="Send a message…" /><div class="g-bar-demo">
         <PillButton {...icon("Message options", <PlusIcon />)} /><PillButton {...icon("Take a photo", <CameraIcon />)} /><PillButton {...icon("Type a message", <KeyboardIcon />)} /><PillButton stretch {...icon("Dictate", <MicIcon />)} /><PillButton {...icon("Send", <ArrowUpIcon />)} />
       </div></div>, true),
+    ] },
+    { title: "Motion", note: "its own moves: a circle that comes and goes in a row grows from nothing and shrinks back, its gap with it, so a stretched neighbour gives and takes the room -- Send beside the mic, once there is something to send", layout: "phone", atoms: [
+      lib("pill-motion", "Pill · motion", "phone", "pill", "PillButton motion", () => <FormTable rows={[
+        form("comes and goes", "grows from nothing beside the mic; shrinks back", () => <States states={["Empty", "Typed"] as const}>{(s) => <div class="g-bar-demo"><PillButton {...icon("Message options", <PlusIcon />)} /><PillButton stretch {...icon("Dictate", <MicIcon />)} />
+          <Presence when={s() === "Typed"}>{(m) => <PillButton motion={m()} {...icon("Send", <ArrowUpIcon />)} />}</Presence></div>}</States>, "<PillButton motion>", "in: --duration-gentle · --ease-arrive · out: --duration-quick · --ease-leave"),
+      ]} on={["phone"]} widths={["200px", "minmax(0, 1fr)"]} />, "row"),
     ] },
   ] },
   { title: "CodeBlock", rail: "Transcript", note: "a fenced block in an answer: a box, its language and Copy, numbered lines; a long one folds. Not frosted: it reads in the transcript's units and scale", groups: [
