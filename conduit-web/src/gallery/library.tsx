@@ -1,8 +1,8 @@
 import { ArrowDownIcon, PanelLeftIcon, MessageSquarePlusIcon, EllipsisIcon, CameraIcon, KeyboardIcon, MicIcon, ArrowUpIcon, ChevronDownIcon, CircleIcon, FileTextIcon, ClockIcon, Maximize2Icon, SendHorizontalIcon, XIcon, CheckIcon } from "lucide-solid";
 import { createSignal, For, onCleanup, onMount, Show, type JSX } from "solid-js";
-import { SquareIcon } from "lucide-solid";
+import { SquareIcon, Undo2Icon, DeleteIcon, ChevronLeftIcon, TextCursorInputIcon } from "lucide-solid";
 import { PanelRightIcon, ClipboardCopyIcon, Columns2Icon, CopyIcon, FolderIcon, FolderInputIcon, LayoutDashboardIcon, MenuIcon, MonitorIcon, PaperclipIcon, PencilIcon, PinIcon, PlusIcon, QrCodeIcon, RefreshCwIcon, SearchIcon, ShareIcon, ShieldCheckIcon, SquarePenIcon, TerminalIcon, Trash2Icon } from "lucide-solid";
-import { type Motion, Disclosure, Transcript, Message, Turn, TraceHeader, Trail, Step, Answer, CodeBlock, CopyButton, MessageFoot, Toast, Toaster, SettingRecorder, Field, Leader, Crumbs, Spotlight, OverlayHead, Match, Choices, OverlayBar, OverlayHints, OverlayList, OverlayPage, OverlayRail, OverlaySplit, Glance, GlanceHead, GlancePrompt, GlanceTurn, GlanceAnswer, GlanceEmpty, RiderButton, Overlay, Scrim, SettingGroup, SettingLine, SettingValue, SettingLink, SettingNote, SettingDetails, SettingWide, SettingLoading, Progress, Keycap, NavGroup, NavRow, Segmented, SelectTrigger, Bubble, Button, Card, Chip, Choice, ComposerField, DesktopComposer, Line, TextArea, Rider, RiderActions, RiderTitle, Toolbar, Frost, Input, Item, Menu, PillButton, PillField, PillGroup, PillSwitch, HeadingSection, SearchSection, Section, Slider } from "@/components/ui";
+import { type Motion, Disclosure, Transcript, Message, Turn, TraceHeader, Trail, Step, Answer, CodeBlock, CopyButton, MessageFoot, PhoneComposer, type VoiceMode, Toast, Toaster, SettingRecorder, Field, Leader, Crumbs, Spotlight, OverlayHead, Match, Choices, OverlayBar, OverlayHints, OverlayList, OverlayPage, OverlayRail, OverlaySplit, Glance, GlanceHead, GlancePrompt, GlanceTurn, GlanceAnswer, GlanceEmpty, RiderButton, Overlay, Scrim, SettingGroup, SettingLine, SettingValue, SettingLink, SettingNote, SettingDetails, SettingWide, SettingLoading, Progress, Keycap, NavGroup, NavRow, Segmented, SelectTrigger, Bubble, Button, Card, Chip, Choice, ComposerField, DesktopComposer, Line, TextArea, Rider, RiderActions, RiderTitle, Toolbar, Frost, Input, Item, Menu, PillButton, PillField, PillGroup, PillSwitch, HeadingSection, SearchSection, Section, Slider } from "@/components/ui";
 import { Switch } from "../client/settings/settings-controls";
 import { HarnessMark } from "../client/harness-brand";
 import { PlaceGlyph } from "../client/chat/place-picker";
@@ -78,6 +78,26 @@ const picker = (children: JSX.Element) => <Button variant="ghost" size="sm" clas
 const toolbarStart = () => <>{ghost("Attach and more", <PlusIcon />)}{ghost("Context usage", <CircleIcon />)}{picker(<HarnessMark id="conduit" class="size-4" />)}{picker(<><strong>Meta: Muse Spark 1.3</strong><span class="g-muted">medium</span></>)}</>;
 const toolbarEnd = () => ghost("Start voice dictation", <MicIcon />);
 const send = () => ghost("Send message", <ArrowUpIcon />);
+/** The phone's composer, as components v2 builds it; each option a value or an accessor (the Motion cell switches them). */
+type Live<T> = T | (() => T);
+const read = <T,>(value: Live<T>) => typeof value === "function" ? (value as () => T)() : value;
+const WAVE = [3, 5, 8, 6, 4, 7, 11, 8, 5, 3, 6, 9, 12, 8, 5, 4, 7, 10, 6, 4, 3, 5, 8, 6];
+const phoneComposer = (mode: Live<VoiceMode>, opts: { draft?: Live<boolean>; away?: Live<boolean>; editing?: Live<boolean> } = {}) => {
+  const m = () => read(mode), draft = () => !!read(opts.draft ?? false);
+  return <PhoneComposer mode={m()} editing={!!read(opts.editing ?? false)}
+    field={<PillField value={draft() ? "make the second paragraph shorter" : ""} placeholder="Send a message…" />}
+    track={<span class="g-wave" aria-hidden="true"><For each={WAVE}>{(h) => <i style={{ height: `${h * 2}px` }} />}</For></span>}
+    captions={<p>then rename the file to lorem.txt</p>}
+    edit={<><PillButton {...icon("Undo", <Undo2Icon />)} /><PillButton {...icon("Delete word or selection", <DeleteIcon />)} /><PillButton {...icon("Previous word", <ChevronLeftIcon />)} /><PillButton {...icon("Next word", <ChevronRightIcon />)} /><PillButton {...icon("End of draft", <TextCursorInputIcon />)} /></>}>
+    <PillButton {...icon("Message options", <PlusIcon />)} />
+    <PillButton {...icon("Take a photo", <CameraIcon />)} />
+    <PillButton folded={!read(opts.away ?? false)} {...icon("Scroll to latest", <ArrowDownIcon />)} />
+    <PillButton {...icon(m() === "typing" ? "Close the keyboard" : "Type a message", <KeyboardIcon />)} />
+    <PillButton stretch orb={<ThinkingOrb state="listening" paused={m() !== "listening"} />} {...icon("Dictate", <MicIcon />)} />
+    <PillButton voice folded={m() !== "listening"} {...icon("Stop and send", <ArrowUpIcon />)} />
+    <PillButton folded={m() === "listening" || !draft()} {...icon("Send", <ArrowUpIcon />)} />
+  </PhoneComposer>;
+};
 const thumb = "data:image/svg+xml," + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><defs><linearGradient id="g" x2="1" y2="1"><stop offset="0" stop-color="#6b8afd"/><stop offset="1" stop-color="#d97706"/></linearGradient></defs><rect width="48" height="48" fill="url(#g)"/></svg>');
 /** The app's riders, as components v2 builds them. */
 const attachments = (motion?: Motion) => <Rider label="Attachments" layout="strip" motion={motion}><div class="ui-chips"><Chip name="photo.png" image={thumb} /><Chip name="notes.txt" detail="2.1 KB" icon={<FileTextIcon />} /><Chip name="lorem_ipsum.txt" detail="412 bytes" icon={<FileTextIcon />} status="uploading" progress={60} /></div>
@@ -583,7 +603,7 @@ export const libraryFamilies: Family[] = [
       lib("leader-motion", "Leader · motion", "both", "overlay", "Leader motion", () => <FormTable rows={[form("arrives · leaves", "rises --space-md with a fade; drops back", () => <Replay leaves={["leaving"]}>{(m) => <Overlay label="Leader" class="ui-leader" motion={m()}><OverlayList>{leaderRows()}</OverlayList></Overlay>}</Replay>, "<Leader motion>", "in: --duration-gentle · --ease-arrive · out: --duration-quick · --ease-leave")]} on={["desktop"]} widths={["200px", "minmax(0, 1fr)"]} />, "row"),
     ] },
   ] },
-  { title: "DesktopComposer", note: "desktop only, one integrated piece: resting frost holding a TextArea above a Toolbar, with Riders on its top edge. A phone's composer is Pills, sharing the TextArea and the Riders", groups: [
+  { title: "DesktopComposer", note: "desktop only, one integrated piece: resting frost holding a TextArea above a Toolbar, with Riders on its top edge. A phone's is PhoneComposer (Pills), sharing the TextArea and the Riders", groups: [
     { atoms: [
       lib("composer-anatomy", "Anatomy", "desktop", "composer", "DesktopComposer > riders · ComposerField (a TextArea) · Toolbar (start · end · primary)", () => <div class="g-anatomy g-composer"><DesktopComposer riders={<Rider label="Rider"><span class="g-muted">Rider (its own section below)</span></Rider>}>
         <ComposerField><TextArea placeholder="TextArea (a control), padded by the composer" /></ComposerField>
@@ -651,9 +671,25 @@ export const libraryFamilies: Family[] = [
       </div></div>, true),
     ] },
     { title: "Motion", note: "its own moves: a circle that comes and goes in a row grows from nothing and shrinks back, its gap with it, so a stretched neighbour gives and takes the room -- Send beside the mic, once there is something to send", layout: "phone", atoms: [
-      lib("pill-motion", "Pill · motion", "phone", "pill", "PillButton motion", () => <FormTable rows={[
-        form("comes and goes", "grows from nothing beside the mic; shrinks back", () => <States states={["Empty", "Typed"] as const}>{(s) => <div class="g-bar-demo"><PillButton {...icon("Message options", <PlusIcon />)} /><PillButton stretch {...icon("Dictate", <MicIcon />)} />
-          <Presence when={s() === "Typed"}>{(m) => <PillButton motion={m()} {...icon("Send", <ArrowUpIcon />)} />}</Presence></div>}</States>, "<PillButton motion>", "in: --duration-gentle · --ease-arrive · out: --duration-quick · --ease-leave"),
+      lib("pill-motion", "Pill · motion", "phone", "pill", "PillButton folded", () => <FormTable rows={[
+        form("comes and goes", "unfolds beside the mic, which gives it room, and fades into it; fades, then gives the room back", () => <States states={["Empty", "Typed"] as const}>{(s) => <div class="g-bar-demo"><PillButton {...icon("Message options", <PlusIcon />)} /><PillButton stretch {...icon("Dictate", <MicIcon />)} />
+          <PillButton folded={s() === "Empty"} {...icon("Send", <ArrowUpIcon />)} /></div>}</States>, "<PillButton folded>", "the room: --duration-gentle · --ease-arrive; the fade: --duration-quick, after the room opens or before it closes"),
+      ]} on={["phone"]} widths={["200px", "minmax(0, 1fr)"]} />, "row"),
+    ] },
+  ] },
+  { title: "PhoneComposer", note: "the phone's composer: Pills on the page, a PillField over a row of PillButtons, one gap apart. Its mode says what shows, and nothing reflows between them: idle (the row), typing (the field above it), listening (the voice track and captions). Circles that come and go fold (Scroll to latest, Stop and send, Send)", groups: [
+    { title: "Forms", note: "each mode, and the field's edit pills", layout: "phone", atoms: [
+      lib("phone-idle", "Idle", "phone", "pill", "PhoneComposer mode=idle: the row alone; nothing to send, so Send is folded", () => <div class="g-phone-composer">{phoneComposer("idle")}</div>),
+      lib("phone-typing", "Typing", "phone", "pill", "mode=typing: the field above the row, Send beside the mic", () => <div class="g-phone-composer">{phoneComposer("typing", { draft: true })}</div>),
+      lib("phone-listening", "Listening", "phone", "pill", "mode=listening: the mic an orb pill at the row's end, Stop and send beside it, the track and captions", () => <div class="g-phone-composer">{phoneComposer("listening")}</div>),
+      lib("phone-editing", "Editing", "phone", "pill", "edit · editing: pills over the field while its cursor is moved by hand", () => <div class="g-phone-composer">{phoneComposer("typing", { draft: true, editing: true })}</div>),
+    ] },
+    { title: "Motion", note: "its own moves: the field fades in place and gives up its room once faded; listening, the other pills fade where they stand, the mic shrinks to an orb pill at the row's end, its icon crossfading to the orb, and the track sweeps out of it to the row's start (back, quicker, on stop); captions fade in; folding circles open their room and fade in, or fade and then close it; edit pills fade each", layout: "phone", atoms: [
+      lib("phone-motion", "PhoneComposer · motion", "phone", "pill", "PhoneComposer mode · PillButton folded · orb", () => <FormTable rows={[
+        form("its modes", "pick one, then another", () => <States states={["Idle", "Scrolled up", "Typing", "Typing a draft", "Editing", "Listening"] as const}>{(s) => <div class="g-phone-composer">{phoneComposer(
+          () => s() === "Listening" ? "listening" : s().startsWith("Typing") || s() === "Editing" ? "typing" : "idle",
+          { draft: () => s() === "Typing a draft" || s() === "Editing", away: () => s() === "Scrolled up", editing: () => s() === "Editing" })}</div>}</States>,
+          "<PhoneComposer mode>", "in: --duration-gentle · --ease-arrive · out: --duration-quick · --ease-leave"),
       ]} on={["phone"]} widths={["200px", "minmax(0, 1fr)"]} />, "row"),
     ] },
   ] },
