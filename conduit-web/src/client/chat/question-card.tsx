@@ -137,7 +137,7 @@ export function QuestionCard(props: { request: HostUiRequest; dismissLabel?: str
   // components v2 in the gallery's Library previews (components/ui/swap.ts): a card Rider of Choices.
   const v2 = () => surface() === "library";
   const k = (app: string, v2Class: string) => v2() ? v2Class : app;
-  return <section ref={root} class={v2() ? "question-card ui-frost ui-rider" : "question-card composer-surface-material"} data-composer-surface={surface()} data-surface={v2() ? "frost" : undefined} data-lift={v2() ? "rest" : undefined} data-layout={v2() ? "card" : undefined}
+  return <section ref={root} class={v2() ? "question-card ui-frost ui-rider" : "question-card composer-surface-material"} data-composer-surface={surface()} data-surface={v2() ? "frost" : undefined} data-lift={v2() ? "rest" : undefined} data-layout={v2() ? "card" : undefined} data-entering={v2() ? "" : undefined}
     tabIndex={-1} aria-label={props.request.title || "The agent has a question"} onKeyDown={keydown}>
     <div class={k("question-top", "ui-rider-top")}>
       <Show when={pages() > 1} fallback={<span class={k("question-title", "ui-title-text")}>{current()?.header || props.request.title}</span>}>

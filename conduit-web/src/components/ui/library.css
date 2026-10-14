@@ -61,7 +61,13 @@
 @keyframes ui-fade-out { to { opacity: 0; } }
 @keyframes ui-rise { from { opacity: 0; transform: translateY(var(--rise, var(--space-md))); } }
 @keyframes ui-drop { to { opacity: 0; transform: translateY(var(--rise, var(--space-md))); } }
-@media (prefers-reduced-motion: reduce) { :is(.ui-menu, .ui-card, .ui-toast, .ui-overlay, .ui-rider, .ui-chip, .ui-scrim, .ui-step, .ui-message, .ui-message-foot):is([data-entering], [data-leaving]) { animation: none; } .ui-disclosure-body { transition: none; } }
+/* In place: grows from a fraction (--grow), or steps in from beside (--slide; the end, so it slides back toward the start). */
+@keyframes ui-grow { from { opacity: 0; transform: scale(var(--grow, .6)); } }
+@keyframes ui-slide { from { opacity: 0; transform: translateX(var(--slide, var(--space-md))); } }
+@media (prefers-reduced-motion: reduce) {
+  :is(.ui-menu, .ui-card, .ui-toast, .ui-overlay, .ui-rider, .ui-chip, .ui-scrim, .ui-step, .ui-message, .ui-message-foot, .ui-pill, .ui-rider-button):is([data-entering], [data-leaving]), .ui-toolbar-primary > *, .ui-toolbar-end > .ui-toolbar-aside, .ui-toolbar-end > [aria-pressed="true"] { animation: none; }
+  .ui-disclosure-body, .ui-menu, .ui-composer-slot > .ui-composer-stack { transition: none; }
+}
 /*
  * Scale: everything is drawn from a few numbers. A density gives its unit (12.8px on desktop, 16px on
  * a phone); --scale-ui scales it for everything, --scale-transcript for what you read (a message), so
@@ -169,6 +175,13 @@
 .ui-pill > button:is(:hover, :focus-visible) { background: var(--tint); }
 .ui-pill[data-stretch] { width: auto; flex: 1 1 auto; }
 .ui-pill[data-stretch] > button { width: 100%; }
+/* A circle that comes and goes in a row grows from nothing and shrinks back (its gap with it), so a stretched
+   neighbour (the mic) gives and takes the room. */
+.ui-pill[data-solo]:is([data-entering], [data-leaving]) { overflow: clip; }
+.ui-pill[data-solo][data-entering] { animation: ui-pill-in var(--duration-gentle) var(--ease-arrive) backwards; }
+.ui-pill[data-solo][data-leaving] { animation: ui-pill-out var(--duration-quick) var(--ease-leave) forwards; pointer-events: none; }
+@keyframes ui-pill-in { from { width: 0; margin-inline-start: calc(-1 * var(--space-md)); opacity: 0; } }
+@keyframes ui-pill-out { to { width: 0; margin-inline-start: calc(-1 * var(--space-md)); opacity: 0; } }
 /* Field: text in the capsule; it grows with its lines. */
 .ui-pill-field { display: flex; width: 100%; height: auto; min-height: var(--pill-size); align-items: center; border-radius: var(--pill-field-radius); padding: 0 var(--pill-field-pad); }
 .ui-pill-field .ui-textarea { width: 100%; max-height: 220px; border: 0; background: transparent; padding: calc((var(--pill-size) - var(--space-2xs) - 1.4em) / 2) 0; color: inherit; font: inherit; font-size: var(--text-body); line-height: 1.4; resize: none; outline: none; field-sizing: content; }
@@ -180,6 +193,9 @@
 /* A popover rises in and drops back. */
 .ui-menu[data-entering] { animation: ui-rise var(--duration-gentle) var(--ease-arrive) backwards; }
 .ui-menu[data-leaving] { animation: ui-drop var(--duration-quick) var(--ease-leave) forwards; pointer-events: none; }
+/* Under a phone's submenu panel it dims where it stands, and takes no taps. */
+.ui-menu { transition: opacity var(--duration-quick) var(--ease-change), filter var(--duration-quick) var(--ease-change); }
+.ui-menu[data-under] { opacity: .38; filter: saturate(.6); pointer-events: none; }
 /* A group label (DESIGN Typography): the sidebar's -- sentence case, bold,
    about half the text colour. Every group heading in a list, menu, palette or
    card is this; the breadcrumb's place caps are the one uppercase label. */
@@ -470,6 +486,13 @@
   --cmp-rider-gap: var(--space-sm);
 }
 .ui-composer-stack { display: grid; gap: var(--cmp-rider-gap); }
+/* The composer's slot: the composer (with its riders) and a takeover (the question) share one cell, bottom-aligned.
+   Taken, the composer drops out of the pane but keeps its room, so its leaving moves nothing; it comes back gently. */
+.ui-composer-slot { display: grid; }
+.ui-composer-slot > * { grid-area: 1 / 1; align-self: end; min-width: 0; }
+.ui-composer-slot > .ui-composer-stack { transition: transform var(--duration-gentle) var(--ease-arrive), opacity var(--duration-gentle) var(--ease-arrive); }
+.ui-composer-slot[data-taken] > .ui-composer-stack { visibility: hidden; opacity: 0; pointer-events: none; transform: translateY(calc(100% + var(--space-4xl)));
+  transition: transform var(--duration-quick) var(--ease-leave), opacity var(--duration-quick) var(--ease-leave), visibility 0s var(--duration-quick); }
 /* Its width: the pane it sits in declares --composer-width on its root (a
    chat's centred column, a dashboard's full column); unset, its own default.
    It never shrinks past its pane: min(.., 100%), so no breakpoint is needed. */
@@ -484,6 +507,13 @@
 .ui-toolbar-start, .ui-toolbar-end { display: flex; min-width: 0; align-items: center; gap: var(--cmp-slot-gap); }
 .ui-toolbar-start { flex: 0 1 auto; }
 .ui-toolbar-end { flex: 0 0 auto; }
+/* The primary slot: each action scales in where the last was, so nothing beside it moves; the aside (Stop beside
+   Send) steps in from the slot's side. A held control (dictating) breathes from the text colour to muted. */
+.ui-toolbar-primary { display: inline-grid; flex: none; place-items: center; }
+.ui-toolbar-primary > * { animation: ui-grow var(--duration-quick) var(--ease-arrive); }
+.ui-toolbar-end > .ui-toolbar-aside { display: inline-flex; color: var(--muted-foreground); animation: ui-slide var(--duration-gentle) var(--ease-arrive); }
+.ui-toolbar-end > [aria-pressed="true"] { color: var(--foreground); animation: ui-breathe 1.6s ease-in-out infinite; }
+@keyframes ui-breathe { 50% { color: var(--muted-foreground); } }
 .ui-toolbar .ui-button[data-size^="icon"] { width: var(--cmp-slot); min-width: var(--cmp-slot); height: var(--cmp-slot); border-radius: var(--cmp-slot-radius); padding: 0; }
 .ui-toolbar .ui-button[data-size^="icon"] svg { width: var(--cmp-icon); height: var(--cmp-icon); }
 .ui-frost.ui-rider { border-radius: var(--cmp-radius); }
@@ -494,6 +524,9 @@
 /* A rider rises out of the composer and drops back into it when it takes it; removed by hand, it fades in place. */
 .ui-rider[data-entering] { animation: ui-rise var(--duration-gentle) var(--ease-arrive) backwards; }
 .ui-rider[data-leaving] { animation: ui-drop var(--duration-quick) var(--ease-leave) forwards; pointer-events: none; }
+/* A takeover card rises further, once the composer has gone. */
+.ui-rider[data-layout="card"] { --rise: var(--space-4xl); }
+.ui-rider[data-layout="card"][data-entering] { animation: ui-rise var(--duration-gentle) var(--ease-arrive) var(--duration-quick) backwards; }
 .ui-rider[data-leaving="remove"], .ui-chip[data-leaving="remove"] { animation: ui-fade-out var(--duration-quick) var(--ease-leave) forwards; pointer-events: none; }
 .ui-frost.ui-rider[data-layout="row"] { display: flex; align-items: center; gap: var(--rider-gap); padding: var(--space-xs) var(--space-sm) var(--space-xs) var(--space-lg); }
 .ui-frost.ui-rider[data-layout="strip"] { display: flex; align-items: center; gap: var(--space-sm); padding: 0 var(--space-sm) 0 0; }
@@ -544,9 +577,7 @@
 .ui-chip-remove svg { width: var(--icon-xs); height: var(--icon-xs); }
 .ui-chip:is(:hover, :focus-within) .ui-chip-remove { opacity: 1; }
 @media (hover: none) { .ui-chip-remove { opacity: 1; } }
-.ui-chip[data-entering] { animation: ui-chip-in var(--duration-gentle) var(--ease-arrive) backwards; }
-@keyframes ui-chip-in { from { opacity: 0; transform: scale(.85); } }
-@media (prefers-reduced-motion: reduce) { .ui-chip[data-entering] { animation: none; } }
+.ui-chip[data-entering] { --grow: .85; animation: ui-grow var(--duration-gentle) var(--ease-arrive) backwards; }
 
 /* The question: a card rider. Its top (a title or tabs, close), the prompt,
    choices (number, label, description, check), and a foot of hints and buttons. */
@@ -616,6 +647,11 @@
 /* The app's composer wrapper, drawn as a DesktopComposer: its width is the pane's too
    (the app's own rule loads later, at equal weight). */
 .composer-wrap.ui-composer-width { width: min(var(--composer-width, 47.5rem), 100%); }
+/* The app's takeover (chat-screen's composer-stack and its question-dock) on the slot's moves. */
+.composer-stack > .composer-wrap.ui-composer-width { transition: transform var(--duration-gentle) var(--ease-arrive), opacity var(--duration-gentle) var(--ease-arrive); }
+.composer-stack[data-question="true"] > .composer-wrap.ui-composer-width { transform: translateY(calc(100% + var(--space-4xl)));
+  transition: transform var(--duration-quick) var(--ease-leave), opacity var(--duration-quick) var(--ease-leave), visibility 0s var(--duration-quick); }
+@media (prefers-reduced-motion: reduce) { .composer-stack > .composer-wrap.ui-composer-width { transition: none; } }
 
 /* TextArea: multi-line text that grows with its lines; bare, so what holds it pads it. */
 .ui-textarea { display: block; width: 100%; resize: none; overflow-y: auto; border: 0; outline: 0; background: transparent; padding: 0; color: inherit; font: inherit; font-size: var(--text-body); line-height: 1.45; field-sizing: content; }
@@ -885,6 +921,9 @@
 .ui-frost.ui-rider-button[data-labelled] { width: auto; padding: 0 var(--space-xl) 0 var(--space-lg); }
 .ui-rider-button[data-labelled] svg { width: var(--icon); height: var(--icon); }
 .ui-rider-button:is(:hover, :focus-visible) { outline: 0; filter: brightness(1.12); }
+/* It fades in where it rides when there is something below, and out when there is not. */
+.ui-rider-button[data-entering] { animation: ui-fade-in var(--duration-gentle) var(--ease-arrive) backwards; }
+.ui-rider-button[data-leaving] { animation: ui-fade-out var(--duration-quick) var(--ease-leave) forwards; pointer-events: none; }
 
 /* Glance: chat search's preview column, in the row's voice: the title at the strong weight, facts in
    the data face, the prompt as the user's message is drawn, the answer a step under the text colour. */
