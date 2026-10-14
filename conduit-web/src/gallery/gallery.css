@@ -362,3 +362,7 @@ html, body { background: var(--frame, #08090a); color: var(--foreground); }
 .g-sketch[data-run="open"] :is(.g-sketch-side, .g-sketch-read) { animation: ui-fade-in var(--duration-gentle) var(--ease-arrive) both; }
 .g-sketch[data-run="leave"] .g-sketch-read { animation: ui-fade-out var(--duration-quick) var(--ease-leave) both; }
 .g-sketch[data-run="arrive"] .g-sketch-read { animation: ui-fade-in var(--duration-gentle) var(--ease-arrive) both; }
+/* PhoneComposer: a phone's width, with room above the row for its captions and edit pills. */
+.g-phone-composer { display: grid; width: 380px; min-height: 200px; align-content: end; padding-top: 72px; }
+.g-wave { display: flex; width: 100%; align-items: center; justify-content: flex-end; gap: 2px; padding-inline: var(--space-lg); }
+.g-wave > i { width: 2px; flex: none; border-radius: 1px; background: var(--foreground); opacity: .8; }

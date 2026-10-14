@@ -28,9 +28,19 @@ type PillAction = { label: string; icon: JSX.Element };
 const pillSlot = (item: PillAction, onPick?: (label: string) => void) => <button type="button" aria-label={item.label} title={item.label}
   onClick={(event) => { if (onPick) { event.stopPropagation(); onPick(item.label); } }}>{item.icon}</button>;
 
-/** motion: a circle that comes and goes in a row (Send beside the mic) grows from nothing and shrinks back, so its neighbours make room. */
-export function PillButton(props: PillAction & { stretch?: boolean; motion?: Motion; onPick?: (label: string) => void }) {
-  return <div class="ui-frost ui-pill" data-solo="" data-stretch={props.stretch ? "" : undefined} {...motionOf(props.motion)}>{pillSlot(props, props.onPick)}</div>;
+/**
+ * folded: a circle that comes and goes in its row (Send, Scroll to latest) folds to nothing, its gap with it, so a
+ * stretched neighbour gives and takes the room. voice: one of the voice controls, which stay while a PhoneComposer
+ * listens (Stop and send). orb: the mic -- its icon and the orb stacked, crossfading as listening starts and stops;
+ * stretched, it shrinks to an orb pill at the row's end.
+ */
+export function PillButton(props: PillAction & { stretch?: boolean; folded?: boolean; voice?: boolean; orb?: JSX.Element; onPick?: (label: string) => void }) {
+  const orb = children(() => props.orb), mic = !!orb();
+  const pill = <div class="ui-frost ui-pill" data-solo="" data-stretch={props.stretch ? "" : undefined} data-folded={props.folded ? "" : undefined} data-voice={props.voice || mic ? "" : undefined}
+    aria-hidden={props.folded ? "true" : undefined}>{mic
+      ? pillSlot({ label: props.label, icon: <><span class="ui-pill-mic">{props.icon}</span><span class="ui-pill-orb">{orb()}</span></> }, props.onPick)
+      : pillSlot(props, props.onPick)}</div>;
+  return mic && props.stretch ? <><span class="ui-pill-room" />{pill}</> : pill;
 }
 export function PillGroup(props: { actions: PillAction[]; onPick?: (label: string) => void }) {
   return <div class="ui-frost ui-pill"><For each={props.actions}>{(item) => pillSlot(item, props.onPick)}</For></div>;
@@ -41,6 +51,24 @@ export function PillSwitch<T extends string>(props: { label: string; value: T; o
 /** Its own textarea, or the caller's field as children (the composer's, with its behaviour). */
 export function PillField(props: { placeholder?: string; value?: string; onInput?: (value: string) => void; class?: string; children?: JSX.Element }) {
   return <div class={cn("ui-frost ui-pill ui-pill-field", props.class)}><Show when={props.children} fallback={<TextArea placeholder={props.placeholder} value={props.value} onInput={props.onInput} />}>{props.children}</Show></div>;
+}
+
+/**
+ * PhoneComposer: the phone's composer, Pills on the page: a PillField over a row of PillButtons. mode says which
+ * shows, and nothing reflows between them: idle (the row), typing (the field fades in above it), listening (the
+ * row's other pills fade where they stand, the stretched mic shrinks to an orb pill at the row's end, the voice
+ * track sweeps out of it to the row's start, captions open above). edit: pills over the field while its cursor is
+ * moved by hand, fading in when editing.
+ */
+export type VoiceMode = "idle" | "typing" | "listening";
+export function PhoneComposer(props: { mode: VoiceMode; field: JSX.Element; track?: JSX.Element; captions?: JSX.Element; edit?: JSX.Element; editing?: boolean; children: JSX.Element }) {
+  const edit = children(() => props.edit);
+  return <div class="ui-phone-composer" data-mode={props.mode} data-editing={props.editing ? "" : undefined}>
+    <Show when={edit()}><div class="ui-phone-edit" aria-hidden={props.editing ? undefined : "true"}>{edit()}</div></Show>
+    <Show when={props.mode === "listening"}><div class="ui-voice-captions" aria-live="polite">{props.captions}</div></Show>
+    <div class="ui-phone-field">{props.field}</div>
+    <div class="ui-phone-row">{props.children}<div class="ui-voice-track" aria-hidden={props.mode === "listening" ? undefined : "true"}>{props.track}</div></div>
+  </div>;
 }
 
 /**
