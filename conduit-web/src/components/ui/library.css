@@ -189,7 +189,7 @@
 
 /* PhoneComposer: a PillField over a row of Pills, one gap apart. Its modes are opacity, flex-grow and clip-path on
    mounted parts, so nothing reflows when dictation starts or stops. */
-.ui-phone-composer { --voice-pill: calc(1.5 * var(--pill-size)); position: relative; display: flex; flex-direction: column; gap: var(--space-md); }
+.ui-phone-composer { --voice-pill: calc(1.5 * var(--pill-size)); position: relative; min-width: 0; display: flex; flex-direction: column; gap: var(--space-md); }
 /* The field: its own row above the controls, fading in place; folded (idle, listening) it gives up its room once faded. */
 .ui-phone-field { transition: opacity var(--duration-gentle) var(--ease-arrive); }
 .ui-phone-composer:not([data-mode="typing"]) > .ui-phone-field { max-height: 0; margin-bottom: calc(-1 * var(--space-md)); overflow: hidden; opacity: 0; pointer-events: none;
