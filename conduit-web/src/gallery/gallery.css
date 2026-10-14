@@ -189,6 +189,7 @@ html, body { background: var(--frame, #08090a); color: var(--foreground); }
 .g-dense .g-cell:has(.g-cell-toggle) .g-tag [data-scope] { display: none; }
 .g-composer { width: 460px; max-width: 100%; }
 .g-cell-body:has(> .g-composer) { width: 100%; }
+.g-cell-body:has(> .g-phone-composer) { width: 100%; }
 .g-cell-body:has(> :is(.g-scrim, .g-overlay-demo)) { width: 100%; }
 .g-stack { display: grid; gap: 8px; }
 .g-muted { color: var(--muted-foreground); font-weight: 400; }
@@ -363,6 +364,7 @@ html, body { background: var(--frame, #08090a); color: var(--foreground); }
 .g-sketch[data-run="leave"] .g-sketch-read { animation: ui-fade-out var(--duration-quick) var(--ease-leave) both; }
 .g-sketch[data-run="arrive"] .g-sketch-read { animation: ui-fade-in var(--duration-gentle) var(--ease-arrive) both; }
 /* PhoneComposer: a phone's width, with room above the row for its captions and edit pills. */
-.g-phone-composer { display: grid; width: 380px; min-height: 200px; align-content: end; padding-top: 72px; }
+.g-phone-composer { display: grid; width: min(380px, 100%); min-width: 0; min-height: 200px; align-content: end; padding-top: 72px; }
 .g-wave { display: flex; width: 100%; align-items: center; justify-content: flex-end; gap: 2px; padding-inline: var(--space-lg); }
 .g-wave > i { width: 2px; flex: none; border-radius: 1px; background: var(--foreground); opacity: .8; }
+.g-phone-composer > .ui-phone-composer { width: 100%; }
