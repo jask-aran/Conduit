@@ -1,11 +1,12 @@
 /*
  * No server stands behind the gallery, so its sockets are fakes. Dictation's
  * plays a transcriber: ready at once, a phrase arriving word by word while
- * audio flows, and the phrase as the final text when the take stops; every
- * second take hears nothing, so a stop with no text is seen too. Any other
+ * audio flows, and the phrase as the final text when the take stops; a silent
+ * take (fake-mic.ts) hears nothing. Any other
  * socket stays connecting forever rather than failing, as a slow server would.
  */
-let takes = 0;
+import { silentTake } from "./fake-mic";
+
 const PHRASE = "make the second paragraph a little shorter and keep the first one as it is".split(" ");
 
 class FakeSocket extends EventTarget {
@@ -19,18 +20,16 @@ class FakeSocket extends EventTarget {
   onerror: ((event: Event) => void) | null = null;
   onclose: ((event: CloseEvent) => void) | null = null;
   private words = 0;
-  private silent = false;
   private timer: ReturnType<typeof setInterval> | undefined;
   constructor(readonly url: string) {
     super();
     if (!/dictat|voice/.test(url)) return;
-    this.silent = takes++ % 2 === 1;
     setTimeout(() => {
       this.readyState = 1;
       this.fire("open", new Event("open"));
       this.say({ type: "ready" });
       this.say({ type: "runtime_ready" });
-      this.timer = setInterval(() => { if (!this.silent && this.words < PHRASE.length) this.say({ type: "partial", text: PHRASE.slice(0, ++this.words).join(" ") }); }, 260);
+      this.timer = setInterval(() => { if (!silentTake && this.words < PHRASE.length) this.say({ type: "partial", text: PHRASE.slice(0, ++this.words).join(" ") }); }, 260);
     }, 80);
   }
   private fire(type: string, event: Event) {
@@ -42,7 +41,7 @@ class FakeSocket extends EventTarget {
     if (typeof data !== "string") return;
     if ((JSON.parse(data) as { type?: string }).type !== "stop") return;
     clearInterval(this.timer);
-    const text = this.silent ? "" : PHRASE.slice(0, Math.max(this.words, 4)).join(" ");
+    const text = silentTake ? "" : PHRASE.slice(0, Math.max(this.words, 4)).join(" ");
     setTimeout(() => { this.say({ type: "final", text }); this.say({ type: "completed", text, final: true, finalWithinDeadline: true }); }, 300);
   }
   close() {

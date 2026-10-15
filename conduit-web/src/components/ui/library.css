@@ -205,11 +205,13 @@
 .ui-phone-composer:not([data-mode="typing"]) > .ui-phone-field { max-height: 0; margin-bottom: calc(-1 * var(--space-md)); overflow: hidden; opacity: 0; pointer-events: none;
   transition: opacity var(--duration-quick) var(--ease-leave), max-height 0s var(--duration-quick), margin 0s var(--duration-quick); }
 .ui-phone-row { position: relative; display: flex; align-items: center; gap: var(--space-md); }
-.ui-phone-row > .ui-pill[data-voice][data-stretch] { flex: 1 1 var(--voice-pill); min-width: var(--voice-pill); overflow: clip; transition: flex-grow var(--duration-gentle) var(--ease-arrive) var(--duration-quick); }
+.ui-phone-row > .ui-pill[data-voice][data-stretch] { flex: 1 1 var(--voice-pill); min-width: var(--voice-pill); overflow: clip; transition: flex-grow var(--duration-gentle) var(--ease-arrive); }
 /* The room the mic gives as it shrinks to its orb pill at the row's end (flex-grow, so its edge, radius and icon stay crisp). */
-.ui-pill-room { flex: 0 0 0; margin-inline-start: calc(-1 * var(--space-md)); transition: flex-grow var(--duration-gentle) var(--ease-arrive) var(--duration-quick); }
-/* Starting, the mic shrinks at once; stopping, it waits for the track to have faded (above). */
-.ui-phone-composer[data-mode="listening"] :is(.ui-pill-room, .ui-phone-row > .ui-pill[data-voice][data-stretch]) { transition-delay: 0s; }
+.ui-pill-room { flex: 0 0 0; margin-inline-start: calc(-1 * var(--space-md)); transition: flex-grow var(--duration-gentle) var(--ease-arrive); }
+/* Stopping is one move from the first frame, as starting is: the mic grows back over the fading track (the pills sit
+   above it), Stop and send folds as it fades, and the other pills fade back where they stand. Nothing waits. */
+.ui-phone-row > .ui-pill[data-voice][data-folded] { transition: opacity var(--duration-quick) var(--ease-leave), width var(--duration-gentle) var(--ease-arrive), min-width var(--duration-gentle) var(--ease-arrive), margin var(--duration-gentle) var(--ease-arrive); }
+.ui-phone-composer:not([data-mode="listening"]) .ui-phone-row > .ui-pill:not([data-folded]) { transition-delay: 0s; }
 .ui-pill-room:not(.ui-phone-row > *) { display: none; }
 /* Listening: the other pills fade where they stand; the mic shrinks, its orb in; the track sweeps out of it. */
 .ui-phone-composer[data-mode="listening"] .ui-phone-row > .ui-pill:not([data-voice]) { opacity: 0; pointer-events: none;
@@ -220,8 +222,8 @@
 .ui-phone-composer[data-mode="listening"] .ui-pill-orb { opacity: 1; }
 .ui-phone-composer[data-mode="listening"] .ui-pill-glow { opacity: calc(.4 + var(--voice-level, 0) * .5); }
 .ui-phone-composer[data-mode="listening"] .ui-pill-glow > i { animation-play-state: running; }
-/* The voice track: no surface, from the row's start to the orb pill. It fades in once the row has made its room, and
-   fades out before the row takes it back, so it is never seen under the moving pills. */
+/* The voice track: no surface, from the row's start to the orb pill. It fades in once the row has made its room;
+   stopping, it fades out quick under the pills as they move back. */
 .ui-voice-track { position: absolute; inset-block: 0; left: 0; right: calc(var(--voice-pill) + var(--space-md)); display: flex; align-items: center; overflow: hidden; border-radius: var(--radius-round); opacity: 0; pointer-events: none;
   transition: opacity var(--duration-quick) var(--ease-leave), right 0s var(--duration-quick); }
 /* The pills sit over the track, so it sweeps out from under the shrinking mic rather than across it. */
@@ -717,7 +719,8 @@
 .composer-wrap[data-library][data-phone-layout]:not([data-primary-hidden]) .composer-actions .composer-stop-send[data-slot="button"] { transition: opacity var(--duration-quick) var(--ease-change); }
 .composer-wrap[data-library][data-phone-layout]:not([data-primary-hidden]) .composer-actions .composer-stop-send[data-slot="button"]:not([data-shown]) { transition: none; }
 /* Listening: the other controls fade where they stand (Scroll to latest too, in place rather than folding). */
-.composer-wrap[data-library][data-phone-layout] :is(.composer-mobile-plus, .composer-camera-trigger, .composer-keyboard-trigger, .composer-stop-aside, .composer-actions-left > *) { transition: opacity var(--duration-quick) var(--ease-arrive) var(--duration-quick); }
+.composer-wrap[data-library][data-phone-layout] :is(.composer-mobile-plus, .composer-camera-trigger, .composer-keyboard-trigger, .composer-stop-aside, .composer-actions-left > *) { transition: opacity var(--duration-quick) var(--ease-arrive); }
+.composer-wrap[data-library][data-phone-layout] .composer-actions .composer-stop-send:not([data-shown])[data-slot="button"] { transition: opacity var(--duration-quick) var(--ease-leave), width var(--duration-gentle) var(--ease-arrive), min-width var(--duration-gentle) var(--ease-arrive), margin var(--duration-gentle) var(--ease-arrive); }
 .composer-wrap[data-library][data-phone-mode="listening"] :is(.composer-mobile-plus, .composer-camera-trigger, .composer-keyboard-trigger, .composer-stop-aside, .composer-actions-left > *) { transition: opacity var(--duration-quick) var(--ease-leave); }
 .composer-wrap[data-library][data-phone-mode="listening"] .composer-actions .composer-latest-trigger[data-slot="button"][data-shown] { transition: opacity var(--duration-quick) var(--ease-leave); }
 .composer-wrap[data-library][data-left-listening] .composer-actions .composer-latest-trigger[data-slot="button"][data-shown] { transition: opacity var(--duration-quick) var(--ease-arrive) var(--duration-quick); }
@@ -731,10 +734,8 @@
 .composer-wrap[data-library][data-phone-layout] .composer-voice-track { transition: opacity var(--duration-quick) var(--ease-change), clip-path var(--duration-gentle) var(--ease-arrive); }
 .composer-wrap[data-library][data-phone-layout="bar"] .composer-voice-track { clip-path: none; transition: opacity var(--duration-quick) var(--ease-leave), right 0s var(--duration-quick); }
 .composer-wrap[data-library][data-phone-layout="bar"][data-phone-mode="listening"] .composer-voice-track { transition: opacity var(--duration-quick) var(--ease-arrive) var(--duration-gentle); }
-.composer-wrap[data-library][data-phone-layout="bar"] .composer::before { transition: flex-grow var(--duration-gentle) var(--ease-arrive) var(--duration-quick); }
-.composer-wrap[data-library][data-phone-layout="bar"][data-phone-mode="listening"] .composer::before { transition-delay: 0s; }
-.composer-wrap[data-library][data-phone-layout="bar"] .composer-actions [data-slot="button"].dictation-trigger { transition: flex-grow var(--duration-gentle) var(--ease-arrive) var(--duration-quick); }
-.composer-wrap[data-library][data-phone-layout="bar"][data-phone-mode="listening"] .composer-actions [data-slot="button"].dictation-trigger { transition-delay: 0s; }
+.composer-wrap[data-library][data-phone-layout="bar"] .composer::before { transition: flex-grow var(--duration-gentle) var(--ease-arrive); }
+.composer-wrap[data-library][data-phone-layout="bar"] .composer-actions [data-slot="button"].dictation-trigger { z-index: 4; transition: flex-grow var(--duration-gentle) var(--ease-arrive); }
 .composer-wrap[data-library][data-phone-layout="bar"] .dictation-trigger .composer-voice-glow { transition: opacity var(--duration-gentle) var(--ease-arrive); }
 /* Captions open in place (after the text pill has faded, when they start from its text); edit pills fade each. */
 .composer-wrap[data-library] .composer-voice-captions { animation: ui-fade-in var(--duration-gentle) var(--ease-arrive) backwards; }
