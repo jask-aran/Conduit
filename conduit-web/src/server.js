@@ -783,7 +783,7 @@ const WORKER_SCRIPTS = /^(sw|service-worker|registerSW|workbox-[^/]+)\.js$/;
 // The component gallery (npm run gallery builds dist-gallery), behind sign-in
 // like the rest of the server, so it can be inspected from anywhere.
 const galleryDist = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../dist-gallery");
-app.get("/gallery", (_request, response) => response.redirect("/gallery/"));
+app.get("/gallery", (request, response, next) => request.path === "/gallery" ? response.redirect("/gallery/") : next());
 app.use("/gallery", express.static(galleryDist, {
   index: "gallery.html",
   fallthrough: false,
