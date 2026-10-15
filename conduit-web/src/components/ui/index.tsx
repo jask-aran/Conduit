@@ -1,4 +1,4 @@
-import { children, createEffect, createSignal, createUniqueId, For, mergeProps, onCleanup, onMount, Show, splitProps, type JSX } from "solid-js";
+import { children, createEffect, createSignal, createUniqueId, For, mergeProps, on, onCleanup, onMount, Show, splitProps, type JSX } from "solid-js";
 import { CheckIcon, ChevronDownIcon, CopyIcon, ChevronLeftIcon, ChevronRightIcon, CircleCheckIcon, CircleXIcon, InfoIcon, SearchIcon, TriangleAlertIcon, XIcon } from "lucide-solid";
 export { ChevronDownIcon };
 import { cn } from "@/lib/utils";
@@ -35,13 +35,13 @@ const pillSlot = (item: PillAction, onPick?: (label: string) => void, attrs?: Pi
  * folded: a circle that comes and goes in its row (Send, Scroll to latest) folds to nothing, its gap with it, so a
  * stretched neighbour gives and takes the room. voice: one of the voice controls, which stay while a PhoneComposer
  * listens (Stop and send). aura: the mic -- listening, its pill fills with an Aura under its icon; stretched, it
- * shrinks to a short pill at the row's end.
+ * shrinks to a short pill at the row's end. open: its menu is open, so it stays lit while its row dims (PhoneComposer under).
  */
-export function PillButton(props: PillAction & { stretch?: boolean; folded?: boolean; voice?: boolean; aura?: boolean; onPick?: (label: string) => void; button?: PillAttrs }) {
+export function PillButton(props: PillAction & { stretch?: boolean; folded?: boolean; voice?: boolean; aura?: boolean; open?: boolean; onPick?: (label: string) => void; button?: PillAttrs }) {
   const mic = !!props.aura;
   // The caller's attributes stay live on the one button (merged lazily, so a change never rebuilds it).
   const attrs = mergeProps(() => ({ tabIndex: props.folded ? -1 : undefined }), () => props.button ?? {}) as PillAttrs;
-  const pill = <div class="ui-frost ui-pill" data-solo="" data-stretch={props.stretch ? "" : undefined} data-folded={props.folded ? "" : undefined} data-voice={props.voice || mic ? "" : undefined}
+  const pill = <div class="ui-frost ui-pill" data-solo="" data-stretch={props.stretch ? "" : undefined} data-folded={props.folded ? "" : undefined} data-voice={props.voice || mic ? "" : undefined} data-open={props.open ? "" : undefined}
     aria-hidden={props.folded ? "true" : undefined}>{mic
       ? pillSlot({ get label() { return props.label; }, icon: <><Aura />{props.icon}</> }, props.onPick, attrs)
       : pillSlot(props, props.onPick, attrs)}</div>;
@@ -158,18 +158,24 @@ export function PillWave(props: { levels: number[]; gain?: number }) {
  * row's other pills fade where they stand, the stretched mic shrinks to a short pill at the row's end, filling with colour, the voice
  * track sweeps out of it to the row's start, captions open above). edit: pills over the field while its cursor is
  * moved by hand, fading in when editing. onTrack: a tap on the track while listening (the app stops). level: the voice level (0-1) while listening; the mic's Aura answers it.
+ * under: a menu opened from one of the row's pills (PillButton open) is over it; the rest dims at once, as a menu under its submenu.
+ * layout: bar (the default: each pill its own frost, the mic stretched) or surface (the row one frost capsule, its pills slots in it,
+ * the mic at its end; listening, an Aura fills the capsule under the track).
  */
 export type VoiceMode = "idle" | "typing" | "listening";
-export function PhoneComposer(props: { mode: VoiceMode; field: JSX.Element; track?: JSX.Element; onTrack?: () => void; captions?: JSX.Element; edit?: JSX.Element; editing?: boolean; level?: number; children: JSX.Element }) {
+export function PhoneComposer(props: { mode: VoiceMode; layout?: "bar" | "surface"; field: JSX.Element; track?: JSX.Element; onTrack?: () => void; captions?: JSX.Element; edit?: JSX.Element; editing?: boolean; under?: boolean; level?: number; children: JSX.Element }) {
   const edit = children(() => props.edit);
-  // The captions fade out when listening stops, as they faded in, then go.
+  // The captions fade out when listening stops, then go. The mode it came from times the field and the captions
+  // where they share a spot: from typing, the captions wait for the field to fade; back to typing, the field waits for them.
   const [captions, setCaptions] = createSignal(props.mode === "listening");
-  createEffect(() => { if (props.mode === "listening") setCaptions(true); });
-  return <div class="ui-phone-composer" data-mode={props.mode} data-editing={props.editing ? "" : undefined} style={props.mode === "listening" && props.level !== undefined ? { "--voice-level": String(props.level) } : undefined}>
+  const [from, setFrom] = createSignal<VoiceMode>();
+  createEffect(on(() => props.mode, (mode, prev) => { if (mode === prev) return; if (mode === "listening") setCaptions(true); setFrom(prev); }));
+  const surface = () => props.layout === "surface";
+  return <div class="ui-phone-composer" data-mode={props.mode} data-from={from()} data-layout={surface() ? "surface" : undefined} data-editing={props.editing ? "" : undefined} data-under={props.under ? "" : undefined} style={props.mode === "listening" && props.level !== undefined ? { "--voice-level": String(props.level) } : undefined}>
     <Show when={edit()}><div class="ui-phone-edit" aria-hidden={props.editing ? undefined : "true"}>{edit()}</div></Show>
     <Show when={captions()}><div class="ui-voice-captions" aria-live="polite" data-leaving={props.mode === "listening" ? undefined : ""} onAnimationEnd={(event) => { if (event.target === event.currentTarget && props.mode !== "listening") setCaptions(false); }}>{props.captions}</div></Show>
     <div class="ui-phone-field">{props.field}</div>
-    <div class="ui-phone-row">{props.children}<div class="ui-voice-track" aria-hidden={props.mode === "listening" ? undefined : "true"} onClick={() => props.mode === "listening" && props.onTrack?.()}>{props.track}</div></div>
+    <div class={surface() ? "ui-frost ui-phone-row" : "ui-phone-row"}>{props.children}<div class="ui-voice-track" aria-hidden={props.mode === "listening" ? undefined : "true"} onClick={() => props.mode === "listening" && props.onTrack?.()}><Show when={surface()}><Aura /></Show>{props.track}</div></div>
   </div>;
 }
 

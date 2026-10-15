@@ -195,7 +195,7 @@
   transition: opacity var(--duration-gentle) var(--ease-leave), --aura-level .12s linear; }
 /* Its fade is its own: shown, it blooms over the gentle duration as the move that shows it runs, and goes the same way
    back (a parent shows it with data-on or a rule of its own, listed here, so the fade stays the same). */
-.ui-aura[data-on], .ui-phone-composer[data-mode="listening"] .ui-pill[data-voice] .ui-aura, .composer-wrap[data-library][data-phone-mode="listening"] .dictation-trigger > .ui-aura {
+.ui-aura[data-on], .ui-phone-composer[data-mode="listening"] :is(.ui-pill[data-voice], .ui-voice-track) .ui-aura {
   opacity: 1; transition: opacity var(--duration-gentle) var(--ease-arrive), --aura-level .12s linear; }
 .ui-aura > canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
 /* The frost over it: a lit rim and a faint sheen from the top, so the colour reads as behind the glass. */
@@ -237,13 +237,32 @@
 /* Captions: the newest three lines above the row, on the page's ground so the transcript never shows through. */
 .ui-voice-captions { position: absolute; left: 0; right: 0; bottom: calc(var(--pill-size) + var(--space-md)); z-index: 1; display: flex; max-height: calc(3 * 1.45em + var(--space-lg)); flex-direction: column; justify-content: flex-end; overflow: hidden;
   background: linear-gradient(to bottom, transparent, var(--background) var(--space-xl)); padding: var(--space-lg) var(--space-lg) var(--space-xs); color: var(--muted-foreground); font-size: var(--text-body); font-style: italic; line-height: 1.45; pointer-events: none; animation: ui-fade-in var(--duration-gentle) var(--ease-arrive) backwards; }
-.ui-voice-captions[data-leaving] { animation: ui-fade-out var(--duration-gentle) var(--ease-leave) forwards; }
+.ui-voice-captions[data-leaving] { animation: ui-fade-out var(--duration-quick) var(--ease-leave) forwards; }
+/* Where the field and the captions share a spot, one waits for the other: from typing, the captions open once the field
+   has faded; back to typing, the field fades in once they have gone, so its text is never under their ground. */
+.ui-phone-composer[data-from="typing"] .ui-voice-captions:not([data-leaving]) { animation-delay: var(--duration-quick); }
+.ui-phone-composer[data-from="listening"][data-mode="typing"] > .ui-phone-field { transition: opacity calc(var(--duration-gentle) - var(--duration-quick)) var(--ease-arrive) var(--duration-quick); }
+/* Under a menu opened from one of its pills, the rest dims at once (as a menu under its submenu); the opener stays lit. */
+.ui-phone-composer[data-under] :is(.ui-phone-field, .ui-phone-row > .ui-pill:not([data-open])) { filter: opacity(.38) saturate(.6); }
+/* Surface: the row is one frost capsule (the field still its own above it), its pills slots in it as a PillGroup's,
+   the mic at its end, unstretched. Listening, an Aura fills the capsule under the waveform, which runs from its start
+   to the mic; the other slots fade where they stand and Stop and send unfolds beside the mic. */
+.ui-phone-composer[data-layout="surface"] > .ui-phone-row { height: var(--pill-size); gap: var(--pill-gap); padding: 0 1px; border-radius: var(--radius-round); }
+.ui-phone-composer[data-layout="surface"] .ui-phone-row > .ui-pill { border: 0; background: none; -webkit-backdrop-filter: none; backdrop-filter: none; box-shadow: none; }
+.ui-phone-composer[data-layout="surface"] .ui-phone-row > .ui-pill:not([data-folded]) { width: var(--pill-slot); height: var(--pill-slot-height); }
+.ui-phone-composer[data-layout="surface"] .ui-phone-row > .ui-pill[data-folded] { margin-inline-start: calc(-1 * var(--pill-gap)); }
+.ui-phone-composer[data-layout="surface"] .ui-phone-row > .ui-pill[data-voice][data-stretch] { flex: none; min-width: 0; margin-inline-start: auto; }
+.ui-phone-composer[data-layout="surface"] :is(.ui-pill-room, .ui-pill[data-voice] .ui-aura) { display: none; }
+.ui-phone-composer[data-layout="surface"] .ui-voice-track { right: 0; padding-inline: var(--space-md) calc(2 * (var(--pill-slot) + var(--pill-gap)) + var(--space-md)); opacity: 1; clip-path: none; transition: none; }
+.ui-phone-composer[data-layout="surface"] .ui-voice-track > .ui-pill-wave { position: relative; z-index: 1; opacity: 0; transition: opacity var(--duration-gentle) var(--ease-leave); }
+.ui-phone-composer[data-layout="surface"][data-mode="listening"] .ui-voice-track { right: 0; }
+.ui-phone-composer[data-layout="surface"][data-mode="listening"] .ui-voice-track > .ui-pill-wave { opacity: 1; transition: opacity var(--duration-gentle) var(--ease-arrive); }
 /* Edit pills over the field: each fades itself (a fading row would be the backdrop its pills blur). */
 .ui-phone-edit { position: absolute; left: 0; bottom: calc(100% + var(--space-md)); display: flex; gap: var(--space-md); pointer-events: none; }
 .ui-phone-edit > .ui-pill { opacity: 0; transition: opacity var(--duration-quick) var(--ease-leave); }
 .ui-phone-composer[data-editing] .ui-phone-edit > .ui-pill { opacity: 1; pointer-events: auto; transition: opacity var(--duration-gentle) var(--ease-arrive); }
 @media (prefers-reduced-motion: reduce) {
-  .ui-pill[data-solo], .ui-aura, .ui-phone-field, .ui-pill-room, .ui-voice-track, .ui-phone-edit > .ui-pill, .ui-phone-row > .ui-pill { transition: none !important; }
+  .ui-pill[data-solo], .ui-aura, .ui-phone-field, .ui-pill-room, .ui-voice-track, .ui-voice-track > .ui-pill-wave, .ui-phone-edit > .ui-pill, .ui-phone-row > .ui-pill { transition: none !important; }
   .ui-voice-captions { animation: none; }
 }
 /* Field: text in the capsule; it grows with its lines. */
@@ -715,47 +734,6 @@
   transition: transform var(--duration-quick) var(--ease-leave), opacity var(--duration-quick) var(--ease-leave), visibility 0s var(--duration-quick); }
 .question-dock > .ui-rider[data-layout="card"] { animation: ui-rise var(--duration-gentle) var(--ease-arrive) var(--duration-quick) backwards; }
 @media (prefers-reduced-motion: reduce) { .composer-stack > .composer-wrap.ui-composer-width { transition: none; } .question-dock > .ui-rider[data-layout="card"] { animation: none; } }
-/* The app's phone composer in its surface layout (composer-voice.css) on PhoneComposer's moves, timed by the tokens;
-   the bar layout is PhoneComposer itself (composer.tsx, phoneV2), so it needs none of this.
-   Folding circles (Send, Scroll to latest, Stop and send) as a folded Pill; Stop and send swaps in place with a draft. */
-.composer-wrap[data-library][data-phone-layout] .composer-actions :is(.composer-latest-trigger, .composer-send-trigger, .composer-stop-trigger, .composer-stop-send)[data-slot="button"] {
-  transition: width var(--duration-gentle) var(--ease-arrive), min-width var(--duration-gentle) var(--ease-arrive), margin var(--duration-gentle) var(--ease-arrive), opacity var(--duration-quick) var(--ease-arrive) var(--duration-quick); }
-.composer-wrap[data-library][data-phone-layout] .composer-actions :is(.composer-latest-trigger:not([data-shown]), .composer-stop-send:not([data-shown]))[data-slot="button"],
-.composer-wrap[data-library][data-phone-layout][data-primary-hidden] .composer-actions .composer-send-trigger[data-slot="button"] {
-  transition: opacity var(--duration-quick) var(--ease-leave), width var(--duration-gentle) var(--ease-arrive) var(--duration-quick), min-width var(--duration-gentle) var(--ease-arrive) var(--duration-quick), margin var(--duration-gentle) var(--ease-arrive) var(--duration-quick); }
-.composer-wrap[data-library][data-phone-layout]:not([data-primary-hidden]) .composer-actions .composer-stop-send[data-slot="button"] { transition: none; }
-.composer-wrap[data-library][data-phone-layout]:not([data-primary-hidden]) .composer-actions .composer-stop-send[data-slot="button"]:not([data-shown]) { transition: none; }
-/* Listening: the other controls fade where they stand (Scroll to latest too, in place rather than folding). */
-.composer-wrap[data-library][data-phone-layout] :is(.composer-mobile-plus, .composer-camera-trigger, .composer-keyboard-trigger, .composer-stop-aside, .composer-actions-left > *) { transition: opacity var(--duration-quick) var(--ease-change) calc(var(--duration-gentle) - var(--duration-quick)); }
-/* Send and Stop and send are one slot with one arrow: with a draft, starting and stopping swap them in place with
-   nothing to see -- no slot-in grow, no fade -- and Send waiting on the transcript is not dimmed for that moment. */
-.composer-wrap[data-library][data-phone-layout] .composer-actions :is(.composer-send-trigger, .composer-stop-send)[data-slot="button"] { animation: none; }
-.composer-wrap[data-library][data-phone-layout] .composer-actions .composer-send-trigger[data-slot="button"]:disabled { opacity: 1; }
-.composer-wrap[data-library][data-phone-layout] .composer-actions .composer-stop-send:not([data-shown])[data-slot="button"] { transition: opacity var(--duration-quick) var(--ease-leave), width var(--duration-gentle) var(--ease-arrive), min-width var(--duration-gentle) var(--ease-arrive), margin var(--duration-gentle) var(--ease-arrive); }
-.composer-wrap[data-library][data-phone-mode="listening"] :is(.composer-mobile-plus, .composer-camera-trigger, .composer-keyboard-trigger, .composer-stop-aside, .composer-actions-left > *) { transition: opacity var(--duration-quick) var(--ease-change); }
-.composer-wrap[data-library][data-phone-mode="listening"] .composer-actions .composer-latest-trigger[data-slot="button"][data-shown] { transition: opacity var(--duration-quick) var(--ease-leave); }
-.composer-wrap[data-library][data-left-listening] .composer-actions .composer-latest-trigger[data-slot="button"][data-shown] { transition: opacity var(--duration-quick) var(--ease-arrive) var(--duration-quick); }
-/* The text pill fades in place, giving up its room once faded. */
-.composer-wrap[data-library][data-phone-layout] .composer-input-shell { transition: opacity var(--duration-gentle) var(--ease-arrive); }
-.composer-wrap[data-library][data-phone-layout]:is([data-phone-mode="idle"], [data-phone-mode="listening"]) .composer-input-shell {
-  transition: opacity var(--duration-quick) var(--ease-leave), max-height 0s var(--duration-quick), min-height 0s var(--duration-quick), margin 0s var(--duration-quick), border-color 0s var(--duration-quick); }
-/* The mic keeps its icon listening, over an Aura (the app's orb and glow are not drawn here). */
-.composer-wrap[data-library][data-phone-mode="listening"] .composer-voice-mic { opacity: 1; }
-.composer-wrap[data-library] .dictation-trigger > .ui-aura { --aura-level: min(1, var(--voice-level, 0) * 2.5); z-index: -1; }
-.composer-wrap[data-library][data-phone-layout] .composer-voice-track { transition: opacity var(--duration-quick) var(--ease-change), clip-path var(--duration-gentle) var(--ease-arrive); }
-/* The waveform is a PillWave filling the track: its last bar is one row gap from the orb pill, as the orb pill is from Send. */
-.composer-wrap[data-library][data-phone-layout] .composer-voice-track > .ui-pill-wave { position: absolute; inset: var(--space-xs) 0; height: auto; }
-/* Captions open in place (after the text pill has faded, when they start from its text); edit pills fade each. */
-.composer-wrap[data-library] .composer-voice-captions { animation: ui-fade-in var(--duration-gentle) var(--ease-arrive) backwards; }
-.composer-wrap[data-library] .composer-voice-captions[data-leaving] { animation: ui-fade-out var(--duration-gentle) var(--ease-leave) forwards; }
-.composer-wrap[data-library] .composer-voice-captions[data-lead]:not([data-leaving]) { animation: ui-fade-in var(--duration-gentle) var(--ease-arrive) var(--duration-quick) backwards; }
-.composer-wrap[data-library][data-phone-layout] .composer-edit-action[data-slot="button"] { transition: opacity var(--duration-quick) var(--ease-leave); }
-.composer-wrap[data-library][data-phone-layout] .composer-edit-actions[data-shown] .composer-edit-action[data-slot="button"] { transition: opacity var(--duration-gentle) var(--ease-arrive); }
-@media (prefers-reduced-motion: reduce) {
-  .composer-wrap[data-library] :is(.composer-actions [data-slot="button"], .composer-input-shell, .composer-voice-mic, .composer-voice-orb, .composer-voice-track, .composer-voice-glow, .composer-edit-action), .composer-wrap[data-library] .composer::before { transition: none !important; }
-  .composer-wrap[data-library] .composer-voice-captions { animation: none; }
-}
-
 /* TextArea: multi-line text that grows with its lines; bare, so what holds it pads it. */
 .ui-textarea { display: block; width: 100%; resize: none; overflow-y: auto; border: 0; outline: 0; background: transparent; padding: 0; color: inherit; font: inherit; font-size: var(--text-body); line-height: 1.45; field-sizing: content; }
 .ui-textarea::placeholder { color: var(--muted-foreground); }
