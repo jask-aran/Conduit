@@ -216,11 +216,11 @@
    pills sit above it) and Stop and send folds as it fades. */
 .ui-phone-row > .ui-pill[data-voice][data-folded] { transition: opacity var(--duration-quick) var(--ease-leave), width var(--duration-gentle) var(--ease-arrive), min-width var(--duration-gentle) var(--ease-arrive), margin var(--duration-gentle) var(--ease-arrive); }
 /* Close mirrors open: listening, the pills fade out over the move's first quick; stopping, back in over its last. */
-.ui-phone-composer:not([data-mode="listening"]) .ui-phone-row > .ui-pill:not([data-folded]) { transition: width var(--duration-gentle) var(--ease-arrive), min-width var(--duration-gentle) var(--ease-arrive), margin var(--duration-gentle) var(--ease-arrive), opacity var(--duration-quick) var(--ease-arrive) calc(var(--duration-gentle) - var(--duration-quick)); }
+.ui-phone-composer:not([data-mode="listening"]) .ui-phone-row > .ui-pill:not([data-folded]) { transition: width var(--duration-gentle) var(--ease-arrive), min-width var(--duration-gentle) var(--ease-arrive), margin var(--duration-gentle) var(--ease-arrive), opacity var(--duration-quick) var(--ease-change) calc(var(--duration-gentle) - var(--duration-quick)); }
 .ui-pill-room:not(.ui-phone-row > *) { display: none; }
 /* Listening: the other pills fade where they stand; the mic shrinks, its orb in; the track sweeps out of it. */
 .ui-phone-composer[data-mode="listening"] .ui-phone-row > .ui-pill:not([data-voice]) { opacity: 0; pointer-events: none;
-  transition: opacity var(--duration-quick) var(--ease-leave), width var(--duration-gentle) var(--ease-arrive) var(--duration-quick), min-width var(--duration-gentle) var(--ease-arrive) var(--duration-quick), margin var(--duration-gentle) var(--ease-arrive) var(--duration-quick); }
+  transition: opacity var(--duration-quick) var(--ease-change), width var(--duration-gentle) var(--ease-arrive) var(--duration-quick), min-width var(--duration-gentle) var(--ease-arrive) var(--duration-quick), margin var(--duration-gentle) var(--ease-arrive) var(--duration-quick); }
 .ui-phone-composer[data-mode="listening"] .ui-pill-room { flex-grow: 1; }
 .ui-phone-composer[data-mode="listening"] .ui-phone-row > .ui-pill[data-voice][data-stretch] { flex-grow: 0; }
 /* The voice track: no surface, from the row's start to the orb pill. It wipes out of the orb pill as the mic shrinks and
@@ -722,12 +722,16 @@
 .composer-wrap[data-library][data-phone-layout] .composer-actions :is(.composer-latest-trigger:not([data-shown]), .composer-stop-send:not([data-shown]))[data-slot="button"],
 .composer-wrap[data-library][data-phone-layout][data-primary-hidden] .composer-actions .composer-send-trigger[data-slot="button"] {
   transition: opacity var(--duration-quick) var(--ease-leave), width var(--duration-gentle) var(--ease-arrive) var(--duration-quick), min-width var(--duration-gentle) var(--ease-arrive) var(--duration-quick), margin var(--duration-gentle) var(--ease-arrive) var(--duration-quick); }
-.composer-wrap[data-library][data-phone-layout]:not([data-primary-hidden]) .composer-actions .composer-stop-send[data-slot="button"] { transition: opacity var(--duration-quick) var(--ease-change); }
+.composer-wrap[data-library][data-phone-layout]:not([data-primary-hidden]) .composer-actions .composer-stop-send[data-slot="button"] { transition: none; }
 .composer-wrap[data-library][data-phone-layout]:not([data-primary-hidden]) .composer-actions .composer-stop-send[data-slot="button"]:not([data-shown]) { transition: none; }
 /* Listening: the other controls fade where they stand (Scroll to latest too, in place rather than folding). */
-.composer-wrap[data-library][data-phone-layout] :is(.composer-mobile-plus, .composer-camera-trigger, .composer-keyboard-trigger, .composer-stop-aside, .composer-actions-left > *) { transition: opacity var(--duration-quick) var(--ease-arrive) calc(var(--duration-gentle) - var(--duration-quick)); }
+.composer-wrap[data-library][data-phone-layout] :is(.composer-mobile-plus, .composer-camera-trigger, .composer-keyboard-trigger, .composer-stop-aside, .composer-actions-left > *) { transition: opacity var(--duration-quick) var(--ease-change) calc(var(--duration-gentle) - var(--duration-quick)); }
+/* Send and Stop and send are one slot with one arrow: with a draft, starting and stopping swap them in place with
+   nothing to see -- no slot-in grow, no fade -- and Send waiting on the transcript is not dimmed for that moment. */
+.composer-wrap[data-library][data-phone-layout] .composer-actions :is(.composer-send-trigger, .composer-stop-send)[data-slot="button"] { animation: none; }
+.composer-wrap[data-library][data-phone-layout] .composer-actions .composer-send-trigger[data-slot="button"]:disabled { opacity: 1; }
 .composer-wrap[data-library][data-phone-layout] .composer-actions .composer-stop-send:not([data-shown])[data-slot="button"] { transition: opacity var(--duration-quick) var(--ease-leave), width var(--duration-gentle) var(--ease-arrive), min-width var(--duration-gentle) var(--ease-arrive), margin var(--duration-gentle) var(--ease-arrive); }
-.composer-wrap[data-library][data-phone-mode="listening"] :is(.composer-mobile-plus, .composer-camera-trigger, .composer-keyboard-trigger, .composer-stop-aside, .composer-actions-left > *) { transition: opacity var(--duration-quick) var(--ease-leave); }
+.composer-wrap[data-library][data-phone-mode="listening"] :is(.composer-mobile-plus, .composer-camera-trigger, .composer-keyboard-trigger, .composer-stop-aside, .composer-actions-left > *) { transition: opacity var(--duration-quick) var(--ease-change); }
 .composer-wrap[data-library][data-phone-mode="listening"] .composer-actions .composer-latest-trigger[data-slot="button"][data-shown] { transition: opacity var(--duration-quick) var(--ease-leave); }
 .composer-wrap[data-library][data-left-listening] .composer-actions .composer-latest-trigger[data-slot="button"][data-shown] { transition: opacity var(--duration-quick) var(--ease-arrive) var(--duration-quick); }
 /* The text pill fades in place, giving up its room once faded. */

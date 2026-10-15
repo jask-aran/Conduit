@@ -107,8 +107,8 @@ const phoneComposer = (mode: Live<VoiceMode>, opts: { draft?: Live<boolean>; awa
     <PillButton folded={!read(opts.away ?? false)} {...icon("Scroll to latest", <ArrowDownIcon />)} />
     <PillButton {...icon(m() === "typing" ? "Close the keyboard" : "Type a message", <KeyboardIcon />)} />
     <PillButton stretch aura {...icon("Dictate", <MicIcon />)} />
-    <PillButton voice folded={m() !== "listening"} {...icon("Stop and send", <ArrowUpIcon />)} />
-    <PillButton folded={m() === "listening" || !draft()} {...icon("Send", <ArrowUpIcon />)} />
+    {/* Send and Stop and send are one slot, one arrow: with a draft it stays put as listening starts and stops. */}
+    <PillButton voice folded={m() !== "listening" && !draft()} {...icon(m() === "listening" ? "Stop and send" : "Send", <ArrowUpIcon />)} />
   </PhoneComposer>;
 };
 const thumb = "data:image/svg+xml," + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><defs><linearGradient id="g" x2="1" y2="1"><stop offset="0" stop-color="#6b8afd"/><stop offset="1" stop-color="#d97706"/></linearGradient></defs><rect width="48" height="48" fill="url(#g)"/></svg>');
