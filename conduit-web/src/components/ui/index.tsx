@@ -84,14 +84,22 @@ export function Aura(props: { on?: boolean; level?: number }) {
     const ctx = canvas.getContext("2d")!;
     let width = AURA_SIDE, height = AURA_SIDE, image = ctx.createImageData(width, height), frame = 0, last = 0, seen = true;
     const turns = AURA_BLOBS.map((_, i) => i * 1.3);
+    // Sizing a canvas clears it, so it is resized only when its grid changes, and redrawn there at once: resized after
+    // the frame's draw (as it is every frame its surface moves), it painted blank and the colour vanished mid-move.
     const fit = () => { const r = box.getBoundingClientRect(); if (!r.width || !r.height) return; const k = AURA_SIDE / Math.max(r.width, r.height);
-      width = Math.max(4, Math.round(r.width * k)); height = Math.max(4, Math.round(r.height * k)); canvas.width = width; canvas.height = height; image = ctx.createImageData(width, height); };
+      const w = Math.max(4, Math.round(r.width * k)), h = Math.max(4, Math.round(r.height * k));
+      if (w === width && h === height && canvas.width === w) return;
+      width = w; height = h; canvas.width = w; canvas.height = h; image = ctx.createImageData(w, h); render(0); };
+    let level = 0;
     const draw = (now: number) => {
       frame = requestAnimationFrame(draw);
       const style = getComputedStyle(box);
       if (!seen || style.opacity === "0") { last = 0; return; }
-      const level = Math.min(1, Math.max(0, parseFloat(style.getPropertyValue("--aura-level")) || 0));
+      level = Math.min(1, Math.max(0, parseFloat(style.getPropertyValue("--aura-level")) || 0));
       const dt = last ? Math.min(.1, (now - last) / 1000) : 0; last = now;
+      render(dt);
+    };
+    const render = (dt: number) => {
       const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
       const blobs = AURA_BLOBS.map((blob, i) => {
         if (!still) turns[i]! += dt * (2 * Math.PI / blob.orbit) * (1 + 1.5 * level);
@@ -150,9 +158,12 @@ export function PillWave(props: { levels: number[]; gain?: number }) {
 export type VoiceMode = "idle" | "typing" | "listening";
 export function PhoneComposer(props: { mode: VoiceMode; field: JSX.Element; track?: JSX.Element; captions?: JSX.Element; edit?: JSX.Element; editing?: boolean; level?: number; children: JSX.Element }) {
   const edit = children(() => props.edit);
+  // The captions fade out when listening stops, as they faded in, then go.
+  const [captions, setCaptions] = createSignal(props.mode === "listening");
+  createEffect(() => { if (props.mode === "listening") setCaptions(true); });
   return <div class="ui-phone-composer" data-mode={props.mode} data-editing={props.editing ? "" : undefined} style={props.mode === "listening" && props.level !== undefined ? { "--voice-level": String(props.level) } : undefined}>
     <Show when={edit()}><div class="ui-phone-edit" aria-hidden={props.editing ? undefined : "true"}>{edit()}</div></Show>
-    <Show when={props.mode === "listening"}><div class="ui-voice-captions" aria-live="polite">{props.captions}</div></Show>
+    <Show when={captions()}><div class="ui-voice-captions" aria-live="polite" data-leaving={props.mode === "listening" ? undefined : ""} onAnimationEnd={(event) => { if (event.target === event.currentTarget && props.mode !== "listening") setCaptions(false); }}>{props.captions}</div></Show>
     <div class="ui-phone-field">{props.field}</div>
     <div class="ui-phone-row">{props.children}<div class="ui-voice-track" aria-hidden={props.mode === "listening" ? undefined : "true"}>{props.track}</div></div>
   </div>;
