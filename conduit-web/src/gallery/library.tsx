@@ -82,11 +82,24 @@ const send = () => ghost("Send message", <ArrowUpIcon />);
 type Live<T> = T | (() => T);
 const read = <T,>(value: Live<T>) => typeof value === "function" ? (value as () => T)() : value;
 const WAVE = [3, 5, 8, 6, 4, 7, 11, 8, 5, 3, 6, 9, 12, 8, 5, 4, 7, 10, 6, 4, 3, 5, 8, 6];
+/** A speaking voice for the gallery: a level (0-1) every 70ms, as the app's dictation samples it, and its last bars. */
+const speech = (on: () => boolean) => {
+  const [level, setLevel] = createSignal(0), [bars, setBars] = createSignal(Array.from({ length: 80 }, (_, i) => WAVE[i % WAVE.length]! / 12));
+  let t = 0;
+  const timer = setInterval(() => {
+    if (!on()) return;
+    t += 1;
+    const next = Math.max(0, Math.min(1, (Math.sin(t / 3) * .5 + .5) * (Math.sin(t / 11) * .4 + .6) * (.6 + Math.random() * .4)));
+    setLevel(next); setBars((b) => [...b.slice(1), next]);
+  }, 70);
+  onCleanup(() => clearInterval(timer));
+  return { level, bars };
+};
 const phoneComposer = (mode: Live<VoiceMode>, opts: { draft?: Live<boolean>; away?: Live<boolean>; editing?: Live<boolean> } = {}) => {
-  const m = () => read(mode), draft = () => !!read(opts.draft ?? false);
-  return <PhoneComposer mode={m()} editing={!!read(opts.editing ?? false)}
+  const m = () => read(mode), draft = () => !!read(opts.draft ?? false), voice = speech(() => m() === "listening");
+  return <PhoneComposer mode={m()} editing={!!read(opts.editing ?? false)} level={voice.level()}
     field={<PillField value={draft() ? "make the second paragraph shorter" : ""} placeholder="Send a message…" />}
-    track={<span class="g-wave" aria-hidden="true"><For each={WAVE}>{(h) => <i style={{ height: `${h * 2}px` }} />}</For></span>}
+    track={<span class="g-wave" aria-hidden="true"><For each={voice.bars()}>{(h) => <i style={{ height: `${Math.max(2, Math.round(h * 28))}px` }} />}</For></span>}
     captions={<p>then rename the file to lorem.txt</p>}
     edit={<><PillButton {...icon("Undo", <Undo2Icon />)} /><PillButton {...icon("Delete word or selection", <DeleteIcon />)} /><PillButton {...icon("Previous word", <ChevronLeftIcon />)} /><PillButton {...icon("Next word", <ChevronRightIcon />)} /><PillButton {...icon("End of draft", <TextCursorInputIcon />)} /></>}>
     <PillButton {...icon("Message options", <PlusIcon />)} />

@@ -38,7 +38,7 @@ export function PillButton(props: PillAction & { stretch?: boolean; folded?: boo
   const orb = children(() => props.orb), mic = !!orb();
   const pill = <div class="ui-frost ui-pill" data-solo="" data-stretch={props.stretch ? "" : undefined} data-folded={props.folded ? "" : undefined} data-voice={props.voice || mic ? "" : undefined}
     aria-hidden={props.folded ? "true" : undefined}>{mic
-      ? pillSlot({ label: props.label, icon: <><span class="ui-pill-mic">{props.icon}</span><span class="ui-pill-orb">{orb()}</span></> }, props.onPick)
+      ? pillSlot({ label: props.label, icon: <><span class="ui-pill-glow" aria-hidden="true"><i /><i /><i /><i /></span><span class="ui-pill-mic">{props.icon}</span><span class="ui-pill-orb">{orb()}</span></> }, props.onPick)
       : pillSlot(props, props.onPick)}</div>;
   return mic && props.stretch ? <><span class="ui-pill-room" />{pill}</> : pill;
 }
@@ -58,12 +58,12 @@ export function PillField(props: { placeholder?: string; value?: string; onInput
  * shows, and nothing reflows between them: idle (the row), typing (the field fades in above it), listening (the
  * row's other pills fade where they stand, the stretched mic shrinks to an orb pill at the row's end, the voice
  * track sweeps out of it to the row's start, captions open above). edit: pills over the field while its cursor is
- * moved by hand, fading in when editing.
+ * moved by hand, fading in when editing. level: the voice level (0-1) while listening; the orb and its glow swell with it.
  */
 export type VoiceMode = "idle" | "typing" | "listening";
-export function PhoneComposer(props: { mode: VoiceMode; field: JSX.Element; track?: JSX.Element; captions?: JSX.Element; edit?: JSX.Element; editing?: boolean; children: JSX.Element }) {
+export function PhoneComposer(props: { mode: VoiceMode; field: JSX.Element; track?: JSX.Element; captions?: JSX.Element; edit?: JSX.Element; editing?: boolean; level?: number; children: JSX.Element }) {
   const edit = children(() => props.edit);
-  return <div class="ui-phone-composer" data-mode={props.mode} data-editing={props.editing ? "" : undefined}>
+  return <div class="ui-phone-composer" data-mode={props.mode} data-editing={props.editing ? "" : undefined} style={props.mode === "listening" && props.level !== undefined ? { "--voice-level": String(props.level) } : undefined}>
     <Show when={edit()}><div class="ui-phone-edit" aria-hidden={props.editing ? undefined : "true"}>{edit()}</div></Show>
     <Show when={props.mode === "listening"}><div class="ui-voice-captions" aria-live="polite">{props.captions}</div></Show>
     <div class="ui-phone-field">{props.field}</div>

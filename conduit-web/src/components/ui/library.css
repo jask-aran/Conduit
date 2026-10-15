@@ -182,10 +182,20 @@
 .ui-pill[data-solo][data-folded] { width: 0; min-width: 0; margin-inline-start: calc(-1 * var(--space-md)); overflow: clip; border-width: 0; opacity: 0; pointer-events: none;
   transition: opacity var(--duration-quick) var(--ease-leave), width var(--duration-gentle) var(--ease-arrive) var(--duration-quick), min-width var(--duration-gentle) var(--ease-arrive) var(--duration-quick), margin var(--duration-gentle) var(--ease-arrive) var(--duration-quick); }
 /* The mic: its icon and the orb stacked in one button, crossfading. */
-.ui-pill[data-voice] > button { position: relative; }
+.ui-pill[data-voice] > button { position: relative; isolation: isolate; }
 .ui-pill-mic { display: inline-flex; transition: opacity var(--duration-quick) var(--ease-change); }
 .ui-pill-orb { position: absolute; inset: 0; display: grid; place-items: center; opacity: 0; pointer-events: none; transition: opacity var(--duration-quick) var(--ease-change); }
-.ui-pill-orb > * { width: var(--icon-xl); height: var(--icon-xl); }
+.ui-pill-orb > * { width: var(--icon-xl); height: var(--icon-xl); transform: scale(calc(1 + var(--voice-level, 0) * .3)); transition: transform .1s linear; }
+/* Listening, the orb pill glows: soft colour fields swelling with the voice level (--voice-level, 0-1, set by the
+   PhoneComposer's level), drifting. Gradients, not a blur, so nothing re-rasterises per frame. The one coloured glow
+   DESIGN.md allows. */
+.ui-pill-glow { position: absolute; inset: 0; z-index: -1; overflow: clip; border-radius: inherit; opacity: 0; pointer-events: none; transition: opacity var(--duration-gentle) var(--ease-arrive); }
+.ui-pill-glow > i { position: absolute; top: -40%; width: 90%; height: 180%; transform: scale(calc(.8 + var(--voice-level, 0) * .6)); transition: transform .12s linear; animation: ui-voice-drift 6s ease-in-out infinite alternate paused; }
+.ui-pill-glow > i:nth-child(1) { left: -10%; background: radial-gradient(closest-side, oklch(.68 .2 300), transparent); }
+.ui-pill-glow > i:nth-child(2) { left: 15%; background: radial-gradient(closest-side, oklch(.7 .2 20), transparent); animation-delay: -1.5s; }
+.ui-pill-glow > i:nth-child(3) { left: 38%; background: radial-gradient(closest-side, oklch(.74 .19 350), transparent); animation-delay: -3s; }
+.ui-pill-glow > i:nth-child(4) { right: -10%; background: radial-gradient(closest-side, oklch(.78 .16 60), transparent); animation-delay: -4.5s; }
+@keyframes ui-voice-drift { from { translate: -10% 0; } to { translate: 10% 0; } }
 
 /* PhoneComposer: a PillField over a row of Pills, one gap apart. Its modes are opacity, flex-grow and clip-path on
    mounted parts, so nothing reflows when dictation starts or stops. */
@@ -206,6 +216,8 @@
 .ui-phone-composer[data-mode="listening"] .ui-phone-row > .ui-pill[data-voice][data-stretch] { flex-grow: 0; }
 .ui-phone-composer[data-mode="listening"] .ui-pill-mic { opacity: 0; }
 .ui-phone-composer[data-mode="listening"] .ui-pill-orb { opacity: 1; }
+.ui-phone-composer[data-mode="listening"] .ui-pill-glow { opacity: calc(.4 + var(--voice-level, 0) * .5); }
+.ui-phone-composer[data-mode="listening"] .ui-pill-glow > i { animation-play-state: running; }
 /* The voice track: no surface, from the row's start to the orb pill; it sweeps leftwards out of the pill and back. */
 .ui-voice-track { position: absolute; inset-block: 0; left: 0; right: calc(var(--voice-pill) + var(--space-md)); display: flex; align-items: center; overflow: hidden; border-radius: var(--radius-round); opacity: 0; pointer-events: none;
   clip-path: inset(0 0 0 100% round var(--radius-round)); transition: clip-path var(--duration-quick) var(--ease-leave), opacity 0s var(--duration-quick), right 0s var(--duration-quick); }
@@ -220,14 +232,13 @@
 .ui-phone-edit > .ui-pill { opacity: 0; transition: opacity var(--duration-quick) var(--ease-leave); }
 .ui-phone-composer[data-editing] .ui-phone-edit > .ui-pill { opacity: 1; pointer-events: auto; transition: opacity var(--duration-gentle) var(--ease-arrive); }
 @media (prefers-reduced-motion: reduce) {
-  .ui-pill[data-solo], .ui-pill-mic, .ui-pill-orb, .ui-phone-field, .ui-pill-room, .ui-voice-track, .ui-phone-edit > .ui-pill, .ui-phone-row > .ui-pill { transition: none !important; }
-  .ui-voice-captions { animation: none; }
+  .ui-pill[data-solo], .ui-pill-mic, .ui-pill-orb, .ui-pill-orb > *, .ui-pill-glow, .ui-pill-glow > i, .ui-phone-field, .ui-pill-room, .ui-voice-track, .ui-phone-edit > .ui-pill, .ui-phone-row > .ui-pill { transition: none !important; }
+  .ui-voice-captions, .ui-pill-glow > i { animation: none; }
 }
 /* Field: text in the capsule; it grows with its lines. */
 .ui-pill-field { display: flex; width: 100%; height: auto; min-height: var(--pill-size); align-items: center; border-radius: var(--pill-field-radius); padding: 0 var(--pill-field-pad); }
 .ui-pill-field .ui-textarea { width: 100%; max-height: 220px; border: 0; background: transparent; padding: calc((var(--pill-size) - var(--space-2xs) - 1.4em) / 2) 0; color: inherit; font: inherit; font-size: var(--text-body); line-height: 1.4; resize: none; outline: none; field-sizing: content; }
 .ui-pill-field .ui-textarea::placeholder { color: var(--muted-foreground); }
-.ui-pill > button svg { width: var(--icon); height: var(--icon); }
 
 /* Menu: a raised container; rows sit concentric inside it. */
 .ui-menu { outline: none; display: flex; min-width: calc(12 * var(--u-type)); flex-direction: column; border-radius: var(--frost-radius); padding: var(--frost-inset); }
