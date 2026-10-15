@@ -198,12 +198,12 @@
 @property --aura-level { syntax: "<number>"; inherits: true; initial-value: 0; }
 @property --aura-turn { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
 .ui-aura { --aura-level: var(--voice-level, 0); position: absolute; inset: 0; container-type: size; overflow: clip; border-radius: inherit; opacity: 0; pointer-events: none;
-  background: oklch(.42 .1 320 / .55); transition: opacity var(--duration-gentle) var(--ease-arrive), --aura-level .12s linear; }
+  background: linear-gradient(120deg, oklch(.62 .17 300), oklch(.64 .18 10) 55%, oklch(.7 .16 50)); transition: opacity var(--duration-gentle) var(--ease-arrive), --aura-level .12s linear; }
 .ui-aura[data-on] { opacity: 1; }
-.ui-aura > i { position: absolute; left: 50%; top: 50%; width: calc(55cqw + 40cqh); aspect-ratio: 1; border-radius: 50%;
-  background: radial-gradient(closest-side, oklch(.74 .19 var(--hue)), oklch(.74 .19 var(--hue) / 0));
-  translate: calc(-50% + cos(var(--from)) * 38cqw + cos(var(--aura-turn)) * 14cqw) calc(-50% + sin(var(--from)) * 45cqh + sin(var(--aura-turn)) * 30cqh);
-  scale: calc(.7 + var(--aura-level) * var(--swell) + .22 * sin(var(--aura-turn) * 2)); opacity: calc(.5 + var(--aura-level) * .5);
+.ui-aura > i { position: absolute; left: 50%; top: 50%; width: calc(70cqw + 70cqh); aspect-ratio: 1; border-radius: 50%;
+  background: radial-gradient(closest-side, oklch(.72 .19 var(--hue)) 30%, oklch(.72 .19 var(--hue) / 0));
+  translate: calc(-50% + cos(var(--from)) * 32cqw + cos(var(--aura-turn)) * 14cqw) calc(-50% + sin(var(--from)) * 36cqh + sin(var(--aura-turn)) * 26cqh);
+  scale: calc(.9 + var(--aura-level) * var(--swell) * .7 + .2 * sin(var(--aura-turn) * 2)); opacity: calc(.8 + var(--aura-level) * .2);
   animation: ui-aura-turn calc(var(--orbit) * 1s) linear infinite var(--spin, normal) paused; }
 .ui-aura[data-on] > i { animation-play-state: running; }
 .ui-aura > i:nth-child(1) { --from: 180deg; --hue: 300; --orbit: 7; --swell: .7; }
