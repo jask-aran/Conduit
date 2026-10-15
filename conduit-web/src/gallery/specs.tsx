@@ -129,8 +129,8 @@ export function FormTable(props: { rows: FormRow[]; on: Column[]; widths?: strin
 }
 export const form = (name: string, use: string, sample: FormRow["sample"], code?: string, tokens?: string): FormRow => ({ name, use, sample, code, tokens });
 
-/** A token's value in ms, read from :root. */
-const msOf = (name: string) => { const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim(); return parseFloat(v) * (v.endsWith("ms") ? 1 : 1000); };
+/** Once the moves under it have played: their own animations and transitions, at whatever rate the page runs them. */
+const settled = async (root: Element) => { await new Promise(requestAnimationFrame); await Promise.allSettled(root.getAnimations({ subtree: true }).map((a) => a.finished)); };
 /**
  * A piece's own moves, played (each piece draws its moves; Foundations · Motion holds the tokens). Arrive draws it
  * again entering; each of `leaves` plays that leaving, then it arrives again.
@@ -138,11 +138,13 @@ const msOf = (name: string) => { const v = getComputedStyle(document.documentEle
 export function Replay(props: { leaves?: Motion[]; children: (motion: () => Motion | undefined) => JSX.Element }) {
   const [run, setRun] = createSignal(1), [motion, setMotion] = createSignal<Motion | undefined>(undefined), [shown, setShown] = createSignal(true);
   const arrive = () => { setMotion("entering"); setShown(true); setRun(run() + 1); };
-  const leave = (move: Motion) => { setMotion(move); setTimeout(() => { setShown(false); setTimeout(arrive, 400); }, msOf("--duration-quick")); };
+  let stage!: HTMLDivElement;
+  // Held at its leave's end (forwards) until it arrives again, so the stage keeps its height.
+  const leave = async (move: Motion) => { setMotion(move); await settled(stage); setTimeout(arrive, 400); };
   return <div class="g-replay">
     <div class="g-replay-bar"><Button size="sm" variant="ghost" outline onClick={arrive}>Arrive</Button>
       <For each={props.leaves ?? []}>{(move) => <Button size="sm" variant="ghost" outline onClick={() => leave(move)}>{move === "removing" ? "Remove" : "Leave"}</Button>}</For></div>
-    <div class="g-replay-stage"><Show when={shown() && run()} keyed>{(_) => props.children(motion)}</Show></div>
+    <div ref={stage} class="g-replay-stage"><Show when={shown() && run()} keyed>{(_) => props.children(motion)}</Show></div>
   </div>;
 }
 
@@ -160,8 +162,9 @@ export function Presence(props: { when: boolean; leave?: Motion; children: (moti
   createEffect(on(() => props.when, (when) => {
     if (when) { setMotion("entering"); setShown(true); return; }
     setMotion(props.leave ?? "leaving");
-    const timer = setTimeout(() => setShown(false), msOf("--duration-quick"));
-    onCleanup(() => clearTimeout(timer));
+    let live = true; onCleanup(() => { live = false; });
+    queueMicrotask(async () => { await settled(anchor.parentElement!); if (live) setShown(false); });
   }, { defer: true }));
-  return <Show when={shown()}>{props.children(motion)}</Show>;
+  const anchor = document.createTextNode("");
+  return <>{anchor}<Show when={shown()}>{props.children(motion)}</Show></>;
 }
