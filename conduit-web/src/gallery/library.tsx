@@ -95,14 +95,14 @@ const speech = (on: () => boolean) => {
   onCleanup(() => clearInterval(timer));
   return { level, bars };
 };
-const phoneComposer = (mode: Live<VoiceMode>, opts: { draft?: Live<boolean>; away?: Live<boolean>; editing?: Live<boolean> } = {}) => {
-  const m = () => read(mode), draft = () => !!read(opts.draft ?? false), voice = speech(() => m() === "listening");
-  return <PhoneComposer mode={m()} editing={!!read(opts.editing ?? false)} level={voice.level()}
+const phoneComposer = (mode: Live<VoiceMode>, opts: { draft?: Live<boolean>; away?: Live<boolean>; editing?: Live<boolean>; under?: Live<boolean>; layout?: "bar" | "surface" } = {}) => {
+  const m = () => read(mode), draft = () => !!read(opts.draft ?? false), under = () => !!read(opts.under ?? false), voice = speech(() => m() === "listening");
+  return <PhoneComposer mode={m()} layout={opts.layout} under={under()} editing={!!read(opts.editing ?? false)} level={voice.level()}
     field={<PillField value={draft() ? "make the second paragraph shorter" : ""} placeholder="Send a message…" />}
     track={<PillWave levels={voice.bars()} />}
     captions={<p>then rename the file to lorem.txt</p>}
     edit={<><PillButton {...icon("Undo", <Undo2Icon />)} /><PillButton {...icon("Delete word or selection", <DeleteIcon />)} /><PillButton {...icon("Previous word", <ChevronLeftIcon />)} /><PillButton {...icon("Next word", <ChevronRightIcon />)} /><PillButton {...icon("End of draft", <TextCursorInputIcon />)} /></>}>
-    <PillButton {...icon("Message options", <PlusIcon />)} />
+    <PillButton open={under()} {...icon("Message options", <PlusIcon />)} />
     <PillButton {...icon("Take a photo", <CameraIcon />)} />
     <PillButton folded={!read(opts.away ?? false)} {...icon("Scroll to latest", <ArrowDownIcon />)} />
     <PillButton {...icon(m() === "typing" ? "Close the keyboard" : "Type a message", <KeyboardIcon />)} />
@@ -696,13 +696,16 @@ export const libraryFamilies: Family[] = [
       lib("phone-typing", "Typing", "phone", "pill", "mode=typing: the field above the row, Send beside the mic", () => <div class="g-phone-composer">{phoneComposer("typing", { draft: true })}</div>),
       lib("phone-listening", "Listening", "phone", "pill", "mode=listening: the mic an orb pill at the row's end, Stop and send beside it, the track and captions", () => <div class="g-phone-composer">{phoneComposer("listening")}</div>),
       lib("phone-editing", "Editing", "phone", "pill", "edit · editing: pills over the field while its cursor is moved by hand", () => <div class="g-phone-composer">{phoneComposer("typing", { draft: true, editing: true })}</div>),
+      lib("phone-under", "Menu open", "phone", "pill", "under · PillButton open: the + menu is open, so the rest dims at once and its opener stays lit", () => <div class="g-phone-composer">{phoneComposer("typing", { draft: true, under: true })}</div>),
+      lib("phone-surface", "Surface", "phone", "pill", "layout=surface: the row one frost capsule, its pills slots in it, the mic at its end", () => <div class="g-phone-composer">{phoneComposer("idle", { layout: "surface" })}</div>),
+      lib("phone-surface-listening", "Surface · listening", "phone", "pill", "layout=surface · mode=listening: an Aura fills the capsule under the waveform; Stop and send beside the mic", () => <div class="g-phone-composer">{phoneComposer("listening", { layout: "surface" })}</div>),
     ] },
     { title: "Motion", note: "its own moves: the field fades in place and gives up its room once faded; listening, the other pills fade where they stand, the mic shrinks to an orb pill at the row's end, its icon crossfading to the orb, and the track sweeps out of it to the row's start (back, quicker, on stop); captions fade in; folding circles open their room and fade in, or fade and then close it; edit pills fade each", layout: "phone", atoms: [
       lib("phone-motion", "PhoneComposer · motion", "phone", "pill", "PhoneComposer mode · PillButton folded · orb", () => <FormTable rows={[
-        form("its modes", "pick one, then another", () => <States states={["Idle", "Scrolled up", "Typing", "Typing a draft", "Editing", "Listening"] as const}>{(s) => <div class="g-phone-composer">{phoneComposer(
-          () => s() === "Listening" ? "listening" : s().startsWith("Typing") || s() === "Editing" ? "typing" : "idle",
-          { draft: () => s() === "Typing a draft" || s() === "Editing", away: () => s() === "Scrolled up", editing: () => s() === "Editing" })}</div>}</States>,
-          "<PhoneComposer mode>", "in: --duration-gentle · --ease-arrive · out: --duration-quick · --ease-leave"),
+        ...(["bar", "surface"] as const).map((layout) => form(layout === "bar" ? "its modes" : "its modes · surface", "pick one, then another", () => <States states={["Idle", "Scrolled up", "Typing", "Typing a draft", "Editing", "Menu open", "Listening"] as const}>{(s) => <div class="g-phone-composer">{phoneComposer(
+          () => s() === "Listening" ? "listening" : s().startsWith("Typing") || s() === "Editing" || s() === "Menu open" ? "typing" : "idle",
+          { layout, draft: () => ["Typing a draft", "Editing", "Menu open"].includes(s()), away: () => s() === "Scrolled up", editing: () => s() === "Editing", under: () => s() === "Menu open" })}</div>}</States>,
+          `<PhoneComposer mode${layout === "surface" ? ' layout="surface"' : ""}>`, "in: --duration-gentle · --ease-arrive · out: --duration-quick · --ease-leave")),
       ]} on={["phone"]} widths={["200px", "minmax(0, 1fr)"]} />, "row"),
     ] },
   ] },
