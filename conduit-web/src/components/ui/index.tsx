@@ -1,4 +1,4 @@
-import { children, createEffect, createSignal, createUniqueId, For, Show, splitProps, type JSX } from "solid-js";
+import { children, createEffect, createSignal, createUniqueId, For, onCleanup, onMount, Show, splitProps, type JSX } from "solid-js";
 import { CheckIcon, ChevronDownIcon, CopyIcon, ChevronLeftIcon, ChevronRightIcon, CircleCheckIcon, CircleXIcon, InfoIcon, SearchIcon, TriangleAlertIcon, XIcon } from "lucide-solid";
 export { ChevronDownIcon };
 import { cn } from "@/lib/utils";
@@ -23,6 +23,7 @@ export function Frost(props: { lift?: Lift; core?: boolean; class?: string; styl
  *   PillGroup   several actions in one capsule, a pill-shaped target each
  *   PillSwitch  a group where one slot is chosen, under a sliding thumb
  *   PillField   a capsule holding text (the phone composer's field)
+ *   PillWave    the voice, as bars on the page (a PhoneComposer's track)
  */
 type PillAction = { label: string; icon: JSX.Element };
 const pillSlot = (item: PillAction, onPick?: (label: string) => void) => <button type="button" aria-label={item.label} title={item.label}
@@ -51,6 +52,25 @@ export function PillSwitch<T extends string>(props: { label: string; value: T; o
 /** Its own textarea, or the caller's field as children (the composer's, with its behaviour). */
 export function PillField(props: { placeholder?: string; value?: string; onInput?: (value: string) => void; class?: string; children?: JSX.Element }) {
   return <div class={cn("ui-frost ui-pill ui-pill-field", props.class)}><Show when={props.children} fallback={<TextArea placeholder={props.placeholder} value={props.value} onInput={props.onInput} />}>{props.children}</Show></div>;
+}
+
+/**
+ * PillWave: the voice as it comes, no surface: whole-pixel bars on a fixed pitch filling the width, the newest at the
+ * right end, so it runs up to its neighbour's gap. levels: 0-1, oldest first (as many as fit are drawn, the rest
+ * flat); silence is a dotted line. gain: how much a level is lifted before it is drawn (speech sits low).
+ */
+export function PillWave(props: { levels: number[]; gain?: number }) {
+  let box!: HTMLDivElement;
+  const [count, setCount] = createSignal(0);
+  onMount(() => {
+    const pitch = () => 2 * parseFloat(getComputedStyle(box).columnGap || "2");
+    const fit = (width: number) => setCount(Math.max(1, Math.floor((width + pitch() / 2) / pitch())));
+    fit(box.clientWidth);
+    const watch = new ResizeObserver(([entry]) => entry && fit(entry.contentRect.width));
+    watch.observe(box); onCleanup(() => watch.disconnect());
+  });
+  const bars = () => { const n = count(), last = props.levels.slice(-n); return [...Array<number>(Math.max(0, n - last.length)).fill(0), ...last]; };
+  return <div ref={box} class="ui-pill-wave" aria-hidden="true"><For each={bars()}>{(level) => <i style={{ height: `${7 + Math.min(1, Math.max(0, level * (props.gain ?? 1))) * 93}%` }} />}</For></div>;
 }
 
 /**

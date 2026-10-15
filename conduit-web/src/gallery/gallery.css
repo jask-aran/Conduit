@@ -365,6 +365,4 @@ html, body { background: var(--frame, #08090a); color: var(--foreground); }
 .g-sketch[data-run="arrive"] .g-sketch-read { animation: ui-fade-in var(--duration-gentle) var(--ease-arrive) both; }
 /* PhoneComposer: a phone's width, with room above the row for its captions and edit pills. */
 .g-phone-composer { display: grid; width: min(380px, 100%); min-width: 0; min-height: 200px; align-content: end; padding-top: 72px; }
-.g-wave { display: flex; width: 100%; align-items: center; justify-content: flex-end; gap: 2px; }
-.g-wave > i { width: 2px; flex: none; border-radius: 1px; background: var(--foreground); opacity: .8; }
 .g-phone-composer > .ui-phone-composer { width: 100%; }

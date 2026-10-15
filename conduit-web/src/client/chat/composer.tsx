@@ -1,5 +1,5 @@
 import { useLibrary } from "@/components/ui/swap";
-import { PillField } from "@/components/ui";
+import { PillField, PillWave } from "@/components/ui";
 import { libraryPiece } from "@/components/ui/swap";
 import { latestAway, scrollToLatest } from "./latest-away";
 import { createEffect, createMemo, createSignal, For, Index, lazy, on, onCleanup, onMount, Show, type JSX } from "solid-js";
@@ -852,7 +852,7 @@ export function Composer(props: {
     <div class="composer-surface-shell" data-composer-surface={composerSurface()}>
       {/* Library previews on a desktop: components v2's DesktopComposer -- its frost, Field and Toolbar (components/ui/swap.ts). */}
       <div class={v2() ? "composer ui-frost ui-desktop-composer" : "composer composer-surface-material"} data-composer-surface={composerSurface()} data-surface={v2() ? "frost" : undefined} data-lift={v2() ? "rest" : undefined}>
-                <Show when={voiceFirst()}><div ref={snapWaveform} class="composer-voice-track" onClick={() => { if (phoneMode() === "listening") toggleDictation(); }}><div class="composer-voice-glow" aria-hidden="true"><i /><i /><i /><i /></div><VoiceWaveform class="chat-status-waveform composer-voice-waveform" history={dictationWaveform.history} level={dictationWaveform.level} peak={dictationWaveform.peak} state={recorderMonitorState()} variant="compact" barDensity={4} gain={2.5} ariaLabel="Microphone input level" /></div></Show>
+                <Show when={voiceFirst()}><div ref={snapWaveform} class="composer-voice-track" onClick={() => { if (phoneMode() === "listening") toggleDictation(); }}><div class="composer-voice-glow" aria-hidden="true"><i /><i /><i /><i /></div><Show when={composerSurface() === "library"} fallback={<VoiceWaveform class="chat-status-waveform composer-voice-waveform" history={dictationWaveform.history} level={dictationWaveform.level} peak={dictationWaveform.peak} state={recorderMonitorState()} variant="compact" barDensity={4} gain={2.5} ariaLabel="Microphone input level" />}><PillWave levels={dictationWaveform.history()} gain={2.5} /></Show></div></Show>
         <div class="composer-content">
           <MobileComposerOptions composer={props} />
           {/* Library previews: the field is the library's PillField round the same textarea (components/ui/swap.ts). */}
