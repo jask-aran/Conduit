@@ -55,11 +55,70 @@ export function PillField(props: { placeholder?: string; value?: string; onInput
 }
 
 /**
- * Aura: a field of colour moving behind a surface (library.css: each blob a direction, a hue, an orbit and a swell).
- * It fills its positioned parent and follows --aura-level, or --voice-level; on shows it, else its parent does.
+ * Aura: a field of colour behind a surface. Its blobs are numbers: the direction each comes in from, its colour
+ * (OKLCh), its orbit (seconds a turn, negative turning back) and its swell (how its reach answers the level, negative
+ * shrinking). Each circles near its edge and breathes twice a turn. Every point of the field is a blend of all of
+ * them by distance (a mesh gradient, as Apple's glows are), its hue their weighted mean and its chroma held, so the
+ * colours meet in colour, never grey, and none lies over another; a faint ground of the middle hue settles meetings. The level (--aura-level, eased by library.css)
+ * turns them faster, brightens them and moves their balance. Drawn small and scaled up; it runs only while shown.
  */
+const AURA_BLOBS = [
+  { from: 180, l: .58, c: .2, h: 290, orbit: 7, swell: .5 },
+  { from: 300, l: .64, c: .21, h: 22, orbit: -9, swell: -.35 },
+  { from: 60, l: .64, c: .23, h: 345, orbit: 11, swell: .6 },
+  { from: 0, l: .74, c: .17, h: 62, orbit: -13, swell: .45 },
+  { from: 125, l: .6, c: .2, h: 315, orbit: 8, swell: -.3 },
+];
+/* A faint ground of the middle hue everywhere, so where two far hues meet head on they settle through it, not flip. */
+const AURA_GROUND = { w: .18, l: .62, c: .2, a: Math.cos(345 * Math.PI / 180), b: Math.sin(345 * Math.PI / 180) };
+const AURA_SIDE = 64;
+function oklchToRgb(l: number, a: number, b: number): [number, number, number] {
+  const l_ = l + .3963377774 * a + .2158037573 * b, m_ = l - .1055613458 * a - .0638541728 * b, s_ = l - .0894841775 * a - 1.291485548 * b;
+  const L = l_ ** 3, M = m_ ** 3, S = s_ ** 3;
+  const gamma = (x: number) => 255 * (x <= .0031308 ? 12.92 * x : 1.055 * Math.max(0, x) ** (1 / 2.4) - .055);
+  return [gamma(4.0767416621 * L - 3.3077115913 * M + .2309699292 * S), gamma(-1.2684380046 * L + 2.6097574011 * M - .3413193965 * S), gamma(-.0041960863 * L - .7034186147 * M + 1.707614701 * S)];
+}
 export function Aura(props: { on?: boolean; level?: number }) {
-  return <span class="ui-aura" data-on={props.on ? "" : undefined} aria-hidden="true" style={props.level === undefined ? undefined : { "--aura-level": String(props.level) }}><i /><i /><i /><i /><i /></span>;
+  let box!: HTMLSpanElement, canvas!: HTMLCanvasElement;
+  onMount(() => {
+    const ctx = canvas.getContext("2d")!;
+    let width = AURA_SIDE, height = AURA_SIDE, image = ctx.createImageData(width, height), frame = 0, last = 0, seen = true;
+    const turns = AURA_BLOBS.map((_, i) => i * 1.3);
+    const fit = () => { const r = box.getBoundingClientRect(); if (!r.width || !r.height) return; const k = AURA_SIDE / Math.max(r.width, r.height);
+      width = Math.max(4, Math.round(r.width * k)); height = Math.max(4, Math.round(r.height * k)); canvas.width = width; canvas.height = height; image = ctx.createImageData(width, height); };
+    const draw = (now: number) => {
+      frame = requestAnimationFrame(draw);
+      const style = getComputedStyle(box);
+      if (!seen || style.opacity === "0") { last = 0; return; }
+      const level = Math.min(1, Math.max(0, parseFloat(style.getPropertyValue("--aura-level")) || 0));
+      const dt = last ? Math.min(.1, (now - last) / 1000) : 0; last = now;
+      const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
+      const blobs = AURA_BLOBS.map((blob, i) => {
+        if (!still) turns[i]! += dt * (2 * Math.PI / blob.orbit) * (1 + 1.5 * level);
+        const t = turns[i]!, from = blob.from * Math.PI / 180, reach = .38 * (.9 + level * blob.swell + .25 * Math.sin(2 * t));
+        return { x: .5 + .32 * Math.cos(from) + .14 * Math.cos(t), y: .5 + .36 * Math.sin(from) + .26 * Math.sin(t), r2: Math.max(.06, reach) ** 2,
+          l: blob.l + .05 * level, c: blob.c, a: Math.cos(blob.h * Math.PI / 180), b: Math.sin(blob.h * Math.PI / 180) };
+      });
+      const data = image.data, aspect = width / height;
+      for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
+        const u = (x + .5) / width, v = (y + .5) / height;
+        let sw = AURA_GROUND.w, sl = AURA_GROUND.w * AURA_GROUND.l, sc = AURA_GROUND.w * AURA_GROUND.c, sa = AURA_GROUND.w * AURA_GROUND.a, sb = AURA_GROUND.w * AURA_GROUND.b;
+        for (const blob of blobs) {
+          const dx = (u - blob.x) * Math.min(1, aspect), dy = (v - blob.y) * Math.min(1, 1 / aspect);
+          const w = Math.exp(-(dx * dx + dy * dy) / blob.r2);
+          sw += w; sl += w * blob.l; sc += w * blob.c; sa += w * blob.a; sb += w * blob.b;
+        }
+        const n = Math.hypot(sa, sb) || 1, c = sc / sw, [r, g, bl] = oklchToRgb(sl / sw, c * sa / n, c * sb / n), o = 4 * (y * width + x);
+        data[o] = r; data[o + 1] = g; data[o + 2] = bl; data[o + 3] = 255;
+      }
+      ctx.putImageData(image, 0, 0);
+    };
+    fit();
+    const resize = new ResizeObserver(fit), view = new IntersectionObserver(([entry]) => { seen = !!entry?.isIntersecting; });
+    resize.observe(box); view.observe(box); frame = requestAnimationFrame(draw);
+    onCleanup(() => { cancelAnimationFrame(frame); resize.disconnect(); view.disconnect(); });
+  });
+  return <span ref={box} class="ui-aura" data-on={props.on ? "" : undefined} aria-hidden="true" style={props.level === undefined ? undefined : { "--aura-level": String(props.level) }}><canvas ref={canvas} /></span>;
 }
 
 /**
