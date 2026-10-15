@@ -175,11 +175,11 @@
 .ui-pill > button:is(:hover, :focus-visible) { background: var(--tint); }
 .ui-pill[data-stretch] { width: auto; flex: 1 1 auto; }
 .ui-pill[data-stretch] > button { width: 100%; }
-/* A circle that comes and goes in its row folds to nothing, its gap with it, so a stretched neighbour (the mic)
+/* A circle that comes and goes in its row folds to nothing, its gap and its 1px border each side with it (the border stays drawn, so it never pops), so a stretched neighbour (the mic)
    gives and takes the room. Coming, the room opens and it fades into it; going, it fades first and only then gives
    the room back, so it is never seen squeezed. */
 .ui-pill[data-solo] { transition: width var(--duration-gentle) var(--ease-arrive), min-width var(--duration-gentle) var(--ease-arrive), margin var(--duration-gentle) var(--ease-arrive), opacity var(--duration-quick) var(--ease-arrive) var(--duration-quick), filter var(--duration-quick) var(--ease-change); }
-.ui-pill[data-solo][data-folded] { width: 0; min-width: 0; margin-inline-start: calc(-1 * var(--space-md)); overflow: clip; border-width: 0; opacity: 0; pointer-events: none;
+.ui-pill[data-solo][data-folded] { width: 0; min-width: 0; margin-inline-start: calc(-1 * var(--space-md) - 2px); overflow: clip; opacity: 0; pointer-events: none;
   transition: opacity var(--duration-quick) var(--ease-leave), width var(--duration-gentle) var(--ease-arrive) var(--duration-quick), min-width var(--duration-gentle) var(--ease-arrive) var(--duration-quick), margin var(--duration-gentle) var(--ease-arrive) var(--duration-quick); }
 /* The mic: its icon and the orb stacked in one button, crossfading. */
 .ui-pill[data-voice] > button { position: relative; isolation: isolate; }
