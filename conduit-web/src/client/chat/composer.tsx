@@ -143,6 +143,9 @@ export function Composer(props: {
     // once rather than holding the draft until the agent takes it.
     : sendingOut() ? "idle"
     : inputFocused() || hasText() ? "typing" : "idle";
+  // Library preview only: the captions fade out as dictation stops, then go.
+  const [captionsHeld, setCaptionsHeld] = createSignal(false);
+  createEffect(() => { if (phoneMode() === "listening") setCaptionsHeld(true); });
   // The text row was zero wide while hidden; measure it again once shown.
   createEffect(on(phoneMode, () => scheduleResize(), { defer: true }));
   // Just back from listening: the row's buttons fade back in together, scroll
@@ -833,8 +836,8 @@ export function Composer(props: {
         { key: "end", label: "End of draft", icon: () => <TextCursorInputIcon /> },
       ] as const}>{(action) => <Button variant="ghost" size="icon-sm" class="composer-edit-action composer-surface-material" data-composer-surface={composerSurface()} aria-label={action.label} title={action.label} tabIndex={editing() ? 0 : -1} onPointerDown={(event) => event.preventDefault()} onClick={() => editActions[action.key]()}>{action.icon()}</Button>}</For>
     </div>
-    <Show when={phoneMode() === "listening"}>
-      <Show when={phoneMode() === "listening"}><div class="composer-voice-captions" data-empty={captionLead() || dictatedText() ? undefined : ""} data-lead={captionLead() ? "" : undefined} aria-live="polite"><p><span ref={glideCaptions} class="composer-voice-words"><Show when={captionLead()}><span class="composer-voice-lead">{captionLead()}</span></Show><Index each={dictatedText().split(/(?<=\s)/)}>{(word) => <span>{word()}</span>}</Index></span></p></div></Show>
+    <Show when={phoneMode() === "listening" || (composerSurface() === "library" && captionsHeld())}>
+      <Show when={phoneMode() === "listening" || (composerSurface() === "library" && captionsHeld())}><div class="composer-voice-captions" data-leaving={phoneMode() === "listening" ? undefined : ""} onAnimationEnd={(event) => { if (event.target === event.currentTarget && phoneMode() !== "listening") setCaptionsHeld(false); }} data-empty={captionLead() || dictatedText() ? undefined : ""} data-lead={captionLead() ? "" : undefined} aria-live="polite"><p><span ref={glideCaptions} class="composer-voice-words"><Show when={captionLead()}><span class="composer-voice-lead">{captionLead()}</span></Show><Index each={dictatedText().split(/(?<=\s)/)}>{(word) => <span>{word()}</span>}</Index></span></p></div></Show>
     </Show>
     <QueuedMessages
       messages={props.chat.pendingMessages()}
