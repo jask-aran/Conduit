@@ -106,7 +106,7 @@ const phoneComposer = (mode: Live<VoiceMode>, opts: { draft?: Live<boolean>; awa
     <PillButton {...icon("Take a photo", <CameraIcon />)} />
     <PillButton folded={!read(opts.away ?? false)} {...icon("Scroll to latest", <ArrowDownIcon />)} />
     <PillButton {...icon(m() === "typing" ? "Close the keyboard" : "Type a message", <KeyboardIcon />)} />
-    <PillButton stretch orb={<ThinkingOrb state="listening" paused={m() !== "listening"} />} {...icon("Dictate", <MicIcon />)} />
+    <PillButton stretch aura {...icon("Dictate", <MicIcon />)} />
     <PillButton voice folded={m() !== "listening"} {...icon("Stop and send", <ArrowUpIcon />)} />
     <PillButton folded={m() === "listening" || !draft()} {...icon("Send", <ArrowUpIcon />)} />
   </PhoneComposer>;

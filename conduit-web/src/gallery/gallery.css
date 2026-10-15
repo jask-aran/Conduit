@@ -366,3 +366,9 @@ html, body { background: var(--frame, #08090a); color: var(--foreground); }
 /* PhoneComposer: a phone's width, with room above the row for its captions and edit pills. */
 .g-phone-composer { display: grid; width: min(380px, 100%); min-width: 0; min-height: 200px; align-content: end; padding-top: 72px; }
 .g-phone-composer > .ui-phone-composer { width: 100%; }
+.g-aura { display: grid; gap: var(--space-xl); }
+.g-aura-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-xl); }
+.g-aura-row > :is(.g-aura-wide, .g-aura-short, .g-aura-round) { position: relative; isolation: isolate; }
+.g-aura-wide { width: 320px; } .g-aura-short { width: calc(1.5 * var(--pill-size)); }
+.g-aura-round { width: 160px; height: 160px; border-radius: var(--radius-round); }
+.g-aura-row .ui-slider, .g-aura-row [role="slider"] { width: 220px; }

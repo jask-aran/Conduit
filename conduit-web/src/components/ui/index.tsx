@@ -32,14 +32,14 @@ const pillSlot = (item: PillAction, onPick?: (label: string) => void) => <button
 /**
  * folded: a circle that comes and goes in its row (Send, Scroll to latest) folds to nothing, its gap with it, so a
  * stretched neighbour gives and takes the room. voice: one of the voice controls, which stay while a PhoneComposer
- * listens (Stop and send). orb: the mic -- its icon and the orb stacked, crossfading as listening starts and stops;
- * stretched, it shrinks to an orb pill at the row's end.
+ * listens (Stop and send). aura: the mic -- listening, its pill fills with an Aura under its icon; stretched, it
+ * shrinks to a short pill at the row's end.
  */
-export function PillButton(props: PillAction & { stretch?: boolean; folded?: boolean; voice?: boolean; orb?: JSX.Element; onPick?: (label: string) => void }) {
-  const orb = children(() => props.orb), mic = !!orb();
+export function PillButton(props: PillAction & { stretch?: boolean; folded?: boolean; voice?: boolean; aura?: boolean; onPick?: (label: string) => void }) {
+  const mic = !!props.aura;
   const pill = <div class="ui-frost ui-pill" data-solo="" data-stretch={props.stretch ? "" : undefined} data-folded={props.folded ? "" : undefined} data-voice={props.voice || mic ? "" : undefined}
     aria-hidden={props.folded ? "true" : undefined}>{mic
-      ? pillSlot({ label: props.label, icon: <><span class="ui-pill-glow" aria-hidden="true"><i /><i /><i /><i /></span><span class="ui-pill-mic">{props.icon}</span><span class="ui-pill-orb">{orb()}</span></> }, props.onPick)
+      ? pillSlot({ label: props.label, icon: <><Aura />{props.icon}</> }, props.onPick)
       : pillSlot(props, props.onPick)}</div>;
   return mic && props.stretch ? <><span class="ui-pill-room" />{pill}</> : pill;
 }
@@ -52,6 +52,14 @@ export function PillSwitch<T extends string>(props: { label: string; value: T; o
 /** Its own textarea, or the caller's field as children (the composer's, with its behaviour). */
 export function PillField(props: { placeholder?: string; value?: string; onInput?: (value: string) => void; class?: string; children?: JSX.Element }) {
   return <div class={cn("ui-frost ui-pill ui-pill-field", props.class)}><Show when={props.children} fallback={<TextArea placeholder={props.placeholder} value={props.value} onInput={props.onInput} />}>{props.children}</Show></div>;
+}
+
+/**
+ * Aura: a field of colour moving behind a surface (library.css: each blob a direction, a hue, an orbit and a swell).
+ * It fills its positioned parent and follows --aura-level, or --voice-level; on shows it, else its parent does.
+ */
+export function Aura(props: { on?: boolean; level?: number }) {
+  return <span class="ui-aura" data-on={props.on ? "" : undefined} aria-hidden="true" style={props.level === undefined ? undefined : { "--aura-level": String(props.level) }}><i /><i /><i /><i /><i /></span>;
 }
 
 /**
@@ -76,9 +84,9 @@ export function PillWave(props: { levels: number[]; gain?: number }) {
 /**
  * PhoneComposer: the phone's composer, Pills on the page: a PillField over a row of PillButtons. mode says which
  * shows, and nothing reflows between them: idle (the row), typing (the field fades in above it), listening (the
- * row's other pills fade where they stand, the stretched mic shrinks to an orb pill at the row's end, the voice
+ * row's other pills fade where they stand, the stretched mic shrinks to a short pill at the row's end, filling with colour, the voice
  * track sweeps out of it to the row's start, captions open above). edit: pills over the field while its cursor is
- * moved by hand, fading in when editing. level: the voice level (0-1) while listening; the orb and its glow swell with it.
+ * moved by hand, fading in when editing. level: the voice level (0-1) while listening; the mic's Aura answers it.
  */
 export type VoiceMode = "idle" | "typing" | "listening";
 export function PhoneComposer(props: { mode: VoiceMode; field: JSX.Element; track?: JSX.Element; captions?: JSX.Element; edit?: JSX.Element; editing?: boolean; level?: number; children: JSX.Element }) {

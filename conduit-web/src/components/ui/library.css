@@ -183,19 +183,35 @@
   transition: opacity var(--duration-quick) var(--ease-leave), width var(--duration-gentle) var(--ease-arrive) var(--duration-quick), min-width var(--duration-gentle) var(--ease-arrive) var(--duration-quick), margin var(--duration-gentle) var(--ease-arrive) var(--duration-quick); }
 /* The mic: its icon and the orb stacked in one button, crossfading. */
 .ui-pill[data-voice] > button { position: relative; isolation: isolate; }
-.ui-pill-mic { display: inline-flex; transition: opacity var(--duration-quick) var(--ease-change); }
-.ui-pill-orb { position: absolute; inset: 0; display: grid; place-items: center; opacity: 0; pointer-events: none; transition: opacity var(--duration-quick) var(--ease-change); }
-.ui-pill-orb > * { width: var(--icon-xl); height: var(--icon-xl); transform: scale(calc(1 + var(--voice-level, 0) * .3)); transition: transform .1s linear; }
-/* Listening, the orb pill glows: soft colour fields swelling with the voice level (--voice-level, 0-1, set by the
-   PhoneComposer's level), drifting. Gradients, not a blur, so nothing re-rasterises per frame. The one coloured glow
+/* The mic: listening, its pill fills with an Aura (below) under its icon. */
+.ui-pill > button > .ui-aura { z-index: -1; }
+.ui-phone-composer[data-mode="listening"] .ui-pill[data-voice] .ui-aura { opacity: 1; }
+.ui-phone-composer[data-mode="listening"] .ui-pill[data-voice] .ui-aura > i { animation-play-state: running; }
+
+/* Aura: a field of colour, defined by numbers. Each blob is four: --from (the direction it comes in from), --hue,
+   --orbit (seconds per turn of a small circle near that edge; --spin reverse turns it the other way) and --swell (how
+   its size answers the level, negative shrinking). Turning, a blob also breathes (twice a turn), so at rest the colours
+   already trade places; --aura-level (0-1, from --voice-level unless set) brightens every blob and resizes each by its
+   swell, so the balance shifts as the voice rises and falls. Gradients only, no blur: nothing re-rasterises per
+   frame. A parent turns it on (opacity, and the blobs' play state); `on` does it alone. The one coloured glow
    DESIGN.md allows. */
-.ui-pill-glow { position: absolute; inset: 0; z-index: -1; overflow: clip; border-radius: inherit; opacity: 0; pointer-events: none; transition: opacity var(--duration-gentle) var(--ease-arrive); }
-.ui-pill-glow > i { position: absolute; top: -40%; width: 90%; height: 180%; transform: scale(calc(.8 + var(--voice-level, 0) * .6)); transition: transform .12s linear; animation: ui-voice-drift 6s ease-in-out infinite alternate paused; }
-.ui-pill-glow > i:nth-child(1) { left: -10%; background: radial-gradient(closest-side, oklch(.68 .2 300), transparent); }
-.ui-pill-glow > i:nth-child(2) { left: 15%; background: radial-gradient(closest-side, oklch(.7 .2 20), transparent); animation-delay: -1.5s; }
-.ui-pill-glow > i:nth-child(3) { left: 38%; background: radial-gradient(closest-side, oklch(.74 .19 350), transparent); animation-delay: -3s; }
-.ui-pill-glow > i:nth-child(4) { right: -10%; background: radial-gradient(closest-side, oklch(.78 .16 60), transparent); animation-delay: -4.5s; }
-@keyframes ui-voice-drift { from { translate: -10% 0; } to { translate: 10% 0; } }
+@property --aura-level { syntax: "<number>"; inherits: true; initial-value: 0; }
+@property --aura-turn { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
+.ui-aura { --aura-level: var(--voice-level, 0); position: absolute; inset: 0; container-type: size; overflow: clip; border-radius: inherit; opacity: 0; pointer-events: none;
+  background: oklch(.42 .1 320 / .55); transition: opacity var(--duration-gentle) var(--ease-arrive), --aura-level .12s linear; }
+.ui-aura[data-on] { opacity: 1; }
+.ui-aura > i { position: absolute; left: 50%; top: 50%; width: calc(55cqw + 40cqh); aspect-ratio: 1; border-radius: 50%;
+  background: radial-gradient(closest-side, oklch(.74 .19 var(--hue)), oklch(.74 .19 var(--hue) / 0));
+  translate: calc(-50% + cos(var(--from)) * 38cqw + cos(var(--aura-turn)) * 14cqw) calc(-50% + sin(var(--from)) * 45cqh + sin(var(--aura-turn)) * 30cqh);
+  scale: calc(.7 + var(--aura-level) * var(--swell) + .22 * sin(var(--aura-turn) * 2)); opacity: calc(.5 + var(--aura-level) * .5);
+  animation: ui-aura-turn calc(var(--orbit) * 1s) linear infinite var(--spin, normal) paused; }
+.ui-aura[data-on] > i { animation-play-state: running; }
+.ui-aura > i:nth-child(1) { --from: 180deg; --hue: 300; --orbit: 7; --swell: .7; }
+.ui-aura > i:nth-child(2) { --from: 300deg; --hue: 25; --orbit: 9; --spin: reverse; --swell: -.3; }
+.ui-aura > i:nth-child(3) { --from: 90deg; --hue: 350; --orbit: 11; --swell: 1; }
+.ui-aura > i:nth-child(4) { --from: 0deg; --hue: 65; --orbit: 13; --spin: reverse; --swell: .35; }
+.ui-aura > i:nth-child(5) { --from: 235deg; --hue: 255; --orbit: 8; --swell: .55; }
+@keyframes ui-aura-turn { to { --aura-turn: 360deg; } }
 
 /* PhoneComposer: a PillField over a row of Pills, one gap apart. Its modes are opacity, flex-grow and clip-path on
    mounted parts, so nothing reflows when dictation starts or stops. */
@@ -218,10 +234,6 @@
   transition: opacity var(--duration-quick) var(--ease-leave), width var(--duration-gentle) var(--ease-arrive) var(--duration-quick), min-width var(--duration-gentle) var(--ease-arrive) var(--duration-quick), margin var(--duration-gentle) var(--ease-arrive) var(--duration-quick); }
 .ui-phone-composer[data-mode="listening"] .ui-pill-room { flex-grow: 1; }
 .ui-phone-composer[data-mode="listening"] .ui-phone-row > .ui-pill[data-voice][data-stretch] { flex-grow: 0; }
-.ui-phone-composer[data-mode="listening"] .ui-pill-mic { opacity: 0; }
-.ui-phone-composer[data-mode="listening"] .ui-pill-orb { opacity: 1; }
-.ui-phone-composer[data-mode="listening"] .ui-pill-glow { opacity: calc(.4 + var(--voice-level, 0) * .5); }
-.ui-phone-composer[data-mode="listening"] .ui-pill-glow > i { animation-play-state: running; }
 /* The voice track: no surface, from the row's start to the orb pill. It wipes out of the orb pill as the mic shrinks and
    back into it as the mic grows, in the same period, under the pills; it turns off only once wiped. */
 .ui-voice-track { position: absolute; inset-block: 0; left: 0; right: calc(var(--voice-pill) + var(--space-md)); display: flex; align-items: center; overflow: hidden; border-radius: var(--radius-round); opacity: 0; pointer-events: none;
@@ -241,8 +253,8 @@
 .ui-phone-edit > .ui-pill { opacity: 0; transition: opacity var(--duration-quick) var(--ease-leave); }
 .ui-phone-composer[data-editing] .ui-phone-edit > .ui-pill { opacity: 1; pointer-events: auto; transition: opacity var(--duration-gentle) var(--ease-arrive); }
 @media (prefers-reduced-motion: reduce) {
-  .ui-pill[data-solo], .ui-pill-mic, .ui-pill-orb, .ui-pill-orb > *, .ui-pill-glow, .ui-pill-glow > i, .ui-phone-field, .ui-pill-room, .ui-voice-track, .ui-phone-edit > .ui-pill, .ui-phone-row > .ui-pill { transition: none !important; }
-  .ui-voice-captions, .ui-pill-glow > i { animation: none; }
+  .ui-pill[data-solo], .ui-aura, .ui-phone-field, .ui-pill-room, .ui-voice-track, .ui-phone-edit > .ui-pill, .ui-phone-row > .ui-pill { transition: none !important; }
+  .ui-voice-captions, .ui-aura > i { animation: none; }
 }
 /* Field: text in the capsule; it grows with its lines. */
 .ui-pill-field { display: flex; width: 100%; height: auto; min-height: var(--pill-size); align-items: center; border-radius: var(--pill-field-radius); padding: 0 var(--pill-field-pad); }
@@ -733,8 +745,11 @@
 .composer-wrap[data-library][data-phone-layout]:is([data-phone-mode="idle"], [data-phone-mode="listening"]) .composer-input-shell {
   transition: opacity var(--duration-quick) var(--ease-leave), max-height 0s var(--duration-quick), min-height 0s var(--duration-quick), margin 0s var(--duration-quick), border-color 0s var(--duration-quick); }
 /* The mic and the orb crossfade; the bar's mic shrinks to its orb pill and the track sweeps out of it. */
-.composer-wrap[data-library] .composer-voice-mic { transition: opacity var(--duration-quick) var(--ease-change); }
-.composer-wrap[data-library] .thinking-orb.composer-voice-orb { transition: opacity var(--duration-quick) var(--ease-change), transform .1s linear; }
+/* The mic keeps its icon listening, over an Aura (the app's orb and glow are not drawn here). */
+.composer-wrap[data-library][data-phone-mode="listening"] .composer-voice-mic { opacity: 1; }
+.composer-wrap[data-library] .dictation-trigger > .ui-aura { --aura-level: min(1, var(--voice-level, 0) * 2.5); z-index: -1; }
+.composer-wrap[data-library][data-phone-mode="listening"] .dictation-trigger > .ui-aura { opacity: 1; }
+.composer-wrap[data-library][data-phone-mode="listening"] .dictation-trigger > .ui-aura > i { animation-play-state: running; }
 .composer-wrap[data-library][data-phone-layout] .composer-voice-track { transition: opacity var(--duration-quick) var(--ease-change), clip-path var(--duration-gentle) var(--ease-arrive); }
 /* The track wipes out of the orb pill and back into it under the moving mic, in the same period; it turns off only once wiped. */
 /* The waveform is a PillWave filling the track: its last bar is one row gap from the orb pill, as the orb pill is from Send. */
@@ -747,7 +762,6 @@
 .composer-wrap[data-library][data-phone-layout="bar"][data-primary-hidden] .composer-actions .composer-send-trigger[data-slot="button"] { margin-left: -10px; border-width: 1px; }
 .composer-wrap[data-library][data-phone-layout="bar"] .composer::before { transition: flex-grow var(--duration-gentle) var(--ease-arrive); }
 .composer-wrap[data-library][data-phone-layout="bar"] .composer-actions [data-slot="button"].dictation-trigger { z-index: 4; transition: flex-grow var(--duration-gentle) var(--ease-arrive); }
-.composer-wrap[data-library][data-phone-layout="bar"] .dictation-trigger .composer-voice-glow { transition: opacity var(--duration-gentle) var(--ease-arrive); }
 /* Captions open in place (after the text pill has faded, when they start from its text); edit pills fade each. */
 .composer-wrap[data-library] .composer-voice-captions { animation: ui-fade-in var(--duration-gentle) var(--ease-arrive) backwards; }
 .composer-wrap[data-library] .composer-voice-captions[data-lead] { animation: ui-fade-in var(--duration-gentle) var(--ease-arrive) var(--duration-quick) backwards; }
