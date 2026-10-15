@@ -733,6 +733,8 @@
 .composer-wrap[data-library] .thinking-orb.composer-voice-orb { transition: opacity var(--duration-quick) var(--ease-change), transform .1s linear; }
 .composer-wrap[data-library][data-phone-layout] .composer-voice-track { transition: opacity var(--duration-quick) var(--ease-change), clip-path var(--duration-gentle) var(--ease-arrive); }
 /* The track wipes out of the orb pill and back into it under the moving mic, in the same period; it turns off only once wiped. */
+/* The waveform fills its track: its last bar is one row gap from the orb pill, as the orb pill is from Send. */
+.composer-wrap[data-library][data-phone-layout] .composer-voice-track .chat-status-waveform.voice-waveform.composer-voice-waveform { left: 0; right: 0; padding-inline: 0; }
 .composer-wrap[data-library][data-phone-layout="bar"] .composer-voice-track { transition: opacity 0s var(--duration-gentle), clip-path var(--duration-gentle) var(--ease-arrive); }
 .composer-wrap[data-library][data-phone-layout="bar"][data-phone-mode="listening"] .composer-voice-track { transition: opacity 0s, clip-path var(--duration-gentle) var(--ease-arrive); }
 /* A folded circle keeps its 1px border each side and gives back the gap and both (-10px), as the app's does; with the
