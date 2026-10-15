@@ -191,26 +191,29 @@
 /* Aura: a field of colour, defined by numbers. Each blob is four: --from (the direction it comes in from), --hue,
    --orbit (seconds per turn of a small circle near that edge; --spin reverse turns it the other way) and --swell (how
    its size answers the level, negative shrinking). Turning, a blob also breathes (twice a turn), so at rest the colours
-   already trade places; --aura-level (0-1, from --voice-level unless set) brightens every blob and resizes each by its
+   already trade places (their hues one arc of the wheel, so no two cross through grey); --aura-level (0-1, from --voice-level unless set) brightens every blob and resizes each by its
    swell, so the balance shifts as the voice rises and falls. Gradients only, no blur: nothing re-rasterises per
    frame. A parent turns it on (opacity, and the blobs' play state); `on` does it alone. The one coloured glow
    DESIGN.md allows. */
 @property --aura-level { syntax: "<number>"; inherits: true; initial-value: 0; }
 @property --aura-turn { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
 .ui-aura { --aura-level: var(--voice-level, 0); position: absolute; inset: 0; container-type: size; overflow: clip; border-radius: inherit; opacity: 0; pointer-events: none;
-  background: linear-gradient(120deg, oklch(.62 .17 300), oklch(.64 .18 10) 55%, oklch(.7 .16 50)); transition: opacity var(--duration-gentle) var(--ease-arrive), --aura-level .12s linear; }
+  background: linear-gradient(120deg in oklch, oklch(.5 .16 290), oklch(.55 .18 345) 50%, oklch(.6 .16 40)); transition: opacity var(--duration-gentle) var(--ease-arrive), --aura-level .12s linear; }
 .ui-aura[data-on] { opacity: 1; }
 .ui-aura > i { position: absolute; left: 50%; top: 50%; width: calc(70cqw + 70cqh); aspect-ratio: 1; border-radius: 50%;
-  background: radial-gradient(closest-side, oklch(.72 .19 var(--hue)) 30%, oklch(.72 .19 var(--hue) / 0));
+  background: radial-gradient(closest-side in oklch, oklch(.62 .19 var(--hue)) 30%, oklch(.62 .19 var(--hue) / 0));
   translate: calc(-50% + cos(var(--from)) * 32cqw + cos(var(--aura-turn)) * 14cqw) calc(-50% + sin(var(--from)) * 36cqh + sin(var(--aura-turn)) * 26cqh);
   scale: calc(.9 + var(--aura-level) * var(--swell) * .7 + .2 * sin(var(--aura-turn) * 2)); opacity: calc(.8 + var(--aura-level) * .2);
   animation: ui-aura-turn calc(var(--orbit) * 1s) linear infinite var(--spin, normal) paused; }
 .ui-aura[data-on] > i { animation-play-state: running; }
-.ui-aura > i:nth-child(1) { --from: 180deg; --hue: 300; --orbit: 7; --swell: .7; }
-.ui-aura > i:nth-child(2) { --from: 300deg; --hue: 25; --orbit: 9; --spin: reverse; --swell: -.3; }
-.ui-aura > i:nth-child(3) { --from: 90deg; --hue: 350; --orbit: 11; --swell: 1; }
-.ui-aura > i:nth-child(4) { --from: 0deg; --hue: 65; --orbit: 13; --spin: reverse; --swell: .35; }
-.ui-aura > i:nth-child(5) { --from: 235deg; --hue: 255; --orbit: 8; --swell: .55; }
+.ui-aura > i:nth-child(1) { --from: 180deg; --hue: 295; --orbit: 7; --swell: .7; }
+.ui-aura > i:nth-child(2) { --from: 300deg; --hue: 20; --orbit: 9; --spin: reverse; --swell: -.3; }
+.ui-aura > i:nth-child(3) { --from: 90deg; --hue: 335; --orbit: 11; --swell: 1; }
+.ui-aura > i:nth-child(4) { --from: 0deg; --hue: 55; --orbit: 13; --spin: reverse; --swell: .35; }
+.ui-aura > i:nth-child(5) { --from: 235deg; --hue: 280; --orbit: 8; --swell: .55; }
+/* The frost over it: the surface's own fill, a haze lighter at the top and its highlit edges, so the colour reads as
+   behind the glass rather than painted on it. */
+.ui-aura::after { content: ""; position: absolute; inset: 0; z-index: 1; border-radius: inherit; background: linear-gradient(rgb(255 255 255 / .1), rgb(255 255 255 / 0) 60%); box-shadow: var(--frost-highlight), inset 0 0 calc(.3 * var(--pill-size)) rgb(255 255 255 / .14); }
 @keyframes ui-aura-turn { to { --aura-turn: 360deg; } }
 
 /* PhoneComposer: a PillField over a row of Pills, one gap apart. Its modes are opacity, flex-grow and clip-path on
