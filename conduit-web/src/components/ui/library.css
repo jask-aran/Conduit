@@ -208,8 +208,8 @@
 .ui-phone-row > .ui-pill[data-voice][data-stretch] { flex: 1 1 var(--voice-pill); min-width: var(--voice-pill); overflow: clip; transition: flex-grow var(--duration-gentle) var(--ease-arrive); }
 /* The room the mic gives as it shrinks to its orb pill at the row's end (flex-grow, so its edge, radius and icon stay crisp). */
 .ui-pill-room { flex: 0 0 0; margin-inline-start: calc(-1 * var(--space-md)); transition: flex-grow var(--duration-gentle) var(--ease-arrive); }
-/* Stopping is one move from the first frame, as starting is: the mic grows back over the fading track (the pills sit
-   above it), Stop and send folds as it fades, and the other pills fade back where they stand. Nothing waits. */
+/* Stopping is one move from the first frame, as starting is: the mic grows back over the track as it wipes in (the
+   pills sit above it), Stop and send folds as it fades, and the other pills fade back where they stand. Nothing waits. */
 .ui-phone-row > .ui-pill[data-voice][data-folded] { transition: opacity var(--duration-quick) var(--ease-leave), width var(--duration-gentle) var(--ease-arrive), min-width var(--duration-gentle) var(--ease-arrive), margin var(--duration-gentle) var(--ease-arrive); }
 .ui-phone-composer:not([data-mode="listening"]) .ui-phone-row > .ui-pill:not([data-folded]) { transition-delay: 0s; }
 .ui-pill-room:not(.ui-phone-row > *) { display: none; }
@@ -222,13 +222,13 @@
 .ui-phone-composer[data-mode="listening"] .ui-pill-orb { opacity: 1; }
 .ui-phone-composer[data-mode="listening"] .ui-pill-glow { opacity: calc(.4 + var(--voice-level, 0) * .5); }
 .ui-phone-composer[data-mode="listening"] .ui-pill-glow > i { animation-play-state: running; }
-/* The voice track: no surface, from the row's start to the orb pill. It fades in once the row has made its room;
-   stopping, it fades out quick under the pills as they move back. */
+/* The voice track: no surface, from the row's start to the orb pill. It wipes out of the orb pill as the mic shrinks and
+   back into it as the mic grows, in the same period, under the pills; it turns off only once wiped. */
 .ui-voice-track { position: absolute; inset-block: 0; left: 0; right: calc(var(--voice-pill) + var(--space-md)); display: flex; align-items: center; overflow: hidden; border-radius: var(--radius-round); opacity: 0; pointer-events: none;
-  transition: opacity var(--duration-quick) var(--ease-leave), right 0s var(--duration-quick); }
+  clip-path: inset(0 0 0 100% round var(--radius-round)); transition: opacity 0s var(--duration-gentle), clip-path var(--duration-gentle) var(--ease-arrive); }
 /* The pills sit over the track, so it sweeps out from under the shrinking mic rather than across it. */
 .ui-phone-row > .ui-pill { position: relative; z-index: 1; }
-.ui-phone-composer[data-mode="listening"] .ui-voice-track { right: calc(var(--voice-pill) + 2 * var(--space-md) + var(--pill-size)); opacity: 1; pointer-events: auto; transition: opacity var(--duration-quick) var(--ease-arrive) var(--duration-gentle); }
+.ui-phone-composer[data-mode="listening"] .ui-voice-track { right: calc(var(--voice-pill) + 2 * var(--space-md) + var(--pill-size)); opacity: 1; pointer-events: auto; clip-path: inset(0 round var(--radius-round)); transition: opacity 0s, clip-path var(--duration-gentle) var(--ease-arrive); }
 /* Captions: the newest three lines above the row, on the page's ground so the transcript never shows through. */
 .ui-voice-captions { position: absolute; left: 0; right: 0; bottom: calc(var(--pill-size) + var(--space-md)); z-index: 1; display: flex; max-height: calc(3 * 1.45em + var(--space-lg)); flex-direction: column; justify-content: flex-end; overflow: hidden;
   background: linear-gradient(to bottom, transparent, var(--background) var(--space-xl)); padding: var(--space-lg) var(--space-lg) var(--space-xs); color: var(--muted-foreground); font-size: var(--text-body); font-style: italic; line-height: 1.45; pointer-events: none; animation: ui-fade-in var(--duration-gentle) var(--ease-arrive) backwards; }
@@ -732,8 +732,13 @@
 .composer-wrap[data-library] .composer-voice-mic { transition: opacity var(--duration-quick) var(--ease-change); }
 .composer-wrap[data-library] .thinking-orb.composer-voice-orb { transition: opacity var(--duration-quick) var(--ease-change), transform .1s linear; }
 .composer-wrap[data-library][data-phone-layout] .composer-voice-track { transition: opacity var(--duration-quick) var(--ease-change), clip-path var(--duration-gentle) var(--ease-arrive); }
-.composer-wrap[data-library][data-phone-layout="bar"] .composer-voice-track { clip-path: none; transition: opacity var(--duration-quick) var(--ease-leave), right 0s var(--duration-quick); }
-.composer-wrap[data-library][data-phone-layout="bar"][data-phone-mode="listening"] .composer-voice-track { transition: opacity var(--duration-quick) var(--ease-arrive) var(--duration-gentle); }
+/* The track wipes out of the orb pill and back into it under the moving mic, in the same period; it turns off only once wiped. */
+.composer-wrap[data-library][data-phone-layout="bar"] .composer-voice-track { transition: opacity 0s var(--duration-gentle), clip-path var(--duration-gentle) var(--ease-arrive); }
+.composer-wrap[data-library][data-phone-layout="bar"][data-phone-mode="listening"] .composer-voice-track { transition: opacity 0s, clip-path var(--duration-gentle) var(--ease-arrive); }
+/* A folded circle keeps its 1px border each side and gives back the gap and both (-10px), as the app's does; with the
+   border dropped (above) for some states and not others, the mic's right edge jumped 2px as dictation stopped. */
+.composer-wrap[data-library][data-phone-layout="bar"] .composer-actions :is(.composer-latest-trigger:not([data-shown]), .composer-stop-send:not([data-shown]))[data-slot="button"],
+.composer-wrap[data-library][data-phone-layout="bar"][data-primary-hidden] .composer-actions .composer-send-trigger[data-slot="button"] { margin-left: -10px; border-width: 1px; }
 .composer-wrap[data-library][data-phone-layout="bar"] .composer::before { transition: flex-grow var(--duration-gentle) var(--ease-arrive); }
 .composer-wrap[data-library][data-phone-layout="bar"] .composer-actions [data-slot="button"].dictation-trigger { z-index: 4; transition: flex-grow var(--duration-gentle) var(--ease-arrive); }
 .composer-wrap[data-library][data-phone-layout="bar"] .dictation-trigger .composer-voice-glow { transition: opacity var(--duration-gentle) var(--ease-arrive); }
