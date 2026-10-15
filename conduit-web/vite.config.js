@@ -108,6 +108,7 @@ export default defineConfig(({ mode }) => {
             /^\/v0(?:\/|(?:\?.*)?$)/,
             /^\/healthz(?:\?.*)?$/,
             /^\/login(?:\?.*)?$/,
+            /^\/gallery(?:\/|(?:\?.*)?$)/,
           ],
         },
         devOptions: { enabled: false },
@@ -121,6 +122,8 @@ export default defineConfig(({ mode }) => {
       ? { exclude: ["@jask-aran/solid-components"] }
       : undefined,
     define: { __CONDUIT_BUILD__: JSON.stringify(buildStamp()) },
+    // The gallery's assets are relative, so the same build serves at :5180 and under the server's /gallery/.
+    base: gallery ? "./" : "/",
     build: {
       outDir: gallery ? "dist-gallery" : "dist",
       emptyOutDir: true,

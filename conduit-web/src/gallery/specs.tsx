@@ -136,15 +136,18 @@ const settled = async (root: Element) => { await new Promise(requestAnimationFra
  * again entering; each of `leaves` plays that leaving, then it arrives again.
  */
 export function Replay(props: { leaves?: Motion[]; children: (motion: () => Motion | undefined) => JSX.Element }) {
-  const [run, setRun] = createSignal(1), [motion, setMotion] = createSignal<Motion | undefined>(undefined), [shown, setShown] = createSignal(true);
-  const arrive = () => { setMotion("entering"); setShown(true); setRun(run() + 1); };
-  let stage!: HTMLDivElement;
+  const [run, setRun] = createSignal(1), [motion, setMotion] = createSignal<Motion | undefined>(undefined);
+  let stage!: HTMLDivElement, away = false;
+  const enter = () => { away = false; setMotion("entering"); setRun(run() + 1); };
   // Held at its leave's end (forwards) until it arrives again, so the stage keeps its height.
-  const leave = async (move: Motion) => { setMotion(move); await settled(stage); setTimeout(arrive, 400); };
+  const leave = async (move: Motion) => { away = true; setMotion(move); await settled(stage); };
+  // Arrive on a piece already there plays it away first, so it never blinks out.
+  const arrive = async () => { if (!away) await leave("leaving"); enter(); };
+  const cycle = async (move: Motion) => { await leave(move); setTimeout(enter, 400); };
   return <div class="g-replay">
     <div class="g-replay-bar"><Button size="sm" variant="ghost" outline onClick={arrive}>Arrive</Button>
-      <For each={props.leaves ?? []}>{(move) => <Button size="sm" variant="ghost" outline onClick={() => leave(move)}>{move === "removing" ? "Remove" : "Leave"}</Button>}</For></div>
-    <div ref={stage} class="g-replay-stage"><Show when={shown() && run()} keyed>{(_) => props.children(motion)}</Show></div>
+      <For each={props.leaves ?? []}>{(move) => <Button size="sm" variant="ghost" outline onClick={() => cycle(move)}>{move === "removing" ? "Remove" : "Leave"}</Button>}</For></div>
+    <div ref={stage} class="g-replay-stage"><Show when={run()} keyed>{(_) => props.children(motion)}</Show></div>
   </div>;
 }
 

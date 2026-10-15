@@ -780,6 +780,18 @@ registerSessionRoutes(app, {
 // that will not re-fetch this file cannot discover a new one.
 const WORKER_SCRIPTS = /^(sw|service-worker|registerSW|workbox-[^/]+)\.js$/;
 
+// The component gallery (npm run gallery builds dist-gallery), behind sign-in
+// like the rest of the server, so it can be inspected from anywhere.
+const galleryDist = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../dist-gallery");
+app.get("/gallery", (_request, response) => response.redirect("/gallery/"));
+app.use("/gallery", express.static(galleryDist, {
+  index: "gallery.html",
+  fallthrough: false,
+  setHeaders(response, file) {
+    response.setHeader("Cache-Control", file.includes(`${path.sep}assets${path.sep}`) ? "public, max-age=31536000, immutable" : "no-cache");
+  },
+}));
+
 app.use(express.static(dist, {
   setHeaders(response, file) {
     if (WORKER_SCRIPTS.test(path.basename(file))) response.setHeader("Cache-Control", "no-store, must-revalidate");

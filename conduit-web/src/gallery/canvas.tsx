@@ -61,8 +61,8 @@ function Canvas() {
   createEffect(() => { const key = preview(); if (!seen().has(key)) setSeen(new Set([...seen(), key])); });
   // The app's real screens, drawn with components v2 (components/ui/swap.ts); phones in a frame that passes for one.
   const views = [
-    { key: "phone", render: () => <iframe class="g-phone" title="Phone" src="/gallery.html?frame=phone" onLoad={tuneFrame} /> },
-    { key: "sidebar", render: () => <iframe class="g-phone" title="Phone sidebar" src="/gallery.html?frame=sidebar" onLoad={tuneFrame} /> },
+    { key: "phone", render: () => <iframe class="g-phone" title="Phone" src="gallery.html?frame=phone" onLoad={tuneFrame} /> },
+    { key: "sidebar", render: () => <iframe class="g-phone" title="Phone sidebar" src="gallery.html?frame=sidebar" onLoad={tuneFrame} /> },
     { key: "desktop", render: () => <div ref={desktop} class="g-desktop-screen" onKeyDown={(event) => { if (event.key === "Escape") setOverlay(null); }}>
       <LibraryContext.Provider value={true}><ChatScreen /></LibraryContext.Provider>
       <Show when={overlay()} keyed>{(view) => <div class="g-desktop-overlay" onPointerDown={(event) => { if ((event.target as Element).classList.contains("ui-scrim")) setOverlay(null); }}>
