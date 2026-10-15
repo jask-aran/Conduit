@@ -1,7 +1,7 @@
 import { createSignal, For, onCleanup, onMount, Show, type JSX } from "solid-js";
 import { ArrowUpIcon, CameraIcon, CopyIcon, FolderIcon, MicIcon, MonitorIcon, PaperclipIcon, PlusIcon, SettingsIcon, ShareIcon, Trash2Icon } from "lucide-solid";
 import { Spinner } from "@/components/primitives";
-import { Segmented, Bubble, Button, Frost, HeadingSection, Input, Item, Keycap, Menu, NavRow, Overlay, OverlayBar, PillButton, PillField, PillGroup, Section, SelectTrigger, TextArea, Toolbar } from "@/components/ui";
+import { Aura, Slider, Segmented, Bubble, Button, Frost, HeadingSection, Input, Item, Keycap, Menu, NavRow, Overlay, OverlayBar, PillButton, PillField, PillGroup, Section, SelectTrigger, TextArea, Toolbar } from "@/components/ui";
 import { px, InUse, style, bg, fg, edge, rounding, tall, icon, FormTable, form, type Mark, type FormRow } from "./specs";
 import { lib, Levels, SegmentedCount, SegmentedIcons, SegmentedText, SwitchDemo, type Family } from "./library";
 import "katex/dist/katex.min.css";
@@ -219,6 +219,19 @@ const SPACE: TokenGroup[] = [
 /** A dot crossing a track, again and again, at a token's pace or along its curve. */
 const run = (duration: string, easing: string) => () => <div class="g-run"><span style={{ "animation-duration": duration, "animation-timing-function": easing }} /></div>;
 /** The page's moves, on a sketch of it: sidebar, reading, and the composer that stays put. */
+const LEVELS = Array.from({ length: 11 }, (_, i) => ({ value: (i / 10).toFixed(1), label: (i / 10).toFixed(1) }));
+/* Aura: the field on a pill-shaped and a round surface, its level moved by hand or by a voice. */
+function AuraDemo() {
+  const [level, setLevel] = createSignal(0), [voice, setVoice] = createSignal(false);
+  let t = 0;
+  const timer = setInterval(() => { if (!voice()) return; t += 1; setLevel(Math.max(0, Math.min(1, (Math.sin(t / 3) * .5 + .5) * (Math.sin(t / 11) * .4 + .6) * (.5 + Math.random() * .5)))); }, 70);
+  onCleanup(() => clearInterval(timer));
+  return <div class="g-aura">
+    <div class="g-aura-row"><div class="ui-frost ui-pill g-aura-wide"><Aura on level={level()} /></div><div class="ui-frost ui-pill g-aura-short"><Aura on level={level()} /></div><div class="ui-frost g-aura-round"><Aura on level={level()} /></div></div>
+    <div class="g-aura-row"><Button variant="secondary" size="sm" onClick={() => setVoice(!voice())}>{voice() ? "Stop the voice" : "Speak"}</Button><Slider label="Level" options={LEVELS} value={(Math.round(level() * 10) / 10).toFixed(1)} onChange={(v) => { setVoice(false); setLevel(Number(v)); }} /><code>--aura-level {level().toFixed(2)}</code></div>
+  </div>;
+}
+
 function PageMoves() {
   const [run, setRun] = createSignal<"open" | "leave" | "arrive">("arrive"), [n, setN] = createSignal(0);
   const play = (move: "open" | "leave") => { setRun(move); setN(n() + 1); if (move === "leave") setTimeout(() => setRun("arrive"), parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--duration-quick"))); };
@@ -455,6 +468,8 @@ export const foundationFamilies: Family[] = [
     lib("motion-tokens", "Motion", "both", "motion", "library.css :root --ease-* · --duration-*", () => <TokenTable groups={MOTION} density={false} />, "row"),
   ] }, { title: "The page", note: "no piece's own: the page's regions fade on the tokens, and the composer never moves. The first open fades in everything but the composer; a route (a dashboard's send opening its chat) fades the reading out quick, then the new one in gentle. The app's motion-rules.ts takes these at the port", layout: "desktop", atoms: [
     lib("motion-page", "The page", "desktop", "motion", "ui-fade-in · ui-fade-out on the page's regions", () => <PageMoves />, "row"),
+  ] }, { title: "Aura", note: "a field of colour behind a surface, made of numbers: each blob comes in from a direction in its hue, circles near that edge on its own period and breathes as it turns, so at rest the colours trade places; a level (0-1, the voice's) brightens them all and grows some while shrinking others. The mic's pill is filled with one while listening", layout: "desktop", atoms: [
+    lib("motion-aura", "Aura", "both", "motion", "Aura · --aura-level · library.css .ui-aura", () => <AuraDemo />, "row"),
   ] }] },
   { title: "Controls", rail: "Foundations", stage: true, note: "what sits on any surface. A surface sets two values, --tint (its lines and washes) and --well (the fill under an input or an outline button), and a control reads only those; so each is drawn once, on the surface and at the density picked above", groups: [
     { title: "In use", note: "the same controls on the ground and over frost: what each takes from the surface under it", layout: "desktop", atoms: [
