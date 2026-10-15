@@ -715,7 +715,8 @@
   transition: transform var(--duration-quick) var(--ease-leave), opacity var(--duration-quick) var(--ease-leave), visibility 0s var(--duration-quick); }
 .question-dock > .ui-rider[data-layout="card"] { animation: ui-rise var(--duration-gentle) var(--ease-arrive) var(--duration-quick) backwards; }
 @media (prefers-reduced-motion: reduce) { .composer-stack > .composer-wrap.ui-composer-width { transition: none; } .question-dock > .ui-rider[data-layout="card"] { animation: none; } }
-/* The app's phone composer (composer-voice.css) on PhoneComposer's moves: the same parts, timed by the tokens.
+/* The app's phone composer in its surface layout (composer-voice.css) on PhoneComposer's moves, timed by the tokens;
+   the bar layout is PhoneComposer itself (composer.tsx, phoneV2), so it needs none of this.
    Folding circles (Send, Scroll to latest, Stop and send) as a folded Pill; Stop and send swaps in place with a draft. */
 .composer-wrap[data-library][data-phone-layout] .composer-actions :is(.composer-latest-trigger, .composer-send-trigger, .composer-stop-trigger, .composer-stop-send)[data-slot="button"] {
   transition: width var(--duration-gentle) var(--ease-arrive), min-width var(--duration-gentle) var(--ease-arrive), margin var(--duration-gentle) var(--ease-arrive), opacity var(--duration-quick) var(--ease-arrive) var(--duration-quick); }
@@ -738,22 +739,12 @@
 .composer-wrap[data-library][data-phone-layout] .composer-input-shell { transition: opacity var(--duration-gentle) var(--ease-arrive); }
 .composer-wrap[data-library][data-phone-layout]:is([data-phone-mode="idle"], [data-phone-mode="listening"]) .composer-input-shell {
   transition: opacity var(--duration-quick) var(--ease-leave), max-height 0s var(--duration-quick), min-height 0s var(--duration-quick), margin 0s var(--duration-quick), border-color 0s var(--duration-quick); }
-/* The mic and the orb crossfade; the bar's mic shrinks to its orb pill and the track sweeps out of it. */
 /* The mic keeps its icon listening, over an Aura (the app's orb and glow are not drawn here). */
 .composer-wrap[data-library][data-phone-mode="listening"] .composer-voice-mic { opacity: 1; }
 .composer-wrap[data-library] .dictation-trigger > .ui-aura { --aura-level: min(1, var(--voice-level, 0) * 2.5); z-index: -1; }
 .composer-wrap[data-library][data-phone-layout] .composer-voice-track { transition: opacity var(--duration-quick) var(--ease-change), clip-path var(--duration-gentle) var(--ease-arrive); }
-/* The track wipes out of the orb pill and back into it under the moving mic, in the same period; it turns off only once wiped. */
 /* The waveform is a PillWave filling the track: its last bar is one row gap from the orb pill, as the orb pill is from Send. */
 .composer-wrap[data-library][data-phone-layout] .composer-voice-track > .ui-pill-wave { position: absolute; inset: var(--space-xs) 0; height: auto; }
-.composer-wrap[data-library][data-phone-layout="bar"] .composer-voice-track { transition: opacity 0s var(--duration-gentle), clip-path var(--duration-gentle) var(--ease-arrive); }
-.composer-wrap[data-library][data-phone-layout="bar"][data-phone-mode="listening"] .composer-voice-track { transition: opacity 0s, clip-path var(--duration-gentle) var(--ease-arrive); }
-/* A folded circle keeps its 1px border each side and gives back the gap and both (-10px), as the app's does; with the
-   border dropped (above) for some states and not others, the mic's right edge jumped 2px as dictation stopped. */
-.composer-wrap[data-library][data-phone-layout="bar"] .composer-actions :is(.composer-latest-trigger:not([data-shown]), .composer-stop-send:not([data-shown]))[data-slot="button"],
-.composer-wrap[data-library][data-phone-layout="bar"][data-primary-hidden] .composer-actions .composer-send-trigger[data-slot="button"] { margin-left: -10px; border-width: 1px; }
-.composer-wrap[data-library][data-phone-layout="bar"] .composer::before { transition: flex-grow var(--duration-gentle) var(--ease-arrive); }
-.composer-wrap[data-library][data-phone-layout="bar"] .composer-actions [data-slot="button"].dictation-trigger { z-index: 4; transition: flex-grow var(--duration-gentle) var(--ease-arrive); }
 /* Captions open in place (after the text pill has faded, when they start from its text); edit pills fade each. */
 .composer-wrap[data-library] .composer-voice-captions { animation: ui-fade-in var(--duration-gentle) var(--ease-arrive) backwards; }
 .composer-wrap[data-library] .composer-voice-captions[data-leaving] { animation: ui-fade-out var(--duration-gentle) var(--ease-leave) forwards; }

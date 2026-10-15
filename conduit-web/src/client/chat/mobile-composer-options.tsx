@@ -30,6 +30,8 @@ const thinkingLabel = (value: string) => value ? value[0]!.toUpperCase() + value
 type MobileOptionsPanel = "root" | "models" | "effort" | "profiles" | "permissions" | "places";
 
 export function MobileComposerOptions(props: {
+  /** components v2: the trigger is a lone PillButton's frost pill in a PhoneComposer's row. */
+  pill?: boolean;
   composer: {
     models: ComposerModels;
     permissions?: ComposerPermissions;
@@ -94,7 +96,7 @@ export function MobileComposerOptions(props: {
     onCleanup(() => window.removeEventListener("pointerdown", keepKeyboard, true));
   });
 
-  return <div ref={root} class="composer-mobile-plus">
+  return <div ref={root} class={props.pill ? "ui-frost ui-pill" : "composer-mobile-plus"} data-solo={props.pill ? "" : undefined}>
     <Menu modal={false} placement="top-start" gutter={8} open={open()} onOpenChange={(value) => { if (value) typingAtOpen = composerTextarea(); setOpen(value); if (!value) reset(); }}>
       <MobileComposerPlusTrigger serverOnline={composer.serverOnline} holdFocus={() => typingAtOpen !== null} />
       <MenuContent class="composer-options-menu" data-settling={settling()} onOpenAutoFocus={preserveFocus} onCloseAutoFocus={(event) => { event.preventDefault(); restoreTyping(); }} onFocusOutside={preserveFocus} onPointerDownOutside={keepForChild}>
