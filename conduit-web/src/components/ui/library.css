@@ -226,7 +226,7 @@
   transition: opacity var(--duration-quick) var(--ease-leave), right 0s var(--duration-quick); }
 /* The pills sit over the track, so it sweeps out from under the shrinking mic rather than across it. */
 .ui-phone-row > .ui-pill { position: relative; z-index: 1; }
-.ui-phone-composer[data-mode="listening"] .ui-voice-track { right: calc(var(--voice-pill) + 2 * var(--space-md) + var(--pill-size)); opacity: 1; pointer-events: auto; transition: opacity var(--duration-gentle) var(--ease-arrive) var(--duration-gentle); }
+.ui-phone-composer[data-mode="listening"] .ui-voice-track { right: calc(var(--voice-pill) + 2 * var(--space-md) + var(--pill-size)); opacity: 1; pointer-events: auto; transition: opacity var(--duration-quick) var(--ease-arrive) var(--duration-gentle); }
 /* Captions: the newest three lines above the row, on the page's ground so the transcript never shows through. */
 .ui-voice-captions { position: absolute; left: 0; right: 0; bottom: calc(var(--pill-size) + var(--space-md)); z-index: 1; display: flex; max-height: calc(3 * 1.45em + var(--space-lg)); flex-direction: column; justify-content: flex-end; overflow: hidden;
   background: linear-gradient(to bottom, transparent, var(--background) var(--space-xl)); padding: var(--space-lg) var(--space-lg) var(--space-xs); color: var(--muted-foreground); font-size: var(--text-body); font-style: italic; line-height: 1.45; pointer-events: none; animation: ui-fade-in var(--duration-gentle) var(--ease-arrive) backwards; }
@@ -731,7 +731,7 @@
 .composer-wrap[data-library] .thinking-orb.composer-voice-orb { transition: opacity var(--duration-quick) var(--ease-change), transform .1s linear; }
 .composer-wrap[data-library][data-phone-layout] .composer-voice-track { transition: opacity var(--duration-quick) var(--ease-change), clip-path var(--duration-gentle) var(--ease-arrive); }
 .composer-wrap[data-library][data-phone-layout="bar"] .composer-voice-track { clip-path: none; transition: opacity var(--duration-quick) var(--ease-leave), right 0s var(--duration-quick); }
-.composer-wrap[data-library][data-phone-layout="bar"][data-phone-mode="listening"] .composer-voice-track { transition: opacity var(--duration-gentle) var(--ease-arrive) var(--duration-gentle); }
+.composer-wrap[data-library][data-phone-layout="bar"][data-phone-mode="listening"] .composer-voice-track { transition: opacity var(--duration-quick) var(--ease-arrive) var(--duration-gentle); }
 .composer-wrap[data-library][data-phone-layout="bar"] .composer::before { transition: flex-grow var(--duration-gentle) var(--ease-arrive) var(--duration-quick); }
 .composer-wrap[data-library][data-phone-layout="bar"][data-phone-mode="listening"] .composer::before { transition-delay: 0s; }
 .composer-wrap[data-library][data-phone-layout="bar"] .composer-actions [data-slot="button"].dictation-trigger { transition: flex-grow var(--duration-gentle) var(--ease-arrive) var(--duration-quick), filter var(--duration-quick) var(--ease-change); }
