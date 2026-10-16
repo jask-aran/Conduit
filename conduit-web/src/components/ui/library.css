@@ -216,8 +216,9 @@
 /* Stopping is one move from the first frame, as starting is: the mic grows back over the track as it wipes in (the
    pills sit above it) and Stop and send folds as it fades. */
 .ui-phone-composer[data-from="listening"] .ui-phone-row > .ui-pill[data-voice][data-folded] { transition: opacity var(--duration-quick) var(--ease-leave), width var(--duration-gentle) var(--ease-arrive), min-width var(--duration-gentle) var(--ease-arrive), margin var(--duration-gentle) var(--ease-arrive); }
-/* Close mirrors open: listening, the pills fade out over the move's first quick; stopping, back in over its last. */
-.ui-phone-composer:not([data-mode="listening"]) .ui-phone-row > .ui-pill:not([data-folded]) { transition: width var(--duration-gentle) var(--ease-arrive), min-width var(--duration-gentle) var(--ease-arrive), margin var(--duration-gentle) var(--ease-arrive), opacity var(--duration-quick) var(--ease-change) calc(var(--duration-gentle) - var(--duration-quick)); }
+/* Close mirrors open: listening, the pills fade out over the move's first quick; stopping, back in over its last.
+   (Not the stretched mic: it keeps its flex-grow move, which this would drop, snapping it halfway on the first frame.) */
+.ui-phone-composer:not([data-mode="listening"]) .ui-phone-row > .ui-pill:not([data-folded], [data-stretch]) { transition: width var(--duration-gentle) var(--ease-arrive), min-width var(--duration-gentle) var(--ease-arrive), margin var(--duration-gentle) var(--ease-arrive), opacity var(--duration-quick) var(--ease-change) calc(var(--duration-gentle) - var(--duration-quick)); }
 .ui-pill-room:not(.ui-phone-row > *) { display: none; }
 /* Listening: the other pills fade where they stand; the mic shrinks, its orb in; the track sweeps out of it. */
 .ui-phone-composer[data-mode="listening"] .ui-phone-row > .ui-pill:not([data-voice]) { opacity: 0; pointer-events: none;
@@ -260,6 +261,8 @@
 .ui-phone-composer[data-layout="surface"] .ui-phone-row > .ui-pill:not([data-folded]) { width: var(--pill-slot); height: var(--pill-slot-height); }
 .ui-phone-composer[data-layout="surface"] .ui-phone-row > .ui-pill[data-folded] { margin-inline-start: calc(-1 * var(--pill-gap)); }
 .ui-phone-composer[data-layout="surface"] .ui-phone-row > .ui-pill[data-voice][data-stretch] { flex: none; min-width: 0; margin-inline-start: auto; }
+/* The mic's colour drains as it grows back, on the move's own curve (the Aura's leave curve held it after the move). */
+.ui-phone-composer .ui-pill[data-voice] .ui-aura { transition: opacity var(--duration-gentle) var(--ease-arrive), --aura-level .12s linear; }
 .ui-phone-composer[data-layout="surface"] :is(.ui-pill-room, .ui-pill[data-voice] .ui-aura) { display: none; }
 .ui-phone-composer[data-layout="surface"] .ui-voice-track { right: 0; padding-inline: var(--space-md) calc(2 * (var(--pill-slot) + var(--pill-gap)) + var(--space-md)); opacity: 1; clip-path: none; transition: none; }
 .ui-phone-composer[data-layout="surface"] .ui-voice-track > .ui-pill-wave { position: relative; z-index: 1; opacity: 0; transition: opacity var(--duration-gentle) var(--ease-leave); }
