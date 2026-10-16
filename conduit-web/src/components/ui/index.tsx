@@ -163,36 +163,34 @@ export function PillWave(props: { levels: number[]; gain?: number }) {
  * the mic at its end; listening, an Aura fills the capsule under the track).
  */
 export type VoiceMode = "idle" | "typing" | "listening";
+/** PhoneComposer's parts, as its state table names them: the field, the row's pills (not the mic or Send, which are
+ * always in the row), the edit pills, the voice track, the captions, and orb (the mic as an orb pill at the row's end). */
+export type PhonePart = "field" | "pills" | "edit" | "track" | "captions" | "orb";
+/** PhoneComposer's state table: what each state shows. Every move between two states follows from it and the three
+ * moves in library.css (in, out, in place) -- none depends on the state it came from. */
+export const PHONE_COMPOSER_STATES = {
+  idle: ["pills"],
+  typing: ["field", "pills"],
+  editing: ["field", "pills", "edit"],
+  listening: ["track", "captions", "orb"],
+} as const satisfies Record<string, readonly PhonePart[]>;
+export type PhoneState = keyof typeof PHONE_COMPOSER_STATES;
 export function PhoneComposer(props: { mode: VoiceMode; layout?: "bar" | "surface"; field: JSX.Element; track?: JSX.Element; onTrack?: () => void; captions?: JSX.Element; edit?: JSX.Element; editing?: boolean; under?: boolean; level?: number; children: JSX.Element }) {
   const edit = children(() => props.edit);
-  // The captions fade out when listening stops, then go. The mode it came from times the field and the captions
-  // where they share a spot: from typing, the captions wait for the field to fade; back to typing, the field waits for them.
-  const [captions, setCaptions] = createSignal(props.mode === "listening");
-  const [from, setFrom] = createSignal<VoiceMode>();
-  let root!: HTMLDivElement, captionsBox: HTMLDivElement | undefined, fieldBox!: HTMLDivElement;
-  // from holds only until the move's animations have finished (at any playback rate), so later folds -- Send as a
-  // draft is cleared -- take their own timing, not the stop's.
-  let move = 0;
-  const settle = (id: number) => requestAnimationFrame(() => void Promise.all(root.getAnimations({ subtree: true })
-    .filter((animation) => animation.effect?.getTiming().iterations !== Infinity).map((animation) => animation.finished.catch(() => {})))
-    .then(() => { if (move === id) setFrom(undefined); }));
-  // from is set with the mode, before the DOM takes either, so a move's first style already has both: set after it, a
-  // move would start on the timing of a mode with no from and keep it.
-  createComputed(on(() => props.mode, (mode, prev) => { if (mode === prev) return; if (mode === "listening") setCaptions(true); setFrom(prev); }));
-  createEffect(on(() => props.mode, (mode, prev) => { if (mode === prev) return;
-    if (prev !== undefined) settle(++move);
-    // Back to typing, the field takes its room at once over the captions' spot: they are hidden under it from the
-    // first frame (clipped to above it), so its text and theirs are never seen together as one fades for the other.
-    if (mode === "typing" && prev === "listening") underField(); }));
-  // The field's height, kept on the captions while they go (the field grows as the transcript lands in it).
-  const underField = () => captionsBox?.style.setProperty("--under-field", `${fieldBox.offsetHeight}px`);
-  onMount(() => { const observer = new ResizeObserver(() => { if (props.mode === "typing") underField(); }); observer.observe(fieldBox); onCleanup(() => observer.disconnect()); });
+  const state = (): PhoneState => props.mode === "typing" && props.editing ? "editing" : props.mode;
+  const shows = (part: PhonePart) => (PHONE_COMPOSER_STATES[state()] as readonly PhonePart[]).includes(part);
+  // The captions stay mounted while they go, until their ground has faded.
+  const [captions, setCaptions] = createSignal(shows("captions"));
+  createComputed(() => { if (shows("captions")) setCaptions(true); });
+  let root!: HTMLDivElement, fieldBox!: HTMLDivElement;
+  // The field's height, kept on the root: the captions' words going are clipped above it (it grows as the transcript lands).
+  onMount(() => { const observer = new ResizeObserver(() => root.style.setProperty("--under-field", `${fieldBox.offsetHeight}px`)); observer.observe(fieldBox); onCleanup(() => observer.disconnect()); });
   const surface = () => props.layout === "surface";
-  return <div ref={root} class="ui-phone-composer" data-mode={props.mode} data-from={from()} data-layout={surface() ? "surface" : undefined} data-editing={props.editing ? "" : undefined} data-under={props.under ? "" : undefined} style={props.mode === "listening" && props.level !== undefined ? { "--voice-level": String(props.level) } : undefined}>
-    <Show when={edit()}><div class="ui-phone-edit" aria-hidden={props.editing ? undefined : "true"}>{edit()}</div></Show>
-    <Show when={captions()}><div ref={captionsBox} class="ui-voice-captions" aria-live="polite" data-leaving={props.mode === "listening" ? undefined : ""} onAnimationEnd={(event) => { if (event.target === event.currentTarget && props.mode !== "listening") setCaptions(false); }}>{props.captions}</div></Show>
+  return <div ref={root} class="ui-phone-composer" data-state={state()} data-show={PHONE_COMPOSER_STATES[state()].join(" ")} data-layout={surface() ? "surface" : undefined} data-under={props.under ? "" : undefined} style={{ "--voice-level": shows("orb") && props.level !== undefined ? String(props.level) : undefined }}>
+    <Show when={edit()}><div class="ui-phone-edit" aria-hidden={shows("edit") ? undefined : "true"}>{edit()}</div></Show>
+    <Show when={captions()}><div class="ui-voice-captions" aria-live="polite" data-leaving={shows("captions") ? undefined : ""} onAnimationEnd={(event) => { if (event.target === event.currentTarget && !shows("captions")) setCaptions(false); }}>{props.captions}</div></Show>
     <div ref={fieldBox} class="ui-phone-field">{props.field}</div>
-    <div class={surface() ? "ui-frost ui-phone-row" : "ui-phone-row"}>{props.children}<div class="ui-voice-track" aria-hidden={props.mode === "listening" ? undefined : "true"} onClick={() => props.mode === "listening" && props.onTrack?.()}><Show when={surface()}><Aura /></Show>{props.track}</div></div>
+    <div class={surface() ? "ui-frost ui-phone-row" : "ui-phone-row"}>{props.children}<div class="ui-voice-track" aria-hidden={shows("track") ? undefined : "true"} onClick={() => shows("track") && props.onTrack?.()}><Show when={surface()}><Aura /></Show>{props.track}</div></div>
   </div>;
 }
 
