@@ -169,12 +169,16 @@ export function PhoneComposer(props: { mode: VoiceMode; layout?: "bar" | "surfac
   // where they share a spot: from typing, the captions wait for the field to fade; back to typing, the field waits for them.
   const [captions, setCaptions] = createSignal(props.mode === "listening");
   const [from, setFrom] = createSignal<VoiceMode>();
-  createEffect(on(() => props.mode, (mode, prev) => { if (mode === prev) return; if (mode === "listening") setCaptions(true); setFrom(prev); }));
+  let captionsBox: HTMLDivElement | undefined, fieldBox!: HTMLDivElement;
+  createEffect(on(() => props.mode, (mode, prev) => { if (mode === prev) return; if (mode === "listening") setCaptions(true); setFrom(prev);
+    // Back to typing, the field takes its room at once over the captions' spot: they are hidden under it from the
+    // first frame (clipped to above it), so its text and theirs are never seen together as one fades for the other.
+    if (mode === "typing" && prev === "listening" && captionsBox) captionsBox.style.setProperty("--under-field", `${fieldBox.offsetHeight}px`); }));
   const surface = () => props.layout === "surface";
   return <div class="ui-phone-composer" data-mode={props.mode} data-from={from()} data-layout={surface() ? "surface" : undefined} data-editing={props.editing ? "" : undefined} data-under={props.under ? "" : undefined} style={props.mode === "listening" && props.level !== undefined ? { "--voice-level": String(props.level) } : undefined}>
     <Show when={edit()}><div class="ui-phone-edit" aria-hidden={props.editing ? undefined : "true"}>{edit()}</div></Show>
-    <Show when={captions()}><div class="ui-voice-captions" aria-live="polite" data-leaving={props.mode === "listening" ? undefined : ""} onAnimationEnd={(event) => { if (event.target === event.currentTarget && props.mode !== "listening") setCaptions(false); }}>{props.captions}</div></Show>
-    <div class="ui-phone-field">{props.field}</div>
+    <Show when={captions()}><div ref={captionsBox} class="ui-voice-captions" aria-live="polite" data-leaving={props.mode === "listening" ? undefined : ""} onAnimationEnd={(event) => { if (event.target === event.currentTarget && props.mode !== "listening") setCaptions(false); }}>{props.captions}</div></Show>
+    <div ref={fieldBox} class="ui-phone-field">{props.field}</div>
     <div class={surface() ? "ui-frost ui-phone-row" : "ui-phone-row"}>{props.children}<div class="ui-voice-track" aria-hidden={props.mode === "listening" ? undefined : "true"} onClick={() => props.mode === "listening" && props.onTrack?.()}><Show when={surface()}><Aura /></Show>{props.track}</div></div>
   </div>;
 }
