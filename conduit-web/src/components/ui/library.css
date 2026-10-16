@@ -270,6 +270,12 @@
    width plus a margin of minus that and the gap, which is what width 0 and its folded margin come to). */
 .ui-phone-composer[data-from="listening"]:not([data-mode="listening"]) .ui-phone-row > .ui-pill:not([data-folded]) {
   --fade-ease: var(--ease-change); --fade-delay: calc(var(--duration-gentle) - var(--duration-quick)); }
+/* Stopping into typing (the field coming back): the pills come in with it, on its duration and curve, and the track
+   goes over the first quick so its waveform is gone before they are over it (4). */
+.ui-phone-composer[data-from="listening"][data-mode="typing"] .ui-phone-row > .ui-pill:not([data-folded]) {
+  --fade: var(--duration-gentle); --fade-ease: var(--ease-arrive); --fade-delay: 0s; }
+.ui-phone-composer[data-from="listening"][data-mode="typing"] .ui-voice-track { --fade: var(--duration-quick); --fade-ease: var(--ease-leave); --fade-delay: 0s; }
+.ui-phone-composer[data-from="listening"][data-mode="typing"] .ui-voice-track > .ui-pill-wave { --fade: var(--duration-quick); }
 .ui-phone-composer[data-from="listening"] .ui-phone-row > .ui-pill[data-voice][data-folded] { --fold-delay: 0s; z-index: 0;
   width: var(--pill-size); min-width: var(--pill-size); margin-inline-start: calc(-1 * (var(--pill-size) + var(--space-md))); }
 .ui-phone-composer[data-from="listening"][data-layout="surface"] .ui-phone-row > .ui-pill[data-voice][data-folded] {
@@ -288,9 +294,9 @@
 /* The voice track: no surface, from the row's start to the orb pill, under the pills. It wipes out of the orb pill as
    the mic shrinks and back into it as the mic grows; it turns off only once wiped. */
 .ui-voice-track { position: absolute; inset-block: 0; left: 0; right: calc(var(--voice-pill) + var(--space-md)); display: flex; align-items: center; overflow: hidden; border-radius: var(--radius-round); opacity: 0; pointer-events: none;
-  clip-path: inset(0 0 0 100% round var(--radius-round)); --fade-delay: var(--duration-gentle);
-  transition: opacity 0s var(--fade-delay), clip-path var(--duration-gentle) var(--ease-arrive); }
-.ui-phone-composer[data-mode="listening"] .ui-voice-track { right: calc(var(--voice-pill) + 2 * var(--space-md) + var(--pill-size)); opacity: 1; pointer-events: auto; clip-path: inset(0 round var(--radius-round)); --fade-delay: 0s; }
+  clip-path: inset(0 0 0 100% round var(--radius-round)); --fade: 0s; --fade-ease: linear; --fade-delay: var(--duration-gentle);
+  transition: opacity var(--fade) var(--fade-ease) var(--fade-delay), clip-path var(--duration-gentle) var(--ease-arrive); }
+.ui-phone-composer[data-mode="listening"] .ui-voice-track { right: calc(var(--voice-pill) + 2 * var(--space-md) + var(--pill-size)); opacity: 1; pointer-events: auto; clip-path: inset(0 round var(--radius-round)); --fade: 0s; --fade-delay: 0s; }
 /* PillWave: bars a whole pixel wide on a fixed pitch (sub-pixel bars dropped out at 1x), the height of the pill's
    inside, the newest at the right end. Its parent sets the width; in a track, it fills it. */
 .ui-pill-wave { display: flex; width: 100%; height: calc(var(--pill-size) - 2 * var(--space-xs)); align-items: center; justify-content: flex-end; gap: 2px; overflow: hidden; }
@@ -322,7 +328,7 @@
 .ui-phone-composer[data-layout="surface"] .ui-phone-row > .ui-pill[data-voice][data-stretch] { flex: none; min-width: 0; margin-inline-start: auto; }
 .ui-phone-composer[data-layout="surface"] :is(.ui-pill-room, .ui-pill[data-voice] .ui-aura) { display: none; }
 .ui-phone-composer[data-layout="surface"] .ui-voice-track { right: 0; padding-inline: var(--space-md) calc(2 * (var(--pill-slot) + var(--pill-gap)) + var(--space-md)); opacity: 1; clip-path: none; }
-.ui-phone-composer[data-layout="surface"] .ui-voice-track > .ui-pill-wave { position: relative; z-index: 1; opacity: 0; --fade-ease: var(--ease-leave); transition: opacity var(--duration-gentle) var(--fade-ease); }
+.ui-phone-composer[data-layout="surface"] .ui-voice-track > .ui-pill-wave { position: relative; z-index: 1; opacity: 0; --fade: var(--duration-gentle); --fade-ease: var(--ease-leave); transition: opacity var(--fade) var(--fade-ease); }
 .ui-phone-composer[data-layout="surface"][data-mode="listening"] .ui-voice-track { right: 0; }
 .ui-phone-composer[data-layout="surface"][data-mode="listening"] .ui-voice-track > .ui-pill-wave { opacity: 1; --fade-ease: var(--ease-arrive); }
 /* Edit pills over the field: each fades itself (a fading row would be the backdrop its pills blur). */
