@@ -55,6 +55,27 @@
   --duration-quick: 150ms;   /* leaving, folding away; a change in place */
   --duration-gentle: 250ms;  /* arriving, opening, settling into place */
 }
+/*
+ * Every piece's moves keep these invariants; a new state or piece is added within them, never as an exception:
+ * 1. Layers: a piece's parts stack in one order in every state; whatever is fading in or out, what is above stays above.
+ * 2. One transition list per part, in its base rule, naming every property any state moves. A state sets only values
+ *    and the part's timing variables below, never its own list, so no state can drop a property's move and snap it.
+ * 3. Room opens before a part fades in and goes only once it has faded out (or is revealed by a clip): nothing is
+ *    seen squeezed.
+ * 4. One spot, one thing: two parts that share a spot never show at once.
+ * 5. A change is one move from its first frame; parts that answer it move with it, over its duration.
+ * Timing variables (each part sets its own -- they never inherit, so a parent's state cannot retime a child):
+ * --move/--move-ease/--move-delay (geometry), --fade/--fade-ease/--fade-delay (opacity), --fold-delay (giving or
+ * taking room), --hide-delay (visibility, once faded).
+ */
+@property --move { syntax: "*"; inherits: false; }
+@property --move-ease { syntax: "*"; inherits: false; }
+@property --move-delay { syntax: "*"; inherits: false; }
+@property --fade { syntax: "*"; inherits: false; }
+@property --fade-ease { syntax: "*"; inherits: false; }
+@property --fade-delay { syntax: "*"; inherits: false; }
+@property --fold-delay { syntax: "*"; inherits: false; }
+@property --hide-delay { syntax: "*"; inherits: false; }
 /* The shapes a move takes: a fade, or a fade that rises --rise (--space-md unless the piece says) and drops
    back the way it came. */
 @keyframes ui-fade-in { from { opacity: 0; } }
@@ -178,9 +199,12 @@
 /* A circle that comes and goes in its row folds to nothing, its gap and its 1px border each side with it (the border stays drawn, so it never pops), so a stretched neighbour (the mic)
    gives and takes the room. Coming, the room opens and it fades into it; going, it fades first and only then gives
    the room back, so it is never seen squeezed. */
-.ui-pill[data-solo] { transition: width var(--duration-gentle) var(--ease-arrive), min-width var(--duration-gentle) var(--ease-arrive), margin var(--duration-gentle) var(--ease-arrive), opacity var(--duration-quick) var(--ease-arrive) var(--duration-quick); }
+.ui-pill[data-solo] { --fade: var(--duration-quick); --fade-ease: var(--ease-arrive); --fade-delay: var(--duration-quick); --fold-delay: 0s;
+  transition: width var(--duration-gentle) var(--ease-arrive) var(--fold-delay), min-width var(--duration-gentle) var(--ease-arrive) var(--fold-delay),
+    margin var(--duration-gentle) var(--ease-arrive) var(--fold-delay), flex-grow var(--duration-gentle) var(--ease-arrive),
+    opacity var(--fade) var(--fade-ease) var(--fade-delay); }
 .ui-pill[data-solo][data-folded] { width: 0; min-width: 0; margin-inline-start: calc(-1 * var(--space-md) - 2px); overflow: clip; opacity: 0; pointer-events: none;
-  transition: opacity var(--duration-quick) var(--ease-leave), width var(--duration-gentle) var(--ease-arrive) var(--duration-quick), min-width var(--duration-gentle) var(--ease-arrive) var(--duration-quick), margin var(--duration-gentle) var(--ease-arrive) var(--duration-quick); }
+  --fade-ease: var(--ease-leave); --fade-delay: 0s; --fold-delay: var(--duration-quick); }
 /* The mic: its icon and the orb stacked in one button, crossfading. */
 .ui-pill[data-voice] > button { position: relative; isolation: isolate; }
 /* The mic: listening, its pill fills with an Aura (below) under its icon. */
@@ -192,11 +216,11 @@
    shows (a parent turns it on, or `on`), and the frost over it. The one coloured glow DESIGN.md allows. */
 @property --aura-level { syntax: "<number>"; inherits: true; initial-value: 0; }
 .ui-aura { --aura-level: var(--voice-level, 0); position: absolute; inset: 0; overflow: clip; border-radius: inherit; opacity: 0; pointer-events: none;
-  transition: opacity var(--duration-gentle) var(--ease-leave), --aura-level .12s linear; }
+  --fade-ease: var(--ease-leave); transition: opacity var(--duration-gentle) var(--fade-ease), --aura-level .12s linear; }
 /* Its fade is its own: shown, it blooms over the gentle duration as the move that shows it runs, and goes the same way
    back (a parent shows it with data-on or a rule of its own, listed here, so the fade stays the same). */
 .ui-aura[data-on], .ui-phone-composer[data-mode="listening"] :is(.ui-pill[data-voice], .ui-voice-track) .ui-aura {
-  opacity: 1; transition: opacity var(--duration-gentle) var(--ease-arrive), --aura-level .12s linear; }
+  opacity: 1; --fade-ease: var(--ease-arrive); }
 .ui-aura > canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
 /* The frost over it: a lit rim and a faint sheen from the top, so the colour reads as behind the glass. */
 .ui-aura::after { content: ""; position: absolute; inset: 0; z-index: 1; border-radius: inherit; background: linear-gradient(rgb(255 255 255 / .1), rgb(255 255 255 / 0) 60%); box-shadow: var(--frost-highlight), inset 0 0 calc(.3 * var(--pill-size)) rgb(255 255 255 / .14); }
@@ -222,8 +246,7 @@
 .ui-phone-edit { z-index: 4; }
 .ui-phone-row > .ui-pill { position: relative; z-index: 1; }
 /* 2. Timing variables: by default a part comes in -- its room at once, then it fades in. */
-.ui-phone-field, .ui-phone-composer .ui-phone-row > .ui-pill, .ui-phone-edit > .ui-pill, .ui-voice-track {
-  --fade: var(--duration-gentle); --fade-ease: var(--ease-arrive); --fade-delay: 0s; --fold-delay: 0s; }
+.ui-phone-field, .ui-phone-edit > .ui-pill, .ui-voice-track { --fade: var(--duration-gentle); --fade-ease: var(--ease-arrive); --fade-delay: 0s; --fold-delay: 0s; }
 
 /* The field: its own row above the controls, fading in place. Folded (idle, listening) it fades out, then gives up its
    room (max-height none to 0 is discrete: allow-discrete holds it until the fade is done). */
@@ -231,11 +254,7 @@
 .ui-phone-composer:not([data-mode="typing"]) > .ui-phone-field { max-height: 0; margin-bottom: calc(-1 * var(--space-md)); overflow: hidden; opacity: 0; pointer-events: none;
   --fade: var(--duration-quick); --fade-ease: var(--ease-leave); --fold-delay: var(--duration-quick); }
 
-/* The row's pills: one list for every pill, the stretched mic's flex-grow with the folds' width and the fades. */
-.ui-phone-composer .ui-phone-row > .ui-pill { --fade: var(--duration-quick); --fade-delay: var(--duration-quick);
-  transition: width var(--duration-gentle) var(--ease-arrive) var(--fold-delay), min-width var(--duration-gentle) var(--ease-arrive) var(--fold-delay),
-    margin var(--duration-gentle) var(--ease-arrive) var(--fold-delay), flex-grow var(--duration-gentle) var(--ease-arrive),
-    opacity var(--fade) var(--fade-ease) var(--fade-delay); }
+/* The row's pills move on the Pill's own list (width, margin, flex-grow, opacity); the row's states set its variables. */
 /* Folding (Send with nothing to send, Scroll to latest at the latest): it fades, then gives its room back. */
 .ui-phone-composer .ui-phone-row > .ui-pill[data-folded] { --fade-ease: var(--ease-leave); --fade-delay: 0s; --fold-delay: var(--duration-quick); }
 /* Listening: the other pills fade where they stand over the move's first quick. */
@@ -259,7 +278,7 @@
 .ui-phone-composer[data-mode="listening"] .ui-pill-room { flex-grow: 1; }
 .ui-phone-composer[data-mode="listening"] .ui-phone-row > .ui-pill[data-voice][data-stretch] { flex-grow: 0; }
 /* Its Aura fills it and drains on the move's own curve. */
-.ui-phone-composer .ui-pill[data-voice] .ui-aura { transition: opacity var(--duration-gentle) var(--ease-arrive), --aura-level .12s linear; }
+.ui-phone-composer .ui-pill[data-voice] .ui-aura { --fade-ease: var(--ease-arrive); }
 
 /* The voice track: no surface, from the row's start to the orb pill, under the pills. It wipes out of the orb pill as
    the mic shrinks and back into it as the mic grows; it turns off only once wiped. */
@@ -297,10 +316,10 @@
 .ui-phone-composer[data-layout="surface"] .ui-phone-row > .ui-pill[data-folded] { margin-inline-start: calc(-1 * var(--pill-gap)); }
 .ui-phone-composer[data-layout="surface"] .ui-phone-row > .ui-pill[data-voice][data-stretch] { flex: none; min-width: 0; margin-inline-start: auto; }
 .ui-phone-composer[data-layout="surface"] :is(.ui-pill-room, .ui-pill[data-voice] .ui-aura) { display: none; }
-.ui-phone-composer[data-layout="surface"] .ui-voice-track { right: 0; padding-inline: var(--space-md) calc(2 * (var(--pill-slot) + var(--pill-gap)) + var(--space-md)); opacity: 1; clip-path: none; transition: none; }
-.ui-phone-composer[data-layout="surface"] .ui-voice-track > .ui-pill-wave { position: relative; z-index: 1; opacity: 0; transition: opacity var(--duration-gentle) var(--ease-leave); }
+.ui-phone-composer[data-layout="surface"] .ui-voice-track { right: 0; padding-inline: var(--space-md) calc(2 * (var(--pill-slot) + var(--pill-gap)) + var(--space-md)); opacity: 1; clip-path: none; }
+.ui-phone-composer[data-layout="surface"] .ui-voice-track > .ui-pill-wave { position: relative; z-index: 1; opacity: 0; --fade-ease: var(--ease-leave); transition: opacity var(--duration-gentle) var(--fade-ease); }
 .ui-phone-composer[data-layout="surface"][data-mode="listening"] .ui-voice-track { right: 0; }
-.ui-phone-composer[data-layout="surface"][data-mode="listening"] .ui-voice-track > .ui-pill-wave { opacity: 1; transition: opacity var(--duration-gentle) var(--ease-arrive); }
+.ui-phone-composer[data-layout="surface"][data-mode="listening"] .ui-voice-track > .ui-pill-wave { opacity: 1; --fade-ease: var(--ease-arrive); }
 /* Edit pills over the field: each fades itself (a fading row would be the backdrop its pills blur). */
 .ui-phone-edit { position: absolute; left: 0; bottom: calc(100% + var(--space-md)); display: flex; gap: var(--space-md); pointer-events: none; }
 .ui-phone-edit > .ui-pill { opacity: 0; --fade: var(--duration-quick); --fade-ease: var(--ease-leave); transition: opacity var(--fade) var(--fade-ease); }
@@ -615,9 +634,10 @@
    Taken, the composer drops out of the pane but keeps its room, so its leaving moves nothing; it comes back gently. */
 .ui-composer-slot { display: grid; }
 .ui-composer-slot > * { grid-area: 1 / 1; align-self: end; min-width: 0; }
-.ui-composer-slot > .ui-composer-stack { transition: transform var(--duration-gentle) var(--ease-arrive), opacity var(--duration-gentle) var(--ease-arrive); }
+.ui-composer-slot > .ui-composer-stack, .composer-stack > .composer-wrap.ui-composer-width { --move: var(--duration-gentle); --move-ease: var(--ease-arrive); --hide-delay: 0s;
+  transition: transform var(--move) var(--move-ease), opacity var(--move) var(--move-ease), visibility 0s var(--hide-delay); }
 .ui-composer-slot[data-taken] > .ui-composer-stack { visibility: hidden; opacity: 0; pointer-events: none; transform: translateY(calc(100% + var(--space-4xl)));
-  transition: transform var(--duration-quick) var(--ease-leave), opacity var(--duration-quick) var(--ease-leave), visibility 0s var(--duration-quick); }
+  --move: var(--duration-quick); --move-ease: var(--ease-leave); --hide-delay: var(--duration-quick); }
 /* Its width: the pane it sits in declares --composer-width on its root (a
    chat's centred column, a dashboard's full column); unset, its own default.
    It never shrinks past its pane: min(.., 100%), so no breakpoint is needed. */
@@ -773,9 +793,8 @@
    (the app's own rule loads later, at equal weight). */
 .composer-wrap.ui-composer-width { width: min(var(--composer-width, 47.5rem), 100%); }
 /* The app's takeover (chat-screen's composer-stack and its question-dock) on the slot's moves. */
-.composer-stack > .composer-wrap.ui-composer-width { transition: transform var(--duration-gentle) var(--ease-arrive), opacity var(--duration-gentle) var(--ease-arrive); }
 .composer-stack[data-question="true"] > .composer-wrap.ui-composer-width { transform: translateY(calc(100% + var(--space-4xl)));
-  transition: transform var(--duration-quick) var(--ease-leave), opacity var(--duration-quick) var(--ease-leave), visibility 0s var(--duration-quick); }
+  --move: var(--duration-quick); --move-ease: var(--ease-leave); --hide-delay: var(--duration-quick); }
 .question-dock > .ui-rider[data-layout="card"] { animation: ui-rise var(--duration-gentle) var(--ease-arrive) var(--duration-quick) backwards; }
 @media (prefers-reduced-motion: reduce) { .composer-stack > .composer-wrap.ui-composer-width { transition: none; } .question-dock > .ui-rider[data-layout="card"] { animation: none; } }
 /* TextArea: multi-line text that grows with its lines; bare, so what holds it pads it. */
@@ -877,10 +896,10 @@
 /* Its buttons' icons are the caption's size, not a row's. */
 .ui-code > figcaption .ui-button svg { width: var(--icon-xs); height: var(--icon-xs); }
 .ui-code-lang { margin-right: auto; }
-.ui-code > pre { height: auto; margin: 0; overflow: auto hidden; interpolate-size: allow-keywords; transition: height var(--duration-gentle) var(--ease-arrive); padding: var(--space-md) 0; font: var(--text-row)/1.6 var(--font-code); }
+.ui-code > pre { height: auto; margin: 0; overflow: auto hidden; interpolate-size: allow-keywords; --move: var(--duration-gentle); --move-ease: var(--ease-arrive); transition: height var(--move) var(--move-ease); padding: var(--space-md) 0; font: var(--text-row)/1.6 var(--font-code); }
 /* Folded: the lines past the fold are cut, the last of them fading; the foot opens it. */
 /* Opening unfolds (arrive); folding goes back quicker (leave). */
-.ui-code[data-folded] > pre { height: calc(var(--code-fold) * 1.6em + 2 * var(--space-md)); transition: height var(--duration-quick) var(--ease-leave); mask-image: linear-gradient(to bottom, #000 calc(100% - 2.4em), transparent); }
+.ui-code[data-folded] > pre { height: calc(var(--code-fold) * 1.6em + 2 * var(--space-md)); --move: var(--duration-quick); --move-ease: var(--ease-leave); mask-image: linear-gradient(to bottom, #000 calc(100% - 2.4em), transparent); }
 .ui-code-more { display: block; width: 100%; height: var(--control-sm); border: 0; border-top: 1px solid var(--tint); background: transparent; color: var(--muted-foreground); font: var(--text-caption) var(--font-sans); cursor: pointer; }
 .ui-code-more:is(:hover, :focus-visible) { background: var(--tint); color: var(--foreground); }
 .ui-code[data-folded][data-streaming] .ui-code-more { animation: ui-code-writing 1.6s ease-in-out infinite; }
@@ -918,8 +937,9 @@
 :is(.ui-disclosure-header, .ui-trace):is(:hover, :focus-visible) > .ui-disclosure-chevron { color: var(--foreground); }
 @media (prefers-reduced-motion: reduce) { .ui-disclosure-chevron { transition: none; } }
 /* Its body unfolds in height (gentle) and folds away quickly: it stays drawn, at no height when closed. */
-.ui-disclosure-body { min-width: 0; height: auto; overflow: clip; interpolate-size: allow-keywords; transition: height var(--duration-gentle) var(--ease-arrive), opacity var(--duration-gentle) var(--ease-arrive), visibility 0s; }
-.ui-disclosure[data-open="false"] > .ui-disclosure-body { height: 0; opacity: 0; visibility: hidden; transition: height var(--duration-quick) var(--ease-leave), opacity var(--duration-quick) var(--ease-leave), visibility 0s var(--duration-quick); }
+.ui-disclosure-body { min-width: 0; height: auto; overflow: clip; interpolate-size: allow-keywords; --move: var(--duration-gentle); --move-ease: var(--ease-arrive); --hide-delay: 0s;
+  transition: height var(--move) var(--move-ease), opacity var(--move) var(--move-ease), visibility 0s var(--hide-delay); }
+.ui-disclosure[data-open="false"] > .ui-disclosure-body { height: 0; opacity: 0; visibility: hidden; --move: var(--duration-quick); --move-ease: var(--ease-leave); --hide-delay: var(--duration-quick); }
 .ui-disclosure[data-open="false"] { gap: 0; }
 
 /* The trail: one light line per step, no boxes, under the header's text; a step under the answer's size. */
@@ -1118,8 +1138,8 @@
 .ui-answer .chat-markdown .artifact-copy[data-copied="true"]::before { mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 6 9 17l-5-5'/%3E%3C/svg%3E"); }
 .ui-answer .chat-markdown .artifact-header { padding-right: calc(var(--space-lg) - (var(--control-xs) - var(--icon-xs)) / 2); }
 /* It unfolds and folds as the CodeBlock does. */
-.ui-answer .chat-markdown .artifact > pre { height: auto; overflow-y: hidden; interpolate-size: allow-keywords; transition: height var(--duration-gentle) var(--ease-arrive); }
-.ui-answer .chat-markdown .artifact[data-collapsed="true"] > pre { height: calc(var(--code-collapse-lines, 15) * 1.6em + 2 * var(--space-md)); max-height: none; transition: height var(--duration-quick) var(--ease-leave); }
+.ui-answer .chat-markdown .artifact > pre { height: auto; overflow-y: hidden; interpolate-size: allow-keywords; --move: var(--duration-gentle); --move-ease: var(--ease-arrive); transition: height var(--move) var(--move-ease); }
+.ui-answer .chat-markdown .artifact[data-collapsed="true"] > pre { height: calc(var(--code-collapse-lines, 15) * 1.6em + 2 * var(--space-md)); max-height: none; --move: var(--duration-quick); --move-ease: var(--ease-leave); }
 /* Its numbers as wide as the last one (two digits past nine), so the language and the numbers start together. */
 .ui-answer .chat-markdown .artifact .code-line::before { width: 2ch; margin-right: var(--space-lg); }
 .ui-answer .chat-markdown .artifact[data-lines="1"] .code-line::before, .ui-answer .chat-markdown .artifact[data-lines="2"] .code-line::before, .ui-answer .chat-markdown .artifact[data-lines="3"] .code-line::before, .ui-answer .chat-markdown .artifact[data-lines="4"] .code-line::before, .ui-answer .chat-markdown .artifact[data-lines="5"] .code-line::before, .ui-answer .chat-markdown .artifact[data-lines="6"] .code-line::before, .ui-answer .chat-markdown .artifact[data-lines="7"] .code-line::before, .ui-answer .chat-markdown .artifact[data-lines="8"] .code-line::before, .ui-answer .chat-markdown .artifact[data-lines="9"] .code-line::before { width: 1ch; }
