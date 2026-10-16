@@ -2,7 +2,7 @@ import { ArrowDownIcon, PanelLeftIcon, MessageSquarePlusIcon, EllipsisIcon, Came
 import { createSignal, For, onCleanup, onMount, Show, type JSX } from "solid-js";
 import { SquareIcon, Undo2Icon, DeleteIcon, ChevronLeftIcon, TextCursorInputIcon } from "lucide-solid";
 import { PanelRightIcon, ClipboardCopyIcon, Columns2Icon, CopyIcon, FolderIcon, FolderInputIcon, LayoutDashboardIcon, MenuIcon, MonitorIcon, PaperclipIcon, PencilIcon, PinIcon, PlusIcon, QrCodeIcon, RefreshCwIcon, SearchIcon, ShareIcon, ShieldCheckIcon, SquarePenIcon, TerminalIcon, Trash2Icon } from "lucide-solid";
-import { type Motion, Disclosure, Transcript, Message, Turn, TraceHeader, Trail, Step, Answer, CodeBlock, CopyButton, MessageFoot, PhoneComposer, type VoiceMode, Toast, Toaster, SettingRecorder, Field, Leader, Crumbs, Spotlight, OverlayHead, Match, Choices, OverlayBar, OverlayHints, OverlayList, OverlayPage, OverlayRail, OverlaySplit, Glance, GlanceHead, GlancePrompt, GlanceTurn, GlanceAnswer, GlanceEmpty, RiderButton, Overlay, Scrim, SettingGroup, SettingLine, SettingValue, SettingLink, SettingNote, SettingDetails, SettingWide, SettingLoading, Progress, Keycap, NavGroup, NavRow, Segmented, SelectTrigger, Bubble, Button, Card, Chip, Choice, ComposerField, DesktopComposer, Line, TextArea, Rider, RiderActions, RiderTitle, Toolbar, Frost, Input, Item, Menu, PillButton, PillField, PillGroup, PillSwitch, PillWave, HeadingSection, SearchSection, Section, Slider } from "@/components/ui";
+import { type Motion, Disclosure, Transcript, Message, Turn, TraceHeader, Trail, Step, Answer, CodeBlock, CopyButton, MessageFoot, PhoneComposer, PHONE_COMPOSER_STATES, type PhonePart, type VoiceMode, Toast, Toaster, SettingRecorder, Field, Leader, Crumbs, Spotlight, OverlayHead, Match, Choices, OverlayBar, OverlayHints, OverlayList, OverlayPage, OverlayRail, OverlaySplit, Glance, GlanceHead, GlancePrompt, GlanceTurn, GlanceAnswer, GlanceEmpty, RiderButton, Overlay, Scrim, SettingGroup, SettingLine, SettingValue, SettingLink, SettingNote, SettingDetails, SettingWide, SettingLoading, Progress, Keycap, NavGroup, NavRow, Segmented, SelectTrigger, Bubble, Button, Card, Chip, Choice, ComposerField, DesktopComposer, Line, TextArea, Rider, RiderActions, RiderTitle, Toolbar, Frost, Input, Item, Menu, PillButton, PillField, PillGroup, PillSwitch, PillWave, HeadingSection, SearchSection, Section, Slider } from "@/components/ui";
 import { Switch } from "../client/settings/settings-controls";
 import { HarnessMark } from "../client/harness-brand";
 import { PlaceGlyph } from "../client/chat/place-picker";
@@ -123,6 +123,9 @@ const PHONE_PARTS: [string, string, string][] = [
   ["Dictate", "PillButton · stretch aura", "the mic: fills the row's rest; starts listening"],
   ["Send", "PillButton · voice folded", "the arrow: shown with a draft; Stop and send while listening"],
 ];
+const PART_NAMES: Record<PhonePart, string> = { field: "Field", pills: "Options · Camera · Keyboard · Scroll to latest", edit: "Edit pills", track: "Voice track", captions: "Captions", orb: "Dictate as an orb pill" };
+const StateTable = () => <table class="g-state-table"><thead><tr><th />{(Object.keys(PHONE_COMPOSER_STATES) as (keyof typeof PHONE_COMPOSER_STATES)[]).map((state) => <th>{state}</th>)}</tr></thead>
+  <tbody>{(Object.keys(PART_NAMES) as PhonePart[]).map((part) => <tr><th>{PART_NAMES[part]}</th>{Object.values(PHONE_COMPOSER_STATES).map((shown) => <td>{(shown as readonly PhonePart[]).includes(part) ? "●" : ""}</td>)}</tr>)}</tbody></table>;
 const PHONE_VOICE_PARTS: [string, string, string][] = [
   ["Captions", "PhoneComposer captions", "the newest three lines heard, on the page's ground"],
   ["Voice track", "PillWave", "the waveform, from the row's start to the mic; tap to stop"],
@@ -712,6 +715,9 @@ export const libraryFamilies: Family[] = [
     { title: "Anatomy", note: "an assembly, not a base component: Pills and foundations (Aura, icons, type), each part named for what it does", layout: "phone", atoms: [
       lib("phone-anatomy", "Anatomy", "phone", "pill", "PhoneComposer > edit · field · row (the mode's pills)", () => <div class="g-anatomy"><div class="g-phone-composer">{phoneComposer("typing", { draft: true, away: true, editing: true })}</div><PartList parts={PHONE_PARTS} /></div>, "row"),
       lib("phone-anatomy-listening", "Anatomy · listening", "phone", "pill", "PhoneComposer mode=listening > captions · row (track · Dictate · Stop and send)", () => <div class="g-anatomy"><div class="g-phone-composer">{phoneComposer("listening")}</div><PartList parts={PHONE_VOICE_PARTS} /></div>, "row"),
+    ] },
+    { title: "State table", note: "what each state shows (PHONE_COMPOSER_STATES, rendered as data-show). Every move between two states follows from it and three moves, none depending on where it came from: in (room at once, fade in over gentle, from the first frame), out (fade over quick from the first frame; room after, or a row pill slides under its neighbour at its own size), in place (the mic's shape, the track's wipe, over gentle). Declared waits: the captions come in after the quick duration. The motion check reads the same table", layout: "phone", atoms: [
+      lib("phone-table", "State table", "phone", "pill", "PHONE_COMPOSER_STATES", () => <StateTable />, "row"),
     ] },
     { title: "Forms", note: "each mode, and the field's edit pills", layout: "phone", atoms: [
       lib("phone-idle", "Idle", "phone", "pill", "PhoneComposer mode=idle: the row alone; nothing to send, so Send is folded", () => <div class="g-phone-composer">{phoneComposer("idle")}</div>),
