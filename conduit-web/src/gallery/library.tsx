@@ -111,6 +111,24 @@ const phoneComposer = (mode: Live<VoiceMode>, opts: { draft?: Live<boolean>; awa
     <PillButton voice folded={m() !== "listening" && !draft()} {...icon(m() === "listening" ? "Stop and send" : "Send", <ArrowUpIcon />)} />
   </PhoneComposer>;
 };
+/** A part of an assembly: what it is called, what it is built from, what it does. */
+const PartList = (props: { parts: [string, string, string][] }) => <dl class="g-parts"><For each={props.parts}>{([name, from, does]) => <><dt>{name}<small>{from}</small></dt><dd>{does}</dd></>}</For></dl>;
+const PHONE_PARTS: [string, string, string][] = [
+  ["Edit pills", "PillButtons in edit", "Undo · Delete word · Previous word · Next word · End of draft: over the field while its cursor is moved by hand"],
+  ["Field", "PillField", "the draft; shown while typing"],
+  ["Options", "PillButton · open", "+: opens the options menu (attach, model, ...); stays lit while the rest dims"],
+  ["Camera", "PillButton", "takes a photo to attach"],
+  ["Keyboard", "PillButton", "opens or closes the keyboard (Type a message / Close the keyboard)"],
+  ["Scroll to latest", "PillButton · folded", "shown only when scrolled up"],
+  ["Dictate", "PillButton · stretch aura", "the mic: fills the row's rest; starts listening"],
+  ["Send", "PillButton · voice folded", "the arrow: shown with a draft; Stop and send while listening"],
+];
+const PHONE_VOICE_PARTS: [string, string, string][] = [
+  ["Captions", "PhoneComposer captions", "the newest three lines heard, on the page's ground"],
+  ["Voice track", "PillWave", "the waveform, from the row's start to the mic; tap to stop"],
+  ["Dictate", "PillButton · Aura", "shrunk to an orb pill; its Aura follows the voice level"],
+  ["Stop and send", "PillButton · voice", "stops and sends what was heard"],
+];
 const thumb = "data:image/svg+xml," + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><defs><linearGradient id="g" x2="1" y2="1"><stop offset="0" stop-color="#6b8afd"/><stop offset="1" stop-color="#d97706"/></linearGradient></defs><rect width="48" height="48" fill="url(#g)"/></svg>');
 /** The app's riders, as components v2 builds them. */
 const attachments = (motion?: Motion) => <Rider label="Attachments" layout="strip" motion={motion}><div class="ui-chips"><Chip name="photo.png" image={thumb} /><Chip name="notes.txt" detail="2.1 KB" icon={<FileTextIcon />} /><Chip name="lorem_ipsum.txt" detail="412 bytes" icon={<FileTextIcon />} status="uploading" progress={60} /></div>
@@ -691,6 +709,10 @@ export const libraryFamilies: Family[] = [
     ] },
   ] },
   { title: "PhoneComposer", note: "the phone's composer: Pills on the page, a PillField over a row of PillButtons, one gap apart. Its mode says what shows, and nothing reflows between them: idle (the row), typing (the field above it), listening (the voice track and captions). Circles that come and go fold (Scroll to latest, Stop and send, Send)", groups: [
+    { title: "Anatomy", note: "an assembly, not a base component: Pills and foundations (Aura, icons, type), each part named for what it does", layout: "phone", atoms: [
+      lib("phone-anatomy", "Anatomy", "phone", "pill", "PhoneComposer > edit · field · row (the mode's pills)", () => <div class="g-anatomy g-phone-composer">{phoneComposer("typing", { draft: true, away: true, editing: true })}<PartList parts={PHONE_PARTS} /></div>),
+      lib("phone-anatomy-listening", "Anatomy · listening", "phone", "pill", "PhoneComposer mode=listening > captions · row (track · Dictate · Stop and send)", () => <div class="g-anatomy g-phone-composer">{phoneComposer("listening")}<PartList parts={PHONE_VOICE_PARTS} /></div>),
+    ] },
     { title: "Forms", note: "each mode, and the field's edit pills", layout: "phone", atoms: [
       lib("phone-idle", "Idle", "phone", "pill", "PhoneComposer mode=idle: the row alone; nothing to send, so Send is folded", () => <div class="g-phone-composer">{phoneComposer("idle")}</div>),
       lib("phone-typing", "Typing", "phone", "pill", "mode=typing: the field above the row, Send beside the mic", () => <div class="g-phone-composer">{phoneComposer("typing", { draft: true })}</div>),
