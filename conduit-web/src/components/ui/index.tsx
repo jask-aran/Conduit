@@ -170,7 +170,12 @@ export function PhoneComposer(props: { mode: VoiceMode; layout?: "bar" | "surfac
   const [captions, setCaptions] = createSignal(props.mode === "listening");
   const [from, setFrom] = createSignal<VoiceMode>();
   let captionsBox: HTMLDivElement | undefined, fieldBox!: HTMLDivElement;
+  // from holds only for the move (its longest: a quick wait then a gentle move), so later folds -- Send as a draft is
+  // cleared -- take their own timing, not the stop's.
+  let settled: ReturnType<typeof setTimeout> | undefined;
+  onCleanup(() => clearTimeout(settled));
   createEffect(on(() => props.mode, (mode, prev) => { if (mode === prev) return; if (mode === "listening") setCaptions(true); setFrom(prev);
+    clearTimeout(settled); settled = setTimeout(() => setFrom(undefined), 400);
     // Back to typing, the field takes its room at once over the captions' spot: they are hidden under it from the
     // first frame (clipped to above it), so its text and theirs are never seen together as one fades for the other.
     if (mode === "typing" && prev === "listening" && captionsBox) captionsBox.style.setProperty("--under-field", `${fieldBox.offsetHeight}px`); }));
