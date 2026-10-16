@@ -315,11 +315,15 @@ export function DesktopComposer(props: { riders?: JSX.Element; takeover?: JSX.El
 export const ComposerField = (props: { children: JSX.Element }) => <div class="ui-composer-field">{props.children}</div>;
 /** A row of controls: start (leading) and end (trailing) groups. primary: the end's one slot (Send, or Stop while
  *  the agent works), each action scaling in where the last was; aside: what steps in beside it (Stop, when a draft
- *  is typed during a turn). */
+ *  is typed during a turn) -- it folds as a Pill does: its room opens, then it fades in; going, it fades, then gives
+ *  the room back (it keeps what it last held while it goes), so its neighbours move rather than jump. */
 export function Toolbar(props: { start?: JSX.Element; end?: JSX.Element; aside?: JSX.Element; primary?: JSX.Element; class?: string }) {
   const aside = children(() => props.aside);
+  const [held, setHeld] = createSignal<JSX.Element>();
+  createEffect(() => { const now = aside(); if (now) setHeld(() => now); });
   return <div class={cn("ui-toolbar", props.class)}><div class="ui-toolbar-start">{props.start}</div><div class="ui-toolbar-end">{props.end}
-    <Show when={aside()}><span class="ui-toolbar-aside">{aside()}</span></Show><Show when={props.primary !== undefined}><span class="ui-toolbar-primary">{props.primary}</span></Show></div></div>;
+    <span ref={(el) => createEffect(() => { el.inert = !aside(); })} class="ui-toolbar-aside" data-folded={aside() ? undefined : ""} aria-hidden={aside() ? undefined : "true"}><span>{held()}</span></span>
+    <Show when={props.primary !== undefined}><span class="ui-toolbar-primary">{props.primary}</span></Show></div></div>;
 }
 
 /*
