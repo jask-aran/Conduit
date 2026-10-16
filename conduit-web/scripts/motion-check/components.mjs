@@ -18,8 +18,12 @@ const PROBE = `window.__probe2 = (spec) => new Promise((res) => {
     for (const [as, bs] of spec.spots()) for (const a of as) for (const z of bs) { const ga = geo(a), gz = geo(z);
       const overlap = ga.x < gz.x + gz.w && gz.x < ga.x + ga.w && ga.y < gz.y + gz.h && gz.y < ga.y + ga.h;
       if (overlap && ga.o > .05 && gz.o > .05 && ga.w * ga.h > 0 && gz.w * gz.h > 0) bad.add("one spot: " + label(a) + " and " + label(z) + " both showing"); } };
-  sample(16.7); spec.act(); const t0 = performance.now(); let last = t0;
-  const tick = () => { const now = performance.now(); sample(now - last); last = now;
+  // 6: a drawn frost never fades through an ancestor (that ancestor would be its backdrop, so it blurs nothing).
+  const frost = () => { for (const e of document.querySelectorAll(".ui-frost")) { if (+getComputedStyle(e).opacity < .05 || !e.getClientRects().length || getComputedStyle(e).backdropFilter === "none") continue;
+    for (let n = e.parentElement; n && n !== document.body; n = n.parentElement) { const o = +getComputedStyle(n).opacity; if (o > .05 && o < .99) { bad.add("frost under a fade: " + label(e) + " in " + label(n)); break; } } } };
+  const sampleAll = (dt) => { sample(dt); frost(); };
+  sampleAll(16.7); spec.act(); const t0 = performance.now(); let last = t0;
+  const tick = () => { const now = performance.now(); sampleAll(now - last); last = now;
     if (now - t0 < (spec.ms || 600)) return requestAnimationFrame(tick);
     for (const [e, list] of hist) for (const k of ["x", "y", "w", "h"]) {
       const steps = list.slice(1).map(([g, dt], i) => [Math.abs(g[k] - list[i][0][k]), dt, g.o, list[i][0].o]);
