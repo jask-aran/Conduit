@@ -64,6 +64,9 @@
  *    seen squeezed.
  * 4. One spot, one thing: two parts that share a spot never show at once.
  * 5. A change is one move from its first frame; parts that answer it move with it, over its duration.
+ * 6. A frosted part fades itself, never through an ancestor: opacity under 1 on an ancestor makes that ancestor the
+ *    frost's backdrop, so it blurs nothing and its text and edge show bare until the fade ends. Whatever holds a frost
+ *    moves only its room; the frost and its contents fade together, as one.
  * Timing variables (each part sets its own -- they never inherit, so a parent's state cannot retime a child):
  * --move/--move-ease/--move-delay (geometry), --fade/--fade-ease/--fade-delay (opacity), --fold-delay (giving or
  * taking room), --hide-delay (visibility, once faded).
@@ -87,7 +90,7 @@
 @keyframes ui-slide { from { opacity: 0; transform: translateX(var(--slide, var(--space-md))); } }
 @media (prefers-reduced-motion: reduce) {
   :is(.ui-menu, .ui-card, .ui-toast, .ui-overlay, .ui-rider, .ui-chip, .ui-scrim, .ui-step, .ui-message, .ui-message-foot, .ui-rider-button):is([data-entering], [data-leaving]), .ui-toolbar-primary > *, .ui-toolbar-end > [aria-pressed="true"] { animation: none; }
-  .ui-disclosure-body, .ui-menu, .ui-composer-slot > .ui-composer-stack, .ui-toolbar-end > .ui-toolbar-aside { transition: none; }
+  .ui-disclosure-body, .ui-menu, .ui-composer-slot > .ui-composer-stack, .ui-composer-slot > .ui-composer-stack > *, .ui-toolbar-end > .ui-toolbar-aside { transition: none; }
 }
 /*
  * Scale: everything is drawn from a few numbers. A density gives its unit (12.8px on desktop, 16px on
@@ -252,13 +255,15 @@
 .ui-phone-edit { z-index: 4; }
 .ui-phone-row > .ui-pill { position: relative; z-index: 1; }
 /* 2. Timing variables: by default a part comes in -- its room at once, then it fades in. */
-.ui-phone-field, .ui-phone-edit > .ui-pill, .ui-voice-track { --fade: var(--duration-gentle); --fade-ease: var(--ease-arrive); --fade-delay: 0s; --fold-delay: 0s; }
+.ui-phone-field, .ui-phone-field > *, .ui-phone-edit > .ui-pill, .ui-voice-track { --fade: var(--duration-gentle); --fade-ease: var(--ease-arrive); --fade-delay: 0s; --fold-delay: 0s; }
 
-/* The field: its own row above the controls, fading in place. Folded (idle, listening) it fades out, then gives up its
-   room (max-height none to 0 is discrete: allow-discrete holds it until the fade is done). */
-.ui-phone-field { transition: opacity var(--fade) var(--fade-ease) var(--fade-delay), max-height 0s var(--fold-delay) allow-discrete, margin 0s var(--fold-delay); }
-.ui-phone-composer:not([data-mode="typing"]) > .ui-phone-field { max-height: 0; margin-bottom: calc(-1 * var(--space-md)); overflow: hidden; opacity: 0; pointer-events: none;
-  --fade: var(--duration-quick); --fade-ease: var(--ease-leave); --fold-delay: var(--duration-quick); }
+/* The field: its own row above the controls; its frost fades in place (6: the row holding it only gives its room).
+   Folded (idle, listening) it fades out, then the row gives up its room (max-height none to 0 is discrete:
+   allow-discrete holds it until the fade is done). */
+.ui-phone-field { transition: max-height 0s var(--fold-delay) allow-discrete, margin 0s var(--fold-delay); }
+.ui-phone-field > * { transition: opacity var(--fade) var(--fade-ease) var(--fade-delay), filter var(--duration-quick) var(--ease-change); }
+.ui-phone-composer:not([data-mode="typing"]) > .ui-phone-field { max-height: 0; margin-bottom: calc(-1 * var(--space-md)); overflow: hidden; pointer-events: none; --fold-delay: var(--duration-quick); }
+.ui-phone-composer:not([data-mode="typing"]) > .ui-phone-field > * { opacity: 0; --fade: var(--duration-quick); --fade-ease: var(--ease-leave); }
 
 /* The row's pills move on the Pill's own list (width, margin, flex-grow, opacity); the row's states set its variables. */
 /* Folding (Send with nothing to send, Scroll to latest at the latest): it fades, then gives its room back. */
@@ -340,7 +345,7 @@
 .ui-phone-edit > .ui-pill { opacity: 0; --fade: var(--duration-quick); --fade-ease: var(--ease-leave); transition: opacity var(--fade) var(--fade-ease); }
 .ui-phone-composer[data-editing] .ui-phone-edit > .ui-pill { opacity: 1; pointer-events: auto; --fade: var(--duration-gentle); --fade-ease: var(--ease-arrive); }
 @media (prefers-reduced-motion: reduce) {
-  .ui-pill[data-solo], .ui-aura, .ui-phone-field, .ui-pill-room, .ui-voice-track, .ui-voice-track > .ui-pill-wave, .ui-phone-edit > .ui-pill, .ui-phone-row > .ui-pill { transition: none !important; }
+  .ui-pill[data-solo], .ui-aura, .ui-phone-field, .ui-phone-field > *, .ui-pill-room, .ui-voice-track, .ui-voice-track > .ui-pill-wave, .ui-phone-edit > .ui-pill, .ui-phone-row > .ui-pill { transition: none !important; }
   .ui-voice-captions { animation: none; }
 }
 /* Field: text in the capsule; it grows with its lines. */
@@ -650,10 +655,16 @@
    Taken, the composer drops out of the pane but keeps its room, so its leaving moves nothing; it comes back gently. */
 .ui-composer-slot { display: grid; }
 .ui-composer-slot > * { grid-area: 1 / 1; align-self: end; min-width: 0; }
-.ui-composer-slot > .ui-composer-stack, .composer-stack > .composer-wrap.ui-composer-width { --move: var(--duration-gentle); --move-ease: var(--ease-arrive); --hide-delay: 0s;
-  transition: transform var(--move) var(--move-ease), opacity var(--move) var(--move-ease), visibility 0s var(--hide-delay); }
-.ui-composer-slot[data-taken] > .ui-composer-stack { visibility: hidden; opacity: 0; pointer-events: none; transform: translateY(calc(100% + var(--space-4xl)));
+/* The stack only moves; its frosts (riders, composer) fade themselves (6). */
+.ui-composer-slot > .ui-composer-stack { --move: var(--duration-gentle); --move-ease: var(--ease-arrive); --hide-delay: 0s;
+  transition: transform var(--move) var(--move-ease), visibility 0s var(--hide-delay); }
+.ui-composer-slot > .ui-composer-stack > * { --fade: var(--duration-gentle); --fade-ease: var(--ease-arrive);
+  transition: opacity var(--fade) var(--fade-ease); }
+.ui-composer-slot[data-taken] > .ui-composer-stack { visibility: hidden; pointer-events: none; transform: translateY(calc(100% + var(--space-4xl)));
   --move: var(--duration-quick); --move-ease: var(--ease-leave); --hide-delay: var(--duration-quick); }
+.ui-composer-slot[data-taken] > .ui-composer-stack > * { opacity: 0; --fade: var(--duration-quick); --fade-ease: var(--ease-leave); }
+.composer-stack > .composer-wrap.ui-composer-width { --move: var(--duration-gentle); --move-ease: var(--ease-arrive); --hide-delay: 0s;
+  transition: transform var(--move) var(--move-ease), visibility 0s var(--hide-delay); }
 /* Its width: the pane it sits in declares --composer-width on its root (a
    chat's centred column, a dashboard's full column); unset, its own default.
    It never shrinks past its pane: min(.., 100%), so no breakpoint is needed. */
@@ -816,7 +827,8 @@
    (the app's own rule loads later, at equal weight). */
 .composer-wrap.ui-composer-width { width: min(var(--composer-width, 47.5rem), 100%); }
 /* The app's takeover (chat-screen's composer-stack and its question-dock) on the slot's moves. */
-.composer-stack[data-question="true"] > .composer-wrap.ui-composer-width { transform: translateY(calc(100% + var(--space-4xl)));
+/* It slides out whole, never fading through its frosts (6). */
+.composer-stack[data-question="true"] > .composer-wrap.ui-composer-width { opacity: 1; transform: translateY(calc(100% + var(--space-4xl)));
   --move: var(--duration-quick); --move-ease: var(--ease-leave); --hide-delay: var(--duration-quick); }
 .question-dock > .ui-rider[data-layout="card"] { animation: ui-rise var(--duration-gentle) var(--ease-arrive) var(--duration-quick) backwards; }
 @media (prefers-reduced-motion: reduce) { .composer-stack > .composer-wrap.ui-composer-width { transition: none; } .question-dock > .ui-rider[data-layout="card"] { animation: none; } }

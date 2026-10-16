@@ -26,10 +26,12 @@ const PROBE = `window.__probe = (root, act) => new Promise((res) => {
     const now = performance.now(), dt = now - (window.__lastT ?? now - 16.7); window.__lastT = now;
     for (const e of parts()) { const g = geo(e), p = last.get(e) ?? first.get(e); frames.push([e, g, p, dt]); last.set(e, g); }
     // 1+4: the field's box is never under captions' words or ground: whatever is topmost at its centre is the field.
-    const f = pc.querySelector(".ui-phone-field"), fr = f.getBoundingClientRect();
+    const f = pc.querySelector(".ui-phone-field > *") ?? pc.querySelector(".ui-phone-field"), fr = f.getBoundingClientRect();
     if (fr.height > 0 && +getComputedStyle(f).opacity > .05) { const top = document.elementFromPoint(fr.left + fr.width * .8, fr.top + fr.height / 2); if (top && !f.contains(top) && pc.contains(top) && top.closest(".ui-voice-captions")) bad.add("layers: captions over the field"); }
     // 4: captions words visible inside the field's box
     const cw = pc.querySelector(".ui-voice-captions > *"); if (cw && fr.height > 0 && +getComputedStyle(f).opacity > .05) { const cr = cw.getBoundingClientRect(), clip = getComputedStyle(cw).clipPath; const visBottom = clip.startsWith("inset") ? cr.bottom - parseFloat(clip.split(" ")[2]) : cr.bottom; if (visBottom > fr.top + 2 && cr.top < fr.bottom && +getComputedStyle(cw.parentElement).opacity > .05) bad.add("one spot: caption words inside the field"); }
+    // 6: a drawn frost never fades through an ancestor (that ancestor would be its backdrop, so it blurs nothing).
+    for (const e of pc.querySelectorAll("*")) { const cs = getComputedStyle(e); if (cs.backdropFilter === "none" || +cs.opacity < .05 || !e.getClientRects().length) continue; for (let a = e.parentElement; a && a !== pc.parentElement; a = a.parentElement) { const o = +getComputedStyle(a).opacity; if (o > .05 && o < .99) { bad.add("frost under a fade: " + (e.getAttribute("aria-label") || e.className.split(" ")[0]) + " in " + a.className.split(" ")[0]); break; } } }
     if (performance.now() - t0 < 500) requestAnimationFrame(tick); else {
       // 2/5: no snaps -- per part, the biggest one-frame step is at most 45% of its whole change in width or x.
       const byPart = new Map(); for (const [e, g, p, dt] of frames) { if (!byPart.has(e)) byPart.set(e, []); byPart.get(e).push([g, p, dt]); }
