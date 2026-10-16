@@ -234,14 +234,13 @@
    inside, the newest at the right end. Its parent sets the width; in a track, it fills it. */
 .ui-pill-wave { display: flex; width: 100%; height: calc(var(--pill-size) - 2 * var(--space-xs)); align-items: center; justify-content: flex-end; gap: 2px; overflow: hidden; }
 .ui-pill-wave > i { flex: 0 0 2px; border-radius: var(--radius-round); background: currentColor; opacity: .78; }
-/* Captions: the newest three lines above the row, on the page's ground so the transcript never shows through. Their
-   lines sit where the field's do (its padding, border and line height), so the field and they swap with no jump. */
-.ui-voice-captions { --caption-end: calc((var(--pill-size) - var(--space-2xs) - 1.4em) / 2 + 1px); position: absolute; left: 0; right: 0; bottom: calc(var(--pill-size) + var(--space-md)); z-index: 1; display: flex; max-height: calc(3 * 1.4em + var(--space-lg) + var(--caption-end)); flex-direction: column; justify-content: flex-end; overflow: hidden;
-  background: linear-gradient(to bottom, transparent, var(--background) var(--space-xl)); padding: var(--space-lg) calc(var(--pill-field-pad) + 1px) var(--caption-end); color: var(--muted-foreground); font-size: var(--text-body); font-style: italic; line-height: 1.4; pointer-events: none; animation: ui-fade-in var(--duration-gentle) var(--ease-arrive) backwards; }
+/* Captions: the newest three lines above the row, a step smaller than the field's text, on the page's ground so the
+   transcript never shows through. */
+.ui-voice-captions { position: absolute; left: 0; right: 0; bottom: calc(var(--pill-size) + var(--space-md)); z-index: 1; display: flex; max-height: calc(3 * 1.45em + var(--space-lg)); flex-direction: column; justify-content: flex-end; overflow: hidden;
+  background: linear-gradient(to bottom, transparent, var(--background) var(--space-xl)); padding: var(--space-lg) var(--space-lg) var(--space-xs); color: var(--muted-foreground); font-size: calc(.875 * var(--u-type)); font-style: italic; line-height: 1.45; pointer-events: none; animation: ui-fade-in var(--duration-gentle) var(--ease-arrive) backwards; }
 .ui-voice-captions[data-leaving] { animation: ui-fade-out var(--duration-quick) var(--ease-leave) forwards; }
-/* The field and the captions share a spot, their lines on the same lines: from typing, the captions open once the
-   field has faded; back to typing, they crossfade in place -- the captions drop their ground at once, so the field
-   comes in under their fading words rather than behind a gap. */
+/* The field and the captions share a spot: from typing, the captions open once the field has faded; back to typing,
+   the captions fade away as the field comes in -- they drop their ground at once, so it never cuts across the field. */
 .ui-phone-composer[data-from="typing"] .ui-voice-captions:not([data-leaving]) { animation-delay: var(--duration-quick); }
 .ui-phone-composer[data-mode="typing"] .ui-voice-captions[data-leaving] { background: none; }
 /* Under a menu opened from one of its pills, the rest dims at once (as a menu under its submenu); the opener stays lit. */
