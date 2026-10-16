@@ -386,9 +386,14 @@ html, body { background: var(--frame, #08090a); color: var(--foreground); }
 .g-aura-round { width: 160px; height: 160px; border-radius: var(--radius-round); }
 .g-aura-row .ui-slider, .g-aura-row [role="slider"] { width: 220px; }
 
-.g-orb-cell { display: grid; justify-items: center; gap: var(--space-xs); text-align: center; font-size: 12px; }
-.g-orb-cell small { color: var(--muted-foreground); max-width: 220px; }
-.g-orb-sizes { display: flex; align-items: center; gap: var(--space-lg); margin-bottom: var(--space-sm); }
+.g-orb-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.g-orb-table :is(th, td) { padding: var(--space-sm) var(--space-md); border-bottom: 1px solid var(--border); text-align: left; vertical-align: middle; }
+.g-orb-table thead th { color: var(--muted-foreground); font-weight: 500; }
+.g-orb-table tbody th { font-weight: 600; white-space: nowrap; } .g-orb-table tbody th small { display: block; font-weight: 400; color: var(--muted-foreground); }
+.g-orb-table td:last-child { color: var(--muted-foreground); }
+.g-orb-how { max-width: 72ch; margin: 0; padding-left: 1.2em; font-size: 13px; line-height: 1.55; color: var(--muted-foreground); }
+.g-orb-how strong { color: var(--foreground); }
+.g-orb-sizes { display: flex; align-items: center; gap: var(--space-lg); }
 .g-orb-sizes > span { display: block; flex: none; }
 .g-orb-change { display: grid; justify-items: center; gap: var(--space-md); }
 .g-orb-big { display: block; width: 48px; height: 48px; }

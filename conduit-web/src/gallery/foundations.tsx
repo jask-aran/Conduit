@@ -3,6 +3,7 @@ import { ArrowUpIcon, CameraIcon, CopyIcon, FolderIcon, MicIcon, MonitorIcon, Pa
 import { Spinner } from "@/components/primitives";
 import { Aura, Orb, settledOrbRate, PLAIN_SPHERE, SPUTTERING_SPHERE, ORBITS_TRAILED, type ModeFrame, type OrbState, Slider, Segmented, Bubble, Button, Frost, HeadingSection, Input, Item, Keycap, Menu, NavRow, Overlay, OverlayBar, PillButton, PillField, PillGroup, Section, SelectTrigger, TextArea, Toolbar } from "@/components/ui";
 import { px, InUse, style, bg, fg, edge, rounding, tall, icon, FormTable, form, type Mark, type FormRow } from "./specs";
+import { resolvePreset } from "thinking-orbs/engine";
 import { lib, Levels, SegmentedCount, SegmentedIcons, SegmentedText, SwitchDemo, type Family } from "./library";
 import "katex/dist/katex.min.css";
 
@@ -420,23 +421,37 @@ function Scale() {
   </div>;
 }
 
-/* Orbs: each state the library draws and each frame drawn for Conduit, with what shows it. */
-const ORB_STATES: [OrbState, string][] = [
-  ["working", "Thinking: a turn with no tool running"], ["composing", "Writing: a turn writing its answer"], ["weaving", "Reading a file"],
-  ["searching", "Searching, fetching"], ["solving", "Running a command, a script, several tools, an unnamed tool"], ["connecting", "A turn starting"],
-  ["listening", "The mic, listening (PhoneComposer's Dictate)"], ["breathing", "the library's; not used"], ["shaping", "the library's; not used"],
+/* Orbs: one Orb, a list of animations, each a speed. */
+type OrbAnimation = { name: string; from: string; state: OrbState; frame?: ModeFrame; tint?: string; rate?: number; use: string };
+const ORB_ANIMATIONS: OrbAnimation[] = [
+  { name: "working", from: "thinking-orbs", state: "working", use: "Thinking: a turn with no tool running" },
+  { name: "composing", from: "thinking-orbs", state: "composing", use: "Writing: a turn writing its answer" },
+  { name: "weaving", from: "thinking-orbs", state: "weaving", use: "Reading a file" },
+  { name: "searching", from: "thinking-orbs", state: "searching", use: "Searching, fetching" },
+  { name: "solving", from: "thinking-orbs", state: "solving", use: "Running a command, a script, several tools, an unnamed tool" },
+  { name: "connecting", from: "thinking-orbs", state: "connecting", use: "A turn starting" },
+  { name: "listening", from: "thinking-orbs", state: "listening", use: "The mic, listening (PhoneComposer's Dictate)" },
+  { name: "ORBITS_TRAILED", from: "orb-frames", state: "working", frame: ORBITS_TRAILED, use: "Editing a file" },
+  { name: "PLAIN_SPHERE", from: "orb-frames", state: "working", frame: PLAIN_SPHERE, rate: settledOrbRate(false), use: "Done: a settled turn, turning slowly" },
+  { name: "SPUTTERING_SPHERE", from: "orb-frames", state: "working", frame: SPUTTERING_SPHERE, tint: "var(--destructive)", rate: settledOrbRate(true), use: "Interrupted or failed: the sphere sputtering, in --destructive" },
+  { name: "breathing", from: "thinking-orbs", state: "breathing", use: "not used" },
+  { name: "shaping", from: "thinking-orbs", state: "shaping", use: "not used" },
 ];
-const ORB_FRAMES: [string, ModeFrame, string, string | undefined, number | undefined][] = [
-  ["PLAIN_SPHERE", PLAIN_SPHERE, "Done: a settled turn, turning slowly", undefined, settledOrbRate(false)],
-  ["SPUTTERING_SPHERE", SPUTTERING_SPHERE, "Interrupted or failed: the sphere sputtering, in --destructive", "var(--destructive)", settledOrbRate(true)],
-  ["ORBITS_TRAILED", ORBITS_TRAILED, "Editing a file", undefined, undefined],
-];
-const OrbCell = (props: { children: JSX.Element; name: string; use: string }) => <div class="g-orb-cell"><div class="g-orb-sizes">{[16, 20, 32].map((size) => <span style={{ width: `${size}px`, height: `${size}px` }}>{props.children}</span>)}</div><strong>{props.name}</strong><small>{props.use}</small></div>;
-/** A state change as the Orb draws it: held a moment, then crossfaded, both still moving. */
+const speedOf = (a: OrbAnimation) => a.frame ? 1 : resolvePreset(a.state, 20).speed;
+const OrbAnimations = () => <table class="g-orb-table"><thead><tr><th>Animation</th><th>16 · 20 · 32px</th><th>Speed</th><th>Draws a second</th><th>Shows</th></tr></thead>
+  <tbody>{ORB_ANIMATIONS.map((a) => <tr><th>{a.name}<small>{a.from}</small></th>
+    <td><div class="g-orb-sizes">{[16, 20, 32].map((size) => <span style={{ width: `${size}px`, height: `${size}px` }}><Orb state={a.state} frame={a.frame} tint={a.tint} rate={a.rate} /></span>)}</div></td>
+    <td>{speedOf(a)}×</td><td>{a.rate ?? "every frame"}</td><td>{a.use}</td></tr>)}</tbody></table>;
+/** A change of animation as the Orb plays it: held a moment, then crossfaded, both still moving. */
 function OrbChange() {
-  const [state, setState] = createSignal<OrbState>("working");
-  return <div class="g-orb-change"><span class="g-orb-big"><Orb state={state()} /></span><div class="g-orb-picks">{ORB_STATES.slice(0, 7).map(([name]) => <Button variant={state() === name ? "secondary" : "ghost"} size="sm" onClick={() => setState(name)}>{name}</Button>)}</div></div>;
+  const [pick, setPick] = createSignal(ORB_ANIMATIONS[0]!);
+  return <div class="g-orb-change"><span class="g-orb-big"><Orb state={pick().state} frame={pick().frame} tint={pick().tint} rate={pick().rate} /></span><div class="g-orb-picks">{ORB_ANIMATIONS.slice(0, 10).map((a) => <Button variant={pick() === a ? "secondary" : "ghost"} size="sm" onClick={() => setPick(a)}>{a.name}</Button>)}</div></div>;
 }
+const OrbHow = () => <ol class="g-orb-how">
+  <li><strong>The renderer</strong>: thinking-orbs' <code>paintFrame</code> draws a list of dots (position, size, depth, brightness) on a canvas, near dots larger and brighter.</li>
+  <li><strong>An animation</strong>: a frame function, (size, seconds) to dots, computed live each draw. thinking-orbs ships one per state, each a preset with a speed (how fast its time runs) and a few shape options; Conduit's own (orb-frames) are built from the engine's pieces and run at 1×.</li>
+  <li><strong>The player</strong> (Orb): one frame loop for every orb on the page; draws only on screen with the tab visible, at its rate if it has one; fills its box at the screen's pixel density; tints its dots; a change is held 250ms then crossfaded over 200ms; paused (or reduced motion) it is one still frame.</li>
+</ol>;
 export const foundationFamilies: Family[] = [
   { title: "Type", rail: "Foundations", note: "the text, top to bottom: the face each role takes, with a switcher; the scale, each role as the library draws it and as it computes; then every face Conduit ships, and the system's own last", groups: [
     { title: "Faces", note: "a token per role; the first option is library.css's default, a pick applies across the gallery", atoms: ROLES.map((role) => lib(`font-role${role.token}`, role.title, "both", "font", `${role.token} · library.css :root`, () => <Role role={role} />)) },
@@ -481,12 +496,12 @@ export const foundationFamilies: Family[] = [
   ] }, { title: "Tokens", layout: "desktop", atoms: [
     lib("radius-tokens", "Radii", "both", "radius", "library.css --radius-*", () => <TokenTable groups={RADII} />, "row"),
   ] }] },
-  { title: "Orbs", rail: "Foundations", note: "Orb: a dotted orb whose motion says what it is doing, drawn by thinking-orbs' engine on Conduit's one frame loop. It fills its box (a turn's mark 20px, a preview's 16px); live it plays only on screen, a settled one draws fewer times a second (settledOrbRate). A change of state holds a moment, then crossfades. Aura (Pill) is the voice's colour field, not an orb", groups: [
-    { title: "States", note: "the library's, at 16, 20 and 32px, and what shows each", layout: "desktop", atoms: ORB_STATES.map(([state, use]) => lib(`orb-${state}`, state, "both", "orb", `<Orb state="${state}">`, () => <OrbCell name={state} use={use}><Orb state={state} /></OrbCell>)) },
-    { title: "Conduit's frames", note: "drawn in the engine's terms for Conduit (orb-frames), passed as frame", layout: "desktop", atoms: ORB_FRAMES.map(([name, frame, use, tint, rate]) => lib(`orb-${name}`, name, "both", "orb", `<Orb state="working" frame={${name}}${tint ? ` tint="${tint}"` : ""}${rate ? ` rate={${rate}}` : ""}>`, () => <OrbCell name={name} use={use}><Orb state="working" frame={frame} tint={tint} rate={rate} /></OrbCell>)) },
-    { title: "Behaviour", note: "a change of state, and a still one", layout: "desktop", atoms: [
-      lib("orb-change", "A change", "both", "orb", "Orb state: held 250ms, crossfaded over 200ms", () => <OrbChange />),
-      lib("orb-paused", "Paused", "both", "orb", "<Orb paused>: one still frame (and with reduced motion)", () => <OrbCell name="paused" use="one still frame; a change is not faded"><Orb state="working" paused /></OrbCell>),
+  { title: "Orbs", rail: "Foundations", note: "one Orb, a list of animations, each with a speed. Aura (Pill) is the voice's colour field, not an orb", groups: [
+    { title: "How it draws", layout: "desktop", atoms: [lib("orb-how", "How it draws", "both", "orb", "thinking-orbs engine · orb-frames · Orb", () => <OrbHow />, "row")] },
+    { title: "Animations", note: "every animation the Orb plays, live at the sizes it is used at (a preview's 16px, a turn's 20px)", layout: "desktop", atoms: [lib("orb-animations", "Animations", "both", "orb", "<Orb state frame? tint? rate?>", () => <OrbAnimations />, "row")] },
+    { title: "Playing", note: "a change, and a still one", layout: "desktop", atoms: [
+      lib("orb-change", "A change", "both", "orb", "held 250ms, crossfaded over 200ms", () => <OrbChange />),
+      lib("orb-paused", "Paused", "both", "orb", "<Orb paused>: one still frame (and with reduced motion); a change is not faded", () => <span class="g-orb-big"><Orb state="working" paused /></span>),
     ] },
   ] },
   { title: "Motion", rail: "Foundations", note: "motion explains a change of place (DESIGN Motion): quick out, gentle in; a change in place is quick and plain. Only transform and opacity, but for a fold the reader opens. The foundation is these tokens and four shapes (a fade in or out, a rise, a drop back the way it came); each piece owns its moves, shown on its own page under Motion. Reduced motion keeps the end state", groups: [{ title: "Tokens", note: "a dot runs each curve, and each duration at its curve", layout: "desktop", atoms: [
