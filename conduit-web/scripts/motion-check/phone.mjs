@@ -70,6 +70,7 @@ await step("listening → stop (2)", P.click("Stop voice dictation")); await pag
 await step("idle/typing → listening (3)", P.click("Start voice dictation")); await page.waitForTimeout(1500);
 await step("listening → stop (3)", P.click("Stop voice dictation"));
 // Gallery card: every pair of its states.
+await page.evaluate(() => [...document.querySelectorAll(".g-rail .ui-nav-row")].find((e) => e.textContent.trim() === "PhoneComposer")?.click()); await page.waitForTimeout(700); await page.evaluate(PROBE);
 const states = ["Idle", "Scrolled up", "Typing", "Typing a draft", "Editing", "Menu open", "Listening"];
 for (const layout of [0, 1]) for (const a of states) for (const z of states) { if (a === z) continue;
   const r = await page.evaluate(async ({ layout, a, z }) => {
