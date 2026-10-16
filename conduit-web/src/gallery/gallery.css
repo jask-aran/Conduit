@@ -398,4 +398,11 @@ html, body { background: var(--frame, #08090a); color: var(--foreground); }
 .g-orb-change { display: grid; justify-items: center; gap: var(--space-md); }
 .g-orb-big { display: block; width: 48px; height: 48px; }
 .g-orb-picks { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--space-2xs); }
-.g-live-turn { width: min(560px, 100%); min-height: 180px; }
+.g-live-turn { width: min(560px, 100%); min-height: 180px; align-content: start; }
+.g-trace-states { width: min(900px, 100%); border-collapse: collapse; font-size: 12px; }
+.g-trace-states :is(th, td) { padding: var(--space-sm) var(--space-md); border-bottom: 1px solid var(--border); text-align: left; vertical-align: middle; }
+.g-trace-states thead th { color: var(--muted-foreground); font-weight: 500; }
+.g-trace-states tbody th { width: 130px; font-weight: 600; white-space: nowrap; }
+.g-trace-states td:nth-child(2) { width: 260px; color: var(--muted-foreground); }
+.g-trace-states .g-trace-group { padding-top: var(--space-lg); color: var(--muted-foreground); font-weight: 500; text-transform: uppercase; letter-spacing: .06em; font-size: 10px; }
+.g-anatomy :is(.ui-trace-line, .ui-trace-latest, .ui-trail) { outline: 1px dashed #d99a2299; outline-offset: 1px; }

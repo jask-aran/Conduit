@@ -1,5 +1,5 @@
 import { ArrowDownIcon, PanelLeftIcon, MessageSquarePlusIcon, EllipsisIcon, CameraIcon, KeyboardIcon, MicIcon, ArrowUpIcon, ChevronDownIcon, CircleIcon, FileTextIcon, ClockIcon, Maximize2Icon, SendHorizontalIcon, XIcon, CheckIcon } from "lucide-solid";
-import { createSignal, For, onCleanup, onMount, Show, type JSX } from "solid-js";
+import { createSignal, For, Index, onCleanup, onMount, Show, type JSX } from "solid-js";
 import { LightbulbIcon, MessageSquareTextIcon, FilePenLineIcon, SquareTerminalIcon, CodeXmlIcon, WrenchIcon } from "lucide-solid";
 import { SquareIcon, Undo2Icon, DeleteIcon, ChevronLeftIcon, TextCursorInputIcon } from "lucide-solid";
 import { PanelRightIcon, ClipboardCopyIcon, Columns2Icon, CopyIcon, FolderIcon, FolderInputIcon, LayoutDashboardIcon, MenuIcon, MonitorIcon, PaperclipIcon, PencilIcon, PinIcon, PlusIcon, QrCodeIcon, RefreshCwIcon, SearchIcon, ShareIcon, ShieldCheckIcon, SquarePenIcon, TerminalIcon, Trash2Icon } from "lucide-solid";
@@ -436,31 +436,61 @@ const TRAIL_FORMS: FormRow[] = [
   </Trail></Fold></Trail>, "<Step><Trail nested=calls><Step state>", "planned .45 · earlier muted"),
   form("error", "a failed request in the trail", () => <Trail><TraceError time="16 Oct 2026, 22:18:04" facts={["Model: Muse Spark 1.3", "Provider: Meta", "Profile: Assistant"]} message="429 Too Many Requests: rate limit reached for this model." /></Trail>, "<TraceError time facts message>", "head --destructive · pre code face"),
 ];
-const TRACE_ASSEMBLED: FormRow[] = [
-  form("starting", "before anything of the turn has shown: connecting, counting, a line held for its first step", () => <Trace orb={<Orb state="connecting" />} status="Starting" time="02s" live />, '<Trace status="Starting" live>', "same spot, same height as the trace that replaces it"),
-  form("live", "running: what it is doing, its latest step; the trail open as steps arrive", () => <FoldTrace orb={<Orb state="weaving" />} status="Reading" time="12s" work="2 reads" latest="lorem_ipsum.txt" live><Trail><Step icon={<FileTextIcon />} verb="Read" subject="README.md" time="0.4s" /><Step state="running" verb="Reading" subject="lorem_ipsum.txt" /></Trail></FoldTrace>, "<Trace live>{trail}</Trace>", ""),
-  form("editing", "an edit running: the orbits trailed", () => <Trace orb={<Orb state="working" frame={ORBITS_TRAILED} />} status="Editing" time="31s" work="1 read" latest="lorem_ipsum.txt" live><Trail><Step state="running" verb="Editing" subject="lorem_ipsum.txt" /></Trail></Trace>, "", ""),
-  form("done", "settled, closed: the last thinking, or the last step", () => <FoldTrace initial={false} orb={orb(true)} status="Done" time="1m 00s" work="1 read, 1 edit, 1 command" latest="The second paragraph has four sentences; keep the first two"><Trail><Step icon={<FileTextIcon />} verb="Read" subject="lorem_ipsum.txt" time="0ms" /></Trail></FoldTrace>, "<Trace>", "the orb turns slowly"),
-  form("interrupted", "stopped: the orb sputters; what was running says Stopped", () => <FoldTrace orb={orb(false)} status="Interrupted" time="41s" work="2 commands" tone="failed" latest="Ran npm test"><Trail><Fold icon={<SquareTerminalIcon />} verb="Ran" subject="npm test" time="14s" state="failed"><StepOutput text="FAIL src/sum.test.ts" /></Fold><Step icon={<SquareTerminalIcon />} verb="Ran" subject="npm run build" state="stopped" /></Trail></FoldTrace>, 'tone="failed"', "the orb in --destructive"),
-  form("no trail", "no thinking, no tools: one line, nothing to open", () => <Trace orb={orb(true)} status="Done" time="3s" />, "<Trace> without children", "not a button"),
+/* Its states: every Status a trace can say, the orb it draws, and what its Latest line holds then. */
+type TraceState = { status: string; orb: () => JSX.Element; when: string; latest: string; tone?: "failed"; live?: boolean };
+const TRACE_STATES: { group: string; rows: TraceState[] }[] = [
+  { group: "Before anything has shown", rows: [
+    { status: "Starting", orb: () => <Orb state="connecting" />, when: "the prompt is sent", latest: "", live: true },
+  ] },
+  { group: "Running", rows: [
+    { status: "Thinking", orb: () => <Orb state="working" />, when: "between tools", latest: "The second paragraph has four sentences", live: true },
+    { status: "Writing", orb: () => <Orb state="composing" />, when: "the answer is streaming", latest: "Ran wc -c lorem_ipsum.txt", live: true },
+    { status: "Reading", orb: () => <Orb state="weaving" />, when: "a read is running", latest: "lorem_ipsum.txt", live: true },
+    { status: "Editing", orb: () => <Orb state="working" frame={ORBITS_TRAILED} />, when: "an edit is running", latest: "lorem_ipsum.txt", live: true },
+    { status: "Running", orb: () => <Orb state="solving" />, when: "a command is running", latest: "wc -c lorem_ipsum.txt", live: true },
+    { status: "Searching", orb: () => <Orb state="searching" />, when: "a search is running (Fetching: a fetch)", latest: "“lorem ipsum”", live: true },
+    { status: "Scripting tools", orb: () => <Orb state="solving" />, when: "a code-mode script is running", latest: "Reading lorem_ipsum.txt", live: true },
+    { status: "Using format", orb: () => <Orb state="solving" />, when: "any other tool, by its name (Calling a tool: not named yet)", latest: "lorem_ipsum.txt", live: true },
+    { status: "Running 3 tools", orb: () => <Orb state="solving" />, when: "several at once", latest: "npm test", live: true },
+  ] },
+  { group: "Settled", rows: [
+    { status: "Done", orb: () => orb(true), when: "it finished", latest: "The second paragraph has four sentences" },
+    { status: "Interrupted", orb: () => orb(false), when: "it was stopped", latest: "Ran npm test", tone: "failed" },
+    { status: "Failed", orb: () => orb(false), when: "the request failed", latest: "429 Too Many Requests", tone: "failed" },
+  ] },
 ];
-/** A turn played: it starts, steps arrive (each rising into the open trail), the time ticks, then it settles. */
+const TraceStates = () => <table class="g-trace-states"><thead><tr><th>Status</th><th>When</th><th>The trace</th></tr></thead>
+  <For each={TRACE_STATES}>{(group) => <tbody><tr><th colspan="3" class="g-trace-group">{group.group}</th></tr>
+    <For each={group.rows}>{(row) => <tr><th>{row.status}</th><td>{row.when}</td><td class="ui-read"><TraceHeader orb={row.orb()} status={row.status} time={row.live ? "12s" : "1m 00s"} work={row.status === "Starting" ? undefined : "1 read, 1 edit"} latest={row.latest || undefined} live={row.live} tone={row.tone} opens={row.status !== "Starting"} /></td></tr>}</For></tbody>}</For></table>;
+/** A turn played, a second a beat: its Status, Work and Latest line follow the app's rules -- a running tool's Latest
+ * is what it acts on, a finished one its past tense, thinking its summary; settled, the last thinking. */
 function LiveTurn() {
-  const SCRIPT: { at: number; step: StepProps & { key: string } }[] = [
-    { at: 1, step: { key: "t", icon: <LightbulbIcon />, summary: "The second paragraph has four sentences" } },
-    { at: 2, step: { key: "r", icon: <FileTextIcon />, verb: "Read", subject: "lorem_ipsum.txt", time: "0.4s" } },
-    { at: 4, step: { key: "e", icon: <FilePenLineIcon />, verb: "Edited", subject: "lorem_ipsum.txt", time: "1.1s" } },
-    { at: 6, step: { key: "c", icon: <SquareTerminalIcon />, verb: "Ran", subject: "wc -c lorem_ipsum.txt", time: "0ms" } },
+  type Beat = { status: string; orb: () => JSX.Element; latest?: string; work?: string; steps: number; running?: boolean };
+  const T = "The second paragraph has four sentences";
+  const BEATS: Beat[] = [
+    { status: "Starting", orb: () => <Orb state="connecting" />, steps: 0 },
+    { status: "Thinking", orb: () => <Orb state="working" />, latest: T, steps: 1 },
+    { status: "Reading", orb: () => <Orb state="weaving" />, latest: "lorem_ipsum.txt", work: "1 read", steps: 2, running: true },
+    { status: "Thinking", orb: () => <Orb state="working" />, latest: "Read lorem_ipsum.txt", work: "1 read", steps: 2 },
+    { status: "Editing", orb: () => <Orb state="working" frame={ORBITS_TRAILED} />, latest: "lorem_ipsum.txt", work: "1 read, 1 edit", steps: 3, running: true },
+    { status: "Thinking", orb: () => <Orb state="working" />, latest: "Edited lorem_ipsum.txt", work: "1 read, 1 edit", steps: 3 },
+    { status: "Running", orb: () => <Orb state="solving" />, latest: "wc -c lorem_ipsum.txt", work: "1 read, 1 edit, 1 command", steps: 4, running: true },
+    { status: "Writing", orb: () => <Orb state="composing" />, latest: "Ran wc -c lorem_ipsum.txt", work: "1 read, 1 edit, 1 command", steps: 4 },
+    { status: "Done", orb: () => orb(true), latest: T, work: "1 read, 1 edit, 1 command", steps: 4 },
+  ];
+  const STEPS: [StepProps, StepProps][] = [
+    [{ icon: <LightbulbIcon />, summary: T }, { icon: <LightbulbIcon />, summary: T }],
+    [{ state: "running", verb: "Reading", subject: "lorem_ipsum.txt" }, { icon: <FileTextIcon />, verb: "Read", subject: "lorem_ipsum.txt", time: "0.4s" }],
+    [{ state: "running", verb: "Editing", subject: "lorem_ipsum.txt" }, { icon: <FilePenLineIcon />, verb: "Edited", subject: "lorem_ipsum.txt", time: "1.1s" }],
+    [{ state: "running", verb: "Running", subject: "wc -c lorem_ipsum.txt" }, { icon: <SquareTerminalIcon />, verb: "Ran", subject: "wc -c lorem_ipsum.txt", time: "0ms" }],
   ];
   const [t, setT] = createSignal(0), [open, setOpen] = createSignal(true);
-  const timer = setInterval(() => setT((v) => v >= 10 ? 0 : v + 1), 1000);
+  const timer = setInterval(() => setT((v) => v >= BEATS.length + 2 ? 0 : v + 1), 1000);
   onCleanup(() => clearInterval(timer));
-  const shown = () => SCRIPT.filter((s) => s.at <= t()), done = () => t() >= 8;
-  const current = () => SCRIPT.find((s) => s.at === t() || s.at === t() - 1);
-  const orbOf = () => done() ? orb(true) : t() === 0 ? <Orb state="connecting" /> : current()?.step.verb === "Edited" ? <Orb state="working" frame={ORBITS_TRAILED} /> : current()?.step.verb === "Ran" ? <Orb state="solving" /> : current()?.step.verb === "Read" ? <Orb state="weaving" /> : <Orb state="working" />;
-  return <Trace orb={orbOf()} status={done() ? "Done" : t() === 0 ? "Starting" : "Thinking"} time={`${String(Math.min(t(), 8)).padStart(2, "0")}s`} work={(() => { const n = shown().filter((s) => s.step.verb).length; return n ? `${n} ${n === 1 ? "step" : "steps"}` : undefined; })()}
-    latest={shown().at(-1)?.step.summary ?? (shown().at(-1) ? `${shown().at(-1)!.step.verb} ${shown().at(-1)!.step.subject}` : undefined)} live={!done()} open={open()} onToggle={() => setOpen(!open())}>
-    {shown().length ? <Trail><For each={shown()}>{(s) => <Step {...s.step} motion="entering" />}</For></Trail> : undefined}
+  const beat = () => BEATS[Math.min(t(), BEATS.length - 1)]!, done = () => beat().status === "Done";
+  return <Trace orb={beat().orb()} status={beat().status} time={done() ? "08s" : `${String(t()).padStart(2, "0")}s`} work={beat().work} latest={beat().latest} live={!done()}
+    open={open()} onToggle={() => setOpen(!open())}>
+    {beat().steps ? <Trail><Index each={STEPS.slice(0, beat().steps)}>{(pair, index) => <Step {...(beat().running && index === beat().steps - 1 ? pair()[0] : pair()[1])} motion="entering" />}</Index></Trail> : undefined}
   </Trace>;
 }
 /** Forms drawn as what is read: in the transcript's scope (its scale, a row a step under the body). */
@@ -786,15 +816,17 @@ export const libraryFamilies: Family[] = [
       ]} on={["phone"]} widths={["200px", "minmax(0, 1fr)"]} />, "row"),
     ] },
   ] },
-  { title: "Trace", rail: "Transcript", note: "a turn's work, folded under its head: a TraceHeader (the orb, Status · time · work, the latest line) over a Trail of Steps that unfolds as a Disclosure's body. A step opens in place to what it did; a run of one kind is a group, a script (code mode) its calls. Every piece is the library's; the app feeds it its turn", groups: [
-    { title: "In use", note: "a turn played: starting, steps rising into the open trail, settling; open and close it", layout: "desktop", atoms: [
-      lib("trace-live", "A turn", "both", "transcript", "Trace > TraceHeader · Trail > Step", () => <div class="ui-read g-read g-live-turn"><LiveTurn /></div>, "row"),
+  { title: "Trace", rail: "Transcript", note: "a turn's work, over its answer. Its head is two lines -- the Status line (Status · Time · Work) and the Latest line -- beside the Orb; opened, its Trail of Steps", groups: [
+    { title: "Anatomy", note: "each part named", layout: "desktop", atoms: [
+      lib("trace-anatomy", "Anatomy", "both", "transcript", "Trace > TraceHeader (Orb · Status line · Latest line) · Trail > Step", () => <div class="ui-read g-read g-live-turn g-anatomy">
+        <FoldTrace orb={orb(true)} status="Done" time="1m 00s" work="1 read, 1 edit, 1 command" latest="The second paragraph has four sentences"><Trail><Step icon={<LightbulbIcon />} summary="The second paragraph has four sentences" /><Step icon={<FileTextIcon />} verb="Read" subject="lorem_ipsum.txt" time="0ms" /><Step icon={<FilePenLineIcon />} verb="Edited" subject="lorem_ipsum.txt" time="1m 00s" /></Trail></FoldTrace>
+        <PartList parts={[["Orb", "Orb", "what it is doing, as motion (Foundations · Orbs)"], ["Status", "Status line", "one word for what it is doing or how it ended (States below)"], ["Time", "Status line", "from the prompt: counting while it runs, then how long it took"], ["Work", "Status line", "its tools counted by kind, most first"], ["Latest line", "second line", "running: what the running tool acts on, else the last step in the past tense, or the last thinking; settled: the last thinking"], ["Trail", "opened", "its steps, one line each"], ["Step", "a line of the Trail", "Icon · Verb · Subject · Flags · Time; opens to what it did (Steps below)"]]} />
+      </div>, "row"),
     ] },
-    { title: "The trace", note: "each state of a turn", layout: "desktop", atoms: [
-      lib("trace-forms", "Trace", "both", "transcript", "<Trace orb status time work latest live tone open onToggle>", () => <FormTable rows={reading(TRACE_ASSEMBLED)} on={["desktop", "phone"]} widths={["200px", "minmax(0, 1fr)", "360px"]} />, "row"),
-    ] },
-    { title: "The trail", note: "each line a step can be, open where it opens", layout: "desktop", atoms: [
-      lib("trace-trail", "Trail", "both", "transcript", "Trail · Step · StepOutput · StepProse · TraceError", () => <FormTable rows={reading(TRAIL_FORMS)} on={["desktop", "phone"]} widths={["200px", "minmax(0, 1fr)", "360px"]} />, "row"),
+    { title: "States", note: "every Status the Status line can say, the orb with it, and what the Latest line holds", layout: "desktop", atoms: [lib("trace-states", "States", "both", "transcript", "<TraceHeader status orb latest live tone>", () => <TraceStates />, "row")] },
+    { title: "A turn", note: "played, a second a beat; open and close it", layout: "desktop", atoms: [lib("trace-live", "A turn", "both", "transcript", "Trace > TraceHeader · Trail > Step", () => <div class="ui-read g-read g-live-turn"><LiveTurn /></div>, "row")] },
+    { title: "Steps", note: "every line the Trail can hold, open where it opens. Verb: present while running (Reading), past once done (Read)", layout: "desktop", atoms: [
+      lib("trace-trail", "Steps", "both", "transcript", "Step · StepOutput · StepProse · Trail nested · TraceError", () => <FormTable rows={reading(TRAIL_FORMS)} on={["desktop"]} widths={["220px", "minmax(0, 1fr)"]} />, "row"),
     ] },
   ] },
   { title: "CodeBlock", rail: "Transcript", note: "a fenced block in an answer: a box, its language and Copy, numbered lines; a long one folds. Not frosted: it reads in the transcript's units and scale", groups: [
