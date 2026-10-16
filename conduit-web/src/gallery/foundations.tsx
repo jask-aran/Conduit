@@ -1,7 +1,7 @@
 import { createSignal, For, onCleanup, onMount, Show, type JSX } from "solid-js";
 import { ArrowUpIcon, CameraIcon, CopyIcon, FolderIcon, MicIcon, MonitorIcon, PaperclipIcon, PlusIcon, SettingsIcon, ShareIcon, Trash2Icon } from "lucide-solid";
 import { Spinner } from "@/components/primitives";
-import { Aura, Slider, Segmented, Bubble, Button, Frost, HeadingSection, Input, Item, Keycap, Menu, NavRow, Overlay, OverlayBar, PillButton, PillField, PillGroup, Section, SelectTrigger, TextArea, Toolbar } from "@/components/ui";
+import { Aura, Orb, settledOrbRate, PLAIN_SPHERE, SPUTTERING_SPHERE, ORBITS_TRAILED, type ModeFrame, type OrbState, Slider, Segmented, Bubble, Button, Frost, HeadingSection, Input, Item, Keycap, Menu, NavRow, Overlay, OverlayBar, PillButton, PillField, PillGroup, Section, SelectTrigger, TextArea, Toolbar } from "@/components/ui";
 import { px, InUse, style, bg, fg, edge, rounding, tall, icon, FormTable, form, type Mark, type FormRow } from "./specs";
 import { lib, Levels, SegmentedCount, SegmentedIcons, SegmentedText, SwitchDemo, type Family } from "./library";
 import "katex/dist/katex.min.css";
@@ -420,6 +420,23 @@ function Scale() {
   </div>;
 }
 
+/* Orbs: each state the library draws and each frame drawn for Conduit, with what shows it. */
+const ORB_STATES: [OrbState, string][] = [
+  ["working", "Thinking: a turn with no tool running"], ["composing", "Writing: a turn writing its answer"], ["weaving", "Reading a file"],
+  ["searching", "Searching, fetching"], ["solving", "Running a command, a script, several tools, an unnamed tool"], ["connecting", "A turn starting"],
+  ["listening", "The mic, listening (PhoneComposer's Dictate)"], ["breathing", "the library's; not used"], ["shaping", "the library's; not used"],
+];
+const ORB_FRAMES: [string, ModeFrame, string, string | undefined, number | undefined][] = [
+  ["PLAIN_SPHERE", PLAIN_SPHERE, "Done: a settled turn, turning slowly", undefined, settledOrbRate(false)],
+  ["SPUTTERING_SPHERE", SPUTTERING_SPHERE, "Interrupted or failed: the sphere sputtering, in --destructive", "var(--destructive)", settledOrbRate(true)],
+  ["ORBITS_TRAILED", ORBITS_TRAILED, "Editing a file", undefined, undefined],
+];
+const OrbCell = (props: { children: JSX.Element; name: string; use: string }) => <div class="g-orb-cell"><div class="g-orb-sizes">{[16, 20, 32].map((size) => <span style={{ width: `${size}px`, height: `${size}px` }}>{props.children}</span>)}</div><strong>{props.name}</strong><small>{props.use}</small></div>;
+/** A state change as the Orb draws it: held a moment, then crossfaded, both still moving. */
+function OrbChange() {
+  const [state, setState] = createSignal<OrbState>("working");
+  return <div class="g-orb-change"><span class="g-orb-big"><Orb state={state()} /></span><div class="g-orb-picks">{ORB_STATES.slice(0, 7).map(([name]) => <Button variant={state() === name ? "secondary" : "ghost"} size="sm" onClick={() => setState(name)}>{name}</Button>)}</div></div>;
+}
 export const foundationFamilies: Family[] = [
   { title: "Type", rail: "Foundations", note: "the text, top to bottom: the face each role takes, with a switcher; the scale, each role as the library draws it and as it computes; then every face Conduit ships, and the system's own last", groups: [
     { title: "Faces", note: "a token per role; the first option is library.css's default, a pick applies across the gallery", atoms: ROLES.map((role) => lib(`font-role${role.token}`, role.title, "both", "font", `${role.token} · library.css :root`, () => <Role role={role} />)) },
@@ -464,6 +481,14 @@ export const foundationFamilies: Family[] = [
   ] }, { title: "Tokens", layout: "desktop", atoms: [
     lib("radius-tokens", "Radii", "both", "radius", "library.css --radius-*", () => <TokenTable groups={RADII} />, "row"),
   ] }] },
+  { title: "Orbs", rail: "Foundations", note: "Orb: a dotted orb whose motion says what it is doing, drawn by thinking-orbs' engine on Conduit's one frame loop. It fills its box (a turn's mark 20px, a preview's 16px); live it plays only on screen, a settled one draws fewer times a second (settledOrbRate). A change of state holds a moment, then crossfades. Aura (Pill) is the voice's colour field, not an orb", groups: [
+    { title: "States", note: "the library's, at 16, 20 and 32px, and what shows each", layout: "desktop", atoms: ORB_STATES.map(([state, use]) => lib(`orb-${state}`, state, "both", "orb", `<Orb state="${state}">`, () => <OrbCell name={state} use={use}><Orb state={state} /></OrbCell>)) },
+    { title: "Conduit's frames", note: "drawn in the engine's terms for Conduit (orb-frames), passed as frame", layout: "desktop", atoms: ORB_FRAMES.map(([name, frame, use, tint, rate]) => lib(`orb-${name}`, name, "both", "orb", `<Orb state="working" frame={${name}}${tint ? ` tint="${tint}"` : ""}${rate ? ` rate={${rate}}` : ""}>`, () => <OrbCell name={name} use={use}><Orb state="working" frame={frame} tint={tint} rate={rate} /></OrbCell>)) },
+    { title: "Behaviour", note: "a change of state, and a still one", layout: "desktop", atoms: [
+      lib("orb-change", "A change", "both", "orb", "Orb state: held 250ms, crossfaded over 200ms", () => <OrbChange />),
+      lib("orb-paused", "Paused", "both", "orb", "<Orb paused>: one still frame (and with reduced motion)", () => <OrbCell name="paused" use="one still frame; a change is not faded"><Orb state="working" paused /></OrbCell>),
+    ] },
+  ] },
   { title: "Motion", rail: "Foundations", note: "motion explains a change of place (DESIGN Motion): quick out, gentle in; a change in place is quick and plain. Only transform and opacity, but for a fold the reader opens. The foundation is these tokens and four shapes (a fade in or out, a rise, a drop back the way it came); each piece owns its moves, shown on its own page under Motion. Reduced motion keeps the end state", groups: [{ title: "Tokens", note: "a dot runs each curve, and each duration at its curve", layout: "desktop", atoms: [
     lib("motion-tokens", "Motion", "both", "motion", "library.css :root --ease-* · --duration-*", () => <TokenTable groups={MOTION} density={false} />, "row"),
   ] }, { title: "The page", note: "no piece's own: the page's regions fade on the tokens, and the composer never moves. The first open fades in everything but the composer; a route (a dashboard's send opening its chat) fades the reading out quick, then the new one in gentle. The app's motion-rules.ts takes these at the port", layout: "desktop", atoms: [
