@@ -1,4 +1,4 @@
-import { children, createEffect, createSignal, createUniqueId, For, mergeProps, on, onCleanup, onMount, Show, splitProps, type JSX } from "solid-js";
+import { children, createComputed, createEffect, createSignal, createUniqueId, For, mergeProps, on, onCleanup, onMount, Show, splitProps, type JSX } from "solid-js";
 import { CheckIcon, ChevronDownIcon, CopyIcon, ChevronLeftIcon, ChevronRightIcon, CircleCheckIcon, CircleXIcon, InfoIcon, SearchIcon, TriangleAlertIcon, XIcon } from "lucide-solid";
 export { ChevronDownIcon };
 import { cn } from "@/lib/utils";
@@ -176,7 +176,10 @@ export function PhoneComposer(props: { mode: VoiceMode; layout?: "bar" | "surfac
   const settle = (id: number) => requestAnimationFrame(() => void Promise.all(root.getAnimations({ subtree: true })
     .filter((animation) => animation.effect?.getTiming().iterations !== Infinity).map((animation) => animation.finished.catch(() => {})))
     .then(() => { if (move === id) setFrom(undefined); }));
-  createEffect(on(() => props.mode, (mode, prev) => { if (mode === prev) return; if (mode === "listening") setCaptions(true); setFrom(prev);
+  // from is set with the mode, before the DOM takes either, so a move's first style already has both: set after it, a
+  // move would start on the timing of a mode with no from and keep it.
+  createComputed(on(() => props.mode, (mode, prev) => { if (mode === prev) return; if (mode === "listening") setCaptions(true); setFrom(prev); }));
+  createEffect(on(() => props.mode, (mode, prev) => { if (mode === prev) return;
     if (prev !== undefined) settle(++move);
     // Back to typing, the field takes its room at once over the captions' spot: they are hidden under it from the
     // first frame (clipped to above it), so its text and theirs are never seen together as one fades for the other.
