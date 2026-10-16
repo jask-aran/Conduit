@@ -328,7 +328,7 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
     disposeRenderer();
     host.dataset.terminalReady = "false";
     const startedAt = performance.now();
-    const created = await createTerminalRenderer(host, { pasteFiles: spoolPastedImages });
+    const created = await createTerminalRenderer(host, { pasteFiles: spoolPastedImages, onClipboardError: setError });
     if (!host || activeProjectId !== props.projectId) {
       created.dispose();
       throw new Error("Terminal Workspace changed while the renderer was loading");
