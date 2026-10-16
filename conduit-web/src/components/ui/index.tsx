@@ -180,7 +180,10 @@ export function PhoneComposer(props: { mode: VoiceMode; layout?: "bar" | "surfac
     if (prev !== undefined) settle(++move);
     // Back to typing, the field takes its room at once over the captions' spot: they are hidden under it from the
     // first frame (clipped to above it), so its text and theirs are never seen together as one fades for the other.
-    if (mode === "typing" && prev === "listening" && captionsBox) captionsBox.style.setProperty("--under-field", `${fieldBox.offsetHeight}px`); }));
+    if (mode === "typing" && prev === "listening") underField(); }));
+  // The field's height, kept on the captions while they go (the field grows as the transcript lands in it).
+  const underField = () => captionsBox?.style.setProperty("--under-field", `${fieldBox.offsetHeight}px`);
+  onMount(() => { const observer = new ResizeObserver(() => { if (props.mode === "typing") underField(); }); observer.observe(fieldBox); onCleanup(() => observer.disconnect()); });
   const surface = () => props.layout === "surface";
   return <div ref={root} class="ui-phone-composer" data-mode={props.mode} data-from={from()} data-layout={surface() ? "surface" : undefined} data-editing={props.editing ? "" : undefined} data-under={props.under ? "" : undefined} style={props.mode === "listening" && props.level !== undefined ? { "--voice-level": String(props.level) } : undefined}>
     <Show when={edit()}><div class="ui-phone-edit" aria-hidden={props.editing ? undefined : "true"}>{edit()}</div></Show>
