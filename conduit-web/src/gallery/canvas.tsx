@@ -1,4 +1,4 @@
-import { createEffect, createSignal, For, Show, type JSX } from "solid-js";
+import { createEffect, createSignal, For, onCleanup, Show, type JSX } from "solid-js";
 import { render } from "solid-js/web";
 import "../client/project/dashboard.css";
 import "../client/chat/composer-geometry.css";
@@ -29,6 +29,7 @@ function applyTune(doc: Document, css: string) {
   doc.head.append(style);
   style.textContent = css;
 }
+const SPEEDS = [1, .5, .25, .1];
 const frames = () => Array.from(document.querySelectorAll<HTMLIFrameElement>("iframe"));
 const tuneFrame = (event: Event) => { const doc = (event.currentTarget as HTMLIFrameElement).contentDocument; if (doc) applyTune(doc, read()); };
 
@@ -111,6 +112,20 @@ function Canvas() {
     dispatchEvent(new Event("gallery:tune"));
   };
   applyTune(document, tune());
+  // Animation speed: every animation and transition here and in the previews plays at the picked rate (each new one
+  // is caught on the frame after it starts), so a move can be watched slowly. Remembered on this browser.
+  const [speed, setSpeed] = createSignal<number>((() => { try { const rate = Number(localStorage.getItem("gallery:speed")); return SPEEDS.includes(rate) ? rate : 1; } catch { return 1; } })());
+  createEffect(() => {
+    const rate = speed();
+    try { localStorage.setItem("gallery:speed", String(rate)); } catch { /* this session only */ }
+    let frame = 0;
+    const tick = () => {
+      for (const doc of [document, ...frames().map((iframe) => iframe.contentDocument)]) doc?.getAnimations().forEach((animation) => { if (animation.playbackRate !== rate) animation.playbackRate = rate; });
+      if (rate !== 1) frame = requestAnimationFrame(tick);
+    };
+    tick();
+    onCleanup(() => cancelAnimationFrame(frame));
+  });
   return <div class="g-canvas" data-preview={preview()}>
     {/* The rail is drawn as the sidebar is, with the library's NavGroups and NavRows, at the desktop's density. */}
     <nav class="g-rail" aria-label="Families" data-density="desktop">
@@ -123,6 +138,9 @@ function Canvas() {
       <div class="g-bar">
         <button type="button" aria-pressed={tuning()} onClick={() => setTuning(!tuning())}>Tune CSS</button>
         <Show when={tuning()}><button type="button" onClick={() => void navigator.clipboard.writeText(tune())}>Copy</button></Show>
+        <div class="g-toggle g-speed" role="group" aria-label="Animation speed"><span>Speed</span>
+          <For each={SPEEDS}>{(rate) => <button type="button" aria-pressed={speed() === rate} onClick={() => setSpeed(rate)}>{rate}×</button>}</For>
+        </div>
       </div>
       <Show when={tuning()}><textarea class="g-tune" spellcheck={false} value={tune()} onInput={(event) => update(event.currentTarget.value)}
         placeholder={".composer-surface-material[data-composer-surface=\"frosted-live\"] {\n  backdrop-filter: blur(30px);\n}"} /></Show>

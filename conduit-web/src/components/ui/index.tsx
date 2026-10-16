@@ -169,18 +169,20 @@ export function PhoneComposer(props: { mode: VoiceMode; layout?: "bar" | "surfac
   // where they share a spot: from typing, the captions wait for the field to fade; back to typing, the field waits for them.
   const [captions, setCaptions] = createSignal(props.mode === "listening");
   const [from, setFrom] = createSignal<VoiceMode>();
-  let captionsBox: HTMLDivElement | undefined, fieldBox!: HTMLDivElement;
-  // from holds only for the move (its longest: a quick wait then a gentle move), so later folds -- Send as a draft is
-  // cleared -- take their own timing, not the stop's.
-  let settled: ReturnType<typeof setTimeout> | undefined;
-  onCleanup(() => clearTimeout(settled));
+  let root!: HTMLDivElement, captionsBox: HTMLDivElement | undefined, fieldBox!: HTMLDivElement;
+  // from holds only until the move's animations have finished (at any playback rate), so later folds -- Send as a
+  // draft is cleared -- take their own timing, not the stop's.
+  let move = 0;
+  const settle = (id: number) => requestAnimationFrame(() => void Promise.all(root.getAnimations({ subtree: true })
+    .filter((animation) => animation.effect?.getTiming().iterations !== Infinity).map((animation) => animation.finished.catch(() => {})))
+    .then(() => { if (move === id) setFrom(undefined); }));
   createEffect(on(() => props.mode, (mode, prev) => { if (mode === prev) return; if (mode === "listening") setCaptions(true); setFrom(prev);
-    clearTimeout(settled); settled = setTimeout(() => setFrom(undefined), 400);
+    if (prev !== undefined) settle(++move);
     // Back to typing, the field takes its room at once over the captions' spot: they are hidden under it from the
     // first frame (clipped to above it), so its text and theirs are never seen together as one fades for the other.
     if (mode === "typing" && prev === "listening" && captionsBox) captionsBox.style.setProperty("--under-field", `${fieldBox.offsetHeight}px`); }));
   const surface = () => props.layout === "surface";
-  return <div class="ui-phone-composer" data-mode={props.mode} data-from={from()} data-layout={surface() ? "surface" : undefined} data-editing={props.editing ? "" : undefined} data-under={props.under ? "" : undefined} style={props.mode === "listening" && props.level !== undefined ? { "--voice-level": String(props.level) } : undefined}>
+  return <div ref={root} class="ui-phone-composer" data-mode={props.mode} data-from={from()} data-layout={surface() ? "surface" : undefined} data-editing={props.editing ? "" : undefined} data-under={props.under ? "" : undefined} style={props.mode === "listening" && props.level !== undefined ? { "--voice-level": String(props.level) } : undefined}>
     <Show when={edit()}><div class="ui-phone-edit" aria-hidden={props.editing ? undefined : "true"}>{edit()}</div></Show>
     <Show when={captions()}><div ref={captionsBox} class="ui-voice-captions" aria-live="polite" data-leaving={props.mode === "listening" ? undefined : ""} onAnimationEnd={(event) => { if (event.target === event.currentTarget && props.mode !== "listening") setCaptions(false); }}>{props.captions}</div></Show>
     <div ref={fieldBox} class="ui-phone-field">{props.field}</div>

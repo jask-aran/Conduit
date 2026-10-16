@@ -14,6 +14,8 @@ html, body { background: var(--frame, #08090a); color: var(--foreground); }
 .g-rail .ui-nav-row { cursor: pointer; }
 .g-bar button, .g-toggle button { border: 1px solid var(--border); border-radius: 6px; background: transparent; padding: 3px 9px; color: var(--foreground); font-size: 12px; }
 :is(.g-bar, .g-toggle) button[aria-pressed="true"] { background: var(--accent); }
+.g-speed { display: flex; align-items: center; gap: 4px; margin-left: auto; }
+.g-speed > span { color: var(--muted-foreground); margin-right: 4px; }
 .g-tune { display: block; width: calc(100% - 32px); height: 160px; margin: 8px 16px; border: 1px solid var(--border); border-radius: 6px; background: transparent; padding: 8px; color: var(--foreground); font: 11px ui-monospace, monospace; }
 /* One grid of equal cells on charcoal, each piece centred in its cell. */
 .g-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 1px; margin: 16px; background: var(--border); border: 1px solid var(--border); }
