@@ -104,8 +104,8 @@ const phoneComposer = (mode: Live<VoiceMode>, opts: { draft?: Live<boolean>; awa
     edit={<><PillButton {...icon("Undo", <Undo2Icon />)} /><PillButton {...icon("Delete word or selection", <DeleteIcon />)} /><PillButton {...icon("Previous word", <ChevronLeftIcon />)} /><PillButton {...icon("Next word", <ChevronRightIcon />)} /><PillButton {...icon("End of draft", <TextCursorInputIcon />)} /></>}>
     <PillButton open={under()} {...icon("Message options", <PlusIcon />)} />
     <PillButton {...icon("Take a photo", <CameraIcon />)} />
-    <PillButton folded={!read(opts.away ?? false)} {...icon("Scroll to latest", <ArrowDownIcon />)} />
     <PillButton {...icon(m() === "typing" ? "Close the keyboard" : "Type a message", <KeyboardIcon />)} />
+    <PillButton folded={!read(opts.away ?? false)} {...icon("Scroll to latest", <ArrowDownIcon />)} />
     <PillButton stretch aura {...icon("Dictate", <MicIcon />)} />
     {/* Send and Stop and send are one slot, one arrow: with a draft it stays put as listening starts and stops. */}
     <PillButton voice folded={m() !== "listening" && !draft()} {...icon(m() === "listening" ? "Stop and send" : "Send", <ArrowUpIcon />)} />
