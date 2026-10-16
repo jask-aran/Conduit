@@ -39,14 +39,17 @@ const PROBE = `window.__probe2 = (spec) => new Promise((res) => {
 const go = async (fam) => { await page.evaluate((fam) => [...document.querySelectorAll(".g-rail .ui-nav-row")].find((e) => e.textContent.trim() === fam)?.click(), fam); await page.waitForTimeout(700); await page.evaluate(PROBE); };
 const report = (name, r) => console.log(r.length ? "✗" : "✓", name, r.join("; "));
 try {
-  // Disclosure: close and open each, watching its body and the rows after it.
-  await go("Transcript");
-  const nd = await page.evaluate(() => document.querySelectorAll(".ui-disclosure").length);
-  for (let i = 0; i < nd; i++) for (const dir of ["close", "open"]) report(`Disclosure ${i} ${dir}`, await page.evaluate((i) => {
-    const d = document.querySelectorAll(".ui-disclosure")[i]; d.scrollIntoView({ block: "center" });
+  // Disclosure (and what folds as one: a Trace, an opening Step): close and open each, watching its body and the rows after it.
+  const HEAD = ":scope > :is(.ui-disclosure-header, .ui-trace, button.ui-step)";
+  for (const fam of ["Transcript", "Trace"]) {
+  await go(fam);
+  const nd = await page.evaluate((HEAD) => [...document.querySelectorAll(".ui-disclosure")].filter((d) => d.querySelector(HEAD) && !d.closest(".g-live-turn")).length, HEAD);
+  for (let i = 0; i < Math.min(nd, 24); i++) for (const dir of ["toggle", "back"]) report(`${fam} disclosure ${i} ${dir}`, await page.evaluate(({ i, HEAD }) => {
+    const d = [...document.querySelectorAll(".ui-disclosure")].filter((d) => d.querySelector(HEAD) && !d.closest(".g-live-turn"))[i]; d.scrollIntoView({ block: "center" });
     const after = () => { const n = d.nextElementSibling; return n ? [n] : []; };
-    return window.__probe2({ parts: () => [d.querySelector(".ui-disclosure-body"), d.querySelector(".ui-disclosure-header"), ...after()], spots: () => [], act: () => d.querySelector(".ui-disclosure-header").click() });
-  }, i));
+    return window.__probe2({ parts: () => [d.querySelector(":scope > .ui-disclosure-body"), d.querySelector(HEAD), ...after()], spots: () => [], act: () => d.querySelector(HEAD).click() });
+  }, { i, HEAD }));
+  }
   // CodeBlock: open and fold each foldable block, watching the pre and what follows the figure.
   await go("CodeBlock");
   const nc = await page.evaluate(() => [...document.querySelectorAll(".ui-code")].filter((c) => c.querySelector(".ui-code-more")).length);

@@ -6,6 +6,7 @@ import type { ToolCallStep, ToolItem, ToolKind } from "../api/contracts";
 import { httpUrl } from "../api/transport";
 import { authorizedFetch } from "../api/native-auth-client";
 import { Disclosure } from "./disclosure";
+import { Step, StepOutput, Trail } from "@/components/ui";
 
 const MAX_PREVIEW = 8_000;
 const commandTools = new Set(["bash", "shell", "exec", "terminal", "run_command"]);
@@ -141,4 +142,48 @@ export function ToolStep(props: { tool?: ToolItem; sessionId?: string | null; in
         </Show>
       </>} />;
   }}</Show>;
+}
+
+/* The gallery's previews draw a tool step from the library (Step, StepOutput, a code-mode script's calls as a
+   Trail of quiet Steps); the logic is ToolStep's. `open`, `onToggle` and `seen` (opened at least once: its body is
+   drawn from then on) are the trail's. */
+export function LibraryToolStep(props: { tool: ToolItem; sessionId?: string | null; settled?: boolean; open: boolean; seen: boolean; onToggle: () => void; motion?: "entering" }) {
+  const [loaded, setLoaded] = createSignal<unknown>(undefined);
+  const [loading, setLoading] = createSignal(false);
+  const [full, setFull] = createSignal(false);
+  const status = createMemo(() => props.tool.isError ? "failed" : props.tool.cancelled ? "stopped" : props.tool.done ? "done" : props.settled ? "stopped" : "running");
+  const output = createMemo(() => stringify(loaded() ?? props.tool.output ?? (props.tool.kind === "script" ? "" : props.tool.input ?? {})));
+  const preview = createMemo(() => {
+    const text = output();
+    if (full() || text.length <= MAX_PREVIEW) return text;
+    return commandTools.has(String(props.tool.name || "").toLowerCase()) ? text.slice(-MAX_PREVIEW) : text.slice(0, MAX_PREVIEW);
+  });
+  const load = async () => {
+    const current = props.tool;
+    if (!current.outputDeferred || loaded() !== undefined || loading() || !props.sessionId) return;
+    setLoading(true);
+    try {
+      const response = await authorizedFetch(httpUrl(`/v0/sessions/${encodeURIComponent(props.sessionId)}/tools/${encodeURIComponent(current.toolCallId)}`));
+      if (!response.ok) throw new Error("Could not load tool output");
+      setLoaded(((await response.json()) as { output?: unknown }).output ?? "");
+    } catch (error) { setLoaded((error as Error).message); }
+    finally { setLoading(false); }
+  };
+  const kind = () => props.tool.kind || "other";
+  const verb = () => `${VERBS[kind()][status() === "running" ? 0 : 1]}${kind() === "other" ? ` ${props.tool.name || "a tool"}` : ""}`;
+  const subject = () => summary(props.tool) || (kind() === "other" || kind() === "script" ? "" : props.tool.name || "");
+  return <Step icon={<Dynamic component={KIND_ICONS[kind()]} />} verb={verb()} subject={subject() || undefined} time={stepDuration(props.tool.timestamp, props.tool.completedAt) || undefined}
+    state={status() === "done" ? undefined : status() as "running" | "failed" | "stopped"} open={props.open} motion={props.motion}
+    onToggle={() => { if (!props.open) void load(); props.onToggle(); }}>
+    <Show when={props.seen} fallback={<span />}>
+      <Show when={props.tool.calls?.length}><Trail nested="calls"><Index each={props.tool.calls!}>{(call) => {
+        const callKind = () => call().kind in KIND_ICONS ? call().kind : "other";
+        const running = () => call().done === false;
+        return <Step icon={<Dynamic component={KIND_ICONS[callKind()]} />} verb={call().earlier ? `${call().earlier} earlier ${call().earlier === 1 ? "call" : "calls"}` : `${VERBS[callKind()][running() || call().planned ? 0 : 1]}${callKind() === "other" ? ` ${call().name}` : ""}`}
+          subject={call().earlier ? undefined : call().subject} state={call().earlier ? "earlier" : call().planned ? "planned" : running() ? "running" : call().isError ? "failed" : undefined}
+          flags={call().repeats ? ["repeats"] : undefined} time={call().durationMs != null ? stepDuration("1970-01-01T00:00:00.000Z", new Date(call().durationMs!).toISOString()) : undefined} />;
+      }}</Index></Trail></Show>
+      <Show when={loading() || preview()}><StepOutput text={loading() ? "Loading…" : preview()} hidden={!loading() && output().length > MAX_PREVIEW ? output().length - MAX_PREVIEW : undefined} full={full()} onToggleFull={() => setFull(!full())} /></Show>
+    </Show>
+  </Step>;
 }

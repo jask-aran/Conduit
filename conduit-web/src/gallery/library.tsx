@@ -1,8 +1,9 @@
 import { ArrowDownIcon, PanelLeftIcon, MessageSquarePlusIcon, EllipsisIcon, CameraIcon, KeyboardIcon, MicIcon, ArrowUpIcon, ChevronDownIcon, CircleIcon, FileTextIcon, ClockIcon, Maximize2Icon, SendHorizontalIcon, XIcon, CheckIcon } from "lucide-solid";
 import { createSignal, For, onCleanup, onMount, Show, type JSX } from "solid-js";
+import { LightbulbIcon, MessageSquareTextIcon, FilePenLineIcon, SquareTerminalIcon, CodeXmlIcon, WrenchIcon } from "lucide-solid";
 import { SquareIcon, Undo2Icon, DeleteIcon, ChevronLeftIcon, TextCursorInputIcon } from "lucide-solid";
 import { PanelRightIcon, ClipboardCopyIcon, Columns2Icon, CopyIcon, FolderIcon, FolderInputIcon, LayoutDashboardIcon, MenuIcon, MonitorIcon, PaperclipIcon, PencilIcon, PinIcon, PlusIcon, QrCodeIcon, RefreshCwIcon, SearchIcon, ShareIcon, ShieldCheckIcon, SquarePenIcon, TerminalIcon, Trash2Icon } from "lucide-solid";
-import { type Motion, Disclosure, Transcript, Message, Turn, TraceHeader, Trail, Step, Answer, CodeBlock, CopyButton, MessageFoot, Orb, settledOrbRate, PLAIN_SPHERE, SPUTTERING_SPHERE, PhoneComposer, PHONE_COMPOSER_STATES, type PhonePart, type VoiceMode, Toast, Toaster, SettingRecorder, Field, Leader, Crumbs, Spotlight, OverlayHead, Match, Choices, OverlayBar, OverlayHints, OverlayList, OverlayPage, OverlayRail, OverlaySplit, Glance, GlanceHead, GlancePrompt, GlanceTurn, GlanceAnswer, GlanceEmpty, RiderButton, Overlay, Scrim, SettingGroup, SettingLine, SettingValue, SettingLink, SettingNote, SettingDetails, SettingWide, SettingLoading, Progress, Keycap, NavGroup, NavRow, Segmented, SelectTrigger, Bubble, Button, Card, Chip, Choice, ComposerField, DesktopComposer, Line, TextArea, Rider, RiderActions, RiderTitle, Toolbar, Frost, Input, Item, Menu, PillButton, PillField, PillGroup, PillSwitch, PillWave, HeadingSection, SearchSection, Section, Slider } from "@/components/ui";
+import { type Motion, Disclosure, Transcript, Message, Turn, TraceHeader, Trail, Step, Answer, CodeBlock, CopyButton, MessageFoot, Orb, settledOrbRate, PLAIN_SPHERE, SPUTTERING_SPHERE, Trace, StepOutput, StepProse, TraceError, ORBITS_TRAILED, PhoneComposer, PHONE_COMPOSER_STATES, type PhonePart, type VoiceMode, Toast, Toaster, SettingRecorder, Field, Leader, Crumbs, Spotlight, OverlayHead, Match, Choices, OverlayBar, OverlayHints, OverlayList, OverlayPage, OverlayRail, OverlaySplit, Glance, GlanceHead, GlancePrompt, GlanceTurn, GlanceAnswer, GlanceEmpty, RiderButton, Overlay, Scrim, SettingGroup, SettingLine, SettingValue, SettingLink, SettingNote, SettingDetails, SettingWide, SettingLoading, Progress, Keycap, NavGroup, NavRow, Segmented, SelectTrigger, Bubble, Button, Card, Chip, Choice, ComposerField, DesktopComposer, Line, TextArea, Rider, RiderActions, RiderTitle, Toolbar, Frost, Input, Item, Menu, PillButton, PillField, PillGroup, PillSwitch, PillWave, HeadingSection, SearchSection, Section, Slider } from "@/components/ui";
 import { Switch } from "../client/settings/settings-controls";
 import { HarnessMark } from "../client/harness-brand";
 import { PlaceGlyph } from "../client/chat/place-picker";
@@ -412,6 +413,56 @@ function DisclosureDemo() {
   const [open, setOpen] = createSignal(true);
   return <Disclosure header={<span>The second paragraph has four sentences</span>} open={open()} onToggle={() => setOpen(!open())}><Answer html={"<p>Keep the first two; they carry the point.</p>"} /></Disclosure>;
 }
+/* Trace: every behaviour, from the library's pieces. A step that opens holds its own open state here (the app's
+   transcript holds it per tool). */
+type StepProps = Parameters<typeof Step>[0];
+const Fold = (props: StepProps & { initial?: boolean }) => { const [open, setOpen] = createSignal(props.initial ?? false); return <Step {...props} open={open()} onToggle={() => setOpen(!open())} />; };
+const FoldTrace = (props: Omit<Parameters<typeof Trace>[0], "open" | "onToggle"> & { initial?: boolean }) => { const [open, setOpen] = createSignal(props.initial ?? true); return <Trace {...props} open={open()} onToggle={() => setOpen(!open())} />; };
+const OUTPUT = Array.from({ length: 14 }, (_, i) => `drwxr-xr-x  ${String(i + 2).padStart(2)} jask  staff  ${448 + i * 32}  Oct 16 22:${String(10 + i).padStart(2, "0")}  dir-${i}`).join("\n");
+function TruncatedOutput() { const [full, setFull] = createSignal(false); const text = () => full() ? OUTPUT : OUTPUT.split("\n").slice(-5).join("\n"); return <StepOutput text={text()} hidden={OUTPUT.length - text().length || OUTPUT.length - OUTPUT.split("\n").slice(-5).join("\n").length} full={full()} onToggleFull={() => setFull(!full())} />; }
+const TRAIL_FORMS: FormRow[] = [
+  form("read", "a tool, settled: its kind's icon, past verb, subject, time; opens to its output", () => <Trail><Fold icon={<FileTextIcon />} verb="Read" subject="lorem_ipsum.txt" time="0ms" initial><StepOutput text={"Lorem ipsum dolor sit amet, consectetur adipiscing elit.\nSed do eiusmod tempor incididunt ut labore."} /></Fold></Trail>, "<Step icon verb subject time><StepOutput text /></Step>", "verb foreground · subject code face · time caption tabular"),
+  form("running", "present verb, a spinner for its icon", () => <Trail><Step state="running" verb="Running" subject="npm run build" /></Trail>, "state=running", "ui-spinner icon-sm"),
+  form("failed · stopped", "flagged at the end; failed tints its icon", () => <Trail><Fold icon={<SquareTerminalIcon />} verb="Ran" subject="npm test" time="14s" state="failed"><StepOutput text={"FAIL src/sum.test.ts\n  expected 3, received 4"} /></Fold><Step icon={<FilePenLineIcon />} verb="Edited" subject="src/sum.ts" state="stopped" /></Trail>, "state=failed · stopped", "flag strong · failed icon --destructive"),
+  form("long output", "cut to a preview (a command's end, a file's start), the rest a click away", () => <Trail><Fold icon={<SquareTerminalIcon />} verb="Ran" subject="ls -la" time="0.2s" initial><TruncatedOutput /></Fold></Trail>, "<StepOutput hidden full onToggleFull>", "scrolls past 20 units"),
+  form("thinking", "its summary (the last heading, or last sentence); opens to the whole text", () => <Trail><Fold icon={<LightbulbIcon />} summary="The second paragraph has four sentences; keep the first two" initial><StepProse><p>The second paragraph has four sentences; keep the first two, they carry the point. The rest repeats it.</p></StepProse></Fold></Trail>, "<Step summary><StepProse>", "prose a step quieter"),
+  form("narration", "what the agent said between steps", () => <Trail><Fold icon={<MessageSquareTextIcon />} summary="I'll shorten it and check the word count."><StepProse><p>I'll shorten it and check the word count.</p></StepProse></Fold></Trail>, "<Step summary>", ""),
+  form("not kept", "text a stop discarded: struck, flagged", () => <Trail><Fold icon={<LightbulbIcon />} summary="Then rename the file to lorem.txt" discarded><StepProse><p>Then rename the file to lorem.txt</p></StepProse></Fold></Trail>, "<Step discarded>", "struck · .55"),
+  form("hidden reasoning", "reasoning the provider kept: a note, said once, nothing to open", () => <Trail><Step note icon={<LightbulbIcon />} summary="Reasoning not shared by the provider" /></Trail>, "<Step note summary>", "italic · no cursor"),
+  form("group", "a run of one kind: how many, the steps on a rail under its icon", () => <Trail><Fold icon={<FileTextIcon />} verb="Read 3 files" time="1.2s" initial><Trail nested="group"><Fold icon={<FileTextIcon />} verb="Read" subject="src/main.tsx" time="0.4s"><StepOutput text="import { render } from 'solid-js/web';" /></Fold><Step icon={<FileTextIcon />} verb="Read" subject="src/app.tsx" time="0.3s" /><Step icon={<FileTextIcon />} verb="Read" subject="package.json" time="0.5s" /></Trail></Fold></Trail>, "<Step verb><Trail nested=group>", "rail --tint"),
+  form("code mode", "a script: the tools it calls, in order, as quiet rows -- planned, running, failed, earlier -- then its output", () => <Trail><Fold icon={<CodeXmlIcon />} verb="Scripting tools" state="running" initial><Trail nested="calls">
+    <Step state="earlier" verb="2 earlier calls" /><Step icon={<FileTextIcon />} verb="Read" subject="lorem_ipsum.txt" time="12ms" /><Step icon={<SquareTerminalIcon />} verb="Ran" subject="wc -w lorem_ipsum.txt" time="40ms" flags={["repeats"]} />
+    <Step icon={<SearchIcon />} verb="Searched" subject="“lorem”" state="failed" time="8ms" /><Step state="running" verb="Editing" subject="lorem_ipsum.txt" /><Step icon={<WrenchIcon />} verb="Using" subject="format" state="planned" />
+  </Trail></Fold></Trail>, "<Step><Trail nested=calls><Step state>", "planned .45 · earlier muted"),
+  form("error", "a failed request in the trail", () => <Trail><TraceError time="16 Oct 2026, 22:18:04" facts={["Model: Muse Spark 1.3", "Provider: Meta", "Profile: Assistant"]} message="429 Too Many Requests: rate limit reached for this model." /></Trail>, "<TraceError time facts message>", "head --destructive · pre code face"),
+];
+const TRACE_ASSEMBLED: FormRow[] = [
+  form("starting", "before anything of the turn has shown: connecting, counting, a line held for its first step", () => <Trace orb={<Orb state="connecting" />} status="Starting" time="02s" live />, '<Trace status="Starting" live>', "same spot, same height as the trace that replaces it"),
+  form("live", "running: what it is doing, its latest step; the trail open as steps arrive", () => <FoldTrace orb={<Orb state="weaving" />} status="Reading" time="12s" work="2 reads" latest="lorem_ipsum.txt" live><Trail><Step icon={<FileTextIcon />} verb="Read" subject="README.md" time="0.4s" /><Step state="running" verb="Reading" subject="lorem_ipsum.txt" /></Trail></FoldTrace>, "<Trace live>{trail}</Trace>", ""),
+  form("editing", "an edit running: the orbits trailed", () => <Trace orb={<Orb state="working" frame={ORBITS_TRAILED} />} status="Editing" time="31s" work="1 read" latest="lorem_ipsum.txt" live><Trail><Step state="running" verb="Editing" subject="lorem_ipsum.txt" /></Trail></Trace>, "", ""),
+  form("done", "settled, closed: the last thinking, or the last step", () => <FoldTrace initial={false} orb={orb(true)} status="Done" time="1m 00s" work="1 read, 1 edit, 1 command" latest="The second paragraph has four sentences; keep the first two"><Trail><Step icon={<FileTextIcon />} verb="Read" subject="lorem_ipsum.txt" time="0ms" /></Trail></FoldTrace>, "<Trace>", "the orb turns slowly"),
+  form("interrupted", "stopped: the orb sputters; what was running says Stopped", () => <FoldTrace orb={orb(false)} status="Interrupted" time="41s" work="2 commands" tone="failed" latest="Ran npm test"><Trail><Fold icon={<SquareTerminalIcon />} verb="Ran" subject="npm test" time="14s" state="failed"><StepOutput text="FAIL src/sum.test.ts" /></Fold><Step icon={<SquareTerminalIcon />} verb="Ran" subject="npm run build" state="stopped" /></Trail></FoldTrace>, 'tone="failed"', "the orb in --destructive"),
+  form("no trail", "no thinking, no tools: one line, nothing to open", () => <Trace orb={orb(true)} status="Done" time="3s" />, "<Trace> without children", "not a button"),
+];
+/** A turn played: it starts, steps arrive (each rising into the open trail), the time ticks, then it settles. */
+function LiveTurn() {
+  const SCRIPT: { at: number; step: StepProps & { key: string } }[] = [
+    { at: 1, step: { key: "t", icon: <LightbulbIcon />, summary: "The second paragraph has four sentences" } },
+    { at: 2, step: { key: "r", icon: <FileTextIcon />, verb: "Read", subject: "lorem_ipsum.txt", time: "0.4s" } },
+    { at: 4, step: { key: "e", icon: <FilePenLineIcon />, verb: "Edited", subject: "lorem_ipsum.txt", time: "1.1s" } },
+    { at: 6, step: { key: "c", icon: <SquareTerminalIcon />, verb: "Ran", subject: "wc -c lorem_ipsum.txt", time: "0ms" } },
+  ];
+  const [t, setT] = createSignal(0), [open, setOpen] = createSignal(true);
+  const timer = setInterval(() => setT((v) => v >= 10 ? 0 : v + 1), 1000);
+  onCleanup(() => clearInterval(timer));
+  const shown = () => SCRIPT.filter((s) => s.at <= t()), done = () => t() >= 8;
+  const current = () => SCRIPT.find((s) => s.at === t() || s.at === t() - 1);
+  const orbOf = () => done() ? orb(true) : t() === 0 ? <Orb state="connecting" /> : current()?.step.verb === "Edited" ? <Orb state="working" frame={ORBITS_TRAILED} /> : current()?.step.verb === "Ran" ? <Orb state="solving" /> : current()?.step.verb === "Read" ? <Orb state="weaving" /> : <Orb state="working" />;
+  return <Trace orb={orbOf()} status={done() ? "Done" : t() === 0 ? "Starting" : "Thinking"} time={`${String(Math.min(t(), 8)).padStart(2, "0")}s`} work={(() => { const n = shown().filter((s) => s.step.verb).length; return n ? `${n} ${n === 1 ? "step" : "steps"}` : undefined; })()}
+    latest={shown().at(-1)?.step.summary ?? (shown().at(-1) ? `${shown().at(-1)!.step.verb} ${shown().at(-1)!.step.subject}` : undefined)} live={!done()} open={open()} onToggle={() => setOpen(!open())}>
+    {shown().length ? <Trail><For each={shown()}>{(s) => <Step {...s.step} motion="entering" />}</For></Trail> : undefined}
+  </Trace>;
+}
 /** Forms drawn as what is read: in the transcript's scope (its scale, a row a step under the body). */
 const reading = (rows: FormRow[]) => rows.map((row) => ({ ...row, sample: () => <div class="ui-read g-read">{row.sample()}</div> }));
 const SNIPPET = "const total = items.reduce(\n  (sum, item) => sum + item.size, 0);";
@@ -733,6 +784,17 @@ export const libraryFamilies: Family[] = [
           { layout, draft: () => ["Typing a draft", "Editing", "Menu open"].includes(s()), away: () => s() === "Scrolled up", editing: () => s() === "Editing", under: () => s() === "Menu open" })}</div>}</States>,
           `<PhoneComposer mode${layout === "surface" ? ' layout="surface"' : ""}>`, "in: --duration-gentle · --ease-arrive · out: --duration-quick · --ease-leave")),
       ]} on={["phone"]} widths={["200px", "minmax(0, 1fr)"]} />, "row"),
+    ] },
+  ] },
+  { title: "Trace", rail: "Transcript", note: "a turn's work, folded under its head: a TraceHeader (the orb, Status · time · work, the latest line) over a Trail of Steps that unfolds as a Disclosure's body. A step opens in place to what it did; a run of one kind is a group, a script (code mode) its calls. Every piece is the library's; the app feeds it its turn", groups: [
+    { title: "In use", note: "a turn played: starting, steps rising into the open trail, settling; open and close it", layout: "desktop", atoms: [
+      lib("trace-live", "A turn", "both", "transcript", "Trace > TraceHeader · Trail > Step", () => <div class="ui-read g-read g-live-turn"><LiveTurn /></div>, "row"),
+    ] },
+    { title: "The trace", note: "each state of a turn", layout: "desktop", atoms: [
+      lib("trace-forms", "Trace", "both", "transcript", "<Trace orb status time work latest live tone open onToggle>", () => <FormTable rows={reading(TRACE_ASSEMBLED)} on={["desktop", "phone"]} widths={["200px", "minmax(0, 1fr)", "360px"]} />, "row"),
+    ] },
+    { title: "The trail", note: "each line a step can be, open where it opens", layout: "desktop", atoms: [
+      lib("trace-trail", "Trail", "both", "transcript", "Trail · Step · StepOutput · StepProse · TraceError", () => <FormTable rows={reading(TRAIL_FORMS)} on={["desktop", "phone"]} widths={["200px", "minmax(0, 1fr)", "360px"]} />, "row"),
     ] },
   ] },
   { title: "CodeBlock", rail: "Transcript", note: "a fenced block in an answer: a box, its language and Copy, numbered lines; a long one folds. Not frosted: it reads in the transcript's units and scale", groups: [

@@ -587,14 +587,32 @@ export function CodeBlock(props: { lang?: string; code: string; onCopy?: () => v
     <Show when={folds()}><button type="button" class="ui-code-more" onClick={() => props.onToggle?.()}>{folded() ? `Show ${hidden()} more ${hidden() === 1 ? "line" : "lines"}` : "Show less"}</button></Show>
   </figure>;
 }
-/** A turn's head: the orb, then Status · time · work, and under it the trail's latest line. opens: a trail to open. */
-export function TraceHeader(props: { orb?: JSX.Element; status: string; time?: string; work?: string; latest?: string; tone?: "failed"; opens?: boolean; open?: boolean; onToggle?: () => void }) {
+/**
+ * A turn's head: the orb, then Status · time · work, and under it the trail's latest line (text, or the app's inline
+ * Markdown). opens: a trail to open. live: the latest line's room is held while the turn runs, so the first step to
+ * arrive moves nothing below.
+ */
+export function TraceHeader(props: { orb?: JSX.Element; status: string; time?: string; work?: string; latest?: JSX.Element; live?: boolean; tone?: "failed"; opens?: boolean; open?: boolean; onToggle?: () => void }) {
   return <button type="button" class="ui-trace" data-tone={props.tone} aria-expanded={props.opens ? Boolean(props.open) : undefined} disabled={!props.opens} onClick={() => props.onToggle?.()}>
     <span class="ui-trace-orb">{props.orb}</span>
-    <span class="ui-trace-line"><b>{props.status}</b><Show when={props.time}><span class="ui-trace-time"> · {props.time}</span></Show><Show when={props.work}><span> · {props.work}</span></Show></span>
+    <span class="ui-trace-line"><b>{props.status}</b><Show when={props.time}><span class="ui-trace-time">{"\u00a0· "}{props.time}</span></Show><Show when={props.work}><span>{"\u00a0· "}{props.work}</span></Show></span>
     <Show when={props.opens}><ChevronDownIcon class="ui-disclosure-chevron" /></Show>
-    <Show when={props.latest}><span class="ui-trace-latest">{props.latest}</span></Show>
+    <Show when={props.latest || props.live}><span class="ui-trace-latest">{props.latest || "\u00a0"}</span></Show>
   </button>;
+}
+/**
+ * Trace: a turn's work, folded under its head. The head is a TraceHeader (pass its props); the trail (children, a
+ * Trail of Steps) unfolds under it as a Disclosure's body does. With no children there is nothing to open. A turn
+ * not yet started is a Trace with status "Starting", a connecting Orb and live.
+ */
+export function Trace(props: Omit<Parameters<typeof TraceHeader>[0], "opens"> & { children?: JSX.Element }) {
+  const [head, local] = splitProps(props, ["orb", "status", "time", "work", "latest", "live", "tone", "open", "onToggle"]);
+  const body = children(() => local.children);
+  const opens = () => body.toArray().length > 0;
+  return <div class="ui-disclosure ui-trace-fold" data-open={head.open && opens() ? "true" : "false"}>
+    <TraceHeader {...head} opens={opens()} />
+    <div class="ui-disclosure-body" aria-hidden={!head.open}>{body()}</div>
+  </div>;
 }
 /** Anything that folds: a header, one turning chevron, a body. Shape only: the caller opens it (and animates it). */
 export function Disclosure(props: { header: JSX.Element; open?: boolean; onToggle?: () => void; disabled?: boolean; children?: JSX.Element }) {
@@ -603,16 +621,46 @@ export function Disclosure(props: { header: JSX.Element; open?: boolean; onToggl
     <div class="ui-disclosure-body" aria-hidden={!props.open}>{props.children}</div>
   </div>;
 }
-/** The opened trail: one light line per step. */
-export const Trail = (props: { children: JSX.Element }) => <ol class="ui-trail">{props.children}</ol>;
-/** A step: its kind's icon (a spinner while running), a verb, its subject in muted mono, its duration at the end. */
-export function Step(props: { icon?: JSX.Element; verb: string; subject?: string; time?: string; state?: "running" | "failed" | "stopped"; motion?: Motion }) {
-  return <li class="ui-step" data-state={props.state} {...motionOf(props.motion)}>
+/** The opened trail: one light line per step. nested: a group's steps on a rail of their own under its icon;
+ * calls: a code-mode script's calls, quieter, inside its step. */
+export const Trail = (props: { nested?: "group" | "calls"; children: JSX.Element }) => <ol class="ui-trail" data-nested={props.nested}>{props.children}</ol>;
+export type StepState = "running" | "failed" | "stopped" | "planned" | "earlier";
+/**
+ * A step: its kind's icon (a spinner while running), a verb, its subject in muted mono, flags, its duration at the
+ * end. summary: a line of text instead of verb and subject (thinking, narration). note: not a step, nothing to open
+ * (reasoning the provider kept). discarded: text a stop threw away, struck, flagged Not kept. flags: words beside the
+ * time (repeats). With children it opens in place to them -- its output, its prose, a group's or a script's steps.
+ */
+export function Step(props: { icon?: JSX.Element; verb?: string; subject?: string; summary?: JSX.Element; time?: string; state?: StepState; flags?: string[]; note?: boolean; discarded?: boolean; open?: boolean; onToggle?: () => void; motion?: Motion; children?: JSX.Element }) {
+  const body = children(() => props.children);
+  const opens = () => body.toArray().length > 0 && !props.note;
+  const flags = () => [...(props.flags ?? []), ...(props.discarded ? ["Not kept"] : []), ...(props.state === "failed" ? ["Failed"] : props.state === "stopped" ? ["Stopped"] : [])];
+  const row = () => <>
     <span class="ui-step-icon"><Show when={props.state === "running"} fallback={props.icon}><span class="ui-spinner" aria-hidden="true" /></Show></span>
-    <span class="ui-step-verb">{props.verb}</span><Show when={props.subject}><code class="ui-step-subject">{props.subject}</code></Show>
-    <Show when={props.state === "failed" || props.state === "stopped"}><span class="ui-step-state">{props.state === "failed" ? "Failed" : "Stopped"}</span></Show>
-    <Show when={props.time}><span class="ui-step-time">{props.time}</span></Show>
+    <Show when={props.summary} fallback={<><Show when={props.verb}><span class="ui-step-verb">{props.verb}</span></Show><Show when={props.subject}><code class="ui-step-subject">{props.subject}</code></Show></>}><span class="ui-step-summary">{props.summary}</span></Show>
+    <span class="ui-step-meta"><For each={flags()}>{(flag) => <span class="ui-step-flag">{flag}</span>}</For><Show when={props.time}><span class="ui-step-time">{props.time}</span></Show></span>
+  </>;
+  return <li class="ui-disclosure ui-step-item" data-open={props.open && opens() ? "true" : "false"} data-state={props.state} data-note={props.note ? "" : undefined} data-discarded={props.discarded ? "" : undefined} {...motionOf(props.motion)}>
+    <Show when={opens()} fallback={<div class="ui-step">{row()}</div>}>
+      <button type="button" class="ui-step" aria-expanded={Boolean(props.open)} onClick={() => props.onToggle?.()}>{row()}<ChevronDownIcon class="ui-disclosure-chevron" /></button>
+      <div class="ui-disclosure-body ui-step-body" aria-hidden={!props.open}>{body()}</div>
+    </Show>
   </li>;
+}
+/** What a tool step opens to: its output in mono, scrolling; cut to a preview, `hidden` characters behind Show full output. */
+export function StepOutput(props: { text: string; hidden?: number; full?: boolean; onToggleFull?: () => void }) {
+  return <>
+    <pre class="ui-step-output">{props.text}</pre>
+    <Show when={props.hidden}><Button variant="ghost" size="sm" class="ui-step-more" onClick={() => props.onToggleFull?.()}>{props.full ? "Show preview" : `Show full output · ${props.hidden} hidden characters`}</Button></Show>
+  </>;
+}
+/** What a thinking or narration step opens to: its whole text, the Answer's prose a step quieter. */
+export const StepProse = (props: { children: JSX.Element }) => <div class="ui-step-prose">{props.children}</div>;
+/** A failed request in the trail: what failed, when, on what, and the error. */
+export function TraceError(props: { time?: string; facts?: string[]; message: string }) {
+  return <li class="ui-trace-error"><div class="ui-trace-error-head"><TriangleAlertIcon /><b>Request failed</b><Show when={props.time}><time>{props.time}</time></Show></div>
+    <Show when={props.facts?.length}><div class="ui-trace-error-facts"><For each={props.facts}>{(fact) => <span>{fact}</span>}</For></div></Show>
+    <pre>{props.message}</pre></li>;
 }
 /** A message's action row: its time first, muted and tabular, then its actions (icon-xs ghost buttons). */
 export const MessageFoot = (props: { time: string; end?: boolean; motion?: Motion; children?: JSX.Element }) =>
