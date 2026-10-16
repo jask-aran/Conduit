@@ -2,7 +2,7 @@ import { ArrowDownIcon, PanelLeftIcon, MessageSquarePlusIcon, EllipsisIcon, Came
 import { createSignal, For, onCleanup, onMount, Show, type JSX } from "solid-js";
 import { SquareIcon, Undo2Icon, DeleteIcon, ChevronLeftIcon, TextCursorInputIcon } from "lucide-solid";
 import { PanelRightIcon, ClipboardCopyIcon, Columns2Icon, CopyIcon, FolderIcon, FolderInputIcon, LayoutDashboardIcon, MenuIcon, MonitorIcon, PaperclipIcon, PencilIcon, PinIcon, PlusIcon, QrCodeIcon, RefreshCwIcon, SearchIcon, ShareIcon, ShieldCheckIcon, SquarePenIcon, TerminalIcon, Trash2Icon } from "lucide-solid";
-import { type Motion, Disclosure, Transcript, Message, Turn, TraceHeader, Trail, Step, Answer, CodeBlock, CopyButton, MessageFoot, PhoneComposer, PHONE_COMPOSER_STATES, type PhonePart, type VoiceMode, Toast, Toaster, SettingRecorder, Field, Leader, Crumbs, Spotlight, OverlayHead, Match, Choices, OverlayBar, OverlayHints, OverlayList, OverlayPage, OverlayRail, OverlaySplit, Glance, GlanceHead, GlancePrompt, GlanceTurn, GlanceAnswer, GlanceEmpty, RiderButton, Overlay, Scrim, SettingGroup, SettingLine, SettingValue, SettingLink, SettingNote, SettingDetails, SettingWide, SettingLoading, Progress, Keycap, NavGroup, NavRow, Segmented, SelectTrigger, Bubble, Button, Card, Chip, Choice, ComposerField, DesktopComposer, Line, TextArea, Rider, RiderActions, RiderTitle, Toolbar, Frost, Input, Item, Menu, PillButton, PillField, PillGroup, PillSwitch, PillWave, HeadingSection, SearchSection, Section, Slider } from "@/components/ui";
+import { type Motion, Disclosure, Transcript, Message, Turn, TraceHeader, Trail, Step, Answer, CodeBlock, CopyButton, MessageFoot, Orb, settledOrbRate, PLAIN_SPHERE, SPUTTERING_SPHERE, PhoneComposer, PHONE_COMPOSER_STATES, type PhonePart, type VoiceMode, Toast, Toaster, SettingRecorder, Field, Leader, Crumbs, Spotlight, OverlayHead, Match, Choices, OverlayBar, OverlayHints, OverlayList, OverlayPage, OverlayRail, OverlaySplit, Glance, GlanceHead, GlancePrompt, GlanceTurn, GlanceAnswer, GlanceEmpty, RiderButton, Overlay, Scrim, SettingGroup, SettingLine, SettingValue, SettingLink, SettingNote, SettingDetails, SettingWide, SettingLoading, Progress, Keycap, NavGroup, NavRow, Segmented, SelectTrigger, Bubble, Button, Card, Chip, Choice, ComposerField, DesktopComposer, Line, TextArea, Rider, RiderActions, RiderTitle, Toolbar, Frost, Input, Item, Menu, PillButton, PillField, PillGroup, PillSwitch, PillWave, HeadingSection, SearchSection, Section, Slider } from "@/components/ui";
 import { Switch } from "../client/settings/settings-controls";
 import { HarnessMark } from "../client/harness-brand";
 import { PlaceGlyph } from "../client/chat/place-picker";
@@ -14,8 +14,6 @@ import type { Question } from "../client/api/contracts";
 import { LibraryContext } from "@/components/ui/swap";
 import { InUse, FormTable, form, px, rounding, edge, fg, bg, Replay, States, Presence, type Mark, type FormRow } from "./specs";
 import katex from "katex";
-import { ThinkingOrb, settledOrbRate } from "../client/chat/thinking-orb";
-import { PLAIN_SPHERE, SPUTTERING_SPHERE } from "../client/chat/orb-frames";
 
 /*
  * The unified library, as a tree: Frost is the material; Popover, Card, Pill
@@ -174,8 +172,8 @@ const chatRows = (query = "") => <OverlayList>
   <Section title="Recent"><Item icon={<SquarePenIcon />} meta="18:29" active><Match text="Untitled chat" query={query} /></Item><Item icon={<HarnessMark id="opencode" />} meta="9 Oct"><Match text="Short Sprint Workout Plan" query={query} /></Item><Item icon={<HarnessMark id="opencode" />} meta="8 Oct"><Match text="Wispah V3 Lodge" query={query} /></Item></Section>
   <Section title="Folders"><Item icon={<FolderIcon />} meta="3 · 25 Sept" opens>Japan</Item><Item icon={<FolderIcon />} meta="0" opens>NHP</Item><Item icon={<FolderIcon />} meta="3 · 26 Sept" opens>Conduit</Item></Section>
 </OverlayList>;
-/* Chat search's preview, drawn by the library's Glance from what the app would read; the orb is the app's own. */
-const orb = (done: boolean) => <ThinkingOrb state="working" frame={done ? PLAIN_SPHERE : SPUTTERING_SPHERE} tint={done ? undefined : "var(--destructive)"} rate={settledOrbRate(!done)} />;
+/* Chat search's preview, drawn by the library's Glance from what the app would read; the orb is the library's Orb. */
+const orb = (done: boolean) => <Orb state="working" frame={done ? PLAIN_SPHERE : SPUTTERING_SPHERE} tint={done ? undefined : "var(--destructive)"} rate={settledOrbRate(!done)} />;
 const glanceChat = () => <Glance label="Chat preview"><GlanceHead mark={<HarnessMark id="opencode" />} title="Untitled chat" facts={["OpenCode · Chats · 18:30"]} />
   <GlancePrompt>ask me a question using the question tool</GlancePrompt><GlanceTurn orb={orb(true)} outcome="Done" detail="42s · 1 tool" />
   <GlanceAnswer>I'll ask you a question using the question tool. Which of these would you like to try first: a short sprint workout, a longer endurance session, or a mobility routine?</GlanceAnswer></Glance>;
@@ -376,8 +374,8 @@ const TOASTS_IN_APP: FormRow[] = [
   form("Settings and voice", "a setting not saved, a microphone gone", () => <Toast kind="error">Voice not saved: the selected microphone is no longer available.</Toast>, "settings/settings-core.tsx · chat/composer.tsx", "error · no action"),
 ];
 
-/* Transcript: a turn measured, each piece's forms, and a conversation, all from v2 (the orb is the app's, passed in). */
-const liveOrb = () => <ThinkingOrb state="working" />;
+/* Transcript: a turn measured, each piece's forms, and a conversation, all from v2 (the orb is the library's Orb, passed in). */
+const liveOrb = () => <Orb state="working" />;
 const ANSWER_HTML = `<p>Created <code>lorem_ipsum.txt</code> in this folder, with <a href="#">three paragraphs</a> of lorem ipsum.</p><ul><li>The first is the classic opening.</li><li>The second is now two sentences.</li></ul><blockquote><p>Lorem ipsum dolor sit amet. Consectetur adipiscing elit.</p></blockquote>`;
 const copyRetry = () => <><Button variant="ghost" size="icon-xs" aria-label="Copy"><CopyIcon /></Button><Button variant="ghost" size="icon-xs" aria-label="Retry"><RefreshCwIcon /></Button></>;
 const turnScene = () => <div class="g-card-scene"><Transcript><Turn>
@@ -605,7 +603,7 @@ export const libraryFamilies: Family[] = [
       lib("o-settings", "Settings", "desktop", "overlay", "settings/settings-core.tsx", () => overlayViews.settings({ close: noop, class: "g-scrim" }), "row"),
       lib("o-settings-record", "Settings · recording a shortcut", "desktop", "overlay", "settings/shortcuts-settings.tsx · + opens a second line under the command; press keys, Esc cancels, Backspace clears", () => <Scrim class="g-scrim" placement="center"><Settings close={noop} start="shortcuts" /></Scrim>, "row"),
     ] },
-    { title: "Chat search's preview", note: "Glance: what the cursor rests on, told apart without opening it. The app reads the chat (a moment after the cursor settles); these draw what it read. The orb is the app's ThinkingOrb. Ctrl+P hides and shows it in the search overlay", atoms: [
+    { title: "Chat search's preview", note: "Glance: what the cursor rests on, told apart without opening it. The app reads the chat (a moment after the cursor settles); these draw what it read. The orb is the library's Orb. Ctrl+P hides and shows it in the search overlay", atoms: [
       lib("glance-chat", "Glance · a chat", "desktop", "overlay", "navigation/chat-preview.tsx · GlanceHead · GlancePrompt · GlanceTurn · GlanceAnswer", () => <Frost lift="raised" class="g-glance">{glanceChat()}</Frost>),
       lib("glance-stopped", "Glance · stopped", "desktop", "overlay", "an interrupted or failed turn: the orb sputters red", () => <Frost lift="raised" class="g-glance">{glanceStopped()}</Frost>),
       lib("glance-math", "Glance · math", "desktop", "overlay", "GlanceAnswer html: the app's rendered KaTeX, faded where it is cut", () => <Frost lift="raised" class="g-glance">{glanceMath()}</Frost>),

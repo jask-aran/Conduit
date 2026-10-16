@@ -2,6 +2,8 @@ import { children, createComputed, createEffect, createSignal, createUniqueId, F
 import { CheckIcon, ChevronDownIcon, CopyIcon, ChevronLeftIcon, ChevronRightIcon, CircleCheckIcon, CircleXIcon, InfoIcon, SearchIcon, TriangleAlertIcon, XIcon } from "lucide-solid";
 export { ChevronDownIcon };
 import { cn } from "@/lib/utils";
+export { Orb, settledOrbRate, type ModeFrame, type ModeOpts, type OrbState } from "./orb";
+export { PLAIN_SPHERE, SPUTTERING_SPHERE, ORBITS_TRAILED } from "./orb-frames";
 
 /*
  * Components v2 (conduit-components-v2): the unified library (library.css).

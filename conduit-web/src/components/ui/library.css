@@ -224,6 +224,9 @@
    This holds its frame: the level it reads (--aura-level, 0-1, from --voice-level unless set, eased here), whether it
    shows (a parent turns it on, or `on`), and the frost over it. The one coloured glow DESIGN.md allows. */
 @property --aura-level { syntax: "<number>"; inherits: true; initial-value: 0; }
+/* Orb: a dotted orb on two canvases (the shown state over the one it is crossfading from), filling its box. */
+.ui-orb { position: relative; display: block; width: 100%; height: 100%; }
+.ui-orb canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
 .ui-aura { --aura-level: var(--voice-level, 0); position: absolute; inset: 0; overflow: clip; border-radius: inherit; opacity: 0; pointer-events: none;
   --fade-ease: var(--ease-leave); transition: opacity var(--duration-gentle) var(--fade-ease), --aura-level .12s linear; }
 /* Its fade is its own: shown, it blooms over the gentle duration as the move that shows it runs, and goes the same way
