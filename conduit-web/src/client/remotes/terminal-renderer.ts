@@ -65,7 +65,7 @@ async function loadTerminalFont() {
  */
 export type TerminalPasteFiles = (files: File[]) => Promise<string>;
 
-export type TerminalRendererOptions = { pasteFiles?: TerminalPasteFiles };
+export type TerminalRendererOptions = { pasteFiles?: TerminalPasteFiles; onClipboardError?: (message: string) => void };
 
 export async function createTerminalRenderer(host: HTMLElement, options: TerminalRendererOptions = {}): Promise<TerminalRenderer> {
   await loadTerminalFont();
@@ -196,6 +196,9 @@ export async function clipboardPasteText(pasteFiles?: TerminalPasteFiles): Promi
 }
 
 function installClipboardShortcuts(host: HTMLElement, terminal: ClipboardTerminal, options: TerminalRendererOptions) {
+  const clipboardError = (cause: unknown) => options.onClipboardError?.(
+    cause instanceof Error ? cause.message : "Clipboard access failed",
+  );
   // The browser's own paste is the only one a non-secure context has, so it
   // stays enabled and keeps working there. It just must not hand xterm an
   // image's text flavour, which is whitespace and arrives as blank lines.
@@ -205,7 +208,7 @@ function installClipboardShortcuts(host: HTMLElement, terminal: ClipboardTermina
     event.preventDefault();
     const files = imageFiles(event.clipboardData?.files);
     if (!files.length || !options.pasteFiles) return;
-    void options.pasteFiles(files).then((text) => { if (text) terminal.paste?.(text); }).catch(() => {});
+    void options.pasteFiles(files).then((text) => { if (text) terminal.paste?.(text); }).catch(clipboardError);
   };
   host.addEventListener("paste", interceptPaste, { capture: true });
 
@@ -226,7 +229,7 @@ function installClipboardShortcuts(host: HTMLElement, terminal: ClipboardTermina
     // host's clipboard instead: the wrong machine's, and silently so. Conduit
     // claims all three.
     const paste = key === "v" && (event.ctrlKey || event.metaKey || event.altKey);
-    const browserPasteGesture = isApple ? event.metaKey : event.ctrlKey;
+    const browserPasteGesture = !event.altKey && (isApple ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey);
 
     // The async Clipboard API only exists in a secure context, so it is absent
     // whenever Conduit is reached over plain HTTP on a LAN address. Falling
@@ -236,18 +239,21 @@ function installClipboardShortcuts(host: HTMLElement, terminal: ClipboardTermina
       if (!navigator.clipboard?.writeText) return true;
       event.preventDefault();
       const selection = terminal.getSelection?.() || "";
-      if (selection) void navigator.clipboard.writeText(selection).catch(() => {});
+      if (selection) void navigator.clipboard.writeText(selection).catch(clipboardError);
       return false;
     }
     if (paste && terminal.paste) {
-      // Without the async Clipboard API the browser's own paste is the only
-      // way in, and it answers to Ctrl/Cmd+V alone. Alt+V has no fallback, so
-      // swallow it rather than let it through to read the host's clipboard.
-      if (!navigator.clipboard?.read && !navigator.clipboard?.readText) return browserPasteGesture;
+      // Skip xterm's key handling without cancelling the browser's paste
+      // event. Native paste does not need async clipboard permission.
+      if (browserPasteGesture) return false;
       event.preventDefault();
+      if (!navigator.clipboard?.read && !navigator.clipboard?.readText) {
+        options.onClipboardError?.("Clipboard access is unavailable. Use Ctrl+V or Cmd+V to paste.");
+        return false;
+      }
       void clipboardPasteText(options.pasteFiles)
         .then((text) => { if (text) terminal.paste?.(text); })
-        .catch(() => {});
+        .catch(clipboardError);
       return false;
     }
     return true;
