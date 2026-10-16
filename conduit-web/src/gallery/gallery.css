@@ -366,6 +366,8 @@ html, body { background: var(--frame, #08090a); color: var(--foreground); }
 /* PhoneComposer: a phone's width, with room above the row for its captions and edit pills. */
 .g-phone-composer { display: grid; width: min(380px, 100%); min-width: 0; min-height: 200px; align-content: end; padding-top: 72px; }
 .g-phone-composer > .ui-phone-composer { width: 100%; }
+/* In a card the captions' ground stops at the composer's sides and bottom, not the screen's. */
+.g-phone-composer .ui-voice-captions::before { left: 0; right: 0; bottom: calc(-1 * (var(--pill-size) + var(--space-md))); }
 .g-aura { display: grid; gap: var(--space-xl); }
 .g-aura-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-xl); }
 .g-aura-row > :is(.g-aura-wide, .g-aura-short, .g-aura-round) { position: relative; isolation: isolate; }
