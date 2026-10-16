@@ -240,9 +240,10 @@
   background: linear-gradient(to bottom, transparent, var(--background) var(--space-xl)); padding: var(--space-lg) var(--space-lg) var(--space-xs); color: var(--muted-foreground); font-size: calc(.875 * var(--u-type)); font-style: italic; line-height: 1.45; pointer-events: none; animation: ui-fade-in var(--duration-gentle) var(--ease-arrive) backwards; }
 .ui-voice-captions[data-leaving] { animation: ui-fade-out var(--duration-quick) var(--ease-leave) forwards; }
 /* The field and the captions share a spot: from typing, the captions open once the field has faded; back to typing,
-   the captions fade away as the field comes in -- they drop their ground at once, so it never cuts across the field. */
+   the captions fade away behind the field as it comes in -- their ground drops and the field's box hides them at once
+   (PhoneComposer measures it), so the two texts are never seen together. */
 .ui-phone-composer[data-from="typing"] .ui-voice-captions:not([data-leaving]) { animation-delay: var(--duration-quick); }
-.ui-phone-composer[data-mode="typing"] .ui-voice-captions[data-leaving] { background: none; }
+.ui-phone-composer[data-mode="typing"] .ui-voice-captions[data-leaving] { background: none; clip-path: inset(0 0 var(--under-field, 0px) 0); }
 /* Under a menu opened from one of its pills, the rest dims at once (as a menu under its submenu); the opener stays lit. */
 .ui-phone-composer[data-under] :is(.ui-phone-field, .ui-phone-row > .ui-pill:not([data-open])) { filter: opacity(.38) saturate(.6); }
 /* Surface: the row is one frost capsule (the field still its own above it), its pills slots in it as a PillGroup's,
