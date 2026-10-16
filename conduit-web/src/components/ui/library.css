@@ -187,6 +187,11 @@
    edge. Its tokens size every member. */
 /* One height for every pill: group, lone button, the field at one line. */
 :root { --pill-size: calc(44px * var(--scale-ui)); --pill-slot: calc(40px * var(--scale-ui)); --pill-slot-height: calc(40px * var(--scale-ui)); --pill-gap: 2px; --pill-field-pad: calc(14px * var(--scale-ui)); }
+/* Under: a piece under something opened from beside it (a submenu, a pill's menu) dims -- one dim for Pill and Menu,
+   a change in place, quick. */
+.ui-pill, .ui-menu { --dim: saturate(.6) opacity(.38); }
+.ui-pill { transition: filter var(--duration-quick) var(--ease-change); }
+.ui-pill[data-under] { filter: var(--dim); }
 .ui-pill { display: inline-flex; height: var(--pill-size); align-items: center; gap: var(--pill-gap); padding: 0 1px; border-radius: var(--radius-round); }
 .ui-pill > button { display: grid; width: var(--pill-slot); height: var(--pill-slot-height); place-items: center; border: 0; border-radius: var(--radius-round); background: transparent; color: inherit; }
 .ui-pill[data-solo] { width: var(--pill-size); justify-content: center; padding: 0; }
@@ -202,7 +207,7 @@
 .ui-pill[data-solo] { --fade: var(--duration-quick); --fade-ease: var(--ease-arrive); --fade-delay: var(--duration-quick); --fold-delay: 0s;
   transition: width var(--duration-gentle) var(--ease-arrive) var(--fold-delay), min-width var(--duration-gentle) var(--ease-arrive) var(--fold-delay),
     margin var(--duration-gentle) var(--ease-arrive) var(--fold-delay), flex-grow var(--duration-gentle) var(--ease-arrive),
-    opacity var(--fade) var(--fade-ease) var(--fade-delay); }
+    opacity var(--fade) var(--fade-ease) var(--fade-delay), filter var(--duration-quick) var(--ease-change); }
 .ui-pill[data-solo][data-folded] { width: 0; min-width: 0; margin-inline-start: calc(-1 * var(--space-md) - 2px); overflow: clip; opacity: 0; pointer-events: none;
   --fade-ease: var(--ease-leave); --fade-delay: 0s; --fold-delay: var(--duration-quick); }
 /* The mic: its icon and the orb stacked in one button, crossfading. */
@@ -306,7 +311,7 @@
 .ui-voice-captions[data-leaving] { animation: ui-fade-out var(--duration-gentle) var(--ease-leave) forwards; }
 .ui-phone-composer[data-mode="typing"] .ui-voice-captions[data-leaving] > * { clip-path: inset(0 0 calc(var(--under-field, 0px) - var(--space-xs)) 0); }
 /* Under a menu opened from one of its pills, the rest dims at once (as a menu under its submenu); the opener stays lit. */
-.ui-phone-composer[data-under] :is(.ui-phone-field, .ui-phone-row > .ui-pill:not([data-open])) { filter: opacity(.38) saturate(.6); }
+.ui-phone-composer[data-under] :is(.ui-phone-field > .ui-pill, .ui-phone-row > .ui-pill:not([data-open])) { filter: var(--dim); }
 /* Surface: the row is one frost capsule (the field still its own above it), its pills slots in it as a PillGroup's,
    the mic at its end, unstretched. Listening, an Aura fills the capsule under the waveform, which runs from its start
    to the mic; the other slots fade where they stand and Stop and send unfolds beside the mic. */
@@ -339,7 +344,8 @@
 .ui-menu[data-entering] { animation: ui-rise var(--duration-gentle) var(--ease-arrive) backwards; }
 .ui-menu[data-leaving] { animation: ui-drop var(--duration-quick) var(--ease-leave) forwards; pointer-events: none; }
 /* Under a phone's submenu panel it dims where it stands, at once (a dim is a state, not a move), and takes no taps. */
-.ui-menu[data-under] { opacity: .38; filter: saturate(.6); pointer-events: none; }
+.ui-menu { transition: filter var(--duration-quick) var(--ease-change); }
+.ui-menu[data-under] { filter: var(--dim); pointer-events: none; }
 /* A group label (DESIGN Typography): the sidebar's -- sentence case, bold,
    about half the text colour. Every group heading in a list, menu, palette or
    card is this; the breadcrumb's place caps are the one uppercase label. */
