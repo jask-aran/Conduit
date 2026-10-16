@@ -316,7 +316,10 @@
 /* Going, they fade over the move with their ground; their words are hidden under the field's box at once
    (PhoneComposer measures it as the field takes its room). */
 .ui-voice-captions[data-leaving] { animation: ui-fade-out var(--duration-gentle) var(--ease-leave) forwards; }
-.ui-phone-composer[data-mode="typing"] .ui-voice-captions[data-leaving] > * { clip-path: inset(0 0 calc(var(--under-field, 0px) - var(--space-xs)) 0); }
+/* Into typing, their ground holds until the field has come in over it, so nothing behind shows through the field
+   as it arrives; their words go at once, over the first quick. */
+.ui-phone-composer[data-mode="typing"] .ui-voice-captions[data-leaving] { animation-delay: var(--duration-gentle); }
+.ui-phone-composer[data-mode="typing"] .ui-voice-captions[data-leaving] > * { animation: ui-fade-out var(--duration-quick) var(--ease-leave) forwards; clip-path: inset(0 0 calc(var(--under-field, 0px) - var(--space-xs)) 0); }
 /* Under a menu opened from one of its pills, the rest dims at once (as a menu under its submenu); the opener stays lit. */
 .ui-phone-composer[data-under] :is(.ui-phone-field > .ui-pill, .ui-phone-row > .ui-pill:not([data-open])) { filter: var(--dim); }
 /* Surface: the row is one frost capsule (the field still its own above it), its pills slots in it as a PillGroup's,
