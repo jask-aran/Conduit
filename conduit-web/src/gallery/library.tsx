@@ -112,7 +112,7 @@ const phoneComposer = (mode: Live<VoiceMode>, opts: { draft?: Live<boolean>; awa
   </PhoneComposer>;
 };
 /** A part of an assembly: what it is called, what it is built from, what it does. */
-const PartList = (props: { parts: [string, string, string][] }) => <dl class="g-parts"><For each={props.parts}>{([name, from, does]) => <><dt>{name}<small>{from}</small></dt><dd>{does}</dd></>}</For></dl>;
+const PartList = (props: { parts: [string, string, string][] }) => <dl class="g-partlist"><For each={props.parts}>{([name, from, does]) => <><dt>{name}<small>{from}</small></dt><dd>{does}</dd></>}</For></dl>;
 const PHONE_PARTS: [string, string, string][] = [
   ["Edit pills", "PillButtons in edit", "Undo · Delete word · Previous word · Next word · End of draft: over the field while its cursor is moved by hand"],
   ["Field", "PillField", "the draft; shown while typing"],
@@ -710,8 +710,8 @@ export const libraryFamilies: Family[] = [
   ] },
   { title: "PhoneComposer", note: "the phone's composer: Pills on the page, a PillField over a row of PillButtons, one gap apart. Its mode says what shows, and nothing reflows between them: idle (the row), typing (the field above it), listening (the voice track and captions). Circles that come and go fold (Scroll to latest, Stop and send, Send)", groups: [
     { title: "Anatomy", note: "an assembly, not a base component: Pills and foundations (Aura, icons, type), each part named for what it does", layout: "phone", atoms: [
-      lib("phone-anatomy", "Anatomy", "phone", "pill", "PhoneComposer > edit · field · row (the mode's pills)", () => <div class="g-anatomy g-phone-composer">{phoneComposer("typing", { draft: true, away: true, editing: true })}<PartList parts={PHONE_PARTS} /></div>),
-      lib("phone-anatomy-listening", "Anatomy · listening", "phone", "pill", "PhoneComposer mode=listening > captions · row (track · Dictate · Stop and send)", () => <div class="g-anatomy g-phone-composer">{phoneComposer("listening")}<PartList parts={PHONE_VOICE_PARTS} /></div>),
+      lib("phone-anatomy", "Anatomy", "phone", "pill", "PhoneComposer > edit · field · row (the mode's pills)", () => <div class="g-anatomy"><div class="g-phone-composer">{phoneComposer("typing", { draft: true, away: true, editing: true })}</div><PartList parts={PHONE_PARTS} /></div>, "row"),
+      lib("phone-anatomy-listening", "Anatomy · listening", "phone", "pill", "PhoneComposer mode=listening > captions · row (track · Dictate · Stop and send)", () => <div class="g-anatomy"><div class="g-phone-composer">{phoneComposer("listening")}</div><PartList parts={PHONE_VOICE_PARTS} /></div>, "row"),
     ] },
     { title: "Forms", note: "each mode, and the field's edit pills", layout: "phone", atoms: [
       lib("phone-idle", "Idle", "phone", "pill", "PhoneComposer mode=idle: the row alone; nothing to send, so Send is folded", () => <div class="g-phone-composer">{phoneComposer("idle")}</div>),
