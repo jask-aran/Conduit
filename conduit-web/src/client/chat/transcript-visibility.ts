@@ -102,7 +102,9 @@ export function mountTranscriptVisibility(
   // observation costs the browser a check each frame -- a long answer's hundreds of blocks, every frame it grew.
   // Observed again as it is shown, its first notification is its size then.
   const show = (element: HTMLElement) => {
-    if (!element.hasAttribute(VISIBILITY_ATTRIBUTE)) return false;
+    const state = element.getAttribute(VISIBILITY_ATTRIBUTE);
+    // A collapsed block comes back only with its whole run (expandAbove).
+    if (state == null || state === "collapsed") return false;
     element.removeAttribute(VISIBILITY_ATTRIBUTE);
     if (managed.has(element)) sizeObserver.observe(element);
     return true;
@@ -115,7 +117,8 @@ export function mountTranscriptVisibility(
   const pendingMath = (element: HTMLElement) =>
     element.matches(".incremark-math-block:empty") || element.querySelector(".incremark-math-block:empty") !== null;
   const hide = (element: HTMLElement) => {
-    if (element.getAttribute(VISIBILITY_ATTRIBUTE) === "hidden") return false;
+    const state = element.getAttribute(VISIBILITY_ATTRIBUTE);
+    if (state === "hidden" || state === "collapsed") return false;
     if (pendingMath(element)) return false;
     element.setAttribute(VISIBILITY_ATTRIBUTE, "hidden");
     sizeObserver.unobserve(element);
@@ -157,11 +160,14 @@ export function mountTranscriptVisibility(
     // geometry that is still moving, so let the pass at motion end settle them.
     if (activeIds.size) return;
     let changed = false;
+    const hidden: HTMLElement[] = [];
     for (const entry of entries) {
       const element = entry.target as HTMLElement;
       if (!managed.has(element)) continue;
-      changed = (entry.isIntersecting ? show(element) : hide(element)) || changed;
+      if (entry.isIntersecting) changed = show(element) || changed;
+      else if (hide(element)) { changed = true; hidden.push(element); }
     }
+    if (hidden.length) collapseFrom(hidden);
     if (changed) holdRefreshing();
   }, { root: viewport, rootMargin: `${OVERSCAN_PX}px 0px` });
 
@@ -195,6 +201,7 @@ export function mountTranscriptVisibility(
   };
 
   const release = (element: HTMLElement) => {
+    if (element.getAttribute(VISIBILITY_ATTRIBUTE) === "collapsed" && element.parentElement) expandAbove(element.parentElement);
     visibilityObserver.unobserve(element);
     sizeObserver.unobserve(element);
     clear(element);
@@ -217,6 +224,89 @@ export function mountTranscriptVisibility(
     else rowElements.delete(row);
   };
 
+  // A hidden block is still in layout: every frame the browser lays out, pre-paints and checks each one, so a long
+  // answer's hundreds of them cost most of a late frame's growth (layout 0.34 to 0.62ms, pre-paint 0.14 to 0.29,
+  // the paint phase's bookkeeping 0.12 to 0.43). A run of COLLAPSE_BATCH or more hidden blocks wholly a viewport or
+  // more above the reader leaves layout (display: none), its height kept by one box before the first block left
+  // (the container's ::before). It is measured, and corrected by what the first block left moved, so nothing moves.
+  // The run comes back as hidden blocks -- their placeholders as they were -- once the reader is within half a
+  // viewport of it, with the scroll moved by anything that changed while it was out.
+  const COLLAPSE_BATCH = 16;
+  const collapsedAbove = new Map<HTMLElement, HTMLElement[]>();
+  const runIsLeading = (container: HTMLElement, run: HTMLElement[]) => run.every((block, index) => container.children[index] === block);
+  const setSpacer = (container: HTMLElement, height: number) => {
+    container.style.setProperty("--collapsed-above", `${Math.max(0, height)}px`);
+    container.setAttribute("data-collapsed-above", "");
+  };
+  const expandAbove = (container: HTMLElement) => {
+    const run = collapsedAbove.get(container);
+    if (!run) return;
+    collapsedAbove.delete(container);
+    order = null;
+    const next = container.children[run.length] as HTMLElement | undefined;
+    // Where the first block left sits in its answer: a scroll the layout clamps does not move it.
+    const offset = () => next!.getBoundingClientRect().top - container.getBoundingClientRect().top;
+    const before = next?.isConnected ? offset() : null;
+    for (const block of run) {
+      if (block.getAttribute(VISIBILITY_ATTRIBUTE) === "collapsed") block.setAttribute(VISIBILITY_ATTRIBUTE, "hidden");
+      if (managed.has(block)) visibilityObserver.observe(block);
+    }
+    container.removeAttribute("data-collapsed-above");
+    container.style.removeProperty("--collapsed-above");
+    if (before == null || !next) return;
+    const moved = offset() - before;
+    if (Math.abs(moved) > 0.01 && next.getBoundingClientRect().bottom <= viewport.getBoundingClientRect().top) shiftScroll(moved);
+  };
+  const expandAll = () => { for (const container of [...collapsedAbove.keys()]) expandAbove(container); };
+  const collapseAbove = (container: HTMLElement) => {
+    const run = collapsedAbove.get(container) ?? [];
+    if (!runIsLeading(container, run)) { expandAbove(container); return; }
+    const view = viewport.getBoundingClientRect();
+    const limit = view.top - view.height;
+    let end = run.length;
+    while (end < container.children.length) {
+      const child = container.children[end] as HTMLElement;
+      if (!managed.has(child) || child.getAttribute(VISIBILITY_ATTRIBUTE) !== "hidden" || child.getBoundingClientRect().bottom > limit) break;
+      end += 1;
+    }
+    const next = container.children[end] as HTMLElement | undefined;
+    if (end - run.length < COLLAPSE_BATCH || !next) return;
+    // Where the first block left sits in its answer, which a scroll the layout clamps does not move. The spacer is set
+    // before the run leaves layout, so the answer never lays out shorter.
+    const offset = () => next.getBoundingClientRect().top - container.getBoundingClientRect().top;
+    const before = offset();
+    const marginTop = Number.parseFloat(getComputedStyle(next).marginTop) || 0;
+    let height = before - marginTop;
+    setSpacer(container, height);
+    const added = [...container.children].slice(run.length, end) as HTMLElement[];
+    for (const block of added) {
+      visibilityObserver.unobserve(block);
+      block.setAttribute(VISIBILITY_ATTRIBUTE, "collapsed");
+    }
+    collapsedAbove.set(container, [...run, ...added]);
+    order = null;
+    const error = offset() - before;
+    if (Math.abs(error) > 0.01) setSpacer(container, height -= error);
+  };
+  // After the observer hides blocks: the answers whose runs may have grown long enough to collapse.
+  const collapseFrom = (hidden: Iterable<HTMLElement>) => {
+    const containers = new Set<HTMLElement>();
+    for (const element of hidden) {
+      const container = element.parentElement;
+      if (container?.classList.contains("incremark") && element !== container.lastElementChild) containers.add(container);
+    }
+    for (const container of containers) collapseAbove(container);
+  };
+  // Scrolling up: any run the reader is within half a viewport of comes back.
+  const expandNear = () => {
+    if (!collapsedAbove.size) return;
+    const view = viewport.getBoundingClientRect();
+    for (const [container, run] of [...collapsedAbove]) {
+      const next = container.children[run.length] as HTMLElement | undefined;
+      if (!next || next.getBoundingClientRect().top > view.top - view.height / 2) expandAbove(container);
+    }
+  };
+
   // Reconcile the managed set with the DOM. This reads no geometry, so it is
   // what streaming pays: new blocks start observed and fully rendered, and the
   // observers take it from there. Given rows, only those are looked at.
@@ -228,6 +318,11 @@ export function mountTranscriptVisibility(
       for (const row of [...rowElements.keys()]) if (!present.has(row)) syncRow(row);
       for (const row of present) syncRow(row);
     }
+    // A run whose answer went, or whose blocks are no longer its answer's first, is let go or comes back.
+    for (const [container, run] of [...collapsedAbove]) {
+      if (!container.isConnected) collapsedAbove.delete(container);
+      else if (!runIsLeading(container, run)) expandAbove(container);
+    }
     return managed;
   };
 
@@ -235,6 +330,7 @@ export function mountTranscriptVisibility(
   // would force a layout per block; the transcript is long enough for that to
   // be the difference between a frame and a stall.
   const measurePass = () => {
+    expandAll();
     const virtualized = syncMembership();
     const viewportRect = viewport.getBoundingClientRect();
     const top = viewportRect.top - OVERSCAN_PX;
@@ -297,6 +393,7 @@ export function mountTranscriptVisibility(
   const reset = () => {
     activeIds.clear();
     cancelRefresh();
+    expandAll();
     for (const element of [...managed]) release(element);
     managed.clear();
     rowElements.clear();
@@ -419,6 +516,7 @@ export function mountTranscriptVisibility(
     repairTimer = null;
     if (!fontsReady || activeIds.size) return;
     for (const element of managed) {
+      if (element.getAttribute(VISIBILITY_ATTRIBUTE) === "collapsed") continue;
       visibilityObserver.unobserve(element);
       visibilityObserver.observe(element);
     }
@@ -452,7 +550,7 @@ export function mountTranscriptVisibility(
     order = [];
     for (const child of thread.children) {
       const elements = rowElements.get(child as HTMLElement);
-      if (elements) for (const element of elements) if (managed.has(element)) order.push(element);
+      if (elements) for (const element of elements) if (managed.has(element) && element.getAttribute(VISIBILITY_ATTRIBUTE) !== "collapsed") order.push(element);
     }
     return order;
   };
@@ -462,6 +560,7 @@ export function mountTranscriptVisibility(
     const delta = top - revealedAt;
     revealedAt = top;
     if (!delta || !fontsReady || activeIds.size) return;
+    if (delta < 0) expandNear();
     const view = viewport.getBoundingClientRect();
     const from = delta > 0 ? Math.max(view.top, view.bottom - delta) : view.top;
     const to = delta > 0 ? view.bottom : Math.min(view.bottom, view.top - delta);
@@ -510,6 +609,7 @@ export function mountTranscriptVisibility(
       refresh();
     },
     destroy: () => {
+      expandAll();
       window.removeEventListener(PANEL_GEOMETRY_MOTION_EVENT, onMotion);
       document.removeEventListener("visibilitychange", onVisibility);
       viewport.removeEventListener("scrollend", onScrollEnd);
