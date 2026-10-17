@@ -16,7 +16,7 @@ import { morphHtml } from "./morph-html";
 import { markFadeIn, patchMathTree, renderMathTree } from "./katex-patch";
 import { readStoredMath, storeMath } from "./math-html-store";
 import { citationHost, resolveMarkdownUrl } from "./markdown-security";
-import { projectTableMathSource, promoteTableCellDisplayMath, restoreTableMathAst, restoreTableMathSentinel } from "./table-math";
+import { createTableMathProjector, projectTableMathSource, promoteTableCellDisplayMath, restoreTableMathAst, restoreTableMathSentinel } from "./table-math";
 import type { StreamingPending } from "./streaming-markdown";
 import { createStreamingMarkdownSplitter, splitStreamingMarkdown } from "./streaming-markdown";
 import { streamFadeMs, streamMathFade } from "@/client/preferences/stream-fade";
@@ -1180,13 +1180,14 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
   };
 
   const splitSource = createStreamingMarkdownSplitter();
+  const projectSource = createTableMathProjector();
   createEffect(() => {
     const raw = frozenSource() ?? String(props.children || "");
     const source = props.inline ? raw : streaming() ? holdMarkerLine(raw) : closeTrailingMath(raw);
     const tableMath = !props.inline;
     const split = splitSource(source, { tableMath, allowUnclosedMath: streaming() });
     const projection = tableMath
-      ? projectTableMathSource(source, {
+      ? projectSource(source, {
         convertTexDisplayDelimiters: true,
         sentinel: previousTableMathSentinel || undefined,
       })

@@ -10,6 +10,7 @@ const FIRST_SENTINEL = 0xe000;
 const LAST_SENTINEL = 0xf8ff;
 
 import { inlineDollarClose } from "./inline-dollar.ts";
+import { lastBlankLineEnd } from "./streaming-markdown.ts";
 
 function isEscaped(source: string, index: number) {
   let slashes = 0;
@@ -236,6 +237,42 @@ export function projectTableMathSource(source: string, options: { convertTexDisp
     return next.source;
   }).join("");
   return { source: projected, sentinel, pipeRepairs };
+}
+
+/**
+ * projectTableMathSource for one message as it streams: a table ends at a blank line (a row holds a pipe), and each
+ * line projects by itself, so what lies before the last blank line is projected once and kept. A message with a
+ * table in it was split and rebuilt line by line, whole, for every delta. A different sentinel, or a source that
+ * does not extend the last one, starts again.
+ */
+export function createTableMathProjector() {
+  let base = 0;
+  let prefix = "";
+  let projected = "";
+  let repairs = 0;
+  let sentinel: string | null = null;
+  let convert = false;
+  return (source: string, options: { convertTexDisplayDelimiters?: boolean; sentinel?: string } = {}): TableMathProjection => {
+    const next = options.sentinel && !source.includes(options.sentinel) ? options.sentinel : chooseSentinel(source);
+    if (!next) return projectTableMathSource(source, options);
+    if (next !== sentinel || Boolean(options.convertTexDisplayDelimiters) !== convert || !source.startsWith(prefix)) {
+      base = 0; prefix = ""; projected = ""; repairs = 0;
+    }
+    sentinel = next;
+    convert = Boolean(options.convertTexDisplayDelimiters);
+    const tailOptions = { ...options, sentinel: next };
+    const tail = projectTableMathSource(source.slice(base), tailOptions);
+    const result = { source: projected + tail.source, sentinel: next, pipeRepairs: repairs + tail.pipeRepairs };
+    const cut = lastBlankLineEnd(source.slice(base));
+    if (cut > 0) {
+      const settled = projectTableMathSource(source.slice(base, base + cut), tailOptions);
+      projected += settled.source;
+      repairs += settled.pipeRepairs;
+      base += cut;
+      prefix = source.slice(0, base);
+    }
+    return result;
+  };
 }
 
 export function restoreTableMathSentinel(value: string, sentinel: string | null) {
