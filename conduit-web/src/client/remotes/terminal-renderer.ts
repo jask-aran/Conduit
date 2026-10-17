@@ -284,7 +284,6 @@ async function createXtermRenderer(host: HTMLElement, options: TerminalRendererO
     fontFamily: terminalFontFamily(),
     cursorBlink: false,
     altClickMovesCursor: false,
-    macOptionClickForcesSelection: true,
     scrollback: 1000,
     theme: CONDUIT_TERMINAL_THEME,
   });
@@ -303,28 +302,8 @@ async function createXtermRenderer(host: HTMLElement, options: TerminalRendererO
   terminal.loadAddon(clipboard);
   terminal.open(host);
   let selecting = false;
-  let forwardingSelection = false;
   const selectWithMouse = (event: MouseEvent) => {
-    if (forwardingSelection || event.button !== 0 || !(event.target instanceof Element)) return;
-    selecting = true;
-    if (terminal.modes.mouseTrackingMode === "none") return;
-    // Use xterm's own forced selection path when a program owns the mouse.
-    // Re-send the press with its selection modifier, preserving click count.
-    event.preventDefault();
-    event.stopImmediatePropagation();
-    forwardingSelection = true;
-    try {
-      event.target.dispatchEvent(new MouseEvent("mousedown", {
-        bubbles: true, cancelable: true, view: event.view, detail: event.detail,
-        screenX: event.screenX, screenY: event.screenY,
-        clientX: event.clientX, clientY: event.clientY,
-        button: event.button, buttons: event.buttons,
-        ctrlKey: event.ctrlKey, metaKey: event.metaKey,
-        shiftKey: true, altKey: /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent),
-      }));
-    } finally {
-      forwardingSelection = false;
-    }
+    if (event.button === 0) selecting = true;
   };
   const copyMouseSelection = () => {
     if (!selecting) return;
