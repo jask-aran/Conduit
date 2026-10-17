@@ -651,8 +651,10 @@ export class BufferedIncremarkTypewriter {
     return retained + activeCharacters;
   }
 
+  // A code block is shown whole, as a formula is: its text was already on screen as it streamed, in the open
+  // fence's placeholder, and typed out again from no lines it dropped the page by the placeholder's height.
   private blockCharacters(block: ParsedBlock) {
-    return totalAstCharacters(block.node);
+    return (block.node as { type?: string } | undefined)?.type === "code" ? 1 : totalAstCharacters(block.node);
   }
 
   private buildDisplayBlocks(): DisplayBlock[] {
