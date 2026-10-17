@@ -229,6 +229,10 @@ type InlineCarry = { codeDelimiter: number; unclosedParen: boolean };
 function findInlineMath(source: string, ranges: SourceRange[], blockMathStart: number | null, skipDoubleDollar = false, allowUnclosedMath = true, carry?: InlineCarry) {
   let codeDelimiter = 0;
   for (let index = 0; index < source.length; index += 1) {
+    // Only a backtick, a backslash or a dollar opens or closes anything: every other character was asked whether it
+    // sat in a fence and was escaped, a few hundred calls a delta, for nothing.
+    const code = source.charCodeAt(index);
+    if (code !== 96 && code !== 92 && code !== 36) continue;
     if (inRange(index, ranges) || (blockMathStart != null && index >= blockMathStart)) continue;
     if (source[index] === "`" && !isEscaped(source, index)) {
       let end = index;

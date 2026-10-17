@@ -182,12 +182,52 @@ function TrailLine(props: RowProps & { item: TrailItem }) {
  * Muse runs its sentences together without a space, so a sentence ends at
  * . ! or ? followed by a space or a capital.
  */
-const HEADING = /^\s*\*\*(.+?)\*\*\s*$/gm;
-function summaryOf(text: string): string {
-  const headings = [...text.matchAll(HEADING)];
-  if (headings.length) return headings.at(-1)![1]!.trim();
-  const sentences = text.replace(/\s+/g, " ").trim().split(/(?<=[.!?])\s*(?=[A-Z])/);
+const HEADING_LINE = /^\s*\*\*(.+?)\*\*\s*$/;
+const SENTENCE_BREAK = /(?<=[.!?])\s*(?=[A-Z])/;
+/*
+ * Both read only what a streamed delta added. They were asked of the whole text each delta, every heading matched
+ * and every sentence split, for the one shown: a long turn's every update grew with it.
+ *
+ * A heading is a whole line, so the lines already read are not read again: kept per text it extends, a few texts
+ * at a time (a turn's thinking and its answer).
+ */
+const headingScans: Array<{ text: string; read: number; heading: string | null }> = [];
+function lastHeading(text: string): string | null {
+  let scan = headingScans.find((entry) => text.length >= entry.text.length && text.startsWith(entry.text));
+  if (!scan) {
+    scan = { text: "", read: 0, heading: null };
+    headingScans.unshift(scan);
+    headingScans.length = Math.min(headingScans.length, 4);
+  }
+  // Complete lines once; the last, still open, every time.
+  const complete = text.lastIndexOf("\n") + 1;
+  // Only a line with ** in it can be one: from each ** to the next.
+  for (let start = scan.read; start < complete;) {
+    const star = text.indexOf("**", start);
+    if (star < 0 || star >= complete) break;
+    const end = text.indexOf("\n", star);
+    const match = HEADING_LINE.exec(text.slice(Math.max(start, text.lastIndexOf("\n", star) + 1), end));
+    if (match) scan.heading = match[1]!.trim();
+    start = end + 1;
+  }
+  scan.text = text;
+  scan.read = Math.max(scan.read, complete);
+  const open = HEADING_LINE.exec(text.slice(complete));
+  return open ? open[1]!.trim() : scan.heading;
+}
+/* The last sentence, read from the end: a break inside the window is one in the whole text (its first character has
+   no character before it to look behind at, so a sentence must start after it). Longer than the window, the whole. */
+const SENTENCE_WINDOW = 4000;
+function lastSentence(text: string): string {
+  if (text.length > SENTENCE_WINDOW) {
+    const pieces = text.slice(-SENTENCE_WINDOW).replace(/\s+/g, " ").split(SENTENCE_BREAK).map((sentence) => sentence.trim());
+    for (let index = pieces.length - 1; index >= 1; index -= 1) if (pieces[index]) return pieces[index]!;
+  }
+  const sentences = text.replace(/\s+/g, " ").trim().split(SENTENCE_BREAK);
   return sentences.map((sentence) => sentence.trim()).filter(Boolean).at(-1) || "";
+}
+function summaryOf(text: string): string {
+  return lastHeading(text) ?? lastSentence(text);
 }
 
 /* What each kind of tool reads as, counted. The adapter says which kind a tool
@@ -292,14 +332,20 @@ function previewOf(trace: TurnTraceData, writing: boolean): { status: ReturnType
   let latest: Detail | null = null;
   let thought: Detail | null = null;
   const tools: ToolItem[] = [];
-  for (const segment of trace.segments) {
+  for (const segment of trace.segments) if (segment.kind === "tool") tools.push(segment.tool);
+  // From the end: the last segment that has a line is the latest, the last thought or error the thought. Only the
+  // one shown is summarised; each delta summarised every text of the turn, front to back, to keep the last.
+  for (let index = trace.segments.length - 1; index >= 0 && !thought; index -= 1) {
+    const segment = trace.segments[index]!;
+    let detail: Detail | null = null;
     if (segment.kind === "tool") {
-      tools.push(segment.tool);
       const line = unnamed(segment.tool) ? "" : stepLine(segment.tool, trace.active);
-      if (line) latest = { text: line, markdown: false };
-    } else if (segment.kind === "error") latest = thought = { text: segment.message.errorMessage || "The model request failed.", markdown: false };
-    else if (segment.discarded) continue;
-    else if (segment.text.trim()) latest = thought = { text: summaryOf(segment.text), markdown: true };
+      if (line) latest ??= { text: line, markdown: false };
+      continue;
+    }
+    if (segment.kind === "error") detail = { text: segment.message.errorMessage || "The model request failed.", markdown: false };
+    else if (!segment.discarded && segment.text.trim()) detail = { text: summaryOf(segment.text), markdown: true };
+    if (detail) { thought = detail; latest ??= detail; }
   }
   return { status: statusOf(trace, writing), work: workOf(tools), detail: trace.active ? latest : thought || latest };
 }
