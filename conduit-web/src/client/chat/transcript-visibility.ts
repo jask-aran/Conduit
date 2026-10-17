@@ -378,16 +378,35 @@ export function mountTranscriptVisibility(
   // every block's rect read, repeated each frame a block was revealed -- which
   // on a long transcript put 20-odd frames over budget in one scroll
   // (docs/design/performance-pass.md, 10).
-  const onScrollEnd = () => {
+  const reobserve = () => {
+    repairTimer = null;
     if (!fontsReady || activeIds.size) return;
     for (const element of managed) {
       visibilityObserver.unobserve(element);
       visibilityObserver.observe(element);
     }
   };
+  // A scroll the reader made is repaired as it ends. The tail follow's are not, one by one: it sets the scroll every
+  // frame an answer grows, each set ends a scroll, and every block of the transcript was observed afresh each frame --
+  // a long answer's intersections all recomputed, every frame. Those are repaired once they stop.
+  let repairTimer: number | null = null;
+  let readerScrolled = false;
+  const onReaderInput = () => { readerScrolled = true; };
+  const onScrollEnd = () => {
+    if (repairTimer != null) clearTimeout(repairTimer);
+    repairTimer = null;
+    if (readerScrolled) {
+      readerScrolled = false;
+      reobserve();
+      return;
+    }
+    repairTimer = window.setTimeout(reobserve, 200);
+  };
+  const READER_INPUT = ["wheel", "touchstart", "pointerdown", "keydown"] as const;
   window.addEventListener(PANEL_GEOMETRY_MOTION_EVENT, onMotion);
   document.addEventListener("visibilitychange", onVisibility);
   viewport.addEventListener("scrollend", onScrollEnd);
+  for (const type of READER_INPUT) window.addEventListener(type, onReaderInput, { capture: true, passive: true });
   mutationObserver.observe(thread, {
     childList: true,
     subtree: true,
@@ -416,6 +435,8 @@ export function mountTranscriptVisibility(
       window.removeEventListener(PANEL_GEOMETRY_MOTION_EVENT, onMotion);
       document.removeEventListener("visibilitychange", onVisibility);
       viewport.removeEventListener("scrollend", onScrollEnd);
+      for (const type of READER_INPUT) window.removeEventListener(type, onReaderInput, { capture: true });
+      if (repairTimer != null) clearTimeout(repairTimer);
       mutationObserver.disconnect();
       viewportObserver.disconnect();
       visibilityObserver.disconnect();
