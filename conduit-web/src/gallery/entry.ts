@@ -11,7 +11,7 @@ import { fakeFetch } from "./fake-fetch";
 
 const frame = new URLSearchParams(location.search).get("frame");
 fakeMicrophone();
-fakeSockets();
-fakeFetch();
+// A live frame talks to the real server (live-chat.tsx); everything else is fakes.
+if (frame !== "live") { fakeSockets(); fakeFetch(); }
 if (frame) emulatePhone();
 void import("./canvas").then((module) => module.mount(frame));

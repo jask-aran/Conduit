@@ -22,8 +22,9 @@ export function UserBubble(props: { text: string }) {
 }
 
 /** A chat screen of the app's own header, transcript and composer over a seeded chat, not wired to a server. */
-export function ChatScreen() {
-  const chat = fakeChat();
+/** chat: a real one (live-chat.ts) in place of the seeded chat; the pickers stay seeded. */
+export function ChatScreen(props: { chat?: ReturnType<typeof fakeChat> } = {}) {
+  const chat = props.chat ?? fakeChat();
   const models = seededModels();
   const place = seededPlace();
   const profile = seededProfile();
