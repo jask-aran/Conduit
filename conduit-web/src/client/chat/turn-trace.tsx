@@ -367,6 +367,7 @@ function LibraryTrailLine(props: RowProps & { item: TrailItem; arriving?: boolea
     }}</Match>
   </Switch>;
 }
+const LATEST_CHARS = 240;
 function LibraryTurnTrace(props: TraceProps) {
   const preview = createMemo(() => previewOf(props.trace, Boolean(props.writing)));
   const time = turnTime(() => props.trace);
@@ -375,7 +376,9 @@ function LibraryTurnTrace(props: TraceProps) {
   const trail = createMemo(() => trailOf(props.trace.segments));
   let opened = 0;
   // One renderer for the line, its text growing in place: a new one each delta draws a blank frame between them.
-  const text = () => preview().detail?.text ?? "";
+  // The line is one line, cut with an ellipsis, so it is given no more than a line's worth: a long sentence's whole
+  // text, replaced each delta, was laid out and painted every frame for the few words it shows.
+  const text = () => { const full = preview().detail?.text ?? ""; return full.length > LATEST_CHARS ? `${full.slice(0, LATEST_CHARS)}\u2026` : full; };
   const thinking = <Suspense fallback={text()}><ChatMarkdown inline renderer={props.renderer} pacing={props.pacing}>{text() || "…"}</ChatMarkdown></Suspense>;
   const latest = () => { const detail = preview().detail; return detail ? detail.markdown ? thinking : detail.text : undefined; };
   return <div class="turn-trace" data-active={props.trace.active ? "true" : "false"}>
@@ -389,6 +392,8 @@ function LibraryTurnTrace(props: TraceProps) {
 }
 
 export function TurnTrace(props: { trace: TurnTraceData; writing?: boolean; sessionId: string | null; renderer?: MarkdownRendererId; pacing?: IncremarkPacingMode; profileLabel?: string; initialOpen?: boolean; onOpenChange?: (open: boolean) => void; toolOpen?: (id: string) => boolean; onToolOpenChange?: (id: string, open: boolean) => void; onRendered?: () => void }) {
+  // Before this one's preview and clock, which the library's would only duplicate (a second previewOf each delta).
+  if (useLibrary()) return <LibraryTurnTrace {...props} />;
   const preview = createMemo(() => previewOf(props.trace, Boolean(props.writing)));
   const time = turnTime(() => props.trace);
   const unfinished = () => !props.trace.active && (props.trace.status === "failed" || props.trace.status === "interrupted");
@@ -396,7 +401,6 @@ export function TurnTrace(props: { trace: TurnTraceData; writing?: boolean; sess
   // not a button, and it is one line.
   const empty = () => props.trace.segments.length === 0;
   const c = traceClass(useLibrary());
-  if (useLibrary()) return <LibraryTurnTrace {...props} />;
   return <Disclosure class="turn-trace" data-active={props.trace.active ? "true" : "false"} data-empty={empty() ? "true" : undefined} headerClass={c("turn-trace-header", "ui-trace")} bodyClass="turn-trace-body"
     initialOpen={props.initialOpen} onOpenChange={props.onOpenChange} triggerProps={{ get disabled() { return empty(); } }}
     header={<>
