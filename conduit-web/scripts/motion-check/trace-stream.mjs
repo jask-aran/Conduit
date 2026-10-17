@@ -8,8 +8,8 @@
 //   node scripts/motion-check/trace-stream.mjs ["think 400 3 tools 600t"] [stop]
 const { chromium } = await import(new URL("../../../.smoke-tools/node_modules/playwright/index.mjs", import.meta.url).href);
 const flag = (name) => { const at = process.argv.indexOf(name); return at > 0 ? process.argv.splice(at, 2)[1] : null; };
-// --model <spec>: a real model on the Assistant profile; its two runs differ, so they are printed to read, not compared.
-const model = flag("--model");
+// --model <spec>: a real model on the Assistant profile (--profile coding for codemode scripts); its two runs differ, so they are printed to read, not compared.
+const model = flag("--model"), profile = flag("--profile") ?? "assistant";
 const prompt = process.argv[2] ?? (model ? "List the files in this folder, then read one of them, then tell me in three sentences what you found." : "think 400 3 tools 600t"), stop = process.argv[3] === "stop";
 const b = await chromium.connectOverCDP("http://127.0.0.1:9222");
 const ctx = b.contexts()[0];
@@ -18,7 +18,7 @@ const back = g.url();
 const app = await ctx.newPage(); await app.goto("http://127.0.0.1:4310/", { waitUntil: "commit" }); await app.waitForTimeout(1500);
 const api = (url, method, body) => app.evaluate(async ([url, method, body]) => (await fetch(url, { method, headers: { "content-type": "application/json" }, body: body ? JSON.stringify(body) : undefined })).json(), [url, method, body]);
 // A chat each: a window does not follow a turn another one sends on its chat (an app bug, not the library's).
-const fresh = async () => { const chat = await api("/v0/chats", "POST", { projectId: "test", profileId: model ? "assistant" : "test-stream" }); const id = chat?.id ?? chat?.chat?.id;
+const fresh = async () => { const chat = await api("/v0/chats", "POST", { projectId: "test", profileId: model ? profile : "test-stream" }); const id = chat?.id ?? chat?.chat?.id;
   await api(`/v0/chats/${id}/models`, "PATCH", { model: model ?? "fast-250" }); return id; };
 const id = await fresh(), phoneId = await fresh();
 await app.close();
