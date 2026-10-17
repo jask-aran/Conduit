@@ -31,7 +31,9 @@
 [data-sidebar="header"] [data-sidebar="brand"] { display: flex; order: 1; min-width: 0; height: 33.6px; flex: 1; align-items: stretch; justify-content: flex-start; gap: 8px; border: 0; border-radius: var(--radius-md); background: transparent; padding: 0 4.8px; color: inherit; }
 [data-sidebar="header"] [data-sidebar="trigger"] { order: 0; margin-left: 0; }
 [data-sidebar="header"] [data-sidebar="brand"] > span { display: flex; height: 100%; align-items: center; font-family: "Conduit Wordmark", sans-serif; font-size: 15px; font-weight: 400; letter-spacing: 0; line-height: 1; }
-.sidebar-content { min-height: 0; flex: 1; overflow-y: auto; padding: 5.6px 6.4px; scrollbar-color: var(--native-scrollbar-color); scrollbar-width: var(--native-scrollbar-width); }
+/* Scrolled on the compositor, as the transcript is: below 1.5x a transparent scroller is not, and each frame of a
+   scroll laid the whole page out into layers again (0.6ms a frame). */
+.sidebar-content { min-height: 0; flex: 1; overflow-y: auto; padding: 5.6px 6.4px; scrollbar-color: var(--native-scrollbar-color); scrollbar-width: var(--native-scrollbar-width); will-change: scroll-position; }
 .sidebar-content::-webkit-scrollbar { width: 5.6px; height: 5.6px; }
 .sidebar-content::-webkit-scrollbar-thumb { border: 1.6px solid transparent; border-radius: 999px; background: color-mix(in oklch, var(--foreground), transparent 72%); background-clip: padding-box; }
 .sidebar-group { display: flex; flex-direction: column; gap: 0.8px; margin-top: 9.6px; }
