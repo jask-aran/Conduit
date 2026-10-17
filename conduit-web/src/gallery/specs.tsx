@@ -13,7 +13,8 @@ export const px = (value: string) => value.replace(/(\d+\.\d+)px/g, (_, n: strin
  * In use: a small scene drawn by the library, each place a foundation shows numbered
  * on it, and what it computes to beside the number -- at desktop and phone.
  */
-export interface Mark { selector: string; label: string; read: (el: HTMLElement) => string }
+/** side: the number above or below what it marks, for a part sharing its line with others; else in the gutter left of the scene. */
+export interface Mark { selector: string; label: string; read: (el: HTMLElement) => string; side?: "above" | "below" }
 /** A box of space drawn over a scene: a container's padding (edge) or the gap between two of its parts. */
 type Band = { x: number; y: number; w: number; h: number; kind: "edge" | "gap"; label: string };
 /** The bands of each container in the scene: its padding all round, and the gap between each pair of its children. */
@@ -45,7 +46,7 @@ export function InUse(props: { scene: () => JSX.Element; marks: Mark[]; density?
   const columns = props.density === false ? [undefined] : (["desktop", "phone"] as const);
   const [values, setValues] = createSignal<string[][]>(columns.map(() => []));
   const Scene = (scene: { column: number; density?: "desktop" | "phone" }) => {
-    const [spots, setSpots] = createSignal<({ x: number; y: number; to: number } | null)[]>([]);
+    const [spots, setSpots] = createSignal<({ x: number; y: number; to: number; drop?: number } | null)[]>([]);
     const [bands, setBands] = createSignal<Band[]>([]);
     let el!: HTMLDivElement;
     const measure = () => requestAnimationFrame(() => {
@@ -54,9 +55,11 @@ export function InUse(props: { scene: () => JSX.Element; marks: Mark[]; density?
       // Each number in the gutter left of the scene, level with what it marks, a line out to it; marks on one line queue leftward.
       if (props.spacing) setBands(bandsOf(el, props.spacing));
       const placed: { x: number; y: number; to: number }[] = [];
-      setSpots(found.map((node) => {
+      setSpots(found.map((node, at) => {
         if (!node) return null;
-        const rect = node.getBoundingClientRect();
+        const rect = node.getBoundingClientRect(), side = props.marks[at]!.side;
+        if (side) { const edge = (side === "above" ? rect.top : rect.bottom) - box.top; const y = edge + (side === "above" ? -14 : 14);
+          return { x: rect.left - box.left + rect.width / 2, y, to: 0, drop: edge - y }; }
         const y = rect.top - box.top + Math.min(rect.height / 2, 12);
         const x = -26 - 20 * placed.filter((spot) => Math.abs(spot.y - y) < 16).length;
         const spot = { x, y, to: rect.left - box.left };
@@ -75,7 +78,9 @@ export function InUse(props: { scene: () => JSX.Element; marks: Mark[]; density?
       <div ref={el} class="g-inuse-scene">{props.scene()}
         <For each={bands()}>{(band) => <i class="g-band" data-kind={band.kind} style={{ left: `${band.x}px`, top: `${band.y}px`, width: `${band.w}px`, height: `${band.h}px` }}><small>{band.label}</small></i>}</For>
         <For each={spots()}>{(spot, index) => spot && <>
-          <i class="g-lead" style={{ left: `${spot.x + 8}px`, top: `${spot.y}px`, width: `${Math.max(0, spot.to - spot.x - 8)}px` }} />
+          {spot.drop === undefined
+            ? <i class="g-lead" style={{ left: `${spot.x + 8}px`, top: `${spot.y}px`, width: `${Math.max(0, spot.to - spot.x - 8)}px` }} />
+            : <i class="g-lead" style={{ left: `${spot.x}px`, top: `${spot.y + Math.min(0, spot.drop)}px`, width: "1px", height: `${Math.abs(spot.drop)}px` }} />}
           <span class="g-badge" style={{ left: `${spot.x}px`, top: `${spot.y}px` }}>{index() + 1}</span>
         </>}</For>
       </div>
