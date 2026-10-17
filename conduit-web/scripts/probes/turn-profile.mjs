@@ -8,7 +8,7 @@
  * function. Names come from source maps: build with them first (`npx vite build --mode gallery --sourcemap`, or the
  * app's `npx vite build --sourcemap` and a restart), and without them afterwards.
  *
- *   node scripts/probes/turn-profile.mjs ["think 3000 5 tools 1500t"] [--app | --phone] [--save <file>]
+ *   node scripts/probes/turn-profile.mjs ["think 3000 5 tools 1500t"] [--app | --phone] [--throttle 4] [--css <rules>] [--save <file>]
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -31,7 +31,11 @@ const phone = process.argv.includes("--phone");
 const emu = await ctx.newCDPSession(page);
 await emu.send("Emulation.setDeviceMetricsOverride", phone ? { width: 412, height: 860, deviceScaleFactor: 2.625, mobile: true } : app ? { width: 1280, height: 900, deviceScaleFactor: 0, mobile: false } : { width: 413, height: 858, deviceScaleFactor: 0, mobile: false });
 if (phone) await emu.send("Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 5 });
+// --throttle N: the CPU N times slower, as a phone's is (4 is a mid-range one).
+const throttle = Number(arg("--throttle", 1)); if (throttle > 1) await emu.send("Emulation.setCPUThrottlingRate", { rate: throttle });
 await page.goto(url, { waitUntil: "commit" }); await page.waitForTimeout(7000);
+// --css <rules>: added to the page before the prompt, to measure a turn with something switched off (an A/B).
+if (arg("--css", null)) await page.addStyleTag({ content: arg("--css", null) });
 // State marks from a MutationObserver: a rAF of the probe's own would ask for every frame it measures.
 await page.evaluate((line) => { let last = ""; new MutationObserver(() => { const s = ([...document.querySelectorAll(".turn-trace")].at(-1)?.querySelector(line)?.textContent ?? "").replace(/\s+/g, " ").trim().replace(/ · .*/, "");
   if (s && s !== last) { last = s; window.__state = s; performance.mark(`state ${s}`); } }).observe(document.body, { subtree: true, childList: true, characterData: true }); }, ".ui-trace-line, .turn-trace-line");
@@ -59,10 +63,12 @@ const span = {}; for (let i = 0; i + 1 < marks.length; i++) { const s = marks[i]
 // --save <file>: the page's main thread (its slices, the state marks) and the CPU profile, to look at frame by frame.
 if (arg("--save", null)) fs.writeFileSync(arg("--save", null), JSON.stringify({ marks, list, profile }));
 const agg = {}; let j = 0;
-for (const t of tasks) { const a = agg[stateAt(t.ts)] ??= { busy: 0, frames: 0, phases: {}, raf: {}, durs: [] }; a.busy += t.dur / 1000; a.durs.push(t.dur / 1000);
+const firstAt = {}; for (const m of marks) firstAt[m.name.slice(6)] ??= m.ts;
+for (const t of tasks) { const st = stateAt(t.ts); const a = agg[st] ??= { busy: 0, frames: 0, phases: {}, raf: {}, durs: [], trend: [] }; a.busy += t.dur / 1000; a.durs.push(t.dur / 1000);
+  const sec = Math.floor((t.ts - (firstAt[st] ?? t.ts)) / 1e6); const tr = a.trend[sec] ??= { busy: 0, frames: 0 }; tr.busy += t.dur / 1000;
   while (j < list.length && list[j].ts < t.ts) j++;
   const inside = []; for (let k = j; k < list.length && list[k].ts < t.ts + t.dur; k++) if (list[k] !== t && !isTask(list[k])) inside.push(list[k]);
-  if (inside.some((e) => e.name === "Paint")) a.frames++;
+  if (inside.some((e) => e.name === "Paint")) { a.frames++; tr.frames++; }
   for (const e of inside) if (["UpdateLayoutTree", "Layout", "PrePaint", "Paint", "Layerize", "MinorGC", "MajorGC", "IntersectionObserverController::computeIntersections"].includes(e.name)) a.phases[e.name] = (a.phases[e.name] ?? 0) + e.dur / 1000;
   for (const e of inside) if (e.name === "FireAnimationFrame") { const d = inside.find((c) => c.name === "FunctionCall" && c.ts >= e.ts && c.ts < e.ts + e.dur)?.args?.data ?? {};
     const k = where(d.url, (d.lineNumber ?? 1) - 1, (d.columnNumber ?? 1) - 1) ?? d.functionName; a.raf[k] = (a.raf[k] ?? 0) + e.dur / 1000; } }
@@ -76,4 +82,6 @@ for (const [s, a] of Object.entries(agg)) { const secs = span[s];
   // Tasks against the 144Hz frame (6.94ms): how long the usual, the slow and the slowest took, and how many went over.
   const d = a.durs.sort((x, z) => x - z), q = (f) => d[Math.min(d.length - 1, Math.floor(d.length * f))]?.toFixed(1);
   console.log(`   tasks: ${d.length}, p50 ${q(0.5)} p90 ${q(0.9)} p99 ${q(0.99)} max ${q(1)}ms, ${d.filter((x) => x > 6.94).length} over 6.94ms`);
+  // A frame's cost as the turn goes on: work that grows with the reply's length shows as a rising line.
+  if (a.trend) console.log(`   per second, ms of main thread a frame: ${a.trend.map((x) => x.frames ? (x.busy / x.frames).toFixed(1) : "-").join(" ")}`);
   console.log(`   rendering (ms): ${top(a.phases, 8)}\n   rAF (ms): ${top(a.raf, 5)}\n   JS self (ms): ${top(self[s] ?? {}, 10)}`); }
