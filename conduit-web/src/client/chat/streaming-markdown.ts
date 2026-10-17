@@ -333,7 +333,7 @@ function closedPrefix(prefix: string) {
 }
 
 // Where the text after the last whitespace-only line starts, or -1: read back from the end, line by line.
-function lastBlankLineEnd(source: string) {
+export function lastBlankLineEnd(source: string) {
   let end = source.lastIndexOf("\n");
   while (end > 0) {
     const start = source.lastIndexOf("\n", end - 1);

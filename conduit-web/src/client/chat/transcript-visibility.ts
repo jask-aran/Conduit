@@ -310,6 +310,17 @@ export function mountTranscriptVisibility(
     if (!activeIds.size) scheduleRefresh(true);
   };
 
+  // A change inside a block -- a streamed word, a formula filling in -- leaves a row's blocks as they were. Each one
+  // re-read them, and the selector walked every element of the row to find them: 6,000 word spans late in a long
+  // answer, every frame. One that brings a message's Markdown in or out still counts.
+  const withinBlock = (record: MutationRecord) => {
+    const target = record.target instanceof Element ? record.target : record.target.parentElement;
+    if (!target || target.classList.contains("incremark") || !target.closest(".incremark")) return false;
+    for (const node of [...record.addedNodes, ...record.removedNodes]) {
+      if (node instanceof Element && (node.matches(".chat-markdown") || node.querySelector(".chat-markdown"))) return false;
+    }
+    return true;
+  };
   const mutationObserver = new MutationObserver((records) => {
     // A collapse commits a large height change in one go. Leaving it to the
     // observers left every cached intrinsic size stale for a frame or more,
@@ -334,10 +345,12 @@ export function mountTranscriptVisibility(
     }
     let rows: Set<HTMLElement> | null = new Set();
     for (const record of records) {
+      if (withinBlock(record)) continue;
       const row = record.target === thread ? null : (record.target as Element).closest?.(ROW_SELECTOR) as HTMLElement | null;
       if (!row) { rows = null; break; }
       rows.add(row);
     }
+    if (rows && !rows.size) return;
     scheduleSync(rows);
   });
   const viewportObserver = new ResizeObserver(() => scheduleRefresh());
