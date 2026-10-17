@@ -18,7 +18,7 @@ import { readStoredMath, storeMath } from "./math-html-store";
 import { citationHost, resolveMarkdownUrl } from "./markdown-security";
 import { projectTableMathSource, promoteTableCellDisplayMath, restoreTableMathAst, restoreTableMathSentinel } from "./table-math";
 import type { StreamingPending } from "./streaming-markdown";
-import { splitStreamingMarkdown } from "./streaming-markdown";
+import { createStreamingMarkdownSplitter, splitStreamingMarkdown } from "./streaming-markdown";
 import { streamFadeMs, streamMathFade } from "@/client/preferences/stream-fade";
 import "./incremark-markdown.css";
 
@@ -147,11 +147,13 @@ function restoreParsedBlock(block: ParsedBlock, sentinel: string | null, origina
  * rebuilt the list item or restyled the line above for a frame. The line is
  * released with its first word, a character or two later.
  */
-const MARKER_ONLY_LINE = /(?:^|\n)([ \t]*[-*+#>=_~`.):|\d][-*+#>=_~`.):|\d \t]*)$/;
+const MARKER_ONLY_LINE = /^[ \t]*[-*+#>=_~`.):|\d][-*+#>=_~`.):|\d \t]*$/;
 
+// Only the last line is read: a pattern anchored at the end but not the start was tried from every offset of the
+// whole message, every delta.
 function holdMarkerLine(source: string) {
-  const match = MARKER_ONLY_LINE.exec(source);
-  return match ? source.slice(0, source.length - match[1]!.length) : source;
+  const lineStart = source.lastIndexOf("\n") + 1;
+  return MARKER_ONLY_LINE.test(source.slice(lineStart)) ? source.slice(0, lineStart) : source;
 }
 
 function sameDefinitions(previous: Record<string, Definition>, next: Record<string, Definition>) {
@@ -1177,11 +1179,12 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
     return within ?? touching;
   };
 
+  const splitSource = createStreamingMarkdownSplitter();
   createEffect(() => {
     const raw = frozenSource() ?? String(props.children || "");
     const source = props.inline ? raw : streaming() ? holdMarkerLine(raw) : closeTrailingMath(raw);
     const tableMath = !props.inline;
-    const split = splitStreamingMarkdown(source, { tableMath, allowUnclosedMath: streaming() });
+    const split = splitSource(source, { tableMath, allowUnclosedMath: streaming() });
     const projection = tableMath
       ? projectTableMathSource(source, {
         convertTexDisplayDelimiters: true,

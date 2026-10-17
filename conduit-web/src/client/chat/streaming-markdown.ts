@@ -222,7 +222,11 @@ function looksLikeShellVariable(body: string) {
     && /\s\$[A-Za-z_][A-Za-z0-9_]*(?:[./:-][A-Za-z0-9_.-]*)?(?=\s|[.,;:!?)]|$)/.test(body);
 }
 
-function findInlineMath(source: string, ranges: SourceRange[], blockMathStart: number | null, skipDoubleDollar = false, allowUnclosedMath = true) {
+// What an inline scan leaves open at its end: a code span, or a `\(` it found no close for (the scan of a longer
+// source would close it further on, past this end, and skip what lies between).
+type InlineCarry = { codeDelimiter: number; unclosedParen: boolean };
+
+function findInlineMath(source: string, ranges: SourceRange[], blockMathStart: number | null, skipDoubleDollar = false, allowUnclosedMath = true, carry?: InlineCarry) {
   let codeDelimiter = 0;
   for (let index = 0; index < source.length; index += 1) {
     if (inRange(index, ranges) || (blockMathStart != null && index >= blockMathStart)) continue;
@@ -243,6 +247,7 @@ function findInlineMath(source: string, ranges: SourceRange[], blockMathStart: n
         index = close + 1;
         continue;
       }
+      if (carry) carry.unclosedParen = true;
       const body = source.slice(index + 2);
       if (allowUnclosedMath && !/[\r\n]/.test(body)) return { start: index, bodyStart: index + 2 };
       continue;
@@ -264,6 +269,7 @@ function findInlineMath(source: string, ranges: SourceRange[], blockMathStart: n
     const body = source.slice(index + 1);
     if (allowUnclosedMath && !/[\r\n]/.test(body) && !looksLikeShellVariable(body)) return { start: index, bodyStart: index + 1 };
   }
+  if (carry) carry.codeDelimiter = codeDelimiter;
   return null;
 }
 
@@ -311,4 +317,60 @@ export function splitStreamingMarkdown(source: string, options: StreamingMarkdow
 
   const pending = candidates.sort((left, right) => left.start - right.start)[0] || null;
   return pending ? { stable: source.slice(0, pending.start), pending } : { stable: source, pending: null };
+}
+
+/**
+ * Whether nothing in `prefix` reaches past its end: no fence, `$$` block, table-cell formula or inline formula open,
+ * no code span, no `\(` waiting for its close. A source that grows from such a prefix splits exactly as its remainder
+ * does, its offsets moved on by the prefix's length.
+ */
+function closedPrefix(prefix: string) {
+  const fences = scanFences(prefix);
+  if (fences.open || findOpenBlockMath(prefix, fences.ranges) || findOpenTableCellMath(prefix, fences.ranges)) return false;
+  const carry: InlineCarry = { codeDelimiter: 0, unclosedParen: false };
+  return !findInlineMath(prefix, fences.ranges, null, true, true, carry) && !carry.codeDelimiter && !carry.unclosedParen
+    && !findInlineMath(prefix, fences.ranges, null, false, true);
+}
+
+// Where the text after the last whitespace-only line starts, or -1: read back from the end, line by line.
+function lastBlankLineEnd(source: string) {
+  let end = source.lastIndexOf("\n");
+  while (end > 0) {
+    const start = source.lastIndexOf("\n", end - 1);
+    if (start < 0) return -1;
+    if (/^[ \t]*$/.test(source.slice(start + 1, end))) return end + 1;
+    end = start;
+  }
+  return -1;
+}
+
+/**
+ * splitStreamingMarkdown for one message as it streams, without reading it all again for every delta: what lies
+ * before the last blank line that closes everything before it (closedPrefix) is never scanned again. Each delta
+ * read the whole message several times over, so a long answer's every update grew with its length (5ms a delta
+ * late in an 8,000-token answer, the CPU 4x slower). A source that does not extend the last one starts again.
+ */
+export function createStreamingMarkdownSplitter() {
+  let previous = "";
+  let base = 0;
+  let checked = -1;
+  let key = "";
+  return (source: string, options: StreamingMarkdownOptions = {}): StreamingMarkdownSplit => {
+    const nextKey = `${Boolean(options.tableMath)}:${options.allowUnclosedMath !== false}`;
+    if (nextKey !== key || source.length < base || source.substring(0, base) !== previous.substring(0, base)) { base = 0; checked = -1; }
+    key = nextKey;
+    previous = source;
+    const from = base;
+    const tail = from ? source.slice(from) : source;
+    const split = splitStreamingMarkdown(tail, options);
+    // A blank line is a candidate: a block always ends there, a code span or inline formula never crosses it.
+    const blankEnd = lastBlankLineEnd(tail);
+    const candidate = blankEnd < 0 ? -1 : from + blankEnd;
+    if (candidate > from && candidate !== checked) {
+      checked = candidate;
+      if (closedPrefix(source.slice(from, candidate))) base = candidate;
+    }
+    if (!split.pending) return { stable: source, pending: null };
+    return { stable: source.slice(0, from + split.pending.start), pending: { ...split.pending, start: from + split.pending.start } };
+  };
 }
