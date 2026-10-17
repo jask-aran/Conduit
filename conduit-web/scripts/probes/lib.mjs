@@ -66,11 +66,9 @@ export async function open({ windows = flag("--windows"), width = 1800, height =
     const context = browser.contexts()[0];
     const page = await context.newPage();
     const cdp = await context.newCDPSession(page);
-    try {
-      const { windowId } = await cdp.send("Browser.getWindowForTarget");
-      await cdp.send("Browser.setWindowBounds", { windowId, bounds: { windowState: "normal" } });
-      await cdp.send("Browser.setWindowBounds", { windowId, bounds: { width, height } });
-    } catch {}
+    // A tab in the window already open, its viewport set by emulation: the reader's window is never moved or resized.
+    await page.bringToFront();
+    await cdp.send("Emulation.setDeviceMetricsOverride", { width, height, deviceScaleFactor: 0, mobile: false }).catch(() => {});
     return { browser, context, page, cdp, windows, close: () => page.close().catch(() => {}) };
   }
   const scratch = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-probe-"));

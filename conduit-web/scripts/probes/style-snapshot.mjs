@@ -33,11 +33,7 @@ if (mode === "diff") {
   await tmp.close();
   const result = {};
   for (const [name, path] of [["chat", `/chat/${chat}`], ["home", "/"]]) {
-    const { targetId } = await cdp.send("Target.createTarget", { url: `${origin}${path}`, newWindow: true });
-    const { windowId } = await cdp.send("Browser.getWindowForTarget", { targetId });
-    await cdp.send("Browser.setWindowBounds", { windowId, bounds: { windowState: "normal" } }); await cdp.send("Browser.setWindowBounds", { windowId, bounds: { width: 1300, height: 950 } });
-    await new Promise((r) => setTimeout(r, 8000));
-    const page = ctx.pages().find((p) => p.url().endsWith(path)); await page.bringToFront();
+    const page = await ctx.newPage(); await page.bringToFront(); await page.goto(`${origin}${path}`, { waitUntil: "commit" }); await page.waitForTimeout(8000);
     const ps = await ctx.newCDPSession(page); await ps.send("Emulation.setDeviceMetricsOverride", { width: 1280, height: 900, deviceScaleFactor: 1, mobile: false }); await page.waitForTimeout(2500);
     result[name] = await page.evaluate((PROPS) => {
       const skip = (e) => e.closest(".solid-meteor-shower, canvas, .thinking-orb, .ui-orb, [data-sonner-toaster]");
