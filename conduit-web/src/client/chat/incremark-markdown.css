@@ -48,7 +48,9 @@
    opacity: an opacity animation gives every word mid-fade its own compositor
    layer, and layerizing a few dozen of them cost more than the frame budget on
    a real stream. A colour animation only repaints the word. */
-.chat-markdown .stream-word { animation: stream-word-in var(--stream-word-fade, 200ms) ease-out both; }
+/* Backwards only: filled forwards, every word's finished fade stayed in effect, 1,600 animations live by an answer's
+   end; its end is the word's own colour either way. */
+.chat-markdown .stream-word { animation: stream-word-in var(--stream-word-fade, 200ms) ease-out backwards; }
 @keyframes stream-word-in { from { color: transparent; } }
 /* A formula's new parts fade their opacity instead, backwards only, and the
    class is taken off once it has run (katex-patch.ts). */
