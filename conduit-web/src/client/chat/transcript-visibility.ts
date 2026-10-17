@@ -436,10 +436,12 @@ export function mountTranscriptVisibility(
   // One wholly above the viewport changes the height of what is above the reader, and the viewport has no scroll
   // anchoring: the scroll moves with it, so the page does not.
   const remeasure = (blocks: Set<HTMLElement>) => {
+    // Every read before any write, then every read after: read and shown one by one, each block laid the answer out
+    // again -- at settlement, when the fade's word spans leave every hidden block, a layout per block (150ms).
     const viewTop = viewport.getBoundingClientRect().top;
+    const rects = [...blocks].map((block) => [block, block.getBoundingClientRect()] as const);
     const above: Array<[HTMLElement, number]> = [];
-    for (const block of blocks) {
-      const rect = block.getBoundingClientRect();
+    for (const [block, rect] of rects) {
       if (!show(block)) continue;
       if (rect.bottom <= viewTop) above.push([block, rect.height]);
       visibilityObserver.unobserve(block);
