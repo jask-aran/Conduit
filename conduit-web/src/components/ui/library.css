@@ -886,6 +886,10 @@
 /* An answer's foot fades in once the answer is done; a sent message fades in where it lands. */
 :is(.ui-message, .ui-message-foot)[data-entering] { animation: ui-fade-in var(--duration-gentle) var(--ease-arrive) backwards; }
 .ui-message-foot > time { margin-right: var(--space-xs); font-variant-numeric: tabular-nums; }
+.ui-message-status { margin-right: var(--space-xs); color: var(--foreground); font-weight: var(--weight-strong); }
+.ui-stop-line { display: flex; align-items: center; gap: var(--space-xs); color: var(--muted-foreground); font-size: var(--text-row); }
+.ui-stop-line > b { color: var(--foreground); font-weight: var(--weight-strong); }
+.ui-stop-line > svg { width: var(--icon-xs); height: var(--icon-xs); fill: currentColor; stroke-width: 0; }
 .ui-message-foot[data-end] { justify-content: flex-end; }
 /* Its buttons are the smallest icon buttons, whatever size they were asked for. */
 .ui-message-foot .ui-button[data-size^="icon"] { width: var(--control-xs); height: var(--control-xs); border-radius: var(--radius-round); padding: 0; }
@@ -1159,27 +1163,10 @@ button.ui-step:is(:hover, :focus-visible) { background: var(--tint); }
 .ui-answer .chat-markdown blockquote { border-left-color: var(--tint); padding-left: var(--space-lg); }
 .ui-answer .chat-markdown :not(pre) > code { border-radius: calc(0.6 * var(--radius-control)); background: var(--tint); padding: 0 var(--space-xs); font: 0.9em var(--font-code); }
 .ui-answer .chat-markdown :is(th, td) { border-color: var(--tint); padding: var(--space-sm) var(--space-md); }
-/* The app's opened trail drawn as a Trail of Steps: in the transcript's units (its own rules are in rem),
-   its lines under the header's text, the step's icon, verb, mono subject and time. */
-.ui-read .turn-trace .turn-trace-body { display: grid; gap: var(--space-2xs); margin: var(--space-2xs) 0 0; padding-left: calc(var(--icon-xl) + var(--row-gap) - var(--space-sm)); }
-.ui-read .turn-trace .trail-row-header { min-height: var(--control-xs); gap: var(--row-gap); border-radius: var(--radius-control); padding: 0 var(--space-sm); font-size: var(--text-row); }
-.ui-read .turn-trace .trail-row-header:is(:hover, :focus-visible) { background: var(--tint); }
-.ui-read .turn-trace .trail-row-header .trail-icon { width: var(--icon-sm); height: var(--icon-sm); }
-.ui-read .turn-trace .trail-verb { color: var(--foreground); font-weight: var(--weight-rest); }
-.ui-read .turn-trace .trail-subject { font: var(--text-caption) var(--font-code); }
-.ui-read .turn-trace .trail-meta { gap: var(--space-md); font-size: var(--text-caption); }
 /* The header's latest line, when it is Markdown (the app's), reads inline at the line's size. */
 .ui-trace-latest .chat-markdown { display: contents; font-size: inherit; line-height: inherit; }
 .ui-trace-latest :is(.chat-markdown, .incremark) > * { display: inline; margin: 0; }
 .ui-trace-latest :is(.chat-markdown, .incremark) > *:not(:last-child)::after { content: " "; }
-.ui-read .turn-trace .trail-row-header .ui-disclosure-chevron { opacity: 0; }
-.ui-read .turn-trace .trail-meta + .ui-disclosure-chevron { margin-left: 0; }
-.ui-read .turn-trace .trail-row-header:is(:hover, :focus-visible, [aria-expanded="true"]) .ui-disclosure-chevron { opacity: 1; }
-.ui-read .turn-trace[data-empty] .ui-disclosure-chevron { visibility: hidden; }
-.ui-read .turn-trace :is(.tool-step-content, .text-step-content) { margin: var(--space-2xs) 0 var(--space-sm) calc(var(--space-sm) + var(--icon-sm) + var(--row-gap)); }
-.ui-read .turn-trace .tool-step-content pre { border: 1px solid var(--tint); border-radius: var(--radius-control); background: transparent; padding: var(--space-sm) var(--space-lg); font: var(--text-caption)/1.6 var(--font-code); }
-.ui-read .turn-trace .text-step-content .chat-markdown { font-size: var(--text-row); }
-.ui-read .turn-trace .tool-group-steps { gap: var(--space-2xs); margin-left: calc(var(--space-sm) + var(--icon-sm) / 2); padding-left: var(--space-sm); border-left-color: var(--tint); }
 /* The app's code block (its Markdown's .artifact) drawn as a CodeBlock: a box, the caption bar, the code face. */
 .ui-answer .chat-markdown .artifact { border: 1px solid var(--tint); border-radius: var(--radius-control); background: var(--background); }
 .ui-answer .chat-markdown .artifact-header { min-height: var(--control-sm); border-bottom: 1px solid var(--tint); background: linear-gradient(var(--tint), var(--tint)), var(--background); padding: 0 var(--space-2xs) 0 var(--space-lg); color: var(--muted-foreground); font: var(--text-caption) var(--font-data); }
