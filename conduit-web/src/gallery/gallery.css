@@ -203,9 +203,6 @@ html, body { background: var(--frame, #08090a); color: var(--foreground); }
 .g-state-table { border-collapse: collapse; font-size: 12px; }
 .g-state-table :is(th, td) { padding: var(--space-xs) var(--space-md); border-bottom: 1px solid var(--border); text-align: center; }
 .g-state-table tbody th { text-align: left; font-weight: 500; } .g-state-table thead th { color: var(--muted-foreground); font-weight: 500; }
-.g-partlist { display: grid; grid-template-columns: max-content 1fr; gap: var(--space-xs) var(--space-md); margin: var(--space-xl) 0 0; font-size: 12px; }
-.g-partlist dt { font-weight: 600; } .g-partlist dt small { display: block; font-weight: 400; color: var(--muted-foreground); }
-.g-partlist dd { margin: 0; color: var(--muted-foreground); }
 .g-anatomy :is(.ui-composer-field, .ui-toolbar, .ui-rider) { outline: 1px dashed #d99a2299; outline-offset: -1px; }
 .g-anatomy :is(.ui-toolbar-start, .ui-toolbar-end) { outline: 1px dotted #7aa2f799; outline-offset: -2px; }
 .g-anatomy :is(.ui-lines, .ui-rider-actions, .ui-rider > .ui-title-text) { outline: 1px dotted #7aa2f799; outline-offset: 1px; }
@@ -406,3 +403,5 @@ html, body { background: var(--frame, #08090a); color: var(--foreground); }
 .g-trace-states td:nth-child(2) { width: 260px; color: var(--muted-foreground); }
 .g-trace-states .g-trace-group { padding-top: var(--space-lg); color: var(--muted-foreground); font-weight: 500; text-transform: uppercase; letter-spacing: .06em; font-size: 10px; }
 .g-anatomy :is(.ui-trace-line, .ui-trace-latest, .ui-trail) { outline: 1px dashed #d99a2299; outline-offset: 1px; }
+.g-trace-anatomy { width: 560px; }
+.g-inuse-scene > .g-anatomy { padding-block: 20px; }

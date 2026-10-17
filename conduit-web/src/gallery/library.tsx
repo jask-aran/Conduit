@@ -110,26 +110,29 @@ const phoneComposer = (mode: Live<VoiceMode>, opts: { draft?: Live<boolean>; awa
     <PillButton voice folded={m() !== "listening" && !draft()} {...icon(m() === "listening" ? "Stop and send" : "Send", <ArrowUpIcon />)} />
   </PhoneComposer>;
 };
-/** A part of an assembly: what it is called, what it is built from, what it does. */
-const PartList = (props: { parts: [string, string, string][] }) => <dl class="g-partlist"><For each={props.parts}>{([name, from, does]) => <><dt>{name}<small>{from}</small></dt><dd>{does}</dd></>}</For></dl>;
-const PHONE_PARTS: [string, string, string][] = [
-  ["Edit pills", "PillButtons in edit", "Undo · Delete word · Previous word · Next word · End of draft: over the field while its cursor is moved by hand"],
-  ["Field", "PillField", "the draft; shown while typing"],
-  ["Options", "PillButton · open", "+: opens the options menu (attach, model, ...); stays lit while the rest dims"],
-  ["Camera", "PillButton", "takes a photo to attach"],
-  ["Keyboard", "PillButton", "opens or closes the keyboard (Type a message / Close the keyboard)"],
-  ["Scroll to latest", "PillButton · folded", "shown only when scrolled up"],
-  ["Dictate", "PillButton · stretch aura", "the mic: fills the row's rest; starts listening"],
-  ["Send", "PillButton · voice folded", "the arrow: shown with a draft; Stop and send while listening"],
+/** An assembly's parts, numbered on it as In use numbers its places: where it is, its name, what does it, what it does. */
+type Part = [selector: string, name: string, from: string, does: string, side?: Mark["side"]];
+const Anatomy = (props: { scene: () => JSX.Element; parts: Part[] }) => <InUse density={false} scene={() => <div class="g-anatomy">{props.scene()}</div>}
+  marks={props.parts.map(([selector, name, from, does, side]) => ({ selector, label: `${name}: ${does}`, read: () => from, side }))} />;
+const pill = (label: string) => `[aria-label="${label}"]`;
+const PHONE_PARTS: Part[] = [
+  [".ui-phone-edit", "Edit pills", "PillButtons in edit", "Undo · Delete word · Previous word · Next word · End of draft: over the field while its cursor is moved by hand"],
+  [".ui-phone-field", "Field", "PillField", "the draft; shown while typing"],
+  [pill("Message options"), "Options", "PillButton · open", "+: opens the options menu (attach, model, ...); stays lit while the rest dims"],
+  [pill("Take a photo"), "Camera", "PillButton", "takes a photo to attach", "below"],
+  [pill("Close the keyboard"), "Keyboard", "PillButton", "opens or closes the keyboard (Type a message / Close the keyboard)", "below"],
+  [pill("Scroll to latest"), "Scroll to latest", "PillButton · folded", "shown only when scrolled up", "below"],
+  [pill("Dictate"), "Dictate", "PillButton · stretch aura", "the mic: fills the row's rest; starts listening", "below"],
+  [pill("Send"), "Send", "PillButton · voice folded", "the arrow: shown with a draft; Stop and send while listening", "below"],
 ];
 const PART_NAMES: Record<PhonePart, string> = { field: "Field", pills: "Options · Camera · Keyboard · Scroll to latest", edit: "Edit pills", track: "Voice track", captions: "Captions", orb: "Dictate as an orb pill" };
 const StateTable = () => <table class="g-state-table"><thead><tr><th />{(Object.keys(PHONE_COMPOSER_STATES) as (keyof typeof PHONE_COMPOSER_STATES)[]).map((state) => <th>{state}</th>)}</tr></thead>
   <tbody>{(Object.keys(PART_NAMES) as PhonePart[]).map((part) => <tr><th>{PART_NAMES[part]}</th>{Object.values(PHONE_COMPOSER_STATES).map((shown) => <td>{(shown as readonly PhonePart[]).includes(part) ? "●" : ""}</td>)}</tr>)}</tbody></table>;
-const PHONE_VOICE_PARTS: [string, string, string][] = [
-  ["Captions", "PhoneComposer captions", "the newest three lines heard, on the page's ground"],
-  ["Voice track", "PillWave", "the waveform, from the row's start to the mic; tap to stop"],
-  ["Dictate", "PillButton · Aura", "shrunk to an orb pill; its Aura follows the voice level"],
-  ["Stop and send", "PillButton · voice", "stops and sends what was heard"],
+const PHONE_VOICE_PARTS: Part[] = [
+  [".ui-voice-captions", "Captions", "PhoneComposer captions", "the newest three lines heard, on the page's ground"],
+  [".ui-voice-track", "Voice track", "PillWave", "the waveform, from the row's start to the mic; tap to stop"],
+  ['[aria-label="Dictate"]', "Dictate", "PillButton · Aura", "shrunk to an orb pill; its Aura follows the voice level", "below"],
+  ['[aria-label="Stop and send"]', "Stop and send", "PillButton · voice", "stops and sends what was heard", "below"],
 ];
 const thumb = "data:image/svg+xml," + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><defs><linearGradient id="g" x2="1" y2="1"><stop offset="0" stop-color="#6b8afd"/><stop offset="1" stop-color="#d97706"/></linearGradient></defs><rect width="48" height="48" fill="url(#g)"/></svg>');
 /** The app's riders, as components v2 builds them. */
@@ -792,8 +795,8 @@ export const libraryFamilies: Family[] = [
   ] },
   { title: "PhoneComposer", note: "the phone's composer: Pills on the page, a PillField over a row of PillButtons, one gap apart. Its mode says what shows, and nothing reflows between them: idle (the row), typing (the field above it), listening (the voice track and captions). Circles that come and go fold (Scroll to latest, Stop and send, Send)", groups: [
     { title: "Anatomy", note: "an assembly, not a base component: Pills and foundations (Aura, icons, type), each part named for what it does", layout: "phone", atoms: [
-      lib("phone-anatomy", "Anatomy", "phone", "pill", "PhoneComposer > edit · field · row (the mode's pills)", () => <div class="g-anatomy"><div class="g-phone-composer">{phoneComposer("typing", { draft: true, away: true, editing: true })}</div><PartList parts={PHONE_PARTS} /></div>, "row"),
-      lib("phone-anatomy-listening", "Anatomy · listening", "phone", "pill", "PhoneComposer mode=listening > captions · row (track · Dictate · Stop and send)", () => <div class="g-anatomy"><div class="g-phone-composer">{phoneComposer("listening")}</div><PartList parts={PHONE_VOICE_PARTS} /></div>, "row"),
+      lib("phone-anatomy", "Anatomy", "phone", "pill", "PhoneComposer > edit · field · row (the mode's pills)", () => <Anatomy scene={() => <div class="g-phone-composer">{phoneComposer("typing", { draft: true, away: true, editing: true })}</div>} parts={PHONE_PARTS} />, "row"),
+      lib("phone-anatomy-listening", "Anatomy · listening", "phone", "pill", "PhoneComposer mode=listening > captions · row (track · Dictate · Stop and send)", () => <Anatomy scene={() => <div class="g-phone-composer">{phoneComposer("listening")}</div>} parts={PHONE_VOICE_PARTS} />, "row"),
     ] },
     { title: "State table", note: "what each state shows (PHONE_COMPOSER_STATES, rendered as data-show). Every move between two states follows from it and three moves, none depending on where it came from: in (room at once, fade in over gentle, from the first frame), out (fade over quick from the first frame; room after, or a row pill slides under its neighbour at its own size), in place (the mic's shape, the track's wipe, over gentle). Declared waits: the captions come in after the quick duration. The motion check reads the same table", layout: "phone", atoms: [
       lib("phone-table", "State table", "phone", "pill", "PHONE_COMPOSER_STATES", () => <StateTable />, "row"),
@@ -818,10 +821,17 @@ export const libraryFamilies: Family[] = [
   ] },
   { title: "Trace", rail: "Transcript", note: "a turn's work, over its answer. Its head is two lines -- the Status line (Status · Time · Work) and the Latest line -- beside the Orb; opened, its Trail of Steps", groups: [
     { title: "Anatomy", note: "each part named", layout: "desktop", atoms: [
-      lib("trace-anatomy", "Anatomy", "both", "transcript", "Trace > TraceHeader (Orb · Status line · Latest line) · Trail > Step", () => <div class="ui-read g-read g-live-turn g-anatomy">
+      lib("trace-anatomy", "Anatomy", "both", "transcript", "Trace > TraceHeader (Orb · Status line · Latest line) · Trail > Step", () => <Anatomy scene={() => <div class="ui-read g-read g-trace-anatomy">
         <FoldTrace orb={orb(true)} status="Done" time="1m 00s" work="1 read, 1 edit, 1 command" latest="The second paragraph has four sentences"><Trail><Step icon={<LightbulbIcon />} summary="The second paragraph has four sentences" /><Step icon={<FileTextIcon />} verb="Read" subject="lorem_ipsum.txt" time="0ms" /><Step icon={<FilePenLineIcon />} verb="Edited" subject="lorem_ipsum.txt" time="1m 00s" /></Trail></FoldTrace>
-        <PartList parts={[["Orb", "Orb", "what it is doing, as motion (Foundations · Orbs)"], ["Status", "Status line", "one word for what it is doing or how it ended (States below)"], ["Time", "Status line", "from the prompt: counting while it runs, then how long it took"], ["Work", "Status line", "its tools counted by kind, most first"], ["Latest line", "second line", "running: what the running tool acts on, else the last step in the past tense, or the last thinking; settled: the last thinking"], ["Trail", "opened", "its steps, one line each"], ["Step", "a line of the Trail", "Icon · Verb · Subject · Flags · Time; opens to what it did (Steps below)"]]} />
-      </div>, "row"),
+      </div>} parts={[
+        [".ui-trace-orb", "Orb", "Orb", "what it is doing, as motion (Foundations · Orbs)"],
+        [".ui-trace-line > b", "Status", "Status line", "one word for what it is doing or how it ended (States below)", "above"],
+        [".ui-trace-time", "Time", "Status line", "from the prompt: counting while it runs, then how long it took", "above"],
+        [".ui-trace-line > span:last-child", "Work", "Status line", "its tools counted by kind, most first", "above"],
+        [".ui-trace-latest", "Latest line", "the second line", "running: what the running tool acts on, else the last step in the past tense, or the last thinking; settled: the last thinking"],
+        [".ui-trail", "Trail", "Trail, opened", "its steps, one line each"],
+        [".ui-step-item:nth-child(2) .ui-step", "Step", "a line of the Trail", "Icon · Verb · Subject · Flags · Time; opens to what it did (Steps below)"],
+      ]} />, "row"),
     ] },
     { title: "States", note: "every Status the Status line can say, the orb with it, and what the Latest line holds", layout: "desktop", atoms: [lib("trace-states", "States", "both", "transcript", "<TraceHeader status orb latest live tone>", () => <TraceStates />, "row")] },
     { title: "A turn", note: "played, a second a beat; open and close it", layout: "desktop", atoms: [lib("trace-live", "A turn", "both", "transcript", "Trace > TraceHeader · Trail > Step", () => <div class="ui-read g-read g-live-turn"><LiveTurn /></div>, "row")] },
