@@ -15,7 +15,6 @@ import { useLibrary, useLibraryPiece } from "@/components/ui/swap";
 /* The gallery's previews draw a turn's header as the library's TraceHeader (its classes); the app keeps its own. */
 const traceClass = (library: boolean) => (app: string, piece: string) => library ? piece : app;
 import type { MarkdownRendererId } from "./markdown-settings";
-import type { IncremarkPacingMode } from "./incremark-pacing";
 
 const ChatMarkdown = lazy(() => import("./markdown").then((module) => ({ default: module.ChatMarkdown })));
 const fullDateTime = (value?: string) => {
@@ -54,7 +53,6 @@ type RowProps = {
   onRendered?: () => void;
   sessionId: string | null;
   renderer?: MarkdownRendererId;
-  pacing?: IncremarkPacingMode;
   profileLabel?: string;
   toolOpen?: (id: string) => boolean;
   onToolOpenChange?: (id: string, open: boolean) => void;
@@ -74,12 +72,12 @@ function TextStep(props: RowProps & { segment: Extract<TraceSegment, { kind: "th
     header={<>
       <Icon />
       <span class="trail-summary">
-        <Suspense fallback={summaryOf(props.segment.text)}><ChatMarkdown inline renderer={props.renderer} pacing={props.pacing}>{summaryOf(props.segment.text) || "\u2026"}</ChatMarkdown></Suspense>
+        <Suspense fallback={summaryOf(props.segment.text)}><ChatMarkdown inline renderer={props.renderer}>{summaryOf(props.segment.text) || "\u2026"}</ChatMarkdown></Suspense>
       </span>
       <Show when={props.segment.discarded}><span class="trail-meta"><span class="trail-flag" title="Interrupted — the agent has no record of this">Not kept</span></span></Show>
     </>}
     body={() => <Suspense fallback={<div class="markdown-skeleton" />}>
-      <ChatMarkdown streaming={Boolean(props.segment.live)} renderer={props.renderer} pacing={props.pacing} onRendered={props.onRendered}>{props.segment.text}</ChatMarkdown>
+      <ChatMarkdown streaming={Boolean(props.segment.live)} renderer={props.renderer} onRendered={props.onRendered}>{props.segment.text}</ChatMarkdown>
     </Suspense>} />;
 }
 
@@ -385,15 +383,15 @@ function useFold(id: () => string, props: Pick<RowProps, "toolOpen" | "onToolOpe
   const [open, setOpen] = createSignal(initial), [seen, setSeen] = createSignal(initial);
   return { open, seen, toggle: () => { const next = !open(); setOpen(next); if (next) setSeen(true); props.onToolOpenChange?.(id(), next); } };
 }
-const inline = (props: Pick<RowProps, "renderer" | "pacing">, text: string) =>
-  <Suspense fallback={text}><ChatMarkdown inline renderer={props.renderer} pacing={props.pacing}>{text || "\u2026"}</ChatMarkdown></Suspense>;
+const inline = (props: Pick<RowProps, "renderer">, text: string) =>
+  <Suspense fallback={text}><ChatMarkdown inline renderer={props.renderer}>{text || "\u2026"}</ChatMarkdown></Suspense>;
 function LibraryTrailLine(props: RowProps & { item: TrailItem; arriving?: boolean }) {
   const motion = () => props.arriving ? "entering" as const : undefined;
   return <Switch>
     <Match when={props.item.type === "text" && props.item}>{(item) => {
       const segment = () => item().segment, fold = useFold(() => segment().id, props);
       return <Step icon={segment().kind === "thinking" ? <LightbulbIcon /> : <MessageSquareTextIcon />} summary={inline(props, summaryOf(segment().text))} discarded={segment().discarded} motion={motion()} open={fold.open()} onToggle={fold.toggle}>
-        <Show when={fold.seen()} fallback={<span />}><StepProse><Suspense fallback={<div class="markdown-skeleton" />}><ChatMarkdown streaming={Boolean(segment().live)} renderer={props.renderer} pacing={props.pacing} onRendered={props.onRendered}>{segment().text}</ChatMarkdown></Suspense></StepProse></Show>
+        <Show when={fold.seen()} fallback={<span />}><StepProse><Suspense fallback={<div class="markdown-skeleton" />}><ChatMarkdown streaming={Boolean(segment().live)} renderer={props.renderer} onRendered={props.onRendered}>{segment().text}</ChatMarkdown></Suspense></StepProse></Show>
       </Step>;
     }}</Match>
     <Match when={props.item.type === "error" && props.item}>{(item) => <LibraryTraceError time={fullDateTime(item().message.timestamp) || undefined}
@@ -425,19 +423,19 @@ function LibraryTurnTrace(props: TraceProps) {
   // The line is one line, cut with an ellipsis, so it is given no more than a line's worth: a long sentence's whole
   // text, replaced each delta, was laid out and painted every frame for the few words it shows.
   const text = () => { const full = preview().detail?.text ?? ""; return full.length > LATEST_CHARS ? `${full.slice(0, LATEST_CHARS)}\u2026` : full; };
-  const thinking = <Suspense fallback={text()}><ChatMarkdown inline renderer={props.renderer} pacing={props.pacing}>{text() || "…"}</ChatMarkdown></Suspense>;
+  const thinking = <Suspense fallback={text()}><ChatMarkdown inline renderer={props.renderer}>{text() || "…"}</ChatMarkdown></Suspense>;
   const latest = () => { const detail = preview().detail; return detail ? detail.markdown ? thinking : detail.text : undefined; };
   return <div class="turn-trace" data-active={props.trace.active ? "true" : "false"}>
     <Trace orb={<Orb state={preview().status.orb} frame={preview().status.frame} tint={unfinished() ? "var(--destructive)" : undefined} rate={props.trace.active ? undefined : settledOrbRate(unfinished())} />}
       status={preview().status.verb} time={time() || undefined} work={preview().work || undefined} latest={latest()} live={props.trace.active} tone={unfinished() ? "failed" : undefined}
       open={open()} onToggle={() => { const next = !open(); if (next && !seen()) { opened = trail().length; setSeen(true); } setOpen(next); props.onOpenChange?.(next); }}>
       {props.trace.segments.length ? <Show when={seen()} fallback={<span />}>{(() => { opened ||= trail().length; return <Trail><Index each={trail()}>{(item, index) =>
-        <LibraryTrailLine item={item()} arriving={index >= opened} settled={!props.trace.active} sessionId={props.sessionId} renderer={props.renderer} pacing={props.pacing} profileLabel={props.profileLabel} toolOpen={props.toolOpen} onToolOpenChange={props.onToolOpenChange} onRendered={props.onRendered} />}</Index></Trail>; })()}</Show> : undefined}
+        <LibraryTrailLine item={item()} arriving={index >= opened} settled={!props.trace.active} sessionId={props.sessionId} renderer={props.renderer} profileLabel={props.profileLabel} toolOpen={props.toolOpen} onToolOpenChange={props.onToolOpenChange} onRendered={props.onRendered} />}</Index></Trail>; })()}</Show> : undefined}
     </Trace>
   </div>;
 }
 
-export function TurnTrace(props: { trace: TurnTraceData; writing?: boolean; sessionId: string | null; renderer?: MarkdownRendererId; pacing?: IncremarkPacingMode; profileLabel?: string; initialOpen?: boolean; onOpenChange?: (open: boolean) => void; toolOpen?: (id: string) => boolean; onToolOpenChange?: (id: string, open: boolean) => void; onRendered?: () => void }) {
+export function TurnTrace(props: { trace: TurnTraceData; writing?: boolean; sessionId: string | null; renderer?: MarkdownRendererId; profileLabel?: string; initialOpen?: boolean; onOpenChange?: (open: boolean) => void; toolOpen?: (id: string) => boolean; onToolOpenChange?: (id: string, open: boolean) => void; onRendered?: () => void }) {
   // Before this one's preview and clock, which the library's would only duplicate (a second previewOf each delta).
   if (useLibraryPiece("trace")) return <LibraryTurnTrace {...props} />;
   const preview = createMemo(() => previewOf(props.trace, Boolean(props.writing)));
@@ -471,7 +469,7 @@ export function TurnTrace(props: { trace: TurnTraceData; writing?: boolean; sess
             {/* A tool's line is plain text -- a path's underscores are not emphasis. */}
             <Show when={preview().detail} fallback={"\u00a0"}>{(detail) =>
               <Show when={detail().markdown} fallback={detail().text}>
-                <Suspense fallback={detail().text}><ChatMarkdown inline renderer={props.renderer} pacing={props.pacing}>{detail().text}</ChatMarkdown></Suspense>
+                <Suspense fallback={detail().text}><ChatMarkdown inline renderer={props.renderer}>{detail().text}</ChatMarkdown></Suspense>
               </Show>}</Show>
           </div>
         </Show>
@@ -484,7 +482,7 @@ export function TurnTrace(props: { trace: TurnTraceData; writing?: boolean; sess
       const opened = trail().length;
       return <Index each={trail()}>{(item, index) =>
         <div class="turn-trace-step" data-arriving={index >= opened || undefined}>
-          <TrailLine item={item()} settled={!props.trace.active} sessionId={props.sessionId} renderer={props.renderer} pacing={props.pacing} profileLabel={props.profileLabel} toolOpen={props.toolOpen} onToolOpenChange={props.onToolOpenChange} onRendered={props.onRendered} />
+          <TrailLine item={item()} settled={!props.trace.active} sessionId={props.sessionId} renderer={props.renderer} profileLabel={props.profileLabel} toolOpen={props.toolOpen} onToolOpenChange={props.onToolOpenChange} onRendered={props.onRendered} />
         </div>
       }</Index>;
     }} />;

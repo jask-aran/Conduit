@@ -4,21 +4,16 @@ import {
   type DisplayBlock,
   type ParsedBlock,
 } from "@incremark/core";
-import type { IncremarkPacingMode } from "./incremark-pacing";
 
 export const TYPEWRITER_FRAME_WORK_BUDGET_MS = 8;
 export const TYPEWRITER_MIN_FRAME_BUDGET_MS = 2;
 export const TYPEWRITER_DEFAULT_FRAME_INTERVAL_MS = 16;
 export const TYPEWRITER_MIN_FRAME_INTERVAL_MS = 4;
 export const TYPEWRITER_MAX_FRAME_INTERVAL_MS = 100;
-export const TYPEWRITER_INITIAL_STEP = 32;
-export const TYPEWRITER_MAX_STEP = 4096;
 export const TYPEWRITER_MAX_CHARS_PER_FRAME = 8192;
 export const TYPEWRITER_MAX_BLOCKS_PER_FRAME = 64;
 export const TYPEWRITER_EMA_ALPHA = 0.25;
-export const TYPEWRITER_FIXED_STEP = 32;
-export const TYPEWRITER_ADAPTIVE_BACKLOG_WINDOW_MS = 250;
-/** The longest a delivered word may wait to be shown under fade pacing. */
+/** The longest a delivered word may wait to be shown. */
 export const FADE_MAX_WINDOW_MS = 300;
 /** Per delivery, how much of the longest recent gap the window still covers. */
 export const FADE_GAP_DECAY = 0.9;
@@ -27,7 +22,6 @@ export const FADE_MS_PER_CHARACTER = 0.7;
 const TYPEWRITER_MATH_SOURCE = "__conduitMathSource";
 
 export type TypewriterMetrics = {
-  scheduler: IncremarkPacingMode;
   sourceVisibleCharacters: number;
   displayedVisibleCharacters: number;
   backlogCharacters: number;
@@ -68,43 +62,10 @@ export function chooseFrameBudget(frameIntervalMs = TYPEWRITER_DEFAULT_FRAME_INT
   );
 }
 
-/** Select the next buffered work chunk from measured frame cost, not input rate. */
-export function chooseBufferedStep(
-  bufferedCharacters: number,
-  previousStep: number,
-  frameWorkMs: number,
-  frameBudgetMs: number,
-) {
-  const available = Math.max(1, Math.trunc(bufferedCharacters));
-  const current = Math.max(1, Math.trunc(previousStep) || 1);
-  const budget = Math.max(TYPEWRITER_MIN_FRAME_BUDGET_MS, frameBudgetMs);
-  if (frameWorkMs > budget) return Math.min(available, Math.max(1, Math.floor(current * 0.5)));
-  if (frameWorkMs <= budget * 0.5) return Math.min(available, Math.min(TYPEWRITER_MAX_STEP, current * 2));
-  return Math.min(available, current);
-}
-
-export function chooseFixedStep(availableCharacters: number) {
-  return Math.min(Math.max(1, Math.trunc(availableCharacters)), TYPEWRITER_FIXED_STEP);
-}
-
-export function chooseAdaptiveStep(
-  availableCharacters: number,
-  observedRate: number | null,
-  backlogCharacters: number,
-  frameIntervalMs: number,
-) {
-  const available = Math.max(1, Math.trunc(availableCharacters));
-  const catchUpRate = Math.max(0, backlogCharacters) / TYPEWRITER_ADAPTIVE_BACKLOG_WINDOW_MS * 1000;
-  const targetRate = Math.max(0, observedRate || 0, catchUpRate);
-  if (targetRate <= 0) return Math.min(available, TYPEWRITER_FIXED_STEP);
-  const interval = normalizeFrameInterval(frameIntervalMs);
-  return Math.min(available, Math.max(1, Math.min(TYPEWRITER_MAX_STEP, Math.ceil(targetRate * interval / 1000))));
-}
-
 export type FadeDelivery = { end: number; deadline: number };
 
 /**
- * How long one delivery may take to show under fade pacing.
+ * How long one delivery may take to show.
  *
  * Spread over the usual gap between deliveries, the next one lands as the last
  * finishes, so a provider that sends chunks every 100ms reads as a continuous
@@ -133,8 +94,8 @@ export function chooseFadeStep(
     if (remaining <= 0) continue;
     rate = Math.max(rate, remaining / Math.max(interval, delivery.deadline - now));
   }
-  // Nothing owed a deadline -- pacing just switched, or the tail is markup the
-  // visible count does not see -- so there is nothing to spread out.
+  // Nothing owed a deadline -- the tail is markup the visible count does not
+  // see -- so there is nothing to spread out.
   return rate > 0 ? Math.max(1, Math.ceil(rate * interval)) : Infinity;
 }
 
@@ -256,21 +217,18 @@ export type BufferedIncremarkTypewriterOptions = {
   onChange: (blocks: DisplayBlock[]) => void;
   onDisplayBusyChange?: (busy: boolean) => void;
   onMetrics?: (metrics: TypewriterMetrics) => void;
-  pacing?: IncremarkPacingMode;
 };
 
 /**
  * A producer-consumer scheduler for incremental Markdown.
  *
  * Parser updates replace the source queue. The consumer drains complete
- * blocks and bounded partial slices on one rAF schedule. Buffered mode selects
- * work from measured frame cost; adaptive mode also uses the observed source
- * rate to catch up; fixed mode uses a stable chunk size. None of these modes
- * render outside the frame budget.
+ * blocks and bounded partial slices on one rAF schedule: each delivery is
+ * shown by its deadline (fadeWindow), its words fading in as they appear, and
+ * no frame renders outside the frame budget.
  */
 export class BufferedIncremarkTypewriter {
   private readonly callbacks: BufferedIncremarkTypewriterOptions;
-  private pacing: IncremarkPacingMode;
   private sourceBlocks: ParsedBlock[] = [];
   private progress = new Map<string, number>();
   private cachedDisplay = new Map<string, { node: any; progress: number; source: any }>();
@@ -280,18 +238,14 @@ export class BufferedIncremarkTypewriter {
   private frameHandle: number | null = null;
   private lastFrameAt: number | null = null;
   private frameIntervalMs = TYPEWRITER_DEFAULT_FRAME_INTERVAL_MS;
-  private currentStep = TYPEWRITER_INITIAL_STEP;
   private frameWorkMs = 0;
   private frameWorkEmaMs = 0;
-  private observedRate: number | null = null;
   private lastObservedSourceCharacters = 0;
-  private lastObservedSourceAt: number | null = null;
   private backlogStartedAt: number | null = null;
   private deliveries: FadeDelivery[] = [];
   private deliveryGapMs: number | null = null;
   private lastDeliveryAt: number | null = null;
   private lastMetrics: TypewriterMetrics = {
-    scheduler: "buffered",
     sourceVisibleCharacters: 0,
     displayedVisibleCharacters: 0,
     backlogCharacters: 0,
@@ -325,7 +279,6 @@ export class BufferedIncremarkTypewriter {
 
   constructor(callbacks: BufferedIncremarkTypewriterOptions) {
     this.callbacks = callbacks;
-    this.pacing = callbacks.pacing || "buffered";
   }
 
   setBaselineCharacters(characters: number) {
@@ -340,23 +293,12 @@ export class BufferedIncremarkTypewriter {
     else this.cancelFrame();
   }
 
-  setPacing(mode: IncremarkPacingMode) {
-    if (this.pacing === mode) return;
-    this.pacing = mode;
-    this.currentStep = mode === "fixed" ? TYPEWRITER_FIXED_STEP : TYPEWRITER_INITIAL_STEP;
-    this.emitMetrics(performance.now(), false, 0, this.getDisplayBlocks());
-    this.scheduleFrame();
-  }
-
   observeSource(blocks: ParsedBlock[]) {
     const now = performance.now();
     const sourceCharacters = this.baselineCharacters + countVisibleBlocks(blocks);
-    const elapsed = this.lastObservedSourceAt == null ? 0 : now - this.lastObservedSourceAt;
     const delta = sourceCharacters - this.lastObservedSourceCharacters;
-    if (elapsed > 0 && delta > 0) this.observedRate = updateEma(this.observedRate, delta / elapsed * 1000);
-    if (delta > 0 && this.pacing === "fade") this.recordDelivery(sourceCharacters, delta, now);
+    if (delta > 0) this.recordDelivery(sourceCharacters, delta, now);
     this.lastObservedSourceCharacters = sourceCharacters;
-    this.lastObservedSourceAt = now;
     this.setSourceBlocks(blocks);
     this.scheduleFrame();
   }
@@ -379,12 +321,9 @@ export class BufferedIncremarkTypewriter {
     this.baselineCharacters = 0;
     this.lastFrameAt = null;
     this.frameIntervalMs = TYPEWRITER_DEFAULT_FRAME_INTERVAL_MS;
-    this.currentStep = TYPEWRITER_INITIAL_STEP;
     this.frameWorkMs = 0;
     this.frameWorkEmaMs = 0;
-    this.observedRate = null;
     this.lastObservedSourceCharacters = this.baselineCharacters;
-    this.lastObservedSourceAt = null;
     this.backlogStartedAt = null;
     this.deliveries = [];
     this.deliveryGapMs = null;
@@ -409,9 +348,8 @@ export class BufferedIncremarkTypewriter {
     this.deliveries.push({ end: sourceCharacters, deadline: now + span });
   }
 
-  /** The whole of this frame's release under fade pacing; unbounded otherwise. */
+  /** The whole of this frame's release: every delivery shown by its deadline. */
   private frameQuota(displayedCharacters: number) {
-    if (this.pacing !== "fade") return Infinity;
     let shown = 0;
     while (shown < this.deliveries.length && this.deliveries[shown]!.end <= displayedCharacters) shown += 1;
     if (shown) this.deliveries.splice(0, shown);
@@ -563,7 +501,6 @@ export class BufferedIncremarkTypewriter {
     const frameBudgetMs = chooseFrameBudget(this.frameIntervalMs);
     const startedAt = performance.now();
     let accepted = this.getDisplayBlocks();
-    const sourceCharacters = this.baselineCharacters + this.sourceVisibleCharacters;
     let displayedCharacters = this.baselineCharacters + this.displayedVisibleCharacters(accepted);
     let processedCharacters = 0;
     let processedBlocks = 0;
@@ -580,11 +517,11 @@ export class BufferedIncremarkTypewriter {
       const current = this.progress.get(block.id) || 0;
       const remaining = Math.max(0, total - current);
       if (remaining <= 0) continue;
+      // The frame's quota bounds the release; within it, show as much as fits.
       const step = Math.min(
         remaining,
         TYPEWRITER_MAX_CHARS_PER_FRAME - processedCharacters,
         quota - processedCharacters,
-        this.chooseStep(remaining, sourceCharacters - displayedCharacters, frameBudgetMs),
       );
       if (step <= 0) break;
       const nextProgress = current + step;
@@ -621,11 +558,6 @@ export class BufferedIncremarkTypewriter {
     const frameWorkMs = Math.max(0, performance.now() - startedAt);
     this.frameWorkMs = frameWorkMs;
     this.frameWorkEmaMs = updateEma(this.frameWorkEmaMs, frameWorkMs) || frameWorkMs;
-    if (frameWorkMs > frameBudgetMs) {
-      this.currentStep = Math.max(1, Math.floor(this.currentStep * 0.5));
-    } else if (frameWorkMs <= frameBudgetMs * 0.5) {
-      this.currentStep = Math.min(TYPEWRITER_MAX_STEP, Math.max(1, this.currentStep * 2));
-    }
     const pending = this.firstIncompleteIndex() >= 0;
     if (!pending) {
       this.backlogStartedAt = null;
@@ -637,16 +569,6 @@ export class BufferedIncremarkTypewriter {
     const terminal = !pending && !this.terminalEmitted;
     if (terminal) this.terminalEmitted = true;
     this.emitMetrics(performance.now(), terminal, processedCharacters, accepted, frameBudgetMs);
-  }
-
-  private chooseStep(availableCharacters: number, backlogCharacters: number, frameBudgetMs: number) {
-    // The frame's quota already bounds fade; within it, show as much as fits.
-    if (this.pacing === "fade") return availableCharacters;
-    if (this.pacing === "fixed") return chooseFixedStep(availableCharacters);
-    if (this.pacing === "adaptive") {
-      return chooseAdaptiveStep(availableCharacters, this.observedRate, backlogCharacters, this.frameIntervalMs);
-    }
-    return chooseBufferedStep(availableCharacters, this.currentStep, this.frameWorkMs, frameBudgetMs);
   }
 
   private emitMetrics(
@@ -661,7 +583,6 @@ export class BufferedIncremarkTypewriter {
     const backlogCharacters = Math.max(0, sourceVisibleCharacters - displayedVisibleCharacters);
     const activeIndex = this.firstIncompleteIndex();
     this.lastMetrics = {
-      scheduler: this.pacing,
       sourceVisibleCharacters,
       displayedVisibleCharacters,
       backlogCharacters,

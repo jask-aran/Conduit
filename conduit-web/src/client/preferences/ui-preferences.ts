@@ -11,7 +11,6 @@ export interface UiPreferences {
   markdownRenderer: string | null;
   composerSurface: string | null;
   meteorField: boolean | null;
-  incremarkPacing: string | null;
   transcriptWidth: string | null;
   transcriptWideBlocks: string | null;
   codeBlockCollapse: string | null;

@@ -5,7 +5,6 @@ import { lazy, Show, Suspense } from "solid-js";
 import "katex/dist/katex.min.css";
 import "./markdown.css";
 import { isIncremarkRenderer, selectedMarkdownRenderer, type MarkdownRendererId } from "./markdown-settings";
-import type { IncremarkPacingMode } from "./incremark-pacing";
 
 export { MARKDOWN_RENDERER_STORAGE_KEY, selectedMarkdownRenderer } from "./markdown-settings";
 export type { MarkdownRendererId } from "./markdown-settings";
@@ -19,7 +18,6 @@ export type ChatMarkdownProps = {
   // The answer has finished appearing: nothing still revealing or drawing.
   // Only renderers that reveal after the stream ends call it.
   onSettled?: () => void;
-  pacing?: IncremarkPacingMode;
   displayKey?: string;
   renderer?: MarkdownRendererId;
 };

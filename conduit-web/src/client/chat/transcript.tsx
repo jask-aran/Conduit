@@ -14,7 +14,6 @@ import { createTimelineStore } from "../state/timeline-store";
 import type { MarkdownRendererId } from "./markdown-settings";
 import { COMPOSER_SURFACE_CHANGE_EVENT, COMPOSER_SURFACE_OPTIONS, saveComposerSurface, selectedComposerSurface, type ComposerSurfaceMode } from "./composer-surface";
 import { isIncremarkRenderer, MARKDOWN_RENDERER_OPTIONS, saveMarkdownRenderer, selectedMarkdownRenderer } from "./markdown-settings";
-import { INCREMARK_PACING_OPTIONS, saveIncremarkPacing, selectedIncremarkPacing, type IncremarkPacingMode } from "./incremark-pacing";
 import { PANEL_MOTION_OPTIONS, savePanelMotion, selectedPanelMotion, type PanelMotionMode } from "./transcript-appearance";
 import { UI_PREFERENCE_CHANGE_EVENT } from "../preferences/ui-preferences";
 import { copyWithFeedback } from "./markdown-actions";
@@ -293,7 +292,6 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
   onCleanup(() => setLatestAway(false));
   const [composerSurface, setComposerSurface] = createSignal<ComposerSurfaceMode>(selectedComposerSurface());
   const [markdownRenderer, setMarkdownRenderer] = createSignal<MarkdownRendererId>(selectedMarkdownRenderer());
-  const [incremarkPacing, setIncremarkPacing] = createSignal<IncremarkPacingMode>(selectedIncremarkPacing());
   const [panelDrag, setPanelDrag] = createSignal<PanelMotionMode>(selectedPanelMotion());
   const switchComposerSurface = (next: ComposerSurfaceMode) => setComposerSurface(saveComposerSurface(next));
   // A reset relays out every managed block, so hold the reading position across
@@ -305,7 +303,6 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
     requestAnimationFrame(() => restoreTranscriptAnchor(viewport, anchor, setViewportScrollTop));
   };
   const switchMarkdownRenderer = (next: MarkdownRendererId) => setMarkdownRenderer(saveMarkdownRenderer(next));
-  const switchIncremarkPacing = (next: IncremarkPacingMode) => setIncremarkPacing(saveIncremarkPacing(next));
   const switchPanelDrag = (next: PanelMotionMode) => setPanelDrag(savePanelMotion(next));
   // Only Incremark reveals a message block by block, and only that reveal needs
   // the tail to be followed by a spring rather than pinned to the bottom.
@@ -823,9 +820,6 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
       else if (detail?.key === "markdownRenderer" && typeof detail.value === "string"
         && !params.has("markdownRenderer")) {
         setMarkdownRenderer(detail.value as MarkdownRendererId);
-      } else if (detail?.key === "incremarkPacing" && typeof detail.value === "string"
-        && !params.has("incremarkPacing") && !params.has("adaptivePacing")) {
-        setIncremarkPacing(detail.value as IncremarkPacingMode);
       } else if (detail?.key === "panelMotion" && typeof detail.value === "string"
         && !params.has("panelMotion")) {
         setPanelDrag(detail.value as PanelMotionMode);
@@ -1214,7 +1208,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
     });
   });
 
-  return <div ref={transcriptRoot} class="transcript" data-part="transcript" data-slot="message-scroller" data-markdown-renderer={markdownRenderer()} data-markdown-typewriter={rendererUsesTypewriter() ? "true" : undefined} data-incremark-pacing={rendererUsesTypewriter() ? incremarkPacing() : undefined}>
+  return <div ref={transcriptRoot} class="transcript" data-part="transcript" data-slot="message-scroller" data-markdown-renderer={markdownRenderer()} data-markdown-typewriter={rendererUsesTypewriter() ? "true" : undefined}>
     <div ref={motionShell} class="transcript-motion-shell">
       <div ref={viewport} class="message-scroller-viewport" data-slot="message-scroller-viewport" tabIndex={-1} aria-label="Transcript">
         <div ref={thread} class={library ? "thread ui-read" : "thread"} data-slot="message-scroller-content">
@@ -1228,7 +1222,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
             const chatId = () => props.chat.loadedId();
             const artifact = () => item.answerless && item.precedingUserId ? artifactSummaries().get(item.precedingUserId) : undefined;
             const arrive = arrivalOf(lastArrivedId);
-            return <div ref={traceRow} data-slot="message-scroller-item" data-arrived={arrive ? "" : undefined} style={arrive}><TurnTrace trace={item.value} writing={item.answerless === false} sessionId={chatId()} renderer={markdownRenderer()} pacing={incremarkPacing()} profileLabel={props.profileLabel} initialOpen={itemExpanded(chatId(), item.key)} onOpenChange={(open) => setItemExpanded(chatId(), item.key, open)} toolOpen={(id) => itemExpanded(chatId(), `tool:${id}`)} onToolOpenChange={(id, open) => setItemExpanded(chatId(), `tool:${id}`, open)} onRendered={() => settleAfterMarkdown(traceRow)} />
+            return <div ref={traceRow} data-slot="message-scroller-item" data-arrived={arrive ? "" : undefined} style={arrive}><TurnTrace trace={item.value} writing={item.answerless === false} sessionId={chatId()} renderer={markdownRenderer()} profileLabel={props.profileLabel} initialOpen={itemExpanded(chatId(), item.key)} onOpenChange={(open) => setItemExpanded(chatId(), item.key, open)} toolOpen={(id) => itemExpanded(chatId(), `tool:${id}`)} onToolOpenChange={(id, open) => setItemExpanded(chatId(), `tool:${id}`, open)} onRendered={() => settleAfterMarkdown(traceRow)} />
               {/* A turn that ended without an answer -- stopped under a tool, or
                   one that only ran commands -- still offers to try again. */}
               <Show when={item.answerless && !item.value.active}>
@@ -1285,7 +1279,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
                     <Show when={user()} fallback={<>
                       <Show when={message().content}>
                         <Suspense fallback={<div class="markdown-skeleton" />}>
-                          <ChatMarkdown renderer={markdownRenderer()} pacing={incremarkPacing()} displayKey={item.displayKey} streaming={live()} streamVersion={item.streamVersion} onRendered={() => settleAfterMarkdown(row)} onSettled={() => setSettled(true)}>{message().content || ""}</ChatMarkdown>
+                          <ChatMarkdown renderer={markdownRenderer()} displayKey={item.displayKey} streaming={live()} streamVersion={item.streamVersion} onRendered={() => settleAfterMarkdown(row)} onSettled={() => setSettled(true)}>{message().content || ""}</ChatMarkdown>
                         </Suspense>
                       </Show>
                       <Show when={!message().content && message().stopped && !item.traced && !failed()}>

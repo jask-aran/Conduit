@@ -1077,7 +1077,6 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
   // Block-by-block reveal is what this renderer is; only an inline preview,
   // which is a single line inside a summary, skips it.
   const typewriter = () => !props.inline;
-  const pacing = () => props.pacing || "buffered";
   // Freezing is a message-level guarantee. A one-line preview inside a summary
   // has no settled state worth protecting, and giving it one would fight the
   // summary's own sizing.
@@ -1145,7 +1144,6 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
         stage: "markdown-typewriter",
         renderer: rendererId(),
         typewriter: true,
-        scheduler: metrics.scheduler,
         sourceVisibleCharacters: metrics.sourceVisibleCharacters,
         displayedVisibleCharacters: metrics.displayedVisibleCharacters,
         backlogCharacters: metrics.backlogCharacters,
@@ -1354,7 +1352,6 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
     }
 
     const enabled = typewriter();
-    typewriterController.setPacing(pacing());
     typewriterController.setEnabled(enabled);
     if (previousTypewriter === true && !enabled) {
       typewriterController.flush();
@@ -1449,7 +1446,7 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
     const timer = setTimeout(() => setFadeOver(true), streamFadeMs() + 20);
     onCleanup(() => clearTimeout(timer));
   });
-  const displayContext: RendererContext = { ...context, fadeWords: () => pacing() === "fade" && !props.inline, fadeMath: () => pacing() === "fade" && !props.inline && streamMathFade(), fadeLive: () => !fadeOver() };
+  const displayContext: RendererContext = { ...context, fadeWords: () => !props.inline, fadeMath: () => !props.inline && streamMathFade(), fadeLive: () => !fadeOver() };
   return <>
     <div class="chat-markdown" data-renderer={rendererId()} data-inline={props.inline ? "true" : undefined} data-streaming={streaming() || undefined} data-display-busy={displayBusy() || pendingMathRenders() > 0 ? "true" : undefined} data-display-animation-busy={displayBusy() ? "true" : undefined} data-pending-math-renders={pendingMathRenders() > 0 ? String(pendingMathRenders()) : undefined} data-display-key={props.displayKey || undefined} data-settled={settled() ? "true" : undefined}>
       <div class="incremark" data-incremark-core="true">
