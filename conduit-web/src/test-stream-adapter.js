@@ -7,7 +7,7 @@ import { applyTranscriptOps } from "./transcript-fold.js";
 import { messageClose, messageDrop, messageOpen, toolClose, toolOpen, turnSettle } from "./harnesses/transcript-ops.js";
 import { reduceActiveGeneration, snapshotActiveGeneration } from "./active-generation.js";
 import { unsupported } from "./harnesses/unsupported.js";
-import { KATEX_COMPENDIUM, KATEX_LIMITS, MARKDOWN_MIX } from "./test-stream-replays.js";
+import { KATEX_COMPENDIUM, KATEX_LIMITS, MARKDOWN_MIX, RICH_MIX, RICH_PROSE } from "./test-stream-replays.js";
 
 /**
  * A backend that answers instantly, forever, at a rate you choose.
@@ -179,6 +179,8 @@ export function thinkingFromPrompt(message) {
 }
 
 export const narrationFromPrompt = (message) => /\bnarrat/i.test(String(message || ""));
+/** "rich" streams real-looking text: typographic punctuation, Markdown, formulas, code (test-stream-replays.js). */
+export const richFromPrompt = (message) => /\brich\b/i.test(String(message || ""));
 /** What a refused call returns to the model. */
 export const TEST_STREAM_DENIED = "Denied: the user did not allow this call.";
 export const approvalFromPrompt = (message) => /\bapprove|approval\b/i.test(String(message || ""));
@@ -199,6 +201,9 @@ export function replayTokens(text) {
   if (!replayTokenCache.has(text)) replayTokenCache.set(text, text.match(/\s*\S{1,4}|\s+/g) || []);
   return replayTokenCache.get(text);
 }
+
+/** The nth token of a text played over and over, for a run longer than the text. */
+export const loopedToken = (text, index) => { const tokens = replayTokens(text); return tokens[index % tokens.length]; };
 
 /** The nth token of the stream, including the paragraph breaks. */
 export function tokenAt(index) {
@@ -347,6 +352,7 @@ export class TestStreamAdapter extends EventEmitter {
       steps: planTurn(record.tokens, toolRunsFromPrompt(message), thinkingFromPrompt(message), narrationFromPrompt(message))
         .map((step) => (step.toolCallId ? { ...step, toolCallId: `${step.toolCallId}_${generationId.slice(0, 8)}` } : step)),
       step: 0,
+      rich: richFromPrompt(message),
       approvals: approvalFromPrompt(message),
       attachments: attachmentSummary(options?.attachments || []),
       sent: 0,
@@ -425,7 +431,8 @@ export class TestStreamAdapter extends EventEmitter {
       let burst = "";
       while (turn.sent < due) {
         const delta = step.text ? replayTokens(step.text)[turn.sent - from] ?? ""
-          : speed.replay ? replayTokens(speed.replay)[turn.sent] ?? "" : tokenAt(turn.sent);
+          : speed.replay ? replayTokens(speed.replay)[turn.sent] ?? ""
+          : turn.rich ? loopedToken(blockKind === "thinking" ? RICH_PROSE : RICH_MIX, turn.sent - from) : tokenAt(turn.sent);
         if (blockKind === "thinking") turn.thinking += delta;
         else turn.text += delta;
         turn.sent += 1;
