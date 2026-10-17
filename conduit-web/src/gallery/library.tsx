@@ -13,7 +13,7 @@ import { QuestionCard } from "../client/chat/question-card";
 import { ImageIcon, ActivityIcon, BrainIcon, ChevronRightIcon, GlobeIcon, MessageSquareIcon, MicIcon as VoiceIcon, NotebookTextIcon, PanelLeftCloseIcon, ServerIcon } from "lucide-solid";
 import type { Question } from "../client/api/contracts";
 import { LibraryContext } from "@/components/ui/swap";
-import { InUse, FormTable, form, px, rounding, edge, fg, bg, Replay, States, Presence, type Mark, type FormRow } from "./specs";
+import { InUse, Anatomy, type Part, FormTable, form, px, rounding, edge, fg, bg, Replay, States, Presence, type Mark, type FormRow } from "./specs";
 import katex from "katex";
 
 /*
@@ -110,10 +110,6 @@ const phoneComposer = (mode: Live<VoiceMode>, opts: { draft?: Live<boolean>; awa
     <PillButton voice folded={m() !== "listening" && !draft()} {...icon(m() === "listening" ? "Stop and send" : "Send", <ArrowUpIcon />)} />
   </PhoneComposer>;
 };
-/** An assembly's parts, numbered on it as In use numbers its places: where it is, its name, what does it, what it does. */
-type Part = [selector: string, name: string, from: string, does: string, side?: Mark["side"]];
-const Anatomy = (props: { scene: () => JSX.Element; parts: Part[] }) => <InUse density={false} scene={() => <div class="g-anatomy">{props.scene()}</div>}
-  marks={props.parts.map(([selector, name, from, does, side]) => ({ selector, label: `${name}: ${does}`, read: () => from, side }))} />;
 const pill = (label: string) => `[aria-label="${label}"]`;
 const PHONE_PARTS: Part[] = [
   [".ui-phone-edit", "Edit pills", "PillButtons in edit", "Undo · Delete word · Previous word · Next word · End of draft: over the field while its cursor is moved by hand"],
@@ -561,12 +557,20 @@ export const libraryFamilies: Family[] = [
   ] }] },
   { title: "Popover", note: "raised frost holding sections, separated by rules; a submenu is another popover", groups: [
     { atoms: [
-      lib("anatomy", "Anatomy", "both", "popover", "Menu > Section > Item", () => <div class="g-anatomy"><Menu>
-        <HeadingSection title="Section · heading" detail="a title and a line under it" />
-        <SearchSection placeholder="Section · search" />
-        <Section title="Section · list"><Item icon={<PaperclipIcon />}>Item</Item><Item meta="meta">Item</Item><Item opens>Item that opens a submenu</Item></Section>
-        <Section kind="slider"><Levels label="Section · slider" /></Section>
-      </Menu></div>),
+      lib("anatomy", "Anatomy", "both", "popover", "Menu > Section > Item", () => <Anatomy scene={() => <Menu>
+        <HeadingSection title="lorem_ipsum.txt" detail="Edited 2 minutes ago" />
+        <SearchSection placeholder="Search models…" />
+        <Section title="Attach"><Item icon={<PaperclipIcon />}>File</Item><Item meta="xai">Model</Item><Item opens>More</Item></Section>
+        <Section kind="slider"><Levels label="Reasoning" /></Section>
+      </Menu>} parts={[
+        [".ui-heading", "Heading section", "HeadingSection", "what the popover is about: a title and a line under it"],
+        [".ui-search-section", "Search section", "SearchSection", "a field filtering the list after it"],
+        ['.ui-section[data-kind="list"] > .ui-title', "List section", "Section", "a titled group of Items"],
+        ['.ui-section[data-kind="list"] > .ui-row:nth-child(2)', "Item", "Item · icon", "one choice; icon, meta, keys and opens are its parts"],
+        ['.ui-section[data-kind="list"] > .ui-row:nth-child(3)', "Meta", "Item · meta", "a value or source at the row's end"],
+        ['.ui-section[data-kind="list"] > .ui-row:nth-child(4)', "Opens", "Item · opens", "opens a submenu"],
+        ['.ui-section[data-kind="slider"]', "Slider section", "Section kind=slider", "a level picked by dragging"],
+      ]} />, "row"),
       lib("section-heading", "Heading", "both", "section", "HeadingSection + Item field", () => <Menu><ChatTitle /></Menu>),
       lib("section-search", "Search", "both", "section", "SearchSection: heads a pick list (PopoverSearchList). A menu over a long list starts with a Search all… row that opens the palette instead", () => <Menu><SearchSection placeholder="Search all models…" keys={["⌘", "⇧", "X"]} /></Menu>),
       lib("item", "List · items", "both", "section", "Section + Item: icon meta detail keys opens field · checked (current: bold, no tick) disabled destructive", () => <Menu><Section title="Title" note="note">
@@ -658,15 +662,27 @@ export const libraryFamilies: Family[] = [
   ] },
   { title: "Overlay", note: "raised frost over a dimmed page, the large surfaces: sections edge to edge, ruled off -- a Bar, a body (a List, a List beside an aside, or a Rail beside a Page), Hints. Its rows are the popover's Items at its scale; its Rail is the sidebar's NavGroups", groups: [
     { atoms: [
-      lib("overlay-anatomy", "Anatomy", "both", "overlay", "Scrim > Overlay > OverlayBar · OverlayList (Sections of Items) · OverlayHints", () => <div class="g-anatomy g-overlay-demo"><Overlay label="Anatomy">
-        <OverlayBar lead={glyph()} placeholder="OverlayBar: lead · input · end · close" onClose={() => {}} />
-        <OverlayList><Section title="OverlayList · Section"><Item icon={<PaperclipIcon />} active>Item</Item><Item icon={<SearchIcon />} keys={["Ctrl", "K"]}>Item with keys</Item><Item opens>Item that opens a page</Item></Section></OverlayList>
-        <OverlayHints start={[[["↑", "↓"], "OverlayHints"]]} end={[[["Esc"], "Close"]]} />
-      </Overlay></div>, true),
-      lib("overlay-anatomy-rail", "Anatomy · rail", "desktop", "overlay", "Overlay layout=rail > OverlayRail (NavGroups) · OverlayPage (SettingGroups of SettingLines)", () => <div class="g-anatomy g-overlay-demo"><Overlay label="Anatomy" layout="rail" style={{ "--overlay-width": "100%" }}>
-        <OverlayRail title="OverlayRail"><NavGroup label="NavGroup"><NavRow icon={<MonitorIcon />} current>NavRow</NavRow><NavRow icon={<KeyboardIcon />}>NavRow</NavRow></NavGroup></OverlayRail>
-        <OverlayPage title="OverlayPage" onClose={() => {}}><SettingGroup title="SettingGroup"><SettingLine label="SettingLine"><SelectTrigger value="Control" bare /></SettingLine><SettingLine label="SettingLine"><SwitchDemo /></SettingLine></SettingGroup></OverlayPage>
-      </Overlay></div>, true),
+      lib("overlay-anatomy", "Anatomy", "both", "overlay", "Scrim > Overlay > OverlayBar · OverlayList (Sections of Items) · OverlayHints", () => <Anatomy scene={() => <div class="g-overlay-demo"><Overlay label="Anatomy">
+        <OverlayBar lead={glyph()} placeholder="Run a command…" onClose={() => {}} />
+        <OverlayList><Section title="Chat"><Item icon={<PaperclipIcon />} active>Attach a file</Item><Item icon={<SearchIcon />} keys={["Ctrl", "K"]}>Search chats</Item><Item opens>Model</Item></Section></OverlayList>
+        <OverlayHints start={[[["↑", "↓"], "Move"]]} end={[[["Esc"], "Close"]]} />
+      </Overlay></div>} parts={[
+        [".ui-overlay-bar", "Bar", "OverlayBar", "lead · input · end · close: what you type to"],
+        [".ui-overlay-list", "List", "OverlayList", "the scrolling body: Sections (titled groups) of Items"],
+        [".ui-overlay-list .ui-row", "Item", "Item · active", "a choice; the cursor follows the pointer and the arrows"],
+        [".ui-overlay-hints", "Hints", "OverlayHints", "the keys along the foot, start and end"],
+      ]} />, true),
+      lib("overlay-anatomy-rail", "Anatomy · rail", "desktop", "overlay", "Overlay layout=rail > OverlayRail (NavGroups) · OverlayPage (SettingGroups of SettingLines)", () => <Anatomy scene={() => <div class="g-overlay-demo"><Overlay label="Anatomy" layout="rail" style={{ "--overlay-width": "600px" }}>
+        <OverlayRail title="Settings"><NavGroup label="App"><NavRow icon={<MonitorIcon />} current>Appearance</NavRow><NavRow icon={<KeyboardIcon />}>Shortcuts</NavRow></NavGroup></OverlayRail>
+        <OverlayPage title="Appearance" onClose={() => {}}><SettingGroup title="Display"><SettingLine label="Density"><SelectTrigger value="Compact" bare /></SettingLine><SettingLine label="Reduce motion"><SwitchDemo /></SettingLine></SettingGroup></OverlayPage>
+      </Overlay></div>} parts={[
+        [".ui-overlay-rail", "Rail", "OverlayRail", "a title, NavGroups, a foot"],
+        [".ui-nav-group .ui-nav-label", "Nav group", "NavGroup", "rows under a label"],
+        [".ui-nav-row", "Nav row", "NavRow · current", "a page; the current one lit"],
+        [".ui-overlay-page-head", "Page", "OverlayPage", "its title, save status and close, over its groups", "above"],
+        [".ui-setting-group", "Setting group", "SettingGroup", "lines under a title", "below"],
+        [".ui-setting-line:last-child > span:first-child", "Setting line", "SettingLine", "a name, then its control in the one control column", "below"],
+      ]} />, "row"),
       lib("overlay-bar", "OverlayBar", "both", "overlay", "OverlayBar lead · input · end · close", () => <div class="g-stack g-overlay-demo">
         <Overlay label="Bar"><OverlayBar lead={glyph()} placeholder="Run a command…" onClose={() => {}} /></Overlay>
         <Overlay label="Bar"><OverlayBar lead={<SearchIcon />} placeholder="Search chats, projects, workspaces…" end={<SortToggle />} onClose={() => {}} /></Overlay>
@@ -721,10 +737,16 @@ export const libraryFamilies: Family[] = [
   ] },
   { title: "DesktopComposer", note: "desktop only, one integrated piece: resting frost holding a TextArea above a Toolbar, with Riders on its top edge. A phone's is PhoneComposer (Pills), sharing the TextArea and the Riders", groups: [
     { atoms: [
-      lib("composer-anatomy", "Anatomy", "desktop", "composer", "DesktopComposer > riders · ComposerField (a TextArea) · Toolbar (start · end · primary)", () => <div class="g-anatomy g-composer"><DesktopComposer riders={<Rider label="Rider"><span class="g-muted">Rider (its own section below)</span></Rider>}>
-        <ComposerField><TextArea placeholder="TextArea (a control), padded by the composer" /></ComposerField>
-        <Toolbar start={<>{ghost("Icon button", <PlusIcon />)}{picker(<span>Picker</span>)}</>} end={ghost("Icon button", <MicIcon />)} primary={ghost("Primary", <ArrowUpIcon />)} />
-      </DesktopComposer></div>, true),
+      lib("composer-anatomy", "Anatomy", "desktop", "composer", "DesktopComposer > riders · ComposerField (a TextArea) · Toolbar (start · end · primary)", () => <Anatomy scene={() => <div class="g-composer"><DesktopComposer riders={queued()}>
+        <ComposerField><TextArea placeholder="Send a message…" /></ComposerField>
+        <Toolbar start={toolbarStart()} end={toolbarEnd()} primary={send()} />
+      </DesktopComposer></div>} parts={[
+        [".ui-rider", "Riders", "Rider", "frost on the composer's top edge (Rider, its own section)"],
+        [".ui-composer-field", "Field", "ComposerField · TextArea", "the draft, padded by the composer"],
+        [".ui-toolbar-start", "Start", "Toolbar start", "ghost icon buttons and pickers"],
+        [".ui-toolbar-end", "End", "Toolbar end", "the mic", "below"],
+        [".ui-toolbar-primary", "Primary", "Toolbar primary", "Send, or Stop while the agent works", "below"],
+      ]} />, true),
       lib("composer-toolbar", "Toolbar", "desktop", "composer", "Toolbar start · end · aside · primary, no frost of its own: ghost icon buttons, pickers; the primary its own slot (Send, or Stop while the agent works), Stop stepping in beside it as the aside", () => <div class="g-composer g-part"><Toolbar start={toolbarStart()} end={toolbarEnd()} primary={send()} /></div>, "row"),
     ] },
     { title: "Assembled", atoms: [
@@ -747,7 +769,11 @@ export const libraryFamilies: Family[] = [
   ] },
   { title: "Rider", note: "resting frost at a composer, either composer's: a row or a strip on its top edge (queued messages, attachments), or a card that takes over its slot in its material (the question: the composer takeover)", groups: [
     { atoms: [
-      lib("rider-anatomy", "Anatomy", "both", "rider", "Rider layout=row: RiderTitle · body · RiderActions", () => <div class="g-anatomy g-composer"><Rider label="Rider"><RiderTitle>Title</RiderTitle><ul class="ui-lines"><Line text="Body: lines, chips or choices" /></ul><RiderActions>{ghost("Action", <PencilIcon />)}{ghost("Action", <XIcon />)}</RiderActions></Rider></div>, true),
+      lib("rider-anatomy", "Anatomy", "both", "rider", "Rider layout=row: RiderTitle · body · RiderActions", () => <Anatomy scene={() => <div class="g-composer">{queued()}</div>} parts={[
+        [".ui-rider > .ui-title-text", "Title", "RiderTitle", "what it holds"],
+        [".ui-lines", "Body", "Lines · Chips · Choices", "what waits: lines, chips or choices", "above"],
+        [".ui-rider-actions", "Actions", "RiderActions", "ghost icon buttons for it", "below"],
+      ]} />, true),
       lib("rider-line", "Line", "both", "rider", "Line: waiting text, one line until opened", () => <div class="g-composer"><Rider><ul class="ui-lines"><Line text="and make the second paragraph shorter" /><Line text="then rename the file to lorem.txt, and add a heading at the top that says what it is, and then read it back to me" clipped /></ul></Rider></div>, true),
       lib("rider-chip", "Chip", "both", "rider", "Chip: image · file · uploading · failed", () => <div class="g-row"><Chip name="photo.png" image={thumb} /><Chip name="notes.txt" detail="2.1 KB" icon={<FileTextIcon />} /><Chip name="big.pdf" detail="64%" icon={<FileTextIcon />} status="uploading" progress={64} /><Chip name="broken.txt" detail="Upload failed" icon={<FileTextIcon />} status="error" /></div>, true),
       lib("rider-choice", "Choice", "both", "rider", "Choices > Choice: number · label · detail. One answer: the current choice white and bold, no tick. Pick any: the wash on each chosen. The cursor follows the pointer", () => <div class="g-composer g-stack"><Rider layout="card"><Choices><Choice n={1} label="Chosen" detail="the current choice" chosen /><Choice n={2} label="Not chosen" active /><Choice n={3} label="Not chosen" detail="with a description" /><div class="ui-choice"><span class="ui-choice-key">4</span><TextArea placeholder="Type your own answer (a TextArea)" /></div></Choices></Rider>
