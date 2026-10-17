@@ -50,7 +50,6 @@ function inlineSize(entry: ResizeObserverEntry) {
 }
 
 const ROW_SELECTOR = '[data-slot="message-scroller-item"]';
-const BLOCK_SELECTOR = ".chat-markdown > .incremark > *";
 
 // Three observers share the work, and the split is the whole point of this
 // module's shape:
@@ -99,9 +98,13 @@ export function mountTranscriptVisibility(
       }
     }
   };
+  // Only a shown element is size-observed: a hidden one's size is contained, so it cannot change, and every
+  // observation costs the browser a check each frame -- a long answer's hundreds of blocks, every frame it grew.
+  // Observed again as it is shown, its first notification is its size then.
   const show = (element: HTMLElement) => {
     if (!element.hasAttribute(VISIBILITY_ATTRIBUTE)) return false;
     element.removeAttribute(VISIBILITY_ATTRIBUTE);
+    if (managed.has(element)) sizeObserver.observe(element);
     return true;
   };
   // A formula still waiting in the render queue is an empty box shorter than
@@ -115,6 +118,7 @@ export function mountTranscriptVisibility(
     if (element.getAttribute(VISIBILITY_ATTRIBUTE) === "hidden") return false;
     if (pendingMath(element)) return false;
     element.setAttribute(VISIBILITY_ATTRIBUTE, "hidden");
+    sizeObserver.unobserve(element);
     return true;
   };
   const clear = (element: HTMLElement) => {
@@ -198,6 +202,7 @@ export function mountTranscriptVisibility(
   };
 
   const syncRow = (row: HTMLElement) => {
+    order = null;
     const previous = rowElements.get(row) ?? [];
     const next = row.isConnected ? elementsOf(row) : [];
     const kept = new Set(next);
@@ -295,6 +300,7 @@ export function mountTranscriptVisibility(
     for (const element of [...managed]) release(element);
     managed.clear();
     rowElements.clear();
+    order = null;
     scheduleRefresh(true);
   };
 
@@ -437,9 +443,19 @@ export function mountTranscriptVisibility(
   // A scroll could bring hidden blocks into view before the observer, a frame or two behind, showed them -- a wheel's
   // notch, a jump, the glide to the latest message: a frame with a hole in the page. The scroll's own handler runs
   // before that frame is drawn, so it shows whatever hidden block lies in the strip the scroll uncovered (the whole
-  // viewport after a jump), walking down it block by block: each hit test continues below the block it found. It
-  // reads layout once, which the transcript's own scroll handler forces anyway.
-  const GAP_STEP = 8;
+  // viewport after a jump). The managed elements in document order are searched for the strip's first, then walked
+  // to its end: a dozen rect reads in a layout the transcript's own scroll handler brings up to date anyway. (Hit
+  // testing the strip instead cost 0.8ms a frame on a long answer, every frame the tail follow scrolled.)
+  let order: HTMLElement[] | null = null;
+  const ordered = () => {
+    if (order) return order;
+    order = [];
+    for (const child of thread.children) {
+      const elements = rowElements.get(child as HTMLElement);
+      if (elements) for (const element of elements) if (managed.has(element)) order.push(element);
+    }
+    return order;
+  };
   let revealedAt = viewport.scrollTop;
   const onScroll = () => {
     const top = viewport.scrollTop;
@@ -447,32 +463,20 @@ export function mountTranscriptVisibility(
     revealedAt = top;
     if (!delta || !fontsReady || activeIds.size) return;
     const view = viewport.getBoundingClientRect();
-    const viewTop = Math.max(0, view.top) + 1;
-    const viewBottom = Math.min(innerHeight, view.bottom);
-    const column = thread.getBoundingClientRect();
-    const x = column.left + column.width / 2;
-    const from = delta > 0 ? Math.max(viewTop, viewBottom - delta - GAP_STEP) : viewTop;
-    const bottom = delta > 0 ? viewBottom : Math.min(viewBottom, viewTop - delta + GAP_STEP);
+    const from = delta > 0 ? Math.max(view.top, view.bottom - delta) : view.top;
+    const to = delta > 0 ? view.bottom : Math.min(view.bottom, view.top - delta);
+    const list = ordered();
+    let low = 0, high = list.length;
+    while (low < high) {
+      const middle = (low + high) >> 1;
+      if (list[middle]!.getBoundingClientRect().bottom < from) low = middle + 1;
+      else high = middle;
+    }
     let changed = false;
-    for (let y = from; y < bottom;) {
-      let next = y + GAP_STEP;
-      for (const element of document.elementsFromPoint(x, y)) {
-        const block = element.closest<HTMLElement>(BLOCK_SELECTOR);
-        if (block) {
-          if (managed.has(block)) changed = show(block) || changed;
-          next = Math.max(next, block.getBoundingClientRect().bottom + 1);
-          break;
-        }
-        // A row with no blocks of its own (a trace, a prompt) is managed whole, and passed whole.
-        const row = element.closest<HTMLElement>(ROW_SELECTOR);
-        if (row && (rowElements.get(row)?.[0] ?? row) === row) {
-          if (managed.has(row)) changed = show(row) || changed;
-          next = Math.max(next, row.getBoundingClientRect().bottom + 1);
-          break;
-        }
-      }
-      // The last row of pixels is always looked at: a block may show only its first few there.
-      y = next >= bottom - 1 && y < bottom - 1 ? bottom - 1 : next;
+    for (let index = low; index < list.length; index += 1) {
+      const element = list[index]!;
+      if (element.getBoundingClientRect().top > to) break;
+      changed = show(element) || changed;
     }
     if (changed) holdRefreshing();
   };
