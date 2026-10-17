@@ -172,7 +172,7 @@ export function LibraryToolStep(props: { tool: ToolItem; sessionId?: string | nu
   const kind = () => props.tool.kind || "other";
   const verb = () => `${VERBS[kind()][status() === "running" ? 0 : 1]}${kind() === "other" ? ` ${props.tool.name || "a tool"}` : ""}`;
   const subject = () => summary(props.tool) || (kind() === "other" || kind() === "script" ? "" : props.tool.name || "");
-  return <Step icon={<Dynamic component={KIND_ICONS[kind()]} />} verb={verb()} subject={subject() || undefined} time={stepDuration(props.tool.timestamp, props.tool.completedAt) || undefined}
+  return <Step label={`${props.tool.name || "Tool"} ${status()}`} icon={<Dynamic component={KIND_ICONS[kind()]} />} verb={verb()} subject={subject() || undefined} time={stepDuration(props.tool.timestamp, props.tool.completedAt) || undefined}
     state={status() === "done" ? undefined : status() as "running" | "failed" | "stopped"} open={props.open} motion={props.motion}
     onToggle={() => { if (!props.open) void load(); props.onToggle(); }}>
     <Show when={props.seen} fallback={<span />}>

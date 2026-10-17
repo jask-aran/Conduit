@@ -1,5 +1,5 @@
 import { children, createComputed, createEffect, createSignal, createUniqueId, For, mergeProps, on, onCleanup, onMount, Show, splitProps, type JSX } from "solid-js";
-import { CheckIcon, ChevronDownIcon, CopyIcon, ChevronLeftIcon, ChevronRightIcon, CircleCheckIcon, CircleXIcon, InfoIcon, SearchIcon, TriangleAlertIcon, XIcon } from "lucide-solid";
+import { CheckIcon, ChevronDownIcon, CopyIcon, ChevronLeftIcon, ChevronRightIcon, CircleCheckIcon, CircleXIcon, InfoIcon, SearchIcon, SquareIcon, TriangleAlertIcon, XIcon } from "lucide-solid";
 export { ChevronDownIcon };
 import { cn } from "@/lib/utils";
 export { Orb, settledOrbRate, type ModeFrame, type ModeOpts, type OrbState } from "./orb";
@@ -624,6 +624,7 @@ export function Disclosure(props: { header: JSX.Element; open?: boolean; onToggl
 /** The opened trail: one light line per step. nested: a group's steps on a rail of their own under its icon;
  * calls: a code-mode script's calls, quieter, inside its step. */
 export const Trail = (props: { nested?: "group" | "calls"; children: JSX.Element }) => <ol class="ui-trail" data-nested={props.nested}>{props.children}</ol>;
+const NOT_KEPT = "Not kept";
 export type StepState = "running" | "failed" | "stopped" | "planned" | "earlier";
 /**
  * A step: its kind's icon (a spinner while running), a verb, its subject in muted mono, flags, its duration at the
@@ -631,18 +632,18 @@ export type StepState = "running" | "failed" | "stopped" | "planned" | "earlier"
  * (reasoning the provider kept). discarded: text a stop threw away, struck, flagged Not kept. flags: words beside the
  * time (repeats). With children it opens in place to them -- its output, its prose, a group's or a script's steps.
  */
-export function Step(props: { icon?: JSX.Element; verb?: string; subject?: string; summary?: JSX.Element; time?: string; state?: StepState; flags?: string[]; note?: boolean; discarded?: boolean; open?: boolean; onToggle?: () => void; motion?: Motion; children?: JSX.Element }) {
+export function Step(props: { label?: string; icon?: JSX.Element; verb?: string; subject?: string; summary?: JSX.Element; time?: string; state?: StepState; flags?: string[]; note?: boolean; discarded?: boolean; open?: boolean; onToggle?: () => void; motion?: Motion; children?: JSX.Element }) {
   const body = children(() => props.children);
   const opens = () => body.toArray().length > 0 && !props.note;
-  const flags = () => [...(props.flags ?? []), ...(props.discarded ? ["Not kept"] : []), ...(props.state === "failed" ? ["Failed"] : props.state === "stopped" ? ["Stopped"] : [])];
+  const flags = () => [...(props.flags ?? []), ...(props.discarded ? [NOT_KEPT] : []), ...(props.state === "failed" ? ["Failed"] : props.state === "stopped" ? ["Stopped"] : [])];
   const row = () => <>
     <span class="ui-step-icon"><Show when={props.state === "running"} fallback={props.icon}><span class="ui-spinner" aria-hidden="true" /></Show></span>
     <Show when={props.summary} fallback={<><Show when={props.verb}><span class="ui-step-verb">{props.verb}</span></Show><Show when={props.subject}><code class="ui-step-subject">{props.subject}</code></Show></>}><span class="ui-step-summary">{props.summary}</span></Show>
-    <span class="ui-step-meta"><For each={flags()}>{(flag) => <span class="ui-step-flag">{flag}</span>}</For><Show when={props.time}><span class="ui-step-time">{props.time}</span></Show></span>
+    <span class="ui-step-meta"><For each={flags()}>{(flag) => <span class="ui-step-flag" title={flag === NOT_KEPT ? "Interrupted — the agent has no record of this" : undefined}>{flag}</span>}</For><Show when={props.time}><span class="ui-step-time">{props.time}</span></Show></span>
   </>;
   return <li class="ui-disclosure ui-step-item" data-open={props.open && opens() ? "true" : "false"} data-state={props.state} data-note={props.note ? "" : undefined} data-discarded={props.discarded ? "" : undefined} {...motionOf(props.motion)}>
     <Show when={opens()} fallback={<div class="ui-step">{row()}</div>}>
-      <button type="button" class="ui-step" aria-expanded={Boolean(props.open)} onClick={() => props.onToggle?.()}>{row()}<ChevronDownIcon class="ui-disclosure-chevron" /></button>
+      <button type="button" class="ui-step" aria-label={props.label} aria-expanded={Boolean(props.open)} onClick={() => props.onToggle?.()}>{row()}<ChevronDownIcon class="ui-disclosure-chevron" /></button>
       <div class="ui-disclosure-body ui-step-body" aria-hidden={!props.open}>{body()}</div>
     </Show>
   </li>;
@@ -663,8 +664,12 @@ export function TraceError(props: { time?: string; facts?: string[]; message: st
     <pre>{props.message}</pre></li>;
 }
 /** A message's action row: its time first, muted and tabular, then its actions (icon-xs ghost buttons). */
-export const MessageFoot = (props: { time: string; end?: boolean; motion?: Motion; children?: JSX.Element }) =>
-  <div class="ui-message-foot" data-end={props.end ? "" : undefined} {...motionOf(props.motion)}><time>{props.time}</time>{props.children}</div>;
+/** status: how the answer ended when it did not finish (Interrupted, Stopping…), after the time. */
+export const MessageFoot = (props: { time: string; status?: string; end?: boolean; motion?: Motion; children?: JSX.Element }) =>
+  <div class="ui-message-foot" data-end={props.end ? "" : undefined} {...motionOf(props.motion)}><time>{props.time}</time><Show when={props.status}><b class="ui-message-status">{props.status}</b></Show>{props.children}</div>;
+/** In an answer's place, one stopped before writing any: the stop mark, Interrupted, and when. */
+export const StopLine = (props: { detail: string }) =>
+  <div class="ui-stop-line" role="status"><SquareIcon aria-hidden="true" /><b>Interrupted</b>{`\u00a0· ${props.detail}`}</div>;
 /** A turn: the trace header, the answer and its foot, one gap apart. */
 export const Turn = (props: { children: JSX.Element }) => <article class="ui-turn">{props.children}</article>;
 /** The user's message: its Bubble and, under it at the right, its foot. */

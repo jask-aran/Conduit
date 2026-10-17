@@ -50,6 +50,7 @@ import { captureTranscriptAnchor, restoreTranscriptAnchor } from "./transcript-a
 import { api } from "../api/client";
 import { requestTurnArtifactNavigation } from "./turn-artifact-navigation";
 import { useLibrary } from "@/components/ui/swap";
+import { StopLine } from "@/components/ui";
 
 const ChatMarkdown = lazy(() => import("./markdown").then((module) => ({ default: module.ChatMarkdown })));
 const fullDateTime = (value?: string) => {
@@ -172,7 +173,7 @@ function Actions(props: { message: Message; precedingUserId?: string; chat: Tran
   const library = useLibrary();
   return <div class={library ? "ui-message-foot" : "response-actions"} data-end={library && !assistant() ? "" : undefined} data-reveal={props.reveal ? "" : undefined}>
     <MessageTime timestamp={props.message.timestamp} />
-    <Show when={status()}>{(label) => <span class="marker response-status turn-trace-status" data-status={label() === "Interrupted" ? "interrupted" : undefined}>{label()}</span>}</Show>
+    <Show when={status()}>{(label) => library ? <b class="ui-message-status">{label()}</b> : <span class="marker response-status turn-trace-status" data-status={label() === "Interrupted" ? "interrupted" : undefined}>{label()}</span>}</Show>
     {/* A prompt offers editing. Regenerating it is the same act as regenerating
         the answer below, which already has a button, so there is one way to ask
         for it rather than two that look like different things. */}
@@ -1276,7 +1277,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
                         </Suspense>
                       </Show>
                       <Show when={!message().content && message().stopped && !item.traced && !failed()}>
-                        <div class="discarded-answer-header turn-stop-row"><StopLabel detail="before answering" /></div>
+                        {library ? <StopLine detail="before answering" /> : <div class="discarded-answer-header turn-stop-row"><StopLabel detail="before answering" /></div>}
                       </Show>
                       <Show when={failed()}>
                         <details class="assistant-error" open role="alert">
