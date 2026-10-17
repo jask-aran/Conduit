@@ -180,9 +180,9 @@
 .ui-frost[data-core] { background: linear-gradient(var(--frost-fill), var(--frost-fill)), var(--frost-core-ground); }
 
 /* Never a ring (DESIGN Interaction): no outline or focus ring from the browser or any component, in any
-   colour, on anything the library is loaded under. The one rule, so no piece can forget it; keyboard focus
-   is the wash, which each piece draws on :focus-visible as on :hover. */
-:focus, :focus-visible { outline: none !important; --tw-ring-shadow: 0 0 #0000 !important; --tw-ring-offset-shadow: 0 0 #0000 !important; }
+   colour, on a library piece or anything in one (and the whole gallery, :root[data-library]). The one rule, so no
+   piece can forget it; keyboard focus is the wash, which each piece draws on :focus-visible as on :hover. */
+:root[data-library] :is(:focus, :focus-visible), :where([class*="ui-"], [class*="ui-"] *):is(:focus, :focus-visible) { outline: none !important; --tw-ring-shadow: 0 0 #0000 !important; --tw-ring-offset-shadow: 0 0 #0000 !important; }
 
 /* Pill: the phone's floating frost controls -- one family for the header's
    groups, the sidebar's toggle and the composer's buttons. One icon is a
@@ -934,10 +934,10 @@
 /* Copied: the button's check in the foreground, and what was copied washes --tint and fades (no ring, ever).
 .ui-copy[data-copied] { color: var(--foreground); }
    The wash is laid over the whole region (a pinned caption included), so all of it flashes as one. */
-:where([data-copied]):not(.ui-button), .ui-read [data-copy-flash="true"] { position: relative; }
-:where([data-copied]):not(.ui-button)::after, .ui-read [data-copy-flash="true"]::after { position: absolute; z-index: 2; inset: 0; border-radius: inherit; background: var(--tint); content: ""; opacity: 0; pointer-events: none; animation: ui-copied .7s ease-out; }
+:where([class*="ui-"][data-copied]):not(.ui-button), .ui-read [data-copy-flash="true"] { position: relative; }
+:where([class*="ui-"][data-copied]):not(.ui-button)::after, .ui-read [data-copy-flash="true"]::after { position: absolute; z-index: 2; inset: 0; border-radius: inherit; background: var(--tint); content: ""; opacity: 0; pointer-events: none; animation: ui-copied .7s ease-out; }
 @keyframes ui-copied { from { opacity: 1; } }
-@media (prefers-reduced-motion: reduce) { :where([data-copied]):not(.ui-button)::after, .ui-read [data-copy-flash="true"]::after { animation: none; } }
+@media (prefers-reduced-motion: reduce) { :where([class*="ui-"][data-copied]):not(.ui-button)::after, .ui-read [data-copy-flash="true"]::after { animation: none; } }
 .ui-code-line { display: block; padding-inline: var(--space-lg); white-space: pre; }
 .ui-code-n { display: inline-block; min-width: calc(var(--code-digits, 2) * 1ch); margin-right: var(--space-lg); color: var(--muted-foreground); font-variant-numeric: tabular-nums; text-align: right; user-select: none; }
 /* The trace header: the orb, Status · time · work, a chevron when there is a trail; the latest line under it. */
