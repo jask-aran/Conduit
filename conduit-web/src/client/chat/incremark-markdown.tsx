@@ -1467,6 +1467,20 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
     const timer = setTimeout(() => setFadeOver(true), streamFadeMs() + 20);
     onCleanup(() => clearTimeout(timer));
   });
+  // An open fence's placeholder stays until the code block that replaces it is on screen: when the fence closed it
+  // went at once, and the block waited its turn behind the text before it, so the page lost the placeholder's
+  // height for those frames and dropped by it. Released when the reveal reaches the block
+  // or, the answer finished, nothing is left to reveal.
+  let heldFence: StreamingPending | null = null;
+  const shownPending = createMemo<StreamingPending | null>(() => {
+    const current = pending();
+    if (current?.kind === "fence") return heldFence = current;
+    if (!heldFence) return current;
+    const start = heldFence.start;
+    const reached = displayBlocks().some((block) => (block as DisplayBlock & { startOffset?: number }).startOffset! >= start);
+    if (reached || (!streaming() && !displayBusy())) return heldFence = null, current;
+    return heldFence;
+  });
   const displayContext: RendererContext = { ...context, fadeWords: () => !props.inline, fadeMath: () => !props.inline && streamMathFade(), fadeLive: () => !fadeOver() };
   return <>
     <div class="chat-markdown" data-renderer={rendererId()} data-inline={props.inline ? "true" : undefined} data-streaming={streaming() || undefined} data-display-busy={displayBusy() || pendingMathRenders() > 0 ? "true" : undefined} data-display-animation-busy={displayBusy() ? "true" : undefined} data-pending-math-renders={pendingMathRenders() > 0 ? String(pendingMathRenders()) : undefined} data-display-key={props.displayKey || undefined} data-settled={settled() ? "true" : undefined}>
@@ -1474,7 +1488,7 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
         <Show when={props.inline} fallback={<>
           <ParsedBlockNodes blocks={seededBlocks} context={context} />
           <DisplayBlockNodes blocks={displayBlocks} context={displayContext} history={displayHistory} shown={displayShown} streaming={streaming} />
-          <Show when={pending()}>
+          <Show when={shownPending()}>
             {(value) => <Show when={value().kind === "fence"}>
               <PendingConstruct pending={value()} streaming={streaming()} />
             </Show>}
