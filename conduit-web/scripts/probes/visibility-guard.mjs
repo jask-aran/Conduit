@@ -51,6 +51,8 @@ try {
       const view = viewport.getBoundingClientRect(); const scrollTop = viewport.scrollTop;
       let blank = 0, first = null, firstTop = 0; const now = new Map();
       for (const element of blocks()) {
+        // Collapsed (out of layout, its run's height held by a spacer) is neither shown nor a placeholder.
+        if (element.getAttribute("data-transcript-visibility") === "collapsed") { placeholders.delete(element); continue; }
         const rect = element.getBoundingClientRect(); now.set(element, [rect.height, element.getAttribute("data-transcript-visibility") ?? "shown", rect.top - view.top]);
         const hidden = element.getAttribute("data-transcript-visibility") === "hidden";
         if (hidden) placeholders.set(element, rect.height);

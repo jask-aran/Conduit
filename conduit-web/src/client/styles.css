@@ -281,6 +281,11 @@ svg.lucide { stroke-width: 2.4; }
 .thread { width: min(var(--transcript-column-width), calc(100% - var(--transcript-column-gutter))); min-height: 100%; margin-inline: auto; padding: 70.4px clamp(0px, calc((100% - var(--composer-desktop-reference-width) - var(--transcript-column-gutter)) / 2 + 35.2px), 35.2px) 25.6px; }
 [data-slot="message-scroller-item"] { margin-block: 8px; content-visibility: visible; contain-intrinsic-size: none; }
 [data-transcript-visibility="hidden"] { content-visibility: hidden; }
+/* A long run of hidden blocks far above the reader, out of layout: the run's measured height stands in for it as
+   one box before the first block that is left (transcript-visibility.ts, collapseAbove). Important: a block's own
+   display rule is more specific. */
+[data-transcript-visibility="collapsed"] { display: none !important; }
+.incremark[data-collapsed-above]::before { content: ""; display: block; height: var(--collapsed-above); }
 [data-slot="message"] { display: flex; width: 100%; }
 [data-slot="message-content"] { display: flex; min-width: 0; max-width: 100%; flex-direction: column; gap: 3.2px; }
 .message-user { justify-content: flex-end; }
@@ -1079,6 +1084,11 @@ svg.lucide { stroke-width: 2.4; }
 .thread { width: min(var(--transcript-column-width), calc(100% - var(--transcript-column-gutter))); min-height: 100%; margin-inline: auto; padding: 88px 44px 32px; }
 [data-slot="message-scroller-item"] { margin-block: 10px; content-visibility: visible; contain-intrinsic-size: none; }
 [data-transcript-visibility="hidden"] { content-visibility: hidden; }
+/* A long run of hidden blocks far above the reader, out of layout: the run's measured height stands in for it as
+   one box before the first block that is left (transcript-visibility.ts, collapseAbove). Important: a block's own
+   display rule is more specific. */
+[data-transcript-visibility="collapsed"] { display: none !important; }
+.incremark[data-collapsed-above]::before { content: ""; display: block; height: var(--collapsed-above); }
 [data-slot="message"] { display: flex; width: 100%; }
 [data-slot="message-content"] { display: flex; min-width: 0; max-width: 100%; flex-direction: column; gap: 4px; }
 .message-user { justify-content: flex-end; }
