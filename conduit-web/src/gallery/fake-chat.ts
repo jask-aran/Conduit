@@ -31,9 +31,13 @@ const TOOLS: ToolItem[] = [
   { toolCallId: "t3", name: "bash", kind: "command", subject: "wc -c lorem_ipsum.txt", input: { command: "wc -c lorem_ipsum.txt" }, output: "412 lorem_ipsum.txt", done: true, timestamp: at(19), completedAt: at(19) },
 ];
 
+/** A real chat's saved session (GET /v0/sessions/:id) put in localStorage under gallery:seed replaces the seed,
+ *  so the previews can be checked against the app on the same transcript. */
+const stored = (() => { try { return JSON.parse(localStorage.getItem("gallery:seed") || "null") as { messages: Message[]; tools: ToolItem[]; id?: string } | null; } catch { return null; } })();
+
 export function fakeChat() {
   const [draft, setDraft] = createSignal("");
-  const [messages, setMessages] = createSignal<Message[]>(SEED);
+  const [messages, setMessages] = createSignal<Message[]>(stored?.messages ?? SEED);
   // Editing an earlier message: its text into the draft, and the way out the transcript shows over the composer.
   const [editingEntryId, setEditingEntryId] = createSignal<string | null>(null);
   let next = 0;
@@ -46,7 +50,7 @@ export function fakeChat() {
     editingEntryId,
     edit: (message: Message) => { if (editingEntryId() === message.id) { setEditingEntryId(null); setDraft(""); return; } setEditingEntryId(message.id); setDraft(typeof message.content === "string" ? message.content : ""); },
     cancelEdit: () => { setEditingEntryId(null); setDraft(""); },
-    messages, hostUiRequests: () => [], pendingMessages: () => [], harnessCommands: () => [], tools: () => TOOLS,
+    messages, hostUiRequests: () => [], pendingMessages: () => [], harnessCommands: () => [], tools: () => stored?.tools ?? TOOLS,
     title: () => "Lorem ipsum file", status: () => "active", presentation: () => ({ kind: "ready" }),
     send: async () => {
       const text = draft().trim();

@@ -53,6 +53,8 @@ For component and styling changes, check the gallery before the app. Run `npm ru
 
 After changing a component's motion (library.css, Motion: its five invariants), run the motion checks against the gallery open in headed Chrome on CDP `:9222` (`node ../scripts/run-windows-chrome-devtools.mjs start`): `node scripts/motion-check/phone.mjs` (PhoneComposer: the phone preview's transitions and every pair of the gallery card's states, about two minutes) and `node scripts/motion-check/components.mjs` (Disclosure, CodeBlock, DesktopComposer). They play each move at 1x, restoring the gallery's speed setting after, and print one line per move: ✓, or ✗ with the invariant it broke.
 
+After changing the library's Trace or the app's trace logic, run `node scripts/motion-check/trace-parity.mjs` (from conduit-web, the gallery served, the server on :4310 already signed in in that Chrome): it makes a Test-profile chat (thinking, tools, interrupted turns), loads its saved session into the gallery's phone preview and walks both traces -- Status and Latest lines, every step opened and what it opens to, the stopped markers -- printing each line that differs. `--chat <id>` checks an existing chat instead (one with groups, failed tools or output left on the server). Settled turns only: the preview has no live server, so a streaming turn is not compared.
+
 ## Browser surfaces
 
 | Surface | Use |
