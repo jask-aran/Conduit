@@ -207,22 +207,27 @@ export function tokenAt(index) {
 /**
  * The steps a turn will take, decided before it writes a word.
  *
- * Text, then a tool, then text, for as many tools as were asked for. Deciding
- * it up front is what makes a run repeatable: the same prompt produces the same
- * turn, down to which token the call lands on.
+ * Shaped as models were recorded working with tools (Muse, GPT, Gemini, Codex
+ * chats on this server): each message opens with its own thinking, a call is
+ * made with a sentence of narration before it or none at all, and the long
+ * text is the final answer alone. Thinking is shared across the messages; the
+ * answer is the amount asked for. Deciding it up front is what makes a run
+ * repeatable: the same prompt produces the same turn, down to which token the
+ * call lands on.
  */
+export const NARRATION = " I'll read docs/testing.md to see what it says first.";
 export function planTurn(tokens, toolRuns, thinking = 0) {
   const total = Math.max(1, tokens);
-  const steps = thinking ? [{ kind: "thinking", tokens: thinking }] : [];
-  if (!toolRuns) return [...steps, { kind: "text", tokens: total }];
-  const share = Math.max(1, Math.floor(total / (toolRuns + 1)));
-  let left = total;
+  const thought = thinking ? Math.max(20, Math.floor(thinking / (toolRuns + 1))) : 0;
+  const steps = [];
   for (let run = 0; run < toolRuns; run += 1) {
-    steps.push({ kind: "text", tokens: share });
+    if (thought) steps.push({ kind: "thinking", tokens: thought });
+    // Every other call is narrated, as a model says what it is about to do some of the time.
+    if (run % 2 === 0) steps.push({ kind: "text", text: NARRATION, tokens: replayTokens(NARRATION).length });
     steps.push({ kind: "tool", toolCallId: `call_${run + 1}` });
-    left -= share;
   }
-  steps.push({ kind: "text", tokens: Math.max(1, left) });
+  if (thought) steps.push({ kind: "thinking", tokens: thought });
+  steps.push({ kind: "text", tokens: total });
   return steps;
 }
 
@@ -411,7 +416,8 @@ export class TestStreamAdapter extends EventEmitter {
       // Bursts arrive as one delta, the way a provider's chunk does.
       let burst = "";
       while (turn.sent < due) {
-        const delta = speed.replay ? replayTokens(speed.replay)[turn.sent] ?? "" : tokenAt(turn.sent);
+        const delta = step.text ? replayTokens(step.text)[turn.sent - from] ?? ""
+          : speed.replay ? replayTokens(speed.replay)[turn.sent] ?? "" : tokenAt(turn.sent);
         if (blockKind === "thinking") turn.thinking += delta;
         else turn.text += delta;
         turn.sent += 1;
@@ -634,7 +640,8 @@ export class TestStreamAdapter extends EventEmitter {
     if (!turn?.messageId) return;
     const blocks = [
       ...(turn.thinking ? [{ kind: "thinking", contentIndex: 0, text: turn.thinking, redacted: false }] : []),
-      { kind: "text", contentIndex: turn.textIndex || 0, text: turn.text },
+      // A message that only thought and called has no text, as a model's has none.
+      ...(turn.text ? [{ kind: "text", contentIndex: turn.textIndex || 0, text: turn.text }] : []),
       ...turn.blocks,
     ];
     this.publish(record, { type: "assistant_content", generationId: turn.generationId, phase: "final",
