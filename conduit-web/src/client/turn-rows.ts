@@ -477,7 +477,11 @@ function liveRows(generation: ActiveGenerationView, owner: Message | null, tools
   const rows: TurnRow[] = [];
   // Every turn that has shown anything has its trace: one with no thinking
   // and no tools is its header alone -- the orb, what it is doing, the time.
-  if (segments.length || answers.length) {
+  // One stopped or failed before it showed anything is that header too, as
+  // the saved turn is (endedEarly): without a row the thread still ended at
+  // the prompt, and its starting header stayed up, counting, until a reload.
+  const endedEarly = generation.status === "stopped" || generation.status === "failed";
+  if (segments.length || answers.length || endedEarly) {
     const running = active(generation);
     const latestTool = segments.findLast((segment) => segment.kind === "tool");
     const executingTool = running && latestTool?.kind === "tool" && latestTool.tool.done === false;
