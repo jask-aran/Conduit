@@ -290,7 +290,7 @@ for (const [name, run] of Object.entries(scenarios)) {
     console.log(`${bad.length ? "FAIL" : "ok  "} ${name}${bad.length ? `: ${bad.map(([label, , detail]) => detail === undefined ? label : `${label} (${detail})`).join(", ")}` : ""}`);
   } catch (error) {
     failed += 1;
-    console.log(`FAIL ${name}: ${error.message.split("\n")[0]}`);
+    console.log(`FAIL ${name}: ${error.message.split("\n").slice(0, process.env.FULL ? 12 : 1).join(" | ")}`);
   } finally {
     if (id) await api(`/v0/sessions/${id}`, "DELETE").catch(() => {});
   }

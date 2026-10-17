@@ -510,6 +510,11 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
       if (following()) scrollBottomNow();
     });
   };
+  // A turn that has just ended is still the live tail for a moment: its foot and last rows arrive as it settles, and
+  // the spring takes the view down to them. Snapped -- as a chat opened finished is -- they landed in one frame (48px).
+  let liveTailUntil = 0;
+  const liveTail = () => Boolean(props.chat.activeGeneration()) || performance.now() < liveTailUntil;
+  createEffect(on(() => Boolean(props.chat.activeGeneration()), (live, was) => { if (was && !live) liveTailUntil = performance.now() + 1500; }, { defer: true }));
   const resumeTypewriterTailFollow = (reason: string) => {
     if (!rendererUsesInertialTailFollow()) return;
     cancelTypewriterTailRejoin();
@@ -523,7 +528,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
   };
   const requestTypewriterTailFollow = (reason: string) => {
     if (!rendererUsesInertialTailFollow() || !following() || typewriterTailState.owner !== "app") return;
-    if (!props.chat.activeGeneration()) {
+    if (!liveTail()) {
       const targetScrollTop = viewportMaxScrollTop();
       setViewportScrollTop(targetScrollTop);
       typewriterTailState = rebaseTailFollowState(typewriterTailState, targetScrollTop, "app");
@@ -551,7 +556,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
       // A persisted transcript is already complete. Keep its tail pinned while
       // lazy Markdown resolves; the spring is for live output, where the target
       // moves continuously and a snap would fight the display cadence.
-      if (!props.chat.activeGeneration()) {
+      if (!liveTail()) {
         setViewportScrollTop(targetScrollTop);
         typewriterTailState = rebaseTailFollowState(typewriterTailState, targetScrollTop, "app");
       }
@@ -577,7 +582,13 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
       const distanceFromBottom = Math.max(0, maxScrollTop - currentScrollTop);
       const frame = advanceTailFollow(typewriterTailState, targetScrollTop, now, currentScrollTop, feedForwardTargetDeltaPx);
       typewriterTailState = frame.state;
-      const nextScrollTop = frame.nextScrollTop;
+      // Its last steps are under a pixel, and written rounded they did not move it: it stopped short of the bottom
+      // (8px) until a snap closed the gap. A step that would round to nothing takes a whole pixel, never past the target.
+      let nextScrollTop = frame.nextScrollTop;
+      const step = nextScrollTop - currentScrollTop;
+      if (Math.abs(step) > 0.05 && Math.round(nextScrollTop) === Math.round(currentScrollTop)) {
+        nextScrollTop = step > 0 ? Math.min(targetScrollTop, currentScrollTop + 1) : Math.max(targetScrollTop, currentScrollTop - 1);
+      }
       const distanceToTarget = targetScrollTop - currentScrollTop;
       const shouldWrite = !frame.rebased && Math.abs(nextScrollTop - currentScrollTop) > 0.05;
       if (shouldWrite) setViewportScrollTop(nextScrollTop);
@@ -741,6 +752,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
     const trailingUser = messages.at(-1)?.role === "user" ? messages.at(-1)! : null;
     const trailingUserId = trailingUser?.id || null;
     if (loaded !== previousLoaded) {
+      liveTailUntil = 0;
       if (previousLoaded) rememberScrollPosition(previousLoaded);
       previousLoaded = loaded;
       requestAnimationFrame(syncLatestDistance);
