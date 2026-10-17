@@ -5,11 +5,13 @@
 // line every frame; prints both sequences of what a reader sees change. A state shown 150ms or more on
 // one side must show on the other, and the states both show come in the same order (one held a moment may be missed).
 // From conduit-web, the gallery served and the server signed in in that Chrome:
-//   node scripts/motion-check/trace-stream.mjs ["think 400 3 tools 600t"] [stop]
+//   node scripts/motion-check/trace-stream.mjs ["think 400 3 tools 600t"] [stop] [--budget]
+// --budget also traces each side's turn (devtools.timeline, toplevel) and prints its busiest renderer's tasks over 6.94ms.
 const { chromium } = await import(new URL("../../../.smoke-tools/node_modules/playwright/index.mjs", import.meta.url).href);
 const flag = (name) => { const at = process.argv.indexOf(name); return at > 0 ? process.argv.splice(at, 2)[1] : null; };
 // --model <spec>: a real model on the Assistant profile (--profile coding for codemode scripts); its two runs differ, so they are printed to read, not compared.
 const model = flag("--model"), profile = flag("--profile") ?? "assistant";
+const budget = process.argv.includes("--budget"); if (budget) process.argv.splice(process.argv.indexOf("--budget"), 1);
 const prompt = process.argv[2] ?? (model ? "List the files in this folder, then read one of them, then tell me in three sentences what you found." : "think 400 3 tools 600t"), stop = process.argv[3] === "stop";
 const b = await chromium.connectOverCDP("http://127.0.0.1:9222");
 const ctx = b.contexts()[0];
@@ -39,7 +41,24 @@ const REC = (S) => { const log = window.__log = []; const pulled = window.__pull
     else if (shown) shown.text = t(shown.el); const traces = document.querySelectorAll(".turn-trace"); const tr = traces[traces.length - 1];
     const s = tr ? `${t(tr.querySelector(S.line)).replace(/ · \d+(\.\d+)?(ms|s)\b| · \d+m \d+s/g, " · T")} | ${t(tr.querySelector(S.latest)).slice(0, 80)}` : "";
     if (s !== last) { log.push([s, performance.now()]); last = s; } window.__raf = requestAnimationFrame(tick); }; tick(); };
-const pulled = {};
+const pulled = {}, tasks = {};
+// The busiest renderer main thread over the turn: its tasks, and what ran inside the ones over budget.
+const traced = async (run) => {
+  if (!budget) return run();
+  const events = []; const onData = (d) => events.push(...d.value); cdp.on("Tracing.dataCollected", onData);
+  const done = new Promise((r) => cdp.once("Tracing.tracingComplete", r));
+  await cdp.send("Tracing.start", { traceConfig: { includedCategories: ["devtools.timeline", "toplevel"] } });
+  const out = await run(); await cdp.send("Tracing.end"); await done; cdp.off("Tracing.dataCollected", onData);
+  const key = (e) => `${e.pid}:${e.tid}`, task = (e) => e.ph === "X" && e.dur && (e.name === "RunTask" || e.name === "ThreadControllerImpl::RunTask");
+  const mains = new Set(events.filter((e) => e.name === "thread_name" && e.args?.name === "CrRendererMain").map(key));
+  const busy = {}; for (const e of events) if (task(e) && mains.has(key(e))) busy[key(e)] = (busy[key(e)] ?? 0) + e.dur;
+  const main = Object.entries(busy).sort((a, z) => z[1] - a[1])[0]?.[0];
+  const all = events.filter((e) => task(e) && key(e) === main), long = all.filter((e) => e.dur > 6940);
+  const inner = {}; for (const e of events) if (e.ph === "X" && key(e) === main && !task(e) && long.some((t) => e.ts >= t.ts && e.ts < t.ts + t.dur)) inner[e.name] = (inner[e.name] ?? 0) + e.dur / 1000;
+  return { out, tasks: `${all.length} tasks, ${long.length} over 6.94ms, ${all.filter((e) => e.dur > 16700).length} over 16.7ms, longest ${(Math.max(0, ...all.map((e) => e.dur)) / 1000).toFixed(1)}ms`
+    + (long.length ? ` (at ${long.map((e) => `${((e.ts - all[0].ts) / 1e6).toFixed(1)}s`).join(" ")})` : "")
+    + (long.length ? `; inside them: ${Object.entries(inner).sort((a, z) => z[1] - a[1]).slice(0, 6).map(([k, v]) => `${k} ${v.toFixed(0)}ms`).join(", ")}` : "") };
+};
 // The window sending is brought forward: a window covered by another draws no frames.
 const send = async (page, S, tab) => {
   await tab.bringToFront();
@@ -62,8 +81,9 @@ const send = async (page, S, tab) => {
   return out;
 };
 try {
-  const a = await send(live, { line: ".turn-trace-line", latest: ".turn-trace-summary" }, live);
-  const z = await send(f, { line: ".ui-trace-line", latest: ".ui-trace-latest" }, g);
+  const both2 = [await traced(() => send(live, { line: ".turn-trace-line", latest: ".turn-trace-summary" }, live)), await traced(() => send(f, { line: ".ui-trace-line", latest: ".ui-trace-latest" }, g))];
+  const [a, z] = budget ? both2.map((x) => x.out) : both2;
+  if (budget) console.log(`frame budget -- app: ${both2[0].tasks}\n              library: ${both2[1].tasks}`);
   // A state held a moment either side's frames may miss; one shown 150ms or more must show on both, in the same order.
   const show = (list) => list.map(({ state, ms }) => `${state}  ${Math.round(ms)}ms`).join("\n         ");
   console.log("app:    ", show(a)); console.log("library:", show(z));
