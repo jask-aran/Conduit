@@ -38,8 +38,10 @@ export function Button(props: ButtonProps) {
   />;
 }
 
+// It turns a box around the icon: an <svg> turning is animated on the main thread, and laid out into layers again
+// every frame something else draws (a fifth of a thinking turn's main thread); a box turns on the compositor.
 export function Spinner(props: { class?: string; [key: string]: unknown }) {
-  return <LoaderCircleIcon aria-hidden="true" class={cn("size-4 animate-spin", props.class)} />;
+  return <span aria-hidden="true" class={cn("inline-flex size-4 shrink-0 animate-spin", props.class)}><LoaderCircleIcon class="size-full" /></span>;
 }
 
 export function Badge(props: ParentProps<{ class?: string; variant?: "default" | "secondary" | "outline" }>) {

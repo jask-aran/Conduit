@@ -8,7 +8,7 @@
  * function. Names come from source maps: build with them first (`npx vite build --mode gallery --sourcemap`, or the
  * app's `npx vite build --sourcemap` and a restart), and without them afterwards.
  *
- *   node scripts/probes/turn-profile.mjs ["think 3000 5 tools 1500t"] [--app]
+ *   node scripts/probes/turn-profile.mjs ["think 3000 5 tools 1500t"] [--app] [--save <file>]
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -30,7 +30,7 @@ await (await ctx.newCDPSession(page)).send("Emulation.setDeviceMetricsOverride",
 await page.goto(url, { waitUntil: "commit" }); await page.waitForTimeout(7000);
 // State marks from a MutationObserver: a rAF of the probe's own would ask for every frame it measures.
 await page.evaluate((line) => { let last = ""; new MutationObserver(() => { const s = ([...document.querySelectorAll(".turn-trace")].at(-1)?.querySelector(line)?.textContent ?? "").replace(/\s+/g, " ").trim().replace(/ · .*/, "");
-  if (s && s !== last) { last = s; window.__state = s; performance.mark(`state ${s}`); } }).observe(document.body, { subtree: true, childList: true, characterData: true }); }, app ? ".turn-trace-line" : ".ui-trace-line");
+  if (s && s !== last) { last = s; window.__state = s; performance.mark(`state ${s}`); } }).observe(document.body, { subtree: true, childList: true, characterData: true }); }, ".ui-trace-line, .turn-trace-line");
 const ps = await ctx.newCDPSession(page); await ps.send("Profiler.enable"); await ps.send("Profiler.setSamplingInterval", { interval: 100 });
 const events = []; const onData = (d) => events.push(...d.value); cdp.on("Tracing.dataCollected", onData);
 const traced = new Promise((r) => cdp.once("Tracing.tracingComplete", r));
@@ -52,8 +52,10 @@ const isTask = (e) => e.ph === "X" && (e.name === "RunTask" || e.name === "Threa
 const list = events.filter((e) => e.ph === "X" && e.pid === pid && e.tid === tid).sort((a, z) => a.ts - z.ts || z.dur - a.dur);
 const tasks = []; let end = -1; for (const e of list) if (isTask(e) && e.ts >= end) { tasks.push(e); end = e.ts + e.dur; }
 const span = {}; for (let i = 0; i + 1 < marks.length; i++) { const s = marks[i].name.slice(6); span[s] = (span[s] ?? 0) + (marks[i + 1].ts - marks[i].ts) / 1e6; }
+// --save <file>: the page's main thread (its slices, the state marks) and the CPU profile, to look at frame by frame.
+if (arg("--save", null)) fs.writeFileSync(arg("--save", null), JSON.stringify({ marks, list, profile }));
 const agg = {}; let j = 0;
-for (const t of tasks) { const a = agg[stateAt(t.ts)] ??= { busy: 0, frames: 0, phases: {}, raf: {} }; a.busy += t.dur / 1000;
+for (const t of tasks) { const a = agg[stateAt(t.ts)] ??= { busy: 0, frames: 0, phases: {}, raf: {}, durs: [] }; a.busy += t.dur / 1000; a.durs.push(t.dur / 1000);
   while (j < list.length && list[j].ts < t.ts) j++;
   const inside = []; for (let k = j; k < list.length && list[k].ts < t.ts + t.dur; k++) if (list[k] !== t && !isTask(list[k])) inside.push(list[k]);
   if (inside.some((e) => e.name === "Paint")) a.frames++;
@@ -67,4 +69,7 @@ for (let i = 0; i < profile.samples.length; i++) { at += profile.timeDeltas[i]; 
 const top = (o, n) => Object.entries(o).sort((a, z) => z[1] - a[1]).slice(0, n).map(([k, v]) => `${k} ${v.toFixed(0)}`).join(" | ");
 for (const [s, a] of Object.entries(agg)) { const secs = span[s];
   console.log(`\n== ${s}${secs ? ` ${secs.toFixed(1)}s: main thread busy ${(a.busy / secs / 10).toFixed(1)}%, ${(a.frames / secs).toFixed(0)} frames painted/s` : `: ${a.busy.toFixed(0)}ms busy`}`);
+  // Tasks against the 144Hz frame (6.94ms): how long the usual, the slow and the slowest took, and how many went over.
+  const d = a.durs.sort((x, z) => x - z), q = (f) => d[Math.min(d.length - 1, Math.floor(d.length * f))]?.toFixed(1);
+  console.log(`   tasks: ${d.length}, p50 ${q(0.5)} p90 ${q(0.9)} p99 ${q(0.99)} max ${q(1)}ms, ${d.filter((x) => x > 6.94).length} over 6.94ms`);
   console.log(`   rendering (ms): ${top(a.phases, 8)}\n   rAF (ms): ${top(a.raf, 5)}\n   JS self (ms): ${top(self[s] ?? {}, 10)}`); }
