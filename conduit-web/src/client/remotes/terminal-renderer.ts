@@ -220,7 +220,7 @@ function installClipboardShortcuts(host: HTMLElement, terminal: ClipboardTermina
     if (event.type !== "keydown") return true;
     const key = event.key.toLowerCase();
     const isApple = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
-    const copy = key === "c" && (isApple ? event.metaKey && !event.ctrlKey : event.ctrlKey && event.shiftKey);
+    const copy = key === "c" && (isApple ? event.metaKey && !event.ctrlKey : event.ctrlKey && (event.shiftKey || terminal.hasSelection?.()));
 
     // A terminal reached through a browser is almost never running on the
     // machine the browser is on, so a paste has to mean the browser's
@@ -235,11 +235,11 @@ function installClipboardShortcuts(host: HTMLElement, terminal: ClipboardTermina
     // whenever Conduit is reached over plain HTTP on a LAN address. Falling
     // through leaves the browser's own copy/paste on xterm's textarea intact,
     // which still works there; swallowing the key would break it outright.
-    if (copy && terminal.hasSelection?.()) {
-      if (!navigator.clipboard?.writeText) return true;
+    if (copy) {
       event.preventDefault();
       const selection = terminal.getSelection?.() || "";
-      if (selection) void navigator.clipboard.writeText(selection).catch(clipboardError);
+      if (!selection) options.onClipboardError?.("Select terminal text to copy.");
+      else void writeClipboardText(selection, options);
       return false;
     }
     if (paste && terminal.paste) {
@@ -262,6 +262,15 @@ function installClipboardShortcuts(host: HTMLElement, terminal: ClipboardTermina
   return () => host.removeEventListener("paste", interceptPaste, { capture: true });
 }
 
+async function writeClipboardText(text: string, options: TerminalRendererOptions) {
+  try {
+    if (!navigator.clipboard?.writeText) throw new Error("Clipboard access is unavailable. Use HTTPS or localhost.");
+    await navigator.clipboard.writeText(text);
+  } catch (cause) {
+    options.onClipboardError?.(cause instanceof Error ? cause.message : "Clipboard copy failed");
+  }
+}
+
 async function createXtermRenderer(host: HTMLElement, options: TerminalRendererOptions): Promise<TerminalRenderer> {
   const [{ Terminal }, { FitAddon }, { ClipboardAddon, Base64 }, { WebglAddon }] = await Promise.all([
     import("@xterm/xterm"),
@@ -275,6 +284,7 @@ async function createXtermRenderer(host: HTMLElement, options: TerminalRendererO
     fontFamily: terminalFontFamily(),
     cursorBlink: false,
     altClickMovesCursor: false,
+    macOptionClickForcesSelection: true,
     scrollback: 1000,
     theme: CONDUIT_TERMINAL_THEME,
   });
@@ -285,13 +295,45 @@ async function createXtermRenderer(host: HTMLElement, options: TerminalRendererO
     // explicit user gesture through the paste shortcut below.
     readText: async () => "",
     writeText: async (selection: string, text: string) => {
-      if (selection !== "c") return;
-      await navigator.clipboard.writeText(text).catch(() => {});
+      if (selection !== "c" && selection !== "p") return;
+      await writeClipboardText(text, options);
     },
   });
   terminal.loadAddon(fit);
   terminal.loadAddon(clipboard);
   terminal.open(host);
+  let selecting = false;
+  let forwardingSelection = false;
+  const selectWithMouse = (event: MouseEvent) => {
+    if (forwardingSelection || event.button !== 0 || !(event.target instanceof Element)) return;
+    selecting = true;
+    if (terminal.modes.mouseTrackingMode === "none") return;
+    // Use xterm's own forced selection path when a program owns the mouse.
+    // Re-send the press with its selection modifier, preserving click count.
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    forwardingSelection = true;
+    try {
+      event.target.dispatchEvent(new MouseEvent("mousedown", {
+        bubbles: true, cancelable: true, view: event.view, detail: event.detail,
+        screenX: event.screenX, screenY: event.screenY,
+        clientX: event.clientX, clientY: event.clientY,
+        button: event.button, buttons: event.buttons,
+        ctrlKey: event.ctrlKey, metaKey: event.metaKey,
+        shiftKey: true, altKey: /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent),
+      }));
+    } finally {
+      forwardingSelection = false;
+    }
+  };
+  const copyMouseSelection = () => {
+    if (!selecting) return;
+    selecting = false;
+    const text = terminal.getSelection();
+    if (text) void writeClipboardText(text, options);
+  };
+  host.addEventListener("mousedown", selectWithMouse, { capture: true });
+  document.addEventListener("mouseup", copyMouseSelection);
   // Its frame kept, so a pane's crossfade can copy it (main.tsx, ghostOf).
   const webgl = new WebglAddon(true);
   const contextLoss = webgl.onContextLoss(() => webgl.dispose());
@@ -316,6 +358,6 @@ async function createXtermRenderer(host: HTMLElement, options: TerminalRendererO
     resize: (cols, rows) => resizeTerminal(terminal, cols, rows),
     onData: (listener) => { const subscription = terminal.onData(listener); return () => subscription.dispose(); },
     onResize: (listener) => { const subscription = terminal.onResize(listener); return () => subscription.dispose(); },
-    dispose: () => { stopClipboardShortcuts(); stopObservingHost(); contextLoss.dispose(); webgl.dispose(); clipboard.dispose(); fit.dispose?.(); terminal.dispose(); },
+    dispose: () => { host.removeEventListener("mousedown", selectWithMouse, { capture: true }); document.removeEventListener("mouseup", copyMouseSelection); stopClipboardShortcuts(); stopObservingHost(); contextLoss.dispose(); webgl.dispose(); clipboard.dispose(); fit.dispose?.(); terminal.dispose(); },
   };
 }
