@@ -45,7 +45,8 @@ const walk = async (root, S) => root.evaluate(async (S) => {
       const body = row.querySelector(S.rowBody); const nested = body?.matches(S.nestedList) ? body : body?.querySelector(S.nestedList);
       if (nested) await rows(nested, depth + 1); else out.push(`${"  ".repeat(depth + 1)}> ${t(body).slice(0, 160)}`); } } };
   for (const trace of document.querySelectorAll(".turn-trace")) {
-    out.push(`TRACE ${t(trace.querySelector(S.line))} | ${t(trace.querySelector(S.latest))}${trace.querySelector(S.head)?.disabled ? " (no open)" : ""}`);
+    // The latest line is one line: the library's is given a line's worth (240 characters), the app's the whole sentence.
+    out.push(`TRACE ${t(trace.querySelector(S.line))} | ${t(trace.querySelector(S.latest)).replace(/\u2026$/, "").slice(0, 240)}${trace.querySelector(S.head)?.disabled ? " (no open)" : ""}`);
     const head = trace.querySelector(S.head); if (!head || head.disabled) continue;
     if (head.getAttribute("aria-expanded") !== "true") { head.click(); await wait(400); }
     const list = trace.querySelector(S.list); if (list) await rows(list, 1);

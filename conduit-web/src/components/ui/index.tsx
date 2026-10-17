@@ -97,10 +97,15 @@ export function Aura(props: { on?: boolean; level?: number }) {
       if (w === width && h === height && canvas.width === w) return;
       width = w; height = h; canvas.width = w; canvas.height = h; image = ctx.createImageData(w, h); render(0); };
     let level = 0;
+    // It draws only while it shows: hidden it is faded out (opacity 0), and its loop stops there rather than asking for
+    // every frame to read that it is still hidden. Its fade starting (after any delay) or a change to what shows it
+    // starts the loop again, which runs at least a moment so a fade in that starts from 0 is not taken for hidden.
+    let wake = 0;
     const draw = (now: number) => {
-      frame = requestAnimationFrame(draw);
+      frame = 0;
       const style = getComputedStyle(box);
-      if (!seen || style.opacity === "0") { last = 0; return; }
+      if (!seen || (style.opacity === "0" && now > wake)) { last = 0; return; }
+      frame = requestAnimationFrame(draw);
       level = Math.min(1, Math.max(0, parseFloat(style.getPropertyValue("--aura-level")) || 0));
       const dt = last ? Math.min(.1, (now - last) / 1000) : 0; last = now;
       render(dt);
@@ -127,10 +132,15 @@ export function Aura(props: { on?: boolean; level?: number }) {
       }
       ctx.putImageData(image, 0, 0);
     };
+    const start = () => { wake = performance.now() + 500; if (!frame) frame = requestAnimationFrame(draw); };
     fit();
-    const resize = new ResizeObserver(fit), view = new IntersectionObserver(([entry]) => { seen = !!entry?.isIntersecting; });
-    resize.observe(box); view.observe(box); frame = requestAnimationFrame(draw);
-    onCleanup(() => { cancelAnimationFrame(frame); resize.disconnect(); view.disconnect(); });
+    const resize = new ResizeObserver(fit), view = new IntersectionObserver(([entry]) => { seen = !!entry?.isIntersecting; if (seen) start(); });
+    // What shows it: its own data-on, or its pill's and composer's attributes (library.css, .ui-aura).
+    const shows = new MutationObserver(start);
+    shows.observe(box.closest(".ui-phone-composer") ?? box.parentElement ?? box, { attributes: true, subtree: true, attributeFilter: ["data-on", "data-show", "data-voice", "data-state", "data-mode"] });
+    box.addEventListener("transitionstart", start);
+    resize.observe(box); view.observe(box); start();
+    onCleanup(() => { cancelAnimationFrame(frame); resize.disconnect(); view.disconnect(); shows.disconnect(); box.removeEventListener("transitionstart", start); });
   });
   return <span ref={box} class="ui-aura" data-on={props.on ? "" : undefined} aria-hidden="true" style={props.level === undefined ? undefined : { "--aura-level": String(props.level) }}><canvas ref={canvas} /></span>;
 }
