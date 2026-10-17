@@ -6,6 +6,7 @@ import { manifest } from "../src/harnesses/test-stream.js";
 import { buildTurnRows } from "../src/client/turn-rows.ts";
 import { applyToolOp, applyTranscriptOp, isToolOp } from "../src/transcript-fold.js";
 import {
+  TEST_STREAM_DENIED,
   DEFAULT_AMOUNT_ID,
   DEFAULT_SPEED_ID,
   TEST_STREAM_AMOUNTS,
@@ -216,7 +217,7 @@ test("a tool call ends the message that made it and is stated as a tool", async 
     ["start", "update", "end"]);
 });
 
-test("a tool asks first when the prompt says to, and a refusal stops the turn", async () => {
+test("a tool asks first when the prompt says to, and a refusal fails the call and the turn goes on", async () => {
   const adapter = new TestStreamAdapter();
   const { record, reader } = await attached(adapter);
   await adapter.prompt(record.id, "80t 1 tool approve", { clientUserMessageId: "u1" });
@@ -232,16 +233,19 @@ test("a tool asks first when the prompt says to, and a refusal stops the turn", 
   assert.ok(reader.events().some((event) => event.type === "permission_resolved"));
   assert.equal(reader.tools().length, 1, "approved, so it ran");
 
-  // And refused, the turn ends where it stood.
+  // Refused, the call is made but fails with the refusal, and the answer follows.
   const second = await attached(adapter, { chatId: "chat-refused" });
   await adapter.prompt(second.record.id, "80t 1 tool approve", { clientUserMessageId: "u2" });
   await new Promise((resolve) => setTimeout(resolve, 60));
   const asked = second.reader.events().find((event) => event.type === "permission_request");
-  const stopped = settle(adapter);
+  assert.equal(second.reader.tools().length, 1, "the call is made before it is asked about");
+  const answered = settle(adapter);
   adapter.respondHostUi(second.record.id, { id: asked.requestId, confirmed: false });
-  await stopped;
-  assert.equal(second.reader.tools().length, 0);
-  assert.equal(second.reader.messages().at(-1).stopped, true);
+  await answered;
+  const [refused] = second.reader.tools();
+  assert.equal(refused.isError, true);
+  assert.equal(refused.output, TEST_STREAM_DENIED);
+  assert.notEqual(second.reader.messages().at(-1).stopped, true, "the turn went on to answer");
 });
 
 test("a steered message lands inside the turn; a follow-up starts its own", async () => {
