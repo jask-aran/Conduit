@@ -272,7 +272,9 @@ svg.lucide { stroke-width: 2.4; }
  * how this went wrong twice already. Only one of them can be right, and the
  * one that knows a keyboard is involved is this one.
  */
-.message-scroller-viewport { width: 100%; height: 100%; overflow-y: auto; outline: none; scroll-padding-top: 44.8px; scrollbar-width: none; overflow-anchor: none; }
+/* Scrolled on the compositor: below 1.5x a transparent scroller is not, so each scroll -- the tail follow's, every frame
+   of an answer -- laid the whole page out into layers again (0.7ms a frame). Its text was grayscale either way. */
+.message-scroller-viewport { width: 100%; height: 100%; overflow-y: auto; outline: none; scroll-padding-top: 44.8px; scrollbar-width: none; overflow-anchor: none; will-change: scroll-position; }
 .message-scroller-viewport::-webkit-scrollbar { display: none; }
 /* Narrower than its column, the thread keeps the dashboard's 24px from the pane (the gutter's half) and
    its text gives up its inset over the next 70px, until it lines up with the composer's edges. */
