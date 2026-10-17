@@ -11,6 +11,7 @@ import { ORBITS_TRAILED, PLAIN_SPHERE, SPUTTERING_SPHERE } from "./orb-frames";
 import { ThinkingOrb, type ModeFrame, type OrbState, settledOrbRate } from "./thinking-orb";
 import { Disclosure } from "./disclosure";
 import { useLibrary, useLibraryPiece } from "@/components/ui/swap";
+import { extendsText } from "./streaming-markdown";
 
 /* The gallery's previews draw a turn's header as the library's TraceHeader (its classes); the app keeps its own. */
 const traceClass = (library: boolean) => (app: string, piece: string) => library ? piece : app;
@@ -191,7 +192,7 @@ const SENTENCE_BREAK = /(?<=[.!?])\s*(?=[A-Z])/;
  */
 const headingScans: Array<{ text: string; read: number; heading: string | null }> = [];
 function lastHeading(text: string): string | null {
-  let scan = headingScans.find((entry) => text.length >= entry.text.length && text.startsWith(entry.text));
+  let scan = headingScans.find((entry) => extendsText(text, entry.text));
   if (!scan) {
     scan = { text: "", read: 0, heading: null };
     headingScans.unshift(scan);

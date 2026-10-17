@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createRenderEffect, createSignal, For, Index, onCleanup, onMount, Show, untrack } from "solid-js";
+import { createComputed, createEffect, createMemo, createSelector, createRenderEffect, createSignal, For, Index, onCleanup, onMount, Show, untrack } from "solid-js";
 import { createIncremarkParser, type DisplayBlock, type ParsedBlock } from "@incremark/core";
 import katex from "katex";
 import { getHarnessRecorder, recordHarnessMetric } from "@/client/harness-metrics";
@@ -18,7 +18,7 @@ import { readStoredMath, storeMath } from "./math-html-store";
 import { citationHost, resolveMarkdownUrl } from "./markdown-security";
 import { createTableMathProjector, projectTableMathSource, promoteTableCellDisplayMath, restoreTableMathAst, restoreTableMathSentinel } from "./table-math";
 import type { StreamingPending } from "./streaming-markdown";
-import { createStreamingMarkdownSplitter, splitStreamingMarkdown } from "./streaming-markdown";
+import { createStreamingMarkdownSplitter, extendsText, splitStreamingMarkdown } from "./streaming-markdown";
 import { streamFadeMs, streamMathFade } from "@/client/preferences/stream-fade";
 import "./incremark-markdown.css";
 
@@ -270,13 +270,30 @@ const sameIdList = (previous: string[], next: string[]) =>
  * contents does not re-run the keyed list reconciliation as well.
  */
 function createBlockIndex<T extends { id: string }>(blocks: () => T[]) {
-  const index = createMemo(() => {
-    const map = new Map<string, T>();
-    for (const block of blocks()) map.set(block.id, block);
-    return map;
+  // A signal per block, set each update: only a block that is a new object notifies its row. One map for the
+  // list, read by every row, re-ran every row's lookup each frame -- a long answer's hundreds of finished blocks
+  // with it, to find each unchanged.
+  const entries = new Map<string, { read: () => T; write: (block: T) => void; pass: number }>();
+  const [ids, setIds] = createSignal<string[]>([], { equals: sameIdList });
+  let pass = 0;
+  createComputed(() => {
+    pass += 1;
+    const order: string[] = [];
+    for (const block of blocks()) {
+      const entry = entries.get(block.id);
+      if (!entry) {
+        const [read, write] = createSignal(block);
+        entries.set(block.id, { read, write: (next) => write(() => next), pass });
+        order.push(block.id);
+      } else {
+        entry.write(block);
+        if (entry.pass !== pass) { entry.pass = pass; order.push(block.id); }
+      }
+    }
+    if (entries.size > order.length) for (const [id, entry] of entries) if (entry.pass !== pass) entries.delete(id);
+    setIds(order);
   });
-  const ids = createMemo(() => [...index().keys()], [], { equals: sameIdList });
-  return { ids, lookup: (id: string) => index().get(id) };
+  return { ids, lookup: (id: string) => entries.get(id)?.read() };
 }
 
 function ParsedBlockNodes(props: { blocks: () => ParsedBlock[]; context: RendererContext }) {
@@ -364,6 +381,9 @@ function DisplayBlockNodes(props: { blocks: () => DisplayBlock[]; context: Rende
   // received so far, so on a real stream it flipped at every delivery, and
   // the caret with it.
   const tail = createMemo(() => props.streaming() ? props.blocks().at(-1)?.id ?? null : null);
+  // Each row asks whether it is the tail through a selector: the tail memo goes stale with every frame's blocks,
+  // and read by every row it had each one checked, a long answer's hundreds, to find the same tail.
+  const isTail = createSelector(tail);
   const structuralType = (block: DisplayBlock) => {
     const sourceNode = block.node as MarkdownNode;
     if (sourceNode?.type === "paragraph" && /^ {0,3}\|/.test(String((block as DisplayBlock & { rawText?: string }).rawText || ""))) return "table";
@@ -425,7 +445,7 @@ function DisplayBlockNodes(props: { blocks: () => DisplayBlock[]; context: Rende
       // finished blocks it was a permanent zero-width span in every paragraph,
       // and the settled-message check -- which looks for exactly this marker --
       // could therefore never pass.
-      return current.id === tail() ? renderBlockNode(display) : display;
+      return isTail(current.id) ? renderBlockNode(display) : display;
     });
     return <Show when={block()}><AstNode node={node} context={props.context} /></Show>;
   }}</For>;
@@ -1197,13 +1217,14 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
     let parserMode = "none";
     let update: ReturnType<typeof parser.append> | undefined;
     const updates: Array<ReturnType<typeof parser.append>> = [];
+    const extendsPrevious = extendsText(source, previousSource);
     const preserveTypewriterState = typewriter()
       && previousTypewriter === true
-      && source.startsWith(previousSource);
+      && extendsPrevious;
     if (source !== previousSource || (tableMath && parserSource !== previousParserSource)) {
       const canAppend = true
-        && source.startsWith(previousSource)
-        && parserSource.startsWith(previousParserSource)
+        && extendsPrevious
+        && extendsText(parserSource, previousParserSource)
         && (!projection || projection.sentinel === previousTableMathSentinel);
       if (canAppend) {
         parserMode = "append";
