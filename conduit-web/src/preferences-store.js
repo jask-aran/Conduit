@@ -17,7 +17,6 @@ const DEFAULTS = {
   composerSurface: null,
   contextMetrics: null,
   meteorField: null,
-  incremarkPacing: null,
   transcriptWidth: null,
   transcriptWideBlocks: null,
   codeBlockCollapse: null,
@@ -103,7 +102,7 @@ export function validSidebarPins(input) {
 const UI_PREFERENCE_KEYS = new Set([
   "sidebarChatLimit", "collapsedProjectIds", "sidebarCollapsed", "markdownRenderer",
   "rendererControlsVisible", "composerSurface", "contextMetrics",
-  "meteorField", "incremarkPacing", "transcriptWidth", "transcriptWideBlocks",
+  "meteorField", "transcriptWidth", "transcriptWideBlocks",
   "codeBlockCollapse", "codeBlockCollapseLines", "codeBlockWidth", "panelMotion",
   "leaderMenu", "userMessageCollapse", "chatSort",
   "shortcutOverrides", "voicePreferences",
@@ -167,7 +166,6 @@ export function validUiPreferencePatch(input = {}) {
     if (key === "markdownRenderer") return oneOf(value, MARKDOWN_RENDERERS);
     if (key === "composerSurface") return oneOf(value, ["static", "frosted-live"]);
     if (key === "contextMetrics") return stringList(value, 40);
-    if (key === "incremarkPacing") return oneOf(value, ["adaptive", "fixed", "buffered", "fade"]);
     if (key === "transcriptWidth") return oneOf(value, TRANSCRIPT_WIDTHS);
     if (key === "transcriptWideBlocks") return oneOf(value, TRANSCRIPT_WIDE_BLOCKS);
     if (key === "codeBlockCollapse") return oneOf(value, CODE_BLOCK_COLLAPSE_MODES);
@@ -256,7 +254,6 @@ export function normalizePreferences(input = {}, fallback = DEFAULTS, knownTempl
     composerSurface: nullable("composerSurface", choice(["static", "frosted-live"])),
     contextMetrics: nullable("contextMetrics", stringArray(40)),
     meteorField: nullable("meteorField", boolean),
-    incremarkPacing: nullable("incremarkPacing", choice(["adaptive", "fixed", "buffered", "fade"])),
     transcriptWidth: nullable("transcriptWidth", choice(TRANSCRIPT_WIDTHS)),
     transcriptWideBlocks: nullable("transcriptWideBlocks", choice(TRANSCRIPT_WIDE_BLOCKS)),
     codeBlockCollapse: nullable("codeBlockCollapse", choice(CODE_BLOCK_COLLAPSE_MODES)),

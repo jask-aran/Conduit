@@ -99,7 +99,6 @@ import { MIN_MAIN_PANE_WIDTH, MIN_SPLIT_PANE_WIDTH } from "./layout-geometry";
 import { dispatchPanelGeometryMotion } from "./panel-motion";
 import { publishUiPreference, queueUiPreferenceSave, uiPreferenceSaves, UI_PREFERENCE_CHANGE_EVENT, type UiPreferenceKey, type UiPreferences } from "./preferences/ui-preferences";
 import { applyUiScale, selectedUiScale } from "./preferences/ui-scale";
-import { INCREMARK_PACING_STORAGE_KEY } from "./chat/incremark-pacing";
 import { harnessLabelFor, HarnessMark } from "./harness-brand";
 import { NO_ATTACHMENTS } from "./chat/composer-attachments";
 import { OutsideThreadChip } from "./chat/outside-thread-chip";
@@ -4660,7 +4659,6 @@ function App() {
       markdownRenderer: localStorage.getItem(MARKDOWN_RENDERER_STORAGE_KEY) || selectedMarkdownRenderer(),
       composerSurface: selectedComposerSurface(),
       meteorField: selectedMeteorField(),
-      incremarkPacing: localStorage.getItem(INCREMARK_PACING_STORAGE_KEY) || "buffered",
       transcriptWidth: selectedTranscriptWidth(),
       transcriptWideBlocks: selectedTranscriptWideBlocks(),
       codeBlockCollapse: selectedCodeBlockCollapse(),
@@ -4686,7 +4684,6 @@ function App() {
       markdownRenderer: MARKDOWN_RENDERER_STORAGE_KEY,
       composerSurface: COMPOSER_SURFACE_STORAGE_KEY,
       meteorField: METEOR_FIELD_STORAGE_KEY,
-      incremarkPacing: INCREMARK_PACING_STORAGE_KEY,
       transcriptWidth: TRANSCRIPT_WIDTH_STORAGE_KEY,
       transcriptWideBlocks: TRANSCRIPT_WIDE_BLOCKS_STORAGE_KEY,
       codeBlockCollapse: CODE_BLOCK_COLLAPSE_STORAGE_KEY,

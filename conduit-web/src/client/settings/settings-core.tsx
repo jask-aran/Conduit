@@ -21,7 +21,6 @@ import { saveTranscriptFont, TRANSCRIPT_FONT_OPTIONS, transcriptFont, type Trans
 import { saveTerminalFont, TERMINAL_FONT_OPTIONS, terminalFont, type TerminalFont } from "../preferences/terminal-font";
 import { PHONE_COMPOSER_OPTIONS, phoneComposerLayout, savePhoneComposerLayout, type PhoneComposerLayout } from "../preferences/phone-composer";
 import { saveStreamFade, saveStreamMathFade, STREAM_FADE_OPTIONS, streamFadeMs, streamMathFade } from "../preferences/stream-fade";
-import { INCREMARK_PACING_OPTIONS, saveIncremarkPacing, selectedIncremarkPacing, type IncremarkPacingMode } from "../chat/incremark-pacing";
 import type { Installation, Project, Template, VoiceExecutionCatalogueView, VoiceExecutionProfile, VoiceLocalSelection, VoiceServerSettings } from "../api/contracts";
 import type { ModelSettings } from "../state/model-settings";
 import { MAX_SIDEBAR_CHAT_LIMIT, MIN_SIDEBAR_CHAT_LIMIT } from "../navigation/sidebar-preferences";
@@ -267,7 +266,6 @@ export function Settings(props: {
     queueMicrotask(mark);
     onCleanup(() => observer.disconnect());
   };
-  const [pacing, setPacing] = createSignal<IncremarkPacingMode>(selectedIncremarkPacing());
   /*
    * On a phone, Settings is two screens rather than a rail beside a pane.
    *
@@ -1201,13 +1199,6 @@ export function Settings(props: {
                     </Select>
                   </label>
                   <Show when={props.markdownRenderer === "incremark"}>
-                    <label class="settings-line" for="stream-pacing"><span>Streaming</span>
-                      <Select id="stream-pacing" aria-label="Streaming reveal" value={pacing()} onChange={(event) => setPacing(saveIncremarkPacing(event.currentTarget.value as IncremarkPacingMode))}>
-                        <For each={INCREMARK_PACING_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
-                      </Select>
-                    </label>
-                  </Show>
-                  <Show when={props.markdownRenderer === "incremark" && pacing() === "fade"}>
                     <label class="settings-line" for="stream-fade"><span>Word fade</span>
                       <Select id="stream-fade" aria-label="Word fade time" value={fadeMs()} onChange={(event) => setFadeMs(saveStreamFade(Number(event.currentTarget.value)))}>
                         <For each={STREAM_FADE_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>

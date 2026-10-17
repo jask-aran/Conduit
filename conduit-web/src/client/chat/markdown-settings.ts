@@ -58,7 +58,7 @@ export function selectedMarkdownRenderer(
   // exists. "incremark-advanced" retired when its settle-and-freeze shell was
   // merged into the renderer itself; everyone stored under it lands back on the
   // same component. "incremark-fade" was briefly a renderer; it is Incremark
-  // with the Fade pacing, which selectedIncremarkPacing picks up from it.
+  // with the fade, which is now its only reveal.
   const stored = storage.getItem(MARKDOWN_RENDERER_STORAGE_KEY);
   return isMarkdownRendererId(stored) ? stored : MARKDOWN_RENDERER_DEFAULT;
 }

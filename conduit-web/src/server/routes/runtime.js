@@ -209,7 +209,7 @@ export function registerRuntimeRoutes(app, {
       const uiKeys = [
         "sidebarChatLimit", "collapsedProjectIds", "sidebarCollapsed", "markdownRenderer",
         "rendererControlsVisible", "composerSurface", "contextMetrics",
-        "meteorField", "incremarkPacing", "transcriptWidth", "transcriptWideBlocks",
+        "meteorField", "transcriptWidth", "transcriptWideBlocks",
         "codeBlockCollapse", "codeBlockCollapseLines", "codeBlockWidth",
         "userMessageCollapse", "chatSort",
         "shortcutOverrides", "voicePreferences",

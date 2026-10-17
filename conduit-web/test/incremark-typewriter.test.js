@@ -2,10 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   BufferedIncremarkTypewriter,
-  chooseAdaptiveStep,
-  chooseBufferedStep,
   chooseFrameBudget,
-  chooseFixedStep,
   normalizeFrameInterval,
   prepareTypewriterNode,
   updateEma,
@@ -25,22 +22,7 @@ test("frame budget follows the measured display interval", () => {
   assert.ok(Math.abs(normalizeFrameInterval(refresh144Hz) - refresh144Hz) < 0.001);
 });
 
-test("buffered work grows from measured frame cost and halves after an overrun", () => {
-  assert.equal(chooseBufferedStep(200, 16, 0, 8), 32);
-  assert.equal(chooseBufferedStep(200, 16, 5, 8), 16);
-  assert.equal(chooseBufferedStep(200, 16, 12, 8), 8);
-  assert.equal(updateEma(null, 4), 4);
-  assert.equal(updateEma(4, 12), 6);
-});
-
-test("fixed and adaptive pacing remain distinct from the buffered scheduler", () => {
-  assert.equal(chooseFixedStep(200), 32);
-  assert.equal(chooseFixedStep(8), 8);
-  assert.equal(chooseAdaptiveStep(200, 100, 0, 16), 2);
-  assert.equal(chooseAdaptiveStep(200, null, 500, 16), 32);
-});
-
-test("buffered scheduler can drain several complete blocks in one frame", () => {
+test("the scheduler can drain several complete blocks in one frame", () => {
   const originalRequest = globalThis.requestAnimationFrame;
   const originalCancel = globalThis.cancelAnimationFrame;
   const frames = [];

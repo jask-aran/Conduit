@@ -12,9 +12,9 @@
  * document must produce the same digest, so a change that is meant to be a pure
  * cost change can be proved to be one by comparing digests either side of it.
  *
- * Pacing is fixed here on purpose. The buffered scheduler chooses its step from
- * measured frame cost, which would make the sequence -- and so the digest --
- * depend on how fast the machine is.
+ * Motion is reduced here on purpose: each delivery is then due at once, so a
+ * frame's release does not depend on the clock -- with the fade's deadlines the
+ * sequence, and so the digest, would depend on how fast the machine is.
  */
 import { createHash } from "node:crypto";
 import { createIncremarkParser } from "@incremark/core";
@@ -27,6 +27,7 @@ const CHUNK = 24;
 const frames = [];
 globalThis.requestAnimationFrame = (callback) => frames.push(callback);
 globalThis.cancelAnimationFrame = () => {};
+globalThis.matchMedia = () => ({ matches: true });
 
 function buildSource(paragraphs) {
   const parts = [];
@@ -46,7 +47,6 @@ function run(source, { hash = false } = {}) {
     onChange: (blocks) => digest?.update(`${JSON.stringify(blocks.map((block) =>
       [block.id, block.status, block.progress, block.displayNode]))}\n`),
   });
-  controller.setPacing("fixed");
   controller.setEnabled(true);
   const completed = new Map();
   let offset = 0;
@@ -82,4 +82,4 @@ for (const row of rows) {
   console.log(`${String(row.characters).padStart(6)} chars  ${String(row.frames).padStart(5)} frames  `
     + `${String(row.medianMs).padStart(8)} ms  ${row.digest}`);
 }
-console.log(JSON.stringify({ benchmark: "streaming-renderer", chunkSize: CHUNK, pacing: "fixed", rows }));
+console.log(JSON.stringify({ benchmark: "streaming-renderer", chunkSize: CHUNK, rows }));
