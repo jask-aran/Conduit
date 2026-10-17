@@ -9,45 +9,48 @@ const INTRINSIC_SIZE_PROPERTY = "contain-intrinsic-block-size";
 const INTRINSIC_INLINE_SIZE_PROPERTY = "contain-intrinsic-inline-size";
 const OVERSCAN_PX = 120;
 
-// A block's borders do not change as it resizes, and reading them is a
-// getComputedStyle per block: at settlement every block of a long answer is
-// observed at once, and those reads were a third of that frame.
-const borders = new WeakMap<Element, { block: number; inline: number }>();
+// A placeholder (contain-intrinsic-size) is the size of the content box: the browser adds the padding and borders
+// to it. Sizes read from a rect are border boxes, so both come off; a placeholder that kept the padding was that much
+// too tall, and the page moved by it when the block was shown. A block's insets do not change as it resizes, and
+// reading them is a getComputedStyle per block: at settlement every block of a long answer is observed at once, and
+// those reads were a third of that frame.
+const insets = new WeakMap<Element, { block: number; inline: number }>();
 
-function bordersOf(element: HTMLElement) {
-  let known = borders.get(element);
+function insetsOf(element: HTMLElement) {
+  let known = insets.get(element);
   if (!known) {
     const style = getComputedStyle(element);
+    const sum = (...values: string[]) => values.reduce((total, value) => total + Number.parseFloat(value), 0);
     known = {
-      block: Number.parseFloat(style.borderBlockStartWidth) + Number.parseFloat(style.borderBlockEndWidth),
-      inline: Number.parseFloat(style.borderInlineStartWidth) + Number.parseFloat(style.borderInlineEndWidth),
+      block: sum(style.borderBlockStartWidth, style.borderBlockEndWidth, style.paddingBlockStart, style.paddingBlockEnd),
+      inline: sum(style.borderInlineStartWidth, style.borderInlineEndWidth, style.paddingInlineStart, style.paddingInlineEnd),
     };
-    borders.set(element, known);
+    insets.set(element, known);
   }
   return known;
 }
 
 function intrinsicBlockSize(element: HTMLElement, borderBoxSize: number) {
-  return Math.max(0, borderBoxSize - bordersOf(element).block);
-}
-
-function blockSize(entry: ResizeObserverEntry) {
-  const borderBox = entry.borderBoxSize;
-  const size = borderBox[0]?.blockSize ?? entry.target.getBoundingClientRect().height;
-  return intrinsicBlockSize(entry.target as HTMLElement, size);
+  return Math.max(0, borderBoxSize - insetsOf(element).block);
 }
 
 function intrinsicInlineSize(element: HTMLElement, borderBoxSize: number) {
-  return Math.max(0, borderBoxSize - bordersOf(element).inline);
+  return Math.max(0, borderBoxSize - insetsOf(element).inline);
+}
+
+// An observer's entry has the content box itself.
+function blockSize(entry: ResizeObserverEntry) {
+  const content = entry.contentBoxSize?.[0]?.blockSize;
+  return content ?? intrinsicBlockSize(entry.target as HTMLElement, entry.target.getBoundingClientRect().height);
 }
 
 function inlineSize(entry: ResizeObserverEntry) {
-  const borderBox = entry.borderBoxSize;
-  const size = borderBox[0]?.inlineSize ?? entry.target.getBoundingClientRect().width;
-  return intrinsicInlineSize(entry.target as HTMLElement, size);
+  const content = entry.contentBoxSize?.[0]?.inlineSize;
+  return content ?? intrinsicInlineSize(entry.target as HTMLElement, entry.target.getBoundingClientRect().width);
 }
 
 const ROW_SELECTOR = '[data-slot="message-scroller-item"]';
+const BLOCK_SELECTOR = ".chat-markdown > .incremark > *";
 
 // Three observers share the work, and the split is the whole point of this
 // module's shape:
@@ -64,6 +67,8 @@ export function mountTranscriptVisibility(
   transcript: HTMLElement,
   viewport: HTMLElement,
   thread: HTMLElement,
+  /** Moves the scroll by this much as the transcript's own scroll: the viewport has no scroll anchoring. */
+  shiftScroll: (delta: number) => void = (delta) => { viewport.scrollTop += delta; },
 ) {
   const activeIds = new Map<PanelGeometryMotionSource, number>();
   const managed = new Set<HTMLElement>();
@@ -134,7 +139,7 @@ export function mountTranscriptVisibility(
 
   const sizeObserver = new ResizeObserver((entries) => {
     if (activeIds.size) return;
-    // Every read before any write: a size written between two border reads
+    // Every read before any write: a size written between two reads
     // made the second getComputedStyle recalculate style, once per block --
     // at settlement, once per block of the whole answer.
     const sizes = entries
@@ -321,6 +326,27 @@ export function mountTranscriptVisibility(
     }
     return true;
   };
+  // A hidden block is not laid out, so nothing measures it: one that changes hidden -- the tail of an answer still
+  // streaming while the reader is above it, a formula drawing, a turn's header settling -- kept the height it was hidden at (a line, where
+  // the block came to several hundred pixels) and moved the page when it was shown. It is shown to be measured, and
+  // observed afresh, so the observer hides it again with its new size if it is still out of view.
+  // One wholly above the viewport changes the height of what is above the reader, and the viewport has no scroll
+  // anchoring: the scroll moves with it, so the page does not.
+  const remeasure = (blocks: Set<HTMLElement>) => {
+    const viewTop = viewport.getBoundingClientRect().top;
+    const above: Array<[HTMLElement, number]> = [];
+    for (const block of blocks) {
+      const rect = block.getBoundingClientRect();
+      if (!show(block)) continue;
+      if (rect.bottom <= viewTop) above.push([block, rect.height]);
+      visibilityObserver.unobserve(block);
+      visibilityObserver.observe(block);
+    }
+    let shift = 0;
+    for (const [block, height] of above) shift += block.getBoundingClientRect().height - height;
+    if (Math.abs(shift) > 0.01) shiftScroll(shift);
+    holdRefreshing();
+  };
   const mutationObserver = new MutationObserver((records) => {
     // A collapse commits a large height change in one go. Leaving it to the
     // observers left every cached intrinsic size stale for a frame or more,
@@ -344,12 +370,17 @@ export function mountTranscriptVisibility(
       scheduleRefresh(true);
     }
     let rows: Set<HTMLElement> | null = new Set();
+    let changedHidden: Set<HTMLElement> | null = null;
     for (const record of records) {
+      const target = record.target instanceof Element ? record.target : record.target.parentElement;
+      const hidden = target?.closest<HTMLElement>(`[${VISIBILITY_ATTRIBUTE}="hidden"]`);
+      if (hidden && hidden !== target && managed.has(hidden)) (changedHidden ??= new Set()).add(hidden);
       if (withinBlock(record)) continue;
       const row = record.target === thread ? null : (record.target as Element).closest?.(ROW_SELECTOR) as HTMLElement | null;
       if (!row) { rows = null; break; }
       rows.add(row);
     }
+    if (changedHidden && !activeIds.size) remeasure(changedHidden);
     if (rows && !rows.size) return;
     scheduleSync(rows);
   });
@@ -403,9 +434,52 @@ export function mountTranscriptVisibility(
     repairTimer = window.setTimeout(reobserve, 200);
   };
   const READER_INPUT = ["wheel", "touchstart", "pointerdown", "keydown"] as const;
+  // A scroll could bring hidden blocks into view before the observer, a frame or two behind, showed them -- a wheel's
+  // notch, a jump, the glide to the latest message: a frame with a hole in the page. The scroll's own handler runs
+  // before that frame is drawn, so it shows whatever hidden block lies in the strip the scroll uncovered (the whole
+  // viewport after a jump), walking down it block by block: each hit test continues below the block it found. It
+  // reads layout once, which the transcript's own scroll handler forces anyway.
+  const GAP_STEP = 8;
+  let revealedAt = viewport.scrollTop;
+  const onScroll = () => {
+    const top = viewport.scrollTop;
+    const delta = top - revealedAt;
+    revealedAt = top;
+    if (!delta || !fontsReady || activeIds.size) return;
+    const view = viewport.getBoundingClientRect();
+    const viewTop = Math.max(0, view.top) + 1;
+    const viewBottom = Math.min(innerHeight, view.bottom);
+    const column = thread.getBoundingClientRect();
+    const x = column.left + column.width / 2;
+    const from = delta > 0 ? Math.max(viewTop, viewBottom - delta - GAP_STEP) : viewTop;
+    const bottom = delta > 0 ? viewBottom : Math.min(viewBottom, viewTop - delta + GAP_STEP);
+    let changed = false;
+    for (let y = from; y < bottom;) {
+      let next = y + GAP_STEP;
+      for (const element of document.elementsFromPoint(x, y)) {
+        const block = element.closest<HTMLElement>(BLOCK_SELECTOR);
+        if (block) {
+          if (managed.has(block)) changed = show(block) || changed;
+          next = Math.max(next, block.getBoundingClientRect().bottom + 1);
+          break;
+        }
+        // A row with no blocks of its own (a trace, a prompt) is managed whole, and passed whole.
+        const row = element.closest<HTMLElement>(ROW_SELECTOR);
+        if (row && (rowElements.get(row)?.[0] ?? row) === row) {
+          if (managed.has(row)) changed = show(row) || changed;
+          next = Math.max(next, row.getBoundingClientRect().bottom + 1);
+          break;
+        }
+      }
+      // The last row of pixels is always looked at: a block may show only its first few there.
+      y = next >= bottom - 1 && y < bottom - 1 ? bottom - 1 : next;
+    }
+    if (changed) holdRefreshing();
+  };
   window.addEventListener(PANEL_GEOMETRY_MOTION_EVENT, onMotion);
   document.addEventListener("visibilitychange", onVisibility);
   viewport.addEventListener("scrollend", onScrollEnd);
+  viewport.addEventListener("scroll", onScroll, { passive: true });
   for (const type of READER_INPUT) window.addEventListener(type, onReaderInput, { capture: true, passive: true });
   mutationObserver.observe(thread, {
     childList: true,
@@ -435,6 +509,7 @@ export function mountTranscriptVisibility(
       window.removeEventListener(PANEL_GEOMETRY_MOTION_EVENT, onMotion);
       document.removeEventListener("visibilitychange", onVisibility);
       viewport.removeEventListener("scrollend", onScrollEnd);
+      viewport.removeEventListener("scroll", onScroll);
       for (const type of READER_INPUT) window.removeEventListener(type, onReaderInput, { capture: true });
       if (repairTimer != null) clearTimeout(repairTimer);
       mutationObserver.disconnect();

@@ -1072,7 +1072,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
       motionShell,
       (next) => setViewportScrollTop(next, false),
     );
-    transcriptVisibility = mountTranscriptVisibility(transcriptRoot, viewport, thread);
+    transcriptVisibility = mountTranscriptVisibility(transcriptRoot, viewport, thread, (delta) => setViewportScrollTop(viewport.scrollTop + delta, false));
     const claimUserScroll = () => {
       if (empty()) return;
       if (!rendererUsesInertialTailFollow()) return;
