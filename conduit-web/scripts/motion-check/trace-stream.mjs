@@ -26,24 +26,21 @@ const fresh = async () => { const chat = await api("/v0/chats", "POST", { projec
   await api(`/v0/chats/${id}/models`, "PATCH", { model: model ?? "fast-250" }); return id; };
 const id = await fresh(), phoneId = await fresh();
 await app.close();
-// The app in its own window, so both pages stay visible (a hidden tab draws no frames).
+// The app in a tab of its own; each side's tab is brought forward as it sends (a hidden tab draws no frames).
 const cdp = await b.newBrowserCDPSession();
-await cdp.send("Target.createTarget", { url: `http://127.0.0.1:4310/chat/${id}`, newWindow: true });
+const appTab = await ctx.newPage(); await appTab.goto(`http://127.0.0.1:4310/chat/${id}`, { waitUntil: "commit" });
 await g.goto(`http://127.0.0.1:5180/gallery.html?live=${phoneId}`); await g.waitForTimeout(2500);
 await g.click(".g-toggle button:text-is('Phone · live chat')"); await g.waitForTimeout(5000);
-const live = ctx.pages().find((p) => p.url().includes(`:4310/chat/${id}`));
+const live = appTab;
 let f = g.frames().find((f) => f.url().includes("frame=live")), ftab = g, solo;
-// Measured, the phone page is opened in a window of its own sized as the gallery's frame: inside the gallery it shares
+// Measured, the phone page is opened in a tab of its own, its viewport the gallery frame's: inside the gallery it shares
 // its renderer with every card there, whose layers it re-layerizes each frame the transcript scrolls (2-13ms bursts).
 if (budget) {
   const [w, h] = await f.evaluate(() => [innerWidth, innerHeight]); const url = f.url();
   await g.goto(back); await g.waitForTimeout(1000);
-  const { targetId } = await cdp.send("Target.createTarget", { url, newWindow: true });
-  const { windowId } = await cdp.send("Browser.getWindowForTarget", { targetId });
-  await cdp.send("Browser.setWindowBounds", { windowId, bounds: { windowState: "normal" } });
-  await cdp.send("Browser.setWindowBounds", { windowId, bounds: { width: w + 16, height: h + 88 } });
-  await g.waitForTimeout(6000);
-  solo = ctx.pages().find((p) => p.url().includes("frame=live")); f = solo; ftab = solo;
+  solo = await ctx.newPage(); await (await ctx.newCDPSession(solo)).send("Emulation.setDeviceMetricsOverride", { width: w, height: h, deviceScaleFactor: 0, mobile: false });
+  await solo.goto(url, { waitUntil: "commit" }); await g.waitForTimeout(6000);
+  f = solo; ftab = solo;
 }
 // Also: each answer drawn and then taken away (text that turned out to come before a tool call), and for how long it showed.
 const REC = (S) => { const log = window.__log = []; const pulled = window.__pulled = []; const t = (e) => (e?.textContent ?? "").replace(/\s+/g, " ").trim(); let last = "";

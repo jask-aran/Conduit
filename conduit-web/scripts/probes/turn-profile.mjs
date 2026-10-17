@@ -2,7 +2,7 @@
 /**
  * Where a streamed turn's main-thread time goes, by the trace's state (docs/testing.md, Frame budget). It sends one
  * Test-profile prompt on a fresh chat -- in the library's live phone page (gallery.html?frame=live, the gallery
- * served) or, with --app, the app -- in a window of its own in headed Windows Chrome, and records a lean trace and a
+ * served) or, with --app, the app -- in a tab of its own in headed Windows Chrome, and records a lean trace and a
  * 100us CPU profile of the page until 3s after the turn ends. Per state (Thinking, Writing, Done, ...): how busy the
  * main thread was, frames painted a second, rendering time by phase, rAF callbacks and JS self time by original
  * function. Names come from source maps: build with them first (`npx vite build --mode gallery --sourcemap`, or the
@@ -24,12 +24,10 @@ const api = (url, method, body) => tmp.evaluate(async ([url, method, body]) => (
 const chat = await api("/v0/chats", "POST", { projectId: "test", profileId: "test-stream" }); const id = chat?.id ?? chat?.chat?.id;
 await api(`/v0/chats/${id}/models`, "PATCH", { model: arg("--model", "fast-250") });
 const url = app ? `${origin}/chat/${id}` : `${arg("--gallery", "http://127.0.0.1:5180")}/gallery.html?frame=live&chat=${id}`;
-const { targetId } = await cdp.send("Target.createTarget", { url, newWindow: true });
-const { windowId } = await cdp.send("Browser.getWindowForTarget", { targetId });
-await cdp.send("Browser.setWindowBounds", { windowId, bounds: { windowState: "normal" } });
-await cdp.send("Browser.setWindowBounds", { windowId, bounds: app ? { width: 1300, height: 950 } : { width: 429, height: 946 } });
-await tmp.waitForTimeout(7000);
-const page = ctx.pages().find((p) => p.url().startsWith(url)); await page.bringToFront();
+// A tab of its own in the window already open, brought forward (a hidden tab draws no frames), its viewport emulated.
+const page = await ctx.newPage(); await page.bringToFront();
+await (await ctx.newCDPSession(page)).send("Emulation.setDeviceMetricsOverride", app ? { width: 1280, height: 900, deviceScaleFactor: 0, mobile: false } : { width: 413, height: 858, deviceScaleFactor: 0, mobile: false });
+await page.goto(url, { waitUntil: "commit" }); await page.waitForTimeout(7000);
 // State marks from a MutationObserver: a rAF of the probe's own would ask for every frame it measures.
 await page.evaluate((line) => { let last = ""; new MutationObserver(() => { const s = ([...document.querySelectorAll(".turn-trace")].at(-1)?.querySelector(line)?.textContent ?? "").replace(/\s+/g, " ").trim().replace(/ · .*/, "");
   if (s && s !== last) { last = s; window.__state = s; performance.mark(`state ${s}`); } }).observe(document.body, { subtree: true, childList: true, characterData: true }); }, app ? ".turn-trace-line" : ".ui-trace-line");
