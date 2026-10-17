@@ -57,12 +57,15 @@ function Piece(props: { atom: Atom; fixed?: Density; surface?: Surface }) {
 
 function Canvas() {
   const [tune, setTune] = createSignal(read());
-  const [preview, setPreview] = createSignal<"phone" | "sidebar" | "desktop">("phone");
+  const [preview, setPreview] = createSignal<"phone" | "sidebar" | "desktop" | "live">("phone");
+  // gallery.html?live=<chat id>: a phone on that real chat, from the server (live-chat.tsx).
+  const liveChat = new URLSearchParams(location.search).get("live");
   const [seen, setSeen] = createSignal(new Set<string>(["phone"]));
   createEffect(() => { const key = preview(); if (!seen().has(key)) setSeen(new Set([...seen(), key])); });
   // The app's real screens, drawn with components v2 (components/ui/swap.ts); phones in a frame that passes for one.
   const views = [
     { key: "phone", render: () => <iframe class="g-phone" title="Phone" src="gallery.html?frame=phone" onLoad={tuneFrame} /> },
+    { key: "live", render: () => <iframe class="g-phone" title="Phone live" src={`http://127.0.0.1:${location.port}/gallery.html?frame=live&chat=${encodeURIComponent(liveChat ?? "")}`} onLoad={tuneFrame} /> },
     { key: "sidebar", render: () => <iframe class="g-phone" title="Phone sidebar" src="gallery.html?frame=sidebar" onLoad={tuneFrame} /> },
     { key: "desktop", render: () => <div ref={desktop} class="g-desktop-screen" onKeyDown={(event) => { if (event.key === "Escape") setOverlay(null); }}>
       <LibraryContext.Provider value={true}><ChatScreen /></LibraryContext.Provider>
@@ -166,6 +169,7 @@ function Canvas() {
           <button type="button" aria-pressed={preview() === "phone"} onClick={() => setPreview("phone")}>Phone</button>
           <button type="button" aria-pressed={preview() === "sidebar"} onClick={() => setPreview("sidebar")}>Phone sidebar</button>
           <button type="button" aria-pressed={preview() === "desktop"} onClick={() => setPreview("desktop")}>Desktop</button>
+          <Show when={liveChat}><button type="button" aria-pressed={preview() === "live"} onClick={() => setPreview("live")}>Phone · live chat</button></Show>
         </div>
         <Show when={preview() === "desktop"}><div class="g-toggle" role="group" aria-label="Open over the desktop">
           <For each={overlays}>{([view, label]) => <button type="button" aria-pressed={overlay() === view} onClick={() => setOverlay(overlay() === view ? null : view)}>{label}</button>}</For>
@@ -200,6 +204,7 @@ export function mount(frame: string | null) {
   try { localStorage.setItem("conduit:composer-surface", "frosted-live"); localStorage.setItem("conduit:phone-composer", "bar"); } catch { /* private window */ }
   // The phone screens, drawn with components v2, in a frame with a phone's root size and media rules.
   if (frame === "sidebar") { document.body.classList.add("g-solo-body"); render(() => <LibraryContext.Provider value={true}><SidebarScreen /></LibraryContext.Provider>, root); }
+  else if (frame === "live") { document.body.classList.add("g-solo-body"); const chat = new URLSearchParams(location.search).get("chat") ?? ""; void import("./live-chat").then(({ LiveChatScreen }) => render(() => <LibraryContext.Provider value={true}><LiveChatScreen chatId={chat} /></LibraryContext.Provider>, root)); }
   else if (frame) { document.body.classList.add("g-solo-body"); render(() => <LibraryContext.Provider value={true}><ChatScreen /><PhoneOverlay /></LibraryContext.Provider>, root); }
   else {
     render(() => <Canvas />, root);

@@ -442,6 +442,8 @@ type TraceState = { status: string; orb: () => JSX.Element; when: string; latest
 const TRACE_STATES: { group: string; rows: TraceState[] }[] = [
   { group: "Before anything has shown", rows: [
     { status: "Starting", orb: () => <Orb state="connecting" />, when: "the prompt is sent", latest: "", live: true },
+    { status: "Starting agent", orb: () => <Orb state="connecting" />, when: "sent, its agent's process still starting", latest: "", live: true },
+    { status: "Waiting for model", orb: () => <Orb state="connecting" />, when: "sent, the agent up, nothing back from the model yet", latest: "", live: true },
   ] },
   { group: "Running", rows: [
     { status: "Thinking", orb: () => <Orb state="working" />, when: "between tools", latest: "The second paragraph has four sentences", live: true },
@@ -462,7 +464,7 @@ const TRACE_STATES: { group: string; rows: TraceState[] }[] = [
 ];
 const TraceStates = () => <table class="g-trace-states"><thead><tr><th>Status</th><th>When</th><th>The trace</th></tr></thead>
   <For each={TRACE_STATES}>{(group) => <tbody><tr><th colspan="3" class="g-trace-group">{group.group}</th></tr>
-    <For each={group.rows}>{(row) => <tr><th>{row.status}</th><td>{row.when}</td><td class="ui-read"><TraceHeader orb={row.orb()} status={row.status} time={row.live ? "12s" : "1m 00s"} work={row.status === "Starting" ? undefined : "1 read, 1 edit"} latest={row.latest || undefined} live={row.live} tone={row.tone} opens={row.status !== "Starting"} /></td></tr>}</For></tbody>}</For></table>;
+    <For each={group.rows}>{(row) => <tr><th>{row.status}</th><td>{row.when}</td><td class="ui-read"><TraceHeader orb={row.orb()} status={row.status} time={row.live ? "12s" : "1m 00s"} work={row.status.startsWith("Starting") || row.status === "Waiting for model" ? undefined : "1 read, 1 edit"} latest={row.latest || undefined} live={row.live} tone={row.tone} opens={row.status !== "Starting"} /></td></tr>}</For></tbody>}</For></table>;
 /** A turn played, a second a beat: its Status, Work and Latest line follow the app's rules -- a running tool's Latest
  * is what it acts on, a finished one its past tense, thinking its summary; settled, the last thinking. */
 function LiveTurn() {

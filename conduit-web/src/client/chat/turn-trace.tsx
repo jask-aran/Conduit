@@ -374,7 +374,10 @@ function LibraryTurnTrace(props: TraceProps) {
   const [open, setOpen] = createSignal(Boolean(props.initialOpen)), [seen, setSeen] = createSignal(Boolean(props.initialOpen));
   const trail = createMemo(() => trailOf(props.trace.segments));
   let opened = 0;
-  const latest = () => { const detail = preview().detail; return detail ? detail.markdown ? inline(props, detail.text) : detail.text : undefined; };
+  // One renderer for the line, its text growing in place: a new one each delta draws a blank frame between them.
+  const text = () => preview().detail?.text ?? "";
+  const thinking = <Suspense fallback={text()}><ChatMarkdown inline renderer={props.renderer} pacing={props.pacing}>{text() || "…"}</ChatMarkdown></Suspense>;
+  const latest = () => { const detail = preview().detail; return detail ? detail.markdown ? thinking : detail.text : undefined; };
   return <div class="turn-trace" data-active={props.trace.active ? "true" : "false"}>
     <Trace orb={<Orb state={preview().status.orb} frame={preview().status.frame} tint={unfinished() ? "var(--destructive)" : undefined} rate={props.trace.active ? undefined : settledOrbRate(unfinished())} />}
       status={preview().status.verb} time={time() || undefined} work={preview().work || undefined} latest={latest()} live={props.trace.active} tone={unfinished() ? "failed" : undefined}

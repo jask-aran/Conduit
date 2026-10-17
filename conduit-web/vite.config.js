@@ -49,6 +49,7 @@ export default defineConfig(({ mode }) => {
   const aliases = [
     ...(solidComponents?.aliases ?? []),
     { find: "@", replacement: path.resolve(import.meta.dirname, "src") },
+    ...(gallery ? [{ find: "virtual:pwa-register", replacement: path.resolve(import.meta.dirname, "src/gallery/no-pwa.ts") }] : []),
   ];
   return {
     plugins: [
@@ -137,6 +138,8 @@ export default defineConfig(({ mode }) => {
         },
       },
     },
+    // The gallery's live phone (src/gallery/live-chat.tsx) reaches the server as the app does.
+    preview: { proxy: { "/v0": { target: serverTarget, ws: true } } },
     server: {
       fs: solidComponents
         ? { allow: [import.meta.dirname, solidComponents.root] }
