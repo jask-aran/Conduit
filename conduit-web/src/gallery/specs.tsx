@@ -96,6 +96,10 @@ export function InUse(props: { scene: () => JSX.Element; marks: Mark[]; density?
     </div>
   </div>;
 }
+/** Anatomy: an assembly's parts numbered on it, as In use numbers places -- each part's name and what it does, and what builds it. */
+export type Part = [selector: string, name: string, from: string, does: string, side?: Mark["side"]];
+export const Anatomy = (props: { scene: () => JSX.Element; parts: Part[] }) => <InUse density={false} scene={() => <div class="g-anatomy">{props.scene()}</div>}
+  marks={props.parts.map(([selector, name, from, does, side]) => ({ selector, label: `${name}: ${does}`, read: () => from, side }))} />;
 export const style = (el: HTMLElement) => getComputedStyle(el);
 export const bg = (el: HTMLElement) => style(el).backgroundColor;
 export const fg = (el: HTMLElement) => style(el).color;
