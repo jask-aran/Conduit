@@ -537,10 +537,10 @@ shape the turn, and the same prompt always produces the same turn:
 
 | In the prompt | Turn |
 | --- | --- |
-| `1500t` | stream exactly 1500 tokens, whatever the level says |
-| `tool`, `3 tools` | text, a tool call, text, ... with that many calls |
+| `1500t` | an answer of exactly 1500 tokens, whatever the level says |
+| `tool`, `3 tools` | that many calls, one a message, the first and every other one after a sentence of narration, then the answer -- as models were recorded working |
 | `approve` | each tool asks for approval first |
-| `think`, `think 900` | open with a thinking block, 400 tokens or the number given (a number ending in `t` is the answer's: `think 900 1500t`) |
+| `think`, `think 900` | thinking, 400 tokens or the number given, shared across the turn's messages: each opens with its part (a number ending in `t` is the answer's: `think 900 1500t`) |
 
 Sending while it answers steers, read where a real harness reads its queue:
 after a tool call the message joins the turn and what is left answers it;
