@@ -178,6 +178,7 @@ export function thinkingFromPrompt(message) {
   return match[1] ? Math.min(MAX_TOKENS, Math.max(1, Number(match[1]))) : THINKING_TOKENS;
 }
 
+export const narrationFromPrompt = (message) => /\bnarrat/i.test(String(message || ""));
 export const approvalFromPrompt = (message) => /\bapprove|approval\b/i.test(String(message || ""));
 
 /** The tool a run calls, and what it returns. Fixed, like everything else. */
@@ -208,22 +209,23 @@ export function tokenAt(index) {
  * The steps a turn will take, decided before it writes a word.
  *
  * Shaped as models were recorded working with tools (Muse, GPT, Gemini, Codex
- * chats on this server): each message opens with its own thinking, a call is
- * made with a sentence of narration before it or none at all, and the long
- * text is the final answer alone. Thinking is shared across the messages; the
+ * chats on this server): each message opens with its own thinking, then its
+ * call, and the long
+ * text is the final answer alone. Most calls have no text before them (about
+ * one in seven had any), so narration is asked for: "narrate" puts a sentence
+ * before each call. Thinking is shared across the messages; the
  * answer is the amount asked for. Deciding it up front is what makes a run
  * repeatable: the same prompt produces the same turn, down to which token the
  * call lands on.
  */
 export const NARRATION = " I'll read docs/testing.md to see what it says first.";
-export function planTurn(tokens, toolRuns, thinking = 0) {
+export function planTurn(tokens, toolRuns, thinking = 0, narrate = false) {
   const total = Math.max(1, tokens);
   const thought = thinking ? Math.max(20, Math.floor(thinking / (toolRuns + 1))) : 0;
   const steps = [];
   for (let run = 0; run < toolRuns; run += 1) {
     if (thought) steps.push({ kind: "thinking", tokens: thought });
-    // Every other call is narrated, as a model says what it is about to do some of the time.
-    if (run % 2 === 0) steps.push({ kind: "text", text: NARRATION, tokens: replayTokens(NARRATION).length });
+    if (narrate) steps.push({ kind: "text", text: NARRATION, tokens: replayTokens(NARRATION).length });
     steps.push({ kind: "tool", toolCallId: `call_${run + 1}` });
   }
   if (thought) steps.push({ kind: "thinking", tokens: thought });
@@ -340,7 +342,7 @@ export class TestStreamAdapter extends EventEmitter {
       // A tool's id is the turn's as well as its place in it: tool records are
       // keyed by id for the whole chat, so a second turn's call_1 would be
       // folded over the first's.
-      steps: planTurn(record.tokens, toolRunsFromPrompt(message), thinkingFromPrompt(message))
+      steps: planTurn(record.tokens, toolRunsFromPrompt(message), thinkingFromPrompt(message), narrationFromPrompt(message))
         .map((step) => (step.toolCallId ? { ...step, toolCallId: `${step.toolCallId}_${generationId.slice(0, 8)}` } : step)),
       step: 0,
       approvals: approvalFromPrompt(message),
@@ -358,7 +360,11 @@ export class TestStreamAdapter extends EventEmitter {
     this.publish(record, { type: "status", generationId, phase: "running", seq: ++record.generationSeq,
       status: "working", activity: "working", detail: null });
     this.openAnswer(record);
-    this.runStream(record);
+    // A turn can open on its call, as a model that neither thinks nor narrates does -- a tick
+    // later, as a streamed step's first token comes, so a message sent with the prompt is read after it.
+    const turn = record.turn;
+    if (turn.steps[0].kind === "tool") record.timer = setTimeout(() => { record.timer = null; if (record.turn === turn && !record.stopping) this.runTool(record, turn.steps[0]); }, 0);
+    else this.runStream(record);
     return generationId;
   }
 
