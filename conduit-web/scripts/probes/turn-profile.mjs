@@ -8,7 +8,7 @@
  * function. Names come from source maps: build with them first (`npx vite build --mode gallery --sourcemap`, or the
  * app's `npx vite build --sourcemap` and a restart), and without them afterwards.
  *
- *   node scripts/probes/turn-profile.mjs ["think 3000 5 tools 1500t"] [--app] [--save <file>]
+ *   node scripts/probes/turn-profile.mjs ["think 3000 5 tools 1500t"] [--app | --phone] [--save <file>]
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -16,7 +16,7 @@ import { TraceMap, originalPositionFor } from "@jridgewell/trace-mapping";
 import { arg, cdpOrigin, flag, loadPlaywright, origin, root } from "./lib.mjs";
 
 const prompt = process.argv[2]?.startsWith("--") ? "think 3000 5 tools 1500t" : process.argv[2] ?? "think 3000 5 tools 1500t";
-const app = flag("--app");
+const app = flag("--app") || flag("--phone");
 const { chromium } = await loadPlaywright();
 const b = await chromium.connectOverCDP(cdpOrigin); const ctx = b.contexts()[0]; const cdp = await b.newBrowserCDPSession();
 const tmp = await ctx.newPage(); await tmp.goto(origin, { waitUntil: "commit" }); await tmp.waitForTimeout(1200);
@@ -26,7 +26,11 @@ await api(`/v0/chats/${id}/models`, "PATCH", { model: arg("--model", "fast-250")
 const url = app ? `${origin}/chat/${id}` : `${arg("--gallery", "http://127.0.0.1:5180")}/gallery.html?frame=live&chat=${id}`;
 // A tab of its own in the window already open, brought forward (a hidden tab draws no frames), its viewport emulated.
 const page = await ctx.newPage(); await page.bringToFront();
-await (await ctx.newCDPSession(page)).send("Emulation.setDeviceMetricsOverride", app ? { width: 1280, height: 900, deviceScaleFactor: 0, mobile: false } : { width: 413, height: 858, deviceScaleFactor: 0, mobile: false });
+// --phone: the app as a phone draws it (a Pixel's 412x860 at 2.625x, touch), its layout chosen by those.
+const phone = process.argv.includes("--phone");
+const emu = await ctx.newCDPSession(page);
+await emu.send("Emulation.setDeviceMetricsOverride", phone ? { width: 412, height: 860, deviceScaleFactor: 2.625, mobile: true } : app ? { width: 1280, height: 900, deviceScaleFactor: 0, mobile: false } : { width: 413, height: 858, deviceScaleFactor: 0, mobile: false });
+if (phone) await emu.send("Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 5 });
 await page.goto(url, { waitUntil: "commit" }); await page.waitForTimeout(7000);
 // State marks from a MutationObserver: a rAF of the probe's own would ask for every frame it measures.
 await page.evaluate((line) => { let last = ""; new MutationObserver(() => { const s = ([...document.querySelectorAll(".turn-trace")].at(-1)?.querySelector(line)?.textContent ?? "").replace(/\s+/g, " ").trim().replace(/ · .*/, "");
