@@ -179,6 +179,8 @@ export function thinkingFromPrompt(message) {
 }
 
 export const narrationFromPrompt = (message) => /\bnarrat/i.test(String(message || ""));
+/** What a refused call returns to the model. */
+export const TEST_STREAM_DENIED = "Denied: the user did not allow this call.";
 export const approvalFromPrompt = (message) => /\bapprove|approval\b/i.test(String(message || ""));
 
 /** The tool a run calls, and what it returns. Fixed, like everything else. */
@@ -475,21 +477,25 @@ export class TestStreamAdapter extends EventEmitter {
    */
   runTool(record, step) {
     const turn = record.turn;
-    if (turn.approvals && !step.approved) return this.askApproval(record, step);
     const { generationId, messageId } = turn;
     const toolCallId = step.toolCallId;
     const input = TEST_STREAM_TOOL.input;
-    turn.contentIndex += 1;
-    const contentIndex = turn.contentIndex;
-    // The call paints like any other block: its input arrives as text into a
-    // block of kind `tool_call`, which is what the reducers at both ends build
-    // a call out of.
-    this.publish(record, { type: "assistant_content", generationId, phase: "delta",
-      seq: ++record.generationSeq, messageId, contentIndex, blockKind: "tool_call",
-      delta: JSON.stringify(input) });
-    turn.blocks.push({ kind: "tool_call", contentIndex, toolCallId, name: TEST_STREAM_TOOL.name, input });
-    this.publish(record, toolOpen({ toolCallId, name: TEST_STREAM_TOOL.name, kind: TEST_STREAM_TOOL.kind, subject: TEST_STREAM_TOOL.subject, input,
-      messageId, generationId }));
+    if (!step.called) {
+      step.called = true;
+      turn.contentIndex += 1;
+      const contentIndex = turn.contentIndex;
+      // The call paints like any other block: its input arrives as text into a
+      // block of kind `tool_call`, which is what the reducers at both ends build
+      // a call out of.
+      this.publish(record, { type: "assistant_content", generationId, phase: "delta",
+        seq: ++record.generationSeq, messageId, contentIndex, blockKind: "tool_call",
+        delta: JSON.stringify(input) });
+      turn.blocks.push({ kind: "tool_call", contentIndex, toolCallId, name: TEST_STREAM_TOOL.name, input });
+      this.publish(record, toolOpen({ toolCallId, name: TEST_STREAM_TOOL.name, kind: TEST_STREAM_TOOL.kind, subject: TEST_STREAM_TOOL.subject, input,
+        messageId, generationId }));
+    }
+    // Asked about once the call is made, as a harness asks: the model has called it, and it waits to run.
+    if (turn.approvals && !step.approved) return this.askApproval(record, step);
     this.publish(record, { type: "tool_activity", phase: "start", generationId,
       seq: ++record.generationSeq, toolCallId, name: TEST_STREAM_TOOL.name, kind: TEST_STREAM_TOOL.kind, subject: TEST_STREAM_TOOL.subject, input });
     this.publish(record, { type: "tool_activity", phase: "update", generationId,
@@ -553,10 +559,16 @@ export class TestStreamAdapter extends EventEmitter {
       : typeof response.confirmed === "boolean" ? response.confirmed
         : ["yes", "approve"].includes(String(response.value ?? "").toLowerCase());
     if (!approved) {
-      // Refused: the turn says so and stops, which is the shape a refusal takes
-      // on a real harness -- the model is told, and there is nothing else to do
-      // with a step it was not allowed to run.
-      this.finish(record, "aborted");
+      // Refused: the call fails with the refusal as its result, and the model,
+      // told, goes on -- as Pi returns a blocked call.
+      const { generationId } = record.turn;
+      const toolCallId = pending.step.toolCallId;
+      this.publish(record, { type: "tool_activity", phase: "end", generationId, seq: ++record.generationSeq,
+        toolCallId, name: TEST_STREAM_TOOL.name, output: TEST_STREAM_DENIED, isError: true });
+      this.publish(record, toolClose({ toolCallId, output: TEST_STREAM_DENIED, isError: true, generationId }));
+      this.closeAnswer(record, "toolUse");
+      this.openAnswer(record);
+      this.advanceAfterTool(record);
       return null;
     }
     pending.step.approved = true;
@@ -662,6 +674,9 @@ export class TestStreamAdapter extends EventEmitter {
     const turn = record.turn;
     if (!turn) return;
     if (record.timer) { clearTimeout(record.timer); record.timer = null; }
+    // Stopped while a call waited for approval: the call goes with the turn.
+    const waiting = record.pendingApproval?.step;
+    if (waiting?.called) this.publish(record, toolClose({ toolCallId: waiting.toolCallId, output: "", cancelled: true, generationId: turn.generationId }));
     this.closeAnswer(record, stopReason);
     record.turn = null;
     record.active = false;
