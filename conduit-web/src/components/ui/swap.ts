@@ -3,13 +3,22 @@ import { createContext, useContext } from "solid-js";
 /*
  * Whether the app's pieces draw themselves with the library (index.tsx,
  * library.css) instead of their own material and menu classes. Off by
- * default and off everywhere in the app; only the gallery's Library
- * previews turn it on, around the real screens, so the library is judged in
- * the real app with all its behaviour. Context is read where a piece is
+ * default and off in the app, but for the pieces graduated below; the
+ * gallery's Library previews turn it on, around the real screens, so the
+ * library is judged in the real app with all its behaviour. Context is read where a piece is
  * created; Solid carries it through portals, so menus see it too.
  */
 export const LibraryContext = createContext(false);
 export const useLibrary = () => useContext(LibraryContext);
+
+/*
+ * The pieces the app draws with the library everywhere, not only in the gallery's previews: graduated one at a time.
+ * `localStorage conduit:classic` (a comma list, e.g. "trace") draws one the old way again, to compare the two.
+ */
+export type Graduated = "trace";
+const GRADUATED = new Set<Graduated>(["trace"]);
+const classic = (() => { try { return new Set((localStorage.getItem("conduit:classic") ?? "").split(",").map((piece) => piece.trim())); } catch { return new Set<string>(); } })();
+export const useLibraryPiece = (piece: Graduated) => useLibrary() || (GRADUATED.has(piece) && !classic.has(piece));
 
 
 /** What an app trigger adds to be a library piece in the Library previews: a

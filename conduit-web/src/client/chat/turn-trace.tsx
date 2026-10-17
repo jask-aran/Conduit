@@ -10,7 +10,7 @@ import "./turn-trail.css";
 import { ORBITS_TRAILED, PLAIN_SPHERE, SPUTTERING_SPHERE } from "./orb-frames";
 import { ThinkingOrb, type ModeFrame, type OrbState, settledOrbRate } from "./thinking-orb";
 import { Disclosure } from "./disclosure";
-import { useLibrary } from "@/components/ui/swap";
+import { useLibrary, useLibraryPiece } from "@/components/ui/swap";
 
 /* The gallery's previews draw a turn's header as the library's TraceHeader (its classes); the app keeps its own. */
 const traceClass = (library: boolean) => (app: string, piece: string) => library ? piece : app;
@@ -393,7 +393,7 @@ function LibraryTurnTrace(props: TraceProps) {
 
 export function TurnTrace(props: { trace: TurnTraceData; writing?: boolean; sessionId: string | null; renderer?: MarkdownRendererId; pacing?: IncremarkPacingMode; profileLabel?: string; initialOpen?: boolean; onOpenChange?: (open: boolean) => void; toolOpen?: (id: string) => boolean; onToolOpenChange?: (id: string, open: boolean) => void; onRendered?: () => void }) {
   // Before this one's preview and clock, which the library's would only duplicate (a second previewOf each delta).
-  if (useLibrary()) return <LibraryTurnTrace {...props} />;
+  if (useLibraryPiece("trace")) return <LibraryTurnTrace {...props} />;
   const preview = createMemo(() => previewOf(props.trace, Boolean(props.writing)));
   const time = turnTime(() => props.trace);
   const unfinished = () => !props.trace.active && (props.trace.status === "failed" || props.trace.status === "interrupted");
@@ -452,7 +452,7 @@ export function TraceStarting(props: { startedAt?: string; label?: string }) {
   const time = turnTime(() => ({ active: true, startedAt: props.startedAt }));
   const label = () => props.label || "Starting";
   const c = traceClass(useLibrary());
-  if (useLibrary()) return <div class="turn-trace turn-trace-starting" role="status" aria-label={label()}><Trace orb={<Orb state="connecting" />} status={label()} time={time() || undefined} live /></div>;
+  if (useLibraryPiece("trace")) return <div class="turn-trace turn-trace-starting" role="status" aria-label={label()}><Trace orb={<Orb state="connecting" />} status={label()} time={time() || undefined} live /></div>;
   return <div class="turn-trace turn-trace-starting" data-active="true" role="status" aria-label={label()}>
     <div class={c("turn-trace-header", "ui-trace")}>
       <span class={c("turn-trace-mark", "ui-trace-orb")}><ThinkingOrb state="connecting" /></span>
