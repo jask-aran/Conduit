@@ -538,7 +538,8 @@ shape the turn, and the same prompt always produces the same turn:
 | In the prompt | Turn |
 | --- | --- |
 | `1500t` | an answer of exactly 1500 tokens, whatever the level says |
-| `tool`, `3 tools` | that many calls, one a message, the first and every other one after a sentence of narration, then the answer -- as models were recorded working |
+| `tool`, `3 tools` | that many calls, one a message, then the answer -- as models were recorded working |
+| `narrate` | a sentence of narration before each call (about one call in seven had any) |
 | `approve` | each tool asks for approval first |
 | `think`, `think 900` | thinking, 400 tokens or the number given, shared across the turn's messages: each opens with its part (a number ending in `t` is the answer's: `think 900 1500t`) |
 
