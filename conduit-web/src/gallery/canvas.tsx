@@ -4,12 +4,14 @@ import "../client/project/dashboard.css";
 import "../client/chat/composer-geometry.css";
 import "../client/styles.css";
 import "./gallery.css";
-// The library's styles load with the gallery only; the app never ships them until it adopts the library.
 import "@/components/ui/library.css";
 import { ChatScreen } from "./stories";
 import { NavGroup, NavRow, Frost } from "@/components/ui";
 import { LibraryContext } from "@/components/ui/swap";
 import { SidebarScreen } from "./sidebar-story";
+
+// The gallery is all library: its rules that the app keeps to library pieces (no focus ring) hold on the whole page.
+document.documentElement.setAttribute("data-library", "");
 import { applyFaces, applyScale, foundationFamilies } from "./foundations";
 import { libraryFamilies, overlayViews, type Atom, type OverlayView } from "./library";
 
