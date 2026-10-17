@@ -10,7 +10,7 @@ const FIRST_SENTINEL = 0xe000;
 const LAST_SENTINEL = 0xf8ff;
 
 import { inlineDollarClose } from "./inline-dollar.ts";
-import { lastBlankLineEnd } from "./streaming-markdown.ts";
+import { extendsText, lastBlankLineEnd } from "./streaming-markdown.ts";
 
 function isEscaped(source: string, index: number) {
   let slashes = 0;
@@ -255,7 +255,7 @@ export function createTableMathProjector() {
   return (source: string, options: { convertTexDisplayDelimiters?: boolean; sentinel?: string } = {}): TableMathProjection => {
     const next = options.sentinel && !source.includes(options.sentinel) ? options.sentinel : chooseSentinel(source);
     if (!next) return projectTableMathSource(source, options);
-    if (next !== sentinel || Boolean(options.convertTexDisplayDelimiters) !== convert || !source.startsWith(prefix)) {
+    if (next !== sentinel || Boolean(options.convertTexDisplayDelimiters) !== convert || !extendsText(source, prefix)) {
       base = 0; prefix = ""; projected = ""; repairs = 0;
     }
     sentinel = next;

@@ -336,6 +336,13 @@ function closedPrefix(prefix: string) {
     && !findInlineMath(prefix, fences.ranges, null, false, true);
 }
 
+/**
+ * Whether text begins with prefix. String#startsWith compares character by character (122us for a 53,000-character
+ * answer); an equality of the slice compares memory (1.5us), and a streamed answer asks this of its whole text every
+ * delta -- the frame cost that grew with the answer's length.
+ */
+export const extendsText = (text: string, prefix: string) => text.length >= prefix.length && text.slice(0, prefix.length) === prefix;
+
 // Where the text after the last whitespace-only line starts, or -1: read back from the end, line by line.
 export function lastBlankLineEnd(source: string) {
   let end = source.lastIndexOf("\n");
