@@ -2,7 +2,6 @@ import { batch, createEffect, createMemo, createSignal, onCleanup, untrack } fro
 import { deriveFineActivity } from "../../activity.js";
 import { api, asList } from "../api/client";
 import { createAgentSession } from "./agent-session";
-import { webSocketUrl } from "../api/transport";
 import { isFoldedTurnEvent, isStructuredGenerationEvent, normalizeLiveEvent } from "../api/live-events";
 import type { FoldedTurnEvent, LiveEvent, RuntimeStateEvent, StructuredGenerationEvent, TurnArtifactSummary } from "../api/live-events";
 import type {
@@ -29,9 +28,7 @@ import { applyToolOp, applyTranscriptOp, assignToolSeq, isToolOp, replaceMessage
 import { getHarnessRecorder, recordHarnessMetric } from "../harness-metrics";
 import type { UploadAttachment } from "./attachments";
 import type { DraftsStore } from "./drafts";
-import type { CatalogueStore } from "./catalogue";
 import { type ActiveGenerationView, type LiveGenerationChange } from "../turn-rows";
-import type { ModelSettings } from "./model-settings";
 import type { PermissionSettings } from "./permission-settings";
 import type { ServiceLevelSettings } from "./service-level-settings";
 import type { RuntimeStore } from "./runtime";
@@ -65,9 +62,6 @@ interface LiveOpening {
   onShown?: () => void;
   resolve: () => void;
 }
-
-/** Mirrors the server's SPAWNING_INTENTS; see the note at its only use. */
-const SPAWNING_INTENTS = new Set(["prompt", "continue", "compact", "regenerate", "steer"]);
 
 function generationChangeFor(event: StructuredGenerationEvent | FoldedTurnEvent): LiveGenerationChange {
   const source = event as unknown as UnknownRecord;

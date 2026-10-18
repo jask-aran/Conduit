@@ -213,7 +213,6 @@ export function createAgentSession(deps: {
       if (pending?.chatId === chatId) return pending.attempt;
     }
     const era = epoch;
-    const intent = request.intent || "open";
     const current = () => era === epoch && deps.chatId() === chatId;
 
     const adopt = (record: LiveRecord) => {
