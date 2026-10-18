@@ -50,6 +50,14 @@
 .chat-main { flex: 1 1 auto; min-width: 0; }
 .chat-main.workspace-expanded { margin-inline: 0; pointer-events: none; }
 .workspace-layout { position: relative; overflow: hidden; container-type: inline-size; }
+/* A chat is never drawn narrower than it declares (MIN_MAIN_PANE_WIDTH, DESIGN.md "Documents and room"): on a desktop
+   window too narrow for it beside the sidebar, the shell scrolls sideways instead. The layout holds the chat and its
+   margins; its own intrinsic width is no help, as a size container it has none. A phone is full-bleed at any width. */
+@media (--conduit-wide-layout) {
+  .chat-main { min-width: var(--conduit-min-main-pane); }
+  .workspace-layout { min-width: calc(var(--conduit-min-main-pane) + 9.6px); }
+  #root { overflow: auto hidden; }
+}
 .workspace-panel-surface { right: 0; left: auto; width: 100%; transition: width 260ms var(--panel-motion-easing); }
 .workspace-panel-expanded .workspace-panel-surface { width: calc(100cqw - 8px); }
 .workspace-panel-expanded .workspace-resize-handle { display: none; }
