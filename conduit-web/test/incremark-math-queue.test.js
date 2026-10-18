@@ -9,7 +9,6 @@ function createManualQueue() {
   let now = 0;
   let nextHandle = 0;
   const frames = new Map();
-  const metrics = [];
   const queue = new MathRenderQueue({
     now: () => now,
     requestFrame: (callback) => {
@@ -18,11 +17,9 @@ function createManualQueue() {
       return handle;
     },
     cancelFrame: (handle) => frames.delete(handle),
-    onMetrics: (metric) => metrics.push(metric),
   });
   return {
     queue,
-    metrics,
     advance(milliseconds) { now += milliseconds; },
     runFrame() {
       const [handle, callback] = frames.entries().next().value || [];
@@ -46,9 +43,7 @@ test("math queue processes several live formulas within the measured frame budge
   harness.runFrame();
 
   assert.equal(completed.length, 4);
-  assert.equal(harness.queue.getMetrics().queueDepth, 2);
-  assert.equal(harness.queue.getMetrics().oldestJobAgeMs, 4);
-  assert.equal(harness.metrics.at(-1).processedJobs, 4);
+  assert.equal(harness.queue.size, 2);
 });
 
 test("complete-message reattach uses the larger bounded batch policy", () => {
@@ -64,18 +59,15 @@ test("complete-message reattach uses the larger bounded batch policy", () => {
   harness.runFrame();
 
   assert.equal(completed, MATH_RENDER_REATTACH_FRAME_BUDGET_MS);
-  assert.equal(harness.metrics.at(-1).policy, "reattach");
-  assert.equal(harness.metrics.at(-1).queueDepth, 20 - MATH_RENDER_REATTACH_FRAME_BUDGET_MS);
+  assert.equal(harness.queue.size, 20 - MATH_RENDER_REATTACH_FRAME_BUDGET_MS);
 });
 
-test("cancelling a math render removes it from the queue and records the cancellation", () => {
+test("cancelling a math render removes it from the queue and runs nothing", () => {
   const harness = createManualQueue();
   let ran = false;
   const cancel = harness.queue.enqueue(() => { ran = true; }, "stream");
   cancel();
 
-  assert.equal(harness.queue.getMetrics().queueDepth, 0);
-  assert.equal(harness.queue.getMetrics().cancelledJobs, 1);
-  assert.equal(harness.metrics.at(-1).event, "cancel");
+  assert.equal(harness.queue.size, 0);
   assert.equal(ran, false);
 });

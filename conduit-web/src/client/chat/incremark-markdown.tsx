@@ -33,7 +33,6 @@ type RendererContext = {
   requestExternalLink: (url: string, trigger?: HTMLElement) => void;
   deferMath: () => boolean;
   mathRenderPolicy: () => MathRenderPolicy;
-  rendererId: () => string;
   onMathBusyChange: (busy: boolean) => void;
   onPendingPlaceholderChange: (delta: number) => void;
   /** Newly shown words fade in as spans; only the streamed blocks set it. */
@@ -180,10 +179,6 @@ function sameDefinitions(previous: Record<string, Definition>, next: Record<stri
   });
 }
 
-function safeUrl(value: unknown): { href: string; external: boolean } | null {
-  return resolveMarkdownUrl(value);
-}
-
 function inlineText(nodes: MarkdownNode[]) {
   let text = "";
   for (const node of nodes) {
@@ -211,11 +206,7 @@ function readNodes(value: NodeList) {
   return typeof value === "function" ? value() : value;
 }
 
-function InlineNodes(props: { nodes: NodeList; context: RendererContext }) {
-  return <Index each={readNodes(props.nodes)}>{(node) => <AstNode node={node} context={props.context} />}</Index>;
-}
-
-function BlockNodes(props: { nodes: NodeList; context: RendererContext }) {
+function Nodes(props: { nodes: NodeList; context: RendererContext }) {
   return <Index each={readNodes(props.nodes)}>{(node) => <AstNode node={node} context={props.context} />}</Index>;
 }
 
@@ -460,7 +451,7 @@ function DisplayBlockNodes(props: { blocks: () => DisplayBlock[]; context: Rende
 function LinkNode(props: { node: MarkdownNode | NodeAccessor; context: RendererContext; reference?: () => Definition | undefined }) {
   const node = () => readNode(props.node);
   const reference = () => props.reference?.();
-  const target = createMemo(() => safeUrl(reference()?.url || node()?.url));
+  const target = createMemo(() => resolveMarkdownUrl(reference()?.url || node()?.url));
   // The citation test walks the link's inline children. It is read from four
   // attribute positions below, so it is computed once rather than per read.
   const labelText = createMemo(() => inlineText(node()?.children || []));
@@ -474,7 +465,7 @@ function LinkNode(props: { node: MarkdownNode | NodeAccessor; context: RendererC
   });
   const label = () => reference() === undefined && node()?.type === "linkReference"
     ? `[${labelText()}][${node()?.identifier || node()?.label || ""}]`
-    : <InlineNodes nodes={() => node()?.children || []} context={props.context} />;
+    : <Nodes nodes={() => node()?.children || []} context={props.context} />;
   const content = () => host() ?? label();
   return <Show when={target()} fallback={label()}>
     {(resolved) => <Show when={!props.context.inline} fallback={label()}>
@@ -536,11 +527,7 @@ function rememberMathHtml(key: string, html: string) {
   mathHtmlCache.set(key, html);
 }
 
-function scheduleMathRender(run: () => void, policy: MathRenderPolicy) {
-  return mathRenderQueue.enqueue(run, policy);
-}
-
-function MathNode(props: { node: MarkdownNode | NodeAccessor; fadeOnce?: () => boolean; defer?: () => boolean; policy?: () => MathRenderPolicy; renderer?: () => string; onBusyChange?: (busy: boolean) => void }) {
+function MathNode(props: { node: MarkdownNode | NodeAccessor; fadeOnce?: () => boolean; defer?: () => boolean; policy?: () => MathRenderPolicy; onBusyChange?: (busy: boolean) => void }) {
   const node = () => readNode(props.node);
   const [html, setHtml] = createSignal("");
   const [type, setType] = createSignal<string | undefined>();
@@ -701,7 +688,7 @@ function MathNode(props: { node: MarkdownNode | NodeAccessor; fadeOnce?: () => b
       // queued. Clearing the span here makes every streamed partial flash
       // blank before KaTeX completes, which is most visible on mobile.
       setBusy(true);
-      cancelJob = scheduleMathRender(() => renderCurrent(current, source, version), props.policy?.() || "stream");
+      cancelJob = mathRenderQueue.enqueue(() => renderCurrent(current, source, version), props.policy?.() || "stream");
       return;
     }
     renderCurrent(current, source, version);
@@ -847,17 +834,6 @@ function CodeCopyButton(props: { text: () => string }) {
   ><span class="artifact-copy-label">Copy</span></button>;
 }
 
-function PendingConstruct(props: { pending: StreamingPending; streaming: boolean; handoff?: FenceHandoff }) {
-  const pending = () => props.pending;
-  if (pending().kind === "fence") {
-    return <CodeCard text={() => pending().body} language={() => pending().language} pending streaming={props.streaming} handoff={props.handoff} />;
-  }
-  const className = () => `streaming-pending ${pending().kind === "math-block" ? "streaming-pending-math-block" : "streaming-pending-math-inline"}`;
-  return pending().kind === "math-block"
-    ? <div class={className()} data-streaming-pending={props.streaming ? pending().kind : undefined} aria-hidden="true" />
-    : <span class={className()} data-streaming-pending={props.streaming ? pending().kind : undefined} aria-hidden="true" />;
-}
-
 /**
  * Register while mounted so settlement can see this without reading the DOM.
  *
@@ -897,8 +873,8 @@ function TableNode(props: { node: MarkdownNode | NodeAccessor; context: Renderer
 function TableRow(props: { node: MarkdownNode | NodeAccessor; context: RendererContext; header?: boolean }) {
   const node = () => readNode(props.node);
   return <tr><Index each={node()?.children || []}>{(cell) => props.header
-    ? <th><InlineNodes nodes={() => cell()?.children || []} context={props.context} /><PendingCaret node={cell} context={props.context} /></th>
-    : <td><InlineNodes nodes={() => cell()?.children || []} context={props.context} /><PendingCaret node={cell} context={props.context} /></td>}
+    ? <th><Nodes nodes={() => cell()?.children || []} context={props.context} /><PendingCaret node={cell} context={props.context} /></th>
+    : <td><Nodes nodes={() => cell()?.children || []} context={props.context} /><PendingCaret node={cell} context={props.context} /></td>}
   </Index></tr>;
 }
 
@@ -1008,19 +984,19 @@ function AstNodeContent(props: { node: NodeAccessor; context: RendererContext })
   const node = props.node;
   switch (node().type) {
     case "text": return <TextNode node={node} context={props.context} />;
-    case "strong": return <strong data-markdown="strong"><InlineNodes nodes={() => node()?.children || []} context={props.context} /></strong>;
-    case "emphasis": return <em><InlineNodes nodes={() => node()?.children || []} context={props.context} /></em>;
-    case "delete": return <del><InlineNodes nodes={() => node()?.children || []} context={props.context} /></del>;
+    case "strong": return <strong data-markdown="strong"><Nodes nodes={() => node()?.children || []} context={props.context} /></strong>;
+    case "emphasis": return <em><Nodes nodes={() => node()?.children || []} context={props.context} /></em>;
+    case "delete": return <del><Nodes nodes={() => node()?.children || []} context={props.context} /></del>;
     case "inlineCode": return <code>{node()?.value || ""}</code>;
     case "inlineMath":
-    case "math": return <MathNode node={node} fadeOnce={() => Boolean(props.context.fadeMath?.() && props.context.fadeLive?.())} defer={props.context.deferMath} policy={props.context.mathRenderPolicy} renderer={props.context.rendererId} onBusyChange={props.context.onMathBusyChange} />;
+    case "math": return <MathNode node={node} fadeOnce={() => Boolean(props.context.fadeMath?.() && props.context.fadeLive?.())} defer={props.context.deferMath} policy={props.context.mathRenderPolicy} onBusyChange={props.context.onMathBusyChange} />;
     case "break": return <br />;
     case "link": return <LinkNode node={node} context={props.context} />;
     case "linkReference": return <LinkNode node={node} context={props.context} reference={() => props.context.definitions()[node()?.identifier]} />;
     case "image":
     case "imageReference": return null;
     case "heading": {
-      const children = <><InlineNodes nodes={() => node()?.children || []} context={props.context} /><PendingCaret node={node} context={props.context} /></>;
+      const children = <><Nodes nodes={() => node()?.children || []} context={props.context} /><PendingCaret node={node} context={props.context} /></>;
       if (node()?.depth === 1) return <h1>{children}</h1>;
       if (node()?.depth === 2) return <h2>{children}</h2>;
       if (node()?.depth === 3) return <h3>{children}</h3>;
@@ -1028,21 +1004,21 @@ function AstNodeContent(props: { node: NodeAccessor; context: RendererContext })
       if (node()?.depth === 5) return <h5>{children}</h5>;
       return <h6>{children}</h6>;
     }
-    case "paragraph": return <p><InlineNodes nodes={() => node()?.children || []} context={props.context} /><PendingCaret node={node} context={props.context} /></p>;
+    case "paragraph": return <p><Nodes nodes={() => node()?.children || []} context={props.context} /><PendingCaret node={node} context={props.context} /></p>;
     case "list": {
       const children = <Index each={node()?.children || []}>{(item) => <AstNode node={item} context={props.context} />}</Index>;
       return node()?.ordered ? <ol start={node()?.start || undefined}>{children}</ol> : <ul>{children}</ul>;
     }
-    case "listItem": return <li>{node()?.checked !== null && <input type="checkbox" checked={Boolean(node()?.checked)} disabled />}{<BlockNodes nodes={() => node()?.children || []} context={props.context} />}</li>;
-    case "blockquote": return <blockquote><BlockNodes nodes={() => node()?.children || []} context={props.context} /></blockquote>;
+    case "listItem": return <li>{node()?.checked !== null && <input type="checkbox" checked={Boolean(node()?.checked)} disabled />}{<Nodes nodes={() => node()?.children || []} context={props.context} />}</li>;
+    case "blockquote": return <blockquote><Nodes nodes={() => node()?.children || []} context={props.context} /></blockquote>;
     case "code": return <CodeNode node={node} handoff={props.context.fenceHandoff} />;
     case "table": return <TableNode node={node} context={props.context} />;
     case "thematicBreak": return <hr />;
     case "html":
     case "htmlElement":
     case "definition": return null;
-    case "root": return <BlockNodes nodes={() => node()?.children || []} context={props.context} />;
-    default: return node().children ? <BlockNodes nodes={node().children} context={props.context} /> : null;
+    case "root": return <Nodes nodes={() => node()?.children || []} context={props.context} />;
+    default: return node().children ? <Nodes nodes={node().children} context={props.context} /> : null;
   }
 }
 
@@ -1058,7 +1034,7 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
   // the same object for every finished block and a fresh one only for the
   // block being revealed, so identity says what changed; reconcile re-derived
   // that by walking every block's whole tree on every frame.
-  const [displayBlocks, setDisplayBlocksSignal] = createSignal<DisplayBlock[]>([], { equals: false });
+  const [displayBlocks, setDisplayBlocks] = createSignal<DisplayBlock[]>([], { equals: false });
   const [displayBusy, setDisplayBusy] = createSignal(false);
   const [pendingMathRenders, setPendingMathRenders] = createSignal(0);
   const [inlineAst, setInlineAst] = createSignal<MarkdownNode>({ type: "root", children: [] });
@@ -1077,14 +1053,12 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
   let previousParserSource = "";
   let previousTableMathSentinel = "";
   let finalised = false;
-  let previousTypewriter: boolean | null = null;
-  // Block-by-block reveal is what this renderer is; only an inline preview,
-  // which is a single line inside a summary, skips it.
-  const typewriter = () => !props.inline;
-  // Freezing is a message-level guarantee. A one-line preview inside a summary
-  // has no settled state worth protecting, and giving it one would fight the
+  // Whether the source effect has run: a message first seen finished is seeded whole rather than revealed.
+  let started = false;
+  // Block-by-block reveal and freezing are what this renderer is for a message; only an inline preview, a single
+  // line inside a summary, skips them -- it has no settled state worth protecting, and one would fight the
   // summary's own sizing.
-  const freezes = () => !props.inline;
+  const typewriter = !props.inline;
   // The memo deliberately preserves value equality across settlement: settled
   // changing while streaming is already false leaves everything downstream
   // seeing no value change, so nothing takes a terminal render pulse.
@@ -1118,7 +1092,7 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
     setSettled(true);
   };
   createEffect(() => {
-    if (!freezes() || settled()) return;
+    if (!typewriter || settled()) return;
     if (!quiet()) {
       cancelSettlement();
       return;
@@ -1129,18 +1103,12 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
   });
   onCleanup(cancelSettlement);
   createEffect(() => { if (settled()) props.onSettled?.(); });
-  const rendererId = () => "incremark";
-  const setDisplayBlocks = (next: DisplayBlock[]) => {
-    setDisplayBlocksSignal(next);
-  };
   const typewriterController = new BufferedIncremarkTypewriter({
     onChange: (next) => {
       setDisplayBlocks(next);
       queueMicrotask(() => props.onRendered?.());
     },
-    onDisplayBusyChange: (busy) => {
-      setDisplayBusy(busy);
-    },
+    onDisplayBusyChange: setDisplayBusy,
   });
   onCleanup(() => typewriterController.destroy());
 
@@ -1174,7 +1142,7 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
       : null;
     const parserSource = projection?.source || source;
     const normalizeBlock = (block: ParsedBlock) => projection ? restoreParsedBlock(block, projection.sentinel, source) : block;
-    let parserMode = "none";
+    let reparsed = false;
     let update: ReturnType<typeof parser.append> | undefined;
     const updates: Array<ReturnType<typeof parser.append>> = [];
     const extendsPrevious = extendsText(source, previousSource);
@@ -1186,19 +1154,16 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
     const changedAt = !extendsPrevious && previousSource ? commonPrefixLength(source, previousSource) : -1;
     const keepsBlocks = changedAt > 0 && [...completedById.values()].some((block) => block.endOffset <= changedAt);
     if (keepsBlocks) for (const [id, block] of [...completedById]) if (block.endOffset > changedAt) completedById.delete(id);
-    const preserveTypewriterState = typewriter()
-      && previousTypewriter === true
-      && (extendsPrevious || keepsBlocks);
+    const preserveTypewriterState = typewriter && started && (extendsPrevious || keepsBlocks);
     if (source !== previousSource || (tableMath && parserSource !== previousParserSource)) {
       const canAppend = true
         && extendsPrevious
         && extendsText(parserSource, previousParserSource)
         && (!projection || projection.sentinel === previousTableMathSentinel);
       if (canAppend) {
-        parserMode = "append";
         update = parser.append(parserSource.slice(previousParserSource.length));
       } else {
-        parserMode = "render";
+        reparsed = true;
         parser.reset();
         update = parser.append(parserSource);
         if (!preserveTypewriterState) {
@@ -1217,7 +1182,8 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
       finalised = false;
     }
     if (!streaming() && !finalised && !split.pending) {
-      parserMode = parserMode === "none" ? "finalize" : `${parserMode}+finalize`;
+      // Finished in the same pass as a reparse, what is on screen carries on rather than being seeded again.
+      reparsed = false;
       update = parser.finalize();
       updates.push(update);
       finalised = true;
@@ -1338,20 +1304,7 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
         .sort((left, right) => left.startOffset - right.startOffset);
     }
 
-    const enabled = typewriter();
-    typewriterController.setEnabled(enabled);
-    if (previousTypewriter === true && !enabled) {
-      typewriterController.flush();
-      displayHistory.clear();
-      displayShown.clear();
-      seededById.clear();
-      setSeededBlocks([]);
-      setDisplayBlocks([]);
-    } else if (enabled && currentBlocks.length && (
-      previousTypewriter === false
-      || (previousTypewriter === null && !streaming())
-      || (parserMode === "render" && previousTypewriter === true && !preserveTypewriterState)
-    )) {
+    if (typewriter && currentBlocks.length && ((!started && !streaming()) || (reparsed && started && !preserveTypewriterState))) {
       displayHistory.clear();
       displayShown.clear();
       seededById.clear();
@@ -1360,7 +1313,7 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
       typewriterController.seed(currentBlocks);
       setDisplayBlocks([]);
     }
-    if (enabled) {
+    if (typewriter) {
       for (const block of currentBlocks) {
         if (seededById.has(block.id)) seededById.set(block.id, block);
       }
@@ -1374,7 +1327,7 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
       typewriterController.observeSource(animated);
       if (animated.length === 0 && currentBlocks.length > 0) typewriterController.completeSeeded();
     }
-    previousTypewriter = enabled;
+    started = true;
 
     if (props.inline) {
       const inlineParser = createIncremarkParser(incremarkParserOptions);
@@ -1390,9 +1343,8 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
     definitions,
     inline: Boolean(props.inline),
     requestExternalLink: external.request,
-    deferMath: () => typewriter(),
+    deferMath: () => typewriter,
     mathRenderPolicy: () => streaming() ? "stream" : "reattach",
-    rendererId,
     onMathBusyChange: (busy) => setPendingMathRenders((count) => Math.max(0, count + (busy ? 1 : -1))),
     onPendingPlaceholderChange: (delta) => setPendingPlaceholders((count) => Math.max(0, count + delta)),
   };
@@ -1412,19 +1364,19 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
   });
   const displayContext: RendererContext = { ...context, fadeWords: () => !props.inline, fadeMath: () => !props.inline && streamMathFade() };
   return <>
-    <div class="chat-markdown" data-renderer={rendererId()} data-inline={props.inline ? "true" : undefined} data-streaming={streaming() || undefined} data-settled={settled() ? "true" : undefined}>
+    <div class="chat-markdown" data-renderer="incremark" data-inline={props.inline ? "true" : undefined} data-streaming={streaming() || undefined} data-settled={settled() ? "true" : undefined}>
       <div class="incremark" data-incremark-core="true">
         <Show when={props.inline} fallback={<>
           <ParsedBlockNodes blocks={seededBlocks} context={context} />
           <DisplayBlockNodes blocks={displayBlocks} context={displayContext} history={displayHistory} shown={displayShown} streaming={streaming} />
           <Show when={shownPending()}>
             {(value) => <Show when={value().kind === "fence"}>
-              <PendingConstruct pending={value()} streaming={streaming()} handoff={fenceHandoff} />
+              <CodeCard text={() => value().body} language={() => value().language} pending streaming={streaming()} handoff={fenceHandoff} />
             </Show>}
           </Show>
         </>}>
           <AstNode node={inlineAst()} context={context} />
-          <Show when={pending()}>{(value) => <Show when={value().kind === "fence"}><PendingConstruct pending={value()} streaming={streaming()} handoff={fenceHandoff} /></Show>}</Show>
+          <Show when={pending()}>{(value) => <Show when={value().kind === "fence"}><CodeCard text={() => value().body} language={() => value().language} pending streaming={streaming()} handoff={fenceHandoff} /></Show>}</Show>
         </Show>
       </div>
     </div>

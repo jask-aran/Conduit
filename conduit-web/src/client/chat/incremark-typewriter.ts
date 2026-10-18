@@ -12,7 +12,6 @@ export const TYPEWRITER_MIN_FRAME_INTERVAL_MS = 4;
 export const TYPEWRITER_MAX_FRAME_INTERVAL_MS = 100;
 export const TYPEWRITER_MAX_CHARS_PER_FRAME = 8192;
 export const TYPEWRITER_MAX_BLOCKS_PER_FRAME = 64;
-export const TYPEWRITER_EMA_ALPHA = 0.25;
 /** The longest a delivered word may wait to be shown. */
 export const FADE_MAX_WINDOW_MS = 300;
 /** Per delivery, how much of the longest recent gap the window still covers. */
@@ -20,27 +19,6 @@ export const FADE_GAP_DECAY = 0.9;
 /** A delivery drains no faster than this per character: a paragraph reads in, not pops. */
 export const FADE_MS_PER_CHARACTER = 0.7;
 const TYPEWRITER_MATH_SOURCE = "__conduitMathSource";
-
-export type TypewriterMetrics = {
-  sourceVisibleCharacters: number;
-  displayedVisibleCharacters: number;
-  backlogCharacters: number;
-  backlogAgeMs: number;
-  pendingBlockCount: number;
-  completedBlockCount: number;
-  charsPerFrame: number;
-  frameIntervalMs: number;
-  frameBudgetMs: number;
-  frameWorkMs: number;
-  frameWorkEmaMs: number;
-  terminal: boolean;
-};
-
-export function updateEma(previous: number | null, sample: number, alpha = TYPEWRITER_EMA_ALPHA) {
-  if (!Number.isFinite(sample) || sample < 0) return previous;
-  if (previous == null) return sample;
-  return previous + alpha * (sample - previous);
-}
 
 export function normalizeFrameInterval(
   sample: number,
@@ -221,7 +199,6 @@ function emptyDisplayNode(node: any): any {
 export type BufferedIncremarkTypewriterOptions = {
   onChange: (blocks: DisplayBlock[]) => void;
   onDisplayBusyChange?: (busy: boolean) => void;
-  onMetrics?: (metrics: TypewriterMetrics) => void;
 };
 
 /**
@@ -238,34 +215,15 @@ export class BufferedIncremarkTypewriter {
   private progress = new Map<string, number>();
   private cachedDisplay = new Map<string, { node: any; progress: number; source: any }>();
   private baselineCharacters = 0;
-  private enabled = false;
   private busy = false;
   private frameHandle: number | null = null;
   private lastFrameAt: number | null = null;
   private frameIntervalMs = TYPEWRITER_DEFAULT_FRAME_INTERVAL_MS;
-  private frameWorkMs = 0;
-  private frameWorkEmaMs = 0;
   private lastObservedSourceCharacters = 0;
-  private backlogStartedAt: number | null = null;
   private deliveries: FadeDelivery[] = [];
   private deliveryGapMs: number | null = null;
   private lastDeliveryAt: number | null = null;
-  private lastMetrics: TypewriterMetrics = {
-    sourceVisibleCharacters: 0,
-    displayedVisibleCharacters: 0,
-    backlogCharacters: 0,
-    backlogAgeMs: 0,
-    pendingBlockCount: 0,
-    completedBlockCount: 0,
-    charsPerFrame: 0,
-    frameIntervalMs: TYPEWRITER_DEFAULT_FRAME_INTERVAL_MS,
-    frameBudgetMs: chooseFrameBudget(),
-    frameWorkMs: 0,
-    frameWorkEmaMs: 0,
-    terminal: false,
-  };
   private readonly publishedBlocks = new Map<string, DisplayBlock>();
-  private terminalEmitted = false;
   // Blocks complete in order, so everything before this index is finished and
   // can never change again unless setSourceBlocks rewinds it. Keeping the
   // finished prefix as retained results -- rather than rebuilding, re-walking
@@ -275,12 +233,9 @@ export class BufferedIncremarkTypewriter {
   private completedPrefix = 0;
   /** The array as handed in, so an unchanged leading run can be recognised. */
   private sourceInputs: ParsedBlock[] = [];
-  /** Running sums of visible characters over sourceBlocks. */
-  private readonly sourceVisibleSums: number[] = [];
   private readonly completedDisplay: DisplayBlock[] = [];
   /** Running sums of visible characters over completedDisplay, for O(1) rewind. */
   private readonly completedVisibleSums: number[] = [];
-  private sourceVisibleCharacters = 0;
 
   constructor(callbacks: BufferedIncremarkTypewriterOptions) {
     this.callbacks = callbacks;
@@ -291,14 +246,6 @@ export class BufferedIncremarkTypewriter {
     // Asked every delivery; a streamed answer's seeded prefix rarely changes, and each time built the display blocks.
     if (baseline === this.baselineCharacters) return;
     this.baselineCharacters = baseline;
-    this.emitMetrics(performance.now(), false, 0, this.getDisplayBlocks());
-  }
-
-  setEnabled(enabled: boolean) {
-    if (this.enabled === enabled) return;
-    this.enabled = enabled;
-    if (enabled) this.scheduleFrame();
-    else this.cancelFrame();
   }
 
   observeSource(blocks: ParsedBlock[]) {
@@ -311,11 +258,6 @@ export class BufferedIncremarkTypewriter {
     this.scheduleFrame();
   }
 
-  push(blocks: ParsedBlock[]) {
-    this.setSourceBlocks(blocks);
-    this.scheduleFrame();
-  }
-
   reset() {
     this.cancelFrame();
     this.sourceBlocks = [];
@@ -324,21 +266,14 @@ export class BufferedIncremarkTypewriter {
     this.publishedBlocks.clear();
     this.rewindCompleted(0);
     this.sourceInputs = [];
-    this.sourceVisibleSums.length = 0;
-    this.sourceVisibleCharacters = 0;
     this.baselineCharacters = 0;
     this.lastFrameAt = null;
     this.frameIntervalMs = TYPEWRITER_DEFAULT_FRAME_INTERVAL_MS;
-    this.frameWorkMs = 0;
-    this.frameWorkEmaMs = 0;
     this.lastObservedSourceCharacters = this.baselineCharacters;
-    this.backlogStartedAt = null;
     this.deliveries = [];
     this.deliveryGapMs = null;
     this.lastDeliveryAt = null;
-    this.terminalEmitted = false;
     this.setBusy(false);
-    this.emitMetrics(performance.now(), false, 0, []);
   }
 
   private recordDelivery(sourceCharacters: number, delta: number, now: number) {
@@ -371,43 +306,14 @@ export class BufferedIncremarkTypewriter {
   seed(blocks: ParsedBlock[]) {
     this.reset();
     this.baselineCharacters = countVisibleBlocks(blocks);
-    this.emitMetrics(performance.now(), false, 0, []);
-  }
-
-  flush() {
-    for (const block of this.sourceBlocks) this.progress.set(block.id, this.blockCharacters(block));
-    const display = this.getDisplayBlocks();
-    this.setBusy(false);
-    this.callbacks.onChange(display);
-    this.emitMetrics(performance.now(), true, 0, display);
   }
 
   completeSeeded() {
     this.setBusy(false);
-    this.emitMetrics(performance.now(), true, 0, []);
   }
 
   getDisplayBlocks() {
     return this.stabilizeDisplayBlocks(this.buildDisplayBlocks());
-  }
-
-  getMetrics() {
-    return this.lastMetrics;
-  }
-
-  getDebugState() {
-    const activeIndex = this.firstIncompleteIndex();
-    const active = activeIndex >= 0 ? this.sourceBlocks[activeIndex] : null;
-    const currentProgress = active ? this.progress.get(active.id) || 0 : 0;
-    const currentTotal = active ? this.blockCharacters(active) : 0;
-    return {
-      processing: activeIndex >= 0,
-      currentBlockId: active?.id ?? null,
-      currentProgress,
-      currentTotal,
-      pendingBlockCount: activeIndex >= 0 ? Math.max(0, this.sourceBlocks.length - activeIndex - 1) : 0,
-      completedBlockCount: activeIndex >= 0 ? activeIndex : this.sourceBlocks.length,
-    };
   }
 
   destroy() {
@@ -415,8 +321,6 @@ export class BufferedIncremarkTypewriter {
     this.publishedBlocks.clear();
     this.rewindCompleted(0);
     this.sourceInputs = [];
-    this.sourceVisibleSums.length = 0;
-    this.sourceVisibleCharacters = 0;
     this.sourceBlocks = [];
     this.progress.clear();
     this.cachedDisplay.clear();
@@ -457,14 +361,11 @@ export class BufferedIncremarkTypewriter {
     }
     const prepared = this.sourceBlocks.slice(0, shared);
     prepared.length = blocks.length;
-    this.sourceVisibleSums.length = blocks.length;
     for (let index = shared; index < blocks.length; index += 1) {
       const input = blocks[index]!;
       const node = prepareTypewriterNode(input.node);
       const block = node === input.node ? input : { ...input, node } as ParsedBlock;
       prepared[index] = block;
-      this.sourceVisibleSums[index] = (index > 0 ? this.sourceVisibleSums[index - 1]! : 0)
-        + visibleAstCharacters(block.node);
       const previous = previousById.get(block.id);
       if (!previous || previous.node !== block.node) {
         const previousProgress = this.progress.get(block.id) || 0;
@@ -476,21 +377,16 @@ export class BufferedIncremarkTypewriter {
       // prefix is positional, so a reorder has to rewind it too.
       if (firstChangedIndex < 0 && this.sourceBlocks[index]?.id !== block.id) firstChangedIndex = index;
     }
-    this.sourceVisibleCharacters = blocks.length ? this.sourceVisibleSums[blocks.length - 1]! : 0;
     this.sourceInputs = blocks;
     this.sourceBlocks = prepared as ParsedBlock[];
     if (firstChangedIndex >= 0 && firstChangedIndex < this.completedPrefix) {
       this.rewindCompleted(firstChangedIndex);
     }
-    const active = this.firstIncompleteIndex() >= 0;
-    if (active && this.backlogStartedAt == null) this.backlogStartedAt = performance.now();
-    if (!active) this.backlogStartedAt = null;
-    this.setBusy(active);
-    this.terminalEmitted = false;
+    this.setBusy(this.firstIncompleteIndex() >= 0);
   }
 
   private scheduleFrame() {
-    if (!this.enabled || this.frameHandle != null || typeof requestAnimationFrame !== "function") return;
+    if (this.frameHandle != null || typeof requestAnimationFrame !== "function") return;
     this.frameHandle = requestAnimationFrame((timestamp) => {
       this.frameHandle = null;
       this.drainFrame(timestamp);
@@ -563,52 +459,10 @@ export class BufferedIncremarkTypewriter {
       const next = Math.min(this.blockCharacters(active), current + 1);
       this.progress.set(active.id, next);
       accepted = this.getDisplayBlocks();
-      processedCharacters = Math.max(1, next - current);
     }
 
     this.callbacks.onChange(accepted);
-    const frameWorkMs = Math.max(0, performance.now() - startedAt);
-    this.frameWorkMs = frameWorkMs;
-    this.frameWorkEmaMs = updateEma(this.frameWorkEmaMs, frameWorkMs) || frameWorkMs;
-    const pending = this.firstIncompleteIndex() >= 0;
-    if (!pending) {
-      this.backlogStartedAt = null;
-      this.setBusy(false);
-    } else if (this.backlogStartedAt == null) {
-      this.backlogStartedAt = performance.now();
-      this.setBusy(true);
-    }
-    const terminal = !pending && !this.terminalEmitted;
-    if (terminal) this.terminalEmitted = true;
-    this.emitMetrics(performance.now(), terminal, processedCharacters, accepted, frameBudgetMs);
-  }
-
-  private emitMetrics(
-    now: number,
-    terminal: boolean,
-    charsPerFrame: number,
-    display: DisplayBlock[],
-    frameBudgetMs = chooseFrameBudget(this.frameIntervalMs),
-  ) {
-    const sourceVisibleCharacters = this.baselineCharacters + this.sourceVisibleCharacters;
-    const displayedVisibleCharacters = this.baselineCharacters + this.displayedVisibleCharacters(display);
-    const backlogCharacters = Math.max(0, sourceVisibleCharacters - displayedVisibleCharacters);
-    const activeIndex = this.firstIncompleteIndex();
-    this.lastMetrics = {
-      sourceVisibleCharacters,
-      displayedVisibleCharacters,
-      backlogCharacters,
-      backlogAgeMs: this.backlogStartedAt == null ? 0 : Math.max(0, now - this.backlogStartedAt),
-      pendingBlockCount: activeIndex >= 0 ? Math.max(0, this.sourceBlocks.length - activeIndex) : 0,
-      completedBlockCount: activeIndex >= 0 ? activeIndex : this.sourceBlocks.length,
-      charsPerFrame,
-      frameIntervalMs: this.frameIntervalMs,
-      frameBudgetMs,
-      frameWorkMs: this.frameWorkMs,
-      frameWorkEmaMs: this.frameWorkEmaMs,
-      terminal,
-    };
-    this.callbacks.onMetrics?.(this.lastMetrics);
+    this.setBusy(this.firstIncompleteIndex() >= 0);
   }
 
   private rewindCompleted(index: number) {
