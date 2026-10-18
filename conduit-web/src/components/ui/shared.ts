@@ -28,3 +28,13 @@ export type Motion = "entering" | "leaving" | "removing";
  *  rather than starting one of its own (a turn's header arriving under the message just sent). */
 export const sinceOf = (since?: number) => since ? { "--entered": `${-Math.round(since)}ms` } : undefined;
 export const motionOf = (motion?: Motion) => ({ "data-entering": motion === "entering" ? "" : undefined, "data-leaving": motion === "leaving" ? "" : motion === "removing" ? "remove" : undefined });
+
+/**
+ * What a Markdown renderer drawing into an Answer marks: a wrapper of its own holding the answer's blocks (flow,
+ * spaced as the Answer's own), a table's scroll box (table), a link it opens itself (link, a button), words just
+ * streamed in (word: they fade in, over --answer-word-fade) and a formula's new parts (math: they fade in too, and the
+ * renderer takes the class off once they have). A citation (a link whose text is its URL) carries data-citation;
+ * formulas are KaTeX's own. A wide block -- a table, or a CodeBlock -- may grow past the column, centred, up to
+ * --answer-bleed (tables) and --answer-bleed-code (code), which the pane declares; never past what it needs.
+ */
+export const ANSWER_MARKDOWN = { flow: "ui-answer-flow", table: "ui-answer-table", link: "ui-answer-link", word: "ui-answer-word", math: "ui-answer-math-in" } as const;

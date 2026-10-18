@@ -1,3 +1,4 @@
+import { ANSWER_MARKDOWN } from "@/components/ui/shared";
 import { createComputed, createEffect, createMemo, createSelector, createRenderEffect, createSignal, For, Index, onCleanup, onMount, Show, untrack } from "solid-js";
 import { createIncremarkParser, type DisplayBlock, type ParsedBlock } from "@incremark/core";
 import katex from "katex";
@@ -472,7 +473,7 @@ function LinkNode(props: { node: MarkdownNode | NodeAccessor; context: RendererC
       <Show when={resolved().external} fallback={<a href={resolved().href} data-citation={host() ? "true" : undefined} title={host() ? resolved().href : (reference()?.title || node()?.title || undefined)}>{content()}</a>}>
         <button
           type="button"
-          class="external-markdown-link"
+          class={ANSWER_MARKDOWN.link}
           data-citation={host() ? "true" : undefined}
           title={host() ? resolved().href : undefined}
           data-external-url={resolved().href}
@@ -862,7 +863,7 @@ function TableNode(props: { node: MarkdownNode | NodeAccessor; context: Renderer
   const node = () => readNode(props.node);
   const head = () => node()?.children?.[0];
   const body = () => node()?.children?.slice(1) || [];
-  return <div class="markdown-table-scroll"><table>
+  return <div class={ANSWER_MARKDOWN.table}><table>
       <Show when={head()}>{(value) => <thead><TableRow node={() => value()} context={props.context} header /></thead>}</Show>
       {/* Streaming Markdown appends rows but replaces AST row objects on every update.
           Index keeps each logical row and its cells mounted while the active row grows. */}
@@ -969,7 +970,7 @@ function FadingText(props: { node: NodeAccessor; text: () => string }) {
   return <Index each={runs()}>{(text, run) => {
     const fade = fades[run];
     if (fade == null) return <>{text()}</>;
-    return <span class="stream-word" style={fade ? { "animation-delay": `-${fade}ms` } : undefined}>{text()}</span>;
+    return <span class={ANSWER_MARKDOWN.word} style={fade ? { "animation-delay": `-${fade}ms` } : undefined}>{text()}</span>;
   }}</Index>;
 }
 
@@ -1364,8 +1365,8 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
   });
   const displayContext: RendererContext = { ...context, fadeWords: () => !props.inline, fadeMath: () => !props.inline && streamMathFade() };
   return <>
-    <div class="chat-markdown" data-renderer="incremark" data-inline={props.inline ? "true" : undefined} data-streaming={streaming() || undefined} data-settled={settled() ? "true" : undefined}>
-      <div class="incremark" data-incremark-core="true">
+    <div class={`chat-markdown ${ANSWER_MARKDOWN.flow}`} data-renderer="incremark" data-inline={props.inline ? "true" : undefined} data-streaming={streaming() || undefined} data-settled={settled() ? "true" : undefined}>
+      <div class={`incremark ${ANSWER_MARKDOWN.flow}`} data-incremark-core="true">
         <Show when={props.inline} fallback={<>
           <ParsedBlockNodes blocks={seededBlocks} context={context} />
           <DisplayBlockNodes blocks={displayBlocks} context={displayContext} history={displayHistory} shown={displayShown} streaming={streaming} />

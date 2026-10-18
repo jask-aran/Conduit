@@ -33,7 +33,7 @@ export function streamFadeMs(): number {
 }
 
 export function applyStreamFade(ms = streamFadeMs()): void {
-  document.documentElement.style.setProperty("--stream-word-fade", `${ms}ms`);
+  document.documentElement.style.setProperty("--answer-word-fade", `${ms}ms`);
 }
 
 export function saveStreamFade(ms: number): number {

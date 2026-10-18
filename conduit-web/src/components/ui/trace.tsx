@@ -67,6 +67,6 @@ export function StepOutput(props: { text: string; hidden?: number; full?: boolea
   </>;
 }
 /** What a thinking or narration step opens to: its whole text, the Answer's prose a step quieter. */
-export const StepProse = (props: { children: JSX.Element }) => <div class="ui-step-prose">{props.children}</div>;
+export const StepProse = (props: { children: JSX.Element }) => <div class="ui-step-prose"><div class="ui-answer">{props.children}</div></div>;
 /** A failed request in the trail: what failed, when, on what, and the error. */
 export const TraceError = (props: { time?: string; facts?: string[]; message: string }) => <li class="ui-trace-error"><Failure {...props} /></li>;

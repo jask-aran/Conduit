@@ -45,3 +45,10 @@
 :root[data-transcript-width="wide"] { --transcript-column-width: 950px; }
 :root[data-transcript-width="full"] { --transcript-column-width: 100%; }
 }
+
+/* The pane declares the Answer's bleed: past the reading column only when the chat is wide, code only when the reader
+   asked for wide code blocks. */
+@container chat-main (--conduit-wide-chat) {
+  .thread { --answer-bleed: min(var(--transcript-wide-scale), var(--transcript-wide-max)); }
+  :root[data-code-width="wide"] .thread { --answer-bleed-code: min(var(--transcript-wide-scale), var(--transcript-wide-max)); }
+}

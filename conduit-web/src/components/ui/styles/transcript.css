@@ -48,7 +48,10 @@
 /* The answer: no bubble, the Body role, one gap between blocks and none outside the first and last. */
 .ui-answer { --answer-gap: var(--space-lg); min-width: 0; color: var(--foreground); font-size: var(--text-body); line-height: var(--leading-reading); overflow-wrap: anywhere; }
 .ui-answer :where(p, ul, ol, blockquote, pre, table, hr, figure, h1, h2, h3, h4) { margin: 0; }
-.ui-answer > * + *, .ui-answer :is(li, blockquote) > * + * { margin-top: var(--answer-gap); }
+/* A renderer's own wrappers (ANSWER_MARKDOWN.flow) hold the answer's blocks and space them as the Answer does. */
+.ui-answer-flow { display: block; min-width: 0; }
+:is(.ui-answer, .ui-answer-flow) > * { margin-block: 0; }
+:is(.ui-answer, .ui-answer-flow) > * + *, .ui-answer :is(li, blockquote) > * + * { margin-top: var(--answer-gap); }
 .ui-answer :is(h1, h2, h3, h4) { line-height: var(--leading-tight); font-weight: var(--weight-strong); }
 .ui-answer h1 { font-size: var(--text-heading); }
 .ui-answer :is(h2, h3, h4) { font-size: var(--text-body); }
@@ -59,11 +62,38 @@
 .ui-answer li + li { margin-top: var(--space-2xs); }
 .ui-answer blockquote { border-left: var(--hairline) solid var(--tint); padding-left: var(--space-lg); color: var(--muted-foreground); }
 .ui-answer :not(pre, .ui-code-line) > code { border-radius: var(--radius-inset); background: var(--tint); padding: 0 var(--space-xs); font: 0.9em var(--font-code); }
-.ui-answer a { color: inherit; text-decoration: underline; text-decoration-color: color-mix(in oklch, currentColor, transparent var(--tone-faint)); text-underline-offset: var(--space-2xs); }
-.ui-answer a:is(:hover, :focus-visible) { text-decoration-color: currentColor; }
+.ui-answer :is(a, .ui-answer-link) { color: inherit; text-decoration: underline; text-decoration-color: color-mix(in oklch, currentColor, transparent var(--tone-faint)); text-underline-offset: var(--space-2xs); }
+.ui-answer :is(a, .ui-answer-link):is(:hover, :focus-visible) { outline: 0; text-decoration-color: currentColor; }
+.ui-answer-link { border: 0; background: none; padding: 0; font: inherit; cursor: pointer; }
+/* A citation: a chip carrying the host, the whole URL on its title; a run of them after one claim is one cluster. */
+.ui-answer [data-citation] { display: inline-flex; max-width: 14em; align-items: baseline; overflow: hidden; border: var(--hairline) solid var(--tint); border-radius: var(--radius-round); padding: 0 var(--space-xs); color: var(--muted-foreground); font-size: var(--text-caption); line-height: var(--leading-row); text-decoration: none; text-overflow: ellipsis; vertical-align: baseline; white-space: nowrap; }
+.ui-answer [data-citation]:is(:hover, :focus-visible) { background: var(--tint); color: var(--foreground); }
+.ui-answer [data-citation] + [data-citation] { margin-left: var(--space-2xs); }
 .ui-answer hr { border: 0; border-top: var(--hairline) solid var(--tint); }
 .ui-answer table { display: block; max-width: 100%; overflow-x: auto; border-collapse: collapse; font-size: var(--text-row); }
-.ui-answer :is(th, td) { border: var(--hairline) solid var(--tint); padding: var(--space-sm) var(--space-md); text-align: left; vertical-align: top; }
+/* A table in its scroll box (ANSWER_MARKDOWN.table) fills it; a cell keeps a readable width and words whole. */
+.ui-answer-table { max-width: 100%; overflow-x: auto; scrollbar-color: var(--muted-foreground) transparent; scrollbar-gutter: stable; scrollbar-width: thin; }
+.ui-answer-table > table { display: table; width: 100%; max-width: none; overflow: visible; table-layout: auto; }
+.ui-answer :is(th, td) { min-width: 5em; max-width: 32ch; border: var(--hairline) solid var(--tint); padding: var(--space-sm) var(--space-md); overflow-wrap: normal; text-align: left; vertical-align: top; word-break: normal; }
+.ui-answer :is(th, td) code { overflow-wrap: anywhere; }
+/* A wide block may grow past the column up to the pane's bleed, centred however wide it is (from the column's middle,
+   pulled back half its own width), never wider than it needs; a block that fits does not move. Only the answer's own
+   blocks: one in a list or a quote keeps to its box. */
+:is(.ui-answer, .ui-answer-flow) > :is(.ui-answer-table, .ui-code) { width: max-content; min-width: 100%; max-width: var(--answer-bleed, 100%); margin-left: 50%; translate: -50%; }
+:is(.ui-answer, .ui-answer-flow) > .ui-code { max-width: var(--answer-bleed-code, 100%); }
+/* Formulas (KaTeX's own boxes): a display formula centred, one wider than the column scrolling from its start, never
+   clipped at both ends. Each paints on its own: one still arriving does not repaint those above it. */
+.ui-answer :is(.katex-display, .incremark-math-block) { display: block; min-height: 2.2em; max-width: 100%; overflow: auto hidden; scrollbar-width: none; contain: layout paint; }
+.ui-answer :is(.katex-display, .incremark-math-block)::-webkit-scrollbar { display: none; }
+.ui-answer .katex-display { display: flex; margin: 0; align-items: center; justify-content: safe center; }
+.ui-answer .katex-display > .katex { flex: 0 0 auto; }
+/* Streaming: a word just written fades in once, its layout already final. Its colour fades, not its opacity (an
+   opacity fade gives every word mid-fade a compositor layer, and a few dozen of them cost more than a frame); backwards
+   only, so a finished fade is not an animation still in effect. A formula's new parts fade their opacity instead: a
+   colour is inherited, and fading it restyled every span of the formula each frame. */
+.ui-answer-word { animation: ui-answer-word var(--answer-word-fade, var(--duration-gentle)) ease-out backwards; }
+@keyframes ui-answer-word { from { color: transparent; } }
+.ui-answer-math-in { animation: ui-fade-in var(--answer-word-fade, var(--duration-gentle)) ease-out backwards; }
 .ui-answer th { font-weight: var(--weight-strong); }
 /* Disclosure (DESIGN Transcript): everything that folds -- a header, one turning chevron, a body. Its
    unfolding is the caller's (the app's Disclosure animates it); this is its shape. */

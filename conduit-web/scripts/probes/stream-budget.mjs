@@ -34,7 +34,7 @@ for (const renderer of (process.env.RENDERERS || "marked,incremark,incremark-fad
     const mo = new MutationObserver((records) => { for (const r of records) { if (!r.target.closest?.(".chat-markdown")) continue; for (const n of r.addedNodes) if (n.nodeType === 1) added++; for (const n of r.removedNodes) if (n.nodeType === 1) { const k = n.tagName.toLowerCase() + (n.className && typeof n.className === "string" ? "." + n.className.split(" ")[0] : ""); churn[k] = (churn[k] ?? 0) + 1; } } });
     mo.observe(document.querySelector(".thread") || document.body, { childList: true, subtree: true });
     const lens = []; let spans = 0; const t0 = performance.now(); let quietSince = null;
-    const f = () => { const e = el(); const n = (e?.textContent || "").length; lens.push([performance.now() - t0, n]); spans = Math.max(spans, document.querySelectorAll(".stream-word").length);
+    const f = () => { const e = el(); const n = (e?.textContent || "").length; lens.push([performance.now() - t0, n]); spans = Math.max(spans, document.querySelectorAll(".ui-answer-word").length);
       const live = document.querySelector("[aria-label='Stop response']"); if (!live && n > 0) quietSince ??= performance.now(); else quietSince = null;
       if ((quietSince && performance.now() - quietSince > 1500) || performance.now() - t0 > 90000) { mo.disconnect(); const top = [...(el()?.querySelector("[data-incremark-root], .incremark-root") || el()).children]; window.__shape = top.map((c) => c.tagName + ":" + c.querySelectorAll(".incremark-math-block").length).join(" "); finish({ lens, spans, churn, added, shape: window.__shape }); } else requestAnimationFrame(f); };
     requestAnimationFrame(f); }));

@@ -1,3 +1,4 @@
+import { ANSWER_MARKDOWN } from "@/components/ui/shared";
 import katex from "katex";
 import { streamFadeMs } from "@/client/preferences/stream-fade";
 
@@ -48,7 +49,7 @@ export function renderMathTree(tex: string, displayMode: boolean): TreeNode | nu
  * spans again. It fades opacity, not the words' colour: colour is inherited,
  * so a colour fade restyled every span of the formula on every frame.
  */
-export const MATH_FADE_CLASS = "stream-math-in";
+export const MATH_FADE_CLASS = ANSWER_MARKDOWN.math;
 let faded: Array<[Element, number]> = [];
 let fadedTimer: ReturnType<typeof setTimeout> | null = null;
 

@@ -43,8 +43,8 @@ button.ui-step:is(:hover, :focus-visible) { background: var(--tint); }
 .ui-step-output { max-height: var(--measure-md); margin: 0; overflow: auto; border: var(--hairline) solid var(--tint); border-radius: var(--radius-control); padding: var(--space-sm) var(--space-lg); white-space: pre-wrap; font: var(--text-caption)/var(--leading-code) var(--font-code); }
 .ui-step-more { margin-top: var(--space-xs); }
 .ui-step-prose { color: var(--muted-foreground); font-size: var(--text-row); line-height: var(--leading-text); }
-.ui-step-prose .chat-markdown { color: inherit; font-size: inherit; line-height: inherit; }
-.ui-step-prose > :first-child { margin-top: 0; } .ui-step-prose > :last-child { margin-bottom: 0; }
+/* Its text is an Answer's Markdown, muted at the trail's size. */
+.ui-step-prose > .ui-answer { color: inherit; font-size: inherit; line-height: inherit; }
 /* A note (reasoning the provider kept), not a step: nothing to open, no cursor. */
 .ui-step-item[data-note] .ui-step-summary { font-style: italic; }
 /* Text a stop discarded, struck where it sits. */
