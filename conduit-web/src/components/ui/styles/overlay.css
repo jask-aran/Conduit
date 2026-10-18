@@ -5,7 +5,7 @@
 .ui-scrim[data-entering] { animation: ui-fade-in var(--duration-gentle) var(--ease-change) backwards; }
 .ui-scrim[data-leaving] { animation: ui-fade-out var(--duration-quick) var(--ease-leave) forwards; pointer-events: none; }
 .ui-scrim[data-placement="center"] { align-items: center; }
-.ui-frost.ui-overlay { display: flex; width: min(var(--overlay-width, calc(40 * var(--u-space))), 100%); max-height: var(--overlay-height, none); flex-direction: column; overflow: hidden; border-radius: var(--radius-surface); padding: 0; color: var(--foreground); font-size: var(--text-body); }
+.ui-frost.ui-overlay { display: flex; width: min(var(--overlay-width, var(--measure-2xl)), 100%); max-height: var(--overlay-height, none); flex-direction: column; overflow: hidden; border-radius: var(--radius-surface); padding: 0; color: var(--foreground); font-size: var(--text-body); }
 .ui-overlay[data-layout="rail"] { flex-direction: row; }
 .ui-overlay-bar { display: flex; flex: none; align-items: center; gap: var(--space-lg); border-bottom: 1px solid var(--tint); padding: var(--space-md) var(--space-lg); }
 /* The lead is one mark at one size and colour, whichever it is (search, the command prompt, back). */
@@ -29,7 +29,7 @@
 .ui-overlay-hints-end { margin-left: auto; gap: var(--space-xl) !important; }
 .ui-overlay-title { margin: 0; font-size: var(--text-heading); font-weight: var(--weight-strong); line-height: 1.5; letter-spacing: -0.02em; }
 /* The rail beside a page: the sidebar's NavGroups, washed as a popover's rows are. */
-.ui-overlay-rail { display: flex; width: calc(14.84375 * var(--u-space)); flex: none; flex-direction: column; gap: var(--space-xs); overflow: auto; border-right: 1px solid var(--tint); padding: var(--space-2xl) var(--space-lg); }
+.ui-overlay-rail { display: flex; width: var(--measure-sm); flex: none; flex-direction: column; gap: var(--space-xs); overflow: auto; border-right: 1px solid var(--tint); padding: var(--space-2xl) var(--space-lg); }
 .ui-overlay-rail > .ui-overlay-title { margin-bottom: var(--space-md); padding-left: var(--space-md); }
 .ui-overlay-rail .ui-nav-group + .ui-nav-group { margin-top: var(--space-md); }
 /* The current section is white and bold with no fill; the wash is only the cursor. */
@@ -62,7 +62,7 @@
 .ui-setting-line > span:first-child { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ui-setting-line > span:first-child > small { margin-left: var(--space-md); color: var(--muted-foreground); font-size: inherit; }
 /* Every row's control sits in one column of one width, so they line up. */
-.ui-setting-control { display: inline-flex; width: var(--setting-control-width, calc(18.75 * var(--u-space))); max-width: 50%; flex: none; align-items: center; justify-content: flex-end; gap: var(--space-xs); }
+.ui-setting-control { display: inline-flex; width: var(--setting-control-width, var(--measure-md)); max-width: 50%; flex: none; align-items: center; justify-content: flex-end; gap: var(--space-xs); }
 .ui-setting-control > .ui-input:not([data-bare]) { width: 100%; }
 .ui-setting-control > .ui-seg { width: 100%; }
 /* What a line holds besides a field: a value read, not set; a link out; a note or details under
@@ -81,7 +81,7 @@
 .ui-setting-details ol { padding-left: var(--space-xl); }
 .ui-setting-details code { font: var(--text-caption) var(--font-data); }
 .ui-setting-wide { display: flex; flex-direction: column; gap: var(--space-md); padding: var(--space-2xs) var(--space-md) var(--space-md); }
-.ui-setting-wide > .ui-textarea { min-height: calc(6 * var(--u-space)); font-size: var(--text-row); line-height: 1.5; }
+.ui-setting-wide > .ui-textarea { min-height: calc(4 * var(--control-xs)); font-size: var(--text-row); line-height: 1.5; }
 .ui-setting-wide > .ui-textarea:focus { border-color: color-mix(in oklch, var(--foreground), transparent 70%); }
 .ui-setting-loading { display: flex; align-items: center; gap: var(--row-gap); padding: var(--space-md); color: var(--muted-foreground); font-size: var(--text-row); }
 .ui-overlay-page-head > .ui-overlay-title { flex: 1; }

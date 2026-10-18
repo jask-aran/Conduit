@@ -1,5 +1,5 @@
 /* Menu: a raised container; rows sit concentric inside it. */
-.ui-menu { outline: none; display: flex; min-width: calc(12 * var(--u-type)); flex-direction: column; border-radius: var(--radius-surface); padding: var(--frost-inset); }
+.ui-menu { outline: none; display: flex; min-width: var(--measure-xs); flex-direction: column; border-radius: var(--radius-surface); padding: var(--frost-inset); }
 /* A popover rises in and drops back. */
 .ui-menu[data-entering] { animation: ui-rise var(--duration-gentle) var(--ease-arrive) backwards; }
 .ui-menu[data-leaving] { animation: ui-drop var(--duration-quick) var(--ease-leave) forwards; pointer-events: none; }
