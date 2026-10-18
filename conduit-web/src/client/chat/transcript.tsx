@@ -1243,8 +1243,13 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
           const user = createMemo(() => message().role === "user");
           const review = createMemo(() => user() ? parseReviewComments(message().content || "") : { text: message().content || "", comments: [] });
           const failed = createMemo(() => !user() && message().stopReason === "error");
+          // Once its own generation has said it finished, the row is not live again: the saved message takes it over
+          // before the turn settles, and read from the chat's streaming flag it was live once more for a frame -- an
+          // answer ending in an open formula then lost the closing the finish gave it, and was parsed again whole.
+          let finished = false;
           const live = createMemo(() => {
-            if (item.live != null) return item.live;
+            if (item.live != null) return !(finished = !item.live);
+            if (finished) return false;
             const last = props.chat.messages().at(-1);
             return props.chat.streaming() && !user() && Boolean(last && message().id === last.id);
           });
