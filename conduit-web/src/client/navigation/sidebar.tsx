@@ -7,7 +7,6 @@ import { createComposerSurfaceSignal } from "../chat/composer-surface";
 import { batch, createEffect, createMemo, createSignal, For, lazy, onCleanup, onMount, Show } from "solid-js";
 import { FrostDialog } from "@/components/frost";
 import {
-  CableIcon,
   ChevronRightIcon,
   ClipboardCopyIcon,
   CheckIcon,
@@ -28,7 +27,6 @@ import {
   PinIcon,
   PinOffIcon,
   PlusIcon,
-  RefreshCwIcon,
   SearchIcon,
   Settings2Icon,
   SquareIcon,
@@ -54,10 +52,6 @@ import {
   FieldGroup,
   FieldLabel,
   Input,
-  Menu,
-  MenuContent,
-  MenuItem,
-  MenuTrigger,
   Spinner,
   Tooltip,
   TooltipContent,

@@ -1,4 +1,4 @@
-import { children, createComputed, createEffect, createSignal, createUniqueId, For, mergeProps, on, onCleanup, onMount, Show, splitProps, type JSX } from "solid-js";
+import { children, createComputed, createEffect, createSignal, createUniqueId, For, mergeProps, onCleanup, onMount, Show, splitProps, type JSX } from "solid-js";
 import { CheckIcon, ChevronDownIcon, CopyIcon, ChevronLeftIcon, ChevronRightIcon, CircleCheckIcon, CircleXIcon, InfoIcon, SearchIcon, SquareIcon, TriangleAlertIcon, XIcon } from "lucide-solid";
 export { ChevronDownIcon };
 import { cn } from "@/lib/utils";

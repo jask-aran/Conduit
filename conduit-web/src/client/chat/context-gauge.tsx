@@ -1,7 +1,7 @@
 import { libraryPiece } from "@/components/ui/swap";
 import { sliderParts } from "./step-slider";
 import { useLibrary } from "@/components/ui/swap";
-import { createEffect, createMemo, createSignal, For, on, onCleanup, Show } from "solid-js";
+import { createEffect, createMemo, createSignal, For, on, Show } from "solid-js";
 import { ChevronRightIcon } from "lucide-solid";
 import { Popover, PopoverContent } from "@/components/primitives";
 import type { ActiveChatStore } from "../state/active-chat";
@@ -44,10 +44,6 @@ export function ContextGauge(props: { chat: ActiveChatStore; compact?: boolean; 
     return value == null ? 0 : Math.max(0, Math.min(100, value));
   };
   const tone = () => reported() == null ? "idle" : percent() >= 90 ? "critical" : percent() >= 70 ? "warning" : "normal";
-  const sessionId = () => {
-    const value = (props.chat.live() as { sessionId?: unknown } | null)?.sessionId;
-    return typeof value === "string" ? value : "";
-  };
 
   const [held, setHeld] = createSignal(false);
   let trigger: HTMLButtonElement | undefined;

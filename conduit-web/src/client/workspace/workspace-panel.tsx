@@ -1,6 +1,6 @@
 import { batch, createEffect, createSignal, For, on, onCleanup, onMount, Show, type Accessor } from "solid-js";
 import { Portal } from "solid-js/web";
-import { MIN_MAIN_PANE_WIDTH, MIN_SPLIT_PANE_WIDTH } from "../layout-geometry";
+import { MIN_MAIN_PANE_WIDTH } from "../layout-geometry";
 import { Columns2Icon, FolderIcon, GitCompareArrowsIcon, Maximize2Icon, MessageSquareIcon, Minimize2Icon, PanelRightIcon, TerminalIcon, XIcon } from "lucide-solid";
 import { Button, Spinner } from "@/components/primitives";
 import { COMMAND_IDS } from "../commands/command-registry";
