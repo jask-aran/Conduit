@@ -88,6 +88,13 @@
 /* Leading: six line heights -- none (a keycap, a glyph's box), tight (titles, names, two-line labels), row (rows,
    toasts, previews), text (what you type, messages, notes), code (code, a step's output), reading (the answer). */
 :root { --leading-none: 1; --leading-tight: 1.3; --leading-row: 1.4; --leading-text: 1.5; --leading-code: 1.6; --leading-reading: 1.66; }
+/* Tones: how far text and lines fall back from --foreground (or a colour), mixed in oklch toward transparent --
+   strong (a glance's answer), rest (a row at rest), quiet (a value, a label beside the strong one), faint (struck
+   out, an underline), line (a field's border on hover), wash (a destructive hover's fill). */
+:root { --tone-strong: 20%; --tone-rest: 32%; --tone-quiet: 45%; --tone-faint: 62%; --tone-line: 70%; --tone-wash: 85%;
+  /* Opacities, of a whole part: rest (a mark, a wave's bars), muted (struck through, discarded, uploading), disabled
+     (a control, a planned step), faint (a pulse's low); a hover lightens or darkens by one step. */
+  --opacity-rest: .78; --opacity-muted: .55; --opacity-disabled: .45; --opacity-faint: .35; --brighten: 1.12; --darken: .88; }
 /* The reading column: the composer's and the transcript's width unless their pane declares --composer-width. */
 :root { --reading-width: 47.5rem; }
 :root, [data-density="desktop"] {

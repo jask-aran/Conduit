@@ -13,7 +13,7 @@
 .ui-code-more { display: block; width: 100%; height: var(--control-sm); border: 0; border-top: var(--hairline) solid var(--tint); background: transparent; color: var(--muted-foreground); font: var(--text-caption) var(--font-sans); cursor: pointer; }
 .ui-code-more:is(:hover, :focus-visible) { background: var(--tint); color: var(--foreground); }
 .ui-code[data-folded][data-streaming] .ui-code-more { animation: ui-code-writing var(--duration-breathe) ease-in-out infinite; }
-@keyframes ui-code-writing { 50% { opacity: .45; } }
+@keyframes ui-code-writing { 50% { opacity: var(--opacity-disabled); } }
 @media (prefers-reduced-motion: reduce) { .ui-code[data-folded][data-streaming] .ui-code-more, .ui-code > pre { animation: none; transition: none; } }
 /* Copied: the button's check in the foreground, and what was copied washes --tint and fades (no ring, ever).
    The wash is laid over the whole region (a pinned caption included), so all of it flashes as one. */

@@ -26,22 +26,22 @@
 :where(.ui-button) svg { width: var(--icon); height: var(--icon); flex: none; }
 /* Keyboard focus is the wash and nothing else: never a ring. */
 .ui-button:focus-visible { outline: 0; background: var(--tint); }
-.ui-button[data-variant="primary"]:focus-visible { background: var(--primary); filter: brightness(0.88); }
-.ui-button:disabled { opacity: 0.45; pointer-events: none; }
+.ui-button[data-variant="primary"]:focus-visible { background: var(--primary); filter: brightness(var(--darken)); }
+.ui-button:disabled { opacity: var(--opacity-disabled); pointer-events: none; }
 .ui-button[data-variant="primary"] { background: var(--foreground); color: var(--background); }
-.ui-button[data-variant="primary"]:is(:hover, :focus-visible) { filter: brightness(0.88); }
+.ui-button[data-variant="primary"]:is(:hover, :focus-visible) { filter: brightness(var(--darken)); }
 .ui-button[data-variant="secondary"] { border-color: var(--tint); background: var(--well); color: var(--foreground); }
 .ui-button[data-variant="secondary"]:is(:hover, :focus-visible) { background: var(--tint); }
 .ui-button[data-variant="ghost"] { background: transparent; color: var(--foreground); }
 .ui-button[data-variant="ghost"]:is(:hover, :focus-visible) { background: var(--tint); }
 .ui-button[data-variant="destructive"] { background: var(--destructive); color: var(--foreground); }
-.ui-button[data-variant="destructive"]:is(:hover, :focus-visible) { filter: brightness(1.1); }
+.ui-button[data-variant="destructive"]:is(:hover, :focus-visible) { filter: brightness(var(--brighten)); }
 .ui-button[data-outline] { background: transparent; }
 .ui-button[data-outline]:is(:hover, :focus-visible) { background: var(--tint); filter: none; }
 .ui-button[data-variant="primary"][data-outline] { border-color: var(--foreground); color: var(--foreground); }
 .ui-button[data-variant="ghost"][data-outline] { border-color: var(--tint); }
 .ui-button[data-variant="destructive"][data-outline] { border-color: var(--destructive); color: var(--destructive); }
-.ui-button[data-variant="destructive"][data-outline]:is(:hover, :focus-visible) { background: color-mix(in oklch, var(--destructive), transparent 85%); }
+.ui-button[data-variant="destructive"][data-outline]:is(:hover, :focus-visible) { background: color-mix(in oklch, var(--destructive), transparent var(--tone-wash)); }
 :where(.ui-button[data-size="sm"]) { height: var(--control-sm); padding: 0 var(--space-lg); font-size: var(--text-row); }
 :where(.ui-button[data-size="icon"]) { width: var(--control); padding: 0; }
 /* icon-xs: a row of small actions under a message (time, copy, edit), round as the app draws them. */
@@ -53,7 +53,7 @@
    select is just its value and a chevron. Field, below the Card, names one. */
 .ui-input { display: flex; width: 100%; height: var(--control); align-items: center; gap: var(--space-md); padding: 0 var(--space-lg); color: var(--foreground); font-size: var(--text-row); text-align: left; outline: none; transition: border-color var(--duration-quick) var(--ease-change); }
 .ui-input::placeholder { color: var(--muted-foreground); }
-.ui-input:is(:hover, :focus, [aria-expanded="true"]) { border-color: color-mix(in oklch, var(--foreground), transparent 70%); }
+.ui-input:is(:hover, :focus, [aria-expanded="true"]) { border-color: color-mix(in oklch, var(--foreground), transparent var(--tone-line)); }
 .ui-input > span { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ui-input > svg { width: var(--icon); height: var(--icon); flex: none; color: var(--muted-foreground); }
 .ui-input[data-bare] { width: auto; height: auto; border: 0; background: transparent; padding: var(--space-xs) 0; color: var(--muted-foreground); }
@@ -90,9 +90,9 @@
 /* Slider: the label is a section title, the value an item (one that opens,
    when it opens the levels); track, thumb and ticks follow density. */
 .ui-slider { display: grid; gap: var(--space-sm); padding: var(--space-sm) var(--space-md) var(--space-md); }
-.ui-slider[data-disabled] { opacity: 0.5; }
+.ui-slider[data-disabled] { opacity: var(--opacity-disabled); }
 .ui-slider-head { display: flex; align-items: center; justify-content: space-between; gap: var(--row-gap); }
-.ui-slider-value { display: inline-flex; align-items: center; gap: var(--space-xs); border: 0; border-radius: var(--radius-control); background: transparent; padding: var(--space-xs) var(--space-xs) var(--space-xs) var(--space-sm); color: color-mix(in oklch, var(--foreground), transparent 38%); font-size: var(--text-caption); font-weight: var(--weight-rest); }
+.ui-slider-value { display: inline-flex; align-items: center; gap: var(--space-xs); border: 0; border-radius: var(--radius-control); background: transparent; padding: var(--space-xs) var(--space-xs) var(--space-xs) var(--space-sm); color: color-mix(in oklch, var(--foreground), transparent var(--tone-quiet)); font-size: var(--text-caption); font-weight: var(--weight-rest); }
 .ui-slider-value[data-opens]:is(:hover, :focus-visible) { background: var(--tint); color: var(--foreground); }
 .ui-slider-value svg { width: var(--icon-xs); height: var(--icon-xs); color: var(--muted-foreground); }
 .ui-slider-input { --thumb: var(--control-2xs); --track: var(--track-size); width: 100%; height: var(--thumb); margin: 0; appearance: none; -webkit-appearance: none; background: transparent; cursor: pointer; touch-action: pan-y; }
@@ -102,7 +102,7 @@
 .ui-slider-input::-moz-range-progress { height: var(--track); border-radius: var(--radius-round); background: var(--foreground); }
 .ui-slider-input::-webkit-slider-thumb { width: var(--thumb); height: var(--thumb); margin-top: calc((var(--track) - var(--thumb)) / 2); border: var(--stroke) solid var(--background); border-radius: var(--radius-round); background: var(--foreground); -webkit-appearance: none; }
 .ui-slider-input::-moz-range-thumb { width: var(--thumb); height: var(--thumb); border: var(--stroke) solid var(--background); border-radius: var(--radius-round); background: var(--foreground); }
-.ui-slider-input:focus-visible::-webkit-slider-thumb { filter: brightness(1.1); }
+.ui-slider-input:focus-visible::-webkit-slider-thumb { filter: brightness(var(--brighten)); }
 .ui-slider-ticks { display: flex; justify-content: space-between; margin-top: calc(-1 * var(--track-size)); padding-inline: calc((var(--thumb, var(--control-2xs)) - var(--stroke)) / 2); }
 .ui-slider-ticks i { width: var(--stroke); height: var(--track-size); border-radius: var(--radius-round); background: var(--tint); }
 .ui-slider-ticks i[data-reached] { background: var(--muted-foreground); }

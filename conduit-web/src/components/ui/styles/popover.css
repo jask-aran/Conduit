@@ -17,7 +17,7 @@
 .ui-search::placeholder { color: var(--muted-foreground); }
 .ui-empty { padding: var(--space-md); color: var(--muted-foreground); font-size: var(--text-caption); }
 
-.ui-row { display: flex; width: 100%; min-height: var(--row-min); align-items: center; gap: var(--row-gap); border: 0; border-radius: var(--radius-control); background: transparent; padding: var(--row-pad); color: color-mix(in oklch, var(--foreground), transparent 32%); font-size: var(--text-row); font-weight: var(--weight-rest); line-height: var(--leading-text); text-align: left; cursor: default; user-select: none; outline: none; }
+.ui-row { display: flex; width: 100%; min-height: var(--row-min); align-items: center; gap: var(--row-gap); border: 0; border-radius: var(--radius-control); background: transparent; padding: var(--row-pad); color: color-mix(in oklch, var(--foreground), transparent var(--tone-rest)); font-size: var(--text-row); font-weight: var(--weight-rest); line-height: var(--leading-text); text-align: left; cursor: default; user-select: none; outline: none; }
 /* The icon slot: every leading mark -- a lucide icon, a workspace glyph, a
    harness mark -- fills one icon-sized square. */
 .ui-icon { display: inline-grid; width: var(--icon); height: var(--icon); flex: none; place-items: center; }
@@ -35,18 +35,18 @@
 .ui-row[data-checked], [data-surface="frost"] .ui-row[data-checked] { color: var(--foreground); font-weight: var(--weight-current); }
 /* Over frost the row reads a touch heavier and brighter (text over frost reads thinner). */
 /* The row role, one for every row (list, menu, palette, settings, the sidebar): over frost a touch heavier and brighter, since text there reads thinner. */
-[data-surface="frost"] :is(.ui-row, .ui-nav-row) { color: color-mix(in oklch, var(--foreground), transparent 28%); font-weight: var(--weight-lift); }
+[data-surface="frost"] :is(.ui-row, .ui-nav-row) { color: color-mix(in oklch, var(--foreground), transparent var(--tone-rest)); font-weight: var(--weight-lift); }
 /* Icons muted at rest, white on the cursor; a current icon is drawn an eighth of its size (3 units), not a tenth. */
 .ui-row > .ui-icon { color: var(--muted-foreground); }
 .ui-row:is([data-highlighted], [data-checked]) > .ui-icon { color: var(--foreground); }
 :is(.ui-row[data-checked] > .ui-icon, .ui-nav-row[aria-current="page"] > .ui-nav-icon, .ui-tabs > [aria-selected="true"]) svg.lucide { stroke-width: 3; }
 /* A harness mark rests greyed with its row and shows its colour on the cursor or the current row. */
-.ui-row .harness-mark { filter: grayscale(1); opacity: .78; }
+.ui-row .harness-mark { filter: grayscale(1); opacity: var(--opacity-rest); }
 .ui-row:is([data-highlighted], [data-checked]) .harness-mark { filter: none; opacity: 1; }
-.ui-row[data-disabled], [data-surface="frost"] .ui-row[data-disabled] { pointer-events: none; color: color-mix(in oklch, var(--foreground), transparent 62%); text-decoration: line-through var(--stroke-thin); }
+.ui-row[data-disabled], [data-surface="frost"] .ui-row[data-disabled] { pointer-events: none; color: color-mix(in oklch, var(--foreground), transparent var(--tone-faint)); text-decoration: line-through var(--stroke-thin); }
 .ui-row[data-disabled] > small { text-decoration: none; }
 .ui-row[data-destructive], .ui-row[data-destructive] > .ui-icon { color: var(--destructive); }
-.ui-row[data-destructive][data-highlighted] { background: color-mix(in oklch, var(--destructive), transparent 85%); }
+.ui-row[data-destructive][data-highlighted] { background: color-mix(in oklch, var(--destructive), transparent var(--tone-wash)); }
 
 .ui-row > .ui-row-end { display: inline-flex; flex: none; margin-left: auto; margin-right: calc((var(--u-icon) - var(--control-sm)) / 2); }
 
@@ -58,7 +58,7 @@
 
 /* A field row: its name muted at the row role (never uppercase), its value after it. */
 .ui-row[data-field] > .ui-label { color: var(--muted-foreground); }
-.ui-row[data-field] > small { color: color-mix(in oklch, var(--foreground), transparent 45%); font-family: inherit; font-size: var(--text-row); }
+.ui-row[data-field] > small { color: color-mix(in oklch, var(--foreground), transparent var(--tone-quiet)); font-family: inherit; font-size: var(--text-row); }
 /* A rule between groups of an app menu's rows, where a library menu has sections. */
 .ui-menu .ui-rule { height: var(--hairline); margin: var(--frost-inset) calc(-1 * var(--frost-inset)); border: 0; background: var(--tint); }
 /* A menu keeps its caller's class for its width and placement; its shell
