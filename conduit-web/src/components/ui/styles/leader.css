@@ -1,6 +1,6 @@
 /* Leader: a small overlay card above the composer, measured from the app's (360 wide). */
 .ui-frost.ui-leader { --overlay-width: calc(28.125 * var(--u-space)); }
-.ui-overlay-bar[data-head] { min-height: calc(2.96875 * var(--u-space)); gap: var(--space-md); padding: var(--space-md) var(--space-lg); }
+.ui-overlay-bar[data-head] { min-height: calc(var(--control-sm) + 2 * var(--space-md)); gap: var(--space-md); padding: var(--space-md) var(--space-lg); }
 .ui-leader .ui-keys[data-first] .ui-keycap { color: var(--foreground); }
 /* Crumbs: the leader's path, in the section label's type. */
 .ui-crumbs { display: flex; min-width: 0; flex: 1; align-items: center; justify-content: flex-start; gap: 2px; overflow: hidden; }
