@@ -288,7 +288,6 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
   // Only Incremark reveals a message block by block, and only that reveal needs
   // the tail to be followed by a spring rather than pinned to the bottom.
   const rendererUsesTypewriter = () => isIncremarkRenderer(markdownRenderer());
-  const rendererUsesInertialTailFollow = () => rendererUsesTypewriter();
   // A queued message lives in the composer bubble until the model takes it, so
   // the transcript does not also show it as a sent turn. An answer still
   // arriving keeps its row here: the projection below skips drawing it, but
@@ -343,9 +342,6 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
   let typewriterTailFrame: number | null = null;
   let typewriterTailState: TailFollowState = createTailFollowState();
   let typewriterTailRejoinTimer: number | null = null;
-  let typewriterTailLastTarget: number | null = null;
-  let typewriterTailLastExpected: number | null = null;
-  let typewriterTailTargetDeltaEma = 0;
   let programmaticScrollTop: number | null = null;
   let previousScrollTop: number | null = null;
   // Paired with previousScrollTop: an upward move is only a reader if the
@@ -410,10 +406,10 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
   // timer just waits for the gesture to go quiet before the spring resumes.
   const scheduleTypewriterTailRejoin = () => {
     cancelTypewriterTailRejoin();
-    if (!rendererUsesInertialTailFollow() || !following()) return;
+    if (!rendererUsesTypewriter() || !following()) return;
     typewriterTailRejoinTimer = window.setTimeout(() => {
       typewriterTailRejoinTimer = null;
-      if (!rendererUsesInertialTailFollow() || !following()) return;
+      if (!rendererUsesTypewriter() || !following()) return;
       setTypewriterTailOwner("app", true);
       requestTypewriterTailFollow();
     }, 120);
@@ -489,13 +485,10 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
   const liveTail = () => Boolean(props.chat.activeGeneration()) || performance.now() < liveTailUntil;
   createEffect(on(() => Boolean(props.chat.activeGeneration()), (live, was) => { if (was && !live) liveTailUntil = performance.now() + 1500; }, { defer: true }));
   const resumeTypewriterTailFollow = () => {
-    if (!rendererUsesInertialTailFollow()) return;
+    if (!rendererUsesTypewriter()) return;
     cancelTypewriterTailRejoin();
     setFollowing(true);
-    setTypewriterTailOwner("app", true);
-    typewriterTailLastTarget = null;
-    typewriterTailLastExpected = null;
-    typewriterTailTargetDeltaEma = 0;
+    typewriterTailState = createTailFollowState(currentViewportScrollTop(), "app");
     requestTypewriterTailFollow();
   };
   // Sending and Scroll to latest are both a request to watch the answer arrive: the view follows from the press, and the
@@ -505,12 +498,12 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
     setFollowing(true);
     glideToLatest(() => {
       setFollowing(true);
-      if (rendererUsesInertialTailFollow()) resumeTypewriterTailFollow();
+      if (rendererUsesTypewriter()) resumeTypewriterTailFollow();
       else scrollBottom();
     });
   };
   const requestTypewriterTailFollow = () => {
-    if (!rendererUsesInertialTailFollow() || !following() || typewriterTailState.owner !== "app") return;
+    if (!rendererUsesTypewriter() || !following() || typewriterTailState.owner !== "app") return;
     if (!liveTail()) {
       const targetScrollTop = viewportMaxScrollTop();
       setViewportScrollTop(targetScrollTop);
@@ -523,15 +516,9 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
     }
     typewriterTailFrame = requestAnimationFrame((now) => {
       typewriterTailFrame = null;
-      if (!rendererUsesInertialTailFollow() || !following() || typewriterTailState.owner !== "app") return;
+      if (!rendererUsesTypewriter() || !following() || typewriterTailState.owner !== "app") return;
 
-      const scrollHeight = viewport.scrollHeight;
-      const maxScrollTop = usedMaxScrollTop({
-        scrollHeight,
-        clientHeight: viewport.clientHeight,
-        scrollTop: viewport.scrollTop,
-      });
-      const targetScrollTop = maxScrollTop;
+      const targetScrollTop = viewportMaxScrollTop();
       // A persisted transcript is already complete. Keep its tail pinned while
       // lazy Markdown resolves; the spring is for live output, where the target
       // moves continuously and a snap would fight the display cadence.
@@ -540,46 +527,21 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
         typewriterTailState = rebaseTailFollowState(typewriterTailState, targetScrollTop, "app");
       }
       const currentScrollTop = viewport.scrollTop;
-      const previousTarget = typewriterTailLastTarget;
-      const targetDeltaPx = previousTarget == null ? 0 : targetScrollTop - previousTarget;
-      const browserCompensationPx = typewriterTailLastExpected == null
-        ? 0
-        : currentScrollTop - typewriterTailLastExpected;
-      const uncompensatedTargetDeltaPx = targetDeltaPx - browserCompensationPx;
-      const previousTargetDeltaEma = typewriterTailTargetDeltaEma;
-      const targetDeltaMagnitude = Math.abs(uncompensatedTargetDeltaPx);
-      const feedForwardTargetDeltaPx = previousTargetDeltaEma > 0
-        ? Math.sign(uncompensatedTargetDeltaPx) * Math.min(targetDeltaMagnitude, previousTargetDeltaEma * 2)
-        : 0;
-      if (targetDeltaMagnitude > 0) {
-        typewriterTailTargetDeltaEma = previousTargetDeltaEma > 0
-          ? previousTargetDeltaEma * 0.75 + targetDeltaMagnitude * 0.25
-          : targetDeltaMagnitude;
-      }
-      const frame = advanceTailFollow(typewriterTailState, targetScrollTop, now, currentScrollTop, feedForwardTargetDeltaPx);
+      const frame = advanceTailFollow(typewriterTailState, targetScrollTop, now, currentScrollTop);
       typewriterTailState = frame.state;
-      // Its last steps are under a pixel, and written rounded they did not move it: it stopped short of the bottom
-      // (8px) until a snap closed the gap. A step that would round to nothing takes a whole pixel, never past the target.
-      let nextScrollTop = frame.nextScrollTop;
-      const step = nextScrollTop - currentScrollTop;
-      if (Math.abs(step) > 0.05 && Math.round(nextScrollTop) === Math.round(currentScrollTop)) {
-        nextScrollTop = step > 0 ? Math.min(targetScrollTop, currentScrollTop + 1) : Math.max(targetScrollTop, currentScrollTop - 1);
-      }
-      const shouldWrite = !frame.rebased && Math.abs(nextScrollTop - currentScrollTop) > 0.05;
-      if (shouldWrite) setViewportScrollTop(nextScrollTop);
+      const nextScrollTop = frame.nextScrollTop;
+      if (!frame.rebased && Math.abs(nextScrollTop - currentScrollTop) > 0.05) setViewportScrollTop(nextScrollTop);
       loadEarlier();
 
-      typewriterTailLastTarget = targetScrollTop;
-      typewriterTailLastExpected = nextScrollTop;
       const stillMoving = Math.abs(targetScrollTop - nextScrollTop) > 0.25 || Math.abs(typewriterTailState.velocity) > 1;
-      if (following() && rendererUsesInertialTailFollow() && typewriterTailState.owner === "app" && stillMoving) {
+      if (following() && rendererUsesTypewriter() && typewriterTailState.owner === "app" && stillMoving) {
         requestTypewriterTailFollow();
       }
     });
   };
   const settleInitialLayout = (epoch: number) => {
     if (epoch !== layoutEpoch || !following()) return;
-    if (rendererUsesInertialTailFollow()) requestTypewriterTailFollow();
+    if (rendererUsesTypewriter()) requestTypewriterTailFollow();
     else scrollBottomNow();
   };
   // Highlighting is a settled-content concern, so it runs off the idle queue and
@@ -611,7 +573,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
   let displayScrollQueued = false;
   const settleAfterMarkdown = (root?: HTMLElement) => {
     scheduleHighlight(root);
-    if (rendererUsesInertialTailFollow()) {
+    if (rendererUsesTypewriter()) {
       requestTypewriterTailFollow();
       return;
     }
@@ -639,7 +601,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
     // Filling a short page is not the reader scrolling up: it stays on the
     // latest, and the turns above arrive out of sight.
     const filling = settled && maxScrollTop < HISTORY_LOAD_TOP_PX;
-    if (rendererUsesInertialTailFollow() && !filling) {
+    if (rendererUsesTypewriter() && !filling) {
       cancelTypewriterTailRejoin();
       setTypewriterTailOwner("user", true);
       setFollowing(false);
@@ -701,7 +663,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
       previousUserMessageId = trailingUserId;
       const epoch = layoutEpoch;
       if (loaded && restoreScrollPosition(loaded, epoch)) return;
-      if (rendererUsesInertialTailFollow()) resumeTypewriterTailFollow();
+      if (rendererUsesTypewriter()) resumeTypewriterTailFollow();
       else {
         setFollowing(true);
         scrollBottom();
@@ -740,7 +702,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
     // The two renderers lay a message out differently, so every cached block
     // size the virtualizer is holding is stale.
     resetVisibilityPreservingPosition();
-    if (rendererUsesInertialTailFollow()) resumeTypewriterTailFollow();
+    if (rendererUsesTypewriter()) resumeTypewriterTailFollow();
     else {
       cancelTypewriterTailRejoin();
       cancelTypewriterTailFrame();
@@ -791,7 +753,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
       const cardTop = detail.previousTop;
       // Folding shortens the content; stop following so the tail spring does
       // not read the shrink as a reason to chase the bottom.
-      if (following() && rendererUsesInertialTailFollow()) setTypewriterTailOwner("user", true);
+      if (following() && rendererUsesTypewriter()) setTypewriterTailOwner("user", true);
       const previousOverflowAnchor = viewport.style.overflowAnchor;
       viewport.style.overflowAnchor = "none";
       requestAnimationFrame(() => {
@@ -807,7 +769,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
     // clicked, as if the reader had scrolled up to it already open.
     const onDisclosureToggle = () => {
       if (!following()) return;
-      if (rendererUsesInertialTailFollow()) { cancelTypewriterTailRejoin(); setTypewriterTailOwner("user", true); }
+      if (rendererUsesTypewriter()) { cancelTypewriterTailRejoin(); setTypewriterTailOwner("user", true); }
       setFollowing(false);
     };
     thread.addEventListener(DISCLOSURE_TOGGLE_EVENT, onDisclosureToggle);
@@ -846,8 +808,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
       if (latestButtonAnchorFrame != null) return;
       latestButtonAnchorFrame = requestAnimationFrame(syncLatestButtonAnchor);
     };
-    const scrollLatest = () => viewport.scrollTo({ top: viewport.scrollHeight, behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
-    setLatestScroller(scrollLatest);
+    setLatestScroller(followLatest);
     onCleanup(() => setLatestScroller(null));
     window.addEventListener("conduit:voice-captions", scheduleLatestButtonAnchor);
     onCleanup(() => window.removeEventListener("conduit:voice-captions", scheduleLatestButtonAnchor));
@@ -1011,7 +972,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
     transcriptVisibility = mountTranscriptVisibility(viewport, thread, (delta) => setViewportScrollTop(viewport.scrollTop + delta, false));
     const claimUserScroll = () => {
       if (empty()) return;
-      if (!rendererUsesInertialTailFollow()) return;
+      if (!rendererUsesTypewriter()) return;
       programmaticScrollTop = null;
       cancelTypewriterTailRejoin();
       setTypewriterTailOwner("user", true);
@@ -1055,12 +1016,12 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
         cancelTypewriterTailRejoin();
         if (!wasProgrammatic) claimUserScroll();
       }
-      if (!rendererUsesInertialTailFollow() || typewriterTailState.owner === "user" || !following()) {
+      if (!rendererUsesTypewriter() || typewriterTailState.owner === "user" || !following()) {
         setFollowing(decision.following);
       } else if (decision.direction === "up") {
         setFollowing(false);
       }
-      if (rendererUsesInertialTailFollow() && decision.rejoin) scheduleTypewriterTailRejoin();
+      if (rendererUsesTypewriter() && decision.rejoin) scheduleTypewriterTailRejoin();
       loadEarlier();
     };
     const onTouchStart = () => claimUserScroll();
@@ -1089,7 +1050,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
       // layer already preserves a visible anchor; tail-following the same
       // resize would move scrollTop a second time and make blocks jump.
       if (transcriptVisibility?.refreshing() || transcriptVisibility?.moving()) return;
-      if (rendererUsesInertialTailFollow()) requestTypewriterTailFollow();
+      if (rendererUsesTypewriter()) requestTypewriterTailFollow();
       else scrollBottom();
     });
     resizeObserver.observe(thread);
