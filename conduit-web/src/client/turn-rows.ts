@@ -145,7 +145,6 @@ export interface LiveProjectionIndex {
   answerBlockIdentities: Map<string, Set<string>>;
   answerRowKeys: Map<string, string>;
   firstAnswerAssistantId: string | null;
-  activeBlockCount: number;
 }
 
 // Returns the index as well as the message: the caller needs both, and asking
@@ -254,12 +253,10 @@ export function buildLiveProjectionIndex(
   let firstAnswerAssistantId: string | null = null;
   let answerIndex = 0;
   let segmentIndex = 0;
-  let activeBlockCount = 0;
 
   for (const assistant of generation.assistantMessages) {
     const answerBlocks = new Set<string>();
     for (const block of assistant.blocks) {
-      activeBlockCount += 1;
       if (block.kind === "thinking" || block.kind === "narration"
         || (block.kind === "text" && classifications[block.identity] === "interim")) {
         blockLocations.set(block.identity, { kind: "trace", rowKey: traceRowKey, segmentIndex });
@@ -291,7 +288,6 @@ export function buildLiveProjectionIndex(
     answerBlockIdentities,
     answerRowKeys,
     firstAnswerAssistantId,
-    activeBlockCount,
   };
 }
 

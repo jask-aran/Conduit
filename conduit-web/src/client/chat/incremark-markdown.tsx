@@ -1,7 +1,6 @@
 import { createComputed, createEffect, createMemo, createSelector, createRenderEffect, createSignal, For, Index, onCleanup, onMount, Show, untrack } from "solid-js";
 import { createIncremarkParser, type DisplayBlock, type ParsedBlock } from "@incremark/core";
 import katex from "katex";
-import { getHarnessRecorder, recordHarnessMetric } from "@/client/harness-metrics";
 import type { ChatMarkdownProps } from "./markdown";
 import { ExternalLinkDialog } from "./external-link-dialog";
 import { copyWithFeedback, createExternalLinkController } from "./markdown-actions";
@@ -196,26 +195,6 @@ function inlineText(nodes: MarkdownNode[]) {
     for (const child of node.children) text += child.value || "";
   }
   return text;
-}
-
-function summarizeTableAst(blocks: ParsedBlock[]) {
-  const tables: Array<{ blockId: string; rows: number; cells: number; rowCells: number[] }> = [];
-  const visit = (node: MarkdownNode, blockId: string) => {
-    if (!node || typeof node !== "object") return;
-    if (node.type === "table") {
-      const rows = Array.isArray(node.children) ? node.children : [];
-      const rowCells = rows.map((row: MarkdownNode) => Array.isArray(row?.children) ? row.children.length : 0);
-      tables.push({ blockId, rows: rows.length, cells: rowCells.reduce((total: number, count: number) => total + count, 0), rowCells });
-    }
-    if (Array.isArray(node.children)) for (const child of node.children) visit(child, blockId);
-  };
-  for (const block of blocks) visit(block.node, block.id);
-  return {
-    tableCount: tables.length,
-    rowCount: tables.reduce((total, table) => total + table.rows, 0),
-    cellCount: tables.reduce((total, table) => total + table.cells, 0),
-    tables,
-  };
 }
 
 const sameBlockList = (previous: ParsedBlock[], next: ParsedBlock[]) =>
@@ -516,23 +495,7 @@ function LinkNode(props: { node: MarkdownNode | NodeAccessor; context: RendererC
 
 const MATH_HTML_CACHE_LIMIT = 512;
 const mathHtmlCache = new Map<string, string>();
-const mathRenderQueue = new MathRenderQueue({
-  onMetrics: (metrics) => {
-    const recorder = getHarnessRecorder();
-    if (!recorder) return;
-    recordHarnessMetric(recorder, {
-      stage: "markdown-math-queue",
-      renderer: "incremark-math",
-      queuePolicy: metrics.policy,
-      queueEvent: metrics.event,
-      queueDepth: metrics.queueDepth,
-      oldestJobAgeMs: metrics.oldestJobAgeMs,
-      processedJobs: metrics.processedJobs,
-      cancelledJobs: metrics.cancelledJobs,
-      frameBudgetMs: metrics.frameBudgetMs,
-    });
-  },
-});
+const mathRenderQueue = new MathRenderQueue();
 
 function mathCacheKey(node: MarkdownNode, source: string) {
   return `${node?.type === "math" ? "display" : "inline"}\u0000${source}`;
@@ -662,8 +625,6 @@ function MathNode(props: { node: MarkdownNode | NodeAccessor; fadeOnce?: () => b
     }
     let renderedHtml: string | null = null;
     let valid = false;
-    const recorder = getHarnessRecorder();
-    const startedAt = recorder ? performance.now() : 0;
     const render = (tex: string) => {
       try {
         const out = katex.renderToString(tex, { displayMode: current?.type === "math", throwOnError: true });
@@ -684,16 +645,6 @@ function MathNode(props: { node: MarkdownNode | NodeAccessor; fadeOnce?: () => b
       // the valid preview that follows it. Keep the stable wrapper mounted,
       // but let the cell grow when KaTeX first accepts the candidate.
       renderedHtml = lastValidHtml;
-    }
-    if (recorder) {
-      recordHarnessMetric(recorder, {
-        stage: "markdown-katex",
-        renderer: props.renderer?.() || "incremark",
-        katexMs: performance.now() - startedAt,
-        katexCallCount: 1,
-        katexSourceCharacters: candidate.length,
-        katexHtmlCharacters: renderedHtml.length,
-      });
     }
     if (valid) {
       lastValidHtml = renderedHtml;
@@ -1190,28 +1141,6 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
     onDisplayBusyChange: (busy) => {
       setDisplayBusy(busy);
     },
-    onMetrics: (metrics) => {
-      const recorder = getHarnessRecorder();
-      if (!recorder) return;
-      recordHarnessMetric(recorder, {
-        stage: "markdown-typewriter",
-        renderer: rendererId(),
-        typewriter: true,
-        sourceVisibleCharacters: metrics.sourceVisibleCharacters,
-        displayedVisibleCharacters: metrics.displayedVisibleCharacters,
-        backlogCharacters: metrics.backlogCharacters,
-        backlogAgeMs: metrics.backlogAgeMs,
-        pendingBlockCount: metrics.pendingBlockCount,
-        completedBlockCount: metrics.completedBlockCount,
-        charsPerFrame: metrics.charsPerFrame,
-        frameIntervalMs: metrics.frameIntervalMs,
-        frameBudgetMs: metrics.frameBudgetMs,
-        frameWorkMs: metrics.frameWorkMs,
-        frameWorkEmaMs: metrics.frameWorkEmaMs,
-        terminal: metrics.terminal,
-        nativeTransformer: typewriterController.getDebugState(),
-      });
-    },
   });
   onCleanup(() => typewriterController.destroy());
 
@@ -1245,8 +1174,6 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
       : null;
     const parserSource = projection?.source || source;
     const normalizeBlock = (block: ParsedBlock) => projection ? restoreParsedBlock(block, projection.sentinel, source) : block;
-    const recorder = getHarnessRecorder();
-    const parseStartedAt = recorder ? performance.now() : 0;
     let parserMode = "none";
     let update: ReturnType<typeof parser.append> | undefined;
     const updates: Array<ReturnType<typeof parser.append>> = [];
@@ -1295,8 +1222,6 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
       updates.push(update);
       finalised = true;
     }
-    const parsedAt = recorder ? performance.now() : 0;
-    const latestUpdate = updates.at(-1);
     const pendingUpdateBlocks = new Map<string, ParsedBlock>();
     let pendingOffset: number | null = null;
     for (const entry of updates) {
@@ -1455,35 +1380,6 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
       const inlineParser = createIncremarkParser(incremarkParserOptions);
       inlineParser.render(split.pending ? split.stable : source);
       setInlineAst({ ...inlineParser.getAst() });
-    }
-    const reconciledAt = recorder ? performance.now() : 0;
-    if (recorder) {
-      const tableAst = summarizeTableAst(currentBlocks);
-      recordHarnessMetric(recorder, {
-        stage: "markdown-render",
-        renderer: rendererId(),
-        sourceCharacters: source.length,
-        inline: Boolean(props.inline),
-        parseMs: parsedAt - parseStartedAt,
-        sanitiseMs: null,
-        katexCandidate: /(?:\$(?:\$?)[^\n]+\$(?:\$?)|\\\([^\n]+\\\)|\\\[[\s\S]+?\\\])/.test(source),
-        katexMs: null,
-        katexCallCount: 0,
-        katexTimingAvailable: false,
-        katexTimingBlocker: "Incremark adapter KaTeX calls are measured per new AST node",
-        parserMode,
-        pendingBlockCount: latestUpdate?.pending?.length ?? null,
-        completedBlockCount: latestUpdate?.completed?.length ?? null,
-        updatedBlockCount: latestUpdate?.updated?.length ?? null,
-        tableAst,
-      });
-      recordHarnessMetric(recorder, {
-        stage: "markdown-reconcile",
-        renderer: rendererId(),
-        sourceCharacters: source.length,
-        inline: Boolean(props.inline),
-        reconcileMs: reconciledAt - parsedAt,
-      });
     }
     queueMicrotask(() => props.onRendered?.());
   });
