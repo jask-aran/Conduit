@@ -64,6 +64,11 @@ export function chooseFrameBudget(frameIntervalMs = TYPEWRITER_DEFAULT_FRAME_INT
 
 export type FadeDelivery = { end: number; deadline: number };
 
+// One query, read every delivery: making one each time was a parse and a lookup a delta.
+let reducedMotionQuery: MediaQueryList | null | undefined;
+const reducedMotion = () => reducedMotionQuery !== undefined ? reducedMotionQuery
+  : (reducedMotionQuery = typeof matchMedia === "function" ? matchMedia("(prefers-reduced-motion: reduce)") : null);
+
 /**
  * How long one delivery may take to show.
  *
@@ -282,7 +287,10 @@ export class BufferedIncremarkTypewriter {
   }
 
   setBaselineCharacters(characters: number) {
-    this.baselineCharacters = Math.max(0, Math.trunc(characters));
+    const baseline = Math.max(0, Math.trunc(characters));
+    // Asked every delivery; a streamed answer's seeded prefix rarely changes, and each time built the display blocks.
+    if (baseline === this.baselineCharacters) return;
+    this.baselineCharacters = baseline;
     this.emitMetrics(performance.now(), false, 0, this.getDisplayBlocks());
   }
 
@@ -343,7 +351,7 @@ export class BufferedIncremarkTypewriter {
       this.deliveryGapMs = Math.max(gap, (this.deliveryGapMs ?? gap) * FADE_GAP_DECAY);
     }
     this.lastDeliveryAt = now;
-    const reduced = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const reduced = reducedMotion()?.matches ?? false;
     const span = reduced ? 0 : fadeWindow(delta, this.deliveryGapMs);
     // Never sooner than the delivery before it: a few characters just after a burst have a window of a frame or two,
     // and as the steepest deadline sets the rate, theirs released the whole burst in one frame (a thousand characters,
