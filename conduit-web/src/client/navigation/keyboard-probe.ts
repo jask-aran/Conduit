@@ -147,10 +147,6 @@ function draw(): void {
   panel.textContent = events.length ? `${numbers}${run}\n--\n${events.join("\n")}` : `${numbers}${run}`;
 }
 
-export function keyboardRunSummary(): string {
-  return runSummary;
-}
-
 export function reportKeyboardProbe(lines: Record<string, unknown>): void {
   if (!keyboardProbeOn()) return;
   /*

@@ -7,7 +7,7 @@ import { DropdownMenu as KMenu } from "@kobalte/core/dropdown-menu";
 import { ContextMenu as KContextMenu } from "@kobalte/core/context-menu";
 import { Popover as KPopover } from "@kobalte/core/popover";
 import * as KTooltip from "@kobalte/core/tooltip";
-import { ChevronRightIcon, LoaderCircleIcon, SearchIcon, XIcon } from "lucide-solid";
+import { ChevronRightIcon, LoaderCircleIcon, SearchIcon } from "lucide-solid";
 import { useLibrary } from "@/components/ui/swap";
 import { cn } from "@/lib/utils";
 

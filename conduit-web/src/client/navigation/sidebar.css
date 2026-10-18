@@ -121,14 +121,12 @@
   .sidebar-container { height: var(--app-height, 100dvh); }
   .sidebar-context-menu { width: 11rem; max-height: min(70dvh, calc(var(--app-height, 100dvh) - 19.2px)); }
   [data-slot="context-menu-sub-content"].sidebar-context-menu { width: 7rem; }
-  .sidebar-row { min-height: 35.2px; }
   .sidebar-context-menu [role="menuitem"],
   .sidebar-context-menu [role="menuitemradio"] { min-height: 35.2px; }
   .chat-header .mobile-header-leading { display: flex; flex: none; }
   .chat-header .mobile-sidebar-trigger, .chat-header .mobile-new-chat-trigger { display: inline-flex; flex: none; }
-  .conduit-sidebar { position: fixed; inset-block: 0; left: 0; z-index: 55; width: 100vw; background: var(--frame); transform: translateX(-102%); transition: transform var(--panel-motion-duration) var(--panel-motion-easing); }
+  .conduit-sidebar { inset-block: 0; left: 0; background: var(--frame); transform: translateX(-102%); }
   .conduit-sidebar[data-mobile-open="true"] { transform: translateX(0); }
-  .conduit-sidebar[data-state="collapsed"] { width: 100vw; }
   .conduit-sidebar .sidebar-container { width: 100%; padding-top: var(--safe-area-inset-top, env(safe-area-inset-top, 0px)); padding-bottom: var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)); background: var(--frame); overscroll-behavior: contain; }
   .conduit-sidebar .sidebar-content { overscroll-behavior: contain; }
   .conduit-sidebar[data-state="collapsed"] .sidebar-container span,
@@ -273,7 +271,6 @@
   .conduit-sidebar[data-state="collapsed"] .sidebar-empty,
   .conduit-sidebar[data-state="collapsed"] .sidebar-chevron,
   .conduit-sidebar[data-state="collapsed"] [data-sidebar="brand"] { display: initial; }
-  .conduit-sidebar[data-state="collapsed"] [data-sidebar="header"] { justify-content: flex-start; padding: 12px 10px 6px; }
   .conduit-sidebar [data-sidebar="trigger"] { display: inline-flex; }
   /* Pills as the chat header has them: the close button in its own, where the
      open button was, the wordmark on the black beside it, the area toggle on
@@ -307,7 +304,6 @@
 @media (prefers-reduced-motion: reduce) {
   .conduit-sidebar { transition-duration: 0.01ms !important; }
 }
-
 }
 
 .sidebar-area-toggle { position: relative; display: grid; order: 2; flex: none; grid-template-columns: 28px 28px; gap: 2px; margin: 0; padding: 2px; border: 1px solid var(--sidebar-border); border-radius: var(--radius-md); }

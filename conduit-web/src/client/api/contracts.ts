@@ -154,13 +154,6 @@ export interface BackendSessionSummary {
   replayFidelity: "full" | "summary" | "from-now";
 }
 
-export interface BackendSessionDiscovery {
-  implementation: string;
-  replayFidelity: BackendSessionSummary["replayFidelity"];
-  tracked: ChatSummary[];
-  adoptable: BackendSessionSummary[];
-}
-
 export interface HarnessSummary {
   id: "codex" | "chatgpt-web";
   label: string;

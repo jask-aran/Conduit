@@ -216,7 +216,6 @@
   line-height: 1.45;
 }
 
-.terminal-pane-warning,
 .terminal-pane-error {
   position: absolute;
   z-index: 4;
@@ -402,7 +401,6 @@
   line-height: 1.45;
 }
 
-.terminal-pane-warning,
 .terminal-pane-error {
   position: absolute;
   z-index: 4;
@@ -435,7 +433,6 @@
     display: none;
   }
 }
-
 
 }
 

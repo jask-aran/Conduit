@@ -5,19 +5,8 @@ export const MATH_RENDER_REATTACH_FRAME_BUDGET_MS = 5;
 export const MATH_RENDER_STREAM_MAX_JOBS_PER_FRAME = 4;
 export const MATH_RENDER_REATTACH_MAX_JOBS_PER_FRAME = 12;
 
-export type MathRenderQueueMetric = {
-  event: "enqueue" | "cancel" | "frame";
-  policy: MathRenderPolicy | null;
-  queueDepth: number;
-  oldestJobAgeMs: number;
-  processedJobs: number;
-  cancelledJobs: number;
-  frameBudgetMs: number;
-};
-
 type MathRenderJob = {
   policy: MathRenderPolicy;
-  queuedAt: number;
   run: () => void;
   cancelled: boolean;
   completed: boolean;
@@ -27,7 +16,6 @@ type MathRenderQueueOptions = {
   now?: () => number;
   requestFrame?: (callback: FrameRequestCallback) => number;
   cancelFrame?: (handle: number) => void;
-  onMetrics?: (metric: MathRenderQueueMetric) => void;
 };
 
 function defaultRequestFrame(callback: FrameRequestCallback) {
@@ -51,28 +39,27 @@ export class MathRenderQueue {
   private readonly now: () => number;
   private readonly requestFrame: (callback: FrameRequestCallback) => number;
   private readonly cancelFrame: (handle: number) => void;
-  private readonly onMetrics?: (metric: MathRenderQueueMetric) => void;
   private readonly jobs: MathRenderJob[] = [];
   private frameHandle: number | null = null;
-  private cancelledJobs = 0;
+
+  get size() {
+    return this.jobs.length;
+  }
 
   constructor(options: MathRenderQueueOptions = {}) {
     this.now = options.now || (() => performance.now());
     this.requestFrame = options.requestFrame || defaultRequestFrame;
     this.cancelFrame = options.cancelFrame || defaultCancelFrame;
-    this.onMetrics = options.onMetrics;
   }
 
   enqueue(run: () => void, policy: MathRenderPolicy = "stream") {
     const job: MathRenderJob = {
       policy,
-      queuedAt: this.now(),
       run,
       cancelled: false,
       completed: false,
     };
     this.jobs.push(job);
-    this.emitMetrics("enqueue", policy, 0);
     this.schedule();
     let cancelled = false;
     return () => {
@@ -81,8 +68,6 @@ export class MathRenderQueue {
       job.cancelled = true;
       const index = this.jobs.indexOf(job);
       if (index >= 0) this.jobs.splice(index, 1);
-      this.cancelledJobs += 1;
-      this.emitMetrics("cancel", policy, 0);
       if (!this.jobs.length && this.frameHandle != null) {
         this.cancelFrame(this.frameHandle);
         this.frameHandle = null;
@@ -90,21 +75,6 @@ export class MathRenderQueue {
     };
   }
 
-  getMetrics(): MathRenderQueueMetric {
-    const policy = this.jobs[0]?.policy || null;
-    const frameBudgetMs = policy === "reattach"
-      ? MATH_RENDER_REATTACH_FRAME_BUDGET_MS
-      : MATH_RENDER_STREAM_FRAME_BUDGET_MS;
-    return {
-      event: "frame",
-      policy,
-      queueDepth: this.jobs.length,
-      oldestJobAgeMs: this.oldestJobAgeMs(),
-      processedJobs: 0,
-      cancelledJobs: this.cancelledJobs,
-      frameBudgetMs,
-    };
-  }
 
   private schedule() {
     if (this.frameHandle != null || !this.jobs.length) return;
@@ -135,28 +105,5 @@ export class MathRenderQueue {
       next.run();
       processedJobs += 1;
     }
-    this.emitMetrics("frame", policy, processedJobs, frameBudgetMs);
-  }
-
-  private oldestJobAgeMs() {
-    const oldest = this.jobs[0]?.queuedAt;
-    return oldest == null ? 0 : Math.max(0, this.now() - oldest);
-  }
-
-  private emitMetrics(
-    event: MathRenderQueueMetric["event"],
-    policy: MathRenderPolicy | null,
-    processedJobs: number,
-    frameBudgetMs = policy === "reattach" ? MATH_RENDER_REATTACH_FRAME_BUDGET_MS : MATH_RENDER_STREAM_FRAME_BUDGET_MS,
-  ) {
-    this.onMetrics?.({
-      event,
-      policy,
-      queueDepth: this.jobs.length,
-      oldestJobAgeMs: this.oldestJobAgeMs(),
-      processedJobs,
-      cancelledJobs: this.cancelledJobs,
-      frameBudgetMs,
-    });
   }
 }

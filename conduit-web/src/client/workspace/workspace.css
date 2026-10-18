@@ -50,6 +50,14 @@
 .chat-main { flex: 1 1 auto; min-width: 0; }
 .chat-main.workspace-expanded { margin-inline: 0; pointer-events: none; }
 .workspace-layout { position: relative; overflow: hidden; container-type: inline-size; }
+/* A chat is never drawn narrower than it declares (MIN_MAIN_PANE_WIDTH, DESIGN.md "Documents and room"): on a desktop
+   window too narrow for it beside the sidebar, the shell scrolls sideways instead. The layout holds the chat and its
+   margins; its own intrinsic width is no help, as a size container it has none. A phone is full-bleed at any width. */
+@media (--conduit-wide-layout) {
+  .chat-main { min-width: var(--conduit-min-main-pane); }
+  .workspace-layout { min-width: calc(var(--conduit-min-main-pane) + 9.6px); }
+  #root { overflow: auto hidden; }
+}
 .workspace-panel-surface { right: 0; left: auto; width: 100%; transition: width 260ms var(--panel-motion-easing); }
 .workspace-panel-expanded .workspace-panel-surface { width: calc(100cqw - 8px); }
 .workspace-panel-expanded .workspace-resize-handle { display: none; }
@@ -389,11 +397,9 @@
 .workspace-commit-refs code[data-current="true"] { background: var(--accent); color: var(--foreground); }
 .workspace-diff-overview { display: flex; min-height: 112px; flex: 1 1 56%; flex-direction: column; overflow: hidden; }
 .workspace-patch { display: flex; min-height: 0; max-height: 42%; flex: none; flex-direction: column; overflow: hidden; }
-.workspace-source-modes { display: flex; min-width: 0; flex: 1; align-items: center; gap: 2px; }
-.workspace-source-modes button, .workspace-source-actions button { display: flex; min-height: 21px; align-items: center; justify-content: center; gap: 4px; border: 0; border-radius: 4px; background: transparent; padding: 3px 6px; color: var(--muted-foreground); font-size: 8px; }
-.workspace-source-modes button:hover, .workspace-source-modes button:focus-visible, .workspace-source-modes button[aria-selected="true"], .workspace-source-actions button:hover:not(:disabled), .workspace-source-actions button:focus-visible { background: var(--accent); color: var(--foreground); }
-.workspace-source-modes button[aria-selected="true"] { background: var(--accent); color: var(--foreground); }
-.workspace-source-modes svg, .workspace-source-actions svg { width: 11px; height: 11px; }
+.workspace-source-actions button { display: flex; min-height: 21px; align-items: center; justify-content: center; gap: 4px; border: 0; border-radius: 4px; background: transparent; padding: 3px 6px; color: var(--muted-foreground); font-size: 8px; }
+.workspace-source-actions button:hover:not(:disabled), .workspace-source-actions button:focus-visible { background: var(--accent); color: var(--foreground); }
+.workspace-source-actions svg { width: 11px; height: 11px; }
 .workspace-source-header > small { color: var(--muted-foreground); font: 7.6px ui-monospace, SFMono-Regular, Consolas, monospace; white-space: nowrap; }
 .workspace-source-actions { display: flex; flex: none; align-items: center; gap: 1px; }
 .workspace-source-actions button:disabled { opacity: .35; }
@@ -547,22 +553,19 @@
 @media (--conduit-phone-layout) {
   .workspace-rail, .main-split, .workspace-move-toggle { display: none; }
   .workspace-panel-tabs-space { display: flex; }
-  .workspace-panel-header { height: auto; min-height: 32px; flex-wrap: wrap; }
+  .workspace-panel-header { height: auto; flex-wrap: wrap; }
   .workspace-panel-header .settings-segmented { order: 1; flex-basis: 100%; margin-bottom: 4px; }
   .chat-main.workspace-expanded { display: flex; }
   .workspace-expand-toggle { display: none; }
   .workspace-panel {
-    position: fixed;
     inset: 0;
     z-index: 70;
     width: 100vw !important;
     height: 100dvh;
-    margin: 0;
     transform: translateX(100%);
-    transition: transform var(--panel-motion-duration) var(--panel-motion-easing);
   }
   .workspace-panel.workspace-panel-open { margin: 0; transform: translateX(0); }
-  .workspace-panel-surface { width: 100%; border: 0; border-radius: 0; overscroll-behavior: contain; opacity: 1; transform: none; }
+  .workspace-panel-surface { width: 100%; border: 0; overscroll-behavior: contain; opacity: 1; transform: none; }
   .workspace-tree, .workspace-preview, .workspace-diff, .workspace-changes, .workspace-diff-content { overscroll-behavior: contain; }
   .workspace-resize-handle { display: none; }
   .workspace-files { grid-template-rows: minmax(128px, 42%) 1fr; }
@@ -733,7 +736,6 @@
   .workspace-panel, .workspace-panel-surface { transition-duration: 0.01ms !important; }
   .workspace-panel-open .workspace-panel-surface { transform: none; }
 }
-
 }
 /* A shell as a pane's document: the terminal fills the pane, its header
    carrying the pane's swap and close. */

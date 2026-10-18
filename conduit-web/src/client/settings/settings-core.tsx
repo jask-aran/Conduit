@@ -1,12 +1,12 @@
 import { createEffect, createMemo, createSignal, For, lazy, on, onCleanup, onMount, Show } from "solid-js";
 import * as KDialog from "@kobalte/core/dialog";
-import { ActivityIcon, BotIcon, ChevronLeftIcon, ChevronRightIcon, FileTextIcon, XIcon, KeyboardIcon, Mic2Icon, MonitorIcon, SearchIcon, SlidersHorizontalIcon } from "lucide-solid";
+import { ActivityIcon, BotIcon, ChevronLeftIcon, ChevronRightIcon, FileTextIcon, XIcon, KeyboardIcon, Mic2Icon, MonitorIcon, SearchIcon } from "lucide-solid";
 import { CableIcon, CloudIcon, CpuIcon, HandIcon, MicOffIcon, PlayIcon, RefreshCwIcon, RepeatIcon, RotateCcwIcon, SquareIcon } from "lucide-solid";
 import { AboutSettingsFooter } from "./about-settings";
 import { ServersSettingsTile } from "./servers-settings";
 import { DesktopSettingsTile } from "./desktop-settings";
 import { toast } from "solid-sonner";
-import { Button, Field, FieldGroup, FieldLabel, Input, Spinner } from "@/components/primitives";
+import { Button, Field, FieldLabel, Input, Spinner } from "@/components/primitives";
 import { api } from "../api/client";
 import { COMPOSER_SURFACE_OPTIONS, type ComposerSurfaceMode } from "../chat/composer-surface";
 import { MARKDOWN_RENDERER_OPTIONS, type MarkdownRendererId } from "../chat/markdown-settings";
@@ -162,13 +162,6 @@ const sameVoiceSelection = (left: VoiceLocalSelection | null | undefined, right:
   && left.runtimeId === right.runtimeId
   && left.execution === right.execution
   && left.segmentation === right.segmentation);
-const sameVoiceDraft = (left: VoiceDictationSettings, right: VoiceDictationSettings) => left.shortcut === right.shortcut
-  && left.activation === right.activation
-  && left.autoSend === right.autoSend
-  && left.inputDeviceId === right.inputDeviceId
-  && left.inputDeviceLabel === right.inputDeviceLabel
-  && left.captureProfile === right.captureProfile
-  && left.warmMicrophone === right.warmMicrophone;
 // The runtime fields as typed, checked against the ranges the server keeps
 // them in (runtime-settings.js), which it would otherwise clamp to silently.
 type RuntimeDraft = { live: string; generating: string; ttl: string };

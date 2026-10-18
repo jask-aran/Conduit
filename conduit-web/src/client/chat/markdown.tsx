@@ -18,7 +18,6 @@ export type ChatMarkdownProps = {
   // The answer has finished appearing: nothing still revealing or drawing.
   // Only renderers that reveal after the stream ends call it.
   onSettled?: () => void;
-  displayKey?: string;
   renderer?: MarkdownRendererId;
 };
 

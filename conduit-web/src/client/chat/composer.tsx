@@ -2,7 +2,7 @@ import { useLibrary } from "@/components/ui/swap";
 import { PhoneComposer, PillButton, PillField, PillWave } from "@/components/ui";
 import { libraryPiece } from "@/components/ui/swap";
 import { latestAway, scrollToLatest } from "./latest-away";
-import { createEffect, createMemo, createSignal, For, Index, lazy, on, onCleanup, onMount, Show, type JSX } from "solid-js";
+import { createEffect, createMemo, createSignal, For, Index, lazy, on, onCleanup, onMount, Show } from "solid-js";
 import { ArrowDownIcon, ArrowUpIcon, CameraIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, DeleteIcon, KeyboardIcon, MicIcon, TextCursorInputIcon, Undo2Icon, ShieldCheckIcon, SquareIcon, TriangleAlertIcon } from "lucide-solid";
 import { ThinkingOrb } from "./thinking-orb";
 import { PHONE_COMPOSER_CHANGE_EVENT, phoneComposerLayout } from "../preferences/phone-composer";

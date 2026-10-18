@@ -174,6 +174,7 @@ next run, or the next load can hang.
 | `style-snapshot.mjs save <file>` / `diff <a> <b>` | Did a change move anything the app draws? |
 | `gallery-style-diff.mjs <buildA> <buildB> [--ignore --a,--b] [--keys]` | Did a library change move anything in the gallery? Every element's computed style, every family at both densities and the previews, between two `npx vite build --mode gallery --outDir <dir>` builds; no server. A refactor is done when it prints IDENTICAL (or only the custom properties it renamed). |
 | `settle-stability.mjs` | Does a turn hold still as it settles, stops (also from an approval) or takes a steered message? Asserted, no model call; the gate for transcript live/settle changes. A turn a harness ends without stating its outcome is logged in the server journal as `transcript contract: ...`. |
+| `fast-check.mjs [prompt] [out]` | The quick look at a renderer change, in about 4s: one `rich 2000t` loop at 1000 tokens/s, recording the answer's DOM churn (added/removed by kind), every code card shape seen while streaming, and the settled answer (`<out>.html`, `<out>.cards`). Run before and after and `cmp` the files; motion still needs `visibility-guard.mjs`. |
 | `visibility-guard.mjs [prompt] [--phone] [--examples]` | What the transcript's virtualization shows each frame through a long streamed answer scrolled every way a reader and the app do: blank frames, unexplained moves, placeholders back at a different height, any move down while following. Before and after a virtualization or layout change; no count may rise. It reads layout every frame, so it times nothing. |
 | `screen-shift.mjs [prompt] [--phone]` | How the transcript moves on screen while streaming, from the screencast's pixels; nothing runs in the page. Lists every frame that moved down while following, with the time since the last code block opened. |
 | `placeholder-heights.mjs` | Do off-screen blocks hold their real height? |
@@ -184,7 +185,7 @@ next run, or the next load can hang.
 | `dictation-row.mjs` | How the phone composer's row moves as dictation starts and stops, empty and with a draft (synthetic mic). |
 | `send-motion.mjs` | What moves when a message is sent from the phone composer; saves a frame strip. |
 | `stream-budget.mjs` | Tasks over 6.94ms while an answer streams, what ran in them, how evenly the text appeared. Live model call. |
-| `turn-profile.mjs [prompt] [--app \| --phone] [--save <file>]` | Where a streamed Test-profile turn's main-thread time goes, by trace state: % busy, frames, tasks against 6.94ms, rendering by phase, JS self time by function. `--phone` is 412x860 at 2.625x with touch. A run of slow frames whose element counts match their neighbours' is the machine, not the page. Build with source maps for names. |
+| `turn-profile.mjs [prompt] [--app \| --phone] [--save <file>]` | Where a streamed Test-profile turn's main-thread time goes, by trace state: % busy, frames the compositor drew and dropped (the frame rate; main-thread paints a second are not it), tasks against 6.94ms, rendering by phase, JS self time by function. `--phone` is 412x860 at 2.625x with touch. A run of slow frames whose element counts match their neighbours' is the machine, not the page. Build with source maps for names. |
 | `call-counts.mjs [prompt] [--phone] [--match <text>] [--top N]` | How many times each function ran in one streamed turn, per socket message and frame. Counts don't vary run to run, so they state exactly what a change removed. Build with source maps first. |
 | `load-waterfall.mjs [--rtt <ms>] [--cpu 4] [--runs <n>]` | How long the first open takes to its fade, and what it waits on. |
 | `load-profile.mjs [--cpu 4] [--slices]` | What the first open spends its main thread on. Names after `npx vite build --sourcemap`; rebuild without it afterwards. |
@@ -240,7 +241,7 @@ the same prompt always produces the same turn:
 | `1500t` | an answer of exactly 1500 tokens, whatever the level says |
 | `tool`, `3 tools` | that many calls, one a message, then the answer |
 | `narrate` | a sentence of narration before each call |
-| `rich` | realistic text (punctuation past Latin-1, which V8 keeps as two-byte strings, lists, a table, inline and display formulas, code), the thinking typographic prose; plain prompts stream ASCII words |
+| `rich` | realistic text (punctuation past Latin-1, which V8 keeps as two-byte strings, lists, a table, inline and display formulas, a five-line code block and a 137-line source file), the thinking typographic prose; plain prompts stream ASCII words |
 | `approve` | each call asks for approval; denied, it fails with the refusal and the turn goes on, as Pi returns a blocked call |
 | `think`, `think 900` | thinking, 400 tokens or the number given, shared across the turn's messages (`think 900 1500t`) |
 

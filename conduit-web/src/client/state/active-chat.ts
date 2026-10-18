@@ -2,7 +2,6 @@ import { batch, createEffect, createMemo, createSignal, onCleanup, untrack } fro
 import { deriveFineActivity } from "../../activity.js";
 import { api, asList } from "../api/client";
 import { createAgentSession } from "./agent-session";
-import { webSocketUrl } from "../api/transport";
 import { isFoldedTurnEvent, isStructuredGenerationEvent, normalizeLiveEvent } from "../api/live-events";
 import type { FoldedTurnEvent, LiveEvent, RuntimeStateEvent, StructuredGenerationEvent, TurnArtifactSummary } from "../api/live-events";
 import type {
@@ -26,12 +25,9 @@ import type {
   TranscriptDetail,
 } from "../api/contracts";
 import { applyToolOp, applyTranscriptOp, assignToolSeq, isToolOp, replaceMessages, truncateAt } from "../timeline-order";
-import { getHarnessRecorder, recordHarnessMetric } from "../harness-metrics";
 import type { UploadAttachment } from "./attachments";
 import type { DraftsStore } from "./drafts";
-import type { CatalogueStore } from "./catalogue";
 import { type ActiveGenerationView, type LiveGenerationChange } from "../turn-rows";
-import type { ModelSettings } from "./model-settings";
 import type { PermissionSettings } from "./permission-settings";
 import type { ServiceLevelSettings } from "./service-level-settings";
 import type { RuntimeStore } from "./runtime";
@@ -65,9 +61,6 @@ interface LiveOpening {
   onShown?: () => void;
   resolve: () => void;
 }
-
-/** Mirrors the server's SPAWNING_INTENTS; see the note at its only use. */
-const SPAWNING_INTENTS = new Set(["prompt", "continue", "compact", "regenerate", "steer"]);
 
 function generationChangeFor(event: StructuredGenerationEvent | FoldedTurnEvent): LiveGenerationChange {
   const source = event as unknown as UnknownRecord;
@@ -114,22 +107,6 @@ export interface ChatAttachments {
   markAnnounced: (ids: string[]) => void;
   restore: (attachments: Attachment[]) => void;
 }
-
-/** For a chat whose harness owns the model and whose surface carries no files. */
-export const HARNESS_OWNED_MODELS: ChatModels = {
-  model: () => "",
-  effort: () => "",
-  reloadChat: async () => {},
-  select: async () => {},
-};
-
-export const NO_CHAT_ATTACHMENTS: ChatAttachments = {
-  items: () => [],
-  pendingIds: () => [],
-  select: () => {},
-  markAnnounced: () => {},
-  restore: () => {},
-};
 
 /** The slice of the catalogue this store uses: which chat is open, and where. */
 export interface ChatCatalogue {
@@ -458,8 +435,6 @@ export function createActiveChat(options: ActiveChatOptions) {
     // The Solid store mutates in place. Capture the status before apply;
     // reading previous.status afterwards reads the new terminal status too.
     const previousStatus = previous?.status;
-    const recorder = getHarnessRecorder();
-    const reduceStartedAt = recorder ? performance.now() : 0;
     let result: ReturnType<typeof generationStore.apply> | undefined;
     batch(() => {
       // The message that started this turn is the last one the client minted,
@@ -495,59 +470,6 @@ export function createActiveChat(options: ActiveChatOptions) {
         generationStore.clear();
         setActiveGenerationChange(null);
         setActiveGeneration(null);
-      });
-    }
-    if (recorder) {
-      const eventRecord = event as Record<string, unknown>;
-      const nestedBlock = eventRecord.block && typeof eventRecord.block === "object"
-        ? eventRecord.block as Record<string, unknown>
-        : null;
-      const nestedBlocks = Array.isArray(eventRecord.blocks)
-        ? eventRecord.blocks.filter((block): block is Record<string, unknown> => Boolean(block && typeof block === "object"))
-        : [];
-      const messageId = typeof eventRecord.messageId === "string" ? eventRecord.messageId : null;
-      const directContentIndex = Number.isInteger(eventRecord.contentIndex) ? Number(eventRecord.contentIndex) : null;
-      const nestedIndexValue = nestedBlock?.contentIndex;
-      const nestedContentIndex = Number.isInteger(nestedIndexValue) ? Number(nestedIndexValue) : null;
-      const contentIndex = directContentIndex ?? nestedContentIndex;
-      const previousMessage = messageId == null
-        ? null
-        : previous?.assistantMessages.find((message) => message.id === messageId) || null;
-      const nextMessage = messageId == null
-        ? null
-        : next.assistantMessages.find((message) => message.id === messageId) || null;
-      const previousBlock = previousMessage && contentIndex != null
-        ? previousMessage.blocks.find((block) => block.contentIndex === contentIndex) || null
-        : null;
-      const nextBlock = nextMessage && contentIndex != null
-        ? nextMessage.blocks.find((block) => block.contentIndex === contentIndex) || null
-        : null;
-      const selectedIndexValue = nestedBlocks[0]?.contentIndex;
-      const selectedBlock = nestedBlocks.length === 1 && Number.isInteger(selectedIndexValue)
-        ? Number(selectedIndexValue)
-        : null;
-      recordHarnessMetric(recorder, {
-        stage: "client-reduce",
-        eventType: event.type,
-        seq: event.seq,
-        messageId,
-        contentIndex,
-        changedBlock: messageId != null && contentIndex != null
-          ? `${messageId}:${contentIndex}`
-          : messageId != null && selectedBlock != null
-            ? `${messageId}:${selectedBlock}`
-            : null,
-        changeScope: messageId != null && (contentIndex != null || selectedBlock != null)
-          ? "block"
-          : "structural-boundary",
-        boundaryType: messageId != null && (contentIndex != null || selectedBlock != null) ? null : event.type,
-        reduceMs: performance.now() - reduceStartedAt,
-        generationIdentityChanged: previous !== next,
-        assistantMessagesIdentityChanged: previous?.assistantMessages !== next.assistantMessages,
-        messageIdentityChanged: previousMessage !== nextMessage,
-        blockArrayIdentityChanged: previousMessage?.blocks !== nextMessage?.blocks,
-        blockIdentityChanged: previousBlock !== nextBlock,
-        toolExecutionsIdentityChanged: previous?.toolExecutions !== next.toolExecutions,
       });
     }
     currentGeneration = next.id;

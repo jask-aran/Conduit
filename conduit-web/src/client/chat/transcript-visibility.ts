@@ -38,23 +38,14 @@ function intrinsicInlineSize(element: HTMLElement, borderBoxSize: number) {
   return Math.max(0, borderBoxSize - insetsOf(element).inline);
 }
 
-// An observer's entry has the content box itself.
-function blockSize(entry: ResizeObserverEntry) {
-  const content = entry.contentBoxSize?.[0]?.blockSize;
-  return content ?? intrinsicBlockSize(entry.target as HTMLElement, entry.target.getBoundingClientRect().height);
-}
-
-function inlineSize(entry: ResizeObserverEntry) {
-  const content = entry.contentBoxSize?.[0]?.inlineSize;
-  return content ?? intrinsicInlineSize(entry.target as HTMLElement, entry.target.getBoundingClientRect().width);
-}
-
 const ROW_SELECTOR = '[data-slot="message-scroller-item"]';
 
-// Three observers share the work, and the split is the whole point of this
+// Observers share the work, and the split is the whole point of this
 // module's shape:
 //   - IntersectionObserver decides what is on screen. It is the only thing that
-//     runs while scrolling, and it costs no main-thread layout at all.
+//     runs while scrolling, and it costs no main-thread layout at all. A second
+//     one, its root a viewport taller above, finds the runs far enough up to
+//     leave layout.
 //   - ResizeObserver records each managed block's rendered size so the
 //     placeholder it leaves behind is the right shape.
 //   - MutationObserver keeps the managed set in step with the DOM.
@@ -63,7 +54,6 @@ const ROW_SELECTOR = '[data-slot="message-scroller-item"]';
 // a panel finishing its motion, the viewport resizing. Scrolling never enters
 // it, so transcript length no longer sets the cost of a scroll frame.
 export function mountTranscriptVisibility(
-  transcript: HTMLElement,
   viewport: HTMLElement,
   thread: HTMLElement,
   /** Moves the scroll by this much as the transcript's own scroll: the viewport has no scroll anchoring. */
@@ -88,17 +78,8 @@ export function mountTranscriptVisibility(
   // was seen stale -- a list hidden at the two lines it once had (40px) though measured at three (60px). The measured
   // size is the content box and is kept current: while shown by the size observer, while hidden by remeasure.
   const setIntrinsicSize = (element: HTMLElement, height: number, width: number) => {
-    if (height > 0) {
-      const value = `${height}px`;
-      if (element.style.getPropertyValue(INTRINSIC_SIZE_PROPERTY) !== value) {
-        element.style.setProperty(INTRINSIC_SIZE_PROPERTY, value);
-      }
-    }
-    if (width > 0) {
-      const value = `${width}px`;
-      if (element.style.getPropertyValue(INTRINSIC_INLINE_SIZE_PROPERTY) !== value) {
-        element.style.setProperty(INTRINSIC_INLINE_SIZE_PROPERTY, value);
-      }
+    for (const [property, size] of [[INTRINSIC_SIZE_PROPERTY, height], [INTRINSIC_INLINE_SIZE_PROPERTY, width]] as const) {
+      if (size > 0 && element.style.getPropertyValue(property) !== `${size}px`) element.style.setProperty(property, `${size}px`);
     }
   };
   // Only a shown element is size-observed: a hidden one's size is contained, so it cannot change, and every
@@ -152,9 +133,10 @@ export function mountTranscriptVisibility(
     // Every read before any write: a size written between two reads
     // made the second getComputedStyle recalculate style, once per block --
     // at settlement, once per block of the whole answer.
+    // An observer's entry has the content box itself.
     const sizes = entries
       .filter((entry) => (entry.target as HTMLElement).getAttribute(VISIBILITY_ATTRIBUTE) !== "hidden")
-      .map((entry) => [entry.target as HTMLElement, blockSize(entry), inlineSize(entry)] as const);
+      .map((entry) => [entry.target as HTMLElement, entry.contentBoxSize[0]!.blockSize, entry.contentBoxSize[0]!.inlineSize] as const);
     for (const [element, height, width] of sizes) setIntrinsicSize(element, height, width);
   });
 
@@ -173,6 +155,37 @@ export function mountTranscriptVisibility(
     if (hidden.length) collapseFrom(hidden);
     if (changed) holdRefreshing();
   }, { root: viewport, rootMargin: `${OVERSCAN_PX}px 0px` });
+
+  // Which blocks lie wholly a viewport or more above the reader -- the ones a run may collapse -- told by an observer
+  // whose root reaches a viewport further up, so finding a run reads no layout. Read for it, every block the
+  // observer hid asked the browser to lay the answer out again (210ms over a 14,000-token answer's slow frames).
+  const farAbove = new Set<HTMLElement>();
+  // A run's blocks brought back as the reader nears them report where they are, which collapses nothing: they go
+  // again only when something next hides (the reader moving on), as before.
+  const returning = new Set<HTMLElement>();
+  const farObserver = new IntersectionObserver((entries) => {
+    if (activeIds.size) return;
+    const containers = new Set<HTMLElement>();
+    for (const entry of entries) {
+      const element = entry.target as HTMLElement;
+      if (!managed.has(element)) continue;
+      const quiet = returning.delete(element);
+      if (entry.isIntersecting || entry.boundingClientRect.bottom > (entry.rootBounds?.top ?? 0)) { farAbove.delete(element); continue; }
+      farAbove.add(element);
+      if (!quiet && element.parentElement?.classList.contains("incremark")) containers.add(element.parentElement);
+    }
+    for (const container of containers) collapseAbove(container);
+  }, { root: viewport, rootMargin: "100% 0px 0px 0px" });
+  const observe = (element: HTMLElement) => {
+    visibilityObserver.observe(element);
+    farObserver.observe(element);
+  };
+  const unobserve = (element: HTMLElement) => {
+    visibilityObserver.unobserve(element);
+    farObserver.unobserve(element);
+    farAbove.delete(element);
+    returning.delete(element);
+  };
 
   const cancelRefresh = () => {
     if (measureFrame != null) cancelAnimationFrame(measureFrame);
@@ -205,7 +218,7 @@ export function mountTranscriptVisibility(
 
   const release = (element: HTMLElement) => {
     if (element.getAttribute(VISIBILITY_ATTRIBUTE) === "collapsed" && element.parentElement) expandAbove(element.parentElement);
-    visibilityObserver.unobserve(element);
+    unobserve(element);
     sizeObserver.unobserve(element);
     clear(element);
     managed.delete(element);
@@ -221,7 +234,7 @@ export function mountTranscriptVisibility(
       if (managed.has(element)) continue;
       managed.add(element);
       sizeObserver.observe(element);
-      visibilityObserver.observe(element);
+      observe(element);
     }
     if (next.length) rowElements.set(row, next);
     else rowElements.delete(row);
@@ -230,16 +243,16 @@ export function mountTranscriptVisibility(
   // A hidden block is still in layout: every frame the browser lays out, pre-paints and checks each one, so a long
   // answer's hundreds of them cost most of a late frame's growth (layout 0.34 to 0.62ms, pre-paint 0.14 to 0.29,
   // the paint phase's bookkeeping 0.12 to 0.43). A run of COLLAPSE_BATCH or more hidden blocks wholly a viewport or
-  // more above the reader leaves layout (display: none), its height kept by one box before the first block left
-  // (the container's ::before). It is measured, and corrected by what the first block left moved, so nothing moves.
+  // more above the reader leaves layout (display: none), its height kept as the answer's top padding -- not inherited,
+  // so setting it restyles the answer alone (a custom property restyled every element of it, 15-18ms a collapse). It
+  // is measured, and corrected by what the first block left moved, so nothing moves.
   // The run comes back as hidden blocks -- their placeholders as they were -- once the reader is within half a
   // viewport of it, with the scroll moved by anything that changed while it was out.
   const COLLAPSE_BATCH = 16;
   const collapsedAbove = new Map<HTMLElement, HTMLElement[]>();
   const runIsLeading = (container: HTMLElement, run: HTMLElement[]) => run.every((block, index) => container.children[index] === block);
   const setSpacer = (container: HTMLElement, height: number) => {
-    container.style.setProperty("--collapsed-above", `${Math.max(0, height)}px`);
-    container.setAttribute("data-collapsed-above", "");
+    container.style.paddingTop = `${Math.max(0, height)}px`;
   };
   const expandAbove = (container: HTMLElement) => {
     const run = collapsedAbove.get(container);
@@ -252,10 +265,9 @@ export function mountTranscriptVisibility(
     const before = next?.isConnected ? offset() : null;
     for (const block of run) {
       if (block.getAttribute(VISIBILITY_ATTRIBUTE) === "collapsed") block.setAttribute(VISIBILITY_ATTRIBUTE, "hidden");
-      if (managed.has(block)) visibilityObserver.observe(block);
+      if (managed.has(block)) { observe(block); returning.add(block); }
     }
-    container.removeAttribute("data-collapsed-above");
-    container.style.removeProperty("--collapsed-above");
+    container.style.removeProperty("padding-top");
     if (before == null || !next) return;
     const moved = offset() - before;
     if (Math.abs(moved) > 0.01 && next.getBoundingClientRect().bottom <= viewport.getBoundingClientRect().top) shiftScroll(moved);
@@ -264,12 +276,10 @@ export function mountTranscriptVisibility(
   const collapseAbove = (container: HTMLElement) => {
     const run = collapsedAbove.get(container) ?? [];
     if (!runIsLeading(container, run)) { expandAbove(container); return; }
-    const view = viewport.getBoundingClientRect();
-    const limit = view.top - view.height;
     let end = run.length;
     while (end < container.children.length) {
       const child = container.children[end] as HTMLElement;
-      if (!managed.has(child) || child.getAttribute(VISIBILITY_ATTRIBUTE) !== "hidden" || child.getBoundingClientRect().bottom > limit) break;
+      if (!farAbove.has(child) || child.getAttribute(VISIBILITY_ATTRIBUTE) !== "hidden") break;
       end += 1;
     }
     const next = container.children[end] as HTMLElement | undefined;
@@ -283,7 +293,7 @@ export function mountTranscriptVisibility(
     setSpacer(container, height);
     const added = [...container.children].slice(run.length, end) as HTMLElement[];
     for (const block of added) {
-      visibilityObserver.unobserve(block);
+      unobserve(block);
       block.setAttribute(VISIBILITY_ATTRIBUTE, "collapsed");
     }
     collapsedAbove.set(container, [...run, ...added]);
@@ -451,6 +461,7 @@ export function mountTranscriptVisibility(
     // again -- at settlement, when the fade's word spans leave every hidden block, a layout per block (150ms).
     const viewTop = viewport.getBoundingClientRect().top;
     const rects = [...blocks].map((block) => [block, block.getBoundingClientRect()] as const);
+    const scrollBefore = viewport.scrollTop;
     const above: Array<[HTMLElement, number]> = [];
     for (const [block, rect] of rects) {
       if (!show(block)) continue;
@@ -460,9 +471,23 @@ export function mountTranscriptVisibility(
     }
     let shift = 0;
     for (const [block, height] of above) shift += block.getBoundingClientRect().height - height;
-    if (Math.abs(shift) > 0.01) shiftScroll(shift);
+    // From where the scroll was before any block was shown: one that came back shorter shortened the page, and at its
+    // bottom the browser had already clamped the scroll by as much. Shifted again, the text dropped by it -- the turn's
+    // header losing its latest-step line at Done, 6px on desktop and 9px on a phone, while the answer was followed.
+    if (Math.abs(shift) > 0.01) {
+      const delta = scrollBefore + shift - viewport.scrollTop;
+      if (Math.abs(delta) > 0.01) shiftScroll(delta);
+    }
     holdRefreshing();
   };
+  // A settled answer's fade puts each run of word spans back as the one text node they held: the same text, the same
+  // size. Re-measuring every hidden block for it showed them all at once and laid the answer out (86ms at the end of a
+  // long turn). Streaming adds spans, which this is not.
+  const unwrapsFade = (record: MutationRecord) => record.type === "childList"
+    && (record.target as Element).classList?.contains("stream-text")
+    && record.removedNodes.length > 0
+    && [...record.addedNodes].every((node) => node.nodeType === Node.TEXT_NODE)
+    && [...record.removedNodes].every((node) => node.nodeType === Node.ELEMENT_NODE || node.nodeType === Node.TEXT_NODE);
   const mutationObserver = new MutationObserver((records) => {
     // A collapse commits a large height change in one go. Leaving it to the
     // observers left every cached intrinsic size stale for a frame or more,
@@ -492,7 +517,7 @@ export function mountTranscriptVisibility(
       const hidden = target?.closest<HTMLElement>(`[${VISIBILITY_ATTRIBUTE}="hidden"]`);
       // The block itself counts: a heading losing the caret's placeholder, the last block no longer, is a change to
       // its own children, and kept it 0.6px taller than it was until it was shown.
-      if (hidden && managed.has(hidden)) (changedHidden ??= new Set()).add(hidden);
+      if (hidden && managed.has(hidden) && !unwrapsFade(record)) (changedHidden ??= new Set()).add(hidden);
       if (withinBlock(record)) continue;
       const row = record.target === thread ? null : (record.target as Element).closest?.(ROW_SELECTOR) as HTMLElement | null;
       if (!row) { rows = null; break; }
@@ -512,47 +537,14 @@ export function mountTranscriptVisibility(
   const onVisibility = () => {
     if (document.visibilityState === "hidden") {
       cancelRefresh();
-        // Abandon in-flight panel motions: their end events may never arrive
+      // Abandon in-flight panel motions: their end events may never arrive
       // while hidden, and a stuck activeIds entry would gate every future
       // refresh. Dropping the tracking costs nothing -- the geometry stays.
       activeIds.clear();
-        return;
+      return;
     }
     scheduleRefresh(true);
   };
-  // After a scroll, repair any intersection the observer missed (upward
-  // scrolls were seen to leave a block hidden in view) by observing every
-  // managed block afresh: an observer reports each new target's current state,
-  // computed in the frame's own intersection step. This was a measurePass --
-  // every block's rect read, repeated each frame a block was revealed -- which
-  // on a long transcript put 20-odd frames over budget in one scroll
-  // (docs/design/performance-pass.md, 10).
-  const reobserve = () => {
-    repairTimer = null;
-    if (!fontsReady || activeIds.size) return;
-    for (const element of managed) {
-      if (element.getAttribute(VISIBILITY_ATTRIBUTE) === "collapsed") continue;
-      visibilityObserver.unobserve(element);
-      visibilityObserver.observe(element);
-    }
-  };
-  // A scroll the reader made is repaired as it ends. The tail follow's are not, one by one: it sets the scroll every
-  // frame an answer grows, each set ends a scroll, and every block of the transcript was observed afresh each frame --
-  // a long answer's intersections all recomputed, every frame. Those are repaired once they stop.
-  let repairTimer: number | null = null;
-  let readerScrolled = false;
-  const onReaderInput = () => { readerScrolled = true; };
-  const onScrollEnd = () => {
-    if (repairTimer != null) clearTimeout(repairTimer);
-    repairTimer = null;
-    if (readerScrolled) {
-      readerScrolled = false;
-      reobserve();
-      return;
-    }
-    repairTimer = window.setTimeout(reobserve, 200);
-  };
-  const READER_INPUT = ["wheel", "touchstart", "pointerdown", "keydown"] as const;
   // A scroll could bring hidden blocks into view before the observer, a frame or two behind, showed them -- a wheel's
   // notch, a jump, the glide to the latest message: a frame with a hole in the page. The scroll's own handler runs
   // before that frame is drawn, so it shows whatever hidden block lies in the strip the scroll uncovered (the whole
@@ -596,9 +588,7 @@ export function mountTranscriptVisibility(
   };
   window.addEventListener(PANEL_GEOMETRY_MOTION_EVENT, onMotion);
   document.addEventListener("visibilitychange", onVisibility);
-  viewport.addEventListener("scrollend", onScrollEnd);
   viewport.addEventListener("scroll", onScroll, { passive: true });
-  for (const type of READER_INPUT) window.addEventListener(type, onReaderInput, { capture: true, passive: true });
   mutationObserver.observe(thread, {
     childList: true,
     subtree: true,
@@ -628,13 +618,11 @@ export function mountTranscriptVisibility(
       expandAll();
       window.removeEventListener(PANEL_GEOMETRY_MOTION_EVENT, onMotion);
       document.removeEventListener("visibilitychange", onVisibility);
-      viewport.removeEventListener("scrollend", onScrollEnd);
       viewport.removeEventListener("scroll", onScroll);
-      for (const type of READER_INPUT) window.removeEventListener(type, onReaderInput, { capture: true });
-      if (repairTimer != null) clearTimeout(repairTimer);
       mutationObserver.disconnect();
       viewportObserver.disconnect();
       visibilityObserver.disconnect();
+      farObserver.disconnect();
       sizeObserver.disconnect();
       cancelRefresh();
         for (const element of managed) clear(element);

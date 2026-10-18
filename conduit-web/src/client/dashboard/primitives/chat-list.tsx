@@ -150,12 +150,6 @@ export function CompactHeading(props: { label: string; count: number; where?: st
   return <h2 class="split-compact-heading">{props.label}<small>{props.count}</small><Show when={props.where}><span>{props.where}</span></Show></h2>;
 }
 
-/** The profiles the given chats were started with, in the catalogue's order. */
-export function profilesInUse<T extends { templateId?: string }>(templates: Array<{ id: string; label: string; implementation?: string }>, chats: T[]) {
-  const used = new Set(chats.map((chat) => chat.templateId).filter(Boolean));
-  return templates.filter((template) => used.has(template.id));
-}
-
 export function ListSearch(props: { label: string; onClick: () => void }) {
   return <button type="button" aria-label={props.label} title={props.label} onClick={props.onClick}><SearchIcon /></button>;
 }

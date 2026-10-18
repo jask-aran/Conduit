@@ -1,7 +1,6 @@
 import { createComputed, createEffect, createMemo, createSelector, createRenderEffect, createSignal, For, Index, onCleanup, onMount, Show, untrack } from "solid-js";
 import { createIncremarkParser, type DisplayBlock, type ParsedBlock } from "@incremark/core";
 import katex from "katex";
-import { getHarnessRecorder, recordHarnessMetric } from "@/client/harness-metrics";
 import type { ChatMarkdownProps } from "./markdown";
 import { ExternalLinkDialog } from "./external-link-dialog";
 import { copyWithFeedback, createExternalLinkController } from "./markdown-actions";
@@ -12,7 +11,7 @@ import { createSyntheticMathPreviewNode, repairSyntheticMathSource, trimUnfinish
 import { conduitMathPlugin } from "./incremark-math-extension";
 import { BufferedIncremarkTypewriter, visibleAstCharacters } from "./incremark-typewriter";
 import { MathRenderQueue, type MathRenderPolicy } from "./incremark-math-queue";
-import { morphHtml } from "./morph-html";
+import { morphHtml, morphLines } from "./morph-html";
 import { markFadeIn, patchMathTree, renderMathTree } from "./katex-patch";
 import { readStoredMath, storeMath } from "./math-html-store";
 import { citationHost, resolveMarkdownUrl } from "./markdown-security";
@@ -34,7 +33,6 @@ type RendererContext = {
   requestExternalLink: (url: string, trigger?: HTMLElement) => void;
   deferMath: () => boolean;
   mathRenderPolicy: () => MathRenderPolicy;
-  rendererId: () => string;
   onMathBusyChange: (busy: boolean) => void;
   onPendingPlaceholderChange: (delta: number) => void;
   /** Newly shown words fade in as spans; only the streamed blocks set it. */
@@ -43,7 +41,15 @@ type RendererContext = {
   fadeMath?: () => boolean;
   /** False once the message has settled and its last fade is over. */
   fadeLive?: () => boolean;
+  fenceHandoff?: FenceHandoff;
 };
+
+/**
+ * An open fence's lines, passed to the code block that replaces it when the fence closes. The two are different
+ * cards in different places, and the block built all of a long file's lines again from nothing (a 137-line file:
+ * ~700 elements styled and laid out in the frame it settled). The lines are the same, so it takes the fence's own.
+ */
+type FenceHandoff = { current: { code: HTMLElement; highlighter: StreamingCodeHighlighter; text: string; language: string; released: boolean } | null };
 
 /** Text-node field: characters of this node before it were already on screen. */
 const FADE_FROM = "__conduitFadeFrom";
@@ -151,6 +157,13 @@ const MARKER_ONLY_LINE = /^[ \t]*[-*+#>=_~`.):|\d][-*+#>=_~`.):|\d \t]*$/;
 
 // Only the last line is read: a pattern anchored at the end but not the start was tried from every offset of the
 // whole message, every delta.
+function commonPrefixLength(left: string, right: string) {
+  const length = Math.min(left.length, right.length);
+  let index = 0;
+  while (index < length && left.charCodeAt(index) === right.charCodeAt(index)) index += 1;
+  return index;
+}
+
 function holdMarkerLine(source: string) {
   const lineStart = source.lastIndexOf("\n") + 1;
   return MARKER_ONLY_LINE.test(source.slice(lineStart)) ? source.slice(0, lineStart) : source;
@@ -166,10 +179,6 @@ function sameDefinitions(previous: Record<string, Definition>, next: Record<stri
   });
 }
 
-function safeUrl(value: unknown): { href: string; external: boolean } | null {
-  return resolveMarkdownUrl(value);
-}
-
 function inlineText(nodes: MarkdownNode[]) {
   let text = "";
   for (const node of nodes) {
@@ -181,26 +190,6 @@ function inlineText(nodes: MarkdownNode[]) {
     for (const child of node.children) text += child.value || "";
   }
   return text;
-}
-
-function summarizeTableAst(blocks: ParsedBlock[]) {
-  const tables: Array<{ blockId: string; rows: number; cells: number; rowCells: number[] }> = [];
-  const visit = (node: MarkdownNode, blockId: string) => {
-    if (!node || typeof node !== "object") return;
-    if (node.type === "table") {
-      const rows = Array.isArray(node.children) ? node.children : [];
-      const rowCells = rows.map((row: MarkdownNode) => Array.isArray(row?.children) ? row.children.length : 0);
-      tables.push({ blockId, rows: rows.length, cells: rowCells.reduce((total: number, count: number) => total + count, 0), rowCells });
-    }
-    if (Array.isArray(node.children)) for (const child of node.children) visit(child, blockId);
-  };
-  for (const block of blocks) visit(block.node, block.id);
-  return {
-    tableCount: tables.length,
-    rowCount: tables.reduce((total, table) => total + table.rows, 0),
-    cellCount: tables.reduce((total, table) => total + table.cells, 0),
-    tables,
-  };
 }
 
 const sameBlockList = (previous: ParsedBlock[], next: ParsedBlock[]) =>
@@ -217,11 +206,7 @@ function readNodes(value: NodeList) {
   return typeof value === "function" ? value() : value;
 }
 
-function InlineNodes(props: { nodes: NodeList; context: RendererContext }) {
-  return <Index each={readNodes(props.nodes)}>{(node) => <AstNode node={node} context={props.context} />}</Index>;
-}
-
-function BlockNodes(props: { nodes: NodeList; context: RendererContext }) {
+function Nodes(props: { nodes: NodeList; context: RendererContext }) {
   return <Index each={readNodes(props.nodes)}>{(node) => <AstNode node={node} context={props.context} />}</Index>;
 }
 
@@ -406,7 +391,7 @@ function DisplayBlockNodes(props: { blocks: () => DisplayBlock[]; context: Rende
     const previousNode = props.history.get(block.id);
     const stableNode = shareUnchanged(previousNode, type === "table" ? preserveAppendOnlyTable(previousNode, currentNode) : currentNode);
     props.history.set(block.id, stableNode);
-    if (!props.context.fadeWords?.() || !props.context.fadeLive?.()) return stableNode;
+    if (!props.context.fadeWords?.()) return stableNode;
     let fade = props.shown.get(block.id);
     if (!fade) props.shown.set(block.id, fade = { shown: 0, reveals: [] });
     const now = performance.now();
@@ -447,14 +432,26 @@ function DisplayBlockNodes(props: { blocks: () => DisplayBlock[]; context: Rende
       // could therefore never pass.
       return isTail(current.id) ? renderBlockNode(display) : display;
     });
-    return <Show when={block()}><AstNode node={node} context={props.context} /></Show>;
+    // Word spans exist only while there is a fade to run. A block no longer being written puts plain text back once
+    // its last word has faded in, so the answer does not keep an element per word -- 6,000 late in a long answer,
+    // laid out and restyled with every frame -- and does not swap them all out in one go when it settles (31ms).
+    const [faded, setFaded] = createSignal(false);
+    const context: RendererContext = { ...props.context, fadeLive: () => !faded() };
+    createEffect(() => {
+      if (faded() || isTail(id) || !props.context.fadeWords?.()) return;
+      const last = props.shown.get(id)?.reveals.at(-1)?.[1];
+      // The spans outlive the longest fade that could still be running.
+      const timer = setTimeout(() => setFaded(true), last == null ? 0 : Math.max(0, last + streamFadeMs() + 20 - performance.now()));
+      onCleanup(() => clearTimeout(timer));
+    });
+    return <Show when={block()}><AstNode node={node} context={context} /></Show>;
   }}</For>;
 }
 
 function LinkNode(props: { node: MarkdownNode | NodeAccessor; context: RendererContext; reference?: () => Definition | undefined }) {
   const node = () => readNode(props.node);
   const reference = () => props.reference?.();
-  const target = createMemo(() => safeUrl(reference()?.url || node()?.url));
+  const target = createMemo(() => resolveMarkdownUrl(reference()?.url || node()?.url));
   // The citation test walks the link's inline children. It is read from four
   // attribute positions below, so it is computed once rather than per read.
   const labelText = createMemo(() => inlineText(node()?.children || []));
@@ -468,7 +465,7 @@ function LinkNode(props: { node: MarkdownNode | NodeAccessor; context: RendererC
   });
   const label = () => reference() === undefined && node()?.type === "linkReference"
     ? `[${labelText()}][${node()?.identifier || node()?.label || ""}]`
-    : <InlineNodes nodes={() => node()?.children || []} context={props.context} />;
+    : <Nodes nodes={() => node()?.children || []} context={props.context} />;
   const content = () => host() ?? label();
   return <Show when={target()} fallback={label()}>
     {(resolved) => <Show when={!props.context.inline} fallback={label()}>
@@ -489,23 +486,7 @@ function LinkNode(props: { node: MarkdownNode | NodeAccessor; context: RendererC
 
 const MATH_HTML_CACHE_LIMIT = 512;
 const mathHtmlCache = new Map<string, string>();
-const mathRenderQueue = new MathRenderQueue({
-  onMetrics: (metrics) => {
-    const recorder = getHarnessRecorder();
-    if (!recorder) return;
-    recordHarnessMetric(recorder, {
-      stage: "markdown-math-queue",
-      renderer: "incremark-math",
-      queuePolicy: metrics.policy,
-      queueEvent: metrics.event,
-      queueDepth: metrics.queueDepth,
-      oldestJobAgeMs: metrics.oldestJobAgeMs,
-      processedJobs: metrics.processedJobs,
-      cancelledJobs: metrics.cancelledJobs,
-      frameBudgetMs: metrics.frameBudgetMs,
-    });
-  },
-});
+const mathRenderQueue = new MathRenderQueue();
 
 function mathCacheKey(node: MarkdownNode, source: string) {
   return `${node?.type === "math" ? "display" : "inline"}\u0000${source}`;
@@ -546,11 +527,7 @@ function rememberMathHtml(key: string, html: string) {
   mathHtmlCache.set(key, html);
 }
 
-function scheduleMathRender(run: () => void, policy: MathRenderPolicy) {
-  return mathRenderQueue.enqueue(run, policy);
-}
-
-function MathNode(props: { node: MarkdownNode | NodeAccessor; fadeOnce?: () => boolean; defer?: () => boolean; policy?: () => MathRenderPolicy; renderer?: () => string; onBusyChange?: (busy: boolean) => void }) {
+function MathNode(props: { node: MarkdownNode | NodeAccessor; fadeOnce?: () => boolean; defer?: () => boolean; policy?: () => MathRenderPolicy; onBusyChange?: (busy: boolean) => void }) {
   const node = () => readNode(props.node);
   const [html, setHtml] = createSignal("");
   const [type, setType] = createSignal<string | undefined>();
@@ -635,8 +612,6 @@ function MathNode(props: { node: MarkdownNode | NodeAccessor; fadeOnce?: () => b
     }
     let renderedHtml: string | null = null;
     let valid = false;
-    const recorder = getHarnessRecorder();
-    const startedAt = recorder ? performance.now() : 0;
     const render = (tex: string) => {
       try {
         const out = katex.renderToString(tex, { displayMode: current?.type === "math", throwOnError: true });
@@ -657,16 +632,6 @@ function MathNode(props: { node: MarkdownNode | NodeAccessor; fadeOnce?: () => b
       // the valid preview that follows it. Keep the stable wrapper mounted,
       // but let the cell grow when KaTeX first accepts the candidate.
       renderedHtml = lastValidHtml;
-    }
-    if (recorder) {
-      recordHarnessMetric(recorder, {
-        stage: "markdown-katex",
-        renderer: props.renderer?.() || "incremark",
-        katexMs: performance.now() - startedAt,
-        katexCallCount: 1,
-        katexSourceCharacters: candidate.length,
-        katexHtmlCharacters: renderedHtml.length,
-      });
     }
     if (valid) {
       lastValidHtml = renderedHtml;
@@ -723,7 +688,7 @@ function MathNode(props: { node: MarkdownNode | NodeAccessor; fadeOnce?: () => b
       // queued. Clearing the span here makes every streamed partial flash
       // blank before KaTeX completes, which is most visible on mobile.
       setBusy(true);
-      cancelJob = scheduleMathRender(() => renderCurrent(current, source, version), props.policy?.() || "stream");
+      cancelJob = mathRenderQueue.enqueue(() => renderCurrent(current, source, version), props.policy?.() || "stream");
       return;
     }
     renderCurrent(current, source, version);
@@ -744,20 +709,63 @@ function MathNode(props: { node: MarkdownNode | NodeAccessor; fadeOnce?: () => b
   return <span ref={wrapper} class={type() === "math" ? "incremark-math-block" : "incremark-math-inline"} style={{ "min-height": type() === "math" && previewMinHeight() > 0 ? `${previewMinHeight()}px` : undefined }} />;
 }
 
-function CodeNode(props: { node: MarkdownNode | NodeAccessor }) {
+function CodeNode(props: { node: MarkdownNode | NodeAccessor; handoff?: FenceHandoff }) {
   const node = () => readNode(props.node);
-  const language = () => normalizeCodeLanguage(node()?.lang);
-  const text = () => String(node()?.value || "");
+  return <CodeCard text={() => String(node()?.value || "")} language={() => node()?.lang} handoff={props.handoff} />;
+}
+
+/**
+ * A code card, settled or still being written (`pending`, a fence the stream has not closed). A pending card is
+ * plain to the delegated click handler (no data-expand-code) and wears the streaming-pending classes while
+ * `streaming`; otherwise the two are the same card.
+ */
+function CodeCard(props: { text: () => string; language: () => string | undefined; pending?: boolean; streaming?: boolean; handoff?: FenceHandoff }) {
+  const language = () => normalizeCodeLanguage(props.language());
+  // Whole lines colour as they complete; the line still being written stays
+  // plain so its colours do not change under the reader.
+  const highlighter = new StreamingCodeHighlighter();
+  // A block that closes a fence starts from the lines the fence highlighted for good.
+  if (!props.pending && props.handoff?.current) highlighter.continueFrom(props.handoff.current.highlighter);
+  const highlighted = createMemo(() => {
+    highlighterReady();
+    return highlighter.render(props.text(), language(), Boolean(props.streaming));
+  });
+  // A growing fence folds on the same rule as a settled one, and at the same
+  // moment it crosses the threshold -- waiting for the closing fence let a
+  // ten-line limit run to fifty before it took effect. Folded, the card is
+  // the only thing still moving on a transcript that has stopped scrolling,
+  // so the expand label counts the hidden lines as they arrive.
+  const collapse = useCodeBlockCollapse();
   // Expanding by hand is a decision about this block, so it outlives later
   // preference changes and any re-evaluation of the collapse default.
   const [userExpanded, setUserExpanded] = createSignal(false);
-  const collapse = useCodeBlockCollapse();
-  const state = createMemo(() => codeBlockState(text(), collapse.mode(), collapse.threshold(), false));
+  const state = createMemo(() => codeBlockState(props.text(), collapse.mode(), collapse.threshold(), false));
   const collapsed = () => state().collapsed && !userExpanded();
-  const highlighter = new StreamingCodeHighlighter();
-  const highlighted = createMemo(() => {
-    highlighterReady();
-    return highlighter.render(text(), language(), false);
+  const settled = !props.pending || undefined;
+  let pre: HTMLPreElement | undefined;
+  let code = document.createElement("code");
+  // A fence offers its lines as it grows; a block takes them in its first render, which runs after the update that
+  // closed the fence has removed it -- never from a fence still on screen, whose card would go blank.
+  const offered: FenceHandoff["current"] = props.pending && props.handoff ? (props.handoff.current = { code, highlighter, text: "", language: "", released: false }) : null;
+  if (offered) onCleanup(() => { offered.released = true; });
+  let first = !props.pending;
+  createRenderEffect(() => {
+    const lines = highlighted();
+    if (first) {
+      first = false;
+      const fence = props.handoff?.current;
+      if (fence?.released && fence.language === language() && props.text().startsWith(fence.text)) {
+        props.handoff!.current = null;
+        // Run before the card's markup was made (outside an update), the markup inserts the adopted element itself.
+        pre?.replaceChild(fence.code, code);
+        code = fence.code;
+      }
+    }
+    morphLines(code, lines);
+    if (offered) {
+      offered.text = props.text().trimEnd();
+      offered.language = language();
+    }
   });
   // Folding removes a lot of height at once. Tell the transcript so it can hold
   // this card still and re-measure, instead of leaving stale placeholders.
@@ -768,24 +776,25 @@ function CodeNode(props: { node: MarkdownNode | NodeAccessor }) {
     if (card) queueMicrotask(() => publishCodeBlockToggle(card, previousTop));
   };
   return <div
-    class="artifact"
+    class={props.streaming ? "artifact streaming-pending streaming-pending-fence" : "artifact"}
     data-language={language()}
+    data-streaming-pending={props.streaming ? "fence" : undefined}
     data-lines={state().lines}
     data-collapsible={state().collapsible ? "true" : undefined}
     data-collapsed={collapsed() ? "true" : undefined}
-    data-user-expanded={userExpanded() ? "true" : undefined}
+    data-user-expanded={settled && userExpanded() ? "true" : undefined}
   >
     <div class="artifact-header">
       <span>{language()}</span>
       <span class="artifact-actions">
-        <CodeCopyButton text={text} />
+        <CodeCopyButton text={props.text} />
         <Show when={state().collapsible}>
           {/* Pinned with the header, so it stays reachable part-way down a
               block the footer button has long since scrolled past. */}
           <button
             type="button"
             class="artifact-toggle"
-            data-expand-code
+            data-expand-code={settled && ""}
             aria-label={collapsed() ? "Expand code" : "Collapse code"}
             aria-expanded={collapsed() ? "false" : "true"}
             onClick={(event) => toggle(event.currentTarget)}
@@ -793,13 +802,12 @@ function CodeNode(props: { node: MarkdownNode | NodeAccessor }) {
         </Show>
       </span>
     </div>
-    {/* Morphed by the renderer rather than rewritten from outside, so a later
-        render cannot wipe the highlighting; morphed rather than innerHTML, so
-        a streaming block keeps its finished lines instead of rebuilding every
-        line on every token. */}
-    <pre><code ref={(element) => createRenderEffect(() => morphHtml(element, highlighted()))} /></pre>
+    {/* Morphed by the renderer rather than rewritten from outside, so a later render cannot wipe the highlighting, and
+        so a growing block keeps its finished lines: rewritten, every line of a long fence was built and laid out
+        again each frame it grew (3-4ms of layout a frame for a 137-line file). */}
+    <pre ref={pre}>{code}</pre>
     <Show when={state().collapsible}>
-      <button type="button" class="artifact-expand" data-expand-code data-expand-label onClick={(event) => toggle(event.currentTarget)}>
+      <button type="button" class="artifact-expand" data-expand-code={settled && ""} data-expand-label={settled && ""} onClick={(event) => toggle(event.currentTarget)}>
         {collapsed() ? state().expandLabel : codeBlockCollapseLabel()}
       </button>
     </Show>
@@ -824,69 +832,6 @@ function CodeCopyButton(props: { text: () => string }) {
     data-copy-code
     onClick={() => void copyWithFeedback(props.text(), button)}
   ><span class="artifact-copy-label">Copy</span></button>;
-}
-
-function PendingConstruct(props: { pending: StreamingPending; streaming: boolean }) {
-  const pending = () => props.pending;
-  if (pending().kind === "fence") {
-    const language = () => normalizeCodeLanguage(pending().language);
-    // Whole lines colour as they complete; the line still being written stays
-    // plain so its colours do not change under the reader.
-    const highlighter = new StreamingCodeHighlighter();
-    const highlighted = createMemo(() => {
-      highlighterReady();
-      return highlighter.render(pending().body, language(), props.streaming);
-    });
-    // A growing fence folds on the same rule as a settled one, and at the same
-    // moment it crosses the threshold -- waiting for the closing fence let a
-    // ten-line limit run to fifty before it took effect. Folded, the card is
-    // the only thing still moving on a transcript that has stopped scrolling,
-    // so the expand label counts the hidden lines as they arrive.
-    const collapse = useCodeBlockCollapse();
-    const [userExpanded, setUserExpanded] = createSignal(false);
-    const state = createMemo(() => codeBlockState(pending().body, collapse.mode(), collapse.threshold(), false));
-    const collapsed = () => state().collapsed && !userExpanded();
-    const toggle = (control: HTMLElement) => {
-      const card = control.closest<HTMLElement>(".artifact");
-      const previousTop = card?.getBoundingClientRect().top ?? 0;
-      setUserExpanded((value) => !value);
-      if (card) queueMicrotask(() => publishCodeBlockToggle(card, previousTop));
-    };
-    return <div
-      class={props.streaming ? "artifact streaming-pending streaming-pending-fence" : "artifact"}
-      data-language={language()}
-      data-streaming-pending={props.streaming ? "fence" : undefined}
-      data-lines={state().lines}
-      data-collapsible={state().collapsible ? "true" : undefined}
-      data-collapsed={collapsed() ? "true" : undefined}
-    >
-      <div class="artifact-header">
-        <span>{language()}</span>
-        <span class="artifact-actions">
-          <CodeCopyButton text={() => pending().body} />
-          <Show when={state().collapsible}>
-            <button
-              type="button"
-              class="artifact-toggle"
-              aria-label={collapsed() ? "Expand code" : "Collapse code"}
-              aria-expanded={collapsed() ? "false" : "true"}
-              onClick={(event) => toggle(event.currentTarget)}
-            />
-          </Show>
-        </span>
-      </div>
-      <pre><code innerHTML={highlighted()} /></pre>
-      <Show when={state().collapsible}>
-        <button type="button" class="artifact-expand" onClick={(event) => toggle(event.currentTarget)}>
-          {collapsed() ? state().expandLabel : codeBlockCollapseLabel()}
-        </button>
-      </Show>
-    </div>;
-  }
-  const className = () => `streaming-pending ${pending().kind === "math-block" ? "streaming-pending-math-block" : "streaming-pending-math-inline"}`;
-  return pending().kind === "math-block"
-    ? <div class={className()} data-streaming-pending={props.streaming ? pending().kind : undefined} aria-hidden="true" />
-    : <span class={className()} data-streaming-pending={props.streaming ? pending().kind : undefined} aria-hidden="true" />;
 }
 
 /**
@@ -928,8 +873,8 @@ function TableNode(props: { node: MarkdownNode | NodeAccessor; context: Renderer
 function TableRow(props: { node: MarkdownNode | NodeAccessor; context: RendererContext; header?: boolean }) {
   const node = () => readNode(props.node);
   return <tr><Index each={node()?.children || []}>{(cell) => props.header
-    ? <th><InlineNodes nodes={() => cell()?.children || []} context={props.context} /><PendingCaret node={cell} context={props.context} /></th>
-    : <td><InlineNodes nodes={() => cell()?.children || []} context={props.context} /><PendingCaret node={cell} context={props.context} /></td>}
+    ? <th><Nodes nodes={() => cell()?.children || []} context={props.context} /><PendingCaret node={cell} context={props.context} /></th>
+    : <td><Nodes nodes={() => cell()?.children || []} context={props.context} /><PendingCaret node={cell} context={props.context} /></td>}
   </Index></tr>;
 }
 
@@ -977,39 +922,54 @@ function TextNode(props: { node: NodeAccessor; context: RendererContext }) {
 }
 
 /**
- * Words as they are shown: each new one a span that fades in once.
+ * Words as they are shown, each run shown together a span that fades in once.
  *
- * A word keeps its index as the text grows, so a trailing partial word
- * (`wor` to `world`) grows inside the span already fading rather than
- * restarting it. A word from before the node's fade offset -- one remounted by
- * a restructure, not newly shown -- is plain text, unless the reveal that
- * showed it is still fading: then it resumes that fade part way through.
+ * A run keeps its index as the text grows, so a trailing partial word (`wor`
+ * to `world`) grows inside the span already fading rather than restarting it.
+ * Words shown in the same frame fade alike, so they share a span: a burst
+ * showed eight words a frame, and every frame restyled each of the two hundred
+ * spans still fading. A word from before the node's fade offset -- one
+ * remounted by a restructure, not newly shown -- is plain text, unless the
+ * reveal that showed it is still fading: then it resumes that fade part way
+ * through.
  */
 function FadingText(props: { node: NodeAccessor; text: () => string }) {
-  const words = createMemo(() => props.text().match(/\S+\s*|\s+/g) || []);
-  const starts = createMemo(() => {
-    const list = words();
-    const at = new Array<number>(list.length);
-    let offset = 0;
-    for (let index = 0; index < list.length; index += 1) {
-      at[index] = offset;
-      offset += list[index]!.length;
-    }
-    return at;
-  });
-  return <Index each={words()}>{(word, index) => {
-    const node = untrack(props.node);
+  // How each word fades: from its start (0), resumed this many ms in, or not at all (null).
+  const fadeOf = (node: MarkdownNode | undefined, end: number): number | null => {
     const from = node?.[FADE_FROM];
-    if (typeof from !== "number") return <>{word()}</>;
-    const end = untrack(starts)[index]! + untrack(word).length;
-    if (end > from) return <span class="stream-word">{word()}</span>;
-    const absolute = (node[FADE_OFFSET] ?? 0) + end;
-    const reveals: Reveal[] = node[FADE_REVEALS] || [];
+    if (typeof from !== "number") return null;
+    if (end > from) return 0;
+    const absolute = (node![FADE_OFFSET] ?? 0) + end;
     let shownAt: number | null = null;
-    for (const [start, at] of reveals) if (start < absolute) shownAt = at;
+    for (const [start, at] of (node![FADE_REVEALS] || []) as Reveal[]) if (start < absolute) shownAt = at;
     const elapsed = shownAt == null ? Infinity : performance.now() - shownAt;
-    if (elapsed >= streamFadeMs()) return <>{word()}</>;
-    return <span class="stream-word" style={{ "animation-delay": `-${Math.round(elapsed)}ms` }}>{word()}</span>;
+    return elapsed >= streamFadeMs() ? null : Math.max(1, Math.round(elapsed));
+  };
+  // Runs start at a word index; a new one where new words start or their fade differs. Only appended to while the
+  // text grows, so a run already on screen keeps its span.
+  const starts: number[] = [];
+  const fades: Array<number | null> = [];
+  let counted = 0;
+  const runs = createMemo(() => {
+    const words = props.text().match(/\S+\s*|\s+/g) || [];
+    while (starts.length && starts.at(-1)! >= words.length) { starts.pop(); fades.pop(); }
+    if (words.length > counted) {
+      const node = untrack(props.node);
+      let end = 0;
+      for (let index = 0; index < words.length; index += 1) {
+        end += words[index]!.length;
+        if (index < counted) continue;
+        const fade = fadeOf(node, end);
+        if (index === counted || fade !== fades.at(-1)) { starts.push(index); fades.push(fade); }
+      }
+    }
+    counted = words.length;
+    return starts.map((start, run) => words.slice(start, starts[run + 1] ?? words.length).join(""));
+  });
+  return <Index each={runs()}>{(text, run) => {
+    const fade = fades[run];
+    if (fade == null) return <>{text()}</>;
+    return <span class="stream-word" style={fade ? { "animation-delay": `-${fade}ms` } : undefined}>{text()}</span>;
   }}</Index>;
 }
 
@@ -1024,19 +984,19 @@ function AstNodeContent(props: { node: NodeAccessor; context: RendererContext })
   const node = props.node;
   switch (node().type) {
     case "text": return <TextNode node={node} context={props.context} />;
-    case "strong": return <strong data-markdown="strong"><InlineNodes nodes={() => node()?.children || []} context={props.context} /></strong>;
-    case "emphasis": return <em><InlineNodes nodes={() => node()?.children || []} context={props.context} /></em>;
-    case "delete": return <del><InlineNodes nodes={() => node()?.children || []} context={props.context} /></del>;
+    case "strong": return <strong data-markdown="strong"><Nodes nodes={() => node()?.children || []} context={props.context} /></strong>;
+    case "emphasis": return <em><Nodes nodes={() => node()?.children || []} context={props.context} /></em>;
+    case "delete": return <del><Nodes nodes={() => node()?.children || []} context={props.context} /></del>;
     case "inlineCode": return <code>{node()?.value || ""}</code>;
     case "inlineMath":
-    case "math": return <MathNode node={node} fadeOnce={() => Boolean(props.context.fadeMath?.() && props.context.fadeLive?.())} defer={props.context.deferMath} policy={props.context.mathRenderPolicy} renderer={props.context.rendererId} onBusyChange={props.context.onMathBusyChange} />;
+    case "math": return <MathNode node={node} fadeOnce={() => Boolean(props.context.fadeMath?.() && props.context.fadeLive?.())} defer={props.context.deferMath} policy={props.context.mathRenderPolicy} onBusyChange={props.context.onMathBusyChange} />;
     case "break": return <br />;
     case "link": return <LinkNode node={node} context={props.context} />;
     case "linkReference": return <LinkNode node={node} context={props.context} reference={() => props.context.definitions()[node()?.identifier]} />;
     case "image":
     case "imageReference": return null;
     case "heading": {
-      const children = <><InlineNodes nodes={() => node()?.children || []} context={props.context} /><PendingCaret node={node} context={props.context} /></>;
+      const children = <><Nodes nodes={() => node()?.children || []} context={props.context} /><PendingCaret node={node} context={props.context} /></>;
       if (node()?.depth === 1) return <h1>{children}</h1>;
       if (node()?.depth === 2) return <h2>{children}</h2>;
       if (node()?.depth === 3) return <h3>{children}</h3>;
@@ -1044,21 +1004,21 @@ function AstNodeContent(props: { node: NodeAccessor; context: RendererContext })
       if (node()?.depth === 5) return <h5>{children}</h5>;
       return <h6>{children}</h6>;
     }
-    case "paragraph": return <p><InlineNodes nodes={() => node()?.children || []} context={props.context} /><PendingCaret node={node} context={props.context} /></p>;
+    case "paragraph": return <p><Nodes nodes={() => node()?.children || []} context={props.context} /><PendingCaret node={node} context={props.context} /></p>;
     case "list": {
       const children = <Index each={node()?.children || []}>{(item) => <AstNode node={item} context={props.context} />}</Index>;
       return node()?.ordered ? <ol start={node()?.start || undefined}>{children}</ol> : <ul>{children}</ul>;
     }
-    case "listItem": return <li>{node()?.checked !== null && <input type="checkbox" checked={Boolean(node()?.checked)} disabled />}{<BlockNodes nodes={() => node()?.children || []} context={props.context} />}</li>;
-    case "blockquote": return <blockquote><BlockNodes nodes={() => node()?.children || []} context={props.context} /></blockquote>;
-    case "code": return <CodeNode node={node} />;
+    case "listItem": return <li>{node()?.checked !== null && <input type="checkbox" checked={Boolean(node()?.checked)} disabled />}{<Nodes nodes={() => node()?.children || []} context={props.context} />}</li>;
+    case "blockquote": return <blockquote><Nodes nodes={() => node()?.children || []} context={props.context} /></blockquote>;
+    case "code": return <CodeNode node={node} handoff={props.context.fenceHandoff} />;
     case "table": return <TableNode node={node} context={props.context} />;
     case "thematicBreak": return <hr />;
     case "html":
     case "htmlElement":
     case "definition": return null;
-    case "root": return <BlockNodes nodes={() => node()?.children || []} context={props.context} />;
-    default: return node().children ? <BlockNodes nodes={node().children} context={props.context} /> : null;
+    case "root": return <Nodes nodes={() => node()?.children || []} context={props.context} />;
+    default: return node().children ? <Nodes nodes={node().children} context={props.context} /> : null;
   }
 }
 
@@ -1074,7 +1034,7 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
   // the same object for every finished block and a fresh one only for the
   // block being revealed, so identity says what changed; reconcile re-derived
   // that by walking every block's whole tree on every frame.
-  const [displayBlocks, setDisplayBlocksSignal] = createSignal<DisplayBlock[]>([], { equals: false });
+  const [displayBlocks, setDisplayBlocks] = createSignal<DisplayBlock[]>([], { equals: false });
   const [displayBusy, setDisplayBusy] = createSignal(false);
   const [pendingMathRenders, setPendingMathRenders] = createSignal(0);
   const [inlineAst, setInlineAst] = createSignal<MarkdownNode>({ type: "root", children: [] });
@@ -1093,14 +1053,12 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
   let previousParserSource = "";
   let previousTableMathSentinel = "";
   let finalised = false;
-  let previousTypewriter: boolean | null = null;
-  // Block-by-block reveal is what this renderer is; only an inline preview,
-  // which is a single line inside a summary, skips it.
-  const typewriter = () => !props.inline;
-  // Freezing is a message-level guarantee. A one-line preview inside a summary
-  // has no settled state worth protecting, and giving it one would fight the
+  // Whether the source effect has run: a message first seen finished is seeded whole rather than revealed.
+  let started = false;
+  // Block-by-block reveal and freezing are what this renderer is for a message; only an inline preview, a single
+  // line inside a summary, skips them -- it has no settled state worth protecting, and one would fight the
   // summary's own sizing.
-  const freezes = () => !props.inline;
+  const typewriter = !props.inline;
   // The memo deliberately preserves value equality across settlement: settled
   // changing while streaming is already false leaves everything downstream
   // seeing no value change, so nothing takes a terminal render pulse.
@@ -1134,7 +1092,7 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
     setSettled(true);
   };
   createEffect(() => {
-    if (!freezes() || settled()) return;
+    if (!typewriter || settled()) return;
     if (!quiet()) {
       cancelSettlement();
       return;
@@ -1145,40 +1103,12 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
   });
   onCleanup(cancelSettlement);
   createEffect(() => { if (settled()) props.onSettled?.(); });
-  const rendererId = () => "incremark";
-  const setDisplayBlocks = (next: DisplayBlock[]) => {
-    setDisplayBlocksSignal(next);
-  };
   const typewriterController = new BufferedIncremarkTypewriter({
     onChange: (next) => {
       setDisplayBlocks(next);
       queueMicrotask(() => props.onRendered?.());
     },
-    onDisplayBusyChange: (busy) => {
-      setDisplayBusy(busy);
-    },
-    onMetrics: (metrics) => {
-      const recorder = getHarnessRecorder();
-      if (!recorder) return;
-      recordHarnessMetric(recorder, {
-        stage: "markdown-typewriter",
-        renderer: rendererId(),
-        typewriter: true,
-        sourceVisibleCharacters: metrics.sourceVisibleCharacters,
-        displayedVisibleCharacters: metrics.displayedVisibleCharacters,
-        backlogCharacters: metrics.backlogCharacters,
-        backlogAgeMs: metrics.backlogAgeMs,
-        pendingBlockCount: metrics.pendingBlockCount,
-        completedBlockCount: metrics.completedBlockCount,
-        charsPerFrame: metrics.charsPerFrame,
-        frameIntervalMs: metrics.frameIntervalMs,
-        frameBudgetMs: metrics.frameBudgetMs,
-        frameWorkMs: metrics.frameWorkMs,
-        frameWorkEmaMs: metrics.frameWorkEmaMs,
-        terminal: metrics.terminal,
-        nativeTransformer: typewriterController.getDebugState(),
-      });
-    },
+    onDisplayBusyChange: setDisplayBusy,
   });
   onCleanup(() => typewriterController.destroy());
 
@@ -1212,25 +1142,28 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
       : null;
     const parserSource = projection?.source || source;
     const normalizeBlock = (block: ParsedBlock) => projection ? restoreParsedBlock(block, projection.sentinel, source) : block;
-    const recorder = getHarnessRecorder();
-    const parseStartedAt = recorder ? performance.now() : 0;
-    let parserMode = "none";
+    let reparsed = false;
     let update: ReturnType<typeof parser.append> | undefined;
     const updates: Array<ReturnType<typeof parser.append>> = [];
     const extendsPrevious = extendsText(source, previousSource);
-    const preserveTypewriterState = typewriter()
-      && previousTypewriter === true
-      && extendsPrevious;
+    // A text that changes behind its end -- the final message restating the streamed one a character shorter, an
+    // answer ending inside a formula finished with the formula repaired -- no longer extends the last, and starting
+    // over rebuilt every block of it (a 14,000-token answer: 215 blocks, 200ms). A block's id is its offset, so a
+    // parse from scratch gives every block wholly before the change the same block: those are kept, and only what
+    // follows is taken again.
+    const changedAt = !extendsPrevious && previousSource ? commonPrefixLength(source, previousSource) : -1;
+    const keepsBlocks = changedAt > 0 && [...completedById.values()].some((block) => block.endOffset <= changedAt);
+    if (keepsBlocks) for (const [id, block] of [...completedById]) if (block.endOffset > changedAt) completedById.delete(id);
+    const preserveTypewriterState = typewriter && started && (extendsPrevious || keepsBlocks);
     if (source !== previousSource || (tableMath && parserSource !== previousParserSource)) {
       const canAppend = true
         && extendsPrevious
         && extendsText(parserSource, previousParserSource)
         && (!projection || projection.sentinel === previousTableMathSentinel);
       if (canAppend) {
-        parserMode = "append";
         update = parser.append(parserSource.slice(previousParserSource.length));
       } else {
-        parserMode = "render";
+        reparsed = true;
         parser.reset();
         update = parser.append(parserSource);
         if (!preserveTypewriterState) {
@@ -1249,13 +1182,12 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
       finalised = false;
     }
     if (!streaming() && !finalised && !split.pending) {
-      parserMode = parserMode === "none" ? "finalize" : `${parserMode}+finalize`;
+      // Finished in the same pass as a reparse, what is on screen carries on rather than being seeded again.
+      reparsed = false;
       update = parser.finalize();
       updates.push(update);
       finalised = true;
     }
-    const parsedAt = recorder ? performance.now() : 0;
-    const latestUpdate = updates.at(-1);
     const pendingUpdateBlocks = new Map<string, ParsedBlock>();
     let pendingOffset: number | null = null;
     for (const entry of updates) {
@@ -1372,20 +1304,7 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
         .sort((left, right) => left.startOffset - right.startOffset);
     }
 
-    const enabled = typewriter();
-    typewriterController.setEnabled(enabled);
-    if (previousTypewriter === true && !enabled) {
-      typewriterController.flush();
-      displayHistory.clear();
-      displayShown.clear();
-      seededById.clear();
-      setSeededBlocks([]);
-      setDisplayBlocks([]);
-    } else if (enabled && currentBlocks.length && (
-      previousTypewriter === false
-      || (previousTypewriter === null && !streaming())
-      || (parserMode === "render" && previousTypewriter === true && !preserveTypewriterState)
-    )) {
+    if (typewriter && currentBlocks.length && ((!started && !streaming()) || (reparsed && started && !preserveTypewriterState))) {
       displayHistory.clear();
       displayShown.clear();
       seededById.clear();
@@ -1394,7 +1313,7 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
       typewriterController.seed(currentBlocks);
       setDisplayBlocks([]);
     }
-    if (enabled) {
+    if (typewriter) {
       for (const block of currentBlocks) {
         if (seededById.has(block.id)) seededById.set(block.id, block);
       }
@@ -1408,65 +1327,27 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
       typewriterController.observeSource(animated);
       if (animated.length === 0 && currentBlocks.length > 0) typewriterController.completeSeeded();
     }
-    previousTypewriter = enabled;
+    started = true;
 
     if (props.inline) {
       const inlineParser = createIncremarkParser(incremarkParserOptions);
       inlineParser.render(split.pending ? split.stable : source);
       setInlineAst({ ...inlineParser.getAst() });
     }
-    const reconciledAt = recorder ? performance.now() : 0;
-    if (recorder) {
-      const tableAst = summarizeTableAst(currentBlocks);
-      recordHarnessMetric(recorder, {
-        stage: "markdown-render",
-        renderer: rendererId(),
-        sourceCharacters: source.length,
-        inline: Boolean(props.inline),
-        parseMs: parsedAt - parseStartedAt,
-        sanitiseMs: null,
-        katexCandidate: /(?:\$(?:\$?)[^\n]+\$(?:\$?)|\\\([^\n]+\\\)|\\\[[\s\S]+?\\\])/.test(source),
-        katexMs: null,
-        katexCallCount: 0,
-        katexTimingAvailable: false,
-        katexTimingBlocker: "Incremark adapter KaTeX calls are measured per new AST node",
-        parserMode,
-        pendingBlockCount: latestUpdate?.pending?.length ?? null,
-        completedBlockCount: latestUpdate?.completed?.length ?? null,
-        updatedBlockCount: latestUpdate?.updated?.length ?? null,
-        tableAst,
-      });
-      recordHarnessMetric(recorder, {
-        stage: "markdown-reconcile",
-        renderer: rendererId(),
-        sourceCharacters: source.length,
-        inline: Boolean(props.inline),
-        reconcileMs: reconciledAt - parsedAt,
-      });
-    }
     queueMicrotask(() => props.onRendered?.());
   });
 
+  const fenceHandoff: FenceHandoff = { current: null };
   const context: RendererContext = {
+    fenceHandoff,
     definitions,
     inline: Boolean(props.inline),
     requestExternalLink: external.request,
-    deferMath: () => typewriter(),
+    deferMath: () => typewriter,
     mathRenderPolicy: () => streaming() ? "stream" : "reattach",
-    rendererId,
     onMathBusyChange: (busy) => setPendingMathRenders((count) => Math.max(0, count + (busy ? 1 : -1))),
     onPendingPlaceholderChange: (delta) => setPendingPlaceholders((count) => Math.max(0, count + delta)),
   };
-  // Word spans exist only while there is a fade to run. Once the message has
-  // settled and its last fade is over, one render puts plain text back, so a
-  // streamed message does not keep an element per word for the session.
-  const [fadeOver, setFadeOver] = createSignal(false);
-  createEffect(() => {
-    if (!settled()) return;
-    // The spans outlive the longest fade that could still be running.
-    const timer = setTimeout(() => setFadeOver(true), streamFadeMs() + 20);
-    onCleanup(() => clearTimeout(timer));
-  });
   // An open fence's placeholder stays until the code block that replaces it is on screen: when the fence closed it
   // went at once, and the block waited its turn behind the text before it, so the page lost the placeholder's
   // height for those frames and dropped by it. Released when the reveal reaches the block
@@ -1481,21 +1362,21 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
     if (reached || (!streaming() && !displayBusy())) return heldFence = null, current;
     return heldFence;
   });
-  const displayContext: RendererContext = { ...context, fadeWords: () => !props.inline, fadeMath: () => !props.inline && streamMathFade(), fadeLive: () => !fadeOver() };
+  const displayContext: RendererContext = { ...context, fadeWords: () => !props.inline, fadeMath: () => !props.inline && streamMathFade() };
   return <>
-    <div class="chat-markdown" data-renderer={rendererId()} data-inline={props.inline ? "true" : undefined} data-streaming={streaming() || undefined} data-display-busy={displayBusy() || pendingMathRenders() > 0 ? "true" : undefined} data-display-animation-busy={displayBusy() ? "true" : undefined} data-pending-math-renders={pendingMathRenders() > 0 ? String(pendingMathRenders()) : undefined} data-display-key={props.displayKey || undefined} data-settled={settled() ? "true" : undefined}>
+    <div class="chat-markdown" data-renderer="incremark" data-inline={props.inline ? "true" : undefined} data-streaming={streaming() || undefined} data-settled={settled() ? "true" : undefined}>
       <div class="incremark" data-incremark-core="true">
         <Show when={props.inline} fallback={<>
           <ParsedBlockNodes blocks={seededBlocks} context={context} />
           <DisplayBlockNodes blocks={displayBlocks} context={displayContext} history={displayHistory} shown={displayShown} streaming={streaming} />
           <Show when={shownPending()}>
             {(value) => <Show when={value().kind === "fence"}>
-              <PendingConstruct pending={value()} streaming={streaming()} />
+              <CodeCard text={() => value().body} language={() => value().language} pending streaming={streaming()} handoff={fenceHandoff} />
             </Show>}
           </Show>
         </>}>
           <AstNode node={inlineAst()} context={context} />
-          <Show when={pending()}>{(value) => <Show when={value().kind === "fence"}><PendingConstruct pending={value()} streaming={streaming()} /></Show>}</Show>
+          <Show when={pending()}>{(value) => <Show when={value().kind === "fence"}><CodeCard text={() => value().body} language={() => value().language} pending streaming={streaming()} handoff={fenceHandoff} /></Show>}</Show>
         </Show>
       </div>
     </div>
