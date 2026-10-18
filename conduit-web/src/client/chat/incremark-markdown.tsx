@@ -996,39 +996,54 @@ function TextNode(props: { node: NodeAccessor; context: RendererContext }) {
 }
 
 /**
- * Words as they are shown: each new one a span that fades in once.
+ * Words as they are shown, each run shown together a span that fades in once.
  *
- * A word keeps its index as the text grows, so a trailing partial word
- * (`wor` to `world`) grows inside the span already fading rather than
- * restarting it. A word from before the node's fade offset -- one remounted by
- * a restructure, not newly shown -- is plain text, unless the reveal that
- * showed it is still fading: then it resumes that fade part way through.
+ * A run keeps its index as the text grows, so a trailing partial word (`wor`
+ * to `world`) grows inside the span already fading rather than restarting it.
+ * Words shown in the same frame fade alike, so they share a span: a burst
+ * showed eight words a frame, and every frame restyled each of the two hundred
+ * spans still fading. A word from before the node's fade offset -- one
+ * remounted by a restructure, not newly shown -- is plain text, unless the
+ * reveal that showed it is still fading: then it resumes that fade part way
+ * through.
  */
 function FadingText(props: { node: NodeAccessor; text: () => string }) {
-  const words = createMemo(() => props.text().match(/\S+\s*|\s+/g) || []);
-  const starts = createMemo(() => {
-    const list = words();
-    const at = new Array<number>(list.length);
-    let offset = 0;
-    for (let index = 0; index < list.length; index += 1) {
-      at[index] = offset;
-      offset += list[index]!.length;
-    }
-    return at;
-  });
-  return <Index each={words()}>{(word, index) => {
-    const node = untrack(props.node);
+  // How each word fades: from its start (0), resumed this many ms in, or not at all (null).
+  const fadeOf = (node: MarkdownNode | undefined, end: number): number | null => {
     const from = node?.[FADE_FROM];
-    if (typeof from !== "number") return <>{word()}</>;
-    const end = untrack(starts)[index]! + untrack(word).length;
-    if (end > from) return <span class="stream-word">{word()}</span>;
-    const absolute = (node[FADE_OFFSET] ?? 0) + end;
-    const reveals: Reveal[] = node[FADE_REVEALS] || [];
+    if (typeof from !== "number") return null;
+    if (end > from) return 0;
+    const absolute = (node![FADE_OFFSET] ?? 0) + end;
     let shownAt: number | null = null;
-    for (const [start, at] of reveals) if (start < absolute) shownAt = at;
+    for (const [start, at] of (node![FADE_REVEALS] || []) as Reveal[]) if (start < absolute) shownAt = at;
     const elapsed = shownAt == null ? Infinity : performance.now() - shownAt;
-    if (elapsed >= streamFadeMs()) return <>{word()}</>;
-    return <span class="stream-word" style={{ "animation-delay": `-${Math.round(elapsed)}ms` }}>{word()}</span>;
+    return elapsed >= streamFadeMs() ? null : Math.max(1, Math.round(elapsed));
+  };
+  // Runs start at a word index; a new one where new words start or their fade differs. Only appended to while the
+  // text grows, so a run already on screen keeps its span.
+  const starts: number[] = [];
+  const fades: Array<number | null> = [];
+  let counted = 0;
+  const runs = createMemo(() => {
+    const words = props.text().match(/\S+\s*|\s+/g) || [];
+    while (starts.length && starts.at(-1)! >= words.length) { starts.pop(); fades.pop(); }
+    if (words.length > counted) {
+      const node = untrack(props.node);
+      let end = 0;
+      for (let index = 0; index < words.length; index += 1) {
+        end += words[index]!.length;
+        if (index < counted) continue;
+        const fade = fadeOf(node, end);
+        if (index === counted || fade !== fades.at(-1)) { starts.push(index); fades.push(fade); }
+      }
+    }
+    counted = words.length;
+    return starts.map((start, run) => words.slice(start, starts[run + 1] ?? words.length).join(""));
+  });
+  return <Index each={runs()}>{(text, run) => {
+    const fade = fades[run];
+    if (fade == null) return <>{text()}</>;
+    return <span class="stream-word" style={fade ? { "animation-delay": `-${fade}ms` } : undefined}>{text()}</span>;
   }}</Index>;
 }
 
