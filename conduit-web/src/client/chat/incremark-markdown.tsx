@@ -12,7 +12,7 @@ import { createSyntheticMathPreviewNode, repairSyntheticMathSource, trimUnfinish
 import { conduitMathPlugin } from "./incremark-math-extension";
 import { BufferedIncremarkTypewriter, visibleAstCharacters } from "./incremark-typewriter";
 import { MathRenderQueue, type MathRenderPolicy } from "./incremark-math-queue";
-import { morphHtml } from "./morph-html";
+import { morphHtml, morphLines } from "./morph-html";
 import { markFadeIn, patchMathTree, renderMathTree } from "./katex-patch";
 import { readStoredMath, storeMath } from "./math-html-store";
 import { citationHost, resolveMarkdownUrl } from "./markdown-security";
@@ -816,7 +816,7 @@ function CodeNode(props: { node: MarkdownNode | NodeAccessor }) {
         render cannot wipe the highlighting; morphed rather than innerHTML, so
         a streaming block keeps its finished lines instead of rebuilding every
         line on every token. */}
-    <pre><code ref={(element) => createRenderEffect(() => morphHtml(element, highlighted()))} /></pre>
+    <pre><code ref={(element) => createRenderEffect(() => morphLines(element, highlighted()))} /></pre>
     <Show when={state().collapsible}>
       <button type="button" class="artifact-expand" data-expand-code data-expand-label onClick={(event) => toggle(event.currentTarget)}>
         {collapsed() ? state().expandLabel : codeBlockCollapseLabel()}
@@ -894,7 +894,9 @@ function PendingConstruct(props: { pending: StreamingPending; streaming: boolean
           </Show>
         </span>
       </div>
-      <pre><code innerHTML={highlighted()} /></pre>
+      {/* Morphed, as the settled block is: rewritten, every line of a long fence was built and laid out again each
+          frame it grew (3-4ms of layout a frame for a 137-line file). */}
+      <pre><code ref={(element) => createRenderEffect(() => morphLines(element, highlighted()))} /></pre>
       <Show when={state().collapsible}>
         <button type="button" class="artifact-expand" onClick={(event) => toggle(event.currentTarget)}>
           {collapsed() ? state().expandLabel : codeBlockCollapseLabel()}
