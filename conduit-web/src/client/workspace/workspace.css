@@ -389,11 +389,9 @@
 .workspace-commit-refs code[data-current="true"] { background: var(--accent); color: var(--foreground); }
 .workspace-diff-overview { display: flex; min-height: 112px; flex: 1 1 56%; flex-direction: column; overflow: hidden; }
 .workspace-patch { display: flex; min-height: 0; max-height: 42%; flex: none; flex-direction: column; overflow: hidden; }
-.workspace-source-modes { display: flex; min-width: 0; flex: 1; align-items: center; gap: 2px; }
-.workspace-source-modes button, .workspace-source-actions button { display: flex; min-height: 21px; align-items: center; justify-content: center; gap: 4px; border: 0; border-radius: 4px; background: transparent; padding: 3px 6px; color: var(--muted-foreground); font-size: 8px; }
-.workspace-source-modes button:hover, .workspace-source-modes button:focus-visible, .workspace-source-modes button[aria-selected="true"], .workspace-source-actions button:hover:not(:disabled), .workspace-source-actions button:focus-visible { background: var(--accent); color: var(--foreground); }
-.workspace-source-modes button[aria-selected="true"] { background: var(--accent); color: var(--foreground); }
-.workspace-source-modes svg, .workspace-source-actions svg { width: 11px; height: 11px; }
+.workspace-source-actions button { display: flex; min-height: 21px; align-items: center; justify-content: center; gap: 4px; border: 0; border-radius: 4px; background: transparent; padding: 3px 6px; color: var(--muted-foreground); font-size: 8px; }
+.workspace-source-actions button:hover:not(:disabled), .workspace-source-actions button:focus-visible { background: var(--accent); color: var(--foreground); }
+.workspace-source-actions svg { width: 11px; height: 11px; }
 .workspace-source-header > small { color: var(--muted-foreground); font: 7.6px ui-monospace, SFMono-Regular, Consolas, monospace; white-space: nowrap; }
 .workspace-source-actions { display: flex; flex: none; align-items: center; gap: 1px; }
 .workspace-source-actions button:disabled { opacity: .35; }
