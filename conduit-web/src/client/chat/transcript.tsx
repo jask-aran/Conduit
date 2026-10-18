@@ -46,7 +46,7 @@ import {
 import { captureTranscriptAnchor, restoreTranscriptAnchor } from "./transcript-anchor";
 import { api } from "../api/client";
 import { requestTurnArtifactNavigation } from "./turn-artifact-navigation";
-import { useLibrary } from "@/components/ui/swap";
+import { LibraryContext, useLibrary, useLibraryPiece } from "@/components/ui/swap";
 import { StopLine } from "@/components/ui";
 import { ChatMarkdown } from "./lazy-markdown";
 import { fullDateTime } from "./full-date-time";
@@ -153,7 +153,7 @@ function Actions(props: { message: Message; precedingUserId?: string; chat: Tran
      when the agent kept what it had written. */
   const continuable = () => props.partialContinue && Boolean(props.message.stopped) && !props.message.discarded
     && Boolean(props.message.content) && !props.chat.streaming() && props.chat.messages().at(-1)?.id === props.message.id;
-  // The gallery's previews draw it as the library's MessageFoot; the app keeps its own.
+  // In v2, the library's MessageFoot.
   const library = useLibrary();
   return <div class={library ? "ui-message-foot" : "response-actions"} data-end={library && !assistant() ? "" : undefined} data-reveal={props.reveal ? "" : undefined}>
     <MessageTime timestamp={props.message.timestamp} />
@@ -208,14 +208,19 @@ function StopLabel(props: { traced?: boolean; detail: string }) {
    caret there once the draft has been swapped in. */
 const focusComposerSoon = () => requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>(".composer textarea:not([disabled])")?.focus({ preventScroll: true }));
 
-export function Transcript(props: { chat: TranscriptSource; supports: (capability: BooleanCapability) => boolean; partialContinue: boolean; markdownRenderer: MarkdownRendererId; profileLabel?: string; projectId?: string }) {
+/** The transcript is drawn with components v2 (graduated in components/ui/swap.ts): its bubbles, answers, feet and disclosures. */
+export function Transcript(props: Parameters<typeof TranscriptBody>[0]) {
+  return <LibraryContext.Provider value={useLibraryPiece("transcript")}><TranscriptBody {...props} /></LibraryContext.Provider>;
+}
+
+function TranscriptBody(props: { chat: TranscriptSource; supports: (capability: BooleanCapability) => boolean; partialContinue: boolean; markdownRenderer: MarkdownRendererId; profileLabel?: string; projectId?: string }) {
   let transcriptRoot!: HTMLDivElement;
   let motionShell!: HTMLDivElement;
   let viewport!: HTMLDivElement;
   let thread!: HTMLDivElement;
   let latestButton: HTMLButtonElement | undefined;
   let cancelEditButton: HTMLButtonElement | undefined;
-  // The gallery's previews draw these two as the library's RiderButtons, and the user's message as its Bubble, and the answer as its Answer (ui-answer); the app keeps its own.
+  // In v2 these two are the library's RiderButtons, the user's message its Bubble and the answer its Answer (ui-answer).
   const library = useLibrary();
   let scheduleLatestButtonAnchor = () => {};
   let panelMotion: ReturnType<typeof mountTranscriptPanelMotion> | null = null;

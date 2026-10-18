@@ -15,8 +15,8 @@ export const useLibrary = () => useContext(LibraryContext);
  * The pieces the app draws with the library everywhere, not only in the gallery's previews: graduated one at a time.
  * `localStorage conduit:classic` (a comma list, e.g. "trace,composer") draws one the old way again, to compare the two.
  */
-export type Graduated = "trace" | "composer";
-const GRADUATED = new Set<Graduated>(["trace", "composer"]);
+export type Graduated = "trace" | "composer" | "transcript";
+const GRADUATED = new Set<Graduated>(["trace", "composer", "transcript"]);
 const classic = (() => { try { return new Set((localStorage.getItem("conduit:classic") ?? "").split(",").map((piece) => piece.trim())); } catch { return new Set<string>(); } })();
 export const useLibraryPiece = (piece: Graduated) => useLibrary() || (GRADUATED.has(piece) && !classic.has(piece));
 
