@@ -1205,7 +1205,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
     });
   });
 
-  return <div ref={transcriptRoot} class="transcript" data-part="transcript" data-slot="message-scroller" data-markdown-renderer={markdownRenderer()} data-markdown-typewriter={rendererUsesTypewriter() ? "true" : undefined}>
+  return <div ref={transcriptRoot} class="transcript" data-part="transcript" data-slot="message-scroller">
     <div ref={motionShell} class="transcript-motion-shell">
       <div ref={viewport} class="message-scroller-viewport" data-slot="message-scroller-viewport" tabIndex={-1} aria-label="Transcript">
         <div ref={thread} class={library ? "thread ui-read" : "thread"} data-slot="message-scroller-content">
@@ -1281,7 +1281,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
                     <Show when={user()} fallback={<>
                       <Show when={message().content}>
                         <Suspense fallback={<div class="markdown-skeleton" />}>
-                          <ChatMarkdown renderer={markdownRenderer()} displayKey={item.displayKey} streaming={live()} streamVersion={item.streamVersion} onRendered={() => settleAfterMarkdown(row)} onSettled={() => setSettled(true)}>{message().content || ""}</ChatMarkdown>
+                          <ChatMarkdown renderer={markdownRenderer()} streaming={live()} streamVersion={item.streamVersion} onRendered={() => settleAfterMarkdown(row)} onSettled={() => setSettled(true)}>{message().content || ""}</ChatMarkdown>
                         </Suspense>
                       </Show>
                       <Show when={!message().content && message().stopped && !item.traced && !failed()}>
