@@ -64,14 +64,14 @@ What each v2 family replaces and where it stands. Update a row in the commit tha
 | Controls: `Keycap` | `Keycap` in `components/frost.tsx` | old |
 | Controls: Switch, Spinner, StatusDot (the runtime dot) | `settings-controls.tsx`, `primitives.tsx`, `navigation/runtime-indicator.tsx` | gallery only (v2 pieces exist; the app still draws its own) |
 | Frost | `.composer-surface-material`, `chat/composer-surface.ts` | previews |
-| Popover: `Menu`, `Section`, `Item` | `Menu*`, `ContextMenu*`, `Popover*`, `PopoverSearchList` in `primitives.tsx`; `.menu-row` (terminal pane, leader, context gauge, place picker) | previews |
+| Popover: `Menu`, `Section`, `Item` | `Menu*`, `ContextMenu*`, `Popover*`, `PopoverSearchList` in `primitives.tsx`; `.menu-row` (terminal pane, leader, context gauge, place picker) | each section's menus with its section (the composer's are graduated with it); previews elsewhere |
 | Card | `FrostDialog` (`frost.tsx`) | gallery only |
 | Toast | solid-sonner's toasts | gallery only |
 | Overlay, Glance | `FrostOverlay` (`frost.tsx`), command menu, chat search, Settings | gallery only |
 | Leader | `navigation/leader-palette.tsx`, `frost-card` | gallery only |
-| DesktopComposer | `chat/composer.tsx` (desktop) | previews |
+| DesktopComposer | `chat/composer.tsx` (desktop) | graduated (`composer`) |
 | Rider | queued messages, attachment strip, question card | in the app (v2 classes, not components) |
-| Pill, PhoneComposer | phone header pills, sidebar header, `chat/composer.tsx` (phone) | previews |
+| Pill, PhoneComposer | phone header pills, sidebar header, `chat/composer.tsx` (phone: the voice bar, a phone's only composer) | graduated in the composer (`composer`); previews elsewhere |
 | Trace | `chat/turn-trace.tsx`, `tool-card.tsx` | graduated (`trace`) |
 | Transcript, CodeBlock | `chat/transcript.tsx`, the Markdown's `.artifact`, `chat/disclosure.tsx` | previews (`StopLine` in the app) |
 

@@ -5,7 +5,7 @@
  * voice layout, animations slowed: records every frame's text pill, sent
  * bubble and scroll position, and saves a frame strip.
  *
- *   node scripts/probes/send-motion.mjs --windows [--layout bar] [--rate 0.2] [--out dir]
+ *   node scripts/probes/send-motion.mjs --windows [--rate 0.2] [--out dir]
  */
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -13,7 +13,6 @@ import { arg, capture, open, origin } from "./lib.mjs";
 
 const rate = Number(arg("--rate", "0.2"));
 const out = arg("--out", "/tmp/conduit-send-motion");
-const layout = arg("--layout", "bar");
 const { page, cdp, close } = await open({ width: 600, height: 1100 });
 await cdp.send("Emulation.setDeviceMetricsOverride", { width: 412, height: 915, deviceScaleFactor: 2.625, mobile: true });
 await cdp.send("Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 5 });
@@ -27,7 +26,6 @@ await page.addInitScript((latency) => {
   WebSocket.prototype.send = function (data) { setTimeout(() => { try { send.call(this, data); } catch {} }, latency); };
 }, latency);
 await page.goto(origin);
-await page.evaluate((layout) => localStorage.setItem("conduit:phone-composer", layout), layout);
 const api = (url, method, body) => page.evaluate(async ([url, method, body]) => {
   const response = await fetch(url, { method, headers: { "content-type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
   return response.json().catch(() => null);
