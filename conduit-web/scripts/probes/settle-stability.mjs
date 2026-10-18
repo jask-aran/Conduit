@@ -40,7 +40,7 @@ const settled = () => page.waitForFunction(() => !document.querySelector("[aria-
 /** Mark the live answer and trace of the last turn, and remember what they said. */
 const tag = () => page.evaluate(() => {
   const answer = [...document.querySelectorAll(".bubble-assistant")].at(-1);
-  const trace = [...document.querySelectorAll(".turn-trace:not(.turn-trace-starting)")].at(-1);
+  const trace = [...document.querySelectorAll(".ui-trace-fold:has(> .ui-trace[aria-expanded])")].at(-1);
   if (answer) answer.dataset.probe = "answer";
   if (trace) trace.dataset.probe = "trace";
   return { answer: Boolean(answer), trace: Boolean(trace), text: answer?.textContent || "", open: trace?.dataset.open === "true" };
@@ -51,7 +51,7 @@ const inspect = () => page.evaluate(() => new Promise((finish) => {
   const answer = document.querySelector("[data-probe='answer']");
   const trace = document.querySelector("[data-probe='trace']");
   const thread = document.querySelector(".thread") || document.body;
-  const watched = () => [...thread.querySelectorAll(".bubble, .turn-trace, .response-actions")];
+  const watched = () => [...thread.querySelectorAll(".ui-bubble, .ui-answer, .ui-trace-fold, .ui-message-foot")];
   const rects = () => watched().map((node) => { const r = node.getBoundingClientRect(); return `${Math.round(r.top)}:${Math.round(r.height)}`; }).join("|");
   let churn = 0;
   const kinds = {};
@@ -96,7 +96,7 @@ async function watchQueue(text) {
     let quiet = null;
     let aboveFirst = null;
     const frame = () => {
-      const nodes = [...document.querySelectorAll(".thread .bubble, .thread .ui-bubble, .thread .turn-trace")];
+      const nodes = [...document.querySelectorAll(".thread .ui-answer, .thread .ui-bubble, .thread .ui-trace-fold")];
       const users = nodes.filter((node) => node.classList.contains("ui-bubble"));
       const sent = users.find((node) => node.textContent.trim().startsWith(text));
       if (sent) {
@@ -108,7 +108,7 @@ async function watchQueue(text) {
         else if (above > aboveFirst) bad.above += 1;
         const queued = document.querySelector(".queued-float:not([data-leaving])")?.textContent || "";
         if (queued.includes(text)) bad.both += 1;
-        if (nodes.slice(0, at).some((node) => node.classList.contains("turn-trace") && node.dataset.active === "true")) bad.stale += 1;
+        if (nodes.slice(0, at).some((node) => node.classList.contains("ui-trace-fold") && node.hasAttribute("data-live"))) bad.stale += 1;
       }
       if (!document.querySelector("[aria-label='Stop response']")) quiet ??= performance.now(); else quiet = null;
       if ((quiet && performance.now() - quiet > 1500) || performance.now() - started > 60_000) finish(bad);
@@ -124,8 +124,8 @@ async function watchQueue(text) {
 }
 
 async function settledShape() {
-  const shape = () => page.evaluate(() => [...document.querySelectorAll(".thread .bubble, .thread .ui-bubble, .thread .turn-trace")]
-    .map((node) => node.classList.contains("ui-bubble") ? "U" : node.classList.contains("turn-trace") ? "T" : "A").join(""));
+  const shape = () => page.evaluate(() => [...document.querySelectorAll(".thread .ui-answer, .thread .ui-bubble, .thread .ui-trace-fold")]
+    .map((node) => node.classList.contains("ui-bubble") ? "U" : node.classList.contains("ui-trace-fold") ? "T" : "A").join(""));
   const live = await shape();
   await page.reload();
   await composer().waitFor();
@@ -146,11 +146,11 @@ const scenarios = {
   /** Thinking, two tools and a long answer, with the trace opened while it runs. */
   async settle() {
     await send("think 2 tools 1500t");
-    await page.locator(".turn-trace:not(.turn-trace-starting) .turn-trace-header").last().waitFor();
-    await page.locator(".turn-trace:not(.turn-trace-starting) .turn-trace-header").last().click();
+    await page.locator(".ui-trace-fold .ui-trace[aria-expanded]").last().waitFor();
+    await page.locator(".ui-trace-fold .ui-trace[aria-expanded]").last().click();
     // The answer is what follows the last tool; text before a tool is the turn
     // talking as it works, and moves into the trace when its message closes.
-    await page.waitForFunction(() => /\b2\b/.test([...document.querySelectorAll(".turn-trace-work")].at(-1)?.textContent || ""));
+    await page.waitForFunction(() => /\b2\b/.test([...document.querySelectorAll(".ui-trace-line > span:last-child")].at(-1)?.textContent || ""));
     await page.waitForFunction(() => ([...document.querySelectorAll(".bubble-assistant")].at(-1)?.textContent || "").length > 200);
     const live = await tag();
     await settled();
@@ -185,7 +185,7 @@ const scenarios = {
   /** Dismiss a tool's approval (a denial): the trace keeps its node and settles still. */
   async "deny-tool"() {
     await send("think 1 tool approve 300t");
-    await page.waitForFunction(() => document.querySelector(".turn-trace:not(.turn-trace-starting)") && document.querySelector(".question-card, [data-takeover]"), null, { timeout: 30_000 });
+    await page.waitForFunction(() => document.querySelector(".ui-trace-fold:has(> .ui-trace[aria-expanded])") && document.querySelector(".question-card, [data-takeover]"), null, { timeout: 30_000 });
     const live = await tag();
     await page.keyboard.press("Escape");
     await settled();
@@ -236,7 +236,7 @@ const scenarios = {
   /** A message sent while a turn runs tools joins that turn after the tool. */
   async "queued-tool"() {
     await send("think 200 2 tools 1500t");
-    await page.locator(".turn-trace:not(.turn-trace-starting)").last().waitFor();
+    await page.locator(".ui-trace-fold:has(> .ui-trace[aria-expanded])").last().waitFor();
     await send("hmm");
     const frames = await watchQueue("hmm");
     const shapes = await settledShape();

@@ -1,7 +1,7 @@
 import { children, For, Show, splitProps, type JSX } from "solid-js";
 import { ChevronDownIcon, TriangleAlertIcon } from "lucide-solid";
 import { Button, Spinner } from "./controls";
-import { type Motion, motionOf } from "./shared";
+import { type Motion, motionOf, sinceOf } from "./shared";
 
 /**
  * A turn's head: the orb, then Status · time · work, and under it the trail's latest line (text, or the app's inline
@@ -19,13 +19,14 @@ export function TraceHeader(props: { orb?: JSX.Element; status: string; time?: s
 /**
  * Trace: a turn's work, folded under its head. The head is a TraceHeader (pass its props); the trail (children, a
  * Trail of Steps) unfolds under it as a Disclosure's body does. With no children there is nothing to open. A turn
- * not yet started is a Trace with status "Starting", a connecting Orb and live.
+ * not yet started is a Trace with status "Starting", a connecting Orb and live. motion and since: its entrance
+ * (entering fades it in), and how far into it it already is.
  */
-export function Trace(props: Omit<Parameters<typeof TraceHeader>[0], "opens"> & { children?: JSX.Element }) {
+export function Trace(props: Omit<Parameters<typeof TraceHeader>[0], "opens"> & { motion?: Motion; since?: number; children?: JSX.Element }) {
   const [head, local] = splitProps(props, ["orb", "status", "time", "work", "latest", "live", "tone", "open", "onToggle"]);
   const body = children(() => local.children);
   const opens = () => body.toArray().length > 0;
-  return <div class="ui-disclosure ui-trace-fold" data-open={head.open && opens() ? "true" : "false"}>
+  return <div class="ui-disclosure ui-trace-fold" data-open={head.open && opens() ? "true" : "false"} data-live={head.live ? "" : undefined} {...motionOf(local.motion)} style={sinceOf(local.since)}>
     <TraceHeader {...head} opens={opens()} />
     <div class="ui-disclosure-body" aria-hidden={!head.open}>{body()}</div>
   </div>;

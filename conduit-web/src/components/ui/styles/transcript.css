@@ -15,7 +15,7 @@
 .ui-message-foot { display: flex; min-height: var(--control-xs); align-items: center; gap: var(--space-2xs); color: var(--muted-foreground); font: var(--weight-rest) var(--text-caption) var(--font-sans); }
 /* An answer's foot fades in once the answer is done; a sent message fades in where it lands. */
 /* Its parts fade, never the message: under a fading parent the bubble's frost would not blur until the end. */
-:is(.ui-message[data-entering] > *, .ui-message-foot[data-entering]) { animation: ui-fade-in var(--duration-gentle) var(--ease-arrive) backwards; }
+:is(.ui-message[data-entering] > *, .ui-message-foot[data-entering]) { animation: ui-fade-in var(--duration-gentle) var(--ease-arrive) var(--entered, 0s) backwards; }
 .ui-message-foot > time { margin-right: var(--space-xs); font-variant-numeric: tabular-nums; }
 .ui-message-status { margin-right: var(--space-xs); color: var(--foreground); font-weight: var(--weight-strong); }
 .ui-stop-line { display: flex; align-items: center; gap: var(--space-xs); color: var(--muted-foreground); font-size: var(--text-row); }

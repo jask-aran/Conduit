@@ -1,7 +1,7 @@
 import { createEffect, createSignal, onCleanup, onMount, Show, type JSX } from "solid-js";
 import { ChevronDownIcon, SquareIcon } from "lucide-solid";
 import { cn } from "@/lib/utils";
-import { type Motion, motionOf } from "./shared";
+import { type Motion, motionOf, sinceOf } from "./shared";
 
 /**
  * The user's words in frost. Given `fold` lines, a message that runs past them folds to them, its last line fading,
@@ -64,10 +64,10 @@ export const Turn = (props: { children: JSX.Element }) => <article class="ui-tur
 /**
  * The user's message: its Bubble (none when it is only attachments), what came with it (`under`: attachments,
  * references), and its foot at the right. fold, open, onToggle and editing are the Bubble's; time, dateTime and
- * title the foot's.
+ * title the foot's. since: how far into its entrance it already is (sinceOf).
  */
-export const Message = (props: { time?: string; dateTime?: string; title?: string; actions?: JSX.Element; under?: JSX.Element; fold?: number; open?: boolean; onToggle?: (event: MouseEvent) => void; editing?: boolean; motion?: Motion; children?: JSX.Element }) =>
-  <article class="ui-message" {...motionOf(props.motion)}>
+export const Message = (props: { time?: string; dateTime?: string; title?: string; actions?: JSX.Element; under?: JSX.Element; fold?: number; open?: boolean; onToggle?: (event: MouseEvent) => void; editing?: boolean; motion?: Motion; since?: number; children?: JSX.Element }) =>
+  <article class="ui-message" {...motionOf(props.motion)} style={sinceOf(props.since)}>
     <Show when={props.children}><Bubble fold={props.fold} open={props.open} onToggle={props.onToggle} editing={props.editing}>{props.children}</Bubble></Show>
     {props.under}
     <MessageFoot time={props.time} dateTime={props.dateTime} title={props.title} end>{props.actions}</MessageFoot>

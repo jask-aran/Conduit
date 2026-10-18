@@ -44,7 +44,7 @@ try {
   const ta = page.locator(".chat-main textarea").first(); await ta.fill(prompt);
   await s.send("Page.startScreencast", { format: "png", everyNthFrame: 1, maxWidth: size.width, maxHeight: size.height });
   await ta.press("Enter");
-  await page.waitForFunction(() => /^(Done|Interrupted|Failed)/.test(document.querySelector(".ui-trace-line, .turn-trace-line")?.textContent ?? ""), null, { timeout: Number(arg("--seconds", 120)) * 1000, polling: 500 }).catch(() => {});
+  await page.waitForFunction(() => /^(Done|Interrupted|Failed)/.test(document.querySelector(".ui-trace-line")?.textContent ?? ""), null, { timeout: Number(arg("--seconds", 120)) * 1000, polling: 500 }).catch(() => {});
   await page.waitForTimeout(1500);
   await s.send("Page.stopScreencast");
   fences = await page.evaluate(() => window.__fences);

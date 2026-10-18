@@ -91,10 +91,10 @@ try {
   const phase = (name) => page.evaluate((name) => { window.__guard.phase = name; }, name);
   const wheel = async (dy, steps, pause = 40) => { const box = await page.locator(".message-scroller-viewport").boundingBox();
     await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2); for (let i = 0; i < steps; i++) { await page.mouse.wheel(0, dy); await page.waitForTimeout(pause); } };
-  const state = () => page.evaluate(() => document.querySelector(".ui-trace-line, .turn-trace-line")?.textContent ?? "");
+  const state = () => page.evaluate(() => document.querySelector(".ui-trace-line")?.textContent ?? "");
   await page.evaluate(() => document.querySelector(".composer-keyboard-trigger, [aria-label='Type a message']")?.click());
   const ta = page.locator(".chat-main textarea").first(); await ta.fill(prompt); await ta.press("Enter");
-  await page.waitForFunction(() => /^Writing/.test(document.querySelector(".ui-trace-line, .turn-trace-line")?.textContent ?? ""), null, { timeout: 60_000 });
+  await page.waitForFunction(() => /^Writing/.test(document.querySelector(".ui-trace-line")?.textContent ?? ""), null, { timeout: 60_000 });
   await phase("follow"); await page.waitForTimeout(20_000);
   await phase("wheel up, streaming"); await wheel(-500, 12);
   await page.waitForTimeout(1500);
@@ -105,7 +105,7 @@ try {
   await phase("scroll to latest"); await page.evaluate(() => document.querySelector(".message-scroller-button")?.click());
   await page.waitForTimeout(3000);
   await phase("follow again");
-  await page.waitForFunction(() => /^(Done|Interrupted|Failed)/.test(document.querySelector(".ui-trace-line, .turn-trace-line")?.textContent ?? ""), null, { timeout: 300_000, polling: 500 });
+  await page.waitForFunction(() => /^(Done|Interrupted|Failed)/.test(document.querySelector(".ui-trace-line")?.textContent ?? ""), null, { timeout: 300_000, polling: 500 });
   await phase("settling"); await page.waitForTimeout(2500);
   await phase("settled: top"); await page.evaluate(() => { document.querySelector(".message-scroller-viewport").scrollTop = 0; }); await page.waitForTimeout(1000);
   await phase("settled: wheel down"); await wheel(350, 60, 30);
