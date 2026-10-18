@@ -91,12 +91,11 @@ test("narrow projection work stays on the changed live answer row", () => {
       const index = buildLiveProjectionIndex(generation, messages);
       const target = generation.assistantMessages[0].blocks.at(-1);
       assert.equal(target.kind, "text");
-      assert.equal(index.activeBlockCount, dimensions.activeMessageCount * dimensions.activeBlockCount);
       assert.equal(index.blockLocations.get(target.identity)?.kind, "answer");
 
       const narrow = measure(() => {
         target.text = `${target.text}!`;
-        const row = buildLiveAnswerRow(generation, "m0", index, index.messageIndex);
+        const row = buildLiveAnswerRow(generation, "m0", index);
         assert.equal(row?.key, "answer:live-user:0");
       });
       const full = measure(() => {

@@ -5,7 +5,6 @@
 
 .voice-settings { gap: 8px; }
 .voice-settings-intro { margin: 0; color: var(--muted-foreground); font-size: 9.6px; line-height: 1.4; }
-.voice-settings .dictation-auto-send { padding: 7.2px 8px; }
 .voice-input-test { gap: 6.4px; padding: 8px; }
 .voice-input-playback { display: grid; gap: 6.4px; border-left: 1px solid var(--border); background: var(--muted); padding: 6.4px 8px; color: var(--muted-foreground); font-size: 10.4px; }
 .voice-input-playback-error { margin: 0; border-left: 1px solid var(--muted-foreground); background: var(--muted); padding: 6.4px 8px; color: var(--muted-foreground); font-size: 10.4px; }
@@ -42,7 +41,6 @@
 .voice-advanced-heading h3 { margin: 0; font-size: 10.4px; }
 .voice-advanced-heading p { margin: 0; color: var(--muted-foreground); font-size: 8.8px; line-height: 1.35; }
 .voice-settings-footer { padding-top: 8px; }
-@media (--conduit-mobile-layout) { .voice-backend-facts { grid-template-columns: 1fr; } }
 
 
 /* Mobile retains v0.5.2 density. */
@@ -54,7 +52,6 @@
 
 .voice-settings { gap: 10px; }
 .voice-settings-intro { margin: 0; color: var(--muted-foreground); font-size: 12px; line-height: 1.4; }
-.voice-settings .dictation-auto-send { padding: 9px 10px; }
 .voice-input-test { gap: 8px; padding: 10px; }
 .voice-input-playback { display: grid; gap: 8px; border-left: 2px solid var(--border); background: var(--muted); padding: 8px 10px; color: var(--muted-foreground); font-size: 13px; }
 .voice-input-playback-error { margin: 0; border-left: 2px solid var(--muted-foreground); background: var(--muted); padding: 8px 10px; color: var(--muted-foreground); font-size: 13px; }
@@ -92,5 +89,4 @@
 .voice-advanced-heading p { margin: 0; color: var(--muted-foreground); font-size: 11px; line-height: 1.35; }
 .voice-settings-footer { padding-top: 10px; }
 @media (--conduit-mobile-layout) { .voice-backend-facts { grid-template-columns: 1fr; } }
-
 }

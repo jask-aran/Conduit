@@ -1,6 +1,6 @@
 import { textBlockClassifications } from "../active-generation.js";
 import { mergeContinuation } from "../continuation.js";
-import type { ContentBlock, Message, ToolItem, ToolKind } from "./api/contracts";
+import type { Message, ToolItem, ToolKind } from "./api/contracts";
 
 /**
  * A block of a message still arriving.
@@ -139,14 +139,12 @@ export type LiveBlockLocation =
 
 export interface LiveProjectionIndex {
   generationId: string;
-  messageIndex: number;
   traceRowKey: string | null;
   blockLocations: Map<string, LiveBlockLocation>;
   toolLocations: Map<string, { rowKey: string; segmentIndex: number }>;
   answerBlockIdentities: Map<string, Set<string>>;
   answerRowKeys: Map<string, string>;
   firstAnswerAssistantId: string | null;
-  activeBlockCount: number;
 }
 
 // Returns the index as well as the message: the caller needs both, and asking
@@ -247,7 +245,6 @@ export function buildLiveProjectionIndex(
   const classifications = textBlockClassifications(generation) as Record<string, "interim" | "answer">;
   const ownerIndex = liveOwnerIndex(messages, generation);
   const owner = ownerIndex < 0 ? null : messages[ownerIndex]!;
-  const messageIndex = ownerIndex < 0 ? messages.length : ownerIndex;
   const traceRowKey = `trace:${owner ? owner.id : `live:${generation.id}`}`;
   const blockLocations = new Map<string, LiveBlockLocation>();
   const toolLocations = new Map<string, { rowKey: string; segmentIndex: number }>();
@@ -256,12 +253,10 @@ export function buildLiveProjectionIndex(
   let firstAnswerAssistantId: string | null = null;
   let answerIndex = 0;
   let segmentIndex = 0;
-  let activeBlockCount = 0;
 
   for (const assistant of generation.assistantMessages) {
     const answerBlocks = new Set<string>();
     for (const block of assistant.blocks) {
-      activeBlockCount += 1;
       if (block.kind === "thinking" || block.kind === "narration"
         || (block.kind === "text" && classifications[block.identity] === "interim")) {
         blockLocations.set(block.identity, { kind: "trace", rowKey: traceRowKey, segmentIndex });
@@ -287,14 +282,12 @@ export function buildLiveProjectionIndex(
   }
   return {
     generationId: generation.id,
-    messageIndex,
     traceRowKey: segmentIndex ? traceRowKey : null,
     blockLocations,
     toolLocations,
     answerBlockIdentities,
     answerRowKeys,
     firstAnswerAssistantId,
-    activeBlockCount,
   };
 }
 
@@ -302,7 +295,6 @@ export function buildLiveAnswerRow(
   generation: ActiveGenerationView,
   assistantId: string,
   index: LiveProjectionIndex,
-  _messageIndex: number,
   precedingUserId?: string,
 ): Extract<TurnRow, { type: "message" }> | null {
   const assistant = generation.assistantMessages.find((message) => message.id === assistantId);
@@ -326,19 +318,24 @@ export function buildLiveAnswerRow(
     live: active(generation),
     streamVersion: generation.lastSeq,
     precedingUserId,
-    value: {
-      id: `live:${generation.id}:${assistantId}`,
-      role: "assistant",
-      content,
-      stopReason: assistant.stopReason || undefined,
-      errorMessage: terminalError ? assistant.errorMessage || "The model request failed." : null,
-      provider: assistant.provider || null,
-      model: assistant.model || null,
-      timestamp: assistant.timestamp || undefined,
-      stopped: generation.status === "stopped",
-      status: generation.status === "stopped" ? "stopped" : null,
-    },
+    value: liveAnswerMessage(generation, assistant, content, terminalError),
   };
+}
+
+// A live answer as the message its row shows: the same whether the turn has a trace or not.
+function liveAnswerMessage(generation: ActiveGenerationView, assistant: ActiveGenerationView["assistantMessages"][number], content: string, terminalError: boolean) {
+  return {
+    id: `live:${generation.id}:${assistant.id}`,
+    role: "assistant",
+    content,
+    stopReason: assistant.stopReason || undefined,
+    errorMessage: terminalError ? assistant.errorMessage || "The model request failed." : null,
+    provider: assistant.provider || null,
+    model: assistant.model || null,
+    timestamp: assistant.timestamp || undefined,
+    stopped: generation.status === "stopped",
+    status: generation.status === "stopped" ? "stopped" : null,
+  } satisfies Message;
 }
 
 export function buildLiveToolSegment(
@@ -458,18 +455,7 @@ function liveRows(generation: ActiveGenerationView, owner: Message | null, tools
         live: active(generation),
         streamVersion: generation.lastSeq,
         precedingUserId: owner?.id,
-        value: {
-          id: `live:${generation.id}:${assistant.id}`,
-          role: "assistant",
-          content,
-          stopReason: assistant.stopReason || undefined,
-          errorMessage: terminalError ? assistant.errorMessage || "The model request failed." : null,
-          provider: assistant.provider || null,
-          model: assistant.model || null,
-          timestamp: assistant.timestamp || undefined,
-          stopped: generation.status === "stopped",
-          status: generation.status === "stopped" ? "stopped" : null,
-        },
+        value: liveAnswerMessage(generation, assistant, content, terminalError),
       });
       answerIndex += 1;
     }
@@ -538,7 +524,7 @@ function sameSources(
     && left.sourceTools.every((tool, index) => tool === sourceTools[index]);
 }
 
-function persistedRowsForTurn(turn: PersistedTurn, messages: Message[], toolById: Map<string, ToolItem>): TurnRow[] {
+function persistedRowsForTurn(turn: PersistedTurn, toolById: Map<string, ToolItem>): TurnRow[] {
   const rows: TurnRow[] = [];
   if (turn.userMessage) {
     rows.push({ key: `message:${turn.userMessage.id}`, type: "message", value: turn.userMessage });
@@ -663,7 +649,7 @@ export function projectPersistedTurns(
       userMessage: turn.userMessage,
       assistants: turn.assistants,
       sourceTools,
-      rows: persistedRowsForTurn(turn, messages, toolById),
+      rows: persistedRowsForTurn(turn, toolById),
     };
   });
   return { rows: projected.flatMap((turn) => turn.rows), turns: projected };

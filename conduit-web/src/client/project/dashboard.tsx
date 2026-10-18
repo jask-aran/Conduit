@@ -85,16 +85,6 @@ function readThreadSide(projectId: string): ThreadSide {
 }
 
 
-function compactDate(value?: string | null) {
-  const date = new Date(value || "");
-  if (!Number.isFinite(date.getTime())) return "";
-  return new Intl.DateTimeFormat(undefined, {
-    day: "numeric",
-    month: "short",
-    year: date.getFullYear() === new Date().getFullYear() ? undefined : "numeric",
-  }).format(date);
-}
-
 function relativeActivity(value?: string | null, currentTime = Date.now()) {
   const timestamp = Date.parse(value || "") || 0;
   if (!timestamp) return "No activity";

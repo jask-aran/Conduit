@@ -4,7 +4,7 @@
  * Test-profile prompt on a fresh chat -- in the library's live phone page (gallery.html?frame=live, the gallery
  * served) or, with --app, the app -- in a tab of its own in headed Windows Chrome, and records a lean trace and a
  * 100us CPU profile of the page until 3s after the turn ends. Per state (Thinking, Writing, Done, ...): how busy the
- * main thread was, frames painted a second, rendering time by phase, rAF callbacks and JS self time by original
+ * main thread was, frames drawn and dropped (the compositor's) and main-thread paints a second, rendering time by phase, rAF callbacks and JS self time by original
  * function. Names come from source maps: build with them first (`npx vite build --mode gallery --sourcemap`, or the
  * app's `npx vite build --sourcemap` and a restart), and without them afterwards.
  *
@@ -42,7 +42,7 @@ await page.evaluate((line) => { let last = ""; new MutationObserver(() => { cons
 const ps = await ctx.newCDPSession(page); await ps.send("Profiler.enable"); await ps.send("Profiler.setSamplingInterval", { interval: 100 });
 const events = []; const onData = (d) => events.push(...d.value); cdp.on("Tracing.dataCollected", onData);
 const traced = new Promise((r) => cdp.once("Tracing.tracingComplete", r));
-await cdp.send("Tracing.start", { traceConfig: { includedCategories: ["devtools.timeline", "toplevel", "blink.user_timing"] } }); await ps.send("Profiler.start");
+await cdp.send("Tracing.start", { traceConfig: { includedCategories: ["devtools.timeline", "toplevel", "blink.user_timing", "disabled-by-default-devtools.timeline.frame"] } }); await ps.send("Profiler.start");
 await page.evaluate(() => document.querySelector(".composer-keyboard-trigger, [aria-label='Type a message']")?.click());
 const ta = page.locator(".chat-main textarea").first(); await ta.fill(prompt); await ta.press("Enter");
 await page.waitForFunction(() => /^(Done|Interrupted|Failed)/.test(window.__state ?? ""), null, { timeout: 240_000, polling: 500 });
@@ -62,6 +62,9 @@ const tasks = []; let end = -1; for (const e of list) if (isTask(e) && e.ts >= e
 const span = {}; for (let i = 0; i + 1 < marks.length; i++) { const s = marks[i].name.slice(6); span[s] = (span[s] ?? 0) + (marks[i + 1].ts - marks[i].ts) / 1e6; }
 // --save <file>: the page's main thread (its slices, the state marks) and the CPU profile, to look at frame by frame.
 if (arg("--save", null)) fs.writeFileSync(arg("--save", null), JSON.stringify({ marks, list, profile }));
+// Frames as the page's compositor drew or dropped them: a frame can draw with no main-thread paint (nothing changed
+// there, or only composited motion), so the paints a second are not the frame rate.
+const shown = {}; for (const e of events) if (e.pid === pid && (e.name === "DrawFrame" || e.name === "DroppedFrame")) { const f = shown[stateAt(e.ts)] ??= { drawn: 0, dropped: 0 }; f[e.name === "DrawFrame" ? "drawn" : "dropped"]++; }
 const agg = {}; let j = 0;
 const firstAt = {}; for (const m of marks) firstAt[m.name.slice(6)] ??= m.ts;
 for (const t of tasks) { const st = stateAt(t.ts); const a = agg[st] ??= { busy: 0, frames: 0, phases: {}, raf: {}, durs: [], trend: [] }; a.busy += t.dur / 1000; a.durs.push(t.dur / 1000);
@@ -78,7 +81,7 @@ for (let i = 0; i < profile.samples.length; i++) { at += profile.timeDeltas[i]; 
   const k = names.get(n.id); if (k === "(idle)" || k === "(program)") continue; const s = stateAt(at); (self[s] ??= {})[k] = (self[s]?.[k] ?? 0) + profile.timeDeltas[i] / 1000; }
 const top = (o, n) => Object.entries(o).sort((a, z) => z[1] - a[1]).slice(0, n).map(([k, v]) => `${k} ${v.toFixed(0)}`).join(" | ");
 for (const [s, a] of Object.entries(agg)) { const secs = span[s];
-  console.log(`\n== ${s}${secs ? ` ${secs.toFixed(1)}s: main thread busy ${(a.busy / secs / 10).toFixed(1)}%, ${(a.frames / secs).toFixed(0)} frames painted/s` : `: ${a.busy.toFixed(0)}ms busy`}`);
+  console.log(`\n== ${s}${secs ? ` ${secs.toFixed(1)}s: main thread busy ${(a.busy / secs / 10).toFixed(1)}%, ${((shown[s]?.drawn ?? 0) / secs).toFixed(0)} frames drawn/s, ${shown[s]?.dropped ?? 0} dropped, ${(a.frames / secs).toFixed(0)} main-thread paints/s` : `: ${a.busy.toFixed(0)}ms busy`}`);
   // Tasks against the 144Hz frame (6.94ms): how long the usual, the slow and the slowest took, and how many went over.
   const d = a.durs.sort((x, z) => x - z), q = (f) => d[Math.min(d.length - 1, Math.floor(d.length * f))]?.toFixed(1);
   console.log(`   tasks: ${d.length}, p50 ${q(0.5)} p90 ${q(0.9)} p99 ${q(0.99)} max ${q(1)}ms, ${d.filter((x) => x > 6.94).length} over 6.94ms`);

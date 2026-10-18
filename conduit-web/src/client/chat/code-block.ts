@@ -72,7 +72,6 @@ export function shouldCollapseCodeBlock(
   lines: number,
   mode: CodeBlockCollapseMode,
   threshold: number,
-  streaming: boolean,
 ) {
   if (mode === "off") return false;
   if (mode === "all") return lines > 1;
@@ -104,7 +103,7 @@ export function codeBlockState(
   streaming: boolean,
 ): CodeBlockState {
   const lines = countCodeLines(text);
-  const collapsed = shouldCollapseCodeBlock(lines, mode, threshold, streaming);
+  const collapsed = shouldCollapseCodeBlock(lines, mode, threshold);
   return {
     lines,
     collapsible: collapsed || (!streaming && mode !== "off" && lines > threshold),

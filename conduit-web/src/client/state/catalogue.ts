@@ -77,4 +77,3 @@ export function createCatalogueStore() {
   return { projects, loaded, setProjects, selectedId, setSelectedId, projectId, setProjectId, selected, refresh, select, selectProject, patchChat };
 }
 
-export type CatalogueStore = ReturnType<typeof createCatalogueStore>;

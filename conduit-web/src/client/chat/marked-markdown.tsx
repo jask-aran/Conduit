@@ -2,7 +2,6 @@ import { createEffect, onCleanup, onMount } from "solid-js";
 import { marked } from "marked";
 import markedKatex from "marked-katex-extension";
 import katex from "katex";
-import { getHarnessRecorder, recordHarnessMetric } from "../harness-metrics";
 import { ExternalLinkDialog } from "./external-link-dialog";
 import { createExternalLinkController, handleMarkdownClick } from "./markdown-actions";
 import { renderMarkdownLink, sanitizeMarkdownFragment } from "./markdown-security";
@@ -132,41 +131,25 @@ type MarkedToken = { type?: string; raw?: string; tokens?: MarkedToken[] };
 const markedKatexCache = new Map<string, string>();
 const markedKatexCacheLimit = 512;
 
-function renderMarkdownFragment(source: string, inline: boolean, render: () => string) {
-  const recorder = getHarnessRecorder();
-  const parseStartedAt = recorder ? performance.now() : 0;
-  let katexMs = 0;
-  let katexCalls = 0;
-  let katexTimingAvailable = false;
-  let katexTimingBlocker: string | null = null;
+function renderMarkdownFragment(inline: boolean, render: () => string) {
+  // KaTeX's export is wrapped for the render so a formula drawn before is not drawn again.
   let restoreKatex: (() => void) | null = null;
   const katexApi = katex as typeof katex & { renderToString: (...args: any[]) => string };
   const originalRenderToString = katexApi.renderToString;
-  if (typeof originalRenderToString !== "function") {
-    katexTimingBlocker = "katex.renderToString is unavailable";
-  } else {
+  if (typeof originalRenderToString === "function") {
     try {
-      katexApi.renderToString = function measuredRenderToString(...args: any[]) {
+      katexApi.renderToString = function cachedRenderToString(...args: any[]) {
         const key = JSON.stringify(args);
         const cached = markedKatexCache.get(key);
         if (cached !== undefined) return cached;
-        const startedAt = recorder ? performance.now() : 0;
-        try {
-          const html = originalRenderToString.apply(this, args);
-          if (markedKatexCache.size >= markedKatexCacheLimit) markedKatexCache.delete(markedKatexCache.keys().next().value!);
-          markedKatexCache.set(key, html);
-          return html;
-        } finally {
-          if (recorder) {
-            katexCalls += 1;
-            katexMs += performance.now() - startedAt;
-          }
-        }
+        const html = originalRenderToString.apply(this, args);
+        if (markedKatexCache.size >= markedKatexCacheLimit) markedKatexCache.delete(markedKatexCache.keys().next().value!);
+        markedKatexCache.set(key, html);
+        return html;
       };
-      katexTimingAvailable = true;
       restoreKatex = () => { katexApi.renderToString = originalRenderToString; };
     } catch {
-      katexTimingBlocker = "katex.renderToString cannot be wrapped without changing the module export";
+      // The module export cannot be wrapped here: render uncached.
     }
   }
   let html: string;
@@ -175,7 +158,6 @@ function renderMarkdownFragment(source: string, inline: boolean, render: () => s
   } finally {
     restoreKatex?.();
   }
-  const parsedAt = recorder ? performance.now() : 0;
   const fragment = sanitizeMarkdownFragment(html, { inline });
   for (const table of fragment.querySelectorAll("table")) {
     const scroller = document.createElement("div");
@@ -183,33 +165,16 @@ function renderMarkdownFragment(source: string, inline: boolean, render: () => s
     table.before(scroller);
     scroller.append(table);
   }
-  const sanitisedAt = recorder ? performance.now() : 0;
-  if (recorder) {
-    recordHarnessMetric(recorder, {
-      stage: "markdown-render",
-      renderer: "marked",
-      sourceCharacters: source.length,
-      inline,
-      parseMs: parsedAt - parseStartedAt,
-      sanitiseMs: sanitisedAt - parsedAt,
-      katexCandidate: /\$(?:\$?)[^\n]+\$(?:\$?)|\\\([\s\S]+?\\\)|\\\[[\s\S]+?\\\]/.test(source),
-      katexMs: katexCalls > 0 ? katexMs : null,
-      katexCallCount: katexCalls,
-      katexTimingAvailable,
-      katexTimingBlocker,
-    });
-  }
   return fragment;
 }
 
 function renderMarkdown(source: string, inline = false) {
-  return renderMarkdownFragment(source, inline, () =>
+  return renderMarkdownFragment(inline, () =>
     (inline ? marked.parseInline(source, { async: false }) : marked.parse(source, { async: false })) as string);
 }
 
 function renderMarkdownTokens(tokens: MarkedToken[]) {
-  const source = tokens.map((token) => token.raw || "").join("");
-  return renderMarkdownFragment(source, false, () => marked.Parser.parse(tokens as any));
+  return renderMarkdownFragment(false, () => marked.Parser.parse(tokens as any));
 }
 
 function tokenParts(source: string) {
@@ -241,20 +206,6 @@ function sourceContainsMath(source: string, pending: StreamingPending | null) {
 
 function hasTokenPrefix(value: string[], prefix: string[]) {
   return prefix.every((entry, index) => value[index] === entry);
-}
-
-/**
- * Where two sources first differ, counted in code points.
- *
- * Diagnostic only, and reached only when the source was not a clean append.
- * One pass rather than the two the inline form used to make, and the arrays
- * are built here so the common appending path never allocates them at all.
- */
-function firstCodePointMismatch(next: string, previous: string) {
-  const nextCharacters = Array.from(next);
-  const previousCharacters = Array.from(previous);
-  const index = nextCharacters.findIndex((character, position) => character !== previousCharacters[position]);
-  return index >= 0 ? index : Math.min(nextCharacters.length, previousCharacters.length);
 }
 
 function moveBefore(anchor: Comment, nodes: Node[]) {
@@ -411,17 +362,6 @@ export function MarkedMarkdown(props: ChatMarkdownProps) {
     const nextTailRaws = tokenRaws(parts.tail);
     const sourceAppended = markdownSource.startsWith(renderedMarkdownSource);
     const fullSourceAppended = source.startsWith(renderedSource);
-    // Comparing by code point allocates two arrays the size of the whole
-    // message, and both values below are only ever metric fields. Gathering
-    // them unconditionally made every streamed delta pay an allocation
-    // proportional to the message so far.
-    const recorder = getHarnessRecorder();
-    const previousRenderedMarkdownSourceCharacters = recorder
-      ? Array.from(renderedMarkdownSource).length
-      : 0;
-    const firstSourceMismatchIndex = !recorder || sourceAppended
-      ? null
-      : firstCodePointMismatch(markdownSource, renderedMarkdownSource);
     const stablePrefixUnchanged = hasTokenPrefix(nextStableRaws, stableTokenRaws);
     const promoted = nextStableRaws.slice(stableTokenRaws.length);
     const oldTailPromoted = hasTokenPrefix(promoted, tailTokenRaws)
@@ -433,19 +373,11 @@ export function MarkedMarkdown(props: ChatMarkdownProps) {
       && tailNodes.length > 0;
     const canReuse = trimToPending || (sourceAppended && stablePrefixUnchanged
       && (tailTokenRaws.length === 0 || oldTailPromoted || tailRemainsMutable));
-    const renderStartedAt = recorder ? performance.now() : 0;
-    let incrementalMode = "append-tail";
 
     if (trimToPending) {
-      incrementalMode = "append-pending-trim";
       const tailFragment = renderMarkdownTokens(parts.tail);
       tailNodes = reconcileRange(root, tailNodes, [...tailFragment.childNodes], pendingBoundary!);
     } else if (!canReuse) {
-      incrementalMode = !sourceAppended
-        ? "full-reset-source"
-        : !stablePrefixUnchanged
-          ? "full-reset-prefix"
-          : "full-reset-tail";
       resetIncrementalRoot();
       const stableFragment = renderMarkdownTokens(parts.stable);
       const tailFragment = renderMarkdownTokens(parts.tail);
@@ -454,7 +386,6 @@ export function MarkedMarkdown(props: ChatMarkdownProps) {
       moveBefore(pendingBoundary!, tailNodes);
     } else {
       if (tailTokenRaws.length && oldTailPromoted) {
-        incrementalMode = "append-promote";
         pendingBoundary!.before(stableBoundary!);
         tailNodes = [];
       }
@@ -465,32 +396,10 @@ export function MarkedMarkdown(props: ChatMarkdownProps) {
       tailNodes = reconcileRange(root, tailNodes, [...tailFragment.childNodes], pendingBoundary!);
     }
 
-    const previousStableTokenCount = stableTokenRaws.length;
-    const previousTailTokenCount = tailTokenRaws.length;
     stableTokenRaws = nextStableRaws;
     tailTokenRaws = nextTailRaws;
     renderedMarkdownSource = markdownSource;
     renderPending(pending);
-    if (recorder) {
-      recordHarnessMetric(recorder, {
-        stage: "markdown-reconcile",
-        renderer: "marked",
-        sourceCharacters: source.length,
-        inline: false,
-        reconcileMs: performance.now() - renderStartedAt,
-        incrementalMode,
-        markdownSourceCharacters: markdownSource.length,
-        previousRenderedMarkdownSourceCharacters,
-        renderedMarkdownSourceCharacters: Array.from(renderedMarkdownSource).length,
-        stableTokenCount: nextStableRaws.length,
-        previousStableTokenCount,
-        tailTokenCount: nextTailRaws.length,
-        previousTailTokenCount,
-        sourceAppended,
-        firstSourceMismatchIndex,
-        stablePrefixUnchanged,
-      });
-    }
   };
 
   createEffect(() => {
@@ -507,37 +416,14 @@ export function MarkedMarkdown(props: ChatMarkdownProps) {
     if (props.inline) {
       const fragment = renderMarkdown(split.pending ? split.stable : source, true);
       if (split.pending) appendPendingMarkup(fragment, split.pending, Boolean(props.streaming));
-      const recorder = getHarnessRecorder();
-      const reconcileStartedAt = recorder ? performance.now() : 0;
       reconcileChildren(root, fragment);
-      if (recorder) {
-        recordHarnessMetric(recorder, {
-          stage: "markdown-reconcile",
-          renderer: "marked",
-          sourceCharacters: source.length,
-          inline: true,
-          reconcileMs: performance.now() - reconcileStartedAt,
-        });
-      }
     } else if (incrementalActive || sourceContainsMath(source, split.pending)) {
       incrementalActive = true;
       renderIncremental(source, split);
     } else {
       const fragment = renderMarkdown(split.pending ? split.stable : source, false);
       if (split.pending) appendPendingMarkup(fragment, split.pending, Boolean(props.streaming));
-      const recorder = getHarnessRecorder();
-      const reconcileStartedAt = recorder ? performance.now() : 0;
       reconcileChildren(root, fragment);
-      if (recorder) {
-        recordHarnessMetric(recorder, {
-          stage: "markdown-reconcile",
-          renderer: "marked",
-          sourceCharacters: source.length,
-          inline: false,
-          reconcileMs: performance.now() - reconcileStartedAt,
-          incrementalMode: "legacy-full-reconcile",
-        });
-      }
     }
     renderedSource = source;
     renderedVersion = version;

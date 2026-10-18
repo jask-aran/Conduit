@@ -18,7 +18,6 @@ import {
   projectLiveTurn,
   projectPersistedTurns,
 } from "../turn-rows";
-import { getHarnessRecorder, recordHarnessMetric } from "../harness-metrics";
 
 export type TimelineRow = TurnRow;
 
@@ -116,40 +115,6 @@ export function createTimelineStore(
   let liveIndex: LiveProjectionIndex | null = null;
 
   const rowIndex = (key: string) => rowIndexes.get(key);
-  const rowChanges = (previous: TurnRow[], projected: TurnRow[]) => {
-    const nextKeys = new Set(projected.map((row) => row.key));
-    const previousRowsByKey = new Map(previous.map((row) => [row.key, row]));
-    return projected.filter((row) => {
-      const prior = previousRowsByKey.get(row.key);
-      if (!prior || prior.type !== row.type || prior.value !== row.value) return true;
-      if (row.type !== "message" || prior.type !== "message") return false;
-      return prior.live !== row.live || prior.streamVersion !== row.streamVersion;
-    }).map((row) => row.key)
-      .concat(previous.filter((row) => !nextKeys.has(row.key)).map((row) => row.key));
-  };
-
-  const recordProjection = (
-    recorder: ReturnType<typeof getHarnessRecorder>,
-    inputMessages: Message[],
-    inputTools: ToolItem[],
-    inputGeneration: ActiveGenerationView | null,
-    startedAt: number,
-    changedRowKeys: string[],
-    mode: "full" | "narrow",
-  ) => {
-    if (!recorder) return;
-    recordHarnessMetric(recorder, {
-      stage: "timeline-projection",
-      durationMs: performance.now() - startedAt,
-      projectionMode: mode,
-      messageCount: inputMessages.length,
-      toolCount: inputTools.length,
-      activeGenerationId: inputGeneration?.id || null,
-      activeBlockCount: liveIndex?.activeBlockCount || 0,
-      projectedRowCount: previousProjectedRows.length,
-      changedRowKeys,
-    });
-  };
 
   const updateTraceSegment = (
     row: Extract<TurnRow, { type: "trace" }>,
@@ -186,7 +151,7 @@ export function createTimelineStore(
 
     if (location.kind === "answer") {
       if (current.type !== "message") return null;
-      const next = buildLiveAnswerRow(inputGeneration, location.assistantId, liveIndex, liveIndex.messageIndex, current.precedingUserId);
+      const next = buildLiveAnswerRow(inputGeneration, location.assistantId, liveIndex, current.precedingUserId);
       if (!next) return null;
       setRows(index, "value", owned(next.value));
       previousProjectedRows[index] = next;
@@ -242,8 +207,6 @@ export function createTimelineStore(
     const inputTools = tools();
     const inputGeneration = activeGeneration();
     const change = activeGenerationChange();
-    const recorder = getHarnessRecorder();
-    const startedAt = recorder ? performance.now() : 0;
     const canNarrow = Boolean(inputGeneration && change && change.generationId === inputGeneration.id
       && previousMessages === inputMessages && previousTools === inputTools);
     const changedRowKeys = canNarrow && inputGeneration && change
@@ -253,10 +216,7 @@ export function createTimelineStore(
           ? narrowToolChange(inputGeneration, change)
           : null
       : null;
-    if (changedRowKeys) {
-      recordProjection(recorder, inputMessages, inputTools, inputGeneration, startedAt, [changedRowKeys], "narrow");
-      return;
-    }
+    if (changedRowKeys) return;
 
     const persistedInputsChanged = persistedMessages !== inputMessages || persistedTools !== inputTools;
     const mustRefreshPersisted = persistedInputsChanged && (
@@ -276,17 +236,12 @@ export function createTimelineStore(
     const projected = stableProjection(previousProjectedRows, inputGeneration
       ? projectLiveTurn(persistedRows, inputMessages, inputGeneration, inputTools)
       : persistedRows);
-    // Diffing the row sets allocates a Map and a Set the size of the whole
-    // transcript, and the result is only ever a metric field. Every other
-    // measurement here is already gated on the recorder; this one was not.
-    const changed = recorder ? rowChanges(previousProjectedRows, projected) : [];
     setRows(reconcile(owned(projected), { key: "key" }));
     previousProjectedRows = projected;
     previousMessages = inputMessages;
     previousTools = inputTools;
     rowIndexes = new Map(projected.map((row, index) => [row.key, index]));
     liveIndex = inputGeneration ? buildLiveProjectionIndex(inputGeneration, inputMessages) : null;
-    recordProjection(recorder, inputMessages, inputTools, inputGeneration, startedAt, changed, "full");
   });
   return rows;
 }

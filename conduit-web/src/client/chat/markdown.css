@@ -254,5 +254,4 @@
 .chat-markdown .katex-display::-webkit-scrollbar,
 .chat-markdown .incremark-math-block::-webkit-scrollbar { display: none; }
 .chat-markdown .katex-display > .katex { flex: 0 0 auto; }
-
 }
