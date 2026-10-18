@@ -547,7 +547,7 @@ shape the turn, and the same prompt always produces the same turn:
 | `1500t` | an answer of exactly 1500 tokens, whatever the level says |
 | `tool`, `3 tools` | that many calls, one a message, then the answer -- as models were recorded working |
 | `narrate` | a sentence of narration before each call (about one call in seven had any) |
-| `rich` | the answer loops realistic text (`RICH_MIX`: em dashes, curly quotes and other text past Latin-1, which V8 keeps as two-byte strings, plus lists, a table, inline and display formulas, code), the thinking typographic prose; plain prompts stream ASCII words only |
+| `rich` | the answer loops realistic text (`RICH_MIX`: em dashes, curly quotes and other text past Latin-1, which V8 keeps as two-byte strings, plus lists, a table, inline and display formulas, a five-line code block and a 137-line source file), the thinking typographic prose; plain prompts stream ASCII words only |
 | `approve` | each call asks for approval once it is made; denied, it fails with the refusal as its result and the turn goes on, as Pi returns a blocked call |
 | `think`, `think 900` | thinking, 400 tokens or the number given, shared across the turn's messages: each opens with its part (a number ending in `t` is the answer's: `think 900 1500t`) |
 
