@@ -75,7 +75,6 @@
 .split-row-context { min-width: 0; flex: 1 1 0; overflow: hidden; color: var(--muted-foreground); font-size: 9.6px; text-overflow: ellipsis; white-space: nowrap; }
 .split-row-context code { font: 8.8px ui-monospace, SFMono-Regular, Consolas, monospace; }
 .split-row-trailing { flex: none; color: var(--muted-foreground); font: 8.8px ui-monospace, SFMono-Regular, Consolas, monospace; font-variant-numeric: tabular-nums; }
-.split-row-live { width: 6px; height: 6px; border-radius: 50%; background: var(--live); }
 .split-counts { display: inline-flex; gap: 5px; font: 8.8px ui-monospace, SFMono-Regular, Consolas, monospace; }
 .split-counts [data-change="removed"] { color: var(--destructive); }
 .split-counts [data-change="added"] { color: var(--workspace-git-added, #98c379); }
@@ -165,8 +164,6 @@
 .split-group-actions .split-list-filter { display: inline-flex; height: 20px; align-items: center; gap: 3px; border: 0; border-radius: 6px; background: transparent; padding: 0 6px; color: var(--muted-foreground); font-size: 9.6px; }
 .split-group-actions .split-list-filter:is(:hover, :focus-visible, [data-expanded]) { outline: none; background: var(--accent); color: var(--foreground); }
 .split-group-more small { margin-left: 5px; color: var(--muted-foreground); font: 8.8px ui-monospace, SFMono-Regular, Consolas, monospace; }
-.split-check { display: inline-grid; width: 14px; place-items: center; }
-.split-check svg { width: 12px; height: 12px; }
 @media (--conduit-mobile-layout) {
   .split-day { padding: 12px 9px 3px; font-size: 12px; }
   .split-group-actions .split-list-filter { height: 32px; padding: 0 8px; font-size: 13px; }

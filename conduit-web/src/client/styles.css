@@ -506,8 +506,6 @@ svg.lucide { stroke-width: 2.4; }
 .model-trigger span { max-width: 112px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .model-trigger svg { width: 11.2px; height: 11.2px; }
 .dictation-trigger[data-state="active"] { box-shadow: 0 0 0 2.4px color-mix(in oklch, var(--accent-cool), transparent 78%); }
-.composer-dictation-error { display: flex; align-items: center; gap: 5.6px; margin-top: 4.8px; color: var(--destructive); font-size: 9.6px; }
-.composer-dictation-error svg { width: 11.2px; height: 11.2px; flex: none; }
 .composer-status-state { display: inline-flex; height: 17.6px; align-items: center; gap: 4.8px; padding: 0 9.6px; white-space: nowrap; }
 .composer-status-state { position: relative; padding-left: 8px; background: color-mix(in oklch, var(--accent-cool), transparent 82%); color: var(--foreground); }
 .composer-status-state::after { content: ""; position: absolute; top: 0; right: -9px; z-index: 1; border-block: 1px solid transparent; border-left: 1px solid color-mix(in oklch, var(--accent-cool), transparent 82%); }
@@ -541,7 +539,6 @@ svg.lucide { stroke-width: 2.4; }
 .review-comment-chip [data-slot="button"] svg { width: 10px; height: 10px; }
 .review-comment-editor { gap: 10px; max-width: 640px; border-color: var(--border); border-radius: 11px; background: var(--popover); }
 .review-comment-editor textarea { min-height: 64px; max-height: 36vh; resize: vertical; font: 13px/1.45 var(--font-sans); }
-.review-comment-editor-actions { display: flex; justify-content: flex-end; gap: 6px; }
 /* The commented lines, whole, with the part the comment covers picked out. */
 .review-comment-excerpt { max-height: 45vh; overflow: auto; border: 1px solid var(--border); border-radius: 8px; background: var(--background); }
 .review-comment-excerpt-fallback { margin: 0; padding: 8px 10px; color: var(--muted-foreground); font: 11px/1.5 ui-monospace, SFMono-Regular, Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
@@ -589,15 +586,9 @@ svg.lucide { stroke-width: 2.4; }
 .settings-content { min-width: 0; flex: 1; overflow-y: auto; padding: 14.4px 17.6px; }
 .settings-content > header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
 .settings-content > header h2 { margin: 0; font-size: 17.6px; }
-.model-scope { display: flex; flex-direction: column; gap: 8px; }
-.model-scope > [role="group"] { display: flex; min-height: 0; flex: 1; flex-direction: column; gap: 8px; }
 .settings-error, .settings-loading { display: flex; align-items: center; justify-content: space-between; gap: 8px; border: 0.8px solid var(--border); border-radius: var(--radius-md); padding: 8px; }
 .settings-error { border-color: color-mix(in srgb, var(--destructive) 45%, var(--border)); color: var(--destructive); }
 .settings-inline-error { margin: 0; color: var(--destructive); font-size: 10.4px; }
-.dictation-auto-send { display: flex; align-items: flex-start; gap: 8px; border: 0.8px solid var(--border); border-radius: var(--radius); background: var(--card); padding: 9.6px; cursor: pointer; }
-.dictation-auto-send input { margin-top: 2.4px; accent-color: var(--primary); }
-.dictation-auto-send span { display: flex; flex-direction: column; gap: 2.4px; }
-.dictation-auto-send small { color: var(--muted-foreground); }
 .voice-settings { display: grid; gap: 12.8px; }
 .voice-input-test { display: grid; gap: 8px; padding: 9.6px; border: 0.8px solid var(--border); border-radius: var(--radius); background: var(--card); }
 .voice-input-result { display: grid; gap: 1.6px; border-left: 1px solid var(--border); background: var(--muted); padding: 6.4px 8px; }
@@ -627,24 +618,11 @@ svg.lucide { stroke-width: 2.4; }
 .voice-progress progress { width: 100%; accent-color: var(--primary); }
 .voice-progress small { overflow: hidden; color: var(--muted-foreground); text-overflow: ellipsis; white-space: nowrap; }
 .voice-test-success { margin: 0; color: var(--live, oklch(0.62 0.17 145)); font-size: 10.4px; }
-.settings-cards, .installations { display: grid; gap: 8px; margin-top: 14.4px; }
-.settings-cards article, .installations article, .workspace-settings-card { padding: 11.2px; border: 0.8px solid var(--border); border-radius: var(--radius); background: var(--card); }
-.settings-cards h3, .installations h3, .workspace-settings-card h3 { margin: 0; }
-.settings-cards p, .installations p, .workspace-settings-card p { margin: 4px 0; color: var(--muted-foreground); }
+.installations { display: grid; gap: 8px; margin-top: 14.4px; }
+.installations article, .workspace-settings-card { padding: 11.2px; border: 0.8px solid var(--border); border-radius: var(--radius); background: var(--card); }
+.installations h3, .workspace-settings-card h3 { margin: 0; }
+.installations p, .workspace-settings-card p { margin: 4px 0; color: var(--muted-foreground); }
 .search-settings { display: grid; gap: 12.8px; }
-.search-settings-intro { margin: 0; color: var(--muted-foreground); line-height: 1.45; }
-.search-provider-actions { display: flex; align-items: center; justify-content: space-between; gap: 9.6px; }
-.search-provider-actions > div { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6.4px; }
-.search-provider-status { color: var(--muted-foreground); font-size: 9.6px; }
-.search-provider-status[data-configured="true"] { color: var(--live, oklch(0.62 0.17 145)); }
-.search-provider-list { display: grid; gap: 8px; }
-.search-provider-card { display: grid; grid-template-columns: minmax(0, 1fr) minmax(144px, 0.7fr); gap: 12.8px; align-items: center; padding: 11.2px; border: 0.8px solid var(--border); border-radius: var(--radius); background: var(--card); }
-.search-provider-card h3 { display: flex; align-items: center; gap: 6.4px; margin: 0; }
-.search-provider-card h3 span { border: 0.8px solid var(--border); border-radius: 999px; padding: 1.6px 5.6px; color: var(--muted-foreground); font-size: 8px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
-.search-provider-card p { margin: 4px 0; color: var(--muted-foreground); font-size: 10.4px; }
-.search-provider-card a { color: var(--muted-foreground); font-size: 9.6px; }
-.search-provider-card[data-disabled] { opacity: .55; }
-.search-provider-card input:disabled { cursor: not-allowed; }
 .command-dialog { width: 100vw; height: 100dvh; margin: 0; }
 .command-shell { display: flex; flex-direction: column; width: min(512px, calc(100vw - 22.4px)); max-height: min(480px, calc(100dvh - 22.4px)); overflow: hidden; border: 0.8px solid var(--border); border-radius: 11.2px; background: var(--popover); box-shadow: 0 19.2px 64px rgb(0 0 0 / 42%); }
 .command-dialog-chat-search .command-shell { width: min(720px, calc(100vw - 22.4px)); max-height: min(576px, calc(100dvh - 22.4px)); }
@@ -712,7 +690,6 @@ svg.lucide { stroke-width: 2.4; }
 .command-option[data-chat-selected="true"] { background: var(--accent); }
 .command-rename-input { min-width: 0; width: 100%; border: 0.8px solid var(--ring); border-radius: 4px; outline: 0; background: var(--background); padding: 1.6px 4px; color: inherit; font: inherit; }
 .command-detail-pane { width: min(256px, calc(100vw - 22.4px)); max-height: min(480px, calc(100dvh - 22.4px)); overflow: auto; border: 0.8px solid var(--border); border-left: 0; border-radius: 0 11.2px 11.2px 0; background: var(--popover); padding: 12.8px; }
-.dialog-actions { display: flex; justify-content: flex-end; gap: 6.4px; margin-top: 14.4px; }
 .delete-dialog-choice[data-selected="true"][data-variant="outline"] { background: var(--accent); color: var(--accent-foreground); }
 .delete-dialog-confirm[data-variant="outline"] { border-color: color-mix(in oklch, var(--destructive), var(--border) 58%); background: transparent; color: var(--destructive); }
 .palette-move-list { display: flex; flex-direction: column; gap: 1.6px; max-height: 256px; overflow-y: auto; margin-top: 9.6px; }
@@ -729,11 +706,9 @@ svg.lucide { stroke-width: 2.4; }
   border: 1px solid var(--border);
   box-shadow: 0 19.2px 56px rgb(0 0 0 / 45%);
 }
-.composer-queue,
 .workspace-warning,
 .artifact,
 .attachment-card,
-.settings-cards article,
 .installations article,
 .workspace-settings-card {
   background: var(--card);
@@ -918,7 +893,6 @@ svg.lucide { stroke-width: 2.4; }
     letter-spacing: .07em;
     text-transform: uppercase;
   }
-  .composer-options-submenu .composer-option-note { margin: 0 6.4px 4px; color: var(--muted-foreground); font-size: 8.8px; line-height: 1.4; }
   .mobile-header-leading > .mobile-sidebar-trigger,
   .mobile-header-leading > .mobile-new-chat-trigger,
   .chat-header-actions > [data-slot="button"],
@@ -986,9 +960,6 @@ svg.lucide { stroke-width: 2.4; }
   .settings-rail h2 { display: none; }
   .settings-rail button { overflow: hidden; padding-inline: 4px; font-size: 8.8px; text-overflow: ellipsis; }
   .settings-content { padding: 11.2px; }
-  .search-provider-actions { align-items: flex-start; flex-direction: column; }
-  .search-provider-actions > div { justify-content: flex-start; }
-  .search-provider-card { grid-template-columns: 1fr; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1300,8 +1271,6 @@ svg.lucide { stroke-width: 2.4; }
 .model-trigger span { max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .model-trigger svg { width: 14px; height: 14px; }
 .dictation-trigger[data-state="active"] { box-shadow: 0 0 0 3px color-mix(in oklch, var(--accent-cool), transparent 78%); }
-.composer-dictation-error { display: flex; align-items: center; gap: 7px; margin-top: 6px; color: var(--destructive); font-size: 12px; }
-.composer-dictation-error svg { width: 14px; height: 14px; flex: none; }
 .composer-status-state { display: inline-flex; height: 22px; align-items: center; gap: 6px; padding: 0 12px; white-space: nowrap; }
 .composer-status-state { position: relative; padding-left: 10px; background: color-mix(in oklch, var(--accent-cool), transparent 82%); color: var(--foreground); }
 .composer-status-state::after { content: ""; position: absolute; top: 0; right: -9px; z-index: 1; border-block: 11px solid transparent; border-left: 9px solid color-mix(in oklch, var(--accent-cool), transparent 82%); }
@@ -1387,14 +1356,9 @@ svg.lucide { stroke-width: 2.4; }
 .settings-content input, .settings-content select { min-height: 31px; height: 31px; padding: 5px 8px; font-size: 12px; }
 .settings-content [data-slot="button"] { min-height: 30px; height: auto; padding-block: 5px; font-size: 12px; }
 .settings-content small { font-size: 11px; line-height: 1.35; }
-.settings-inline-action { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .settings-error, .settings-loading { display: flex; align-items: center; justify-content: space-between; gap: 10px; border: 1px solid var(--border); border-radius: var(--radius-md); padding: 10px; }
 .settings-error { border-color: color-mix(in srgb, var(--destructive) 45%, var(--border)); color: var(--destructive); }
 .settings-inline-error { margin: 0; color: var(--destructive); font-size: 13px; }
-.dictation-auto-send { display: flex; align-items: flex-start; gap: 10px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); padding: 12px; cursor: pointer; }
-.dictation-auto-send input { margin-top: 3px; accent-color: var(--primary); }
-.dictation-auto-send span { display: flex; flex-direction: column; gap: 3px; }
-.dictation-auto-send small { color: var(--muted-foreground); }
 .voice-settings { display: grid; gap: 16px; }
 .voice-input-test { display: grid; gap: 10px; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); }
 .voice-input-result { display: grid; gap: 2px; border-left: 2px solid var(--border); background: var(--muted); padding: 8px 10px; }
@@ -1424,25 +1388,12 @@ svg.lucide { stroke-width: 2.4; }
 .voice-progress progress { width: 100%; accent-color: var(--primary); }
 .voice-progress small { overflow: hidden; color: var(--muted-foreground); text-overflow: ellipsis; white-space: nowrap; }
 .voice-test-success { margin: 0; color: var(--live, oklch(0.62 0.17 145)); font-size: 13px; }
-.settings-cards, .installations { display: grid; gap: 8px; margin-top: 14px; }
-.settings-cards article, .installations article, .workspace-settings-card { padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); }
+.installations { display: grid; gap: 8px; margin-top: 14px; }
+.installations article, .workspace-settings-card { padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); }
 .installations article { min-height: 0; }
-.settings-cards h3, .installations h3, .workspace-settings-card h3 { margin: 0; }
-.settings-cards p, .installations p, .workspace-settings-card p { margin: 5px 0; color: var(--muted-foreground); }
+.installations h3, .workspace-settings-card h3 { margin: 0; }
+.installations p, .workspace-settings-card p { margin: 5px 0; color: var(--muted-foreground); }
 .search-settings { display: grid; gap: 16px; }
-.search-settings-intro { margin: 0; color: var(--muted-foreground); line-height: 1.45; }
-.search-provider-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.search-provider-actions > div { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
-.search-provider-status { color: var(--muted-foreground); font-size: 12px; }
-.search-provider-status[data-configured="true"] { color: var(--live, oklch(0.62 0.17 145)); }
-.search-provider-list { display: grid; gap: 10px; }
-.search-provider-card { display: grid; grid-template-columns: minmax(0, 1fr) minmax(180px, 0.7fr); gap: 16px; align-items: center; padding: 14px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); }
-.search-provider-card h3 { display: flex; align-items: center; gap: 8px; margin: 0; }
-.search-provider-card h3 span { border: 1px solid var(--border); border-radius: 999px; padding: 2px 7px; color: var(--muted-foreground); font-size: 10px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
-.search-provider-card p { margin: 5px 0; color: var(--muted-foreground); font-size: 13px; }
-.search-provider-card a { color: var(--muted-foreground); font-size: 12px; }
-.search-provider-card[data-disabled] { opacity: .55; }
-.search-provider-card input:disabled { cursor: not-allowed; }
 .command-dialog { width: 100vw; height: 100dvh; margin: 0; }
 .command-shell { display: flex; flex-direction: column; width: min(640px, calc(100vw - 28px)); max-height: min(600px, calc(100dvh - 28px)); overflow: hidden; border: 1px solid var(--border); border-radius: 14px; background: var(--popover); box-shadow: 0 24px 80px rgb(0 0 0 / 42%); }
 .command-dialog-chat-search .command-shell { width: min(900px, calc(100vw - 28px)); max-height: min(720px, calc(100dvh - 28px)); }
@@ -1510,7 +1461,6 @@ svg.lucide { stroke-width: 2.4; }
 .command-option[data-chat-selected="true"] { background: var(--accent); }
 .command-rename-input { min-width: 0; width: 100%; border: 1px solid var(--ring); border-radius: 5px; outline: 0; background: var(--background); padding: 2px 5px; color: inherit; font: inherit; }
 .command-detail-pane { width: min(320px, calc(100vw - 28px)); max-height: min(600px, calc(100dvh - 28px)); overflow: auto; border: 1px solid var(--border); border-left: 0; border-radius: 0 14px 14px 0; background: var(--popover); padding: 16px; }
-.dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
 .delete-dialog-choice[data-selected="true"][data-variant="outline"] { background: var(--accent); color: var(--accent-foreground); }
 .delete-dialog-confirm[data-variant="outline"] { border-color: color-mix(in oklch, var(--destructive), var(--border) 58%); background: transparent; color: var(--destructive); }
 .palette-move-list { display: flex; flex-direction: column; gap: 2px; max-height: 320px; overflow-y: auto; margin-top: 12px; }
@@ -1528,11 +1478,9 @@ svg.lucide { stroke-width: 2.4; }
   border: 1px solid var(--border);
   box-shadow: 0 24px 70px rgb(0 0 0 / 45%);
 }
-.composer-queue,
 .workspace-warning,
 .artifact,
 .attachment-card,
-.settings-cards article,
 .installations article,
 .workspace-settings-card {
   background: var(--card);
@@ -1717,7 +1665,6 @@ svg.lucide { stroke-width: 2.4; }
     letter-spacing: .07em;
     text-transform: uppercase;
   }
-  .composer-options-submenu .composer-option-note { margin: 0 8px 5px; color: var(--muted-foreground); font-size: 11px; line-height: 1.4; }
   .mobile-header-leading > .mobile-sidebar-trigger,
   .mobile-header-leading > .mobile-new-chat-trigger,
   .chat-header-actions > [data-slot="button"],
@@ -1805,9 +1752,6 @@ svg.lucide { stroke-width: 2.4; }
   .settings-rail h2 { display: none; }
   .settings-rail button { overflow: hidden; padding-inline: 5px; font-size: 11px; text-overflow: ellipsis; }
   .settings-content { padding: 14px; }
-  .search-provider-actions { align-items: flex-start; flex-direction: column; }
-  .search-provider-actions > div { justify-content: flex-start; }
-  .search-provider-card { grid-template-columns: 1fr; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1891,7 +1835,6 @@ svg.lucide { stroke-width: 2.4; }
 .server-route-choice > .server-row-latency { flex: none; }
 /* A sentence inside a menu: it explains the rows rather than labelling them,
    so it wraps and is not shouted like a group heading. */
-.server-route-note { max-width: 260px; text-transform: none; font-weight: 400; letter-spacing: 0; white-space: normal; line-height: 1.35; }
 .server-route-error { color: var(--destructive); text-transform: none; font-weight: 400; letter-spacing: 0; white-space: normal; line-height: 1.35; }
 /* The routes sit under the name they belong to, indented so the hierarchy is
    in the layout rather than in a heading. */
@@ -1943,50 +1886,12 @@ svg.lucide { stroke-width: 2.4; }
 .settings-dialog .settings-content[data-section="prompts"] { display: flex; overflow: hidden; flex-direction: column; }
 /* Settings content follows the dashboard tile pattern: hairline groups of
    stacked rows. No multi-column card grids as chrome. */
-.settings-tile { overflow: hidden; border: 1px solid var(--border); border-radius: 10px; background: transparent; }
-.settings-tile > summary,
-.settings-disclosure > summary {
-  display: flex;
-  min-height: 44px;
-  align-items: center;
-  gap: 10px;
-  padding: 8px 12px;
-  cursor: pointer;
-  list-style: none;
-}
-.settings-tile > summary::-webkit-details-marker,
-.settings-tile > summary > span,
-.settings-tile > summary > span svg,
-.settings-tile > summary strong,
-.settings-tile > summary small,
-.settings-chevron { width: 14px; height: 14px; flex: none; margin-left: auto; color: var(--muted-foreground); transition: transform 140ms ease; }
-details[open] > summary .settings-chevron { transform: rotate(90deg); }
-.settings-tile[open] > summary { border-bottom: 1px solid var(--border); }
-.settings-rows { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
-.settings-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(108px, 148px); align-items: center; gap: 10px; min-height: 38px; padding: 5px 12px; border-top: 1px solid var(--border); }
-.settings-rows > .settings-row:nth-child(-n+2) { border-top: 0; }
-.settings-rows > .settings-row:nth-child(2n) { border-left: 1px solid var(--border); }
 /* The name of a setting is the thing being read, so it is foreground -- muted
    left it dimmer than the value beside it, which is the wrong way round. */
-.settings-row > span { min-width: 0; color: var(--foreground); font-size: 12px; font-weight: 500; }
-.settings-dialog .settings-row > select,
-.settings-dialog .settings-row > input:not([type="checkbox"]),
-.settings-dialog .settings-row > [data-slot="input"] { width: 100%; min-width: 0; min-height: 30px; height: 30px; margin: 0; font-size: 12px; }
-.settings-row > input[type="checkbox"] { width: 15px; height: 15px; min-height: 0; justify-self: end; margin: 0; accent-color: var(--primary); }
 /* A build is an identifier, not prose: mono, and allowed to wrap rather than
    be clipped, since a tag and a commit together outrun the value column. */
-.settings-row > .settings-build { min-width: 0; color: var(--foreground); font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 11px; text-align: right; overflow-wrap: anywhere; }
-.settings-row > .settings-build > small { display: block; color: var(--muted-foreground); font-size: 10px; }
-.settings-metric-groups { display: grid; gap: 10px; }
-.settings-metric-groups fieldset { margin: 0; padding: 0; border: 0; }
-.settings-metric-groups legend { margin: 0 0 4px; color: var(--muted-foreground); font-size: 9px; font-weight: 650; letter-spacing: .08em; text-transform: uppercase; }
 .settings-dialog .settings-content [data-slot="field-group"],
-.settings-dialog .settings-content[data-section="models"] .settings-section-block > [data-slot="field-group"],
-.settings-dialog .pi-auth-panel > [data-slot="field-group"],
-.settings-control-grid,
-.settings-dialog .settings-cards,
 .settings-dialog .installations,
-.settings-dialog .pi-auth-panel > .settings-cards,
 .settings-dialog .settings-content [data-slot="field-group"] { gap: 10px; }
 .settings-dialog .settings-content [data-slot="field"] { gap: 5px; }
 .settings-dialog .settings-content input,
@@ -2006,11 +1911,6 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
  * the names beneath it. None of this is decoration: it is the order of the
  * page, said in the only three things that can say it.
  */
-.settings-dialog .settings-section-block,
-.settings-dialog .settings-tile,
-.settings-dialog .settings-disclosure,
-.settings-dialog .settings-content .settings-control-grid,
-.settings-dialog .settings-rows { background: var(--card); }
 .settings-dialog .settings-content [data-slot="field"] > label {
   color: var(--foreground); font-size: 12.5px; font-weight: 550; letter-spacing: -.005em;
 }
@@ -2065,10 +1965,6 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
  *   section title 19 · tile heading 14 · name 12.5 · help 11
  */
 .settings-dialog .settings-content > header h2 { font-size: 19px; font-weight: 600; letter-spacing: -.025em; }
-.settings-dialog .settings-section-block > h3,
-.settings-dialog .settings-tile > summary strong,
-.settings-dialog .settings-tile > summary small,
-
 /*
  * The close and the back control are the same kind of thing and are drawn the
  * same size. The close was the character "x" at the button's text size, beside
@@ -2086,11 +1982,6 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
  * the content flow with nothing between them, so a group of settings and the
  * accounts below it read as one run of rows with a stray hairline in it.
  */
-.settings-dialog .settings-content > .settings-section-block,
-.settings-dialog .settings-content > .settings-disclosure,
-.settings-dialog .settings-content > .settings-tile,
-.settings-dialog .settings-content > .settings-control-grid,
-
 /*
  * A setting is a row, not a stack.
  *
@@ -2128,10 +2019,6 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
  * them: it had the weight of the labels beneath it and sat at the same indent,
  * so nothing said which was the container.
  */
-.settings-dialog .settings-section-block > h3 {
-  margin: 0; border-bottom: 1px solid var(--border); padding: 11px 14px;
-  color: var(--foreground); font-size: 12.5px; font-weight: 600; letter-spacing: -.01em;
-}
 /* Rows inside one tile are separated by the hairline, as tiled lists are. */
 /* A server is a row of the tile like any other, so it is inset like one. */
 
@@ -2154,16 +2041,7 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
  * together", and it should not depend on which section happened to use which
  * wrapper.
  */
-.settings-dialog .settings-content .settings-control-grid {
-  border: 1px solid var(--border); border-radius: 10px; gap: 0 !important; overflow: hidden;
-}
-.settings-dialog .settings-content .settings-control-grid > [data-slot="field"] { padding: 12px 14px; }
-.settings-dialog .settings-content .settings-control-grid > [data-slot="field"] + [data-slot="field"] { border-top: 1px solid var(--border); }
 /* An action belongs to the rows above it, on a line of its own beneath them. */
-.settings-dialog .settings-content .settings-control-grid > [data-slot="button"] {
-  margin: 0; border-top: 1px solid var(--border); border-radius: 0; padding: 11px 14px; justify-self: stretch; width: 100%;
-}
-.settings-dialog .settings-content .settings-control-grid > [role="alert"] { border-top: 1px solid var(--border); padding: 8px 12px; }
 
 /*
  * Setup instructions are help, not content.
@@ -2174,26 +2052,10 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
  * now read as the aside they are, and the panel opens closed: it says whether
  * it is connected on the summary row, which is the part worth seeing daily.
  */
-.settings-dialog .pi-auth-panel > p,
-.settings-dialog .pi-auth-panel > ol {
-  margin: 0 0 10px; max-width: 68ch; color: var(--muted-foreground); font-size: 11px; line-height: 1.5;
-}
 
 /* The close sits in the dialog's corner, level with the title it closes. */
 .settings-dialog .settings-content > header { align-items: start; }
 .settings-dialog .settings-content > header > [data-slot="button"]:last-child { margin: -4px -8px 0 0; }
-.settings-dialog .search-provider-card { grid-template-columns: minmax(0, 1fr) !important; }
-.settings-control-grid > [role="alert"] { grid-column: 1 / -1; }
-.settings-control-grid > [data-slot="button"] { justify-self: start; }
-.settings-disclosure {
-  overflow: hidden;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: transparent;
-}
-.settings-tile > summary > span svg,
-.settings-disclosure > .pi-auth-panel,
-.settings-disclosure > .settings-loading,
 .settings-dialog .installations > [data-slot="button"] { grid-column: 1 / -1; justify-self: start; }
 .settings-dialog .voice-backend-disclosure { margin-top: 0; }
 .settings-dialog .voice-backend-disclosure > .voice-card { border: 0; border-top: 1px solid var(--border); border-radius: 0; }
@@ -2297,11 +2159,6 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
 
   /* Tiles need air around them, and each other, or the page is one grey slab. */
   .settings-dialog .settings-content { padding: 0 12px 24px; }
-  .settings-dialog .settings-content > .settings-stack,
-  .settings-dialog .settings-content > .settings-section-block,
-  .settings-dialog .settings-content .settings-control-grid { margin-bottom: 12px; }
-  .settings-dialog .settings-section-block > [data-slot="field-group"] > [data-slot="field"],
-  .settings-dialog .settings-content .settings-control-grid > [data-slot="field"] { padding: 12px; }
   /*
    * An intro paragraph is the first thing in the flow after a sticky header,
    * and its top margin was collapsing through it -- so the first line of Voice
@@ -2313,7 +2170,6 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
      grandchild rather than a child -- named by where it sits, not by depth. */
   .settings-dialog .settings-content > *:not(header) > :first-child { margin-top: 0; }
   .settings-dialog .voice-settings-intro,
-  .settings-dialog .settings-note,
   .settings-dialog .search-settings > p,
   .settings-dialog .voice-settings > p {
     margin: 0 0 12px; color: var(--muted-foreground); font-size: 11px; line-height: 1.5;
@@ -2323,9 +2179,6 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
    * put theirs straight on the pane, so the same controls looked unrelated to
    * the ones a section away.
    */
-  .settings-dialog .settings-content [data-slot="field-group"]:not(.settings-section-block [data-slot="field-group"]):not(.pi-auth-panel [data-slot="field-group"]) {
-    border: 1px solid var(--border); border-radius: 10px; margin-bottom: 12px; overflow: hidden;
-  }
 
   /*
    * A server is a small stack on a phone, not four controls on one line. The
@@ -2333,8 +2186,6 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
    * width, and sharing it between them left a name box too narrow to read a
    * name in and an address truncated to nothing.
    */
-  .settings-server-row > [data-slot="input"],
-  .settings-server-row > [data-slot="button"],
   /* No room for three columns beside an address, so the reach follows it. */
 
   /* The back chevron is a control, not a target: it was drawing its own box. */
@@ -2347,14 +2198,6 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
   .settings-dialog .settings-content > header p { margin: 2px 0 0; }
   .settings-shell[data-view="index"] > .settings-content,
   .settings-shell[data-view="detail"] > .settings-rail { display: none; }
-  .settings-control-grid, .settings-dialog .settings-cards,
-  .settings-dialog .settings-content[data-section="models"] .settings-section-block > [data-slot="field-group"],
-  .settings-dialog .pi-auth-panel > [data-slot="field-group"],
-  .settings-rows { grid-template-columns: 1fr; }
-  .settings-rows > .settings-row:nth-child(2n) { border-left: 0; }
-  .settings-rows > .settings-row:nth-child(-n+2) { border-top: 1px solid var(--border); }
-  .settings-rows > .settings-row:first-child { border-top: 0; }
-  .settings-row { grid-template-columns: minmax(0, 1fr) minmax(110px, 160px); gap: 8px; padding-inline: 10px; }
 }
 
 .harness-mark { display: block; flex: none; object-fit: contain; }
@@ -2503,11 +2346,6 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
   box-shadow: 0 28px 84px rgb(0 0 0 / 55%);
 }
 .command-dialog-chat-search .command-shell { width: min(720px, calc(100vw - 22px)); max-height: min(576px, 76dvh); }
-.command-search-path { display: flex; min-height: 27px; align-items: center; gap: 5px; padding: 6px 14px 0; color: var(--muted-foreground); font-size: 9px; }
-.command-search-path button { border: 0; background: none; padding: 0; color: var(--muted-foreground); font: inherit; cursor: pointer; }
-.command-search-path button:hover, .command-search-path button:focus-visible { outline: none; color: var(--foreground); }
-.command-search-path > span:last-of-type { color: var(--foreground); }
-.command-search-path small { margin-left: auto; color: var(--muted-foreground); font-size: inherit; }
 .command-dialog-model-selector .command-shell { width: min(576px, calc(100vw - 22px)); }
 .command-input-row { min-height: 44px; gap: 8px; padding: 4px 11px; border-bottom-color: oklch(1 0 0 / 10%); }
 .command-input { min-height: 36px; font-size: 12px; font-weight: 520; }
@@ -2517,16 +2355,11 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
 .command-back { width: 24px; min-width: 24px; height: 24px; min-height: 24px; flex: none; color: var(--muted-foreground); }
 .command-back svg { width: 12px; height: 12px; }
 .command-page-prefix { font-weight: 580; }
-.command-search-tools { display: flex; min-height: 32px; align-items: center; justify-content: space-between; gap: 8px; border-bottom: 1px solid oklch(1 0 0 / 10%); padding: 4px 11px; }
-.command-search-filters { display: flex; min-width: 0; overflow-x: auto; align-items: center; gap: 5px; white-space: nowrap; }
 .command-filter-chip { border-color: oklch(1 0 0 / 10%); background: oklch(1 0 0 / 10%); }
 .command-filter-chip:hover, .command-filter-chip:focus-visible { outline: none; border-color: color-mix(in oklch, oklch(1 0 0 / 10%), var(--foreground) 24%); }
 .command-sort-toggle { border-color: oklch(1 0 0 / 10%); }
 .command-sort-toggle button { min-height: 18px; padding: 2px 5px; font-size: 8.5px; }
 .command-sort-toggle button:focus-visible { outline: none; background: oklch(1 0 0 / 10%); }
-.command-search-footer-controls { display: flex; flex: none; align-items: center; gap: 5px; }
-.command-all-chats-toggle { min-height: 22px; border: 1px solid oklch(1 0 0 / 10%); border-radius: 5px; background: transparent; padding: 2px 7px; color: var(--muted-foreground); font-size: 8.8px; cursor: pointer; }
-.command-all-chats-toggle[aria-pressed="true"], .command-all-chats-toggle:is(:hover, :focus-visible) { outline: none; background: oklch(1 0 0 / 10%); color: var(--foreground); }
 .command-list { padding: 5px 6px; }
 .command-group-label { margin: 8px 7px 3px; color: oklch(0.68 0.004 264); font-size: 8.8px; font-weight: 650; letter-spacing: .08em; }
 .command-list > .command-group-label:first-child { margin-top: 2px; }
@@ -2576,11 +2409,6 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
 .command-chat-date { flex: none; white-space: nowrap; }
 .command-hint-bar[data-chat-search] { min-height: 62px; flex-wrap: wrap; align-content: center; gap: 4px 9px; }
 .command-hint-bar[data-chat-search][data-mode="move"] { min-height: 32px; }
-.command-hint-bar[data-chat-search] .command-search-footer-controls { width: 100%; min-height: 22px; gap: 12px; }
-.command-search-footer-controls label { display: inline-flex; min-width: 0; align-items: center; gap: 3px; white-space: nowrap; }
-.command-search-footer-controls select { max-width: 170px; border: 0; border-radius: 4px; outline: none; background: transparent; padding: 2px 12px 2px 2px; color: var(--foreground); color-scheme: dark; font: inherit; cursor: pointer; }
-.command-search-footer-controls select:hover, .command-search-footer-controls select:focus-visible { background: oklch(1 0 0 / 10%); }
-.command-search-footer-controls select option { background: var(--popover); color: var(--foreground); }
 .command-hint-bar[data-chat-search] .command-hint-primary { min-height: 20px; }
 .command-shortcut, .command-model-spec { font: 500 8.5px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace; }
 .command-empty { padding: 16px 9px; }
@@ -2603,13 +2431,11 @@ details[open] > summary .settings-chevron { transform: rotate(90deg); }
   .command-dialog .command-shell { width: 100%; height: 100%; max-height: none; border-radius: 14px; }
   .command-input-row { min-height: 52px; padding-inline: 12px; }
   .command-input { min-height: 44px; font-size: 16px; }
-  .command-search-tools { min-height: 44px; padding-inline: 12px; }
   .command-list { padding: 8px 10px calc(12px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))); }
   .command-option, .command-dialog-chat-search .command-option[data-chat-row="true"] { min-height: 44px; }
   .command-label, .command-dialog-chat-search .command-option[data-chat-row="true"] .command-label { font-size: 14px; }
   .command-icon { width: 16px; height: 16px; }
   .command-hint-bar { flex-wrap: wrap; }
-  .command-search-footer-controls { width: 100%; }
 }
 
 /* Search and the command palette in the composer's frost (the palette sketch,
