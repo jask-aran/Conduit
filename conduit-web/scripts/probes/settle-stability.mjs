@@ -59,7 +59,7 @@ const inspect = () => page.evaluate(() => new Promise((finish) => {
     for (const record of records) for (const [sign, list] of [["+", record.addedNodes], ["-", record.removedNodes]]) for (const node of list) if (node.nodeType === 1) {
       // By design: the word fade unwraps its spans once it ends (text unchanged),
       // and the action row replaces its placeholder once the answer has appeared.
-      if (node.classList.contains("stream-word") || node.classList.contains("ui-message-foot")) continue;
+      if (node.classList.contains("ui-answer-word") || node.classList.contains("ui-message-foot")) continue;
       churn += 1;
       const key = `${sign}${node.tagName.toLowerCase()}.${String(node.className || "").split(" ")[0]} in ${record.target.className ? String(record.target.className).split(" ")[0] : record.target.tagName}`;
       kinds[key] = (kinds[key] || 0) + 1;

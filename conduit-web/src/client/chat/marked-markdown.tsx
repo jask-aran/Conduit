@@ -1,3 +1,4 @@
+import { ANSWER_MARKDOWN } from "@/components/ui/shared";
 import { createEffect, onCleanup, onMount } from "solid-js";
 import { marked } from "marked";
 import markedKatex from "marked-katex-extension";
@@ -161,7 +162,7 @@ function renderMarkdownFragment(inline: boolean, render: () => string) {
   const fragment = sanitizeMarkdownFragment(html, { inline });
   for (const table of fragment.querySelectorAll("table")) {
     const scroller = document.createElement("div");
-    scroller.className = "markdown-table-scroll";
+    scroller.className = ANSWER_MARKDOWN.table;
     table.before(scroller);
     scroller.append(table);
   }
@@ -439,7 +440,7 @@ export function MarkedMarkdown(props: ChatMarkdownProps) {
   onCleanup(() => root.removeEventListener("click", click));
 
   return <>
-    <div ref={root} class="chat-markdown" data-renderer="marked" data-inline={props.inline ? "true" : undefined} data-streaming={props.streaming || undefined} />
+    <div ref={root} class={`chat-markdown ${ANSWER_MARKDOWN.flow}`} data-renderer="marked" data-inline={props.inline ? "true" : undefined} data-streaming={props.streaming || undefined} />
     <ExternalLinkDialog url={external.url} onClose={external.close} returnFocus={external.returnFocus} onFocusRestored={external.clearReturnFocus} />
   </>;
 }

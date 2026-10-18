@@ -38,17 +38,6 @@
   --move: var(--duration-quick); --move-ease: var(--ease-leave); --hide-delay: var(--duration-quick); }
 .question-dock > .ui-rider[data-layout="card"] { animation: ui-rise var(--duration-gentle) var(--ease-arrive) var(--duration-quick) backwards; }
 @media (prefers-reduced-motion: reduce) { .composer-stack > .composer-wrap.ui-composer-width { transition: none; } .question-dock > .ui-rider[data-layout="card"] { animation: none; } }
-/* In the gallery's previews the app's answer (its own Markdown renderer) is drawn as an Answer: its blocks
-   take the Answer's type, gap and pieces, outranking the app's .chat-markdown rules, so it follows Text size. */
-.ui-answer .chat-markdown { font-size: inherit; line-height: inherit; }
-.ui-answer :is(.chat-markdown, .chat-markdown > .incremark) > * { margin-block: 0; }
-.ui-answer :is(.chat-markdown, .chat-markdown > .incremark) > * + * { margin-top: var(--answer-gap); }
-.ui-answer .chat-markdown :is(h1, h2, h3) { letter-spacing: normal; }
-.ui-answer .chat-markdown h1 { font-size: var(--text-heading); }
-.ui-answer .chat-markdown :is(h2, h3) { font-size: var(--text-body); }
-.ui-answer .chat-markdown blockquote { border-left-color: var(--tint); padding-left: var(--space-lg); }
-.ui-answer .chat-markdown :not(pre) > code { border-radius: var(--radius-inset); background: var(--tint); padding: 0 var(--space-xs); font: 0.9em var(--font-code); }
-.ui-answer .chat-markdown :is(th, td) { border-color: var(--tint); padding: var(--space-sm) var(--space-md); }
 /* The app's code block (its Markdown's .artifact) drawn as a CodeBlock: a box, the caption bar, the code face. */
 .ui-answer .chat-markdown .artifact { border: var(--hairline) solid var(--tint); border-radius: var(--radius-control); background: var(--background); }
 .ui-answer .chat-markdown .artifact-header { min-height: var(--control-sm); border-bottom: var(--hairline) solid var(--tint); background: linear-gradient(var(--tint), var(--tint)), var(--background); padding: 0 var(--space-2xs) 0 var(--space-lg); color: var(--muted-foreground); font: var(--text-caption) var(--font-data); }

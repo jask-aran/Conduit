@@ -3,6 +3,7 @@ import { BellIcon, ChevronDownIcon, SquareIcon, TriangleAlertIcon } from "lucide
 import { cn } from "@/lib/utils";
 import { Spinner } from "./controls";
 import { type Motion, motionOf, sinceOf } from "./shared";
+export { ANSWER_MARKDOWN } from "./shared";
 
 /**
  * The user's words in frost. Given `fold` lines, a message that runs past them folds to them, its last line fading,
@@ -44,7 +45,7 @@ export function Bubble(props: { children: JSX.Element; fold?: number; open?: boo
  * markdown and every action are the caller's.
  */
 /** The answer: Markdown with no bubble, the Body role, one gap between blocks. html for rendered Markdown. copied: it
- *  was just copied, and takes the copied wash. */
+ *  was just copied, and takes the copied wash. A Markdown renderer marks what it draws into it with ANSWER_MARKDOWN. */
 export const Answer = (props: { html?: string; copied?: boolean; children?: JSX.Element }) =>
   <Show when={props.html !== undefined} fallback={<div class="ui-answer" data-copied={props.copied ? "" : undefined}>{props.children}</div>}><div class="ui-answer" data-copied={props.copied ? "" : undefined} innerHTML={props.html} /></Show>;
 /** A request that failed: Request failed and when, its facts (model, provider, profile), then what the provider

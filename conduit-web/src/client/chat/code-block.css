@@ -1,3 +1,18 @@
+/* The code card until it is the library's CodeBlock: its box, header and lines, and a wide one's bleed (the
+   Answer's, components/ui/styles/transcript.css), at both densities. */
+.artifact { border: 0.8px solid var(--border); border-radius: 8px; background: var(--card); }
+.artifact-header { display: flex; align-items: center; justify-content: space-between; padding: 5.6px 8px; border-bottom: 1px solid var(--border); color: var(--muted-foreground); font-size: 9.6px; }
+.artifact-header button { border: 0; background: transparent; color: inherit; }
+.artifact pre { margin: 0; overflow: auto; padding: 11.2px; font: 10.4px/1.55 ui-monospace, monospace; }
+.streaming-pending.artifact { color: var(--muted-foreground); }
+.streaming-pending-fence { opacity: 0.92; }
+:is(.ui-answer, .ui-answer-flow) > .artifact { width: max-content; min-width: 100%; max-width: var(--answer-bleed-code, 100%); margin-left: 50%; translate: -50%; }
+@media (--conduit-phone-layout) {
+  .artifact { border-width: 1px; border-radius: 10px; }
+  .artifact-header { padding: 7px 10px; font-size: 12px; }
+  .artifact pre { padding: 14px; font: 13px/1.55 ui-monospace, monospace; }
+}
+
 /* Code block card: sticky header, collapse, and copy feedback.
 
    .artifact previously carried overflow:hidden, which made the card a scroll

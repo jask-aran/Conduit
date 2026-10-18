@@ -30,7 +30,7 @@ if (!handles.length) { await close(); process.exit(1); }
 await page.addStyleTag({ content: ".solid-meteor-shower, canvas { visibility: hidden !important; } * { caret-color: transparent !important; animation-play-state: paused !important; }" });
 await page.waitForTimeout(300);
 await page.evaluate(() => {
-  const watched = () => [...document.querySelectorAll(".katex-display > .katex, .markdown-table-scroll, .chat-markdown > .incremark > *")];
+  const watched = () => [...document.querySelectorAll(".katex-display > .katex, .ui-answer-table, .chat-markdown > .incremark > *")];
   const rect = (element) => { const box = element.getBoundingClientRect(); return [box.left, box.top, box.width]; };
   const name = (node) => node.tagName.toLowerCase() + (typeof node.className === "string" && node.className ? "." + node.className.split(" ").slice(0, 2).join(".") : "");
   const elements = watched();

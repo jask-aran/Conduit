@@ -1,3 +1,4 @@
+import { ANSWER_MARKDOWN } from "@/components/ui/shared";
 import DOMPurify from "dompurify";
 
 const allowedProtocols = new Set(["http:", "https:", "mailto:"]);
@@ -61,7 +62,7 @@ export function renderMarkdownLink(options: {
   if (!target.external) {
     return `<a href="${escapeHtml(String(options.href ?? ""))}"${citation}${title}>${label}</a>`;
   }
-  return `<button type="button" class="external-markdown-link"${citation}${title} data-external-url="${escapeHtml(target.href)}" aria-label="${escapeHtml(options.labelText || target.href)}">${label}</button>`;
+  return `<button type="button" class="${ANSWER_MARKDOWN.link}"${citation}${title} data-external-url="${escapeHtml(target.href)}" aria-label="${escapeHtml(options.labelText || target.href)}">${label}</button>`;
 }
 
 const baseAttributes = [
