@@ -96,8 +96,8 @@ async function watchQueue(text) {
     let quiet = null;
     let aboveFirst = null;
     const frame = () => {
-      const nodes = [...document.querySelectorAll(".thread .bubble, .thread .turn-trace")];
-      const users = nodes.filter((node) => node.classList.contains("bubble-user"));
+      const nodes = [...document.querySelectorAll(".thread .bubble, .thread .ui-bubble, .thread .turn-trace")];
+      const users = nodes.filter((node) => node.classList.contains("ui-bubble"));
       const sent = users.find((node) => node.textContent.trim().startsWith(text));
       if (sent) {
         const at = nodes.indexOf(sent);
@@ -124,8 +124,8 @@ async function watchQueue(text) {
 }
 
 async function settledShape() {
-  const shape = () => page.evaluate(() => [...document.querySelectorAll(".thread .bubble, .thread .turn-trace")]
-    .map((node) => node.classList.contains("bubble-user") ? "U" : node.classList.contains("turn-trace") ? "T" : "A").join(""));
+  const shape = () => page.evaluate(() => [...document.querySelectorAll(".thread .bubble, .thread .ui-bubble, .thread .turn-trace")]
+    .map((node) => node.classList.contains("ui-bubble") ? "U" : node.classList.contains("turn-trace") ? "T" : "A").join(""));
   const live = await shape();
   await page.reload();
   await composer().waitFor();
