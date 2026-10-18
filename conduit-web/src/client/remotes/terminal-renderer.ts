@@ -116,7 +116,7 @@ function terminalFontSize() {
   return Math.max(8, Math.min(24, Number(localStorage.getItem("conduit:terminal-font-size")) || fallback));
 }
 
-function observeHostSize(host: HTMLElement, terminal: ResizableTerminal & RefreshableTerminal, fit: TerminalFit) {
+function observeHostSize(host: HTMLElement, fit: TerminalFit) {
   let frame: number | undefined;
   let disposed = false;
   let width = -1;
@@ -322,7 +322,7 @@ async function createXtermRenderer(host: HTMLElement, options: TerminalRendererO
     webgl.dispose();
   }
   const stopClipboardShortcuts = installClipboardShortcuts(host, terminal, options);
-  const stopObservingHost = observeHostSize(host, terminal, fit);
+  const stopObservingHost = observeHostSize(host, fit);
   return {
     id: "xterm",
     cols: () => terminal.cols,

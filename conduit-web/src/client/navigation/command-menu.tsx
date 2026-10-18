@@ -22,7 +22,7 @@ import {
 } from "../palette/chat-query";
 import { COMMAND_IDS, commandRegistry } from "../commands/command-registry";
 import { chatSortStamp, compareChatsBySort, saveChatSort, useChatSort } from "../preferences/chat-sort";
-import { harnessLabelFor, ThreadHarnessMark } from "../harness-brand";
+import { ThreadHarnessMark } from "../harness-brand";
 import type { ShortcutManager } from "../shortcuts/shortcut-manager";
 import type { ShortcutContext } from "../shortcuts/shortcut-types";
 import { ChatPreview } from "./chat-preview";
@@ -574,7 +574,6 @@ export function CommandMenu(props: {
     setEditingValue(target.chat.title || "");
   };
   const submitRename = async () => {
-    const id = editingId();
     const target = editingTarget();
     const value = editingValue().trim();
     if (!target || !value) return;

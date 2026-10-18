@@ -79,9 +79,6 @@ export function ModelSelector(props: {
   onManageModels?: () => void;
 }) {
   const selected = createMemo(() => props.models.find((item) => item.spec === props.model));
-  const selectableModels = createMemo(() => props.models.filter((item) => !item.outsideScope));
-  // A model with no levels still shows the slider, held on its one setting.
-  const levels = createMemo(() => selected()?.thinkingLevels?.length ? selected()!.thinkingLevels! : ["off"]);
   const label = createMemo(() => selected()?.label || props.model);
   // A catalogue we already hold is the answer while the next one loads: the
   // agent's own spinner already says something is starting, so swapping this

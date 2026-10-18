@@ -12,18 +12,15 @@ import { liveUpdateNow, startLiveUpdate } from "./platform/live-update.ts";
 // The clients that stage a downloaded update and install it on request.
 const updateShell = desktopShell ?? androidShell;
 import {
-  ArrowLeftRightIcon, Columns2Icon, PanelTopIcon, EllipsisIcon, MessageSquarePlusIcon, PanelLeftIcon, PanelRightIcon, PencilIcon, RefreshCwIcon, SearchIcon, ServerIcon, QrCodeIcon, MonitorIcon, ShareIcon, TerminalIcon, Trash2Icon, TriangleAlertIcon, XIcon,
-  ChevronRightIcon,
+  ArrowLeftRightIcon, Columns2Icon, PanelTopIcon, EllipsisIcon, PanelLeftIcon, PanelRightIcon, ServerIcon, QrCodeIcon, MonitorIcon, TriangleAlertIcon, XIcon,
 } from "lucide-solid";
 import { Toaster, toast } from "solid-sonner";
 import "solid-sonner/styles.css";
 import { DefaultMeteorShower } from "@jask-aran/solid-components/meteor-shower";
 import "@jask-aran/solid-components/meteor-shower.css";
 import { phoneLayerOpen } from "@/components/phone-overlays";
-import { attachRowMenus, Button, Menu, MenuContent, MenuGroup, MenuItem, MenuLabel, MenuSeparator, MenuTrigger, Spinner } from "@/components/primitives";
-import { ContextBar, ContextBreakdown } from "./chat/context-gauge";
+import { attachRowMenus, Button, Menu, MenuContent, MenuGroup, MenuItem, MenuLabel, MenuTrigger, Spinner } from "@/components/primitives";
 import { ChatHeader, Conversation } from "./chat/chat-screen";
-import { contextUsagePercent } from "./chat/context-metrics";
 import { api, apiWhenServed, asList, pathChatId, pathProjectId, projectMatchesPath, projectPath } from "./api/client";
 import { buildHttpUrl, loginUrl, logoutUrl, normalizeServerOrigin, transcriptUrl } from "./api/transport";
 import { startPathSelection } from "./platform/path-selector";
@@ -35,17 +32,15 @@ import { publishServerDirectory } from "./platform/server-directory";
 import { canScanQr, parsePairingLink, QrScanner, redeemPairing, type PairingLink } from "./platform/pairing";
 import { authorizedFetch, clearNativeBearerToken, nativeBearerToken, NATIVE_AUTH_REQUIRED_EVENT, saveNativeBearerToken } from "./api/native-auth-client";
 import { resolveCapability } from "./chat-capabilities";
-import type { ChatSummary, DashboardChat, HarnessManifestView, Installation, Project, RuntimeIdentity, Template, TranscriptDetail, WorkspaceAppearance, WorkspacePolicy, WorkspaceSuggestion, WorkspaceSuggestionsPayload } from "./api/contracts";
+import type { ChatSummary, DashboardChat, HarnessManifestView, Installation, Project, Template, TranscriptDetail, WorkspaceAppearance, WorkspacePolicy, WorkspaceSuggestion, WorkspaceSuggestionsPayload } from "./api/contracts";
 import { createErrorDiagnostic, formatRuntimeDiagnosticPrompt, type ErrorDiagnostic, type ErrorDiagnosticContext } from "./error-diagnostics";
-import { Composer, SPINNING_ACTIVITY, type ComposerStatus } from "./chat/composer";
+import { Composer } from "./chat/composer";
 import { AppDashboard } from "./dashboard/app-dashboard";
-import { COMPOSER_SURFACE_CHANGE_EVENT, COMPOSER_SURFACE_STORAGE_KEY, createComposerSurfaceSignal, selectedComposerSurface } from "./chat/composer-surface";
+import { COMPOSER_SURFACE_CHANGE_EVENT, COMPOSER_SURFACE_STORAGE_KEY, selectedComposerSurface } from "./chat/composer-surface";
 import { applyTabFrost } from "./preferences/tab-frost";
 import { applyStreamFade } from "./preferences/stream-fade";
 import { installFocusShown } from "./preferences/focus-shown";
 import type { VoiceDictationSettings } from "./chat/voice-dictation-types";
-import { HostUiRequests } from "./chat/host-ui-card";
-import { isWorkspace } from "./chat/place-picker";
 import {
   MARKDOWN_RENDERER_STORAGE_KEY,
   saveMarkdownRenderer,
@@ -73,7 +68,6 @@ import { clampSidebarChatLimit, selectedSidebarChatLimit, SIDEBAR_CHAT_LIMIT_STO
 import { CHAT_SORT_STORAGE_KEY, selectedChatSort, useChatSort } from "./preferences/chat-sort";
 import { WorkspaceAppearanceEditor } from "./project/workspace-appearance-editor";
 import { applyPwaUpdate, checkForPwaUpdate, arrivedByNewBuild, claimPwaUpdateArrival, forcePwaUpdate, pwaUpdateWaiting, resetPwaAppCache, startPwaUpdates } from "./pwa-update";
-import type { ActiveChatStore } from "./state/active-chat";
 import { createChatSession, type ChatSession } from "./state/chat-session";
 import { DEFAULT_MAX_ATTACHMENT_BYTES, filesFromDataTransfer } from "./state/attachments";
 import { createDrafts } from "./state/drafts";
@@ -82,7 +76,6 @@ import { createCatalogueStore } from "./state/catalogue";
 import { markChatRead } from "./state/read-receipts";
 import { createSideChat, type SideChat } from "./state/side-chat";
 import { createRuntimeStore } from "./state/runtime";
-import { VoiceWaveform } from "./chat/voice-waveform";
 import { browserShortcutEnvironmentProvider } from "./shortcuts/shortcut-environment";
 import { ShortcutManager } from "./shortcuts/shortcut-manager";
 import { isShortcutRegion } from "./shortcuts/shortcut-types";
@@ -100,7 +93,6 @@ import { dispatchPanelGeometryMotion } from "./panel-motion";
 import { publishUiPreference, queueUiPreferenceSave, uiPreferenceSaves, UI_PREFERENCE_CHANGE_EVENT, type UiPreferenceKey, type UiPreferences } from "./preferences/ui-preferences";
 import { applyUiScale, selectedUiScale } from "./preferences/ui-scale";
 import { harnessLabelFor, HarnessMark } from "./harness-brand";
-import { NO_ATTACHMENTS } from "./chat/composer-attachments";
 import { OutsideThreadChip } from "./chat/outside-thread-chip";
 import type { HarnessChoices, HarnessThreadTarget } from "./dashboard/harness-dashboard";
 import {
@@ -2023,8 +2015,6 @@ function App() {
     else if (panelOpen()) focusWorkspacePanel();
     else focusChatPane();
   };
-
-  const switchProfile = (id: string) => session.switchProfile(id);
 
   const refresh = async () => {
     const projects = await catalogue.refresh();
