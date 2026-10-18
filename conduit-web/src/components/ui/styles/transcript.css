@@ -30,13 +30,13 @@
 .ui-answer ol { list-style: decimal; }
 .ui-answer li::marker { color: var(--muted-foreground); }
 .ui-answer li + li { margin-top: var(--space-2xs); }
-.ui-answer blockquote { border-left: 1px solid var(--tint); padding-left: var(--space-lg); color: var(--muted-foreground); }
+.ui-answer blockquote { border-left: var(--hairline) solid var(--tint); padding-left: var(--space-lg); color: var(--muted-foreground); }
 .ui-answer :not(pre, .ui-code-line) > code { border-radius: var(--radius-inset); background: var(--tint); padding: 0 var(--space-xs); font: 0.9em var(--font-code); }
-.ui-answer a { color: inherit; text-decoration: underline; text-decoration-color: color-mix(in oklch, currentColor, transparent 55%); text-underline-offset: 2px; }
+.ui-answer a { color: inherit; text-decoration: underline; text-decoration-color: color-mix(in oklch, currentColor, transparent 55%); text-underline-offset: var(--space-2xs); }
 .ui-answer a:is(:hover, :focus-visible) { text-decoration-color: currentColor; }
-.ui-answer hr { border: 0; border-top: 1px solid var(--tint); }
+.ui-answer hr { border: 0; border-top: var(--hairline) solid var(--tint); }
 .ui-answer table { display: block; max-width: 100%; overflow-x: auto; border-collapse: collapse; font-size: var(--text-row); }
-.ui-answer :is(th, td) { border: 1px solid var(--tint); padding: var(--space-sm) var(--space-md); text-align: left; vertical-align: top; }
+.ui-answer :is(th, td) { border: var(--hairline) solid var(--tint); padding: var(--space-sm) var(--space-md); text-align: left; vertical-align: top; }
 .ui-answer th { font-weight: var(--weight-strong); }
 /* Disclosure (DESIGN Transcript): everything that folds -- a header, one turning chevron, a body. Its
    unfolding is the caller's (the app's Disclosure animates it); this is its shape. */

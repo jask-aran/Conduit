@@ -8,7 +8,7 @@
   --pill-gap: calc(0.125 * var(--u-touch)); --pill-field-pad: calc(0.875 * var(--u-touch)); }
 .ui-pill { transition: filter var(--duration-quick) var(--ease-change); }
 .ui-pill[data-under] { filter: var(--dim-under); }
-.ui-pill { display: inline-flex; height: var(--pill-size); align-items: center; gap: var(--pill-gap); padding: 0 1px; border-radius: var(--radius-round); }
+.ui-pill { display: inline-flex; height: var(--pill-size); align-items: center; gap: var(--pill-gap); padding: 0 var(--hairline); border-radius: var(--radius-round); }
 .ui-pill > button { display: grid; width: var(--pill-slot); height: var(--pill-slot-height); place-items: center; border: 0; border-radius: var(--radius-round); background: transparent; color: inherit; }
 .ui-pill[data-solo] { width: var(--pill-size); justify-content: center; padding: 0;
   --fade: var(--duration-quick); --fade-ease: var(--ease-arrive); --fade-delay: var(--duration-quick); --fold-delay: 0s;
@@ -25,7 +25,7 @@
    its width is its two borders, as drawn, so a move between two widths it is drawn at never meets a clamp), so a stretched neighbour (the mic)
    gives and takes the room. Coming, the room opens and it fades into it; going, it fades first and only then gives
    the room back, so it is never seen squeezed (its transition list is the solo pill's, above). */
-.ui-pill[data-solo][data-folded] { width: 2px; min-width: 0; margin-inline-start: calc(-1 * var(--space-md) - 2px); overflow: clip; opacity: 0; pointer-events: none;
+.ui-pill[data-solo][data-folded] { width: calc(2 * var(--hairline)); min-width: 0; margin-inline-start: calc(-1 * var(--space-md) - 2 * var(--hairline)); overflow: clip; opacity: 0; pointer-events: none;
   --fade-ease: var(--ease-leave); --fade-delay: 0s; --fold-delay: var(--duration-quick); }
 /* The mic: its icon and the orb stacked in one button, crossfading. */
 .ui-pill[data-voice] > button { position: relative; isolation: isolate; }
@@ -48,7 +48,7 @@
 .ui-aura::after { content: ""; position: absolute; inset: 0; z-index: 1; border-radius: inherit; background: linear-gradient(rgb(255 255 255 / .1), rgb(255 255 255 / 0) 60%); box-shadow: var(--frost-highlight), inset 0 0 calc(.3 * var(--pill-size)) rgb(255 255 255 / .14); }
 /* Field: text in the capsule; it grows with its lines. */
 .ui-pill-field { display: flex; width: 100%; height: auto; min-height: var(--pill-size); align-items: center; border-radius: var(--radius-message); padding: 0 var(--pill-field-pad); }
-.ui-pill-field .ui-textarea { width: 100%; max-height: 220px; border: 0; background: transparent; padding: calc((var(--pill-size) - var(--space-2xs) - 1.4em) / 2) 0; color: inherit; font: inherit; font-size: var(--text-body); line-height: 1.4; resize: none; outline: none; field-sizing: content; }
+.ui-pill-field .ui-textarea { width: 100%; max-height: var(--measure-sm); border: 0; background: transparent; padding: calc((var(--pill-size) - var(--space-2xs) - 1.4em) / 2) 0; color: inherit; font: inherit; font-size: var(--text-body); line-height: 1.4; resize: none; outline: none; field-sizing: content; }
 .ui-pill-field .ui-textarea::placeholder { color: var(--muted-foreground); }
 /* The Pill wins over an app pill's own rules (it stands in for them in the Library previews). */
 .ui-frost.ui-pill[data-surface] { display: inline-flex; flex: none; }

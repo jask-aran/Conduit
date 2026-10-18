@@ -1,5 +1,5 @@
 .ui-frost {
-  border: 1px solid var(--frost-stroke);
+  border: var(--hairline) solid var(--frost-stroke);
   background: var(--frost-fill);
   -webkit-backdrop-filter: var(--frost-blur);
   backdrop-filter: var(--frost-blur);

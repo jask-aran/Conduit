@@ -7,7 +7,7 @@
 .ui-scrim[data-placement="center"] { align-items: center; }
 .ui-frost.ui-overlay { display: flex; width: min(var(--overlay-width, var(--measure-2xl)), 100%); max-height: var(--overlay-height, none); flex-direction: column; overflow: hidden; border-radius: var(--radius-surface); padding: 0; color: var(--foreground); font-size: var(--text-body); }
 .ui-overlay[data-layout="rail"] { flex-direction: row; }
-.ui-overlay-bar { display: flex; flex: none; align-items: center; gap: var(--space-lg); border-bottom: 1px solid var(--tint); padding: var(--space-md) var(--space-lg); }
+.ui-overlay-bar { display: flex; flex: none; align-items: center; gap: var(--space-lg); border-bottom: var(--hairline) solid var(--tint); padding: var(--space-md) var(--space-lg); }
 /* The lead is one mark at one size and colour, whichever it is (search, the command prompt, back). */
 .ui-overlay-lead { display: inline-grid; flex: none; place-items: center; color: var(--muted-foreground); }
 .ui-overlay-lead svg { width: var(--icon-lg); height: var(--icon-lg); color: var(--muted-foreground); }
@@ -23,13 +23,13 @@
 .ui-overlay-list .ui-title { padding: var(--space-md) var(--space-lg) var(--space-xs); }
 .ui-overlay-split { display: grid; min-height: 0; flex: 1; grid-template-columns: minmax(0, 1fr); }
 .ui-overlay-split[data-aside] { grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr); }
-.ui-overlay-aside { min-width: 0; overflow: auto; border-left: 1px solid var(--tint); padding: var(--space-xl); }
-.ui-overlay-hints { display: flex; min-height: var(--control-lg); flex: none; flex-wrap: wrap; align-items: center; gap: var(--space-sm) var(--space-xl); border-top: 1px solid var(--tint); padding: var(--space-md) var(--space-lg); color: var(--muted-foreground); font-size: var(--text-caption); }
+.ui-overlay-aside { min-width: 0; overflow: auto; border-left: var(--hairline) solid var(--tint); padding: var(--space-xl); }
+.ui-overlay-hints { display: flex; min-height: var(--control-lg); flex: none; flex-wrap: wrap; align-items: center; gap: var(--space-sm) var(--space-xl); border-top: var(--hairline) solid var(--tint); padding: var(--space-md) var(--space-lg); color: var(--muted-foreground); font-size: var(--text-caption); }
 .ui-overlay-hints span { display: inline-flex; align-items: center; gap: var(--space-xs); white-space: nowrap; }
 .ui-overlay-hints-end { margin-left: auto; gap: var(--space-xl) !important; }
 .ui-overlay-title { margin: 0; font-size: var(--text-heading); font-weight: var(--weight-strong); line-height: 1.5; letter-spacing: -0.02em; }
 /* The rail beside a page: the sidebar's NavGroups, washed as a popover's rows are. */
-.ui-overlay-rail { display: flex; width: var(--measure-sm); flex: none; flex-direction: column; gap: var(--space-xs); overflow: auto; border-right: 1px solid var(--tint); padding: var(--space-2xl) var(--space-lg); }
+.ui-overlay-rail { display: flex; width: var(--measure-sm); flex: none; flex-direction: column; gap: var(--space-xs); overflow: auto; border-right: var(--hairline) solid var(--tint); padding: var(--space-2xl) var(--space-lg); }
 .ui-overlay-rail > .ui-overlay-title { margin-bottom: var(--space-md); padding-left: var(--space-md); }
 .ui-overlay-rail .ui-nav-group + .ui-nav-group { margin-top: var(--space-md); }
 /* The current section is white and bold with no fill; the wash is only the cursor. */
@@ -41,8 +41,8 @@
 .ui-overlay-rail-foot { margin-top: auto; color: var(--muted-foreground); font-size: var(--text-row); }
 .ui-overlay-page { display: flex; min-width: 0; flex: 1; flex-direction: column; overflow: auto; padding: var(--space-2xl) var(--space-4xl) var(--space-4xl); }
 .ui-overlay-page-head { display: flex; align-items: center; gap: var(--space-lg); margin-bottom: var(--space-lg); padding-left: var(--space-md); }
-.ui-setting-group { display: flex; flex-direction: column; gap: 1px; }
-.ui-setting-group + .ui-setting-group { margin-top: var(--space-lg); border-top: 1px solid var(--tint); padding-top: var(--space-xl); }
+.ui-setting-group { display: flex; flex-direction: column; gap: var(--hairline); }
+.ui-setting-group + .ui-setting-group { margin-top: var(--space-lg); border-top: var(--hairline) solid var(--tint); padding-top: var(--space-xl); }
 /* At least a row's height: a finger's on a phone, as every row is there. */
 /* A settings line's height, at least a row's (a finger's on a phone): the setting line and the recorder under it. */
 :root, [data-density] { --line-min: max(var(--control), var(--row-min)); }
@@ -50,7 +50,7 @@
 /* Focus anywhere in a row is the row's wash. */
 .ui-setting-line:is(:hover, :focus-within) { background: var(--tint); }
 /* The recorder: a second line as tall as a setting line, inset under its label, a dashed --tint line round it. */
-.ui-setting-recorder { display: flex; min-height: var(--line-min); align-items: center; gap: var(--space-md); border: 1px dashed var(--tint); border-radius: var(--radius-control); padding: var(--space-2xs) var(--space-sm) var(--space-2xs) var(--space-md); font-size: var(--text-row); }
+.ui-setting-recorder { display: flex; min-height: var(--line-min); align-items: center; gap: var(--space-md); border: var(--hairline) dashed var(--tint); border-radius: var(--radius-control); padding: var(--space-2xs) var(--space-sm) var(--space-2xs) var(--space-md); font-size: var(--text-row); }
 .ui-recorder-dot { width: var(--icon-dot); height: var(--icon-dot); flex: none; border-radius: var(--radius-round); background: var(--destructive); animation: ui-recorder-pulse 1.2s ease-in-out infinite; }
 @keyframes ui-recorder-pulse { 50% { opacity: .35; } }
 @media (prefers-reduced-motion: reduce) { .ui-recorder-dot { animation: none; } }
@@ -89,7 +89,7 @@
 .ui-overlay-status[data-failed] { color: var(--destructive); }
 /* On a phone an overlay is full screen, nothing round it dimmed: one column, the split's aside
    and the hints gone, settings' rail a screen of its own. */
-[data-density="phone"] .ui-scrim, .ui-scrim[data-density="phone"] { padding: var(--phone-overlay-padding, 8px); background: transparent; }
+[data-density="phone"] .ui-scrim, .ui-scrim[data-density="phone"] { padding: var(--phone-overlay-padding, var(--space-md)); background: transparent; }
 :is([data-density="phone"] .ui-frost.ui-overlay, .ui-frost.ui-overlay[data-density="phone"]) { width: 100%; height: 100%; max-height: none; }
 [data-density="phone"] .ui-overlay-split { grid-template-columns: minmax(0, 1fr); }
 [data-density="phone"] .ui-overlay-aside { display: none; }

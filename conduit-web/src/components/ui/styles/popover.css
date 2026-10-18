@@ -9,10 +9,10 @@
 .ui-title { display: flex; align-items: baseline; justify-content: space-between; gap: var(--row-gap); padding: var(--space-sm) var(--space-md) var(--space-sm); }
 .ui-title small { font-weight: var(--weight-rest); letter-spacing: 0; text-transform: none; }
 .ui-section { display: flex; flex-direction: column; }
-.ui-section + .ui-section { margin-top: var(--frost-inset); border-top: 1px solid var(--tint); margin-inline: calc(-1 * var(--frost-inset)); padding: var(--frost-inset) var(--frost-inset) 0; }
+.ui-section + .ui-section { margin-top: var(--frost-inset); border-top: var(--hairline) solid var(--tint); margin-inline: calc(-1 * var(--frost-inset)); padding: var(--frost-inset) var(--frost-inset) 0; }
 .ui-search-section { flex-direction: row; align-items: center; gap: var(--row-gap); padding: var(--row-pad); }
 .ui-search-section > svg { width: var(--icon); height: var(--icon); flex: none; color: var(--muted-foreground); }
-.ui-search-section .ui-keys { display: inline-flex; flex: none; gap: 2px; }
+.ui-search-section .ui-keys { display: inline-flex; flex: none; gap: var(--space-2xs); }
 .ui-search { min-width: 0; flex: 1; border: 0; background: transparent; padding: 0; color: var(--foreground); font-size: var(--text-row); outline: none; }
 .ui-search::placeholder { color: var(--muted-foreground); }
 .ui-empty { padding: var(--space-md); color: var(--muted-foreground); font-size: var(--text-caption); }
@@ -43,7 +43,7 @@
 /* A harness mark rests greyed with its row and shows its colour on the cursor or the current row. */
 .ui-row .harness-mark { filter: grayscale(1); opacity: .78; }
 .ui-row:is([data-highlighted], [data-checked]) .harness-mark { filter: none; opacity: 1; }
-.ui-row[data-disabled], [data-surface="frost"] .ui-row[data-disabled] { pointer-events: none; color: color-mix(in oklch, var(--foreground), transparent 62%); text-decoration: line-through 1.5px; }
+.ui-row[data-disabled], [data-surface="frost"] .ui-row[data-disabled] { pointer-events: none; color: color-mix(in oklch, var(--foreground), transparent 62%); text-decoration: line-through var(--stroke-thin); }
 .ui-row[data-disabled] > small { text-decoration: none; }
 .ui-row[data-destructive], .ui-row[data-destructive] > .ui-icon { color: var(--destructive); }
 .ui-row[data-destructive][data-highlighted] { background: color-mix(in oklch, var(--destructive), transparent 85%); }
@@ -60,7 +60,7 @@
 .ui-row[data-field] > .ui-label { color: var(--muted-foreground); }
 .ui-row[data-field] > small { color: color-mix(in oklch, var(--foreground), transparent 45%); font-family: inherit; font-size: var(--text-row); }
 /* A rule between groups of an app menu's rows, where a library menu has sections. */
-.ui-menu .ui-rule { height: 1px; margin: var(--frost-inset) calc(-1 * var(--frost-inset)); border: 0; background: var(--tint); }
+.ui-menu .ui-rule { height: var(--hairline); margin: var(--frost-inset) calc(-1 * var(--frost-inset)); border: 0; background: var(--tint); }
 /* A menu keeps its caller's class for its width and placement; its shell
    (inset, radius, lift) is the library's. */
 .ui-frost.ui-menu { padding: var(--frost-inset); border-radius: var(--radius-surface); }
