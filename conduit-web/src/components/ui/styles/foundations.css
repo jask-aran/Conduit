@@ -31,6 +31,9 @@
   --ease-change: ease;
   --duration-quick: 150ms;   /* leaving, folding away; a change in place */
   --duration-gentle: 250ms;  /* arriving, opening, settling into place */
+  /* Effects keep their own time: a level following a voice, a copy's wash fading, a spinner's turn (three
+     times slower when motion is reduced), a recording's pulse, something live breathing. */
+  --duration-follow: 120ms; --duration-flash: 700ms; --duration-spin: 800ms; --duration-pulse: 1.2s; --duration-breathe: 1.6s;
 }
 /*
  * Every piece's moves keep these invariants; a new state or piece is added within them, never as an exception:

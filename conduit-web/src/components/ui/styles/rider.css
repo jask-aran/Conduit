@@ -55,7 +55,7 @@
 .ui-chip[data-status="error"] .ui-chip-body { border-color: var(--destructive); }
 .ui-chip[data-status="error"] .ui-chip-media img { opacity: 0.4; }
 .ui-chip-retry { position: absolute; width: var(--icon-lg); height: var(--icon-lg); color: var(--foreground); filter: drop-shadow(0 0 var(--stroke) rgb(0 0 0 / 70%)); }
-.ui-chip-remove { position: absolute; top: var(--space-xs); right: var(--space-xs); display: grid; width: var(--icon-lg); height: var(--icon-lg); place-items: center; border: 0; border-radius: var(--radius-round); background: rgb(0 0 0 / 62%); padding: 0; color: #fff; cursor: pointer; opacity: 0; transition: opacity 120ms ease; }
+.ui-chip-remove { position: absolute; top: var(--space-xs); right: var(--space-xs); display: grid; width: var(--icon-lg); height: var(--icon-lg); place-items: center; border: 0; border-radius: var(--radius-round); background: rgb(0 0 0 / 62%); padding: 0; color: #fff; cursor: pointer; opacity: 0; transition: opacity var(--duration-quick) var(--ease-change); }
 .ui-chip-remove svg { width: var(--icon-xs); height: var(--icon-xs); }
 .ui-chip:is(:hover, :focus-within) .ui-chip-remove { opacity: 1; }
 @media (hover: none) { .ui-chip-remove { opacity: 1; } }
@@ -122,7 +122,7 @@
 
 /* RiderButton: rides over the transcript above the composer (scroll to latest, cancel an edit):
    resting frost, a square of 2.5 units at the surface radius, or its words beside the icon. */
-.ui-frost.ui-rider-button { display: inline-flex; width: var(--control-lg); height: var(--control-lg); flex: none; align-items: center; justify-content: center; gap: var(--space-sm); border-radius: var(--radius-surface); padding: 0; color: var(--foreground); font: var(--weight-lift) var(--text-row) var(--font-sans); white-space: nowrap; cursor: pointer; transition: filter .12s ease; }
+.ui-frost.ui-rider-button { display: inline-flex; width: var(--control-lg); height: var(--control-lg); flex: none; align-items: center; justify-content: center; gap: var(--space-sm); border-radius: var(--radius-surface); padding: 0; color: var(--foreground); font: var(--weight-lift) var(--text-row) var(--font-sans); white-space: nowrap; cursor: pointer; transition: filter var(--duration-quick) var(--ease-change); }
 .ui-rider-button svg { width: var(--icon-lg); height: var(--icon-lg); flex: none; }
 .ui-frost.ui-rider-button[data-labelled] { width: auto; padding: 0 var(--space-xl) 0 var(--space-lg); }
 .ui-rider-button[data-labelled] svg { width: var(--icon); height: var(--icon); }

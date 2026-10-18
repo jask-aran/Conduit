@@ -257,6 +257,13 @@ const MOTION: TokenGroup[] = [
     tok("--duration-quick", "leaving, folding away; a change in place", colour("--duration-quick"), run("var(--duration-quick)", "var(--ease-leave)")),
     tok("--duration-gentle", "arriving, opening, settling into place", colour("--duration-gentle"), run("var(--duration-gentle)", "var(--ease-arrive)")),
   ] },
+  { title: "Effects keep their own time", rows: [
+    tok("--duration-follow", "a level following a voice (the aura)", colour("--duration-follow"), run("var(--duration-follow)", "linear")),
+    tok("--duration-flash", "a copy's wash fading", colour("--duration-flash"), run("var(--duration-flash)", "ease-out")),
+    tok("--duration-spin", "a spinner's turn; three times slower when motion is reduced", colour("--duration-spin"), run("var(--duration-spin)", "linear")),
+    tok("--duration-pulse", "a recording's dot", colour("--duration-pulse"), run("var(--duration-pulse)", "ease-in-out")),
+    tok("--duration-breathe", "something live: a pressed mic, a block still writing", colour("--duration-breathe"), run("var(--duration-breathe)", "ease-in-out")),
+  ] },
 ];
 
 const RADII: TokenGroup[] = [
