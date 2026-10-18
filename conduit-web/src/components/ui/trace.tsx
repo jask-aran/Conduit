@@ -1,6 +1,6 @@
 import { children, For, Show, splitProps, type JSX } from "solid-js";
 import { ChevronDownIcon, TriangleAlertIcon } from "lucide-solid";
-import { Button } from "./controls";
+import { Button, Spinner } from "./controls";
 import { type Motion, motionOf } from "./shared";
 
 /**
@@ -46,7 +46,7 @@ export function Step(props: { label?: string; icon?: JSX.Element; verb?: string;
   const opens = () => body.toArray().length > 0 && !props.note;
   const flags = () => [...(props.flags ?? []), ...(props.discarded ? [NOT_KEPT] : []), ...(props.state === "failed" ? ["Failed"] : props.state === "stopped" ? ["Stopped"] : [])];
   const row = () => <>
-    <span class="ui-step-icon"><Show when={props.state === "running"} fallback={props.icon}><span class="ui-spinner" aria-hidden="true" /></Show></span>
+    <span class="ui-step-icon"><Show when={props.state === "running"} fallback={props.icon}><Spinner /></Show></span>
     <Show when={props.summary} fallback={<><Show when={props.verb}><span class="ui-step-verb">{props.verb}</span></Show><Show when={props.subject}><code class="ui-step-subject">{props.subject}</code></Show></>}><span class="ui-step-summary">{props.summary}</span></Show>
     <span class="ui-step-meta"><For each={flags()}>{(flag) => <span class="ui-step-flag" title={flag === NOT_KEPT ? "Interrupted — the agent has no record of this" : undefined}>{flag}</span>}</For><Show when={props.time}><span class="ui-step-time">{props.time}</span></Show></span>
   </>;

@@ -19,3 +19,13 @@
 .ui-nav-row:is(:hover, :focus-visible, [aria-current="page"]) > .ui-nav-icon { color: var(--foreground); }
 .ui-nav-toggle { margin-right: calc((var(--icon) - var(--control-xs)) / 2); display: grid; width: var(--control-xs); height: var(--control-xs); flex: none; place-items: center; border-radius: var(--radius-control); color: var(--muted-foreground); }
 .ui-nav-toggle svg { width: var(--icon); height: var(--icon); }
+/* StatusDot: a row's live state in an --icon slot, a dot in its tone (or a Spinner while it works). */
+.ui-status { display: inline-grid; width: var(--icon); height: var(--icon); flex: none; place-items: center; color: var(--muted-foreground); }
+.ui-status > .ui-spinner { width: var(--icon-sm); height: var(--icon-sm); }
+.ui-status-dot { width: var(--icon-dot); height: var(--icon-dot); border-radius: var(--radius-round); background: currentColor; }
+.ui-status[data-tone="success"] { color: var(--status-success); }
+.ui-status[data-tone="active"] { color: var(--accent-cool); }
+.ui-status[data-tone="warn"] { color: var(--status-warn); }
+.ui-status[data-tone="danger"] { color: var(--destructive); }
+.ui-status[data-tone="unread"] { color: var(--status-unread); }
+.ui-status[data-stale] { opacity: var(--opacity-muted); }

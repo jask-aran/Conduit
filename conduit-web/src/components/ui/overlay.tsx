@@ -1,7 +1,7 @@
 import { For, Show, type JSX } from "solid-js";
 import { ChevronLeftIcon, XIcon } from "lucide-solid";
 import { cn } from "@/lib/utils";
-import { Button, Keycap } from "./controls";
+import { Button, Keycap, Spinner } from "./controls";
 import { type Density, type Motion, motionOf, moveCursor } from "./shared";
 
 /*
@@ -97,7 +97,7 @@ export const SettingDetails = (props: { summary: string; children: JSX.Element }
 /** Something a setting needs the page's width for: a prompt's text, a download's progress. */
 export const SettingWide = (props: { children: JSX.Element }) => <div class="ui-setting-wide">{props.children}</div>;
 /** Waiting on what a page shows. */
-export const SettingLoading = (props: { children: JSX.Element }) => <div class="ui-setting-loading"><span class="ui-spinner" aria-hidden="true" />{props.children}</div>;
+export const SettingLoading = (props: { children: JSX.Element }) => <div class="ui-setting-loading"><Spinner />{props.children}</div>;
 
 /*
  * Glance: what chat search's cursor rests on, told apart without opening it -- a chat's title and
