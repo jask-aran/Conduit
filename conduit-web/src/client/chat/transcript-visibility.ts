@@ -463,6 +463,14 @@ export function mountTranscriptVisibility(
     if (Math.abs(shift) > 0.01) shiftScroll(shift);
     holdRefreshing();
   };
+  // A settled answer's fade puts each run of word spans back as the one text node they held: the same text, the same
+  // size. Re-measuring every hidden block for it showed them all at once and laid the answer out (86ms at the end of a
+  // long turn). Streaming adds spans, which this is not.
+  const unwrapsFade = (record: MutationRecord) => record.type === "childList"
+    && (record.target as Element).classList?.contains("stream-text")
+    && record.removedNodes.length > 0
+    && [...record.addedNodes].every((node) => node.nodeType === Node.TEXT_NODE)
+    && [...record.removedNodes].every((node) => node.nodeType === Node.ELEMENT_NODE || node.nodeType === Node.TEXT_NODE);
   const mutationObserver = new MutationObserver((records) => {
     // A collapse commits a large height change in one go. Leaving it to the
     // observers left every cached intrinsic size stale for a frame or more,
@@ -492,7 +500,7 @@ export function mountTranscriptVisibility(
       const hidden = target?.closest<HTMLElement>(`[${VISIBILITY_ATTRIBUTE}="hidden"]`);
       // The block itself counts: a heading losing the caret's placeholder, the last block no longer, is a change to
       // its own children, and kept it 0.6px taller than it was until it was shown.
-      if (hidden && managed.has(hidden)) (changedHidden ??= new Set()).add(hidden);
+      if (hidden && managed.has(hidden) && !unwrapsFade(record)) (changedHidden ??= new Set()).add(hidden);
       if (withinBlock(record)) continue;
       const row = record.target === thread ? null : (record.target as Element).closest?.(ROW_SELECTOR) as HTMLElement | null;
       if (!row) { rows = null; break; }
