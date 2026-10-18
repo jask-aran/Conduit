@@ -5,7 +5,8 @@
  * Nothing runs in the page but a note of when each code block opens, so the measurement cannot change the timing it
  * measures (visibility-guard.mjs reads layout every frame; this does not). Following, the text only ever moves up,
  * and smoothly: every frame it moved down, reversed within a few frames (an oscillation), or jumped up further than
- * --snap a frame drawn (a snap; --hz, 144 by default) is listed with the time since the last code block opened.
+ * --snap a frame drawn (a snap; --hz, 144 by default) is listed with the time since the last code block opened. A
+ * capture spans about two frames at 144Hz, so one whose whole shift is over --snap is listed as a possible snap.
  *
  *   node scripts/probes/screen-shift.mjs ["rich 3000t"] [--phone] [--seconds 25]
  */
@@ -78,10 +79,15 @@ const sinceFence = (at) => { const last = fences.filter((f) => f <= at).at(-1); 
 const down = moves.filter((m) => m.dy > 0.5);
 // A snap: one frame moving the text further than a smooth follow does (the spring's steps are a few pixels to ~20).
 const snaps = moves.filter((m) => m.perFrame < -Number(arg("--snap", 40)));
+// Spread over the frames between two captures a shift reads smaller than it may have been: a 70px jump in one of two
+// frames reads 35px a frame. Each capture whose whole shift is over --snap is listed too, as a possible snap -- the
+// per-frame scroll log (scrollTop every frame) tells which it was.
+const possible = moves.filter((m) => m.dy < -Number(arg("--snap", 40)) && !snaps.includes(m));
 // A reversal: up then down (or down then up) within 5 frames, each over 1px.
+const list = (ms) => ms.map((m) => `${((m.at - (moves[0]?.at ?? 0)) / 1000).toFixed(2)}s ${m.dy.toFixed(0)}px over ${m.spans} frames, ${sinceFence(m.at)}`).slice(0, 8).join("; ");
 const reversals = moves.filter((m, i) => m.dy > 1 && moves.slice(Math.max(0, i - 5), i).some((p) => p.dy < -1));
 console.log(`"${prompt}" ${phone ? "phone" : "desktop"}: ${frames.length} frames, ${fences.length} code blocks opened`);
-console.log(`moved down: ${down.length} frames, ${down.reduce((a, m) => a + m.dy, 0).toFixed(0)}px; up-then-down reversals: ${reversals.length}; snaps up over ${arg("--snap", 40)}px: ${snaps.length}${snaps.length ? ` (${snaps.map((m) => `${((m.at - (moves[0]?.at ?? 0)) / 1000).toFixed(2)}s ${m.dy.toFixed(0)}px over ${m.spans} frames, ${sinceFence(m.at)}`).slice(0, 8).join("; ")})` : ""}`);
+console.log(`moved down: ${down.length} frames, ${down.reduce((a, m) => a + m.dy, 0).toFixed(0)}px; up-then-down reversals: ${reversals.length}; snaps up over ${arg("--snap", 40)}px a frame: ${snaps.length}${snaps.length ? ` (${list(snaps)})` : ""}; possible snaps (over ${arg("--snap", 40)}px across several frames): ${possible.length}${possible.length ? ` (${list(possible)})` : ""}`);
 const t0 = moves[0]?.at ?? 0;
 // --frames <dir>: also the frames either side of the first snap of each burst.
 if (arg("--frames", null)) { const fs = await import("node:fs"); const dir = arg("--frames", null); fs.mkdirSync(dir, { recursive: true });
