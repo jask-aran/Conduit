@@ -1,3 +1,4 @@
+import { CODE_BLOCK } from "@/components/ui/shared";
 import { createSignal } from "solid-js";
 /**
  * Syntax highlighting and line numbers.
@@ -116,7 +117,7 @@ export function splitHighlightedLines(html: string, keepTrailing = false): HTMLE
 
   const startLine = () => {
     const line = document.createElement("span");
-    line.className = "code-line";
+    line.className = CODE_BLOCK.line;
     lines.push(line);
     let parent: HTMLElement = line;
     openChain = sourceChain.map((source) => {
@@ -160,14 +161,12 @@ export function splitHighlightedLines(html: string, keepTrailing = false): HTMLE
 const HIGHLIGHTED = "data-highlighted";
 
 function needsHighlight(card: HTMLElement) {
-  if (card.dataset.streamingPending === "fence") return false;
+  if (card.hasAttribute("data-streaming")) return false;
   const code = card.querySelector("code");
   if (!code) return false;
-  // Presence of line spans is the real test, not the marker. It skips the
-  // Incremark path -- which renders its own highlighted markup and must not be
-  // rewritten from outside -- and it self-heals a card whose renderer replaced
-  // the spans with plain text after the marker was set.
-  return !code.querySelector(".code-line");
+  // Coloured tokens are the real test, not the marker: it self-heals a block whose renderer put its plain lines back
+  // after the marker was set. A language with no highlighter has nothing to colour.
+  return Boolean(resolveHighlightLanguage(card.dataset.language || "")) && !code.querySelector(`.${CODE_BLOCK.line} *`);
 }
 
 /**
@@ -175,7 +174,7 @@ function needsHighlight(card: HTMLElement) {
  * it. Safe to call often -- finished cards are skipped by attribute.
  */
 export async function highlightCodeBlocks(root: ParentNode) {
-  const cards = [...root.querySelectorAll<HTMLElement>(".artifact[data-language]")].filter(needsHighlight);
+  const cards = [...root.querySelectorAll<HTMLElement>(".ui-code[data-language]")].filter(needsHighlight);
   if (!cards.length) return;
   let hljs: Highlighter;
   try {
@@ -218,7 +217,7 @@ function escapeForLines(text: string) {
  * so textContent alone would hand the reader every line run together.
  */
 export function codeElementText(code: Element) {
-  const lines = code.querySelectorAll(".code-line");
+  const lines = code.querySelectorAll(`.${CODE_BLOCK.line}`);
   if (!lines.length) return code.textContent || "";
   return [...lines].map((line) => line.textContent || "").join("\n");
 }
@@ -235,7 +234,7 @@ function lineSpans(html: string, keepTrailing = false) {
 function plainLineSpans(text: string) {
   const lines = text.split("\n");
   if (lines.length > 1 && !lines.at(-1)) lines.pop();
-  return lines.map((line) => `<span class="code-line">${escapeForLines(line)}</span>`);
+  return lines.map((line) => `<span class="${CODE_BLOCK.line}">${escapeForLines(line)}</span>`);
 }
 
 export function highlightToHtml(text: string, language: string) {
@@ -289,7 +288,7 @@ export class StreamingCodeHighlighter {
     this.committedLines = other.committedLines;
   }
 
-  /** Each line's markup, one `.code-line` apiece: a line unchanged since the last render is the same string. */
+  /** Each line's markup, one CODE_BLOCK.line apiece: a line unchanged since the last render is the same string. */
   render(text: string, language: string, streaming: boolean): string[] {
     primeHighlighter();
     // The grammars arrive asynchronously, so the first render of a block is

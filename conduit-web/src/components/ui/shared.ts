@@ -38,3 +38,6 @@ export const motionOf = (motion?: Motion) => ({ "data-entering": motion === "ent
  * --answer-bleed (tables) and --answer-bleed-code (code), which the pane declares; never past what it needs.
  */
 export const ANSWER_MARKDOWN = { flow: "ui-answer-flow", table: "ui-answer-table", link: "ui-answer-link", word: "ui-answer-word", math: "ui-answer-math-in" } as const;
+
+/** What a caller drawing its own lines into a CodeBlock marks: each line (line), which the block numbers. */
+export const CODE_BLOCK = { line: "ui-code-line" } as const;

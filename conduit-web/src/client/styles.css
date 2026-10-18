@@ -558,9 +558,9 @@ svg.lucide { stroke-width: 2.4; }
 .command-hint-more summary::after { content: "▾"; margin-left: 4px; color: var(--muted-foreground); }
 .command-hint-more[open] summary::after { content: "▴"; }
 .command-hint-more-list { display: flex; flex-wrap: wrap; gap: 4.8px 9.6px; margin-top: 6.4px; border-top: 1px solid var(--border); padding-top: 6.4px; }
-.command-list, .settings-content, .artifact pre, .composer textarea, .attachment-tray, .external-link-url, .frost-dialog, .workspace-tree, .workspace-preview pre, .workspace-changes, .workspace-diff-content { scrollbar-color: var(--native-scrollbar-color); scrollbar-width: var(--native-scrollbar-width); }
-.command-list::-webkit-scrollbar, .settings-content::-webkit-scrollbar, .artifact pre::-webkit-scrollbar, .composer textarea::-webkit-scrollbar, .attachment-tray::-webkit-scrollbar, .external-link-url::-webkit-scrollbar, .frost-dialog::-webkit-scrollbar, .workspace-tree::-webkit-scrollbar, .workspace-preview pre::-webkit-scrollbar, .workspace-changes::-webkit-scrollbar, .workspace-diff-content::-webkit-scrollbar { width: 5.6px; height: 5.6px; }
-.command-list::-webkit-scrollbar-thumb, .settings-content::-webkit-scrollbar-thumb, .artifact pre::-webkit-scrollbar-thumb, .composer textarea::-webkit-scrollbar-thumb, .attachment-tray::-webkit-scrollbar-thumb, .external-link-url::-webkit-scrollbar-thumb, .frost-dialog::-webkit-scrollbar-thumb, .workspace-tree::-webkit-scrollbar-thumb, .workspace-preview pre::-webkit-scrollbar-thumb, .workspace-changes::-webkit-scrollbar-thumb, .workspace-diff-content::-webkit-scrollbar-thumb { border: 1.6px solid transparent; border-radius: 999px; background: color-mix(in oklch, var(--foreground), transparent 72%); background-clip: padding-box; }
+.command-list, .settings-content, .composer textarea, .attachment-tray, .external-link-url, .frost-dialog, .workspace-tree, .workspace-preview pre, .workspace-changes, .workspace-diff-content { scrollbar-color: var(--native-scrollbar-color); scrollbar-width: var(--native-scrollbar-width); }
+.command-list::-webkit-scrollbar, .settings-content::-webkit-scrollbar, .composer textarea::-webkit-scrollbar, .attachment-tray::-webkit-scrollbar, .external-link-url::-webkit-scrollbar, .frost-dialog::-webkit-scrollbar, .workspace-tree::-webkit-scrollbar, .workspace-preview pre::-webkit-scrollbar, .workspace-changes::-webkit-scrollbar, .workspace-diff-content::-webkit-scrollbar { width: 5.6px; height: 5.6px; }
+.command-list::-webkit-scrollbar-thumb, .settings-content::-webkit-scrollbar-thumb, .composer textarea::-webkit-scrollbar-thumb, .attachment-tray::-webkit-scrollbar-thumb, .external-link-url::-webkit-scrollbar-thumb, .frost-dialog::-webkit-scrollbar-thumb, .workspace-tree::-webkit-scrollbar-thumb, .workspace-preview pre::-webkit-scrollbar-thumb, .workspace-changes::-webkit-scrollbar-thumb, .workspace-diff-content::-webkit-scrollbar-thumb { border: 1.6px solid transparent; border-radius: 999px; background: color-mix(in oklch, var(--foreground), transparent 72%); background-clip: padding-box; }
 .command-empty { color: var(--muted-foreground); font-size: 11.2px; text-align: center; }
 .command-option { display: flex; width: 100%; align-items: center; border: 0; background: transparent; color: inherit; text-align: left; cursor: pointer; }
 .command-option[data-highlighted] { color: var(--accent-foreground); }
@@ -598,7 +598,6 @@ svg.lucide { stroke-width: 2.4; }
   box-shadow: 0 19.2px 56px rgb(0 0 0 / 45%);
 }
 .workspace-warning,
-.artifact,
 .attachment-card,
 .installations article,
 .workspace-settings-card {
@@ -1193,9 +1192,9 @@ svg.lucide { stroke-width: 2.4; }
 .command-hint-more summary::after { content: "▾"; margin-left: 5px; color: var(--muted-foreground); }
 .command-hint-more[open] summary::after { content: "▴"; }
 .command-hint-more-list { display: flex; flex-wrap: wrap; gap: 6px 12px; margin-top: 8px; border-top: 1px solid var(--border); padding-top: 8px; }
-.command-list, .settings-content, .artifact pre, .composer textarea, .attachment-tray, .external-link-url, .frost-dialog, .workspace-tree, .workspace-preview pre, .workspace-changes, .workspace-diff-content { scrollbar-color: var(--native-scrollbar-color); scrollbar-width: var(--native-scrollbar-width); }
-.command-list::-webkit-scrollbar, .settings-content::-webkit-scrollbar, .artifact pre::-webkit-scrollbar, .composer textarea::-webkit-scrollbar, .attachment-tray::-webkit-scrollbar, .external-link-url::-webkit-scrollbar, .frost-dialog::-webkit-scrollbar, .workspace-tree::-webkit-scrollbar, .workspace-preview pre::-webkit-scrollbar, .workspace-changes::-webkit-scrollbar, .workspace-diff-content::-webkit-scrollbar { width: 7px; height: 7px; }
-.command-list::-webkit-scrollbar-thumb, .settings-content::-webkit-scrollbar-thumb, .artifact pre::-webkit-scrollbar-thumb, .composer textarea::-webkit-scrollbar-thumb, .attachment-tray::-webkit-scrollbar-thumb, .external-link-url::-webkit-scrollbar-thumb, .frost-dialog::-webkit-scrollbar-thumb, .workspace-tree::-webkit-scrollbar-thumb, .workspace-preview pre::-webkit-scrollbar-thumb, .workspace-changes::-webkit-scrollbar-thumb, .workspace-diff-content::-webkit-scrollbar-thumb { border: 2px solid transparent; border-radius: 999px; background: color-mix(in oklch, var(--foreground), transparent 72%); background-clip: padding-box; }
+.command-list, .settings-content, .composer textarea, .attachment-tray, .external-link-url, .frost-dialog, .workspace-tree, .workspace-preview pre, .workspace-changes, .workspace-diff-content { scrollbar-color: var(--native-scrollbar-color); scrollbar-width: var(--native-scrollbar-width); }
+.command-list::-webkit-scrollbar, .settings-content::-webkit-scrollbar, .composer textarea::-webkit-scrollbar, .attachment-tray::-webkit-scrollbar, .external-link-url::-webkit-scrollbar, .frost-dialog::-webkit-scrollbar, .workspace-tree::-webkit-scrollbar, .workspace-preview pre::-webkit-scrollbar, .workspace-changes::-webkit-scrollbar, .workspace-diff-content::-webkit-scrollbar { width: 7px; height: 7px; }
+.command-list::-webkit-scrollbar-thumb, .settings-content::-webkit-scrollbar-thumb, .composer textarea::-webkit-scrollbar-thumb, .attachment-tray::-webkit-scrollbar-thumb, .external-link-url::-webkit-scrollbar-thumb, .frost-dialog::-webkit-scrollbar-thumb, .workspace-tree::-webkit-scrollbar-thumb, .workspace-preview pre::-webkit-scrollbar-thumb, .workspace-changes::-webkit-scrollbar-thumb, .workspace-diff-content::-webkit-scrollbar-thumb { border: 2px solid transparent; border-radius: 999px; background: color-mix(in oklch, var(--foreground), transparent 72%); background-clip: padding-box; }
 .command-empty { padding: 18px 12px; color: var(--muted-foreground); font-size: 14px; text-align: center; }
 .command-group-label { margin: 8px 8px 3px; color: var(--muted-foreground); font-size: 11px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; }
 .command-list > .command-group-label:first-child { margin-top: 2px; }
@@ -1239,7 +1238,6 @@ svg.lucide { stroke-width: 2.4; }
   box-shadow: 0 24px 70px rgb(0 0 0 / 45%);
 }
 .workspace-warning,
-.artifact,
 .attachment-card,
 .installations article,
 .workspace-settings-card {

@@ -6,7 +6,7 @@
 /* Its buttons' icons are the caption's size, not a row's. */
 .ui-code > figcaption .ui-button svg { width: var(--icon-xs); height: var(--icon-xs); }
 .ui-code-lang { margin-right: auto; }
-.ui-code > pre { height: auto; margin: 0; overflow: auto hidden; interpolate-size: allow-keywords; --move: var(--duration-gentle); --move-ease: var(--ease-arrive); transition: height var(--move) var(--move-ease); padding: var(--space-md) 0; font: var(--text-row)/var(--leading-code) var(--font-code); }
+.ui-code > pre { height: auto; margin: 0; overflow: auto hidden; scrollbar-color: var(--muted-foreground) transparent; scrollbar-width: thin; interpolate-size: allow-keywords; --move: var(--duration-gentle); --move-ease: var(--ease-arrive); transition: height var(--move) var(--move-ease); padding: var(--space-md) 0; font: var(--text-row)/var(--leading-code) var(--font-code); }
 /* Folded: the lines past the fold are cut, the last of them fading; the foot opens it. */
 /* Opening unfolds (arrive); folding goes back quicker (leave). A block still being written folds at once on the line
    that passes the fold: eased, its height would run a line or two past the fold and come back, pulling the page down. */
@@ -20,9 +20,25 @@
 /* Copied: the button's check in the foreground, and what was copied washes --tint and fades (no ring, ever).
    The wash is laid over the whole region (a pinned caption included), so all of it flashes as one. */
 .ui-copy[data-copied] { color: var(--foreground); }
-:where([class*="ui-"][data-copied]):not(.ui-button), .ui-read [data-copy-flash="true"] { position: relative; }
-:where([class*="ui-"][data-copied]):not(.ui-button)::after, .ui-read [data-copy-flash="true"]::after { position: absolute; z-index: 2; inset: 0; border-radius: inherit; background: var(--tint); content: ""; opacity: 0; pointer-events: none; animation: ui-copied var(--duration-flash) ease-out; }
+.ui-copy:not([data-copied]) > .ui-copy-done, .ui-copy[data-copied] > .ui-copy-idle { display: none; }
+:where([class*="ui-"][data-copied]):not(.ui-button) { position: relative; }
+:where([class*="ui-"][data-copied]):not(.ui-button)::after { position: absolute; z-index: 2; inset: 0; border-radius: inherit; background: var(--tint); content: ""; opacity: 0; pointer-events: none; animation: ui-copied var(--duration-flash) ease-out; }
 @keyframes ui-copied { from { opacity: 1; } }
-@media (prefers-reduced-motion: reduce) { :where([class*="ui-"][data-copied]):not(.ui-button)::after, .ui-read [data-copy-flash="true"]::after { animation: none; } }
-.ui-code-line { display: block; padding-inline: var(--space-lg); white-space: pre; }
-.ui-code-n { display: inline-block; min-width: calc(var(--code-digits, 2) * 1ch); margin-right: var(--space-lg); color: var(--muted-foreground); font-variant-numeric: tabular-nums; text-align: right; user-select: none; }
+@media (prefers-reduced-motion: reduce) { :where([class*="ui-"][data-copied]):not(.ui-button)::after { animation: none; } }
+/* Each line numbered by the block (a counter, so the caller's own lines carry no numbers): muted, tabular, out of the
+   selection, clipped with the code when it folds and aligned when it scrolls sideways. */
+.ui-code > pre > code { display: block; counter-reset: ui-code-line; }
+.ui-code-line { display: block; padding-inline: var(--space-lg); white-space: pre; counter-increment: ui-code-line; }
+.ui-code-line::before { display: inline-block; min-width: calc(var(--code-digits, 2) * 1ch); margin-right: var(--space-lg); color: var(--muted-foreground); content: counter(ui-code-line); font-variant-numeric: tabular-nums; text-align: right; user-select: none; }
+/* Syntax: a highlighter's classes, coloured by role. */
+.ui-code :is(.hljs-comment, .hljs-quote) { color: var(--muted-foreground); font-style: italic; }
+.ui-code :is(.hljs-keyword, .hljs-selector-tag, .hljs-literal, .hljs-doctag) { color: var(--syntax-keyword); }
+.ui-code :is(.hljs-string, .hljs-regexp, .hljs-addition) { color: var(--syntax-string); }
+.ui-code :is(.hljs-number, .hljs-symbol, .hljs-bullet) { color: var(--syntax-number); }
+.ui-code :is(.hljs-title, .hljs-name, .hljs-section) { color: var(--syntax-title); }
+.ui-code :is(.hljs-attr, .hljs-attribute, .hljs-variable, .hljs-template-variable) { color: var(--syntax-variable); }
+.ui-code :is(.hljs-type, .hljs-built_in, .hljs-class .hljs-title) { color: var(--syntax-type); }
+.ui-code .hljs-meta { color: var(--syntax-meta); }
+.ui-code .hljs-deletion { color: var(--destructive); }
+.ui-code .hljs-emphasis { font-style: italic; }
+.ui-code .hljs-strong { font-weight: var(--weight-strong); }

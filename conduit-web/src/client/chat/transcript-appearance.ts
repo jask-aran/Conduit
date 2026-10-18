@@ -1,7 +1,6 @@
 import { createSignal } from "solid-js";
 import { CODE_BLOCK_COLLAPSE_DEFAULT_LINES, CODE_BLOCK_COLLAPSE_LINE_OPTIONS, type CodeBlockCollapseMode } from "./code-block";
 import { isUserMessageCollapseMode, selectedUserMessageCollapse, type UserMessageCollapseMode } from "./user-message-collapse";
-import "./code-block.css";
 import "./transcript-appearance.css";
 
 export {
@@ -240,7 +239,6 @@ export function applyTranscriptAppearance(options: {
   if (options.width) root.dataset.transcriptWidth = options.width;
   if (options.wideBlocks) root.dataset.transcriptWide = options.wideBlocks;
   if (options.collapse) root.dataset.codeCollapse = options.collapse;
-  if (options.collapseLines) root.style.setProperty("--code-collapse-lines", String(options.collapseLines));
 }
 
 /**

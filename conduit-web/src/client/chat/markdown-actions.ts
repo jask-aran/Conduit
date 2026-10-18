@@ -1,5 +1,6 @@
 import { createSignal } from "solid-js";
-import { publishCodeBlockToggle, syncCodeBlockToggleLabels } from "./code-block";
+import { setCodeBlockOpen } from "@/components/ui/code";
+import { publishCodeBlockToggle } from "./code-block";
 import { codeElementText } from "./code-highlight";
 
 export function createExternalLinkController() {
@@ -20,15 +21,14 @@ export function createExternalLinkController() {
   };
 }
 
-const COPY_FEEDBACK_MS = 1400;
-const COPY_FLASH_MS = 620;
+const COPY_FEEDBACK_MS = 1200;
 
 /**
  * Copy, and say so.
  *
  * Copying is frequent enough that a stacking toast would be noise, so the
- * confirmation is local: the control reports "Copied" for a moment and the
- * region it copied gets a single ring pulse. Both are attribute flips, which
+ * confirmation is local: the control turns to its check for a moment and the
+ * region it copied takes the copied wash. Both are attribute flips, which
  * keeps them out of every renderer's reactive graph -- a settled Incremark
  * Advanced message can show the feedback without being re-entered.
  *
@@ -46,29 +46,19 @@ export async function copyWithFeedback(
   } catch {
     return false;
   }
-  if (trigger) {
-    trigger.dataset.copied = "true";
-    const label = trigger.querySelector<HTMLElement>(".artifact-copy-label");
-    const previousLabel = label?.textContent ?? null;
-    const previousAria = trigger.getAttribute("aria-label");
-    if (label) label.textContent = "Copied";
-    trigger.setAttribute("aria-label", "Copied");
-    window.setTimeout(() => {
-      if (!trigger.isConnected) return;
-      delete trigger.dataset.copied;
-      if (label && previousLabel != null) label.textContent = previousLabel;
-      if (previousAria != null) trigger.setAttribute("aria-label", previousAria);
-    }, COPY_FEEDBACK_MS);
+  // The library's copied state, set on the button and on what it copied (CopyButton, the copied wash).
+  for (const target of [trigger, region]) {
+    if (!target) continue;
+    // Restart the wash even if a previous one is still running.
+    target.removeAttribute("data-copied");
+    void target.offsetWidth;
+    target.setAttribute("data-copied", "");
+    window.setTimeout(() => { if (target.isConnected) target.removeAttribute("data-copied"); }, COPY_FEEDBACK_MS);
   }
-  const flashTarget = region || trigger?.closest<HTMLElement>("[data-language]");
-  if (flashTarget) {
-    // Restart the animation even if a previous flash is still running.
-    delete flashTarget.dataset.copyFlash;
-    void flashTarget.offsetWidth;
-    flashTarget.dataset.copyFlash = "true";
-    window.setTimeout(() => {
-      if (flashTarget.isConnected) delete flashTarget.dataset.copyFlash;
-    }, COPY_FLASH_MS);
+  if (trigger) {
+    const label = trigger.getAttribute("aria-label");
+    trigger.setAttribute("aria-label", "Copied");
+    window.setTimeout(() => { if (trigger.isConnected && label != null) trigger.setAttribute("aria-label", label); }, COPY_FEEDBACK_MS);
   }
   return true;
 }
@@ -83,8 +73,8 @@ export async function handleMarkdownClick(
   const target = eventTarget.closest<HTMLElement>("[data-copy-code], [data-expand-code], [data-external-url]");
   if (!target || !root.contains(target)) return;
   if (target.hasAttribute("data-copy-code")) {
-    const card = target.closest<HTMLElement>("[data-language]");
-    const code = card?.querySelector("code");
+    const card = target.closest<HTMLElement>(".ui-code");
+    const code = card?.querySelector("pre > code");
     await copyWithFeedback(code ? codeElementText(code) : "", target, card);
     return;
   }
@@ -93,17 +83,12 @@ export async function handleMarkdownClick(
   // pinned header toggle and the footer button carry data-expand-code, so this
   // one branch serves either.
   if (target.hasAttribute("data-expand-code")) {
-    const card = target.closest<HTMLElement>(".artifact");
+    const card = target.closest<HTMLElement>(".ui-code");
     if (!card) return;
     const previousTop = card.getBoundingClientRect().top;
-    if (card.dataset.collapsed === "true") {
-      delete card.dataset.collapsed;
-      card.dataset.userExpanded = "true";
-    } else {
-      card.dataset.collapsed = "true";
-      delete card.dataset.userExpanded;
-    }
-    syncCodeBlockToggleLabels(card);
+    const open = card.hasAttribute("data-folded");
+    setCodeBlockOpen(card, open);
+    card.toggleAttribute("data-user-open", open);
     publishCodeBlockToggle(card, previousTop);
     return;
   }
