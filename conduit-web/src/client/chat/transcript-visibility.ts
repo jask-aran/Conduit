@@ -545,39 +545,6 @@ export function mountTranscriptVisibility(
     }
     scheduleRefresh(true);
   };
-  // After a scroll, repair any intersection the observer missed (upward
-  // scrolls were seen to leave a block hidden in view) by observing every
-  // managed block afresh: an observer reports each new target's current state,
-  // computed in the frame's own intersection step. This was a measurePass --
-  // every block's rect read, repeated each frame a block was revealed -- which
-  // on a long transcript put 20-odd frames over budget in one scroll
-  // (docs/design/performance-pass.md, 10).
-  const reobserve = () => {
-    repairTimer = null;
-    if (!fontsReady || activeIds.size) return;
-    for (const element of managed) {
-      if (element.getAttribute(VISIBILITY_ATTRIBUTE) === "collapsed") continue;
-      visibilityObserver.unobserve(element);
-      visibilityObserver.observe(element);
-    }
-  };
-  // A scroll the reader made is repaired as it ends. The tail follow's are not, one by one: it sets the scroll every
-  // frame an answer grows, each set ends a scroll, and every block of the transcript was observed afresh each frame --
-  // a long answer's intersections all recomputed, every frame. Those are repaired once they stop.
-  let repairTimer: number | null = null;
-  let readerScrolled = false;
-  const onReaderInput = () => { readerScrolled = true; };
-  const onScrollEnd = () => {
-    if (repairTimer != null) clearTimeout(repairTimer);
-    repairTimer = null;
-    if (readerScrolled) {
-      readerScrolled = false;
-      reobserve();
-      return;
-    }
-    repairTimer = window.setTimeout(reobserve, 200);
-  };
-  const READER_INPUT = ["wheel", "touchstart", "pointerdown", "keydown"] as const;
   // A scroll could bring hidden blocks into view before the observer, a frame or two behind, showed them -- a wheel's
   // notch, a jump, the glide to the latest message: a frame with a hole in the page. The scroll's own handler runs
   // before that frame is drawn, so it shows whatever hidden block lies in the strip the scroll uncovered (the whole
@@ -621,9 +588,7 @@ export function mountTranscriptVisibility(
   };
   window.addEventListener(PANEL_GEOMETRY_MOTION_EVENT, onMotion);
   document.addEventListener("visibilitychange", onVisibility);
-  viewport.addEventListener("scrollend", onScrollEnd);
   viewport.addEventListener("scroll", onScroll, { passive: true });
-  for (const type of READER_INPUT) window.addEventListener(type, onReaderInput, { capture: true, passive: true });
   mutationObserver.observe(thread, {
     childList: true,
     subtree: true,
@@ -653,10 +618,7 @@ export function mountTranscriptVisibility(
       expandAll();
       window.removeEventListener(PANEL_GEOMETRY_MOTION_EVENT, onMotion);
       document.removeEventListener("visibilitychange", onVisibility);
-      viewport.removeEventListener("scrollend", onScrollEnd);
       viewport.removeEventListener("scroll", onScroll);
-      for (const type of READER_INPUT) window.removeEventListener(type, onReaderInput, { capture: true });
-      if (repairTimer != null) clearTimeout(repairTimer);
       mutationObserver.disconnect();
       viewportObserver.disconnect();
       visibilityObserver.disconnect();
