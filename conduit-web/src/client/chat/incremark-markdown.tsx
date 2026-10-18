@@ -51,7 +51,7 @@ type RendererContext = {
  * cards in different places, and the block built all of a long file's lines again from nothing (a 137-line file:
  * ~700 elements styled and laid out in the frame it settled). The lines are the same, so it takes the fence's own.
  */
-type FenceHandoff = { current: { code: HTMLElement; text: string; language: string; released: boolean } | null };
+type FenceHandoff = { current: { code: HTMLElement; highlighter: StreamingCodeHighlighter; text: string; language: string; released: boolean } | null };
 
 /** Text-node field: characters of this node before it were already on screen. */
 const FADE_FROM = "__conduitFadeFrom";
@@ -786,6 +786,8 @@ function CodeCard(props: { text: () => string; language: () => string | undefine
   // Whole lines colour as they complete; the line still being written stays
   // plain so its colours do not change under the reader.
   const highlighter = new StreamingCodeHighlighter();
+  // A block that closes a fence starts from the lines the fence highlighted for good.
+  if (!props.pending && props.handoff?.current) highlighter.continueFrom(props.handoff.current.highlighter);
   const highlighted = createMemo(() => {
     highlighterReady();
     return highlighter.render(props.text(), language(), Boolean(props.streaming));
@@ -806,7 +808,7 @@ function CodeCard(props: { text: () => string; language: () => string | undefine
   let code = document.createElement("code");
   // A fence offers its lines as it grows; a block takes them in its first render, which runs after the update that
   // closed the fence has removed it -- never from a fence still on screen, whose card would go blank.
-  const offered: FenceHandoff["current"] = props.pending && props.handoff ? (props.handoff.current = { code, text: "", language: "", released: false }) : null;
+  const offered: FenceHandoff["current"] = props.pending && props.handoff ? (props.handoff.current = { code, highlighter, text: "", language: "", released: false }) : null;
   if (offered) onCleanup(() => { offered.released = true; });
   let first = !props.pending;
   createRenderEffect(() => {
