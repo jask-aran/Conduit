@@ -402,6 +402,7 @@ const ANSWER_FORMS: FormRow[] = [
 const MESSAGE_FORMS: FormRow[] = [
   form("a word", "never narrower than tall", () => <Transcript><Message time="00:08">hi</Message></Transcript>, "<Message time>", "min-width one line · --radius-message"),
   form("a line", "a third of a line above and below", () => <Transcript><Message time="00:08">use the question tool to ask me about dogs</Message></Transcript>, "", "padding md · lg (the composer's text inset)"),
+  form("folded", "past its fold (Settings · Transcript): cut at the fold, the last line fading, Show more", () => <Transcript><Message time="00:08" fold={3}>{Array.from({ length: 6 }, (_, i) => `line ${i + 1} of a long message`).join("\n")}</Message></Transcript>, "<Message fold open onToggle>", "-webkit-line-clamp · caption"),
   form("several lines", "wraps inside the column, the radius held", () => <Transcript><Message time="00:08">{"Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua, ut enim ad minim veniam."}</Message></Transcript>, "", "max-width --measure-2xl"),
 ];
 const TRACE_FORMS: FormRow[] = [

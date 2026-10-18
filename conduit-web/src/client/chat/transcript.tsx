@@ -47,7 +47,7 @@ import { captureTranscriptAnchor, restoreTranscriptAnchor } from "./transcript-a
 import { api } from "../api/client";
 import { requestTurnArtifactNavigation } from "./turn-artifact-navigation";
 import { LibraryContext, useLibrary, useLibraryPiece } from "@/components/ui/swap";
-import { StopLine } from "@/components/ui";
+import { Button as LibraryButton, Message as LibraryMessage, StopLine } from "@/components/ui";
 import { ChatMarkdown } from "./lazy-markdown";
 import { fullDateTime } from "./full-date-time";
 
@@ -65,63 +65,34 @@ import { fullDateTime } from "./full-date-time";
  * at a pessimistic 24 characters per line is never measured at all, which is
  * almost every message anyone sends.
  */
-function UserMessageText(props: { text: string }) {
-  let text!: HTMLSpanElement;
+/** A message the user sent: the library's Message, given the fold preference, the edit state and its foot. */
+function UserMessage(props: { message: Message; text: string; editing: boolean; editable: boolean; arriving: boolean; under: JSX.Element; onEdit: () => void }) {
   const preference = useUserMessageCollapse();
-  const lines = () => userMessageCollapseLines(preference.mode());
-  // Starts false so the first paint is already folded: measuring an unfolded
-  // box would compare the content against itself and always report a fit.
-  const [fits, setFits] = createSignal(false);
-  const [expanded, setExpanded] = createSignal(false);
-  // Pessimistic: assume a line holds only 24 characters. A message under that
-  // budget cannot fill the fold at any column width, so it never gets measured.
-  const mayOverflow = () => {
-    const limit = lines();
-    if (!limit) return false;
+  const [open, setOpen] = createSignal(false);
+  // Pessimistic: a line holds at least 24 characters. Under that budget a message cannot fill the fold at any
+  // column width, so it is not given one and never measured.
+  const fold = () => {
+    const limit = userMessageCollapseLines(preference.mode());
+    if (!limit) return undefined;
     let breaks = 1;
-    for (let index = 0; index < props.text.length; index += 1) {
-      if (props.text[index] === "\n") breaks += 1;
-    }
-    return breaks > limit || props.text.length > limit * 24;
+    for (let index = 0; index < props.text.length; index += 1) if (props.text[index] === "\n") breaks += 1;
+    return breaks > limit || props.text.length > limit * 24 ? limit : undefined;
   };
-  const foldable = () => mayOverflow() && !fits();
-  const collapsed = () => foldable() && !expanded();
-  const measure = () => {
-    // Valid only while the clamp is applied, which is what collapsed() gates.
-    if (!collapsed()) return;
-    setFits(text.scrollHeight - text.clientHeight <= 1);
-  };
-
-  onMount(measure);
-  createEffect(() => {
-    // The fold moved or the column resized, so the previous verdict is stale.
-    // Re-fold first, then measure on the next frame once that has committed --
-    // reading in this tick would measure the box as it still is.
-    lines();
-    preference.readingWidthVersion();
-    if (!mayOverflow() || expanded()) return;
-    setFits(false);
-    requestAnimationFrame(measure);
-  });
-
   const toggle = (event: MouseEvent) => {
     const row = (event.currentTarget as HTMLElement).closest<HTMLElement>('[data-slot="message-scroller-item"]');
     const previousTop = row?.getBoundingClientRect().top;
-    setExpanded((value) => !value);
-    // Unfolding a long message adds real height above everything below it.
-    // Reuse the code card's hold-and-re-measure path rather than leaving the
-    // reading position to browser scroll anchoring.
+    setOpen((value) => !value);
+    // Opening a long message adds real height above everything below it: the code card's hold-and-re-measure path,
+    // rather than leaving the reading position to browser scroll anchoring.
     if (row && previousTop != null) publishCodeBlockToggle(row, previousTop);
   };
-
-  return <>
-    <span ref={text} class="user-message-text" data-collapsed={collapsed() ? "true" : undefined}>{props.text}</span>
-    <Show when={foldable()}>
-      <button type="button" class="user-message-expand" aria-expanded={expanded()} onClick={toggle}>
-        {expanded() ? "Show less" : "Show more"}
-      </button>
-    </Show>
-  </>;
+  const timestamp = () => props.message.timestamp || undefined;
+  return <LibraryMessage motion={props.arriving ? "entering" : undefined} editing={props.editing} fold={fold()} open={open()} onToggle={toggle}
+    time={timestamp() && new Date(timestamp()!).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} dateTime={timestamp()} title={timestamp() && fullDateTime(timestamp()!)}
+    under={props.under}
+    actions={<Show when={props.editable}><LibraryButton variant="ghost" size="icon-xs" aria-label={props.editing ? "Cancel editing" : "Edit from here"} onClick={props.onEdit}><PencilIcon /></LibraryButton></Show>}>
+    {props.text || undefined}
+  </LibraryMessage>;
 }
 
 function TurnArtifactButton(props: { artifact: TurnArtifactSummary; chatId: string }) {
@@ -155,15 +126,12 @@ function Actions(props: { message: Message; precedingUserId?: string; chat: Tran
     && Boolean(props.message.content) && !props.chat.streaming() && props.chat.messages().at(-1)?.id === props.message.id;
   // In v2, the library's MessageFoot.
   const library = useLibrary();
-  return <div class={library ? "ui-message-foot" : "response-actions"} data-end={library && !assistant() ? "" : undefined} data-reveal={props.reveal ? "" : undefined}>
+  return <div class={library ? "ui-message-foot" : "response-actions"} data-reveal={props.reveal ? "" : undefined}>
     <MessageTime timestamp={props.message.timestamp} />
     <Show when={status()}>{(label) => library ? <b class="ui-message-status">{label()}</b> : <span class="marker response-status turn-trace-status" data-status={label() === "Interrupted" ? "interrupted" : undefined}>{label()}</span>}</Show>
     {/* A prompt offers editing. Regenerating it is the same act as regenerating
         the answer below, which already has a button, so there is one way to ask
         for it rather than two that look like different things. */}
-    <Show when={!assistant() && !props.message.pending && props.supports("fork")}>
-      <Button variant="ghost" size="icon-sm" aria-label={props.chat.editingEntryId() === props.message.id ? "Cancel editing" : "Edit from here"} onClick={() => { props.chat.edit(props.message); focusComposerSoon(); }}><PencilIcon /></Button>
-    </Show>
     <Show when={continuable()}><Button variant="ghost" size="sm" class="response-continue" onClick={() => void props.chat.continueResponse()}><PlayIcon />Continue</Button></Show>
     <Show when={assistant() && copyable()}>
       <Button
@@ -1160,11 +1128,10 @@ function TranscriptBody(props: { chat: TranscriptSource; supports: (capability: 
             </div>;
           }
           return <div ref={row} data-slot="message-scroller-item" data-message-id={message().id} data-arrived={arrive ? "" : undefined} style={arrive}>
-            <article data-slot="message" data-align={user() ? "end" : "start"} class={user() ? "message-user" : "message-assistant"}>
-              <div data-slot="message-content" data-incremark={!user() && rendererUsesTypewriter() ? "" : undefined}>
-                <Show when={!user() || review().text}><div data-slot="bubble" data-align={user() ? "end" : "start"} data-error={failed() ? "true" : undefined} data-editing={props.chat.editingEntryId() === message().id ? "true" : "false"} data-composer-surface={user() ? composerSurface() : undefined} class={user() ? (library ? "ui-frost ui-bubble" : "bubble bubble-user composer-surface-material") : "bubble bubble-assistant"}>
-                  <div data-slot="bubble-content" class={!user() && library ? "ui-answer" : undefined}>
-                    <Show when={user()} fallback={<>
+            <Show when={user()} fallback={<article data-slot="message" data-align="start" class="message-assistant">
+              <div data-slot="message-content" data-incremark={rendererUsesTypewriter() ? "" : undefined}>
+                                <div data-slot="bubble" data-align="start" data-error={failed() ? "true" : undefined} class="bubble bubble-assistant">
+                  <div data-slot="bubble-content" class={library ? "ui-answer" : undefined}>
                       <Show when={message().content}>
                         <Suspense fallback={<div class="markdown-skeleton" />}>
                           <ChatMarkdown renderer={markdownRenderer()} streaming={live()} streamVersion={item.streamVersion} onRendered={() => settleAfterMarkdown(row)} onSettled={() => setSettled(true)}>{message().content || ""}</ChatMarkdown>
@@ -1185,15 +1152,19 @@ function TranscriptBody(props: { chat: TranscriptSource; supports: (capability: 
                           <pre>{message().errorMessage || "The model request failed."}</pre>
                         </details>
                       </Show>
-                    </>}><UserMessageText text={review().text} /></Show>
                   </div>
-                </div></Show>
+                </div>
 
-                <Show when={user() && message().attachments?.length}><AttachmentCards items={message().attachments!} chatId={props.chat.loadedId()} label="Message attachments" /></Show>
-                <Show when={user() && review().comments.length}><ReviewCommentCards items={review().comments} chatId={props.chat.loadedId() ?? ""} label="Code references" /></Show>
                 <Show when={actionsShown()} fallback={<div class={library ? "ui-message-foot" : "response-actions"} aria-hidden="true" />}><Actions message={message()} precedingUserId={precedingUserId()} chat={props.chat} supports={props.supports} partialContinue={props.partialContinue} artifact={artifact()} traced={item.traced} reveal={!user() && streamed()} /></Show>
               </div>
-            </article>
+            </article>}>
+              <UserMessage message={message()} text={review().text} editing={props.chat.editingEntryId() === message().id}
+                editable={!message().pending && props.supports("fork")} arriving={Boolean(arrive)} onEdit={() => { props.chat.edit(message()); focusComposerSoon(); }}
+                under={<>
+                  <Show when={message().attachments?.length}><AttachmentCards items={message().attachments!} chatId={props.chat.loadedId()} label="Message attachments" /></Show>
+                  <Show when={review().comments.length}><ReviewCommentCards items={review().comments} chatId={props.chat.loadedId() ?? ""} label="Code references" /></Show>
+                </>} />
+            </Show>
           </div>;
         }}</For>
         {/* Sent, and the server has not started the turn yet: its starting

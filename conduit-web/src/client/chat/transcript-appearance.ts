@@ -1,6 +1,6 @@
 import { createSignal } from "solid-js";
 import { CODE_BLOCK_COLLAPSE_DEFAULT_LINES, CODE_BLOCK_COLLAPSE_LINE_OPTIONS, type CodeBlockCollapseMode } from "./code-block";
-import { isUserMessageCollapseMode, selectedUserMessageCollapse, userMessageCollapseLines, type UserMessageCollapseMode } from "./user-message-collapse";
+import { isUserMessageCollapseMode, selectedUserMessageCollapse, type UserMessageCollapseMode } from "./user-message-collapse";
 import "./code-block.css";
 import "./transcript-appearance.css";
 
@@ -236,12 +236,6 @@ export function applyTranscriptAppearance(options: {
   userMessageCollapse?: UserMessageCollapseMode;
 }, root: HTMLElement | null = typeof document === "undefined" ? null : document.documentElement) {
   if (!root) return;
-  // Only the line count reaches CSS. Whether a given message actually folds is
-  // decided per message by measurement, not by a root-level flag.
-  if (options.userMessageCollapse) {
-    const fold = userMessageCollapseLines(options.userMessageCollapse);
-    if (fold) root.style.setProperty("--user-message-collapse-lines", String(fold));
-  }
   if (options.codeWidth) root.dataset.codeWidth = options.codeWidth;
   if (options.width) root.dataset.transcriptWidth = options.width;
   if (options.wideBlocks) root.dataset.transcriptWide = options.wideBlocks;
@@ -265,16 +259,6 @@ const [collapseThreshold, setCollapseThreshold] = createSignal(selectedCodeBlock
 const [userCollapse, setUserCollapse] = createSignal<UserMessageCollapseMode>(selectedUserMessageCollapse());
 const [panelMotion, setPanelMotion] = createSignal<PanelMotionMode>(selectedPanelMotion());
 
-/**
- * Bumped whenever the reading measure may have changed.
- *
- * Whether a user message overflows its fold is a measured fact, not a computed
- * one, so the only correct trigger to re-measure is "the column is a different
- * width than when we last looked". One coalesced listener serves every message
- * rather than a ResizeObserver per bubble.
- */
-const [readingWidthVersion, setReadingWidthVersion] = createSignal(0);
-
 if (typeof window !== "undefined") {
   window.addEventListener("conduit:ui-preference-change", (event) => {
     const detail = (event as CustomEvent<{ key?: string; value?: unknown }>).detail;
@@ -282,19 +266,7 @@ if (typeof window !== "undefined") {
     else if (detail?.key === "codeBlockCollapseLines" && isCodeBlockCollapseLines(detail.value)) setCollapseThreshold(detail.value);
     else if (detail?.key === "userMessageCollapse" && isUserMessageCollapseMode(detail.value)) setUserCollapse(detail.value);
     else if (detail?.key === "panelMotion" && isPanelMotionMode(detail.value)) setPanelMotion(detail.value);
-    else if (detail?.key === "transcriptWidth") setReadingWidthVersion((version) => version + 1);
   });
-  let resizeFrame: number | null = null;
-  let lastWidth = window.innerWidth;
-  window.addEventListener("resize", () => {
-    if (resizeFrame != null || window.innerWidth === lastWidth) return;
-    resizeFrame = requestAnimationFrame(() => {
-      resizeFrame = null;
-      if (window.innerWidth === lastWidth) return;
-      lastWidth = window.innerWidth;
-      setReadingWidthVersion((version) => version + 1);
-    });
-  }, { passive: true });
 }
 
 export function useCodeBlockCollapse() {
@@ -306,5 +278,5 @@ export function usePanelMotion() {
 }
 
 export function useUserMessageCollapse() {
-  return { mode: userCollapse, readingWidthVersion };
+  return { mode: userCollapse };
 }
