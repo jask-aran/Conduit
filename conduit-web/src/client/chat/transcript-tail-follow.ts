@@ -6,16 +6,16 @@ export type TailFollowState = {
   velocity: number;
   lastTimeMs: number | null;
   owner: TailFollowOwner;
+  /** The target and the position written at the last frame, to tell the target's own movement since. */
+  lastTarget: number | null;
+  lastWritten: number | null;
+  /** A running average of how far the target moves a frame, which bounds the feed-forward. */
+  targetDeltaEma: number;
 };
 
 export type TailFollowFrame = {
   state: TailFollowState;
-  actualScrollTop: number;
   nextScrollTop: number;
-  movementPx: number;
-  feedForwardVelocityPxPerSecond: number;
-  frameIntervalMs: number | null;
-  mode: "tracking" | "settled" | "rebase";
   rebased: boolean;
 };
 
@@ -38,6 +38,9 @@ export function createTailFollowState(
     velocity: 0,
     lastTimeMs: null,
     owner,
+    lastTarget: null,
+    lastWritten: null,
+    targetDeltaEma: 0,
   };
 }
 
@@ -67,37 +70,36 @@ export function advanceTailFollow(
   targetScrollTop: number,
   nowMs: number,
   actualScrollTop: number,
-  uncompensatedTargetDeltaPx = 0,
 ): TailFollowFrame {
   const target = Math.max(0, targetScrollTop);
   const actual = Math.max(0, actualScrollTop);
+  // The target's own movement since the last frame: what it moved, less what the browser moved the scroll by itself.
+  const targetDelta = (state.lastTarget == null ? 0 : target - state.lastTarget)
+    - (state.lastWritten == null ? 0 : actualScrollTop - state.lastWritten);
+  const magnitude = Math.abs(targetDelta);
+  const feedForwardPx = state.targetDeltaEma > 0 ? Math.sign(targetDelta) * Math.min(magnitude, state.targetDeltaEma * 2) : 0;
+  const targetDeltaEma = magnitude > 0
+    ? state.targetDeltaEma > 0 ? state.targetDeltaEma * 0.75 + magnitude * 0.25 : magnitude
+    : state.targetDeltaEma;
   const frameIntervalMs = state.lastTimeMs == null ? null : nowMs - state.lastTimeMs;
   const baseState = {
     ...state,
     targetScrollTop: target,
     position: actual,
     lastTimeMs: nowMs,
+    lastTarget: target,
+    targetDeltaEma,
   };
 
   if (state.owner === "user" || frameIntervalMs == null || frameIntervalMs > TYPEWRITER_TAIL_MAX_FRAME_GAP_MS || frameIntervalMs < 0) {
     const rebased = frameIntervalMs != null && (frameIntervalMs > TYPEWRITER_TAIL_MAX_FRAME_GAP_MS || frameIntervalMs < 0);
-    return {
-      state: { ...baseState, velocity: 0 },
-      actualScrollTop: actual,
-      nextScrollTop: actual,
-      movementPx: 0,
-      feedForwardVelocityPxPerSecond: 0,
-      frameIntervalMs,
-      mode: rebased ? "rebase" : "settled",
-      rebased,
-    };
+    return { state: { ...baseState, velocity: 0, lastWritten: actual }, nextScrollTop: actual, rebased };
   }
 
   const dt = Math.min(TYPEWRITER_TAIL_MAX_FRAME_GAP_MS, Math.max(0.5, frameIntervalMs)) / 1000;
   const response = TYPEWRITER_TAIL_RESPONSE;
   const error = actual - target;
-  const feedForwardVelocityPxPerSecond = uncompensatedTargetDeltaPx * response * TYPEWRITER_TAIL_TARGET_FEED_FORWARD;
-  const effectiveVelocity = state.velocity + feedForwardVelocityPxPerSecond;
+  const effectiveVelocity = state.velocity + feedForwardPx * response * TYPEWRITER_TAIL_TARGET_FEED_FORWARD;
   const decay = Math.exp(-response * dt);
   const nextError = (error + (effectiveVelocity + response * error) * dt) * decay;
   const nextVelocity = (effectiveVelocity - response * (effectiveVelocity + response * error) * dt) * decay;
@@ -110,19 +112,19 @@ export function advanceTailFollow(
   } else {
     nextPosition = Math.max(0, nextPosition);
   }
+  // Its last steps are under a pixel, and written rounded they did not move it: it stopped short of the bottom
+  // (8px) until a snap closed the gap. A step that would round to nothing takes a whole pixel, never past the target.
+  let nextScrollTop = nextPosition;
+  const step = nextScrollTop - actual;
+  if (Math.abs(step) > 0.05 && Math.round(nextScrollTop) === Math.round(actual)) {
+    nextScrollTop = step > 0 ? Math.min(target, actual + 1) : Math.max(target, actual - 1);
+    // Landed on the target, it has arrived: kept, its speed carried it past by a fraction the next frame.
+    if (nextScrollTop === target) { nextPosition = target; velocity = 0; }
+  }
 
   return {
-    state: {
-      ...baseState,
-      position: nextPosition,
-      velocity,
-    },
-    actualScrollTop: actual,
-    nextScrollTop: nextPosition,
-    movementPx: nextPosition - actual,
-    feedForwardVelocityPxPerSecond,
-    frameIntervalMs,
-    mode: nextPosition === target ? "settled" : "tracking",
+    state: { ...baseState, position: nextPosition, velocity, lastWritten: nextScrollTop },
+    nextScrollTop,
     rebased: false,
   };
 }
