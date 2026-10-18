@@ -236,10 +236,4 @@
   [data-phone-layout="bar"][data-primary-hidden] .composer-send-trigger { margin-left: -10px; }
 }
 
-/* A message sent from this view fades in as the text pill fades out
-   (transcript.tsx, data-arrived). Each part fades itself, never the row, so
-   the bubble's own frost is drawn from the first frame. */
-[data-slot="message-scroller-item"][data-arrived] :is([data-slot="message-content"] > *, .turn-trace) { animation: message-arrive .18s ease-out var(--arrive-delay, 0ms) both; }
-@keyframes message-arrive { from { opacity: 0; } }
-@media (prefers-reduced-motion: reduce) { [data-slot="message-scroller-item"][data-arrived] :is([data-slot="message-content"] > *, .turn-trace) { animation: none; } }
 

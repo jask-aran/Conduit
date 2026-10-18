@@ -24,4 +24,7 @@ export function moveCursor(event: PointerEvent & { currentTarget: Element }) {
 
 /** A piece's move, drawn by the piece from Foundations · Motion: entering, leaving (back the way it came), removing (fades in place). */
 export type Motion = "entering" | "leaving" | "removing";
+/** An entrance already under way: `since` ms into it, so a piece that takes another's place goes on with its entrance
+ *  rather than starting one of its own (a turn's header arriving under the message just sent). */
+export const sinceOf = (since?: number) => since ? { "--entered": `${-Math.round(since)}ms` } : undefined;
 export const motionOf = (motion?: Motion) => ({ "data-entering": motion === "entering" ? "" : undefined, "data-leaving": motion === "leaving" ? "" : motion === "removing" ? "remove" : undefined });

@@ -37,8 +37,8 @@ await page.goto(url, { waitUntil: "commit" }); await page.waitForTimeout(7000);
 // --css <rules>: added to the page before the prompt, to measure a turn with something switched off (an A/B).
 if (arg("--css", null)) await page.addStyleTag({ content: arg("--css", null) });
 // State marks from a MutationObserver: a rAF of the probe's own would ask for every frame it measures.
-await page.evaluate((line) => { let last = ""; new MutationObserver(() => { const s = ([...document.querySelectorAll(".turn-trace")].at(-1)?.querySelector(line)?.textContent ?? "").replace(/\s+/g, " ").trim().replace(/ · .*/, "");
-  if (s && s !== last) { last = s; window.__state = s; performance.mark(`state ${s}`); } }).observe(document.body, { subtree: true, childList: true, characterData: true }); }, ".ui-trace-line, .turn-trace-line");
+await page.evaluate((line) => { let last = ""; new MutationObserver(() => { const s = ([...document.querySelectorAll(".ui-trace-fold")].at(-1)?.querySelector(line)?.textContent ?? "").replace(/\s+/g, " ").trim().replace(/ · .*/, "");
+  if (s && s !== last) { last = s; window.__state = s; performance.mark(`state ${s}`); } }).observe(document.body, { subtree: true, childList: true, characterData: true }); }, ".ui-trace-line");
 const ps = await ctx.newCDPSession(page); await ps.send("Profiler.enable"); await ps.send("Profiler.setSamplingInterval", { interval: 100 });
 const events = []; const onData = (d) => events.push(...d.value); cdp.on("Tracing.dataCollected", onData);
 const traced = new Promise((r) => cdp.once("Tracing.tracingComplete", r));

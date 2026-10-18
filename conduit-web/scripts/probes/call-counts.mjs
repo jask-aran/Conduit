@@ -37,7 +37,7 @@ try {
   await page.evaluate(() => { window.__frames = 0; }); messages = 0;
   await page.evaluate(() => document.querySelector(".composer-keyboard-trigger, [aria-label='Type a message']")?.click());
   const ta = page.locator(".chat-main textarea").first(); await ta.fill(prompt); await ta.press("Enter");
-  await page.waitForFunction(() => /^(Done|Interrupted|Failed)/.test(document.querySelector(".ui-trace-line, .turn-trace-line")?.textContent ?? ""), null, { timeout: 240_000, polling: 500 });
+  await page.waitForFunction(() => /^(Done|Interrupted|Failed)/.test(document.querySelector(".ui-trace-line")?.textContent ?? ""), null, { timeout: 240_000, polling: 500 });
   await page.waitForTimeout(1500);
   const { result: coverage } = await s.send("Profiler.takePreciseCoverage");
   const counts = { frames: await page.evaluate(() => window.__frames), messages };

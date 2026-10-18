@@ -66,7 +66,7 @@ await page.evaluate(() => {
       users: users.length, bubbleTop: bubble ? Math.round(r(bubble).top) : null,
       bubbleOp: bubble ? +getComputedStyle(bubble).opacity : null,
       scroll: Math.round(viewport.scrollTop), height: Math.round(viewport.scrollHeight),
-      trace: (() => { const t = [...document.querySelectorAll(".thread .turn-trace")].at(-1); return t ? `${t.classList.contains("turn-trace-starting") ? "S" : "T"}${Math.round(t.getBoundingClientRect().top)}/${(+getComputedStyle(t).opacity).toFixed(2)}` : "-"; })(),
+      trace: (() => { const t = [...document.querySelectorAll(".thread .ui-trace-fold")].at(-1); return t ? `${/^(Starting|Waiting)/.test(t.querySelector(".ui-trace-line")?.textContent ?? "") ? "S" : "T"}${Math.round(t.getBoundingClientRect().top)}/${(+getComputedStyle(t).opacity).toFixed(2)}` : "-"; })(),
     });
     if (performance.now() - t0 < 4000) requestAnimationFrame(frame);
   };

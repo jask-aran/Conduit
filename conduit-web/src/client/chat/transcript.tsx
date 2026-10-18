@@ -6,7 +6,6 @@ import type { BooleanCapability, Message } from "../api/contracts";
 import { isChatContentActivity, type TranscriptSource } from "./transcript-source";
 import type { TurnArtifactSummary } from "../api/live-events";
 import { AttachmentCards } from "./attachments";
-import { DISCLOSURE_TOGGLE_EVENT } from "./disclosure";
 import { ReviewCommentCards } from "./review-comment-cards";
 import { parseReviewComments } from "./review-comments";
 import { TraceStarting, TurnTrace } from "./turn-trace";
@@ -66,7 +65,7 @@ import { fullDateTime } from "./full-date-time";
  * almost every message anyone sends.
  */
 /** A message the user sent: the library's Message, given the fold preference, the edit state and its foot. */
-function UserMessage(props: { message: Message; text: string; editing: boolean; editable: boolean; arriving: boolean; under: JSX.Element; onEdit: () => void }) {
+function UserMessage(props: { message: Message; text: string; editing: boolean; editable: boolean; since?: number; under: JSX.Element; onEdit: () => void }) {
   const preference = useUserMessageCollapse();
   const [open, setOpen] = createSignal(false);
   // Pessimistic: a line holds at least 24 characters. Under that budget a message cannot fill the fold at any
@@ -87,7 +86,7 @@ function UserMessage(props: { message: Message; text: string; editing: boolean; 
     if (row && previousTop != null) publishCodeBlockToggle(row, previousTop);
   };
   const timestamp = () => props.message.timestamp || undefined;
-  return <LibraryMessage motion={props.arriving ? "entering" : undefined} editing={props.editing} fold={fold()} open={open()} onToggle={toggle}
+  return <LibraryMessage motion={props.since != null ? "entering" : undefined} since={props.since} editing={props.editing} fold={fold()} open={open()} onToggle={toggle}
     time={timestamp() && new Date(timestamp()!).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} dateTime={timestamp()} title={timestamp() && fullDateTime(timestamp()!)}
     under={props.under}
     actions={<Show when={props.editable}><LibraryButton variant="ghost" size="icon-xs" aria-label={props.editing ? "Cancel editing" : "Edit from here"} onClick={props.onEdit}><PencilIcon /></LibraryButton></Show>}>
@@ -271,19 +270,21 @@ function TranscriptBody(props: { chat: TranscriptSource; supports: (capability: 
   // When each message we sent first showed here: its fade runs from then,
   // and a row rebuilt for it (the server's copy, a new chat's id) carries on
   // from the same point instead of starting again.
-  const ARRIVE_MS = 180;
+  // The library's entrance (Foundations · Motion, gentle).
+  const ARRIVE_MS = 250;
   const arrivedAt = new Map<string, number>();
   let lastArrivedId: string | null = null;
-  const arrival = (message: Message): JSX.CSSProperties | undefined => {
+  const arrival = (message: Message): number | undefined => {
     if (message.local && !arrivedAt.has(message.id)) { arrivedAt.set(message.id, performance.now()); lastArrivedId = message.id; }
     return arrivalOf(message.id);
   };
   // The turn under a message just sent fades with it, from the same moment.
-  const arrivalOf = (id: string | null): JSX.CSSProperties | undefined => {
+  // How far into its entrance it is (the pieces' `since`), or undefined once it is in.
+  const arrivalOf = (id: string | null): number | undefined => {
     const at = id ? arrivedAt.get(id) : undefined;
     if (at == null) return undefined;
     const ago = performance.now() - at;
-    return ago < ARRIVE_MS ? { "--arrive-delay": `${-Math.round(ago)}ms` } : undefined;
+    return ago < ARRIVE_MS ? ago : undefined;
   };
   const timeline = createTimelineStore(
     settledMessages,
@@ -745,7 +746,10 @@ function TranscriptBody(props: { chat: TranscriptSource; supports: (capability: 
       if (rendererUsesTypewriter()) { cancelTypewriterTailRejoin(); setTypewriterTailOwner("user", true); }
       setFollowing(false);
     };
-    thread.addEventListener(DISCLOSURE_TOGGLE_EVENT, onDisclosureToggle);
+    // Opening or closing anything in the transcript (a trace, a step, a fold) is reading, not following: the click
+    // reaches the thread before the piece's own handler (Solid's are delegated to the document) changes its height.
+    const onExpanderClick = (event: MouseEvent) => { if ((event.target as Element).closest("[aria-expanded]")) onDisclosureToggle(); };
+    thread.addEventListener("click", onExpanderClick);
     window.addEventListener(CODE_BLOCK_TOGGLE_EVENT, onCodeBlockToggle);
     window.addEventListener(UI_PREFERENCE_CHANGE_EVENT, syncUiPreference);
     let latestButtonAnchorFrame: number | null = null;
@@ -1029,7 +1033,7 @@ function TranscriptBody(props: { chat: TranscriptSource; supports: (capability: 
     resizeObserver.observe(thread);
     onCleanup(() => {
       window.removeEventListener(CODE_BLOCK_TOGGLE_EVENT, onCodeBlockToggle);
-      thread.removeEventListener(DISCLOSURE_TOGGLE_EVENT, onDisclosureToggle);
+      thread.removeEventListener("click", onExpanderClick);
       window.removeEventListener(UI_PREFERENCE_CHANGE_EVENT, syncUiPreference);
       layoutEpoch += 1;
       resizeObserver.disconnect();
@@ -1073,7 +1077,7 @@ function TranscriptBody(props: { chat: TranscriptSource; supports: (capability: 
             const chatId = () => props.chat.loadedId();
             const artifact = () => item.answerless && item.precedingUserId ? artifactSummaries().get(item.precedingUserId) : undefined;
             const arrive = arrivalOf(lastArrivedId);
-            return <div ref={traceRow} data-slot="message-scroller-item" data-arrived={arrive ? "" : undefined} style={arrive}><TurnTrace trace={item.value} writing={item.answerless === false} sessionId={chatId()} renderer={markdownRenderer()} profileLabel={props.profileLabel} initialOpen={itemExpanded(chatId(), item.key)} onOpenChange={(open) => setItemExpanded(chatId(), item.key, open)} toolOpen={(id) => itemExpanded(chatId(), `tool:${id}`)} onToolOpenChange={(id, open) => setItemExpanded(chatId(), `tool:${id}`, open)} onRendered={() => settleAfterMarkdown(traceRow)} />
+            return <div ref={traceRow} data-slot="message-scroller-item"><TurnTrace since={arrive} trace={item.value} writing={item.answerless === false} sessionId={chatId()} renderer={markdownRenderer()} profileLabel={props.profileLabel} initialOpen={itemExpanded(chatId(), item.key)} onOpenChange={(open) => setItemExpanded(chatId(), item.key, open)} toolOpen={(id) => itemExpanded(chatId(), `tool:${id}`)} onToolOpenChange={(id, open) => setItemExpanded(chatId(), `tool:${id}`, open)} onRendered={() => settleAfterMarkdown(traceRow)} />
               {/* A turn that ended without an answer -- stopped under a tool, or
                   one that only ran commands -- still offers to try again. */}
               <Show when={item.answerless && !item.value.active}>
@@ -1127,7 +1131,7 @@ function TranscriptBody(props: { chat: TranscriptSource; supports: (capability: 
               <p class="harness-prompt"><BellIcon aria-hidden="true" /><span>{message().content}</span></p>
             </div>;
           }
-          return <div ref={row} data-slot="message-scroller-item" data-message-id={message().id} data-arrived={arrive ? "" : undefined} style={arrive}>
+          return <div ref={row} data-slot="message-scroller-item" data-message-id={message().id}>
             <Show when={user()} fallback={<article data-slot="message" data-align="start" class="message-assistant">
               <div data-slot="message-content" data-incremark={rendererUsesTypewriter() ? "" : undefined}>
                                 <div data-slot="bubble" data-align="start" data-error={failed() ? "true" : undefined} class="bubble bubble-assistant">
@@ -1159,7 +1163,7 @@ function TranscriptBody(props: { chat: TranscriptSource; supports: (capability: 
               </div>
             </article>}>
               <UserMessage message={message()} text={review().text} editing={props.chat.editingEntryId() === message().id}
-                editable={!message().pending && props.supports("fork")} arriving={Boolean(arrive)} onEdit={() => { props.chat.edit(message()); focusComposerSoon(); }}
+                editable={!message().pending && props.supports("fork")} since={arrive} onEdit={() => { props.chat.edit(message()); focusComposerSoon(); }}
                 under={<>
                   <Show when={message().attachments?.length}><AttachmentCards items={message().attachments!} chatId={props.chat.loadedId()} label="Message attachments" /></Show>
                   <Show when={review().comments.length}><ReviewCommentCards items={review().comments} chatId={props.chat.loadedId() ?? ""} label="Code references" /></Show>
@@ -1170,7 +1174,7 @@ function TranscriptBody(props: { chat: TranscriptSource; supports: (capability: 
         {/* Sent, and the server has not started the turn yet: its starting
             header shows with the message, fading in beside it, so the turn's
             own header later takes the same spot instead of pushing in. */}
-        <Show when={awaitingTurn()}>{(_) => { const arrive = untrack(() => arrival(props.chat.messages().at(-1)!)); return <div data-slot="message-scroller-item" data-arrived="" style={arrive}><TraceStarting startedAt={props.chat.messages().at(-1)?.timestamp} label="Starting" /></div>; }}</Show>
+        <Show when={awaitingTurn()}>{(_) => { const arrive = untrack(() => arrival(props.chat.messages().at(-1)!)); return <div data-slot="message-scroller-item"><TraceStarting since={arrive} startedAt={props.chat.messages().at(-1)?.timestamp} label="Starting" /></div>; }}</Show>
         </div>
       </div>
       {/*

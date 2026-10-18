@@ -1,40 +1,16 @@
 import { createEffect, createMemo, createSignal, Index, Match, onCleanup, Show, Suspense, Switch } from "solid-js";
-import { LightbulbIcon, MessageSquareTextIcon, TriangleAlertIcon } from "lucide-solid";
-import { Spinner } from "@/components/primitives";
+import { LightbulbIcon, MessageSquareTextIcon } from "lucide-solid";
 import type { Message, ToolItem, ToolKind } from "../api/contracts";
 import type { TraceSegment, TurnTraceData } from "../turn-rows";
-import { KIND_ICONS, LibraryToolStep, stepDuration, ToolStep, VERBS } from "./tool-card";
+import { KIND_ICONS, stepDuration, ToolStep, VERBS } from "./tool-card";
 import { Orb, Step, StepProse, Trace, TraceError as LibraryTraceError, Trail } from "@/components/ui";
 import { Dynamic } from "solid-js/web";
-import "./turn-trail.css";
 import { ORBITS_TRAILED, PLAIN_SPHERE, SPUTTERING_SPHERE } from "./orb-frames";
-import { ThinkingOrb, type ModeFrame, type OrbState, settledOrbRate } from "./thinking-orb";
-import { Disclosure } from "./disclosure";
-import { useLibrary, useLibraryPiece } from "@/components/ui/swap";
+import { type ModeFrame, type OrbState, settledOrbRate } from "./thinking-orb";
 import { extendsText } from "./streaming-markdown";
 import type { MarkdownRendererId } from "./markdown-settings";
 import { ChatMarkdown } from "./lazy-markdown";
 import { fullDateTime } from "./full-date-time";
-
-/* The gallery's previews draw a turn's header as the library's TraceHeader (its classes); the app keeps its own. */
-const traceClass = (library: boolean) => (app: string, piece: string) => library ? piece : app;
-
-function TraceError(props: { message: Message; profileLabel?: string }) {
-  const message = () => props.message;
-  return <div class="turn-trace-error" data-message-id={message().id}>
-    <div class="turn-trace-error-heading">
-      <TriangleAlertIcon aria-hidden="true" />
-      <strong>Request failed</strong>
-      <Show when={message().timestamp}><time dateTime={message().timestamp}>{fullDateTime(message().timestamp)}</time></Show>
-    </div>
-    <div class="turn-trace-error-meta">
-      <Show when={message().model}><span>Model: {message().model}</span></Show>
-      <Show when={message().provider}><span>Provider: {message().provider}</span></Show>
-      <Show when={props.profileLabel}><span>Profile: {props.profileLabel}</span></Show>
-    </div>
-    <pre>{message().errorMessage || "The model request failed."}</pre>
-  </div>;
-}
 
 type RowProps = {
   onRendered?: () => void;
@@ -45,33 +21,6 @@ type RowProps = {
   onToolOpenChange?: (id: string, open: boolean) => void;
   settled?: boolean;
 };
-
-/* Thinking or narration as one line of the trail: its summary, the whole text
-   a click below it. */
-function TextStep(props: RowProps & { segment: Extract<TraceSegment, { kind: "thinking" | "narration" }> }) {
-  const Icon = () => props.segment.kind === "thinking" ? <LightbulbIcon class="trail-icon" /> : <MessageSquareTextIcon class="trail-icon" />;
-  return <Disclosure class="trail-row text-step" data-kind={props.segment.kind}
-    // Text the model was cut off writing and is not being given back to it:
-    // struck where it sits, and it says so -- the loss is this step's.
-    data-discarded={props.segment.discarded ? "true" : undefined}
-    headerClass="trail-row-header" bodyClass="text-step-content"
-    initialOpen={props.toolOpen?.(props.segment.id)} onOpenChange={(open) => props.onToolOpenChange?.(props.segment.id, open)}
-    header={<>
-      <Icon />
-      <span class="trail-summary">
-        <Suspense fallback={summaryOf(props.segment.text)}><ChatMarkdown inline renderer={props.renderer}>{summaryOf(props.segment.text) || "\u2026"}</ChatMarkdown></Suspense>
-      </span>
-      <Show when={props.segment.discarded}><span class="trail-meta"><span class="trail-flag" title="Interrupted — the agent has no record of this">Not kept</span></span></Show>
-    </>}
-    body={() => <Suspense fallback={<div class="markdown-skeleton" />}>
-      <ChatMarkdown streaming={Boolean(props.segment.live)} renderer={props.renderer} onRendered={props.onRendered}>{props.segment.text}</ChatMarkdown>
-    </Suspense>} />;
-}
-
-function ToolRow(props: RowProps & { tool: ToolItem }) {
-  return <ToolStep tool={props.tool} settled={props.settled} sessionId={props.sessionId}
-    initialOpen={props.toolOpen?.(props.tool.toolCallId)} onOpenChange={(open) => props.onToolOpenChange?.(props.tool.toolCallId, open)} />;
-}
 
 /* Two or more steps of one kind in a row are one line that says how many, the
    steps under it a click below, like any other line of the trail. */
@@ -84,20 +33,6 @@ const GROUP_WORDS: Record<ToolKind, (count: number) => string> = {
   script: (count) => `Scripted tools ${count} times`,
   other: (count) => `Used ${count} tools`,
 };
-function ToolGroup(props: RowProps & { kind: ToolKind; tools: ToolItem[] }) {
-  const key = () => `group:${props.tools[0]!.toolCallId}`;
-  const running = () => !props.settled && props.tools.some((tool) => !tool.done);
-  const KindIcon = () => { const Icon = KIND_ICONS[props.kind]; return <Icon class="trail-icon" />; };
-  return <Disclosure class="trail-row tool-group" headerClass="trail-row-header" bodyClass="tool-group-steps"
-    initialOpen={props.toolOpen?.(key())} onOpenChange={(open) => props.onToolOpenChange?.(key(), open)}
-    header={<>
-      <Show when={running()} fallback={<KindIcon />}><Spinner class="trail-icon" /></Show>
-      <span class="trail-verb">{GROUP_WORDS[props.kind](props.tools.length)}</span>
-      <span class="trail-meta">{stepDuration(props.tools[0]!.timestamp, props.tools.at(-1)!.completedAt)}</span>
-    </>}
-    body={() => <Index each={props.tools}>{(tool) => <ToolRow {...props} tool={tool()} />}</Index>} />;
-}
-
 type TrailItem =
   | { type: "text"; segment: Extract<TraceSegment, { kind: "thinking" | "narration" }> }
   | { type: "error"; message: Message }
@@ -142,18 +77,6 @@ function trailOf(segments: TraceSegment[]): TrailItem[] {
   }
   flush();
   return items;
-}
-
-function TrailLine(props: RowProps & { item: TrailItem }) {
-  return <Switch>
-    <Match when={props.item.type === "text" && props.item}>{(item) => <TextStep {...props} segment={item().segment} />}</Match>
-    <Match when={props.item.type === "error" && props.item}>{(item) => <div class="trail-row trail-error"><TraceError message={item().message} profileLabel={props.profileLabel} /></div>}</Match>
-    <Match when={props.item.type === "tool" && props.item}>{(item) => <ToolRow {...props} tool={item().tool} />}</Match>
-    <Match when={props.item.type === "hidden"}>
-      <div class="trail-row trail-note"><div class="trail-row-header"><LightbulbIcon class="trail-icon" /><span class="trail-summary">Reasoning not shared by the provider</span></div></div>
-    </Match>
-    <Match when={props.item.type === "group" && props.item}>{(item) => <ToolGroup {...props} kind={item().kind} tools={item().tools} />}</Match>
-  </Switch>;
 }
 
 /*
@@ -362,9 +285,8 @@ function turnTime(trace: () => Pick<TurnTraceData, "active" | "startedAt" | "end
   };
 }
 
-/* The gallery's previews draw the trace from the library (Trace, Trail, Step and its parts); the model -- the
-   trail's lines, the header's status, work and latest line, the time -- is this file's, as the app's own. */
-type TraceProps = Parameters<typeof TurnTrace>[0];
+/* The trace is the library's (Trace, Trail, Step and its parts); the model -- the trail's lines, the header's status,
+   work and latest line, the time -- is this file's. */
 function useFold(id: () => string, props: Pick<RowProps, "toolOpen" | "onToolOpenChange">) {
   const initial = Boolean(props.toolOpen?.(id()));
   const [open, setOpen] = createSignal(initial), [seen, setSeen] = createSignal(initial);
@@ -372,7 +294,7 @@ function useFold(id: () => string, props: Pick<RowProps, "toolOpen" | "onToolOpe
 }
 const inline = (props: Pick<RowProps, "renderer">, text: string) =>
   <Suspense fallback={text}><ChatMarkdown inline renderer={props.renderer}>{text || "\u2026"}</ChatMarkdown></Suspense>;
-function LibraryTrailLine(props: RowProps & { item: TrailItem; arriving?: boolean }) {
+function TrailLine(props: RowProps & { item: TrailItem; arriving?: boolean }) {
   const motion = () => props.arriving ? "entering" as const : undefined;
   return <Switch>
     <Match when={props.item.type === "text" && props.item}>{(item) => {
@@ -385,7 +307,7 @@ function LibraryTrailLine(props: RowProps & { item: TrailItem; arriving?: boolea
       facts={[item().message.model && `Model: ${item().message.model}`, item().message.provider && `Provider: ${item().message.provider}`, props.profileLabel && `Profile: ${props.profileLabel}`].filter(Boolean) as string[]}
       message={item().message.errorMessage || "The model request failed."} />}</Match>
     <Match when={props.item.type === "tool" && props.item}>{(item) => { const fold = useFold(() => item().tool.toolCallId, props);
-      return <LibraryToolStep tool={item().tool} settled={props.settled} sessionId={props.sessionId} open={fold.open()} seen={fold.seen()} onToggle={fold.toggle} motion={motion()} />; }}</Match>
+      return <ToolStep tool={item().tool} settled={props.settled} sessionId={props.sessionId} open={fold.open()} seen={fold.seen()} onToggle={fold.toggle} motion={motion()} />; }}</Match>
     <Match when={props.item.type === "hidden"}><Step note icon={<LightbulbIcon />} summary="Reasoning not shared by the provider" motion={motion()} /></Match>
     <Match when={props.item.type === "group" && props.item}>{(item) => {
       const tools = () => (item() as Extract<TrailItem, { type: "group" }>).tools, kind = () => (item() as Extract<TrailItem, { type: "group" }>).kind;
@@ -393,13 +315,14 @@ function LibraryTrailLine(props: RowProps & { item: TrailItem; arriving?: boolea
       return <Step icon={<Dynamic component={KIND_ICONS[kind()]} />} verb={GROUP_WORDS[kind()](tools().length)} state={!props.settled && tools().some((tool) => !tool.done) ? "running" : undefined}
         time={stepDuration(tools()[0]!.timestamp, tools().at(-1)!.completedAt) || undefined} motion={motion()} open={fold.open()} onToggle={fold.toggle}>
         <Show when={fold.seen()} fallback={<span />}><Trail nested="group"><Index each={tools()}>{(tool) => { const inner = useFold(() => tool().toolCallId, props);
-          return <LibraryToolStep tool={tool()} settled={props.settled} sessionId={props.sessionId} open={inner.open()} seen={inner.seen()} onToggle={inner.toggle} />; }}</Index></Trail></Show>
+          return <ToolStep tool={tool()} settled={props.settled} sessionId={props.sessionId} open={inner.open()} seen={inner.seen()} onToggle={inner.toggle} />; }}</Index></Trail></Show>
       </Step>;
     }}</Match>
   </Switch>;
 }
 const LATEST_CHARS = 240;
-function LibraryTurnTrace(props: TraceProps) {
+/** since: how far into a sent message's entrance the turn arrives, so it fades in with it. */
+export function TurnTrace(props: { trace: TurnTraceData; writing?: boolean; sessionId: string | null; renderer?: MarkdownRendererId; profileLabel?: string; initialOpen?: boolean; onOpenChange?: (open: boolean) => void; toolOpen?: (id: string) => boolean; onToolOpenChange?: (id: string, open: boolean) => void; onRendered?: () => void; since?: number }) {
   const preview = createMemo(() => previewOf(props.trace, Boolean(props.writing)));
   const time = turnTime(() => props.trace);
   const unfinished = () => !props.trace.active && (props.trace.status === "failed" || props.trace.status === "interrupted");
@@ -412,88 +335,19 @@ function LibraryTurnTrace(props: TraceProps) {
   const text = () => { const full = preview().detail?.text ?? ""; return full.length > LATEST_CHARS ? `${full.slice(0, LATEST_CHARS)}\u2026` : full; };
   const thinking = <Suspense fallback={text()}><ChatMarkdown inline renderer={props.renderer}>{text() || "…"}</ChatMarkdown></Suspense>;
   const latest = () => { const detail = preview().detail; return detail ? detail.markdown ? thinking : detail.text : undefined; };
-  return <div class="turn-trace" data-active={props.trace.active ? "true" : "false"}>
-    <Trace orb={<Orb state={preview().status.orb} frame={preview().status.frame} tint={unfinished() ? "var(--destructive)" : undefined} rate={props.trace.active ? undefined : settledOrbRate(unfinished())} />}
+  return <Trace motion={props.since != null ? "entering" : undefined} since={props.since} orb={<Orb state={preview().status.orb} frame={preview().status.frame} tint={unfinished() ? "var(--destructive)" : undefined} rate={props.trace.active ? undefined : settledOrbRate(unfinished())} />}
       status={preview().status.verb} time={time() || undefined} work={preview().work || undefined} latest={latest()} live={props.trace.active} tone={unfinished() ? "failed" : undefined}
       open={open()} onToggle={() => { const next = !open(); if (next && !seen()) { opened = trail().length; setSeen(true); } setOpen(next); props.onOpenChange?.(next); }}>
       {props.trace.segments.length ? <Show when={seen()} fallback={<span />}>{(() => { opened ||= trail().length; return <Trail><Index each={trail()}>{(item, index) =>
-        <LibraryTrailLine item={item()} arriving={index >= opened} settled={!props.trace.active} sessionId={props.sessionId} renderer={props.renderer} profileLabel={props.profileLabel} toolOpen={props.toolOpen} onToolOpenChange={props.onToolOpenChange} onRendered={props.onRendered} />}</Index></Trail>; })()}</Show> : undefined}
-    </Trace>
-  </div>;
-}
-
-export function TurnTrace(props: { trace: TurnTraceData; writing?: boolean; sessionId: string | null; renderer?: MarkdownRendererId; profileLabel?: string; initialOpen?: boolean; onOpenChange?: (open: boolean) => void; toolOpen?: (id: string) => boolean; onToolOpenChange?: (id: string, open: boolean) => void; onRendered?: () => void }) {
-  // Before this one's preview and clock, which the library's would only duplicate (a second previewOf each delta).
-  if (useLibraryPiece("trace")) return <LibraryTurnTrace {...props} />;
-  const preview = createMemo(() => previewOf(props.trace, Boolean(props.writing)));
-  const time = turnTime(() => props.trace);
-  const unfinished = () => !props.trace.active && (props.trace.status === "failed" || props.trace.status === "interrupted");
-  // A turn with no thinking and no tools has nothing to open: its header is
-  // not a button, and it is one line.
-  const empty = () => props.trace.segments.length === 0;
-  const c = traceClass(useLibrary());
-  return <Disclosure class="turn-trace" data-active={props.trace.active ? "true" : "false"} data-empty={empty() ? "true" : undefined} headerClass={c("turn-trace-header", "ui-trace")} bodyClass="turn-trace-body"
-    initialOpen={props.initialOpen} onOpenChange={props.onOpenChange} triggerProps={{ get disabled() { return empty(); } }}
-    header={<>
-      {/* One box, live and settled, so nothing beside it moves when the turn
-          ends. A turn that did not finish -- stopped or failed -- tints the
-          orb. */}
-      <span class={c("turn-trace-mark", "ui-trace-orb")}>
-        <ThinkingOrb state={preview().status.orb} frame={preview().status.frame} tint={unfinished() ? "var(--destructive)" : undefined} rate={props.trace.active ? undefined : settledOrbRate(unfinished())} />
-      </span>
-      <div class={c("turn-trace-preview", "ui-trace-preview")}>
-        {/* Two lines: what it is doing, and its latest step. The first is
-            fixed slots, so the ticking time never re-renders the rest; the
-            second is held open while the turn runs, so the first step to
-            arrive moves nothing below. */}
-        <div class={c("turn-trace-line", "ui-trace-line")}>
-          <span class={c("turn-trace-status", "ui-trace-status")} data-status={props.trace.status}>{preview().status.verb}</span>
-          <Show when={time()}>{(text) => <span class={c("turn-trace-time", "ui-trace-time")}>{"\u00a0· "}{text()}</span>}</Show>
-          <Show when={preview().work}>{(text) => <span class={c("turn-trace-work", "ui-trace-work")}>{"\u00a0· "}{text()}</span>}</Show>
-        </div>
-        <Show when={preview().detail || props.trace.active}>
-          <div class={c("turn-trace-summary", "ui-trace-latest")}>
-            {/* A tool's line is plain text -- a path's underscores are not emphasis. */}
-            <Show when={preview().detail} fallback={"\u00a0"}>{(detail) =>
-              <Show when={detail().markdown} fallback={detail().text}>
-                <Suspense fallback={detail().text}><ChatMarkdown inline renderer={props.renderer}>{detail().text}</ChatMarkdown></Suspense>
-              </Show>}</Show>
-          </div>
-        </Show>
-      </div>
-    </>}
-    body={() => {
-      // Lines there when the trace opens unfold with it; one that arrives while
-      // it is open fades in with a short rise, and moves nothing above it.
-      const trail = createMemo(() => trailOf(props.trace.segments));
-      const opened = trail().length;
-      return <Index each={trail()}>{(item, index) =>
-        <div class="turn-trace-step" data-arriving={index >= opened || undefined}>
-          <TrailLine item={item()} settled={!props.trace.active} sessionId={props.sessionId} renderer={props.renderer} profileLabel={props.profileLabel} toolOpen={props.toolOpen} onToolOpenChange={props.onToolOpenChange} onRendered={props.onRendered} />
-        </div>
-      }</Index>;
-    }} />;
+        <TrailLine item={item()} arriving={index >= opened} settled={!props.trace.active} sessionId={props.sessionId} renderer={props.renderer} profileLabel={props.profileLabel} toolOpen={props.toolOpen} onToolOpenChange={props.onToolOpenChange} onRendered={props.onRendered} />}</Index></Trail>; })()}</Show> : undefined}
+    </Trace>;
 }
 
 /* A turn before anything of it has shown: the header it will become, its orb
    connecting and its time counting, one line of space held under it for the
    step that will fill it. The trace takes its place when its first step
    arrives, in the same spot, at the same height. */
-export function TraceStarting(props: { startedAt?: string; label?: string }) {
+export function TraceStarting(props: { startedAt?: string; label?: string; since?: number }) {
   const time = turnTime(() => ({ active: true, startedAt: props.startedAt }));
-  const label = () => props.label || "Starting";
-  const c = traceClass(useLibrary());
-  if (useLibraryPiece("trace")) return <div class="turn-trace turn-trace-starting" role="status" aria-label={label()}><Trace orb={<Orb state="connecting" />} status={label()} time={time() || undefined} live /></div>;
-  return <div class="turn-trace turn-trace-starting" data-active="true" role="status" aria-label={label()}>
-    <div class={c("turn-trace-header", "ui-trace")}>
-      <span class={c("turn-trace-mark", "ui-trace-orb")}><ThinkingOrb state="connecting" /></span>
-      <div class={c("turn-trace-preview", "ui-trace-preview")}>
-        <div class={c("turn-trace-line", "ui-trace-line")}>
-          <span class={c("turn-trace-status", "ui-trace-status")}>{label()}</span>
-          <Show when={time()}>{(text) => <span class={c("turn-trace-time", "ui-trace-time")}>{"\u00a0· "}{text()}</span>}</Show>
-        </div>
-        <div class={c("turn-trace-summary", "ui-trace-latest")}>{"\u00a0"}</div>
-      </div>
-    </div>
-  </div>;
+  return <Trace motion={props.since != null ? "entering" : undefined} since={props.since} orb={<Orb state="connecting" />} status={props.label || "Starting"} time={time() || undefined} live />;
 }
