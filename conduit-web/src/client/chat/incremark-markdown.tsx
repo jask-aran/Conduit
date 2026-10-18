@@ -454,7 +454,19 @@ function DisplayBlockNodes(props: { blocks: () => DisplayBlock[]; context: Rende
       // could therefore never pass.
       return isTail(current.id) ? renderBlockNode(display) : display;
     });
-    return <Show when={block()}><AstNode node={node} context={props.context} /></Show>;
+    // Word spans exist only while there is a fade to run. A block no longer being written puts plain text back once
+    // its last word has faded in, so the answer does not keep an element per word -- 6,000 late in a long answer,
+    // laid out and restyled with every frame -- and does not swap them all out in one go when it settles (31ms).
+    const [faded, setFaded] = createSignal(false);
+    const context: RendererContext = { ...props.context, fadeLive: () => !faded() && props.context.fadeLive?.() !== false };
+    createEffect(() => {
+      if (faded() || isTail(id) || !props.context.fadeWords?.()) return;
+      const last = props.shown.get(id)?.reveals.at(-1)?.[1];
+      // The spans outlive the longest fade that could still be running.
+      const timer = setTimeout(() => setFaded(true), last == null ? 0 : Math.max(0, last + streamFadeMs() + 20 - performance.now()));
+      onCleanup(() => clearTimeout(timer));
+    });
+    return <Show when={block()}><AstNode node={node} context={context} /></Show>;
   }}</For>;
 }
 
@@ -1472,16 +1484,6 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
     onMathBusyChange: (busy) => setPendingMathRenders((count) => Math.max(0, count + (busy ? 1 : -1))),
     onPendingPlaceholderChange: (delta) => setPendingPlaceholders((count) => Math.max(0, count + delta)),
   };
-  // Word spans exist only while there is a fade to run. Once the message has
-  // settled and its last fade is over, one render puts plain text back, so a
-  // streamed message does not keep an element per word for the session.
-  const [fadeOver, setFadeOver] = createSignal(false);
-  createEffect(() => {
-    if (!settled()) return;
-    // The spans outlive the longest fade that could still be running.
-    const timer = setTimeout(() => setFadeOver(true), streamFadeMs() + 20);
-    onCleanup(() => clearTimeout(timer));
-  });
   // An open fence's placeholder stays until the code block that replaces it is on screen: when the fence closed it
   // went at once, and the block waited its turn behind the text before it, so the page lost the placeholder's
   // height for those frames and dropped by it. Released when the reveal reaches the block
@@ -1496,7 +1498,7 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
     if (reached || (!streaming() && !displayBusy())) return heldFence = null, current;
     return heldFence;
   });
-  const displayContext: RendererContext = { ...context, fadeWords: () => !props.inline, fadeMath: () => !props.inline && streamMathFade(), fadeLive: () => !fadeOver() };
+  const displayContext: RendererContext = { ...context, fadeWords: () => !props.inline, fadeMath: () => !props.inline && streamMathFade(), fadeLive: () => true };
   return <>
     <div class="chat-markdown" data-renderer={rendererId()} data-inline={props.inline ? "true" : undefined} data-streaming={streaming() || undefined} data-display-busy={displayBusy() || pendingMathRenders() > 0 ? "true" : undefined} data-display-animation-busy={displayBusy() ? "true" : undefined} data-pending-math-renders={pendingMathRenders() > 0 ? String(pendingMathRenders()) : undefined} data-display-key={props.displayKey || undefined} data-settled={settled() ? "true" : undefined}>
       <div class="incremark" data-incremark-core="true">
