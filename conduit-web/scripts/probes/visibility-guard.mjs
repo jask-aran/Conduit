@@ -59,7 +59,8 @@ try {
         else if (placeholders.has(element)) {
           // Only where it shows: a block re-measured out of view (below it) moves nothing the reader sees.
           const was = placeholders.get(element); const delta = Math.abs(rect.height - was); p.revealed++;
-          const near = rect.bottom > view.top - 120 && rect.top < view.bottom + 120;
+          // In view or just above it: a block that grows below the viewport (the streamed tail, re-measured) moves nothing.
+          const near = rect.bottom > view.top - 120 && rect.top < view.bottom;
           if (delta > 0.5 && !near) p.offscreen = (p.offscreen ?? 0) + 1;
           if (delta > 0.5 && near) { p.wrong++; p.wrongPx += delta;
             (g.examples ??= []).length < 40 && g.examples.push(`${g.phase}: ${element.tagName.toLowerCase()}.${String(element.className).split(" ")[0]}${element.querySelector("[data-collapsed]") ? "[collapsible]" : ""} ${was.toFixed(2)} -> ${rect.height.toFixed(2)} style=${element.style.cssText}`); }
