@@ -462,6 +462,7 @@ export function mountTranscriptVisibility(
     // again -- at settlement, when the fade's word spans leave every hidden block, a layout per block (150ms).
     const viewTop = viewport.getBoundingClientRect().top;
     const rects = [...blocks].map((block) => [block, block.getBoundingClientRect()] as const);
+    const scrollBefore = viewport.scrollTop;
     const above: Array<[HTMLElement, number]> = [];
     for (const [block, rect] of rects) {
       if (!show(block)) continue;
@@ -471,7 +472,13 @@ export function mountTranscriptVisibility(
     }
     let shift = 0;
     for (const [block, height] of above) shift += block.getBoundingClientRect().height - height;
-    if (Math.abs(shift) > 0.01) shiftScroll(shift);
+    // From where the scroll was before any block was shown: one that came back shorter shortened the page, and at its
+    // bottom the browser had already clamped the scroll by as much. Shifted again, the text dropped by it -- the turn's
+    // header losing its latest-step line at Done, 6px on desktop and 9px on a phone, while the answer was followed.
+    if (Math.abs(shift) > 0.01) {
+      const delta = scrollBefore + shift - viewport.scrollTop;
+      if (Math.abs(delta) > 0.01) shiftScroll(delta);
+    }
     holdRefreshing();
   };
   // A settled answer's fade puts each run of word spans back as the one text node they held: the same text, the same
