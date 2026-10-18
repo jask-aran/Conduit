@@ -345,7 +345,11 @@ export class BufferedIncremarkTypewriter {
     this.lastDeliveryAt = now;
     const reduced = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
     const span = reduced ? 0 : fadeWindow(delta, this.deliveryGapMs);
-    this.deliveries.push({ end: sourceCharacters, deadline: now + span });
+    // Never sooner than the delivery before it: a few characters just after a burst have a window of a frame or two,
+    // and as the steepest deadline sets the rate, theirs released the whole burst in one frame (a thousand characters,
+    // the page jumping by them) instead of over its own window.
+    const previous = this.deliveries[this.deliveries.length - 1]?.deadline ?? 0;
+    this.deliveries.push({ end: sourceCharacters, deadline: Math.max(now + span, previous) });
   }
 
   /** The whole of this frame's release: every delivery shown by its deadline. */
