@@ -48,7 +48,7 @@
 .ui-toolbar-aside > span { display: inline-flex; min-width: 0; align-items: center; overflow: clip; }
 .ui-toolbar-end > .ui-toolbar-aside[data-folded] { grid-template-columns: 0fr; margin-inline-start: calc(-1 * var(--cmp-slot-gap)); opacity: 0; pointer-events: none;
   --fade-ease: var(--ease-leave); --fade-delay: 0s; --fold-delay: var(--duration-quick); }
-.ui-toolbar-end > [aria-pressed="true"] { color: var(--foreground); animation: ui-breathe 1.6s ease-in-out infinite; }
+.ui-toolbar-end > [aria-pressed="true"] { color: var(--foreground); animation: ui-breathe var(--duration-breathe) ease-in-out infinite; }
 @keyframes ui-breathe { 50% { color: var(--muted-foreground); } }
 .ui-toolbar .ui-button[data-size^="icon"] { width: var(--cmp-slot); min-width: var(--cmp-slot); height: var(--cmp-slot); border-radius: var(--cmp-slot-radius); padding: 0; }
 .ui-toolbar .ui-button[data-size^="icon"] svg { width: var(--cmp-icon); height: var(--cmp-icon); }

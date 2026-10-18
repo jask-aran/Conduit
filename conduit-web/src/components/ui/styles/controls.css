@@ -21,7 +21,7 @@
 /* Button: a rounded rectangle. Secondary is the surface's well inside its line (on frost, a
    hairline with nothing inside); ghost is text until washed. Outline draws primary, ghost or
    destructive as a line in its colour with nothing inside. */
-:where(.ui-button) { display: inline-flex; height: var(--control); flex: none; align-items: center; justify-content: center; gap: var(--space-sm); border: var(--hairline) solid transparent; border-radius: var(--radius-control); padding: 0 var(--space-xl); font-size: var(--text-row); font-weight: var(--weight-strong); white-space: nowrap; cursor: pointer; transition: background-color .12s ease, border-color .12s ease, filter .12s ease; outline: none; }
+:where(.ui-button) { display: inline-flex; height: var(--control); flex: none; align-items: center; justify-content: center; gap: var(--space-sm); border: var(--hairline) solid transparent; border-radius: var(--radius-control); padding: 0 var(--space-xl); font-size: var(--text-row); font-weight: var(--weight-strong); white-space: nowrap; cursor: pointer; transition: background-color var(--duration-quick) var(--ease-change), border-color var(--duration-quick) var(--ease-change), filter var(--duration-quick) var(--ease-change); outline: none; }
 /* Zero-specificity: where the button sits sets its icon (a header, a composer), as in the app. */
 :where(.ui-button) svg { width: var(--icon); height: var(--icon); flex: none; }
 /* Keyboard focus is the wash and nothing else: never a ring. */
@@ -51,7 +51,7 @@
 
 /* Input: an input or a select's trigger, a box (above) a control tall; the bare
    select is just its value and a chevron. Field, below the Card, names one. */
-.ui-input { display: flex; width: 100%; height: var(--control); align-items: center; gap: var(--space-md); padding: 0 var(--space-lg); color: var(--foreground); font-size: var(--text-row); text-align: left; outline: none; transition: border-color .12s ease; }
+.ui-input { display: flex; width: 100%; height: var(--control); align-items: center; gap: var(--space-md); padding: 0 var(--space-lg); color: var(--foreground); font-size: var(--text-row); text-align: left; outline: none; transition: border-color var(--duration-quick) var(--ease-change); }
 .ui-input::placeholder { color: var(--muted-foreground); }
 .ui-input:is(:hover, :focus, [aria-expanded="true"]) { border-color: color-mix(in oklch, var(--foreground), transparent 70%); }
 .ui-input > span { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -116,6 +116,6 @@
 .ui-progress::-webkit-progress-value { border-radius: var(--radius-round); background: var(--foreground); }
 .ui-progress::-moz-progress-bar { border-radius: var(--radius-round); background: var(--foreground); }
 /* A spinner: a ring in the surface's tint, a quarter of it in the text colour, turning. */
-.ui-spinner { width: var(--icon); height: var(--icon); flex: none; border: var(--stroke-thin) solid var(--tint); border-top-color: var(--foreground); border-radius: var(--radius-round); animation: ui-spin 800ms linear infinite; }
+.ui-spinner { width: var(--icon); height: var(--icon); flex: none; border: var(--stroke-thin) solid var(--tint); border-top-color: var(--foreground); border-radius: var(--radius-round); animation: ui-spin var(--duration-spin) linear infinite; }
 @keyframes ui-spin { to { transform: rotate(1turn); } }
-@media (prefers-reduced-motion: reduce) { .ui-spinner { animation-duration: 2400ms; } }
+@media (prefers-reduced-motion: reduce) { .ui-spinner { animation-duration: calc(3 * var(--duration-spin)); } }

@@ -38,7 +38,7 @@
    shows (a parent turns it on, or `on`), and the frost over it. The one coloured glow DESIGN.md allows. */
 @property --aura-level { syntax: "<number>"; inherits: true; initial-value: 0; }
 .ui-aura { --aura-level: var(--voice-level, 0); position: absolute; inset: 0; overflow: clip; border-radius: inherit; opacity: 0; pointer-events: none;
-  --fade-ease: var(--ease-leave); transition: opacity var(--duration-gentle) var(--fade-ease), --aura-level .12s linear; }
+  --fade-ease: var(--ease-leave); transition: opacity var(--duration-gentle) var(--fade-ease), --aura-level var(--duration-follow) linear; }
 /* Its fade is its own: shown, it blooms over the gentle duration as the move that shows it runs, and goes the same way
    back (a parent shows it with data-on or a rule of its own, listed here, so the fade stays the same). */
 .ui-aura[data-on], .ui-phone-composer[data-show~="orb"] :is(.ui-pill[data-voice], .ui-voice-track) .ui-aura {
