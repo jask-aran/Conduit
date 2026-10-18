@@ -765,19 +765,35 @@ function MathNode(props: { node: MarkdownNode | NodeAccessor; fadeOnce?: () => b
 
 function CodeNode(props: { node: MarkdownNode | NodeAccessor }) {
   const node = () => readNode(props.node);
-  const language = () => normalizeCodeLanguage(node()?.lang);
-  const text = () => String(node()?.value || "");
-  // Expanding by hand is a decision about this block, so it outlives later
-  // preference changes and any re-evaluation of the collapse default.
-  const [userExpanded, setUserExpanded] = createSignal(false);
-  const collapse = useCodeBlockCollapse();
-  const state = createMemo(() => codeBlockState(text(), collapse.mode(), collapse.threshold(), false));
-  const collapsed = () => state().collapsed && !userExpanded();
+  return <CodeCard text={() => String(node()?.value || "")} language={() => node()?.lang} />;
+}
+
+/**
+ * A code card, settled or still being written (`pending`, a fence the stream has not closed). A pending card is
+ * plain to the delegated click handler (no data-expand-code) and wears the streaming-pending classes while
+ * `streaming`; otherwise the two are the same card.
+ */
+function CodeCard(props: { text: () => string; language: () => string | undefined; pending?: boolean; streaming?: boolean }) {
+  const language = () => normalizeCodeLanguage(props.language());
+  // Whole lines colour as they complete; the line still being written stays
+  // plain so its colours do not change under the reader.
   const highlighter = new StreamingCodeHighlighter();
   const highlighted = createMemo(() => {
     highlighterReady();
-    return highlighter.render(text(), language(), false);
+    return highlighter.render(props.text(), language(), Boolean(props.streaming));
   });
+  // A growing fence folds on the same rule as a settled one, and at the same
+  // moment it crosses the threshold -- waiting for the closing fence let a
+  // ten-line limit run to fifty before it took effect. Folded, the card is
+  // the only thing still moving on a transcript that has stopped scrolling,
+  // so the expand label counts the hidden lines as they arrive.
+  const collapse = useCodeBlockCollapse();
+  // Expanding by hand is a decision about this block, so it outlives later
+  // preference changes and any re-evaluation of the collapse default.
+  const [userExpanded, setUserExpanded] = createSignal(false);
+  const state = createMemo(() => codeBlockState(props.text(), collapse.mode(), collapse.threshold(), false));
+  const collapsed = () => state().collapsed && !userExpanded();
+  const settled = !props.pending || undefined;
   // Folding removes a lot of height at once. Tell the transcript so it can hold
   // this card still and re-measure, instead of leaving stale placeholders.
   const toggle = (control: HTMLElement) => {
@@ -787,24 +803,25 @@ function CodeNode(props: { node: MarkdownNode | NodeAccessor }) {
     if (card) queueMicrotask(() => publishCodeBlockToggle(card, previousTop));
   };
   return <div
-    class="artifact"
+    class={props.streaming ? "artifact streaming-pending streaming-pending-fence" : "artifact"}
     data-language={language()}
+    data-streaming-pending={props.streaming ? "fence" : undefined}
     data-lines={state().lines}
     data-collapsible={state().collapsible ? "true" : undefined}
     data-collapsed={collapsed() ? "true" : undefined}
-    data-user-expanded={userExpanded() ? "true" : undefined}
+    data-user-expanded={settled && userExpanded() ? "true" : undefined}
   >
     <div class="artifact-header">
       <span>{language()}</span>
       <span class="artifact-actions">
-        <CodeCopyButton text={text} />
+        <CodeCopyButton text={props.text} />
         <Show when={state().collapsible}>
           {/* Pinned with the header, so it stays reachable part-way down a
               block the footer button has long since scrolled past. */}
           <button
             type="button"
             class="artifact-toggle"
-            data-expand-code
+            data-expand-code={settled && ""}
             aria-label={collapsed() ? "Expand code" : "Collapse code"}
             aria-expanded={collapsed() ? "false" : "true"}
             onClick={(event) => toggle(event.currentTarget)}
@@ -812,13 +829,12 @@ function CodeNode(props: { node: MarkdownNode | NodeAccessor }) {
         </Show>
       </span>
     </div>
-    {/* Morphed by the renderer rather than rewritten from outside, so a later
-        render cannot wipe the highlighting; morphed rather than innerHTML, so
-        a streaming block keeps its finished lines instead of rebuilding every
-        line on every token. */}
+    {/* Morphed by the renderer rather than rewritten from outside, so a later render cannot wipe the highlighting, and
+        so a growing block keeps its finished lines: rewritten, every line of a long fence was built and laid out
+        again each frame it grew (3-4ms of layout a frame for a 137-line file). */}
     <pre><code ref={(element) => createRenderEffect(() => morphLines(element, highlighted()))} /></pre>
     <Show when={state().collapsible}>
-      <button type="button" class="artifact-expand" data-expand-code data-expand-label onClick={(event) => toggle(event.currentTarget)}>
+      <button type="button" class="artifact-expand" data-expand-code={settled && ""} data-expand-label={settled && ""} onClick={(event) => toggle(event.currentTarget)}>
         {collapsed() ? state().expandLabel : codeBlockCollapseLabel()}
       </button>
     </Show>
@@ -848,61 +864,7 @@ function CodeCopyButton(props: { text: () => string }) {
 function PendingConstruct(props: { pending: StreamingPending; streaming: boolean }) {
   const pending = () => props.pending;
   if (pending().kind === "fence") {
-    const language = () => normalizeCodeLanguage(pending().language);
-    // Whole lines colour as they complete; the line still being written stays
-    // plain so its colours do not change under the reader.
-    const highlighter = new StreamingCodeHighlighter();
-    const highlighted = createMemo(() => {
-      highlighterReady();
-      return highlighter.render(pending().body, language(), props.streaming);
-    });
-    // A growing fence folds on the same rule as a settled one, and at the same
-    // moment it crosses the threshold -- waiting for the closing fence let a
-    // ten-line limit run to fifty before it took effect. Folded, the card is
-    // the only thing still moving on a transcript that has stopped scrolling,
-    // so the expand label counts the hidden lines as they arrive.
-    const collapse = useCodeBlockCollapse();
-    const [userExpanded, setUserExpanded] = createSignal(false);
-    const state = createMemo(() => codeBlockState(pending().body, collapse.mode(), collapse.threshold(), false));
-    const collapsed = () => state().collapsed && !userExpanded();
-    const toggle = (control: HTMLElement) => {
-      const card = control.closest<HTMLElement>(".artifact");
-      const previousTop = card?.getBoundingClientRect().top ?? 0;
-      setUserExpanded((value) => !value);
-      if (card) queueMicrotask(() => publishCodeBlockToggle(card, previousTop));
-    };
-    return <div
-      class={props.streaming ? "artifact streaming-pending streaming-pending-fence" : "artifact"}
-      data-language={language()}
-      data-streaming-pending={props.streaming ? "fence" : undefined}
-      data-lines={state().lines}
-      data-collapsible={state().collapsible ? "true" : undefined}
-      data-collapsed={collapsed() ? "true" : undefined}
-    >
-      <div class="artifact-header">
-        <span>{language()}</span>
-        <span class="artifact-actions">
-          <CodeCopyButton text={() => pending().body} />
-          <Show when={state().collapsible}>
-            <button
-              type="button"
-              class="artifact-toggle"
-              aria-label={collapsed() ? "Expand code" : "Collapse code"}
-              aria-expanded={collapsed() ? "false" : "true"}
-              onClick={(event) => toggle(event.currentTarget)}
-            />
-          </Show>
-        </span>
-      </div>
-      {/* Morphed, as the settled block is: rewritten, every line of a long fence was built and laid out again each
-          frame it grew (3-4ms of layout a frame for a 137-line file). */}
-      <pre><code ref={(element) => createRenderEffect(() => morphLines(element, highlighted()))} /></pre>
-      <Show when={state().collapsible}>
-        <button type="button" class="artifact-expand" onClick={(event) => toggle(event.currentTarget)}>
-          {collapsed() ? state().expandLabel : codeBlockCollapseLabel()}
-        </button>
-      </Show>
-    </div>;
+    return <CodeCard text={() => pending().body} language={() => pending().language} pending streaming={props.streaming} />;
   }
   const className = () => `streaming-pending ${pending().kind === "math-block" ? "streaming-pending-math-block" : "streaming-pending-math-inline"}`;
   return pending().kind === "math-block"
