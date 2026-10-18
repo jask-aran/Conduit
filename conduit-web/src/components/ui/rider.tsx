@@ -1,6 +1,7 @@
-import { createSignal, Show, splitProps, type JSX } from "solid-js";
+import { createSignal, For, Show, splitProps, type JSX } from "solid-js";
 import { CheckIcon, ChevronDownIcon, XIcon } from "lucide-solid";
 import { cn } from "@/lib/utils";
+import { Keycap } from "./controls";
 import { type Motion, motionOf, moveCursor } from "./shared";
 
 /*
@@ -49,3 +50,32 @@ export function Choice(props: { n: number; label: string; detail?: string; chose
     <span class="ui-choice-check" data-multi={props.multi ? "true" : undefined}><Show when={props.chosen}><CheckIcon /></Show></span>
   </div>;
 }
+
+/** Waiting lines under a rider's title (the steering and queued messages), a Line each. */
+export const Lines = (props: { children: JSX.Element }) => <ul class="ui-lines">{props.children}</ul>;
+/** A strip of Chips that scrolls sideways; fadeStart, fadeEnd: more lies past that edge. */
+export const Chips = (props: { ref?: (element: HTMLDivElement) => void; fadeStart?: boolean; fadeEnd?: boolean; onScroll?: () => void; children: JSX.Element }) =>
+  <div ref={props.ref} class="ui-chips" data-fade-start={props.fadeStart || undefined} data-fade-end={props.fadeEnd || undefined} onScroll={() => props.onScroll?.()}>{props.children}</div>;
+/** What a choice would send, in mono, scrolling: a link, a file's start, a command. */
+export const Preview = (props: { format?: string; children: JSX.Element }) => <pre class="ui-preview" data-format={props.format}>{props.children}</pre>;
+
+/** A card rider's top: its title or Tabs, then its close. */
+export const RiderTop = (props: { children: JSX.Element }) => <div class="ui-rider-top">{props.children}</div>;
+/** A card rider's foot: its Hints, then its actions. */
+export const RiderFoot = (props: { children: JSX.Element }) => <div class="ui-rider-foot">{props.children}</div>;
+/** A card rider's pages (one question each, then Submit), as tabs: buttons with role tab. */
+export const Tabs = (props: { label?: string; children: JSX.Element }) => <div class="ui-tabs" role="tablist" aria-label={props.label}>{props.children}</div>;
+/** The keys along a rider's foot: [key, what it does]. */
+export const Hints = (props: { hints: [string, string][] }) =>
+  <div class="ui-hints" aria-hidden="true"><For each={props.hints}>{([key, label]) => <span><Keycap>{key}</Keycap>{label}</span>}</For></div>;
+/** One question's page: its Prompt, its Choices, a Preview of the choice. */
+export const ChoicesPage = (props: { children: JSX.Element }) => <div class="ui-choices-page">{props.children}</div>;
+/** The question, with "pick any" after it when several may be chosen. */
+export const Prompt = (props: { multi?: boolean; children: JSX.Element }) =>
+  <p class="ui-prompt">{props.children}<Show when={props.multi}><span> · pick any</span></Show></p>;
+/** A Choice's own answer typed on one line (a secret, masked). */
+export const ChoiceInput = (props: JSX.InputHTMLAttributes<HTMLInputElement>) => <input {...props} class={cn("ui-choice-input", props.class)} />;
+/** Before submitting: each question and its answer, a row each, opening its page; empty: not answered yet. */
+export const Summary = (props: { rows: { label: string; value: string; empty?: boolean; onOpen?: () => void }[] }) =>
+  <div class="ui-summary"><For each={props.rows}>{(row) => <button type="button" tabIndex={-1} onClick={() => row.onOpen?.()}>
+    <span>{row.label}</span><span data-empty={row.empty ? "true" : undefined}>{row.value}</span></button>}</For></div>;

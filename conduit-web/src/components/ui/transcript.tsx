@@ -34,3 +34,6 @@ export const Message = (props: { time: string; actions?: JSX.Element; motion?: M
   <article class="ui-message" {...motionOf(props.motion)}><Bubble>{props.children}</Bubble><MessageFoot time={props.time} end>{props.actions}</MessageFoot></article>;
 /** The reading column: the composer's width, its gutter, one gap between messages. */
 export const Transcript = (props: { children: JSX.Element; class?: string }) => <div class={cn("ui-transcript", props.class)}>{props.children}</div>;
+
+/** What is read: the transcript's scale and type for whatever it holds (a turn, a trace, a sample). */
+export const Read = (props: { class?: string; children: JSX.Element }) => <div class={cn("ui-read", props.class)}>{props.children}</div>;
