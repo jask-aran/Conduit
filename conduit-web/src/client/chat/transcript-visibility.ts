@@ -84,15 +84,18 @@ export function mountTranscriptVisibility(
   // as blocks cross the overscan band, which reads as a horizontal shimmy while
   // scrolling. Pin the measured inline size alongside the block size so the
   // horizontal axis cannot move when a block leaves the viewport.
+  // The measured size alone, not `auto`: with it the browser prefers the size it last remembered drawing, and that
+  // was seen stale -- a list hidden at the two lines it once had (40px) though measured at three (60px). The measured
+  // size is the content box and is kept current: while shown by the size observer, while hidden by remeasure.
   const setIntrinsicSize = (element: HTMLElement, height: number, width: number) => {
     if (height > 0) {
-      const value = `auto ${height}px`;
+      const value = `${height}px`;
       if (element.style.getPropertyValue(INTRINSIC_SIZE_PROPERTY) !== value) {
         element.style.setProperty(INTRINSIC_SIZE_PROPERTY, value);
       }
     }
     if (width > 0) {
-      const value = `auto ${width}px`;
+      const value = `${width}px`;
       if (element.style.getPropertyValue(INTRINSIC_INLINE_SIZE_PROPERTY) !== value) {
         element.style.setProperty(INTRINSIC_INLINE_SIZE_PROPERTY, value);
       }
@@ -329,8 +332,13 @@ export function mountTranscriptVisibility(
   // Reads every managed rect, then writes every attribute. Interleaving the two
   // would force a layout per block; the transcript is long enough for that to
   // be the difference between a frame and a stall.
-  const measurePass = () => {
-    expandAll();
+  // A collapsed run is out of layout and keeps its measured height; it comes back to be measured only when what it
+  // was measured against may have changed -- a resize, a panel's motion, the fonts. An answer settling changes no
+  // width, and expanding every run then, to collapse them again a frame later, cost the end of a long turn 25ms and
+  // moved the page by the run's sub-pixel rounding.
+  let refreshExpands = false;
+  const measurePass = (expand = true) => {
+    if (expand) expandAll();
     const virtualized = syncMembership();
     const viewportRect = viewport.getBoundingClientRect();
     const top = viewportRect.top - OVERSCAN_PX;
@@ -356,13 +364,16 @@ export function mountTranscriptVisibility(
   const refresh = () => {
     measureFrame = null;
     if (!fontsReady || activeIds.size) return;
+    const expand = refreshExpands;
+    refreshExpands = false;
     // Revealing a block relaid the ones after it, so anything that moved into
     // the band during this pass needs one more look.
-    if (measurePass()) measureFrame = requestAnimationFrame(refresh);
+    if (measurePass(expand)) measureFrame = requestAnimationFrame(refresh);
     holdRefreshing();
   };
 
-  const scheduleRefresh = (idle = false) => {
+  const scheduleRefresh = (idle = false, expand = true) => {
+    refreshExpands ||= expand;
     if (!fontsReady || activeIds.size || measureFrame != null || measureIdle != null) return;
     if (idle) {
       measureIdle = requestIdleCallback(() => {
@@ -472,14 +483,16 @@ export function mountTranscriptVisibility(
     // can be measured and hidden now.
     if (records.some((record) => record.attributeName === "data-settled" && !record.oldValue
       && (record.target as HTMLElement).hasAttribute("data-settled"))) {
-      scheduleRefresh(true);
+      scheduleRefresh(true, false);
     }
     let rows: Set<HTMLElement> | null = new Set();
     let changedHidden: Set<HTMLElement> | null = null;
     for (const record of records) {
       const target = record.target instanceof Element ? record.target : record.target.parentElement;
       const hidden = target?.closest<HTMLElement>(`[${VISIBILITY_ATTRIBUTE}="hidden"]`);
-      if (hidden && hidden !== target && managed.has(hidden)) (changedHidden ??= new Set()).add(hidden);
+      // The block itself counts: a heading losing the caret's placeholder, the last block no longer, is a change to
+      // its own children, and kept it 0.6px taller than it was until it was shown.
+      if (hidden && managed.has(hidden)) (changedHidden ??= new Set()).add(hidden);
       if (withinBlock(record)) continue;
       const row = record.target === thread ? null : (record.target as Element).closest?.(ROW_SELECTOR) as HTMLElement | null;
       if (!row) { rows = null; break; }
@@ -608,6 +621,7 @@ export function mountTranscriptVisibility(
     /** Re-measure now, discarding anything already queued. */
     refreshNow: () => {
       cancelRefresh();
+      refreshExpands = true;
       refresh();
     },
     destroy: () => {
