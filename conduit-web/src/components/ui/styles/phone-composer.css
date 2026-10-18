@@ -55,8 +55,8 @@
 .ui-phone-composer[data-show~="track"] .ui-voice-track { right: calc(var(--voice-pill) + 2 * var(--space-md) + var(--pill-size)); opacity: 1; pointer-events: auto; clip-path: inset(0 round var(--radius-round)); --fade: 0s; }
 /* PillWave: bars a whole pixel wide on a fixed pitch (sub-pixel bars dropped out at 1x), the height of the pill's
    inside, the newest at the right end. Its parent sets the width; in a track, it fills it. */
-.ui-pill-wave { display: flex; width: 100%; height: calc(var(--pill-size) - 2 * var(--space-xs)); align-items: center; justify-content: flex-end; gap: 2px; overflow: hidden; }
-.ui-pill-wave > i { flex: 0 0 2px; border-radius: var(--radius-round); background: currentColor; opacity: .78; }
+.ui-pill-wave { display: flex; width: 100%; height: calc(var(--pill-size) - 2 * var(--space-xs)); align-items: center; justify-content: flex-end; gap: var(--stroke); overflow: hidden; }
+.ui-pill-wave > i { flex: 0 0 var(--stroke); border-radius: var(--radius-round); background: currentColor; opacity: .78; }
 /* Captions: the newest three lines above the row (older ones cut off at the top), a step smaller than the field's
    text. Under them their ground, the page's colour, runs from just above them down past the row and out to the
    screen's sides, so the transcript never shows through them or between the row's pills; it is the lowest layer, so
@@ -77,7 +77,7 @@
 /* Surface: the row is one frost capsule (the field still its own above it), its pills slots in it as a PillGroup's,
    the mic at its end, unstretched. Listening, an Aura fills the capsule under the waveform, which runs from its start
    to the mic; the other slots fade where they stand and Stop and send unfolds beside the mic. */
-.ui-phone-composer[data-layout="surface"] > .ui-phone-row { height: var(--pill-size); gap: var(--pill-gap); padding: 0 1px; border-radius: var(--radius-round); }
+.ui-phone-composer[data-layout="surface"] > .ui-phone-row { height: var(--pill-size); gap: var(--pill-gap); padding: 0 var(--hairline); border-radius: var(--radius-round); }
 .ui-phone-composer[data-layout="surface"] .ui-phone-row > .ui-pill { border: 0; background: none; -webkit-backdrop-filter: none; backdrop-filter: none; box-shadow: none; }
 .ui-phone-composer[data-layout="surface"] .ui-phone-row > .ui-pill { width: var(--pill-slot); height: var(--pill-slot-height); }
 .ui-phone-composer[data-layout="surface"] .ui-phone-row > .ui-pill[data-solo][data-folded] { min-width: var(--pill-slot); margin-inline-start: calc(-1 * (var(--pill-slot) + var(--pill-gap))); }

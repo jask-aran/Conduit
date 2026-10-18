@@ -39,7 +39,7 @@ button.ui-step:is(:hover, :focus-visible) { background: var(--tint); }
 .ui-step:is(:hover, :focus-visible, [aria-expanded="true"]) > .ui-disclosure-chevron { opacity: 1; }
 .ui-step-body { padding-left: calc(var(--icon-sm) + var(--row-gap)); }
 .ui-step-item[data-open="true"] > .ui-step-body { padding-block: var(--space-2xs) var(--space-sm); }
-.ui-step-output { max-height: var(--measure-md); margin: 0; overflow: auto; border: 1px solid var(--tint); border-radius: var(--radius-control); padding: var(--space-sm) var(--space-lg); white-space: pre-wrap; font: var(--text-caption)/1.6 var(--font-code); }
+.ui-step-output { max-height: var(--measure-md); margin: 0; overflow: auto; border: var(--hairline) solid var(--tint); border-radius: var(--radius-control); padding: var(--space-sm) var(--space-lg); white-space: pre-wrap; font: var(--text-caption)/1.6 var(--font-code); }
 .ui-step-more { margin-top: var(--space-xs); }
 .ui-step-prose { color: var(--muted-foreground); font-size: var(--text-row); line-height: 1.55; }
 .ui-step-prose .chat-markdown { color: inherit; font-size: inherit; line-height: inherit; }
@@ -49,7 +49,7 @@ button.ui-step:is(:hover, :focus-visible) { background: var(--tint); }
 /* Text a stop discarded, struck where it sits. */
 .ui-step-item[data-discarded] :is(.ui-step-summary, .ui-step-prose) { text-decoration: line-through; opacity: .55; }
 /* A group's steps on a rail of their own under its icon; a script's calls, quieter, inside its step. */
-.ui-trail[data-nested="group"] { margin-left: calc(var(--icon-sm) / 2 - var(--space-sm)); border-left: 1px solid var(--tint); padding-left: calc(var(--space-sm) + var(--icon-sm) / 2 + var(--space-xs)); }
+.ui-trail[data-nested="group"] { margin-left: calc(var(--icon-sm) / 2 - var(--space-sm)); border-left: var(--hairline) solid var(--tint); padding-left: calc(var(--space-sm) + var(--icon-sm) / 2 + var(--space-xs)); }
 .ui-trail[data-nested="calls"] { gap: 0; padding: 0 0 var(--space-xs); }
 .ui-trail[data-nested="calls"] .ui-step { min-height: calc(var(--control-xs) * .8); }
 .ui-step-item[data-state="planned"] { opacity: .45; }
@@ -60,7 +60,7 @@ button.ui-step:is(:hover, :focus-visible) { background: var(--tint); }
 .ui-trace-error-head > svg { width: var(--icon-sm); height: var(--icon-sm); flex: none; }
 .ui-trace-error-head time { margin-left: auto; color: var(--muted-foreground); font-size: var(--text-caption); }
 .ui-trace-error-facts { display: flex; flex-wrap: wrap; gap: var(--space-xs) var(--space-md); font: var(--text-caption) var(--font-data); }
-.ui-trace-error pre { margin: 0; overflow: auto; border: 1px solid var(--tint); border-radius: var(--radius-control); padding: var(--space-sm) var(--space-lg); white-space: pre-wrap; font: var(--text-caption)/1.6 var(--font-code); }
+.ui-trace-error pre { margin: 0; overflow: auto; border: var(--hairline) solid var(--tint); border-radius: var(--radius-control); padding: var(--space-sm) var(--space-lg); white-space: pre-wrap; font: var(--text-caption)/1.6 var(--font-code); }
 /* The header's latest line, when it is Markdown (the app's), reads inline at the line's size. */
 .ui-trace-latest .chat-markdown { display: contents; font-size: inherit; line-height: inherit; }
 .ui-trace-latest :is(.chat-markdown, .incremark) > * { display: inline; margin: 0; }

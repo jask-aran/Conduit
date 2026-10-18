@@ -79,6 +79,9 @@
 :root { --scale-ui: 1; --scale-transcript: 1; }
 /* The phone's unit, at any density: what a finger needs (the pills, which are the same size wherever they sit). */
 :root { --u-phone: 16px; --u-touch: calc(var(--u-phone) * var(--scale-ui)); }
+/* Lines, in whole pixels at any scale: a hairline (a border, a rule, the 1px between rows), a thin stroke (a spinner,
+   a check box, a strike), a stroke (a thumb's ring, a tick, a wave's bar) and a track (a slider's, a progress bar). */
+:root { --hairline: 1px; --stroke-thin: 1.5px; --stroke: 2px; --track-size: 4px; }
 /* The reading column: the composer's and the transcript's width unless their pane declares --composer-width. */
 :root { --reading-width: 47.5rem; }
 :root, [data-density="desktop"] {

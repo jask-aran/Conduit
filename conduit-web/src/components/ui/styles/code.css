@@ -2,7 +2,7 @@
 /* clip, not hidden: the caption pins against the transcript as a long block scrolls by. */
 .ui-code { width: 100%; min-width: 0; margin: 0; overflow: clip; background: var(--background); }
 /* The caption: the language where the numbers start, Copy (and the fold's chevron) at the end, one size of icon button. */
-.ui-code > figcaption { position: sticky; top: 0; z-index: 1; display: flex; height: var(--control-sm); align-items: center; gap: var(--space-2xs); border-bottom: 1px solid var(--tint); background: linear-gradient(var(--tint), var(--tint)), var(--background); padding: 0 calc(var(--space-lg) - (var(--control-xs) - var(--icon-xs)) / 2) 0 var(--space-lg); color: var(--muted-foreground); font: var(--text-caption) var(--font-data); }
+.ui-code > figcaption { position: sticky; top: 0; z-index: 1; display: flex; height: var(--control-sm); align-items: center; gap: var(--space-2xs); border-bottom: var(--hairline) solid var(--tint); background: linear-gradient(var(--tint), var(--tint)), var(--background); padding: 0 calc(var(--space-lg) - (var(--control-xs) - var(--icon-xs)) / 2) 0 var(--space-lg); color: var(--muted-foreground); font: var(--text-caption) var(--font-data); }
 /* Its buttons' icons are the caption's size, not a row's. */
 .ui-code > figcaption .ui-button svg { width: var(--icon-xs); height: var(--icon-xs); }
 .ui-code-lang { margin-right: auto; }
@@ -10,7 +10,7 @@
 /* Folded: the lines past the fold are cut, the last of them fading; the foot opens it. */
 /* Opening unfolds (arrive); folding goes back quicker (leave). */
 .ui-code[data-folded] > pre { height: calc(var(--code-fold) * 1.6em + 2 * var(--space-md)); --move: var(--duration-quick); --move-ease: var(--ease-leave); mask-image: linear-gradient(to bottom, #000 calc(100% - 2.4em), transparent); }
-.ui-code-more { display: block; width: 100%; height: var(--control-sm); border: 0; border-top: 1px solid var(--tint); background: transparent; color: var(--muted-foreground); font: var(--text-caption) var(--font-sans); cursor: pointer; }
+.ui-code-more { display: block; width: 100%; height: var(--control-sm); border: 0; border-top: var(--hairline) solid var(--tint); background: transparent; color: var(--muted-foreground); font: var(--text-caption) var(--font-sans); cursor: pointer; }
 .ui-code-more:is(:hover, :focus-visible) { background: var(--tint); color: var(--foreground); }
 .ui-code[data-folded][data-streaming] .ui-code-more { animation: ui-code-writing 1.6s ease-in-out infinite; }
 @keyframes ui-code-writing { 50% { opacity: .45; } }

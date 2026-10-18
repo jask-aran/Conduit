@@ -1,6 +1,6 @@
 /* In the phone previews the header's pills sit at the full-screen overlay's inset (8px, inside the
    safe area), as the app's own header does round its frosted pills. */
-@media (--conduit-phone-layout) { .chat-header:has(> .ui-pill) { height: calc(56px + var(--safe-area-inset-top, env(safe-area-inset-top, 0px))); padding: calc(8px + var(--safe-area-inset-top, env(safe-area-inset-top, 0px))) 8px 4px; background: linear-gradient(to bottom, var(--background) 0 60%, transparent 100%); } }
+@media (--conduit-phone-layout) { .chat-header:has(> .ui-pill) { height: calc(var(--pill-size) + var(--space-md) + var(--space-xs) + var(--safe-area-inset-top, env(safe-area-inset-top, 0px))); padding: calc(var(--space-md) + var(--safe-area-inset-top, env(safe-area-inset-top, 0px))) var(--space-md) var(--space-xs); background: linear-gradient(to bottom, var(--background) 0 60%, transparent 100%); } }
 
 /* The app's own pieces, drawn with the library (components/ui/swap.ts): the
    app keeps its geometry; the material is the library's frost. Same targets
@@ -9,7 +9,7 @@
 [data-phone-layout="bar"] .composer[data-composer-surface="library"] :is(.composer-actions [data-slot="button"], .composer-plus-trigger),
 [data-phone-layout] .composer[data-composer-surface="library"] .composer-input-shell,
 [data-phone-layout="surface"] .composer[data-composer-surface="library"]::before {
-  border: 1px solid var(--frost-stroke);
+  border: var(--hairline) solid var(--frost-stroke);
   background: var(--frost-fill);
   -webkit-backdrop-filter: var(--frost-blur);
   backdrop-filter: var(--frost-blur);
@@ -50,10 +50,10 @@
 .ui-answer .chat-markdown :not(pre) > code { border-radius: var(--radius-inset); background: var(--tint); padding: 0 var(--space-xs); font: 0.9em var(--font-code); }
 .ui-answer .chat-markdown :is(th, td) { border-color: var(--tint); padding: var(--space-sm) var(--space-md); }
 /* The app's code block (its Markdown's .artifact) drawn as a CodeBlock: a box, the caption bar, the code face. */
-.ui-answer .chat-markdown .artifact { border: 1px solid var(--tint); border-radius: var(--radius-control); background: var(--background); }
-.ui-answer .chat-markdown .artifact-header { min-height: var(--control-sm); border-bottom: 1px solid var(--tint); background: linear-gradient(var(--tint), var(--tint)), var(--background); padding: 0 var(--space-2xs) 0 var(--space-lg); color: var(--muted-foreground); font: var(--text-caption) var(--font-data); }
+.ui-answer .chat-markdown .artifact { border: var(--hairline) solid var(--tint); border-radius: var(--radius-control); background: var(--background); }
+.ui-answer .chat-markdown .artifact-header { min-height: var(--control-sm); border-bottom: var(--hairline) solid var(--tint); background: linear-gradient(var(--tint), var(--tint)), var(--background); padding: 0 var(--space-2xs) 0 var(--space-lg); color: var(--muted-foreground); font: var(--text-caption) var(--font-data); }
 .ui-answer .chat-markdown .artifact pre { padding: var(--space-md) var(--space-lg); background: transparent; font: var(--text-row)/1.6 var(--font-code); }
-.ui-answer .chat-markdown .artifact-expand { min-height: var(--control-sm); border-top: 1px solid var(--tint); padding: 0; font: var(--text-caption) var(--font-sans); }
+.ui-answer .chat-markdown .artifact-expand { min-height: var(--control-sm); border-top: var(--hairline) solid var(--tint); padding: 0; font: var(--text-caption) var(--font-sans); }
 .ui-answer .chat-markdown .artifact-expand:is(:hover, :focus-visible) { background: var(--tint); }
 .ui-answer .chat-markdown .artifact-toggle { width: var(--control-xs); height: var(--control-xs); border-radius: var(--radius-round); }
 .ui-answer .chat-markdown .artifact-toggle:is(:hover, :focus-visible) { background: var(--tint); }
