@@ -2,8 +2,10 @@
    groups, the sidebar's toggle and the composer's buttons. One icon is a
    circle; more share a capsule, each slot a pill-shaped target 1px from its
    edge. Its tokens size every member. */
-/* One height for every pill: group, lone button, the field at one line. */
-:root { --pill-size: calc(44px * var(--scale-ui)); --pill-slot: calc(40px * var(--scale-ui)); --pill-slot-height: calc(40px * var(--scale-ui)); --pill-gap: 2px; --pill-field-pad: calc(14px * var(--scale-ui)); }
+/* One height for every pill: group, lone button, the field at one line -- in the phone's unit at any density (a finger's
+   row, a --control-lg slot, a --space-2xs gap, a --space-lg + 2xs field inset there). */
+:root { --pill-size: calc(2.75 * var(--u-touch)); --pill-slot: calc(2.5 * var(--u-touch)); --pill-slot-height: var(--pill-slot);
+  --pill-gap: calc(0.125 * var(--u-touch)); --pill-field-pad: calc(0.875 * var(--u-touch)); }
 .ui-pill { transition: filter var(--duration-quick) var(--ease-change); }
 .ui-pill[data-under] { filter: var(--dim-under); }
 .ui-pill { display: inline-flex; height: var(--pill-size); align-items: center; gap: var(--pill-gap); padding: 0 1px; border-radius: var(--radius-round); }
