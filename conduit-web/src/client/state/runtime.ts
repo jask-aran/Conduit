@@ -30,6 +30,16 @@ export function createRuntimeStore() {
   // pill would sit there frozen and looking authoritative. Silence is the
   // signal; `onerror` is only the fast path.
   const SILENCE_MS = 45_000;
+  /*
+   * Every browser tab streamed for itself, and over HTTP/1.1 a browser holds six connections to a server: with six
+   * tabs open, every request in every tab waited for one to close. One tab -- whichever holds the lock -- streams
+   * and relays each frame to the others; when it closes, the next one takes the lock and the stream.
+   */
+  const channel = !isInstalledClient() && typeof BroadcastChannel !== "undefined" && navigator.locks
+    ? new BroadcastChannel("conduit:runtime-stream") : null;
+  let leading = !channel;
+  let releaseLead: (() => void) | undefined;
+  let restartAnnounced = { attempt: undefined as unknown, target: undefined as unknown };
 
   const replaceAll = (items: RuntimeProcess[]) => {
     const next = new Map<string, RuntimeProcess>();
@@ -70,6 +80,58 @@ export function createRuntimeStore() {
     return eventSourceUrl(`/v0/runtime/stream?${query}`);
   };
 
+  const onMessage = (data: string) => {
+    lastFrameAt = Date.now();
+    if (leading) channel?.postMessage({ type: "frame", data });
+    try {
+      const event = JSON.parse(data) as Record<string, unknown>;
+      if (event.type === "ping") {
+        if (connectivity() !== "online") { attempts = 0; setConnectivity("online"); }
+        setStale(false);
+      } else if (event.type === "runtime_global_snapshot") {
+        replaceAll((event.processes || []) as RuntimeProcess[]);
+        if (typeof event.connection === "string") setConnectionId(event.connection);
+        restartPrepared = event.restartPrepared === true;
+        if (restartPrepared) prepare(event.restartAttempt, event.restartTarget);
+        restartAnnounced = { attempt: event.restartAttempt, target: event.restartTarget };
+        attempts = 0;
+        setConnectivity("online");
+        setStale(false);
+      } else if (event.type === "runtime_process" && event.process) {
+        upsert(event.process as RuntimeProcess);
+      } else if (event.type === "runtime_process_removed") {
+        remove(event.id as string | undefined, event.chatId as string | undefined);
+      } else if (event.type === "chat_changed" && event.chat) {
+        window.dispatchEvent(new CustomEvent("conduit:chat-changed", { detail: event.chat }));
+      } else if (event.type === "terminal_changed" || event.type === "terminal_removed") {
+        window.dispatchEvent(new Event("conduit:ptys-changed"));
+      } else if (event.type === "pwa_restart_prepared") {
+        restartPrepared = true;
+        prepare(event.attempt, event.target);
+        restartAnnounced = { attempt: event.attempt, target: event.target };
+      }
+    } catch {
+      // A malformed global update must not take the app down.
+    }
+  };
+  // The stream has gone (the server restarting, or a blip): said by the tab holding it to every other.
+  const lost = () => {
+    setStale(true);
+    if (restartPrepared) {
+      restartPrepared = false;
+      void finishPwaRestart();
+    }
+  };
+  // What a tab arriving after the stream's own snapshot needs: the state as the leader holds it now.
+  const snapshot = () => JSON.stringify({
+    type: "runtime_global_snapshot",
+    processes: [...processes().values()],
+    connection: connectionId(),
+    restartPrepared,
+    restartAttempt: restartAnnounced.attempt,
+    restartTarget: restartAnnounced.target,
+  });
+
   const connect = () => {
     if (reconnectTimer) clearTimeout(reconnectTimer);
     reconnectTimer = undefined;
@@ -78,7 +140,7 @@ export function createRuntimeStore() {
     lastFrameAt = Date.now();
     if (!watchdog) {
       watchdog = setInterval(() => {
-        if (!source || Date.now() - lastFrameAt < SILENCE_MS) return;
+        if ((leading && !source) || Date.now() - lastFrameAt < SILENCE_MS) return;
         setStale(true);
         attempts += 1;
         connect();
@@ -87,49 +149,21 @@ export function createRuntimeStore() {
     }
     setConnectivity(attempts ? "reconnecting" : "connecting");
     setStale(attempts > 0);
-    const onMessage = (data: string) => {
-      lastFrameAt = Date.now();
-      try {
-        const event = JSON.parse(data) as Record<string, unknown>;
-        if (event.type === "ping") {
-          if (connectivity() !== "online") { attempts = 0; setConnectivity("online"); }
-          setStale(false);
-        } else if (event.type === "runtime_global_snapshot") {
-          replaceAll((event.processes || []) as RuntimeProcess[]);
-          if (typeof event.connection === "string") setConnectionId(event.connection);
-          restartPrepared = event.restartPrepared === true;
-          if (restartPrepared) prepare(event.restartAttempt, event.restartTarget);
-          attempts = 0;
-          setConnectivity("online");
-          setStale(false);
-        } else if (event.type === "runtime_process" && event.process) {
-          upsert(event.process as RuntimeProcess);
-        } else if (event.type === "runtime_process_removed") {
-          remove(event.id as string | undefined, event.chatId as string | undefined);
-        } else if (event.type === "chat_changed" && event.chat) {
-          window.dispatchEvent(new CustomEvent("conduit:chat-changed", { detail: event.chat }));
-        } else if (event.type === "terminal_changed" || event.type === "terminal_removed") {
-          window.dispatchEvent(new Event("conduit:ptys-changed"));
-        } else if (event.type === "pwa_restart_prepared") {
-          restartPrepared = true;
-          prepare(event.attempt, event.target);
-        }
-      } catch {
-        // A malformed global update must not take the app down.
-      }
-    };
+    // Another tab streams: ask it for where things stand rather than opening a stream of our own.
+    if (!leading) {
+      channel!.postMessage({ type: "hello" });
+      return;
+    }
     const onError = (next: { close: () => void }) => {
       if (source !== next) return;
       next.close();
       source = undefined;
-      if (restartPrepared) {
-        restartPrepared = false;
-        void finishPwaRestart();
-      }
+      lost();
       attempts += 1;
       // A blip is the usual cause, so the first retries come quickly:
       // 250ms, doubling to 8s, and offline after about fifteen seconds.
       const offline = attempts >= 8;
+      channel?.postMessage({ type: "lost", offline });
       setConnectivity(offline ? "offline" : "reconnecting");
       setStale(true);
       if (reconnectTimer) clearTimeout(reconnectTimer);
@@ -185,6 +219,10 @@ export function createRuntimeStore() {
     if (document.visibilityState === "hidden") { hiddenAt ||= Date.now(); return; }
     const away = hiddenAt ? Date.now() - hiddenAt : 0;
     hiddenAt = 0;
+    if (!leading) {
+      channel!.postMessage({ type: "resume", force, away });
+      return;
+    }
     if (force || !source || away >= RESUME_RECONNECT_AFTER_MS || Date.now() - lastFrameAt >= SILENCE_MS) {
       attempts = 0;
       connect();
@@ -196,7 +234,24 @@ export function createRuntimeStore() {
   };
   const online = () => resume(true);
 
+  if (channel) {
+    channel.onmessage = ({ data: message }: MessageEvent<{ type: string; data?: string; force?: boolean; away?: number; offline?: boolean }>) => {
+      if (message.type === "frame" && !leading && message.data) onMessage(message.data);
+      else if (message.type === "lost" && !leading) { setConnectivity(message.offline ? "offline" : "reconnecting"); lost(); }
+      else if (message.type === "hello" && leading && connectivity() === "online") channel.postMessage({ type: "frame", data: snapshot() });
+      else if (message.type === "resume" && leading && (message.force || (message.away ?? 0) >= RESUME_RECONNECT_AFTER_MS || !source
+        || Date.now() - lastFrameAt >= SILENCE_MS)) { attempts = 0; connect(); }
+    };
+  }
+
   onMount(() => {
+    // Held until this tab goes: the browser hands the lock to a waiting tab when it does.
+    if (channel) void navigator.locks.request("conduit:runtime-stream", () => new Promise<void>((release) => {
+      releaseLead = release;
+      leading = true;
+      attempts = 0;
+      connect();
+    }));
     connect();
     document.addEventListener("visibilitychange", onVisibility);
     window.addEventListener("pageshow", restore);
@@ -207,6 +262,8 @@ export function createRuntimeStore() {
     if (watchdog) clearInterval(watchdog);
     watchdog = undefined;
     source?.close();
+    releaseLead?.();
+    channel?.close();
     document.removeEventListener("visibilitychange", onVisibility);
     window.removeEventListener("pageshow", restore);
     window.removeEventListener("online", online);
