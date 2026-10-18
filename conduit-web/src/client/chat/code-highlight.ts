@@ -281,6 +281,14 @@ export class StreamingCodeHighlighter {
   private lastLanguage = "";
   private hadGrammars = false;
 
+  /** Start from the lines another highlighter (a closed fence's, for its settled block) has highlighted for good. */
+  continueFrom(other: StreamingCodeHighlighter) {
+    this.lastLanguage = other.lastLanguage;
+    this.hadGrammars = other.hadGrammars;
+    this.committed = other.committed;
+    this.committedLines = other.committedLines;
+  }
+
   /** Each line's markup, one `.code-line` apiece: a line unchanged since the last render is the same string. */
   render(text: string, language: string, streaming: boolean): string[] {
     primeHighlighter();
@@ -298,10 +306,12 @@ export class StreamingCodeHighlighter {
       this.lastRunAt = 0;
     }
     if (!streaming) {
-      // Settled: the text is final, so highlight all of it exactly once.
+      // Settled: the text is final, so highlight it exactly once -- what follows the lines highlighted for good.
       if (this.prefixLength !== text.length) {
         this.prefixLength = text.length;
-        this.prefixLines = lineSpans(highlightToHtml(text, language));
+        const kept = this.committed && text.startsWith(this.committed) ? this.committedLines : [];
+        const rest = kept.length ? text.slice(this.committed.length) : text;
+        this.prefixLines = rest ? [...kept, ...lineSpans(highlightToHtml(rest, language))] : kept;
       }
       return this.prefixLines;
     }
