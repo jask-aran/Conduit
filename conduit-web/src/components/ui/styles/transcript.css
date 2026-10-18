@@ -1,4 +1,4 @@
-.ui-bubble { width: fit-content; max-width: min(var(--measure-2xl), 88cqw); margin-left: auto; border-radius: var(--radius-message); padding: var(--space-lg) var(--space-lg); font-size: var(--text-body); line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
+.ui-bubble { width: fit-content; max-width: min(var(--measure-2xl), 88cqw); margin-left: auto; border-radius: var(--radius-message); padding: var(--space-lg) var(--space-lg); font-size: var(--text-body); line-height: var(--leading-text); white-space: pre-wrap; overflow-wrap: anywhere; }
 .ui-bubble[data-editing="true"] { color: var(--muted-foreground); font-style: italic; }
 /* Transcript (DESIGN Transcript), at the transcript's scale. The reading column is the composer's width;
    messages a step and a half apart; a turn's parts half a unit. */
@@ -19,10 +19,10 @@
 .ui-message-foot .ui-button[data-size^="icon"] { width: var(--control-xs); height: var(--control-xs); border-radius: var(--radius-round); padding: 0; }
 .ui-message-foot .ui-button[data-size^="icon"] svg { width: var(--icon-sm); height: var(--icon-sm); }
 /* The answer: no bubble, the Body role, one gap between blocks and none outside the first and last. */
-.ui-answer { --answer-gap: var(--space-lg); min-width: 0; color: var(--foreground); font-size: var(--text-body); line-height: 1.66; overflow-wrap: anywhere; }
+.ui-answer { --answer-gap: var(--space-lg); min-width: 0; color: var(--foreground); font-size: var(--text-body); line-height: var(--leading-reading); overflow-wrap: anywhere; }
 .ui-answer :where(p, ul, ol, blockquote, pre, table, hr, figure, h1, h2, h3, h4) { margin: 0; }
 .ui-answer > * + *, .ui-answer :is(li, blockquote) > * + * { margin-top: var(--answer-gap); }
-.ui-answer :is(h1, h2, h3, h4) { line-height: 1.25; font-weight: var(--weight-strong); }
+.ui-answer :is(h1, h2, h3, h4) { line-height: var(--leading-tight); font-weight: var(--weight-strong); }
 .ui-answer h1 { font-size: var(--text-heading); }
 .ui-answer :is(h2, h3, h4) { font-size: var(--text-body); }
 .ui-answer :is(ul, ol) { padding-left: 1.5em; }
@@ -41,7 +41,7 @@
 /* Disclosure (DESIGN Transcript): everything that folds -- a header, one turning chevron, a body. Its
    unfolding is the caller's (the app's Disclosure animates it); this is its shape. */
 .ui-disclosure { display: grid; min-width: 0; gap: var(--space-2xs); }
-.ui-disclosure-header { display: flex; width: 100%; min-width: 0; align-items: center; gap: var(--row-gap); border: 0; border-radius: var(--radius-control); background: transparent; padding: 0; color: var(--muted-foreground); font: var(--weight-rest) var(--text-row)/1.4 var(--font-sans); text-align: left; }
+.ui-disclosure-header { display: flex; width: 100%; min-width: 0; align-items: center; gap: var(--row-gap); border: 0; border-radius: var(--radius-control); background: transparent; padding: 0; color: var(--muted-foreground); font: var(--weight-rest) var(--text-row)/var(--leading-row) var(--font-sans); text-align: left; }
 .ui-disclosure-header:not(:disabled) { cursor: pointer; }
 .ui-disclosure-chevron { width: var(--icon-sm); height: var(--icon-sm); flex: none; margin-left: auto; transition: rotate var(--duration-quick) var(--ease-change); }
 [aria-expanded="true"] > .ui-disclosure-chevron { rotate: 180deg; }

@@ -11,7 +11,7 @@
 /* The lead is one mark at one size and colour, whichever it is (search, the command prompt, back). */
 .ui-overlay-lead { display: inline-grid; flex: none; place-items: center; color: var(--muted-foreground); }
 .ui-overlay-lead svg { width: var(--icon-lg); height: var(--icon-lg); color: var(--muted-foreground); }
-.ui-overlay-input { min-width: 0; height: var(--control-lg); flex: 1; border: 0; outline: 0; background: transparent; padding: 0; color: var(--foreground); font-size: var(--text-body); font-weight: var(--weight-rest); line-height: 1.5; }
+.ui-overlay-input { min-width: 0; height: var(--control-lg); flex: 1; border: 0; outline: 0; background: transparent; padding: 0; color: var(--foreground); font-size: var(--text-body); font-weight: var(--weight-rest); line-height: var(--leading-text); }
 .ui-overlay-input::placeholder { color: var(--muted-foreground); }
 .ui-overlay-bar .ui-seg { flex: none; }
 /* Its rows: a popover's Items at the overlay's scale, full colour; its group titles plain, not ruled. */
@@ -27,7 +27,7 @@
 .ui-overlay-hints { display: flex; min-height: var(--control-lg); flex: none; flex-wrap: wrap; align-items: center; gap: var(--space-sm) var(--space-xl); border-top: var(--hairline) solid var(--tint); padding: var(--space-md) var(--space-lg); color: var(--muted-foreground); font-size: var(--text-caption); }
 .ui-overlay-hints span { display: inline-flex; align-items: center; gap: var(--space-xs); white-space: nowrap; }
 .ui-overlay-hints-end { margin-left: auto; gap: var(--space-xl) !important; }
-.ui-overlay-title { margin: 0; font-size: var(--text-heading); font-weight: var(--weight-strong); line-height: 1.5; letter-spacing: -0.02em; }
+.ui-overlay-title { margin: 0; font-size: var(--text-heading); font-weight: var(--weight-strong); line-height: var(--leading-text); letter-spacing: -0.02em; }
 /* The rail beside a page: the sidebar's NavGroups, washed as a popover's rows are. */
 .ui-overlay-rail { display: flex; width: var(--measure-sm); flex: none; flex-direction: column; gap: var(--space-xs); overflow: auto; border-right: var(--hairline) solid var(--tint); padding: var(--space-2xl) var(--space-lg); }
 .ui-overlay-rail > .ui-overlay-title { margin-bottom: var(--space-md); padding-left: var(--space-md); }
@@ -73,7 +73,7 @@
 .ui-setting-link:is(:hover, :focus-visible) { outline: none; color: var(--foreground); }
 .ui-setting-note { margin: 0; padding: 0 var(--space-md) var(--space-md); color: var(--muted-foreground); font-size: var(--text-caption); }
 .ui-setting-note[data-tone="error"] { color: var(--destructive); }
-.ui-setting-details { padding: 0 var(--space-md) var(--space-md); color: var(--muted-foreground); font-size: var(--text-caption); line-height: 1.5; }
+.ui-setting-details { padding: 0 var(--space-md) var(--space-md); color: var(--muted-foreground); font-size: var(--text-caption); line-height: var(--leading-text); }
 .ui-setting-details > summary { width: fit-content; list-style: none; cursor: pointer; }
 .ui-setting-details > summary::-webkit-details-marker { display: none; }
 .ui-setting-details > summary:is(:hover, :focus-visible) { outline: none; color: var(--foreground); }
@@ -81,7 +81,7 @@
 .ui-setting-details ol { padding-left: var(--space-xl); }
 .ui-setting-details code { font: var(--text-caption) var(--font-data); }
 .ui-setting-wide { display: flex; flex-direction: column; gap: var(--space-md); padding: var(--space-2xs) var(--space-md) var(--space-md); }
-.ui-setting-wide > .ui-textarea { min-height: calc(4 * var(--control-xs)); font-size: var(--text-row); line-height: 1.5; }
+.ui-setting-wide > .ui-textarea { min-height: calc(4 * var(--control-xs)); font-size: var(--text-row); line-height: var(--leading-text); }
 .ui-setting-wide > .ui-textarea:focus { border-color: color-mix(in oklch, var(--foreground), transparent 70%); }
 .ui-setting-loading { display: flex; align-items: center; gap: var(--row-gap); padding: var(--space-md); color: var(--muted-foreground); font-size: var(--text-row); }
 .ui-overlay-page-head > .ui-overlay-title { flex: 1; }
@@ -100,10 +100,10 @@
    the data face, the prompt as the user's message is drawn, the answer a step under the text colour. */
 .ui-glance { display: grid; min-width: 0; align-content: start; gap: var(--space-lg); color: var(--muted-foreground); font-size: var(--text-caption); }
 .ui-glance > * { min-width: 0; }
-.ui-glance-title { display: flex; align-items: flex-start; gap: var(--row-gap); color: var(--foreground); font: var(--weight-strong) var(--text-row)/1.3 var(--font-sans); }
+.ui-glance-title { display: flex; align-items: flex-start; gap: var(--row-gap); color: var(--foreground); font: var(--weight-strong) var(--text-row)/var(--leading-tight) var(--font-sans); }
 .ui-glance-title > :first-child:not(span) { width: var(--icon); height: var(--icon); flex: none; }
 .ui-glance-title + .ui-glance-facts { margin-top: calc(-1 * var(--space-sm)); }
-.ui-glance-facts { overflow: hidden; font: var(--weight-rest) var(--text-caption)/1.5 var(--font-data); text-overflow: ellipsis; white-space: nowrap; }
+.ui-glance-facts { overflow: hidden; font: var(--weight-rest) var(--text-caption)/var(--leading-text) var(--font-data); text-overflow: ellipsis; white-space: nowrap; }
 .ui-glance-facts + .ui-glance-facts { margin-top: calc(-1 * var(--space-lg)); }
 /* The prompt is the user's message (Bubble), smaller and clamped to four lines. */
 .ui-frost.ui-bubble.ui-glance-prompt { display: -webkit-box; max-width: 92%; margin: 0 0 0 auto; overflow: hidden; font-size: var(--text-row); white-space: normal; -webkit-box-orient: vertical; -webkit-line-clamp: 4; }
@@ -111,7 +111,7 @@
 .ui-glance-orb { display: inline-grid; width: var(--icon); height: var(--icon); flex: none; }
 .ui-glance-orb > * { width: 100%; height: 100%; }
 .ui-glance-turn b { color: var(--foreground); font-weight: var(--weight-lift); }
-.ui-glance-answer { display: -webkit-box; margin: 0; overflow: hidden; color: color-mix(in oklch, var(--foreground), transparent 20%); font-size: var(--text-row); line-height: 1.5; -webkit-box-orient: vertical; -webkit-line-clamp: 7; }
+.ui-glance-answer { display: -webkit-box; margin: 0; overflow: hidden; color: color-mix(in oklch, var(--foreground), transparent 20%); font-size: var(--text-row); line-height: var(--leading-text); -webkit-box-orient: vertical; -webkit-line-clamp: 7; }
 .ui-glance-answer[data-math] { display: block; max-height: 15em; -webkit-line-clamp: unset; mask-image: linear-gradient(to bottom, #000 12.5em, transparent 15em); }
 .ui-glance-answer[data-math] .katex-display { margin: .55em 0; overflow: hidden; text-align: left; }
 .ui-glance-empty { margin: 0; padding-top: var(--space-4xl); text-align: center; }

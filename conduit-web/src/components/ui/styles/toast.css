@@ -17,6 +17,6 @@
 .ui-toast[data-kind="error"] .ui-toast-icon { color: var(--destructive); }
 .ui-toast[data-kind="info"] .ui-toast-icon { color: var(--muted-foreground); }
 /* The sentence centres on a control's height when it is one line, and wraps under its own start. */
-.ui-toast-text { min-width: 0; margin: 0; padding-block: calc((var(--control-sm) - 1.4em) / 2); line-height: 1.4; overflow-wrap: anywhere; }
+.ui-toast-text { min-width: 0; margin: 0; padding-block: calc((var(--control-sm) - 1.4em) / 2); line-height: var(--leading-row); overflow-wrap: anywhere; }
 .ui-toast-close { color: var(--muted-foreground); }
 .ui-toast-close.ui-button[data-size="icon-xs"] { margin-top: calc((var(--control-sm) - var(--control-xs)) / 2); }

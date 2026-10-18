@@ -82,6 +82,9 @@
 /* Lines, in whole pixels at any scale: a hairline (a border, a rule, the 1px between rows), a thin stroke (a spinner,
    a check box, a strike), a stroke (a thumb's ring, a tick, a wave's bar) and a track (a slider's, a progress bar). */
 :root { --hairline: 1px; --stroke-thin: 1.5px; --stroke: 2px; --track-size: 4px; }
+/* Leading: six line heights -- none (a keycap, a glyph's box), tight (titles, names, two-line labels), row (rows,
+   toasts, previews), text (what you type, messages, notes), code (code, a step's output), reading (the answer). */
+:root { --leading-none: 1; --leading-tight: 1.3; --leading-row: 1.4; --leading-text: 1.5; --leading-code: 1.6; --leading-reading: 1.66; }
 /* The reading column: the composer's and the transcript's width unless their pane declares --composer-width. */
 :root { --reading-width: 47.5rem; }
 :root, [data-density="desktop"] {
@@ -162,7 +165,7 @@
    piece can forget it; keyboard focus is the wash, which each piece draws on :focus-visible as on :hover. */
 :root[data-library] :is(:focus, :focus-visible), :where([class*="ui-"], [class*="ui-"] *):is(:focus, :focus-visible) { outline: none !important; --tw-ring-shadow: 0 0 #0000 !important; --tw-ring-offset-shadow: 0 0 #0000 !important; }
 /* The section label, one for every section: popovers, cards, riders, the sidebar. Muted caps in the label face. */
-.ui-title, .ui-title-text, .ui-nav-label, .ui-crumbs > button { color: var(--muted-foreground); font: var(--weight-rest) var(--text-label)/1.5 var(--font-label); letter-spacing: .07em; text-transform: uppercase; }
+.ui-title, .ui-title-text, .ui-nav-label, .ui-crumbs > button { color: var(--muted-foreground); font: var(--weight-rest) var(--text-label)/var(--leading-text) var(--font-label); letter-spacing: .07em; text-transform: uppercase; }
 
 /* Tabular figures wherever numbers tick or line up. */
 :is(.ui-keycap, .ui-choice-key, .ui-hints, .ui-overlay-hints, .ui-chip-copy small, .ui-seg small, .ui-slider-value) { font-variant-numeric: tabular-nums; }
