@@ -47,7 +47,7 @@
 .ui-answer .chat-markdown h1 { font-size: var(--text-heading); }
 .ui-answer .chat-markdown :is(h2, h3) { font-size: var(--text-body); }
 .ui-answer .chat-markdown blockquote { border-left-color: var(--tint); padding-left: var(--space-lg); }
-.ui-answer .chat-markdown :not(pre) > code { border-radius: calc(0.6 * var(--radius-control)); background: var(--tint); padding: 0 var(--space-xs); font: 0.9em var(--font-code); }
+.ui-answer .chat-markdown :not(pre) > code { border-radius: var(--radius-inset); background: var(--tint); padding: 0 var(--space-xs); font: 0.9em var(--font-code); }
 .ui-answer .chat-markdown :is(th, td) { border-color: var(--tint); padding: var(--space-sm) var(--space-md); }
 /* The app's code block (its Markdown's .artifact) drawn as a CodeBlock: a box, the caption bar, the code face. */
 .ui-answer .chat-markdown .artifact { border: 1px solid var(--tint); border-radius: var(--radius-control); background: var(--background); }

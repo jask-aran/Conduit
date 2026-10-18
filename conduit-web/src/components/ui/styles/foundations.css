@@ -100,22 +100,22 @@
   --space-2xs: calc(0.125 * var(--u-space)); --space-xs: calc(0.25 * var(--u-space)); --space-sm: calc(0.375 * var(--u-space));
   --space-md: calc(0.5 * var(--u-space)); --space-lg: calc(0.75 * var(--u-space)); --space-xl: var(--u-space);
   --space-2xl: calc(1.25 * var(--u-space)); --space-3xl: calc(1.5 * var(--u-space)); --space-4xl: calc(2 * var(--u-space));
-  /* Icons: five sizes -- a × in a tiny control, a chevron, the icon, a pill's, a ring. */
-  --icon-xs: calc(0.6875 * var(--u-icon)); --icon-sm: calc(0.875 * var(--u-icon)); --icon: var(--u-icon); --icon-lg: calc(1.125 * var(--u-icon)); --icon-xl: calc(1.5 * var(--u-icon));
-  /* Controls: four heights (an icon button is as wide as it is tall). */
-  --control-xs: calc(1.5 * var(--u-space)); --control-sm: calc(1.875 * var(--u-space)); --control: calc(2.25 * var(--u-space)); --control-lg: calc(2.5 * var(--u-space));
+  /* Icons: five sizes -- a × in a tiny control, a chevron, the icon, a pill's, a ring -- and a dot (a status, recording). */
+  --icon-xs: calc(0.6875 * var(--u-icon)); --icon-sm: calc(0.875 * var(--u-icon)); --icon: var(--u-icon); --icon-lg: calc(1.125 * var(--u-icon)); --icon-xl: calc(1.5 * var(--u-icon)); --icon-dot: calc(0.375 * var(--u-icon));
+  /* Controls: five heights (an icon button is as wide as it is tall); 2xs is a keycap, a slider thumb. */
+  --control-2xs: calc(1.125 * var(--u-space)); --control-xs: calc(1.5 * var(--u-space)); --control-sm: calc(1.875 * var(--u-space)); --control: calc(2.25 * var(--u-space)); --control-lg: calc(2.5 * var(--u-space));
   /* Rows: their measured height and text, in the unit; inset, pad and gap are steps. */
   --row-text: calc(var(--row-text-units) * var(--u-type)); --row-min: max(var(--row-min-floor), calc(var(--row-min-units) * var(--u-space)));
   --row-inset: var(--space-md); --row-pad: var(--space-sm) var(--row-inset); --row-gap: var(--space-md);
   --nav-indent: calc(1.875 * var(--u-space));
 }
-/* Four radii (DESIGN.md rounded). control: rows, buttons, inputs, keycaps, chips, in the
+/* Four radii (DESIGN.md rounded), and inset: a keycap's or inline code's, a control's nested. control: rows, buttons, inputs, chips, in the
    density unit; surface: popovers, cards, overlays, nesting their rows (control + inset);
    message: the composer (the phone's field too) and the user's message, one value on phone
    and desktop -- a capsule at one line, held as the composer grows; round: fully round at any
    size -- the phone's pill groups and buttons, which never grow, and small bits inside controls. */
 :root, [data-density], .ui-transcript, .ui-read, .ui-bubble, .ui-answer {
-  --radius-control: calc(0.5 * var(--u-space)); --radius-surface: calc(var(--radius-control) + var(--frost-inset));
+  --radius-control: calc(0.5 * var(--u-space)); --radius-inset: calc(0.6 * var(--radius-control)); --radius-surface: calc(var(--radius-control) + var(--frost-inset));
   --radius-message: calc(22px * var(--scale-transcript)); --radius-round: 999px;
   /* Five type sizes, by role (Type · Scale): label, the section label and keycaps; caption, details,
      hints and data (meta, counts, crumbs); row, every row and control; body, messages, what you
