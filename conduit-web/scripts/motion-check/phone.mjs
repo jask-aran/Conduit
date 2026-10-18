@@ -1,7 +1,7 @@
 // PhoneComposer's motion invariants, frame by frame: the phone preview's real transitions and every pair of the gallery card's states, both layouts.
 // Run with the gallery served (npm run gallery) and open in headed Chrome on CDP :9222 (node ../scripts/run-windows-chrome-devtools.mjs start),
 // from conduit-web: node scripts/motion-check/phone.mjs. It plays each move at 1x (restoring the gallery's speed setting after) and prints
-// one line per move: ✓, or ✗ with the invariant it broke (library.css, Motion: snap, squeezed, layers, one spot,
+// one line per move: ✓, or ✗ with the invariant it broke (styles/foundations.css, Motion: snap, squeezed, layers, one spot,
 // frost under a fade; and PhoneComposer's state table: each part ends as data-show says, starts on the first frames, in step, then settles).
 const { chromium } = await import(new URL("../../../.smoke-tools/node_modules/playwright/index.mjs", import.meta.url).href);
 const b = await chromium.connectOverCDP("http://127.0.0.1:9222");

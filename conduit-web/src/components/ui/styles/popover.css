@@ -1,0 +1,83 @@
+/* Menu: a raised container; rows sit concentric inside it. */
+.ui-menu { outline: none; display: flex; min-width: calc(12 * var(--u-type)); flex-direction: column; border-radius: var(--radius-surface); padding: var(--frost-inset); }
+/* A popover rises in and drops back. */
+.ui-menu[data-entering] { animation: ui-rise var(--duration-gentle) var(--ease-arrive) backwards; }
+.ui-menu[data-leaving] { animation: ui-drop var(--duration-quick) var(--ease-leave) forwards; pointer-events: none; }
+/* Under a phone's submenu panel it dims where it stands, at once (a dim is a state, not a move), and takes no taps. */
+.ui-menu { transition: filter var(--duration-quick) var(--ease-change); }
+.ui-menu[data-under] { filter: var(--dim-under); pointer-events: none; }
+.ui-title { display: flex; align-items: baseline; justify-content: space-between; gap: var(--row-gap); padding: var(--space-sm) var(--space-md) var(--space-sm); }
+.ui-title small { font-weight: var(--weight-rest); letter-spacing: 0; text-transform: none; }
+.ui-section { display: flex; flex-direction: column; }
+.ui-section + .ui-section { margin-top: var(--frost-inset); border-top: 1px solid var(--tint); margin-inline: calc(-1 * var(--frost-inset)); padding: var(--frost-inset) var(--frost-inset) 0; }
+.ui-search-section { flex-direction: row; align-items: center; gap: var(--row-gap); padding: var(--row-pad); }
+.ui-search-section > svg { width: var(--icon); height: var(--icon); flex: none; color: var(--muted-foreground); }
+.ui-search-section .ui-keys { display: inline-flex; flex: none; gap: 2px; }
+.ui-search { min-width: 0; flex: 1; border: 0; background: transparent; padding: 0; color: var(--foreground); font-size: var(--text-row); outline: none; }
+.ui-search::placeholder { color: var(--muted-foreground); }
+.ui-empty { padding: var(--space-md); color: var(--muted-foreground); font-size: var(--text-caption); }
+
+.ui-row { display: flex; width: 100%; min-height: var(--row-min); align-items: center; gap: var(--row-gap); border: 0; border-radius: var(--radius-control); background: transparent; padding: var(--row-pad); color: color-mix(in oklch, var(--foreground), transparent 32%); font-size: var(--text-row); font-weight: var(--weight-rest); line-height: 1.5; text-align: left; cursor: default; user-select: none; outline: none; }
+/* The icon slot: every leading mark -- a lucide icon, a workspace glyph, a
+   harness mark -- fills one icon-sized square. */
+.ui-icon { display: inline-grid; width: var(--icon); height: var(--icon); flex: none; place-items: center; }
+.ui-icon > * { width: 100% !important; height: 100% !important; }
+.ui-icon > .workspace-glyph svg { width: 100%; height: 100%; }
+.ui-icon:has(> .harness-mark) { width: var(--icon-sm); height: var(--icon-sm); }
+.ui-row > .ui-label { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Meta: muted mono beside the title, right-aligned, tabular. */
+.ui-row > :is(small, .ui-meta) { flex: none; margin-left: auto; color: var(--muted-foreground); font: var(--weight-rest) var(--text-caption) var(--font-data); font-variant-numeric: tabular-nums; }
+.ui-row > .ui-keys { display: inline-flex; flex: none; gap: var(--space-xs); }
+.ui-row > .ui-chevron { width: var(--icon-sm); height: var(--icon-sm); color: var(--muted-foreground); }
+/* The cursor (DESIGN Interaction): one row at a time, the wash, white, no change of weight.
+   The pointer moves it (moveCursor), as the keyboard does; hover alone never washes a second row. */
+.ui-row:is([data-highlighted], [data-expanded]) { background: var(--tint); color: var(--foreground); }
+.ui-row[data-checked], [data-surface="frost"] .ui-row[data-checked] { color: var(--foreground); font-weight: var(--weight-current); }
+/* Over frost the row reads a touch heavier and brighter (text over frost reads thinner). */
+/* The row role, one for every row (list, menu, palette, settings, the sidebar): over frost a touch heavier and brighter, since text there reads thinner. */
+[data-surface="frost"] :is(.ui-row, .ui-nav-row) { color: color-mix(in oklch, var(--foreground), transparent 28%); font-weight: var(--weight-lift); }
+/* Icons muted at rest, white on the cursor; a current icon is drawn an eighth of its size (3 units), not a tenth. */
+.ui-row > .ui-icon { color: var(--muted-foreground); }
+.ui-row:is([data-highlighted], [data-checked]) > .ui-icon { color: var(--foreground); }
+:is(.ui-row[data-checked] > .ui-icon, .ui-nav-row[aria-current="page"] > .ui-nav-icon, .ui-tabs > [aria-selected="true"]) svg.lucide { stroke-width: 3; }
+/* A harness mark rests greyed with its row and shows its colour on the cursor or the current row. */
+.ui-row .harness-mark { filter: grayscale(1); opacity: .78; }
+.ui-row:is([data-highlighted], [data-checked]) .harness-mark { filter: none; opacity: 1; }
+.ui-row[data-disabled], [data-surface="frost"] .ui-row[data-disabled] { pointer-events: none; color: color-mix(in oklch, var(--foreground), transparent 62%); text-decoration: line-through 1.5px; }
+.ui-row[data-disabled] > small { text-decoration: none; }
+.ui-row[data-destructive], .ui-row[data-destructive] > .ui-icon { color: var(--destructive); }
+.ui-row[data-destructive][data-highlighted] { background: color-mix(in oklch, var(--destructive), transparent 85%); }
+
+.ui-row > .ui-row-end { display: inline-flex; flex: none; margin-left: auto; margin-right: calc((var(--u-icon) - var(--control-sm)) / 2); }
+
+/* Heading section: the popover's subject, then items about it (a field row). */
+.ui-heading { padding: 0; }
+.ui-heading-title, .ui-heading-detail { padding: var(--space-sm); line-height: 1.32; }
+.ui-heading-title { color: var(--foreground); font-size: var(--text-body); font-weight: var(--weight-strong); }
+.ui-heading-detail { color: var(--muted-foreground); font-size: var(--text-caption); }
+
+/* A field row: its name muted at the row role (never uppercase), its value after it. */
+.ui-row[data-field] > .ui-label { color: var(--muted-foreground); }
+.ui-row[data-field] > small { color: color-mix(in oklch, var(--foreground), transparent 45%); font-family: inherit; font-size: var(--text-row); }
+/* A rule between groups of an app menu's rows, where a library menu has sections. */
+.ui-menu .ui-rule { height: 1px; margin: var(--frost-inset) calc(-1 * var(--frost-inset)); border: 0; background: var(--tint); }
+/* A menu keeps its caller's class for its width and placement; its shell
+   (inset, radius, lift) is the library's. */
+.ui-frost.ui-menu { padding: var(--frost-inset); border-radius: var(--radius-surface); }
+.ui-frost.ui-menu[data-lift="raised"] { box-shadow: var(--frost-lift-raised), var(--frost-highlight); }
+/* An app row's own text runs out in an ellipsis, as a library label does. */
+.ui-row > span:not(.ui-icon, .ui-keys, .ui-meta, .ui-row-end) { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* An item's detail: a second line under its label (a route's address). */
+.ui-row > .ui-label[data-stacked] { display: flex; flex-direction: column; }
+.ui-label > .ui-detail { overflow: hidden; color: var(--muted-foreground); font: var(--weight-rest) var(--text-caption)/1.3 inherit; font-family: inherit; text-overflow: ellipsis; white-space: nowrap; }
+/* An app row's own icon, placed straight in the row (not in an icon slot), is sized as one. */
+.ui-row > :is(svg, .workspace-glyph, .harness-mark, img):not(.ui-chevron) { width: var(--icon); height: var(--icon); flex: none; }
+.ui-row > .harness-mark { width: var(--icon-sm); height: var(--icon-sm); }
+.ui-match { color: var(--muted-foreground); }
+.ui-match > b { color: var(--foreground); font-weight: var(--weight-current); }
+/* A phone variant has no keyboard: shortcut keys are off wherever they sit (after the rows' keys, before the leader's,
+   which stay). */
+[data-density="phone"] .ui-keys { display: none; }
+@media (--conduit-phone-layout) { .ui-keys { display: none; } }
+.ui-keys[data-first] { display: inline-flex; min-width: calc(3.125 * var(--u-space)); flex: none; gap: var(--space-xs); }

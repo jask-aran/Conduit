@@ -131,7 +131,7 @@ import "./project/dashboard.css";
 import "./chat/composer-geometry.css";
 import "./styles.css";
 // The library's styles (components v2): inert until a piece the app draws with it carries its .ui- classes.
-import "@/components/ui/library.css";
+import "@/components/ui/styles";
 
 const DESKTOP_UPDATE_ROUTE_KEY = "conduit:desktop-update-route";
 if (desktopShell) {

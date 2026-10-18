@@ -41,7 +41,7 @@ export function StepSlider(props: {
     if (option && option.value !== props.value) props.onChange(option.value);
   };
 
-  // In the gallery's Library previews this is the library's slider (library.css).
+  // In the gallery's Library previews this is the library's slider (components v2).
   const lib = useLibrary();
   const c = (app: string, library: string) => lib ? library : app;
   return <div class={c("step-slider", "ui-slider")} data-disabled={props.disabled ? "true" : undefined}

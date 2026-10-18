@@ -2,7 +2,7 @@ import { createContext, useContext } from "solid-js";
 
 /*
  * Whether the app's pieces draw themselves with the library (index.tsx,
- * library.css) instead of their own material and menu classes. Off by
+ * styles/) instead of their own material and menu classes. Off by
  * default and off in the app, but for the pieces graduated below; the
  * gallery's Library previews turn it on, around the real screens, so the
  * library is judged in the real app with all its behaviour. Context is read where a piece is

@@ -1,7 +1,7 @@
 ---
 name: Conduit
 description: In-app visual language for Conduit. Dark charcoal control plane, inset panes holding plain lists grouped by heading and space, frosted glass for everything that floats. No blue anywhere.
-note: "Colours are the dark theme's values in client/styles.css. Every other value (space, type, radius, motion) is a token in components/ui/library.css; the body names them, the code holds them."
+note: "Colours are the dark theme's values in client/styles.css. Every other value (space, type, radius, motion) is a token in components/ui/styles/foundations.css; the body names them, the code holds them."
 colors:
   frame: "oklch(0.138 0.004 264)"
   background: "oklch(0.186 0.005 264)"
@@ -34,8 +34,8 @@ This file holds the rules. Values live in code and examples in the gallery:
 | For | Look in |
 | --- | --- |
 | The rules a surface, control or move follows | this file |
-| Token values (space, type, radius, motion, frost) | `conduit-web/src/components/ui/library.css` |
-| The pieces themselves | `conduit-web/src/components/ui/index.tsx` |
+| Token values (space, type, radius, motion, frost) | `conduit-web/src/components/ui/styles/foundations.css` |
+| The pieces themselves | `conduit-web/src/components/ui/`: one module and one `styles/` file per family, re-exported by `index.tsx` |
 | Every piece drawn, measured, in every state and density | the gallery (`npm run gallery`, docs/TESTING.md) |
 
 Write rules here, not specs: sizes, timings, exact copy, counts and fold orders belong to the code. How to verify a rule goes in docs/TESTING.md.
@@ -49,7 +49,7 @@ New UI is built from components v2 (`components/ui`) and its tokens alone, so a 
 - **Nothing styles itself per component.** Sizes come from the space, control, icon and type tokens; corners from `--radius-*`; colour from the surface (Surfaces). A value a piece needs and no token gives is a new token or a new rule here, not a local number.
 - **A piece owns its moves.** Entering, leaving and removing are its `motion` prop or its own state, on the Motion tokens. Callers never animate a library piece from outside.
 - **One gallery family per piece.** A change to a piece updates its source and its gallery family together; the gallery's In use, Anatomy and Forms views go through the shared `gallery/specs.tsx`, never markup of their own.
-- **The app opts in through `components/ui/swap.ts`.** `LibraryContext` draws the app's real screens with v2 inside the gallery's previews; `useLibraryPiece(piece)` graduates one piece into the app itself, and `localStorage conduit:classic = "<piece>"` draws it the old way again to compare. A piece is done when its old code and its `useLibrary()` branch are deleted.
+- **The app opts in through `components/ui/swap.ts`.** `LibraryContext` draws the app's real screens with v2 inside the gallery's previews; `useLibraryPiece(piece)` graduates one piece into the app itself, and `localStorage conduit:classic = "<piece>"` draws it the old way again to compare. Rules that draw an app piece with the library live in `styles/bridge.css`. A piece is done when its old code, its `useLibrary()` branch and its bridge rules are deleted.
 
 ## Migration
 
@@ -136,10 +136,10 @@ The app is locked to `.dark`; the light tokens in `styles.css` are leftovers, ne
 
 Motion explains a change of place. A surface that does not change place does not animate.
 
-- **Quick out, gentle in.** Leaving is `--duration-quick` on `--ease-leave`; arriving is `--duration-gentle` on `--ease-arrive`; a change in place is quick on `--ease-change`. A move is a fade, a rise, a drop back the way it came, a grow or a slide (`library.css` keyframes). Effects that are not moves (the copied wash, a breathing mic) keep their own time.
+- **Quick out, gentle in.** Leaving is `--duration-quick` on `--ease-leave`; arriving is `--duration-gentle` on `--ease-arrive`; a change in place is quick on `--ease-change`. A move is a fade, a rise, a drop back the way it came, a grow or a slide (`styles/foundations.css` keyframes). Effects that are not moves (the copied wash, a breathing mic) keep their own time.
 - **Leave the way you came, then arrive.** Something of the bottom edge leaves downward; a panel leaves toward its control's edge. The outgoing surface goes first; they never cross-fade in place.
 - **Transform and opacity only**, except a Disclosure unfolding, pane widths easing, the composer across a layout switch, and the phone composer's pills.
-- **The invariants every piece's moves keep** (`library.css`): parts stack in one order in every state; one transition list per part, states setting only values; room opens before a part fades in and goes after it fades out; two parts never share a spot at once; a change is one move from its first frame; a frost fades itself, never through an ancestor. A new state fits these, never an exception: state them per piece and check every pair of states, not one-off fixes.
+- **The invariants every piece's moves keep** (`styles/foundations.css`): parts stack in one order in every state; one transition list per part, states setting only values; room opens before a part fades in and goes after it fades out; two parts never share a spot at once; a change is one move from its first frame; a frost fades itself, never through an ancestor. A new state fits these, never an exception: state them per piece and check every pair of states, not one-off fixes.
 - **Hold the reading position.** A swapped surface keeps its room while away; the transcript moves only through its tail spring.
 - **The first open settles, then shows.** Only the frame shows until every pane's document is laid out and holding still; then every region fades in once, with no rise. Nothing arrives or moves after the fade starts.
 - **A send moves at once.** A new chat's first message, or one sent from a dashboard, takes the composer to the chat's foot in the frame the layout changes.

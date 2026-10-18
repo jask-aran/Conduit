@@ -1,0 +1,80 @@
+/* In the phone previews the header's pills sit at the full-screen overlay's inset (8px, inside the
+   safe area), as the app's own header does round its frosted pills. */
+@media (--conduit-phone-layout) { .chat-header:has(> .ui-pill) { height: calc(56px + var(--safe-area-inset-top, env(safe-area-inset-top, 0px))); padding: calc(8px + var(--safe-area-inset-top, env(safe-area-inset-top, 0px))) 8px 4px; background: linear-gradient(to bottom, var(--background) 0 60%, transparent 100%); } }
+
+/* The app's own pieces, drawn with the library (components/ui/swap.ts): the
+   app keeps its geometry; the material is the library's frost. Same targets
+   as the app's material rule in styles.css. */
+.composer-surface-material[data-composer-surface="library"],
+[data-phone-layout="bar"] .composer[data-composer-surface="library"] :is(.composer-actions [data-slot="button"], .composer-plus-trigger),
+[data-phone-layout] .composer[data-composer-surface="library"] .composer-input-shell,
+[data-phone-layout="surface"] .composer[data-composer-surface="library"]::before {
+  border: 1px solid var(--frost-stroke);
+  background: var(--frost-fill);
+  -webkit-backdrop-filter: var(--frost-blur);
+  backdrop-filter: var(--frost-blur);
+  box-shadow: var(--frost-lift-rest), var(--frost-highlight);
+}
+/* The phone composer's buttons are solo Pills: one frost circle each (the mic
+   stretched across the row). Specificity sits between the app's sizing rule
+   and its hide rules; a folded button (send with nothing to send, latest,
+   stop-and-send) is left to the app, which folds it to nothing. */
+:where([data-phone-layout] .composer)[data-composer-surface="library"] :is(.composer-actions button[data-slot="button"], button.composer-plus-trigger):not(:is([data-primary-hidden] .composer-send-trigger, .composer-latest-trigger:not([data-shown]), .composer-stop-send:not([data-shown]))) { width: var(--pill-size); min-width: var(--pill-size); height: var(--pill-size); }
+:where([data-phone-layout] .composer)[data-composer-surface="library"] :is(.composer-actions button[data-slot="button"], button.composer-plus-trigger) svg { width: var(--pill-icon); height: var(--pill-icon); }
+:where([data-phone-layout] .composer)[data-composer-surface="library"] :is(.composer-actions button[data-slot="button"], button.composer-plus-trigger):hover { background: linear-gradient(var(--tint), var(--tint)), var(--frost-fill); }
+[data-phone-layout] .composer[data-composer-surface="library"] :is([data-primary-hidden] .composer-send-trigger, .composer-latest-trigger:not([data-shown]), .composer-stop-send:not([data-shown])) { border-width: 0; }
+/* The composer's field as a PillField: the app keeps its folding (min-height
+   and height while idle or listening); the field's shape is the library's. */
+.composer .composer-input-shell.ui-pill-field { display: block; height: auto; align-items: initial; border-radius: var(--radius-message); padding: 0 var(--pill-field-pad); }
+[data-phone-mode="typing"] .composer-input-shell.ui-pill-field { min-height: var(--pill-size); }
+.composer-stack > .composer-wrap.ui-composer-width { --move: var(--duration-gentle); --move-ease: var(--ease-arrive); --hide-delay: 0s;
+  transition: transform var(--move) var(--move-ease), visibility 0s var(--hide-delay); }
+/* The app's composer wrapper, drawn as a DesktopComposer: its width is the pane's too
+   (the app's own rule loads later, at equal weight). */
+.composer-wrap.ui-composer-width { width: min(var(--composer-width, var(--reading-width)), 100%); }
+/* The app's takeover (chat-screen's composer-stack and its question-dock) on the slot's moves. */
+/* It slides out whole, never fading through its frosts (6). */
+.composer-stack[data-question="true"] > .composer-wrap.ui-composer-width { opacity: 1; transform: translateY(calc(100% + var(--space-4xl)));
+  --move: var(--duration-quick); --move-ease: var(--ease-leave); --hide-delay: var(--duration-quick); }
+.question-dock > .ui-rider[data-layout="card"] { animation: ui-rise var(--duration-gentle) var(--ease-arrive) var(--duration-quick) backwards; }
+@media (prefers-reduced-motion: reduce) { .composer-stack > .composer-wrap.ui-composer-width { transition: none; } .question-dock > .ui-rider[data-layout="card"] { animation: none; } }
+/* In the gallery's previews the app's answer (its own Markdown renderer) is drawn as an Answer: its blocks
+   take the Answer's type, gap and pieces, outranking the app's .chat-markdown rules, so it follows Text size. */
+.ui-answer .chat-markdown { font-size: inherit; line-height: inherit; }
+.ui-answer :is(.chat-markdown, .chat-markdown > .incremark) > * { margin-block: 0; }
+.ui-answer :is(.chat-markdown, .chat-markdown > .incremark) > * + * { margin-top: var(--answer-gap); }
+.ui-answer .chat-markdown :is(h1, h2, h3) { letter-spacing: normal; }
+.ui-answer .chat-markdown h1 { font-size: var(--text-heading); }
+.ui-answer .chat-markdown :is(h2, h3) { font-size: var(--text-body); }
+.ui-answer .chat-markdown blockquote { border-left-color: var(--tint); padding-left: var(--space-lg); }
+.ui-answer .chat-markdown :not(pre) > code { border-radius: calc(0.6 * var(--radius-control)); background: var(--tint); padding: 0 var(--space-xs); font: 0.9em var(--font-code); }
+.ui-answer .chat-markdown :is(th, td) { border-color: var(--tint); padding: var(--space-sm) var(--space-md); }
+/* The app's code block (its Markdown's .artifact) drawn as a CodeBlock: a box, the caption bar, the code face. */
+.ui-answer .chat-markdown .artifact { border: 1px solid var(--tint); border-radius: var(--radius-control); background: var(--background); }
+.ui-answer .chat-markdown .artifact-header { min-height: var(--control-sm); border-bottom: 1px solid var(--tint); background: linear-gradient(var(--tint), var(--tint)), var(--background); padding: 0 var(--space-2xs) 0 var(--space-lg); color: var(--muted-foreground); font: var(--text-caption) var(--font-data); }
+.ui-answer .chat-markdown .artifact pre { padding: var(--space-md) var(--space-lg); background: transparent; font: var(--text-row)/1.6 var(--font-code); }
+.ui-answer .chat-markdown .artifact-expand { min-height: var(--control-sm); border-top: 1px solid var(--tint); padding: 0; font: var(--text-caption) var(--font-sans); }
+.ui-answer .chat-markdown .artifact-expand:is(:hover, :focus-visible) { background: var(--tint); }
+.ui-answer .chat-markdown .artifact-toggle { width: var(--control-xs); height: var(--control-xs); border-radius: var(--radius-round); }
+.ui-answer .chat-markdown .artifact-toggle:is(:hover, :focus-visible) { background: var(--tint); }
+/* Its Copy is the CopyButton (the app's is a string of HTML, so the icon is drawn here): copy, then a check. */
+.ui-answer .chat-markdown .artifact-copy { display: grid; width: var(--control-xs); height: var(--control-xs); place-items: center; border-radius: var(--radius-round); padding: 0; }
+.ui-answer .chat-markdown .artifact-copy:is(:hover, :focus-visible) { background: var(--tint); color: var(--foreground); }
+.ui-answer .chat-markdown .artifact-copy-label { display: none; }
+.ui-answer .chat-markdown .artifact-copy::before { width: var(--icon-xs); height: var(--icon-xs); background: currentColor; content: ""; mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect width='14' height='14' x='8' y='8' rx='2'/%3E%3Cpath d='M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2'/%3E%3C/svg%3E") center / contain no-repeat; }
+.ui-answer .chat-markdown .artifact-copy[data-copied="true"]::before { mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 6 9 17l-5-5'/%3E%3C/svg%3E"); }
+.ui-answer .chat-markdown .artifact-header { padding-right: calc(var(--space-lg) - (var(--control-xs) - var(--icon-xs)) / 2); }
+/* It unfolds and folds as the CodeBlock does. */
+.ui-answer .chat-markdown .artifact > pre { height: auto; overflow-y: hidden; interpolate-size: allow-keywords; --move: var(--duration-gentle); --move-ease: var(--ease-arrive); transition: height var(--move) var(--move-ease); }
+.ui-answer .chat-markdown .artifact[data-collapsed="true"] > pre { height: calc(var(--code-collapse-lines, 15) * 1.6em + 2 * var(--space-md)); max-height: none; --move: var(--duration-quick); --move-ease: var(--ease-leave); }
+/* Its numbers as wide as the last one (two digits past nine), so the language and the numbers start together. */
+.ui-answer .chat-markdown .artifact .code-line::before { width: 2ch; margin-right: var(--space-lg); }
+.ui-answer .chat-markdown .artifact[data-lines="1"] .code-line::before, .ui-answer .chat-markdown .artifact[data-lines="2"] .code-line::before, .ui-answer .chat-markdown .artifact[data-lines="3"] .code-line::before, .ui-answer .chat-markdown .artifact[data-lines="4"] .code-line::before, .ui-answer .chat-markdown .artifact[data-lines="5"] .code-line::before, .ui-answer .chat-markdown .artifact[data-lines="6"] .code-line::before, .ui-answer .chat-markdown .artifact[data-lines="7"] .code-line::before, .ui-answer .chat-markdown .artifact[data-lines="8"] .code-line::before, .ui-answer .chat-markdown .artifact[data-lines="9"] .code-line::before { width: 1ch; }
+/* The app's copy flash is the copied wash (above), not its ring. */
+.ui-read [data-copy-flash="true"] { animation: none; }
+/* In the gallery's previews the app's scroll-to-latest and cancel editing draw as RiderButtons: the
+   app keeps where they sit, the library how they look. */
+.message-scroller-button.ui-rider-button[data-slot="button"] { width: var(--control-lg); min-height: 0; height: var(--control-lg); border-radius: var(--radius-surface); background: var(--frost-fill); color: var(--foreground); }
+.message-scroller-button.ui-rider-button[data-labelled][data-slot="button"] { width: auto; gap: var(--space-sm); padding: 0 var(--space-xl) 0 var(--space-lg); font: var(--weight-lift) var(--text-row) var(--font-sans); }
+.message-scroller-button.ui-rider-button[data-slot="button"] svg { width: var(--icon-lg); height: var(--icon-lg); }
+.message-scroller-button.ui-rider-button[data-labelled][data-slot="button"] svg { width: var(--icon); height: var(--icon); }

@@ -1,0 +1,18 @@
+/* Leader: a small overlay card above the composer, measured from the app's (360 wide). */
+.ui-frost.ui-leader { --overlay-width: calc(28.125 * var(--u-space)); }
+.ui-overlay-bar[data-head] { min-height: calc(2.96875 * var(--u-space)); gap: var(--space-md); padding: var(--space-md) var(--space-lg); }
+.ui-leader .ui-keys[data-first] .ui-keycap { color: var(--foreground); }
+/* Crumbs: the leader's path, in the section label's type. */
+.ui-crumbs { display: flex; min-width: 0; flex: 1; align-items: center; justify-content: flex-start; gap: 2px; overflow: hidden; }
+/* A crumb is a section label you can press (its type is .ui-title's): the wash on hover, the current place white at the current weight. */
+.ui-crumbs > button { flex: none; border: 0; border-radius: var(--radius-control); background: transparent; padding: var(--space-2xs) var(--space-sm); cursor: pointer; }
+.ui-crumbs > button:is(:hover, :focus-visible):not(:disabled) { background: var(--tint); color: var(--foreground); }
+.ui-crumbs > button[aria-current="true"] { color: var(--foreground); font-weight: var(--weight-current); }
+.ui-crumbs > button:disabled { opacity: .55; cursor: default; }
+.ui-crumbs-sep { color: var(--muted-foreground); font-size: var(--text-label); opacity: .6; }
+/* Spotlight: the dim is the shadow round the lit region. */
+.ui-spotlight { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+.ui-spotlight-lit { position: absolute; box-shadow: 0 0 0 200vmax var(--dim); transition: top var(--duration-gentle) var(--ease-arrive), left var(--duration-gentle) var(--ease-arrive), width var(--duration-gentle) var(--ease-arrive), height var(--duration-gentle) var(--ease-arrive); }
+.ui-spotlight-lit[data-whole] { top: 50%; left: 50%; width: 0; height: 0; }
+@media (prefers-reduced-motion: reduce) { .ui-spotlight-lit { transition: none; } }
+.ui-leader .ui-overlay-hints { gap: var(--space-xs) var(--space-lg); }

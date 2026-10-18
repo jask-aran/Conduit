@@ -1,0 +1,21 @@
+/* Nav list: the sidebar's rows on the ground, not in a popover. A group has
+   a label; a row an icon, its label, an optional toggle at its end, and an
+   indent when it sits under another row (a chat under its project). Sizes
+   are the app's sidebar, per density. */
+.ui-nav-group { display: flex; flex-direction: column; gap: 1px; }
+.ui-nav-group:not(:has(> .ui-nav-label)) { gap: 0; }
+.ui-nav-label { align-self: flex-start; padding: var(--nav-label-pad); }
+.ui-nav-row { display: flex; width: 100%; min-width: 0; min-height: var(--row-min); align-items: center; gap: var(--row-gap); border: 0; border-radius: var(--radius-control); background: transparent; padding: var(--row-pad); color: color-mix(in oklch, var(--foreground), transparent 32%); font-size: var(--text-row); line-height: 1.5; text-align: left; }
+.ui-nav-row[data-indent] { padding-left: var(--nav-indent); }
+.ui-nav-row > .ui-nav-icon { display: inline-grid; width: var(--icon); height: var(--icon); flex: none; place-items: center; color: var(--muted-foreground); }
+.ui-nav-row > .ui-nav-icon > * { width: 100%; height: 100%; }
+.ui-nav-icon:has(> .harness-mark) { width: calc(var(--u-icon) - 1px); }
+.ui-nav-row > .ui-nav-icon > .harness-mark { width: calc(var(--u-icon) - 1px); height: calc(0.75 * (var(--u-icon) - 1px)); opacity: .78; transition: opacity var(--duration-quick) var(--ease-change); }
+.ui-nav-row:is(:hover, :focus-visible, [aria-current="page"]) > .ui-nav-icon > .harness-mark { opacity: 1; }
+.ui-nav-row > span:not(.ui-nav-icon, .ui-nav-toggle) { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ui-nav-row:is(:hover, :focus-visible), .ui-nav-row[aria-current="page"] { color: var(--foreground); }
+.ui-nav-row:is(:hover, :focus-visible) { background: var(--sidebar-accent); }
+.ui-nav-row[aria-current="page"] { font-weight: var(--weight-current); }
+.ui-nav-row:is(:hover, :focus-visible, [aria-current="page"]) > .ui-nav-icon { color: var(--foreground); }
+.ui-nav-toggle { margin-right: -6px; display: grid; width: calc(var(--u-icon) + 9px); height: calc(var(--u-icon) + 9px); flex: none; place-items: center; border-radius: var(--radius-control); color: var(--muted-foreground); }
+.ui-nav-toggle svg { width: var(--icon); height: var(--icon); }

@@ -18,7 +18,7 @@ type ButtonProps = JSX.ButtonHTMLAttributes<HTMLButtonElement> & {
 
 export function Button(props: ButtonProps) {
   const [local, rest] = splitProps(props, ["class", "variant", "size"]);
-  // Library previews: the library's button (library.css); where it sits still sizes it, through the caller's class.
+  // Library previews: the library's button (components v2); where it sits still sizes it, through the caller's class.
   if (useLibrary()) return <button {...rest} data-slot="button" data-variant={!local.variant || local.variant === "default" ? "primary" : local.variant}
     data-size={local.size || "default"} class={cn("ui-button", local.class)} />;
   return <button
@@ -69,7 +69,7 @@ export const menuSubContentClass = "z-[100] min-w-28 rounded-lg bg-popover p-1 t
 export const menuItemClass = "relative flex cursor-default select-none items-center gap-1.5 rounded-md px-1.5 py-1 text-sm outline-none data-[highlighted]:bg-accent data-[highlighted]:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50 data-[variant=destructive]:text-destructive data-[variant=destructive]:data-[highlighted]:bg-destructive/15";
 
 /* In the gallery's Library previews (components/ui/swap.ts) a menu is the
-   library's: its frost shell, rows and titles (library.css). */
+   library's: its frost shell, rows and titles (components v2). */
 const libraryMenu = "ui-frost ui-menu";
 const contentClass = (base: string) => useLibrary() ? libraryMenu : base;
 const itemClass = () => useLibrary() ? "ui-row" : menuItemClass;
@@ -167,7 +167,7 @@ export function PopoverSearchList<T>(props: {
       if (row !== undefined) { event.preventDefault(); props.onChoose(row); }
     }
   };
-  // Library previews: the library's search section over a list section (library.css).
+  // Library previews: the library's search section over a list section (components v2).
   const lib = useLibrary();
   const field = <input class={lib ? "ui-search" : "popover-search"} placeholder={props.placeholder} value={query()} onInput={(event) => setQuery(event.currentTarget.value)}
       role="combobox" aria-expanded="true" aria-controls={`${id}-list`} aria-activedescendant={active() >= 0 ? `${id}-${active()}` : undefined}

@@ -1,0 +1,132 @@
+.ui-frost.ui-rider { border-radius: var(--cmp-radius); }
+
+/* Rider: frost on a composer's top edge (either composer). A row (a title, a
+   body, actions) or a card (the question). Its parts below. */
+.ui-rider { --rider-gap: var(--space-lg); --rider-slot: var(--control-sm); }
+/* A rider rises out of the composer and drops back into it when it takes it; removed by hand, it fades in place. */
+.ui-rider[data-entering] { animation: ui-rise var(--duration-gentle) var(--ease-arrive) backwards; }
+.ui-rider[data-leaving] { animation: ui-drop var(--duration-quick) var(--ease-leave) forwards; pointer-events: none; }
+/* A takeover card rises further, once the composer has gone. */
+.ui-rider[data-layout="card"] { --rise: var(--space-4xl); }
+.ui-rider[data-layout="card"][data-entering] { animation: ui-rise var(--duration-gentle) var(--ease-arrive) var(--duration-quick) backwards; }
+.ui-rider[data-leaving="remove"], .ui-chip[data-leaving="remove"] { animation: ui-fade-out var(--duration-quick) var(--ease-leave) forwards; pointer-events: none; }
+.ui-frost.ui-rider[data-layout="row"] { display: flex; align-items: center; gap: var(--rider-gap); padding: var(--space-xs) var(--space-sm) var(--space-xs) var(--space-lg); }
+.ui-frost.ui-rider[data-layout="strip"] { display: flex; align-items: center; gap: var(--space-sm); padding: 0 var(--space-sm) 0 0; }
+.ui-frost.ui-rider[data-layout="card"] { display: grid; width: 100%; gap: var(--space-sm); margin-inline: auto; padding: var(--space-md); outline: 0; }
+.ui-rider > .ui-title-text { flex: none; }
+.ui-rider-actions { display: flex; flex: none; align-items: center; gap: var(--space-2xs); }
+.ui-rider-actions[data-stack] { flex-direction: column; }
+:is(.ui-rider-actions, .ui-rider-top) .ui-button[data-size^="icon"] { width: var(--rider-slot); min-width: var(--rider-slot); height: var(--rider-slot); border-radius: var(--cmp-slot-radius); padding: 0; color: var(--muted-foreground); }
+:is(.ui-rider-actions, .ui-rider-top) .ui-button[data-size^="icon"]:is(:hover, :focus-visible) { color: var(--foreground); }
+:is(.ui-rider-actions, .ui-rider-top) .ui-button[data-size^="icon"] svg { width: var(--icon); height: var(--icon); }
+
+/* Lines: text that waits (the queued messages), one line each until opened. */
+.ui-lines { display: flex; min-width: 0; flex: 1; flex-direction: column; gap: var(--space-xs); margin: 0; padding: 0; list-style: none; }
+.ui-line { display: flex; min-width: 0; align-items: flex-start; gap: var(--space-sm); }
+.ui-line-body { display: -webkit-box; min-width: 0; flex: 1; margin: 0; overflow: hidden; font-size: var(--text-body); line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; -webkit-box-orient: vertical; -webkit-line-clamp: 1; }
+.ui-line[data-expanded="true"] .ui-line-body { overflow: visible; -webkit-line-clamp: unset; }
+.ui-line-more { display: inline-flex; width: calc(1.25 * var(--u-space)); height: calc(1.25 * var(--u-space)); flex: none; align-items: center; justify-content: center; margin-top: 1px; border: 0; border-radius: var(--radius-control); background: transparent; padding: 0; color: var(--muted-foreground); cursor: pointer; }
+.ui-line-more:is(:hover, :focus-visible) { background: var(--tint); color: inherit; }
+.ui-line-more svg { width: var(--icon); height: var(--icon); }
+
+/* Chips: things attached, scrolling sideways with faded edges. An image is its
+   thumbnail; a file its mark, name and size. Uploading: a ring; failed: red, a retry mark. */
+.ui-chips { --fade-start: 0px; --fade-end: 0px; display: flex; min-width: 0; flex: 1; gap: var(--space-sm); overflow-x: auto; padding: var(--space-md); overscroll-behavior-x: contain; scroll-snap-type: x proximity; scroll-padding-inline: var(--space-md); scrollbar-width: none;
+  mask-image: linear-gradient(to right, transparent 0, #000 var(--fade-start), #000 calc(100% - var(--fade-end)), transparent 100%); }
+.ui-chips::-webkit-scrollbar { display: none; }
+.ui-chips[data-fade-start] { --fade-start: var(--space-3xl); }
+.ui-chips[data-fade-end] { --fade-end: var(--space-3xl); }
+.ui-chip { position: relative; flex: none; scroll-snap-align: start; }
+.ui-chip-body { display: flex; height: calc(3.75 * var(--u-space)); align-items: center; gap: var(--space-md); overflow: hidden; background: var(--tint); padding: 0; color: inherit; text-align: left; cursor: pointer; }
+.ui-chip[data-kind="file"] .ui-chip-body { height: calc(2.8125 * var(--u-space)); gap: var(--space-sm); padding: 0 var(--space-lg) 0 var(--space-md); }
+.ui-chip-body:focus-visible { outline: none; filter: brightness(1.12); }
+.ui-chip-media { position: relative; display: grid; width: calc(3.75 * var(--u-space) - 2px); height: calc(3.75 * var(--u-space) - 2px); flex: none; place-items: center; background: var(--tint); color: var(--muted-foreground); }
+.ui-chip[data-kind="file"] .ui-chip-media { width: auto; height: auto; background: none; }
+.ui-chip-media :is(.workspace-file-icon, .workspace-file-icon-generic, svg:not(.ui-chip-ring, .ui-chip-retry)) { display: block; width: var(--icon); height: var(--icon); }
+.ui-chip-media img { width: 100%; height: 100%; object-fit: cover; }
+.ui-chip-copy { display: grid; min-width: 0; max-width: calc(11.25 * var(--u-space)); line-height: 1.3; }
+.ui-chip-copy strong { overflow: hidden; font-size: var(--text-row); font-weight: var(--weight-strong); text-overflow: ellipsis; white-space: nowrap; }
+.ui-chip-copy small { overflow: hidden; color: var(--muted-foreground); font-size: var(--text-caption); text-overflow: ellipsis; white-space: nowrap; }
+.ui-chip:is([data-status="uploading"], [data-status="queued"]) .ui-chip-media img { opacity: 0.55; }
+.ui-chip[data-kind="file"]:is([data-status="uploading"], [data-status="queued"]) .ui-chip-media > :not(.ui-chip-ring) { opacity: 0.4; }
+.ui-chip-ring { position: absolute; width: var(--icon-xl); height: var(--icon-xl); transform: rotate(-90deg); fill: none; stroke-width: 2.5; filter: drop-shadow(0 0 2px rgb(0 0 0 / 60%)); }
+.ui-chip-ring circle:first-child { stroke: var(--frost-stroke); }
+.ui-chip-ring circle:last-child { stroke: var(--foreground); stroke-linecap: round; transition: stroke-dashoffset var(--duration-quick) linear; }
+.ui-chip[data-status="error"] .ui-chip-body { border-color: var(--destructive); }
+.ui-chip[data-status="error"] .ui-chip-media img { opacity: 0.4; }
+.ui-chip-retry { position: absolute; width: var(--icon-lg); height: var(--icon-lg); color: var(--foreground); filter: drop-shadow(0 0 2px rgb(0 0 0 / 70%)); }
+.ui-chip-remove { position: absolute; top: 3px; right: 3px; display: grid; width: var(--icon-lg); height: var(--icon-lg); place-items: center; border: 0; border-radius: var(--radius-round); background: rgb(0 0 0 / 62%); padding: 0; color: #fff; cursor: pointer; opacity: 0; transition: opacity 120ms ease; }
+.ui-chip-remove svg { width: var(--icon-xs); height: var(--icon-xs); }
+.ui-chip:is(:hover, :focus-within) .ui-chip-remove { opacity: 1; }
+@media (hover: none) { .ui-chip-remove { opacity: 1; } }
+.ui-chip[data-entering] { --grow: .85; animation: ui-grow var(--duration-gentle) var(--ease-arrive) backwards; }
+
+/* The question: a card rider. Its top (a title or tabs, close), the prompt,
+   choices (number, label, description, check), and a foot of hints and buttons. */
+.ui-rider-top { display: flex; min-height: calc(2 * var(--u-space)); align-items: center; gap: var(--space-sm); }
+.ui-rider-top > .ui-title-text { min-width: 0; flex: 1; overflow: hidden; padding-left: var(--space-md); text-overflow: ellipsis; white-space: nowrap; }
+.ui-rider-top > .ui-button:last-child { margin-left: auto; }
+.ui-tabs { display: flex; min-width: 0; flex: 1; gap: 2px; overflow-x: auto; scrollbar-width: none; }
+.ui-tabs::-webkit-scrollbar { display: none; }
+.ui-tabs > button { display: inline-flex; height: calc(2 * var(--u-space)); flex: none; align-items: center; gap: var(--space-xs); border: 0; border-radius: var(--cmp-slot-radius); background: transparent; padding: 0 var(--space-lg); color: var(--muted-foreground); font-size: var(--text-body); font-weight: var(--weight-lift); cursor: pointer; }
+.ui-tabs > button:is(:hover, :focus-visible) { color: var(--foreground); }
+/* The current tab: white at the current weight, no fill (the wash is only the pointer). */
+.ui-tabs > button[aria-selected="true"] { color: var(--foreground); font-weight: var(--weight-current); }
+.ui-tabs > button:is(:hover, :focus-visible) { background: var(--tint); }
+.ui-tabs svg { width: var(--icon-sm); height: var(--icon-sm); }
+.ui-prompt { margin: var(--space-2xs) var(--space-md) var(--space-xs); font-size: var(--text-body); font-weight: var(--weight-strong); line-height: 1.4; letter-spacing: -.005em; overflow-wrap: anywhere; }
+.ui-prompt span { color: var(--muted-foreground); font-size: var(--text-body); font-weight: var(--weight-rest); }
+.ui-choices { display: grid; gap: 1px; }
+.ui-choice { display: flex; min-height: var(--control-lg); align-items: center; gap: var(--space-lg); border-radius: var(--radius-control); padding: var(--space-sm) var(--space-lg); cursor: pointer; }
+/* A choice follows Interaction: grey at rest; the cursor is the wash, white;
+   the current choice is white at the current weight, no tick; several chosen
+   (pick any) are the wash on each, and the cursor on one brightens it a step. */
+.ui-choice { color: color-mix(in oklch, var(--foreground), transparent 38%); }
+.ui-choice[data-active="true"] { background: var(--tint); color: var(--foreground); }
+.ui-choice[aria-selected="true"] { color: var(--foreground); }
+.ui-choices:not([aria-multiselectable="true"]) > .ui-choice[aria-selected="true"] .ui-choice-label { font-weight: var(--weight-current); }
+.ui-choices[aria-multiselectable="true"] > .ui-choice[aria-selected="true"] { background: var(--tint); }
+.ui-choices[aria-multiselectable="true"] > .ui-choice[aria-selected="true"][data-active="true"] { background: linear-gradient(var(--tint), var(--tint)), var(--tint); }
+.ui-choice-check { display: none !important; }
+/* A choice's key is a unit wide; its label starts the choice's padding, the key and the gap in, which a
+   wrapped detail and the rider's note line up under. */
+.ui-rider, .ui-choices { --choice-label: calc(var(--u-space) + var(--space-lg)); }
+.ui-choice-key { width: var(--u-space); flex: none; color: var(--muted-foreground); font: var(--text-caption)/1 var(--font-label); text-align: right; }
+.ui-choice[data-active="true"] .ui-choice-key { color: var(--foreground); }
+.ui-choice-label { flex: none; font-size: var(--text-row); font-weight: var(--weight-lift); }
+.ui-choice-detail { min-width: 0; flex: 1; overflow: hidden; color: var(--muted-foreground); font-size: var(--text-body); text-overflow: ellipsis; white-space: nowrap; }
+.ui-choice-input { min-width: 0; flex: 1; border: 0; background: transparent; padding: 0; color: var(--foreground); font: inherit; font-size: var(--text-body); line-height: 1.4; outline: 0; resize: none; }
+.ui-choice-input::placeholder { color: var(--muted-foreground); }
+.ui-preview { max-height: calc(14 * var(--u-space)); margin: var(--space-2xs) var(--space-md); overflow: auto; font: var(--text-row)/1.45 var(--font-code); white-space: pre; }
+.ui-preview[data-format="markdown"] { font-family: inherit; white-space: pre-wrap; }
+.ui-rider .ui-input[data-note] { width: auto; height: var(--control); margin: var(--space-2xs) var(--space-md) 0 calc(var(--space-lg) + var(--choice-label)); }
+.ui-summary { display: grid; gap: 1px; }
+.ui-summary > button { display: grid; min-height: calc(2.375 * var(--u-space)); grid-template-columns: minmax(0, 9rem) minmax(0, 1fr); align-items: center; gap: var(--space-lg); border: 0; border-radius: var(--radius-control); background: transparent; padding: var(--space-sm) var(--space-lg); color: var(--foreground); font-size: var(--text-body); text-align: left; cursor: pointer; }
+.ui-summary > button:is(:hover, :focus-visible) { background: var(--tint); }
+.ui-summary > button > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ui-summary > button > span:first-child { color: var(--muted-foreground); }
+.ui-summary > button > span:last-child { font-weight: var(--weight-strong); }
+.ui-summary > button > span[data-empty="true"] { color: var(--muted-foreground); font-weight: var(--weight-rest); }
+.ui-rider-foot { display: flex; min-height: var(--control); align-items: center; gap: var(--space-md); padding-left: var(--space-md); }
+.ui-hints { display: flex; min-width: 0; flex: 1; flex-wrap: wrap; gap: var(--space-xs) var(--space-lg); color: var(--muted-foreground); font-size: var(--text-caption); }
+.ui-hints > span { display: inline-flex; align-items: center; gap: var(--space-sm); white-space: nowrap; }
+.ui-rider-foot > .ui-button:first-of-type { margin-left: auto; }
+@media (hover: none) { .ui-hints { display: none; } }
+@media (--conduit-phone-layout) {
+  .ui-choice { flex-wrap: wrap; row-gap: 0; }
+  .ui-choice-detail { flex-basis: 100%; order: 4; padding-left: var(--choice-label); white-space: normal; }
+}
+.ui-choices-page { display: grid; gap: var(--space-xs); }
+/* A Choice holding its own answer: a TextArea (several lines) or a bare input (one), set as the label is. */
+.ui-choice > .ui-textarea { min-width: 0; flex: 1; font-size: var(--text-body); line-height: 1.4; }
+
+/* RiderButton: rides over the transcript above the composer (scroll to latest, cancel an edit):
+   resting frost, a square of 2.5 units at the surface radius, or its words beside the icon. */
+.ui-frost.ui-rider-button { display: inline-flex; width: var(--control-lg); height: var(--control-lg); flex: none; align-items: center; justify-content: center; gap: var(--space-sm); border-radius: var(--radius-surface); padding: 0; color: var(--foreground); font: var(--weight-lift) var(--text-row) var(--font-sans); white-space: nowrap; cursor: pointer; transition: filter .12s ease; }
+.ui-rider-button svg { width: var(--icon-lg); height: var(--icon-lg); flex: none; }
+.ui-frost.ui-rider-button[data-labelled] { width: auto; padding: 0 var(--space-xl) 0 var(--space-lg); }
+.ui-rider-button[data-labelled] svg { width: var(--icon); height: var(--icon); }
+.ui-rider-button:is(:hover, :focus-visible) { outline: 0; filter: brightness(1.12); }
+/* It fades in where it rides when there is something below, and out when there is not. */
+.ui-rider-button[data-entering] { animation: ui-fade-in var(--duration-gentle) var(--ease-arrive) backwards; }
+.ui-rider-button[data-leaving] { animation: ui-fade-out var(--duration-quick) var(--ease-leave) forwards; pointer-events: none; }

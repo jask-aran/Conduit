@@ -1,0 +1,22 @@
+/* Toast: raised frost, --radius-surface, 25 units wide at most (a phone: the screen's, inside the
+   overlay's inset). The text is the Row role; the glyph sits on its first line, the × at its end. */
+.ui-toaster { display: flex; width: min(100%, calc(25 * var(--u-space))); flex-direction: column-reverse; gap: var(--space-sm); }
+:is([data-density="phone"] :is(.ui-toaster, .ui-toast), :is(.ui-toaster, .ui-toast)[data-density="phone"]) { width: 100%; }
+.ui-toast { display: grid; width: min(100%, calc(25 * var(--u-space))); grid-template-columns: auto minmax(0, 1fr) auto; align-items: start; gap: var(--space-sm) var(--space-md); border-radius: var(--radius-surface); padding: var(--space-md) var(--space-sm) var(--space-md) var(--space-lg); color: var(--foreground); font-size: var(--text-row); }
+/* A toast rises in from its edge and drops back to it (a phone's, at the top, comes down). */
+.ui-toast[data-entering] { animation: ui-rise var(--duration-gentle) var(--ease-arrive) backwards; }
+.ui-toast[data-leaving] { animation: ui-drop var(--duration-quick) var(--ease-leave) forwards; pointer-events: none; }
+[data-density="phone"] .ui-toast, .ui-toast[data-density="phone"] { --rise: calc(-1 * var(--space-md)); }
+/* The glyph, the sentence and the × on one line; an action under the sentence, from its start. */
+.ui-toast-close { grid-area: 1 / 3; }
+.ui-toast > .ui-button[data-outline] { grid-area: 2 / 2; justify-self: start; }
+.ui-toast-icon { display: grid; height: var(--control-sm); place-items: center; }
+.ui-toast-icon svg { width: var(--icon); height: var(--icon); }
+.ui-toast[data-kind="success"] .ui-toast-icon { color: var(--live); }
+.ui-toast[data-kind="warning"] .ui-toast-icon { color: var(--warn); }
+.ui-toast[data-kind="error"] .ui-toast-icon { color: var(--destructive); }
+.ui-toast[data-kind="info"] .ui-toast-icon { color: var(--muted-foreground); }
+/* The sentence centres on a control's height when it is one line, and wraps under its own start. */
+.ui-toast-text { min-width: 0; margin: 0; padding-block: calc((var(--control-sm) - 1.4em) / 2); line-height: 1.4; overflow-wrap: anywhere; }
+.ui-toast-close { color: var(--muted-foreground); }
+.ui-toast-close.ui-button[data-size="icon-xs"] { margin-top: calc((var(--control-sm) - var(--control-xs)) / 2); }

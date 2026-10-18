@@ -1,0 +1,160 @@
+@import "@fontsource-variable/inconsolata";
+/* Paper Mono (OFL, fonts/PaperMono-OFL.txt), shipped by the library: the section labels' face. */
+/* Meslo LG S Nerd Font Mono (fonts/MesloLGSNerdFont-LICENSE.txt), the terminal's default: Nerd Font glyphs. Fetched only once something draws in it. */
+@font-face { font-family: "Meslo Nerd Font Mono"; src: url("../fonts/MesloLGSNerdFontMono-Regular.ttf") format("truetype"); font-weight: 400; font-style: normal; font-display: swap; }
+@font-face { font-family: "Paper Mono"; src: url("../fonts/PaperMono-Variable.woff2") format("woff2"); font-weight: 100 800; font-style: normal; font-display: swap; }
+/* Density, measured from the app: text and general spacing grow 1.25x on a
+   phone, icons barely; popover rows and the frost pill take their own
+   measured sizes (rows ~1.8x, for a finger). Sizes below are written in desktop px over 12.8. */
+/* The faces, by role (Foundations · Fonts switches them; --font-sans, the main UI's, is styles.css's).
+   Section labels take a mono the library ships (Paper Mono, above), so they look
+   the same on every system, the system's mono only as the fallback; keycaps and the leader's crumbs take it too. Data (meta, counts) and code take Paper Mono too by default; the terminal, Meslo for its Nerd Font glyphs. */
+:root {
+  /* Four weights: rest; lift, a touch heavier, for text over frost (it reads thinner there)
+     and small controls; strong, for headings, buttons and values; current, where you are. */
+  --weight-rest: 400; --weight-lift: 500; --weight-strong: 600; --weight-current: 660;
+  --font-label: "Paper Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  --font-data: "Paper Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  --font-code: "Paper Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  --font-terminal: "Meslo Nerd Font Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  --font-wordmark: "Conduit Wordmark", sans-serif;
+}
+/*
+ * Motion (DESIGN Motion): the foundation is its tokens, three curves and two durations -- quick out, gentle in.
+ * Arriving, opening and settling are gentle (the long curve); leaving and folding are quick and accelerate;
+ * a change in place (a wash, a turn, a colour) is quick and plain. Each piece owns its moves, from these
+ * tokens and the four shapes below; reduced motion drops the move and keeps the end state.
+ */
+:root {
+  --ease-arrive: cubic-bezier(.2, .8, .2, 1);
+  --ease-leave: cubic-bezier(.4, 0, 1, 1);
+  --ease-change: ease;
+  --duration-quick: 150ms;   /* leaving, folding away; a change in place */
+  --duration-gentle: 250ms;  /* arriving, opening, settling into place */
+}
+/*
+ * Every piece's moves keep these invariants; a new state or piece is added within them, never as an exception:
+ * 1. Layers: a piece's parts stack in one order in every state; whatever is fading in or out, what is above stays above.
+ * 2. One transition list per part, in its base rule, naming every property any state moves. A state sets only values
+ *    and the part's timing variables below, never its own list, so no state can drop a property's move and snap it.
+ * 3. Room opens before a part fades in and goes only once it has faded out (or is revealed by a clip): nothing is
+ *    seen squeezed.
+ * 4. One spot, one thing: two parts that share a spot never show at once.
+ * 5. A change is one move from its first frame; parts that answer it move with it, over its duration.
+ * 6. A frosted part fades itself, never through an ancestor: opacity under 1 on an ancestor makes that ancestor the
+ *    frost's backdrop, so it blurs nothing and its text and edge show bare until the fade ends. Whatever holds a frost
+ *    moves only its room; the frost and its contents fade together, as one.
+ * Timing variables (each part sets its own -- they never inherit, so a parent's state cannot retime a child):
+ * --move/--move-ease/--move-delay (geometry), --fade/--fade-ease/--fade-delay (opacity), --fold-delay (giving or
+ * taking room), --hide-delay (visibility, once faded).
+ */
+@property --move { syntax: "*"; inherits: false; }
+@property --move-ease { syntax: "*"; inherits: false; }
+@property --move-delay { syntax: "*"; inherits: false; }
+@property --fade { syntax: "*"; inherits: false; }
+@property --fade-ease { syntax: "*"; inherits: false; }
+@property --fade-delay { syntax: "*"; inherits: false; }
+@property --fold-delay { syntax: "*"; inherits: false; }
+@property --hide-delay { syntax: "*"; inherits: false; }
+/* The shapes a move takes: a fade, or a fade that rises --rise (--space-md unless the piece says) and drops
+   back the way it came. */
+@keyframes ui-fade-in { from { opacity: 0; } }
+@keyframes ui-fade-out { to { opacity: 0; } }
+@keyframes ui-rise { from { opacity: 0; transform: translateY(var(--rise, var(--space-md))); } }
+@keyframes ui-drop { to { opacity: 0; transform: translateY(var(--rise, var(--space-md))); } }
+/* In place: grows from a fraction (--grow), or steps in from beside (--slide; the end, so it slides back toward the start). */
+@keyframes ui-grow { from { opacity: 0; transform: scale(var(--grow, .6)); } }
+@keyframes ui-slide { from { opacity: 0; transform: translateX(var(--slide, var(--space-md))); } }
+@media (prefers-reduced-motion: reduce) {
+  :is(.ui-menu, .ui-card, .ui-toast, .ui-overlay, .ui-rider, .ui-chip, .ui-scrim, .ui-step-item, .ui-message, .ui-message-foot, .ui-rider-button):is([data-entering], [data-leaving]), .ui-toolbar-primary > *, .ui-toolbar-end > [aria-pressed="true"] { animation: none; }
+  .ui-disclosure-body, .ui-menu, .ui-composer-slot > .ui-composer-stack, .ui-composer-slot > .ui-composer-stack > *, .ui-toolbar-end > .ui-toolbar-aside { transition: none; }
+}
+/*
+ * Scale: everything is drawn from a few numbers. A density gives its unit (12.8px on desktop, 16px on
+ * a phone); --scale-ui scales it for everything, --scale-transcript for what you read (a message), so
+ * the app holds together at any setting. Every gap, padding and margin is one of nine Space steps,
+ * in the unit; every control one of four heights. Rows keep their measured height and text (a
+ * finger's on a phone, never below 44px), written in the unit so they scale too.
+ */
+:root { --scale-ui: 1; --scale-transcript: 1; }
+/* The reading column: the composer's and the transcript's width unless their pane declares --composer-width. */
+:root { --reading-width: 47.5rem; }
+:root, [data-density="desktop"] {
+  --u-base: 12.8px; --row-min-floor: 0px; --row-min-units: 1.875; --row-text-units: 0.8125;
+  --frost-inset: var(--space-xs); --nav-label-pad: var(--space-xs) var(--space-md);
+}
+[data-density="phone"] {
+  --u-base: 16px; --row-min-floor: 44px; --row-min-units: 2.75; --row-text-units: 0.90625;
+  --frost-inset: var(--space-sm); --nav-label-pad: var(--space-sm) var(--space-md);
+}
+@media (--conduit-phone-layout) { :root {
+  --u-base: 16px; --row-min-floor: 44px; --row-min-units: 2.75; --row-text-units: 0.90625;
+  --frost-inset: var(--space-sm); --nav-label-pad: var(--space-sm) var(--space-md);
+} }
+/* What you read takes the transcript's scale: the units below are worked out again inside it. There a row's
+   text (a trace, a trail, a table) is a step under the body on both densities, not a finger list's. */
+.ui-transcript, .ui-read, .ui-bubble, .ui-answer { --scale-ui: var(--scale-transcript); --row-text-units: 0.8125; }
+:root, [data-density], .ui-transcript, .ui-read, .ui-bubble, .ui-answer {
+  --u-space: calc(var(--u-base) * var(--scale-ui)); --u-type: var(--u-space); --u-icon: var(--u-space);
+  /* Space: nine steps, in the unit. */
+  --space-2xs: calc(0.125 * var(--u-space)); --space-xs: calc(0.25 * var(--u-space)); --space-sm: calc(0.375 * var(--u-space));
+  --space-md: calc(0.5 * var(--u-space)); --space-lg: calc(0.75 * var(--u-space)); --space-xl: var(--u-space);
+  --space-2xl: calc(1.25 * var(--u-space)); --space-3xl: calc(1.5 * var(--u-space)); --space-4xl: calc(2 * var(--u-space));
+  /* Icons: five sizes -- a × in a tiny control, a chevron, the icon, a pill's, a ring. */
+  --icon-xs: calc(0.6875 * var(--u-icon)); --icon-sm: calc(0.875 * var(--u-icon)); --icon: var(--u-icon); --icon-lg: calc(1.125 * var(--u-icon)); --icon-xl: calc(1.5 * var(--u-icon));
+  /* Controls: four heights (an icon button is as wide as it is tall). */
+  --control-xs: calc(1.5 * var(--u-space)); --control-sm: calc(1.875 * var(--u-space)); --control: calc(2.25 * var(--u-space)); --control-lg: calc(2.5 * var(--u-space));
+  /* Rows: their measured height and text, in the unit; inset, pad and gap are steps. */
+  --row-text: calc(var(--row-text-units) * var(--u-type)); --row-min: max(var(--row-min-floor), calc(var(--row-min-units) * var(--u-space)));
+  --row-inset: var(--space-md); --row-pad: var(--space-sm) var(--row-inset); --row-gap: var(--space-md);
+  --nav-indent: calc(1.875 * var(--u-space));
+}
+/* Four radii (DESIGN.md rounded). control: rows, buttons, inputs, keycaps, chips, in the
+   density unit; surface: popovers, cards, overlays, nesting their rows (control + inset);
+   message: the composer (the phone's field too) and the user's message, one value on phone
+   and desktop -- a capsule at one line, held as the composer grows; round: fully round at any
+   size -- the phone's pill groups and buttons, which never grow, and small bits inside controls. */
+:root, [data-density], .ui-transcript, .ui-read, .ui-bubble, .ui-answer {
+  --radius-control: calc(0.5 * var(--u-space)); --radius-surface: calc(var(--radius-control) + var(--frost-inset));
+  --radius-message: calc(22px * var(--scale-transcript)); --radius-round: 999px;
+  /* Five type sizes, by role (Type · Scale): label, the section label and keycaps; caption, details,
+     hints and data (meta, counts, crumbs); row, every row and control; body, messages, what you
+     type, titles (titles at the strong weight); heading, a page's title. */
+  --text-label: calc(0.625 * var(--u-type)); --text-caption: calc(0.75 * var(--u-type));
+  --text-row: var(--row-text); --text-body: var(--u-type); --text-heading: calc(1.40625 * var(--u-type));
+  --pill-icon: var(--icon-lg);
+}
+[data-density] { font-family: var(--font-sans); font-size: var(--text-row); }
+:root {
+  --frost-stroke: #ffffff4d;
+  --frost-fill: #ffffff2b;
+  --frost-blur: blur(24px);
+  --frost-highlight: inset 0 1px 0 rgb(255 255 255 / 50%), inset 0 -1px 0 rgb(255 255 255 / 10%);
+  --frost-lift-rest: 0 8px 32px rgb(0 0 0 / 10%);
+  --frost-lift-raised: 0 24px 70px rgb(0 0 0 / 38%);
+  --frost-core-ground: oklch(0.3 0.006 264 / 90%); /* a mid grey, nearly opaque: it stops what is behind, without going dark */
+  --frost-tint: oklch(1 0 0 / 10%);
+  /* The dim over what is behind: a desktop overlay (the scrim), the leader's lit composer (the spotlight), the phone's open sidebar. */
+  --dim: rgb(0 0 0 / 42%);
+  /* Under: a piece under something opened from beside it (a submenu, a pill's menu) dims where it stands -- one dim
+     for Pill and Menu, a change in place, quick. */
+  --dim-under: saturate(.6) opacity(.38);
+  /* State: a runtime dot, a warning. */
+  --live: oklch(0.62 0.17 145); --warn: oklch(0.75 0.15 75);
+}
+
+/* What a surface gives the controls on it. --tint, one value for its washes and its lines (the
+   ground's is the app's --border, which --accent matches); --well, the fill under an input or an
+   outline button: a step darker than the ground, nothing over frost, which is its own fill. */
+:root, [data-surface="ground"] { --tint: var(--border); --well: color-mix(in oklch, var(--background), black 25%); }
+[data-surface="frost"] { --tint: var(--frost-tint); --well: transparent; }
+
+/* Never a ring (DESIGN Interaction): no outline or focus ring from the browser or any component, in any
+   colour, on a library piece or anything in one (and the whole gallery, :root[data-library]). The one rule, so no
+   piece can forget it; keyboard focus is the wash, which each piece draws on :focus-visible as on :hover. */
+:root[data-library] :is(:focus, :focus-visible), :where([class*="ui-"], [class*="ui-"] *):is(:focus, :focus-visible) { outline: none !important; --tw-ring-shadow: 0 0 #0000 !important; --tw-ring-offset-shadow: 0 0 #0000 !important; }
+/* The section label, one for every section: popovers, cards, riders, the sidebar. Muted caps in the label face. */
+.ui-title, .ui-title-text, .ui-nav-label, .ui-crumbs > button { color: var(--muted-foreground); font: var(--weight-rest) var(--text-label)/1.5 var(--font-label); letter-spacing: .07em; text-transform: uppercase; }
+
+/* Tabular figures wherever numbers tick or line up. */
+:is(.ui-keycap, .ui-choice-key, .ui-hints, .ui-overlay-hints, .ui-chip-copy small, .ui-seg small, .ui-slider-value) { font-variant-numeric: tabular-nums; }
