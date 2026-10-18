@@ -86,4 +86,4 @@
 .ui-frost.ui-menu { padding: var(--frost-inset); border-radius: var(--radius-surface); }
 .ui-frost.ui-menu[data-lift="raised"] { box-shadow: var(--frost-lift-raised), var(--frost-highlight); }
 /* An app row's own text runs out in an ellipsis, as a library label does. */
-.ui-row > span:not(.ui-icon, .ui-keys, .ui-meta, .ui-row-end) { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ui-row > span:not(.ui-icon, .ui-keys, .ui-meta, .ui-row-end, .composer-place-lead) { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

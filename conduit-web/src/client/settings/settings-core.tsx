@@ -19,7 +19,6 @@ import { ModelSelector } from "../chat/model-selector";
 import { saveTabFrost, tabFrost } from "../preferences/tab-frost";
 import { saveTranscriptFont, TRANSCRIPT_FONT_OPTIONS, transcriptFont, type TranscriptFont } from "../preferences/transcript-font";
 import { saveTerminalFont, TERMINAL_FONT_OPTIONS, terminalFont, type TerminalFont } from "../preferences/terminal-font";
-import { PHONE_COMPOSER_OPTIONS, phoneComposerLayout, savePhoneComposerLayout, type PhoneComposerLayout } from "../preferences/phone-composer";
 import { saveStreamFade, saveStreamMathFade, STREAM_FADE_OPTIONS, streamFadeMs, streamMathFade } from "../preferences/stream-fade";
 import type { Installation, Project, Template, VoiceExecutionCatalogueView, VoiceExecutionProfile, VoiceLocalSelection, VoiceServerSettings } from "../api/contracts";
 import type { ModelSettings } from "../state/model-settings";
@@ -241,7 +240,6 @@ export function Settings(props: {
 }) {
   const [section, setSection] = createSignal<Section>(props.initialSection || "ui");
   const [frosted, setFrosted] = createSignal(tabFrost());
-  const [phoneComposer, setPhoneComposer] = createSignal(phoneComposerLayout());
   const [transcriptFontChoice, setTranscriptFontChoice] = createSignal(transcriptFont());
   const [terminalFontChoice, setTerminalFontChoice] = createSignal(terminalFont());
   const [fadeMs, setFadeMs] = createSignal(streamFadeMs());
@@ -1176,11 +1174,6 @@ export function Settings(props: {
                   <label class="settings-line" for="composer-surface-mode"><span>Composer</span>
                     <Select id="composer-surface-mode" aria-label="Composer material" title={COMPOSER_SURFACE_OPTIONS.find((option) => option.value === props.composerSurface)?.description} value={props.composerSurface} onChange={(event) => props.onComposerSurfaceChange(event.currentTarget.value as ComposerSurfaceMode)}>
                       <For each={COMPOSER_SURFACE_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
-                    </Select>
-                  </label>
-                  <label class="settings-line" for="phone-composer-layout"><span>Phone composer</span>
-                    <Select id="phone-composer-layout" aria-label="Phone composer layout" value={phoneComposer()} onChange={(event) => setPhoneComposer(savePhoneComposerLayout(event.currentTarget.value as PhoneComposerLayout))}>
-                      <For each={PHONE_COMPOSER_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
                     </Select>
                   </label>
                   <label class="settings-line" for="tab-frost"><span>Tab row</span>

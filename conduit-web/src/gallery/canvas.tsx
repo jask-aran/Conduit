@@ -203,7 +203,7 @@ export function mount(frame: string | null) {
   applyFaces(document);
   applyScale(document);
   // Frosted only: the static material is on its way out.
-  try { localStorage.setItem("conduit:composer-surface", "frosted-live"); localStorage.setItem("conduit:phone-composer", "bar"); } catch { /* private window */ }
+  try { localStorage.setItem("conduit:composer-surface", "frosted-live"); } catch { /* private window */ }
   // The phone screens, drawn with components v2, in a frame with a phone's root size and media rules.
   if (frame === "sidebar") { document.body.classList.add("g-solo-body"); render(() => <LibraryContext.Provider value={true}><SidebarScreen /></LibraryContext.Provider>, root); }
   else if (frame === "live") { document.body.classList.add("g-solo-body"); const chat = new URLSearchParams(location.search).get("chat") ?? ""; void import("./live-chat").then(({ LiveChatScreen }) => render(() => <LibraryContext.Provider value={true}><LiveChatScreen chatId={chat} /></LibraryContext.Provider>, root)); }

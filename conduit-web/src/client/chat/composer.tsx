@@ -1,11 +1,10 @@
-import { useLibrary } from "@/components/ui/swap";
+import { LibraryContext, useLibrary, useLibraryPiece } from "@/components/ui/swap";
 import { PhoneComposer, PillButton, PillField, PillWave } from "@/components/ui";
 import { libraryPiece } from "@/components/ui/swap";
 import { latestAway, scrollToLatest } from "./latest-away";
 import { createEffect, createMemo, createSignal, For, Index, lazy, on, onCleanup, onMount, Show } from "solid-js";
 import { ArrowDownIcon, ArrowUpIcon, CameraIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, DeleteIcon, KeyboardIcon, MicIcon, TextCursorInputIcon, Undo2Icon, ShieldCheckIcon, SquareIcon, TriangleAlertIcon } from "lucide-solid";
 import { ThinkingOrb } from "./thinking-orb";
-import { PHONE_COMPOSER_CHANGE_EVENT, phoneComposerLayout } from "../preferences/phone-composer";
 import {
   Button,
   Menu,
@@ -71,7 +70,12 @@ const EDIT_ACTIONS = [
   { key: "end", label: "End of draft", icon: () => <TextCursorInputIcon /> },
 ] as const;
 
-export function Composer(props: {
+/** The composer is drawn with components v2 (graduated in components/ui/swap.ts), its menus and buttons with it. */
+export function Composer(props: Parameters<typeof ComposerBody>[0]) {
+  return <LibraryContext.Provider value={useLibraryPiece("composer")}><ComposerBody {...props} /></LibraryContext.Provider>;
+}
+
+function ComposerBody(props: {
   chat: ActiveChatStore;
   attachments: ComposerAttachments;
   models: ComposerModels;
@@ -117,7 +121,6 @@ export function Composer(props: {
   /* Voice-first phone layouts: idle is a row of buttons with no text line;
      typing (focused, or a draft kept) adds the text row on top; listening
      shows the orb, the coloured glow and the last lines of the transcript. */
-  const [phoneComposer, setPhoneComposer] = createSignal(phoneComposerLayout());
   const [inputFocused, setInputFocused] = createSignal(false);
   /* In the voice layouts only the keyboard button raises the keyboard. A tap
      on the text pill places the cursor (where dictation will land) or starts
@@ -139,7 +142,8 @@ export function Composer(props: {
     queueMicrotask(() => input.focus({ preventScroll: true }));
   };
   let refocusing = false;
-  const voiceFirst = () => phoneLayout() && phoneComposer() !== "classic";
+  // A phone has one composer, voice-first: a field over a bar of buttons.
+  const voiceFirst = () => phoneLayout();
   // components v2 draws the desktop composer in the gallery's Library previews; a phone's is Pills.
   const v2 = () => composerSurface() === "library" && !voiceFirst();
   const phoneMode = () => !voiceFirst() ? undefined
@@ -779,7 +783,8 @@ export function Composer(props: {
       historyIndex = null;
       historyDraft = "";
     });
-    const composerSurfaceChanged = (event: Event) => setComposerSurface((event as CustomEvent<ComposerSurfaceMode>).detail);
+    // A v2 composer has one material; the setting picks between the classic ones.
+    const composerSurfaceChanged = (event: Event) => { if (composerSurface() !== "library") setComposerSurface((event as CustomEvent<ComposerSurfaceMode>).detail); };
     const voiceKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented || document.querySelector('.settings-dialog[data-state="open"]')) return;
       if (props.keyboardOwner && !props.keyboardOwner()) return;
@@ -807,7 +812,6 @@ export function Composer(props: {
       stopTake();
     };
     const voiceToggle = () => { if (!props.keyboardOwner || props.keyboardOwner()) toggleDictation(); };
-    const phoneComposerChanged = () => setPhoneComposer(phoneComposerLayout());
     // Keyboard put away with nothing typed: leave the text pill too.
     const keyboardHidden = () => {
       setKeyboardWanted(false);
@@ -815,8 +819,6 @@ export function Composer(props: {
     };
     window.addEventListener(KEYBOARD_HIDDEN_EVENT, keyboardHidden);
     onCleanup(() => window.removeEventListener(KEYBOARD_HIDDEN_EVENT, keyboardHidden));
-    window.addEventListener(PHONE_COMPOSER_CHANGE_EVENT, phoneComposerChanged);
-    onCleanup(() => window.removeEventListener(PHONE_COMPOSER_CHANGE_EVENT, phoneComposerChanged));
     window.addEventListener(COMPOSER_SURFACE_CHANGE_EVENT, composerSurfaceChanged);
     window.addEventListener("keydown", voiceKeyDown, true);
     window.addEventListener("keyup", voiceKeyUp, true);
@@ -836,7 +838,7 @@ export function Composer(props: {
             <textarea ref={input} rows={1} class={useLibrary() ? "ui-textarea" : undefined} aria-label="Message the agent" data-has-text={hasText() ? "true" : "false"} data-dictated-range={dictationSelectionOwned() && dictatedRange() ? "true" : undefined} placeholder={!props.serverOnline ? "Server unavailable" : !props.chat.loadedId() ? "New chat" : interactive() ? placeholder() : "Reconnecting..."} value={props.chat.draft()} disabled={!props.serverOnline || !interactive()} onInput={(event) => change(event.currentTarget.value)} onPaste={paste} onSelect={selectionChanged} onKeyDown={keydown} inputMode={voiceFirst() && !keyboardWanted() ? "none" : undefined} onFocus={() => setInputFocused(true)} onBlur={() => { setInputFocused(false); if (!refocusing) setKeyboardWanted(false); }} />
             <Show when={slashOpen() && slashCommand()}>{(item) => <div class="slash-completion" aria-hidden="true"><span>{props.chat.draft()}</span>{item().command.slice(props.chat.draft().length)} <small>{item().description}</small></div>}</Show>
   </>;
-  return <div class={v2() ? "composer-wrap ui-composer-width" : "composer-wrap"} data-part="composer" data-library={composerSurface() === "library" ? "" : undefined} data-phone-layout={voiceFirst() ? phoneComposer() : undefined} data-latest-away={voiceFirst() && latestAway() ? "" : undefined} data-phone-mode={phoneMode()} data-left-listening={leftListening() ? "" : undefined} data-primary-hidden={voiceFirst() && !hasPayload() && !stoppable() ? "" : undefined} style={phoneMode() === "listening" ? { "--voice-level": String(dictationWaveform.level()) } : undefined}>
+  return <div class={v2() ? "composer-wrap ui-composer-width" : "composer-wrap"} data-part="composer" data-library={composerSurface() === "library" ? "" : undefined} data-phone-layout={voiceFirst() ? "bar" : undefined} data-latest-away={voiceFirst() && latestAway() ? "" : undefined} data-phone-mode={phoneMode()} data-left-listening={leftListening() ? "" : undefined} data-primary-hidden={voiceFirst() && !hasPayload() && !stoppable() ? "" : undefined} style={phoneMode() === "listening" ? { "--voice-level": String(dictationWaveform.level()) } : undefined}>
     <Show when={!phoneV2()}><div class="composer-edit-actions" data-shown={editing() ? "" : undefined} aria-hidden={editing() ? undefined : "true"}>
       <For each={EDIT_ACTIONS}>{(action) => <Button variant="ghost" size="icon-sm" class="composer-edit-action composer-surface-material" data-composer-surface={composerSurface()} aria-label={action.label} title={action.label} tabIndex={editing() ? 0 : -1} onPointerDown={(event) => event.preventDefault()} onClick={() => editActions[action.key]()}>{action.icon()}</Button>}</For>
     </div></Show>
@@ -857,7 +859,7 @@ export function Composer(props: {
       <AttachmentStrip items={props.attachments.items()} chatId={props.chat.loadedId()} surface={composerSurface()} onRemove={(item) => props.attachments.remove(item)} onRetry={(item) => props.attachments.retry(item)} />
     </Show>
     <Show when={phoneV2()}>
-      <PhoneComposer mode={phoneMode() ?? "idle"} layout={phoneComposer() === "surface" ? "surface" : "bar"} under={optionsOpen()} editing={editing()} level={Math.min(1, dictationWaveform.level() * 2.5)} onTrack={toggleDictation}
+      <PhoneComposer mode={phoneMode() ?? "idle"} layout="bar" under={optionsOpen()} editing={editing()} level={Math.min(1, dictationWaveform.level() * 2.5)} onTrack={toggleDictation}
         field={<PillField>{field()}</PillField>}
         track={<PillWave levels={dictationWaveform.history()} gain={2.5} />}
         captions={<Show when={captionLead() || dictatedText()}><p><span ref={glideCaptions} class="composer-voice-words"><Show when={captionLead()}><span class="composer-voice-lead">{captionLead()}</span></Show><Index each={dictatedText().split(/(?<=\s)/)}>{(word) => <span>{word()}</span>}</Index></span></p></Show>}
@@ -914,7 +916,7 @@ export function Composer(props: {
             <Show when={recording() && !phoneLayout()}><VoiceWaveform class="composer-status-waveform composer-actions-waveform" history={dictationWaveform.history} level={dictationWaveform.level} peak={dictationWaveform.peak} state={recorderMonitorState()} variant="compact" barDensity={3} ariaLabel={dictationLabel() || "Microphone input level"} /></Show>
             <div ref={mobileActions} class={v2() ? "ui-toolbar-end" : "composer-actions-right"}>
               <Show when={!recording() && (dictationLabel() || (activity()?.label && activity()?.label !== "Ready"))}><span class="composer-status-state composer-actions-status" role="status" aria-live="polite"><Show when={dictationLabel()} fallback={<><Show when={SPINNING_ACTIVITY.has(activity()?.kind || "")}><Spinner /></Show><Show when={["request_failed", "runtime_failed"].includes(activity()?.kind || "")}><TriangleAlertIcon aria-hidden="true" /></Show>{activity()?.label || "Ready"}</>}>{dictationLabel()}</Show></span></Show>
-              <Button variant="ghost" size="icon-sm" class="dictation-trigger" data-state={dictationState()} aria-label={["starting", "listening"].includes(dictationState()) ? "Stop voice dictation" : "Start voice dictation"} aria-pressed={dictating()} title={`Voice dictation (${props.voiceSettings.shortcut})`} disabled={!props.serverOnline || !interactive()} onPointerDown={captureDictationLaunch} onClick={toggleDictation}><Show when={voiceFirst()} fallback={<Show when={dictationState() === "starting"} fallback={<MicIcon />}><Spinner /></Show>}><Show when={phoneComposer() === "bar"}><div class="composer-voice-glow" aria-hidden="true"><i /><i /><i /><i /></div></Show><span class="composer-voice-mic"><MicIcon /></span><ThinkingOrb state="listening" class="composer-voice-orb" paused={phoneMode() !== "listening"} /></Show></Button>
+              <Button variant="ghost" size="icon-sm" class="dictation-trigger" data-state={dictationState()} aria-label={["starting", "listening"].includes(dictationState()) ? "Stop voice dictation" : "Start voice dictation"} aria-pressed={dictating()} title={`Voice dictation (${props.voiceSettings.shortcut})`} disabled={!props.serverOnline || !interactive()} onPointerDown={captureDictationLaunch} onClick={toggleDictation}><Show when={voiceFirst()} fallback={<Show when={dictationState() === "starting"} fallback={<MicIcon />}><Spinner /></Show>}><div class="composer-voice-glow" aria-hidden="true"><i /><i /><i /><i /></div><span class="composer-voice-mic"><MicIcon /></span><ThinkingOrb state="listening" class="composer-voice-orb" paused={phoneMode() !== "listening"} /></Show></Button>
               {/* One primary slot, so nothing beside it moves. While the agent
                   works it is Stop; once a draft is typed it is Send again --
                   which queues the message for the agent -- and Stop steps to

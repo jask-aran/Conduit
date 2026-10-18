@@ -6,11 +6,10 @@
  * no real device). Runs start and stop with an empty draft and with a typed
  * one, logging every frame's row buttons: left/right edge and opacity.
  *
- *   node scripts/probes/dictation-row.mjs --windows [--layout bar]
+ *   node scripts/probes/dictation-row.mjs --windows
  */
 import { arg, open, origin } from "./lib.mjs";
 
-const layout = arg("--layout", "bar");
 const { page, cdp, close } = await open({ width: 600, height: 1100 });
 await cdp.send("Emulation.setDeviceMetricsOverride", { width: 412, height: 915, deviceScaleFactor: 2.625, mobile: true });
 await cdp.send("Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 5 });
@@ -25,7 +24,6 @@ await page.addInitScript(() => {
   };
 });
 await page.goto(origin);
-await page.evaluate((layout) => localStorage.setItem("conduit:phone-composer", layout), layout);
 const api = (url, method, body) => page.evaluate(async ([url, method, body]) => {
   const response = await fetch(url, { method, headers: { "content-type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
   return response.json().catch(() => null);
