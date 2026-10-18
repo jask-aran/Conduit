@@ -19,6 +19,36 @@ export function morphHtml(element: Element, html: string) {
   morphChildren(element, template.content);
 }
 
+// The lines each element was last given, by index: a code block's children are its lines, one element apiece.
+const renderedLines = new WeakMap<Element, string[]>();
+
+/**
+ * Bring a code block's lines to `lines`, touching only the lines whose markup changed. A streaming fence gains a
+ * line or two a delivery; parsing and walking all of a long file's lines to find them was most of each delivery's
+ * work (a 137-line file: 290ms over a second of it).
+ */
+export function morphLines(element: Element, lines: string[]) {
+  const previous = renderedLines.get(element);
+  renderedLines.set(element, lines);
+  // Anything else having changed the children, they are brought to the lines whole.
+  if (!template || !previous || element.childNodes.length !== previous.length) {
+    morphHtml(element, lines.join(""));
+    return;
+  }
+  for (let index = 0; index < lines.length; index += 1) {
+    const existing = element.childNodes[index];
+    if (existing && previous[index] === lines[index]) continue;
+    template.innerHTML = lines[index]!;
+    const incoming = template.content.firstChild;
+    if (!incoming) continue;
+    if (!existing) element.appendChild(incoming);
+    else if (existing.nodeType === Node.ELEMENT_NODE && incoming.nodeType === Node.ELEMENT_NODE
+      && (existing as Element).tagName === (incoming as Element).tagName) morphChildren(existing, incoming);
+    else element.replaceChild(incoming, existing);
+  }
+  while (element.childNodes.length > lines.length) element.removeChild(element.lastChild!);
+}
+
 function morphChildren(from: Node, to: Node) {
   const current = from.childNodes;
   const next = Array.from(to.childNodes);

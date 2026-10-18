@@ -226,7 +226,7 @@ export function codeElementText(code: Element) {
 export const STREAM_REHIGHLIGHT_MS = 100;
 
 function lineSpans(html: string) {
-  return splitHighlightedLines(html).map((line) => line.outerHTML).join("");
+  return splitHighlightedLines(html).map((line) => line.outerHTML);
 }
 
 export function highlightToHtml(text: string, language: string) {
@@ -250,12 +250,13 @@ export function highlightToHtml(text: string, language: string) {
  */
 export class StreamingCodeHighlighter {
   private prefixLength = -1;
-  private prefixHtml = "";
+  private prefixLines: string[] = [];
   private lastRunAt = 0;
   private lastLanguage = "";
   private hadGrammars = false;
 
-  render(text: string, language: string, streaming: boolean): string {
+  /** Each line's markup, one `.code-line` apiece: a line unchanged since the last render is the same string. */
+  render(text: string, language: string, streaming: boolean): string[] {
     primeHighlighter();
     // The grammars arrive asynchronously, so the first render of a block is
     // usually plain. Caching on length alone would keep serving that plain
@@ -265,16 +266,16 @@ export class StreamingCodeHighlighter {
       this.lastLanguage = language;
       this.hadGrammars = hasGrammars;
       this.prefixLength = -1;
-      this.prefixHtml = "";
+      this.prefixLines = [];
       this.lastRunAt = 0;
     }
     if (!streaming) {
       // Settled: the text is final, so highlight all of it exactly once.
       if (this.prefixLength !== text.length) {
         this.prefixLength = text.length;
-        this.prefixHtml = lineSpans(highlightToHtml(text, language));
+        this.prefixLines = lineSpans(highlightToHtml(text, language));
       }
-      return this.prefixHtml;
+      return this.prefixLines;
     }
 
     // Only whole lines are stable enough to colour.
@@ -285,16 +286,16 @@ export class StreamingCodeHighlighter {
     if (grew && now - this.lastRunAt >= STREAM_REHIGHLIGHT_MS) {
       this.lastRunAt = now;
       this.prefixLength = stable.length;
-      this.prefixHtml = stable ? lineSpans(highlightToHtml(stable, language)) : "";
+      this.prefixLines = stable ? lineSpans(highlightToHtml(stable, language)) : [];
     } else if (this.prefixLength < 0) {
       this.prefixLength = 0;
-      this.prefixHtml = "";
+      this.prefixLines = [];
     }
 
     // Anything past the highlighted prefix is rendered plain, so text is never
     // withheld from the reader while waiting for the next recompute.
     const plainFrom = this.prefixLength <= 0 ? text : text.slice(this.prefixLength + 1);
-    if (!plainFrom) return this.prefixHtml;
-    return this.prefixHtml + lineSpans(escapeForLines(plainFrom));
+    if (!plainFrom) return this.prefixLines;
+    return [...this.prefixLines, ...lineSpans(escapeForLines(plainFrom))];
   }
 }
