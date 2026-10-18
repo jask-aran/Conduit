@@ -18,12 +18,13 @@
  *
  *   node scripts/probes/visibility-guard.mjs ["rich 9000t"] [--phone]
  */
-import { cdpOrigin, flag, loadPlaywright, origin } from "./lib.mjs";
+import { flag, open, origin } from "./lib.mjs";
 
 const prompt = process.argv[2] && !process.argv[2].startsWith("--") ? process.argv[2] : "rich 9000t";
 const phone = flag("--phone");
-const { chromium } = await loadPlaywright();
-const b = await chromium.connectOverCDP(cdpOrigin); const ctx = b.contexts()[0];
+// Its own headless browser by default (nothing to warm, and no tab of the reader's shares its connections); --windows
+// for the headed Chrome on :9222.
+const { context: ctx, close } = await open({ width: 1280, height: 900 });
 const tmp = await ctx.newPage(); await tmp.goto(origin, { waitUntil: "commit" }); await tmp.waitForTimeout(1200);
 const api = (url, method, body) => tmp.evaluate(async ([url, method, body]) => (await fetch(url, { method, headers: { "content-type": "application/json" }, body: body ? JSON.stringify(body) : undefined })).json().catch(() => null), [url, method, body]);
 const chat = await api("/v0/chats", "POST", { projectId: "test", profileId: "test-stream" }); const id = chat?.id ?? chat?.chat?.id;
@@ -110,7 +111,7 @@ try {
   await phase("settled: wheel down"); await wheel(350, 60, 30);
   await page.waitForTimeout(1000);
   results.push(await page.evaluate(() => window.__guard.phases), await state(), await page.evaluate(() => [...(window.__guard.examples ?? []), ...(window.__guard.blanks ?? []).map((b) => "blank " + b), ...(window.__guard.moves ?? []).map((b) => "moved " + b)]));
-} finally { await page.close(); await api(`/v0/sessions/${id}`, "DELETE"); await tmp.close(); await b.close(); }
+} finally { await page.close(); await api(`/v0/sessions/${id}`, "DELETE"); await tmp.close(); await close(); }
 
 const [phases, last, examples] = results;
 console.log(`"${prompt}" ${phone ? "phone" : "desktop"}, ended "${last.replace(/\s+/g, " ").trim()}"`);
