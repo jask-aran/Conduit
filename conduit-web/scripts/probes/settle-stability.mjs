@@ -39,7 +39,7 @@ const settled = () => page.waitForFunction(() => !document.querySelector("[aria-
 
 /** Mark the live answer and trace of the last turn, and remember what they said. */
 const tag = () => page.evaluate(() => {
-  const answer = [...document.querySelectorAll(".bubble-assistant")].at(-1);
+  const answer = [...document.querySelectorAll(".ui-answer")].at(-1);
   const trace = [...document.querySelectorAll(".ui-trace-fold:has(> .ui-trace[aria-expanded])")].at(-1);
   if (answer) answer.dataset.probe = "answer";
   if (trace) trace.dataset.probe = "trace";
@@ -59,7 +59,7 @@ const inspect = () => page.evaluate(() => new Promise((finish) => {
     for (const record of records) for (const [sign, list] of [["+", record.addedNodes], ["-", record.removedNodes]]) for (const node of list) if (node.nodeType === 1) {
       // By design: the word fade unwraps its spans once it ends (text unchanged),
       // and the action row replaces its placeholder once the answer has appeared.
-      if (node.classList.contains("stream-word") || node.classList.contains("response-actions")) continue;
+      if (node.classList.contains("stream-word") || node.classList.contains("ui-message-foot")) continue;
       churn += 1;
       const key = `${sign}${node.tagName.toLowerCase()}.${String(node.className || "").split(" ")[0]} in ${record.target.className ? String(record.target.className).split(" ")[0] : record.target.tagName}`;
       kinds[key] = (kinds[key] || 0) + 1;
@@ -69,7 +69,7 @@ const inspect = () => page.evaluate(() => new Promise((finish) => {
   const before = rects();
   setTimeout(() => {
     observer.disconnect();
-    const actions = [...thread.querySelectorAll(".response-actions:not([aria-hidden='true'])")];
+    const actions = [...thread.querySelectorAll(".ui-message-foot:not(:empty)")];
     finish({
       answerMounted: Boolean(answer?.isConnected),
       traceMounted: trace ? trace.isConnected : null,
@@ -82,7 +82,7 @@ const inspect = () => page.evaluate(() => new Promise((finish) => {
   }, 2000);
 }));
 
-const waitForAnswer = () => page.waitForFunction(() => ([...document.querySelectorAll(".bubble-assistant")].at(-1)?.textContent || "").length > 200);
+const waitForAnswer = () => page.waitForFunction(() => ([...document.querySelectorAll(".ui-answer")].at(-1)?.textContent || "").length > 200);
 
 /**
  * Every frame from a queued send until the chat is quiet: no answer above its
@@ -103,7 +103,7 @@ async function watchQueue(text) {
         const at = nodes.indexOf(sent);
         // Answers above the sent message may only shrink (one closing into the
         // trace); a new one there is an answer drawn above its prompt.
-        const above = nodes.slice(0, at).filter((node) => node.classList.contains("bubble-assistant")).length;
+        const above = nodes.slice(0, at).filter((node) => node.classList.contains("ui-answer")).length;
         if (aboveFirst == null) aboveFirst = above;
         else if (above > aboveFirst) bad.above += 1;
         const queued = document.querySelector(".queued-float:not([data-leaving])")?.textContent || "";
@@ -151,7 +151,7 @@ const scenarios = {
     // The answer is what follows the last tool; text before a tool is the turn
     // talking as it works, and moves into the trace when its message closes.
     await page.waitForFunction(() => /\b2\b/.test([...document.querySelectorAll(".ui-trace-line > span:last-child")].at(-1)?.textContent || ""));
-    await page.waitForFunction(() => ([...document.querySelectorAll(".bubble-assistant")].at(-1)?.textContent || "").length > 200);
+    await page.waitForFunction(() => ([...document.querySelectorAll(".ui-answer")].at(-1)?.textContent || "").length > 200);
     const live = await tag();
     await settled();
     const after = await inspect();
@@ -169,7 +169,7 @@ const scenarios = {
   /** Stop while the answer is being written: the partial stands, in place. */
   async "stop-answer"() {
     await send("think 3000t");
-    await page.waitForFunction(() => ([...document.querySelectorAll(".bubble-assistant")].at(-1)?.textContent || "").length > 200);
+    await page.waitForFunction(() => ([...document.querySelectorAll(".ui-answer")].at(-1)?.textContent || "").length > 200);
     const live = await tag();
     await stopButton().click();
     await settled();

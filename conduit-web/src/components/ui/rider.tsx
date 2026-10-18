@@ -13,10 +13,12 @@ export function Rider(props: { label?: string; layout?: "row" | "strip" | "card"
 }
 export const RiderTitle = (props: { children: JSX.Element }) => <span class="ui-title-text">{props.children}</span>;
 /** A button riding over the transcript just above the composer: scroll to latest (an icon alone), cancel an edit
- *  (an icon and its words). Resting frost at the surface radius. */
-export function RiderButton(props: JSX.ButtonHTMLAttributes<HTMLButtonElement> & { icon: JSX.Element; label: string; show?: "icon" | "label"; motion?: Motion }) {
-  const [local, rest] = splitProps(props, ["icon", "label", "show", "class", "motion"]);
+ *  (an icon and its words). Resting frost at the surface radius. hidden: kept where it rides but faded out and out of
+ *  reach, so it fades back in rather than being drawn again. */
+export function RiderButton(props: JSX.ButtonHTMLAttributes<HTMLButtonElement> & { icon: JSX.Element; label: string; show?: "icon" | "label"; motion?: Motion; hidden?: boolean }) {
+  const [local, rest] = splitProps(props, ["icon", "label", "show", "class", "motion", "hidden"]);
   return <button type="button" {...rest} {...motionOf(local.motion)} class={cn("ui-frost ui-rider-button", local.class)} data-surface="frost" data-lift="rest" data-labelled={local.show === "label" ? "" : undefined}
+    data-hidden={local.hidden ? "" : undefined} aria-hidden={local.hidden ? "true" : undefined} tabIndex={local.hidden ? -1 : undefined}
     aria-label={local.show === "label" ? undefined : local.label} title={local.show === "label" ? undefined : local.label}>{local.icon}<Show when={local.show === "label"}><span>{local.label}</span></Show></button>;
 }
 export const RiderActions = (props: { stack?: boolean; children: JSX.Element }) => <div class="ui-rider-actions" data-stack={props.stack ? "" : undefined}>{props.children}</div>;

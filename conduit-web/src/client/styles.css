@@ -278,19 +278,13 @@ svg.lucide { stroke-width: 2.4; }
 .message-scroller-viewport::-webkit-scrollbar { display: none; }
 /* Narrower than its column, the thread keeps the dashboard's 24px from the pane (the gutter's half) and
    its text gives up its inset over the next 70px, until it lines up with the composer's edges. */
-.thread { width: min(var(--transcript-column-width), calc(100% - var(--transcript-column-gutter))); min-height: 100%; margin-inline: auto; padding: 70.4px clamp(0px, calc((100% - var(--composer-desktop-reference-width) - var(--transcript-column-gutter)) / 2 + 35.2px), 35.2px) 25.6px; }
-[data-slot="message-scroller-item"] { margin-block: 8px; content-visibility: visible; contain-intrinsic-size: none; }
+/* The chat pane's reading column (its width preset) holds the Transcript, which fills it. */
+.thread { --transcript-width: 100%; width: min(var(--transcript-column-width), calc(100% - var(--transcript-column-gutter))); min-height: 100%; margin-inline: auto; padding: 70.4px clamp(0px, calc((100% - var(--composer-desktop-reference-width) - var(--transcript-column-gutter)) / 2 + 35.2px), 35.2px) 25.6px; }
 [data-transcript-visibility="hidden"] { content-visibility: hidden; }
 /* A long run of hidden blocks far above the reader, out of layout: the run's measured height stands in for it as
    the answer's top padding (transcript-visibility.ts, collapseAbove). Important: a block's own display rule is more
    specific. */
 [data-transcript-visibility="collapsed"] { display: none !important; }
-[data-slot="message"] { display: flex; width: 100%; }
-[data-slot="message-content"] { display: flex; min-width: 0; max-width: 100%; flex-direction: column; gap: 3.2px; }
-.response-actions .response-time { flex: none; padding: 0 4.8px 0 1.6px; color: var(--muted-foreground); font-size: 8.8px; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.bubble { max-width: min(512px, 88vw); border-radius: 12px; }
-.harness-prompt { display: flex; justify-content: flex-end; align-items: center; gap: 6px; margin: 0; color: var(--muted-foreground); font-size: 0.8125rem; }
-.harness-prompt svg { width: 13px; height: 13px; flex: none; }
 /* Folded user message.
 
    The fold is a line clamp, so it cuts on a line boundary and needs no height
@@ -299,14 +293,6 @@ svg.lucide { stroke-width: 2.4; }
    the browsers this ships to. The mask fades the cut line rather than ending it
    mid-glyph, exactly as the code card does. */
 
-.bubble-assistant {
-  width: 100%;
-  /* The bubble max-width is a measure for the user's own right-aligned
-     messages. An assistant answer is the reading column itself, so capping it
-     left the column narrower than the thread and offset to the left -- which
-     also pulled every wide table and code block off the surface's centre. */
-  max-width: none;
-}
 /* The assistant column must be a definite width, not shrink-to-fit.
    [data-slot="message"] is a flex row, so an auto-width message-content sizes
    to its content's intrinsic width -- and a block virtualized with
@@ -314,46 +300,13 @@ svg.lucide { stroke-width: 2.4; }
    the overscan band therefore rewidened the whole column, which read as code
    blocks and tables shimmying horizontally while scrolling. Incremark Advanced
    already pinned this for its own subtree; every renderer needs it. */
-.message-assistant [data-slot="message-content"] { width: 100%; }
-.bubble-assistant[data-error="true"] { padding: 9.6px 11.2px; border: 1px solid color-mix(in oklch, var(--destructive), transparent 45%); background: color-mix(in oklch, var(--destructive), transparent 92%); }
-.assistant-error { color: color-mix(in oklch, var(--destructive), white 18%); }
-.assistant-error summary { display: flex; align-items: center; gap: 5.6px; cursor: pointer; font-size: 10.4px; list-style: none; }
-.assistant-error summary::-webkit-details-marker { display: none; }
-.assistant-error summary svg { width: 12px; height: 12px; flex: none; }
-.assistant-error-meta { display: flex; flex-wrap: wrap; gap: 4px 11.2px; margin: 7.2px 0 0; color: var(--muted-foreground); font-size: 8.8px; }
-.assistant-error-meta div { display: flex; min-width: 0; gap: 4px; }
-.assistant-error-meta dt { color: var(--foreground); font-weight: 600; }
-.assistant-error-meta dd { min-width: 0; margin: 0; overflow-wrap: anywhere; }
-.assistant-error-meta time { color: inherit; font-size: inherit; }
-.assistant-error pre { max-height: 144px; margin: 7.2px 0 0; overflow: auto; color: var(--foreground); font: 9.6px/1.5 ui-monospace, SFMono-Regular, Consolas, monospace; overflow-wrap: anywhere; white-space: pre-wrap; }
-.bubble-assistant[data-error="true"] .chat-markdown { margin-bottom: 8px; }
-.bubble[data-editing="true"] { color: var(--muted-foreground); font-style: italic; }
 .markdown-skeleton { min-height: 4em; }
 .welcome { display: grid; min-height: 56vh; place-content: center; color: var(--muted-foreground); text-align: center; }
 .welcome h1 { margin: 0; color: var(--foreground); font-size: clamp(17.6px, 3vw, 20.8px); font-weight: 600; letter-spacing: -0.04em; }
 .marker { color: var(--muted-foreground); font-size: 9.6px; }
-.turn-change-summary { display: flex; width: max-content; gap: 4.8px; border: 0; border-radius: 4px; background: transparent; padding: 1.6px 3.2px; font: 8.8px ui-monospace, SFMono-Regular, Consolas, monospace; cursor: pointer; }
-.turn-change-summary:hover { background: var(--accent); }
-.turn-change-summary [data-change="added"] { color: var(--workspace-git-added, #98c379); }
-.turn-change-summary [data-change="removed"] { color: var(--destructive); }
 .composer-status-state > svg { width: 10.4px; height: 10.4px; flex: none; }
-.message-scroller-button[data-slot="button"] {
-  position: absolute;
-  left: 50%;
-  bottom: var(--message-scroller-button-bottom, 14.4px);
-  z-index: 4;
-  width: 32px;
-  min-height: 32px;
-  height: 32px;
-  border-radius: 11.2px;
-  translate: -50% 0;
-  padding: 0;
-  color: var(--foreground);
-}
-.message-scroller-button[data-slot="button"] svg { width: 14.4px; height: 14.4px; }
-.message-scroller-button[data-slot="button"]:hover:not(:disabled) { filter: brightness(1.12); }
-.message-scroller-button[data-slot="button"]:not(.message-cancel-edit) { opacity: 0; pointer-events: none; transition: opacity .18s ease, bottom .22s cubic-bezier(.2, .8, .2, 1); }
-.message-scroller-button[data-slot="button"][data-shown] { opacity: 1; pointer-events: auto; }
+/* Where the transcript's RiderButtons ride: centred above the composer (transcript.tsx measures the bottom). */
+.message-scroller-button { position: absolute; left: 50%; bottom: var(--message-scroller-button-bottom, 14.4px); z-index: 4; translate: -50% 0; transition: bottom var(--duration-gentle) var(--ease-arrive), opacity var(--duration-gentle) var(--ease-arrive); }
 /* A single class owns the material. Do not add material declarations to each
    component: the composer, Follow button, and desktop header pill must match. */
 .composer-surface-material[data-composer-surface="static"],
@@ -379,21 +332,7 @@ svg.lucide { stroke-width: 2.4; }
     inset 0 0.8px 0 rgb(255 255 255 / 50%),
     inset 0 -1px 0 rgb(255 255 255 / 10%);
 }
-.response-actions { display: flex; min-height: 22.4px; align-items: center; gap: 1.6px; opacity: 1; }
-.response-actions [data-slot="button"] { width: 19.2px; height: 19.2px; border-radius: 999px; }
-.response-actions [data-slot="button"] svg { width: 11.2px; height: 11.2px; }
 
-/* Turn trace: one collapsed row per turn holding thinking segments, interim
-   narration, and tool calls; the header previews the latest item live. */
-.response-status { flex: none; margin-right: 4.8px; white-space: nowrap; }
-.response-actions [data-slot="button"].response-continue { width: auto; gap: 4px; padding-inline: 6.4px 8px; font-size: 9.6px; }
-.discarded-answer-header { display: flex; flex: 1; align-items: center; gap: 6.4px; min-width: 0; padding: 3.2px 1.6px; border: none; background: none; color: var(--muted-foreground); font-size: 10.4px; text-align: left; cursor: pointer; border-radius: 4.8px; }
-.discarded-answer-header:hover { color: var(--foreground); }
-.discarded-answer-header > svg { width: 11.2px; height: 11.2px; flex-shrink: 0; }
-.turn-stop-label { flex: none; white-space: pre; }
-.turn-stop-mark { fill: currentColor; stroke-width: 0; scale: 0.78; }
-.turn-stop-row { cursor: default; }
-.turn-stop-row:hover { color: var(--muted-foreground); }
 
 /* Runtime transparency indicators (parity with main): spinner while
    starting/stopping/working/compacting, coloured dot otherwise. */
@@ -971,26 +910,14 @@ svg.lucide { stroke-width: 2.4; }
 .transcript-motion-shell { position: relative; width: var(--workspace-transcript-width, 100%); height: 100%; contain: layout paint; container-name: chat-main; container-type: inline-size; transform: translate3d(0, 0, 0); }
 .message-scroller-viewport { width: 100%; height: 100%; overflow-y: auto; scroll-padding-top: 56px; scrollbar-width: none; overflow-anchor: none; }
 .message-scroller-viewport::-webkit-scrollbar { display: none; }
-.thread { width: min(var(--transcript-column-width), calc(100% - var(--transcript-column-gutter))); min-height: 100%; margin-inline: auto; padding: 88px 44px 32px; }
-[data-slot="message-scroller-item"] { margin-block: 10px; content-visibility: visible; contain-intrinsic-size: none; }
+/* The chat pane's reading column (its width preset) holds the Transcript, which fills it. */
+.thread { --transcript-width: 100%; width: min(var(--transcript-column-width), calc(100% - var(--transcript-column-gutter))); min-height: 100%; margin-inline: auto; padding: 88px 44px 32px; }
 [data-transcript-visibility="hidden"] { content-visibility: hidden; }
 /* A long run of hidden blocks far above the reader, out of layout: the run's measured height stands in for it as
    the answer's top padding (transcript-visibility.ts, collapseAbove). Important: a block's own display rule is more
    specific. */
 [data-transcript-visibility="collapsed"] { display: none !important; }
-[data-slot="message"] { display: flex; width: 100%; }
-[data-slot="message-content"] { display: flex; min-width: 0; max-width: 100%; flex-direction: column; gap: 4px; }
-.response-actions .response-time { flex: none; padding: 0 6px 0 2px; color: var(--muted-foreground); font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.bubble { max-width: min(640px, 88vw); border-radius: 15px; }
 
-.bubble-assistant {
-  width: 100%;
-  /* The bubble max-width is a measure for the user's own right-aligned
-     messages. An assistant answer is the reading column itself, so capping it
-     left the column narrower than the thread and offset to the left -- which
-     also pulled every wide table and code block off the surface's centre. */
-  max-width: none;
-}
 /* The assistant column must be a definite width, not shrink-to-fit.
    [data-slot="message"] is a flex row, so an auto-width message-content sizes
    to its content's intrinsic width -- and a block virtualized with
@@ -998,46 +925,13 @@ svg.lucide { stroke-width: 2.4; }
    the overscan band therefore rewidened the whole column, which read as code
    blocks and tables shimmying horizontally while scrolling. Incremark Advanced
    already pinned this for its own subtree; every renderer needs it. */
-.message-assistant [data-slot="message-content"] { width: 100%; }
-.bubble-assistant[data-error="true"] { padding: 12px 14px; border: 1px solid color-mix(in oklch, var(--destructive), transparent 45%); background: color-mix(in oklch, var(--destructive), transparent 92%); }
-.assistant-error { color: color-mix(in oklch, var(--destructive), white 18%); }
-.assistant-error summary { display: flex; align-items: center; gap: 7px; cursor: pointer; font-size: 13px; list-style: none; }
-.assistant-error summary::-webkit-details-marker { display: none; }
-.assistant-error summary svg { width: 15px; height: 15px; flex: none; }
-.assistant-error-meta { display: flex; flex-wrap: wrap; gap: 5px 14px; margin: 9px 0 0; color: var(--muted-foreground); font-size: 11px; }
-.assistant-error-meta div { display: flex; min-width: 0; gap: 5px; }
-.assistant-error-meta dt { color: var(--foreground); font-weight: 600; }
-.assistant-error-meta dd { min-width: 0; margin: 0; overflow-wrap: anywhere; }
-.assistant-error-meta time { color: inherit; font-size: inherit; }
-.assistant-error pre { max-height: 180px; margin: 9px 0 0; overflow: auto; color: var(--foreground); font: 12px/1.5 ui-monospace, SFMono-Regular, Consolas, monospace; overflow-wrap: anywhere; white-space: pre-wrap; }
-.bubble-assistant[data-error="true"] .chat-markdown { margin-bottom: 10px; }
-.bubble[data-editing="true"] { color: var(--muted-foreground); font-style: italic; }
 .markdown-skeleton { min-height: 5em; }
 .welcome { display: grid; min-height: 56vh; place-content: center; color: var(--muted-foreground); text-align: center; }
 .welcome h1 { margin: 0; color: var(--foreground); font-size: clamp(22px, 3vw, 26px); font-weight: 600; letter-spacing: -0.04em; }
 .marker { color: var(--muted-foreground); font-size: 12px; }
-.turn-change-summary { display: flex; width: max-content; gap: 6px; border: 0; border-radius: 5px; background: transparent; padding: 2px 4px; font: 11px ui-monospace, SFMono-Regular, Consolas, monospace; cursor: pointer; }
-.turn-change-summary:hover { background: var(--accent); }
-.turn-change-summary [data-change="added"] { color: var(--workspace-git-added, #98c379); }
-.turn-change-summary [data-change="removed"] { color: var(--destructive); }
 .composer-status-state > svg { width: 13px; height: 13px; flex: none; }
-.message-scroller-button[data-slot="button"] {
-  position: absolute;
-  left: 50%;
-  bottom: var(--message-scroller-button-bottom, 18px);
-  z-index: 4;
-  width: 40px;
-  min-height: 40px;
-  height: 40px;
-  border-radius: 14px;
-  translate: -50% 0;
-  padding: 0;
-  color: var(--foreground);
-}
-.message-scroller-button[data-slot="button"] svg { width: 18px; height: 18px; }
-.message-scroller-button[data-slot="button"]:hover:not(:disabled) { filter: brightness(1.12); }
-.message-scroller-button[data-slot="button"]:not(.message-cancel-edit) { opacity: 0; pointer-events: none; transition: opacity .18s ease, bottom .22s cubic-bezier(.2, .8, .2, 1); }
-.message-scroller-button[data-slot="button"][data-shown] { opacity: 1; pointer-events: auto; }
+/* Where the transcript's RiderButtons ride: centred above the composer (transcript.tsx measures the bottom). */
+.message-scroller-button { position: absolute; left: 50%; bottom: var(--message-scroller-button-bottom, 18px); z-index: 4; translate: -50% 0; transition: bottom var(--duration-gentle) var(--ease-arrive), opacity var(--duration-gentle) var(--ease-arrive); }
 /* A single class owns the material. Do not add material declarations to each
    component: the composer, Follow button, and desktop header pill must match. */
 .composer-surface-material[data-composer-surface="static"],
@@ -1063,26 +957,7 @@ svg.lucide { stroke-width: 2.4; }
     inset 0 1px 0 rgb(255 255 255 / 50%),
     inset 0 -1px 0 rgb(255 255 255 / 10%);
 }
-.response-actions { display: flex; min-height: 28px; align-items: center; gap: 2px; opacity: 1; }
-/* An answer that streamed here gets its actions and time once it has finished
-   appearing; they fade in rather than landing. The empty row holds their
-   height meanwhile, so nothing moves when they arrive. */
-.response-actions[data-reveal] { animation: response-actions-in 240ms ease-out backwards; }
-@keyframes response-actions-in { from { opacity: 0; } }
-@media (prefers-reduced-motion: reduce) { .response-actions[data-reveal] { animation: none; } }
-.response-actions [data-slot="button"] { width: 24px; height: 24px; border-radius: 999px; }
-.response-actions [data-slot="button"] svg { width: 14px; height: 14px; }
 
-/* Turn trace: one collapsed row per turn holding thinking segments, interim
-   narration, and tool calls; the header previews the latest item live. */
-.response-status { flex: none; margin-right: 6px; white-space: nowrap; }
-.response-actions [data-slot="button"].response-continue { width: auto; gap: 5px; padding-inline: 8px 10px; font-size: 12px; }
-.discarded-answer-header { display: flex; flex: 1; align-items: center; gap: 8px; min-width: 0; padding: 4px 2px; border: none; background: none; color: var(--muted-foreground); font-size: 13px; text-align: left; cursor: pointer; border-radius: 6px; }
-.discarded-answer-header > svg { width: 14px; height: 14px; flex-shrink: 0; }
-.turn-stop-label { flex: none; white-space: pre; }
-.turn-stop-mark { fill: currentColor; stroke-width: 0; scale: 0.78; }
-.turn-stop-row { cursor: default; }
-.turn-stop-row:hover { color: var(--muted-foreground); }
 
 /* Runtime transparency indicators (parity with main): spinner while
    starting/stopping/working/compacting, coloured dot otherwise. */
@@ -1463,7 +1338,6 @@ svg.lucide { stroke-width: 2.4; }
     transform: none;
     background: var(--background);
   }
-  .response-actions { opacity: 1; }
   .chat-header {
     position: relative;
     width: 100%;
@@ -2570,10 +2444,8 @@ svg.lucide { stroke-width: 2.4; }
 
 /* Cancel editing: a frost pill over the composer, beside scroll-to-latest
    when both are up. */
-.message-cancel-edit.message-scroller-button[data-slot="button"] { width: auto; gap: 6px; padding: 0 12px 0 10px; font-size: 10.4px; font-weight: 500; white-space: nowrap; }
-.message-cancel-edit.message-scroller-button[data-slot="button"] svg { width: 12px; height: 12px; }
 .message-cancel-edit[data-beside-latest] { translate: calc(-100% - 22px) 0; }
-@media (--conduit-mobile-layout) { .message-cancel-edit.message-scroller-button[data-slot="button"] { font-size: 13px; padding: 0 14px 0 12px; } .message-cancel-edit[data-beside-latest] { translate: calc(-100% - 26px) 0; } }
+@media (--conduit-mobile-layout) { .message-cancel-edit[data-beside-latest] { translate: calc(-100% - 26px) 0; } }
 .file-viewer-surface:focus { outline: none; }
 /* What a file dropped on a file viewer's column will do, by the pointer (main.tsx dragHint). */
 .drag-hint { position: fixed; top: 0; left: 0; z-index: 80; will-change: transform; display: inline-flex; align-items: center; gap: 5.6px; padding: 3.2px 8px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--popover); color: var(--popover-foreground); box-shadow: 0 4px 14px rgb(0 0 0 / 22%); font-size: 11.2px; pointer-events: none; white-space: nowrap; }

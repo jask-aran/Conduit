@@ -56,12 +56,7 @@ button.ui-step:is(:hover, :focus-visible) { background: var(--tint); }
 .ui-step-item[data-state="planned"] { opacity: var(--opacity-disabled); }
 .ui-step-item[data-state="earlier"] .ui-step-verb { color: var(--muted-foreground); }
 /* A failed request in the trail. */
-.ui-trace-error { display: grid; gap: var(--space-xs); padding-block: var(--space-2xs); font-size: var(--text-row); }
-.ui-trace-error-head { display: flex; align-items: center; gap: var(--row-gap); color: var(--destructive); }
-.ui-trace-error-head > svg { width: var(--icon-sm); height: var(--icon-sm); flex: none; }
-.ui-trace-error-head time { margin-left: auto; color: var(--muted-foreground); font-size: var(--text-caption); }
-.ui-trace-error-facts { display: flex; flex-wrap: wrap; gap: var(--space-xs) var(--space-md); font: var(--text-caption) var(--font-data); }
-.ui-trace-error pre { margin: 0; overflow: auto; border: var(--hairline) solid var(--tint); border-radius: var(--radius-control); padding: var(--space-sm) var(--space-lg); white-space: pre-wrap; font: var(--text-caption)/var(--leading-code) var(--font-code); }
+.ui-trace-error { padding-block: var(--space-2xs); }
 /* The header's latest line, when it is Markdown (the app's), reads inline at the line's size. */
 .ui-trace-latest .chat-markdown { display: contents; font-size: inherit; line-height: inherit; }
 .ui-trace-latest :is(.chat-markdown, .incremark) > * { display: inline; margin: 0; }

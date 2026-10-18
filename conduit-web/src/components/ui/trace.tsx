@@ -1,7 +1,8 @@
 import { children, For, Show, splitProps, type JSX } from "solid-js";
-import { ChevronDownIcon, TriangleAlertIcon } from "lucide-solid";
+import { ChevronDownIcon } from "lucide-solid";
 import { Button, Spinner } from "./controls";
 import { type Motion, motionOf, sinceOf } from "./shared";
+import { Failure } from "./transcript";
 
 /**
  * A turn's head: the orb, then Status · time · work, and under it the trail's latest line (text, or the app's inline
@@ -68,8 +69,4 @@ export function StepOutput(props: { text: string; hidden?: number; full?: boolea
 /** What a thinking or narration step opens to: its whole text, the Answer's prose a step quieter. */
 export const StepProse = (props: { children: JSX.Element }) => <div class="ui-step-prose">{props.children}</div>;
 /** A failed request in the trail: what failed, when, on what, and the error. */
-export function TraceError(props: { time?: string; facts?: string[]; message: string }) {
-  return <li class="ui-trace-error"><div class="ui-trace-error-head"><TriangleAlertIcon /><b>Request failed</b><Show when={props.time}><time>{props.time}</time></Show></div>
-    <Show when={props.facts?.length}><div class="ui-trace-error-facts"><For each={props.facts}>{(fact) => <span>{fact}</span>}</For></div></Show>
-    <pre>{props.message}</pre></li>;
-}
+export const TraceError = (props: { time?: string; facts?: string[]; message: string }) => <li class="ui-trace-error"><Failure {...props} /></li>;
