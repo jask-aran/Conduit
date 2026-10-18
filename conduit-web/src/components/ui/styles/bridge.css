@@ -64,8 +64,7 @@
 .ui-answer .chat-markdown .artifact-copy::before { width: var(--icon-xs); height: var(--icon-xs); background: currentColor; content: ""; mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect width='14' height='14' x='8' y='8' rx='2'/%3E%3Cpath d='M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2'/%3E%3C/svg%3E") center / contain no-repeat; }
 .ui-answer .chat-markdown .artifact-copy[data-copied="true"]::before { mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 6 9 17l-5-5'/%3E%3C/svg%3E"); }
 .ui-answer .chat-markdown .artifact-header { padding-right: calc(var(--space-lg) - (var(--control-xs) - var(--icon-xs)) / 2); }
-/* It unfolds and folds as the CodeBlock does, once written: a block still streaming folds at once on the line that
-   passes the limit, as its height would otherwise run past the fold and ease back, pulling the page down. */
+/* It unfolds and folds as the CodeBlock does (code.css), still being written folding at once. */
 .ui-answer .chat-markdown .artifact > pre { height: auto; overflow-y: hidden; interpolate-size: allow-keywords; --move: var(--duration-gentle); --move-ease: var(--ease-arrive); }
 .ui-answer .chat-markdown .artifact:not(.streaming-pending) > pre { transition: height var(--move) var(--move-ease); }
 .ui-answer .chat-markdown .artifact[data-collapsed="true"] > pre { height: calc(var(--code-collapse-lines, 15) * 1.6em + 2 * var(--space-md)); max-height: none; --move: var(--duration-quick); --move-ease: var(--ease-leave); }
@@ -88,4 +87,4 @@
 .ui-frost.ui-menu { padding: var(--frost-inset); border-radius: var(--radius-surface); }
 .ui-frost.ui-menu[data-lift="raised"] { box-shadow: var(--frost-lift-raised), var(--frost-highlight); }
 /* An app row's own text runs out in an ellipsis, as a library label does. */
-.ui-row > span:not(.ui-icon, .ui-keys, .ui-meta, .ui-row-end, .composer-place-lead) { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ui-row > span:not(.ui-icon, .ui-keys, .ui-meta, .ui-row-end) { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
