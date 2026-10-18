@@ -31,7 +31,7 @@ const LANGUAGE_ALIASES: Record<string, string> = {
 };
 
 type Highlighter = {
-  highlight: (code: string, options: { language: string; ignoreIllegals?: boolean }) => { value: string };
+  highlight: (code: string, options: { language: string; ignoreIllegals?: boolean }) => { value: string; _top?: unknown };
   getLanguage: (name: string) => unknown;
 };
 
@@ -107,7 +107,7 @@ export function resolveHighlightLanguage(language: string) {
  * the tree instead and, at each newline, re-open the same chain of enclosing
  * elements inside a fresh line.
  */
-export function splitHighlightedLines(html: string): HTMLElement[] {
+export function splitHighlightedLines(html: string, keepTrailing = false): HTMLElement[] {
   const template = document.createElement("template");
   template.innerHTML = html;
   const lines: HTMLElement[] = [];
@@ -151,8 +151,9 @@ export function splitHighlightedLines(html: string): HTMLElement[] {
   };
   walk(template.content);
   // A trailing newline in the source produces one empty line the reader never
-  // asked for.
-  if (lines.length > 1 && !lines.at(-1)!.textContent) lines.pop();
+  // asked for -- in finished code. A streaming prefix ending in one is a blank
+  // line with the line being written after it.
+  if (!keepTrailing && lines.length > 1 && !lines.at(-1)!.textContent) lines.pop();
   return lines;
 }
 
@@ -225,19 +226,38 @@ export function codeElementText(code: Element) {
 /** Recompute budget while a fence is still being written. */
 export const STREAM_REHIGHLIGHT_MS = 100;
 
-function lineSpans(html: string) {
-  return splitHighlightedLines(html).map((line) => line.outerHTML);
+function lineSpans(html: string, keepTrailing = false) {
+  return splitHighlightedLines(html, keepTrailing).map((line) => line.outerHTML);
+}
+
+// Lines with no highlighting, built as strings: the tail is rebuilt every delivery, and a template parse a time was
+// most of what was left of a streaming fence's script.
+function plainLineSpans(text: string) {
+  const lines = text.split("\n");
+  if (lines.length > 1 && !lines.at(-1)) lines.pop();
+  return lines.map((line) => `<span class="code-line">${escapeForLines(line)}</span>`);
 }
 
 export function highlightToHtml(text: string, language: string) {
+  return highlightPart(text, language).html;
+}
+
+/**
+ * The text highlighted, and whether the grammar ends it at its top level -- in no comment, string or other construct
+ * still open. Text after such a point highlights the same started afresh as it does continued from the text before
+ * (checked character by character across the registered grammars' multi-line constructs).
+ */
+function highlightPart(text: string, language: string) {
   const hljs = loaded;
-  if (!hljs) return escapeForLines(text);
+  if (!hljs) return { html: escapeForLines(text), atTop: false };
   const resolved = resolveHighlightLanguage(language);
-  if (!resolved || !hljs.getLanguage(resolved)) return escapeForLines(text);
+  const grammar = resolved ? hljs.getLanguage(resolved) : null;
+  if (!grammar) return { html: escapeForLines(text), atTop: true };
   try {
-    return hljs.highlight(text, { language: resolved, ignoreIllegals: true }).value;
+    const result = hljs.highlight(text, { language: resolved, ignoreIllegals: true });
+    return { html: result.value, atTop: result._top === grammar };
   } catch {
-    return escapeForLines(text);
+    return { html: escapeForLines(text), atTop: false };
   }
 }
 
@@ -246,11 +266,17 @@ export function highlightToHtml(text: string, language: string) {
  *
  * Holds the highlighted prefix between frames so a growing block does not pay
  * for its whole length on every chunk, and leaves the in-progress line plain so
- * its colours do not change under the reader as it is completed.
+ * its colours do not change under the reader as it is completed. Lines up to a
+ * point the grammar ends at its top level are final, and each recompute starts
+ * there: highlighting the whole prefix every 100ms grew with the file (a
+ * 137-line file was most of a streaming fence's script time).
  */
 export class StreamingCodeHighlighter {
   private prefixLength = -1;
   private prefixLines: string[] = [];
+  /** The text highlighted for good, through the line break after it, and its lines. */
+  private committed = "";
+  private committedLines: string[] = [];
   private lastRunAt = 0;
   private lastLanguage = "";
   private hadGrammars = false;
@@ -267,6 +293,8 @@ export class StreamingCodeHighlighter {
       this.hadGrammars = hasGrammars;
       this.prefixLength = -1;
       this.prefixLines = [];
+      this.committed = "";
+      this.committedLines = [];
       this.lastRunAt = 0;
     }
     if (!streaming) {
@@ -286,7 +314,20 @@ export class StreamingCodeHighlighter {
     if (grew && now - this.lastRunAt >= STREAM_REHIGHLIGHT_MS) {
       this.lastRunAt = now;
       this.prefixLength = stable.length;
-      this.prefixLines = stable ? lineSpans(highlightToHtml(stable, language)) : [];
+      // Text rewritten behind its end starts over.
+      if (!stable.startsWith(this.committed)) {
+        this.committed = "";
+        this.committedLines = [];
+      }
+      const part = stable.slice(this.committed.length);
+      const { html, atTop } = highlightPart(part, language);
+      // An empty part after committed lines is an empty line of its own.
+      const lines = part || this.committed ? lineSpans(html, true) : [];
+      this.prefixLines = this.committedLines.length ? [...this.committedLines, ...lines] : lines;
+      if (atTop && lines.length) {
+        this.committed = `${stable}\n`;
+        this.committedLines = this.prefixLines;
+      }
     } else if (this.prefixLength < 0) {
       this.prefixLength = 0;
       this.prefixLines = [];
@@ -296,6 +337,6 @@ export class StreamingCodeHighlighter {
     // withheld from the reader while waiting for the next recompute.
     const plainFrom = this.prefixLength <= 0 ? text : text.slice(this.prefixLength + 1);
     if (!plainFrom) return this.prefixLines;
-    return [...this.prefixLines, ...lineSpans(escapeForLines(plainFrom))];
+    return [...this.prefixLines, ...plainLineSpans(plainFrom)];
   }
 }
