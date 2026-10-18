@@ -31,7 +31,7 @@
 .ui-answer li::marker { color: var(--muted-foreground); }
 .ui-answer li + li { margin-top: var(--space-2xs); }
 .ui-answer blockquote { border-left: 1px solid var(--tint); padding-left: var(--space-lg); color: var(--muted-foreground); }
-.ui-answer :not(pre, .ui-code-line) > code { border-radius: calc(0.6 * var(--radius-control)); background: var(--tint); padding: 0 var(--space-xs); font: 0.9em var(--font-code); }
+.ui-answer :not(pre, .ui-code-line) > code { border-radius: var(--radius-inset); background: var(--tint); padding: 0 var(--space-xs); font: 0.9em var(--font-code); }
 .ui-answer a { color: inherit; text-decoration: underline; text-decoration-color: color-mix(in oklch, currentColor, transparent 55%); text-underline-offset: 2px; }
 .ui-answer a:is(:hover, :focus-visible) { text-decoration-color: currentColor; }
 .ui-answer hr { border: 0; border-top: 1px solid var(--tint); }

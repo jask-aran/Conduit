@@ -1,11 +1,11 @@
 /* A keycap is small inside a row, so its corner is a share of the control radius (~4px on desktop), and its text the label size. */
-.ui-keycap { display: inline-grid; min-width: calc(1.125 * var(--u-space)); height: calc(1.125 * var(--u-space)); place-items: center; border-radius: calc(0.6 * var(--radius-control)); background: var(--tint); padding: 0 var(--space-xs); color: var(--muted-foreground); font: var(--weight-lift) var(--text-label)/1 var(--font-label); }
+.ui-keycap { display: inline-grid; min-width: var(--control-2xs); height: var(--control-2xs); place-items: center; border-radius: var(--radius-inset); background: var(--tint); padding: 0 var(--space-xs); color: var(--muted-foreground); font: var(--weight-lift) var(--text-label)/1 var(--font-label); }
 .ui-row[data-highlighted] .ui-keycap { color: var(--foreground); }
 /* A keycap that can be pressed (to record another) and cleared: taller, for a pointer and a finger, the
    chord and a × each a button, a second tint under the one the cursor is on. */
-.ui-keycap[data-editable] { display: inline-flex; height: calc(1.5625 * var(--u-space)); overflow: hidden; padding: 0; color: var(--foreground); font-size: var(--text-caption); }
+.ui-keycap[data-editable] { display: inline-flex; height: var(--control-xs); overflow: hidden; padding: 0; color: var(--foreground); font-size: var(--text-caption); }
 .ui-keycap[data-editable] > button { display: inline-flex; height: 100%; align-items: center; border: 0; background: transparent; padding: 0 var(--space-sm); color: inherit; font: inherit; cursor: pointer; }
-.ui-keycap[data-editable] > .ui-keycap-remove { width: calc(1.25 * var(--u-space)); justify-content: center; border-left: 1px solid var(--tint); padding: 0; color: var(--muted-foreground); }
+.ui-keycap[data-editable] > .ui-keycap-remove { width: var(--control-2xs); justify-content: center; border-left: 1px solid var(--tint); padding: 0; color: var(--muted-foreground); }
 .ui-keycap-remove svg { width: var(--icon-xs); height: var(--icon-xs); }
 .ui-keycap[data-editable] > button:is(:hover, :focus-visible) { outline: 0; background: var(--tint); color: var(--foreground); }
 
@@ -68,7 +68,7 @@
 /* The thumb slides by left, not transform: a transform puts it on a layer of its own and the labels over it
    on others, where Windows draws their text without ClearType, so they dim while it moves. */
 .ui-seg-thumb { position: absolute; top: var(--seg-pad); bottom: var(--seg-pad); left: calc(var(--seg-pad) + (100% - 2 * var(--seg-pad)) / var(--segments) * var(--segment)); width: calc((100% - 2 * var(--seg-pad)) / var(--segments)); border-radius: var(--seg-inner); background: var(--tint); transition: left var(--duration-gentle) var(--ease-arrive); }
-.ui-seg button { position: relative; display: inline-flex; min-width: 0; min-height: calc(1.75 * var(--u-space)); align-items: center; justify-content: center; gap: var(--space-sm); border: 0; border-radius: var(--seg-inner); background: transparent; padding: 0 var(--space-lg); color: var(--muted-foreground); font-size: var(--text-row); font-weight: var(--weight-lift); cursor: pointer; }
+.ui-seg button { position: relative; display: inline-flex; min-width: 0; min-height: calc(var(--control-sm) - 2 * var(--seg-pad)); align-items: center; justify-content: center; gap: var(--space-sm); border: 0; border-radius: var(--seg-inner); background: transparent; padding: 0 var(--space-lg); color: var(--muted-foreground); font-size: var(--text-row); font-weight: var(--weight-lift); cursor: pointer; }
 .ui-seg button svg { width: var(--icon-lg); height: var(--icon-lg); }
 .ui-seg button small { color: var(--muted-foreground); font: var(--weight-rest) var(--text-caption) var(--font-data); }
 .ui-seg button:is(:hover, :focus-visible, [aria-checked="true"]) { color: var(--foreground); }
@@ -85,7 +85,7 @@
 .ui-seg button[aria-checked="true"]:is(:hover, :focus-visible) { background: var(--tint); }
 /* A small segmented choice, for a bar's end (chat search's sort). */
 /* Only its size changes: the same hairline, thumb and type as the Segmented it scales. */
-.ui-seg[data-size="sm"] button { min-height: calc(1.40625 * var(--u-space)); padding: var(--space-2xs) var(--space-md); font-size: var(--text-caption); }
+.ui-seg[data-size="sm"] button { min-height: calc(var(--control-xs) - 2 * var(--seg-pad)); padding: var(--space-2xs) var(--space-md); font-size: var(--text-caption); }
 
 /* Slider: the label is a section title, the value an item (one that opens,
    when it opens the levels); track, thumb and ticks follow density. */
@@ -95,7 +95,7 @@
 .ui-slider-value { display: inline-flex; align-items: center; gap: var(--space-xs); border: 0; border-radius: var(--radius-control); background: transparent; padding: var(--space-xs) var(--space-xs) var(--space-xs) var(--space-sm); color: color-mix(in oklch, var(--foreground), transparent 38%); font-size: var(--text-caption); font-weight: var(--weight-rest); }
 .ui-slider-value[data-opens]:is(:hover, :focus-visible) { background: var(--tint); color: var(--foreground); }
 .ui-slider-value svg { width: var(--icon-xs); height: var(--icon-xs); color: var(--muted-foreground); }
-.ui-slider-input { --thumb: calc(1.25 * var(--u-icon)); --track: 4px; width: 100%; height: var(--thumb); margin: 0; appearance: none; -webkit-appearance: none; background: transparent; cursor: pointer; touch-action: pan-y; }
+.ui-slider-input { --thumb: var(--control-2xs); --track: 4px; width: 100%; height: var(--thumb); margin: 0; appearance: none; -webkit-appearance: none; background: transparent; cursor: pointer; touch-action: pan-y; }
 .ui-slider-input:focus-visible { outline: 0; }
 .ui-slider-input::-webkit-slider-runnable-track { height: var(--track); border-radius: var(--radius-round); background: linear-gradient(to right, var(--foreground) var(--fill), var(--tint) var(--fill)); }
 .ui-slider-input::-moz-range-track { height: var(--track); border-radius: var(--radius-round); background: var(--tint); }
@@ -103,7 +103,7 @@
 .ui-slider-input::-webkit-slider-thumb { width: var(--thumb); height: var(--thumb); margin-top: calc((var(--track) - var(--thumb)) / 2); border: 2px solid var(--background); border-radius: var(--radius-round); background: var(--foreground); -webkit-appearance: none; }
 .ui-slider-input::-moz-range-thumb { width: var(--thumb); height: var(--thumb); border: 2px solid var(--background); border-radius: var(--radius-round); background: var(--foreground); }
 .ui-slider-input:focus-visible::-webkit-slider-thumb { filter: brightness(1.1); }
-.ui-slider-ticks { display: flex; justify-content: space-between; margin-top: -4px; padding-inline: calc(var(--thumb, calc(1.25 * var(--u-icon))) / 2 - 1px); }
+.ui-slider-ticks { display: flex; justify-content: space-between; margin-top: -4px; padding-inline: calc(var(--thumb, var(--control-2xs)) / 2 - 1px); }
 .ui-slider-ticks i { width: 2px; height: 4px; border-radius: var(--radius-round); background: var(--tint); }
 .ui-slider-ticks i[data-reached] { background: var(--muted-foreground); }
 
