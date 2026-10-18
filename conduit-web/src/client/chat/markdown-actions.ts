@@ -60,7 +60,7 @@ export async function copyWithFeedback(
       if (previousAria != null) trigger.setAttribute("aria-label", previousAria);
     }, COPY_FEEDBACK_MS);
   }
-  const flashTarget = region || trigger?.closest<HTMLElement>("[data-language], [data-slot='bubble-content']");
+  const flashTarget = region || trigger?.closest<HTMLElement>("[data-language]");
   if (flashTarget) {
     // Restart the animation even if a previous flash is still running.
     delete flashTarget.dataset.copyFlash;

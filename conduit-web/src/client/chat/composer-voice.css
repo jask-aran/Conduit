@@ -30,7 +30,7 @@
      pace and with no delay; its own fold timings are for showing/hiding. */
   [data-left-listening] .composer-actions .composer-latest-trigger[data-slot="button"][data-shown] { transition: opacity .18s ease, filter .16s ease; }
   [data-phone-mode="listening"] .composer-actions .composer-latest-trigger[data-slot="button"][data-shown] { opacity: 0; pointer-events: none; transition: opacity .18s ease, filter .16s ease; }
-  :root[data-voice-composer] .message-scroller-button[data-slot="button"]:not(.message-cancel-edit) { display: none; }
+  :root[data-voice-composer] .message-scroller-button:not(.message-cancel-edit) { display: none; }
   /* It takes its room as the pill shrinks, so the pill's right edge slides
      over instead of jumping, then fades in -- as Send does beside it. */
   /* Always there, folded away until listening: it takes its room as the pill

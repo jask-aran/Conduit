@@ -70,7 +70,7 @@
 @keyframes ui-slide { from { opacity: 0; transform: translateX(var(--slide, var(--space-md))); } }
 @media (prefers-reduced-motion: reduce) {
   :is(.ui-menu, .ui-card, .ui-toast, .ui-overlay, .ui-rider, .ui-chip, .ui-scrim, .ui-step-item, .ui-message, .ui-message-foot, .ui-rider-button, .ui-trace-fold):is([data-entering], [data-leaving]), .ui-message[data-entering] > *, .ui-toolbar-primary > *, .ui-toolbar-end > [aria-pressed="true"] { animation: none; }
-  .ui-disclosure-body, .ui-menu, .ui-composer-slot > .ui-composer-stack, .ui-composer-slot > .ui-composer-stack > *, .ui-toolbar-end > .ui-toolbar-aside { transition: none; }
+  .ui-disclosure-body, .ui-rider-button, .ui-menu, .ui-composer-slot > .ui-composer-stack, .ui-composer-slot > .ui-composer-stack > *, .ui-toolbar-end > .ui-toolbar-aside { transition: none; }
 }
 /*
  * Scale: everything is drawn from a few numbers. A density gives its unit (12.8px on desktop, 16px on

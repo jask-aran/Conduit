@@ -130,3 +130,6 @@
 /* It fades in where it rides when there is something below, and out when there is not. */
 .ui-rider-button[data-entering] { animation: ui-fade-in var(--duration-gentle) var(--ease-arrive) backwards; }
 .ui-rider-button[data-leaving] { animation: ui-fade-out var(--duration-quick) var(--ease-leave) forwards; pointer-events: none; }
+/* Hidden in place: it fades out quickly and back in gently, never redrawn. */
+.ui-rider-button { transition: opacity var(--duration-gentle) var(--ease-arrive); }
+.ui-rider-button[data-hidden] { opacity: 0; pointer-events: none; transition-duration: var(--duration-quick); transition-timing-function: var(--ease-leave); }

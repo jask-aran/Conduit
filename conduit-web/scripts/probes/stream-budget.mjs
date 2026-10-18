@@ -29,7 +29,7 @@ for (const renderer of (process.env.RENDERERS || "marked,incremark,incremark-fad
   const done = new Promise((r) => cdp.once("Tracing.tracingComplete", r));
   await cdp.send("Tracing.start", { traceConfig: { includedCategories: ["devtools.timeline", "toplevel"] } });
   const sampling = p.evaluate(() => new Promise((finish) => {
-    const el = () => [...document.querySelectorAll(".bubble-assistant .chat-markdown")].at(-1);
+    const el = () => [...document.querySelectorAll(".ui-answer .chat-markdown")].at(-1);
     const churn = {}; let added = 0;
     const mo = new MutationObserver((records) => { for (const r of records) { if (!r.target.closest?.(".chat-markdown")) continue; for (const n of r.addedNodes) if (n.nodeType === 1) added++; for (const n of r.removedNodes) if (n.nodeType === 1) { const k = n.tagName.toLowerCase() + (n.className && typeof n.className === "string" ? "." + n.className.split(" ")[0] : ""); churn[k] = (churn[k] ?? 0) + 1; } } });
     mo.observe(document.querySelector(".thread") || document.body, { childList: true, subtree: true });

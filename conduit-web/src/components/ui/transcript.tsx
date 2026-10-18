@@ -1,6 +1,7 @@
-import { createEffect, createSignal, onCleanup, onMount, Show, type JSX } from "solid-js";
-import { ChevronDownIcon, SquareIcon } from "lucide-solid";
+import { createEffect, createSignal, For, onCleanup, onMount, Show, splitProps, type JSX } from "solid-js";
+import { BellIcon, ChevronDownIcon, SquareIcon, TriangleAlertIcon } from "lucide-solid";
 import { cn } from "@/lib/utils";
+import { Spinner } from "./controls";
 import { type Motion, motionOf, sinceOf } from "./shared";
 
 /**
@@ -42,9 +43,23 @@ export function Bubble(props: { children: JSX.Element; fold?: number; open?: boo
  * answer and the answer's foot; the user's Message is a Bubble and its foot. Shapes only: the orb, the
  * markdown and every action are the caller's.
  */
-/** The answer: Markdown with no bubble, the Body role, one gap between blocks. html for rendered Markdown. */
-export const Answer = (props: { html?: string; children?: JSX.Element }) =>
-  <Show when={props.html !== undefined} fallback={<div class="ui-answer">{props.children}</div>}><div class="ui-answer" innerHTML={props.html} /></Show>;
+/** The answer: Markdown with no bubble, the Body role, one gap between blocks. html for rendered Markdown. copied: it
+ *  was just copied, and takes the copied wash. */
+export const Answer = (props: { html?: string; copied?: boolean; children?: JSX.Element }) =>
+  <Show when={props.html !== undefined} fallback={<div class="ui-answer" data-copied={props.copied ? "" : undefined}>{props.children}</div>}><div class="ui-answer" data-copied={props.copied ? "" : undefined} innerHTML={props.html} /></Show>;
+/** A request that failed: Request failed and when, its facts (model, provider, profile), then what the provider
+ *  said. In an answer's place, or in a trace's trail (TraceError). */
+export function Failure(props: { time?: string; dateTime?: string; facts?: string[]; message: string }) {
+  return <div class="ui-failure" role="alert"><div class="ui-failure-head"><TriangleAlertIcon /><b>Request failed</b><Show when={props.time}><time dateTime={props.dateTime}>{props.time}</time></Show></div>
+    <Show when={props.facts?.length}><div class="ui-failure-facts"><For each={props.facts}>{(fact) => <span>{fact}</span>}</For></div></Show>
+    <pre>{props.message}</pre></div>;
+}
+/** A prompt the harness sent on its own (a background task finishing): one muted line at the right, a bell before
+ *  it, no bubble and no actions. */
+export const HarnessPrompt = (props: { children: JSX.Element }) => <p class="ui-harness-prompt"><BellIcon aria-hidden="true" /><span>{props.children}</span></p>;
+/** What a turn changed, as counts in the data's colours (+added, −removed, mono); opens the changes. In a foot. */
+export const Changes = (props: { added: number; removed: number; title?: string; label?: string; onOpen?: () => void }) =>
+  <button type="button" class="ui-changes" title={props.title} aria-label={props.label} onClick={() => props.onOpen?.()}><span data-change="added">+{props.added}</span><span data-change="removed">−{props.removed}</span></button>;
 /** Anything that folds: a header, one turning chevron, a body. Shape only: the caller opens it (and animates it). */
 export function Disclosure(props: { header: JSX.Element; open?: boolean; onToggle?: () => void; disabled?: boolean; children?: JSX.Element }) {
   return <div class="ui-disclosure" data-open={props.open ? "true" : "false"}>
@@ -72,8 +87,20 @@ export const Message = (props: { time?: string; dateTime?: string; title?: strin
     {props.under}
     <MessageFoot time={props.time} dateTime={props.dateTime} title={props.title} end>{props.actions}</MessageFoot>
   </article>;
-/** The reading column: the composer's width, its gutter, one gap between messages. */
-export const Transcript = (props: { children: JSX.Element; class?: string }) => <div class={cn("ui-transcript", props.class)}>{props.children}</div>;
+/** The reading column: the composer's width (or --transcript-width, when the pane declares one), one gap between
+ *  messages. Drawn row by row for a long chat (the caller windows it), each row a TranscriptRow. */
+export function Transcript(props: JSX.HTMLAttributes<HTMLDivElement>) {
+  const [local, rest] = splitProps(props, ["class", "children"]);
+  return <div {...rest} class={cn("ui-transcript", local.class)}>{local.children}</div>;
+}
+/** At a Transcript's top while earlier messages load: a spinner, centred. */
+export const LoadingEarlier = () => <div class="ui-loading-earlier" role="status" aria-label="Loading earlier messages"><Spinner /></div>;
+/** A row of a Transcript drawn row by row: a message, or a turn's head or answer. turn: it goes on with the turn in
+ *  the row above (its answer, under its trace), a turn's gap from it rather than a message's. */
+export function TranscriptRow(props: JSX.HTMLAttributes<HTMLDivElement> & { turn?: boolean }) {
+  const [local, rest] = splitProps(props, ["turn", "children"]);
+  return <div {...rest} class="ui-transcript-row" data-turn={local.turn ? "" : undefined}>{local.children}</div>;
+}
 
 /** What is read: the transcript's scale and type for whatever it holds (a turn, a trace, a sample). */
 export const Read = (props: { class?: string; children: JSX.Element }) => <div class={cn("ui-read", props.class)}>{props.children}</div>;

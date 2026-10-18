@@ -1,7 +1,6 @@
 import { setLatestAway, setLatestScroller } from "./latest-away";
 import { createComputed, createEffect, createMemo, createRenderEffect, createSignal, For, on, onCleanup, onMount, Show, Suspense, untrack, type JSX } from "solid-js";
-import { ArrowDownIcon, BellIcon, CheckIcon, CopyIcon, PencilIcon, PlayIcon, RefreshCwIcon, SquareIcon, TriangleAlertIcon, XIcon } from "lucide-solid";
-import { Button, Spinner } from "@/components/primitives";
+import { ArrowDownIcon, PencilIcon, PlayIcon, RefreshCwIcon, XIcon } from "lucide-solid";
 import type { BooleanCapability, Message } from "../api/contracts";
 import { isChatContentActivity, type TranscriptSource } from "./transcript-source";
 import type { TurnArtifactSummary } from "../api/live-events";
@@ -11,7 +10,6 @@ import { parseReviewComments } from "./review-comments";
 import { TraceStarting, TurnTrace } from "./turn-trace";
 import { createTimelineStore } from "../state/timeline-store";
 import type { MarkdownRendererId } from "./markdown-settings";
-import { COMPOSER_SURFACE_CHANGE_EVENT, selectedComposerSurface, type ComposerSurfaceMode } from "./composer-surface";
 import { isIncremarkRenderer, selectedMarkdownRenderer } from "./markdown-settings";
 import { UI_PREFERENCE_CHANGE_EVENT } from "../preferences/ui-preferences";
 import { copyWithFeedback } from "./markdown-actions";
@@ -45,8 +43,8 @@ import {
 import { captureTranscriptAnchor, restoreTranscriptAnchor } from "./transcript-anchor";
 import { api } from "../api/client";
 import { requestTurnArtifactNavigation } from "./turn-artifact-navigation";
-import { LibraryContext, useLibrary, useLibraryPiece } from "@/components/ui/swap";
-import { Button as LibraryButton, Message as LibraryMessage, StopLine } from "@/components/ui";
+import { LibraryContext, useLibraryPiece } from "@/components/ui/swap";
+import { Answer, Button as LibraryButton, Changes, CopyButton, Failure, HarnessPrompt, LoadingEarlier, Message as LibraryMessage, MessageFoot, RiderButton, StopLine, Transcript as LibraryTranscript, TranscriptRow, Turn } from "@/components/ui";
 import { ChatMarkdown } from "./lazy-markdown";
 import { fullDateTime } from "./full-date-time";
 
@@ -94,25 +92,24 @@ function UserMessage(props: { message: Message; text: string; editing: boolean; 
   </LibraryMessage>;
 }
 
-function TurnArtifactButton(props: { artifact: TurnArtifactSummary; chatId: string }) {
+/** A turn's changes, opening them in Agent changes. */
+function TurnChanges(props: { artifact: TurnArtifactSummary; chatId: string }) {
   const range = () => `Turn ${props.artifact.sequence} → ${props.artifact.targetSequence === null ? "Working copy" : `Turn ${props.artifact.targetSequence}`}`;
-  return <button type="button" class="turn-change-summary" title={range()} aria-label={`Open ${range()} in Agent changes: ${props.artifact.summary!.added} additions and ${props.artifact.summary!.removed} removals`} onClick={() => requestTurnArtifactNavigation({ chatId: props.chatId, checkpointId: props.artifact.id, path: props.artifact.summary!.preferredPath })}><span data-change="added">+{props.artifact.summary!.added}</span><span data-change="removed">−{props.artifact.summary!.removed}</span></button>;
+  return <Changes added={props.artifact.summary!.added} removed={props.artifact.summary!.removed} title={range()}
+    label={`Open ${range()} in Agent changes: ${props.artifact.summary!.added} additions and ${props.artifact.summary!.removed} removals`}
+    onOpen={() => requestTurnArtifactNavigation({ chatId: props.chatId, checkpointId: props.artifact.id, path: props.artifact.summary!.preferredPath })} />;
 }
 
-/* A message's time leads its action row, muted -- not a line of its own above it. */
-function MessageTime(props: { timestamp?: string | null }) {
-  return <Show when={props.timestamp}>{(timestamp) => <time class="response-time" dateTime={timestamp()} title={fullDateTime(timestamp())}>{new Date(timestamp()).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</time>}</Show>;
-}
+/* A message's time leads its foot, muted -- not a line of its own above it. */
+const clock = (timestamp?: string | null) => timestamp ? new Date(timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : undefined;
 
-function Actions(props: { message: Message; precedingUserId?: string; chat: TranscriptSource; supports: (capability: BooleanCapability) => boolean; partialContinue: boolean; artifact?: TurnArtifactSummary; traced?: boolean; reveal?: boolean }) {
-  const [copied, setCopied] = createSignal(false);
-  let copyButton: HTMLButtonElement | undefined;
-  const assistant = () => props.message.role !== "user";
+/** An answer's foot: its time, how it ended if it did not finish, then Continue, Copy, Regenerate and its changes. */
+function AnswerFoot(props: { message: Message; precedingUserId?: string; chat: TranscriptSource; supports: (capability: BooleanCapability) => boolean; partialContinue: boolean; artifact?: TurnArtifactSummary; traced?: boolean; reveal?: boolean; copied: boolean; onCopy: () => void }) {
   /* A stopped turn says "Interrupted" once, on its first row. A trace above
      says it for the turn; a discarded or unwritten answer says it on its stop
      row; a kept answer with nothing above it says it here. */
   const status = () => {
-    if (!assistant() || !props.message.stopped) return undefined;
+    if (!props.message.stopped) return undefined;
     if (props.message.status === "stopping") return "Stopping…";
     return props.message.content && !props.message.discarded && !props.traced ? "Interrupted" : undefined;
   };
@@ -123,52 +120,12 @@ function Actions(props: { message: Message; precedingUserId?: string; chat: Tran
      when the agent kept what it had written. */
   const continuable = () => props.partialContinue && Boolean(props.message.stopped) && !props.message.discarded
     && Boolean(props.message.content) && !props.chat.streaming() && props.chat.messages().at(-1)?.id === props.message.id;
-  // In v2, the library's MessageFoot.
-  const library = useLibrary();
-  return <div class={library ? "ui-message-foot" : "response-actions"} data-reveal={props.reveal ? "" : undefined}>
-    <MessageTime timestamp={props.message.timestamp} />
-    <Show when={status()}>{(label) => library ? <b class="ui-message-status">{label()}</b> : <span class="marker response-status turn-trace-status" data-status={label() === "Interrupted" ? "interrupted" : undefined}>{label()}</span>}</Show>
-    {/* A prompt offers editing. Regenerating it is the same act as regenerating
-        the answer below, which already has a button, so there is one way to ask
-        for it rather than two that look like different things. */}
-    <Show when={continuable()}><Button variant="ghost" size="sm" class="response-continue" onClick={() => void props.chat.continueResponse()}><PlayIcon />Continue</Button></Show>
-    <Show when={assistant() && copyable()}>
-      <Button
-        ref={(element: HTMLButtonElement) => { copyButton = element; }}
-        variant="ghost"
-        size="icon-sm"
-        aria-label={copied() ? "Copied" : "Copy Markdown"}
-        data-copied={copied() ? "true" : undefined}
-        onClick={async () => {
-          const region = copyButton?.closest<HTMLElement>('[data-slot="message-content"]')
-            ?.querySelector<HTMLElement>('[data-slot="bubble-content"]');
-          if (!await copyWithFeedback(props.message.content || props.message.errorMessage || "", null, region)) return;
-          setCopied(true);
-          setTimeout(() => setCopied(false), 1600);
-        }}
-      >{copied() ? <CheckIcon /> : <CopyIcon />}</Button>
-    </Show>
-    <Show when={assistant()}>
-      <Show when={props.supports("regenerate") && props.precedingUserId}><Button variant="ghost" size="icon-sm" aria-label="Regenerate response" onClick={() => void props.chat.regenerate(props.precedingUserId!)}><RefreshCwIcon /></Button></Show>
-      <Show when={props.artifact}>{(entry) => <TurnArtifactButton artifact={entry()} chatId={props.chat.loadedId()!} />}</Show>
-    </Show>
-  </div>;
-}
-
-/**
- * The line a stopped turn says so on when no trace above it does.
- *
- * It is drawn as a trace header is -- same size, same colour, same tag -- with
- * the Stop mark where a trace has its brain, so the two ways a stop shows up
- * read as one thing and line up with each other.
- */
-function StopLabel(props: { traced?: boolean; detail: string }) {
-  return <>
-    <SquareIcon class="turn-stop-mark" aria-hidden="true" />
-    <span class="turn-stop-label"><Show when={!props.traced} fallback={`${props.detail[0]!.toUpperCase()}${props.detail.slice(1)}`}>
-      <span class="turn-trace-status" data-status="interrupted">Interrupted</span>{` · ${props.detail}`}
-    </Show></span>
-  </>;
+  return <MessageFoot motion={props.reveal ? "entering" : undefined} time={clock(props.message.timestamp)} dateTime={props.message.timestamp || undefined} title={props.message.timestamp ? fullDateTime(props.message.timestamp) : undefined} status={status()}>
+    <Show when={continuable()}><LibraryButton variant="ghost" size="sm" onClick={() => void props.chat.continueResponse()}><PlayIcon />Continue</LibraryButton></Show>
+    <Show when={copyable()}><CopyButton copied={props.copied} label="Copy Markdown" onCopy={props.onCopy} /></Show>
+    <Show when={props.supports("regenerate") && props.precedingUserId}><LibraryButton variant="ghost" size="icon-xs" aria-label="Regenerate response" onClick={() => void props.chat.regenerate(props.precedingUserId!)}><RefreshCwIcon /></LibraryButton></Show>
+    <Show when={props.artifact}>{(entry) => <TurnChanges artifact={entry()} chatId={props.chat.loadedId()!} />}</Show>
+  </MessageFoot>;
 }
 
 /* The composer is where an edit happens, so starting or leaving one puts the
@@ -187,8 +144,6 @@ function TranscriptBody(props: { chat: TranscriptSource; supports: (capability: 
   let thread!: HTMLDivElement;
   let latestButton: HTMLButtonElement | undefined;
   let cancelEditButton: HTMLButtonElement | undefined;
-  // In v2 these two are the library's RiderButtons, the user's message its Bubble and the answer its Answer (ui-answer).
-  const library = useLibrary();
   let scheduleLatestButtonAnchor = () => {};
   let panelMotion: ReturnType<typeof mountTranscriptPanelMotion> | null = null;
   let transcriptVisibility: ReturnType<typeof mountTranscriptVisibility> | null = null;
@@ -247,7 +202,6 @@ function TranscriptBody(props: { chat: TranscriptSource; supports: (capability: 
   const latestAway = createMemo(() => !following() && latestDistance() >= TAIL_NEAR_LATEST_PX);
   createEffect(() => setLatestAway(latestAway()));
   onCleanup(() => setLatestAway(false));
-  const [composerSurface, setComposerSurface] = createSignal<ComposerSurfaceMode>(selectedComposerSurface());
   const [markdownRenderer, setMarkdownRenderer] = createSignal<MarkdownRendererId>(selectedMarkdownRenderer());
   // A reset relays out every managed block, so hold the reading position across
   // it rather than letting the height changes settle wherever they land.
@@ -687,12 +641,10 @@ function TranscriptBody(props: { chat: TranscriptSource; supports: (capability: 
   });
 
   onMount(() => {
-    const syncComposerSurface = () => setComposerSurface(selectedComposerSurface());
     const syncUiPreference = (event: Event) => {
       const detail = (event as CustomEvent<{ key?: string; value?: unknown }>).detail;
       const params = new URLSearchParams(location.search);
-      if (detail?.key === "composerSurface") setComposerSurface(selectedComposerSurface());
-      else if (detail?.key === "markdownRenderer" && typeof detail.value === "string"
+      if (detail?.key === "markdownRenderer" && typeof detail.value === "string"
         && !params.has("markdownRenderer")) {
         setMarkdownRenderer(detail.value as MarkdownRendererId);
       } else if (isCodeBlockCollapseMode(detail?.value) && detail?.key === "codeBlockCollapse") {
@@ -1017,7 +969,6 @@ function TranscriptBody(props: { chat: TranscriptSource; supports: (capability: 
     viewport.addEventListener("touchstart", cancelLatestGlide, { passive: true });
     viewport.addEventListener("pointerdown", onPointerDown, { passive: true });
     viewport.addEventListener("keydown", onKeyDown, { passive: true });
-    window.addEventListener(COMPOSER_SURFACE_CHANGE_EVENT, syncComposerSurface);
     const resizeObserver = new ResizeObserver(() => {
       if (!following()) return;
       // Hiding and showing blocks resizes the thread. Chasing the tail on those
@@ -1042,7 +993,6 @@ function TranscriptBody(props: { chat: TranscriptSource; supports: (capability: 
       viewport.removeEventListener("touchstart", onTouchStart);
       viewport.removeEventListener("pointerdown", onPointerDown);
       viewport.removeEventListener("keydown", onKeyDown);
-      window.removeEventListener(COMPOSER_SURFACE_CHANGE_EVENT, syncComposerSurface);
       composerResizeObserver.disconnect();
       composerStack?.removeEventListener("transitionend", composerLanded);
       window.removeEventListener("resize", scheduleLatestButtonAnchor);
@@ -1066,33 +1016,31 @@ function TranscriptBody(props: { chat: TranscriptSource; supports: (capability: 
   return <div ref={transcriptRoot} class="transcript" data-part="transcript" data-slot="message-scroller">
     <div ref={motionShell} class="transcript-motion-shell">
       <div ref={viewport} class="message-scroller-viewport" data-slot="message-scroller-viewport" tabIndex={-1} aria-label="Transcript">
-        <div ref={thread} class={library ? "thread ui-read" : "thread"} data-slot="message-scroller-content">
-        <Show when={props.chat.loadingOlder()}>
-          <div data-slot="message-scroller-item" class="flex justify-center" role="status" aria-label="Loading earlier messages"><Spinner /></div>
-        </Show>
-        <Show when={empty()}><div class="empty-thread" data-slot="message-scroller-item"><div class="welcome"><h1>How can I help you today?</h1></div></div></Show>
+        <div class="thread">
+        <Show when={empty()}><div class="empty-thread"><div class="welcome"><h1>How can I help you today?</h1></div></div></Show>
+        <LibraryTranscript ref={thread} data-slot="message-scroller-content">
+        <Show when={props.chat.loadingOlder()}><TranscriptRow data-slot="message-scroller-item"><LoadingEarlier /></TranscriptRow></Show>
         <For each={timeline}>{(item) => {
           if (item.type === "trace") {
             let traceRow!: HTMLDivElement;
             const chatId = () => props.chat.loadedId();
             const artifact = () => item.answerless && item.precedingUserId ? artifactSummaries().get(item.precedingUserId) : undefined;
             const arrive = arrivalOf(lastArrivedId);
-            return <div ref={traceRow} data-slot="message-scroller-item"><TurnTrace since={arrive} trace={item.value} writing={item.answerless === false} sessionId={chatId()} renderer={markdownRenderer()} profileLabel={props.profileLabel} initialOpen={itemExpanded(chatId(), item.key)} onOpenChange={(open) => setItemExpanded(chatId(), item.key, open)} toolOpen={(id) => itemExpanded(chatId(), `tool:${id}`)} onToolOpenChange={(id, open) => setItemExpanded(chatId(), `tool:${id}`, open)} onRendered={() => settleAfterMarkdown(traceRow)} />
+            return <TranscriptRow ref={traceRow} data-slot="message-scroller-item"><Turn><TurnTrace since={arrive} trace={item.value} writing={item.answerless === false} sessionId={chatId()} renderer={markdownRenderer()} profileLabel={props.profileLabel} initialOpen={itemExpanded(chatId(), item.key)} onOpenChange={(open) => setItemExpanded(chatId(), item.key, open)} toolOpen={(id) => itemExpanded(chatId(), `tool:${id}`)} onToolOpenChange={(id, open) => setItemExpanded(chatId(), `tool:${id}`, open)} onRendered={() => settleAfterMarkdown(traceRow)} />
               {/* A turn that ended without an answer -- stopped under a tool, or
                   one that only ran commands -- still offers to try again. */}
               <Show when={item.answerless && !item.value.active}>
-                <div class="response-actions">
-                  <MessageTime timestamp={item.timestamp} />
-                  <Show when={props.supports("regenerate") && item.precedingUserId}><Button variant="ghost" size="icon-sm" aria-label="Regenerate response" onClick={() => void props.chat.regenerate(item.precedingUserId!)}><RefreshCwIcon /></Button></Show>
-                  <Show when={artifact()}>{(entry) => <TurnArtifactButton artifact={entry()} chatId={chatId()!} />}</Show>
-                </div>
-              </Show></div>;
+                <MessageFoot time={clock(item.timestamp)} dateTime={item.timestamp} title={item.timestamp ? fullDateTime(item.timestamp) : undefined}>
+                  <Show when={props.supports("regenerate") && item.precedingUserId}><LibraryButton variant="ghost" size="icon-xs" aria-label="Regenerate response" onClick={() => void props.chat.regenerate(item.precedingUserId!)}><RefreshCwIcon /></LibraryButton></Show>
+                  <Show when={artifact()}>{(entry) => <TurnChanges artifact={entry()} chatId={chatId()!} />}</Show>
+                </MessageFoot>
+              </Show></Turn></TranscriptRow>;
           }
           if (item.type === "pending") {
             // A turn before anything of it shows is the header its trace will
             // be, starting -- replaced in place when the first step arrives.
             // Only a booting agent is Conduit's wait; after that it is the model's.
-            return <div data-slot="message-scroller-item"><TraceStarting startedAt={item.startedAt} label={props.chat.activity()?.kind === "starting" ? "Starting agent" : "Waiting for model"} /></div>;
+            return <TranscriptRow data-slot="message-scroller-item"><TraceStarting startedAt={item.startedAt} label={props.chat.activity()?.kind === "starting" ? "Starting agent" : "Waiting for model"} /></TranscriptRow>;
           }
           const message = createMemo(() => item.value);
           const user = createMemo(() => message().role === "user");
@@ -1127,41 +1075,33 @@ function TranscriptBody(props: { chat: TranscriptSource; supports: (capability: 
           // later update must not shift it.
           const arrive = untrack(() => user() ? arrival(message()) : undefined);
           if (user() && message().origin === "harness") {
-            return <div ref={row} data-slot="message-scroller-item" data-message-id={message().id}>
-              <p class="harness-prompt"><BellIcon aria-hidden="true" /><span>{message().content}</span></p>
-            </div>;
+            return <TranscriptRow ref={row} data-slot="message-scroller-item" data-message-id={message().id}><HarnessPrompt>{message().content}</HarnessPrompt></TranscriptRow>;
           }
-          return <div ref={row} data-slot="message-scroller-item" data-message-id={message().id}>
-            <Show when={user()} fallback={<article data-slot="message" data-align="start" class="message-assistant">
-              <div data-slot="message-content" data-incremark={rendererUsesTypewriter() ? "" : undefined}>
-                                <div data-slot="bubble" data-align="start" data-error={failed() ? "true" : undefined} class="bubble bubble-assistant">
-                  <div data-slot="bubble-content" class={library ? "ui-answer" : undefined}>
-                      <Show when={message().content}>
-                        <Suspense fallback={<div class="markdown-skeleton" />}>
-                          <ChatMarkdown renderer={markdownRenderer()} streaming={live()} streamVersion={item.streamVersion} onRendered={() => settleAfterMarkdown(row)} onSettled={() => setSettled(true)}>{message().content || ""}</ChatMarkdown>
-                        </Suspense>
-                      </Show>
-                      <Show when={!message().content && message().stopped && !item.traced && !failed()}>
-                        {library ? <StopLine detail="before answering" /> : <div class="discarded-answer-header turn-stop-row"><StopLabel detail="before answering" /></div>}
-                      </Show>
-                      <Show when={failed()}>
-                        <details class="assistant-error" open role="alert">
-                          <summary><TriangleAlertIcon aria-hidden="true" /><strong>Request failed</strong></summary>
-                          <dl class="assistant-error-meta">
-                            <Show when={message().model}><div><dt>Model</dt><dd>{message().model}</dd></div></Show>
-                            <Show when={message().provider}><div><dt>Provider</dt><dd>{message().provider}</dd></div></Show>
-                            <Show when={props.profileLabel}><div><dt>Profile</dt><dd>{props.profileLabel}</dd></div></Show>
-                            <Show when={message().timestamp}><div><dt>Time</dt><dd><time dateTime={message().timestamp}>{fullDateTime(message().timestamp)}</time></dd></div></Show>
-                          </dl>
-                          <pre>{message().errorMessage || "The model request failed."}</pre>
-                        </details>
-                      </Show>
-                  </div>
-                </div>
-
-                <Show when={actionsShown()} fallback={<div class={library ? "ui-message-foot" : "response-actions"} aria-hidden="true" />}><Actions message={message()} precedingUserId={precedingUserId()} chat={props.chat} supports={props.supports} partialContinue={props.partialContinue} artifact={artifact()} traced={item.traced} reveal={!user() && streamed()} /></Show>
-              </div>
-            </article>}>
+          // Copied: Copy turns to a check, and the answer takes the copied wash, for a moment.
+          const [copied, setCopied] = createSignal(false);
+          const copy = async () => {
+            if (!await copyWithFeedback(message().content || message().errorMessage || "")) return;
+            setCopied(true);
+            setTimeout(() => setCopied(false), 1200);
+          };
+          return <TranscriptRow ref={row} data-slot="message-scroller-item" data-message-id={message().id} turn={!user() && item.traced}>
+            <Show when={user()} fallback={<Turn>
+              <Show when={message().content || (message().stopped && !item.traced && !failed())}>
+                <Answer copied={copied()}>
+                  <Show when={message().content} fallback={<StopLine detail="before answering" />}>
+                    <Suspense fallback={<div class="markdown-skeleton" />}>
+                      <ChatMarkdown renderer={markdownRenderer()} streaming={live()} streamVersion={item.streamVersion} onRendered={() => settleAfterMarkdown(row)} onSettled={() => setSettled(true)}>{message().content || ""}</ChatMarkdown>
+                    </Suspense>
+                  </Show>
+                </Answer>
+              </Show>
+              <Show when={failed()}>
+                <Failure time={message().timestamp ? fullDateTime(message().timestamp) : undefined} dateTime={message().timestamp || undefined} message={message().errorMessage || "The model request failed."}
+                  facts={[message().model && `Model: ${message().model}`, message().provider && `Provider: ${message().provider}`, props.profileLabel && `Profile: ${props.profileLabel}`].filter(Boolean) as string[]} />
+              </Show>
+              {/* Held empty while it streams, so the foot arriving moves nothing. */}
+              <Show when={actionsShown()} fallback={<MessageFoot />}><AnswerFoot message={message()} precedingUserId={precedingUserId()} chat={props.chat} supports={props.supports} partialContinue={props.partialContinue} artifact={artifact()} traced={item.traced} reveal={streamed()} copied={copied()} onCopy={() => void copy()} /></Show>
+            </Turn>}>
               <UserMessage message={message()} text={review().text} editing={props.chat.editingEntryId() === message().id}
                 editable={!message().pending && props.supports("fork")} since={arrive} onEdit={() => { props.chat.edit(message()); focusComposerSoon(); }}
                 under={<>
@@ -1169,12 +1109,13 @@ function TranscriptBody(props: { chat: TranscriptSource; supports: (capability: 
                   <Show when={review().comments.length}><ReviewCommentCards items={review().comments} chatId={props.chat.loadedId() ?? ""} label="Code references" /></Show>
                 </>} />
             </Show>
-          </div>;
+          </TranscriptRow>;
         }}</For>
         {/* Sent, and the server has not started the turn yet: its starting
             header shows with the message, fading in beside it, so the turn's
             own header later takes the same spot instead of pushing in. */}
-        <Show when={awaitingTurn()}>{(_) => { const arrive = untrack(() => arrival(props.chat.messages().at(-1)!)); return <div data-slot="message-scroller-item"><TraceStarting since={arrive} startedAt={props.chat.messages().at(-1)?.timestamp} label="Starting" /></div>; }}</Show>
+        <Show when={awaitingTurn()}>{(_) => { const arrive = untrack(() => arrival(props.chat.messages().at(-1)!)); return <TranscriptRow data-slot="message-scroller-item"><TraceStarting since={arrive} startedAt={props.chat.messages().at(-1)?.timestamp} label="Starting" /></TranscriptRow>; }}</Show>
+        </LibraryTranscript>
         </div>
       </div>
       {/*
@@ -1186,10 +1127,12 @@ function TranscriptBody(props: { chat: TranscriptSource; supports: (capability: 
         */}
       {/* Always mounted, so it fades out as well as in: when pressed, and when
            somebody scrolls back down themselves. */}
-      <Button ref={(element) => { latestButton = element; scheduleLatestButtonAnchor(); }} variant="ghost" size="icon-sm" class={`message-scroller-button ${library ? "ui-frost ui-rider-button" : "composer-surface-material"}`} {...(library ? { "data-surface": "frost", "data-lift": "rest" } : {})} data-composer-surface={composerSurface()} data-shown={!following() && latestDistance() >= TAIL_NEAR_LATEST_PX ? "" : undefined} tabIndex={!following() && latestDistance() >= TAIL_NEAR_LATEST_PX ? 0 : -1} aria-hidden={!following() && latestDistance() >= TAIL_NEAR_LATEST_PX ? undefined : "true"} aria-label="Scroll to latest" title="Scroll to latest" onMouseDown={(event) => event.preventDefault()} onClick={() => followLatest()}><ArrowDownIcon /></Button>
+      <RiderButton ref={(element: HTMLButtonElement) => { latestButton = element; scheduleLatestButtonAnchor(); }} class="message-scroller-button" icon={<ArrowDownIcon />} label="Scroll to latest"
+        hidden={following() || latestDistance() < TAIL_NEAR_LATEST_PX} onMouseDown={(event) => event.preventDefault()} onClick={() => followLatest()} />
       {/* Editing an earlier message: a way out that is always there, floating
           over the composer where the edit happens, as the pencil would. */}
-      <Show when={props.chat.editingEntryId()}><Button ref={(element) => { cancelEditButton = element; scheduleLatestButtonAnchor(); }} variant="ghost" size="sm" class={`message-scroller-button message-cancel-edit ${library ? "ui-frost ui-rider-button" : "composer-surface-material"}`} {...(library ? { "data-surface": "frost", "data-lift": "rest", "data-labelled": "" } : {})} data-composer-surface={composerSurface()} data-beside-latest={!following() && latestDistance() >= TAIL_NEAR_LATEST_PX ? "" : undefined} onMouseDown={(event) => event.preventDefault()} onClick={() => { props.chat.cancelEdit(); focusComposerSoon(); }}><XIcon />Cancel editing</Button></Show>
+      <Show when={props.chat.editingEntryId()}><RiderButton ref={(element: HTMLButtonElement) => { cancelEditButton = element; scheduleLatestButtonAnchor(); }} class="message-scroller-button message-cancel-edit" icon={<XIcon />} label="Cancel editing" show="label"
+        data-beside-latest={!following() && latestDistance() >= TAIL_NEAR_LATEST_PX ? "" : undefined} onMouseDown={(event) => event.preventDefault()} onClick={() => { props.chat.cancelEdit(); focusComposerSoon(); }} /></Show>
     </div>
   </div>;
 }

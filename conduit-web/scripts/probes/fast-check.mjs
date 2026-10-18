@@ -18,7 +18,7 @@ try {
     const w = window; w.__churn = { added: {}, removed: {} }; w.__cards = new Set();
     const kind = (n) => n.nodeType === 3 ? "#text" : n.nodeType === 1 ? n.tagName.toLowerCase() + (n.classList[0] ? "." + n.classList[0] : "") : "#other";
     const count = (map, n) => { map[kind(n)] = (map[kind(n)] ?? 0) + 1; if (n.nodeType === 1) for (const c of n.querySelectorAll("*")) map[kind(c)] = (map[kind(c)] ?? 0) + 1; };
-    new MutationObserver((list) => { for (const m of list) if (m.target.closest?.(".message-assistant") || m.target.parentElement?.closest(".message-assistant")) {
+    new MutationObserver((list) => { for (const m of list) if (m.target.closest?.(".ui-answer") || m.target.parentElement?.closest(".ui-answer")) {
       m.addedNodes.forEach((n) => count(w.__churn.added, n)); m.removedNodes.forEach((n) => count(w.__churn.removed, n)); } }).observe(document.body, { childList: true, subtree: true });
     const grab = () => { for (const c of document.querySelectorAll(".artifact")) { const k = c.cloneNode(true); k.querySelector("code")?.replaceChildren(); k.removeAttribute("style");
       w.__cards.add(k.outerHTML.replace(/data-lines="\d+"/, 'data-lines="N"').replace(/>[^<]*\d+ (more )?lines?[^<]*</g, ">LABEL<")); } requestAnimationFrame(grab); };
@@ -26,7 +26,7 @@ try {
   });
   await ta.fill(prompt); await ta.press("Enter");
   await page.waitForFunction(() => /^(Done|Interrupted|Failed)/.test(document.querySelector(".ui-trace-line")?.textContent ?? ""), null, { timeout: Number(process.env.WAIT ?? 45000), polling: 100 }).catch(async (e) => {
-    await page.screenshot({ path: out + "-stuck.png" }); console.log("url", page.url()); console.log("stuck:", JSON.stringify(await page.evaluate(() => ({ trace: document.querySelector(".ui-trace-line")?.textContent, answer: document.querySelector(".message-assistant")?.textContent?.length, assistants: document.querySelectorAll(".message-assistant").length, user: document.querySelectorAll(".ui-message").length, draft: document.querySelector(".chat-main textarea")?.value?.slice(0, 40) }))));
+    await page.screenshot({ path: out + "-stuck.png" }); console.log("url", page.url()); console.log("stuck:", JSON.stringify(await page.evaluate(() => ({ trace: document.querySelector(".ui-trace-line")?.textContent, answer: document.querySelector(".ui-answer")?.textContent?.length, assistants: document.querySelectorAll(".message-assistant").length, user: document.querySelectorAll(".ui-message").length, draft: document.querySelector(".chat-main textarea")?.value?.slice(0, 40) }))));
     throw e; });
   await page.waitForFunction(() => document.querySelector(".chat-markdown[data-settled]"), null, { timeout: 10000, polling: 100 }).catch(() => {});
   const r = await page.evaluate(() => {

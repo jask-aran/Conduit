@@ -8,7 +8,27 @@
 .ui-bubble-more:is(:hover, :focus-visible) { color: var(--foreground); }
 /* Transcript (DESIGN Transcript), at the transcript's scale. The reading column is the composer's width;
    messages a step and a half apart; a turn's parts half a unit. */
-.ui-transcript { display: flex; width: min(100%, var(--composer-width, var(--reading-width))); flex-direction: column; gap: var(--space-3xl); margin-inline: auto; }
+.ui-transcript { display: flex; width: min(100%, var(--transcript-width, var(--composer-width, var(--reading-width)))); flex-direction: column; gap: var(--space-3xl); margin-inline: auto; }
+/* A row that goes on with the turn above it sits a turn's gap under it. */
+.ui-transcript-row { min-width: 0; }
+.ui-loading-earlier { display: flex; justify-content: center; }
+.ui-transcript-row[data-turn] { margin-top: calc(var(--space-md) - var(--space-3xl)); }
+/* A failed request: its head in destructive, its facts in the data face, what the provider said in a code box. */
+.ui-failure { display: grid; gap: var(--space-xs); font-size: var(--text-row); }
+.ui-failure-head { display: flex; align-items: center; gap: var(--row-gap); color: var(--destructive); }
+.ui-failure-head > svg { width: var(--icon-sm); height: var(--icon-sm); flex: none; }
+.ui-failure-head time { margin-left: auto; color: var(--muted-foreground); font-size: var(--text-caption); }
+.ui-failure-facts { display: flex; flex-wrap: wrap; gap: var(--space-xs) var(--space-md); color: var(--muted-foreground); font: var(--text-caption) var(--font-data); }
+.ui-failure pre { margin: 0; overflow: auto; border: var(--hairline) solid var(--tint); border-radius: var(--radius-control); padding: var(--space-sm) var(--space-lg); white-space: pre-wrap; font: var(--text-caption)/var(--leading-code) var(--font-code); }
+/* The harness's own prompt: a muted Row line at the right, the bell an icon-sm before it. */
+.ui-harness-prompt { display: flex; justify-content: flex-end; align-items: center; gap: var(--row-gap); margin: 0; color: var(--muted-foreground); font-size: var(--text-row); }
+.ui-harness-prompt > svg { width: var(--icon-sm); height: var(--icon-sm); flex: none; }
+/* A turn's changes: the counts in the data face, added in --status-success and removed in --destructive (data, kept
+   on the glyphs); a ghost control's wash on hover. */
+.ui-changes { display: inline-flex; height: var(--control-xs); align-items: center; gap: var(--space-xs); border: 0; border-radius: var(--radius-control); background: transparent; padding: 0 var(--space-xs); font: var(--text-caption) var(--font-data); font-variant-numeric: tabular-nums; cursor: pointer; }
+.ui-changes:is(:hover, :focus-visible) { background: var(--tint); }
+.ui-changes [data-change="added"] { color: var(--status-success); }
+.ui-changes [data-change="removed"] { color: var(--destructive); }
 .ui-turn { display: grid; min-width: 0; gap: var(--space-md); }
 .ui-message { display: grid; min-width: 0; justify-items: end; gap: var(--space-xs); }
 /* The foot: the time first, muted and tabular, then icon buttons; under a user's message, at the right. */
