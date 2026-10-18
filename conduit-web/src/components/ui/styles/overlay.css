@@ -45,7 +45,7 @@
 .ui-setting-group + .ui-setting-group { margin-top: var(--space-lg); border-top: 1px solid var(--tint); padding-top: var(--space-xl); }
 /* At least a row's height: a finger's on a phone, as every row is there. */
 /* A settings line's height, at least a row's (a finger's on a phone): the setting line and the recorder under it. */
-:root, [data-density] { --line-min: max(calc(2.1875 * var(--u-space)), var(--row-min)); }
+:root, [data-density] { --line-min: max(var(--control), var(--row-min)); }
 .ui-setting-line { display: flex; min-height: var(--line-min); align-items: center; gap: var(--space-xl); border-radius: var(--radius-control); padding: var(--space-2xs) var(--space-sm) var(--space-2xs) var(--space-md); font-size: var(--text-row); }
 /* Focus anywhere in a row is the row's wash. */
 .ui-setting-line:is(:hover, :focus-within) { background: var(--tint); }

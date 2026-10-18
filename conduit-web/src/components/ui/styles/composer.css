@@ -2,11 +2,11 @@
    edge. Measured from the app's composer, in units of the density (u). */
 .ui-composer-stack, .ui-desktop-composer, .ui-composer-field, .ui-toolbar, .ui-rider {
   --cmp-radius: var(--radius-message);
-  --cmp-field-min: calc(2.75 * var(--u-space)); --cmp-field-max: calc(12 * var(--u-space));
+  --cmp-field-min: calc(var(--control) + var(--space-md)); --cmp-field-max: calc(12 * var(--u-space));
   --cmp-field-pad: var(--space-lg) var(--space-lg) var(--space-2xs);
   --cmp-bar-min: var(--control); --cmp-bar-gap: var(--space-lg);
   --cmp-bar-pad: var(--space-2xs) var(--space-md) var(--space-sm) var(--space-md);
-  --cmp-slot: calc(1.75 * var(--u-space)); --cmp-slot-radius: var(--radius-control); --cmp-slot-gap: var(--space-xs); --cmp-icon: var(--u-icon);
+  --cmp-slot: var(--control-sm); --cmp-slot-radius: var(--radius-control); --cmp-slot-gap: var(--space-xs); --cmp-icon: var(--u-icon);
   --cmp-rider-gap: var(--space-sm);
 }
 .ui-composer-stack { display: grid; gap: var(--cmp-rider-gap); }
