@@ -44,7 +44,9 @@ Tune CSS applies CSS everywhere without writing source.
 
 ### Swapping a piece to v2
 
-The bar is no visual change the swap didn't intend.
+The bar is no visual change the swap didn't intend. Start with
+`fast-check.mjs` (~4s); steps 1-3 are for a piece whose look is meant to
+stay as it was. Make one pass: don't stack repeat runs or A/Bs.
 
 1. `node scripts/probes/style-snapshot.mjs save /tmp/before.json` on the
    current build.
@@ -55,8 +57,9 @@ The bar is no visual change the swap didn't intend.
    property should be one the swap meant. It covers a real chat and home at
    1280x900, and each control's focus ring; two saves with nothing changed do
    not differ.
-4. Graduated pieces: `localStorage conduit:classic = "<piece>"` draws the old
-   one in the app to compare side by side.
+4. A cut-over piece has no classic path (DESIGN.md, Components v2). To compare
+   it with the old one, build the previous commit; don't keep a fallback in
+   the app.
 5. Only where the swap touches them: the motion checks below if a piece's
    moves changed; `visibility-guard.mjs` and `screen-shift.mjs` if transcript
    layout changed; the panes smoke if panes changed.

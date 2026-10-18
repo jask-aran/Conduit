@@ -49,7 +49,8 @@ New UI is built from components v2 (`components/ui`) and its tokens alone, so a 
 - **Nothing styles itself per component.** Sizes come from the space, control, icon and type tokens; corners from `--radius-*`; colour from the surface (Surfaces). A value a piece needs and no token gives is a new token or a new rule here, not a local number.
 - **A piece owns its moves.** Entering, leaving and removing are its `motion` prop or its own state, on the Motion tokens. Callers never animate a library piece from outside.
 - **One gallery family per piece.** A change to a piece updates its source and its gallery family together; the gallery's In use, Anatomy and Forms views go through the shared `gallery/specs.tsx`, never markup of their own.
-- **The app opts in through `components/ui/swap.ts`.** `LibraryContext` draws the app's real screens with v2 inside the gallery's previews; `useLibraryPiece(piece)` graduates one piece into the app itself, and `localStorage conduit:classic = "<piece>"` draws it the old way again to compare. Rules that draw an app piece with the library live in `styles/bridge.css`. A piece is done when its old code, its `useLibrary()` branch and its bridge rules are deleted.
+- **Cutting a piece over to v2 means the app renders the library's components.** The app gives the piece data and behaviour: its state, handlers and Kobalte wrappers. All markup, structure and styling come from `components/ui`. When the app needs something the piece lacks, add it to the piece as a prop or slot and show it in the piece's gallery family. Never write it as app markup that wears v2 classes, a `useLibrary()` branch or a bridge rule. The same commit deletes the old component, its CSS and its `conduit:classic` fallback, so a cut-over piece has no classic path. The probes and selectors that read the old markup move to the piece's classes in that commit too.
+- **Scaffolding left from the first graduations.** `components/ui/swap.ts` holds `LibraryContext`, which draws the app's screens with v2 inside the gallery's previews, and `useLibraryPiece(piece)`, which graduated `trace`, `composer` and `transcript` by giving app markup v2 classes. `styles/bridge.css` holds rules that draw app markup with the library. Neither is a way to migrate: they shrink as each piece is cut over and are deleted once empty.
 
 ## Migration
 
@@ -69,11 +70,11 @@ What each v2 family replaces and where it stands. Update a row in the commit tha
 | Toast | solid-sonner's toasts | gallery only |
 | Overlay, Glance | `FrostOverlay` (`frost.tsx`), command menu, chat search, Settings | gallery only |
 | Leader | `navigation/leader-palette.tsx`, `frost-card` | gallery only |
-| DesktopComposer | `chat/composer.tsx` (desktop) | graduated (`composer`) |
+| DesktopComposer | `chat/composer.tsx` (desktop) | graduated (`composer`): v2 classes on app markup; cutover pending |
 | Rider | queued messages, attachment strip, question card | in the app (v2 classes, not components) |
-| Pill, PhoneComposer | phone header pills, sidebar header, `chat/composer.tsx` (phone: the voice bar, a phone's only composer) | graduated in the composer (`composer`); previews elsewhere |
-| Trace | `chat/turn-trace.tsx`, `tool-card.tsx` | graduated (`trace`) |
-| Transcript, CodeBlock | `chat/transcript.tsx`, the Markdown's `.artifact`, `chat/disclosure.tsx` | graduated (`transcript`) |
+| Pill, PhoneComposer | phone header pills, sidebar header, `chat/composer.tsx` (phone: the voice bar, a phone's only composer) | the voice bar renders `PhoneComposer` and `Pill*`, wrapped in the composer's v2-classed markup; previews elsewhere |
+| Trace | `chat/turn-trace.tsx`, `tool-card.tsx` | renders `Trace`, `Step`, `Trail`; its classic path (`useLibraryPiece("trace")`) still to delete |
+| Transcript, CodeBlock | `chat/transcript.tsx`, the Markdown's `.artifact`, `chat/disclosure.tsx` | the user's message is cut over (`Message`). The answer, its foot, disclosures and the code card (bridge rules, not `CodeBlock`) are v2 classes on app markup (`transcript`); cutover pending |
 
 **Overlays until Card and Overlay graduate:** build them from `components/frost.tsx`, never a copy of another overlay. `npm run build` fails on a hand-rolled Kobalte dialog (`scripts/check-bundle.mjs`; update that check when Card and Overlay replace them).
 
