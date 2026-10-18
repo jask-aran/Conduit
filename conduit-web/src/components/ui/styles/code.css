@@ -6,7 +6,7 @@
 /* Its buttons' icons are the caption's size, not a row's. */
 .ui-code > figcaption .ui-button svg { width: var(--icon-xs); height: var(--icon-xs); }
 .ui-code-lang { margin-right: auto; }
-.ui-code > pre { height: auto; margin: 0; overflow: auto hidden; interpolate-size: allow-keywords; --move: var(--duration-gentle); --move-ease: var(--ease-arrive); transition: height var(--move) var(--move-ease); padding: var(--space-md) 0; font: var(--text-row)/1.6 var(--font-code); }
+.ui-code > pre { height: auto; margin: 0; overflow: auto hidden; interpolate-size: allow-keywords; --move: var(--duration-gentle); --move-ease: var(--ease-arrive); transition: height var(--move) var(--move-ease); padding: var(--space-md) 0; font: var(--text-row)/var(--leading-code) var(--font-code); }
 /* Folded: the lines past the fold are cut, the last of them fading; the foot opens it. */
 /* Opening unfolds (arrive); folding goes back quicker (leave). */
 .ui-code[data-folded] > pre { height: calc(var(--code-fold) * 1.6em + 2 * var(--space-md)); --move: var(--duration-quick); --move-ease: var(--ease-leave); mask-image: linear-gradient(to bottom, #000 calc(100% - 2.4em), transparent); }

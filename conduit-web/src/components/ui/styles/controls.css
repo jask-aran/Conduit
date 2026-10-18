@@ -1,5 +1,5 @@
 /* A keycap is small inside a row, so its corner is a share of the control radius (~4px on desktop), and its text the label size. */
-.ui-keycap { display: inline-grid; min-width: var(--control-2xs); height: var(--control-2xs); place-items: center; border-radius: var(--radius-inset); background: var(--tint); padding: 0 var(--space-xs); color: var(--muted-foreground); font: var(--weight-lift) var(--text-label)/1 var(--font-label); }
+.ui-keycap { display: inline-grid; min-width: var(--control-2xs); height: var(--control-2xs); place-items: center; border-radius: var(--radius-inset); background: var(--tint); padding: 0 var(--space-xs); color: var(--muted-foreground); font: var(--weight-lift) var(--text-label)/var(--leading-none) var(--font-label); }
 .ui-row[data-highlighted] .ui-keycap { color: var(--foreground); }
 /* A keycap that can be pressed (to record another) and cleared: taller, for a pointer and a finger, the
    chord and a × each a button, a second tint under the one the cursor is on. */
@@ -108,7 +108,7 @@
 .ui-slider-ticks i[data-reached] { background: var(--muted-foreground); }
 
 /* TextArea: multi-line text that grows with its lines; bare, so what holds it pads it. */
-.ui-textarea { display: block; width: 100%; resize: none; overflow-y: auto; border: 0; outline: 0; background: transparent; padding: 0; color: inherit; font: inherit; font-size: var(--text-body); line-height: 1.45; field-sizing: content; }
+.ui-textarea { display: block; width: 100%; resize: none; overflow-y: auto; border: 0; outline: 0; background: transparent; padding: 0; color: inherit; font: inherit; font-size: var(--text-body); line-height: var(--leading-row); field-sizing: content; }
 .ui-textarea::placeholder { color: var(--muted-foreground); }
 /* Progress: the slider's track and fill. */
 .ui-progress { width: 100%; height: var(--track-size); appearance: none; -webkit-appearance: none; overflow: hidden; border: 0; border-radius: var(--radius-round); background: var(--tint); }

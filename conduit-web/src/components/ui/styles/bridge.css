@@ -52,7 +52,7 @@
 /* The app's code block (its Markdown's .artifact) drawn as a CodeBlock: a box, the caption bar, the code face. */
 .ui-answer .chat-markdown .artifact { border: var(--hairline) solid var(--tint); border-radius: var(--radius-control); background: var(--background); }
 .ui-answer .chat-markdown .artifact-header { min-height: var(--control-sm); border-bottom: var(--hairline) solid var(--tint); background: linear-gradient(var(--tint), var(--tint)), var(--background); padding: 0 var(--space-2xs) 0 var(--space-lg); color: var(--muted-foreground); font: var(--text-caption) var(--font-data); }
-.ui-answer .chat-markdown .artifact pre { padding: var(--space-md) var(--space-lg); background: transparent; font: var(--text-row)/1.6 var(--font-code); }
+.ui-answer .chat-markdown .artifact pre { padding: var(--space-md) var(--space-lg); background: transparent; font: var(--text-row)/var(--leading-code) var(--font-code); }
 .ui-answer .chat-markdown .artifact-expand { min-height: var(--control-sm); border-top: var(--hairline) solid var(--tint); padding: 0; font: var(--text-caption) var(--font-sans); }
 .ui-answer .chat-markdown .artifact-expand:is(:hover, :focus-visible) { background: var(--tint); }
 .ui-answer .chat-markdown .artifact-toggle { width: var(--control-xs); height: var(--control-xs); border-radius: var(--radius-round); }

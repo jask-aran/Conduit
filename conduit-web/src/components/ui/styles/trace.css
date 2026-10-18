@@ -1,5 +1,5 @@
 /* The trace header: the orb, Status · time · work, a chevron when there is a trail; the latest line under it. */
-.ui-trace { display: grid; width: 100%; grid-template-columns: var(--icon-xl) minmax(0, 1fr) auto; align-items: center; gap: var(--space-2xs) var(--row-gap); border: 0; background: transparent; padding: 0; color: var(--muted-foreground); font: var(--weight-rest) var(--text-row)/1.4 var(--font-sans); text-align: left; }
+.ui-trace { display: grid; width: 100%; grid-template-columns: var(--icon-xl) minmax(0, 1fr) auto; align-items: center; gap: var(--space-2xs) var(--row-gap); border: 0; background: transparent; padding: 0; color: var(--muted-foreground); font: var(--weight-rest) var(--text-row)/var(--leading-row) var(--font-sans); text-align: left; }
 .ui-trace:not(:disabled) { cursor: pointer; }
 .ui-trace-orb { display: grid; width: var(--icon-xl); height: var(--icon-xl); grid-area: 1 / 1 / 3; align-self: center; }
 .ui-trace-orb > * { width: 100%; height: 100%; }
@@ -39,9 +39,9 @@ button.ui-step:is(:hover, :focus-visible) { background: var(--tint); }
 .ui-step:is(:hover, :focus-visible, [aria-expanded="true"]) > .ui-disclosure-chevron { opacity: 1; }
 .ui-step-body { padding-left: calc(var(--icon-sm) + var(--row-gap)); }
 .ui-step-item[data-open="true"] > .ui-step-body { padding-block: var(--space-2xs) var(--space-sm); }
-.ui-step-output { max-height: var(--measure-md); margin: 0; overflow: auto; border: var(--hairline) solid var(--tint); border-radius: var(--radius-control); padding: var(--space-sm) var(--space-lg); white-space: pre-wrap; font: var(--text-caption)/1.6 var(--font-code); }
+.ui-step-output { max-height: var(--measure-md); margin: 0; overflow: auto; border: var(--hairline) solid var(--tint); border-radius: var(--radius-control); padding: var(--space-sm) var(--space-lg); white-space: pre-wrap; font: var(--text-caption)/var(--leading-code) var(--font-code); }
 .ui-step-more { margin-top: var(--space-xs); }
-.ui-step-prose { color: var(--muted-foreground); font-size: var(--text-row); line-height: 1.55; }
+.ui-step-prose { color: var(--muted-foreground); font-size: var(--text-row); line-height: var(--leading-text); }
 .ui-step-prose .chat-markdown { color: inherit; font-size: inherit; line-height: inherit; }
 .ui-step-prose > :first-child { margin-top: 0; } .ui-step-prose > :last-child { margin-bottom: 0; }
 /* A note (reasoning the provider kept), not a step: nothing to open, no cursor. */
@@ -60,7 +60,7 @@ button.ui-step:is(:hover, :focus-visible) { background: var(--tint); }
 .ui-trace-error-head > svg { width: var(--icon-sm); height: var(--icon-sm); flex: none; }
 .ui-trace-error-head time { margin-left: auto; color: var(--muted-foreground); font-size: var(--text-caption); }
 .ui-trace-error-facts { display: flex; flex-wrap: wrap; gap: var(--space-xs) var(--space-md); font: var(--text-caption) var(--font-data); }
-.ui-trace-error pre { margin: 0; overflow: auto; border: var(--hairline) solid var(--tint); border-radius: var(--radius-control); padding: var(--space-sm) var(--space-lg); white-space: pre-wrap; font: var(--text-caption)/1.6 var(--font-code); }
+.ui-trace-error pre { margin: 0; overflow: auto; border: var(--hairline) solid var(--tint); border-radius: var(--radius-control); padding: var(--space-sm) var(--space-lg); white-space: pre-wrap; font: var(--text-caption)/var(--leading-code) var(--font-code); }
 /* The header's latest line, when it is Markdown (the app's), reads inline at the line's size. */
 .ui-trace-latest .chat-markdown { display: contents; font-size: inherit; line-height: inherit; }
 .ui-trace-latest :is(.chat-markdown, .incremark) > * { display: inline; margin: 0; }

@@ -62,7 +62,7 @@
    screen's sides, so the transcript never shows through them or between the row's pills; it is the lowest layer, so
    the field and the row are always over it. In, they wait the quick duration (for the field, if it is going). */
 .ui-voice-captions { position: absolute; left: 0; right: 0; bottom: calc(var(--pill-size) + var(--space-md));
-  padding: var(--space-lg) var(--space-lg) var(--space-xs); color: var(--muted-foreground); font-size: calc(.875 * var(--u-type)); font-style: italic; line-height: 1.45; pointer-events: none;
+  padding: var(--space-lg) var(--space-lg) var(--space-xs); color: var(--muted-foreground); font-size: calc(.875 * var(--u-type)); font-style: italic; line-height: var(--leading-row); pointer-events: none;
   animation: ui-fade-in var(--duration-gentle) var(--ease-arrive) var(--duration-quick) backwards; }
 .ui-voice-captions > * { display: flex; max-height: calc(3 * 1.45em); flex-direction: column; justify-content: flex-end; overflow: hidden; margin: 0; }
 .ui-voice-captions::before { content: ""; position: absolute; top: 0; bottom: -100vh; left: calc(50% - 50vw); right: calc(50% - 50vw); z-index: -1;
