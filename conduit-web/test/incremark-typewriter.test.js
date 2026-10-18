@@ -5,7 +5,6 @@ import {
   chooseFrameBudget,
   normalizeFrameInterval,
   prepareTypewriterNode,
-  updateEma,
   visibleAstCharacters,
 } from "../src/client/chat/incremark-typewriter.ts";
 import {
@@ -33,18 +32,18 @@ test("the scheduler can drain several complete blocks in one frame", () => {
   };
   globalThis.cancelAnimationFrame = () => {};
   try {
+    let busy = null;
     const controller = new BufferedIncremarkTypewriter({
       onChange: (blocks) => displays.push(blocks),
+      onDisplayBusyChange: (next) => { busy = next; },
     });
-    controller.push([
+    controller.observeSource([
       { id: "one", status: "pending", node: { type: "paragraph", children: [{ type: "text", value: "one" }] } },
       { id: "two", status: "pending", node: { type: "paragraph", children: [{ type: "text", value: "two" }] } },
     ]);
-    controller.setEnabled(true);
     frames.shift()(16);
-    assert.equal(controller.getMetrics().terminal, true);
+    assert.equal(busy, false);
     assert.equal(displays.at(-1).length, 2);
-    assert.equal(controller.getDebugState().pendingBlockCount, 0);
     controller.destroy();
   } finally {
     globalThis.requestAnimationFrame = originalRequest;
