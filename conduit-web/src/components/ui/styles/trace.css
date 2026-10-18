@@ -39,7 +39,7 @@ button.ui-step:is(:hover, :focus-visible) { background: var(--tint); }
 .ui-step:is(:hover, :focus-visible, [aria-expanded="true"]) > .ui-disclosure-chevron { opacity: 1; }
 .ui-step-body { padding-left: calc(var(--icon-sm) + var(--row-gap)); }
 .ui-step-item[data-open="true"] > .ui-step-body { padding-block: var(--space-2xs) var(--space-sm); }
-.ui-step-output { max-height: calc(20 * var(--u-space)); margin: 0; overflow: auto; border: 1px solid var(--tint); border-radius: var(--radius-control); padding: var(--space-sm) var(--space-lg); white-space: pre-wrap; font: var(--text-caption)/1.6 var(--font-code); }
+.ui-step-output { max-height: var(--measure-md); margin: 0; overflow: auto; border: 1px solid var(--tint); border-radius: var(--radius-control); padding: var(--space-sm) var(--space-lg); white-space: pre-wrap; font: var(--text-caption)/1.6 var(--font-code); }
 .ui-step-more { margin-top: var(--space-xs); }
 .ui-step-prose { color: var(--muted-foreground); font-size: var(--text-row); line-height: 1.55; }
 .ui-step-prose .chat-markdown { color: inherit; font-size: inherit; line-height: inherit; }

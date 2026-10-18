@@ -2,7 +2,7 @@
    edge. Measured from the app's composer, in units of the density (u). */
 .ui-composer-stack, .ui-desktop-composer, .ui-composer-field, .ui-toolbar, .ui-rider {
   --cmp-radius: var(--radius-message);
-  --cmp-field-min: calc(var(--control) + var(--space-md)); --cmp-field-max: calc(12 * var(--u-space));
+  --cmp-field-min: calc(var(--control) + var(--space-md)); --cmp-field-max: var(--measure-xs);
   --cmp-field-pad: var(--space-lg) var(--space-lg) var(--space-2xs);
   --cmp-bar-min: var(--control); --cmp-bar-gap: var(--space-lg);
   --cmp-bar-pad: var(--space-2xs) var(--space-md) var(--space-sm) var(--space-md);

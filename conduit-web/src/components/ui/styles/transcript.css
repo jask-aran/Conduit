@@ -1,4 +1,4 @@
-.ui-bubble { width: fit-content; max-width: min(calc(40 * var(--u-type)), 88cqw); margin-left: auto; border-radius: var(--radius-message); padding: var(--space-lg) var(--space-lg); font-size: var(--text-body); line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
+.ui-bubble { width: fit-content; max-width: min(var(--measure-2xl), 88cqw); margin-left: auto; border-radius: var(--radius-message); padding: var(--space-lg) var(--space-lg); font-size: var(--text-body); line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
 .ui-bubble[data-editing="true"] { color: var(--muted-foreground); font-style: italic; }
 /* Transcript (DESIGN Transcript), at the transcript's scale. The reading column is the composer's width;
    messages a step and a half apart; a turn's parts half a unit. */

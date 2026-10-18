@@ -4,7 +4,7 @@
    detail. Text is trimmed to its glyphs, so a gap is the space you see. Spacing is in units, so a
    phone's is the desktop's scaled with its type; a phone's card differs only in being the screen's width. */
 .ui-card { --card-edge: var(--space-2xl); --card-gap: var(--space-xl); --card-pair: var(--space-md);
-  display: flex; width: min(100%, calc(30 * var(--u-space))); flex-direction: column; gap: var(--card-gap); border-radius: var(--radius-surface); padding: var(--card-edge); }
+  display: flex; width: min(100%, var(--measure-xl)); flex-direction: column; gap: var(--card-gap); border-radius: var(--radius-surface); padding: var(--card-edge); }
 :is([data-density="phone"] .ui-card, .ui-card[data-density="phone"]) { width: 100%; }
 @media (--conduit-phone-layout) { .ui-card:not([data-density="desktop"]) { width: 100%; } }
 .ui-card > * { min-width: 0; margin: 0; }
@@ -18,7 +18,7 @@
 /* A card rises in and drops back. */
 .ui-card[data-entering] { animation: ui-rise var(--duration-gentle) var(--ease-arrive) backwards; }
 .ui-card[data-leaving] { animation: ui-drop var(--duration-quick) var(--ease-leave) forwards; pointer-events: none; }
-.ui-card[data-size="wide"] { width: min(100%, calc(37.5 * var(--u-space))); }
+.ui-card[data-size="wide"] { width: min(100%, var(--measure-2xl)); }
 /* The × sits in the corner, its box the edge's half in; the title keeps clear of it. */
 .ui-card-close { position: absolute; top: calc(var(--card-edge) / 2); right: calc(var(--card-edge) / 2); }
 .ui-card[data-close] > h3 { padding-right: var(--space-4xl); }
@@ -26,7 +26,7 @@
    its content with the title instead: a list's rows hang out by their inset, an icon button by its pad. */
 .ui-card > .ui-preview { margin: 0; }
 .ui-card > .ui-section { margin-inline: calc(-1 * var(--row-inset)); }
-.ui-card .ui-textarea { min-height: calc(4.5 * var(--u-space)); }
+.ui-card .ui-textarea { min-height: calc(2 * var(--control)); }
 /* Attachments in a card: the composer's chips, one under another at the card's width. */
 .ui-card > .ui-chips { flex-direction: column; overflow: visible; padding: 0; mask: none; }
 .ui-card .ui-chip-body { width: 100%; }

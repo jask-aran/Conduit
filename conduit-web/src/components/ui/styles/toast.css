@@ -1,8 +1,8 @@
 /* Toast: raised frost, --radius-surface, 25 units wide at most (a phone: the screen's, inside the
    overlay's inset). The text is the Row role; the glyph sits on its first line, the × at its end. */
-.ui-toaster { display: flex; width: min(100%, calc(25 * var(--u-space))); flex-direction: column-reverse; gap: var(--space-sm); }
+.ui-toaster { display: flex; width: min(100%, var(--measure-lg)); flex-direction: column-reverse; gap: var(--space-sm); }
 :is([data-density="phone"] :is(.ui-toaster, .ui-toast), :is(.ui-toaster, .ui-toast)[data-density="phone"]) { width: 100%; }
-.ui-toast { display: grid; width: min(100%, calc(25 * var(--u-space))); grid-template-columns: auto minmax(0, 1fr) auto; align-items: start; gap: var(--space-sm) var(--space-md); border-radius: var(--radius-surface); padding: var(--space-md) var(--space-sm) var(--space-md) var(--space-lg); color: var(--foreground); font-size: var(--text-row); }
+.ui-toast { display: grid; width: min(100%, var(--measure-lg)); grid-template-columns: auto minmax(0, 1fr) auto; align-items: start; gap: var(--space-sm) var(--space-md); border-radius: var(--radius-surface); padding: var(--space-md) var(--space-sm) var(--space-md) var(--space-lg); color: var(--foreground); font-size: var(--text-row); }
 /* A toast rises in from its edge and drops back to it (a phone's, at the top, comes down). */
 .ui-toast[data-entering] { animation: ui-rise var(--duration-gentle) var(--ease-arrive) backwards; }
 .ui-toast[data-leaving] { animation: ui-drop var(--duration-quick) var(--ease-leave) forwards; pointer-events: none; }

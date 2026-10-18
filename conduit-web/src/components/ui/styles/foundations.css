@@ -104,6 +104,9 @@
   --icon-xs: calc(0.6875 * var(--u-icon)); --icon-sm: calc(0.875 * var(--u-icon)); --icon: var(--u-icon); --icon-lg: calc(1.125 * var(--u-icon)); --icon-xl: calc(1.5 * var(--u-icon)); --icon-dot: calc(0.375 * var(--u-icon));
   /* Controls: five heights (an icon button is as wide as it is tall); 2xs is a keycap, a slider thumb. */
   --control-2xs: calc(1.125 * var(--u-space)); --control-xs: calc(1.5 * var(--u-space)); --control-sm: calc(1.875 * var(--u-space)); --control: calc(2.25 * var(--u-space)); --control-lg: calc(2.5 * var(--u-space));
+  /* Measures: six lengths for what has a width (or a scrolling height) of its own -- a column, a card, an overlay. */
+  --measure-xs: calc(12 * var(--u-space)); --measure-sm: calc(15 * var(--u-space)); --measure-md: calc(20 * var(--u-space));
+  --measure-lg: calc(25 * var(--u-space)); --measure-xl: calc(30 * var(--u-space)); --measure-2xl: calc(40 * var(--u-space));
   /* Rows: their measured height and text, in the unit; inset, pad and gap are steps. */
   --row-text: calc(var(--row-text-units) * var(--u-type)); --row-min: max(var(--row-min-floor), calc(var(--row-min-units) * var(--u-space)));
   --row-inset: var(--space-md); --row-pad: var(--space-sm) var(--row-inset); --row-gap: var(--space-md);
