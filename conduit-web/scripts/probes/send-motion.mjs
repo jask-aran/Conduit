@@ -55,7 +55,7 @@ await page.evaluate(() => {
   const viewport = document.querySelector(".message-scroller-viewport");
   const frame = () => {
     const shell = document.querySelector(".composer-input-shell");
-    const users = [...document.querySelectorAll("[data-slot='message-scroller-item']")].filter((row) => row.querySelector(".message-user"));
+    const users = [...document.querySelectorAll("[data-slot='message-scroller-item']")].filter((row) => row.querySelector(".ui-message"));
     const last = users.at(-1); const bubble = last?.querySelector("[data-slot='bubble']");
     const r = (el) => el ? el.getBoundingClientRect() : null;
     log.push({
