@@ -47,12 +47,12 @@ button.ui-step:is(:hover, :focus-visible) { background: var(--tint); }
 /* A note (reasoning the provider kept), not a step: nothing to open, no cursor. */
 .ui-step-item[data-note] .ui-step-summary { font-style: italic; }
 /* Text a stop discarded, struck where it sits. */
-.ui-step-item[data-discarded] :is(.ui-step-summary, .ui-step-prose) { text-decoration: line-through; opacity: .55; }
+.ui-step-item[data-discarded] :is(.ui-step-summary, .ui-step-prose) { text-decoration: line-through; opacity: var(--opacity-muted); }
 /* A group's steps on a rail of their own under its icon; a script's calls, quieter, inside its step. */
 .ui-trail[data-nested="group"] { margin-left: calc(var(--icon-sm) / 2 - var(--space-sm)); border-left: var(--hairline) solid var(--tint); padding-left: calc(var(--space-sm) + var(--icon-sm) / 2 + var(--space-xs)); }
 .ui-trail[data-nested="calls"] { gap: 0; padding: 0 0 var(--space-xs); }
 .ui-trail[data-nested="calls"] .ui-step { min-height: calc(var(--control-xs) * .8); }
-.ui-step-item[data-state="planned"] { opacity: .45; }
+.ui-step-item[data-state="planned"] { opacity: var(--opacity-disabled); }
 .ui-step-item[data-state="earlier"] .ui-step-verb { color: var(--muted-foreground); }
 /* A failed request in the trail. */
 .ui-trace-error { display: grid; gap: var(--space-xs); padding-block: var(--space-2xs); font-size: var(--text-row); }

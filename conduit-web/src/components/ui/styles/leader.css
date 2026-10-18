@@ -8,8 +8,8 @@
 .ui-crumbs > button { flex: none; border: 0; border-radius: var(--radius-control); background: transparent; padding: var(--space-2xs) var(--space-sm); cursor: pointer; }
 .ui-crumbs > button:is(:hover, :focus-visible):not(:disabled) { background: var(--tint); color: var(--foreground); }
 .ui-crumbs > button[aria-current="true"] { color: var(--foreground); font-weight: var(--weight-current); }
-.ui-crumbs > button:disabled { opacity: .55; cursor: default; }
-.ui-crumbs-sep { color: var(--muted-foreground); font-size: var(--text-label); opacity: .6; }
+.ui-crumbs > button:disabled { opacity: var(--opacity-muted); cursor: default; }
+.ui-crumbs-sep { color: var(--muted-foreground); font-size: var(--text-label); opacity: var(--opacity-muted); }
 /* Spotlight: the dim is the shadow round the lit region. */
 .ui-spotlight { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
 .ui-spotlight-lit { position: absolute; box-shadow: 0 0 0 200vmax var(--dim); transition: top var(--duration-gentle) var(--ease-arrive), left var(--duration-gentle) var(--ease-arrive), width var(--duration-gentle) var(--ease-arrive), height var(--duration-gentle) var(--ease-arrive); }

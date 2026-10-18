@@ -39,7 +39,7 @@
 .ui-chip { position: relative; flex: none; scroll-snap-align: start; }
 .ui-chip-body { display: flex; height: calc(2 * var(--control-sm)); align-items: center; gap: var(--space-md); overflow: hidden; background: var(--tint); padding: 0; color: inherit; text-align: left; cursor: pointer; }
 .ui-chip[data-kind="file"] .ui-chip-body { height: var(--control-lg); gap: var(--space-sm); padding: 0 var(--space-lg) 0 var(--space-md); }
-.ui-chip-body:focus-visible { outline: none; filter: brightness(1.12); }
+.ui-chip-body:focus-visible { outline: none; filter: brightness(var(--brighten)); }
 .ui-chip-media { position: relative; display: grid; width: calc(2 * var(--control-sm) - 2 * var(--hairline)); height: calc(2 * var(--control-sm) - 2 * var(--hairline)); flex: none; place-items: center; background: var(--tint); color: var(--muted-foreground); }
 .ui-chip[data-kind="file"] .ui-chip-media { width: auto; height: auto; background: none; }
 .ui-chip-media :is(.workspace-file-icon, .workspace-file-icon-generic, svg:not(.ui-chip-ring, .ui-chip-retry)) { display: block; width: var(--icon); height: var(--icon); }
@@ -47,13 +47,13 @@
 .ui-chip-copy { display: grid; min-width: 0; max-width: var(--measure-xs); line-height: var(--leading-tight); }
 .ui-chip-copy strong { overflow: hidden; font-size: var(--text-row); font-weight: var(--weight-strong); text-overflow: ellipsis; white-space: nowrap; }
 .ui-chip-copy small { overflow: hidden; color: var(--muted-foreground); font-size: var(--text-caption); text-overflow: ellipsis; white-space: nowrap; }
-.ui-chip:is([data-status="uploading"], [data-status="queued"]) .ui-chip-media img { opacity: 0.55; }
-.ui-chip[data-kind="file"]:is([data-status="uploading"], [data-status="queued"]) .ui-chip-media > :not(.ui-chip-ring) { opacity: 0.4; }
+.ui-chip:is([data-status="uploading"], [data-status="queued"]) .ui-chip-media img { opacity: var(--opacity-muted); }
+.ui-chip[data-kind="file"]:is([data-status="uploading"], [data-status="queued"]) .ui-chip-media > :not(.ui-chip-ring) { opacity: var(--opacity-disabled); }
 .ui-chip-ring { position: absolute; width: var(--icon-xl); height: var(--icon-xl); transform: rotate(-90deg); fill: none; stroke-width: 2.5; filter: drop-shadow(0 0 var(--stroke) rgb(0 0 0 / 60%)); }
 .ui-chip-ring circle:first-child { stroke: var(--frost-stroke); }
 .ui-chip-ring circle:last-child { stroke: var(--foreground); stroke-linecap: round; transition: stroke-dashoffset var(--duration-quick) linear; }
 .ui-chip[data-status="error"] .ui-chip-body { border-color: var(--destructive); }
-.ui-chip[data-status="error"] .ui-chip-media img { opacity: 0.4; }
+.ui-chip[data-status="error"] .ui-chip-media img { opacity: var(--opacity-disabled); }
 .ui-chip-retry { position: absolute; width: var(--icon-lg); height: var(--icon-lg); color: var(--foreground); filter: drop-shadow(0 0 var(--stroke) rgb(0 0 0 / 70%)); }
 .ui-chip-remove { position: absolute; top: var(--space-xs); right: var(--space-xs); display: grid; width: var(--icon-lg); height: var(--icon-lg); place-items: center; border: 0; border-radius: var(--radius-round); background: rgb(0 0 0 / 62%); padding: 0; color: #fff; cursor: pointer; opacity: 0; transition: opacity var(--duration-quick) var(--ease-change); }
 .ui-chip-remove svg { width: var(--icon-xs); height: var(--icon-xs); }
@@ -81,7 +81,7 @@
 /* A choice follows Interaction: grey at rest; the cursor is the wash, white;
    the current choice is white at the current weight, no tick; several chosen
    (pick any) are the wash on each, and the cursor on one brightens it a step. */
-.ui-choice { color: color-mix(in oklch, var(--foreground), transparent 38%); }
+.ui-choice { color: color-mix(in oklch, var(--foreground), transparent var(--tone-quiet)); }
 .ui-choice[data-active="true"] { background: var(--tint); color: var(--foreground); }
 .ui-choice[aria-selected="true"] { color: var(--foreground); }
 .ui-choices:not([aria-multiselectable="true"]) > .ui-choice[aria-selected="true"] .ui-choice-label { font-weight: var(--weight-current); }
@@ -126,7 +126,7 @@
 .ui-rider-button svg { width: var(--icon-lg); height: var(--icon-lg); flex: none; }
 .ui-frost.ui-rider-button[data-labelled] { width: auto; padding: 0 var(--space-xl) 0 var(--space-lg); }
 .ui-rider-button[data-labelled] svg { width: var(--icon); height: var(--icon); }
-.ui-rider-button:is(:hover, :focus-visible) { outline: 0; filter: brightness(1.12); }
+.ui-rider-button:is(:hover, :focus-visible) { outline: 0; filter: brightness(var(--brighten)); }
 /* It fades in where it rides when there is something below, and out when there is not. */
 .ui-rider-button[data-entering] { animation: ui-fade-in var(--duration-gentle) var(--ease-arrive) backwards; }
 .ui-rider-button[data-leaving] { animation: ui-fade-out var(--duration-quick) var(--ease-leave) forwards; pointer-events: none; }
