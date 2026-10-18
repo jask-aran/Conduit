@@ -41,7 +41,6 @@
 .composer-actions { position: relative; z-index: 2; }
 
 @media (--conduit-phone-layout) {
-  :is(.chat-main:not(.chat-main-empty), .main-split-chat) .thread { padding-bottom: var(--transcript-composer-inset, 128px); }
   .composer-stack,
   .chat-main-empty .composer-stack { background: transparent; }
   :is(.chat-main:not(.chat-main-empty), .main-split-chat) .composer-stack {
@@ -101,5 +100,4 @@
   }
   .composer-content { display: contents; }
 }
-
 }

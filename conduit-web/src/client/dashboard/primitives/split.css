@@ -100,7 +100,6 @@
 @media (--conduit-mobile-layout) {
   .split-dashboard { overflow: hidden; }
   .split-dashboard-body { width: calc(100% - 32px); margin-inline: auto; overflow-y: auto; padding: 12px 0 calc(100px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))); }
-  .split-header h1 { font-size: 27px; }
   .split-header-context { margin-top: 5px; font-size: 12.5px; line-height: 1.55; }
   .split-header-context code { font-size: 11.5px; }
   .split-dashboard-head { grid-template-columns: auto minmax(0, 1fr); grid-template-areas: "glyph title" "glyph status" "actions actions"; }
@@ -151,8 +150,6 @@
 .split-quick-actions .workspace-dashboard-manage:is(:hover, :focus-visible, [data-expanded]) { outline: none; background: var(--accent); color: var(--foreground); }
 .split-quick-actions .workspace-dashboard-manage svg { display: block; width: 14px; height: 14px; }
 @media (--conduit-mobile-layout) {
-  .split-change-row .workspace-change-counts, .split-change-row code { font-size: 12px; }
-  .split-change-row > svg { width: 15px; height: 15px; }
   /* The ⋯ sits in the chat header on a phone; the header stays one line. */
   .split-quick-actions .workspace-dashboard-manage { display: none; }
   .split-header h1 { font-size: 24px; }

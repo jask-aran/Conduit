@@ -545,22 +545,19 @@
 @media (--conduit-phone-layout) {
   .workspace-rail, .main-split, .workspace-move-toggle { display: none; }
   .workspace-panel-tabs-space { display: flex; }
-  .workspace-panel-header { height: auto; min-height: 32px; flex-wrap: wrap; }
+  .workspace-panel-header { height: auto; flex-wrap: wrap; }
   .workspace-panel-header .settings-segmented { order: 1; flex-basis: 100%; margin-bottom: 4px; }
   .chat-main.workspace-expanded { display: flex; }
   .workspace-expand-toggle { display: none; }
   .workspace-panel {
-    position: fixed;
     inset: 0;
     z-index: 70;
     width: 100vw !important;
     height: 100dvh;
-    margin: 0;
     transform: translateX(100%);
-    transition: transform var(--panel-motion-duration) var(--panel-motion-easing);
   }
   .workspace-panel.workspace-panel-open { margin: 0; transform: translateX(0); }
-  .workspace-panel-surface { width: 100%; border: 0; border-radius: 0; overscroll-behavior: contain; opacity: 1; transform: none; }
+  .workspace-panel-surface { width: 100%; border: 0; overscroll-behavior: contain; opacity: 1; transform: none; }
   .workspace-tree, .workspace-preview, .workspace-diff, .workspace-changes, .workspace-diff-content { overscroll-behavior: contain; }
   .workspace-resize-handle { display: none; }
   .workspace-files { grid-template-rows: minmax(128px, 42%) 1fr; }
@@ -731,7 +728,6 @@
   .workspace-panel, .workspace-panel-surface { transition-duration: 0.01ms !important; }
   .workspace-panel-open .workspace-panel-surface { transform: none; }
 }
-
 }
 /* A shell as a pane's document: the terminal fills the pane, its header
    carrying the pane's swap and close. */
