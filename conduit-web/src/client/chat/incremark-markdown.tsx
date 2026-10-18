@@ -151,6 +151,13 @@ const MARKER_ONLY_LINE = /^[ \t]*[-*+#>=_~`.):|\d][-*+#>=_~`.):|\d \t]*$/;
 
 // Only the last line is read: a pattern anchored at the end but not the start was tried from every offset of the
 // whole message, every delta.
+function commonPrefixLength(left: string, right: string) {
+  const length = Math.min(left.length, right.length);
+  let index = 0;
+  while (index < length && left.charCodeAt(index) === right.charCodeAt(index)) index += 1;
+  return index;
+}
+
 function holdMarkerLine(source: string) {
   const lineStart = source.lastIndexOf("\n") + 1;
   return MARKER_ONLY_LINE.test(source.slice(lineStart)) ? source.slice(0, lineStart) : source;
@@ -1218,9 +1225,17 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
     let update: ReturnType<typeof parser.append> | undefined;
     const updates: Array<ReturnType<typeof parser.append>> = [];
     const extendsPrevious = extendsText(source, previousSource);
+    // A text that changes behind its end -- the final message restating the streamed one a character shorter, an
+    // answer ending inside a formula finished with the formula repaired -- no longer extends the last, and starting
+    // over rebuilt every block of it (a 14,000-token answer: 215 blocks, 200ms). A block's id is its offset, so a
+    // parse from scratch gives every block wholly before the change the same block: those are kept, and only what
+    // follows is taken again.
+    const changedAt = !extendsPrevious && previousSource ? commonPrefixLength(source, previousSource) : -1;
+    const keepsBlocks = changedAt > 0 && [...completedById.values()].some((block) => block.endOffset <= changedAt);
+    if (keepsBlocks) for (const [id, block] of [...completedById]) if (block.endOffset > changedAt) completedById.delete(id);
     const preserveTypewriterState = typewriter()
       && previousTypewriter === true
-      && extendsPrevious;
+      && (extendsPrevious || keepsBlocks);
     if (source !== previousSource || (tableMath && parserSource !== previousParserSource)) {
       const canAppend = true
         && extendsPrevious
