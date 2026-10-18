@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createSignal, Index, lazy, Match, onCleanup, Show, Suspense, Switch } from "solid-js";
+import { createEffect, createMemo, createSignal, Index, Match, onCleanup, Show, Suspense, Switch } from "solid-js";
 import { LightbulbIcon, MessageSquareTextIcon, TriangleAlertIcon } from "lucide-solid";
 import { Spinner } from "@/components/primitives";
 import type { Message, ToolItem, ToolKind } from "../api/contracts";
@@ -12,26 +12,12 @@ import { ThinkingOrb, type ModeFrame, type OrbState, settledOrbRate } from "./th
 import { Disclosure } from "./disclosure";
 import { useLibrary, useLibraryPiece } from "@/components/ui/swap";
 import { extendsText } from "./streaming-markdown";
+import type { MarkdownRendererId } from "./markdown-settings";
+import { ChatMarkdown } from "./lazy-markdown";
+import { fullDateTime } from "./full-date-time";
 
 /* The gallery's previews draw a turn's header as the library's TraceHeader (its classes); the app keeps its own. */
 const traceClass = (library: boolean) => (app: string, piece: string) => library ? piece : app;
-import type { MarkdownRendererId } from "./markdown-settings";
-
-const ChatMarkdown = lazy(() => import("./markdown").then((module) => ({ default: module.ChatMarkdown })));
-const fullDateTime = (value?: string) => {
-  if (!value) return "";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat([], {
-    year: "numeric",
-    month: "short",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    timeZoneName: "short",
-  }).format(date);
-};
 
 function TraceError(props: { message: Message; profileLabel?: string }) {
   const message = () => props.message;

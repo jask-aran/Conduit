@@ -1,5 +1,5 @@
 import { setLatestAway, setLatestScroller } from "./latest-away";
-import { createComputed, createEffect, createMemo, createRenderEffect, createSignal, For, lazy, on, onCleanup, onMount, Show, Suspense, untrack, type JSX } from "solid-js";
+import { createComputed, createEffect, createMemo, createRenderEffect, createSignal, For, on, onCleanup, onMount, Show, Suspense, untrack, type JSX } from "solid-js";
 import { ArrowDownIcon, BellIcon, CheckIcon, CopyIcon, PencilIcon, PlayIcon, RefreshCwIcon, SquareIcon, TriangleAlertIcon, XIcon } from "lucide-solid";
 import { Button, Spinner } from "@/components/primitives";
 import type { BooleanCapability, Message } from "../api/contracts";
@@ -49,22 +49,9 @@ import { api } from "../api/client";
 import { requestTurnArtifactNavigation } from "./turn-artifact-navigation";
 import { useLibrary } from "@/components/ui/swap";
 import { StopLine } from "@/components/ui";
+import { ChatMarkdown } from "./lazy-markdown";
+import { fullDateTime } from "./full-date-time";
 
-const ChatMarkdown = lazy(() => import("./markdown").then((module) => ({ default: module.ChatMarkdown })));
-const fullDateTime = (value?: string) => {
-  if (!value) return "";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat([], {
-    year: "numeric",
-    month: "short",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    timeZoneName: "short",
-  }).format(date);
-};
 
 /**
  * A user message, folded when it is long enough to push the answer off screen.
