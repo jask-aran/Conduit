@@ -7,11 +7,11 @@
 .ui-scrim[data-placement="center"] { align-items: center; }
 .ui-frost.ui-overlay { display: flex; width: min(var(--overlay-width, calc(40 * var(--u-space))), 100%); max-height: var(--overlay-height, none); flex-direction: column; overflow: hidden; border-radius: var(--radius-surface); padding: 0; color: var(--foreground); font-size: var(--text-body); }
 .ui-overlay[data-layout="rail"] { flex-direction: row; }
-.ui-overlay-bar { display: flex; min-height: calc(3.4375 * var(--u-space)); flex: none; align-items: center; gap: var(--space-lg); border-bottom: 1px solid var(--tint); padding: var(--space-sm) var(--space-lg); }
+.ui-overlay-bar { display: flex; flex: none; align-items: center; gap: var(--space-lg); border-bottom: 1px solid var(--tint); padding: var(--space-md) var(--space-lg); }
 /* The lead is one mark at one size and colour, whichever it is (search, the command prompt, back). */
 .ui-overlay-lead { display: inline-grid; flex: none; place-items: center; color: var(--muted-foreground); }
 .ui-overlay-lead svg { width: var(--icon-lg); height: var(--icon-lg); color: var(--muted-foreground); }
-.ui-overlay-input { min-width: 0; height: calc(2.8125 * var(--u-space)); flex: 1; border: 0; outline: 0; background: transparent; padding: 0; color: var(--foreground); font-size: var(--text-body); font-weight: var(--weight-rest); line-height: 1.5; }
+.ui-overlay-input { min-width: 0; height: var(--control-lg); flex: 1; border: 0; outline: 0; background: transparent; padding: 0; color: var(--foreground); font-size: var(--text-body); font-weight: var(--weight-rest); line-height: 1.5; }
 .ui-overlay-input::placeholder { color: var(--muted-foreground); }
 .ui-overlay-bar .ui-seg { flex: none; }
 /* Its rows: a popover's Items at the overlay's scale, full colour; its group titles plain, not ruled. */
@@ -24,7 +24,7 @@
 .ui-overlay-split { display: grid; min-height: 0; flex: 1; grid-template-columns: minmax(0, 1fr); }
 .ui-overlay-split[data-aside] { grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr); }
 .ui-overlay-aside { min-width: 0; overflow: auto; border-left: 1px solid var(--tint); padding: var(--space-xl); }
-.ui-overlay-hints { display: flex; min-height: calc(2.65625 * var(--u-space)); flex: none; flex-wrap: wrap; align-items: center; gap: var(--space-sm) var(--space-xl); border-top: 1px solid var(--tint); padding: var(--space-md) var(--space-lg); color: var(--muted-foreground); font-size: var(--text-caption); }
+.ui-overlay-hints { display: flex; min-height: var(--control-lg); flex: none; flex-wrap: wrap; align-items: center; gap: var(--space-sm) var(--space-xl); border-top: 1px solid var(--tint); padding: var(--space-md) var(--space-lg); color: var(--muted-foreground); font-size: var(--text-caption); }
 .ui-overlay-hints span { display: inline-flex; align-items: center; gap: var(--space-xs); white-space: nowrap; }
 .ui-overlay-hints-end { margin-left: auto; gap: var(--space-xl) !important; }
 .ui-overlay-title { margin: 0; font-size: var(--text-heading); font-weight: var(--weight-strong); line-height: 1.5; letter-spacing: -0.02em; }

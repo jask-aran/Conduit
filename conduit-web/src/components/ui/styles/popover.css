@@ -80,4 +80,4 @@
    which stay). */
 [data-density="phone"] .ui-keys { display: none; }
 @media (--conduit-phone-layout) { .ui-keys { display: none; } }
-.ui-keys[data-first] { display: inline-flex; min-width: calc(3.125 * var(--u-space)); flex: none; gap: var(--space-xs); }
+.ui-keys[data-first] { display: inline-flex; min-width: calc(2 * var(--control-xs)); flex: none; gap: var(--space-xs); }
