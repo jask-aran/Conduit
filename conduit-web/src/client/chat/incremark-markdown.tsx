@@ -43,7 +43,15 @@ type RendererContext = {
   fadeMath?: () => boolean;
   /** False once the message has settled and its last fade is over. */
   fadeLive?: () => boolean;
+  fenceHandoff?: FenceHandoff;
 };
+
+/**
+ * An open fence's lines, passed to the code block that replaces it when the fence closes. The two are different
+ * cards in different places, and the block built all of a long file's lines again from nothing (a 137-line file:
+ * ~700 elements styled and laid out in the frame it settled). The lines are the same, so it takes the fence's own.
+ */
+type FenceHandoff = { current: { code: HTMLElement; text: string; language: string; released: boolean } | null };
 
 /** Text-node field: characters of this node before it were already on screen. */
 const FADE_FROM = "__conduitFadeFrom";
@@ -763,9 +771,9 @@ function MathNode(props: { node: MarkdownNode | NodeAccessor; fadeOnce?: () => b
   return <span ref={wrapper} class={type() === "math" ? "incremark-math-block" : "incremark-math-inline"} style={{ "min-height": type() === "math" && previewMinHeight() > 0 ? `${previewMinHeight()}px` : undefined }} />;
 }
 
-function CodeNode(props: { node: MarkdownNode | NodeAccessor }) {
+function CodeNode(props: { node: MarkdownNode | NodeAccessor; handoff?: FenceHandoff }) {
   const node = () => readNode(props.node);
-  return <CodeCard text={() => String(node()?.value || "")} language={() => node()?.lang} />;
+  return <CodeCard text={() => String(node()?.value || "")} language={() => node()?.lang} handoff={props.handoff} />;
 }
 
 /**
@@ -773,7 +781,7 @@ function CodeNode(props: { node: MarkdownNode | NodeAccessor }) {
  * plain to the delegated click handler (no data-expand-code) and wears the streaming-pending classes while
  * `streaming`; otherwise the two are the same card.
  */
-function CodeCard(props: { text: () => string; language: () => string | undefined; pending?: boolean; streaming?: boolean }) {
+function CodeCard(props: { text: () => string; language: () => string | undefined; pending?: boolean; streaming?: boolean; handoff?: FenceHandoff }) {
   const language = () => normalizeCodeLanguage(props.language());
   // Whole lines colour as they complete; the line still being written stays
   // plain so its colours do not change under the reader.
@@ -794,6 +802,31 @@ function CodeCard(props: { text: () => string; language: () => string | undefine
   const state = createMemo(() => codeBlockState(props.text(), collapse.mode(), collapse.threshold(), false));
   const collapsed = () => state().collapsed && !userExpanded();
   const settled = !props.pending || undefined;
+  let pre: HTMLPreElement | undefined;
+  let code = document.createElement("code");
+  // A fence offers its lines as it grows; a block takes them in its first render, which runs after the update that
+  // closed the fence has removed it -- never from a fence still on screen, whose card would go blank.
+  const offered: FenceHandoff["current"] = props.pending && props.handoff ? (props.handoff.current = { code, text: "", language: "", released: false }) : null;
+  if (offered) onCleanup(() => { offered.released = true; });
+  let first = !props.pending;
+  createRenderEffect(() => {
+    const lines = highlighted();
+    if (first) {
+      first = false;
+      const fence = props.handoff?.current;
+      if (fence?.released && fence.language === language() && props.text().startsWith(fence.text)) {
+        props.handoff!.current = null;
+        // Run before the card's markup was made (outside an update), the markup inserts the adopted element itself.
+        pre?.replaceChild(fence.code, code);
+        code = fence.code;
+      }
+    }
+    morphLines(code, lines);
+    if (offered) {
+      offered.text = props.text().trimEnd();
+      offered.language = language();
+    }
+  });
   // Folding removes a lot of height at once. Tell the transcript so it can hold
   // this card still and re-measure, instead of leaving stale placeholders.
   const toggle = (control: HTMLElement) => {
@@ -832,7 +865,7 @@ function CodeCard(props: { text: () => string; language: () => string | undefine
     {/* Morphed by the renderer rather than rewritten from outside, so a later render cannot wipe the highlighting, and
         so a growing block keeps its finished lines: rewritten, every line of a long fence was built and laid out
         again each frame it grew (3-4ms of layout a frame for a 137-line file). */}
-    <pre><code ref={(element) => createRenderEffect(() => morphLines(element, highlighted()))} /></pre>
+    <pre ref={pre}>{code}</pre>
     <Show when={state().collapsible}>
       <button type="button" class="artifact-expand" data-expand-code={settled && ""} data-expand-label={settled && ""} onClick={(event) => toggle(event.currentTarget)}>
         {collapsed() ? state().expandLabel : codeBlockCollapseLabel()}
@@ -861,10 +894,10 @@ function CodeCopyButton(props: { text: () => string }) {
   ><span class="artifact-copy-label">Copy</span></button>;
 }
 
-function PendingConstruct(props: { pending: StreamingPending; streaming: boolean }) {
+function PendingConstruct(props: { pending: StreamingPending; streaming: boolean; handoff?: FenceHandoff }) {
   const pending = () => props.pending;
   if (pending().kind === "fence") {
-    return <CodeCard text={() => pending().body} language={() => pending().language} pending streaming={props.streaming} />;
+    return <CodeCard text={() => pending().body} language={() => pending().language} pending streaming={props.streaming} handoff={props.handoff} />;
   }
   const className = () => `streaming-pending ${pending().kind === "math-block" ? "streaming-pending-math-block" : "streaming-pending-math-inline"}`;
   return pending().kind === "math-block"
@@ -1049,7 +1082,7 @@ function AstNodeContent(props: { node: NodeAccessor; context: RendererContext })
     }
     case "listItem": return <li>{node()?.checked !== null && <input type="checkbox" checked={Boolean(node()?.checked)} disabled />}{<BlockNodes nodes={() => node()?.children || []} context={props.context} />}</li>;
     case "blockquote": return <blockquote><BlockNodes nodes={() => node()?.children || []} context={props.context} /></blockquote>;
-    case "code": return <CodeNode node={node} />;
+    case "code": return <CodeNode node={node} handoff={props.context.fenceHandoff} />;
     case "table": return <TableNode node={node} context={props.context} />;
     case "thematicBreak": return <hr />;
     case "html":
@@ -1453,7 +1486,9 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
     queueMicrotask(() => props.onRendered?.());
   });
 
+  const fenceHandoff: FenceHandoff = { current: null };
   const context: RendererContext = {
+    fenceHandoff,
     definitions,
     inline: Boolean(props.inline),
     requestExternalLink: external.request,
@@ -1486,12 +1521,12 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
           <DisplayBlockNodes blocks={displayBlocks} context={displayContext} history={displayHistory} shown={displayShown} streaming={streaming} />
           <Show when={shownPending()}>
             {(value) => <Show when={value().kind === "fence"}>
-              <PendingConstruct pending={value()} streaming={streaming()} />
+              <PendingConstruct pending={value()} streaming={streaming()} handoff={fenceHandoff} />
             </Show>}
           </Show>
         </>}>
           <AstNode node={inlineAst()} context={context} />
-          <Show when={pending()}>{(value) => <Show when={value().kind === "fence"}><PendingConstruct pending={value()} streaming={streaming()} /></Show>}</Show>
+          <Show when={pending()}>{(value) => <Show when={value().kind === "fence"}><PendingConstruct pending={value()} streaming={streaming()} handoff={fenceHandoff} /></Show>}</Show>
         </Show>
       </div>
     </div>
