@@ -43,6 +43,7 @@
 .ui-button[data-variant="destructive"][data-outline] { border-color: var(--destructive); color: var(--destructive); }
 .ui-button[data-variant="destructive"][data-outline]:is(:hover, :focus-visible) { background: color-mix(in oklch, var(--destructive), transparent var(--tone-wash)); }
 :where(.ui-button[data-size="sm"]) { height: var(--control-sm); padding: 0 var(--space-lg); font-size: var(--text-row); }
+:where(.ui-button[data-size="lg"]) { height: var(--control-lg); padding: 0 var(--space-2xl); font-size: var(--text-body); }
 :where(.ui-button[data-size="icon"]) { width: var(--control); padding: 0; }
 /* icon-xs: a row of small actions under a message (time, copy, edit), round as the app draws them. */
 :where(.ui-button[data-size="icon-xs"]) { width: var(--control-xs); height: var(--control-xs); border-radius: var(--radius-round); padding: 0; }
@@ -118,4 +119,14 @@
 /* A spinner: a ring in the surface's tint, a quarter of it in the text colour, turning. */
 .ui-spinner { width: var(--icon); height: var(--icon); flex: none; border: var(--stroke-thin) solid var(--tint); border-top-color: var(--foreground); border-radius: var(--radius-round); animation: ui-spin var(--duration-spin) linear infinite; }
 @keyframes ui-spin { to { transform: rotate(1turn); } }
+/* Switch: an --icon thumb in a round track, travelling its own width; on, the primary. */
+.ui-switch { --switch-inset: calc(var(--space-2xs) + var(--hairline)); position: relative; width: calc(2 * var(--icon) + 2 * var(--switch-inset));
+  height: calc(var(--icon) + 2 * var(--switch-inset)); flex: none; border: var(--hairline) solid var(--tint); border-radius: var(--radius-round);
+  background: var(--well); padding: 0; cursor: pointer; transition: background var(--duration-quick) var(--ease-change), border-color var(--duration-quick) var(--ease-change); }
+.ui-switch > span { position: absolute; top: var(--space-2xs); left: var(--space-2xs); width: var(--icon); height: var(--icon); border-radius: var(--radius-round);
+  background: var(--muted-foreground); transition: transform var(--duration-quick) var(--ease-change), background var(--duration-quick) var(--ease-change); }
+.ui-switch[aria-checked="true"] { border-color: transparent; background: var(--primary); }
+.ui-switch[aria-checked="true"] > span { background: var(--primary-foreground); transform: translateX(var(--icon)); }
+.ui-switch:focus-visible { outline: none; border-color: var(--foreground); }
+.ui-switch:disabled { cursor: default; opacity: var(--opacity-disabled); }
 @media (prefers-reduced-motion: reduce) { .ui-spinner { animation-duration: calc(3 * var(--duration-spin)); } }

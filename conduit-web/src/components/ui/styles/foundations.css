@@ -119,7 +119,7 @@
   --space-md: calc(0.5 * var(--u-space)); --space-lg: calc(0.75 * var(--u-space)); --space-xl: var(--u-space);
   --space-2xl: calc(1.25 * var(--u-space)); --space-3xl: calc(1.5 * var(--u-space)); --space-4xl: calc(2 * var(--u-space));
   /* Icons: five sizes -- a × in a tiny control, a chevron, the icon, a pill's, a ring -- and a dot (a status, recording). */
-  --icon-xs: calc(0.6875 * var(--u-icon)); --icon-sm: calc(0.875 * var(--u-icon)); --icon: var(--u-icon); --icon-lg: calc(1.125 * var(--u-icon)); --icon-xl: calc(1.5 * var(--u-icon)); --icon-dot: calc(0.375 * var(--u-icon));
+  --icon-xs: calc(0.6875 * var(--u-icon)); --icon-sm: calc(0.875 * var(--u-icon)); --icon: var(--u-icon); --icon-lg: calc(1.125 * var(--u-icon)); --icon-xl: calc(1.5 * var(--u-icon)); --icon-dot: calc(0.5 * var(--u-icon));
   /* Controls: five heights (an icon button is as wide as it is tall); 2xs is a keycap, a slider thumb. */
   --control-2xs: calc(1.125 * var(--u-space)); --control-xs: calc(1.5 * var(--u-space)); --control-sm: calc(1.875 * var(--u-space)); --control: calc(2.25 * var(--u-space)); --control-lg: calc(2.5 * var(--u-space));
   /* Measures: six lengths for what has a width (or a scrolling height) of its own -- a column, a card, an overlay. */
@@ -153,6 +153,7 @@
   --frost-highlight: inset 0 1px 0 rgb(255 255 255 / 50%), inset 0 -1px 0 rgb(255 255 255 / 10%);
   --frost-lift-rest: 0 8px 32px rgb(0 0 0 / 10%);
   --frost-lift-raised: 0 24px 70px rgb(0 0 0 / 38%);
+  --status-success: oklch(0.62 0.17 145); --status-warn: oklch(0.75 0.15 75); --status-unread: oklch(0.68 0.17 250); /* a row's live state */
   --frost-sheen: rgb(255 255 255 / 10%); --frost-glow: rgb(255 255 255 / 14%); /* the aura's light from above, its rim */
   /* Over an image: a control's ground and glyph, and the shadow that keeps a glyph read on any picture. */
   --on-media-ground: rgb(0 0 0 / 62%); --on-media: #fff; --glyph-shadow: drop-shadow(0 0 var(--stroke) rgb(0 0 0 / 65%));

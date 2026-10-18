@@ -17,10 +17,19 @@ export const Progress = (props: { value: number; max: number; label: string }) =
 
 export type ButtonVariant = "primary" | "secondary" | "ghost" | "destructive";
 /** outline: the variant as a line in its colour with nothing inside (primary, ghost, destructive; secondary is already a line round a well). */
-export function Button(props: JSX.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: ButtonVariant; outline?: boolean; size?: "default" | "sm" | "icon" | "icon-sm" | "icon-xs" }) {
+export function Button(props: JSX.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: ButtonVariant; outline?: boolean; size?: "default" | "sm" | "lg" | "icon" | "icon-sm" | "icon-xs" }) {
   const [local, rest] = splitProps(props, ["class", "variant", "outline", "size"]);
   return <button type="button" data-slot="button" {...rest} class={cn("ui-button", local.class)} data-variant={local.variant ?? "primary"} data-outline={local.outline ? "" : undefined} data-size={local.size ?? "default"} />;
 }
+
+/** On or off, for a setting that is one or the other: an --icon thumb travelling its own width. */
+export function Switch(props: { label: string; checked: boolean; onChange?: (checked: boolean) => void; disabled?: boolean; id?: string }) {
+  return <button id={props.id} type="button" role="switch" class="ui-switch" aria-label={props.label} aria-checked={props.checked}
+    disabled={props.disabled} onClick={() => props.onChange?.(!props.checked)}><span aria-hidden="true" /></button>;
+}
+
+/** Waiting: a ring turning, the icon's size. */
+export const Spinner = (props: { class?: string }) => <span class={cn("ui-spinner", props.class)} aria-hidden="true" />;
 
 /** Multi-line text that grows with its lines: bare, the type's size, no geometry of its own -- what holds it pads it (DesktopComposer, PillField). */
 export function TextArea(props: { placeholder?: string; value?: string; onInput?: (value: string) => void; class?: string }) {
