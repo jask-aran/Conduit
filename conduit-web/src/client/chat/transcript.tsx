@@ -444,8 +444,8 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
   // Normal tail movement uses whole pixels. Panel reflow anchoring must retain
   // fractional scroll positions or each resize frame accumulates visible drift.
   const setViewportScrollTop = (next: number, round = true, glide = false) => {
-    // A send's glide owns the viewport until it lands (glideToSent).
-    if (sendGlide != null && !glide) return;
+    // The glide to the latest owns the viewport until it lands (glideToLatest).
+    if (latestGlide != null && !glide) return;
     viewport.scrollTop = round ? Math.round(next) : next;
     programmaticScrollTop = viewport.scrollTop;
     previousScrollTop = viewport.scrollTop;
@@ -460,18 +460,17 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
     setLatestDistance(Math.max(0, viewportMaxScrollTop() - viewport.scrollTop));
   };
   /*
-   * Sending glides the view to the new message: one quick ease-out, faster
-   * than Scroll to latest, aimed at the bottom as it is on each frame (the
-   * message is already in the thread, and the composer may be folding). The
+   * Sending, and Scroll to latest, glide the view to the bottom: one ease,
+   * aimed at the bottom as it is on each frame (a send's message is already in
+   * the thread and the composer may be folding; an answer may be growing). The
    * tail follow and every other scroll wait until it lands, so nothing snaps
    * underneath it; a touch or wheel hands the view straight back.
    */
-  let sendGlide: number | null = null;
-  const cancelSendGlide = () => { if (sendGlide != null) cancelAnimationFrame(sendGlide); sendGlide = null; };
-  // A send scrolls the way scroll to latest does, to the bottom; nothing else
-  // writes the scroll until it lands or is taken.
-  const glideToSent = (then: () => void) => {
-    cancelSendGlide();
+  let latestGlide: number | null = null;
+  const cancelLatestGlide = () => { if (latestGlide != null) cancelAnimationFrame(latestGlide); latestGlide = null; };
+  // Nothing else writes the scroll until it lands or is taken.
+  const glideToLatest = (then: () => void) => {
+    cancelLatestGlide();
     const from = viewport.scrollTop;
     // The message and its starting header are already in the transcript, so
     // the bottom is final before the scroll starts; read each frame anyway,
@@ -479,18 +478,18 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
     const target = () => viewport.scrollHeight - viewport.clientHeight;
     const first = target();
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches || Math.abs(first - from) < 2) { setViewportScrollTop(first, true, true); then(); return; }
-    // About the pace of the browser's own smooth scroll, the one scroll to
-    // latest uses: longer for further, eased at both ends.
+    // About the pace of the browser's own smooth scroll: longer for further,
+    // eased at both ends.
     const duration = Math.min(700, 280 + Math.sqrt(Math.abs(first - from)) * 6);
     const started = performance.now();
     const step = () => {
       const progress = Math.min(1, (performance.now() - started) / duration);
       const eased = progress < 0.5 ? 4 * progress ** 3 : 1 - (-2 * progress + 2) ** 3 / 2;
-      sendGlide = progress < 1 ? requestAnimationFrame(step) : null;
+      latestGlide = progress < 1 ? requestAnimationFrame(step) : null;
       setViewportScrollTop(from + (target() - from) * eased, true, true);
-      if (sendGlide == null) then();
+      if (latestGlide == null) then();
     };
-    sendGlide = requestAnimationFrame(step);
+    latestGlide = requestAnimationFrame(step);
   };
   const scrollBottomNow = () => {
     if (scrollFrame != null) {
@@ -522,6 +521,17 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
     typewriterTailLastExpected = null;
     typewriterTailTargetDeltaEma = 0;
     requestTypewriterTailFollow(reason);
+  };
+  // Sending and Scroll to latest are both a request to watch the answer arrive: the view follows from the press, and the
+  // tail follow takes it from where the glide lands. Scroll to latest was the browser's smooth scroll, aimed at the
+  // bottom as it was when pressed: an answer growing meanwhile left it short of the follow's reach, and not following.
+  const followLatest = (reason: string) => {
+    setFollowing(true);
+    glideToLatest(() => {
+      setFollowing(true);
+      if (rendererUsesInertialTailFollow()) resumeTypewriterTailFollow(reason);
+      else scrollBottom();
+    });
   };
   const requestTypewriterTailFollow = (reason: string) => {
     if (!rendererUsesInertialTailFollow() || !following() || typewriterTailState.owner !== "app") return;
@@ -769,12 +779,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
     // switch did, and sending while scrolled up left the view where it was.
     if (trailingUserId && trailingUserId !== previousUserMessageId) {
       previousUserMessageId = trailingUserId;
-      setFollowing(true);
-      glideToSent(() => {
-        setFollowing(true);
-        if (rendererUsesInertialTailFollow()) resumeTypewriterTailFollow("user-send");
-        else scrollBottom();
-      });
+      followLatest("user-send");
       return;
     }
     previousUserMessageId = trailingUserId;
@@ -1107,9 +1112,9 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
         previousMaxScrollTop = maxScrollTop;
         return;
       }
-      // The send's glide is not the reader scrolling: its frames neither
+      // The glide to the latest is not the reader scrolling: its frames neither
       // drop nor decide the follow, which it hands back on landing.
-      if (sendGlide != null || (programmaticScrollTop != null && Math.abs(viewport.scrollTop - programmaticScrollTop) < 1)) {
+      if (latestGlide != null || (programmaticScrollTop != null && Math.abs(viewport.scrollTop - programmaticScrollTop) < 1)) {
         programmaticScrollTop = null;
         previousScrollTop = viewport.scrollTop;
         previousMaxScrollTop = maxScrollTop;
@@ -1157,8 +1162,8 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
     viewport.addEventListener("scroll", onScroll, { passive: true });
     viewport.addEventListener("wheel", claimUserScroll, { passive: true });
     viewport.addEventListener("touchstart", onTouchStart, { passive: true });
-    viewport.addEventListener("wheel", cancelSendGlide, { passive: true });
-    viewport.addEventListener("touchstart", cancelSendGlide, { passive: true });
+    viewport.addEventListener("wheel", cancelLatestGlide, { passive: true });
+    viewport.addEventListener("touchstart", cancelLatestGlide, { passive: true });
     viewport.addEventListener("pointerdown", onPointerDown, { passive: true });
     viewport.addEventListener("keydown", onKeyDown, { passive: true });
     window.addEventListener(COMPOSER_SURFACE_CHANGE_EVENT, syncComposerSurface);
@@ -1328,7 +1333,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
         */}
       {/* Always mounted, so it fades out as well as in: when pressed, and when
            somebody scrolls back down themselves. */}
-      <Button ref={(element) => { latestButton = element; scheduleLatestButtonAnchor(); }} variant="ghost" size="icon-sm" class={`message-scroller-button ${library ? "ui-frost ui-rider-button" : "composer-surface-material"}`} {...(library ? { "data-surface": "frost", "data-lift": "rest" } : {})} data-composer-surface={composerSurface()} data-shown={!following() && latestDistance() >= TAIL_NEAR_LATEST_PX ? "" : undefined} tabIndex={!following() && latestDistance() >= TAIL_NEAR_LATEST_PX ? 0 : -1} aria-hidden={!following() && latestDistance() >= TAIL_NEAR_LATEST_PX ? undefined : "true"} aria-label="Scroll to latest" title="Scroll to latest" onMouseDown={(event) => event.preventDefault()} onClick={() => viewport.scrollTo({ top: viewport.scrollHeight, behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" })}><ArrowDownIcon /></Button>
+      <Button ref={(element) => { latestButton = element; scheduleLatestButtonAnchor(); }} variant="ghost" size="icon-sm" class={`message-scroller-button ${library ? "ui-frost ui-rider-button" : "composer-surface-material"}`} {...(library ? { "data-surface": "frost", "data-lift": "rest" } : {})} data-composer-surface={composerSurface()} data-shown={!following() && latestDistance() >= TAIL_NEAR_LATEST_PX ? "" : undefined} tabIndex={!following() && latestDistance() >= TAIL_NEAR_LATEST_PX ? 0 : -1} aria-hidden={!following() && latestDistance() >= TAIL_NEAR_LATEST_PX ? undefined : "true"} aria-label="Scroll to latest" title="Scroll to latest" onMouseDown={(event) => event.preventDefault()} onClick={() => followLatest("user-latest")}><ArrowDownIcon /></Button>
       {/* Editing an earlier message: a way out that is always there, floating
           over the composer where the edit happens, as the pencil would. */}
       <Show when={props.chat.editingEntryId()}><Button ref={(element) => { cancelEditButton = element; scheduleLatestButtonAnchor(); }} variant="ghost" size="sm" class={`message-scroller-button message-cancel-edit ${library ? "ui-frost ui-rider-button" : "composer-surface-material"}`} {...(library ? { "data-surface": "frost", "data-lift": "rest", "data-labelled": "" } : {})} data-composer-surface={composerSurface()} data-beside-latest={!following() && latestDistance() >= TAIL_NEAR_LATEST_PX ? "" : undefined} onMouseDown={(event) => event.preventDefault()} onClick={() => { props.chat.cancelEdit(); focusComposerSoon(); }}><XIcon />Cancel editing</Button></Show>
