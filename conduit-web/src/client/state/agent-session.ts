@@ -359,4 +359,3 @@ export function createAgentSession(deps: {
 
 type UnknownCommand = Record<string, unknown>;
 
-export type AgentSession = ReturnType<typeof createAgentSession>;
