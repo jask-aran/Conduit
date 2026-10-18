@@ -400,7 +400,7 @@ const ANSWER_FORMS: FormRow[] = [
   form("table", "scrolls inside itself when wide", () => <Answer html={"<table><thead><tr><th>Day</th><th>Where</th><th>Time</th></tr></thead><tbody><tr><td>1</td><td>Fushimi Inari</td><td>06:00</td></tr><tr><td>2</td><td>Arashiyama</td><td>08:30</td></tr></tbody></table>"} />, "table", "Row role · --tint cells · sm md padding"),
 ];
 const MESSAGE_FORMS: FormRow[] = [
-  form("a word", "never narrower than tall: a capsule", () => <Transcript><Message time="00:08">hi</Message></Transcript>, "<Message time>", "min-width one line · --radius-message"),
+  form("a word", "never narrower than tall", () => <Transcript><Message time="00:08">hi</Message></Transcript>, "<Message time>", "min-width one line · --radius-message"),
   form("a line", "a third of a line above and below", () => <Transcript><Message time="00:08">use the question tool to ask me about dogs</Message></Transcript>, "", "padding md · lg (the composer's text inset)"),
   form("several lines", "wraps inside the column, the radius held", () => <Transcript><Message time="00:08">{"Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua, ut enim ad minim veniam."}</Message></Transcript>, "", "max-width --measure-2xl"),
 ];

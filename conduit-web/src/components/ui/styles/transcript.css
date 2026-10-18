@@ -1,4 +1,4 @@
-/* A line and a third of it above and below; never narrower than tall, so a word is a capsule. Its text is the composer's inset. */
+/* A line and a third of it above and below; never narrower than tall, so a word is never a sliver. Its text is the composer's inset. */
 .ui-bubble { width: fit-content; max-width: min(var(--measure-2xl), 88cqw); margin-left: auto; min-width: calc(1lh + 2 * var(--space-md)); border-radius: var(--radius-message); padding: var(--space-md) var(--space-lg); font-size: var(--text-body); line-height: var(--leading-text); white-space: pre-wrap; overflow-wrap: anywhere; }
 .ui-bubble[data-editing="true"] { color: var(--muted-foreground); font-style: italic; }
 /* Transcript (DESIGN Transcript), at the transcript's scale. The reading column is the composer's width;
