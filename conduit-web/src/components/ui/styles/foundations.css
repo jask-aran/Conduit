@@ -153,6 +153,9 @@
   --frost-highlight: inset 0 1px 0 rgb(255 255 255 / 50%), inset 0 -1px 0 rgb(255 255 255 / 10%);
   --frost-lift-rest: 0 8px 32px rgb(0 0 0 / 10%);
   --frost-lift-raised: 0 24px 70px rgb(0 0 0 / 38%);
+  --frost-sheen: rgb(255 255 255 / 10%); --frost-glow: rgb(255 255 255 / 14%); /* the aura's light from above, its rim */
+  /* Over an image: a control's ground and glyph, and the shadow that keeps a glyph read on any picture. */
+  --on-media-ground: rgb(0 0 0 / 62%); --on-media: #fff; --glyph-shadow: drop-shadow(0 0 var(--stroke) rgb(0 0 0 / 65%));
   --frost-core-ground: oklch(0.3 0.006 264 / 90%); /* a mid grey, nearly opaque: it stops what is behind, without going dark */
   --frost-tint: oklch(1 0 0 / 10%);
   /* The dim over what is behind: a desktop overlay (the scrim), the leader's lit composer (the spotlight), the phone's open sidebar. */

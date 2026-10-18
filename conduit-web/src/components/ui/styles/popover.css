@@ -72,8 +72,8 @@
 .ui-row > .ui-label[data-stacked] { display: flex; flex-direction: column; }
 .ui-label > .ui-detail { overflow: hidden; color: var(--muted-foreground); font: var(--weight-rest) var(--text-caption)/var(--leading-tight) inherit; font-family: inherit; text-overflow: ellipsis; white-space: nowrap; }
 /* An app row's own icon, placed straight in the row (not in an icon slot), is sized as one. */
-.ui-row > :is(svg, .workspace-glyph, .harness-mark, img):not(.ui-chevron) { width: var(--icon); height: var(--icon); flex: none; }
-.ui-row > .harness-mark { width: var(--icon-sm); height: var(--icon-sm); }
+.ui-row > :is(svg, .workspace-glyph, img):not(.ui-chevron) { width: var(--icon); height: var(--icon); flex: none; }
+.ui-row > .harness-mark { width: var(--icon-sm); height: var(--icon-sm); flex: none; }
 .ui-match { color: var(--muted-foreground); }
 .ui-match > b { color: var(--foreground); font-weight: var(--weight-current); }
 /* A phone variant has no keyboard: shortcut keys are off wherever they sit (after the rows' keys, before the leader's,
