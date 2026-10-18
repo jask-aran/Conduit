@@ -67,10 +67,7 @@
 .workspace-destroy-confirm { white-space: nowrap; }
 
 @media (--conduit-mobile-layout) {
-  .workspace-appearance-editor { padding: 12.8px; }
-  .workspace-appearance-modes { grid-template-columns: 1fr; }
-  .workspace-appearance-icon-grid { grid-template-columns: repeat(6, minmax(0, 1fr)); }
-  .project-dashboard-error { align-items: flex-start; flex-direction: column; gap: 2.4px; }
+  .project-dashboard-error { flex-direction: column; }
 }
 
 
@@ -150,7 +147,6 @@
   .workspace-appearance-icon-grid { grid-template-columns: repeat(6, minmax(0, 1fr)); }
   .project-dashboard-error { align-items: flex-start; flex-direction: column; gap: 3px; }
 }
-
 }
 
 .workspace-dashboard-manage:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }

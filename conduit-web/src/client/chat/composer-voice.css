@@ -14,7 +14,6 @@
      every control. Order: + · keyboard/folder · mic · stop · send. */
   [data-phone-layout] :is(.composer-actions, .composer-actions-left, .composer-actions-right, .composer-primary-slot) { display: contents; }
   [data-phone-layout] .composer { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 0; }
-  [data-phone-layout="surface"] .composer { padding: 0 1px; gap: 4px; }
   [data-phone-layout] .composer-mobile-plus { order: 1; padding: 0; }
   [data-phone-layout] :is(.composer-camera-trigger, .composer-keyboard-trigger) { order: 2; }
   /* Scroll to latest: just left of the mic, and folds open and shut as Send
@@ -67,7 +66,7 @@
 
   /* Bar: no shared pill; the mic is a frost pill filling the row. */
   [data-phone-layout="bar"] .composer.composer-surface-material { border-color: transparent; background: transparent; backdrop-filter: none; box-shadow: none; }
-  [data-phone-layout="bar"] .composer-actions [data-slot="button"].dictation-trigger { flex: 1 1 auto; width: auto; }
+  [data-phone-layout="bar"] .composer-actions [data-slot="button"].dictation-trigger { width: auto; }
 
   /* Idle and listening hide the text; the textarea stays focusable so the
      keyboard button and dictation can reach it. */
@@ -177,7 +176,6 @@
   }
   .composer-voice-captions p {
     display: flex; flex-direction: column; justify-content: flex-end; max-height: calc(3 * 1.45em); overflow: hidden;
-   
   }
   .composer-voice-captions p { margin: 0; }
   /* Anchored to the row, not the composer's top: the text pill is still
