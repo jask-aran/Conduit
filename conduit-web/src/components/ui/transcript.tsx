@@ -1,4 +1,4 @@
-import { createEffect, createSignal, For, onCleanup, onMount, Show, splitProps, type JSX } from "solid-js";
+import { children, createEffect, createRenderEffect, createSignal, For, onCleanup, onMount, Show, splitProps, type JSX } from "solid-js";
 import { BellIcon, ChevronDownIcon, SquareIcon, TriangleAlertIcon } from "lucide-solid";
 import { cn } from "@/lib/utils";
 import { Spinner } from "./controls";
@@ -62,10 +62,23 @@ export const HarnessPrompt = (props: { children: JSX.Element }) => <p class="ui-
 export const Changes = (props: { added: number; removed: number; title?: string; label?: string; onOpen?: () => void }) =>
   <button type="button" class="ui-changes" title={props.title} aria-label={props.label} onClick={() => props.onOpen?.()}><span data-change="added">+{props.added}</span><span data-change="removed">−{props.removed}</span></button>;
 /** Anything that folds: a header, one turning chevron, a body. Shape only: the caller opens it (and animates it). */
-export function Disclosure(props: { header: JSX.Element; open?: boolean; onToggle?: () => void; disabled?: boolean; children?: JSX.Element }) {
+/**
+ * A fold's body (Disclosure, Trace, Step). Given opens -- that it has something to open to, known without drawing it --
+ * the body is drawn the first time it opens and kept from then on, so it folds closed with its motion and a long
+ * trail costs nothing until it is read. Without, the children are drawn to learn whether there is anything to open.
+ */
+export function foldBody(props: { opens?: boolean; open?: boolean; children?: JSX.Element }) {
+  const [seen, setSeen] = createSignal(Boolean(props.open));
+  createRenderEffect(() => { if (props.open) setSeen(true); });
+  const body = children(() => props.opens === undefined || seen() ? props.children : undefined);
+  return { body, opens: () => props.opens ?? body.toArray().length > 0 };
+}
+/** A header that opens in place to its children. opens: drawn only once opened (foldBody). */
+export function Disclosure(props: { header: JSX.Element; open?: boolean; onToggle?: () => void; disabled?: boolean; opens?: boolean; children?: JSX.Element }) {
+  const { body } = foldBody(props);
   return <div class="ui-disclosure" data-open={props.open ? "true" : "false"}>
     <button type="button" class="ui-disclosure-header" aria-expanded={Boolean(props.open)} disabled={props.disabled} onClick={() => props.onToggle?.()}>{props.header}<ChevronDownIcon class="ui-disclosure-chevron" /></button>
-    <div class="ui-disclosure-body" aria-hidden={!props.open}>{props.children}</div>
+    <div class="ui-disclosure-body" aria-hidden={!props.open}>{body()}</div>
   </div>;
 }
 /** A message's action row: its time first, muted and tabular, then its actions (icon-xs ghost buttons). status: how

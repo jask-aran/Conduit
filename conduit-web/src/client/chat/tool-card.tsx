@@ -46,9 +46,9 @@ export function stepDuration(from?: string, to?: string): string {
 }
 
 /* A tool step: the library's Step, StepOutput, a code-mode script's calls as a Trail of quiet Steps. `open`,
-   `onToggle` and `seen` (opened at least once: its body is drawn from then on) are the trail's. Output a reload
+   `onToggle` are the trail's; its body is drawn the first time it opens (the Step's opens). Output a reload
    left on the server is fetched the first time it is opened. */
-export function ToolStep(props: { tool: ToolItem; sessionId?: string | null; settled?: boolean; open: boolean; seen: boolean; onToggle: () => void; motion?: "entering" }) {
+export function ToolStep(props: { tool: ToolItem; sessionId?: string | null; settled?: boolean; open: boolean; onToggle: () => void; motion?: "entering" }) {
   const [loaded, setLoaded] = createSignal<unknown>(undefined);
   const [loading, setLoading] = createSignal(false);
   const [full, setFull] = createSignal(false);
@@ -74,9 +74,9 @@ export function ToolStep(props: { tool: ToolItem; sessionId?: string | null; set
   const verb = () => `${VERBS[kind()][status() === "running" ? 0 : 1]}${kind() === "other" ? ` ${props.tool.name || "a tool"}` : ""}`;
   const subject = () => summary(props.tool) || (kind() === "other" || kind() === "script" ? "" : props.tool.name || "");
   return <Step label={`${props.tool.name || "Tool"} ${status()}`} icon={<Dynamic component={KIND_ICONS[kind()]} />} verb={verb()} subject={subject() || undefined} time={stepDuration(props.tool.timestamp, props.tool.completedAt) || undefined}
-    state={status() === "done" ? undefined : status() as "running" | "failed" | "stopped"} open={props.open} motion={props.motion}
+    state={status() === "done" ? undefined : status() as "running" | "failed" | "stopped"} opens open={props.open} motion={props.motion}
     onToggle={() => { if (!props.open) void load(); props.onToggle(); }}>
-    <Show when={props.seen} fallback={<span />}>
+    <>
       <Show when={props.tool.calls?.length}><Trail nested="calls"><Index each={props.tool.calls!}>{(call) => {
         const callKind = () => call().kind in KIND_ICONS ? call().kind : "other";
         const running = () => call().done === false;
@@ -85,6 +85,6 @@ export function ToolStep(props: { tool: ToolItem; sessionId?: string | null; set
           flags={call().repeats ? ["repeats"] : undefined} time={call().durationMs != null ? stepDuration("1970-01-01T00:00:00.000Z", new Date(call().durationMs!).toISOString()) : undefined} />;
       }}</Index></Trail></Show>
       <Show when={loading() || preview()}><StepOutput text={loading() ? "Loading…" : preview()} hidden={!loading() && output().length > MAX_PREVIEW ? output().length - MAX_PREVIEW : undefined} full={full()} onToggleFull={() => setFull(!full())} /></Show>
-    </Show>
+    </>
   </Step>;
 }

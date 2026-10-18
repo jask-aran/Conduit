@@ -1,8 +1,8 @@
-import { children, For, Show, splitProps, type JSX } from "solid-js";
+import { For, Show, splitProps, type JSX } from "solid-js";
 import { ChevronDownIcon } from "lucide-solid";
 import { Button, Spinner } from "./controls";
 import { type Motion, motionOf, sinceOf } from "./shared";
-import { Failure } from "./transcript";
+import { Failure, foldBody } from "./transcript";
 
 /**
  * A turn's head: the orb, then Status · time · work, and under it the trail's latest line (text, or the app's inline
@@ -21,12 +21,11 @@ export function TraceHeader(props: { orb?: JSX.Element; status: string; time?: s
  * Trace: a turn's work, folded under its head. The head is a TraceHeader (pass its props); the trail (children, a
  * Trail of Steps) unfolds under it as a Disclosure's body does. With no children there is nothing to open. A turn
  * not yet started is a Trace with status "Starting", a connecting Orb and live. motion and since: its entrance
- * (entering fades it in), and how far into it it already is.
+ * (entering fades it in), and how far into it it already is. opens: the trail is drawn only once opened (foldBody).
  */
-export function Trace(props: Omit<Parameters<typeof TraceHeader>[0], "opens"> & { motion?: Motion; since?: number; children?: JSX.Element }) {
+export function Trace(props: Parameters<typeof TraceHeader>[0] & { motion?: Motion; since?: number; children?: JSX.Element }) {
   const [head, local] = splitProps(props, ["orb", "status", "time", "work", "latest", "live", "tone", "open", "onToggle"]);
-  const body = children(() => local.children);
-  const opens = () => body.toArray().length > 0;
+  const { body, opens } = foldBody({ get opens() { return local.opens; }, get open() { return head.open; }, get children() { return local.children; } });
   return <div class="ui-disclosure ui-trace-fold" data-open={head.open && opens() ? "true" : "false"} data-live={head.live ? "" : undefined} {...motionOf(local.motion)} style={sinceOf(local.since)}>
     <TraceHeader {...head} opens={opens()} />
     <div class="ui-disclosure-body" aria-hidden={!head.open}>{body()}</div>
@@ -41,11 +40,12 @@ export type StepState = "running" | "failed" | "stopped" | "planned" | "earlier"
  * A step: its kind's icon (a spinner while running), a verb, its subject in muted mono, flags, its duration at the
  * end. summary: a line of text instead of verb and subject (thinking, narration). note: not a step, nothing to open
  * (reasoning the provider kept). discarded: text a stop threw away, struck, flagged Not kept. flags: words beside the
- * time (repeats). With children it opens in place to them -- its output, its prose, a group's or a script's steps.
+ * time (repeats). With children it opens in place to them -- its output, its prose, a group's or a script's steps;
+ * opens: they are drawn only once it has opened (foldBody).
  */
-export function Step(props: { label?: string; icon?: JSX.Element; verb?: string; subject?: string; summary?: JSX.Element; time?: string; state?: StepState; flags?: string[]; note?: boolean; discarded?: boolean; open?: boolean; onToggle?: () => void; motion?: Motion; children?: JSX.Element }) {
-  const body = children(() => props.children);
-  const opens = () => body.toArray().length > 0 && !props.note;
+export function Step(props: { label?: string; icon?: JSX.Element; verb?: string; subject?: string; summary?: JSX.Element; time?: string; state?: StepState; flags?: string[]; note?: boolean; discarded?: boolean; opens?: boolean; open?: boolean; onToggle?: () => void; motion?: Motion; children?: JSX.Element }) {
+  const fold = foldBody(props), body = fold.body;
+  const opens = () => fold.opens() && !props.note;
   const flags = () => [...(props.flags ?? []), ...(props.discarded ? [NOT_KEPT] : []), ...(props.state === "failed" ? ["Failed"] : props.state === "stopped" ? ["Stopped"] : [])];
   const row = () => <>
     <span class="ui-step-icon"><Show when={props.state === "running"} fallback={props.icon}><Spinner /></Show></span>
