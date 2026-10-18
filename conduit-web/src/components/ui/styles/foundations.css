@@ -77,6 +77,8 @@
  * finger's on a phone, never below 44px), written in the unit so they scale too.
  */
 :root { --scale-ui: 1; --scale-transcript: 1; }
+/* The phone's unit, at any density: what a finger needs (the pills, which are the same size wherever they sit). */
+:root { --u-phone: 16px; --u-touch: calc(var(--u-phone) * var(--scale-ui)); }
 /* The reading column: the composer's and the transcript's width unless their pane declares --composer-width. */
 :root { --reading-width: 47.5rem; }
 :root, [data-density="desktop"] {
@@ -84,11 +86,11 @@
   --frost-inset: var(--space-xs); --nav-label-pad: var(--space-xs) var(--space-md);
 }
 [data-density="phone"] {
-  --u-base: 16px; --row-min-floor: 44px; --row-min-units: 2.75; --row-text-units: 0.90625;
+  --u-base: var(--u-phone); --row-min-floor: 44px; --row-min-units: 2.75; --row-text-units: 0.90625;
   --frost-inset: var(--space-sm); --nav-label-pad: var(--space-sm) var(--space-md);
 }
 @media (--conduit-phone-layout) { :root {
-  --u-base: 16px; --row-min-floor: 44px; --row-min-units: 2.75; --row-text-units: 0.90625;
+  --u-base: var(--u-phone); --row-min-floor: 44px; --row-min-units: 2.75; --row-text-units: 0.90625;
   --frost-inset: var(--space-sm); --nav-label-pad: var(--space-sm) var(--space-md);
 } }
 /* What you read takes the transcript's scale: the units below are worked out again inside it. There a row's
