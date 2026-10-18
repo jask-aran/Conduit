@@ -299,7 +299,7 @@ test("indexes live blocks to one trace or answer row", () => {
 
   generation.assistantMessages[1].blocks[0].text = "Answer updated";
   generation.lastSeq = 5;
-  const row = buildLiveAnswerRow(generation, "m2", index, index.messageIndex);
+  const row = buildLiveAnswerRow(generation, "m2", index);
   assert.equal(row?.value.content, "Answer updated");
   assert.equal(row?.key, "answer:u1:0");
 });

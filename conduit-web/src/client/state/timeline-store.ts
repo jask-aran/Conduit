@@ -186,7 +186,7 @@ export function createTimelineStore(
 
     if (location.kind === "answer") {
       if (current.type !== "message") return null;
-      const next = buildLiveAnswerRow(inputGeneration, location.assistantId, liveIndex, liveIndex.messageIndex, current.precedingUserId);
+      const next = buildLiveAnswerRow(inputGeneration, location.assistantId, liveIndex, current.precedingUserId);
       if (!next) return null;
       setRows(index, "value", owned(next.value));
       previousProjectedRows[index] = next;
