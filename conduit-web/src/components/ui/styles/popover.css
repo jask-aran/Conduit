@@ -15,7 +15,6 @@
 .ui-search-section .ui-keys { display: inline-flex; flex: none; gap: var(--space-2xs); }
 .ui-search { min-width: 0; flex: 1; border: 0; background: transparent; padding: 0; color: var(--foreground); font-size: var(--text-row); outline: none; }
 .ui-search::placeholder { color: var(--muted-foreground); }
-.ui-empty { padding: var(--space-md); color: var(--muted-foreground); font-size: var(--text-caption); }
 
 .ui-row { display: flex; width: 100%; min-height: var(--row-min); align-items: center; gap: var(--row-gap); border: 0; border-radius: var(--radius-control); background: transparent; padding: var(--row-pad); color: color-mix(in oklch, var(--foreground), transparent var(--tone-rest)); font-size: var(--text-row); font-weight: var(--weight-rest); line-height: var(--leading-text); text-align: left; cursor: default; user-select: none; outline: none; }
 /* The icon slot: every leading mark -- a lucide icon, a workspace glyph, a

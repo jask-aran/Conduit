@@ -1,7 +1,7 @@
 import { createSignal, For, onCleanup, onMount, Show, type JSX } from "solid-js";
 import { ArrowUpIcon, CameraIcon, CopyIcon, FolderIcon, MicIcon, MonitorIcon, PaperclipIcon, PlusIcon, SettingsIcon, ShareIcon, Trash2Icon } from "lucide-solid";
 
-import { Aura, Orb, settledOrbRate, PLAIN_SPHERE, SPUTTERING_SPHERE, ORBITS_TRAILED, type ModeFrame, type OrbState, Slider, Segmented, Spinner, StatusDot, Bubble, Button, Frost, HeadingSection, Input, Item, Keycap, Menu, NavRow, Overlay, OverlayBar, PillButton, PillField, PillGroup, Section, SelectTrigger, TextArea, Toolbar } from "@/components/ui";
+import { Aura, Orb, settledOrbRate, PLAIN_SPHERE, SPUTTERING_SPHERE, ORBITS_TRAILED, type ModeFrame, type OrbState, Slider, Segmented, Spinner, StatusDot, Preview, Bubble, Button, Frost, HeadingSection, Input, Item, Keycap, Menu, NavRow, Overlay, OverlayBar, PillButton, PillField, PillGroup, Section, SelectTrigger, TextArea, Toolbar } from "@/components/ui";
 import { px, InUse, style, bg, fg, edge, rounding, tall, icon, FormTable, form, type Mark, type FormRow } from "./specs";
 import { resolvePreset } from "thinking-orbs/engine";
 import { lib, Levels, SegmentedCount, SegmentedIcons, SegmentedText, SwitchDemo, type Family } from "./library";
@@ -354,7 +354,7 @@ const ROLES: FontRole[] = [
   { token: "--font-data", title: "Data", fallback: MONO, uses: "Meta beside a row's title: times, counts, model ids, sizes; tabular, so numbers line up", options: [option("paper", "Paper Mono", PAPER), option("inconsolata", "Inconsolata", INCONSOLATA), option("system", "System", "")],
     preview: () => <Menu><Section><Item meta="2m ago">Lorem ipsum file</Item><Item meta="gpt-6-luna">Model</Item><Item meta="1,024">Tokens</Item></Section></Menu> },
   { token: "--font-code", title: "Code", fallback: MONO, uses: "Code blocks, previews and artifacts, the file editor", options: [option("paper", "Paper Mono", PAPER), option("inconsolata", "Inconsolata", INCONSOLATA), option("system", "System", "")],
-    preview: () => <Frost class="g-entry"><pre class="ui-preview">{"~/Conduit $ npm run build\n✓ built in 10.4s  │ ├─ └─\nconst x = { a: 1, b: [2, 3] };"}</pre></Frost> },
+    preview: () => <Frost class="g-entry"><Preview>{"~/Conduit $ npm run build\n✓ built in 10.4s  │ ├─ └─\nconst x = { a: 1, b: [2, 3] };"}</Preview></Frost> },
   { token: "--font-terminal", title: "Terminal", fallback: MONO, uses: "The terminal pane: Meslo by default for its Nerd Font glyphs (prompt segments, file icons); yours to change", options: [option("meslo", "Meslo", MESLO), option("paper", "Paper Mono", PAPER), option("inconsolata", "Inconsolata", INCONSOLATA), option("system", "System", "")],
     preview: () => <pre class="g-terminal">{"\ue0b6 ~/Conduit \ue0b0 \ue0a0 main \ue0b4\n$ ls\n\uf07b src  \uf07b dist  \ue718 package.json  \uf48a README.md"}</pre> },
   { token: "--font-wordmark", title: "Wordmark", fallback: SANS, uses: "The brand at the top of the sidebar", options: [option("druk", "Druk", WORDMARK), option("geist", "Geist", GEIST), option("paper", "Paper Mono", PAPER)],

@@ -63,3 +63,8 @@ export function Match(props: { text: string; query: string }) {
 
 /** A run of keys, a keycap each; first: they lead the row (the leader). */
 const Keys = (props: { keys: string[]; first?: boolean }) => <span class="ui-keys" data-first={props.first ? "" : undefined}><For each={props.keys}>{(key) => <Keycap>{key}</Keycap>}</For></span>;
+
+/** A rule between groups of a menu's rows, where it has no sections. */
+export const Rule = () => <hr class="ui-rule" />;
+/** A row's meta: muted, after its label (a value, a latency). */
+export const Meta = (props: { children: JSX.Element }) => <span class="ui-meta">{props.children}</span>;
