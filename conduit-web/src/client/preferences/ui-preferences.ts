@@ -49,9 +49,3 @@ export function queueUiPreferenceSave<K extends UiPreferenceKey>(key: K, value: 
   uiPreferenceSaves.edit(unsaved, "now");
 }
 
-export async function saveUiPreference<K extends UiPreferenceKey>(key: K, value: UiPreferences[K]) {
-  return api<UiPreferences>("/v0/preferences", {
-    method: "PATCH",
-    body: JSON.stringify({ [key]: value }),
-  });
-}

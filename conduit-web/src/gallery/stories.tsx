@@ -11,16 +11,6 @@ import { createComposerSurfaceSignal } from "../client/chat/composer-surface";
 /* The previews: the app's own chat screen over a seeded chat. */
 
 
-/** The user's message, as transcript.tsx draws it. */
-export function UserBubble(props: { text: string }) {
-  const surface = createComposerSurfaceSignal();
-  return <article data-slot="message" data-align="end" class="message-user">
-    <div data-slot="message-content"><div data-slot="bubble" data-align="end" class="bubble bubble-user composer-surface-material" data-composer-surface={surface()}>
-      <div data-slot="bubble-content"><span class="user-message-text">{props.text}</span></div>
-    </div></div>
-  </article>;
-}
-
 /** A chat screen of the app's own header, transcript and composer over a seeded chat, not wired to a server. */
 /** chat: a real one (live-chat.ts) in place of the seeded chat; the pickers stay seeded. */
 export function ChatScreen(props: { chat?: ReturnType<typeof fakeChat> } = {}) {

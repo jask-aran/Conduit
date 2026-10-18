@@ -109,22 +109,6 @@ export interface ChatAttachments {
   restore: (attachments: Attachment[]) => void;
 }
 
-/** For a chat whose harness owns the model and whose surface carries no files. */
-export const HARNESS_OWNED_MODELS: ChatModels = {
-  model: () => "",
-  effort: () => "",
-  reloadChat: async () => {},
-  select: async () => {},
-};
-
-export const NO_CHAT_ATTACHMENTS: ChatAttachments = {
-  items: () => [],
-  pendingIds: () => [],
-  select: () => {},
-  markAnnounced: () => {},
-  restore: () => {},
-};
-
 /** The slice of the catalogue this store uses: which chat is open, and where. */
 export interface ChatCatalogue {
   selectedId: () => string | null;

@@ -18,25 +18,7 @@ export function PlaceGlyph(props: { project?: Project | null }) {
 export const isWorkspace = (project: Project) => project.kind === "workspace" || ["linked", "created", "cloned"].includes(project.origin || "");
 
 /**
- * The composer's folder button: puts the chat in a project or workspace, or
- * takes it out of one. A searchable list of places, as Claude's "Add to
- * project" is, without the menu in front of it.
- */
-export function PlacePicker(props: PlaceOptions) {
-  const [open, setOpen] = createSignal(false);
-  const placed = () => props.current && props.current.slug !== "chat" ? props.current : null;
-  return <Popover open={open()} onOpenChange={setOpen} placement="top-start">
-    <PopoverTrigger as={Button} class="composer-desktop-attachment composer-place-trigger" variant="ghost" size="icon-sm" disabled={props.disabled}
-      aria-label={placed() ? `In ${placed()!.name}. Change folder` : "Add to a project or workspace"} title={placed() ? `In ${placed()!.name}` : "Add to project"} data-placed={placed() ? "true" : undefined}>
-      <PlaceGlyph project={placed()} />
-    </PopoverTrigger>
-    <PopoverContent class="composer-place-menu" aria-label="Add to project"><PlaceList {...props} onDone={() => setOpen(false)} /></PopoverContent>
-  </Popover>;
-}
-
-/**
- * The searchable list of places, wherever it opens: the folder button's
- * popover, or the desktop +'s Project submenu.
+ * The searchable list of places: the desktop +'s Project submenu.
  */
 export function PlaceList(props: PlaceOptions & { onDone?: () => void }) {
   const root = createMemo(() => props.projects.find((project) => project.slug === "chat"));

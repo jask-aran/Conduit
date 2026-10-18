@@ -83,7 +83,6 @@ export const LEGACY_ORIGIN_STORAGE_KEY = "conduit.native.server-origin";
 
 const hostOf = (origin: string) => { try { return new URL(origin).hostname; } catch { return ""; } };
 
-export const isLoopbackOrigin = (origin: string) => LOOPBACK_HOST.test(hostOf(origin));
 /** On this machine, or on the network it is sitting on. */
 export const isDirectOrigin = (origin: string) => {
   const host = hostOf(origin);
