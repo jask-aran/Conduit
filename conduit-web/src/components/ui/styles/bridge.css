@@ -78,3 +78,12 @@
 .message-scroller-button.ui-rider-button[data-labelled][data-slot="button"] { width: auto; gap: var(--space-sm); padding: 0 var(--space-xl) 0 var(--space-lg); font: var(--weight-lift) var(--text-row) var(--font-sans); }
 .message-scroller-button.ui-rider-button[data-slot="button"] svg { width: var(--icon-lg); height: var(--icon-lg); }
 .message-scroller-button.ui-rider-button[data-labelled][data-slot="button"] svg { width: var(--icon); height: var(--icon); }
+/* App menus drawn as library menus (until they graduate). */
+/* A rule between groups of an app menu's rows, where a library menu has sections. */
+.ui-menu .ui-rule { height: var(--hairline); margin: var(--frost-inset) calc(-1 * var(--frost-inset)); border: 0; background: var(--tint); }
+/* A menu keeps its caller's class for its width and placement; its shell
+   (inset, radius, lift) is the library's. */
+.ui-frost.ui-menu { padding: var(--frost-inset); border-radius: var(--radius-surface); }
+.ui-frost.ui-menu[data-lift="raised"] { box-shadow: var(--frost-lift-raised), var(--frost-highlight); }
+/* An app row's own text runs out in an ellipsis, as a library label does. */
+.ui-row > span:not(.ui-icon, .ui-keys, .ui-meta, .ui-row-end) { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

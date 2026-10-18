@@ -59,14 +59,6 @@
 /* A field row: its name muted at the row role (never uppercase), its value after it. */
 .ui-row[data-field] > .ui-label { color: var(--muted-foreground); }
 .ui-row[data-field] > small { color: color-mix(in oklch, var(--foreground), transparent var(--tone-quiet)); font-family: inherit; font-size: var(--text-row); }
-/* A rule between groups of an app menu's rows, where a library menu has sections. */
-.ui-menu .ui-rule { height: var(--hairline); margin: var(--frost-inset) calc(-1 * var(--frost-inset)); border: 0; background: var(--tint); }
-/* A menu keeps its caller's class for its width and placement; its shell
-   (inset, radius, lift) is the library's. */
-.ui-frost.ui-menu { padding: var(--frost-inset); border-radius: var(--radius-surface); }
-.ui-frost.ui-menu[data-lift="raised"] { box-shadow: var(--frost-lift-raised), var(--frost-highlight); }
-/* An app row's own text runs out in an ellipsis, as a library label does. */
-.ui-row > span:not(.ui-icon, .ui-keys, .ui-meta, .ui-row-end) { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* An item's detail: a second line under its label (a route's address). */
 .ui-row > .ui-label[data-stacked] { display: flex; flex-direction: column; }
