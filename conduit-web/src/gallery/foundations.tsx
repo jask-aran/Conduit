@@ -271,7 +271,7 @@ const RADII: TokenGroup[] = [
     tok("--radius-control", "rows, buttons, inputs, keycaps, chips: in the density unit", length("--radius-control"), corner("--radius-control")),
     tok("--radius-inset", "a keycap's or inline code's: a control's, nested", length("--radius-inset"), corner("--radius-inset")),
     tok("--radius-surface", "popovers, cards, overlays: a control's plus the inset, so rows nest", length("--radius-surface"), corner("--radius-surface")),
-    tok("--radius-message", "the composer (the phone's field too) and the user's message: one value on both; a capsule at one line, held as it grows", length("--radius-message"), corner("--radius-message")),
+    tok("--radius-message", "the composer (the phone's field too), its riders and the user's message, one value among them: 1.375 units at the transcript's scale (17.6px desktop, 22px phone); a capsule at one line, held as it grows", length("--radius-message"), corner("--radius-message")),
     tok("--radius-round", "fully round at any size: the phone's pill groups and buttons (they never grow), the slider, a chip's remove", length("--radius-round"), corner("--radius-round")),
   ] },
 ];

@@ -399,6 +399,11 @@ const ANSWER_FORMS: FormRow[] = [
   form("quote", "quoted text", () => <Answer html={"<blockquote><p>Lorem ipsum dolor sit amet.</p></blockquote>"} />, "blockquote", "a --tint line · muted"),
   form("table", "scrolls inside itself when wide", () => <Answer html={"<table><thead><tr><th>Day</th><th>Where</th><th>Time</th></tr></thead><tbody><tr><td>1</td><td>Fushimi Inari</td><td>06:00</td></tr><tr><td>2</td><td>Arashiyama</td><td>08:30</td></tr></tbody></table>"} />, "table", "Row role · --tint cells · sm md padding"),
 ];
+const MESSAGE_FORMS: FormRow[] = [
+  form("a word", "never narrower than tall: a capsule", () => <Transcript><Message time="00:08">hi</Message></Transcript>, "<Message time>", "min-width one line · --radius-message"),
+  form("a line", "a third of a line above and below", () => <Transcript><Message time="00:08">use the question tool to ask me about dogs</Message></Transcript>, "", "padding md · lg (the composer's text inset)"),
+  form("several lines", "wraps inside the column, the radius held", () => <Transcript><Message time="00:08">{"Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua, ut enim ad minim veniam."}</Message></Transcript>, "", "max-width --measure-2xl"),
+];
 const TRACE_FORMS: FormRow[] = [
   form("live", "a turn running: what it is doing, ticking", () => <TraceHeader orb={liveOrb()} status="Reading" time="12s" work="3 reads" latest="Reading src/client/chat/transcript.tsx" opens />, "<TraceHeader status time work latest opens>", "Row role · status strong · time tabular"),
   form("done", "settled", () => <TraceHeader orb={orb(true)} status="Done" time="2m 00s" work="1 edit · 2 reads" latest="Edited lorem_ipsum.txt" opens />, "", "the orb turns slowly"),
@@ -892,6 +897,7 @@ export const libraryFamilies: Family[] = [
       lib("transcript-inuse", "Turn in use", "both", "transcript", "Turn > TraceHeader · Answer · MessageFoot", () => <InUse scene={turnScene} marks={TURN_MARKS} spacing={[".ui-turn", ".ui-answer"]} />, "row"),
     ] },
     { title: "Forms", note: "each piece at each density", layout: "desktop", atoms: [
+      lib("transcript-message", "Message · lengths × densities", "both", "transcript", "Message > Bubble · MessageFoot", () => <FormTable rows={reading(MESSAGE_FORMS)} on={["desktop", "phone"]} widths={["200px", "minmax(0, 1fr)", "360px"]} />, "row"),
       lib("transcript-answer", "Answer · blocks × densities", "both", "transcript", "Answer", () => <FormTable rows={reading(ANSWER_FORMS)} on={["desktop", "phone"]} widths={["200px", "minmax(0, 1fr)", "360px"]} />, "row"),
       lib("transcript-trace", "TraceHeader · Trail · MessageFoot", "both", "transcript", "TraceHeader · Trail · Step · MessageFoot", () => <FormTable rows={reading(TRACE_FORMS)} on={["desktop", "phone"]} widths={["200px", "minmax(0, 1fr)", "360px"]} />, "row"),
     ] },
