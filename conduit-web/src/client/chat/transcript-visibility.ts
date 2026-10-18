@@ -38,23 +38,14 @@ function intrinsicInlineSize(element: HTMLElement, borderBoxSize: number) {
   return Math.max(0, borderBoxSize - insetsOf(element).inline);
 }
 
-// An observer's entry has the content box itself.
-function blockSize(entry: ResizeObserverEntry) {
-  const content = entry.contentBoxSize?.[0]?.blockSize;
-  return content ?? intrinsicBlockSize(entry.target as HTMLElement, entry.target.getBoundingClientRect().height);
-}
-
-function inlineSize(entry: ResizeObserverEntry) {
-  const content = entry.contentBoxSize?.[0]?.inlineSize;
-  return content ?? intrinsicInlineSize(entry.target as HTMLElement, entry.target.getBoundingClientRect().width);
-}
-
 const ROW_SELECTOR = '[data-slot="message-scroller-item"]';
 
-// Three observers share the work, and the split is the whole point of this
+// Observers share the work, and the split is the whole point of this
 // module's shape:
 //   - IntersectionObserver decides what is on screen. It is the only thing that
-//     runs while scrolling, and it costs no main-thread layout at all.
+//     runs while scrolling, and it costs no main-thread layout at all. A second
+//     one, its root a viewport taller above, finds the runs far enough up to
+//     leave layout.
 //   - ResizeObserver records each managed block's rendered size so the
 //     placeholder it leaves behind is the right shape.
 //   - MutationObserver keeps the managed set in step with the DOM.
@@ -88,17 +79,8 @@ export function mountTranscriptVisibility(
   // was seen stale -- a list hidden at the two lines it once had (40px) though measured at three (60px). The measured
   // size is the content box and is kept current: while shown by the size observer, while hidden by remeasure.
   const setIntrinsicSize = (element: HTMLElement, height: number, width: number) => {
-    if (height > 0) {
-      const value = `${height}px`;
-      if (element.style.getPropertyValue(INTRINSIC_SIZE_PROPERTY) !== value) {
-        element.style.setProperty(INTRINSIC_SIZE_PROPERTY, value);
-      }
-    }
-    if (width > 0) {
-      const value = `${width}px`;
-      if (element.style.getPropertyValue(INTRINSIC_INLINE_SIZE_PROPERTY) !== value) {
-        element.style.setProperty(INTRINSIC_INLINE_SIZE_PROPERTY, value);
-      }
+    for (const [property, size] of [[INTRINSIC_SIZE_PROPERTY, height], [INTRINSIC_INLINE_SIZE_PROPERTY, width]] as const) {
+      if (size > 0 && element.style.getPropertyValue(property) !== `${size}px`) element.style.setProperty(property, `${size}px`);
     }
   };
   // Only a shown element is size-observed: a hidden one's size is contained, so it cannot change, and every
@@ -152,9 +134,10 @@ export function mountTranscriptVisibility(
     // Every read before any write: a size written between two reads
     // made the second getComputedStyle recalculate style, once per block --
     // at settlement, once per block of the whole answer.
+    // An observer's entry has the content box itself.
     const sizes = entries
       .filter((entry) => (entry.target as HTMLElement).getAttribute(VISIBILITY_ATTRIBUTE) !== "hidden")
-      .map((entry) => [entry.target as HTMLElement, blockSize(entry), inlineSize(entry)] as const);
+      .map((entry) => [entry.target as HTMLElement, entry.contentBoxSize[0]!.blockSize, entry.contentBoxSize[0]!.inlineSize] as const);
     for (const [element, height, width] of sizes) setIntrinsicSize(element, height, width);
   });
 
@@ -548,11 +531,11 @@ export function mountTranscriptVisibility(
   const onVisibility = () => {
     if (document.visibilityState === "hidden") {
       cancelRefresh();
-        // Abandon in-flight panel motions: their end events may never arrive
+      // Abandon in-flight panel motions: their end events may never arrive
       // while hidden, and a stuck activeIds entry would gate every future
       // refresh. Dropping the tracking costs nothing -- the geometry stays.
       activeIds.clear();
-        return;
+      return;
     }
     scheduleRefresh(true);
   };
