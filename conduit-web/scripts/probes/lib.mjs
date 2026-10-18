@@ -35,13 +35,13 @@ export async function loadPlaywright() {
   return import(pathToFileURL(entry).href);
 }
 
-async function launchHeadless(chromium) {
+export async function launchHeadless(chromium) {
   try { return await chromium.launch(); } catch (error) {
     // A cached Chromium from another Playwright version serves as well.
     const cache = path.join(os.homedir(), ".cache/ms-playwright");
-    const builds = (await fs.readdir(cache).catch(() => [])).filter((name) => /^chromium-\d+$/.test(name)).sort().reverse();
+    const builds = (await fs.readdir(cache).catch(() => [])).filter((name) => /^chromium(_headless_shell)?-\d+$/.test(name)).sort().reverse();
     for (const build of builds) {
-      const executablePath = path.join(cache, build, "chrome-linux64/chrome");
+      const executablePath = path.join(cache, build, build.startsWith("chromium_headless_shell") ? "chrome-headless-shell-linux64/chrome-headless-shell" : "chrome-linux64/chrome");
       if (await fs.stat(executablePath).catch(() => null)) return chromium.launch({ executablePath });
     }
     throw error;

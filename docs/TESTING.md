@@ -172,6 +172,7 @@ next run, or the next load can hang.
 | Probe | Answers |
 | --- | --- |
 | `style-snapshot.mjs save <file>` / `diff <a> <b>` | Did a change move anything the app draws? |
+| `gallery-style-diff.mjs <buildA> <buildB> [--ignore --a,--b] [--keys]` | Did a library change move anything in the gallery? Every element's computed style, every family at both densities and the previews, between two `npx vite build --mode gallery --outDir <dir>` builds; no server. A refactor is done when it prints IDENTICAL (or only the custom properties it renamed). |
 | `settle-stability.mjs` | Does a turn hold still as it settles, stops (also from an approval) or takes a steered message? Asserted, no model call; the gate for transcript live/settle changes. A turn a harness ends without stating its outcome is logged in the server journal as `transcript contract: ...`. |
 | `visibility-guard.mjs [prompt] [--phone] [--examples]` | What the transcript's virtualization shows each frame through a long streamed answer scrolled every way a reader and the app do: blank frames, unexplained moves, placeholders back at a different height, any move down while following. Before and after a virtualization or layout change; no count may rise. It reads layout every frame, so it times nothing. |
 | `screen-shift.mjs [prompt] [--phone]` | How the transcript moves on screen while streaming, from the screencast's pixels; nothing runs in the page. Lists every frame that moved down while following, with the time since the last code block opened. |
