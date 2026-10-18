@@ -20,7 +20,7 @@ try {
     const count = (map, n) => { map[kind(n)] = (map[kind(n)] ?? 0) + 1; if (n.nodeType === 1) for (const c of n.querySelectorAll("*")) map[kind(c)] = (map[kind(c)] ?? 0) + 1; };
     new MutationObserver((list) => { for (const m of list) if (m.target.closest?.(".ui-answer") || m.target.parentElement?.closest(".ui-answer")) {
       m.addedNodes.forEach((n) => count(w.__churn.added, n)); m.removedNodes.forEach((n) => count(w.__churn.removed, n)); } }).observe(document.body, { childList: true, subtree: true });
-    const grab = () => { for (const c of document.querySelectorAll(".artifact")) { const k = c.cloneNode(true); k.querySelector("code")?.replaceChildren(); k.removeAttribute("style");
+    const grab = () => { for (const c of document.querySelectorAll(".ui-code")) { const k = c.cloneNode(true); k.querySelector("code")?.replaceChildren(); k.removeAttribute("style");
       w.__cards.add(k.outerHTML.replace(/data-lines="\d+"/, 'data-lines="N"').replace(/>[^<]*\d+ (more )?lines?[^<]*</g, ">LABEL<")); } requestAnimationFrame(grab); };
     requestAnimationFrame(grab);
   });
@@ -36,5 +36,5 @@ try {
   });
   fs.writeFileSync(out + ".html", r.html.replace(/></g, ">\n<")); fs.writeFileSync(out + ".cards", r.cards.join("\n"));
   const k = (name) => `${r.added[name] ?? 0}/${r.removed[name] ?? 0}`;
-  console.log(`${at()} settled ${createHash("sha1").update(r.html).digest("hex").slice(0, 12)}, ${r.cards.length} card shapes; added/removed: code-line ${k("span.code-line")}, hljs-keyword ${k("span.hljs-keyword")}, pre ${k("pre")}, code ${k("code")}, div.artifact ${k("div.artifact")}`);
+  console.log(`${at()} settled ${createHash("sha1").update(r.html).digest("hex").slice(0, 12)}, ${r.cards.length} card shapes; added/removed: ui-code-line ${k("span.ui-code-line")}, hljs-keyword ${k("span.hljs-keyword")}, pre ${k("pre")}, code ${k("code")}, figure.ui-code ${k("figure.ui-code")}`);
 } finally { if (id) await api(`/v0/sessions/${id}`, "DELETE").catch(() => {}); await close(); clearTimeout(deadline); }

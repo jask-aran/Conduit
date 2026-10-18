@@ -497,8 +497,8 @@ export function mountTranscriptVisibility(
     // CODE_BLOCK_TOGGLE_EVENT. Rewrites to the same value, and a user
     // message's first fold verdict as history loads, ran this full pass
     // repeatedly through a scroll up (docs/design/performance-pass.md, 10).
-    const deliberate = records.some((record) => record.attributeName === "data-collapsed"
-      && record.oldValue !== (record.target as HTMLElement).getAttribute("data-collapsed")
+    const deliberate = records.some((record) => record.attributeName === "data-folded" && (record.target as HTMLElement).classList.contains("ui-code")
+      && record.oldValue !== (record.target as HTMLElement).getAttribute("data-folded")
       && Boolean((record.target as HTMLElement).closest(`[${VISIBILITY_ATTRIBUTE}="hidden"]`)));
     if (deliberate) {
       scheduleRefresh();
@@ -594,7 +594,7 @@ export function mountTranscriptVisibility(
     subtree: true,
     attributes: true,
     attributeOldValue: true,
-    attributeFilter: ["data-settled", "data-collapsed"],
+    attributeFilter: ["data-settled", "data-folded"],
   });
   viewportObserver.observe(viewport);
   void document.fonts.ready.then(() => {

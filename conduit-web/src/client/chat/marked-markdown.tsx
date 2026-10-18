@@ -6,7 +6,8 @@ import katex from "katex";
 import { ExternalLinkDialog } from "./external-link-dialog";
 import { createExternalLinkController, handleMarkdownClick } from "./markdown-actions";
 import { renderMarkdownLink, sanitizeMarkdownFragment } from "./markdown-security";
-import { codeBlockMarkup, codeBlockState } from "./code-block";
+import { codeBlockHtml, fillCodeBlocks } from "@/components/ui/code";
+import { codeBlockFold, countCodeLines, normalizeCodeLanguage } from "./code-block";
 import { selectedCodeBlockCollapse, selectedCodeBlockCollapseLines } from "./transcript-appearance";
 import { splitStreamingMarkdown, type StreamingPending } from "./streaming-markdown";
 import type { ChatMarkdownProps } from "./markdown";
@@ -19,17 +20,15 @@ import type { ChatMarkdownProps } from "./markdown";
  * It lives in its own module so that choosing Incremark -- which almost
  * everyone does -- does not also download marked and its KaTeX extension.
  */
+/** The library's CodeBlock as a string, folded on the preference as it is read now (syncCodeBlockCollapse re-applies a change). */
+function codeMarkup(language: unknown, text: string, streaming = false) {
+  const lines = countCodeLines(text);
+  return codeBlockHtml({ lang: normalizeCodeLanguage(language), code: text, lines, fold: codeBlockFold(lines, selectedCodeBlockCollapse(), selectedCodeBlockCollapseLines()), streaming });
+}
+
 function pendingMarkup(pending: StreamingPending, streaming: boolean) {
   if (pending.kind === "fence") {
-    const mode = selectedCodeBlockCollapse();
-    const threshold = selectedCodeBlockCollapseLines();
-    return codeBlockMarkup({
-      language: pending.language || "text",
-      text: pending.body,
-      streaming,
-      pending: true,
-      state: codeBlockState(pending.body, mode, threshold, streaming),
-    });
+    return codeMarkup(pending.language, pending.body, streaming);
   }
   const className = `streaming-pending ${pending.kind === "math-block" ? "streaming-pending-math-block" : "streaming-pending-math-inline"}`;
   const tag = pending.kind === "math-block" ? "div" : "span";
@@ -40,6 +39,7 @@ function appendPendingMarkup(fragment: DocumentFragment, pending: StreamingPendi
   const pendingFragment = sanitizeMarkdownFragment(pendingMarkup(pending, streaming), {
     additionalAttributes: ["aria-hidden", "data-streaming-final", "data-streaming-pending"],
   });
+  fillCodeBlocks(pendingFragment);
   if (pending.kind === "math-inline") {
     const paragraph = [...fragment.children].reverse().find((child) => child.tagName === "P");
     if (paragraph) {
@@ -117,13 +117,7 @@ marked.use({
       });
     },
     code({ text, lang }) {
-      const mode = selectedCodeBlockCollapse();
-      const threshold = selectedCodeBlockCollapseLines();
-      return codeBlockMarkup({
-        language: String(lang || "text"),
-        text,
-        state: codeBlockState(text, mode, threshold, false),
-      });
+      return codeMarkup(lang, text);
     },
   },
 });
@@ -160,6 +154,7 @@ function renderMarkdownFragment(inline: boolean, render: () => string) {
     restoreKatex?.();
   }
   const fragment = sanitizeMarkdownFragment(html, { inline });
+  fillCodeBlocks(fragment);
   for (const table of fragment.querySelectorAll("table")) {
     const scroller = document.createElement("div");
     scroller.className = ANSWER_MARKDOWN.table;
@@ -336,6 +331,7 @@ export function MarkedMarkdown(props: ChatMarkdownProps) {
     const pendingFragment = sanitizeMarkdownFragment(pendingMarkup(pending, Boolean(props.streaming)), {
       additionalAttributes: ["aria-hidden", "data-streaming-final", "data-streaming-pending"],
     });
+    fillCodeBlocks(pendingFragment);
     const nodes = [...pendingFragment.childNodes];
     if (pending.kind === "math-inline") {
       const paragraph = [...root.querySelectorAll("p")].at(-1);

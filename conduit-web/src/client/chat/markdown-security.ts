@@ -68,10 +68,9 @@ export function renderMarkdownLink(options: {
 const baseAttributes = [
   "aria-label", "data-copy-code", "data-external-url", "data-language", "data-markdown", "class",
   "data-citation",
-  // Code-block card contract: collapse state and the expander are driven by
-  // attributes so delegated listeners can toggle them without re-rendering.
-  "data-lines", "data-collapsible", "data-collapsed", "data-user-expanded",
-  "data-expand-code", "data-expand-label",
+  // The CodeBlock as a string (codeBlockHtml): its state and its controls' hooks are attributes, so one delegated
+  // listener opens and copies it without re-rendering.
+  "data-lines", "data-folded", "data-streaming", "data-user-open", "data-expand-code", "data-slot", "data-variant", "data-size",
 ];
 const forbiddenTags = ["img", "script", "style", "iframe", "object", "embed"];
 

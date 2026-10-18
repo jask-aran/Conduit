@@ -1,11 +1,12 @@
+import { CodeBlock } from "@/components/ui/code";
 import { ANSWER_MARKDOWN } from "@/components/ui/shared";
 import { createComputed, createEffect, createMemo, createSelector, createRenderEffect, createSignal, For, Index, onCleanup, onMount, Show, untrack } from "solid-js";
 import { createIncremarkParser, type DisplayBlock, type ParsedBlock } from "@incremark/core";
 import katex from "katex";
 import type { ChatMarkdownProps } from "./markdown";
 import { ExternalLinkDialog } from "./external-link-dialog";
-import { copyWithFeedback, createExternalLinkController } from "./markdown-actions";
-import { codeBlockCollapseLabel, codeBlockState, normalizeCodeLanguage, publishCodeBlockToggle } from "./code-block";
+import { createExternalLinkController } from "./markdown-actions";
+import { codeBlockFold, countCodeLines, normalizeCodeLanguage, publishCodeBlockToggle } from "./code-block";
 import { useCodeBlockCollapse } from "./transcript-appearance";
 import { highlighterReady, StreamingCodeHighlighter } from "./code-highlight";
 import { createSyntheticMathPreviewNode, repairSyntheticMathSource, trimUnfinishedMathTail } from "./incremark-synthetic-math";
@@ -716,9 +717,8 @@ function CodeNode(props: { node: MarkdownNode | NodeAccessor; handoff?: FenceHan
 }
 
 /**
- * A code card, settled or still being written (`pending`, a fence the stream has not closed). A pending card is
- * plain to the delegated click handler (no data-expand-code) and wears the streaming-pending classes while
- * `streaming`; otherwise the two are the same card.
+ * A code block (the library's CodeBlock), settled or still being written (`pending`, a fence the stream has not
+ * closed); its lines are this file's, highlighted and grown in place.
  */
 function CodeCard(props: { text: () => string; language: () => string | undefined; pending?: boolean; streaming?: boolean; handoff?: FenceHandoff }) {
   const language = () => normalizeCodeLanguage(props.language());
@@ -740,29 +740,27 @@ function CodeCard(props: { text: () => string; language: () => string | undefine
   // Expanding by hand is a decision about this block, so it outlives later
   // preference changes and any re-evaluation of the collapse default.
   const [userExpanded, setUserExpanded] = createSignal(false);
-  const state = createMemo(() => codeBlockState(props.text(), collapse.mode(), collapse.threshold(), false));
-  const collapsed = () => state().collapsed && !userExpanded();
-  const settled = !props.pending || undefined;
-  let pre: HTMLPreElement | undefined;
+  const [copied, setCopied] = createSignal(false);
+  const lines = createMemo(() => countCodeLines(props.text()));
   let code = document.createElement("code");
+  const [element, setElement] = createSignal(code);
   // A fence offers its lines as it grows; a block takes them in its first render, which runs after the update that
   // closed the fence has removed it -- never from a fence still on screen, whose card would go blank.
   const offered: FenceHandoff["current"] = props.pending && props.handoff ? (props.handoff.current = { code, highlighter, text: "", language: "", released: false }) : null;
   if (offered) onCleanup(() => { offered.released = true; });
   let first = !props.pending;
   createRenderEffect(() => {
-    const lines = highlighted();
+    const next = highlighted();
     if (first) {
       first = false;
       const fence = props.handoff?.current;
       if (fence?.released && fence.language === language() && props.text().startsWith(fence.text)) {
         props.handoff!.current = null;
-        // Run before the card's markup was made (outside an update), the markup inserts the adopted element itself.
-        pre?.replaceChild(fence.code, code);
         code = fence.code;
+        setElement(code);
       }
     }
-    morphLines(code, lines);
+    morphLines(code, next);
     if (offered) {
       offered.text = props.text().trimEnd();
       offered.language = language();
@@ -770,69 +768,23 @@ function CodeCard(props: { text: () => string; language: () => string | undefine
   });
   // Folding removes a lot of height at once. Tell the transcript so it can hold
   // this card still and re-measure, instead of leaving stale placeholders.
-  const toggle = (control: HTMLElement) => {
-    const card = control.closest<HTMLElement>(".artifact");
+  const toggle = () => {
+    const card = code.closest<HTMLElement>(".ui-code");
     const previousTop = card?.getBoundingClientRect().top ?? 0;
     setUserExpanded((value) => !value);
     if (card) queueMicrotask(() => publishCodeBlockToggle(card, previousTop));
   };
-  return <div
-    class={props.streaming ? "artifact streaming-pending streaming-pending-fence" : "artifact"}
-    data-language={language()}
-    data-streaming-pending={props.streaming ? "fence" : undefined}
-    data-lines={state().lines}
-    data-collapsible={state().collapsible ? "true" : undefined}
-    data-collapsed={collapsed() ? "true" : undefined}
-    data-user-expanded={settled && userExpanded() ? "true" : undefined}
-  >
-    <div class="artifact-header">
-      <span>{language()}</span>
-      <span class="artifact-actions">
-        <CodeCopyButton text={props.text} />
-        <Show when={state().collapsible}>
-          {/* Pinned with the header, so it stays reachable part-way down a
-              block the footer button has long since scrolled past. */}
-          <button
-            type="button"
-            class="artifact-toggle"
-            data-expand-code={settled && ""}
-            aria-label={collapsed() ? "Expand code" : "Collapse code"}
-            aria-expanded={collapsed() ? "false" : "true"}
-            onClick={(event) => toggle(event.currentTarget)}
-          />
-        </Show>
-      </span>
-    </div>
-    {/* Morphed by the renderer rather than rewritten from outside, so a later render cannot wipe the highlighting, and
-        so a growing block keeps its finished lines: rewritten, every line of a long fence was built and laid out
-        again each frame it grew (3-4ms of layout a frame for a 137-line file). */}
-    <pre ref={pre}>{code}</pre>
-    <Show when={state().collapsible}>
-      <button type="button" class="artifact-expand" data-expand-code={settled && ""} data-expand-label={settled && ""} onClick={(event) => toggle(event.currentTarget)}>
-        {collapsed() ? state().expandLabel : codeBlockCollapseLabel()}
-      </button>
-    </Show>
-  </div>;
-}
-
-/**
- * Copy control shared by the settled and streaming code cards.
- *
- * The confirmation is left entirely to copyWithFeedback, which drives it
- * through attributes. Mirroring it in a signal here would have two owners
- * writing the same label, and the marked renderers -- which have no component
- * to hold that signal -- would still need the attribute path anyway.
- */
-function CodeCopyButton(props: { text: () => string }) {
-  let button!: HTMLButtonElement;
-  return <button
-    ref={button}
-    type="button"
-    class="artifact-copy"
-    aria-label="Copy code"
-    data-copy-code
-    onClick={() => void copyWithFeedback(props.text(), button)}
-  ><span class="artifact-copy-label">Copy</span></button>;
+  const copy = async () => {
+    if (!navigator.clipboard) return;
+    try { await navigator.clipboard.writeText(props.text()); } catch { return; }
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1200);
+  };
+  // The lines are morphed by the renderer rather than rewritten from outside, so a later render cannot wipe the
+  // highlighting, and so a growing block keeps its finished lines: rewritten, every line of a long fence was built
+  // and laid out again each frame it grew (3-4ms of layout a frame for a 137-line file).
+  return <CodeBlock lang={language()} lines={lines()} fold={codeBlockFold(lines(), collapse.mode(), collapse.threshold())} open={userExpanded()} onToggle={toggle}
+    streaming={props.streaming} copied={copied()} onCopy={() => void copy()}>{element()}</CodeBlock>;
 }
 
 /**

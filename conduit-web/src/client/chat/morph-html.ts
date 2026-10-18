@@ -1,3 +1,4 @@
+import { CODE_BLOCK } from "@/components/ui/shared";
 /**
  * Bring an element's content to `html` by editing what is already there.
  *
@@ -27,7 +28,7 @@ const renderedLines = new WeakMap<Element, string[]>();
  * line or two a delivery; parsing and walking all of a long file's lines to find them was most of each delivery's
  * work (a 137-line file: 290ms over a second of it).
  */
-const PLAIN_LINE = /^<span class="code-line">([^<]*)<\/span>$/;
+const PLAIN_LINE = new RegExp(`^<span class="${CODE_BLOCK.line}">([^<]*)</span>$`);
 const ENTITIES: Record<string, string> = { lt: "<", gt: ">", amp: "&", quot: "\"", "#x27": "'", "#39": "'", nbsp: "\u00a0" };
 // The text a plain line's markup stands for, or null for an entity not among those a highlighter or serializer writes.
 const unescapeText = (html: string) => {
@@ -54,7 +55,7 @@ export function morphLines(element: Element, lines: string[]) {
     // A line with no highlighting yet -- the one being written -- has its text set, not parsed.
     const plain = PLAIN_LINE.exec(lines[index]!);
     const text = plain ? unescapeText(plain[1]!) : null;
-    if (text != null && existing?.nodeType === Node.ELEMENT_NODE && (existing as Element).className === "code-line"
+    if (text != null && existing?.nodeType === Node.ELEMENT_NODE && (existing as Element).className === CODE_BLOCK.line
       && existing.childNodes.length <= 1 && existing.firstChild?.nodeType !== Node.ELEMENT_NODE) {
       if (!text) existing.firstChild?.remove();
       else if (existing.firstChild) (existing.firstChild as Text).data = text;
