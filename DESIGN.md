@@ -73,7 +73,7 @@ What each v2 family replaces and where it stands. Update a row in the commit tha
 | Rider | queued messages, attachment strip, question card | in the app (v2 classes, not components) |
 | Pill, PhoneComposer | phone header pills, sidebar header, `chat/composer.tsx` (phone: the voice bar, a phone's only composer) | graduated in the composer (`composer`); previews elsewhere |
 | Trace | `chat/turn-trace.tsx`, `tool-card.tsx` | graduated (`trace`) |
-| Transcript, CodeBlock | `chat/transcript.tsx`, the Markdown's `.artifact`, `chat/disclosure.tsx` | previews (`StopLine` in the app) |
+| Transcript, CodeBlock | `chat/transcript.tsx`, the Markdown's `.artifact`, `chat/disclosure.tsx` | graduated (`transcript`) |
 
 **Overlays until Card and Overlay graduate:** build them from `components/frost.tsx`, never a copy of another overlay. `npm run build` fails on a hand-rolled Kobalte dialog (`scripts/check-bundle.mjs`; update that check when Card and Overlay replace them).
 
