@@ -54,7 +54,6 @@ const ROW_SELECTOR = '[data-slot="message-scroller-item"]';
 // a panel finishing its motion, the viewport resizing. Scrolling never enters
 // it, so transcript length no longer sets the cost of a scroll frame.
 export function mountTranscriptVisibility(
-  transcript: HTMLElement,
   viewport: HTMLElement,
   thread: HTMLElement,
   /** Moves the scroll by this much as the transcript's own scroll: the viewport has no scroll anchoring. */

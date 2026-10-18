@@ -1,6 +1,6 @@
 import { textBlockClassifications } from "../active-generation.js";
 import { mergeContinuation } from "../continuation.js";
-import type { ContentBlock, Message, ToolItem, ToolKind } from "./api/contracts";
+import type { Message, ToolItem, ToolKind } from "./api/contracts";
 
 /**
  * A block of a message still arriving.
@@ -538,7 +538,7 @@ function sameSources(
     && left.sourceTools.every((tool, index) => tool === sourceTools[index]);
 }
 
-function persistedRowsForTurn(turn: PersistedTurn, messages: Message[], toolById: Map<string, ToolItem>): TurnRow[] {
+function persistedRowsForTurn(turn: PersistedTurn, toolById: Map<string, ToolItem>): TurnRow[] {
   const rows: TurnRow[] = [];
   if (turn.userMessage) {
     rows.push({ key: `message:${turn.userMessage.id}`, type: "message", value: turn.userMessage });
@@ -663,7 +663,7 @@ export function projectPersistedTurns(
       userMessage: turn.userMessage,
       assistants: turn.assistants,
       sourceTools,
-      rows: persistedRowsForTurn(turn, messages, toolById),
+      rows: persistedRowsForTurn(turn, toolById),
     };
   });
   return { rows: projected.flatMap((turn) => turn.rows), turns: projected };

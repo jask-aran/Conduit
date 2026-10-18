@@ -12,9 +12,8 @@ import { parseReviewComments } from "./review-comments";
 import { TraceStarting, TurnTrace } from "./turn-trace";
 import { createTimelineStore } from "../state/timeline-store";
 import type { MarkdownRendererId } from "./markdown-settings";
-import { COMPOSER_SURFACE_CHANGE_EVENT, COMPOSER_SURFACE_OPTIONS, saveComposerSurface, selectedComposerSurface, type ComposerSurfaceMode } from "./composer-surface";
-import { isIncremarkRenderer, MARKDOWN_RENDERER_OPTIONS, saveMarkdownRenderer, selectedMarkdownRenderer } from "./markdown-settings";
-import { PANEL_MOTION_OPTIONS, savePanelMotion, selectedPanelMotion, type PanelMotionMode } from "./transcript-appearance";
+import { COMPOSER_SURFACE_CHANGE_EVENT, selectedComposerSurface, type ComposerSurfaceMode } from "./composer-surface";
+import { isIncremarkRenderer, selectedMarkdownRenderer } from "./markdown-settings";
 import { UI_PREFERENCE_CHANGE_EVENT } from "../preferences/ui-preferences";
 import { copyWithFeedback } from "./markdown-actions";
 import { CODE_BLOCK_TOGGLE_EVENT, publishCodeBlockToggle, syncCodeBlockCollapse } from "./code-block";
@@ -292,8 +291,6 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
   onCleanup(() => setLatestAway(false));
   const [composerSurface, setComposerSurface] = createSignal<ComposerSurfaceMode>(selectedComposerSurface());
   const [markdownRenderer, setMarkdownRenderer] = createSignal<MarkdownRendererId>(selectedMarkdownRenderer());
-  const [panelDrag, setPanelDrag] = createSignal<PanelMotionMode>(selectedPanelMotion());
-  const switchComposerSurface = (next: ComposerSurfaceMode) => setComposerSurface(saveComposerSurface(next));
   // A reset relays out every managed block, so hold the reading position across
   // it rather than letting the height changes settle wherever they land.
   const resetVisibilityPreservingPosition = () => {
@@ -302,8 +299,6 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
     transcriptVisibility.reset();
     requestAnimationFrame(() => restoreTranscriptAnchor(viewport, anchor, setViewportScrollTop));
   };
-  const switchMarkdownRenderer = (next: MarkdownRendererId) => setMarkdownRenderer(saveMarkdownRenderer(next));
-  const switchPanelDrag = (next: PanelMotionMode) => setPanelDrag(savePanelMotion(next));
   // Only Incremark reveals a message block by block, and only that reveal needs
   // the tail to be followed by a spring rather than pinned to the bottom.
   const rendererUsesTypewriter = () => isIncremarkRenderer(markdownRenderer());
@@ -825,9 +820,6 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
       else if (detail?.key === "markdownRenderer" && typeof detail.value === "string"
         && !params.has("markdownRenderer")) {
         setMarkdownRenderer(detail.value as MarkdownRendererId);
-      } else if (detail?.key === "panelMotion" && typeof detail.value === "string"
-        && !params.has("panelMotion")) {
-        setPanelDrag(detail.value as PanelMotionMode);
       } else if (isCodeBlockCollapseMode(detail?.value) && detail?.key === "codeBlockCollapse") {
         resyncCodeBlocks();
         resetVisibilityPreservingPosition();
@@ -1077,7 +1069,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
       motionShell,
       (next) => setViewportScrollTop(next, false),
     );
-    transcriptVisibility = mountTranscriptVisibility(transcriptRoot, viewport, thread, (delta) => setViewportScrollTop(viewport.scrollTop + delta, false));
+    transcriptVisibility = mountTranscriptVisibility(viewport, thread, (delta) => setViewportScrollTop(viewport.scrollTop + delta, false));
     const claimUserScroll = () => {
       if (empty()) return;
       if (!rendererUsesInertialTailFollow()) return;

@@ -413,7 +413,7 @@ function DisplayBlockNodes(props: { blocks: () => DisplayBlock[]; context: Rende
     const previousNode = props.history.get(block.id);
     const stableNode = shareUnchanged(previousNode, type === "table" ? preserveAppendOnlyTable(previousNode, currentNode) : currentNode);
     props.history.set(block.id, stableNode);
-    if (!props.context.fadeWords?.() || !props.context.fadeLive?.()) return stableNode;
+    if (!props.context.fadeWords?.()) return stableNode;
     let fade = props.shown.get(block.id);
     if (!fade) props.shown.set(block.id, fade = { shown: 0, reveals: [] });
     const now = performance.now();
@@ -458,7 +458,7 @@ function DisplayBlockNodes(props: { blocks: () => DisplayBlock[]; context: Rende
     // its last word has faded in, so the answer does not keep an element per word -- 6,000 late in a long answer,
     // laid out and restyled with every frame -- and does not swap them all out in one go when it settles (31ms).
     const [faded, setFaded] = createSignal(false);
-    const context: RendererContext = { ...props.context, fadeLive: () => !faded() && props.context.fadeLive?.() !== false };
+    const context: RendererContext = { ...props.context, fadeLive: () => !faded() };
     createEffect(() => {
       if (faded() || isTail(id) || !props.context.fadeWords?.()) return;
       const last = props.shown.get(id)?.reveals.at(-1)?.[1];
@@ -1515,9 +1515,9 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
     if (reached || (!streaming() && !displayBusy())) return heldFence = null, current;
     return heldFence;
   });
-  const displayContext: RendererContext = { ...context, fadeWords: () => !props.inline, fadeMath: () => !props.inline && streamMathFade(), fadeLive: () => true };
+  const displayContext: RendererContext = { ...context, fadeWords: () => !props.inline, fadeMath: () => !props.inline && streamMathFade() };
   return <>
-    <div class="chat-markdown" data-renderer={rendererId()} data-inline={props.inline ? "true" : undefined} data-streaming={streaming() || undefined} data-display-busy={displayBusy() || pendingMathRenders() > 0 ? "true" : undefined} data-display-animation-busy={displayBusy() ? "true" : undefined} data-pending-math-renders={pendingMathRenders() > 0 ? String(pendingMathRenders()) : undefined} data-display-key={props.displayKey || undefined} data-settled={settled() ? "true" : undefined}>
+    <div class="chat-markdown" data-renderer={rendererId()} data-inline={props.inline ? "true" : undefined} data-streaming={streaming() || undefined} data-display-busy={displayBusy() || pendingMathRenders() > 0 ? "true" : undefined} data-pending-math-renders={pendingMathRenders() > 0 ? String(pendingMathRenders()) : undefined} data-display-key={props.displayKey || undefined} data-settled={settled() ? "true" : undefined}>
       <div class="incremark" data-incremark-core="true">
         <Show when={props.inline} fallback={<>
           <ParsedBlockNodes blocks={seededBlocks} context={context} />

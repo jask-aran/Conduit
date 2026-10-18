@@ -21,21 +21,21 @@ test("countCodeLines ignores the trailing newline a fence always carries", () =>
 });
 
 test("a block folds at the threshold whether or not it is still streaming", () => {
-  assert.equal(shouldCollapseCodeBlock(400, "long", 15, true), true);
-  assert.equal(shouldCollapseCodeBlock(400, "all", 15, true), true);
-  assert.equal(shouldCollapseCodeBlock(15, "long", 15, true), false);
+  assert.equal(shouldCollapseCodeBlock(400, "long", 15), true);
+  assert.equal(shouldCollapseCodeBlock(400, "all", 15), true);
+  assert.equal(shouldCollapseCodeBlock(15, "long", 15), false);
 });
 
 test("long mode folds only past the threshold", () => {
-  assert.equal(shouldCollapseCodeBlock(15, "long", 15, false), false);
-  assert.equal(shouldCollapseCodeBlock(16, "long", 15, false), true);
-  assert.equal(shouldCollapseCodeBlock(16, "long", 25, false), false);
+  assert.equal(shouldCollapseCodeBlock(15, "long", 15), false);
+  assert.equal(shouldCollapseCodeBlock(16, "long", 15), true);
+  assert.equal(shouldCollapseCodeBlock(16, "long", 25), false);
 });
 
 test("off never folds and all folds anything past one line", () => {
-  assert.equal(shouldCollapseCodeBlock(9000, "off", 15, false), false);
-  assert.equal(shouldCollapseCodeBlock(1, "all", 15, false), false);
-  assert.equal(shouldCollapseCodeBlock(2, "all", 15, false), true);
+  assert.equal(shouldCollapseCodeBlock(9000, "off", 15), false);
+  assert.equal(shouldCollapseCodeBlock(1, "all", 15), false);
+  assert.equal(shouldCollapseCodeBlock(2, "all", 15), true);
 });
 
 test("the expander names how much is hidden", () => {
