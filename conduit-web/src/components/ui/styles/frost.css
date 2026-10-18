@@ -1,0 +1,10 @@
+.ui-frost {
+  border: 1px solid var(--frost-stroke);
+  background: var(--frost-fill);
+  -webkit-backdrop-filter: var(--frost-blur);
+  backdrop-filter: var(--frost-blur);
+  box-shadow: var(--frost-lift-rest), var(--frost-highlight);
+  color: var(--foreground);
+}
+.ui-frost[data-lift="raised"] { box-shadow: var(--frost-lift-raised), var(--frost-highlight); }
+.ui-frost[data-core] { background: linear-gradient(var(--frost-fill), var(--frost-fill)), var(--frost-core-ground); }

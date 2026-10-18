@@ -1,0 +1,67 @@
+/* The trace header: the orb, Status · time · work, a chevron when there is a trail; the latest line under it. */
+.ui-trace { display: grid; width: 100%; grid-template-columns: var(--icon-xl) minmax(0, 1fr) auto; align-items: center; gap: var(--space-2xs) var(--row-gap); border: 0; background: transparent; padding: 0; color: var(--muted-foreground); font: var(--weight-rest) var(--text-row)/1.4 var(--font-sans); text-align: left; }
+.ui-trace:not(:disabled) { cursor: pointer; }
+.ui-trace-orb { display: grid; width: var(--icon-xl); height: var(--icon-xl); grid-area: 1 / 1 / 3; align-self: center; }
+.ui-trace-orb > * { width: 100%; height: 100%; }
+.ui-trace-line { min-width: 0; grid-area: 1 / 2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ui-trace-line > :is(b, .ui-trace-status) { color: var(--foreground); font-weight: var(--weight-strong); }
+/* A header whose line and latest come wrapped (the app's) lays them out as if they were not. */
+.ui-trace-preview { display: contents; }
+.ui-trace-time { font-variant-numeric: tabular-nums; }
+.ui-trace > .ui-disclosure-chevron { grid-area: 1 / 3; }
+
+.ui-trace-latest { min-width: 0; grid-area: 2 / 2 / 3 / 4; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* The trail: one light line per step, no boxes, under the header's text; a step under the answer's size. A step's
+   row washes on the cursor and opens in place (a Disclosure: its body unfolds gentle, folds quick); what it opens
+   to sits under its verb. */
+.ui-trace-fold { gap: var(--space-2xs); }
+.ui-trail { display: grid; gap: var(--space-2xs); margin: 0; padding: 0 0 0 calc(var(--icon-xl) + var(--row-gap)); color: var(--muted-foreground); font-size: var(--text-row); list-style: none; }
+.ui-step-item { gap: 0; }
+.ui-step { display: flex; width: calc(100% + var(--space-sm)); min-width: 0; min-height: var(--control-xs); align-items: center; gap: var(--row-gap); margin-left: calc(-1 * var(--space-sm)); border: 0; border-radius: var(--radius-control); background: transparent; padding: 0 var(--space-sm); color: inherit; font: inherit; text-align: left; }
+button.ui-step { cursor: pointer; }
+button.ui-step:is(:hover, :focus-visible) { background: var(--tint); }
+/* A step arriving in an open trail rises a little; its height arrives at once, so nothing above moves. */
+.ui-step-item[data-entering] { --rise: var(--space-xs); animation: ui-rise var(--duration-gentle) var(--ease-arrive) backwards; }
+.ui-step-icon { display: grid; width: var(--icon-sm); height: var(--icon-sm); flex: none; place-items: center; }
+.ui-step-icon > svg { width: 100%; height: 100%; }
+.ui-step-icon > .ui-spinner { width: var(--icon-sm); height: var(--icon-sm); }
+.ui-step-verb { flex: none; color: var(--foreground); white-space: nowrap; }
+.ui-step-subject { min-width: 0; overflow: hidden; font: var(--text-caption) var(--font-code); text-overflow: ellipsis; white-space: nowrap; }
+.ui-step-summary { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ui-step-summary .chat-markdown { display: contents; color: inherit; font-size: inherit; line-height: inherit; }
+.ui-step-summary :is(.chat-markdown, .incremark) > * { display: inline; margin: 0; }
+.ui-step-meta { display: flex; flex: none; gap: var(--space-md); margin-left: auto; font-size: var(--text-caption); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ui-step-flag { color: var(--foreground); font-weight: var(--weight-strong); }
+.ui-step-item[data-state="failed"] > .ui-step .ui-step-icon { color: var(--destructive); }
+/* The chevron is there when it is wanted: on the cursor, or open. */
+.ui-step > .ui-disclosure-chevron { margin-left: 0; opacity: 0; }
+.ui-step:is(:hover, :focus-visible, [aria-expanded="true"]) > .ui-disclosure-chevron { opacity: 1; }
+.ui-step-body { padding-left: calc(var(--icon-sm) + var(--row-gap)); }
+.ui-step-item[data-open="true"] > .ui-step-body { padding-block: var(--space-2xs) var(--space-sm); }
+.ui-step-output { max-height: calc(20 * var(--u-space)); margin: 0; overflow: auto; border: 1px solid var(--tint); border-radius: var(--radius-control); padding: var(--space-sm) var(--space-lg); white-space: pre-wrap; font: var(--text-caption)/1.6 var(--font-code); }
+.ui-step-more { margin-top: var(--space-xs); }
+.ui-step-prose { color: var(--muted-foreground); font-size: var(--text-row); line-height: 1.55; }
+.ui-step-prose .chat-markdown { color: inherit; font-size: inherit; line-height: inherit; }
+.ui-step-prose > :first-child { margin-top: 0; } .ui-step-prose > :last-child { margin-bottom: 0; }
+/* A note (reasoning the provider kept), not a step: nothing to open, no cursor. */
+.ui-step-item[data-note] .ui-step-summary { font-style: italic; }
+/* Text a stop discarded, struck where it sits. */
+.ui-step-item[data-discarded] :is(.ui-step-summary, .ui-step-prose) { text-decoration: line-through; opacity: .55; }
+/* A group's steps on a rail of their own under its icon; a script's calls, quieter, inside its step. */
+.ui-trail[data-nested="group"] { margin-left: calc(var(--icon-sm) / 2 - var(--space-sm)); border-left: 1px solid var(--tint); padding-left: calc(var(--space-sm) + var(--icon-sm) / 2 + var(--space-xs)); }
+.ui-trail[data-nested="calls"] { gap: 0; padding: 0 0 var(--space-xs); }
+.ui-trail[data-nested="calls"] .ui-step { min-height: calc(var(--control-xs) * .8); }
+.ui-step-item[data-state="planned"] { opacity: .45; }
+.ui-step-item[data-state="earlier"] .ui-step-verb { color: var(--muted-foreground); }
+/* A failed request in the trail. */
+.ui-trace-error { display: grid; gap: var(--space-xs); padding-block: var(--space-2xs); font-size: var(--text-row); }
+.ui-trace-error-head { display: flex; align-items: center; gap: var(--row-gap); color: var(--destructive); }
+.ui-trace-error-head > svg { width: var(--icon-sm); height: var(--icon-sm); flex: none; }
+.ui-trace-error-head time { margin-left: auto; color: var(--muted-foreground); font-size: var(--text-caption); }
+.ui-trace-error-facts { display: flex; flex-wrap: wrap; gap: var(--space-xs) var(--space-md); font: var(--text-caption) var(--font-data); }
+.ui-trace-error pre { margin: 0; overflow: auto; border: 1px solid var(--tint); border-radius: var(--radius-control); padding: var(--space-sm) var(--space-lg); white-space: pre-wrap; font: var(--text-caption)/1.6 var(--font-code); }
+/* The header's latest line, when it is Markdown (the app's), reads inline at the line's size. */
+.ui-trace-latest .chat-markdown { display: contents; font-size: inherit; line-height: inherit; }
+.ui-trace-latest :is(.chat-markdown, .incremark) > * { display: inline; margin: 0; }
+.ui-trace-latest :is(.chat-markdown, .incremark) > *:not(:last-child)::after { content: " "; }

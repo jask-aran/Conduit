@@ -1,0 +1,54 @@
+/* Pill: the phone's floating frost controls -- one family for the header's
+   groups, the sidebar's toggle and the composer's buttons. One icon is a
+   circle; more share a capsule, each slot a pill-shaped target 1px from its
+   edge. Its tokens size every member. */
+/* One height for every pill: group, lone button, the field at one line. */
+:root { --pill-size: calc(44px * var(--scale-ui)); --pill-slot: calc(40px * var(--scale-ui)); --pill-slot-height: calc(40px * var(--scale-ui)); --pill-gap: 2px; --pill-field-pad: calc(14px * var(--scale-ui)); }
+.ui-pill { transition: filter var(--duration-quick) var(--ease-change); }
+.ui-pill[data-under] { filter: var(--dim-under); }
+.ui-pill { display: inline-flex; height: var(--pill-size); align-items: center; gap: var(--pill-gap); padding: 0 1px; border-radius: var(--radius-round); }
+.ui-pill > button { display: grid; width: var(--pill-slot); height: var(--pill-slot-height); place-items: center; border: 0; border-radius: var(--radius-round); background: transparent; color: inherit; }
+.ui-pill[data-solo] { width: var(--pill-size); justify-content: center; padding: 0;
+  --fade: var(--duration-quick); --fade-ease: var(--ease-arrive); --fade-delay: var(--duration-quick); --fold-delay: 0s;
+  transition: width var(--duration-gentle) var(--ease-arrive) var(--fold-delay), min-width var(--duration-gentle) var(--ease-arrive) var(--fold-delay),
+    margin var(--duration-gentle) var(--ease-arrive) var(--fold-delay), flex-grow var(--duration-gentle) var(--ease-arrive),
+    opacity var(--fade) var(--fade-ease) var(--fade-delay), filter var(--duration-quick) var(--ease-change); }
+.ui-pill[data-solo] > button { width: 100%; height: 100%; }
+/* One icon size in every pill, alone or grouped, each in a 40px circle: as far from the sides as from the top. */
+.ui-pill > button svg, .ui-pill[data-surface] > :is(button, [data-slot="button"]) svg { width: var(--pill-icon); height: var(--pill-icon); }
+.ui-pill > button:is(:hover, :focus-visible) { background: var(--tint); }
+.ui-pill[data-stretch] { width: auto; flex: 1 1 auto; }
+.ui-pill[data-stretch] > button { width: 100%; }
+/* A circle that comes and goes in its row folds to nothing, its gap and its 1px border each side with it (the border stays drawn, so it never pops;
+   its width is its two borders, as drawn, so a move between two widths it is drawn at never meets a clamp), so a stretched neighbour (the mic)
+   gives and takes the room. Coming, the room opens and it fades into it; going, it fades first and only then gives
+   the room back, so it is never seen squeezed (its transition list is the solo pill's, above). */
+.ui-pill[data-solo][data-folded] { width: 2px; min-width: 0; margin-inline-start: calc(-1 * var(--space-md) - 2px); overflow: clip; opacity: 0; pointer-events: none;
+  --fade-ease: var(--ease-leave); --fade-delay: 0s; --fold-delay: var(--duration-quick); }
+/* The mic: its icon and the orb stacked in one button, crossfading. */
+.ui-pill[data-voice] > button { position: relative; isolation: isolate; }
+/* The mic: listening, its pill fills with an Aura (below) under its icon. */
+.ui-pill > button > .ui-aura { z-index: -1; }
+
+/* Aura: a field of colour behind frost, drawn by Aura (index.tsx) as a mesh: every point's colour is a blend of all its
+   blobs at once by distance, kept at full chroma, so no colour is painted over another and none passes through grey.
+   This holds its frame: the level it reads (--aura-level, 0-1, from --voice-level unless set, eased here), whether it
+   shows (a parent turns it on, or `on`), and the frost over it. The one coloured glow DESIGN.md allows. */
+@property --aura-level { syntax: "<number>"; inherits: true; initial-value: 0; }
+.ui-aura { --aura-level: var(--voice-level, 0); position: absolute; inset: 0; overflow: clip; border-radius: inherit; opacity: 0; pointer-events: none;
+  --fade-ease: var(--ease-leave); transition: opacity var(--duration-gentle) var(--fade-ease), --aura-level .12s linear; }
+/* Its fade is its own: shown, it blooms over the gentle duration as the move that shows it runs, and goes the same way
+   back (a parent shows it with data-on or a rule of its own, listed here, so the fade stays the same). */
+.ui-aura[data-on], .ui-phone-composer[data-show~="orb"] :is(.ui-pill[data-voice], .ui-voice-track) .ui-aura {
+  opacity: 1; --fade-ease: var(--ease-arrive); }
+.ui-aura > canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+/* The frost over it: a lit rim and a faint sheen from the top, so the colour reads as behind the glass. */
+.ui-aura::after { content: ""; position: absolute; inset: 0; z-index: 1; border-radius: inherit; background: linear-gradient(rgb(255 255 255 / .1), rgb(255 255 255 / 0) 60%); box-shadow: var(--frost-highlight), inset 0 0 calc(.3 * var(--pill-size)) rgb(255 255 255 / .14); }
+/* Field: text in the capsule; it grows with its lines. */
+.ui-pill-field { display: flex; width: 100%; height: auto; min-height: var(--pill-size); align-items: center; border-radius: var(--radius-message); padding: 0 var(--pill-field-pad); }
+.ui-pill-field .ui-textarea { width: 100%; max-height: 220px; border: 0; background: transparent; padding: calc((var(--pill-size) - var(--space-2xs) - 1.4em) / 2) 0; color: inherit; font: inherit; font-size: var(--text-body); line-height: 1.4; resize: none; outline: none; field-sizing: content; }
+.ui-pill-field .ui-textarea::placeholder { color: var(--muted-foreground); }
+/* The Pill wins over an app pill's own rules (it stands in for them in the Library previews). */
+.ui-frost.ui-pill[data-surface] { display: inline-flex; flex: none; }
+.ui-pill[data-surface] > :is(button, [data-slot="button"]) { width: var(--pill-slot); min-width: var(--pill-slot); height: var(--pill-slot-height); padding: 0; border-radius: var(--radius-round); }
+.ui-pill[data-surface][data-solo] > :is(button, [data-slot="button"]) { width: 100%; min-width: 0; height: 100%; }

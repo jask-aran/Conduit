@@ -1,0 +1,3 @@
+/* Orb: a dotted orb on two canvases (the shown state over the one it is crossfading from), filling its box. */
+.ui-orb { position: relative; display: block; width: 100%; height: 100%; }
+.ui-orb canvas { position: absolute; inset: 0; width: 100%; height: 100%; }

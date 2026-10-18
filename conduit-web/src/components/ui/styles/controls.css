@@ -1,0 +1,121 @@
+/* A keycap is small inside a row, so its corner is a share of the control radius (~4px on desktop), and its text the label size. */
+.ui-keycap { display: inline-grid; min-width: calc(1.125 * var(--u-space)); height: calc(1.125 * var(--u-space)); place-items: center; border-radius: calc(0.6 * var(--radius-control)); background: var(--tint); padding: 0 var(--space-xs); color: var(--muted-foreground); font: var(--weight-lift) var(--text-label)/1 var(--font-label); }
+.ui-row[data-highlighted] .ui-keycap { color: var(--foreground); }
+/* A keycap that can be pressed (to record another) and cleared: taller, for a pointer and a finger, the
+   chord and a × each a button, a second tint under the one the cursor is on. */
+.ui-keycap[data-editable] { display: inline-flex; height: calc(1.5625 * var(--u-space)); overflow: hidden; padding: 0; color: var(--foreground); font-size: var(--text-caption); }
+.ui-keycap[data-editable] > button { display: inline-flex; height: 100%; align-items: center; border: 0; background: transparent; padding: 0 var(--space-sm); color: inherit; font: inherit; cursor: pointer; }
+.ui-keycap[data-editable] > .ui-keycap-remove { width: calc(1.25 * var(--u-space)); justify-content: center; border-left: 1px solid var(--tint); padding: 0; color: var(--muted-foreground); }
+.ui-keycap-remove svg { width: var(--icon-xs); height: var(--icon-xs); }
+.ui-keycap[data-editable] > button:is(:hover, :focus-visible) { outline: 0; background: var(--tint); color: var(--foreground); }
+
+/* The box: what holds a value is a --tint line at the control corner -- an input, a text area in a
+   card or a setting, the code preview, a chip, a segmented track. What you type into fills with the
+   surface's well; a text area and the preview pad their text half a unit by three quarters. */
+.ui-input, .ui-card .ui-textarea, .ui-setting-wide > .ui-textarea, .ui-preview, .ui-code, .ui-chip-body, .ui-seg { border: 1px solid var(--tint); border-radius: var(--radius-control); }
+.ui-input, .ui-card .ui-textarea, .ui-setting-wide > .ui-textarea { background: var(--well); }
+.ui-card .ui-textarea, .ui-setting-wide > .ui-textarea, .ui-preview { padding: var(--space-md) var(--space-lg); }
+.ui-field { display: flex; min-width: 0; flex-direction: column; gap: var(--card-pair, var(--space-md)); }
+.ui-field-label { color: var(--muted-foreground); font-size: var(--text-caption); font-weight: var(--weight-lift); text-box: trim-both cap alphabetic; }
+
+/* Button: a rounded rectangle. Secondary is the surface's well inside its line (on frost, a
+   hairline with nothing inside); ghost is text until washed. Outline draws primary, ghost or
+   destructive as a line in its colour with nothing inside. */
+:where(.ui-button) { display: inline-flex; height: var(--control); flex: none; align-items: center; justify-content: center; gap: var(--space-sm); border: 1px solid transparent; border-radius: var(--radius-control); padding: 0 var(--space-xl); font-size: var(--text-row); font-weight: var(--weight-strong); white-space: nowrap; cursor: pointer; transition: background-color .12s ease, border-color .12s ease, filter .12s ease; outline: none; }
+/* Zero-specificity: where the button sits sets its icon (a header, a composer), as in the app. */
+:where(.ui-button) svg { width: var(--icon); height: var(--icon); flex: none; }
+/* Keyboard focus is the wash and nothing else: never a ring. */
+.ui-button:focus-visible { outline: 0; background: var(--tint); }
+.ui-button[data-variant="primary"]:focus-visible { background: var(--primary); filter: brightness(0.88); }
+.ui-button:disabled { opacity: 0.45; pointer-events: none; }
+.ui-button[data-variant="primary"] { background: var(--foreground); color: var(--background); }
+.ui-button[data-variant="primary"]:is(:hover, :focus-visible) { filter: brightness(0.88); }
+.ui-button[data-variant="secondary"] { border-color: var(--tint); background: var(--well); color: var(--foreground); }
+.ui-button[data-variant="secondary"]:is(:hover, :focus-visible) { background: var(--tint); }
+.ui-button[data-variant="ghost"] { background: transparent; color: var(--foreground); }
+.ui-button[data-variant="ghost"]:is(:hover, :focus-visible) { background: var(--tint); }
+.ui-button[data-variant="destructive"] { background: var(--destructive); color: var(--foreground); }
+.ui-button[data-variant="destructive"]:is(:hover, :focus-visible) { filter: brightness(1.1); }
+.ui-button[data-outline] { background: transparent; }
+.ui-button[data-outline]:is(:hover, :focus-visible) { background: var(--tint); filter: none; }
+.ui-button[data-variant="primary"][data-outline] { border-color: var(--foreground); color: var(--foreground); }
+.ui-button[data-variant="ghost"][data-outline] { border-color: var(--tint); }
+.ui-button[data-variant="destructive"][data-outline] { border-color: var(--destructive); color: var(--destructive); }
+.ui-button[data-variant="destructive"][data-outline]:is(:hover, :focus-visible) { background: color-mix(in oklch, var(--destructive), transparent 85%); }
+:where(.ui-button[data-size="sm"]) { height: var(--control-sm); padding: 0 var(--space-lg); font-size: var(--text-row); }
+:where(.ui-button[data-size="icon"]) { width: var(--control); padding: 0; }
+/* icon-xs: a row of small actions under a message (time, copy, edit), round as the app draws them. */
+:where(.ui-button[data-size="icon-xs"]) { width: var(--control-xs); height: var(--control-xs); border-radius: var(--radius-round); padding: 0; }
+:where(.ui-button[data-size="icon-xs"]) svg { width: var(--icon-sm); height: var(--icon-sm); }
+:where(.ui-button[data-size="icon-sm"]) { width: var(--control-sm); height: var(--control-sm); padding: 0; }
+
+/* Input: an input or a select's trigger, a box (above) a control tall; the bare
+   select is just its value and a chevron. Field, below the Card, names one. */
+.ui-input { display: flex; width: 100%; height: var(--control); align-items: center; gap: var(--space-md); padding: 0 var(--space-lg); color: var(--foreground); font-size: var(--text-row); text-align: left; outline: none; transition: border-color .12s ease; }
+.ui-input::placeholder { color: var(--muted-foreground); }
+.ui-input:is(:hover, :focus, [aria-expanded="true"]) { border-color: color-mix(in oklch, var(--foreground), transparent 70%); }
+.ui-input > span { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ui-input > svg { width: var(--icon); height: var(--icon); flex: none; color: var(--muted-foreground); }
+.ui-input[data-bare] { width: auto; height: auto; border: 0; background: transparent; padding: var(--space-xs) 0; color: var(--muted-foreground); }
+.ui-input[data-bare]:is(:hover, :focus-visible) { color: var(--foreground); }
+
+/* Segmented choice: a hairline track and a sliding thumb (the app's
+   settings and dashboard filters): the surface's tint for both. The
+   pill form is the phone header's: the track is itself frost. */
+/* The track at --radius-control; the wash and segments 2px in (its line and 1px), so their corner is
+   the track's less those 2px: the space round the wash is even, corners included. Segments touch. */
+.ui-seg { --seg-pad: 1px; --seg-inner: calc(var(--radius-control) - 1px - var(--seg-pad)); position: relative; display: inline-grid; grid-template-columns: repeat(var(--segments), minmax(0, 1fr)); gap: 0; background: transparent; padding: var(--seg-pad); }
+/* The thumb slides by left, not transform: a transform puts it on a layer of its own and the labels over it
+   on others, where Windows draws their text without ClearType, so they dim while it moves. */
+.ui-seg-thumb { position: absolute; top: var(--seg-pad); bottom: var(--seg-pad); left: calc(var(--seg-pad) + (100% - 2 * var(--seg-pad)) / var(--segments) * var(--segment)); width: calc((100% - 2 * var(--seg-pad)) / var(--segments)); border-radius: var(--seg-inner); background: var(--tint); transition: left var(--duration-gentle) var(--ease-arrive); }
+.ui-seg button { position: relative; display: inline-flex; min-width: 0; min-height: calc(1.75 * var(--u-space)); align-items: center; justify-content: center; gap: var(--space-sm); border: 0; border-radius: var(--seg-inner); background: transparent; padding: 0 var(--space-lg); color: var(--muted-foreground); font-size: var(--text-row); font-weight: var(--weight-lift); cursor: pointer; }
+.ui-seg button svg { width: var(--icon-lg); height: var(--icon-lg); }
+.ui-seg button small { color: var(--muted-foreground); font: var(--weight-rest) var(--text-caption) var(--font-data); }
+.ui-seg button:is(:hover, :focus-visible, [aria-checked="true"]) { color: var(--foreground); }
+.ui-seg[data-icons] button { width: var(--control); padding: 0; }
+.ui-seg[data-pill] { height: var(--pill-size); gap: var(--pill-gap); border-color: var(--frost-stroke); border-radius: var(--radius-round); background: var(--frost-fill); padding: 1px; }
+.ui-seg[data-pill] .ui-seg-thumb { top: 1px; bottom: 1px; width: var(--pill-slot); left: calc(1px + (var(--pill-slot) + var(--pill-gap)) * var(--segment)); border-radius: var(--radius-round); background: var(--tint); }
+.ui-seg[data-pill] button { width: var(--pill-slot); min-height: var(--pill-slot-height); border-radius: var(--radius-round); padding: 0; }
+.ui-seg[data-pill] button svg { width: var(--pill-icon); height: var(--pill-icon); }
+/* On the frame (the sidebar) controls take the sidebar's own ink. */
+[data-surface="frame"] :is(.ui-pill > button, .ui-seg[data-pill] button[aria-checked="true"]) { color: var(--sidebar-accent-foreground); }
+[data-surface="frame"] .ui-seg[data-pill] .ui-seg-thumb { background: var(--sidebar-accent); }
+@media (prefers-reduced-motion: reduce) { .ui-seg-thumb { transition: none; } }
+/* The cursor on the chosen segment (already washed) brightens that wash a step: a second tint over the thumb's. */
+.ui-seg button[aria-checked="true"]:is(:hover, :focus-visible) { background: var(--tint); }
+/* A small segmented choice, for a bar's end (chat search's sort). */
+/* Only its size changes: the same hairline, thumb and type as the Segmented it scales. */
+.ui-seg[data-size="sm"] button { min-height: calc(1.40625 * var(--u-space)); padding: var(--space-2xs) var(--space-md); font-size: var(--text-caption); }
+
+/* Slider: the label is a section title, the value an item (one that opens,
+   when it opens the levels); track, thumb and ticks follow density. */
+.ui-slider { display: grid; gap: var(--space-sm); padding: var(--space-sm) var(--space-md) var(--space-md); }
+.ui-slider[data-disabled] { opacity: 0.5; }
+.ui-slider-head { display: flex; align-items: center; justify-content: space-between; gap: var(--row-gap); }
+.ui-slider-value { display: inline-flex; align-items: center; gap: var(--space-xs); border: 0; border-radius: var(--radius-control); background: transparent; padding: var(--space-xs) var(--space-xs) var(--space-xs) var(--space-sm); color: color-mix(in oklch, var(--foreground), transparent 38%); font-size: var(--text-caption); font-weight: var(--weight-rest); }
+.ui-slider-value[data-opens]:is(:hover, :focus-visible) { background: var(--tint); color: var(--foreground); }
+.ui-slider-value svg { width: var(--icon-xs); height: var(--icon-xs); color: var(--muted-foreground); }
+.ui-slider-input { --thumb: calc(1.25 * var(--u-icon)); --track: 4px; width: 100%; height: var(--thumb); margin: 0; appearance: none; -webkit-appearance: none; background: transparent; cursor: pointer; touch-action: pan-y; }
+.ui-slider-input:focus-visible { outline: 0; }
+.ui-slider-input::-webkit-slider-runnable-track { height: var(--track); border-radius: var(--radius-round); background: linear-gradient(to right, var(--foreground) var(--fill), var(--tint) var(--fill)); }
+.ui-slider-input::-moz-range-track { height: var(--track); border-radius: var(--radius-round); background: var(--tint); }
+.ui-slider-input::-moz-range-progress { height: var(--track); border-radius: var(--radius-round); background: var(--foreground); }
+.ui-slider-input::-webkit-slider-thumb { width: var(--thumb); height: var(--thumb); margin-top: calc((var(--track) - var(--thumb)) / 2); border: 2px solid var(--background); border-radius: var(--radius-round); background: var(--foreground); -webkit-appearance: none; }
+.ui-slider-input::-moz-range-thumb { width: var(--thumb); height: var(--thumb); border: 2px solid var(--background); border-radius: var(--radius-round); background: var(--foreground); }
+.ui-slider-input:focus-visible::-webkit-slider-thumb { filter: brightness(1.1); }
+.ui-slider-ticks { display: flex; justify-content: space-between; margin-top: -4px; padding-inline: calc(var(--thumb, calc(1.25 * var(--u-icon))) / 2 - 1px); }
+.ui-slider-ticks i { width: 2px; height: 4px; border-radius: var(--radius-round); background: var(--tint); }
+.ui-slider-ticks i[data-reached] { background: var(--muted-foreground); }
+
+/* TextArea: multi-line text that grows with its lines; bare, so what holds it pads it. */
+.ui-textarea { display: block; width: 100%; resize: none; overflow-y: auto; border: 0; outline: 0; background: transparent; padding: 0; color: inherit; font: inherit; font-size: var(--text-body); line-height: 1.45; field-sizing: content; }
+.ui-textarea::placeholder { color: var(--muted-foreground); }
+/* Progress: the slider's track and fill. */
+.ui-progress { width: 100%; height: 4px; appearance: none; -webkit-appearance: none; overflow: hidden; border: 0; border-radius: var(--radius-round); background: var(--tint); }
+.ui-progress::-webkit-progress-bar { background: var(--tint); }
+.ui-progress::-webkit-progress-value { border-radius: var(--radius-round); background: var(--foreground); }
+.ui-progress::-moz-progress-bar { border-radius: var(--radius-round); background: var(--foreground); }
+/* A spinner: a ring in the surface's tint, a quarter of it in the text colour, turning. */
+.ui-spinner { width: var(--icon); height: var(--icon); flex: none; border: 1.5px solid var(--tint); border-top-color: var(--foreground); border-radius: var(--radius-round); animation: ui-spin 800ms linear infinite; }
+@keyframes ui-spin { to { transform: rotate(1turn); } }
+@media (prefers-reduced-motion: reduce) { .ui-spinner { animation-duration: 2400ms; } }

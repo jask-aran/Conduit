@@ -4,7 +4,7 @@ import "../client/project/dashboard.css";
 import "../client/chat/composer-geometry.css";
 import "../client/styles.css";
 import "./gallery.css";
-import "@/components/ui/library.css";
+import "@/components/ui/styles";
 import { ChatScreen } from "./stories";
 import { NavGroup, NavRow, Frost } from "@/components/ui";
 import { LibraryContext } from "@/components/ui/swap";

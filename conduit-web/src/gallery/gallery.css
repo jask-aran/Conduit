@@ -47,7 +47,7 @@ html, body { background: var(--frame, #08090a); color: var(--foreground); }
    the frame is as wide as that chat at its composer's full width: the width,
    the composer stack's 24px sides (the transcript's gutter), the chat pane's
    9.6px of margins, and this frame's border. */
-.g-desktop-screen { --composer-width: 47.5rem; --app-height: calc(100vh - 60px); display: flex; flex: none; width: calc(var(--composer-width) + var(--transcript-column-gutter) + 9.6px + 2px); height: calc(100vh - 60px); overflow: hidden; border: 1px solid var(--border); border-radius: 12px; background: var(--background); }
+.g-desktop-screen { --composer-width: var(--reading-width); --app-height: calc(100vh - 60px); display: flex; flex: none; width: calc(var(--composer-width) + var(--transcript-column-gutter) + 9.6px + 2px); height: calc(100vh - 60px); overflow: hidden; border: 1px solid var(--border); border-radius: 12px; background: var(--background); }
 .g-desktop-screen .chat-main { flex: 1; height: 100%; min-height: 0; }
 .g-solo-body #root, .g-parts-body #root { height: 100vh; }
 .g-parts-body { overflow: auto; background: #1b1c1f; }
