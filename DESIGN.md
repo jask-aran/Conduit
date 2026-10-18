@@ -1,570 +1,257 @@
 ---
 name: Conduit
-description: In-app visual language for Conduit. Dark charcoal control plane, inset panes holding plain lists grouped by heading and space, frosted glass floating chrome. No blue anywhere.
-note: "Frontmatter tokens are roles and ranges. Body copy wins on conflict."
+description: In-app visual language for Conduit. Dark charcoal control plane, inset panes holding plain lists grouped by heading and space, frosted glass for everything that floats. No blue anywhere.
+note: "Colours are the dark theme's values in client/styles.css. Every other value (space, type, radius, motion) is a token in components/ui/library.css; the body names them, the code holds them."
 colors:
   frame: "oklch(0.138 0.004 264)"
   background: "oklch(0.186 0.005 264)"
   foreground: "oklch(0.93 0.003 258)"
-  card: "oklch(0.225 0.006 264)"
-  popover: "oklch(0.208 0.006 264)"
-  primary: "oklch(0.95 0.002 258)"
-  primary-foreground: "oklch(0.2 0.006 264)"
-  secondary: "oklch(1 0 0 / 6%)"
-  secondary-foreground: "oklch(0.93 0.003 258)"
-  muted: "oklch(1 0 0 / 5%)"
   muted-foreground: "oklch(0.63 0.006 262)"
   accent: "oklch(1 0 0 / 7%)"
-  accent-foreground: "oklch(0.96 0.003 258)"
-  destructive: "oklch(0.645 0.19 18)"
   border: "oklch(1 0 0 / 7%)"
-  input: "oklch(1 0 0 / 9%)"
+  card: "oklch(0.225 0.006 264)"
+  primary: "oklch(0.95 0.002 258)"
+  destructive: "oklch(0.645 0.19 18)"
   ring: "oklch(0.78 0.008 258)"
-  sidebar: "transparent"
-  sidebar-foreground: "oklch(0.9 0.003 258)"
-  glass-bg: "oklch(0.3 0.006 264 / 52%)"
-  glass-border: "oklch(1 0 0 / 10%)"
   frost-fill: "#ffffff2b"
   frost-stroke: "#ffffff4d"
   live: "oklch(0.62 0.17 145)"
   warn: "oklch(0.75 0.15 75)"
-typography:
-  sans:
-    fontFamily: Geist Variable
-    fontSize: 13px
-    fontWeight: 400
-    lineHeight: 1.45
-  heading:
-    fontFamily: Geist Variable
-    fontSize: 20px
-    fontWeight: 600
-    letterSpacing: -0.035em
-    lineHeight: 1.05
-  display:
-    fontFamily: Geist Variable
-    fontSize: 31px
-    fontWeight: 560
-    letterSpacing: -0.035em
-    lineHeight: 1.05
-  label:
-    fontFamily: Geist Variable
-    fontSize: 12px
-    fontWeight: 620
-  caption:
-    fontFamily: Geist Variable
-    fontSize: 9px
-    fontWeight: 400
-  row-title:
-    fontFamily: Geist Variable
-    fontSize: 10.5px
-    fontWeight: 580
-  meta:
-    fontFamily: Paper Mono, ui-monospace, SFMono-Regular, Consolas, monospace
-    fontSize: 11px
-    fontWeight: 400
-  section-label:
-    fontFamily: Paper Mono, ui-monospace, SFMono-Regular, Consolas, monospace
-    fontSize: 8px
-    fontWeight: 400
-    letterSpacing: 0.07em
-    textTransform: uppercase
-  keycap:
-    fontFamily: Paper Mono, ui-monospace, SFMono-Regular, Consolas, monospace
-    fontSize: 8px
-    fontWeight: 500
-rounded:
-  control: 8px
-  surface: 13px
-  message: 22px
-  pane: 16px
-  round: 999px
-spacing:
-  xs: 4px
-  sm: 8px
-  md: 12px
-  lg: 20px
-  xl: 28px
-  pane-inset: 8px
-components:
-  pane:
-    backgroundColor: "{colors.background}"
-    textColor: "{colors.foreground}"
-    rounded: "{rounded.pane}"
-  tile:
-    backgroundColor: "transparent"
-    textColor: "{colors.foreground}"
-    rounded: "{rounded.surface}"
-  card:
-    backgroundColor: "{colors.card}"
-    textColor: "{colors.foreground}"
-    rounded: "{rounded.surface}"
-  popover:
-    backgroundColor: "{colors.popover}"
-    textColor: "{colors.foreground}"
-    rounded: "{rounded.surface}"
-  frost-chrome:
-    backgroundColor: "{colors.frost-fill}"
-    textColor: "{colors.foreground}"
-    rounded: "{rounded.message}"
-  user-bubble:
-    backgroundColor: "{colors.glass-bg}"
-    textColor: "{colors.foreground}"
-    rounded: "{rounded.message}"
-  row-hover:
-    backgroundColor: "{colors.accent}"
-    textColor: "{colors.accent-foreground}"
-    rounded: "{rounded.control}"
-  row-selected:
-    backgroundColor: "{colors.accent}"
-    textColor: "{colors.foreground}"
-    rounded: "{rounded.control}"
-  button-primary:
-    backgroundColor: "{colors.primary}"
-    textColor: "{colors.primary-foreground}"
-    rounded: "{rounded.control}"
-  button-ghost:
-    backgroundColor: "transparent"
-    textColor: "{colors.foreground}"
-    rounded: "{rounded.control}"
-  input-quiet:
-    backgroundColor: "transparent"
-    textColor: "{colors.foreground}"
-    rounded: "{rounded.control}"
-  input-bordered:
-    backgroundColor: "transparent"
-    textColor: "{colors.foreground}"
-    rounded: "{rounded.control}"
 ---
-
 
 # Overview
 
-Conduit is a self-hosted, always-dark agent control plane. The look is charcoal and quiet: a darker frame, inset rounded panes, plain lists grouped by a heading and space, and frosted glass for everything that floats. It is not a marketing site, not a light theme, and not a colorful dashboard.
+Conduit is a self-hosted, always-dark agent control plane. The look is charcoal and quiet: a darker frame, inset rounded panes, plain lists grouped by a heading and space, and frosted glass for everything that floats. It is not a marketing site, not a light theme, and not a colourful dashboard.
 
 Three surfaces are the references; copy them before inventing anything:
 
-- **The sidebar** -- how everything is interacted with: grey at rest, the wash as the one cursor, the current item bold with no fill, no outlines, driven as easily from the keyboard.
-- **Chat search and the command palette** -- the frost overlay: what anything that opens on top of the app looks like (`docs/design/palette-sketch/palette-sketch.html`).
-- **The dashboards** -- the pane: laying things out on grey without borders, in clean single lines grouped by heading and space.
+- **The sidebar** -- how everything is interacted with: grey at rest, the wash as the one cursor, the current item bold with no fill, driven as easily from the keyboard.
+- **Chat search and the command palette** -- what anything that opens on top of the app looks like.
+- **The dashboards** -- laying things out on grey without borders, in single lines grouped by heading and space.
 
-This file is the whole design language and the one place its rules live: read it before building or changing any UI. It holds the general rules; where a detail is not here, the code is the record of it. Choose the surface first (Surfaces), then follow the one interaction grammar (Interaction); components, motion and keyboard follow from those two. Numbers here are current values unless a rule says otherwise: a size or duration written as `~` describes what the code does today, not a constraint on changing it. A surface that does not match yet is listed under Being migrated -- do not copy it.
+This file holds the rules. Values live in code and examples in the gallery:
 
-Stack: SolidJS, Kobalte primitives, Geist Variable, tokens in `conduit-web/src/client/styles.css`. Do not add React, extra icon kits, or a second palette.
+| For | Look in |
+| --- | --- |
+| The rules a surface, control or move follows | this file |
+| Token values (space, type, radius, motion, frost) | `conduit-web/src/components/ui/library.css` |
+| The pieces themselves | `conduit-web/src/components/ui/index.tsx` |
+| Every piece drawn, measured, in every state and density | the gallery (`npm run gallery`, docs/TESTING.md) |
+
+Write rules here, not specs: sizes, timings, exact copy, counts and fold orders belong to the code. How to verify a rule goes in docs/TESTING.md.
+
+Stack: SolidJS, Kobalte for behaviour, Geist Variable and Paper Mono, Lucide icons. Do not add React, another icon kit, a chart library for chrome, or a second palette.
+
+# Components v2
+
+New UI is built from components v2 (`components/ui`) and its tokens alone, so a change to a token or a piece reaches every use. The library draws shapes: behaviour (Kobalte menus, dialogs, the app's state) is the caller's, wrapped round the piece.
+
+- **Nothing styles itself per component.** Sizes come from the space, control, icon and type tokens; corners from `--radius-*`; colour from the surface (Surfaces). A value a piece needs and no token gives is a new token or a new rule here, not a local number.
+- **A piece owns its moves.** Entering, leaving and removing are its `motion` prop or its own state, on the Motion tokens. Callers never animate a library piece from outside.
+- **One gallery family per piece.** A change to a piece updates its source and its gallery family together; the gallery's In use, Anatomy and Forms views go through the shared `gallery/specs.tsx`, never markup of their own.
+- **The app opts in through `components/ui/swap.ts`.** `LibraryContext` draws the app's real screens with v2 inside the gallery's previews; `useLibraryPiece(piece)` graduates one piece into the app itself, and `localStorage conduit:classic = "<piece>"` draws it the old way again to compare. A piece is done when its old code and its `useLibrary()` branch are deleted.
+
+## Migration
+
+What each v2 family replaces and where it stands. Update a row in the commit that moves it; remove it once the old code is gone. Until a family is in the app, the old piece in the "Replaces" column is what app code uses.
+
+| v2 family (gallery) | Replaces | In the app |
+| --- | --- | --- |
+| Controls: `Button` | `Button` in `components/primitives.tsx`; raw `<button>`s in the terminal pane, sidebar, `main.tsx`, command menu, Computer dashboard | previews |
+| Controls: `Segmented` | `settings/settings-controls.tsx`; `.sidebar-area-toggle`, `.split-heading-switches`, `.workspace-history-toggle` | old |
+| Controls: `Input`, `TextArea`, `SelectTrigger`, `Field` | `Field*`, `Input`, `Textarea` in `primitives.tsx` | old |
+| Controls: `Slider` | `chat/step-slider.tsx` | previews |
+| Controls: `Keycap` | `Keycap` in `components/frost.tsx` | old |
+| Controls: Switch, Spinner, runtime dot | `settings-controls.tsx`, `primitives.tsx`, `navigation/runtime-indicator.tsx` | old (no v2 Switch or dot yet) |
+| Frost | `.composer-surface-material`, `chat/composer-surface.ts` | previews |
+| Popover: `Menu`, `Section`, `Item` | `Menu*`, `ContextMenu*`, `Popover*`, `PopoverSearchList` in `primitives.tsx`; `.menu-row` (terminal pane, leader, context gauge, place picker) | previews |
+| Card | `FrostDialog` (`frost.tsx`) | gallery only |
+| Toast | solid-sonner's toasts | gallery only |
+| Overlay, Glance | `FrostOverlay` (`frost.tsx`), command menu, chat search, Settings | gallery only |
+| Leader | `navigation/leader-palette.tsx`, `frost-card` | gallery only |
+| DesktopComposer | `chat/composer.tsx` (desktop) | previews |
+| Rider | queued messages, attachment strip, question card | in the app (v2 classes, not components) |
+| Pill, PhoneComposer | phone header pills, sidebar header, `chat/composer.tsx` (phone) | previews |
+| Trace | `chat/turn-trace.tsx`, `tool-card.tsx` | graduated (`trace`) |
+| Transcript, CodeBlock | `chat/transcript.tsx`, the Markdown's `.artifact`, `chat/disclosure.tsx` | previews (`StopLine` in the app) |
+
+**Overlays until Card and Overlay graduate:** build them from `components/frost.tsx`, never a copy of another overlay. `npm run build` fails on a hand-rolled Kobalte dialog (`scripts/check-bundle.mjs`; update that check when Card and Overlay replace them).
+
+| Building | Use |
+| --- | --- |
+| a palette, search or anything that filters | `FrostOverlay` (`placement="center"` for one that does not filter, like Settings) |
+| a confirm, a one-field prompt, a small piece of content | `FrostDialog` (`alert` for a destructive choice, `size="wide"` for content, `close`, `actions`) |
+| a menu, context menu or submenu | `Menu*` / `ContextMenu*` (`primitives.tsx`) |
+| a pick list anchored to a control | `PopoverContent` holding `PopoverSearchList` |
+| a card that floats without covering the page | `frost-card` alone |
+
+Inside them rows take `frost-row`, keys `Keycap`, the foot `frost-rail`, a dialog's buttons `frost-dialog-actions`; material, dim, radius and arrival come from those pieces and the `--frost-*` tokens, and a surface's own CSS sets only its layout.
 
 # Surfaces
 
 Every surface is one of three materials. Choose it first, before any colour, border or radius.
 
-| Surface | Material | Reference | Holds |
-|---|---|---|---|
-| **Frame** | near-black `{colors.frame}` | the sidebar | permanent navigation: the sidebar, the collapsed rail, the workspace rail |
-| **Pane** | charcoal `{colors.background}`, no borders, single-line rows grouped by heading and space | the dashboards | where you work: chats, pages, file viewers, tools |
-| **Frost** | the composer's frost (Elevation & Depth) | chat search and the palette | anything that floats |
+| Surface | Material | Holds |
+| --- | --- | --- |
+| **Frame** | near-black `frame` | permanent navigation: the sidebar, the collapsed rail, the workspace rail |
+| **Pane** | charcoal `background`, no borders | where you work: chats, pages, file viewers, tools |
+| **Frost** | `Frost` | anything that floats |
 
-**The test is "does it float?", not "is it where you work?".** Frost covers two kinds of floating thing:
+**The test is "does it float?", not "is it where you work?".** Frost is for overlays (palette, chat search, model selector, leader, menus, Settings, dialogs; where one covers the page, the page dims) and for floating chrome inside a pane (the composer, user bubbles, the header pill, scroll to latest, the attachment strip, a composer takeover), centred on the reading column. Inside frost, content follows the pane's rules: one-line rows, headings and space, no boxes. Never frost a row, a list, the workspace tree or the transcript. Something genuinely new is composed inside these surfaces, not beside them.
 
-- **Overlays** -- anything that opens on top of the app: chat search, the command palette, the model selector, the leader menu, dropdown menus, Settings, dialogs and confirms. Where one covers the page, the page dims behind it.
-- **Floating chrome** inside a pane -- the composer, user bubbles, the header pill, scroll-to-latest, the attachment strip, the composer takeover. It floats over the transcript, so it is frost even though it is where you work. It is centred on the reading column where it applies, at a larger radius (Shapes).
+**Controls take their look from the surface under them.** A surface sets `--tint` (its lines and washes) and `--well` (the fill under an input or an outline button), and controls read only those. Over frost there is no well: an input there is a hairline with nothing inside. Set `data-surface` on the surface, never a per-surface rule on a control.
 
-Inside frost, content follows the pane's rules: one-line rows, headings and space, no boxes, and never frost on a row of its own.
-
-**Controls take their look from the surface under them.** A surface gives its controls two values and they read only those: its **tint**, for lines and washes (a hairline, a segmented choice's thumb, a keycap, the wash under the pointer), and its **well**, the fill under an input or an outline button. On the frame and a pane the tint is the app's border and the well a step darker than the pane; over frost the tint is frost's own and there is no well, so an input or outline button there is a hairline with nothing inside. No control is styled per surface (components v2: `--tint`, `--well`).
-
-**Build an overlay from the shared pieces in `components/frost.tsx`**, never a copy of another overlay -- the build fails on a hand-rolled Kobalte dialog:
-
-| Building | Use |
-| --- | --- |
-| a palette, search or any surface that filters | `FrostOverlay` (pinned near the top; `placement="center"` for one that does not filter, like Settings) |
-| a confirm, a one-field prompt, a small piece of content | `FrostDialog` (`alert` for a destructive choice, `size="wide"` when it holds content, `close` for a ×, `actions` for its buttons) |
-| a menu, context menu or submenu | `Menu*` / `ContextMenu*` (`components/primitives.tsx`) |
-| a pick list anchored to a control | `PopoverContent` holding `PopoverSearchList` |
-| a card that floats without covering the page (the leader menu) | `frost-card` alone |
-
-Inside them: rows take `frost-row` (the cursor wash on `data-highlighted`, where you are by `aria-current`), keys `Keycap`, the foot `frost-rail`, a dialog's buttons `frost-dialog-actions`. Material, dim, radius and arrival come from those pieces and the `--frost-*` tokens; a surface's own CSS sets only its layout. Something genuinely new (the context usage readout) is composed inside these, not beside them.
-
-**On a phone an overlay is a full-screen bubble:** it fills the visual viewport inside the status and navigation bars (`--phone-overlay-padding`, never its own inset) with a small margin and larger tap targets, and stays a dialog, never a new route -- Settings included. Frost over a full-screen overlay gets a darker core, because nothing around it is dimmed and the page behind would otherwise show through at full contrast. Desktop overlays keep plain frost over the dim.
+**On a phone an overlay is a full-screen bubble** filling the visual viewport inside the status and navigation bars (`--phone-overlay-padding`, never its own inset), with larger tap targets. It stays a dialog, never a route -- Settings included.
 
 # Interaction
 
-One grammar for every surface -- frame, pane or frost -- taken from the sidebar. Lists, menus, pickers, palettes, tabs and settings all follow it; none invents its own.
+One grammar for every list, menu, picker, palette, tab and setting, taken from the sidebar.
 
 - **Rest.** Grey text, muted icons, harness marks greyed with their row.
-- **Cursor.** The row under the pointer, under keyboard focus, or being pressed takes the `{colors.accent}` wash and goes white; a harness mark shows its own colour. There is one cursor, only one row at a time, and pointer and keyboard move the same one. The cursor never changes weight. On something already washed -- the chosen segment of a segmented switch -- the cursor brightens that wash a step toward the text colour instead. It stays where it was while the window is in the background.
-- **Current.** Where you are -- the open chat, the folder or workspace holding it, the active tab, the current section, the chosen option in a menu or picker -- is white at the current weight (Typography) with its icon at a heavier stroke (Icons), and **no fill**. Something open but not where you are (the other pane's chat, a tab showing in an unfocused pane) is white at the resting weight. The cursor and the current item can always be told apart.
-- **Selection.** Several chosen items are the cursor's wash on each: no edge bar, tick column or other marker. A checkbox column appears only in an explicit edit mode (chat search's Edit).
-- **Never.** Focus rings or outlines, from the browser or a component, in any colour; coloured bars or slivers; boxes drawn around a row to mark it; a tick column for the current choice. Keyboard focus is the wash and nothing else.
-- **Fold, don't squeeze.** Controls keep their size and only draw together. When a row of them stops fitting, the least-used fold, last first, into a ⋯ that lists only what has folded; what must stay (a title, the active tab) truncates only once nothing is left to fold. The fold point is measured from the controls, never a tuned px width.
+- **Cursor.** The row under the pointer, under keyboard focus or being pressed takes the `accent` wash and goes white; a harness mark shows its own colour. There is one cursor, only one row at a time, and pointer and keyboard move the same one (`moveCursor`). It never changes weight. On something already washed (a chosen segment) it brightens that wash a step. It stays where it was while the window is in the background.
+- **Current.** Where you are -- the open chat and the folder or workspace holding it, the active tab, the current section, the chosen option -- is white at the current weight with a heavier icon stroke, and **no fill**. Open but not where you are (the other pane's chat) is white at the resting weight. Cursor and current can always be told apart.
+- **Selection.** Several chosen items are the wash on each. A checkbox column appears only in an explicit edit mode (chat search's Edit).
+- **Never** focus rings or outlines, from the browser or a component, in any colour; coloured bars or slivers; boxes round a row; a tick for the current choice. Keyboard focus is the wash.
+- **Fold, don't squeeze.** Controls keep their size. When a row of them stops fitting, the least used fold, last first, into a ⋯ listing only what folded; what must stay (a title, the active tab) truncates only once nothing is left to fold. The fold point is measured from the controls, never a tuned px width.
 
-The keys that move the cursor are in Keyboard; the row itself is List row (Components).
+# Colour
 
-# Colors
+The app is locked to `.dark`; the light tokens in `styles.css` are leftovers, never paint them. The charcoal is cool-neutral at chroma ~0.005, and that grey is the brand: do not raise it to "read as blue".
 
-The app is locked to `.dark` on `<html>`. Light `:root` tokens exist as leftovers; never paint them.
+- **Near-monochrome.** Muted text for timestamps, hints, empty states and icons at rest. `border` hairlines for inputs, a header or footer rule and dividers; grouping is a heading and space, with at most one hairline between groups, never a box or a fill. `card` solids are left on tool cards only. `primary` is the one bright action.
+- **Hue only for state:** `destructive` for errors and destructive actions, `live` and `warn` as small dots and glyphs (never fills, rails or washes). Workspace glyph colours and git dots are data, kept on the glyph.
+- **No blue anywhere** -- not for selection, focus, links, status, audio, waveforms or "active" surfaces, and no `--accent-cool` or slate tint. Connecting states are muted; success is foreground or `live`. Two exceptions: syntax highlighting inside code, and a status dot's own colour. Leftover blue (`--accent-cool` in `project/dashboard.css`, `styles.css`, `sidebar.css`) is removed when touched. It is frontend-design skill output: don't follow that skill's urge for a signature accent colour; frost is the signature.
 
-The charcoal is cool-neutral at chroma ~0.004–0.006. That gray is the brand. Do not raise chroma to make it "read as blue."
+# Typography, scale and shape
 
-- **frame** — page ground behind inset panes.
-- **background** — inset pane fill.
-- **foreground / muted-foreground** — type. Muted for timestamps, hints, empty states, icons at rest.
-- **border** — 1px hairlines: inputs, a header or footer rule, and dividers. Grouping is a heading and space, with at most one hairline between groups -- not a hairline box and not a fill. Panes have no edge hairline.
-- **accent** — white at 6–7% opacity. This is hover, pressed, and selected. Selection is a gray wash, never a hue.
-- **card / popover** — slightly raised solids, left on tool cards. Overlays are frost (Surfaces).
-- **primary** — near-white. Default buttons and the one bright action.
-- **destructive** — errors and destructive actions only.
-- **live / warn** — tiny runtime dots and git-ish status. Never as fills, rails, or card washes.
-- **frost-fill / frost-stroke / glass-bg / glass-border** — the signature floating material (Elevation & Depth).
-
-Workspace glyph colors and git file dots are user/data colors, not brand. Leave them on the glyph; do not echo them into chrome.
-
-## Forbidden color
-
-No blue anywhere. There is no blue accent token. Do not introduce `--accent-cool` or any steely, slate, or "intelligent blue", for any purpose: selected rows, cards or nav items; a left-edge sliver or inset rail; a gradient wash on a selected control; status strips or "this is active" surfaces; focus; links in an answer (they are the text colour with a muted underline); runtime dots, waveform bars, audio or connecting states, success text, icon tints.
-
-Two exceptions. Syntax highlighting inside code may use blue as a semantic token colour; the exception does not reach editor chrome, selection, focus, status or navigation. A status dot that already carries its own colour (the unread/recent dot on a chat row) keeps it: the rule is against blue injected into chrome, not a state's own mark.
-
-Replacements: active/connecting states use `{colors.muted-foreground}`; live stays `{colors.live}` green, warn amber, danger red; success/ready text uses `{colors.foreground}` or `{colors.live}`; waveform bars and audio chrome use foreground/muted tints.
-
-That blue treatment is leftover frontend-design skill output. Do not encode, copy or extend it; remove it where you find it (Being migrated).
-
-# Typography
-
-Geist Variable everywhere for UI. Paper Mono, which Conduit ships, for the section label, the keycap and data: model ids, paths, times and counts in meta, status, waveforms. Code is Paper Mono too. The terminal is Meslo LG S Nerd Font Mono, for its Nerd Font glyphs, and is the one face the user is expected to change. The system's `ui-monospace` only as the fallback. Tabular figures wherever numbers tick or line up.
-
-A handful of roles, each defined once in `styles.css`; components name a role rather than a size:
-
-- **display** — the dashboard title only. Tight tracking.
-- **heading** — settings and dialog titles.
-- **body** — chat, answers, inputs.
-- **row** — the sidebar row: every list, menu, palette and settings row takes it (a touch larger on a phone, a touch heavier and brighter over frost, since text over frost reads thinner).
-- **section label** — Paper Mono (shipped, so it reads the same on every system; the system's mono only as the fallback), uppercase, small, letter-spaced, muted. Every section heading is this: a list, menu, palette, card, rider or slider, and the sidebar's groups; the breadcrumb's places share it.
-- **caption** — section subtitles, timestamps, empty copy.
-- **meta** — muted Paper Mono beside a row's title, right-aligned, truncating before the title does.
-- **keycap** — small, in the section label's face (Paper Mono), at the label size, on the surface's tint, its corner a share of `{rounded.control}` (about 4px on desktop), muted; in the text colour on the cursor row or a clickable rail action.
-
-Four weights, no others: **rest** (400); **lift** (500), a touch heavier for text over frost, which reads thinner there; **strong** (600), for titles, headings, buttons and values; and the **current weight** (660), which carries state with rest -- where you are, and a match lit while typing. Five sizes, one per role: label (and keycaps), caption (and data: meta, counts), row, body (messages, input, and titles at strong), heading. Do not invent further sizes or weights per component (components v2: `--text-*`, `--weight-*`). No serif except the Capacitor first-launch wordmark (legacy).
-
-# Layout
-
-Desktop is a darker **frame** with **inset rounded panes**, separated by the frame's margin, which is also the gutter you drag. Mobile drops the inset and goes full-bleed, keeping safe-area padding on edge controls. On either side of the phone layout, things only draw closer; layouts change at widths measured from their content (Interaction: Fold, don't squeeze).
-
-- **Chat.** The sidebar on the frame; the chat in its pane; the workspace rail on the right edge and, when open, the **dock** -- a second inset pane showing one tool at a time (Files, Source Control, Chat review, Terminal), not a floating card. Assistant markdown is the full reading column; user messages are a right-aligned frosted bubble. The composer sits at the bottom of the pane in frost, the reference material for all floating chrome. A phone keeps the tools as tabs in the dock's header.
-- **Dashboards** -- the Conduit, project, workspace and harness pages -- are one layout (`dashboard/primitives/split.tsx`): listed content, no tiles. A header carries the page's mark and name, a one-line muted **status row** saying where things stand, and quiet text **quick actions** -- only verbs for the place nothing else on the page offers; managing the place lives in its ⋯, and actions fold into it as room runs out. Below, two columns while the left holds its controls at full size: the composer with the chats under it, beside a narrower column of places and state, each scrolling on its own. Narrower, one column in that order. The switch is the only point the layout changes (Motion: A layout switch). On a phone, sections fold under their headings, filters fold into one Filters menu, and the composer docks at the foot.
-- **The Conduit dashboard is the new-chat screen.** New chat lands here with the composer focused; a new chat in a place lands on that place's page. The composer is at the centre of every dashboard. Where a chat lives is chosen from the composer's place button.
-- **The chats list is one component everywhere** (`primitives/chat-list.tsx`): the same heading, switches, filters and search scoped to where you are; rows grouped by day as chat search groups them, each with its harness mark, title, where it lives (live activity first) and age.
-- **Untracked threads.** A harness's own thread that no Conduit chat owns is still a whole chat page -- transcript, composer, every chat action -- hidden from Conduit's lists, with a pill offering Track.
-- **Empty lists** read "Nothing here yet." with no action of their own.
-- **Entering a page** puts focus in its composer; each page declares its sections, and Tab and the leader go one stop per section (Keyboard).
-
-**Palettes** -- the command palette, chat search and model selector -- share one language with separate layouts; `docs/design/palette-sketch/palette-sketch.html` is the visual reference.
-
-- **Card.** The overlays' frost, pinned near the top rather than centred, so filtering shrinks it from the bottom.
-- **Search row.** One line: a leading mark (search icon, or `>` for commands), any chips, the query, the row's controls and a quiet close. A scope or view is a mono chip (`in:Japan`, `is:unread`); Backspace on an empty query removes the last chip, Esc steps out. A drill-down puts Back in the header, never a Back row.
-- **Rows** are one line: icon or harness mark, title at the row role, muted meta right-aligned, shortcuts as keycaps. Results keep their groups, best match first.
-- **Typing lights the match.** The matched letters are white and heavier and the rest of the label goes muted. A keyword-only match is left plain.
-- **Preview.** Where there is room, chat search shows the highlighted chat beside the results: its last prompt in a small bubble, the turn's outcome as a trace header line, and the start of the answer, muted, its formulas drawn as the transcript draws them at the preview's size, fading out at its foot rather than ending on a cut line. It loads once the cursor rests.
-- **Footer rail.** One line under a faint hairline: the view's actions first, the keys at the right. Keys only; sort and filters live in the search row.
-- **Phone.** The full-screen bubble; the key rail becomes a bar of buttons at the foot.
-
-**Settings** is a frost overlay, centred since it does not filter. Its rail is drawn as the sidebar is, About in quiet lines at its foot; on a phone the rail is a screen of its own. Content is the Settings list (Components). **Settings save as they change**: no Save button; the header says Saving, Saved, or Not saved with Retry in the danger colour; a value not valid yet says why under its field. Credentials and one-off actions keep their own buttons.
-
-**Spacing (components v2)** -- everything is drawn from a few numbers. A density gives the unit (12.8px on desktop, 16px on a phone); **UI scale** multiplies it for everything, **transcript scale** for what you read (a message: its text, padding and corner), so the app holds together at any setting. Every gap, padding and margin is one of nine **Space** steps in the unit: 2xs 0.125, xs 0.25, sm 0.375, md 0.5, lg 0.75, xl 1, 2xl 1.25, 3xl 1.5, 4xl 2. Every control is one of four heights: xs 1.5, sm 1.875, default 2.25, lg 2.5. Every icon is one of five sizes: xs 0.6875 (a × in a tiny control), sm 0.875 (a chevron), the icon 1, lg 1.125 (a pill's), xl 1.5 (a ring). The two scales are Appearance settings: Interface size and, under Reading, Text size. Rows keep their measured height and text (a finger's on a phone, never below 44px), written in the unit so they scale too. An offset that lines something up with something else (a wrapped detail under its label) is worked out from what it lines up with, never picked. Never a one-off multiplier or a px gap.
-
-# Panes and windows
-
-How panes, tabs, the dock and the window behave. Every arrangement follows these; a new one follows them before it gets rules of its own. The panes smoke and `file-tabs` tests assert the current behaviour.
-
-**Documents and room**
-
-- **A pane holds one document**: a chat, a page, a file viewer, a tool or a shell. Pane A holds the route; panes beside it are opened, never navigated to.
-- **A document declares its minimum width to its pane**, and nothing is drawn narrower. Chats and pages declare the dashboard composer's least plus its gutters (420px, `MIN_MAIN_PANE_WIDTH`); file viewers and tools declare the dock's (240px, `MIN_SPLIT_PANE_WIDTH`). The dock imposes no minimum of its own: it takes the minimum of whatever it shows. Containers lay out from those declarations, never from their own guesses.
-- **Room runs out in one order.** Panes show while the width holds every one at its minimum. The dock narrows to its minimum first, then panes move to the dock, last first, exactly as a docked pane: a rail icon, shown in the dock on a click, document and state kept. They come back to the row by themselves once the width holds them again. A dragged edge takes room from its neighbour down to that neighbour's minimum, then from the next.
-- **Up to three panes.** The rail's foot offers Equalise and share presets while panes are open. Not on a phone.
-
-**Focus**
-
-- **One pane has the keyboard.** A click anywhere in a pane gives it the keyboard. Everything that acts "here" acts on it: the palette, the leader, the model selector, the composer's keys and dictation, and the place the dock's Files shows. Its chat is the sidebar's current row; another pane's open chat is white at the resting weight.
-- **Focus is a pane's, not a column's.** Ctrl+Shift+2 and Alt+Shift+[ / ] go round panes, each landing where its focus last was; Alt+[ / ] step tabs within the focused pane. Inside a pane with columns, a current column receives what opens and keeps DOM focus, so switching a tab keeps the keyboard there.
-
-**Opening**
-
-- **One verb per modifier**, the same from every place you open from (sidebar, pages, chat search, Files, Source Control): plain replaces what the focused pane shows, Ctrl (Cmd) keeps it as a tab, Alt opens it beside -- a new pane right of the focused one when the width holds it, otherwise in the neighbouring pane -- and leaves the keyboard where it was, so several opened beside land in the same place.
-- **A document is open once.** Opening one already open anywhere goes to it.
-- **A pane says it is loading** ("Loading chat…"); it never shows an empty chat's welcome meanwhile.
-- **Opening a chat hands focus to its composer**; a file viewer takes the keyboard as soon as its editor has drawn, unless focus has gone elsewhere meanwhile.
-
-**Tabs**
-
-- **A pane of chats, or a file viewer's column, holds a few documents as tabs**, and its header becomes the tab row. A lone document is a row of one, so it is named once. Other documents have their pane to themselves.
-- **Where you are is text alone**: the active tab at the current weight with its X; the others grey, with an X on the pointer and a live dot while running. The wash is only the pointer.
-- **Switching moves nothing.** Tabs keep their order and reserve their bold width; one tab is mounted and the switch is in place, with drafts and scroll positions kept per document.
-- **Chat tabs group by place**: each run of tabs from one place is one breadcrumb, the place named once in caps and white when it holds the active tab, as the sidebar marks the folder holding the current chat. A new tab joins its place's run.
-- **A full row drops the tab used longest ago**, never the one showing and never one with an unsent draft. Closing the active tab goes to the one used last.
-- **Headers fold, then truncate** (Interaction): other tabs fold into the tabs' ⋯, then the header's actions into its ⋯, least-used first; the active tab never folds and cuts its title only last.
-- **A file viewer can stand empty** ("No file open") and split into two columns sharing its width by a rule between them; a chat pane cannot stand empty. A tab dragged out leaves its column empty rather than closing it.
-
-**Dragging**
-
-- **Anything that opens can be dragged**: a sidebar row, a page's chat, a file, a tab, a place's label (all its tabs), a rail tool, and a pane's header (its whole document).
-- **A drop says what it will do.** The target washes exactly the band it would land in, and a pill by the pointer names the result in words. An edge opens a new pane there; the middle replaces the document, joins a pane of chats as a tab, or swaps two open panes; a drop that would do nothing does not wash. Inside a file viewer, columns are targets named by the pill alone.
-
-**The dock and the split**
-
-- **The rail opens the dock**, one tool at a time; pressing the open tool again closes it, and a tool that cannot be used here is dimmed. The rail also holds chat search and the command palette, so no pane's header carries them.
-- **Files follows the pane with the keyboard**: it shows that pane's place, so focus and the dock never disagree; a pane with no place leaves it where it was.
-- **Tools open in the dock by default**, the terminal included; Alt on a rail tool or a shell, or dragging it to a pane, opens it as a pane instead.
-- **Any pane can move into the dock**, by its header's button, the leader (D, from a chat or tool; a page keeps D for Changes) or dragging its header onto the dock or the rail. Docking leaves the dock as it was. The pane keeps its document, session, state and tabs, and gets a rail icon of its own: a click shows it in the dock, first at its document's minimum width (again closes the dock), and Alt or dragging it from the rail puts it back in a pane. The dock holds up to three panes in addition to the row's and shows one thing at a time, a tool or a docked pane, at that document's own minimum width. Pane A docks only while another pane can take its place.
-- **The dock sits beside the panes or over them**, switched per device from the rail's foot. Beside, it takes its room from the row; over, it floats above the panes with a shadow, takes no room, and nothing beneath it moves.
-- **A tool can move out of the dock** into a pane beside the chat, by its header's button, the leader, or dragging its header, and back the same ways. Its rail icon is then white at the resting weight: open, not current.
-- **A pane's swap and close sit once at its right edge**, as small quiet icons acting on the whole pane.
-
-**The window remembers**
-
-- **The layout is in the address.** Every pane, tab and column is in the URL and the device's layout; Back restores the layout before, and a copied link reproduces it.
-
-**Resizing**
-
-- **Resizing holds the content still.** Pressing a gutter or panel handle moves nothing, not even a pixel; only dragging does. While an edge moves, a transcript keeps its shape and slides to stay centred on its pane, as long as its column has room beside its gutters. Once sliding would clip it at the pane's edge, it takes real width and reflows. A reflow keeps the reader's place: the first block whose top is on screen stays where it was. Widening back out of a compression restores the column's width before it slides again. Releasing the handle lays the content out once at its final width. The Panel motion setting can choose to reflow on every frame instead.
-
-**Motion**
-
-- **Panes ease; documents don't travel.** Opening a pane eases the others to their new widths, then fades it in; closing fades it out, then the rest ease into its room; a swap keeps both panes' last frames showing until the documents have loaded, then crossfades. A document never slides across another pane -- being compared on Shift is the one exception. None of this runs on first load, Back, a phone or reduced motion.
-
-# Elevation & Depth
-
-Almost none on listed content. Frosted glass carries the depth.
-
-- Panes and lists: nothing -- no edge hairline, no shadow.
-- Overlays: the composer's frost, one dark outer shadow and a subtle edge. Dropdown menus included.
-- Frost chrome (the signature): translucent `frost-fill`, a 1px white-alpha `frost-stroke`, a strong blur, optional top specular inset, no heavy drop. Composer, user bubble (`glass-bg` + blur), header pill and future floating toolbars share this one material — do not redeclare it per component.
-- Buttons offer forms (components v2: filled or outlined primary and destructive, ghost and its hairline outline, secondary's well); the place that holds them picks one (a dialog, Components · Dialog). Ghost buttons: no fill until hover.
-
-No stacked card shadows, no colored glows, no frost on a row or a list. One exception: while the phone's voice-first composer is listening, soft colour fields swell with the input level inside its orb pill (or, in the one-surface layout, the composer), clipped to that surface and gone when it stops.
-
-# Shapes
-
-Four radii, and a pane's:
-
-- **control** (`{rounded.control}`): rows, buttons, inputs, keycaps, chips. In the density unit, so 6.4px on desktop.
-- **surface** (`{rounded.surface}`): popovers, cards, overlays. A control's radius plus the surface's inset, so the rows inside nest (9.6px on desktop).
-- **message** (`{rounded.message}`): the composer (the phone's field too) and the user's message, one value on phone and desktop. A capsule at one line, held as the composer grows.
-- **round** (`{rounded.round}`): fully round at any size -- the phone's pill groups and buttons, which never grow, and small bits inside controls (the slider's track and thumb, a pill's buttons, a chip's remove, runtime dots). Every pill is one height, the field's at one line. Do not round section titles or metadata.
-- Inset panes take `{rounded.pane}`. Tiles (legacy, dashboard and workspace panel only) take surface.
-
-Nothing sets its own radius (components v2: `--radius-*`).
-
-**Icons** are Lucide, muted at rest, one size per context (the top of the app shares one size and one line). **An icon's stroke is a tenth of its size** (2.4 in Lucide's 24-unit box, `svg.lucide`), so weight scales with the icon and no size needs tuning; a current or selected icon is an eighth (3 units). Rules that set a stroke set it in those units; nothing overrides the ratio for one component. Artwork that is not Lucide (harness marks, the context gauge) draws its own weight. The composer's + and mic wear the text colour rather than muted, because they are live actions.
-
-**The top line.** The sidebar header and every pane's header centre on one line, icons centred on the breadcrumb's capitals. A chat's breadcrumb names its place in caps before the title, with no slash; a page that is a place has no crumb.
+- **Faces.** Geist Variable for UI; Paper Mono (shipped) for section labels, keycaps, data (model ids, paths, times, counts) and code; Meslo Nerd Font for the terminal, the one face the user is expected to change. No serif but the first-launch wordmark. Tabular figures wherever numbers tick or line up.
+- **Roles, not sizes.** Five sizes (`--text-label`, `caption`, `row`, `body`, `heading`) and four weights (`--weight-rest`; `lift`, for text over frost, which reads thinner; `strong`, for titles, buttons and values; `current`, for where you are and a match lit while typing). Every section heading is the section label: Paper Mono, uppercase, letter-spaced, muted. Meta is muted mono beside a row's title, right-aligned, truncating before the title does.
+- **Everything is drawn in the density unit** (12.8px desktop, 16px phone) times a scale: **UI scale** (Settings, Interface size) for everything, **transcript scale** (Text size) for what you read. Gaps are one of the `--space-*` steps, controls one of the `--control-*` heights, icons one of the `--icon-*` sizes. Rows keep a finger's height on a phone (44px floor). An offset that lines something up is worked out from what it lines up with. Never a one-off multiplier or a px gap.
+- **Radii.** `--radius-control` (rows, buttons, inputs, keycaps, chips), `--radius-surface` (popovers, cards, overlays: the control's plus the inset, so rows nest), `--radius-message` (the composer and the user's message: a capsule at one line, held as it grows), `--radius-round` (pills, which never grow, and small round bits), and the pane's. Do not round section titles or metadata.
+- **Icons** are Lucide, muted at rest, one size per context; a stroke a tenth of the icon's size, an eighth when current. Harness marks and the context gauge draw their own. The composer's + and mic wear the text colour, as live actions.
+- **Depth.** Panes and lists have none. Frost carries it: one material, resting or raised (`data-lift`), never redeclared per component. No stacked shadows, coloured glows, mesh gradients or SaaS card grids; the voice composer's Aura is the one allowed colour field.
+- **The top line.** The sidebar header and every pane header centre on one line. A chat's breadcrumb names its place in caps before the title, with no slash; a page that is a place has no crumb.
 
 # Motion
 
-Motion explains a change of place: where something went, and what took its place. It is not decoration, and a surface that does not change place does not animate.
+Motion explains a change of place. A surface that does not change place does not animate.
 
-- **Leave the way you came.** Something that belongs to the bottom edge leaves downward and returns upward; a panel leaves toward the edge its control sits on.
-- **One leaves, then the other arrives.** The outgoing surface goes first and the incoming one starts a beat later, so they never cross-fade in place.
-- **Quick out, gentle in.** Leaving is short and accelerates; arriving is longer and settles, rising with a fade. In components v2 the foundation is its tokens (`library.css`, Foundations · Motion). There are three curves (`--ease-arrive`, `--ease-leave`, `--ease-change`) and two durations: `--duration-quick` (150ms, for leaving, folding and changes in place) and `--duration-gentle` (250ms, for arriving, opening and settling). A move takes one of four shapes: a fade in, a fade out, a rise (`--space-md`, unless the piece says otherwise), or a drop back the way it came; a change in place grows from a fraction (`ui-grow`) or steps in from beside (`ui-slide`). Each piece owns its moves through its `motion` prop (entering, leaving, or removing, which fades in place) or its own state, and shows them on its own gallery page: a takeover card rises two units into the composer's slot once the composer has dropped out, keeping its room; the Toolbar's primary slot grows each action in where the last was, and Stop steps in beside Send; a phone pill that comes and goes folds to nothing so its stretched neighbour makes room (the room first, then the fade; leaving, the fade first); a phone submenu dims its parent. The PhoneComposer's modes are opacity, flex-grow and clip-path on mounted parts, so nothing reflows: the field fades in place; listening, the other pills fade where they stand, the mic shrinks to an orb pill at the row's end as its icon crossfades to the orb, and the voice track sweeps out of it to the row's start, back quicker on stop. The page's regions fade on the same tokens (first open, a route) while the composer stays put. Effects that are not moves keep their own time: the copied wash (0.7s), a fence still being written and a held mic breathing (1.6s).
-- **Hold the reading position.** A surface that is swapped keeps its room while it is away, so the swap itself moves nothing. The transcript moves only through its tail spring, when what replaced the surface is taller.
-- **Transform and opacity only.** Never animate width, height or layout. A panel slides over its neighbour rather than squeezing it. Exceptions: a row the reader opens or closes (a Disclosure) unfolds in height, because pushing what is below is what they asked for; pane widths ease when panes open, close or take a preset; the composer eases across a layout switch; and on the phone's voice-first composer the mic pill resizes into and out of its listening pill, send slides open and shut, and the text pill folds open and shut above the row (`chat/composer-voice.css`), each one small element in one row.
-- **The first open settles, then shows.** Until the page is laid out -- every pane's document included, and the layout holding still -- only the frame shows. Then every region fades in once, with no rise, since nothing is changing place. Nothing may arrive or move after the fade starts: what decides the layout loads before it.
-- **A turn starts as its header.** From the prompt until its first step, a live turn is the trace header it will become, and its trace takes that place at the same height, moving nothing.
-- **A stopped turn is one row.** Its trace says Interrupted, and text the stop discarded is a struck-through step of the trace under "Not kept", never a row of its own.
-- **A send moves at once.** A new chat's first message, or one sent from a dashboard, takes the composer to the foot of the chat in the frame the layout changes, not when the agent has started; from a dashboard, the page around the composer leaves first.
+- **Quick out, gentle in.** Leaving is `--duration-quick` on `--ease-leave`; arriving is `--duration-gentle` on `--ease-arrive`; a change in place is quick on `--ease-change`. A move is a fade, a rise, a drop back the way it came, a grow or a slide (`library.css` keyframes). Effects that are not moves (the copied wash, a breathing mic) keep their own time.
+- **Leave the way you came, then arrive.** Something of the bottom edge leaves downward; a panel leaves toward its control's edge. The outgoing surface goes first; they never cross-fade in place.
+- **Transform and opacity only**, except a Disclosure unfolding, pane widths easing, the composer across a layout switch, and the phone composer's pills.
+- **The invariants every piece's moves keep** (`library.css`): parts stack in one order in every state; one transition list per part, states setting only values; room opens before a part fades in and goes after it fades out; two parts never share a spot at once; a change is one move from its first frame; a frost fades itself, never through an ancestor. A new state fits these, never an exception: state them per piece and check every pair of states, not one-off fixes.
+- **Hold the reading position.** A swapped surface keeps its room while away; the transcript moves only through its tail spring.
+- **The first open settles, then shows.** Only the frame shows until every pane's document is laid out and holding still; then every region fades in once, with no rise. Nothing arrives or moves after the fade starts.
+- **A send moves at once.** A new chat's first message, or one sent from a dashboard, takes the composer to the chat's foot in the frame the layout changes.
 - **Cards belong to the composer.** Queued messages and attachments rise out of it and drop back into it when it takes them; removed by hand, a card fades in place. Anything keyed for animation is keyed by identity, so an update never replays an entrance.
-- **A layout switch** (a dashboard's two columns becoming one) happens in the frame the width crosses, never waiting on an exit animation. Nothing crosses the pane: a section that changes place fades in where it now is. The composer alone eases, from where it was last drawn to its new column, and what it would cover waits for it. Both layouts share their gutters, so nothing moves sideways at the switch.
-- **Floating controls follow.** Anything anchored to a surface is re-measured when that surface is swapped or lands, never left behind.
-- `prefers-reduced-motion` removes these transitions; the end state is identical.
+- **A layout switch** happens in the frame the width crosses. Nothing crosses the pane: a section that changes place fades in where it now is; the composer alone eases to its new column. Both layouts share their gutters.
+- **Floating controls follow.** Anything anchored to a surface is re-measured when that surface is swapped or lands.
+- `prefers-reduced-motion` drops the move and keeps the end state (the meteor field excepted).
+
+# Layout
+
+Desktop is a darker frame with inset rounded panes; the frame's margin is also the gutter you drag. Mobile drops the inset and goes full-bleed, with safe-area padding on edge controls. Layouts change at widths measured from their content, never a tuned breakpoint.
+
+- **Chat.** The sidebar on the frame; the chat in its pane; the workspace rail on the right and, when open, the dock -- a second inset pane showing one tool at a time (Files, Source Control, Chat review, Terminal), not a floating card. Answers fill the reading column with no bubble; the user's message is a frosted bubble at the right; the composer floats at the foot in frost. A phone keeps the tools as tabs in the dock's header.
+- **Dashboards** (Conduit, project, workspace, harness pages) are one layout (`dashboard/primitives/split.tsx`): a header with the place's mark, name, a one-line muted status and quiet quick actions -- only verbs nothing else on the page offers; managing the place lives in its ⋯. Below, the composer with the chats under it beside a narrower column of places and state, each scrolling on its own; one column when narrow. On a phone, sections fold under their headings, filters fold into one Filters menu, and the composer docks at the foot. No hero of metric boxes.
+- **The Conduit dashboard is the new-chat screen**, the composer focused; a new chat in a place lands on that place's page. Where a chat lives is chosen from the composer's place button.
+- **The chats list is one component everywhere** (`primitives/chat-list.tsx`), scoped to where you are, rows grouped by day. Empty lists read "Nothing here yet." with no action of their own.
+- **Untracked threads.** A harness's own thread that no Conduit chat owns is still a whole chat page, hidden from Conduit's lists, with a pill offering Track.
+- **Palettes** (command palette, chat search, model selector) pin near the top so filtering shrinks them from the bottom. One search row: a leading mark, chips for scope or view (`in:Japan`; Backspace on an empty query removes the last, Esc steps out), the query, a quiet close. A drill-down puts Back in the header, never a Back row. Rows are one line, keeping their groups, best match first; typing lights the matched letters. Chat search previews the highlighted chat beside the results once the cursor rests. A footer rail of the view's actions and its keys; on a phone, a bar of buttons. `docs/design/palette-sketch/` is the reference.
+- **Settings** is a centred frost overlay whose rail is drawn as the sidebar is (on a phone, a screen of its own). It saves as it changes: no Save button; the header says Saving, Saved, or Not saved with Retry; a value not valid yet says why under its field. Credentials and one-off actions keep their own buttons.
+
+# Panes and windows
+
+The panes smoke and `test/file-tabs.test.js` assert these; a change to a rule changes its test.
+
+**Documents and room**
+
+- **A pane holds one document** (chat, page, file viewer, tool, shell). Pane A holds the route; panes beside it are opened, never navigated to.
+- **A document declares its minimum width** (chats and pages `MIN_MAIN_PANE_WIDTH`, viewers and tools `MIN_SPLIT_PANE_WIDTH`; the dock takes whatever it shows). Containers lay out from those, never their own guesses.
+- **Room runs out in one order.** The dock narrows first, then panes move to the dock, last first, document and state kept, and come back when the width holds them. A dragged edge takes room from its neighbour down to its minimum, then the next. Up to three panes, with Equalise and presets at the rail's foot; not on a phone.
+
+**Focus and opening**
+
+- **One pane has the keyboard**; a click anywhere in it gives it. Everything that acts "here" acts on it: the palette, the leader, the model selector, the composer's keys and dictation, the dock's Files. Ctrl+Shift+2 and Alt+Shift+[ / ] go round panes, landing where each one's focus last was; Alt+[ / ] step tabs. In a pane with columns, the current column receives what opens.
+- **One verb per modifier** from every place you open from: plain replaces what the focused pane shows, Ctrl keeps it as a tab, Alt opens it beside (a new pane when the width holds it, else the neighbour) and leaves the keyboard where it was. A document is open once; opening it again goes to it.
+- **A pane says it is loading**, never shows an empty chat meanwhile. Opening a chat hands focus to its composer; a file viewer takes the keyboard once its editor has drawn, unless focus has moved.
+
+**Tabs**
+
+- **A pane of chats or a viewer's column holds documents as tabs**, its header the tab row; a lone document is a row of one. Where you are is text alone: the active tab at the current weight with its ×, the others grey.
+- **Switching moves nothing**: tabs keep their order and their bold width; drafts and scroll are kept per document.
+- **Chat tabs group by place**, the place named once in caps. A full row drops the tab used longest ago, never the one showing or one with a draft; closing the active tab goes to the one used last. Headers fold, then truncate.
+- **A file viewer can stand empty** ("No file open") and split into two columns; a chat pane cannot stand empty.
+
+**Dragging, the dock and the window**
+
+- **Anything that opens can be dragged**, and a drop says what it will do: the target washes the band it lands in and a pill names the result. An edge opens a new pane; the middle replaces, joins as a tab, or swaps two panes; a drop that would do nothing does not wash.
+- **The rail opens the dock**, one tool at a time; pressing the open tool closes it. Files follows the pane with the keyboard. Tools open in the dock by default; Alt or dragging opens one as a pane. Any pane can move into the dock (its header, the leader's D, or dragging) and back, keeping its document, state and tabs, with a rail icon of its own; pane A docks only while another can take its place. The dock sits beside the panes or over them, per device.
+- **A pane's swap and close** sit once at its right edge.
+- **The layout is in the address**: every pane, tab and column is in the URL; Back restores it, a copied link reproduces it.
+- **Resizing holds the content still.** Pressing a handle moves nothing, not a pixel. While dragging, a transcript keeps its shape and slides to stay centred until it would clip, then reflows keeping the reader's place; releasing lays it out once.
+- **Panes ease; documents don't travel.** Opening eases the others to their new widths, then fades the pane in; closing fades it out, then the rest ease into its room; a swap holds both panes' last frames until loaded, then crossfades. None of this on first load, Back, a phone or reduced motion.
 
 # Keyboard
 
 One model for every surface, so no surface grows keys of its own.
 
-- **Regions.** The app is a tree of regions (sidebar, panes, dock, and what is inside them) following focus. Shortcuts resolve innermost region first, then outward.
-- **Go to a region.** Ctrl+Shift+1/2/3 (⌘⇧ on a Mac) go to the sidebar, the panes and the dock in screen order. They open and focus, never close. Ctrl+B and Ctrl+. stay plain show/hide toggles. Arriving shows held focus (Anywhere).
-- **The leader acts where you are.** Ctrl+G, then a key: only actions within the current region, looked up innermost first and then outward. Its menu lists the current region's keys; a key that would do nothing is not listed. Numbers inside a region mean positions, never other regions.
-- **Moving in a list.** ↑/↓ move, skipping headings; Home/End go to the ends; →/← step into and out of a level; Shift+↑/↓ extends a selection; Menu or Shift+F10 opens the row's menu. Pointer and keyboard move the one cursor.
-- **↑ from the top reaches the switch above.** A list headed by a segmented switch takes ↑ from its first row onto the switch's chosen side; ←/→ move between sides, ↓ returns.
-- **Tab is one stop per section**, landing where the cursor last was.
-- **Enter acts.** Opening a chat hands focus to its composer.
-- **Esc steps outward** a level at a time, and from the top of a region goes home to the composer: pressing Esc enough always gets back to typing.
-- **A key on a bare pane goes somewhere**: typing, Enter and Esc to the composer, arrows into the list.
-- New global chords go in the settings shortcut manager; every scoped key can be found in the leader under its region.
+- **Regions.** The app is a tree of regions following focus; shortcuts resolve innermost first, then outward. Ctrl+Shift+1/2/3 go to the sidebar, the panes and the dock, opening and focusing, never closing; Ctrl+B and Ctrl+. stay plain toggles.
+- **The leader** (Ctrl+G, then a key) acts within the current region, innermost first, and lists only keys that would do something. Numbers inside a region mean positions, never other regions.
+- **Lists:** ↑/↓ move skipping headings, Home/End, →/← into and out of a level, Shift+↑/↓ extends, Menu or Shift+F10 opens the row's menu. ↑ from the top reaches a segmented switch above.
+- **Tab** is one stop per section, landing where the cursor last was; entering a page puts focus in its composer. **Enter** acts. **Esc** steps outward a level at a time and always gets back to the composer. A key on a bare pane goes to the composer or the list.
+- **New global chords** go in the settings shortcut manager; every scoped key is findable in the leader under its region.
+- **Held focus.** A region reached by a go-to shortcut shows a thin `ring` line along its bottom edge, the rest dimming briefly; it stays while focus is in it or nowhere, and goes when focus reaches another region another way. A click or Tab never lights one. Not on a phone.
 
-# Components
+# Transcript
 
-Grouped by the surface they live on (Surfaces). Every row in every group follows Interaction.
+**Nothing moves once drawn**, at every width and pixel density:
 
-## Frost
+- Every block holds its real height before it is drawn, so scrolling back or a reload's fade moves nothing.
+- Starting or ending an interaction (pressing a handle, opening a panel, hovering) shifts no text, not even a device pixel.
+- Only the reader (opening a trace, a resize) and the tail spring following new content move an answer.
 
-**Frost chrome (signature, use more of it)** — composer, user bubbles, header pill, scroll-to-latest, and future floating toolbars or hero surfaces. When something floats over content or marks the primary action area, default to frosted glass before a solid card. Do not frost a list, a tree or a row.
+A "sizzle" -- text that shifts and settles -- is a broken rule: find the structure that changes geometry, not a delay that hides it. docs/TESTING.md has the probes.
 
-**Leader menu** — what Ctrl+G can do from where you are, shown after a pause. The page dims except the current region, which stays lit. A small frost card above the composer: the region path as a breadcrumb along the top, left-aligned and alone (no leader keycap), action rows with keycaps at the left, the go-to chords in the rail (no Esc: leaving needs no prompt).
+- **Answer.** Markdown with no bubble at the body role, in a gutter the composer shares. One gap between blocks and none outside the first and last. Wide tables and code may grow past the column up to the composer's gutters, centred, then scroll inside themselves; the page never scrolls sideways. Links are the text colour with a muted underline; everything else is monochrome but code's syntax colours. The transcript's scrollbar is hidden; panes that scroll as ledgers keep thin thumbs.
+- **Formulas.** A display formula is centred; one wider than the column starts at its left and scrolls, never clipped at both ends. Inline math sits on the baseline at the text's size. Partial TeX never shows raw, and a drawn formula never blinks out.
+- **Code blocks** fold when long (a fading cut, a foot saying how many lines it hides); the caption stays pinned while the block scrolls by. **Copied** turns Copy's icon to a check and washes what was copied with the tint, fading -- never a ring or a toast.
+- **Streaming** appears at a steady pace, not in network bursts; the optional fade is opacity, never colour. An answer's actions and time wait until it has finished appearing. A stopped answer inside a formula draws what was written of it.
+- **Message time** is a muted caption at the head of the message's action row, never a line of its own.
+- **Trace.** Every turn that answers has a trace header, live and settled: the orb, then `Status · time · work`, and the trail's latest line under it, held open while live. A turn starts as its header. A turn with no thinking or tools is its first line alone. A stopped turn is one row: Interrupted, with discarded text struck under "Not kept".
+- **Thinking orb.** Its motion says what the turn is doing; changes hold briefly and crossfade, so bursts don't flicker and no frame is empty. Settled, it turns slowly for Done and sputters in `destructive` for Interrupted and Failed. Every orb shares one frame loop; reduced motion is a still frame. Frames: `docs/design/orb-catalogue/`.
+- **Trace trail.** The opened trace: one light line per step, no boxes; repeated steps of one kind are one line; any line opens in place to its output or text.
+- **Harness prompt.** A turn the harness started itself opens on one muted line with a bell where the prompt sits, with no bubble and no actions.
+- **Disclosure.** Everything that folds is one piece: a header, one turning chevron, a body that unfolds in height and folds to nothing. Opened at the tail, it lets go of the tail rather than being chased.
 
-**Dropdown menu** — the common case: sessions, shortcuts, overflow, context menus, submenus and popovers. The overlays' frost and `{rounded.surface}`. A section label, then one-line rows: an optional leading mark, the title at the row role, muted meta inline at the right, trailing icon actions that appear with the row on hover or focus (always on touch). The whole row takes the wash. A single footer action ("+ New …") under a hairline. Something edited in place opens as an inline form in its row and saves on Done; use a popover rather than a menu when rows hold inputs. A one-field rename stays a dialog.
+# Pieces
 
-Choosing in a menu:
+What each kind of piece does; how it looks is its gallery family.
 
-- **The current choice is bold, not a tick** (Interaction).
-- **No notes in menus.** A choice that cannot be picked here is dimmer and struck through, and that says enough.
-- **No Manage rows.** Settings are reached from Settings, not from a picker.
-- **Search opens the palette.** A menu over a long list starts with a "Search all …" row that opens the matching palette, not an inline field.
-- **Stay open for the next choice** when the follow-up is in the same menu; a choice that ends the task closes it.
-- **Ordered choices are a slider** whose label opens a submenu of the levels.
-- **A list that is not a menu still uses menu rows**: a pick list with a search at its head is `PopoverSearchList`, whose rows are the shared `menu-row`, and the search keeps focus while the arrows walk the rows.
-- **A tap ends where it lifts.** When a tap changes what a menu shows, the mouse events a phone sends after it are dropped.
+- **List row.** Follows Interaction exactly. In the sidebar the current row and the folder or workspace holding it are white at the current weight, so where you are reads up the tree. A pinned row looks like its unpinned row. A sidebar action is a row, not a small button by a heading, and is also on the collapsed rail.
+- **Menu.** A section label, then one-line rows: an optional mark, the title, muted meta at the right, trailing actions that appear on hover or focus (always on touch). One footer action ("+ New …") under a hairline. Use a popover rather than a menu when rows hold inputs.
+- **Choosing in a menu.** The current choice is bold, not ticked. A choice not available here is dimmed and struck through, with no note. No Manage rows: settings are reached from Settings. A menu over a long list starts with "Search all …", which opens the matching palette. It stays open when the follow-up is in the same menu. Ordered choices are a slider whose label opens the levels. A pick list that is not a menu still uses menu rows, the search keeping focus while the arrows walk them. Something edited in place is an inline form in its row; a one-field rename is a dialog. A tap ends where it lifts.
+- **Dialog.** A narrow frost card over the dim, centred, small on a phone too. The title and the choice, nothing else: no line repeating the title; a detail only when it asks something; a one-field prompt drops its label. An input is a hairline that brightens on focus. The primary action a white outline, the others a ghost outline, a destructive confirm filled red.
+- **Settings list.** The sidebar's language, not tiles: section labels over one-line rows, no box, no dividers between rows, one light hairline between groups. A value is quiet (a select is its muted value and a chevron); descriptions go in a title. Every row's control sits in one column of one width, and the name truncates before the control. Buttons are ghost unless they are the one action waiting. Focus anywhere in a row is the row's wash.
+- **Segmented choice** for two to four named peers; a long or open list stays a select. **Switch** for on or off; a checkbox is for choosing items, not settings.
+- **Composer.** Controls in tiers by how often they are reached for: the model and the primary slot at full weight, settings showing their value muted, folding into the + as the composer narrows, least used first, and coming back exactly when they fit. The primary slot is one fixed button: Send, Stop while the agent works, Send again with Stop beside it once a draft is typed. Nothing in the row is a white filled button; recording, the mic breathes, with no fill, ring or colour. On a phone: +, the draft, mic and the primary slot, every setting in the + menu.
+- **Takeover.** Anything the agent is blocked on (questions, approvals, choices) replaces the composer in its slot rather than stacking above it, and never scrolls inside itself. One question at a time, several as tabs ending in a Submit tab that summarises them; answers are numbered one-line rows, a typed answer last. It takes the keyboard (arrows, a number or Enter chooses, Tab turns the page), and Esc dismisses (a dismissed approval is a denial). A single question with a single answer skips the tabs.
+- **User bubble.** A message being edited goes muted and italic in its bubble with no outline, and a frost "Cancel editing" pill floats above the composer.
+- **Attachment strip.** Every attachment for the draft in one short strip directly above the composer: images as thumbnails, files as chips. Remove on hover or focus (always on touch); uploading a thin ring; failed a red outline with retry. More scroll sideways, fading at the edge.
+- **Toast.** One sentence about what just happened, never a second line or a title: its kind a glyph in the state's colour, at most one action, a ×. Bottom right on desktop, the top on a phone.
+- **Leader menu.** What Ctrl+G can do from here, shown after a pause: a small frost card above the composer, the page dimmed but the current region. The region path along its top, rows with keycaps at the left, the go-to chords in its rail.
+- **Pane header.** The document's name or tab row at the left; its modes as a segmented switch; quiet ghost controls at the right in the order they are reached for, folding into a ⋯; the pane's swap and close last.
+- **Workspace rail.** Mirrors the sidebar's collapsed rail on the right edge: one icon per tool, the dock's tool current; chat search and the palette below a hairline. It is out of the tab order; the tool keys and Ctrl+Shift+3 reach the dock.
+- **Harness mark.** Greyed with its row; its own colour on the cursor or the current row. Live activity or an unread reply shows in its place first.
+- **Runtime dot.** Colour on the dot only, a label only when it has something to say, a spinner in its place while busy, one per surface, worst state first.
+- **App icons.** Only platform-required assets, derived from `public/favicon.svg`: the release C white on black, every dev build inverted; the Windows caption keeps the icon but no text. The Conduit mark is `public/brand/conduit-mark.svg`.
 
-**Composer row** — the controls under the draft, in tiers by how often they are reached for mid-conversation. Nothing leaves the row; lower tiers get quieter, not hidden, and desktop controls never squeeze. The model chip and the primary slot are the only controls at full weight; settings show their value muted. The row starts with a +, which holds Attach and the project the chat lives in, and the controls fold into it as the composer narrows rather than squeezing, least used first: permissions and service level, then the profile, the context and last the model. Each comes back exactly when it fits again, and in the menu it opens a submenu as on a phone. On a phone: +, the draft, mic and the primary slot, every setting in the + menu showing its value. The primary slot is one fixed-size button -- Send, Stop while the agent works, Send again once a draft is typed with Stop beside it. Stop is a small solid rounded square in the text colour; nothing in the row is a white filled button. Recording, the mic breathes between the text colour and muted -- no fill, ring or colour.
+# Intentional exceptions
 
-**Composer takeover** — anything the agent is blocked on until the user answers: questions, approvals, choices. It replaces the composer in its slot and material rather than stacking above it, and never scrolls inside itself. One question at a time: several are tabs ending in a Submit tab that summarises the answers; answers are numbered one-line rows, a typed answer the last of them. It takes the keyboard while up -- arrows, a number or Enter chooses, Tab turns the page, Esc dismisses (a dismissed approval is a denial). A single question with a single answer skips tabs: choosing is answering.
-
-**User bubble** — frosted glass, `{rounded.message}`, right-aligned, in the composer's material family. A message being edited goes muted and italic in its bubble with no outline, and a frost "Cancel editing" pill floats above the composer. Assistant text has no bubble.
-
-**Attachment strip** — every attachment for the draft in one short strip directly above the composer, in the queued pill's width and material: images as cropped thumbnails, files as chips with type icon, name and size. Remove on hover or focus (always on touch); uploading a thin progress ring; failed a red outline with retry. More chips scroll sideways with a fade at the edge; a quiet ⤢ opens the full list (a bottom sheet on a phone).
-
-**Toast** — one sentence about what just happened, raised frost at the window's edge: bottom right on desktop, the top on a phone (clear of the composer and keyboard). Its kind is a glyph in the state's colour, never a fill (success live, warning warn, error destructive, info muted); an action under the sentence when there is one thing to do; a × to dismiss. Never a second line or a title.
-
-**Dialog** (`FrostDialog`) — confirms and small prompts: a narrow frost card over the dim, centred, small on a phone too. The title and the choice, nothing else: no line saying what the title already does ("It can't be brought back" under Delete); a detail only when it asks something (type the name to confirm); a one-field prompt drops its label. An input is a faint hairline that brightens on focus, never a ring. Its buttons: the primary action (Save, Continue) a white outline, the others (Cancel, Back) a ghost outline, a destructive confirm (Delete) filled red.
-
-**Input-quiet** — borderless inside frost composer or palette search.
-
-## Pane
-
-**List row** — transparent, `{rounded.control}`, follows Interaction exactly. In the sidebar every row rests at one weight; the current row and the folder or workspace holding it are white at the current weight, so where you are reads up the tree. A pinned row looks exactly like its unpinned row. Never an inset coloured bar.
-
-**Sidebar action** — an action of the sidebar is a row, not a small button beside a heading, and is also on the collapsed rail.
-
-**Settings list** — the sidebar's language, not tiles: no box, no dividers between rows, one light hairline between groups. Section labels over one-line rows at the row role. A value is quiet (a select is its value in muted text and a small chevron); state that matters sits muted after the name; descriptions go in a title. Every row's control sits in one column of one width so they line up, and the name truncates before the control does. Buttons are ghost unless they are the one action waiting. Focus anywhere in a row is the row's wash.
-
-**Segmented choice** — two to four named peer choices: a hairline box, the current option under the gray wash, which slides to the next. Never a colour, never a tick. A long or open list stays a select.
-
-**Switch** — on or off: a small pill, near-white track with a dark knob when on, gray when off. A checkbox is for choosing items, not settings.
-
-**Input-bordered** — 1px hairline inside settings and forms, `{rounded.control}`, as tall as its row needs.
-
-**Workspace rail** — mirrors the sidebar's collapsed rail on the right edge, on the frame: one icon per tool, grey at rest, the wash as the cursor, the dock's tool current. Below a short hairline, chat search and the command palette; while panes are open, Equalise and Layouts at its foot. It is out of the tab order; the tool keys and Ctrl+Shift+3 reach the dock.
-
-**Pane header** — shares the top line of the app. A document's name or its tab row at the left; its modes as a segmented switch; quiet ghost controls at the right in the order they are reached for, grouped by short hairlines, folding into a ⋯ rather than scrolling; the pane's swap and close last.
-
-**Tiled pane (legacy)** — hairline, `{rounded.surface}`, flat. Being retired for lists; not for new surfaces.
-
-## Transcript
-
-**Answer** — the assistant's Markdown, with no bubble, filling the reading column, in the Body role: the user's message's size, so both follow Text size together. A gutter keeps it off the pane's edges, and the composer shares that gutter, so an answer and the composer line up on both sides.
-
-- *Rhythm.* There is one gap between blocks, everywhere. An answer's first and last blocks have no outer margin, so its height is its content and the action row sits the same distance below every answer.
-- *Wide content.* A table or a wide code block may grow past the reading column, up to a set multiple of it. It stays centred on the column, and it never goes past the gutters the composer keeps. A block narrower than the column fills it, so its edges line up with the prose. Anything still too wide scrolls inside itself; the page never scrolls sideways.
-- *Formulas.* A display formula is centred in the column. One wider than the column starts at its left edge and scrolls sideways; it is never clipped on both ends. Inline math sits on the text's baseline at the text's size. A formula is drawn from the moment it is readable: partial TeX never shows as raw text, and a formula already drawn never blinks out while the next one arrives.
-- *Code blocks* (CodeBlock) are a box with a --tint line. The caption has the language, where the line numbers start, and Copy at the end, which is an icon-xs ghost button. A long block folds: its cut fades, a foot says how many lines it hides, and a chevron beside Copy opens it. The caption stays pinned while the block scrolls by.
-- *Copied* (CopyButton): Copy's icon becomes a check in the foreground for about 1.2s, and what was copied gets a --tint wash that fades out over 0.7s. It is never a ring and never a toast. With reduced motion, the check alone.
-- *Links* are the text colour with a muted underline, and code keeps its syntax colours (Forbidden color). Everything else in an answer is the pane's monochrome.
-
-**Streaming** — an answer appears at a steady pace, not in network bursts. The Fade option fades each new word in, over a duration set per device, by its opacity and never its colour. Formulas grow piece by piece as they arrive. With "Fade formulas in when complete", a formula is held while it is open, then fades in whole once it closes. An answer's actions and its time wait until it has finished appearing, then fade in, rather than riding the bottom of the stream. A stopped answer that ends inside a formula draws what was written of it.
-
-**Nothing moves once drawn.** This is the transcript's stability rule, and it holds at every width and pixel density:
-
-- Every block holds its real height before it is drawn, so content scrolled out of view and coming back, or a reload's fade-in, moves nothing once the fade starts.
-- Starting or ending an interaction (pressing a handle, opening a panel, hovering) shifts no text, not even by a device pixel.
-- The only things that move an answer are the reader asking for it (opening a trace, a resize) and the tail spring following new content.
-
-A "sizzle", text that shifts and settles, is a broken rule here, not a tuning matter: look for the structure that changes geometry, not a delay that hides it.
-
-**Message time** — muted caption at the head of a message's action row, never a line of its own.
-
-**Trace header** — every turn that answers has one, live and settled. The first line is the orb, then `Status · time · work`: status one verb (what the running tool is doing, Thinking, Writing; settled Done, Interrupted or Failed); time muted and tabular, ticking while live; work as single-word counts by kind, most used first. The second line is the trail's latest line, muted and cut to one line, held open while the turn runs so nothing jumps. A turn with no thinking and no tools is its first line alone, with nothing to open.
-
-**Thinking orb** — the trace header's mark: a dotted orb whose motion says what the turn is doing (connecting, thinking, searching, reading, editing, running, writing). Changes hold briefly and crossfade, so a burst of tool calls does not flicker it and there is never an empty frame. Settled, it turns slowly for Done and sputters in `{colors.destructive}` for Interrupted and Failed. Every orb shares one frame loop and a settled one draws at a low rate. Reduced motion is a still frame. The frames are catalogued in `docs/design/orb-catalogue/contact-sheet.html`.
-
-**Trace trail** — the opened trace: one light line per step, no boxes. A tool step is its kind's icon (a spinner while running), a verb in present or past tense, its subject in muted mono and its duration right-aligned; failed and stopped steps say so. Repeated steps of one kind in a row are one line. Any line opens in place to its output or full text. Sizes sit a step under the answer (0.8125 of the unit on both densities, at the transcript's scale), the orb a ring's size centred on the header's two lines.
-
-**Harness prompt** — a turn the harness started itself opens on one muted line with a bell where the prompt sits, right-aligned, with no bubble and no actions.
-
-**Disclosure** — one component for everything that folds (`chat/disclosure.tsx`; its shape is v2's `Disclosure`, its unfolding the app's): a header, one turning chevron, and a body that unfolds in height and folds to nothing, gap included. Opened at the transcript's tail it lets go of the tail rather than being chased.
-
-## Anywhere
-
-**Harness mark** — rests greyed with its row, and shows its own colour on hover, focus, or the current chat. Live activity or an unread reply shows in its place first. The Conduit mark is `public/brand/conduit-mark.svg`.
-
-**App icons** — derive only platform-required assets from `public/favicon.svg`: release C is white-on-black, all dev artifacts (Windows and Android) invert it to black-on-white; the Windows caption keeps the icon but no text.
-
-**Runtime dot** — live green / warn amber / danger red / muted, colour on the dot only. A healthy indicator is the dot alone; it gains a label only when it has something to say, and a busy state is a small spinner in its place. One indicator per surface, worst state first.
-
-**Held focus** — a region reached by a go-to-region shortcut shows a thin line along its bottom edge in the near-neutral `{colors.ring}` tone, fading at both ends; the regions' bottoms line up, so it reads as one baseline with the held region lit. On arrival the rest of the app dims briefly around it. It stays while focus is in that region or in none (a menu, a dialog), and goes when focus reaches another region any other way; a click or Tab never lights one. Not on a phone.
-
-# Catalogue
-
-Every canonical component, where it lives and what varies. A change to one updates its source, its gallery entry and its row here together. "Gallery" is the entry's anchor on the gallery canvas (`npm run gallery`).
-
-| Component | Source | Surface | Variants | Gallery |
-| --- | --- | --- | --- | --- |
-| Button | `components/primitives.tsx` | any | ghost, outline, default; icon sizes | — |
-| Spinner | `components/primitives.tsx` | any | size | — |
-| Menu, ContextMenu (+ Sub, Radio, Label, Separator) | `components/primitives.tsx` | frost | phone panels via `PhoneMenuSubmenu` | `#menu` |
-| Popover, PopoverSearchList | `components/primitives.tsx` | frost | — | — |
-| Tooltip | `components/primitives.tsx` | frost | — | — |
-| Field, FieldGroup, FieldLabel, Input, Textarea | `components/primitives.tsx` | pane, frost | bordered, quiet | — |
-| FrostDialog, FrostOverlay | `components/frost.tsx` | frost | narrow, wide | — |
-| Keycap | `components/frost.tsx` | frost | — | — |
-| Frost material | `.composer-surface-material` + `chat/composer-surface.ts` | frost | static, frosted-live | `#material` |
-| Segmented choice | `settings/settings-controls.tsx` | pane | 2-4 options | — |
-| Switch | `settings/settings-controls.tsx` | pane | — | — |
-| Disclosure | `chat/disclosure.tsx` | transcript, pane | — | — |
-| StepSlider | `chat/step-slider.tsx` | frost, pane | — | `#slider` |
-| Runtime dot | `navigation/runtime-indicator.tsx` | any | success, warn, danger, muted, busy | — |
-
-## Intentional exceptions
-
-A component drawn its own way on purpose, with the reason. Format: **where** -- what differs -- why.
-
-- **Phone header pills** (`main.tsx` `headerPill`, sidebar header) -- buttons sharing a pill are capsules narrower than tall, concentric with it -- several controls read as one floating object over the transcript.
-
-## Known mismatches
-
-Hand-rolled copies of a canonical component, to fold in when touched. Different from Being migrated, which is about surfaces.
-
-- **Segmented choice** re-drawn as `.sidebar-area-toggle` (sidebar), `.split-heading-switches` (three dashboards) and `.workspace-history-toggle`.
-- **Menu rows** outside menus as the `.menu-row` class (terminal pane, leader palette, context gauge) without a component.
-- **Raw `<button>`s** with local styling instead of `Button`: most in the terminal pane, sidebar, `main.tsx`, command menu and Computer dashboard.
-- **Badge** is exported and unused.
-
-# Being migrated
-
-Surfaces that do not match the language yet. Do not copy them; when you touch one, move it towards its target, and take it off this list once it is there.
-
-- **Workspace panel, Computer page**: hairline tiles (Tiled pane) → the pane.
-- **Focus rings** in the workspace panel, the Computer page, and project and workspace pages (`project/dashboard.css`) → the wash.
-- **Group labels** in the system's mono (menus, the leader) or sentence-case Geist (the sidebar, the question card, the slider) → the Paper Mono section label.
-- **Leftover blue** (Forbidden color) wherever it is found.
-
-# Do's and Don'ts
-
-Do:
-
-- Design in near-monochrome charcoal. Hue only for live dots, destructive, git/data glyphs.
-- Group with a heading and space, not hairline boxes or colored surfaces.
-- Choose the surface first: frost for anything that floats, pane for where you work, frame for navigation.
-- Follow Interaction everywhere: grey at rest, the wash as the one cursor, the current item white and semibold with no fill.
-- Keep the composer at the centre of every dashboard; it is the home-screen pattern.
-- Let content set the breakpoints and minimums: controls keep their size, documents declare their minimum, and layouts change at widths measured from them -- never a px width tuned by eye.
-- Stay dark. Match existing Solid/Kobalte slots (`data-slot="button"`, menu, dialog).
-- Hide the transcript scrollbar; keep thin thumbs on panes that scroll as ledgers.
-- Respect `prefers-reduced-motion` everywhere, except the existing meteor field.
-
-Don't:
-
-- Use any blue for any purpose.
-- Put a colored left-edge sliver on selected cards, nav, or rows.
-- Follow the `frontend-design` skill's urge to add a signature accent color. Frosted glass is the signature.
-- Frost a row, a list, the workspace tree or the transcript.
-- Ship a light theme, mesh gradients, glow, or a generic SaaS card grid.
-- Center a hero of metric boxes. Conduit leads with a composer and lists.
-- Introduce a second font, icon set, or chart library for chrome.
-- Write specs here: per-component sizes, timings, exact copy, counts and fold orders belong to the code. Write the rule they follow.
-- Encode implementation gotchas (density-duplicate CSS, `-webkit-backdrop-filter` pairing, content-visibility) as visual rules; how to verify a rule goes in `docs/TESTING.md`.
+- **Phone header pills** -- buttons sharing a pill are capsules narrower than tall, concentric with it -- several controls read as one floating object over the transcript.
 
 # References
 
-Visual companions to the rules above; the rules win where they differ.
-
-- `docs/design/palette-sketch/palette-sketch.html` -- chat search, the command palette and their states (serve the repository root to open it).
+- `docs/design/palette-sketch/palette-sketch.html` -- chat search, the command palette and their states (serve the repository root).
 - `docs/design/orb-catalogue/contact-sheet.html` -- every thinking-orb frame and which state uses it.
 - `docs/design/dashboard-layout/`, `docs/design/conduit-home-dashboard/` -- the dashboard sketches.
-- `conduit-web/test/file-tabs.test.js` and `npm run smoke:panes` (`docs/TESTING.md`) -- the current pane, tab, drag and focus behaviour, asserted. A change to a rule under Panes and windows changes its test.
