@@ -1,6 +1,11 @@
 /* A line and a third of it above and below; never narrower than tall, so a word is never a sliver. Its text is the composer's inset. */
-.ui-bubble { width: fit-content; max-width: min(var(--measure-2xl), 88cqw); margin-left: auto; min-width: calc(1lh + 2 * var(--space-md)); border-radius: var(--radius-message); padding: var(--space-md) var(--space-lg); font-size: var(--text-body); line-height: var(--leading-text); white-space: pre-wrap; overflow-wrap: anywhere; }
+.ui-bubble { width: fit-content; max-width: min(var(--measure-2xl), 88cqw); margin-left: auto; min-width: calc(1lh + 2 * var(--space-md) + 2 * var(--hairline)); border-radius: var(--radius-message); padding: var(--space-md) var(--space-lg); font-size: var(--text-body); line-height: var(--leading-text); white-space: pre-wrap; overflow-wrap: anywhere; }
 .ui-bubble[data-editing="true"] { color: var(--muted-foreground); font-style: italic; }
+/* Folded: cut at the fold's last line, half a line of it fading (the cut already falls on a line; the fade only says
+   there is more). Show more under it, the foot's caption. */
+.ui-bubble-text[data-folded] { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: var(--bubble-fold); mask-image: linear-gradient(to bottom, #000 calc(100% - 0.5lh), transparent); }
+.ui-bubble-more { display: block; margin-top: var(--space-xs); border: 0; background: transparent; padding: 0; color: var(--muted-foreground); font: var(--weight-rest) var(--text-caption) var(--font-sans); cursor: pointer; }
+.ui-bubble-more:is(:hover, :focus-visible) { color: var(--foreground); }
 /* Transcript (DESIGN Transcript), at the transcript's scale. The reading column is the composer's width;
    messages a step and a half apart; a turn's parts half a unit. */
 .ui-transcript { display: flex; width: min(100%, var(--composer-width, var(--reading-width))); flex-direction: column; gap: var(--space-3xl); margin-inline: auto; }
@@ -9,7 +14,8 @@
 /* The foot: the time first, muted and tabular, then icon buttons; under a user's message, at the right. */
 .ui-message-foot { display: flex; min-height: var(--control-xs); align-items: center; gap: var(--space-2xs); color: var(--muted-foreground); font: var(--weight-rest) var(--text-caption) var(--font-sans); }
 /* An answer's foot fades in once the answer is done; a sent message fades in where it lands. */
-:is(.ui-message, .ui-message-foot)[data-entering] { animation: ui-fade-in var(--duration-gentle) var(--ease-arrive) backwards; }
+/* Its parts fade, never the message: under a fading parent the bubble's frost would not blur until the end. */
+:is(.ui-message[data-entering] > *, .ui-message-foot[data-entering]) { animation: ui-fade-in var(--duration-gentle) var(--ease-arrive) backwards; }
 .ui-message-foot > time { margin-right: var(--space-xs); font-variant-numeric: tabular-nums; }
 .ui-message-status { margin-right: var(--space-xs); color: var(--foreground); font-weight: var(--weight-strong); }
 .ui-stop-line { display: flex; align-items: center; gap: var(--space-xs); color: var(--muted-foreground); font-size: var(--text-row); }

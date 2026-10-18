@@ -287,11 +287,8 @@ svg.lucide { stroke-width: 2.4; }
 [data-transcript-visibility="collapsed"] { display: none !important; }
 [data-slot="message"] { display: flex; width: 100%; }
 [data-slot="message-content"] { display: flex; min-width: 0; max-width: 100%; flex-direction: column; gap: 3.2px; }
-.message-user { justify-content: flex-end; }
-.message-user [data-slot="message-content"] { align-items: flex-end; }
 .response-actions .response-time { flex: none; padding: 0 4.8px 0 1.6px; color: var(--muted-foreground); font-size: 8.8px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .bubble { max-width: min(512px, 88vw); border-radius: 12px; }
-.bubble-user { padding: 8px 10.4px; white-space: pre-wrap; overflow-wrap: anywhere; }
 .harness-prompt { display: flex; justify-content: flex-end; align-items: center; gap: 6px; margin: 0; color: var(--muted-foreground); font-size: 0.8125rem; }
 .harness-prompt svg { width: 13px; height: 13px; flex: none; }
 /* Folded user message.
@@ -301,19 +298,6 @@ svg.lucide { stroke-width: 2.4; }
    every current engine implements; the standard `line-clamp` is still ahead of
    the browsers this ships to. The mask fades the cut line rather than ending it
    mid-glyph, exactly as the code card does. */
-.user-message-text { display: block; }
-.user-message-text[data-collapsed="true"] {
-  display: -webkit-box;
-  overflow: hidden;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: var(--user-message-collapse-lines, 10);
-  /* Half a line, not a whole one: the clamp already cuts on a line boundary,
-     so the fade only has to say "there is more", not hide the last line. */
-  mask-image: linear-gradient(to bottom, #000 calc(100% - 0.8em), transparent);
-  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 0.8em), transparent);
-}
-.user-message-expand { display: block; margin-top: 4.8px; border: 0; padding: 0; background: transparent; color: var(--muted-foreground); font-size: 9.6px; cursor: pointer; }
-.user-message-expand:hover { color: var(--foreground); }
 
 .bubble-assistant {
   width: 100%;
@@ -544,7 +528,6 @@ svg.lucide { stroke-width: 2.4; }
 .review-comment-excerpt-fallback { margin: 0; padding: 8px 10px; color: var(--muted-foreground); font: 11px/1.5 ui-monospace, SFMono-Regular, Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
 .review-comment-excerpt-fallback mark { border-radius: 2px; background: color-mix(in oklch, var(--warn), transparent 82%); color: var(--foreground); }
 .composer-wrap > .review-comment-tray { margin-inline: 2px; }
-.message-user .review-comment-tray { justify-content: flex-end; margin-bottom: 0; }
 .chat-drop-overlay { position: absolute; inset: 0; z-index: 40; display: grid; place-items: center; pointer-events: none; background: color-mix(in oklch, var(--background), transparent 22%); backdrop-filter: blur(9.6px); }
 .chat-drop-overlay > div { padding: 14.4px 17.6px; border: 0.8px solid var(--border); border-radius: 12.8px; background: var(--card); box-shadow: 0 14.4px 48px rgb(0 0 0 / 18%); }
 /* Decorative, deterministic meteor field for the entire chat main surface. */
@@ -1017,23 +1000,8 @@ svg.lucide { stroke-width: 2.4; }
 [data-transcript-visibility="collapsed"] { display: none !important; }
 [data-slot="message"] { display: flex; width: 100%; }
 [data-slot="message-content"] { display: flex; min-width: 0; max-width: 100%; flex-direction: column; gap: 4px; }
-.message-user { justify-content: flex-end; }
-.message-user [data-slot="message-content"] { align-items: flex-end; }
 .response-actions .response-time { flex: none; padding: 0 6px 0 2px; color: var(--muted-foreground); font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .bubble { max-width: min(640px, 88vw); border-radius: 15px; }
-.bubble-user { padding: 10px 13px; white-space: pre-wrap; overflow-wrap: anywhere; }
-.user-message-text { display: block; }
-.user-message-text[data-collapsed="true"] {
-  display: -webkit-box;
-  overflow: hidden;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: var(--user-message-collapse-lines, 10);
-  /* Half a line, not a whole one: the clamp already cuts on a line boundary,
-     so the fade only has to say "there is more", not hide the last line. */
-  mask-image: linear-gradient(to bottom, #000 calc(100% - 0.8em), transparent);
-  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 0.8em), transparent);
-}
-.user-message-expand { margin-top: 6px; font-size: 12px; }
 
 .bubble-assistant {
   width: 100%;

@@ -1,9 +1,41 @@
-import { Show, type JSX } from "solid-js";
+import { createEffect, createSignal, onCleanup, onMount, Show, type JSX } from "solid-js";
 import { ChevronDownIcon, SquareIcon } from "lucide-solid";
 import { cn } from "@/lib/utils";
 import { type Motion, motionOf } from "./shared";
 
-export const Bubble = (props: { children: JSX.Element }) => <div class="ui-frost ui-bubble">{props.children}</div>;
+/**
+ * The user's words in frost. Given `fold` lines, a message that runs past them folds to them, its last line fading,
+ * "Show more" under it; `open` and `onToggle` are the caller's (opening adds height above whatever follows, so the
+ * caller holds the reading position). It measures itself, only when folded, and again when its width changes.
+ * `editing`: the message being edited, muted.
+ */
+export function Bubble(props: { children: JSX.Element; fold?: number; open?: boolean; onToggle?: (event: MouseEvent) => void; editing?: boolean }) {
+  let text!: HTMLDivElement;
+  // Folded from the first paint: measuring it unfolded would compare the text with itself and always fit.
+  const [fits, setFits] = createSignal(false);
+  const foldable = () => Boolean(props.fold) && !fits();
+  const folded = () => foldable() && !props.open;
+  const measure = () => { if (folded()) setFits(text.scrollHeight - text.clientHeight <= 1); };
+  onMount(() => {
+    if (!props.fold) return;
+    let width = text.clientWidth;
+    const resized = new ResizeObserver(() => {
+      if (text.clientWidth === width) return;
+      width = text.clientWidth;
+      setFits(false);
+      requestAnimationFrame(measure);
+    });
+    resized.observe(text);
+    onCleanup(() => resized.disconnect());
+    measure();
+  });
+  // A new fold: fold again, then measure once that has drawn.
+  createEffect(() => { if (props.fold && !props.open) { setFits(false); requestAnimationFrame(measure); } });
+  return <div class="ui-frost ui-bubble" data-editing={props.editing ? "true" : undefined}>
+    <div ref={text} class="ui-bubble-text" data-folded={folded() ? "" : undefined} style={props.fold ? { "--bubble-fold": props.fold } : undefined}>{props.children}</div>
+    <Show when={foldable()}><button type="button" class="ui-bubble-more" aria-expanded={Boolean(props.open)} onClick={(event) => props.onToggle?.(event)}>{props.open ? "Show less" : "Show more"}</button></Show>
+  </div>;
+}
 
 /*
  * Transcript (DESIGN Transcript): what is read, at the transcript's scale. A Turn is its trace header, the
@@ -22,16 +54,24 @@ export function Disclosure(props: { header: JSX.Element; open?: boolean; onToggl
 }
 /** A message's action row: its time first, muted and tabular, then its actions (icon-xs ghost buttons). status: how
  *  the answer ended when it did not finish (Interrupted, Stopping…), after the time. */
-export const MessageFoot = (props: { time: string; status?: string; end?: boolean; motion?: Motion; children?: JSX.Element }) =>
-  <div class="ui-message-foot" data-end={props.end ? "" : undefined} {...motionOf(props.motion)}><time>{props.time}</time><Show when={props.status}><b class="ui-message-status">{props.status}</b></Show>{props.children}</div>;
+export const MessageFoot = (props: { time?: string; dateTime?: string; title?: string; status?: string; end?: boolean; motion?: Motion; children?: JSX.Element }) =>
+  <div class="ui-message-foot" data-end={props.end ? "" : undefined} {...motionOf(props.motion)}><Show when={props.time}><time dateTime={props.dateTime} title={props.title}>{props.time}</time></Show><Show when={props.status}><b class="ui-message-status">{props.status}</b></Show>{props.children}</div>;
 /** In an answer's place, one stopped before writing any: the stop mark, Interrupted, and when. */
 export const StopLine = (props: { detail: string }) =>
   <div class="ui-stop-line" role="status"><SquareIcon aria-hidden="true" /><b>Interrupted</b>{`\u00a0· ${props.detail}`}</div>;
 /** A turn: the trace header, the answer and its foot, one gap apart. */
 export const Turn = (props: { children: JSX.Element }) => <article class="ui-turn">{props.children}</article>;
-/** The user's message: its Bubble and, under it at the right, its foot. */
-export const Message = (props: { time: string; actions?: JSX.Element; motion?: Motion; children: JSX.Element }) =>
-  <article class="ui-message" {...motionOf(props.motion)}><Bubble>{props.children}</Bubble><MessageFoot time={props.time} end>{props.actions}</MessageFoot></article>;
+/**
+ * The user's message: its Bubble (none when it is only attachments), what came with it (`under`: attachments,
+ * references), and its foot at the right. fold, open, onToggle and editing are the Bubble's; time, dateTime and
+ * title the foot's.
+ */
+export const Message = (props: { time?: string; dateTime?: string; title?: string; actions?: JSX.Element; under?: JSX.Element; fold?: number; open?: boolean; onToggle?: (event: MouseEvent) => void; editing?: boolean; motion?: Motion; children?: JSX.Element }) =>
+  <article class="ui-message" {...motionOf(props.motion)}>
+    <Show when={props.children}><Bubble fold={props.fold} open={props.open} onToggle={props.onToggle} editing={props.editing}>{props.children}</Bubble></Show>
+    {props.under}
+    <MessageFoot time={props.time} dateTime={props.dateTime} title={props.title} end>{props.actions}</MessageFoot>
+  </article>;
 /** The reading column: the composer's width, its gutter, one gap between messages. */
 export const Transcript = (props: { children: JSX.Element; class?: string }) => <div class={cn("ui-transcript", props.class)}>{props.children}</div>;
 
