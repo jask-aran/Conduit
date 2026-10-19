@@ -8,9 +8,10 @@ import {
   readCookie,
   safeRedirectTarget,
 } from "../../auth-middleware.js";
-import { renderLoginPage } from "../../auth-login-page.js";
+import { createLoginPageRenderer } from "../../auth-login-page.js";
 
-export function registerAuthRoutes(app, { authStore, socketTickets }) {
+export function registerAuthRoutes(app, { authStore, socketTickets, clientDist }) {
+  const renderLoginPage = createLoginPageRenderer(clientDist);
   const loginRateLimiter = createRateLimiter();
   const authenticate = async (request, response, { native = false } = {}) => {
     const password = String(request.body?.password || "");

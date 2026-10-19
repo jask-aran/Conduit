@@ -452,7 +452,11 @@ applies a global cap: after five failures the next attempt is rejected with
 exponential backoff (5 s → 5 min); scrypt compare runs even on throttled paths
 so timing reveals nothing.
 
-- `GET /login` — server-rendered HTML form, no SPA code
+- `GET /login` — server-rendered HTML form, no SPA code. The normal Vite build
+  generates its HTML from the v2 `PasswordSignIn` and `ConnectionScreen`
+  components, with the same colour, type and control tokens as the app. It
+  works without JavaScript. A custom `CONDUIT_CLIENT_DIST` must include the
+  build's `access/templates.json` and its referenced `/assets/` files.
 - `POST /v0/auth/login` — accepts `application/json` (SPA fetch) or
   `application/x-www-form-urlencoded` (plain form POST); on success issues the
   cookie and returns `303 → after` (form) or `{ ok, redirect }` (JSON). Wrong

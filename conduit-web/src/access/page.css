@@ -1,0 +1,5 @@
+/* Document reset for the standalone, server-rendered v2 access page. */
+:root { color-scheme: dark; }
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--frame); }
+button, input { font: inherit; }

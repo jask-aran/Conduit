@@ -49,6 +49,29 @@ actions and exit. The animated `[data-sonner-toast]` must itself be the
 `.ui-frost.ui-toast-frame`; its embedded `.ui-toast` has no second frost.
 Check through the entrance and dismissal, not only once the toast settles.
 
+### Connection and access screens
+
+Gallery → Connection covers the plain password form, credential and rate-limit
+errors, first connection, server state indicators, collapsed control, desktop
+route submenu, phone route panel and root recovery. Menu demos have no server
+switching or sign-out side effects. Their submit handlers do not send passwords.
+
+`GET /login?after=%2Fchat%2Fexample` shows the built v2 sign-in form without
+signing out the current session. It must load its hashed CSS without a session,
+contain no scripts, focus Password, and retain `/chat/example` in the hidden
+`after` field. Use the existing isolated auth tests for authentication changes;
+do not test wrong passwords or rate limiting against the user's live server:
+
+```bash
+node --test --test-name-pattern='unauthenticated routes|login flow|login redirect target' test/auth-server.test.js
+```
+
+The auth fixture serves the generated `dist/access` template and its assets
+alongside its tiny SPA. Build first, as CI does. For phone menu checks, use
+Chrome CLI `emulate --viewport '412x860x2.625,mobile,touch'`; window resizing
+alone does not set the coarse-pointer layout. Check opening-tap consumption,
+Escape back to the parent, disabled choices, keyboard focus and selection.
+
 ### Swapping a piece to v2
 
 The bar is no visual change the swap didn't intend. Start with

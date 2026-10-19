@@ -12,3 +12,20 @@
 .ui-camera video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 .ui-camera-frame { position: relative; width: min(100%, var(--measure-sm)); aspect-ratio: 1; border: var(--stroke) solid var(--foreground); border-radius: var(--radius-surface); }
 .ui-camera p, .ui-camera > .ui-button { position: relative; margin: 0; padding: var(--space-sm); color: var(--foreground); background: var(--background); font-size: var(--text-caption); text-align: center; }
+
+.ui-connection-screen { display: grid; min-height: var(--app-height, 100dvh); width: 100%; align-content: center; justify-items: center; box-sizing: border-box; overflow: auto; padding: calc(var(--space-xl) + var(--safe-area-inset-top, env(safe-area-inset-top, 0px))) var(--space-xl) calc(var(--space-xl) + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))); background: var(--frame); color: var(--foreground); font: var(--text-body)/var(--leading-text) var(--font-sans); }
+.ui-connection-screen[data-embedded] { min-height: var(--measure-lg); }
+.ui-connection-password { display: flex; gap: var(--space-sm); align-items: center; }
+.ui-connection-password > .ui-input { min-width: 0; flex: 1; }
+.ui-connection-error { margin: 0; color: var(--destructive); font-size: var(--text-caption); line-height: var(--leading-row); overflow-wrap: anywhere; }
+.ui-server-control { display: flex; width: 100%; min-width: 0; height: auto; min-height: var(--control); gap: var(--space-sm); padding: var(--space-xs) var(--space-sm); text-align: start; }
+.ui-server-copy { display: flex; min-width: 0; flex: 1; flex-direction: column; }
+.ui-server-copy > strong, .ui-server-copy > small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ui-server-copy > strong { font-size: var(--text-row); font-weight: var(--weight-strong); line-height: var(--leading-tight); }
+.ui-server-copy > small { color: var(--muted-foreground); font-size: var(--text-caption); font-weight: var(--weight-rest); line-height: var(--leading-row); }
+.ui-server-control > .ui-status { flex: none; }
+.ui-server-control[data-compact] { width: var(--control); height: var(--control); justify-content: center; margin-inline-start: auto; padding: 0; }
+.ui-server-control[data-compact] > .ui-server-copy { display: none; }
+.ui-connection-recovery { display: grid; width: 100%; max-width: var(--measure-xl); gap: var(--space-lg); }
+.ui-connection-recovery h1 { margin: 0; font-size: var(--text-heading); font-weight: var(--weight-strong); line-height: var(--leading-tight); }
+.ui-connection-recovery p { margin: 0; overflow-wrap: anywhere; font-size: var(--text-body); line-height: var(--leading-text); }

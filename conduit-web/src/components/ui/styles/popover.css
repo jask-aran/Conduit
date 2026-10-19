@@ -74,3 +74,19 @@
 .ui-keys[data-first] { display: inline-flex; min-width: calc(2 * var(--control-xs)); flex: none; gap: var(--space-xs); }
 
 .ui-menu-action > :is(svg, img), .ui-menu-action > :first-child:not(:last-child) { width: var(--icon); height: var(--icon); flex: none; }
+
+.ui-menu { max-width: calc(100vw - var(--space-xl)); }
+.ui-menu-parent { display: flex; flex-direction: column; transition: filter var(--duration-quick) var(--ease-change); }
+.ui-menu-parent[data-under] { filter: var(--dim-under); }
+.ui-menu-parent[data-under] > *, .ui-menu[data-settling="true"] * { pointer-events: none; }
+.ui-menu-panel { pointer-events: auto; position: fixed; z-index: calc(var(--layer-dialog) + 1); width: var(--measure-md); max-height: var(--measure-2xl); overflow: auto; }
+.ui-menu-note { margin: 0; padding: var(--row-pad); color: var(--muted-foreground); font-size: var(--text-caption); line-height: var(--leading-row); white-space: normal; overflow-wrap: anywhere; }
+.ui-menu-note[data-error] { color: var(--destructive); }
+.ui-row > .ui-label[data-stacked] > small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+@media (prefers-reduced-motion: reduce) { .ui-menu-parent { transition: none; } }
+
+/* Menu material and separators belong to the library, including previews. */
+.ui-menu .ui-rule { height: var(--hairline); margin: var(--frost-inset) calc(-1 * var(--frost-inset)); border: 0; background: var(--tint); }
+.ui-frost.ui-menu { padding: var(--frost-inset); border-radius: var(--radius-surface); }
+.ui-frost.ui-menu[data-lift="raised"] { box-shadow: var(--frost-lift-raised), var(--frost-highlight); }

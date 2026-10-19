@@ -11,7 +11,7 @@ import { createFullscreenPortalMount } from "./primitives";
  * mouse events follow. These panels are ordinary state instead, and the rules
  * below are what made that safe in the composer's options.
  */
-export function createPhoneMenuPanels<Panel extends string>(root: Panel, open: () => boolean) {
+export function createPhoneMenuPanels<Panel extends string>(root: Panel, open: () => boolean, childSelector = ".phone-menu-submenu") {
   const [panel, setPanel] = createSignal<Panel>(root);
   /* A tap that changes the panel lands on pointerup, and the panel changes
      under the finger -- but the same tap's compatibility mouse events follow,
@@ -67,7 +67,7 @@ export function createPhoneMenuPanels<Panel extends string>(root: Panel, open: (
   };
   /** For the menu's onPointerDownOutside: the child is portaled, so a touch in it is not "outside". */
   const keepForChild = (event: Event) => {
-    if (event.target instanceof Element && event.target.closest(".phone-menu-submenu")) event.preventDefault();
+    if (event.target instanceof Element && event.target.closest(childSelector)) event.preventDefault();
   };
   return { panel, go, settling, returnToRoot, keepForChild, reset: () => setPanel(() => root) };
 }

@@ -20,7 +20,7 @@ control does not make its subsystem complete.
 | V2-04 | Dashboards | Conduit, project, workspace, harness, and Computer screens; headings, lists, actions, menus, and empty states. | Open. Computer explorer and workspace identity editor now render v2; the other dashboard presentations remain. Coordinate dashboard composers with Claude. | Unassigned; composer changes require coordination |
 | V2-05 | Panes and workspace tools | Pane headers, tabs, resize and drag controls, dock, Files, file viewer, Source Control, Chat review, and Terminal controls. | Open. Confirmations, file prompts and the embedded code excerpt now use v2; pane controls and the editable file viewer remain. | Unassigned |
 | V2-06 | Notifications and shared dialogs | Toasts, confirmations, prompts, previews, and other dialogs used across subsystems. | Complete cutover. Sonner and Kobalte retain engine behavior. All internal native decisions and the embedded widgets now render v2. Verification has one pane-smoke failure; see below. | Delivered in this session |
-| V2-07 | Connection and access screens | Sign-in, first connection, server selection, reconnect, and connection error states. | Open. Add server, pairing, the shared server connection form and camera preview use v2; remaining access screens need migration. | Unassigned |
+| V2-07 | Connection and access screens | Sign-in, first connection, server selection, reconnect, and connection error states. | Partial. Rendering is fully cut over, including browser sign-in, first connection, server/route selection and recovery. Phone route-panel initial focus blocks completion; see V2-07 evidence below. | This session; verification blocker recorded |
 | V2-08 | Composer and transcript | Composer, riders, questions, approvals, pickers, message rows, answers, traces, Markdown, code blocks, and message actions. | Partial; Claude's scope. Recent commits record substantial cutover, including `d7ac7e33` and `17731746`. The remaining pickers, header pills and migration scaffolding need an ownership and source check before edits. | Claude; confirm remaining scope before touching it |
 | V2-09 | Shared v2 foundations | Controls, navigation rows, menus, cards, overlays, keycaps, loading indicators, and status indicators. | Partial. Extend these as each subsystem needs them. Use DESIGN.md's family table for the remaining old implementations. | The agent migrating a subsystem owns its required extensions; coordinate shared-file edits |
 
@@ -117,3 +117,45 @@ fixture selection needs a test-tool follow-up. The remaining assertion needs
 further diagnosis; its cause is not established.
 Camera hardware, server discovery/sign-in, push and destructive filesystem
 actions were not exercised.
+
+## V2-07 connection and access cutover
+
+All access rendering now comes from `components/ui/connection.tsx`, the v2
+controls/status pieces, and `Menu`/`Section`/`Item` with Kobalte behavior.
+`ServerSwitcher` retains probing, identity checks, automatic/pinned routes,
+browser/native restrictions, downloads, update checks, pairing and sign-out.
+The phone behavior keeps its tap guard and Back handling. Old server-picker,
+first-connection, sign-in and root-error markup/CSS and the picker library
+preview branches were removed.
+
+The browser login page remains a plain server-rendered form. The normal Vite
+build renders its templates from the actual v2 components and emits their
+hashed CSS. The server substitutes only escaped error and redirect data. It
+reads the template from the configured client distribution. There is no
+second stylesheet or legacy fallback. `styles/theme.css` owns the shared dark
+colour tokens for both the app and standalone page.
+
+Executed: typecheck, gallery build, production build and bundle checks passed.
+Three selected existing auth-server tests passed: access enforcement,
+login/logout/rate limiting and safe redirects. A built-template check passed
+escaped error/redirect values and error accessibility. Headed Chrome confirmed
+the live `/login` page has zero scripts, autofocus, the original POST target,
+the hidden redirect, and a shared input token that changes from 10.4px to 20px
+and restores. The live server control uses v2 with no old sidebar-user node.
+Gallery desktop checks covered checked/disabled radio rows, keyboard submenu
+opening and route selection. The phone panel stays within a 412px touch
+viewport; Escape returns to the parent. Selecting a manually focused route
+closes both layers and restores the trigger.
+
+**Open blocker:** opening the phone route panel leaves initial focus on the
+parent Route row. Two fixes were attempted, then work on that error stopped
+under the operator's two-attempt rule. The nested Kobalte scope now permits
+focus to enter and stay in the child, but the initial activation still leaves
+focus on Route. Separate scope instances were ruled out by installed-source
+inspection; a focus trace confirms manually focusing a child row succeeds.
+The leading hypothesis is an activation handler restoring focus after mount.
+The next diagnostic is to trace focus calls across the opening keydown/keyup
+and scope mount. Do not mark V2-07 Complete until that check passes.
+
+Hardware sign-in, secure token storage, discovery, camera scanning and native
+Android Back were not exercised. Their domain logic was retained.

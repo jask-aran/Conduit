@@ -1158,7 +1158,7 @@ export function Sidebar(props: {
     else toggleSidebar();
   };
 
-  const serverSwitcher = () => <ServerSwitcher connectivity={props.connectivity} pwaUpdating={props.pwaUpdating}
+  const serverSwitcher = () => <ServerSwitcher compact={!phoneLayout() && visualCollapsed()} connectivity={props.connectivity} pwaUpdating={props.pwaUpdating}
     downloads={phoneLayout() && installedClientKind === "browser"}
     onOpenSettings={() => { closeMobile(); props.onOpenSettings(); }}
     onUpdatePwa={() => props.onUpdatePwa()}

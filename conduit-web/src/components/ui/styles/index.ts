@@ -24,6 +24,7 @@
  *   code, trace     CodeBlock, CopyButton; Trace, Trail, Step
  *   bridge          the app's own pieces drawn with the library; deleted piece by piece as each graduates
  */
+import "./theme.css";
 import "./foundations.css";
 import "./controls.css";
 import "./frost.css";

@@ -561,7 +561,7 @@ app.delete("/v0/chatgpt-web/credential", async (_request, response, next) => {
   try { response.json(await requireChatgptWeb().removeCredential()); } catch (error) { next(error); }
 });
 
-registerAuthRoutes(app, { authStore, socketTickets });
+registerAuthRoutes(app, { authStore, socketTickets, clientDist: dist });
 
 const pendingCheckpoints = new Set();
 let shuttingDown = false;

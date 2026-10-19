@@ -1,8 +1,11 @@
+import { createPhoneMenuPanels } from "@/components/phone-menu-panels";
+import { MenuParent } from "@/components/ui/popover";
+import { PhoneMenuPanel as LivePhonePanel, Menu as LiveMenu, MenuContent as LiveMenuContent, MenuSection as LiveMenuSection, MenuRow as LiveMenuRow, MenuRadioGroup as LiveRadioGroup, MenuRadioItem as LiveRadioItem, MenuSub as LiveSub, MenuSubTrigger as LiveSubTrigger, MenuSubContent as LiveSubContent } from "@/components/menus";
 import { createDecisionDialogs } from "@/components/decision-dialog";
 import { WorkspaceAppearanceEditor } from "../client/project/workspace-appearance-editor";
 import { ComputerExplorer } from "../client/dashboard/computer-dashboard";
 import WorkspaceExcerptView from "../client/workspace/workspace-excerpt-view";
-import { ConnectionForm, ConnectionChoices, ConnectionChoice, ConnectionGroup, CameraPreview } from "@/components/ui/connection";
+import { ConnectionScreen, PasswordSignIn, ServerControl, ConnectionRecovery, ConnectionForm, ConnectionChoices, ConnectionChoice, ConnectionGroup, CameraPreview } from "@/components/ui/connection";
 import { NotificationToaster, toast } from "@/components/notifications";
 import { Dialog } from "@/components/dialog";
 import { CardActions, CardForm, CardBody, CardNote, CardRead, CardDetails, CardQR, CardPreview, CardAttachments, CardAttachment } from "@/components/ui/card";
@@ -376,6 +379,41 @@ function ConnectionDemo() {
     <Button variant="ghost" onClick={() => { setVerified(false); setError(false); }}>Reset example</Button>
   </ConnectionForm>;
 }
+function ServerMenuDemo(props: { phone?: boolean }) {
+  const [route, setRoute] = createSignal("automatic");
+  const [action, setAction] = createSignal("No action yet");
+  const [open, setOpen] = createSignal(false);
+  const { panel, go, settling, returnToRoot, keepForChild, reset } = createPhoneMenuPanels<"root" | "routes">("root", open, ".ui-menu-panel");
+  const Routes = () => <LiveMenuSection title="Route to Laptop"><LiveRadioGroup value={route()} onChange={setRoute}>
+    <LiveRadioItem value="automatic" detail="Tailscale · laptop.ts.net" meta="12 ms">Automatic</LiveRadioItem>
+    <LiveRadioItem value="lan" detail="192.168.1.10" meta="3 ms">This network</LiveRadioItem>
+    <LiveRadioItem value="unreachable" disabled detail="10.0.0.10">Unavailable</LiveRadioItem>
+  </LiveRadioGroup></LiveMenuSection>;
+  return <CardBody><LiveMenu onOpenChange={(value) => { setOpen(value); if (!value) reset(); }}>
+    <LiveMenu.Trigger as={ServerControl} name="Laptop" detail="Connected · 12 ms" connectivity="online" />
+    <LiveMenuContent data-settling={settling()} onPointerDownOutside={keepForChild} onFocusOutside={keepForChild}>
+      <MenuParent under={panel() !== "root"} onPointerDown={returnToRoot}>
+        <LiveMenuSection title="Servers"><LiveRadioGroup value="laptop"><LiveRadioItem value="laptop" meta="12 ms">Laptop</LiveRadioItem><LiveRadioItem value="offline" disabled>Office</LiveRadioItem></LiveRadioGroup></LiveMenuSection>
+        <Show when={props.phone} fallback={<LiveSub><LiveSubTrigger detail={route()}>Route</LiveSubTrigger><LiveSubContent><Routes /></LiveSubContent></LiveSub>}>
+          <LiveMenuRow detail={route()} opens closeOnSelect={false} onSelect={() => go("routes")}>Route</LiveMenuRow>
+        </Show>
+        <LiveMenuRow onSelect={() => setAction("Add server")} icon={<PlusIcon />}>Add server</LiveMenuRow><LiveMenuRow onSelect={() => setAction("Sign out")}>Sign out</LiveMenuRow>
+      </MenuParent>
+      <Show when={panel() === "routes"}><LivePhonePanel parent="[data-slot='ui-menu-content']" settling={settling()}><Routes /></LivePhonePanel></Show>
+    </LiveMenuContent>
+  </LiveMenu><CardNote>{action()}</CardNote></CardBody>;
+}
+const CONNECTIONS: FormRow[] = [
+  form("browser sign-in", "plain form POST, password-manager autocomplete and autofocus", () => <ConnectionScreen embedded><PasswordSignIn onSubmit={(event) => event.preventDefault()} after="/" /></ConnectionScreen>, "ConnectionScreen > PasswordSignIn", "the same component generates /login without JavaScript"),
+  form("incorrect password", "the field identifies and describes the server error", () => <PasswordSignIn onSubmit={(event) => event.preventDefault()} after="/chat/example" error="Incorrect password." />, "PasswordSignIn error", "aria-invalid · aria-describedby · role=alert"),
+  form("rate limited", "the server keeps the redirect and explains the wait", () => <PasswordSignIn onSubmit={(event) => event.preventDefault()} after="/" error="Too many failed attempts. Try again shortly." />, "PasswordSignIn error", "server keeps rate limiting and credential handling"),
+  form("first connection / add server", "local and discovered servers, address, password, loading and errors", () => <ConnectionDemo />, "ConnectionForm · ConnectionChoice · Field · Input · Button", "uses v2 at every stage"),
+  form("phone route panel", "Back returns to the parent; the opening tap cannot select a route", () => <ServerMenuDemo phone />, "createPhoneMenuPanels > MenuParent · MenuPanel", "same phone behavior adapter as ServerSwitcher"),
+  form("server selection", "keyboard choice, unavailable rows and a real route submenu", () => <ServerMenuDemo />, "Kobalte > v2 Menu · Section · Item", "no network calls or stored server changes"),
+  ...["online", "connecting", "reconnecting", "offline"].map((state) => form(state, "connection state on the server control", () => <ServerControl name="Laptop" detail={state === "offline" ? "Server unavailable" : state === "online" ? "Connected · 12 ms" : state === "reconnecting" ? "Reconnecting" : "Connecting"} connectivity={state} />, "ServerControl > StatusDot · Spinner", "shared status and type tokens")),
+  form("collapsed control", "same status and accessible name in a narrow rail", () => <ServerControl compact name="Laptop" detail="Reconnecting" connectivity="reconnecting" aria-label="Laptop · Reconnecting" />, "ServerControl compact", "the caller supplies layout state, never styling"),
+  form("recovery", "a root error and the existing reload action", () => <ConnectionRecovery embedded title="Conduit hit a UI error" error="The interface could not load." onRetry={() => {}} retryLabel="Reload Conduit" />, "ConnectionRecovery", "shared access layout and controls"),
+];
 const CARDS: FormRow[] = [
   form("async decisions", "confirm, prompt, queue, cancellation and stale target guard", () => <DecisionDemo />, "createDecisionDialogs > Dialog", "the live app's shared decision queue"),
   form("workspace identity", "mark, icon search, palette and custom colour; Save retains the draft", () => <WorkspaceAppearanceEditor compact onSave={() => {}} />, "WorkspaceAppearanceEditor > IdentityEditor", "v2 controls and tokens"),
@@ -662,6 +700,11 @@ const PhoneStage = (props: { children: JSX.Element }) => <div class="g-phone-sta
 const Busy = (props: { children: JSX.Element }) => <div class="g-busy"><p>{"Created lorem_ipsum.txt in this folder. The second paragraph is now two sentences: lorem ipsum dolor sit amet, consectetur adipiscing elit. ".repeat(4)}</p>{props.children}</div>;
 
 export const libraryFamilies: Family[] = [
+  { title: "Connection", note: "Sign-in, first connection, server selection and recovery. Shared v2 markup and tokens in the app and the server-rendered login page.", groups: [
+    { title: "Forms and states", note: "Desktop and phone; live menu behavior uses Kobalte, while sign-in remains a plain HTML form.", layout: "desktop", atoms: [
+      lib("connection-forms", "Connection · forms × densities", "both", "connection", "components/ui/connection.tsx · components/menus.tsx", () => <FormTable rows={CONNECTIONS} on={["desktop", "phone"]} widths={["200px", "minmax(0, 1fr)", "360px"]} />, "row"),
+    ] },
+  ] },
   { title: "Frost", note: "two materials: frost, and core -- frost on a solid backing, kept for the phone's full-screen overlays should what is behind them be too busy (off for now; nothing uses it). Over a plain ground they look alike; over text the difference shows. Lift is not a material, only its shadow: rest sits on the page, raised floats above it", groups: [{ atoms: [
     lib("frost", "Frost", "both", "material", "Frost", () => <div class="g-material"><Busy><Frost lift="raised" class="g-swatch" /></Busy><FrostTokens names={FROST_CSS} /></div>, true),
     lib("frost-core", "Core", "both", "material", "Frost core · Overlay core (off for now)", () => <div class="g-material"><Busy><Frost lift="raised" core class="g-swatch" /></Busy><FrostTokens names={["--frost-core-ground", ...FROST_CSS]} /></div>, true),

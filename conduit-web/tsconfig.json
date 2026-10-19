@@ -22,5 +22,5 @@
     },
     "types": ["vite/client"]
   },
-  "include": ["src/client/**/*.ts", "src/client/**/*.tsx", "src/components/**/*.ts", "src/components/**/*.tsx"]
+  "include": ["src/access/**/*.tsx", "src/client/**/*.ts", "src/client/**/*.tsx", "src/components/**/*.ts", "src/components/**/*.tsx"]
 }

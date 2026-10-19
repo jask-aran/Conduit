@@ -1,7 +1,7 @@
 /// <reference types="vite-plugin-pwa/client" />
-import { ConnectionForm, ConnectionHeading, ConnectionChoices, ConnectionChoice, ConnectionGroup } from "@/components/ui/connection";
+import { ConnectionScreen, ConnectionRecovery, ConnectionForm, ConnectionHeading, ConnectionChoices, ConnectionChoice, ConnectionGroup } from "@/components/ui/connection";
 import { CardNote as ConnectionNote } from "@/components/ui/card";
-import { Field as ConnectionField, Input as ConnectionInput, Button as ConnectionButton } from "@/components/ui/controls";
+import { Field as ConnectionField, Input as ConnectionInput, Button as ConnectionButton, Spinner as ConnectionSpinner } from "@/components/ui/controls";
 import { createDecisionScope, DecisionDialogs } from "@/components/decision-dialog";
 import { Dialog } from "@/components/dialog";
 import "./motion-rules";
@@ -374,7 +374,7 @@ function ServerConnectForm(props: { adding?: boolean; onDone: (origin: string) =
     </Show>
     <Show when={!verifiedOrigin()}>
       <Show when={canDiscoverServers()} fallback={<ConnectionNote>Finding servers on this network needs the Conduit app.</ConnectionNote>}>
-        <ConnectionGroup>On this network<Show when={searching()}><Spinner /></Show></ConnectionGroup>
+        <ConnectionGroup>On this network<Show when={searching()}><ConnectionSpinner /></Show></ConnectionGroup>
         <Show when={found().length} fallback={<Show when={!searching()}><ConnectionNote>Nothing here yet.</ConnectionNote></Show>}>
           <ConnectionChoices>
             <For each={found()}>{(server) => <ConnectionChoice type="button" onClick={() => void chooseFound(server)} disabled={submitting()} icon={<ServerIcon />} detail={server.origin.replace(/^https?:\/\//, "")}>{server.name}</ConnectionChoice>}</For>
@@ -410,9 +410,9 @@ function ServerConnectForm(props: { adding?: boolean; onDone: (origin: string) =
 }
 
 function NativeServerSetup(props: { onAuthenticated: () => void }) {
-  return <main class="native-server-setup">
+  return <ConnectionScreen>
     <ServerConnectForm onDone={(origin) => { setActiveServer(origin); props.onAuthenticated(); }} />
-  </main>;
+  </ConnectionScreen>;
 }
 
 /**
@@ -1871,7 +1871,7 @@ function App() {
     const target = event.target instanceof Element ? event.target : null;
     // A press in a menu or popover belongs to it, and Solid carries portal
     // events up to where the portal was declared, so skip those as well.
-    if (target?.closest(".ui-composer-slot,.ui-phone-composer,button,a,input,textarea,select,[contenteditable='true'],[role='button'],[role='link'],[role='option'],[data-slot='menu-content'],[data-slot='menu-sub-content'],[data-slot='context-menu-content'],[data-slot='context-menu-sub-content'],[data-slot='popover-content']")) return;
+    if (target?.closest(".ui-composer-slot,.ui-phone-composer,[role='menu'],button,a,input,textarea,select,[contenteditable='true'],[role='button'],[role='link'],[role='option'],[data-slot='menu-content'],[data-slot='menu-sub-content'],[data-slot='context-menu-content'],[data-slot='context-menu-sub-content'],[data-slot='popover-content']")) return;
     if (!(event.currentTarget instanceof HTMLElement)) return;
     event.currentTarget.focus({ preventScroll: true });
   };
@@ -5381,6 +5381,6 @@ window.addEventListener("vite:preloadError", (event) => {
 // the background (platform/live-update.ts).
 void startLiveUpdate(() => { const path = activePath(); return path ? dialOrigin(path) : null; }).catch(() => {});
 
-render(() => <ErrorBoundary fallback={(error) => { dismissLaunchMark(); return <div class="crash-screen"><div class="crash-card"><h1>Conduit hit a UI error</h1><p>{error instanceof Error ? error.message : "Unknown interface error"}</p><Button onClick={() => location.reload()}>Reload Conduit</Button></div></div>; }}>
+render(() => <ErrorBoundary fallback={(error) => { dismissLaunchMark(); return <ConnectionRecovery title="Conduit hit a UI error" error={error instanceof Error ? error.message : "Unknown interface error"} onRetry={() => location.reload()} retryLabel="Reload Conduit" />; }}>
   {nativeApp ? <NativeRoot /> : <App />}
 </ErrorBoundary>, mount);

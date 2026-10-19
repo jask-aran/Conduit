@@ -1,7 +1,7 @@
 ---
 name: Conduit
 description: In-app visual language for Conduit. Dark charcoal control plane, inset panes holding plain lists grouped by heading and space, frosted glass for everything that floats. No blue anywhere.
-note: "Colours are the dark theme's values in client/styles.css. Every other value (space, type, radius, motion) is a token in components/ui/styles/foundations.css; the body names them, the code holds them."
+note: "Colours are the dark theme's values in components/ui/styles/theme.css. Every other value (space, type, radius, motion) is a token in components/ui/styles/foundations.css; the body names them, the code holds them."
 colors:
   frame: "oklch(0.138 0.004 264)"
   background: "oklch(0.186 0.005 264)"
@@ -69,6 +69,7 @@ What each v2 family replaces and where it stands. Update a row in the commit tha
 | Controls: Spinner, StatusDot (the runtime dot) | `primitives.tsx`, `navigation/runtime-indicator.tsx` | gallery only (v2 pieces exist; the app still draws its own) |
 | Frost | `.composer-surface-material`, `chat/composer-surface.ts` | previews |
 | Popover: `Menu`, `Section`, `Item` | `Menu*`, `ContextMenu*`, `Popover*`, `PopoverSearchList` in `primitives.tsx`; `.menu-row` (terminal pane, leader, context gauge, place picker) | each section's menus with its section (the composer's are graduated with it); previews elsewhere |
+| Connection | standalone browser sign-in, native first connection, server selection and recovery | v2 rendering cut over; phone route-panel initial focus remains a verification blocker |
 | Overlay, Glance | `FrostOverlay` (`frost.tsx`), command menu, chat search, Settings | gallery only |
 | Leader | `navigation/leader-palette.tsx`, `frost-card` | gallery only |
 | DesktopComposer | `chat/composer.tsx` (desktop) | cut over: `DesktopComposer` (riders, the question as its takeover), `ComposerField` with `Completion`, `Toolbar` (status, aside, primary, `StopGlyph`); its pickers are the menus still to cut over |
