@@ -11,8 +11,9 @@ export function Menu(props: JSX.HTMLAttributes<HTMLDivElement> & { density?: Den
 }
 
 /** A menu's section: a list of items (the default) or a slider, with an optional title and a note beside it. */
-export function Section(props: { title?: string; note?: JSX.Element; kind?: "list" | "slider"; children: JSX.Element }) {
-  return <div role="group" aria-label={props.title} class="ui-section" data-kind={props.kind ?? "list"}>
+export function Section(props: JSX.HTMLAttributes<HTMLDivElement> & { note?: JSX.Element; kind?: "list" | "slider" }) {
+  const [, rest] = splitProps(props, ["title", "note", "kind", "children", "class"]);
+  return <div {...rest} role="group" aria-label={props.title} class="ui-section" data-kind={props.kind ?? "list"}>
     <Show when={props.title}><div class="ui-title"><span>{props.title}</span><Show when={props.note}><small>{props.note}</small></Show></div></Show>
     {props.children}
   </div>;
@@ -35,18 +36,19 @@ export function HeadingSection(props: { title: string; detail?: JSX.Element; chi
 }
 
 /** An item in a list section. Icon, meta, keys and opens are its parts; checked, disabled and destructive its states. */
-export function Item(props: {
+export function Item(props: JSX.HTMLAttributes<HTMLDivElement> & {
   icon?: JSX.Element; meta?: JSX.Element; detail?: JSX.Element; keys?: string[]; opens?: boolean; active?: boolean;
   /** field: the label is a field name (title type) and meta its value, as in "CONTEXT  Unavailable ›". */
-  field?: boolean; onClick?: () => void;
+  field?: boolean;
   /** keysFirst: the keycaps lead the row (the leader menu, where the key is what you read first). */
   keysFirst?: boolean;
   checked?: boolean; disabled?: boolean; destructive?: boolean; children: JSX.Element;
   /** end: a control at the row's end, after its meta (a remove ×). */
   end?: JSX.Element;
 }) {
-  return <div role={props.checked !== undefined ? "menuitemradio" : "menuitem"} class="ui-row" aria-checked={props.checked} data-field={props.field ? "" : undefined} onClick={props.onClick}
-    data-highlighted={props.active ? "" : undefined} data-checked={props.checked ? "" : undefined} data-disabled={props.disabled ? "" : undefined} data-destructive={props.destructive ? "" : undefined}>
+  const [, rest] = splitProps(props, ["icon", "meta", "detail", "keys", "opens", "active", "field", "keysFirst", "checked", "disabled", "destructive", "children", "end", "class"]);
+  return <div role={props.checked !== undefined ? "menuitemradio" : "menuitem"} class="ui-row" aria-checked={props.checked} data-field={props.field ? "" : undefined}
+    data-highlighted={props.active ? "" : undefined} data-checked={props.checked ? "" : undefined} data-disabled={props.disabled ? "" : undefined} data-destructive={props.destructive ? "" : undefined} {...rest}>
     <Show when={props.keysFirst && props.keys}><Keys keys={props.keys!} first /></Show>
     <Show when={props.icon}><span class="ui-icon">{props.icon}</span></Show><span class="ui-label" data-stacked={props.detail ? "" : undefined}><Show when={props.detail} fallback={props.children}><span>{props.children}</span><small class="ui-detail">{props.detail}</small></Show></span>
     <Show when={props.meta}><small>{props.meta}</small></Show>
@@ -72,3 +74,11 @@ export const Meta = (props: { children: JSX.Element }) => <span class="ui-meta">
 
 /** A behavior engine can supply focus, selection and keyboard attributes. */
 export const MenuAction = (props: JSX.HTMLAttributes<HTMLDivElement>) => <div {...props} class="ui-row ui-menu-action" />;
+
+/** Menu panels keep the parent in place; the behavior adapter supplies coordinates. */
+export const MenuParent = (props: JSX.HTMLAttributes<HTMLDivElement> & { under: boolean }) => {
+  const [local, rest] = splitProps(props, ["under"]);
+  return <div {...rest} class="ui-menu-parent" data-under={local.under ? "" : undefined} />;
+};
+export const MenuPanel = (props: JSX.HTMLAttributes<HTMLDivElement>) => <Menu {...props} class="ui-menu-panel" />;
+export const MenuNote = (props: { children: JSX.Element; error?: boolean }) => <p class="ui-menu-note" role={props.error ? "alert" : undefined} data-error={props.error ? "" : undefined}>{props.children}</p>;

@@ -1,0 +1,21 @@
+@import "@fontsource-variable/geist";
+:root { --font-sans: "Geist Variable", sans-serif; }
+/* Charcoal / glass. Deep cool-neutral ground, translucent raised surfaces, a
+   near-white primary, and a near-neutral focus ring. Selection is a gray
+   wash; there is no blue accent token. Kept as token values so every surface
+   inherits. */
+.dark {
+  --frame: oklch(0.138 0.004 264); --background: oklch(0.186 0.005 264); --foreground: oklch(0.93 0.003 258);
+  --card: oklch(0.225 0.006 264); --card-foreground: oklch(0.93 0.003 258);
+  --popover: oklch(0.208 0.006 264); --popover-foreground: oklch(0.93 0.003 258);
+  --primary: oklch(0.95 0.002 258); --primary-foreground: oklch(0.2 0.006 264);
+  --secondary: oklch(1 0 0 / 6%); --secondary-foreground: oklch(0.93 0.003 258);
+  --muted: oklch(1 0 0 / 5%); --muted-foreground: oklch(0.63 0.006 262);
+  --accent: oklch(1 0 0 / 7%); --accent-foreground: oklch(0.96 0.003 258);
+  --destructive: oklch(0.645 0.19 18); --border: oklch(1 0 0 / 7%);
+  --input: oklch(1 0 0 / 9%); --ring: oklch(0.78 0.008 258); --region-focus: oklch(0.86 0.006 258);
+  --sidebar: transparent; --sidebar-foreground: oklch(0.9 0.003 258);
+  --sidebar-primary: oklch(0.74 0.004 260); --sidebar-primary-foreground: oklch(0.985 0.003 258);
+  --sidebar-accent: oklch(1 0 0 / 6%); --sidebar-accent-foreground: oklch(0.96 0.003 258);
+  --sidebar-border: oklch(1 0 0 / 6%); --sidebar-ring: oklch(0.78 0.008 258);
+}

@@ -67,6 +67,9 @@ async function spawnServer(env, { password } = {}) {
   await fs.mkdir(workspace);
   const clientDist = path.join(root, "client-dist");
   await fs.mkdir(clientDist);
+  // Login is built from v2; the fixture serves that build beside its tiny SPA.
+  await fs.cp(path.resolve("dist/access"), path.join(clientDist, "access"), { recursive: true });
+  await fs.symlink(path.resolve("dist/assets"), path.join(clientDist, "assets"), "dir");
   await fs.writeFile(path.join(clientDist, "index.html"), "<!doctype html><title>Conduit test SPA</title>");
   const child = spawn(process.execPath, ["src/server.js"], {
     cwd: path.resolve(import.meta.dirname, ".."),

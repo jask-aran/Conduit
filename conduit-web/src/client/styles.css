@@ -1,6 +1,5 @@
 @import "tailwindcss";
 @import "tw-animate-css";
-@import "@fontsource-variable/geist";
 
 /* Paper Mono (OFL, fonts/PaperMono-OFL.txt): the transcript face when chosen
    in Settings → Appearance (preferences/transcript-font.ts). */
@@ -40,24 +39,7 @@
   --sidebar-border: oklch(0.922 0 0); --sidebar-ring: oklch(0.708 0 0);
 }
 
-/* Charcoal / glass. Deep cool-neutral ground, translucent raised surfaces, a
-   near-white primary, and a near-neutral focus ring. Selection is a gray
-   wash; there is no blue accent token. Kept as token values so every surface
-   inherits. */
 .dark {
-  --frame: oklch(0.138 0.004 264); --background: oklch(0.186 0.005 264); --foreground: oklch(0.93 0.003 258);
-  --card: oklch(0.225 0.006 264); --card-foreground: oklch(0.93 0.003 258);
-  --popover: oklch(0.208 0.006 264); --popover-foreground: oklch(0.93 0.003 258);
-  --primary: oklch(0.95 0.002 258); --primary-foreground: oklch(0.2 0.006 264);
-  --secondary: oklch(1 0 0 / 6%); --secondary-foreground: oklch(0.93 0.003 258);
-  --muted: oklch(1 0 0 / 5%); --muted-foreground: oklch(0.63 0.006 262);
-  --accent: oklch(1 0 0 / 7%); --accent-foreground: oklch(0.96 0.003 258);
-  --destructive: oklch(0.645 0.19 18); --border: oklch(1 0 0 / 7%);
-  --input: oklch(1 0 0 / 9%); --ring: oklch(0.78 0.008 258); --region-focus: oklch(0.86 0.006 258);
-  --sidebar: transparent; --sidebar-foreground: oklch(0.9 0.003 258);
-  --sidebar-primary: oklch(0.74 0.004 260); --sidebar-primary-foreground: oklch(0.985 0.003 258);
-  --sidebar-accent: oklch(1 0 0 / 6%); --sidebar-accent-foreground: oklch(0.96 0.003 258);
-  --sidebar-border: oklch(1 0 0 / 6%); --sidebar-ring: oklch(0.78 0.008 258);
   /* Glass tokens used by the composer and message surfaces. */
   --glass-bg: oklch(0.3 0.006 264 / 52%);
   --glass-border: oklch(1 0 0 / 10%);
@@ -510,9 +492,6 @@ svg.lucide { stroke-width: 2.4; }
 .command-detail-pane { width: min(256px, calc(100vw - 22.4px)); max-height: min(480px, calc(100dvh - 22.4px)); overflow: auto; border: 0.8px solid var(--border); border-left: 0; border-radius: 0 11.2px 11.2px 0; background: var(--popover); padding: 12.8px; }
 .palette-move-list { display: flex; flex-direction: column; gap: 1.6px; max-height: 256px; overflow-y: auto; margin-top: 9.6px; }
 .palette-move-option { width: 100%; justify-content: flex-start; gap: 8px; }
-
-.crash-screen { display: grid; min-height: 100dvh; place-items: center; padding: 19.2px; background: var(--background); }
-.crash-card { width: min(368px, 100%); padding: 16px; border: 0.8px solid var(--border); border-radius: 9.6px; background: var(--card); }
 
 /* The old solid surface. Palettes, Settings and menus have moved to frost
    (the frost blocks at the end of this file); dialogs still use it. */
@@ -1065,9 +1044,6 @@ svg.lucide { stroke-width: 2.4; }
 .palette-move-list { display: flex; flex-direction: column; gap: 2px; max-height: 320px; overflow-y: auto; margin-top: 12px; }
 .palette-move-option { width: 100%; justify-content: flex-start; gap: 10px; }
 
-.crash-screen { display: grid; min-height: 100dvh; place-items: center; padding: 24px; background: var(--background); }
-.crash-card { width: min(460px, 100%); padding: 20px; border: 1px solid var(--border); border-radius: 12px; background: var(--card); }
-
 /* Overlays, dialogs, and cards share the menu's solid dark surface. The
    glass treatment is reserved for the composer (and the drop overlay's
    native blur); everywhere else translucent grey read as flat, not glassy. */
@@ -1273,24 +1249,15 @@ svg.lucide { stroke-width: 2.4; }
   [data-slot="menu-content"].chat-header-menu [role="menuitem"] { min-height: 38px; padding: 8px 9px; gap: 8px; border-radius: 9px; font-size: 13px; }
   /* The server switcher's rows take the chat menu's touch size; their
      secondary text (latency, route kind) steps down so the names lead. */
-  :is([data-slot="menu-content"], [data-slot="menu-sub-content"]).server-switcher-menu [role^="menuitem"] { min-height: 38px; padding: 8px 9px; gap: 8px; border-radius: 9px; font-size: 13px; }
   /* Outranks the menus' rule that sizes every span in a row to the row. */
-  .server-switcher-menu[data-slot] [role^="menuitem"] span.server-row-latency { font-size: 11px; }
-  .server-switcher-menu[data-slot="menu-content"] { max-width: min(280px, calc(100vw - 32px)); }
   /* Phone child panels (components/phone-menu-panels.tsx): the parent dims and
      only returns to itself while a child is open, and neither takes the tap
      that changed panels. */
-  .phone-menu-parent { transition: opacity .16s ease, filter .16s ease; }
-  .phone-menu-parent[data-panel-open="true"] { opacity: .38; filter: saturate(.6); }
   /* A modal menu turns the page's pointer events off and only its own
      content back on; the child panel is portaled beside it, so it takes them
      back itself or every tap falls through to the parent. */
   .phone-menu-submenu { pointer-events: auto; }
-  .phone-menu-parent[data-panel-open="true"] > *, [data-settling="true"] :is(.phone-menu-parent, .phone-menu-parent *), .phone-menu-submenu[data-settling="true"] * { pointer-events: none; }
-  .phone-menu-submenu.server-route-menu { --phone-submenu-offset: 48px; width: min(258px, calc(100vw - 32px)); max-height: min(60dvh, 420px); overflow-y: auto; padding: 4px; border-radius: 14px; }
-  .phone-menu-submenu.server-route-menu [role^="menuitem"] { min-height: 38px; padding: 8px 9px; gap: 8px; border-radius: 9px; font-size: 13px; }
-  .phone-menu-submenu.server-route-menu[data-slot] [role^="menuitem"] span.server-row-latency { font-size: 11px; }
-  .server-switcher-menu .server-route-label code { font-size: 10px; }
+  .phone-menu-submenu[data-settling="true"] * { pointer-events: none; }
   .settings-shell { width: calc(100vw - 24px); height: calc(100dvh - 24px); }
   .settings-rail { width: 132px; }
   /* The mobile palette fills the visual viewport while keeping the inset frame
@@ -1345,24 +1312,10 @@ svg.lucide { stroke-width: 2.4; }
    Surfaces): the Conduit mark, a heading, then the ways in as sidebar rows --
    scan, this computer, what the network has -- and the address field last,
    for when none of those is the answer. */
-.native-server-setup {
-  min-height: var(--app-height, 100dvh);
-  display: grid;
-  place-items: center;
-  padding: calc(24px + var(--safe-area-inset-top, env(safe-area-inset-top, 0px))) 20px calc(24px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)));
-  background: var(--frame);
-}
 /* The ways in: one-line rows with no box, the wash as the cursor. */
 /* The same form, minus the page it owns on first launch. */
-.server-row-latency { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-variant-numeric: tabular-nums; }
-.server-switcher-menu { width: max-content; max-width: min(220px, calc(100vw - 24px)); }
-.server-route-choice { align-items: flex-start; }
-.server-route-label { display: flex; min-width: 0; flex: 1; flex-direction: column; }
-.server-route-label code { overflow: hidden; color: var(--muted-foreground); font-size: 10px; font-weight: 400; line-height: 1.4; text-overflow: ellipsis; white-space: nowrap; }
-.server-route-choice > .server-row-latency { flex: none; }
 /* A sentence inside a menu: it explains the rows rather than labelling them,
    so it wraps and is not shouted like a group heading. */
-.server-route-error { color: var(--destructive); text-transform: none; font-weight: 400; letter-spacing: 0; white-space: normal; line-height: 1.35; }
 /* The routes sit under the name they belong to, indented so the hierarchy is
    in the layout rather than in a heading. */
 
@@ -2079,9 +2032,9 @@ svg.lucide { stroke-width: 2.4; }
 /* Where you are, in every menu and picker, is white and semibold with its
    icon at a heavier stroke and no fill (DESIGN.md, Interaction); the wash is
    only the cursor. */
-[data-slot*="menu"] [data-checked], .command-option[data-checked], .menu-row[data-checked] { color: var(--foreground); font-weight: 660; }
-[data-slot*="menu"] [data-checked] > span:first-of-type, .command-option[data-checked] .command-label { font-weight: 660; }
-[data-slot*="menu"] [data-checked] svg, .command-option[data-checked] svg, .menu-row[data-checked] svg { stroke-width: 3; }
+[data-slot*="menu"]:not([data-slot^="ui-"]) [data-checked], .command-option[data-checked], .menu-row[data-checked] { color: var(--foreground); font-weight: 660; }
+[data-slot*="menu"]:not([data-slot^="ui-"]) [data-checked] > span:first-of-type, .command-option[data-checked] .command-label { font-weight: 660; }
+[data-slot*="menu"]:not([data-slot^="ui-"]) [data-checked] svg, .command-option[data-checked] svg, .menu-row[data-checked] svg { stroke-width: 3; }
 .command-option[data-checked]:not([data-highlighted]) { background: transparent; }
 
 /* `menu-row` is the menu row for lists that are not a Kobalte menu (a
@@ -2099,16 +2052,16 @@ svg.lucide { stroke-width: 2.4; }
 /* Menu rows rest as the sidebar's do -- a regular weight a step under the
    text colour -- so the cursor (white, on the wash) and the current choice
    (white and semibold) each have something to step up from. */
-:is([data-slot*="menu"] [role^="menuitem"], .menu-row):not([data-variant="destructive"]) { color: color-mix(in oklch, var(--foreground), transparent 38%); font-weight: 450; }
+:is([data-slot*="menu"]:not([data-slot^="ui-"]) [role^="menuitem"], .menu-row):not([data-variant="destructive"]) { color: color-mix(in oklch, var(--foreground), transparent 38%); font-weight: 450; }
 /* Unavailable is struck through as well as greyed, so it cannot pass for a resting row. */
-:is([data-slot*="menu"] [role^="menuitem"], .menu-row)[data-disabled]:not([data-variant="destructive"]) { color: color-mix(in oklch, var(--foreground), transparent 22%); }
-:is([data-slot*="menu"] [role^="menuitem"], .menu-row)[data-disabled] { text-decoration: line-through 1.5px; text-decoration-color: currentColor; }
+:is([data-slot*="menu"]:not([data-slot^="ui-"]) [role^="menuitem"], .menu-row)[data-disabled]:not([data-variant="destructive"]) { color: color-mix(in oklch, var(--foreground), transparent 22%); }
+:is([data-slot*="menu"]:not([data-slot^="ui-"]) [role^="menuitem"], .menu-row)[data-disabled] { text-decoration: line-through 1.5px; text-decoration-color: currentColor; }
 /* Meta and keys are not struck: an inline-block stops the line reaching them. */
-:is([data-slot*="menu"] [role^="menuitem"], .menu-row)[data-disabled] :is(small, kbd) { display: inline-block; text-decoration: none; }
-:is([data-slot*="menu"] [role^="menuitem"], .menu-row) :is(span, strong):not(.composer-menu-shortcut) { font-weight: inherit; }
-:is([data-slot*="menu"] [role^="menuitem"], .menu-row):not([data-variant="destructive"]):is([data-highlighted], [data-expanded], [data-checked]) { color: var(--foreground); }
-:is([data-slot*="menu"] [role^="menuitem"], .menu-row)[data-checked] { font-weight: 660; }
-:is([data-slot*="menu"] [role^="menuitem"], .menu-row) small { font-weight: 400; }
+:is([data-slot*="menu"]:not([data-slot^="ui-"]) [role^="menuitem"], .menu-row)[data-disabled] :is(small, kbd) { display: inline-block; text-decoration: none; }
+:is([data-slot*="menu"]:not([data-slot^="ui-"]) [role^="menuitem"], .menu-row) :is(span, strong):not(.composer-menu-shortcut) { font-weight: inherit; }
+:is([data-slot*="menu"]:not([data-slot^="ui-"]) [role^="menuitem"], .menu-row):not([data-variant="destructive"]):is([data-highlighted], [data-expanded], [data-checked]) { color: var(--foreground); }
+:is([data-slot*="menu"]:not([data-slot^="ui-"]) [role^="menuitem"], .menu-row)[data-checked] { font-weight: 660; }
+:is([data-slot*="menu"]:not([data-slot^="ui-"]) [role^="menuitem"], .menu-row) small { font-weight: 400; }
 /* The model selector: scoped and unscoped differ by colour, at one weight;
    the current model is the only bold one. */
 .command-model-option[data-scoped] .command-model-label { font-weight: 450; color: color-mix(in oklch, var(--foreground), transparent 12%); }
@@ -2116,9 +2069,9 @@ svg.lucide { stroke-width: 2.4; }
 .command-model-option[data-checked] .command-model-label, .command-model-option[data-highlighted] .command-model-label { color: var(--foreground); }
 .command-model-option[data-checked] .command-model-label { font-weight: 660; }
 /* Menu rows at the sidebar row's size, a step under the old text-sm. */
-:is([data-slot*="menu"] [role^="menuitem"], .menu-row) { font-size: 10.4px; }
-:is([data-slot*="menu"] [role^="menuitem"], .menu-row) :is(span, strong):not(.composer-menu-shortcut) { font-size: inherit; }
-@media (--conduit-mobile-layout) { :is([data-slot*="menu"] [role^="menuitem"], .menu-row) { font-size: 0.875rem; } }
+:is([data-slot*="menu"]:not([data-slot^="ui-"]) [role^="menuitem"], .menu-row) { font-size: 10.4px; }
+:is([data-slot*="menu"]:not([data-slot^="ui-"]) [role^="menuitem"], .menu-row) :is(span, strong):not(.composer-menu-shortcut) { font-size: inherit; }
+@media (--conduit-mobile-layout) { :is([data-slot*="menu"]:not([data-slot^="ui-"]) [role^="menuitem"], .menu-row) { font-size: 0.875rem; } }
 
 /* Centered legacy overlays, including Settings, migrate with their subsystem. */
 .frost-overlay[data-placement="center"] { align-items: center; padding: 16px; }
