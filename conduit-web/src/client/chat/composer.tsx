@@ -1,4 +1,3 @@
-import { LibraryContext, useLibraryPiece } from "@/components/ui/swap";
 import { Button as LibraryButton, Captions, Completion, ComposerField, DesktopComposer, PhoneComposer, Picker, PillButton, PillField, PillWave, Rider, Spinner, StopGlyph, Toolbar } from "@/components/ui";
 import { latestAway, scrollToLatest } from "./latest-away";
 import { createEffect, createMemo, createSignal, For, lazy, on, onCleanup, onMount, Show, type JSX } from "solid-js";
@@ -56,12 +55,7 @@ const EDIT_ACTIONS = [
   { key: "end", label: "End of draft", icon: () => <TextCursorInputIcon /> },
 ] as const;
 
-/** The composer is drawn with components v2 (graduated in components/ui/swap.ts), its menus and buttons with it. */
-export function Composer(props: Parameters<typeof ComposerBody>[0]) {
-  return <LibraryContext.Provider value={useLibraryPiece("composer")}><ComposerBody {...props} /></LibraryContext.Provider>;
-}
-
-function ComposerBody(props: {
+export function Composer(props: {
   chat: ActiveChatStore;
   attachments: ComposerAttachments;
   models: ComposerModels;

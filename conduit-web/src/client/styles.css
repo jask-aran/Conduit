@@ -269,11 +269,7 @@ svg.lucide { stroke-width: 2.4; }
    blocks and tables shimmying horizontally while scrolling. Incremark Advanced
    already pinned this for its own subtree; every renderer needs it. */
 .markdown-skeleton { min-height: 4em; }
-.welcome { display: grid; min-height: 56vh; place-content: center; color: var(--muted-foreground); text-align: center; }
-.welcome h1 { margin: 0; color: var(--foreground); font-size: clamp(17.6px, 3vw, 20.8px); font-weight: 600; letter-spacing: -0.04em; }
 .marker { color: var(--muted-foreground); font-size: 9.6px; }
-/* Where the transcript's RiderButtons ride: centred above the composer (transcript.tsx measures the bottom). */
-.message-scroller-button { position: absolute; left: 50%; bottom: var(--message-scroller-button-bottom, 14.4px); z-index: 4; translate: -50% 0; transition: bottom var(--duration-gentle) var(--ease-arrive), opacity var(--duration-gentle) var(--ease-arrive); }
 /* A single class owns the material. Do not add material declarations to each
    component: the composer, Follow button, and desktop header pill must match. */
 .composer-surface-material[data-composer-surface="static"] {
@@ -357,8 +353,8 @@ svg.lucide { stroke-width: 2.4; }
 
 .chat-main-empty .transcript { position: absolute; inset: var(--chat-header-height) 0 0; margin-top: 0; }
 .chat-main-empty .message-scroller-viewport { overflow: hidden; overscroll-behavior-y: none; }
-.chat-main-empty .thread, .chat-main-empty .empty-thread, .chat-main-empty .welcome { width: 100%; min-height: 100%; padding: 0; }
-.chat-main-empty .welcome { padding-bottom: 140.8px; }
+.chat-main-empty .thread, .chat-main-empty .empty-thread { width: 100%; min-height: 100%; padding: 0; }
+.chat-main-empty .empty-thread { --welcome-room: 140.8px; }
 /* A first send waiting on its agent (main.tsx): docked, with no welcome. */
 .chat-main-sending .empty-thread { visibility: hidden; }
 .chat-main-empty .composer-stack { position: absolute; inset-inline: 0; top: 50%; z-index: 2; width: min(563.2px, calc(100% - 38.4px)); margin-inline: auto; padding: 0; transform: translateY(43.2px); background: transparent; }
@@ -555,12 +551,8 @@ svg.lucide { stroke-width: 2.4; }
     min-height: 0;
   }
   .chat-main-empty .thread,
-  .chat-main-empty .empty-thread,
-  .chat-main-empty .welcome {
+  .chat-main-empty .empty-thread {
     height: 100%;
-  }
-  .chat-main-empty .welcome {
-    place-content: center;
   }
   .chat-main-empty .composer-stack {
     inset: auto;
@@ -753,11 +745,7 @@ svg.lucide { stroke-width: 2.4; }
    blocks and tables shimmying horizontally while scrolling. Incremark Advanced
    already pinned this for its own subtree; every renderer needs it. */
 .markdown-skeleton { min-height: 5em; }
-.welcome { display: grid; min-height: 56vh; place-content: center; color: var(--muted-foreground); text-align: center; }
-.welcome h1 { margin: 0; color: var(--foreground); font-size: clamp(22px, 3vw, 26px); font-weight: 600; letter-spacing: -0.04em; }
 .marker { color: var(--muted-foreground); font-size: 12px; }
-/* Where the transcript's RiderButtons ride: centred above the composer (transcript.tsx measures the bottom). */
-.message-scroller-button { position: absolute; left: 50%; bottom: var(--message-scroller-button-bottom, 18px); z-index: 4; translate: -50% 0; transition: bottom var(--duration-gentle) var(--ease-arrive), opacity var(--duration-gentle) var(--ease-arrive); }
 /* A single class owns the material. Do not add material declarations to each
    component: the composer, Follow button, and desktop header pill must match. */
 .composer-surface-material[data-composer-surface="static"] {
@@ -840,8 +828,8 @@ svg.lucide { stroke-width: 2.4; }
 
 .chat-main-empty .transcript { position: absolute; inset: var(--chat-header-height) 0 0; margin-top: 0; }
 .chat-main-empty .message-scroller-viewport { overflow: hidden; overscroll-behavior-y: none; }
-.chat-main-empty .thread, .chat-main-empty .empty-thread, .chat-main-empty .welcome { width: 100%; min-height: 100%; padding: 0; }
-.chat-main-empty .welcome { padding-bottom: 176px; }
+.chat-main-empty .thread, .chat-main-empty .empty-thread { width: 100%; min-height: 100%; padding: 0; }
+.chat-main-empty .empty-thread { --welcome-room: 176px; }
 .chat-main-empty .composer-stack { position: absolute; inset-inline: 0; top: 50%; z-index: 2; width: min(704px, calc(100% - 48px)); margin-inline: auto; padding: 0; transform: translateY(54px); background: transparent; }
 .chat-main-live-opening .transcript { visibility: hidden; }
 /* Opening a chat in a pane: its composer shows only its field until the chat is there. */
@@ -1067,17 +1055,13 @@ svg.lucide { stroke-width: 2.4; }
     min-height: 0;
   }
   .chat-main-empty .thread,
-  .chat-main-empty .empty-thread,
-  .chat-main-empty .welcome {
+  .chat-main-empty .empty-thread {
     width: 100%;
     min-height: 100%;
     height: 100%;
     padding: 0;
   }
-  .chat-main-empty .welcome {
-    padding-bottom: 0;
-    place-content: center;
-  }
+  .chat-main-empty .empty-thread { --welcome-room: 0; }
   .chat-main-empty .composer-stack {
     position: relative;
     inset: auto;
@@ -1982,10 +1966,6 @@ svg.lucide { stroke-width: 2.4; }
 [data-slot="button"]:not(.ui-button):is([data-variant="ghost"], [data-variant="outline"]):focus-visible { background: var(--accent); color: var(--accent-foreground); }
 [data-slot="button"]:not(.ui-button):is([data-variant="default"], [data-variant="destructive"]):focus-visible { filter: brightness(1.12); }
 
-/* Cancel editing: a frost pill over the composer, beside scroll-to-latest
-   when both are up. */
-.message-cancel-edit[data-beside-latest] { translate: calc(-100% - 22px) 0; }
-@media (--conduit-mobile-layout) { .message-cancel-edit[data-beside-latest] { translate: calc(-100% - 26px) 0; } }
 .file-viewer-surface:focus { outline: none; }
 /* What a file dropped on a file viewer's column will do, by the pointer (main.tsx dragHint). */
 .drag-hint { position: fixed; top: 0; left: 0; z-index: 80; will-change: transform; display: inline-flex; align-items: center; gap: 5.6px; padding: 3.2px 8px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--popover); color: var(--popover-foreground); box-shadow: 0 4px 14px rgb(0 0 0 / 22%); font-size: 11.2px; pointer-events: none; white-space: nowrap; }

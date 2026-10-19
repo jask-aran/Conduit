@@ -89,6 +89,9 @@ export const MessageFoot = (props: { time?: string; dateTime?: string; title?: s
 export const StopLine = (props: { detail: string }) =>
   <div class="ui-stop-line" role="status"><SquareIcon aria-hidden="true" /><b>Interrupted</b>{`\u00a0· ${props.detail}`}</div>;
 /** A turn: the trace header, the answer and its foot, one gap apart. */
+/** An empty chat's greeting: centred in what holds it, above the room its host keeps for the composer (--welcome-room). */
+export const Welcome = (props: { title: string }) => <div class="ui-welcome"><h1>{props.title}</h1></div>;
+
 export const Turn = (props: { children: JSX.Element }) => <article class="ui-turn">{props.children}</article>;
 /**
  * The user's message: its Bubble (none when it is only attachments), what came with it (`under`: attachments,

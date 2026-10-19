@@ -109,3 +109,7 @@
   transition: height var(--move) var(--move-ease), opacity var(--move) var(--move-ease), visibility 0s var(--hide-delay); }
 .ui-disclosure[data-open="false"] > .ui-disclosure-body { height: 0; opacity: 0; visibility: hidden; --move: var(--duration-quick); --move-ease: var(--ease-leave); --hide-delay: var(--duration-quick); }
 .ui-disclosure[data-open="false"] { gap: 0; }
+
+/* Welcome: an empty chat's greeting, centred in its host above the room kept for the composer. */
+.ui-welcome { display: grid; height: 100%; min-height: 100%; place-content: center; padding-bottom: var(--welcome-room, 0); text-align: center; }
+.ui-welcome h1 { margin: 0; color: var(--foreground); font-size: var(--text-heading); font-weight: var(--weight-strong); line-height: var(--leading-tight); letter-spacing: -0.02em; }
