@@ -33,3 +33,33 @@
 .ui-card .ui-chip-copy { max-width: none; text-align: left; }
 /* Actions share one width, the widest's, at the card's right edge. */
 .ui-card-actions { display: grid; width: fit-content; grid-auto-columns: 1fr; grid-auto-flow: column; gap: var(--space-md); margin-left: auto; }
+
+/* Shared dialog parts: content supplies state and handlers, never surface CSS. */
+.ui-card { min-height: 0; max-height: 100%; overflow-y: auto; color: var(--foreground); font-size: var(--text-row); }
+.ui-card[data-size="large"] { width: min(100%, var(--measure-dialog-large)); }
+.ui-card-description { position: absolute; width: var(--hairline); height: var(--hairline); overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.ui-card-form, .ui-card-body { display: flex; min-width: 0; flex-direction: column; gap: var(--card-gap); }
+.ui-card-actions { grid-auto-columns: minmax(0, 1fr); max-width: 100%; }
+.ui-card-actions > .ui-button { min-width: 0; min-height: var(--control); height: auto; white-space: normal; }
+.ui-card-note { margin: 0; color: var(--muted-foreground); font-size: var(--text-caption); line-height: var(--leading-text); overflow-wrap: anywhere; }
+.ui-card-note[data-error] { color: var(--destructive); }
+.ui-card-read mark { border-radius: var(--radius-inset); background: var(--tint); color: var(--foreground); }
+.ui-card-read { display: block; max-height: var(--measure-xs); overflow: auto; padding: var(--space-md); border-radius: var(--radius-inset); background: var(--tint); font: var(--weight-rest) var(--text-caption)/var(--leading-text) var(--font-data); white-space: pre-wrap; overflow-wrap: anywhere; }
+.ui-card-details { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--space-sm) var(--space-lg); font-size: var(--text-caption); }
+.ui-card-details dt { color: var(--muted-foreground); }
+.ui-card-details dd { margin: 0; overflow-wrap: anywhere; text-align: right; font-family: var(--font-data); }
+.ui-card-qr { width: min(100%, var(--measure-sm)); aspect-ratio: 1; align-self: center; overflow: hidden; border-radius: var(--radius-control); background: var(--primary); transition: opacity var(--duration-quick) var(--ease-change); }
+.ui-card-qr svg { display: block; width: 100%; height: 100%; }
+.ui-card-qr[data-expired] { opacity: var(--opacity-disabled); }
+.ui-card-preview { max-height: var(--measure-lg); overflow: auto; }
+.ui-card .ui-textarea { width: 100%; max-height: var(--measure-md); resize: vertical; border: var(--hairline) solid var(--tint); border-radius: var(--radius-control); padding: var(--space-md); }
+.ui-card-attachments { display: flex; flex-direction: column; gap: var(--space-md); padding: 0; list-style: none; }
+.ui-card-attachment { display: flex; align-items: center; gap: var(--space-md); }
+.ui-card-attachment-media { display: grid; flex: none; width: var(--control); place-items: center; overflow: hidden; border-radius: var(--radius-control); color: var(--muted-foreground); }
+.ui-card-attachment-media[data-image] { width: min(45%, var(--measure-xs)); }
+.ui-card-attachment-media img { display: block; max-width: 100%; max-height: var(--measure-xs); object-fit: contain; }
+.ui-card-attachment-media svg { width: var(--icon); height: var(--icon); }
+.ui-card-attachment-copy { display: grid; flex: 1; min-width: 0; gap: var(--space-xs); overflow-wrap: anywhere; }
+.ui-card-attachment-copy strong { font-size: var(--text-row); font-weight: var(--weight-strong); }
+.ui-card-attachment-copy small { color: var(--muted-foreground); font-size: var(--text-caption); }
+.ui-card-attachment[data-error] .ui-card-attachment-copy small { color: var(--destructive); }

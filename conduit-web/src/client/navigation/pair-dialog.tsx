@@ -1,6 +1,8 @@
+import { Dialog } from "@/components/dialog";
+import { CardActions, CardQR, CardNote, CardDetails } from "@/components/ui/card";
+import { Button as DialogButton } from "@/components/ui/controls";
 import { createEffect, createSignal, on, onCleanup, Show } from "solid-js";
-import { Button } from "@/components/primitives";
-import { FrostDialog } from "@/components/frost";
+
 import { authorizedFetch } from "../api/native-auth-client";
 import { httpUrl } from "../api/transport";
 import { activeServer, pathsOf, serverPathLabel, type ServerPath } from "../platform/servers.ts";
@@ -66,23 +68,23 @@ export function PairDialog(props: { open: boolean; onOpenChange: (open: boolean)
   const left = () => Math.max(0, Math.round((expiresAt() - now()) / 1000));
   const expired = () => Boolean(svg()) && left() === 0;
 
-  return <FrostDialog open={props.open} onOpenChange={props.onOpenChange} title="Pair a device" close size="wide" class="pair-card">
-    <Show when={route()} fallback={<p class="pair-note">Only this machine reaches {activeServer()?.name || "this server"}. Run <code>conduit-server connect</code> on it to add your network, Tailscale or a tunnel, then pair from here.</p>}>
-      <div class="pair-qr" data-expired={expired() ? "" : undefined} innerHTML={svg()} aria-label="Pairing QR code" role="img" />
-      <Show when={error()}><p class="pair-note pair-error" role="alert">{error()}</p></Show>
-      <p class="pair-note">Scan with a phone's camera, or with <strong>Add server → Scan QR code</strong> in the Conduit app. It works once.</p>
-      <dl class="pair-details">
+  return <Dialog open={props.open} onOpenChange={props.onOpenChange} title="Pair a device" close size="wide" >
+    <Show when={route()} fallback={<CardNote>Only this machine reaches {activeServer()?.name || "this server"}. Run <code>conduit-server connect</code> on it to add your network, Tailscale or a tunnel, then pair from here.</CardNote>}>
+      <CardQR svg={svg()} expired={expired()} />
+      <Show when={error()}><CardNote error>{error()}</CardNote></Show>
+      <CardNote>Scan with a phone's camera, or with <strong>Add server → Scan QR code</strong> in the Conduit app. It works once.</CardNote>
+      <CardDetails>
         <dt>Server</dt><dd>{activeServer()?.name}</dd>
         {/* The address a camera opens, in the route words the menus use. The
             app takes the nearest route that proves it is this server. */}
         <dt>Opens on</dt><dd>{serverPathLabel(route()!)} · {shortOrigin(route()!.origin)}</dd>
         <Show when={version()}><dt>Version</dt><dd>{version().replace(/\.\d{14}\./, " · ")}</dd></Show>
         <dt>Code</dt><dd>{expired() ? "Expired" : svg() ? `Expires in ${Math.floor(left() / 60)}:${String(left() % 60).padStart(2, "0")}` : "…"}</dd>
-      </dl>
-      <div class="frost-dialog-actions">
-        <Button variant="ghost" size="sm" onClick={() => void navigator.clipboard.writeText(link())} disabled={!link() || expired()}>Copy link</Button>
-        <Button variant="outline" size="sm" onClick={() => void fresh()}>New code</Button>
-      </div>
+      </CardDetails>
+      <CardActions>
+        <DialogButton variant="ghost" size="sm" onClick={() => void navigator.clipboard.writeText(link())} disabled={!link() || expired()}>Copy link</DialogButton>
+        <DialogButton variant="ghost" outline size="sm" onClick={() => void fresh()}>New code</DialogButton>
+      </CardActions>
     </Show>
-  </FrostDialog>;
+  </Dialog>;
 }

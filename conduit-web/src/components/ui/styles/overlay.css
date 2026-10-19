@@ -116,3 +116,9 @@
 .ui-glance-answer[data-math] .katex-display { margin: .55em 0; overflow: hidden; text-align: left; }
 .ui-glance-empty { margin: 0; padding-top: var(--space-4xl); text-align: center; }
 .ui-glance .ui-section { margin-inline: calc(-1 * var(--space-md)); }
+
+/* Kobalte's shared dialog host. The frost itself fades on Card, not its ancestor. */
+.ui-scrim[data-dialog] { position: fixed; inset: 0; z-index: var(--layer-dialog); min-height: 0; outline: none; padding: calc(var(--space-xl) + var(--safe-area-inset-top, env(safe-area-inset-top, 0px))) var(--space-xl) calc(var(--space-xl) + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))); }
+.ui-scrim[data-dialog][data-state="closed"] { animation: ui-dialog-close var(--duration-quick) var(--ease-leave); pointer-events: none; }
+/* Keep the behavior host mounted for Card's exit, including in reduced motion. */
+@keyframes ui-dialog-close { from { visibility: visible; } to { visibility: visible; } }

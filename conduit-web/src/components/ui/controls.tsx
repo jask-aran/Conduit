@@ -34,12 +34,13 @@ export const StopGlyph = () => <SquareIcon class="ui-stop-glyph" aria-hidden="tr
 export const Spinner = (props: { class?: string }) => <span class={cn("ui-spinner", props.class)} aria-hidden="true" />;
 
 /** Multi-line text that grows with its lines: bare, the type's size, no geometry of its own -- what holds it pads it (DesktopComposer, PillField). */
-export function TextArea(props: { placeholder?: string; value?: string; onInput?: (value: string) => void; class?: string }) {
-  return <textarea class={cn("ui-textarea", props.class)} rows={1} placeholder={props.placeholder} value={props.value ?? ""} onInput={(event) => props.onInput?.(event.currentTarget.value)} />;
+export function TextArea(props: JSX.TextareaHTMLAttributes<HTMLTextAreaElement>) {
+  const [local, rest] = splitProps(props, ["class"]);
+  return <textarea rows={1} {...rest} class={cn("ui-textarea", local.class)} />;
 }
 
 /** A field's name over its control: Caption type, --card-pair above it. */
-export function Field(props: { label: string; children: JSX.Element }) {
+export function Field(props: { label: JSX.Element; children: JSX.Element }) {
   return <label class="ui-field"><span class="ui-field-label">{props.label}</span>{props.children}</label>;
 }
 

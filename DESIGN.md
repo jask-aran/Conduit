@@ -66,25 +66,28 @@ What each v2 family replaces and where it stands. Update a row in the commit tha
 | Controls: Spinner, StatusDot (the runtime dot) | `primitives.tsx`, `navigation/runtime-indicator.tsx` | gallery only (v2 pieces exist; the app still draws its own) |
 | Frost | `.composer-surface-material`, `chat/composer-surface.ts` | previews |
 | Popover: `Menu`, `Section`, `Item` | `Menu*`, `ContextMenu*`, `Popover*`, `PopoverSearchList` in `primitives.tsx`; `.menu-row` (terminal pane, leader, context gauge, place picker) | each section's menus with its section (the composer's are graduated with it); previews elsewhere |
-| Card | `FrostDialog` (`frost.tsx`) | gallery only |
 | Overlay, Glance | `FrostOverlay` (`frost.tsx`), command menu, chat search, Settings | gallery only |
 | Leader | `navigation/leader-palette.tsx`, `frost-card` | gallery only |
 | DesktopComposer | `chat/composer.tsx` (desktop) | cut over: `DesktopComposer` (riders, the question as its takeover), `ComposerField` with `Completion`, `Toolbar` (status, aside, primary, `StopGlyph`); its pickers are the menus still to cut over |
-| Rider | queued messages, attachment strip, file references, question card | cut over: `Rider` with `Lines`/`Line` (measures its own clipping), `Chips`/`Chip` (open, retry, remove), `References`/`Reference` (also under a sent message), and the question as a card of `Tabs`/`Tab`, `Choices`/`Choice` (own answer), `Summary`, `Hints`; their dialogs are overlays still to cut over |
+| Rider | queued messages, attachment strip, file references, question card | cut over: `Rider` with `Lines`/`Line` (measures its own clipping), `Chips`/`Chip` (open, retry, remove), `References`/`Reference` (also under a sent message), and the question as a card of `Tabs`/`Tab`, `Choices`/`Choice` (own answer), `Summary`, `Hints`; attachment and review-comment dialogs use the shared v2 `Dialog` |
 | Pill, PhoneComposer | phone header pills, sidebar header, `chat/composer.tsx` (phone: the voice bar, a phone's only composer) | the voice bar is cut over: `PhoneComposer` (riders, `Captions`) and `Pill*`; header pills previews |
 | Transcript, CodeBlock | `chat/transcript.tsx`, the Markdown renderers | cut over: rows (`TranscriptRow`), the user's `Message`, the answer's `Turn`, `Answer`, `MessageFoot`, `Failure`, `HarnessPrompt`, `Changes`, the `RiderButton`s, the Markdown, drawn by `Answer` through `ANSWER_MARKDOWN` (the renderers' wrappers, tables, links, citations, formulas, streamed words, a wide block's bleed)., the code block (`CodeBlock`, the renderer's highlighted lines grown in place as its children; `codeBlockHtml` for the marked renderer) |
 
-**Overlays until Card and Overlay graduate:** build them from `components/frost.tsx`, never a copy of another overlay. `npm run build` fails on a hand-rolled Kobalte dialog (`scripts/check-bundle.mjs`; update that check when Card and Overlay replace them).
+**Shared dialogs and notifications are cut over.** `components/dialog.tsx` supplies Kobalte behavior around the library's `Scrim` and `Card`; `components/notifications.tsx` supplies Sonner behavior around `Toaster` and `Toast`. App callers supply content and handlers. Dialog shell, headings, actions, close controls, fields, spacing and motion come from v2, with no caller surface classes or classic path. Embedded domain widgets (the Computer explorer, workspace identity editor, server connection form and code viewer) remain content slots owned by their subsystems; this does not permit them to override the dialog surface.
+
+Browser-native `window.confirm` and `window.prompt` calls in pane/file navigation and settings remain outside this shared in-app dialog cutover. Replacing their synchronous return values requires a separate change to those navigation flows.
+
+**Large overlays until Overlay graduates:** use `FrostOverlay` from `components/frost.tsx`. `npm run build` rejects a hand-rolled Kobalte dialog or a direct notification call that bypasses the shared adapter (`scripts/check-bundle.mjs`).
 
 | Building | Use |
 | --- | --- |
 | a palette, search or anything that filters | `FrostOverlay` (`placement="center"` for one that does not filter, like Settings) |
-| a confirm, a one-field prompt, a small piece of content | `FrostDialog` (`alert` for a destructive choice, `size="wide"` for content, `close`, `actions`) |
+| a confirm, a one-field prompt, a small piece of content | `Dialog` from `components/dialog.tsx` (`alert` for a destructive choice, `size="wide"` or `"large"` for content, `close`, `actions`); `CardForm`, `CardBody` and `CardActions` for its form |
 | a menu, context menu or submenu | `Menu*` / `ContextMenu*` (`primitives.tsx`) |
 | a pick list anchored to a control | `PopoverContent` holding `PopoverSearchList` |
 | a card that floats without covering the page | `frost-card` alone |
 
-Inside them rows take `frost-row`, keys `Keycap`, the foot `frost-rail`, a dialog's buttons `frost-dialog-actions`; material, dim, radius and arrival come from those pieces and the `--frost-*` tokens, and a surface's own CSS sets only its layout.
+Inside them rows take `frost-row`, keys `Keycap`, the foot `frost-rail`, a shared dialog's buttons `CardActions`; material, dim, radius and arrival come from those pieces and the `--frost-*` tokens, and a surface's own CSS sets only its layout.
 
 # Surfaces
 

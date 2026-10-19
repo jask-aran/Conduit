@@ -1,9 +1,11 @@
+import { CardPreview, CardRead } from "@/components/ui/card";
+import { Dialog } from "@/components/dialog";
+import { Button as DialogButton, TextArea as DialogTextArea } from "@/components/ui/controls";
 import { createSignal, For, lazy, Show, Suspense } from "solid-js";
 import { FileCode2Icon, FileDiffIcon } from "lucide-solid";
 import { Reference, References } from "@/components/ui";
 import { reviewCommentParts, type ProjectedReviewComment, type ReviewComment } from "./review-comments";
-import { Button, Textarea } from "@/components/primitives";
-import { FrostDialog } from "@/components/frost";
+
 import { requestReviewNavigation } from "./review-navigation";
 
 // The preview pulls in CodeMirror, so it arrives with the dialog, not the chat.
@@ -39,23 +41,23 @@ export function ReviewCommentCards(props: {
         <Reference icon={diff ? <FileDiffIcon /> : <FileCode2Icon />} name={item.path.split("/").at(-1) ?? item.path} at={lines} note={item.note || undefined} title={item.excerpt}
           label={diff ? "Comment on a comparison" : "Comment on the working file"} onOpen={props.chatId ? () => requestReviewNavigation(props.chatId!, item) : undefined}
           onEdit={props.onUpdate && removable ? () => { setNote(removable.note); setEditing(true); } : undefined} onRemove={props.onRemove && removable ? () => props.onRemove?.(removable) : undefined} />
-        <Show when={props.onUpdate && removable}><FrostDialog open={editing()} onOpenChange={(open) => {
+        <Show when={props.onUpdate && removable}><Dialog open={editing()} onOpenChange={(open) => {
           if (!open) setNote(item.note);
           setEditing(open);
-        }} size="wide" class="review-comment-editor" title="Edit review comment" description={`${item.path}${lines}${diff ? " · comparison" : ""}`} close="Close comment editor"
+        }} size="wide" title="Edit review comment" description={`${item.path}${lines}${diff ? " · comparison" : ""}`} close="Close comment editor"
           actions={<>
-            <Button variant="ghost" onClick={() => setEditing(false)}>Cancel</Button>
-            <Button onClick={commit}>Save comment</Button>
+            <DialogButton variant="ghost" onClick={() => setEditing(false)}>Cancel</DialogButton>
+            <DialogButton onClick={commit}>Save comment</DialogButton>
           </>}>
-            <div class="review-comment-excerpt" data-scope={diff ? "comparison" : "file"}>
-              <Suspense fallback={<pre class="review-comment-excerpt-fallback"><span>{parts().before}</span><mark>{parts().selected}</mark><span>{parts().after}</span></pre>}>
+            <CardPreview>
+              <Suspense fallback={<CardRead><span>{parts().before}</span><mark>{parts().selected}</mark><span>{parts().after}</span></CardRead>}>
                 <WorkspaceExcerptView path={item.path} text={item.excerpt} firstLine={item.from} startColumn={item.startColumn} endColumn={item.endColumn} note={item.note} side={diff ? item.side : undefined} counterpart={item.counterpart} />
               </Suspense>
-            </div>
-            <Textarea ref={(element: HTMLTextAreaElement) => queueMicrotask(() => grow(element))} autofocus aria-label={`Comment for ${item.path}`} maxlength={2000} rows={2} value={note()} onInput={(event) => { setNote(event.currentTarget.value); grow(event.currentTarget); }} onKeyDown={(event) => {
+            </CardPreview>
+            <DialogTextArea ref={(element: HTMLTextAreaElement) => queueMicrotask(() => grow(element))} autofocus aria-label={`Comment for ${item.path}`} maxlength={2000} rows={2} value={note()} onInput={(event) => { setNote(event.currentTarget.value); grow(event.currentTarget); }} onKeyDown={(event) => {
               if ((event.ctrlKey || event.metaKey) && event.key === "Enter") { event.preventDefault(); commit(); }
             }} />
-        </FrostDialog></Show>
+        </Dialog></Show>
       </>;
     }}</For>
   </References></Show>;

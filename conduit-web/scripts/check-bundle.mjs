@@ -110,20 +110,22 @@ if (pwaFailures.length) {
   console.log(`PWA: manifest ${manifestName}, service worker ${serviceWorkerName}, icons present, no /v0 runtime cache.`);
 }
 
-// Overlays are built from components/frost.tsx (DESIGN.md, Surfaces). A
+// Overlays use the shared behavioral adapters (DESIGN.md, Surfaces). A
 // hand-rolled Kobalte dialog, or a blur and fill set in a surface's own CSS,
-// is how overlays drifted apart before; FrostOverlay, FrostDialog and the
+// is how overlays drifted apart before; FrostOverlay, Dialog and the
 // Menu/Popover primitives are the ways in.
 const overlayFailures = [];
 const walk = (dir) => fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry) => entry.isDirectory() ? walk(path.join(dir, entry.name)) : [path.join(dir, entry.name)]);
 for (const file of walk(path.resolve("src"))) {
-  if (!/\.(tsx|ts)$/.test(file) || file.endsWith(path.join("components", "frost.tsx"))) continue;
+  if (!/\.(tsx|ts)$/.test(file) || ["frost.tsx", "dialog.tsx"].some((name) => file.endsWith(path.join("components", name)))) continue;
   const text = fs.readFileSync(file, "utf8");
-  if (/K(?:Alert)?Dialog\.(?:Root|Portal|Content)\b/.test(text)) overlayFailures.push(`${path.relative(process.cwd(), file)} builds its own dialog; use FrostDialog or FrostOverlay from components/frost.tsx`);
+  if (/\bFrostDialog\b/.test(text)) overlayFailures.push(`${path.relative(process.cwd(), file)} uses the removed classic dialog`);
+  if (/from ["\']solid-sonner["\']/.test(text) && !file.endsWith(path.join("components", "notifications.tsx"))) overlayFailures.push(`${path.relative(process.cwd(), file)} bypasses the shared v2 notification adapter`);
+  if (/K(?:Alert)?Dialog\.(?:Root|Portal|Content)\b/.test(text)) overlayFailures.push(`${path.relative(process.cwd(), file)} builds its own dialog; use Dialog from components/dialog.tsx or FrostOverlay from components/frost.tsx`);
 }
 if (overlayFailures.length) {
   for (const failure of overlayFailures) console.error(`Overlays: ${failure}`);
   process.exitCode = 1;
 } else {
-  console.log("Overlays: every dialog is FrostDialog or FrostOverlay.");
+  console.log("Overlays: every dialog uses the shared Dialog or FrostOverlay.");
 }

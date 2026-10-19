@@ -127,6 +127,7 @@
   /* Measures: six lengths for what has a width (or a scrolling height) of its own -- a column, a card, an overlay. */
   --measure-xs: calc(12 * var(--u-space)); --measure-sm: calc(15 * var(--u-space)); --measure-md: calc(20 * var(--u-space));
   --measure-lg: calc(25 * var(--u-space)); --measure-xl: calc(30 * var(--u-space)); --measure-2xl: calc(40 * var(--u-space));
+  --measure-dialog-large: calc(60 * var(--u-space));
   /* Rows: their measured height and text, in the unit; inset, pad and gap are steps. */
   --row-text: calc(var(--row-text-units) * var(--u-type)); --row-min: max(var(--row-min-floor), calc(var(--row-min-units) * var(--u-space)));
   --row-inset: var(--space-md); --row-pad: var(--space-sm) var(--row-inset); --row-gap: var(--space-md);

@@ -1,3 +1,5 @@
+import { Dialog } from "@/components/dialog";
+import { Button as DialogButton } from "@/components/ui/controls";
 import { createEffect, createMemo, createSignal, For, onCleanup, Show } from "solid-js";
 import type { JSX } from "solid-js";
 import * as KDialog from "@kobalte/core/dialog";
@@ -8,7 +10,7 @@ import {
   SlashIcon, SlidersHorizontalIcon, SquareIcon, TerminalIcon, Trash2Icon, XIcon,
 } from "lucide-solid";
 import { Button } from "@/components/primitives";
-import { FrostDialog, FrostOverlay, Keycap } from "@/components/frost";
+import { FrostOverlay, Keycap } from "@/components/frost";
 import { activityLabel } from "../../activity.js";
 import type { ChatSummary, ModelOption, Project } from "../api/contracts";
 import {
@@ -1055,7 +1057,7 @@ export function CommandMenu(props: {
               onTogglePreview={togglePreview}
             />
     </FrostOverlay>
-    <FrostDialog alert open={Boolean(pendingDelete())}
+    <Dialog alert open={Boolean(pendingDelete())}
       onOpenChange={(open) => { if (!open) { setPendingDelete(null); focusInput(); } }}
       onOpenAutoFocus={(event) => { event.preventDefault(); selectDeleteChoice("cancel"); }}
       onCloseAutoFocus={(event) => event.preventDefault()}
@@ -1071,22 +1073,20 @@ export function CommandMenu(props: {
       title={`Delete ${pendingDelete()?.length || 0} chats?`}
       description="This permanently deletes the selected session transcripts and attached files."
       actions={<>
-        <Button
+        <DialogButton
           ref={deleteCancelButton}
-          class="delete-dialog-choice"
-          variant="outline"
+          variant="ghost" outline
           data-selected={deleteChoice() === "cancel"}
           onFocus={() => setDeleteChoice("cancel")}
           onClick={() => { setPendingDelete(null); focusInput(); }}
-        >Cancel</Button>
-        <Button
+       >Cancel</DialogButton>
+        <DialogButton
           ref={deleteConfirmButton}
-          class="delete-dialog-choice delete-dialog-confirm"
-          variant={deleteChoice() === "confirm" ? "destructive" : "outline"}
+          variant="destructive" outline={deleteChoice() !== "confirm"}
           data-selected={deleteChoice() === "confirm"}
           onFocus={() => setDeleteChoice("confirm")}
           onClick={() => void confirmDelete()}
-        >Delete chats</Button>
+       >Delete chats</DialogButton>
       </>} />
   </>;
 }

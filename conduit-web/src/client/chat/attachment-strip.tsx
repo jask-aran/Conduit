@@ -1,13 +1,14 @@
+import { Dialog } from "@/components/dialog";
+import { Button as DialogButton } from "@/components/ui/controls";
+import { CardAttachments, CardAttachment } from "@/components/ui/card";
 import { createEffect, createMemo, createSignal, For, lazy, on, onCleanup, onMount, Show, Suspense } from "solid-js";
-import { FrostDialog } from "@/components/frost";
-import { FileIcon, Maximize2Icon, Trash2Icon, XIcon } from "lucide-solid";
-import { Button } from "@/components/primitives";
+
+import { FileIcon, Maximize2Icon, Trash2Icon } from "lucide-solid";
 import { Button as LibraryButton, Chip, Chips, Rider, RiderActions } from "@/components/ui";
 import type { UploadAttachment } from "../state/attachments";
 import { attachmentUrl } from "../api/transport";
 import { AttachmentImage, sizeLabel } from "./attachments";
 import { createLeaving, fadeOut, riderMotion, type CardExit } from "./composer-cards";
-import "./attachment-strip.css";
 
 const reduced = () => typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
 const isImage = (item: UploadAttachment) => Boolean(item.type?.startsWith("image/"));
@@ -41,28 +42,23 @@ function AttachmentsDialog(props: {
   const total = () => props.items.reduce((sum, item) => sum + (item.size || 0), 0);
   const removeAll = () => { props.onOpenChange(false); props.onRemoveAll(); };
   createEffect(() => { if (props.open && !props.items.length) props.onOpenChange(false); });
-  return <FrostDialog open={props.open} onOpenChange={props.onOpenChange} size="wide" overlayClass="attachment-dialog" class="attachment-dialog-card"
-    title={props.items.length === 1 ? "1 attachment" : `${props.items.length} attachments`}
+  return <Dialog open={props.open} onOpenChange={props.onOpenChange} size="wide"
+   title={props.items.length === 1 ? "1 attachment" : `${props.items.length} attachments`}
     description={sizeLabel(total())}
-    actions={<><Button variant="ghost" size="sm" onClick={removeAll}>Remove all</Button>
-            <Button size="sm" onClick={() => props.onOpenChange(false)}>Done</Button></>}>
-    <ul class="attachment-dialog-list">
+    actions={<><DialogButton variant="ghost" size="sm" onClick={removeAll}>Remove all</DialogButton>
+            <DialogButton size="sm" onClick={() => props.onOpenChange(false)}>Done</DialogButton></>}>
+    <CardAttachments>
             <For each={props.items.map((item) => item.id)}>{(id) => {
               const item = createMemo<UploadAttachment | undefined>((last) => props.items.find((candidate) => candidate.id === id) ?? last);
               const source = () => item() && previewOf(item()!, props.chatId);
-              return <Show when={item()}>{(current) => <li class="attachment-dialog-row" data-status={current().status}>
-                <span class="attachment-dialog-preview" data-kind={isImage(current()) ? "image" : "file"}>
-                  <Show when={source()} fallback={<FileMark name={current().name} />}><AttachmentImage src={source()!} /></Show>
-                </span>
-                <span class="attachment-dialog-copy">
-                  <strong>{current().name}</strong>
-                  <small>{current().status === "error" ? current().error || "Upload failed" : [sizeLabel(current().size), current().type].filter(Boolean).join(" · ")}</small>
-                </span>
-                <Button variant="ghost" size="icon-sm" aria-label={`Remove ${current().name}`} onClick={() => void props.onRemove(current())}><XIcon /></Button>
-              </li>}</Show>;
+              return <Show when={item()}>{(current) => <CardAttachment name={current().name}
+                detail={current().status === "error" ? current().error || "Upload failed" : [sizeLabel(current().size), current().type].filter(Boolean).join(" · ")}
+                failed={current().status === "error"} icon={<FileMark name={current().name} />}
+                image={source() ? <AttachmentImage src={source()!} /> : undefined}
+                onRemove={() => void props.onRemove(current())} />}</Show>;
             }}</For>
-          </ul>
-  </FrostDialog>;
+          </CardAttachments>
+  </Dialog>;
 }
 
 /**

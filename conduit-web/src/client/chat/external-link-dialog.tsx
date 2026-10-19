@@ -1,6 +1,7 @@
+import { Dialog } from "@/components/dialog";
+import { Button as DialogButton } from "@/components/ui/controls";
 import type { Accessor } from "solid-js";
-import { Button } from "@/components/primitives";
-import { FrostDialog } from "@/components/frost";
+import { CardRead } from "@/components/ui/card";
 
 export function ExternalLinkDialog(props: {
   url: Accessor<string | null>;
@@ -19,12 +20,12 @@ export function ExternalLinkDialog(props: {
     if (url) window.open(url, "_blank", "noopener,noreferrer");
     props.onClose();
   };
-  return <FrostDialog alert open={Boolean(props.url())} onOpenChange={(openState) => { if (!openState) props.onClose(); }} onCloseAutoFocus={restoreFocus}
-    title="Open external link?" description="This link opens outside Conduit."
+  return <Dialog alert open={Boolean(props.url())} onOpenChange={(openState) => { if (!openState) props.onClose(); }} onCloseAutoFocus={restoreFocus}
+   title="Open external link?" description="This link opens outside Conduit."
     actions={<>
-      <Button variant="outline" onClick={props.onClose}>Cancel</Button>
-      <Button onClick={open}>Open link</Button>
+      <DialogButton variant="ghost" outline onClick={props.onClose}>Cancel</DialogButton>
+      <DialogButton onClick={open}>Open link</DialogButton>
     </>}>
-    <code class="external-link-url">{props.url()}</code>
-  </FrostDialog>;
+    <CardRead>{props.url()}</CardRead>
+  </Dialog>;
 }
