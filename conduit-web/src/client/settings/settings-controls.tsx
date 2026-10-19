@@ -50,19 +50,7 @@ export function Segmented<T extends string>(props: {
   </div>;
 }
 
-/** On or off, for a setting that is one or the other. */
-export function Switch(props: { label: string; checked: boolean; onChange: (checked: boolean) => void; disabled?: boolean; id?: string }) {
-  return <button
-    id={props.id}
-    type="button"
-    role="switch"
-    class="settings-switch"
-    aria-label={props.label}
-    aria-checked={props.checked}
-    disabled={props.disabled}
-    onClick={() => props.onChange(!props.checked)}
-  ><span aria-hidden="true" /></button>;
-}
+export { Switch } from "@/components/ui/controls";
 
 /**
  * A settings dropdown: the native select stays as the value's owner (ids,

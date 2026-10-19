@@ -63,7 +63,7 @@ What each v2 family replaces and where it stands. Update a row in the commit tha
 | Controls: `Input`, `TextArea`, `SelectTrigger`, `Field` | `Field*`, `Input`, `Textarea` in `primitives.tsx` | old |
 | Controls: `Slider` | `chat/step-slider.tsx` | previews |
 | Controls: `Keycap` | `Keycap` in `components/frost.tsx` | old |
-| Controls: Switch, Spinner, StatusDot (the runtime dot) | `settings-controls.tsx`, `primitives.tsx`, `navigation/runtime-indicator.tsx` | gallery only (v2 pieces exist; the app still draws its own) |
+| Controls: Spinner, StatusDot (the runtime dot) | `primitives.tsx`, `navigation/runtime-indicator.tsx` | gallery only (v2 pieces exist; the app still draws its own) |
 | Frost | `.composer-surface-material`, `chat/composer-surface.ts` | previews |
 | Popover: `Menu`, `Section`, `Item` | `Menu*`, `ContextMenu*`, `Popover*`, `PopoverSearchList` in `primitives.tsx`; `.menu-row` (terminal pane, leader, context gauge, place picker) | each section's menus with its section (the composer's are graduated with it); previews elsewhere |
 | Card | `FrostDialog` (`frost.tsx`) | gallery only |
