@@ -196,8 +196,6 @@ html, body { background: var(--frame, #08090a); color: var(--foreground); }
 .g-cell-body:has(> :is(.g-scrim, .g-overlay-demo)) { width: 100%; }
 .g-stack { display: grid; gap: 8px; }
 .g-muted { color: var(--muted-foreground); font-weight: 400; }
-.g-picker { gap: 6px; }
-.g-picker svg { width: calc(0.875 * var(--u-icon)); height: calc(0.875 * var(--u-icon)); color: var(--muted-foreground); }
 .g-anatomy :is(.ui-phone-field, .ui-phone-row, .ui-phone-edit, .ui-voice-captions) { outline: 1px dashed #d99a2299; outline-offset: 1px; }
 .g-anatomy :is(.ui-phone-row, .ui-phone-edit) > .ui-pill, .g-anatomy .ui-voice-track { outline: 1px dotted #7aa2f799; outline-offset: 2px; }
 .g-state-table { border-collapse: collapse; font-size: 12px; }

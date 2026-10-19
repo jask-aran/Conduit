@@ -1,23 +1,8 @@
-import { libraryPiece } from "@/components/ui/swap";
 import { createMemo, For, Show } from "solid-js";
-import { ChevronDownIcon, SearchIcon } from "lucide-solid";
-import {
-  Menu,
-  MenuContent,
-  MenuGroup,
-  MenuItem,
-  MenuLabel,
-  MenuRadioGroup,
-  MenuRadioItem,
-  MenuSeparator,
-  MenuSub,
-  MenuSubContent,
-  MenuSubTrigger,
-  MenuTrigger,
-  Spinner,
-} from "@/components/primitives";
+import { SearchIcon } from "lucide-solid";
+import { MenuNote, Picker, Section, Slider, Spinner } from "@/components/ui";
+import { Menu, MenuContent, MenuRadioGroup, MenuRadioItem, MenuRow, MenuSection, MenuSub, MenuSubContent, MenuSubValue } from "@/components/menus";
 import type { ModelOption } from "../api/contracts";
-import { StepSlider, sliderParts } from "./step-slider";
 
 const thinkingLabel = (value: string) => value ? value[0]!.toUpperCase() + value.slice(1) : "Off";
 
@@ -40,28 +25,26 @@ export function ModelMenuItems(props: ModelMenuProps) {
   // A model with no levels still shows the slider, held on its one setting.
   const levels = createMemo(() => selected()?.thinkingLevels?.length ? selected()!.thinkingLevels! : ["off"]);
   return <>
-      <Show when={props.onSearchModels}>
-        <MenuItem onSelect={() => props.onSearchModels?.()}><SearchIcon class="size-3.5" /><span>Search all models…</span><Show when={props.searchShortcut}><kbd class="composer-menu-shortcut">{props.searchShortcut}</kbd></Show></MenuItem>
-        <MenuSeparator />
-      </Show>
-      <Show when={!props.onSearchModels && props.notice}><div class="px-2 pb-2 text-xs text-muted-foreground">{props.notice}</div></Show>
-      <MenuRadioGroup value={props.model} onChange={props.onModelChange}>
-        <For each={selectableModels()}>{(item) => <MenuRadioItem class="composer-model-option" value={item.spec} closeOnSelect={false}><span title={item.label}>{item.label}</span><small>{item.provider}</small></MenuRadioItem>}</For>
-      </MenuRadioGroup>
-      <Show when={selected()}><MenuSeparator />
-        <StepSlider label="Thinking" value={levels().length > 1 ? props.thinkingLevel : levels()[0]!} disabled={levels().length < 2}
-          options={levels().map((level) => ({ value: level, label: thinkingLabel(level) }))}
-          valueControl={levels().length < 2 ? undefined : (label) => <MenuSub>
-            <MenuSubTrigger class={sliderParts().value}>{label()}</MenuSubTrigger>
-            <MenuSubContent>
-              <MenuGroup><MenuLabel>Thinking</MenuLabel><MenuRadioGroup value={props.thinkingLevel} onChange={props.onThinkingLevelChange}>
-                <For each={levels()}>{(level) => <MenuRadioItem value={level}>{thinkingLabel(level)}</MenuRadioItem>}</For>
-              </MenuRadioGroup></MenuGroup>
-            </MenuSubContent>
-          </MenuSub>}
-          onChange={props.onThinkingLevelChange} />
-      </Show>
-      <Show when={props.onManageModels}><MenuSeparator /><MenuItem onSelect={props.onManageModels}>Manage models…</MenuItem></Show>
+    <Show when={props.onSearchModels}>
+      <MenuSection><MenuRow icon={<SearchIcon />} keys={props.searchShortcut?.split(/\s+/)} onSelect={() => props.onSearchModels?.()}>Search all models…</MenuRow></MenuSection>
+    </Show>
+    <Show when={!props.onSearchModels && props.notice}><MenuNote>{props.notice}</MenuNote></Show>
+    <MenuSection><MenuRadioGroup value={props.model} onChange={props.onModelChange}>
+      <For each={selectableModels()}>{(item) => <MenuRadioItem value={item.spec} closeOnSelect={false} title={item.label} meta={item.provider}>{item.label}</MenuRadioItem>}</For>
+    </MenuRadioGroup></MenuSection>
+    <Show when={selected()}>
+      <Section kind="slider">
+        <Slider label="Thinking" value={levels().length > 1 ? props.thinkingLevel : levels()[0]!} disabled={levels().length < 2}
+          options={levels().map((level) => ({ value: level, label: thinkingLabel(level) }))} onChange={props.onThinkingLevelChange}
+          control={levels().length < 2 ? undefined : (shown) => <MenuSub>
+            <MenuSubValue>{shown()}</MenuSubValue>
+            <MenuSubContent><MenuSection title="Thinking"><MenuRadioGroup value={props.thinkingLevel} onChange={props.onThinkingLevelChange}>
+              <For each={levels()}>{(level) => <MenuRadioItem value={level}>{thinkingLabel(level)}</MenuRadioItem>}</For>
+            </MenuRadioGroup></MenuSection></MenuSubContent>
+          </MenuSub>} />
+      </Section>
+    </Show>
+    <Show when={props.onManageModels}><MenuSection><MenuRow onSelect={props.onManageModels}>Manage models…</MenuRow></MenuSection></Show>
   </>;
 }
 
@@ -86,15 +69,8 @@ export function ModelSelector(props: {
   const pending = createMemo(() => Boolean(props.loading) && !label());
 
   return <Menu>
-    <MenuTrigger {...libraryPiece("select").data} class={`model-trigger ${libraryPiece("select").class}`.trim()} classList={{ "composer-model-trigger": Boolean(props.onSearchModels) }} aria-label={pending() ? "Connecting to model" : `${label() || "Model"} ${props.thinkingLevel || "off"}`} disabled={props.disabled || pending()}>
-      <Show when={!pending()} fallback={<><Spinner /><span>Connecting…</span></>}>
-        <span>{label() || "Model"}</span>
-        <span class="text-muted-foreground">{props.thinkingLevel || "off"}</span>
-        <ChevronDownIcon />
-      </Show>
-    </MenuTrigger>
-    <MenuContent class={props.onSearchModels ? "composer-quick-model-menu" : "w-72"}>
-      <ModelMenuItems {...props} />
-    </MenuContent>
+    <Menu.Trigger as={Picker} subject={Boolean(props.onSearchModels)} aria-label={pending() ? "Connecting to model" : `${label() || "Model"} ${props.thinkingLevel || "off"}`} disabled={props.disabled || pending()}
+      icon={pending() ? <Spinner /> : undefined} value={pending() ? "Connecting…" : label() || "Model"} quiet={pending() ? undefined : props.thinkingLevel || "off"} />
+    <MenuContent><ModelMenuItems {...props} /></MenuContent>
   </Menu>;
 }

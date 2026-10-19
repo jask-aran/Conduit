@@ -64,12 +64,36 @@ export function Segmented<T extends string>(props: { label: string; value: T; op
   </div>;
 }
 
+/** A slider's value as a control that opens its levels (a Slider's onOpen, or a menu's submenu trigger). */
+export function SliderValue(props: JSX.ButtonHTMLAttributes<HTMLButtonElement>) {
+  const [local, rest] = splitProps(props, ["children"]);
+  return <button type="button" {...rest} class="ui-slider-value" data-opens="">{local.children}<ChevronRightIcon /></button>;
+}
+
+/** How full something is, as a ring in the text colour: tone idle (nothing reported), warning and critical colour it. */
+export function Gauge(props: { value: number; tone?: "idle" | "normal" | "warning" | "critical" }) {
+  return <svg class="ui-gauge" data-tone={props.tone ?? "normal"} viewBox="0 0 24 24" aria-hidden="true">
+    <circle cx="12" cy="12" r="9" pathLength="100" /><circle cx="12" cy="12" r="9" pathLength="100" style={{ "stroke-dasharray": `${props.value || 0} 100` }} />
+  </svg>;
+}
+
+/** A colour standing for a kind of thing (a meter's part): the icon-dot's size; hollow, a ring for what holds nothing. */
+export const Swatch = (props: { colour?: string; hollow?: boolean }) => <i class="ui-swatch" data-hollow={props.hollow ? "" : undefined} style={{ background: props.hollow ? undefined : props.colour }} aria-hidden="true" />;
+
+/** A whole as one bar of its parts, each in its colour and grown by its value; mark: a rule where something happens, named under it. */
+export function Meter(props: { parts: { value: number; colour: string }[]; mark?: { at: number; label: string } }) {
+  return <div class="ui-meter" data-marked={props.mark ? "" : undefined}>
+    <div class="ui-meter-bar" aria-hidden="true"><For each={props.parts}>{(part) => <span style={{ "flex-grow": part.value, background: part.colour }} />}</For></div>
+    <Show when={props.mark}>{(mark) => <><i class="ui-meter-mark" style={{ left: `${mark().at}%` }} /><small class="ui-meter-label" style={{ left: `${mark().at}%` }}>{mark().label}</small></>}</Show>
+  </div>;
+}
+
 /**
- * One choice from an ordered list, set by sliding along it (the app's
- * StepSlider, at the library's density). The value follows the thumb and is
- * chosen on release; with onOpen the value is an item that opens the levels.
+ * One choice from an ordered list, set by sliding along it. The value follows
+ * the thumb and is chosen on release; with onOpen the value is a SliderValue
+ * that opens the levels, and control puts the caller's own there (a submenu).
  */
-export function Slider(props: { label: string; options: { value: string; label: string }[]; value: string; disabled?: boolean; onChange: (value: string) => void; onOpen?: () => void }) {
+export function Slider(props: { label: string; options: { value: string; label: string }[]; value: string; disabled?: boolean; onChange: (value: string) => void; onOpen?: () => void; control?: (shown: () => string) => JSX.Element }) {
   const id = createUniqueId();
   const indexOf = (value: string) => Math.max(0, props.options.findIndex((option) => option.value === value));
   const [preview, setPreview] = createSignal(indexOf(props.value));
@@ -80,9 +104,9 @@ export function Slider(props: { label: string; options: { value: string; label: 
     onKeyDown={(event) => { if (event.target instanceof HTMLInputElement && event.key !== "Escape" && event.key !== "Tab") event.stopPropagation(); }}>
     <div class="ui-slider-head">
       <label for={id} class="ui-title-text">{props.label}</label>
-      <Show when={props.onOpen} fallback={<span class="ui-slider-value">{shown()}</span>}>
-        <button type="button" class="ui-slider-value" data-opens disabled={props.disabled} onClick={() => props.onOpen?.()}>{shown()}<ChevronRightIcon /></button>
-      </Show>
+      <Show when={props.control} fallback={<Show when={props.onOpen} fallback={<span class="ui-slider-value">{shown()}</span>}>
+        <SliderValue disabled={props.disabled} onClick={() => props.onOpen?.()}>{shown()}</SliderValue>
+      </Show>}>{(control) => control()(shown)}</Show>
     </div>
     <input id={id} class="ui-slider-input" type="range" min={0} max={Math.max(0, props.options.length - 1)} step={1} value={preview()} disabled={props.disabled} aria-valuetext={shown()}
       style={{ "--fill": `${props.options.length > 1 ? (preview() / (props.options.length - 1)) * 100 : 0}%` }}

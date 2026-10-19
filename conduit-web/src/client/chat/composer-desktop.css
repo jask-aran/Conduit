@@ -1,26 +1,3 @@
-/* The toolbar's pickers until they are the library's own (composer menus): muted settings, the model at full weight. */
-.composer-profile-trigger, .composer-permission-trigger { color: var(--muted-foreground); }
-.composer-profile-trigger { flex: none; gap: 3px; }
-.composer-profile-trigger > svg:first-child { width: 14px; height: 14px; }
-.composer-model-trigger { color: var(--foreground); font-weight: 580; }
-.composer-model-trigger > span:first-child { max-width: 160px; }
-.composer-model-trigger > span:nth-child(2) { flex: none; }
-.composer-permission-trigger > span { max-width: 72px; }
-.ui-toolbar-start .chat-context-gauge { width: 14px; height: 14px; }
-.ui-toolbar-start :is(.chat-context-gauge-track, .chat-context-gauge-value) { stroke-width: 2.4; }
-.ui-toolbar-start .chat-context-gauge-track { stroke: color-mix(in oklch, currentColor, transparent 70%); }
-/* The +'s folded controls: a name, then its value muted at the right, as menu meta. */
-.composer-plus-menu { min-width: 220px; }
-.composer-plus-name { flex: none; }
-.composer-plus-value { min-width: 0; margin-left: auto; overflow: hidden; color: var(--muted-foreground); text-overflow: ellipsis; white-space: nowrap; }
-.composer-plus-context { padding: 4px 8px; color: var(--muted-foreground); font: 10px ui-monospace, SFMono-Regular, Consolas, monospace; }
-.composer-menu-shortcut { margin-left: auto; color: var(--muted-foreground); font-size: 10px; }
-.composer-quick-model-menu { width: max-content; min-width: 240px; max-width: min(380px, calc(100vw - 24px)); }
-.composer-model-option > span { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 560; }
-.composer-model-option > small { flex: none; margin-left: auto; color: var(--muted-foreground); font-size: 11px; white-space: nowrap; }
-.composer-profile-copy { display: flex; min-width: 0; flex: 1; align-items: center; gap: 12px; }
-.composer-profile-copy > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 560; }
-.composer-profile-copy small { flex: none; margin-left: auto; color: var(--muted-foreground); font: 10px ui-monospace, monospace; }
 /* The phone's options menu: its header carries the context readout the row has no room for. */
 .composer-options-header { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
 .composer-options-context { color: var(--muted-foreground); font: 10px ui-monospace, SFMono-Regular, Consolas, monospace; letter-spacing: 0; text-transform: none; }
@@ -29,31 +6,6 @@
 .composer-options-value > span { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .composer-options-value > .menu-chevron, .composer-options-value > svg:last-child { width: 14px; height: 14px; flex: none; margin-left: auto; color: var(--muted-foreground); }
 .composer-options-model > span { font-weight: 580; }
-/* The context ring's breakdown, in the model menu's parts: the step slider's
-   header and track, the model rows, the menu's separators and key style. */
-.chat-context-menu:has(.context-breakdown) { width: 17rem; min-width: 240px; padding: 4px; }
-.context-breakdown { display: grid; }
-.context-breakdown-section { gap: 6px; }
-.context-breakdown-separator { height: 1px; margin: 4px -4px; background: var(--border); }
-.context-breakdown-bar { display: flex; height: 4px; overflow: hidden; gap: 1px; border-radius: 999px; background: var(--border); }
-.context-breakdown-bar > span { min-width: 2px; flex-basis: 0; }
-.context-breakdown-total { display: flex; justify-content: space-between; gap: 8px; color: var(--muted-foreground); font-size: 10.4px; font-variant-numeric: tabular-nums; }
-.context-breakdown-rows { display: grid; }
-.context-breakdown-row { gap: 8px; font-variant-numeric: tabular-nums; list-style: none; }
-.context-breakdown-row::-webkit-details-marker { display: none; }
-.context-breakdown-row > .context-breakdown-share { width: 3.2em; margin-left: 0; text-align: right; }
-summary.context-breakdown-row:hover { background: oklch(1 0 0 / 10%); color: var(--foreground); }
-.context-breakdown-dot { width: 6px; height: 6px; flex: none; border-radius: 999px; }
-.context-breakdown-dot:is([data-kind="free"], [data-kind="deferred"]) { box-shadow: inset 0 0 0 1px var(--muted-foreground); background: transparent !important; }
-.context-breakdown-item > span { font-weight: 450; }
-.context-breakdown-chevron { width: 12px; height: 12px; flex: none; color: var(--muted-foreground); transition: rotate 150ms; }
-.context-breakdown-group[open] .context-breakdown-chevron { rotate: 90deg; }
-.context-breakdown-footer { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 4px 6px; color: var(--muted-foreground); font-size: 10.4px; }
-.context-breakdown-session { margin-left: auto; border: 0; background: transparent; padding: 0; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; cursor: default; }
-.context-breakdown-session:hover { color: var(--foreground); }
-@media (--conduit-mobile-layout) {
-  .context-breakdown-total, .context-breakdown-footer { font-size: 12px; }
-}
 /* The chat menu's context row: its share over the bar; a tap opens the
    breakdown in place, where the bar was. */
 .chat-header-menu-context-block { display: grid; gap: 4px; margin: 2px 0; }
@@ -63,14 +15,3 @@ summary.context-breakdown-row:hover { background: oklch(1 0 0 / 10%); color: var
 .chat-header-menu-context-line > :first-child { margin-right: auto; }
 .chat-header-menu-context-chevron { width: 14px; height: 14px; transition: rotate 150ms; }
 .chat-header-menu-context-trigger[aria-expanded="true"] .chat-header-menu-context-chevron { rotate: 90deg; }
-.chat-header-menu-context-trigger .context-breakdown-bar { margin-inline: 0; }
-.chat-header-menu-context-block .context-breakdown { padding-bottom: 4px; }
-.chat-header-menu-context-block .context-breakdown-separator { margin-inline: 0; }
-.context-breakdown-load small { margin-left: auto; color: var(--muted-foreground); font-size: 9.6px; }
-/* The compaction threshold: a rule across the bar where the harness will
-   compact, named under it. */
-.context-breakdown-meter { position: relative; }
-.context-breakdown-meter[data-threshold] { padding-bottom: 14px; }
-.context-breakdown-threshold { position: absolute; top: -3px; width: 1px; height: 10px; background: var(--foreground); opacity: .7; }
-.context-breakdown-threshold-label { position: absolute; top: 9px; translate: -100% 0; padding-right: 2px; color: var(--muted-foreground); font-size: 9px; white-space: nowrap; }
-.context-breakdown-load:disabled { opacity: .5; }

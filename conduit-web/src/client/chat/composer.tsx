@@ -1,19 +1,9 @@
 import { LibraryContext, useLibraryPiece } from "@/components/ui/swap";
-import { Button as LibraryButton, Captions, Completion, ComposerField, DesktopComposer, PhoneComposer, PillButton, PillField, PillWave, Rider, Spinner, StopGlyph, Toolbar } from "@/components/ui";
-import { libraryPiece } from "@/components/ui/swap";
+import { Button as LibraryButton, Captions, Completion, ComposerField, DesktopComposer, PhoneComposer, Picker, PillButton, PillField, PillWave, Rider, Spinner, StopGlyph, Toolbar } from "@/components/ui";
 import { latestAway, scrollToLatest } from "./latest-away";
 import { createEffect, createMemo, createSignal, For, lazy, on, onCleanup, onMount, Show, type JSX } from "solid-js";
-import { ArrowDownIcon, ArrowUpIcon, CameraIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, DeleteIcon, KeyboardIcon, MicIcon, TextCursorInputIcon, Undo2Icon, ShieldCheckIcon, TriangleAlertIcon } from "lucide-solid";
-import {
-  Menu,
-  MenuContent,
-  MenuGroup,
-  MenuLabel,
-  MenuRadioGroup,
-  MenuRadioItem,
-  MenuSeparator,
-  MenuTrigger,
-} from "@/components/primitives";
+import { ArrowDownIcon, ArrowUpIcon, CameraIcon, ChevronLeftIcon, ChevronRightIcon, DeleteIcon, KeyboardIcon, MicIcon, TextCursorInputIcon, Undo2Icon, ShieldCheckIcon, TriangleAlertIcon } from "lucide-solid";
+import { Menu, MenuContent } from "@/components/menus";
 import type { BooleanCapability, Template } from "../api/contracts";
 import type { ActiveChatStore } from "../state/active-chat";
 import { filesFromDataTransfer } from "../state/attachments";
@@ -45,7 +35,7 @@ export const SPINNING_ACTIVITY = new Set(["starting", "reconnecting", "thinking"
 
 import { FolderPicker, type FolderOptions, type PlaceOptions } from "./place-picker";
 import { COMPOSER_FOLDS, foldsFor, type ComposerFold } from "./composer-folds";
-import { ComposerPlusMenu } from "./composer-plus-menu";
+import { ComposerPlusMenu, PermissionChoices, ProfileChoices, ServiceChoices } from "./composer-plus-menu";
 const MobileComposerOptions = lazy(() => import("./mobile-composer-options"));
 
 export interface ComposerStatus {
@@ -799,11 +789,20 @@ function ComposerBody(props: {
           onAttach={props.attachmentsSupported !== false ? attach : undefined} />
         <Show when={props.folder}>{(folder) => <FolderPicker {...folder()} />}</Show>
         <Show when={shows("context")}><div data-composer-fold="context"><ContextGauge chat={props.chat} compact canCompact={supports("compaction")} /></div></Show>
-        <Show when={props.profiles.length && shows("profile")}><div data-composer-fold="profile"><Menu><MenuTrigger {...libraryPiece("select").data} class={`model-trigger composer-profile-trigger ${libraryPiece("select").class}`.trim()} title={props.activeProfile?.label || "Profile"} aria-label={`Profile ${props.activeProfile?.label || "General"}`} disabled={!props.serverOnline || !interactive()}><HarnessMark id={props.activeProfile?.implementation || "conduit"} class="size-4" /><ChevronDownIcon /></MenuTrigger><MenuContent class="w-72"><MenuGroup><MenuLabel>Profile</MenuLabel><MenuRadioGroup value={props.activeProfile?.id || ""} onChange={props.onChooseProfile}><For each={props.profiles}>{(item) => <MenuRadioItem value={item.id} disabled={(props.chat.status() !== "draft" && item.id !== props.activeProfile?.id) || item.disabled}><HarnessMark id={item.implementation || "conduit"} class="size-4" /><span class="composer-profile-copy"><span>{item.label}</span><small>{item.implementation || "conduit"}</small></span></MenuRadioItem>}</For></MenuRadioGroup></MenuGroup></MenuContent></Menu></div></Show>
+        <Show when={props.profiles.length && shows("profile")}><div data-composer-fold="profile"><Menu>
+          <Menu.Trigger as={Picker} icon={<HarnessMark id={props.activeProfile?.implementation || "conduit"} />} title={props.activeProfile?.label || "Profile"} aria-label={`Profile ${props.activeProfile?.label || "General"}`} disabled={!props.serverOnline || !interactive()} />
+          <MenuContent><ProfileChoices profiles={props.profiles} active={props.activeProfile} locked={props.chat.status() !== "draft"} onChoose={props.onChooseProfile} /></MenuContent>
+        </Menu></div></Show>
         <Show when={shows("model")}><div data-composer-fold="model">
           <ModelSelector models={props.models.models()} model={props.models.model()} thinkingLevel={props.models.effort()} notice={props.models.notice()} loading={props.modelsLoading} disabled={!props.serverOnline || !interactive() || !supports("modelSwitch")} onModelChange={(value) => void props.models.chooseModel(value)} onThinkingLevelChange={(value) => void props.models.chooseEffort(value)} onSearchModels={props.onOpenModelSelector} searchShortcut={props.modelSelectorShortcut} />
         </div></Show>
-        <Show when={(props.permissions?.profiles().length || props.serviceLevels?.levels().length) && shows("permissions")}><div data-composer-fold="permissions"><Menu><MenuTrigger {...libraryPiece("select").data} class={`model-trigger composer-permission-trigger ${libraryPiece("select").class}`.trim()} aria-label="Session settings" disabled={!props.serverOnline || !interactive()}><ShieldCheckIcon /><span>{props.permissions?.profiles().find((profile) => profile.id === props.permissions?.selected())?.label || "Settings"}</span><ChevronDownIcon /></MenuTrigger><MenuContent class="w-72"><Show when={props.permissions?.profiles().length}><MenuGroup><MenuLabel>Permissions</MenuLabel><MenuRadioGroup value={props.permissions?.selected() || ""} onChange={(value) => void props.permissions?.choose(value)}><For each={props.permissions?.profiles() || []}>{(profile) => <MenuRadioItem value={profile.id} disabled={!profile.allowed}><span class="shrink-0 whitespace-nowrap">{profile.label}</span><Show when={profile.description}><span class="ml-auto max-w-40 truncate text-xs text-muted-foreground">{profile.description}</span></Show></MenuRadioItem>}</For></MenuRadioGroup></MenuGroup></Show><Show when={props.serviceLevels?.levels().length}><Show when={props.permissions?.profiles().length}><MenuSeparator /></Show><MenuGroup><MenuLabel>Service level</MenuLabel><MenuRadioGroup value={props.serviceLevels?.selected() || ""} onChange={(value) => void props.serviceLevels?.choose(value)}><For each={props.serviceLevels?.levels() || []}>{(level) => <MenuRadioItem value={level.id}>{level.label}</MenuRadioItem>}</For></MenuRadioGroup></MenuGroup></Show></MenuContent></Menu></div></Show>
+        <Show when={(props.permissions?.profiles().length || props.serviceLevels?.levels().length) && shows("permissions")}><div data-composer-fold="permissions"><Menu>
+          <Menu.Trigger as={Picker} icon={<ShieldCheckIcon />} value={props.permissions?.profiles().find((profile) => profile.id === props.permissions?.selected())?.label || "Settings"} aria-label="Session settings" disabled={!props.serverOnline || !interactive()} />
+          <MenuContent>
+            <Show when={props.permissions?.profiles().length}><PermissionChoices permissions={props.permissions!} /></Show>
+            <Show when={props.serviceLevels?.levels().length}><ServiceChoices levels={props.serviceLevels!} /></Show>
+          </MenuContent>
+        </Menu></div></Show>
       </>}
       end={<LibraryButton variant="ghost" size="icon-sm" data-state={dictationState()} aria-label={["starting", "listening"].includes(dictationState()) ? "Stop voice dictation" : "Start voice dictation"} aria-pressed={dictating()} title={`Voice dictation (${props.voiceSettings.shortcut})`} disabled={!props.serverOnline || !interactive()} onPointerDown={captureDictationLaunch} onClick={toggleDictation}><Show when={dictationState() === "starting"} fallback={<MicIcon />}><Spinner /></Show></LibraryButton>}
       // One primary slot, so nothing beside it moves: Stop while the agent works; once a draft is typed, Send again
@@ -817,7 +816,7 @@ function ComposerBody(props: {
     track={<PillWave levels={dictationWaveform.history()} gain={2.5} />}
     captions={<Show when={captionLead() || dictatedText()}><Captions lead={captionLead()} words={dictatedText().split(/(?<=\s)/)} ref={announceCaptions} /></Show>}
     edit={<For each={EDIT_ACTIONS}>{(action) => <PillButton label={action.label} icon={action.icon()} button={{ tabIndex: editing() ? 0 : -1, onPointerDown: (event) => event.preventDefault(), onClick: () => editActions[action.key]() }} />}</For>}>
-    <MobileComposerOptions composer={props} pill onOpenChange={setOptionsOpen} />
+    <MobileComposerOptions composer={props} onOpenChange={setOptionsOpen} />
     <Show when={props.attachmentsSupported !== false}>
       {/* Tap: the camera, through the platform's own capture. Hold: the same picker as Attach files. */}
       <input ref={cameraInput} type="file" accept="image/*" capture="environment" hidden onChange={(event) => { const files = Array.from(event.currentTarget.files || []); event.currentTarget.value = ""; if (files.length) props.attachments.addFiles(files); }} />
