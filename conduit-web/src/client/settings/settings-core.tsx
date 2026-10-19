@@ -5,7 +5,7 @@ import { CableIcon, CloudIcon, CpuIcon, HandIcon, MicOffIcon, PlayIcon, RefreshC
 import { AboutSettingsFooter } from "./about-settings";
 import { ServersSettingsTile } from "./servers-settings";
 import { DesktopSettingsTile } from "./desktop-settings";
-import { toast } from "solid-sonner";
+import { toast } from "@/components/notifications";
 import { Button, Field, FieldLabel, Input, Spinner } from "@/components/primitives";
 import { api } from "../api/client";
 import { COMPOSER_SURFACE_OPTIONS, type ComposerSurfaceMode } from "../chat/composer-surface";

@@ -1,5 +1,5 @@
 import { createEffect, createSignal, onCleanup, type Accessor } from "solid-js";
-import { toast } from "solid-sonner";
+import { toast } from "@/components/notifications";
 import { api } from "../api/client";
 import type { Files } from "./workspace-files";
 import { cacheWorkspace, wasAborted, type RequestScope } from "./workspace-shared";

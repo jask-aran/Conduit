@@ -29,6 +29,8 @@
   --ease-arrive: cubic-bezier(.2, .8, .2, 1);
   --ease-leave: cubic-bezier(.4, 0, 1, 1);
   --ease-change: ease;
+  --layer-dialog: 100;
+  --layer-notification: 110;
   --duration-quick: 150ms;   /* leaving, folding away; a change in place */
   --duration-gentle: 250ms;  /* arriving, opening, settling into place */
   /* Effects keep their own time: a level following a voice, a copy's wash fading, a spinner's turn (three

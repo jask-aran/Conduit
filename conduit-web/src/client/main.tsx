@@ -14,8 +14,7 @@ const updateShell = desktopShell ?? androidShell;
 import {
   ArrowLeftRightIcon, Columns2Icon, PanelTopIcon, EllipsisIcon, PanelLeftIcon, PanelRightIcon, ServerIcon, QrCodeIcon, MonitorIcon, TriangleAlertIcon, XIcon,
 } from "lucide-solid";
-import { Toaster, toast } from "solid-sonner";
-import "solid-sonner/styles.css";
+import { NotificationToaster, toast } from "@/components/notifications";
 import { DefaultMeteorShower } from "@jask-aran/solid-components/meteor-shower";
 import "@jask-aran/solid-components/meteor-shower.css";
 import { phoneLayerOpen } from "@/components/phone-overlays";
@@ -5157,7 +5156,7 @@ function App() {
   };
 
   return <>
-    <Toaster richColors />
+    <NotificationToaster />
     <input ref={session.setAttachInput} type="file" multiple hidden aria-hidden="true" onChange={(event) => { if (event.currentTarget.files) attachments.addFiles(event.currentTarget.files); event.currentTarget.value = ""; }} />
     <FrostDialog open={Boolean(workspaceIdentityProject())} onOpenChange={(open) => { if (!open) closeWorkspaceIdentity(); }} close size="wide" class="workspace-appearance-dialog" title="Workspace identity" description="Choose a short mark or a Lucide icon, then choose a preset or custom color.">
         <Show when={workspaceIdentityProject()}>{(project) => <WorkspaceAppearanceEditor compact value={project().workspaceAppearance} saving={workspaceIdentitySaving()} onSave={(appearance) => void saveWorkspaceIdentity(appearance)} />}</Show>

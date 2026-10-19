@@ -362,6 +362,7 @@ const TOASTS: FormRow[] = [
   form("warning", "it went ahead another way", () => <Toast kind="warning">gpt-5 is unavailable. Using gpt-5-mini.</Toast>, '<Toast kind="warning">', "glyph --warn"),
   form("error", "it did not happen: an alert", () => <Toast kind="error">Could not reach the server to update.</Toast>, '<Toast kind="error">', "glyph --destructive · role alert"),
   form("action", "one thing to do about it", () => <Toast kind="error" action={{ label: "Ask Runtime" }}>The model stopped: context window exceeded.</Toast>, "<Toast action={{ label, onClick }}>", "Button ghost outline sm, under the sentence"),
+  form("description", "an explanation under the notification", () => <Toast description="Large pastes are attached so they do not fill the model's context." action={{ label: "Paste inline" }}>Pasted text attached as paste.txt</Toast>, "<Toast description action>", "Caption role under the sentence"),
   form("long", "a path or names wrap; nothing is cut", () => <Toast kind="success">Moved src/client/chat/attachment-strip.tsx to src/client/composer/</Toast>, "<Toast>", "overflow-wrap anywhere"),
 ];
 const TOASTS_IN_APP: FormRow[] = [
@@ -673,7 +674,7 @@ export const libraryFamilies: Family[] = [
     { title: "Forms", note: "each kind and form at each density", layout: "desktop", atoms: [
       lib("toast-forms", "Toast · forms × densities", "both", "toast", "Toast", () => <FormTable rows={TOASTS} on={["desktop", "phone"]} widths={["200px", "minmax(0, 1fr)", "360px"]} />, "row"),
     ] },
-    { title: "In the app", note: "the app raises 42 toasts (solid-sonner): success 16, info 12, error 12, warning 2. One sentence each, never a second line; two carry an action; some set a longer duration or an id, so a repeat replaces the one showing. Grouped by where they come from", layout: "desktop", atoms: [
+    { title: "In the app", note: "the app raises notifications through Sonner, rendered by the shared v2 Toast: success 16, info 12, error 12, warning 2. One sentence each, never a second line; two carry an action; some set a longer duration or an id, so a repeat replaces the one showing. Grouped by where they come from", layout: "desktop", atoms: [
       lib("toast-in-app", "Toast · in the app", "both", "toast", "client/** toast.*", () => <FormTable rows={TOASTS_IN_APP} on={["desktop", "phone"]} widths={["minmax(0, 1fr)", "360px"]} stacked />, "row"),
     ] },
     { title: "Motion", note: "its own moves: it comes in from its edge and leaves back to it, so on a phone (the top) it comes down", layout: "desktop", atoms: [
