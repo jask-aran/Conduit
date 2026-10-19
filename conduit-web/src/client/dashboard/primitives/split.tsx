@@ -23,7 +23,7 @@ const Phone = createContext<Accessor<boolean>>(() => false);
 // switches, ⋯ and search. The breakpoint is measured from them, not tuned.
 const BODY_GUTTERS = 48; // .split-dashboard-body: calc(100% - 48px)
 const WATCHED = [
-  ".composer-actions-left > *", ".composer-actions-right",
+  ".ui-toolbar-start > *", ".ui-toolbar-end",
   ".split-group[data-order='list'] > .split-group-heading > *", ".split-group[data-order='list'] .split-group-actions > *",
 ].join(", ");
 
@@ -82,7 +82,7 @@ function twoColumnWidth(root: HTMLElement) {
   const style = getComputedStyle(body);
   const needs = [0];
   const composer = root.querySelector<HTMLElement>(".split-dashboard-composer");
-  const actions = composer?.querySelector<HTMLElement>(".composer-actions");
+  const actions = composer?.querySelector<HTMLElement>(".ui-toolbar");
   if (composer && actions) needs.push(rowNeed(actions) + composer.getBoundingClientRect().width - actions.getBoundingClientRect().width);
   const heading = root.querySelector<HTMLElement>(".split-group[data-order='list'] > .split-group-heading");
   if (heading) needs.push(rowNeed(heading) + heading.parentElement!.getBoundingClientRect().width - heading.getBoundingClientRect().width);

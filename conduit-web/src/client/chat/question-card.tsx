@@ -52,7 +52,7 @@ export function QuestionCard(props: { request: HostUiRequest; dismissLabel?: str
   const respond = (response: QuestionResponse) => {
     const hadFocus = root?.contains(document.activeElement);
     props.onRespond(response);
-    if (hadFocus) document.querySelector<HTMLTextAreaElement>(".composer textarea")?.focus({ preventScroll: true });
+    if (hadFocus) document.querySelector<HTMLTextAreaElement>("textarea[data-composer-input]")?.focus({ preventScroll: true });
   };
   const dismiss = () => respond({ id: props.request.id, cancelled: true });
   const submit = () => {

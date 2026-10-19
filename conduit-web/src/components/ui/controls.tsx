@@ -1,5 +1,5 @@
 import { createEffect, createSignal, createUniqueId, For, Show, splitProps, type JSX } from "solid-js";
-import { ChevronDownIcon, ChevronRightIcon, XIcon } from "lucide-solid";
+import { ChevronDownIcon, ChevronRightIcon, SquareIcon, XIcon } from "lucide-solid";
 import { cn } from "@/lib/utils";
 
 /** A key or a chord. onClick: it can be pressed (to record another); onRemove: a × beside it clears it (Settings · Shortcuts). */
@@ -29,6 +29,8 @@ export function Switch(props: { label: string; checked: boolean; onChange?: (che
 }
 
 /** Waiting: a ring turning, the icon's size. */
+/** Stop: a small solid square in the text colour, the mark alone (Stop a turn, the composer's primary slot). */
+export const StopGlyph = () => <SquareIcon class="ui-stop-glyph" aria-hidden="true" />;
 export const Spinner = (props: { class?: string }) => <span class={cn("ui-spinner", props.class)} aria-hidden="true" />;
 
 /** Multi-line text that grows with its lines: bare, the type's size, no geometry of its own -- what holds it pads it (DesktopComposer, PillField). */

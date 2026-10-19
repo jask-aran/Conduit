@@ -165,7 +165,7 @@ export function WorkspaceAnnotationPopup(props: {
     if (!props.onAdd(note())) return setError("Limit of 12 references reached");
     props.onDismiss();
     queueMicrotask(() => {
-      document.querySelector<HTMLTextAreaElement>(".composer textarea:not([disabled])")?.focus({ preventScroll: true });
+      document.querySelector<HTMLTextAreaElement>("textarea[data-composer-input]:not([disabled])")?.focus({ preventScroll: true });
     });
   };
   return <div class="workspace-annotation" style={{ left: `${props.selection.left}px`, top: `${props.selection.top}px` }}>

@@ -20,7 +20,7 @@
 .split-dashboard-head .split-quick-actions { grid-area: actions; margin-left: 20px; }
 .split-dashboard-notice { grid-area: notice; margin-bottom: 16px; }
 .split-dashboard-main { display: flex; min-width: 0; min-height: 0; grid-area: main; flex-direction: column; }
-.split-dashboard-composer .composer-wrap { width: 100%; margin-inline: 0; }
+.split-dashboard-composer { --composer-width: 100%; }
 .split-dashboard-main > .split-group { min-height: 0; flex: 1; margin-top: 14px; }
 .split-dashboard-main > .split-group > .split-group-rows { min-height: 0; flex: 1; overflow-y: auto; scrollbar-width: var(--native-scrollbar-width); }
 .split-dashboard-aside { min-width: 0; min-height: 0; grid-area: aside; overflow-y: auto; scrollbar-width: var(--native-scrollbar-width); }

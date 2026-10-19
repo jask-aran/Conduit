@@ -15,26 +15,26 @@ const MOTION_RULES = `
   [data-region="sidebar"],
   [data-region="workspace-panel"],
   .workspace-rail,
-  :is(.chat-main, .main-split, :is(.chat-main, .main-split) :has([data-part="composer"])) > :not([data-part="composer"], :has([data-part="composer"]))
+  :is(.chat-main, .main-split, :is(.chat-main, .main-split) :has(:is(.ui-composer-slot, .ui-phone-composer))) > :not(:is(.ui-composer-slot, .ui-phone-composer), :has(:is(.ui-composer-slot, .ui-phone-composer)))
 ) { opacity: 0; }
 :root[data-arrival="arriving"] :is(
   [data-region="sidebar"],
   [data-region="workspace-panel"],
   .workspace-rail,
-  :is(.chat-main, .main-split, :is(.chat-main, .main-split) :has([data-part="composer"])) > :not([data-part="composer"], :has([data-part="composer"]))
+  :is(.chat-main, .main-split, :is(.chat-main, .main-split) :has(:is(.ui-composer-slot, .ui-phone-composer))) > :not(:is(.ui-composer-slot, .ui-phone-composer), :has(:is(.ui-composer-slot, .ui-phone-composer)))
 ) { animation: ui-arrive 300ms cubic-bezier(.2, .8, .2, 1) both; }
 
-:root[data-route-motion="leaving"] :is(.chat-main, .chat-main :has([data-part="composer"])) > :not([data-part="composer"], :has([data-part="composer"])) {
+:root[data-route-motion="leaving"] :is(.chat-main, .chat-main :has(:is(.ui-composer-slot, .ui-phone-composer))) > :not(:is(.ui-composer-slot, .ui-phone-composer), :has(:is(.ui-composer-slot, .ui-phone-composer))) {
   animation: ui-leave 200ms cubic-bezier(.4, 0, 1, 1) both;
 }
-:root[data-route-motion="arriving"] :is(.chat-main, .chat-main :has([data-part="composer"])) > :not([data-part="composer"], :has([data-part="composer"])) {
+:root[data-route-motion="arriving"] :is(.chat-main, .chat-main :has(:is(.ui-composer-slot, .ui-phone-composer))) > :not(:is(.ui-composer-slot, .ui-phone-composer), :has(:is(.ui-composer-slot, .ui-phone-composer))) {
   animation: ui-arrive 300ms cubic-bezier(.2, .8, .2, 1) both;
 }
 @media (prefers-reduced-motion: reduce) {
   :root[data-arrival="arriving"] :is(
     [data-region="sidebar"],
     [data-region="workspace-panel"],
-    :is(.chat-main, .main-split, :is(.chat-main, .main-split) :has([data-part="composer"])) > :not([data-part="composer"], :has([data-part="composer"]))
+    :is(.chat-main, .main-split, :is(.chat-main, .main-split) :has(:is(.ui-composer-slot, .ui-phone-composer))) > :not(:is(.ui-composer-slot, .ui-phone-composer), :has(:is(.ui-composer-slot, .ui-phone-composer)))
   ) { animation: none; }
 }
 `;

@@ -27,18 +27,6 @@
 }
 :is(.chat-main:not(.chat-main-empty), .main-split-chat) .composer-stack > * { pointer-events: auto; }
 
-.composer-wrap { position: relative; width: min(var(--composer-desktop-reference-width), 100%); margin-inline: auto; }
-.composer-surface-shell { position: relative; width: 100%; border-radius: var(--composer-radius); }
-.composer[data-composer-surface] {
-  position: relative;
-  width: 100%;
-  border-radius: var(--composer-radius);
-}
-.composer[data-composer-surface]::before,
-.composer[data-composer-surface]::after { content: none; }
-.composer-content { position: relative; z-index: 1; }
-.composer textarea,
-.composer-actions { position: relative; z-index: 2; }
 
 @media (--conduit-phone-layout) {
   .composer-stack,
@@ -48,7 +36,6 @@
     background: linear-gradient(to top, var(--background) calc(9.6px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))),
       transparent calc(27.2px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))));
   }
-  .composer-content { display: contents; }
 }
 
 
@@ -76,18 +63,6 @@
 }
 :is(.chat-main:not(.chat-main-empty), .main-split-chat) .composer-stack > * { pointer-events: auto; }
 
-.composer-wrap { position: relative; width: min(var(--composer-desktop-reference-width), 100%); margin-inline: auto; }
-.composer-surface-shell { position: relative; width: 100%; border-radius: var(--composer-radius); }
-.composer[data-composer-surface] {
-  position: relative;
-  width: 100%;
-  border-radius: var(--composer-radius);
-}
-.composer[data-composer-surface]::before,
-.composer[data-composer-surface]::after { content: none; }
-.composer-content { position: relative; z-index: 1; }
-.composer textarea,
-.composer-actions { position: relative; z-index: 2; }
 
 @media (--conduit-phone-layout) {
   :is(.chat-main:not(.chat-main-empty), .main-split-chat) .thread { padding-bottom: var(--transcript-composer-inset, 160px); }
@@ -98,6 +73,5 @@
     background: linear-gradient(to top, var(--background) calc(12px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))),
       transparent calc(34px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))));
   }
-  .composer-content { display: contents; }
 }
 }

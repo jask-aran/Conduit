@@ -67,14 +67,13 @@ export function MobileComposerOptions(props: {
   /* The bubble composer's other controls dim while the menu is open, as a
      parent menu does under its submenu. */
   let root!: HTMLDivElement;
-  createEffect(() => { root.closest(".composer-wrap")?.toggleAttribute("data-options-open", open()); props.onOpenChange?.(open()); });
-  onCleanup(() => root?.closest(".composer-wrap")?.removeAttribute("data-options-open"));
+  createEffect(() => props.onOpenChange?.(open()));
   /* Closing hands focus back to the trigger; with the text pill open it goes
      back to the textarea instead, in the same task, so the keyboard stays. */
   let typingAtOpen: HTMLTextAreaElement | null = null;
   const composerTextarea = () => {
     const active = document.activeElement;
-    return active instanceof HTMLTextAreaElement && root.closest(".composer-wrap")?.contains(active) ? active : null;
+    return active instanceof HTMLTextAreaElement && root.closest(".ui-phone-composer")?.contains(active) ? active : null;
   };
   const restoreTyping = () => {
     const textarea = typingAtOpen;
@@ -88,7 +87,7 @@ export function MobileComposerOptions(props: {
      tap's default focus change would blur the textarea and drop the keyboard. */
   const keepKeyboard = (event: PointerEvent) => {
     const active = document.activeElement;
-    if (!(active instanceof HTMLTextAreaElement) || !root.closest(".composer-wrap")?.contains(active)) return;
+    if (!(active instanceof HTMLTextAreaElement) || !root.closest(".ui-phone-composer")?.contains(active)) return;
     if ((event.target as Element | null)?.closest?.('[data-slot="menu-content"], [data-slot="menu-sub-content"], [data-slot="ui-menu-content"], [data-slot="ui-menu-sub-content"]')) return;
     event.preventDefault();
   };

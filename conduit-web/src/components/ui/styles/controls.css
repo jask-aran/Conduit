@@ -111,12 +111,17 @@
 /* TextArea: multi-line text that grows with its lines; bare, so what holds it pads it. */
 .ui-textarea { display: block; width: 100%; resize: none; overflow-y: auto; border: 0; outline: 0; background: transparent; padding: 0; color: inherit; font: inherit; font-size: var(--text-body); line-height: var(--leading-row); field-sizing: content; }
 .ui-textarea::placeholder { color: var(--muted-foreground); }
+/* A selection the app holds while it writes into it (dictation's range): the tint, not the system highlight. */
+.ui-textarea[data-held]::selection { background: var(--tint); color: var(--foreground); }
+/* Its scrollbar, once it is at its tallest: thin, the tint, no track. */
+.ui-textarea { scrollbar-width: thin; scrollbar-color: var(--tint) transparent; }
 /* Progress: the slider's track and fill. */
 .ui-progress { width: 100%; height: var(--track-size); appearance: none; -webkit-appearance: none; overflow: hidden; border: 0; border-radius: var(--radius-round); background: var(--tint); }
 .ui-progress::-webkit-progress-bar { background: var(--tint); }
 .ui-progress::-webkit-progress-value { border-radius: var(--radius-round); background: var(--foreground); }
 .ui-progress::-moz-progress-bar { border-radius: var(--radius-round); background: var(--foreground); }
 /* A spinner: a ring in the surface's tint, a quarter of it in the text colour, turning. */
+.ui-stop-glyph { fill: currentColor; stroke-width: 0; scale: 0.7; }
 .ui-spinner { width: var(--icon); height: var(--icon); flex: none; border: var(--stroke-thin) solid var(--tint); border-top-color: var(--foreground); border-radius: var(--radius-round); animation: ui-spin var(--duration-spin) linear infinite; }
 @keyframes ui-spin { to { transform: rotate(1turn); } }
 /* Switch: an --icon thumb in a round track, travelling its own width; on, the primary. */

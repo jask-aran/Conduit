@@ -81,9 +81,9 @@ function Canvas() {
   const [overlay, setOverlay] = createSignal<OverlayView | null>(null);
   let desktop: HTMLDivElement | undefined;
   const litComposer = () => {
-    const wrap = desktop?.querySelector(".composer-wrap"); if (!desktop || !wrap) return undefined;
+    const wrap = desktop?.querySelector(".ui-desktop-composer"); if (!desktop || !wrap) return undefined;
     const frame = desktop.getBoundingClientRect(), box = wrap.getBoundingClientRect();
-    return { lit: { top: `${box.top - frame.top}px`, left: `${box.left - frame.left}px`, width: `${box.width}px`, height: `${box.height}px`, radius: getComputedStyle(wrap.querySelector(".composer") ?? wrap).borderRadius },
+    return { lit: { top: `${box.top - frame.top}px`, left: `${box.left - frame.left}px`, width: `${box.width}px`, height: `${box.height}px`, radius: getComputedStyle(wrap).borderRadius },
       leaderBottom: `${frame.bottom - box.top + 12}px` };
   };
   const overlays: [OverlayView, string][] = [["leader", "Leader"], ["palette", "Command palette"], ["search", "Chat search"], ["settings", "Settings"]];
