@@ -1,3 +1,5 @@
+import { CameraPreview } from "@/components/ui/connection";
+import { Dialog } from "@/components/dialog";
 import { onCleanup, onMount, createSignal } from "solid-js";
 import { buildHttpUrl, normalizeServerOrigin } from "../api/transport";
 import { publishTrustedIdentities } from "./certificate-pins";
@@ -143,10 +145,7 @@ export function QrScanner(props: { onLink: (link: PairingLink) => void; onClose:
     }
   });
   onCleanup(() => { stopped = true; clearTimeout(timer); stream?.getTracks().forEach((track) => track.stop()); });
-  return <div class="qr-scanner" role="dialog" aria-label="Scan pairing code">
-    <video ref={video} playsinline muted />
-    <div class="qr-scanner-frame" />
-    <p>{message()}</p>
-    <button type="button" class="qr-scanner-close" onClick={props.onClose}>Cancel</button>
-  </div>;
+  return <Dialog open title="Scan pairing code" onOpenChange={(open) => { if (!open) props.onClose(); }}>
+    <CameraPreview videoRef={(element) => { video = element; }} message={message()} onClose={props.onClose} />
+  </Dialog>;
 }

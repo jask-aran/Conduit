@@ -31,6 +31,7 @@ import "./orb.css";
 import "./popover.css";
 import "./nav.css";
 import "./card.css";
+import "./identity.css";
 import "./toast.css";
 import "./overlay.css";
 import "./leader.css";
@@ -42,3 +43,7 @@ import "./transcript.css";
 import "./code.css";
 import "./trace.css";
 import "./bridge.css";
+
+import "./connection.css";
+
+import "./browser.css";

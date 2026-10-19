@@ -18,6 +18,7 @@ export function Dialog(props: {
   busy?: boolean;
   onOpenAutoFocus?: (event: Event) => void;
   onCloseAutoFocus?: (event: Event) => void;
+  onAfterClose?: () => void;
   onEscapeKeyDown?: (event: KeyboardEvent) => void;
   onKeyDown?: (event: KeyboardEvent) => void;
   children?: JSX.Element;
@@ -38,6 +39,7 @@ export function Dialog(props: {
       if (target?.isConnected) target.focus();
     }
     target = null;
+    props.onAfterClose?.();
   };
   return <K.Root open={props.open} onOpenChange={change}>
     <K.Portal mount={mount()}>
