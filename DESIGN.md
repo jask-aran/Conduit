@@ -64,15 +64,15 @@ What each v2 family replaces and where it stands. Update a row in the commit tha
 | Controls: `Button` | `Button` in `components/primitives.tsx`; raw `<button>`s in the terminal pane, sidebar, `main.tsx`, command menu, Computer dashboard | previews |
 | Controls: `Segmented` | `settings/settings-controls.tsx`; `.sidebar-area-toggle`, `.split-heading-switches`, `.workspace-history-toggle` | old |
 | Controls: `Input`, `TextArea`, `SelectTrigger`, `Field` | `Field*`, `Input`, `Textarea` in `primitives.tsx` | old |
-| Controls: `Slider` | `chat/step-slider.tsx` | previews |
+| Controls: `Slider`, `SliderValue`, `Gauge`, `Meter`, `Swatch` | none | cut over in the composer: the model and effort sliders (a `SliderValue` opening a submenu through `control`), the context `Gauge`, the breakdown's `Meter` and `Swatch`es |
 | Controls: `Keycap` | `Keycap` in `components/frost.tsx` | old |
 | Controls: Spinner, StatusDot (the runtime dot) | `primitives.tsx`, `navigation/runtime-indicator.tsx` | gallery only (v2 pieces exist; the app still draws its own) |
 | Frost | `.composer-surface-material`, `chat/composer-surface.ts` | previews |
-| Popover: `Menu`, `Section`, `Item` | `Menu*`, `ContextMenu*`, `Popover*`, `PopoverSearchList` in `primitives.tsx`; `.menu-row` (terminal pane, leader, context gauge, place picker) | each section's menus with its section (the composer's are graduated with it); previews elsewhere |
+| Popover: `Menu`, `Section`, `Item`, `Readout`, `SearchList` | `Menu*`, `ContextMenu*`, `Popover*` in `primitives.tsx`; `.menu-row` (terminal pane, leader) | the composer's are cut over through `components/menus.tsx`: the + menu, model, profile and permission pickers, the context breakdown (`Menu wide`), the folder and project pick lists (`SearchList`) and the phone's options menu (phone submenus); the rest with their sections |
 | Connection | standalone browser sign-in, native first connection, server selection and recovery | v2 cutover complete; desktop and phone share the Kobalte submenu adapter, with phone layout owned by v2 |
 | Overlay, Glance | `FrostOverlay` (`frost.tsx`), command menu, chat search, Settings | gallery only |
 | Leader | `navigation/leader-palette.tsx`, `frost-card` | gallery only |
-| DesktopComposer | `chat/composer.tsx` (desktop) | cut over: `DesktopComposer` (riders, the question as its takeover), `ComposerField` with `Completion`, `Toolbar` (status, aside, primary, `StopGlyph`); its pickers are the menus still to cut over |
+| DesktopComposer | `chat/composer.tsx` (desktop) | cut over: `DesktopComposer` (riders, the question as its takeover), `ComposerField` with `Completion`, `Toolbar` (status, aside, primary, `StopGlyph`) and its `Picker`s |
 | Rider | queued messages, attachment strip, file references, question card | cut over: `Rider` with `Lines`/`Line` (measures its own clipping), `Chips`/`Chip` (open, retry, remove), `References`/`Reference` (also under a sent message), and the question as a card of `Tabs`/`Tab`, `Choices`/`Choice` (own answer), `Summary`, `Hints`; attachment and review-comment dialogs use the shared v2 `Dialog` |
 | Pill, PhoneComposer | phone header pills, sidebar header, `chat/composer.tsx` (phone: the voice bar, a phone's only composer) | the voice bar is cut over: `PhoneComposer` (riders, `Captions`) and `Pill*`; header pills previews |
 | Transcript, CodeBlock | `chat/transcript.tsx`, the Markdown renderers | cut over: rows (`TranscriptRow`), the user's `Message`, the answer's `Turn`, `Answer`, `MessageFoot`, `Failure`, `HarnessPrompt`, `Changes`, the `RiderButton`s, the Markdown, drawn by `Answer` through `ANSWER_MARKDOWN` (the renderers' wrappers, tables, links, citations, formulas, streamed words, a wide block's bleed)., the code block (`CodeBlock`, the renderer's highlighted lines grown in place as its children; `codeBlockHtml` for the marked renderer) |
@@ -88,7 +88,7 @@ Internal confirmations and prompts use `createDecisionScope` from `components/de
 | a palette, search or anything that filters | `FrostOverlay` (`placement="center"` for one that does not filter, like Settings) |
 | a confirm, a one-field prompt, a small piece of content | `Dialog` from `components/dialog.tsx` (`alert` for a destructive choice, `size="wide"` or `"large"` for content, `close`, `actions`); `CardForm`, `CardBody` and `CardActions` for its form |
 | a migrated menu or context menu | `components/menus.tsx` supplies Kobalte behavior around v2 `Menu` and `MenuAction`; older subsystems still use `primitives.tsx` |
-| a pick list anchored to a control | `PopoverContent` holding `PopoverSearchList` |
+| a pick list anchored to a control | `Popover`/`PopoverContent` in `components/menus.tsx` holding `SearchList` |
 | a card that floats without covering the page | `frost-card` alone |
 
 Inside them rows take `frost-row`, keys `Keycap`, the foot `frost-rail`, a shared dialog's buttons `CardActions`; material, dim, radius and arrival come from those pieces and the `--frost-*` tokens, and a surface's own CSS sets only its layout.

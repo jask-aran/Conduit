@@ -1,13 +1,9 @@
 import { createMemo, createSignal, Show } from "solid-js";
 import { FolderIcon } from "lucide-solid";
-import { Button, Popover, PopoverContent, PopoverSearchList, PopoverTrigger } from "@/components/primitives";
-import { useLibrary } from "@/components/ui/swap";
+import { Button } from "@/components/ui";
+import { Popover, PopoverContent, PopoverTrigger, SearchList } from "@/components/menus";
 import type { Project } from "../api/contracts";
 import { WorkspaceGlyph } from "../project/workspace-appearance";
-import "./place-picker.css";
-
-/** A place row's icon and name: a v2 row's icon slot and label, or the classic menu's. */
-const placeRowParts = () => useLibrary() ? ["ui-icon", "ui-label"] as const : ["composer-place-lead", "composer-place-label"] as const;
 
 export type PlaceOptions = { projects: Project[]; current?: Project | null; disabled?: boolean; onChoose: (project: Project) => void };
 
@@ -38,14 +34,11 @@ export function PlaceList(props: PlaceOptions & { onDone?: () => void }) {
     props.onDone?.();
     if (project.id !== props.current?.id) props.onChoose(project);
   };
-  const [lead, label] = placeRowParts();
-  return <PopoverSearchList items={places()} placeholder="Search projects and workspaces" onChoose={choose}
+  return <SearchList items={places()} placeholder="Search projects and workspaces" onChoose={choose}
     matches={(project, needle) => project.slug !== "chat" && project.name.toLowerCase().includes(needle)}
-    isCurrent={(project) => project.id === props.current?.id}>{(project) => <>
-    <span class={lead}><Show when={project.slug !== "chat"}><PlaceGlyph project={project} /></Show></span>
-    <span class={label}>{project.slug === "chat" ? "No folder" : project.name}</span>
-    <Show when={project.slug !== "chat"}><small>{isWorkspace(project) ? "Workspace" : "Project"}</small></Show>
-  </>}</PopoverSearchList>;
+    isCurrent={(project) => project.id === props.current?.id}
+    row={(project) => project.slug === "chat" ? { icon: <FolderIcon />, label: "No folder" }
+      : { icon: <PlaceGlyph project={project} />, label: project.name, meta: isWorkspace(project) ? "Workspace" : "Project" }} />;
 }
 
 export type FolderOptions = { folders: Array<{ path: string; label: string }>; current: string; onChoose: (path: string) => void; onBrowse: () => void };
@@ -64,19 +57,15 @@ export function FolderPicker(props: FolderOptions) {
     else if (folder.path !== props.current) props.onChoose(folder.path);
   };
 
-  const [lead, label] = placeRowParts();
   return <Popover open={open()} onOpenChange={setOpen} placement="top-start">
-    <PopoverTrigger as={Button} class="composer-desktop-attachment composer-place-trigger" variant="ghost" size="icon-sm"
-      aria-label={`In ${name()}. Change folder`} title={props.current} data-placed="true">
+    <PopoverTrigger as={Button} variant="ghost" size="icon-sm" aria-label={`In ${name()}. Change folder`} title={props.current}>
       <FolderIcon />
     </PopoverTrigger>
-    <PopoverContent class="composer-place-menu" aria-label="Choose folder">
-      <PopoverSearchList items={rows()} placeholder="Search folders" onChoose={choose}
+    <PopoverContent aria-label="Choose folder">
+      <SearchList items={rows()} placeholder="Search folders" onChoose={choose}
         matches={(folder, needle) => !folder.path || `${folder.label} ${folder.path}`.toLowerCase().includes(needle)}
-        isCurrent={(folder) => folder.path === props.current}>{(folder) => <>
-        <span class={lead}><Show when={folder.path}><FolderIcon /></Show></span>
-        <span class={label} title={folder.path || undefined}>{folder.label}</span>
-      </>}</PopoverSearchList>
+        isCurrent={(folder) => folder.path === props.current}
+        row={(folder) => ({ icon: folder.path ? <FolderIcon /> : undefined, label: folder.label, title: folder.path || undefined })} />
     </PopoverContent>
   </Popover>;
 }

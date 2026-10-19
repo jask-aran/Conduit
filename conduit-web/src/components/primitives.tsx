@@ -127,63 +127,6 @@ export function PopoverContent(props: ParentProps<{ class?: string; "aria-label"
   return <KPopover.Portal mount={portalMount()}><KPopover.Content data-slot="popover-content" {...libraryShell("popover-content")} aria-label={props["aria-label"]} onPointerDownOutside={props.onPointerDownOutside} onOpenAutoFocus={props.onOpenAutoFocus} onCloseAutoFocus={props.onCloseAutoFocus} class={cn(contentClass(menuContentClass), props.class)}>{props.children}</KPopover.Content></KPopover.Portal>;
 }
 
-/**
- * A popover that is a list to pick from, with a search at its head: the one
- * searchable list every such popover uses (DESIGN.md, Choosing in a menu).
- * The search keeps focus, so typing filters while the arrows walk the rows
- * with the wash and Enter picks the row under the cursor, or the first match.
- * Rows are the shared `menu-row`; a caller gives only the rows, how one reads,
- * which is current, and what picking does. Put it inside `PopoverContent`.
- */
-export function PopoverSearchList<T>(props: {
-  items: T[];
-  /** Whether a row stays for the typed text (already trimmed and lower-cased). */
-  matches: (item: T, needle: string) => boolean;
-  onChoose: (item: T) => void;
-  isCurrent?: (item: T) => boolean;
-  placeholder: string;
-  empty?: string;
-  children: (item: T) => JSX.Element;
-}) {
-  const id = createUniqueId();
-  const [query, setQuery] = createSignal("");
-  // The cursor; -1 while it rests in the search.
-  const [active, setActive] = createSignal(-1);
-  const rows = createMemo(() => {
-    const needle = query().trim().toLowerCase();
-    return needle ? props.items.filter((item) => props.matches(item, needle)) : props.items;
-  });
-  let list: HTMLDivElement | undefined;
-  createEffect(on(query, () => setActive(query().trim() ? 0 : -1), { defer: true }));
-  createEffect(on(active, (index) => list?.children[index]?.scrollIntoView({ block: "nearest" })));
-  const move = (step: number) => {
-    const count = rows().length;
-    if (count) setActive((index) => index < 0 ? (step > 0 ? 0 : count - 1) : (index + step + count) % count);
-  };
-  const onKeyDown = (event: KeyboardEvent) => {
-    if (event.key === "ArrowDown" || event.key === "ArrowUp") { event.preventDefault(); move(event.key === "ArrowDown" ? 1 : -1); }
-    else if (event.key === "Enter") {
-      const row = rows()[active()] ?? (query().trim() ? rows()[0] : undefined);
-      if (row !== undefined) { event.preventDefault(); props.onChoose(row); }
-    }
-  };
-  // Library previews: the library's search section over a list section (components v2).
-  const lib = useLibrary();
-  const field = <input class={lib ? "ui-search" : "popover-search"} placeholder={props.placeholder} value={query()} onInput={(event) => setQuery(event.currentTarget.value)}
-      role="combobox" aria-expanded="true" aria-controls={`${id}-list`} aria-activedescendant={active() >= 0 ? `${id}-${active()}` : undefined}
-      onKeyDown={onKeyDown} autofocus />;
-  return <>
-    {lib ? <div role="search" class="ui-section ui-search-section" data-kind="search"><SearchIcon />{field}</div> : field}
-    <div class={lib ? "ui-section popover-search-list" : "popover-search-list"} data-kind={lib ? "list" : undefined} id={`${id}-list`} role="listbox" ref={list}>
-      <For each={rows()} fallback={<div class="popover-search-empty">{props.empty ?? "No matches."}</div>}>{(item, index) =>
-        <button type="button" class={lib ? "ui-row" : "menu-row"} role="option" id={`${id}-${index()}`} tabIndex={-1}
-          aria-selected={active() === index()} data-highlighted={active() === index() || undefined} data-checked={props.isCurrent?.(item) || undefined}
-          onPointerMove={() => setActive(index())} onClick={() => props.onChoose(item)}>{props.children(item)}</button>}
-      </For>
-    </div>
-  </>;
-}
-
 /*
  * Row menus wait for the first open to have been shown.
  *

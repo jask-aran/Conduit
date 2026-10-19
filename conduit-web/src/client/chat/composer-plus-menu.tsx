@@ -1,21 +1,7 @@
-import { libraryPiece } from "@/components/ui/swap";
-import { useLibrary } from "@/components/ui/swap";
 import { createSignal, For, Show } from "solid-js";
 import { GaugeIcon, PaperclipIcon, PlusIcon, ShieldCheckIcon } from "lucide-solid";
-import {
-  Menu,
-  MenuContent,
-  MenuGroup,
-  MenuItem,
-  MenuLabel,
-  MenuRadioGroup,
-  MenuRadioItem,
-  MenuSeparator,
-  MenuSub,
-  MenuSubContent,
-  MenuSubTrigger,
-  MenuTrigger,
-} from "@/components/primitives";
+import { Button, MenuNote, Rule } from "@/components/ui";
+import { Menu, MenuContent, MenuRadioGroup, MenuRadioItem, MenuRow, MenuSection, MenuSub, MenuSubContent, MenuSubTrigger, useMenuBack } from "@/components/menus";
 import type { Template } from "../api/contracts";
 import type { ActiveChatStore } from "../state/active-chat";
 import type { ServiceLevelSettings } from "../state/service-level-settings";
@@ -59,12 +45,12 @@ export function ComposerPlusMenu(props: {
   const [open, setOpen] = createSignal(false);
 
   return <Menu open={open()} onOpenChange={setOpen}>
-    <MenuTrigger {...libraryPiece("icon-button").data} class={`composer-plus-trigger ${libraryPiece("icon-button").class}`.trim()} aria-label="Attach and more" title="Attach and more" disabled={props.disabled}><PlusIcon /></MenuTrigger>
-    <MenuContent class="composer-plus-menu">
+    <Menu.Trigger as={Button} variant="ghost" size="icon-sm" aria-label="Attach and more" title="Attach and more" disabled={props.disabled}><PlusIcon /></Menu.Trigger>
+    <MenuContent>
       <Show when={has("model")}>
         <MenuSub>
-          <MenuSubTrigger disabled={!props.modelSwitch}><span class={useLibrary() ? "ui-label" : "composer-plus-name"}>Model</span><span class={useLibrary() ? "ui-meta" : "composer-plus-value"}>{model()?.label || props.models.model() || "Not selected"}</span></MenuSubTrigger>
-          <MenuSubContent class="composer-quick-model-menu">
+          <MenuSubTrigger disabled={!props.modelSwitch} meta={model()?.label || props.models.model() || "Not selected"}>Model</MenuSubTrigger>
+          <MenuSubContent>
             <ModelMenuItems models={props.models.models()} model={props.models.model()} thinkingLevel={props.models.effort()} notice={props.models.notice()}
               onModelChange={(value) => void props.models.chooseModel(value)} onThinkingLevelChange={(value) => void props.models.chooseEffort(value)}
               onSearchModels={props.onOpenModelSelector} searchShortcut={props.modelSelectorShortcut} />
@@ -73,39 +59,27 @@ export function ComposerPlusMenu(props: {
       </Show>
       <Show when={has("profile") && props.profiles.length}>
         <MenuSub>
-          <MenuSubTrigger><HarnessMark id={props.activeProfile?.implementation || "conduit"} class="size-4" /><span class={useLibrary() ? "ui-label" : "composer-plus-name"}>Profile</span><span class={useLibrary() ? "ui-meta" : "composer-plus-value"}>{props.activeProfile?.label || "General"}</span></MenuSubTrigger>
-          <MenuSubContent class="w-72">
-            <MenuGroup><MenuLabel>Profile</MenuLabel><MenuRadioGroup value={props.activeProfile?.id || ""} onChange={props.onChooseProfile}>
-              <For each={props.profiles}>{(item) => <MenuRadioItem value={item.id} disabled={(props.chat.status() !== "draft" && item.id !== props.activeProfile?.id) || item.disabled}><HarnessMark id={item.implementation || "conduit"} class="size-4" /><span class="composer-profile-copy"><span>{item.label}</span><small>{item.implementation || "conduit"}</small></span></MenuRadioItem>}</For>
-            </MenuRadioGroup></MenuGroup>
-          </MenuSubContent>
+          <MenuSubTrigger icon={<HarnessMark id={props.activeProfile?.implementation || "conduit"} />} meta={props.activeProfile?.label || "General"}>Profile</MenuSubTrigger>
+          <MenuSubContent><ProfileChoices profiles={props.profiles} active={props.activeProfile} locked={props.chat.status() !== "draft"} onChoose={props.onChooseProfile} /></MenuSubContent>
         </MenuSub>
       </Show>
       <Show when={has("permissions") && props.permissions?.profiles().length}>
         <MenuSub>
-          <MenuSubTrigger><ShieldCheckIcon /><span class={useLibrary() ? "ui-label" : "composer-plus-name"}>Permissions</span><span class={useLibrary() ? "ui-meta" : "composer-plus-value"}>{permission()?.label || "Default"}</span></MenuSubTrigger>
-          <MenuSubContent class="w-72">
-            <MenuGroup><MenuLabel>Permissions</MenuLabel><MenuRadioGroup value={props.permissions?.selected() || ""} onChange={(value) => void props.permissions?.choose(value)}>
-              <For each={props.permissions?.profiles() || []}>{(profile) => <MenuRadioItem value={profile.id} disabled={!profile.allowed}><span class="shrink-0 whitespace-nowrap">{profile.label}</span><Show when={profile.description}><span class="ml-auto max-w-40 truncate text-xs text-muted-foreground">{profile.description}</span></Show></MenuRadioItem>}</For>
-            </MenuRadioGroup></MenuGroup>
-          </MenuSubContent>
+          <MenuSubTrigger icon={<ShieldCheckIcon />} meta={permission()?.label || "Default"}>Permissions</MenuSubTrigger>
+          <MenuSubContent><PermissionChoices permissions={props.permissions!} /></MenuSubContent>
         </MenuSub>
       </Show>
       <Show when={has("permissions") && props.serviceLevels?.levels().length}>
         <MenuSub>
-          <MenuSubTrigger><GaugeIcon /><span class={useLibrary() ? "ui-label" : "composer-plus-name"}>Service level</span><span class={useLibrary() ? "ui-meta" : "composer-plus-value"}>{service()?.label || "Default"}</span></MenuSubTrigger>
-          <MenuSubContent>
-            <MenuGroup><MenuLabel>Service level</MenuLabel><MenuRadioGroup value={props.serviceLevels?.selected() || ""} onChange={(value) => void props.serviceLevels?.choose(value)}>
-              <For each={props.serviceLevels?.levels() || []}>{(level) => <MenuRadioItem value={level.id}>{level.label}</MenuRadioItem>}</For>
-            </MenuRadioGroup></MenuGroup>
-          </MenuSubContent>
+          <MenuSubTrigger icon={<GaugeIcon />} meta={service()?.label || "Default"}>Service level</MenuSubTrigger>
+          <MenuSubContent><ServiceChoices levels={props.serviceLevels!} /></MenuSubContent>
         </MenuSub>
       </Show>
       <Show when={props.place}>
-        <Show when={anyFolded()}><MenuSeparator /></Show>
+        <Show when={anyFolded()}><Rule /></Show>
         <MenuSub>
-          <MenuSubTrigger disabled={props.place!.disabled}><PlaceGlyph project={placed()} /><span class={useLibrary() ? "ui-label" : "composer-plus-name"}>Project</span><span class={useLibrary() ? "ui-meta" : "composer-plus-value"}>{placed()?.name || "None"}</span></MenuSubTrigger>
-          <MenuSubContent class="composer-place-menu">
+          <MenuSubTrigger disabled={props.place!.disabled} icon={<PlaceGlyph project={placed()} />} meta={placed()?.name || "None"}>Project</MenuSubTrigger>
+          <MenuSubContent>
             {/* The folder button's own list. Keys stay with its search, not the menu's typeahead. */}
             <div ref={(element) => requestAnimationFrame(() => element.querySelector("input")?.focus())}
               onKeyDown={(event) => { if (event.key !== "Escape") event.stopPropagation(); }}>
@@ -114,13 +88,40 @@ export function ComposerPlusMenu(props: {
           </MenuSubContent>
         </MenuSub>
       </Show>
-      <Show when={has("context") && context() != null}>
-        <div class="composer-plus-context">{Math.round(context()!)}% of context used</div>
-      </Show>
+      <Show when={has("context") && context() != null}><MenuNote>{Math.round(context()!)}% of context used</MenuNote></Show>
       <Show when={props.onAttach}>
-        <Show when={anyFolded() || props.place}><MenuSeparator /></Show>
-        <MenuItem onSelect={() => props.onAttach?.()}><PaperclipIcon /><span>Attach files</span></MenuItem>
+        <Show when={anyFolded() || props.place}><Rule /></Show>
+        <MenuRow icon={<PaperclipIcon />} onSelect={() => props.onAttach?.()}>Attach files</MenuRow>
       </Show>
     </MenuContent>
   </Menu>;
+}
+
+/** back: in a phone's submenu, a choice returns to the options rather than closing them -- the next pick is often beside it. */
+const picked = (back: boolean | undefined, apply: (value: string) => void) => {
+  const parent = useMenuBack();
+  return (value: string) => { apply(value); if (back) parent(); };
+};
+
+/** The profiles to start the chat with; once it has started, only its own. */
+export function ProfileChoices(props: { profiles: Template[]; active?: Template | null; locked: boolean; back?: boolean; onChoose: (id: string) => void }) {
+  const choose = picked(props.back, (id) => props.onChoose(id));
+  return <MenuSection title="Profile"><MenuRadioGroup value={props.active?.id || ""} onChange={choose}>
+    <For each={props.profiles}>{(item) => <MenuRadioItem value={item.id} closeOnSelect={!props.back} disabled={(props.locked && item.id !== props.active?.id) || item.disabled}
+      icon={<HarnessMark id={item.implementation || "conduit"} />} meta={item.implementation || "conduit"}>{item.label}</MenuRadioItem>}</For>
+  </MenuRadioGroup></MenuSection>;
+}
+
+export function PermissionChoices(props: { permissions: ComposerPermissions; back?: boolean }) {
+  const choose = picked(props.back, (value) => void props.permissions.choose(value));
+  return <MenuSection title="Permissions"><MenuRadioGroup value={props.permissions.selected() || ""} onChange={choose}>
+    <For each={props.permissions.profiles()}>{(profile) => <MenuRadioItem value={profile.id} closeOnSelect={!props.back} disabled={!profile.allowed} detail={profile.description || undefined}>{profile.label}</MenuRadioItem>}</For>
+  </MenuRadioGroup></MenuSection>;
+}
+
+export function ServiceChoices(props: { levels: ServiceLevelSettings; back?: boolean }) {
+  const choose = picked(props.back, (value) => void props.levels.choose(value));
+  return <MenuSection title="Service level"><MenuRadioGroup value={props.levels.selected() || ""} onChange={choose}>
+    <For each={props.levels.levels()}>{(level) => <MenuRadioItem value={level.id} closeOnSelect={!props.back}>{level.label}</MenuRadioItem>}</For>
+  </MenuRadioGroup></MenuSection>;
 }

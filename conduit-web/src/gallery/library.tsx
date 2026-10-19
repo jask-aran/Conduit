@@ -1,4 +1,4 @@
-import { Menu as LiveMenu, MenuContent as LiveMenuContent, MenuSection as LiveMenuSection, MenuRow as LiveMenuRow, MenuRadioGroup as LiveRadioGroup, MenuRadioItem as LiveRadioItem, MenuSub as LiveSub, MenuSubTrigger as LiveSubTrigger, MenuSubContent as LiveSubContent } from "@/components/menus";
+import { SearchList, Menu as LiveMenu, MenuContent as LiveMenuContent, MenuSection as LiveMenuSection, MenuRow as LiveMenuRow, MenuRadioGroup as LiveRadioGroup, MenuRadioItem as LiveRadioItem, MenuSub as LiveSub, MenuSubTrigger as LiveSubTrigger, MenuSubContent as LiveSubContent } from "@/components/menus";
 import { createDecisionDialogs } from "@/components/decision-dialog";
 import { WorkspaceAppearanceEditor } from "../client/project/workspace-appearance-editor";
 import { ComputerExplorer } from "../client/dashboard/computer-dashboard";
@@ -7,12 +7,12 @@ import { ConnectionScreen, PasswordSignIn, ServerControl, ConnectionRecovery, Co
 import { NotificationToaster, toast } from "@/components/notifications";
 import { Dialog } from "@/components/dialog";
 import { CardActions, CardForm, CardBody, CardNote, CardRead, CardDetails, CardQR, CardPreview, CardAttachments, CardAttachment } from "@/components/ui/card";
-import { ArrowDownIcon, PanelLeftIcon, MessageSquarePlusIcon, EllipsisIcon, CameraIcon, KeyboardIcon, MicIcon, ArrowUpIcon, ChevronDownIcon, CircleIcon, FileTextIcon, ClockIcon, Maximize2Icon, SendHorizontalIcon, XIcon, CheckIcon } from "lucide-solid";
+import { ArrowDownIcon, PanelLeftIcon, MessageSquarePlusIcon, EllipsisIcon, CameraIcon, KeyboardIcon, MicIcon, ArrowUpIcon, FileTextIcon, ClockIcon, Maximize2Icon, SendHorizontalIcon, XIcon, CheckIcon } from "lucide-solid";
 import { createSignal, createUniqueId, For, Index, onCleanup, onMount, Show, type JSX } from "solid-js";
 import { LightbulbIcon, MessageSquareTextIcon, FilePenLineIcon, SquareTerminalIcon, CodeXmlIcon, WrenchIcon } from "lucide-solid";
 import { FileCode2Icon, FileDiffIcon, Undo2Icon, DeleteIcon, ChevronLeftIcon, TextCursorInputIcon } from "lucide-solid";
 import { PanelRightIcon, ClipboardCopyIcon, Columns2Icon, CopyIcon, FolderIcon, FolderInputIcon, LayoutDashboardIcon, MenuIcon, MonitorIcon, PaperclipIcon, PencilIcon, PinIcon, PlusIcon, QrCodeIcon, RefreshCwIcon, SearchIcon, ShareIcon, ShieldCheckIcon, SquarePenIcon, TerminalIcon, Trash2Icon } from "lucide-solid";
-import { type Motion, Reference, References, Captions, Completion, Spinner, StopGlyph, ANSWER_MARKDOWN, CODE_BLOCK, Disclosure, Transcript, TranscriptRow, Message, Turn, Failure, HarnessPrompt, Changes, LoadingEarlier, TraceHeader, Trail, Step, Answer, CodeBlock, codeBlockHtml, fillCodeBlocks, CopyButton, MessageFoot, StopLine, Orb, settledOrbRate, PLAIN_SPHERE, SPUTTERING_SPHERE, Trace, StepOutput, StepProse, TraceError, ORBITS_TRAILED, PhoneComposer, PHONE_COMPOSER_STATES, type PhonePart, type VoiceMode, Toast, Toaster, SettingRecorder, Field, Leader, Crumbs, Spotlight, OverlayHead, Match, Choices, OverlayBar, OverlayHints, OverlayList, OverlayPage, OverlayRail, OverlaySplit, Glance, GlanceHead, GlancePrompt, GlanceTurn, GlanceAnswer, GlanceEmpty, RiderButton, Overlay, Scrim, SettingGroup, SettingLine, SettingValue, SettingLink, SettingNote, SettingDetails, SettingWide, SettingLoading, Progress, Keycap, NavGroup, NavRow, Segmented, SelectTrigger, Bubble, Button, Card, Chip, Choice, ComposerField, DesktopComposer, Line, TextArea, Rider, RiderActions, RiderTitle, Toolbar, Frost, Input, Item, Menu, PillButton, PillField, PillGroup, PillSwitch, PillWave, HeadingSection, SearchSection, Section, Slider, Switch, Chips, Lines, Read, Preview } from "@/components/ui";
+import { type Motion, Picker, Gauge, Meter, Swatch, Readout, SliderValue, Reference, References, Captions, Completion, Spinner, StopGlyph, ANSWER_MARKDOWN, CODE_BLOCK, Disclosure, Transcript, TranscriptRow, Message, Turn, Failure, HarnessPrompt, Changes, LoadingEarlier, TraceHeader, Trail, Step, Answer, CodeBlock, codeBlockHtml, fillCodeBlocks, CopyButton, MessageFoot, StopLine, Orb, settledOrbRate, PLAIN_SPHERE, SPUTTERING_SPHERE, Trace, StepOutput, StepProse, TraceError, ORBITS_TRAILED, PhoneComposer, PHONE_COMPOSER_STATES, type PhonePart, type VoiceMode, Toast, Toaster, SettingRecorder, Field, Leader, Crumbs, Spotlight, OverlayHead, Match, Choices, OverlayBar, OverlayHints, OverlayList, OverlayPage, OverlayRail, OverlaySplit, Glance, GlanceHead, GlancePrompt, GlanceTurn, GlanceAnswer, GlanceEmpty, RiderButton, Overlay, Scrim, SettingGroup, SettingLine, SettingValue, SettingLink, SettingNote, SettingDetails, SettingWide, SettingLoading, Progress, Keycap, NavGroup, NavRow, Segmented, SelectTrigger, Bubble, Button, Card, Chip, Choice, ComposerField, DesktopComposer, Line, TextArea, Rider, RiderActions, RiderTitle, Toolbar, Frost, Input, Item, Menu, PillButton, PillField, PillGroup, PillSwitch, PillWave, HeadingSection, SearchSection, Section, Slider, Switch, Chips, Lines, Read, Preview } from "@/components/ui";
 
 import { HarnessMark } from "../client/harness-brand";
 import { PlaceGlyph } from "../client/chat/place-picker";
@@ -82,8 +82,7 @@ function Area() { const [value, setValue] = createSignal("dashboard"); return <P
 
 /* The desktop composer's controls, as components v2 draws them: ghost icon buttons and small ghost pickers. */
 const ghost = (label: string, glyph: JSX.Element) => <Button variant="ghost" size="icon-sm" aria-label={label} title={label}>{glyph}</Button>;
-const picker = (children: JSX.Element) => <Button variant="ghost" size="sm" class="g-picker">{children}<ChevronDownIcon /></Button>;
-const toolbarStart = () => <>{ghost("Attach and more", <PlusIcon />)}{ghost("Context usage", <CircleIcon />)}{picker(<HarnessMark id="conduit" class="size-4" />)}{picker(<><strong>Meta: Muse Spark 1.3</strong><span class="g-muted">medium</span></>)}</>;
+const toolbarStart = () => <>{ghost("Attach and more", <PlusIcon />)}{ghost("Context usage", <Gauge value={42} />)}<Picker icon={<HarnessMark id="conduit" />} aria-label="Profile" /><Picker subject value="Meta: Muse Spark 1.3" quiet="medium" /></>;
 const toolbarEnd = () => ghost("Start voice dictation", <MicIcon />);
 const send = () => ghost("Send message", <ArrowUpIcon />);
 /** The phone's composer, as components v2 builds it; each option a value or an accessor (the Motion cell switches them). */
@@ -717,7 +716,11 @@ export const libraryFamilies: Family[] = [
         ['.ui-section[data-kind="slider"]', "Slider section", "Section kind=slider", "a level picked by dragging"],
       ]} />, "row"),
       lib("section-heading", "Heading", "both", "section", "HeadingSection + Item field", () => <Menu><ChatTitle /></Menu>),
-      lib("section-search", "Search", "both", "section", "SearchSection: heads a pick list (PopoverSearchList). A menu over a long list starts with a Search all… row that opens the palette instead", () => <Menu><SearchSection placeholder="Search all models…" keys={["⌘", "⇧", "X"]} /></Menu>),
+      lib("section-search", "Search", "both", "section", "SearchSection: heads a pick list (SearchList, live: type, arrows, Enter; the list scrolls in its own height). A menu over a long list starts with a Search all… row that opens the palette instead", () => <div class="g-row g-top">
+        <Menu><SearchSection placeholder="Search all models…" keys={["⌘", "⇧", "X"]} /></Menu>
+        <Menu><SearchList items={PROJECTS} placeholder="Search projects and workspaces" matches={(project, needle) => project.name.toLowerCase().includes(needle)} isCurrent={(project) => project === PROJECTS[1]}
+          onChoose={noop} row={(project) => ({ icon: <PlaceGlyph project={project} />, label: project.name, meta: "Project" })} /></Menu>
+      </div>, true),
       lib("item", "List · items", "both", "section", "Section + Item: icon meta detail keys opens field · checked (current: bold, no tick) disabled destructive", () => <Menu><Section title="Title" note="note">
         <Item>Plain</Item>
         <Item icon={<PaperclipIcon />}>icon</Item>
@@ -731,7 +734,10 @@ export const libraryFamilies: Family[] = [
         <Item disabled>disabled: dimmer, struck through, no note</Item>
         <Item icon={<Trash2Icon />} destructive>destructive</Item>
       </Section></Menu>),
-      lib("section-slider", "Slider", "both", "section", "Section kind=slider + Slider", () => <Menu><Section kind="slider"><Levels /></Section></Menu>),
+      lib("section-slider", "Slider", "both", "section", "Section kind=slider + Slider; its value a SliderValue that opens the levels (onOpen, or control: the caller's own, a submenu's trigger)", () => <Menu>
+        <Section kind="slider"><Levels /></Section>
+        <Section kind="slider"><Slider label="Effort" options={thinking} value="medium" onChange={noop} control={(shown) => <SliderValue>{shown()}</SliderValue>} /></Section>
+      </Menu>),
       lib("submenu", "Submenu", "both", "popover", "Menu beside an Item that opens", () => <div class="g-row g-top g-submenu">
         <Menu><Section title="Servers"><Item checked>Desktop-Dev</Item><Item checked={false}>Laptop</Item></Section><Section><Item opens active>Route</Item><Item>Manage settings</Item></Section></Menu>
         <Menu><Section><Item checked>Automatic</Item><Item checked={false}>Local network</Item><Item checked={false}>Internet</Item></Section></Menu>
@@ -743,6 +749,12 @@ export const libraryFamilies: Family[] = [
       <Section><Item meta="Muse Spark 1.3" opens>Model</Item><Item icon={<HarnessMark id="conduit" class="size-4" />} meta="Assistant" opens>Profile</Item><Item icon={<ShieldCheckIcon />} meta="Default" opens>Permissions</Item></Section>
       <Section><Item icon={<PlaceGlyph project={null} />} meta="None" opens>Project</Item></Section>
       <Section><Item icon={<PaperclipIcon />}>Attach files</Item></Section>
+    </Menu>),
+    lib("d-context", "ContextGauge › breakdown", "desktop", "popover", "chat/context-gauge.tsx · Menu wide: Sections titled with their reading as the note, a Meter of the window's parts (and where it compacts), Readouts, each part an Item with its Swatch", () => <Menu wide>
+      <Section title="Context" note="42% used"><Meter parts={[{ value: 30, colour: "oklch(0.72 0.15 300)" }, { value: 8, colour: "oklch(0.7 0.02 260)" }, { value: 6, colour: "oklch(0.74 0.12 230)" }, { value: 56, colour: "transparent" }]} mark={{ at: 85, label: "compacts at 85%" }} /><Readout label="84k of 200k tokens" value="$0.42" /></Section>
+      <Section><Item icon={<Swatch colour="oklch(0.72 0.15 300)" />} meta="60k · 30.0%">Messages</Item><Item icon={<Swatch colour="oklch(0.74 0.12 230)" />} meta="12k · 6.0%" opens aria-expanded="true">Tools (3)</Item><Item icon={<Swatch hollow />} meta="4k">read_file</Item><Item icon={<Swatch hollow />} meta="116k · 58.0%">Free</Item></Section>
+      <Section title="Cache" note="71% of input" />
+      <Section><Item meta="2 so far">Compact now</Item></Section>
     </Menu>),
     lib("d-profile", "ComposerPlusMenu › Profile", "desktop", "popover", "chat/composer-plus-menu.tsx", () => <Menu class="g-w18"><Profiles /></Menu>),
     lib("d-chat", "ChatHeader › menu", "desktop", "popover", "chat/chat-screen.tsx", () => <Menu class="g-w18"><ChatTitle /><Section><Item icon={<RefreshCwIcon />}>Update app</Item></Section><Section><Item icon={<ShareIcon />}>Share</Item><Item icon={<PencilIcon />}>Rename</Item><Item icon={<Trash2Icon />} destructive>Delete</Item></Section></Menu>),
@@ -899,6 +911,12 @@ export const libraryFamilies: Family[] = [
     ] },
     { title: "Assembled", atoms: [
       lib("composer", "Composer", "desktop", "composer", "chat/composer.tsx", () => <div class="g-composer"><DesktopComposer><ComposerField><TextArea placeholder="Send a message…" /></ComposerField><Toolbar start={toolbarStart()} end={toolbarEnd()} primary={send()} /></DesktopComposer></div>, true),
+      lib("composer-pickers", "Picker · Gauge", "desktop", "composer", "Picker: a small ghost button showing what is picked; Gauge: how full, as a ring", () => <FormTable rows={[
+        form("a setting", "muted: a mark, its value cut short to its room", () => <div class="g-row"><Picker icon={<ShieldCheckIcon />} value="Ask before edits" /><Picker icon={<HarnessMark id="conduit" />} aria-label="Profile" /></div>, "<Picker icon value>", "--icon-sm · --control-sm"),
+        form("the subject", "what the message goes to (the model), at full weight; a quieter second value", () => <Picker subject value="Meta: Muse Spark 1.3 Contributor" quiet="medium" />, "<Picker subject quiet>", "--weight-current"),
+        form("connecting", "a Spinner as its mark until there is a value", () => <Picker icon={<Spinner />} value="Connecting…" disabled />, "<Picker icon={<Spinner />}>", ""),
+        form("Gauge", "idle (nothing reported), normal, warning, critical", () => <div class="g-row"><Gauge value={0} tone="idle" /><Gauge value={42} /><Gauge value={78} tone="warning" /><Gauge value={94} tone="critical" /></div>, "<Gauge value tone>", "--warn · --destructive"),
+      ]} on={["desktop"]} widths={["200px", "minmax(0, 1fr)", "minmax(0, 1fr)"]} />, "row"),
       lib("composer-status", "Toolbar · status · Completion", "desktop", "composer", "Toolbar status · Completion", () => <FormTable rows={[
         form("status · working", "what the agent is doing, muted at the end's start after a Spinner, cut short to its room", () => <div class="g-composer g-part"><Toolbar start={toolbarStart()} end={toolbarEnd()} status={<><Spinner />Responding</>} primary={ghost("Stop response", <StopGlyph />)} /></div>, "<Toolbar status>", "--text-caption · --cmp-status-max"),
         form("status · dictating", "the voice as it comes, a PillWave filling the status's room", () => <div class="g-composer g-part"><Toolbar start={toolbarStart()} end={<Button variant="ghost" size="icon-sm" aria-label="Voice dictation" aria-pressed><MicIcon /></Button>} status={<PillWave levels={[0.1, 0.3, 0.6, 0.4, 0.8, 0.5, 0.2, 0.7, 0.9, 0.4, 0.3, 0.6, 0.2, 0.5, 0.7, 0.3]} gain={1} />} primary={send()} /></div>, "<Toolbar status={<PillWave>}>", "--cmp-slot"),

@@ -1,37 +1,25 @@
 import { For, Show, createEffect, createSignal, createUniqueId, onCleanup } from "solid-js";
-import { createPhoneMenuPanels, PhoneMenuSubmenu } from "@/components/phone-menu-panels";
 // Kobalte's public dropdown-menu entrypoint does not expose this hook, but its
 // menu content uses the same context. The compiled chunk keeps the context
 // identity shared with the public component.
 // @ts-expect-error Kobalte does not publish declarations for this internal chunk.
 import { useMenuContext } from "../../../node_modules/@kobalte/core/dist/chunk/L544S5A4.jsx";
-import { ChevronRightIcon, FolderIcon, PaperclipIcon, PlusIcon, SearchIcon, ShieldCheckIcon } from "lucide-solid";
-import {
-  Menu,
-  MenuContent,
-  MenuGroup,
-  MenuItem,
-  MenuLabel,
-  MenuRadioGroup,
-  MenuRadioItem,
-  MenuSeparator,
-} from "@/components/primitives";
+import { FolderIcon, PaperclipIcon, PlusIcon, SearchIcon, ShieldCheckIcon } from "lucide-solid";
+import { PillButton, Section, Slider } from "@/components/ui";
+import { Menu, MenuContent, MenuRadioGroup, MenuRadioItem, MenuRow, MenuSection, MenuSub, MenuSubContent, MenuSubTrigger, MenuSubValue, useMenuBack } from "@/components/menus";
 import type { Template } from "../api/contracts";
 import type { ActiveChatStore } from "../state/active-chat";
 import type { ComposerModels } from "./composer-models";
 import type { ComposerPermissions } from "./composer-permissions";
 import type { ServiceLevelSettings } from "../state/service-level-settings";
 import { HarnessMark } from "../harness-brand";
-import { StepSlider, sliderParts } from "./step-slider";
 import { contextUsagePercent } from "./context-metrics";
 import { isWorkspace, PlaceGlyph, type PlaceOptions } from "./place-picker";
+import { PermissionChoices, ProfileChoices, ServiceChoices } from "./composer-plus-menu";
 
 const thinkingLabel = (value: string) => value ? value[0]!.toUpperCase() + value.slice(1) : "Off";
-type MobileOptionsPanel = "root" | "models" | "effort" | "profiles" | "permissions" | "places";
 
 export function MobileComposerOptions(props: {
-  /** components v2: the trigger is a lone PillButton's frost pill in a PhoneComposer's row. */
-  pill?: boolean;
   /** Told when the menu opens and closes (a PhoneComposer dims under it). */
   onOpenChange?: (open: boolean) => void;
   composer: {
@@ -57,16 +45,12 @@ export function MobileComposerOptions(props: {
   const levels = () => selectedModel()?.thinkingLevels?.length ? selectedModel()!.thinkingLevels! : ["off"];
   const profileLocked = () => composer.chat.status() !== "draft";
   const [open, setOpen] = createSignal(false);
-  const { panel, go, settling, returnToRoot, keepForChild, reset } = createPhoneMenuPanels<MobileOptionsPanel>("root", open);
   const context = () => contextUsagePercent(composer.chat.contextUsage());
-  /* A choice in a submenu returns to the options rather than closing them:
-     the next thing is often beside it -- a new model's effort. */
-  const chosen = (apply: () => void) => { apply(); go("root"); };
   const preserveFocus = (event: Event) => event.preventDefault();
 
   /* The bubble composer's other controls dim while the menu is open, as a
      parent menu does under its submenu. */
-  let root!: HTMLDivElement;
+  let root!: HTMLButtonElement;
   createEffect(() => props.onOpenChange?.(open()));
   /* Closing hands focus back to the trigger; with the text pill open it goes
      back to the textarea instead, in the same task, so the keyboard stays. */
@@ -88,7 +72,7 @@ export function MobileComposerOptions(props: {
   const keepKeyboard = (event: PointerEvent) => {
     const active = document.activeElement;
     if (!(active instanceof HTMLTextAreaElement) || !root.closest(".ui-phone-composer")?.contains(active)) return;
-    if ((event.target as Element | null)?.closest?.('[data-slot="menu-content"], [data-slot="menu-sub-content"], [data-slot="ui-menu-content"], [data-slot="ui-menu-sub-content"]')) return;
+    if ((event.target as Element | null)?.closest?.('[data-slot="ui-menu-content"], [data-slot="ui-menu-sub-content"]')) return;
     event.preventDefault();
   };
   createEffect(() => {
@@ -97,132 +81,99 @@ export function MobileComposerOptions(props: {
     onCleanup(() => window.removeEventListener("pointerdown", keepKeyboard, true));
   });
 
-  return <div ref={root} class={props.pill ? "ui-frost ui-pill" : "composer-mobile-plus"} data-solo={props.pill ? "" : undefined} data-open={props.pill && open() ? "" : undefined}>
-    <Menu modal={false} placement="top-start" gutter={8} open={open()} onOpenChange={(value) => { if (value) typingAtOpen = composerTextarea(); setOpen(value); if (!value) reset(); }}>
-      <MobileComposerPlusTrigger serverOnline={composer.serverOnline} holdFocus={() => typingAtOpen !== null} />
-      <MenuContent class="composer-options-menu" data-settling={settling()} onOpenAutoFocus={preserveFocus} onCloseAutoFocus={(event) => { event.preventDefault(); restoreTyping(); }} onFocusOutside={preserveFocus} onPointerDownOutside={keepForChild}>
-        <div class="composer-options-parent" data-panel-open={panel() !== "root"} onPointerDown={returnToRoot}>
-         <MenuGroup>
-          <MenuLabel class="composer-options-label composer-options-header"><span>{composer.profiles.length ? "Profile" : "Model"}</span>
-            <Show when={context() != null}><span class="composer-options-context">{Math.round(context()!)}% context</span></Show></MenuLabel>
+  const placed = () => composer.place?.current && composer.place.current.slug !== "chat" ? composer.place.current : null;
+  return <Menu modal={false} placement="top-start" gutter={8} open={open()} onOpenChange={(value) => { if (value) typingAtOpen = composerTextarea(); setOpen(value); }}>
+      <MobileComposerPlusTrigger serverOnline={composer.serverOnline} open={open()} holdFocus={() => typingAtOpen !== null} bind={(element) => { root = element; }} />
+      <MenuContent onOpenAutoFocus={preserveFocus} onCloseAutoFocus={(event) => { event.preventDefault(); restoreTyping(); }} onFocusOutside={preserveFocus}>
+        {/* A phone option shows its value, not its name: the section names it. */}
+        <MenuSection title={composer.profiles.length ? "Profile" : "Model"} note={context() != null ? `${Math.round(context()!)}% context` : undefined}>
           <Show when={composer.profiles.length}>
-            <MenuItem closeOnSelect={false} onSelect={() => go("profiles")} class="composer-options-value" aria-label={`Profile ${selectedProfileLabel()}`}>
-              <HarnessMark id={composer.activeProfile?.implementation || "conduit"} class="size-4" /><span>{selectedProfileLabel()}</span><ChevronRightIcon />
-            </MenuItem>
-            <MenuLabel class="composer-options-label">Model</MenuLabel>
+            <MenuSub phone>
+              <MenuSubTrigger icon={<HarnessMark id={composer.activeProfile?.implementation || "conduit"} />} aria-label={`Profile ${selectedProfileLabel()}`}>{selectedProfileLabel()}</MenuSubTrigger>
+              <MenuSubContent><ProfileChoices profiles={composer.profiles} active={composer.activeProfile} locked={profileLocked()} back onChoose={composer.onChooseProfile} /></MenuSubContent>
+            </MenuSub>
           </Show>
-          <MenuItem disabled={!composer.serverOnline} closeOnSelect={false} onSelect={() => go("models")} class="composer-options-value composer-options-model" aria-label={`Model ${selectedModelLabel()}`}>
-            <span>{selectedModelLabel()}</span><ChevronRightIcon />
-          </MenuItem>
-          <MenuSeparator />
-          <StepSlider label="Effort" value={composer.models.effort()} disabled={!composer.serverOnline || levels().length < 2}
-            options={levels().map((level) => ({ value: level, label: thinkingLabel(level) }))}
-            valueControl={(label) => <button type="button" class={sliderParts().value} data-opens="" disabled={!composer.serverOnline || levels().length < 2}
-              onClick={() => go("effort")}>{label()}<ChevronRightIcon /></button>}
-            onChange={(value) => void composer.models.chooseEffort(value)} />
-          <Show when={composer.permissions?.profiles().length}>
-            <MenuSeparator />
-            <MenuLabel class="composer-options-label">Permissions</MenuLabel>
-            <MenuItem closeOnSelect={false} onSelect={() => go("permissions")} class="composer-options-value" aria-label={`Permissions ${selectedPermissionLabel()}`}>
-              <ShieldCheckIcon /><span>{selectedPermissionLabel()}</span><ChevronRightIcon />
-            </MenuItem>
-          </Show>
-          <MenuSeparator />
-          <MenuItem disabled={!composer.serverOnline} onSelect={composer.onOpenAttachments}>
-            <PaperclipIcon /><span>Attach files</span>
-          </MenuItem>
-          <Show when={composer.place}>{(place) => {
-            const placed = () => place().current && place().current!.slug !== "chat" ? place().current! : null;
-            return <>
-              <MenuSeparator />
-              <MenuLabel class="composer-options-label">Project</MenuLabel>
-              <MenuItem closeOnSelect={false} disabled={place().disabled} onSelect={() => go("places")} class="composer-options-value" aria-label={placed() ? `Project ${placed()!.name}` : "Add to a project folder"}>
-                <PlaceGlyph project={placed()} /><span>{placed()?.name || "Add to a project folder"}</span><ChevronRightIcon />
-              </MenuItem>
-            </>;
-          }}</Show>
-         </MenuGroup>
-        </div>
-        <Show when={panel() === "models"}>
-          <PhoneMenuSubmenu parent=".composer-options-menu" settling={settling()} class="composer-options-submenu composer-model-menu">
-            <MenuGroup>
-              <Show when={composer.onOpenModelSelector}>
-                <MenuItem onSelect={() => composer.onOpenModelSelector?.()}><SearchIcon /><span>Search all models…</span></MenuItem>
-                <MenuSeparator />
-              </Show>
-              <MenuLabel class="composer-options-label">Model</MenuLabel>
-              <MenuRadioGroup value={composer.models.model()} onChange={(value) => chosen(() => void composer.models.chooseModel(value))}>
-                <For each={composer.models.models()}>{(item) => <MenuRadioItem onSelect={() => go("root")} class="composer-model-option" value={item.spec} closeOnSelect={false}><span>{item.label}</span><small>{item.provider}</small></MenuRadioItem>}</For>
-              </MenuRadioGroup>
-            </MenuGroup>
-          </PhoneMenuSubmenu>
+        </MenuSection>
+        <MenuSection title={composer.profiles.length ? "Model" : undefined}>
+          <MenuSub phone>
+            <MenuSubTrigger disabled={!composer.serverOnline} aria-label={`Model ${selectedModelLabel()}`}>{selectedModelLabel()}</MenuSubTrigger>
+            <MenuSubContent><ModelChoices composer={composer} /></MenuSubContent>
+          </MenuSub>
+        </MenuSection>
+        <Section kind="slider">
+          <Slider label="Effort" value={composer.models.effort()} disabled={!composer.serverOnline || levels().length < 2}
+            options={levels().map((level) => ({ value: level, label: thinkingLabel(level) }))} onChange={(value) => void composer.models.chooseEffort(value)}
+            control={(shown) => <MenuSub phone>
+              <MenuSubValue disabled={!composer.serverOnline || levels().length < 2}>{shown()}</MenuSubValue>
+              <MenuSubContent><EffortChoices composer={composer} levels={levels()} /></MenuSubContent>
+            </MenuSub>} />
+        </Section>
+        <Show when={composer.permissions?.profiles().length}>
+          <MenuSection title="Permissions">
+            <MenuSub phone>
+              <MenuSubTrigger icon={<ShieldCheckIcon />} aria-label={`Permissions ${selectedPermissionLabel()}`}>{selectedPermissionLabel()}</MenuSubTrigger>
+              <MenuSubContent>
+                <PermissionChoices permissions={composer.permissions!} back />
+                <Show when={composer.serviceLevels?.levels().length}><ServiceChoices levels={composer.serviceLevels!} back /></Show>
+              </MenuSubContent>
+            </MenuSub>
+          </MenuSection>
         </Show>
-        <Show when={panel() === "effort"}>
-          <PhoneMenuSubmenu parent=".composer-options-menu" settling={settling()} class="composer-options-submenu composer-effort-menu">
-            <MenuGroup>
-              <MenuLabel class="composer-options-label">Effort</MenuLabel>
-              <MenuRadioGroup value={composer.models.effort()} onChange={(value) => chosen(() => void composer.models.chooseEffort(value))}>
-                <For each={levels()}>{(level) => <MenuRadioItem onSelect={() => go("root")} value={level} closeOnSelect={false}>{thinkingLabel(level)}</MenuRadioItem>}</For>
-              </MenuRadioGroup>
-            </MenuGroup>
-          </PhoneMenuSubmenu>
-        </Show>
-        <Show when={panel() === "profiles"}>
-          <PhoneMenuSubmenu parent=".composer-options-menu" settling={settling()} class="composer-options-submenu composer-profile-menu">
-            <MenuGroup>
-              <MenuLabel class="composer-options-label">Profile</MenuLabel>
-              <MenuRadioGroup value={composer.activeProfile?.id || ""} onChange={(value) => chosen(() => composer.onChooseProfile(value))}>
-                <For each={composer.profiles}>{(item) => <MenuRadioItem onSelect={() => go("root")} value={item.id} disabled={(profileLocked() && item.id !== composer.activeProfile?.id) || item.disabled} closeOnSelect={false}>
-                  <HarnessMark id={item.implementation || "conduit"} class="size-4" /><span class="composer-profile-copy"><span>{item.label}</span><small>{item.implementation || "conduit"}</small></span></MenuRadioItem>}</For>
-              </MenuRadioGroup>
-            </MenuGroup>
-          </PhoneMenuSubmenu>
-        </Show>
-        <Show when={panel() === "places" && composer.place}>{(_) => {
-          const place = composer.place!;
-          const root = () => place.projects.find((project) => project.slug === "chat");
-          const places = () => place.projects.filter((project) => project.slug !== "chat" && project.state !== "cloning")
-            .sort((left, right) => Number(isWorkspace(left)) - Number(isWorkspace(right)) || left.name.localeCompare(right.name));
-          return <PhoneMenuSubmenu parent=".composer-options-menu" settling={settling()} class="composer-options-submenu composer-places-menu">
-            <MenuGroup>
-              <MenuLabel class="composer-options-label">Project</MenuLabel>
-              <Show when={place.current && place.current.slug !== "chat" && root()}>
-                <MenuItem onSelect={() => place.onChoose(root()!)}><FolderIcon /><span>No folder</span></MenuItem>
-              </Show>
-              <For each={places()}>{(project) =>
-                <MenuItem class={project.id === place.current?.id ? "composer-place-current" : undefined} onSelect={() => { if (project.id !== place.current?.id) place.onChoose(project); }}>
-                  <PlaceGlyph project={project} /><span>{project.name}</span>
-                </MenuItem>}
-              </For>
-            </MenuGroup>
-          </PhoneMenuSubmenu>;
-        }}</Show>
-        <Show when={panel() === "permissions"}>
-          <PhoneMenuSubmenu parent=".composer-options-menu" settling={settling()} class="composer-options-submenu composer-permissions-menu">
-            <MenuGroup>
-              <MenuLabel class="composer-options-label">Permissions</MenuLabel>
-              <MenuRadioGroup value={composer.permissions?.selected() || ""} onChange={(value) => chosen(() => void composer.permissions?.choose(value))}>
-                <For each={composer.permissions?.profiles() || []}>{(profile) => <MenuRadioItem onSelect={() => go("root")} class="composer-model-option" value={profile.id} disabled={!profile.allowed} closeOnSelect={false}><span>{profile.label}</span><Show when={profile.description}><small>{profile.description}</small></Show></MenuRadioItem>}</For>
-              </MenuRadioGroup>
-            </MenuGroup>
-            <Show when={composer.serviceLevels?.levels().length}>
-              <MenuSeparator />
-              <MenuGroup>
-                <MenuLabel class="composer-options-label">Service level</MenuLabel>
-                <MenuRadioGroup value={composer.serviceLevels?.selected() || ""} onChange={(value) => chosen(() => void composer.serviceLevels?.choose(value))}>
-                  <For each={composer.serviceLevels?.levels() || []}>{(level) => <MenuRadioItem onSelect={() => go("root")} value={level.id} closeOnSelect={false}>{level.label}</MenuRadioItem>}</For>
-                </MenuRadioGroup>
-              </MenuGroup>
-            </Show>
-          </PhoneMenuSubmenu>
-        </Show>
+        <MenuSection>
+          <MenuRow icon={<PaperclipIcon />} disabled={!composer.serverOnline} onSelect={composer.onOpenAttachments}>Attach files</MenuRow>
+        </MenuSection>
+        <Show when={composer.place}>{(place) => <MenuSection title="Project">
+          <MenuSub phone>
+            <MenuSubTrigger disabled={place().disabled} icon={<PlaceGlyph project={placed()} />} aria-label={placed() ? `Project ${placed()!.name}` : "Add to a project folder"}>{placed()?.name || "Add to a project folder"}</MenuSubTrigger>
+            <MenuSubContent><PlaceChoices place={place()} /></MenuSubContent>
+          </MenuSub>
+        </MenuSection>}</Show>
       </MenuContent>
-    </Menu>
-  </div>;
+    </Menu>;
+}
+
+type Options = Parameters<typeof MobileComposerOptions>[0]["composer"];
+
+function ModelChoices(props: { composer: Options }) {
+  const back = useMenuBack();
+  return <>
+    <Show when={props.composer.onOpenModelSelector}>
+      <MenuSection><MenuRow icon={<SearchIcon />} onSelect={() => props.composer.onOpenModelSelector?.()}>Search all models…</MenuRow></MenuSection>
+    </Show>
+    <MenuSection title="Model"><MenuRadioGroup value={props.composer.models.model()} onChange={(value) => { void props.composer.models.chooseModel(value); back(); }}>
+      <For each={props.composer.models.models()}>{(item) => <MenuRadioItem value={item.spec} closeOnSelect={false} meta={item.provider}>{item.label}</MenuRadioItem>}</For>
+    </MenuRadioGroup></MenuSection>
+  </>;
+}
+
+function EffortChoices(props: { composer: Options; levels: string[] }) {
+  const back = useMenuBack();
+  return <MenuSection title="Effort"><MenuRadioGroup value={props.composer.models.effort()} onChange={(value) => { void props.composer.models.chooseEffort(value); back(); }}>
+    <For each={props.levels}>{(level) => <MenuRadioItem value={level} closeOnSelect={false}>{thinkingLabel(level)}</MenuRadioItem>}</For>
+  </MenuRadioGroup></MenuSection>;
+}
+
+/** Projects before workspaces, and "No folder" first when the chat is in one. */
+function PlaceChoices(props: { place: PlaceOptions }) {
+  const root = () => props.place.projects.find((project) => project.slug === "chat");
+  const places = () => props.place.projects.filter((project) => project.slug !== "chat" && project.state !== "cloning")
+    .sort((left, right) => Number(isWorkspace(left)) - Number(isWorkspace(right)) || left.name.localeCompare(right.name));
+  const choose = (id: string) => {
+    const project = props.place.projects.find((item) => item.id === id);
+    if (project && id !== props.place.current?.id) props.place.onChoose(project);
+  };
+  return <MenuSection title="Project"><MenuRadioGroup value={props.place.current?.id || ""} onChange={choose}>
+    <Show when={props.place.current && props.place.current.slug !== "chat" && root()}>
+      <MenuRadioItem value={root()!.id} icon={<FolderIcon />}>No folder</MenuRadioItem>
+    </Show>
+    <For each={places()}>{(project) => <MenuRadioItem value={project.id} icon={<PlaceGlyph project={project} />}>{project.name}</MenuRadioItem>}</For>
+  </MenuRadioGroup></MenuSection>;
 }
 
 function MobileComposerPlusTrigger(props: {
   serverOnline: boolean;
+  open: boolean;
+  bind: (element: HTMLButtonElement) => void;
   /* While the text pill has the keyboard, the menu's closing focus never lands
      here: even a moment away from the textarea makes Android drop and re-raise
      the keyboard. */
@@ -232,24 +183,21 @@ function MobileComposerPlusTrigger(props: {
   const triggerId = `composer-plus-${createUniqueId()}`;
   onCleanup(menu.registerTriggerId(triggerId));
 
-  return <button
-    type="button"
-    ref={(element) => {
+  return <PillButton label="Message options" icon={<PlusIcon />} open={props.open} button={{
+    ref: (element: HTMLButtonElement) => {
       const focus = element.focus.bind(element);
       element.focus = (options?: FocusOptions) => { if (!props.holdFocus()) focus(options); };
       menu.setTriggerRef(element);
-    }}
-    id={triggerId}
-    class="composer-plus-trigger"
-    aria-label="Message options"
-    title="Message options"
-    aria-haspopup="true"
-    aria-expanded={menu.isOpen()}
-    aria-controls={menu.isOpen() ? menu.contentId() : undefined}
-    disabled={!props.serverOnline}
-    onPointerDown={(event) => { event.preventDefault(); }}
-    onClick={(event) => { event.preventDefault(); menu.toggle(false); }}
-  ><PlusIcon /></button>;
+      props.bind(element);
+    },
+    id: triggerId,
+    "aria-haspopup": "true",
+    get "aria-expanded"() { return menu.isOpen(); },
+    get "aria-controls"() { return menu.isOpen() ? menu.contentId() : undefined; },
+    get disabled() { return !props.serverOnline; },
+    onPointerDown: (event: PointerEvent) => { event.preventDefault(); },
+    onClick: (event: MouseEvent) => { event.preventDefault(); menu.toggle(false); },
+  }} />;
 }
 
 export default MobileComposerOptions;

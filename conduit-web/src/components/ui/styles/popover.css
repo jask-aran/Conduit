@@ -90,3 +90,12 @@
 .ui-menu .ui-rule { height: var(--hairline); margin: var(--frost-inset) calc(-1 * var(--frost-inset)); border: 0; background: var(--tint); }
 .ui-frost.ui-menu { padding: var(--frost-inset); border-radius: var(--radius-surface); }
 .ui-frost.ui-menu[data-lift="raised"] { box-shadow: var(--frost-lift-raised), var(--frost-highlight); }
+/* A long list scrolls in its own height, under the search that filters it. */
+.ui-section[data-scroll] { max-height: var(--measure-sm); overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--tint) transparent; }
+/* A readout: a menu at its own measure, its lines caption type, tabular, the value at the end. */
+.ui-menu[data-wide] { width: var(--measure-md); max-width: calc(100vw - 2 * var(--space-lg)); }
+.ui-readout { display: flex; justify-content: space-between; gap: var(--row-gap); padding: 0 var(--space-md); color: var(--muted-foreground); font-size: var(--text-caption); font-variant-numeric: tabular-nums; }
+.ui-section > .ui-meter { margin: var(--space-xs) var(--space-md) var(--space-sm); }
+/* A row that opens in place turns its chevron down while open. */
+.ui-row > .ui-chevron { transition: rotate var(--duration-quick) var(--ease-change); }
+.ui-row[aria-expanded="true"] > .ui-chevron { rotate: 90deg; }

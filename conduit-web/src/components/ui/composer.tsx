@@ -1,5 +1,7 @@
-import { children, createEffect, createSignal, Show, type JSX } from "solid-js";
+import { children, createEffect, createSignal, Show, splitProps, type JSX } from "solid-js";
+import { ChevronDownIcon } from "lucide-solid";
 import { cn } from "@/lib/utils";
+import { Button } from "./controls";
 
 /*
  * DesktopComposer: resting frost holding a Field above a Toolbar, desktop only
@@ -15,6 +17,15 @@ export function DesktopComposer(props: { riders?: JSX.Element; takeover?: JSX.El
     <div class="ui-composer-stack">{props.riders}<div class={cn("ui-frost ui-desktop-composer", props.class)} data-surface="frost" data-lift="rest">{props.children}</div></div>{takeover()}</div>;
 }
 /** The composer's field slot: where its TextArea (or the app's, with its behaviour) sits, padded by the composer. */
+/** A toolbar picker: a small ghost button showing what is picked -- a mark, the value, a quieter second value -- and a chevron.
+ *  Muted as a setting; subject: what the message goes to (the model), at full weight. */
+export function Picker(props: JSX.ButtonHTMLAttributes<HTMLButtonElement> & { icon?: JSX.Element; value?: JSX.Element; quiet?: JSX.Element; subject?: boolean }) {
+  const [local, rest] = splitProps(props, ["icon", "value", "quiet", "subject", "children"]);
+  return <Button variant="ghost" size="sm" {...rest} class="ui-picker" data-subject={local.subject ? "" : undefined}>
+    {local.icon}<Show when={local.value}><span class="ui-picker-value">{local.value}</span></Show><Show when={local.quiet}><span class="ui-picker-quiet">{local.quiet}</span></Show>{local.children}<ChevronDownIcon class="ui-picker-chevron" />
+  </Button>;
+}
+
 export const ComposerField = (props: { children: JSX.Element }) => <div class="ui-composer-field">{props.children}</div>;
 /** What the draft completes to (a slash command), over its field's text -- a ComposerField's or a PillField's -- at
  *  its padding and type: what is typed held clear, the rest muted, then what it does. */
