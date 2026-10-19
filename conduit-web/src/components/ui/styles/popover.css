@@ -79,7 +79,7 @@
 .ui-menu-parent { display: flex; flex-direction: column; transition: filter var(--duration-quick) var(--ease-change); }
 .ui-menu-parent[data-under] { filter: var(--dim-under); }
 .ui-menu-parent[data-under] > *, .ui-menu[data-settling="true"] * { pointer-events: none; }
-.ui-menu-panel { pointer-events: auto; position: fixed; z-index: calc(var(--layer-dialog) + 1); width: var(--measure-md); max-height: var(--measure-2xl); overflow: auto; }
+.ui-menu-panel { pointer-events: auto; z-index: calc(var(--layer-dialog) + 1); width: var(--measure-md); max-height: var(--measure-2xl); overflow: auto; }
 .ui-menu-note { margin: 0; padding: var(--row-pad); color: var(--muted-foreground); font-size: var(--text-caption); line-height: var(--leading-row); white-space: normal; overflow-wrap: anywhere; }
 .ui-menu-note[data-error] { color: var(--destructive); }
 .ui-row > .ui-label[data-stacked] > small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

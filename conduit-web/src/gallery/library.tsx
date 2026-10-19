@@ -1,6 +1,4 @@
-import { createPhoneMenuPanels } from "@/components/phone-menu-panels";
-import { MenuParent } from "@/components/ui/popover";
-import { PhoneMenuPanel as LivePhonePanel, Menu as LiveMenu, MenuContent as LiveMenuContent, MenuSection as LiveMenuSection, MenuRow as LiveMenuRow, MenuRadioGroup as LiveRadioGroup, MenuRadioItem as LiveRadioItem, MenuSub as LiveSub, MenuSubTrigger as LiveSubTrigger, MenuSubContent as LiveSubContent } from "@/components/menus";
+import { Menu as LiveMenu, MenuContent as LiveMenuContent, MenuSection as LiveMenuSection, MenuRow as LiveMenuRow, MenuRadioGroup as LiveRadioGroup, MenuRadioItem as LiveRadioItem, MenuSub as LiveSub, MenuSubTrigger as LiveSubTrigger, MenuSubContent as LiveSubContent } from "@/components/menus";
 import { createDecisionDialogs } from "@/components/decision-dialog";
 import { WorkspaceAppearanceEditor } from "../client/project/workspace-appearance-editor";
 import { ComputerExplorer } from "../client/dashboard/computer-dashboard";
@@ -382,24 +380,17 @@ function ConnectionDemo() {
 function ServerMenuDemo(props: { phone?: boolean }) {
   const [route, setRoute] = createSignal("automatic");
   const [action, setAction] = createSignal("No action yet");
-  const [open, setOpen] = createSignal(false);
-  const { panel, go, settling, returnToRoot, keepForChild, reset } = createPhoneMenuPanels<"root" | "routes">("root", open, ".ui-menu-panel");
   const Routes = () => <LiveMenuSection title="Route to Laptop"><LiveRadioGroup value={route()} onChange={setRoute}>
     <LiveRadioItem value="automatic" detail="Tailscale · laptop.ts.net" meta="12 ms">Automatic</LiveRadioItem>
     <LiveRadioItem value="lan" detail="192.168.1.10" meta="3 ms">This network</LiveRadioItem>
     <LiveRadioItem value="unreachable" disabled detail="10.0.0.10">Unavailable</LiveRadioItem>
   </LiveRadioGroup></LiveMenuSection>;
-  return <CardBody><LiveMenu onOpenChange={(value) => { setOpen(value); if (!value) reset(); }}>
+  return <CardBody><LiveMenu>
     <LiveMenu.Trigger as={ServerControl} name="Laptop" detail="Connected · 12 ms" connectivity="online" />
-    <LiveMenuContent data-settling={settling()} onPointerDownOutside={keepForChild} onFocusOutside={keepForChild}>
-      <MenuParent under={panel() !== "root"} onPointerDown={returnToRoot}>
-        <LiveMenuSection title="Servers"><LiveRadioGroup value="laptop"><LiveRadioItem value="laptop" meta="12 ms">Laptop</LiveRadioItem><LiveRadioItem value="offline" disabled>Office</LiveRadioItem></LiveRadioGroup></LiveMenuSection>
-        <Show when={props.phone} fallback={<LiveSub><LiveSubTrigger detail={route()}>Route</LiveSubTrigger><LiveSubContent><Routes /></LiveSubContent></LiveSub>}>
-          <LiveMenuRow detail={route()} opens closeOnSelect={false} onSelect={() => go("routes")}>Route</LiveMenuRow>
-        </Show>
-        <LiveMenuRow onSelect={() => setAction("Add server")} icon={<PlusIcon />}>Add server</LiveMenuRow><LiveMenuRow onSelect={() => setAction("Sign out")}>Sign out</LiveMenuRow>
-      </MenuParent>
-      <Show when={panel() === "routes"}><LivePhonePanel parent="[data-slot='ui-menu-content']" settling={settling()}><Routes /></LivePhonePanel></Show>
+    <LiveMenuContent>
+      <LiveMenuSection title="Servers"><LiveRadioGroup value="laptop"><LiveRadioItem value="laptop" meta="12 ms">Laptop</LiveRadioItem><LiveRadioItem value="offline" disabled>Office</LiveRadioItem></LiveRadioGroup></LiveMenuSection>
+      <LiveSub phone={props.phone}><LiveSubTrigger detail={route()}>Route</LiveSubTrigger><LiveSubContent><Routes /></LiveSubContent></LiveSub>
+      <LiveMenuRow onSelect={() => setAction("Add server")} icon={<PlusIcon />}>Add server</LiveMenuRow><LiveMenuRow onSelect={() => setAction("Sign out")}>Sign out</LiveMenuRow>
     </LiveMenuContent>
   </LiveMenu><CardNote>{action()}</CardNote></CardBody>;
 }
@@ -408,7 +399,7 @@ const CONNECTIONS: FormRow[] = [
   form("incorrect password", "the field identifies and describes the server error", () => <PasswordSignIn onSubmit={(event) => event.preventDefault()} after="/chat/example" error="Incorrect password." />, "PasswordSignIn error", "aria-invalid · aria-describedby · role=alert"),
   form("rate limited", "the server keeps the redirect and explains the wait", () => <PasswordSignIn onSubmit={(event) => event.preventDefault()} after="/" error="Too many failed attempts. Try again shortly." />, "PasswordSignIn error", "server keeps rate limiting and credential handling"),
   form("first connection / add server", "local and discovered servers, address, password, loading and errors", () => <ConnectionDemo />, "ConnectionForm · ConnectionChoice · Field · Input · Button", "uses v2 at every stage"),
-  form("phone route panel", "Back returns to the parent; the opening tap cannot select a route", () => <ServerMenuDemo phone />, "createPhoneMenuPanels > MenuParent · MenuPanel", "same phone behavior adapter as ServerSwitcher"),
+  form("phone route panel", "Back returns to the parent; the opening tap cannot select a route", () => <ServerMenuDemo phone />, "Kobalte Sub > v2 MenuPanel", "same submenu behavior adapter on desktop and phone"),
   form("server selection", "keyboard choice, unavailable rows and a real route submenu", () => <ServerMenuDemo />, "Kobalte > v2 Menu · Section · Item", "no network calls or stored server changes"),
   ...["online", "connecting", "reconnecting", "offline"].map((state) => form(state, "connection state on the server control", () => <ServerControl name="Laptop" detail={state === "offline" ? "Server unavailable" : state === "online" ? "Connected · 12 ms" : state === "reconnecting" ? "Reconnecting" : "Connecting"} connectivity={state} />, "ServerControl > StatusDot · Spinner", "shared status and type tokens")),
   form("collapsed control", "same status and accessible name in a narrow rail", () => <ServerControl compact name="Laptop" detail="Reconnecting" connectivity="reconnecting" aria-label="Laptop · Reconnecting" />, "ServerControl compact", "the caller supplies layout state, never styling"),
