@@ -1,6 +1,8 @@
+import { Dialog } from "@/components/dialog";
+import { Button as DialogButton, Input as DialogInput, Field as DialogField } from "@/components/ui/controls";
 import { isConduitManagedProject } from "../navigation/sidebar-preferences";
 import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show, type JSX } from "solid-js";
-import { FrostDialog } from "@/components/frost";
+
 import {
   CopyIcon,
   FolderIcon,
@@ -28,9 +30,6 @@ import {
   ContextMenuItem,
   ContextMenuSeparator,
   ContextMenuTrigger,
-  Field,
-  FieldLabel,
-  Input,
   MenuGroup,
   MenuItem,
   MenuSeparator,
@@ -500,24 +499,23 @@ export function ProjectDashboard(props: {
         <Show when={payload()?.changes.length} fallback={filesGroup()}>{changesGroup()}</Show>
       </Show>} />
 
-    <FrostDialog open={appearanceOpen()} onOpenChange={setAppearanceOpen} busy={savingAppearance()} close size="wide" class="workspace-appearance-dialog" title="Workspace identity" description="Choose a short mark or a Lucide icon, then choose a preset or custom color.">
+    <Dialog open={appearanceOpen()} onOpenChange={setAppearanceOpen} busy={savingAppearance()} close size="wide" title="Workspace identity" description="Choose a short mark or a Lucide icon, then choose a preset or custom color.">
         <Show when={appearanceOpen()}>
           <WorkspaceAppearanceEditor compact value={activeAppearance()} saving={savingAppearance()} onSave={(appearance) => void saveAppearance(appearance)} />
         </Show>
-      </FrostDialog>
+      </Dialog>
 
-    <FrostDialog alert open={destroyOpen()} onOpenChange={setDestroyOpen} busy={destroying()} class="workspace-destroy-dialog"
-      title="Delete workspace and files?"
+    <Dialog alert open={destroyOpen()} onOpenChange={setDestroyOpen} busy={destroying()}
+     title="Delete workspace and files?"
       description={<>This removes <strong>{props.project.name}</strong> from Conduit and permanently erases its working directory. Type the exact workspace name to continue.</>}
       actions={<>
-        <Button variant="outline" size="sm" disabled={destroying()} onClick={() => setDestroyOpen(false)}>Cancel</Button>
-        <Button class="workspace-destroy-confirm" variant="destructive" size="sm" disabled={destroying() || destroyConfirmation() !== props.project.name} onClick={() => void destroyWorkspace()}><Trash2Icon />{destroying() ? "Deleting…" : "Delete workspace and files"}</Button>
+        <DialogButton variant="ghost" outline size="sm" disabled={destroying()} onClick={() => setDestroyOpen(false)}>Cancel</DialogButton>
+        <DialogButton variant="destructive" size="sm" disabled={destroying() || destroyConfirmation() !== props.project.name} onClick={() => void destroyWorkspace()}><Trash2Icon />{destroying() ? "Deleting…" : "Delete workspace and files"}</DialogButton>
       </>}>
-      <Field>
-        <FieldLabel for="workspace-destroy-confirmation">Workspace name</FieldLabel>
-        <Input id="workspace-destroy-confirmation" value={destroyConfirmation()} onInput={(event) => setDestroyConfirmation(event.currentTarget.value)} autocomplete="off" />
-      </Field>
-    </FrostDialog>
+      <DialogField label={<>Workspace name</>}>
+        <DialogInput id="workspace-destroy-confirmation" value={destroyConfirmation()} onInput={(event) => setDestroyConfirmation(event.currentTarget.value)} autocomplete="off" />
+      </DialogField>
+    </Dialog>
   </>;
 }
 

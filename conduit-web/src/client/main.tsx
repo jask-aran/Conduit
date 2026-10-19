@@ -1,4 +1,5 @@
 /// <reference types="vite-plugin-pwa/client" />
+import { Dialog } from "@/components/dialog";
 import "./motion-rules";
 import { applyTranscriptFont } from "./preferences/transcript-font";
 applyTranscriptFont();
@@ -61,7 +62,7 @@ import { bindVisualViewportShell, focusFirst, isMobileLayout, MOBILE_LAYOUT_QUER
 import { toggleKeyboardProbe } from "./navigation/keyboard-probe.ts";
 import { beginEdgeSwipe, swipeBlocked, type EdgeSwipe } from "./navigation/mobile-swipe";
 import { bindOverlayScrollbars } from "./navigation/overlay-scrollbars";
-import { FrostDialog } from "@/components/frost";
+
 import { Sidebar, type SidebarCommand } from "./navigation/sidebar";
 import { clampSidebarChatLimit, selectedSidebarChatLimit, SIDEBAR_CHAT_LIMIT_STORAGE_KEY } from "./navigation/sidebar-preferences";
 import { CHAT_SORT_STORAGE_KEY, selectedChatSort, useChatSort } from "./preferences/chat-sort";
@@ -5158,9 +5159,9 @@ function App() {
   return <>
     <NotificationToaster />
     <input ref={session.setAttachInput} type="file" multiple hidden aria-hidden="true" onChange={(event) => { if (event.currentTarget.files) attachments.addFiles(event.currentTarget.files); event.currentTarget.value = ""; }} />
-    <FrostDialog open={Boolean(workspaceIdentityProject())} onOpenChange={(open) => { if (!open) closeWorkspaceIdentity(); }} close size="wide" class="workspace-appearance-dialog" title="Workspace identity" description="Choose a short mark or a Lucide icon, then choose a preset or custom color.">
+    <Dialog open={Boolean(workspaceIdentityProject())} onOpenChange={(open) => { if (!open) closeWorkspaceIdentity(); }} close size="wide" title="Workspace identity" description="Choose a short mark or a Lucide icon, then choose a preset or custom color.">
         <Show when={workspaceIdentityProject()}>{(project) => <WorkspaceAppearanceEditor compact value={project().workspaceAppearance} saving={workspaceIdentitySaving()} onSave={(appearance) => void saveWorkspaceIdentity(appearance)} />}</Show>
-    </FrostDialog>
+    </Dialog>
     <Show when={routeKind() !== "terminal"}>
     <Sidebar projects={sidebarFilled() ? catalogue.projects() : []} catalogueLoaded={sidebarFilled() && catalogue.loaded()} projectId={catalogue.projectId()} selectedId={catalogue.selectedId()} focusedId={keyboardSlot() !== null ? slotChatId(keyboardSlot()!) : null} openIds={openChatIds()} onOpenChatBeside={isMobileLayout() ? undefined : openChatBeside} navigatingId={chat.navigatingId()} dashboard={routeKind() === "dashboard" && !paneAOverride()} project={routeKind() === "project"} computer={routeKind() === "computer" && !paneAOverride()} routeCovered={paneAOverride() !== null} terminal={false} runtime={runtime} chatLimit={sidebarChatLimit()}
       connectivity={runtime.connectivity()} workspaceSuggestions={workspaceSuggestions()} workspacePolicy={workspacePolicy()} command={sidebarCommand()}
@@ -5198,7 +5199,7 @@ function App() {
       updateState={updateState()} onTakeUpdate={() => void takePwaUpdate(true)}
       onAddServer={() => setAddingServer(true)}
       onLogout={() => void logout()} />
-    <FrostDialog open={addingServer()} title="Add server" close size="wide" onOpenChange={setAddingServer} class="add-server-dialog">
+    <Dialog open={addingServer()} title="Add server" close size="wide" onOpenChange={setAddingServer} >
       <ServerConnectForm adding onDone={(origin) => {
         setAddingServer(false);
         // Told to the server being left, before leaving it: otherwise the one
@@ -5206,7 +5207,7 @@ function App() {
         // hears about it.
         void publishServerDirectory(servers()).finally(() => switchToServer(origin, isInstalledClient()));
       }} />
-    </FrostDialog>
+    </Dialog>
     <div class="workspace-layout" ref={(element) => { const observer = new ResizeObserver(() => setLayoutWidth(element.clientWidth)); observer.observe(element); onCleanup(() => observer.disconnect()); }}>
     <main data-slot="sidebar-inset" data-region={paneAOverride() ? "workspace-panel" : routeKind() === "chat" || harnessThread() ? "chat" : routeKind() === "terminal" ? "terminal" : "dashboard"} tabIndex={-1} onPointerDown={focusChatSurface} onKeyDown={paneKeydown} class={`chat-main${routeKind() === "chat" && emptyLayout() ? " chat-main-empty" : ""}${routeKind() === "chat" && emptyChat() && !emptyLayout() ? " chat-main-sending" : ""}${routeKind() === "chat" && withheldLiveChat() ? " chat-main-live-opening" : ""}${workspaceExpanded() ? " workspace-expanded" : ""}`} style={{ ...(splitShown() ? { flex: `${paneWeights()[0]} 1 0`, "min-width": paneMotion()?.slot === "main" ? "0px" : `${paneMinWidth("main")}px` } : {}), ...(paneMotion()?.slot === "main" ? { opacity: 0 } : {}), ...(paneMotion()?.slot === "main" && paneMotion()!.collapsed ? { "margin-left": "0px", "margin-right": "0px" } : {}) }} {...mainDropHandlers}>
       <Show when={splitDropActive()}><div class="main-split-drop" aria-hidden="true" /></Show>

@@ -1,3 +1,5 @@
+import { Dialog } from "@/components/dialog";
+import { CardActions, CardForm, CardBody, CardNote, CardRead, CardDetails, CardQR, CardPreview, CardAttachments, CardAttachment } from "@/components/ui/card";
 import { ArrowDownIcon, PanelLeftIcon, MessageSquarePlusIcon, EllipsisIcon, CameraIcon, KeyboardIcon, MicIcon, ArrowUpIcon, ChevronDownIcon, CircleIcon, FileTextIcon, ClockIcon, Maximize2Icon, SendHorizontalIcon, XIcon, CheckIcon } from "lucide-solid";
 import { createSignal, For, Index, onCleanup, onMount, Show, type JSX } from "solid-js";
 import { LightbulbIcon, MessageSquareTextIcon, FilePenLineIcon, SquareTerminalIcon, CodeXmlIcon, WrenchIcon } from "lucide-solid";
@@ -315,13 +317,26 @@ const CARD_MARKS: Mark[] = [
   { selector: ".ui-card .ui-button[data-variant='destructive']", label: "the confirm: destructive, filled red", read: bg },
   { selector: ".ui-card", label: "corner --radius-surface; at most 30 units wide (a phone: its width)", read: (el) => `${rounding(el)} · ${px(`${el.getBoundingClientRect().width}px`)} wide` },
 ];
+function DialogBehaviorDemo(props: { alert?: boolean; busy?: boolean }) {
+  const [open, setOpen] = createSignal(false);
+  const [busy, setBusy] = createSignal(Boolean(props.busy));
+  return <><Button onClick={() => { setBusy(Boolean(props.busy)); setOpen(true); }}>Open {props.busy ? "busy dialog" : props.alert ? "confirmation" : "dialog"}</Button>
+    <Dialog open={open()} onOpenChange={setOpen} title="Example dialog" description="Keyboard and focus behavior" alert={props.alert} busy={busy()} close="Close example"
+      actions={<><Button variant="ghost" outline disabled={busy()} onClick={() => setOpen(false)}>Cancel</Button><Button onClick={() => busy() ? setBusy(false) : setOpen(false)}>{busy() ? "Finish operation" : "Done"}</Button></>}>
+      <Field label="Example name"><Input value="Example" /></Field>
+    </Dialog></>;
+}
 const CARDS: FormRow[] = [
+  form("modal", "focus is trapped, Escape or a press on the dim closes; focus returns to the trigger", () => <DialogBehaviorDemo />, "Dialog > Scrim + Card", "Kobalte behavior, v2 surface"),
+  form("modal alert", "a press on the dim does not dismiss a confirmation", () => <DialogBehaviorDemo alert />, "<Dialog alert>", "Kobalte alert-dialog"),
+  form("modal busy", "Escape, the dim and close cannot dismiss while busy; finish releases the dialog", () => <DialogBehaviorDemo busy />, "<Dialog busy>", "all dismissal paths share the busy guard"),
+  form("shared parts", "forms, actions, notes, paths and previews use the Card's spacing", () => <Card title="Shared dialog parts"><CardForm onSubmit={(event) => event.preventDefault()}><CardBody><Field label="Name"><Input value="Example" /></Field><CardRead>src/example.ts</CardRead><CardNote>Supporting text</CardNote><CardPreview><Read>Selected source</Read></CardPreview><CardDetails><dt>Server</dt><dd>Laptop</dd></CardDetails><CardQR svg="" expired /></CardBody><CardActions><Button type="submit">Save</Button></CardActions></CardForm></Card>, "CardForm · CardBody · CardActions · CardRead · CardNote · CardPreview · CardDetails · CardQR", "v2 tokens only"),
   form("title", "a card says what it is about", () => <Card title="Delete this chat?" />, "<Card title>", "Heading: --text-body · --weight-strong"),
   form("title · detail", "a line --card-pair under the title, only when it asks something of you: never what the title already says", () => <Card title="Destroy Japan?" detail="Type Japan to confirm." />, "<Card title detail>", "Caption: --text-caption · muted, --card-pair under the title"),
   form("body", "what the card holds: one field, a list, a preview", () => <Card title="Rename chat"><Input value="Lorem ipsum file" /></Card>, "<Card title>{children}</Card>", "1 unit between parts; the Input's well and line are the surface's"),
   form("actions", "its buttons, right-aligned: the place picks each form", () => <Card title="Save changes?" actions={<><Button variant="ghost" outline>Cancel</Button><Button outline>Save</Button></>} />, "<Card actions={<>…</>}>", "half a unit apart · primary outline, ghost outline"),
-  form("alert", "confirms what cannot be undone (FrostDialog alert)", () => <Card title="Delete this chat?" actions={<><Button variant="ghost" outline>Cancel</Button><Button variant="destructive">Delete</Button></>} />, "<Card title detail actions>", "the confirm destructive, filled"),
-  form("prompt", "one field and its answer (FrostDialog)", () => <Card title="Rename chat" actions={<><Button variant="ghost" outline>Cancel</Button><Button outline>Save</Button></>}><Input value="Lorem ipsum file" /></Card>, "<Card title actions>{<Input />}</Card>", "a one-field prompt drops its label"),
+  form("alert", "confirms what cannot be undone (Dialog alert)", () => <Card title="Delete this chat?" actions={<><Button variant="ghost" outline>Cancel</Button><Button variant="destructive">Delete</Button></>} />, "<Card title detail actions>", "the confirm destructive, filled"),
+  form("prompt", "one field and its answer (Dialog)", () => <Card title="Rename chat" actions={<><Button variant="ghost" outline>Cancel</Button><Button outline>Save</Button></>}><Input value="Lorem ipsum file" /></Card>, "<Card title actions>{<Input />}</Card>", "a one-field prompt drops its label"),
 ];
 
 /*
@@ -338,8 +353,8 @@ const IN_APP: FormRow[] = [
   form("New folder", "a display name, then Create folder", () => <Card title="New folder" actions={<>{cancel()}<Button outline>Create folder</Button></>}><Field label="Display name"><Input placeholder="Research" /></Field></Card>, "navigation/sidebar.tsx", status()),
   form("Delete chat · chats", "the sidebar's and chat search's delete", () => <Card title="Delete 3 chats?" actions={<>{cancel()}<Button variant="destructive">Delete 3 chats</Button></>} />, "navigation/sidebar.tsx · navigation/command-menu.tsx", status()),
   form("Delete workspace and files", "type its name to confirm; Delete waits until it matches", () => <Card title="Delete workspace and files?" detail="Type the workspace's name, Japan, to continue." actions={<>{cancel()}<Button variant="destructive" disabled><Trash2Icon />Delete workspace</Button></>}><Field label="Workspace name"><Input /></Field></Card>, "project/dashboard.tsx", status()),
-  form("Open external link", "the address, shown before it opens", () => <Card title="Open external link?" actions={<>{cancel()}<Button outline>Open link</Button></>}><Preview>https://example.com/a/long/path?q=1&amp;ref=conduit</Preview></Card>, "chat/external-link-dialog.tsx", status()),
-  form("Attachments", "every file on the draft, opened from the strip: remove one, or all", () => <Card size="wide" title="2 attachments" actions={<><Button variant="ghost" outline>Remove all</Button><Button outline>Done</Button></>}><Chips><For each={files}>{(file) => <Chip name={file.name} detail={file.detail} icon={file.icon()} />}</For></Chips></Card>, "chat/attachment-strip.tsx", status()),
+  form("Open external link", "the address, shown before it opens", () => <Card title="Open external link?" actions={<>{cancel()}<Button outline>Open link</Button></>}><CardRead>https://example.com/a/long/path?q=1&amp;ref=conduit</CardRead></Card>, "chat/external-link-dialog.tsx", status()),
+  form("Attachments", "every file on the draft, opened from the strip: remove one, or all", () => <Card size="wide" title="2 attachments" actions={<><Button variant="ghost" outline>Remove all</Button><Button outline>Done</Button></>}><CardAttachments><For each={files}>{(file) => <CardAttachment name={file.name} detail={file.detail} icon={file.icon()} onRemove={() => {}} />}</For></CardAttachments></Card>, "chat/attachment-strip.tsx", status()),
   form("Edit review comment", "the excerpt it is on, and its text", () => <Card size="wide" close title="Edit review comment" detail="src/main.tsx · lines 12–14" actions={<>{cancel()}<Button outline>Save comment</Button></>}><Preview>{"const total = items.reduce(\n  (sum, item) => sum + item.size, 0);"}</Preview><TextArea value="This could use the size label helper." /></Card>, "chat/review-comment-cards.tsx", status("the excerpt's highlighted selection (WorkspaceExcerptView)")),
   form("Pair a device", "a code to scan, and what it opens", () => <Card size="wide" close title="Pair a device" actions={<><Button variant="ghost" outline>Copy link</Button><Button outline>New code</Button></>}><div class="g-slot g-qr">QR code</div><Section><Item field meta="Laptop">Server</Item><Item field meta="Tailscale · laptop.ts.net">Opens on</Item><Item field meta="Expires in 4:52">Code</Item></Section></Card>, "navigation/pair-dialog.tsx", status("the QR code itself (an image, not a v2 piece)")),
   form("Add server", "an address, or a code to scan", () => <Card size="wide" close title="Add server" actions={<><Button variant="ghost" outline>Scan QR code</Button><Button outline>Connect</Button></>}><Field label="Server address"><Input placeholder="https://laptop.ts.net" /></Field></Card>, "main.tsx (ServerConnectForm)", status()),
@@ -660,8 +675,8 @@ export const libraryFamilies: Family[] = [
     { title: "Forms", note: "each form at each density -- the phone's a phone wide. Every card: --frost-* raised, corner --radius-surface, and spacing it declares: --card-edge all round, which every box meets (1.25 units), --card-gap between parts (1 unit), --card-pair title to detail (0.5); text trimmed to its glyphs; actions share the widest's width. A phone's card is the screen's width", layout: "desktop", atoms: [
       lib("card-forms", "Card · forms × densities", "both", "card", "Card", () => <FormTable rows={CARDS} on={["desktop", "phone"]} widths={["200px", "minmax(0, 1fr)", "360px"]} />, "row"),
     ] },
-    { title: "In the app", note: "every dialog the app opens (FrostDialog), rebuilt from its real content with v2 alone: Card (wide, close), Field, Input, TextArea, Chip, Section and Items, the code preview, Segmented, Buttons. Under each, its file and what v2 still lacks for it", layout: "desktop", atoms: [
-      lib("card-in-app", "FrostDialog · in the app", "both", "card", "client/**/FrostDialog", () => <FormTable rows={IN_APP} on={["desktop", "phone"]} widths={["minmax(0, 1fr)", "360px"]} stacked />, "row"),
+    { title: "In the app", note: "every dialog the app opens (Dialog), rebuilt from its real content with v2 alone: Card (wide, close), Field, Input, TextArea, Chip, Section and Items, the code preview, Segmented, Buttons. Under each, its file and what v2 still lacks for it", layout: "desktop", atoms: [
+      lib("card-in-app", "Dialog · in the app", "both", "card", "client/**/Dialog", () => <FormTable rows={IN_APP} on={["desktop", "phone"]} widths={["minmax(0, 1fr)", "360px"]} stacked />, "row"),
     ] },
     { title: "Motion", note: "its own moves: a card rises in over the page and drops back when it closes", layout: "desktop", atoms: [
       lib("card-motion", "Card · motion", "both", "card", "Card motion", () => <FormTable rows={[form("arrives · leaves", "rises --space-md with a fade; drops back", () => <Replay leaves={["leaving"]}>{(m) => <Card title="Delete 3 chats?" motion={m()} actions={<><Button variant="ghost" outline>Cancel</Button><Button variant="destructive">Delete</Button></>} />}</Replay>, "<Card motion>", "in: --duration-gentle · --ease-arrive · out: --duration-quick · --ease-leave")]} on={["desktop", "phone"]} widths={["200px", "minmax(0, 1fr)", "minmax(0, 1fr)"]} />, "row"),
@@ -674,7 +689,7 @@ export const libraryFamilies: Family[] = [
     { title: "Forms", note: "each kind and form at each density", layout: "desktop", atoms: [
       lib("toast-forms", "Toast · forms × densities", "both", "toast", "Toast", () => <FormTable rows={TOASTS} on={["desktop", "phone"]} widths={["200px", "minmax(0, 1fr)", "360px"]} />, "row"),
     ] },
-    { title: "In the app", note: "the app raises notifications through Sonner, rendered by the shared v2 Toast: success 16, info 12, error 12, warning 2. One sentence each, never a second line; two carry an action; some set a longer duration or an id, so a repeat replaces the one showing. Grouped by where they come from", layout: "desktop", atoms: [
+    { title: "In the app", note: "the app raises notifications through Sonner, rendered by the shared v2 Toast: success, info, error and warning. A notification can include a description and action; duration and IDs retain Sonner behavior. Grouped by where they come from", layout: "desktop", atoms: [
       lib("toast-in-app", "Toast · in the app", "both", "toast", "client/** toast.*", () => <FormTable rows={TOASTS_IN_APP} on={["desktop", "phone"]} widths={["minmax(0, 1fr)", "360px"]} stacked />, "row"),
     ] },
     { title: "Motion", note: "its own moves: it comes in from its edge and leaves back to it, so on a phone (the top) it comes down", layout: "desktop", atoms: [

@@ -1,4 +1,4 @@
-import { For, Show, type JSX } from "solid-js";
+import { For, Show, splitProps, type JSX } from "solid-js";
 import { ChevronLeftIcon, XIcon } from "lucide-solid";
 import { cn } from "@/lib/utils";
 import { Button, Keycap, Spinner } from "./controls";
@@ -12,8 +12,9 @@ import { type Density, type Motion, motionOf, moveCursor } from "./shared";
  * the popover's Items at the overlay's scale; the Rail is the sidebar's
  * NavGroups. Its width is the caller's (--overlay-width).
  */
-export function Scrim(props: { placement?: "top" | "center"; class?: string; motion?: Motion; children: JSX.Element }) {
-  return <div class={cn("ui-scrim", props.class)} data-placement={props.placement ?? "top"} {...motionOf(props.motion)}>{props.children}</div>;
+export function Scrim(props: JSX.HTMLAttributes<HTMLDivElement> & { placement?: "top" | "center"; dialog?: boolean; motion?: Motion }) {
+  const [local, rest] = splitProps(props, ["class", "placement", "dialog", "motion"]);
+  return <div {...rest} class={cn("ui-scrim", local.class)} data-placement={local.placement ?? "top"} data-dialog={local.dialog ? "" : undefined} {...motionOf(local.motion)} />;
 }
 
 /** core: frost on a solid backing, kept for the phone's full-screen overlays should the page behind them be too busy -- off for now. */

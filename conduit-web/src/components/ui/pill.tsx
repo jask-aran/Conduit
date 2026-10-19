@@ -41,7 +41,7 @@ export function PillSwitch<T extends string>(props: { label: string; value: T; o
 }
 /** Its own textarea, or the caller's field as children (the composer's, with its behaviour). */
 export function PillField(props: { placeholder?: string; value?: string; onInput?: (value: string) => void; class?: string; children?: JSX.Element }) {
-  return <div class={cn("ui-frost ui-pill ui-pill-field", props.class)}><Show when={props.children} fallback={<TextArea placeholder={props.placeholder} value={props.value} onInput={props.onInput} />}>{props.children}</Show></div>;
+  return <div class={cn("ui-frost ui-pill ui-pill-field", props.class)}><Show when={props.children} fallback={<TextArea placeholder={props.placeholder} value={props.value} onInput={(event) => props.onInput?.(event.currentTarget.value)} />}>{props.children}</Show></div>;
 }
 
 /**

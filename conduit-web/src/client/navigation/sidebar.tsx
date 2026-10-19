@@ -1,3 +1,7 @@
+import { Dialog } from "@/components/dialog";
+import { Section as DialogSection, Item as DialogItem } from "@/components/ui/popover";
+import { CardActions, CardForm, CardBody, CardRead, CardNote } from "@/components/ui/card";
+import { Button as DialogButton, Input as DialogInput, Field as DialogField } from "@/components/ui/controls";
 import { useLibrary } from "@/components/ui/swap";
 import { PillSwitch } from "@/components/ui";
 import { headerPill, PillShell } from "./header-pill";
@@ -5,7 +9,7 @@ import { isConduitManagedProject } from "./sidebar-preferences";
 import { ServerSwitcher } from "./server-switcher";
 import { createComposerSurfaceSignal } from "../chat/composer-surface";
 import { batch, createEffect, createMemo, createSignal, For, lazy, onCleanup, onMount, Show } from "solid-js";
-import { FrostDialog } from "@/components/frost";
+
 import {
   ChevronRightIcon,
   ClipboardCopyIcon,
@@ -1300,42 +1304,42 @@ export function Sidebar(props: {
       </div>
     </aside>
 
-    <FrostDialog open={Boolean(newKind())} title={newKind() === "workspace" ? (workspaceStep() === "explore" ? "Add workspace" : mode() === "created" ? "Create workspace folder" : mode() === "cloned" ? "Clone repository" : "Workspace details") : "New folder"}
+    <Dialog open={Boolean(newKind())} title={newKind() === "workspace" ? (workspaceStep() === "explore" ? "Add workspace" : mode() === "created" ? "Create workspace folder" : mode() === "cloned" ? "Clone repository" : "Workspace details") : "New folder"}
       description={newKind() === "workspace" && workspaceStep() === "details" ? `Selected location: ${path()}` : newKind() === "folder" ? "Create a separate managed working directory and chat scope." : undefined}
-      onOpenChange={(open) => { if (!open) closeNewDialog(); }} close={newKind() === "workspace"} size={newKind() === "workspace" ? "wide" : undefined} class={newKind() === "workspace" ? `workspace-add-dialog workspace-add-dialog-${workspaceStep()}` : undefined}>
-      <form onSubmit={submitNew}><FieldGroup>
+      onOpenChange={(open) => { if (!open) closeNewDialog(); }} close={newKind() === "workspace"} size={newKind() === "workspace" ? "large" : undefined} >
+      <CardForm onSubmit={submitNew}><CardBody>
         <Show when={newKind() === "workspace" && workspaceStep() === "explore"}><ComputerExplorer dialog projects={props.projects} location={computerPicker()} loading={computerPickerLoading()} error={computerPickerError()} onBrowse={(target) => void browseComputerPicker(target)} onPrefetch={() => {}} onMakeWorkspace={() => {}} onCreateWorkspace={() => {}} onOpenWorkspace={props.onOpenProject} onManageWorkspace={() => {}} onStartWorkspaceAction={() => {}} onOpenView={() => {}} onOpenFile={() => {}} onSelectFolder={() => { selectWorkspaceMode("linked"); setWorkspaceStep("details"); }} onCreateFolder={() => { selectWorkspaceMode("created"); setWorkspaceStep("details"); }} onCloneRepository={() => { selectWorkspaceMode("cloned"); setWorkspaceStep("details"); }} /></Show>
         <Show when={newKind() === "folder" || workspaceStep() === "details"}>
-          <Show when={mode() === "cloned"}><Field><FieldLabel for="folder-clone">GitHub repository or Git URL</FieldLabel><Input id="folder-clone" value={cloneUrl()} disabled={submitting()} placeholder="react/react or https://github.com/org/repo.git" onInput={(event) => setCloneUrl(event.currentTarget.value)} /></Field></Show>
-          <Field><FieldLabel for="folder-name">{mode() === "managed" ? "Display name" : "Display name (optional)"}</FieldLabel><Input id="folder-name" value={name()} disabled={submitting()} placeholder={mode() === "managed" ? "Research" : "My project"} onInput={(event) => setName(event.currentTarget.value)} /></Field>
-          <Show when={mode() === "created"}><Field><FieldLabel for="workspace-directory-name">New folder name</FieldLabel><Input id="workspace-directory-name" value={directoryName()} disabled={submitting()} placeholder="my-project" onInput={(event) => setDirectoryName(event.currentTarget.value)} /></Field></Show>
-          <Show when={mode() === "cloned"}><Field><FieldLabel for="clone-directory-name">Folder name (optional)</FieldLabel><Input id="clone-directory-name" value={cloneDirectoryName()} disabled={submitting()} placeholder="Defaults to the repository name" onInput={(event) => setCloneDirectoryName(event.currentTarget.value)} /></Field></Show>
-          <Show when={mode() !== "linked" ? workspacePreview() : null}>{(preview) => <div class="workspace-path-preview"><strong>{preview().path}</strong><small>{preview().ownership}</small></div>}</Show>
-          <Show when={previewError()}><p class="workspace-preview-error" role="alert">{previewError()}</p></Show>
-          <div class="frost-dialog-actions"><Show when={newKind() === "workspace"}><Button type="button" variant="outline" disabled={submitting()} onClick={() => setWorkspaceStep("explore")}>Back</Button></Show><Button type="button" variant="outline" disabled={submitting()} onClick={closeNewDialog}>Cancel</Button><Button type="submit" disabled={!canCreate()}>{submitting() ? (mode() === "cloned" ? "Cloning…" : "Creating…") : mode() === "cloned" ? "Clone workspace" : mode() === "linked" ? "Add workspace" : mode() === "created" ? "Create workspace" : "Create folder"}</Button></div>
+          <Show when={mode() === "cloned"}><DialogField label={<>GitHub repository or Git URL</>}><DialogInput id="folder-clone" value={cloneUrl()} disabled={submitting()} placeholder="react/react or https://github.com/org/repo.git" onInput={(event) => setCloneUrl(event.currentTarget.value)} /></DialogField></Show>
+          <DialogField label={<>{mode() === "managed" ? "Display name" : "Display name (optional)"}</>}><DialogInput id="folder-name" value={name()} disabled={submitting()} placeholder={mode() === "managed" ? "Research" : "My project"} onInput={(event) => setName(event.currentTarget.value)} /></DialogField>
+          <Show when={mode() === "created"}><DialogField label={<>New folder name</>}><DialogInput id="workspace-directory-name" value={directoryName()} disabled={submitting()} placeholder="my-project" onInput={(event) => setDirectoryName(event.currentTarget.value)} /></DialogField></Show>
+          <Show when={mode() === "cloned"}><DialogField label={<>Folder name (optional)</>}><DialogInput id="clone-directory-name" value={cloneDirectoryName()} disabled={submitting()} placeholder="Defaults to the repository name" onInput={(event) => setCloneDirectoryName(event.currentTarget.value)} /></DialogField></Show>
+          <Show when={mode() !== "linked" ? workspacePreview() : null}>{(preview) => <CardBody><CardRead>{preview().path}</CardRead><CardNote>{preview().ownership}</CardNote></CardBody>}</Show>
+          <Show when={previewError()}><CardNote error>{previewError()}</CardNote></Show>
+          <CardActions><Show when={newKind() === "workspace"}><DialogButton type="button" variant="ghost" outline disabled={submitting()} onClick={() => setWorkspaceStep("explore")}>Back</DialogButton></Show><DialogButton type="button" variant="ghost" outline disabled={submitting()} onClick={closeNewDialog}>Cancel</DialogButton><DialogButton type="submit" disabled={!canCreate()}>{submitting() ? (mode() === "cloned" ? "Cloning…" : "Creating…") : mode() === "cloned" ? "Clone workspace" : mode() === "linked" ? "Add workspace" : mode() === "created" ? "Create workspace" : "Create folder"}</DialogButton></CardActions>
         </Show>
-      </FieldGroup></form>
-    </FrostDialog>
+      </CardBody></CardForm>
+    </Dialog>
 
-    <FrostDialog open={Boolean(rename())} title={rename()?.type === "chat" ? "Rename chat" : rename()?.type === "terminal" ? "Rename terminal" : "Rename folder"}
+    <Dialog open={Boolean(rename())} title={rename()?.type === "chat" ? "Rename chat" : rename()?.type === "terminal" ? "Rename terminal" : "Rename folder"}
       description={rename()?.type === "chat" ? "Set the display name stored by Conduit." : rename()?.type === "terminal" ? "Set the terminal session name." : "Change the folder's display name without changing its working-directory path."}
       onOpenChange={(open) => { if (!open) setRename(null); }}>
-      <form onSubmit={submitRename}><Field><FieldLabel for="rename-name">Name</FieldLabel><Input id="rename-name" value={renameValue()} onInput={(event) => setRenameValue(event.currentTarget.value)} /></Field><div class="frost-dialog-actions"><Button type="button" variant="outline" onClick={() => setRename(null)}>Cancel</Button><Button type="submit" disabled={!renameValue().trim()}>Rename</Button></div></form>
-    </FrostDialog>
+      <CardForm onSubmit={submitRename}><DialogField label={<>Name</>}><DialogInput id="rename-name" value={renameValue()} onInput={(event) => setRenameValue(event.currentTarget.value)} /></DialogField><CardActions><DialogButton type="button" variant="ghost" outline onClick={() => setRename(null)}>Cancel</DialogButton><DialogButton type="submit" disabled={!renameValue().trim()}>Rename</DialogButton></CardActions></CardForm>
+    </Dialog>
 
-    <FrostDialog alert open={Boolean(deleting())} title={deleteCopy().title} description={deleteCopy().description} onOpenChange={(open) => { if (!open) setDeleting(null); }}
-      actions={<><Button variant="outline" onClick={() => setDeleting(null)}>Cancel</Button><Button variant="destructive" onClick={() => void confirmDelete()}>{deleteButtonLabel()}</Button></>} />
+    <Dialog alert open={Boolean(deleting())} title={deleteCopy().title} description={deleteCopy().description} onOpenChange={(open) => { if (!open) setDeleting(null); }}
+      actions={<><DialogButton variant="ghost" outline onClick={() => setDeleting(null)}>Cancel</DialogButton><DialogButton variant="destructive" onClick={() => void confirmDelete()}>{deleteButtonLabel()}</DialogButton></>} />
 
-    <FrostDialog open={Boolean(moving())} title="Move chat" description="Choose the working folder for this chat and its attachments." onOpenChange={(open) => { if (!open) setMoving(null); }}
-      actions={<Button type="button" variant="outline" onClick={() => setMoving(null)}>Cancel</Button>}>
-      <div class="palette-move-list">
+    <Dialog open={Boolean(moving())} title="Move chat" description="Choose the working folder for this chat and its attachments." onOpenChange={(open) => { if (!open) setMoving(null); }}
+      actions={<DialogButton type="button" variant="ghost" outline onClick={() => setMoving(null)}>Cancel</DialogButton>}>
+      <DialogSection>
         <For each={props.projects.filter((item) => item.id !== moving()?.project.id)}>
-          {(target) => <Button variant="ghost" class="palette-move-option" onClick={() => { const current = moving(); if (current) void props.onMoveChat(current.chat, current.project, target); setMoving(null); }}><FolderIcon /><span>{target.name}</span></Button>}
+          {(target) => <DialogItem icon={<FolderIcon />} onClick={() => { const current = moving(); if (current) void props.onMoveChat(current.chat, current.project, target); setMoving(null); }}>{target.name}</DialogItem>}
         </For>
         <Show when={!props.projects.some((item) => item.id !== moving()?.project.id)}>
-          <p class="text-sm text-muted-foreground">No other folders to move this chat to.</p>
+          <CardNote>No other folders to move this chat to.</CardNote>
         </Show>
-      </div>
-    </FrostDialog>
+      </DialogSection>
+    </Dialog>
   </>;
 }

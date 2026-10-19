@@ -1,11 +1,12 @@
+import { Dialog } from "@/components/dialog";
+import { CardActions, CardForm } from "@/components/ui/card";
+import { Button as DialogButton, Input as DialogInput, Field as DialogField } from "@/components/ui/controls";
 import { createEffect, createMemo, createSignal, For, on, onCleanup, onMount, Show, type JSX } from "solid-js";
 import { ArrowLeftIcon, CheckIcon, ChevronDownIcon, Columns2Icon, EllipsisIcon, FocusIcon, KeyboardIcon, Maximize2Icon, Minimize2Icon, GripVerticalIcon, PencilIcon, PlusIcon, Settings2Icon, TerminalIcon, Trash2Icon, UnplugIcon } from "lucide-solid";
 import { toast } from "@/components/notifications";
-import { FrostDialog } from "@/components/frost";
+
 import {
   Button,
-  Field,
-  FieldLabel,
   Input,
   Menu,
   MenuContent,
@@ -1069,19 +1070,18 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
   });
 
   return <>
-    <FrostDialog open={Boolean(renameSession())} onOpenChange={(open) => { if (!open) setRenameSession(null); }} title="Rename terminal" description="Choose the label shown in this Workspace terminal list.">
-        <form onSubmit={(event) => void submitRename(event)}>
-          <Field>
-            <FieldLabel for="terminal-rename-title">Name</FieldLabel>
-            <Input id="terminal-rename-title" value={renameValue()} maxlength={80} autofocus
+    <Dialog open={Boolean(renameSession())} onOpenChange={(open) => { if (!open) setRenameSession(null); }} title="Rename terminal" description="Choose the label shown in this Workspace terminal list.">
+        <CardForm onSubmit={(event) => void submitRename(event)}>
+          <DialogField label={<>Name</>}>
+            <DialogInput id="terminal-rename-title" value={renameValue()} maxlength={80} autofocus
               onInput={(event) => setRenameValue(event.currentTarget.value)} />
-          </Field>
-          <div class="frost-dialog-actions">
-            <Button type="button" variant="outline" onClick={() => setRenameSession(null)}>Cancel</Button>
-            <Button type="submit" disabled={!renameValue().trim() || Boolean(sessionBusy())}>Rename</Button>
-          </div>
-        </form>
-    </FrostDialog>
+          </DialogField>
+          <CardActions>
+            <DialogButton type="button" variant="ghost" outline onClick={() => setRenameSession(null)}>Cancel</DialogButton>
+            <DialogButton type="submit" disabled={!renameValue().trim() || Boolean(sessionBusy())}>Rename</DialogButton>
+          </CardActions>
+        </CardForm>
+    </Dialog>
     <Popover open={shortcutEditorOpen()} anchorRef={shortcutAnchor}
       onOpenChange={(open) => { setShortcutEditorOpen(open); if (!open) setEditingShortcut(null); }}>
       <PopoverContent class="terminal-menu" aria-label="Terminal shortcuts"
