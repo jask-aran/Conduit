@@ -1,6 +1,6 @@
 import { For, Show, type JSX } from "solid-js";
 import { BoxesIcon, SearchIcon } from "lucide-solid";
-import { Button, Field, Input } from "./controls";
+import { Button, Field, Input, Swatch } from "./controls";
 
 type IdentityValue = { mode: "monogram" | "icon"; value: string; color: string };
 type Toggle = (value: boolean | ((current: boolean) => boolean)) => void;
@@ -84,7 +84,7 @@ export function IdentityEditor(props: {
         }}>{showCustomColor() ? "Use Mocha colours" : "More colours"}</Button>
       </div>
       <div class="ui-identity-color-grid" role="radiogroup" aria-label="Workspace color">
-        <For each={props.colors}>{(option) => <Button variant="ghost" type="button" role="radio" aria-label={option.label} aria-checked={draft().color === option.id} data-selected={draft().color === option.id} title={option.label} style={{ background: option.hex }} onClick={() => { props.onColor(option.id, option.hex); }} />}</For>
+        <For each={props.colors}>{(option) => <Button variant="ghost" type="button" role="radio" aria-label={option.label} aria-checked={draft().color === option.id} data-selected={draft().color === option.id} title={option.label} onClick={() => { props.onColor(option.id, option.hex); }}><Swatch colour={option.hex} fill /></Button>}</For>
       </div>
       <Show when={showCustomColor()}>
         <div class="ui-identity-custom-color">

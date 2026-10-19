@@ -67,7 +67,9 @@ node --test --test-name-pattern='unauthenticated routes|login flow|login redirec
 ```
 
 The auth fixture serves the generated `dist/access` template and its assets
-alongside its tiny SPA. Build first, as CI does. For phone menu checks, use
+alongside its tiny SPA when a build exists. Without one (a fresh checkout) it
+serves a stand-in form with the same placeholders, so the auth behaviour is
+still tested but the v2 markup is not; build first to cover the page itself. For phone menu checks, use
 Chrome CLI `emulate --viewport '412x860x2.625,mobile,touch'`; window resizing
 alone does not set the coarse-pointer layout. Check opening-tap consumption,
 Escape back to the parent, disabled choices, keyboard focus and selection.
@@ -134,7 +136,8 @@ invariant it broke (DESIGN.md Motion).
 `npm run smoke:panes [-- --project <name>]` drives the panes and file viewer
 in headless Chromium and prints `ok`/`FAIL` per scenario, exiting 1 on any
 failure. It is read-only, each scenario in a fresh context so the saved layout
-starts empty; it picks the first project with six top-level files, and a
+starts empty; it picks the first project with six visible top-level files
+(Files hides dotfiles), and a
 project whose page lists files also covers the project page. Playwright comes
 from `conduit-web` or is installed once into `.smoke-tools/`. Run it from the
 checkout the server serves (its session goes into that checkout's data), after

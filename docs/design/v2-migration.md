@@ -15,13 +15,13 @@ control does not make its subsystem complete.
 | ID | Subsystem | Full scope | Status and evidence | Ownership |
 | --- | --- | --- | --- | --- |
 | V2-01 | Settings | Settings overlay, section navigation, all settings pages, fields, switches, selectors, shortcut recording, save and error states. | Partial. Switches use v2 (`e43ebf72`). Reset confirmation uses the shared v2 decision queue; the rest of Settings remains to migrate. | Unassigned |
-| V2-02 | Sidebar and navigation | Expanded sidebar, collapsed rail, project and chat rows, server switcher, header controls, status indicators, context menus. | Open. Shared dialogs used here already use v2; navigation and its menus still need their own cutover. | Unassigned |
+| V2-02 | Sidebar and navigation | Expanded sidebar, collapsed rail, project and chat rows, server switcher, header controls, status indicators, context menus. | Open. Shared dialogs used here already use v2, and the chat header's menu content too (V2-08); the header buttons, navigation and its menus still need their own cutover. | Unassigned |
 | V2-03 | Search and commands | Chat search, command palette, leader palette, results, keyboard hints, empty and loading states. | Open. The shared delete confirmation uses v2; the palettes and their controls remain. | Unassigned |
 | V2-04 | Dashboards | Conduit, project, workspace, harness, and Computer screens; headings, lists, actions, menus, and empty states. | Open. Computer explorer and workspace identity editor now render v2; the other dashboard presentations remain. Coordinate dashboard composers with Claude. | Unassigned; composer changes require coordination |
 | V2-05 | Panes and workspace tools | Pane headers, tabs, resize and drag controls, dock, Files, file viewer, Source Control, Chat review, and Terminal controls. | Open. Confirmations, file prompts and the embedded code excerpt now use v2; pane controls and the editable file viewer remain. | Unassigned |
-| V2-06 | Notifications and shared dialogs | Toasts, confirmations, prompts, previews, and other dialogs used across subsystems. | Complete cutover. Sonner and Kobalte retain engine behavior. All internal native decisions and the embedded widgets now render v2. Verification has one pane-smoke failure; see below. | Delivered in this session |
+| V2-06 | Notifications and shared dialogs | Toasts, confirmations, prompts, previews, and other dialogs used across subsystems. | Complete cutover. Sonner and Kobalte retain engine behavior. All internal native decisions and the embedded widgets now render v2. `npm run smoke:panes -- --project NHP` passes 8/8 (2026-10-20); see below. | Delivered in this session |
 | V2-07 | Connection and access screens | Sign-in, first connection, server selection, reconnect, and connection error states. | Complete cutover. Browser sign-in, first connection, server/route selection and recovery render v2. Desktop and phone share Kobalte submenu behavior; the phone initial-focus blocker is resolved. See V2-07 evidence below. | Delivered in this session |
-| V2-08 | Composer and transcript | Composer, riders, questions, approvals, pickers, message rows, answers, traces, Markdown, code blocks, and message actions. | Partial; Claude's scope. Shell `d7ac7e33`, riders `17731746`; the menus and pickers now use `components/menus.tsx` (+ menu, model, profile, permissions, folder and project lists, context gauge and breakdown, the phone options menu with shared phone submenus). The composer and transcript no longer use `LibraryContext`, graduation or bridge rules; the riding buttons and the welcome are library pieces. Composer and transcript markup is v2 throughout. Outside V2-08: the composer-surface setting (Settings, V2-01) still styles the phone header pills, sidebar toggle and the outside-thread chip (V2-02); the chat pane's empty-chat placement (`.chat-main-empty`, `.composer-stack`) is screen layout. | Claude |
+| V2-08 | Composer and transcript | Composer, riders, questions, approvals, pickers, message rows, answers, traces, Markdown, code blocks, and message actions. | Partial; Claude's scope. Shell `d7ac7e33`, riders `17731746`; the menus and pickers now use `components/menus.tsx` (+ menu, model, profile, permissions, folder and project lists, context gauge and breakdown, the phone options menu with shared phone submenus). The composer and transcript no longer use `LibraryContext`, graduation or bridge rules; the riding buttons and the welcome are library pieces. Composer and transcript markup is v2 throughout. The chat header's menu (its context row and breakdown on the phone) is v2 too: `HeadingSection`, the adapter's rows, `Menu fit`; its old classic branches and CSS are gone. The phone + trigger is the adapter's `MenuPillTrigger`, with no private Kobalte import. Outside V2-08: the composer-surface setting (Settings, V2-01) still styles the phone header pills, sidebar toggle and the outside-thread chip, and the header's buttons are still classic (V2-02); the chat pane's empty-chat placement (`.chat-main-empty`, `.composer-stack`) is screen layout. | Claude |
 | V2-09 | Shared v2 foundations | Controls, navigation rows, menus, cards, overlays, keycaps, loading indicators, and status indicators. | Partial. Extend these as each subsystem needs them. Use DESIGN.md's family table for the remaining old implementations. | The agent migrating a subsystem owns its required extensions; coordinate shared-file edits |
 
 ## Completion criteria
@@ -107,14 +107,15 @@ menus passed. Identity icon search, custom colour and monogram controls passed;
 changing its v2 text token changed the live input from 10.4px to 20px and was
 then removed.
 
-`npm run smoke:panes -- --project NHP` passed 7/8 scenarios. The remaining
-failure is `file still bold once focus leaves`. A direct empty-main-space
-focus check changes the file marker to `shown`; the smoke's coordinate click
-remains unproven. The default smoke selected Conduit, which has only five
-visible files despite enough API entries including hidden files; its first
-two scenarios timed out waiting for the sixth. That run was stopped. The
-fixture selection needs a test-tool follow-up. The remaining assertion needs
-further diagnosis; its cause is not established.
+`npm run smoke:panes -- --project NHP` first passed 7/8: `file still bold once
+focus leaves` failed and the default run picked Conduit, whose API tree counted
+hidden files the Files list does not show. The smoke now counts only visible
+files. On 2026-10-20 (after the composer cutover) it passed 8/8 on NHP and the
+bold check passed on the default project too; a direct probe showed the marker
+turning `shown` within 600ms of the click. The earlier failure did not
+reproduce, so its cause stays unknown. The default run picked deriv-dash, whose
+last scenario failed only on an unrelated `409` from
+`/v0/harnesses/opencode/threads` for that folder.
 Camera hardware, server discovery/sign-in, push and destructive filesystem
 actions were not exercised.
 
@@ -133,7 +134,9 @@ The browser login page remains a plain server-rendered form. The normal Vite
 build renders its templates from the actual v2 components and emits their
 hashed CSS. The server substitutes only escaped error and redirect data. It
 reads the template from the configured client distribution. There is no
-second stylesheet or legacy fallback. `styles/theme.css` owns the shared dark
+second stylesheet or legacy fallback. The server reads the template again when a rebuild replaces
+it, so new hashed stylesheet names reach the page without a restart. A
+missing build fails with a message naming the file. `styles/theme.css` owns the shared dark
 colour tokens for both the app and standalone page.
 
 Executed: typecheck, gallery build, production build and bundle checks passed.
@@ -154,8 +157,7 @@ separate `PhoneMenuPanel` focus scope, arrow-key loop and caller-owned panel
 state are removed. Kobalte owns child registration, focus, selection and
 navigation. The adapter supplies phone anchor geometry, parent dimming,
 parent-tap consumption and one-level Escape. V2 owns the panel material,
-size and stacking tokens. The composer still uses its existing adapter;
-its migration remains Claude's scope.
+size and stacking tokens. The composer's menus use the same adapter.
 
 Executed for the adapter change: typecheck, gallery build and production
 build/bundle checks passed. Headed Chrome keyboard checks confirmed initial
