@@ -76,7 +76,7 @@ export function beginEdgeSwipe(start: SwipeStart): EdgeSwipe | null {
  */
 export function swipeBlocked(target: EventTarget | null): boolean {
   let node = target instanceof Element ? target : null;
-  if (node?.closest("input, textarea, select, [contenteditable=''], [contenteditable='true'], [role='slider'], canvas, .composer, .composer-edit-actions, [data-mobile-swipe-ignore]")) return true;
+  if (node?.closest("input, textarea, select, [contenteditable=''], [contenteditable='true'], [role='slider'], canvas, .ui-composer-slot, .ui-phone-composer, [data-mobile-swipe-ignore]")) return true;
   for (; node && node !== document.body; node = node.parentElement) {
     if (node.scrollWidth > node.clientWidth + 1) {
       const overflow = getComputedStyle(node).overflowX;

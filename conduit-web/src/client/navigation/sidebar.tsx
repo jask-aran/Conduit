@@ -536,7 +536,7 @@ export function Sidebar(props: {
     } else if (!open && mobileWasOpen) {
       const previous = mobileReturnFocus;
       mobileReturnFocus = null;
-      queueMicrotask(() => restoreFocus(previous, [".composer textarea", ".mobile-sidebar-trigger"]));
+      queueMicrotask(() => restoreFocus(previous, ["textarea[data-composer-input]", ".mobile-sidebar-trigger"]));
     }
     mobileWasOpen = open;
   });

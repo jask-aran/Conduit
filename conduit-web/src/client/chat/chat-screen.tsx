@@ -7,7 +7,6 @@ import type { ActiveChatStore } from "../state/active-chat";
 import { SPINNING_ACTIVITY, type ComposerStatus } from "./composer";
 import { ContextBar, ContextBreakdown } from "./context-gauge";
 import { contextUsagePercent } from "./context-metrics";
-import { HostUiRequests } from "./host-ui-card";
 import { VoiceWaveform } from "./voice-waveform";
 import { isWorkspace } from "./place-picker";
 import { harnessLabelFor } from "../harness-brand";
@@ -175,8 +174,7 @@ export function Conversation(props: { chat: ActiveChatStore; busy?: boolean; tra
   return <div class="work-area">
     <section class="work-area-conversation" aria-label="Conversation" aria-busy={props.busy}>
       {props.transcript}
-      <div ref={(element) => props.stackRef?.(element)} class="composer-stack" data-question={props.chat.hostUiRequests().length ? "true" : undefined}>
-        <HostUiRequests requests={props.chat.hostUiRequests()} onRespond={props.chat.respondHostUi} onStop={() => props.chat.stop()} />
+      <div ref={(element) => props.stackRef?.(element)} class="composer-stack">
         {props.composer}
       </div>
     </section>

@@ -10,6 +10,8 @@
    spot, one text (the captions come in once the field's quick fade is done, and their words are clipped above the
    field going); a frost fades itself. */
 .ui-phone-composer { --voice-pill: calc(1.5 * var(--pill-size)); position: relative; isolation: isolate; min-width: 0; display: flex; flex-direction: column; gap: var(--space-md); }
+/* Its riders: the composer's rider stack, over the field. */
+.ui-phone-composer > .ui-composer-stack:empty { display: none; }
 /* Layers. */
 .ui-voice-captions { z-index: 1; }
 .ui-phone-field { position: relative; z-index: 2; }
@@ -67,6 +69,11 @@
 .ui-voice-captions > * { display: flex; max-height: calc(3 * 1.45em); flex-direction: column; justify-content: flex-end; overflow: hidden; margin: 0; }
 .ui-voice-captions::before { content: ""; position: absolute; top: 0; bottom: -100vh; left: calc(50% - 50vw); right: calc(50% - 50vw); z-index: -1;
   background: linear-gradient(to bottom, transparent, var(--background) var(--space-xl)); }
+/* Captions' words fade in as the transcript's do (colour, not opacity); the lead was already there, upright. */
+.ui-captions { display: block; }
+.ui-captions > span { animation: ui-caption-word var(--duration-gentle) var(--ease-arrive) both; }
+.ui-captions > .ui-captions-lead { margin-inline-end: 0.3em; font-style: normal; animation: none; }
+@keyframes ui-caption-word { from { color: transparent; } }
 /* Out, their words go over the quick duration, clipped above the field's box (PhoneComposer keeps its height as
    --under-field); their ground holds until whatever comes in over it is in, then fades, so nothing behind shows
    through a part as it arrives. */
@@ -94,5 +101,5 @@
 .ui-phone-composer[data-show~="edit"] .ui-phone-edit > .ui-pill { pointer-events: auto; }
 @media (prefers-reduced-motion: reduce) {
   .ui-pill[data-solo], .ui-aura, .ui-phone-field, .ui-phone-field > *, .ui-pill-room, .ui-voice-track, .ui-voice-track > .ui-pill-wave, .ui-phone-edit > .ui-pill, .ui-phone-row > .ui-pill { transition: none !important; }
-  .ui-voice-captions { animation: none; }
+  .ui-voice-captions, .ui-captions > span { animation: none; }
 }

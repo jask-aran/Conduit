@@ -7,7 +7,7 @@
   --cmp-bar-min: var(--control); --cmp-bar-gap: var(--space-lg);
   --cmp-bar-pad: var(--space-2xs) var(--space-md) var(--space-sm) var(--space-md);
   --cmp-slot: var(--control-sm); --cmp-slot-radius: var(--radius-control); --cmp-slot-gap: var(--space-xs); --cmp-icon: var(--u-icon);
-  --cmp-rider-gap: var(--space-sm);
+  --cmp-rider-gap: var(--space-sm); --cmp-status-max: calc(3 * var(--control));
 }
 .ui-composer-stack { display: grid; gap: var(--cmp-rider-gap); }
 /* The composer's slot: the composer (with its riders) and a takeover (the question) share one cell, bottom-aligned.
@@ -32,9 +32,23 @@
    field's height with !important; the composer's token wins it back). */
 .ui-composer-field > textarea { min-height: var(--cmp-field-min); max-height: var(--cmp-field-max); padding: var(--cmp-field-pad); font-size: var(--text-body); }
 .ui-composer-field > textarea:placeholder-shown { height: var(--cmp-field-min) !important; }
+/* Completion: over its field's text, at the field's padding and type. */
+.ui-completion { position: absolute; inset: 0; z-index: 1; overflow: hidden; color: var(--muted-foreground); font-size: var(--text-body); line-height: var(--leading-row); pointer-events: none; white-space: pre; }
+.ui-completion > span { color: transparent; }
+.ui-completion > small { font-size: var(--text-caption); }
+.ui-composer-field > .ui-completion { padding: var(--cmp-field-pad); }
+.ui-pill-field:has(> .ui-completion) { position: relative; }
+.ui-pill-field > .ui-completion { padding: calc((var(--pill-size) - var(--space-2xs) - 1.4em) / 2) var(--pill-field-pad); }
 .ui-toolbar { position: relative; z-index: 2; display: flex; min-height: var(--cmp-bar-min); align-items: center; justify-content: space-between; gap: var(--cmp-bar-gap); padding: var(--cmp-bar-pad); }
 .ui-toolbar-start, .ui-toolbar-end { display: flex; min-width: 0; align-items: center; gap: var(--cmp-slot-gap); }
 .ui-toolbar-start { flex: 0 1 auto; }
+.ui-toolbar-start > *, .ui-toolbar-end > * { flex-shrink: 0; }
+/* The status: muted at the end's start, cut short to its room; a dictation's PillWave fills that room. */
+.ui-toolbar-end > .ui-toolbar-status { display: block; min-width: 0; max-width: var(--cmp-status-max); flex-shrink: 1; overflow: hidden; padding-inline: var(--space-xs); color: var(--muted-foreground);
+  font: var(--weight-rest) var(--text-caption)/var(--cmp-slot) var(--font-sans); text-overflow: ellipsis; white-space: nowrap; }
+.ui-toolbar-status:empty { display: none; }
+.ui-toolbar-status > :is(.ui-spinner, svg) { display: inline-block; width: var(--icon-xs); height: var(--icon-xs); margin-inline-end: var(--space-xs); vertical-align: -0.125em; }
+.ui-toolbar-status > .ui-pill-wave { width: calc(var(--cmp-status-max) - 2 * var(--space-xs)); height: var(--cmp-slot); }
 .ui-toolbar-end { flex: 0 0 auto; }
 /* The primary slot: each action scales in where the last was, so nothing beside it moves; the aside (Stop beside
    Send) steps in from the slot's side. A held control (dictating) breathes from the text colour to muted. */
@@ -51,4 +65,5 @@
 .ui-toolbar-end > [aria-pressed="true"] { color: var(--foreground); animation: ui-breathe var(--duration-breathe) ease-in-out infinite; }
 @keyframes ui-breathe { 50% { color: var(--muted-foreground); } }
 .ui-toolbar .ui-button[data-size^="icon"] { width: var(--cmp-slot); min-width: var(--cmp-slot); height: var(--cmp-slot); border-radius: var(--cmp-slot-radius); padding: 0; }
+.ui-toolbar [data-pointer-opened]:focus-visible:not(:hover) { background: transparent; }
 .ui-toolbar .ui-button[data-size^="icon"] svg { width: var(--cmp-icon); height: var(--cmp-icon); }

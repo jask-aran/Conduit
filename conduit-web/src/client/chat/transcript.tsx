@@ -25,7 +25,7 @@ import {
 } from "./transcript-appearance";
 import { mountTranscriptPanelMotion } from "./transcript-motion";
 import { mountTranscriptVisibility } from "./transcript-visibility";
-import { isMobileLayout } from "../navigation/mobile-layout";
+import { isMobileLayout, MOBILE_LAYOUT_QUERY } from "../navigation/mobile-layout";
 import {
   advanceTailFollow,
   createTailFollowState,
@@ -130,7 +130,7 @@ function AnswerFoot(props: { message: Message; precedingUserId?: string; chat: T
 
 /* The composer is where an edit happens, so starting or leaving one puts the
    caret there once the draft has been swapped in. */
-const focusComposerSoon = () => requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>(".composer textarea:not([disabled])")?.focus({ preventScroll: true }));
+const focusComposerSoon = () => requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>("textarea[data-composer-input]:not([disabled])")?.focus({ preventScroll: true }));
 
 /** The transcript is drawn with components v2 (graduated in components/ui/swap.ts): its bubbles, answers, feet and disclosures. */
 export function Transcript(props: Parameters<typeof TranscriptBody>[0]) {
@@ -195,6 +195,9 @@ function TranscriptBody(props: { chat: TranscriptSource; supports: (capability: 
   let layoutEpoch = 0;
   let previousMarkdownRenderer = props.markdownRenderer;
   const [following, setFollowing] = createSignal(true);
+  // A phone's composer has Scroll to latest in its own row, so the transcript's stays hidden there.
+  const [phoneLayout, setPhoneLayout] = createSignal(isMobileLayout());
+  onMount(() => { const media = matchMedia(MOBILE_LAYOUT_QUERY), sync = () => setPhoneLayout(media.matches); media.addEventListener("change", sync); onCleanup(() => media.removeEventListener("change", sync)); });
   const [latestDistance, setLatestDistance] = createSignal(0);
   /* The phone's voice composer carries its own scroll-to-latest in its row
      and hides the floating one: tell it when the latest is out of view, and
@@ -714,18 +717,17 @@ function TranscriptBody(props: { chat: TranscriptSource; supports: (capability: 
       const anchored = [latestButton, cancelEditButton].filter((button): button is HTMLButtonElement => Boolean(button?.isConnected));
       if (!anchored.length) return;
       const conversation = transcriptRoot.closest<HTMLElement>(".work-area-conversation");
-      // A question stands in for the composer, which has slid out of the pane.
-      // Its dock is measured rather than the card, whose rise is a transform.
-      const composerShell = conversation?.querySelector<HTMLElement>(".question-dock")
-        || conversation?.querySelector<HTMLElement>(".composer-surface-shell");
+      // A question stands in for the composer, which has slid out of the pane; otherwise the composer and its riders.
+      const composerShell = conversation?.querySelector<HTMLElement>(".ui-composer-slot[data-taken] > :not(.ui-composer-stack)")
+        || conversation?.querySelector<HTMLElement>(".ui-composer-slot > .ui-composer-stack, .ui-phone-composer");
       if (!conversation || !composerShell) return;
       const shellRect = motionShell.getBoundingClientRect();
       const composerRect = composerShell.getBoundingClientRect();
       // Dictation captions float above the composer; the button clears them too.
-      const captions = conversation.querySelector<HTMLElement>(".composer-voice-captions p");
+      const captions = conversation.querySelector<HTMLElement>(".ui-voice-captions > *");
       const captionsTop = captions?.getBoundingClientRect().top ?? Infinity;
       // So do the text pill's edit actions while they show.
-      const editActions = conversation.querySelector<HTMLElement>(".composer-edit-actions[data-shown]");
+      const editActions = conversation.querySelector<HTMLElement>(".ui-phone-composer[data-show~=\"edit\"] > .ui-phone-edit");
       const editTop = editActions?.getBoundingClientRect().top ?? Infinity;
       if (shellRect.width <= 0 || shellRect.height <= 0 || composerRect.width <= 0 || composerRect.height <= 0) return;
       const bottom = `${Math.max(isMobileLayout() ? 8 : 6.4, shellRect.bottom - Math.min(composerRect.top, captionsTop, editTop) + (isMobileLayout() ? 10 : 8))}px`;
@@ -755,7 +757,7 @@ function TranscriptBody(props: { chat: TranscriptSource; supports: (capability: 
       // float where it was: the room is still taken, so the thread keeps it
       // rather than following the composer down and back up.
       const current = parseFloat(transcriptRoot.style.getPropertyValue("--transcript-composer-inset")) || 0;
-      if (composerStack?.querySelector('.composer-wrap[data-phone-mode="listening"]') && blockSize + COMPOSER_CLEARANCE_PX < current) return;
+      if (composerStack?.querySelector('.ui-phone-composer[data-state="listening"]') && blockSize + COMPOSER_CLEARANCE_PX < current) return;
       const inset = `${Math.round(blockSize + COMPOSER_CLEARANCE_PX)}px`;
       if (transcriptRoot.style.getPropertyValue("--transcript-composer-inset") === inset) return;
       transcriptRoot.style.setProperty("--transcript-composer-inset", inset);
@@ -778,7 +780,7 @@ function TranscriptBody(props: { chat: TranscriptSource; supports: (capability: 
     // The composer slides back in as a transform, which no size change reports,
     // and it is measured with that transform applied -- so again once it lands.
     const composerLanded = (event: TransitionEvent) => {
-      if (event.propertyName === "transform" && (event.target as HTMLElement).classList.contains("composer-wrap")) scheduleLatestButtonAnchor();
+      if (event.propertyName === "transform" && (event.target as HTMLElement).classList.contains("ui-composer-stack")) scheduleLatestButtonAnchor();
     };
     composerStack?.addEventListener("transitionend", composerLanded);
     const visualViewport = window.visualViewport;
@@ -1128,7 +1130,7 @@ function TranscriptBody(props: { chat: TranscriptSource; supports: (capability: 
       {/* Always mounted, so it fades out as well as in: when pressed, and when
            somebody scrolls back down themselves. */}
       <RiderButton ref={(element: HTMLButtonElement) => { latestButton = element; scheduleLatestButtonAnchor(); }} class="message-scroller-button" icon={<ArrowDownIcon />} label="Scroll to latest"
-        hidden={following() || latestDistance() < TAIL_NEAR_LATEST_PX} onMouseDown={(event) => event.preventDefault()} onClick={() => followLatest()} />
+        hidden={phoneLayout() || following() || latestDistance() < TAIL_NEAR_LATEST_PX} onMouseDown={(event) => event.preventDefault()} onClick={() => followLatest()} />
       {/* Editing an earlier message: a way out that is always there, floating
           over the composer where the edit happens, as the pencil would. */}
       <Show when={props.chat.editingEntryId()}><RiderButton ref={(element: HTMLButtonElement) => { cancelEditButton = element; scheduleLatestButtonAnchor(); }} class="message-scroller-button message-cancel-edit" icon={<XIcon />} label="Cancel editing" show="label"

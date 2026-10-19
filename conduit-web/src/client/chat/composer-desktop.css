@@ -1,33 +1,14 @@
-/* Desktop hierarchy; mobile keeps its existing layout. */
-@media (--conduit-wide-layout) {
-  .composer-actions-left { flex: 1; }
-  /* The controls never squeeze; they only draw together as the composer
-     narrows, and a layout that cannot fit them changes before they would
-     have to (the dashboard's one column, split.tsx). */
-  .composer-actions-left > *, .composer-actions-right > * { flex-shrink: 0; }
-  .composer-actions-right { flex: none; }
-  /* Attach and the microphone are live actions, so they wear the text colour;
-     muted is kept for settings and for an action that is off (an empty Send). */
-  .composer-profile-trigger, .composer-permission-trigger { color: var(--muted-foreground); }
-  .composer-desktop-attachment, .composer-actions-right .dictation-trigger { color: var(--foreground); }
-  .composer-profile-trigger { flex: none; gap: 3px; }
-  .composer-profile-trigger > svg:first-child { width: 14px; height: 14px; }
-  .composer-model-trigger { color: var(--foreground); font-weight: 580; }
-  .composer-model-trigger > span:first-child { max-width: 160px; }
-  .composer-model-trigger > span:nth-child(2) { flex: none; }
-  .composer-permission-trigger > span { max-width: 72px; }
-  .composer-actions-status { max-width: 100px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  /* The ring sits with the row's icons: their size and a tenth-of-size stroke,
-     in the text colour, its track a clear step back rather than a ghost. */
-  .composer-actions-left .chat-context-trigger, .composer-actions-left .chat-context-trigger[data-state="idle"] { height: 24px; color: var(--foreground); padding-inline: 3px; }
-  .composer-actions-left .chat-context-gauge { width: 14px; height: 14px; }
-  .composer-actions-left .chat-context-gauge-track, .composer-actions-left .chat-context-gauge-value { stroke-width: 2.4; }
-  .composer-actions-left .chat-context-gauge-track { stroke: color-mix(in oklch, currentColor, transparent 70%); }
-  /* The +: attach, and whatever the row had no room for. A live action, so the text colour. */
-  .composer-actions-left > .composer-plus-trigger { display: inline-flex; width: 28px; height: 28px; flex: none; align-items: center; justify-content: center; border: 0; border-radius: 8px; background: transparent; color: var(--foreground); }
-  .composer-actions-left > .composer-plus-trigger:hover, .composer-actions-left > .composer-plus-trigger[aria-expanded="true"] { background: var(--accent); }
-  .composer-actions-left > .composer-plus-trigger svg { width: 15px; height: 15px; }
-}
+/* The toolbar's pickers until they are the library's own (composer menus): muted settings, the model at full weight. */
+.composer-profile-trigger, .composer-permission-trigger { color: var(--muted-foreground); }
+.composer-profile-trigger { flex: none; gap: 3px; }
+.composer-profile-trigger > svg:first-child { width: 14px; height: 14px; }
+.composer-model-trigger { color: var(--foreground); font-weight: 580; }
+.composer-model-trigger > span:first-child { max-width: 160px; }
+.composer-model-trigger > span:nth-child(2) { flex: none; }
+.composer-permission-trigger > span { max-width: 72px; }
+.ui-toolbar-start .chat-context-gauge { width: 14px; height: 14px; }
+.ui-toolbar-start :is(.chat-context-gauge-track, .chat-context-gauge-value) { stroke-width: 2.4; }
+.ui-toolbar-start .chat-context-gauge-track { stroke: color-mix(in oklch, currentColor, transparent 70%); }
 /* The +'s folded controls: a name, then its value muted at the right, as menu meta. */
 .composer-plus-menu { min-width: 220px; }
 .composer-plus-name { flex: none; }
@@ -43,51 +24,11 @@
 /* The phone's options menu: its header carries the context readout the row has no room for. */
 .composer-options-header { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
 .composer-options-context { color: var(--muted-foreground); font: 10px ui-monospace, SFMono-Regular, Consolas, monospace; letter-spacing: 0; text-transform: none; }
-/* The primary slot: its action scales in where the last one was; Stop steps
-   in beside it when a draft is typed during a turn. */
-.composer-primary-slot { display: inline-grid; flex: none; place-items: center; }
-.composer-primary-slot > [data-slot="button"] { animation: composer-slot-in 150ms cubic-bezier(.2, .8, .2, 1); }
-.composer-stop-aside { color: var(--muted-foreground); animation: composer-aside-in 200ms cubic-bezier(.2, .8, .2, 1); }
-@keyframes composer-slot-in { from { opacity: 0; transform: scale(.6); } }
-@keyframes composer-aside-in { from { opacity: 0; transform: translateX(10px); } }
-@media (prefers-reduced-motion: reduce) {
-  .composer-primary-slot > [data-slot="button"], .composer-stop-aside { animation: none; }
-}
 /* A phone option shows its value, not its name: the value takes the row and
    truncates rather than being cut off, a chevron says it opens. */
 .composer-options-value > span { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .composer-options-value > .menu-chevron, .composer-options-value > svg:last-child { width: 14px; height: 14px; flex: none; margin-left: auto; color: var(--muted-foreground); }
 .composer-options-model > span { font-weight: 580; }
-/* Stop reads as Send does -- no fill of its own, just its mark: a small solid
-   square in the text colour, the ghost wash on hover. */
-.composer-actions .composer-stop-trigger:not(:hover) { background: transparent; }
-.composer-actions .composer-stop-trigger { color: var(--foreground); }
-.composer-stop-trigger > .lucide-square, .composer-stop-aside > .lucide-square { width: 11px; height: 11px; fill: currentColor; stroke-width: 0; }
-/* Dictating: no filled squircle -- Stop is its mark alone, and so is the
-   microphone. It breathes from the text colour to muted and back. */
-.composer-actions .dictation-trigger[aria-pressed="true"] { color: var(--foreground); box-shadow: none; animation: dictation-breathe 1.6s ease-in-out infinite; }
-@keyframes dictation-breathe { 50% { color: var(--muted-foreground); } }
-@media (prefers-reduced-motion: reduce) {
-  .composer-actions .dictation-trigger[aria-pressed="true"] { animation: none; }
-}
-/* The up arrow fills less of its box than the microphone does of its own; it
-   is drawn a size up so the row reads as one height. */
-.composer-actions .composer-send-trigger > svg { scale: 1.15; }
-/* Phone: + sits in the pill's end cap in the text colour, and the microphone
-   tucks against Send, handing the width to the draft. */
-@media (--conduit-phone-layout) {
-  .composer .composer-mobile-plus { padding-left: 0; }
-  .composer .composer-plus-trigger { color: var(--foreground); }
-  .composer .composer-actions .composer-actions-right { gap: 0; }
-  .composer .composer-actions:not([data-mobile-actions-stacked="true"]) .dictation-trigger { width: auto; padding-inline: 6px; }
-}
-
-/* A phone's empty draft names the model on one line; a long name is cut short
-   rather than wrapping into a line the collapsed draft does not show. */
-@media (--conduit-phone-layout) {
-  .composer textarea::placeholder { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-}
-
 /* The context ring's breakdown, in the model menu's parts: the step slider's
    header and track, the model rows, the menu's separators and key style. */
 .chat-context-menu:has(.context-breakdown) { width: 17rem; min-width: 240px; padding: 4px; }
@@ -125,11 +66,6 @@ summary.context-breakdown-row:hover { background: oklch(1 0 0 / 10%); color: var
 .chat-header-menu-context-trigger .context-breakdown-bar { margin-inline: 0; }
 .chat-header-menu-context-block .context-breakdown { padding-bottom: 4px; }
 .chat-header-menu-context-block .context-breakdown-separator { margin-inline: 0; }
-/* No focus rings (DESIGN.md, Never). Keyboard focus is the wash, but Escape
-   handing focus back to a control the pointer opened is not the keyboard
-   engaging: only a control opened from the keyboard shows it. */
-.composer-actions :is(button, [role="button"]):focus-visible { outline: none; box-shadow: none; background: var(--accent); }
-.composer-actions [data-pointer-opened]:focus-visible:not(:hover) { background: transparent; }
 .context-breakdown-load small { margin-left: auto; color: var(--muted-foreground); font-size: 9.6px; }
 /* The compaction threshold: a rule across the bar where the harness will
    compact, named under it. */

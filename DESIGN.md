@@ -70,9 +70,9 @@ What each v2 family replaces and where it stands. Update a row in the commit tha
 | Toast | solid-sonner's toasts | gallery only |
 | Overlay, Glance | `FrostOverlay` (`frost.tsx`), command menu, chat search, Settings | gallery only |
 | Leader | `navigation/leader-palette.tsx`, `frost-card` | gallery only |
-| DesktopComposer | `chat/composer.tsx` (desktop) | graduated (`composer`): v2 classes on app markup; cutover pending |
+| DesktopComposer | `chat/composer.tsx` (desktop) | cut over: `DesktopComposer` (riders, the question as its takeover), `ComposerField` with `Completion`, `Toolbar` (status, aside, primary, `StopGlyph`); its pickers are the menus still to cut over |
 | Rider | queued messages, attachment strip, question card | in the app (v2 classes, not components) |
-| Pill, PhoneComposer | phone header pills, sidebar header, `chat/composer.tsx` (phone: the voice bar, a phone's only composer) | the voice bar renders `PhoneComposer` and `Pill*`, wrapped in the composer's v2-classed markup; previews elsewhere |
+| Pill, PhoneComposer | phone header pills, sidebar header, `chat/composer.tsx` (phone: the voice bar, a phone's only composer) | the voice bar is cut over: `PhoneComposer` (riders, `Captions`) and `Pill*`; header pills previews |
 | Transcript, CodeBlock | `chat/transcript.tsx`, the Markdown renderers | cut over: rows (`TranscriptRow`), the user's `Message`, the answer's `Turn`, `Answer`, `MessageFoot`, `Failure`, `HarnessPrompt`, `Changes`, the `RiderButton`s, the Markdown, drawn by `Answer` through `ANSWER_MARKDOWN` (the renderers' wrappers, tables, links, citations, formulas, streamed words, a wide block's bleed)., the code block (`CodeBlock`, the renderer's highlighted lines grown in place as its children; `codeBlockHtml` for the marked renderer) |
 
 **Overlays until Card and Overlay graduate:** build them from `components/frost.tsx`, never a copy of another overlay. `npm run build` fails on a hand-rolled Kobalte dialog (`scripts/check-bundle.mjs`; update that check when Card and Overlay replace them).

@@ -1,12 +1,10 @@
-import { LibraryContext, useLibrary, useLibraryPiece } from "@/components/ui/swap";
-import { PhoneComposer, PillButton, PillField, PillWave } from "@/components/ui";
+import { LibraryContext, useLibraryPiece } from "@/components/ui/swap";
+import { Button as LibraryButton, Captions, Completion, ComposerField, DesktopComposer, PhoneComposer, PillButton, PillField, PillWave, Spinner, StopGlyph, Toolbar } from "@/components/ui";
 import { libraryPiece } from "@/components/ui/swap";
 import { latestAway, scrollToLatest } from "./latest-away";
-import { createEffect, createMemo, createSignal, For, Index, lazy, on, onCleanup, onMount, Show } from "solid-js";
-import { ArrowDownIcon, ArrowUpIcon, CameraIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, DeleteIcon, KeyboardIcon, MicIcon, TextCursorInputIcon, Undo2Icon, ShieldCheckIcon, SquareIcon, TriangleAlertIcon } from "lucide-solid";
-import { ThinkingOrb } from "./thinking-orb";
+import { createEffect, createMemo, createSignal, For, lazy, on, onCleanup, onMount, Show, type JSX } from "solid-js";
+import { ArrowDownIcon, ArrowUpIcon, CameraIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, DeleteIcon, KeyboardIcon, MicIcon, TextCursorInputIcon, Undo2Icon, ShieldCheckIcon, TriangleAlertIcon } from "lucide-solid";
 import {
-  Button,
   Menu,
   MenuContent,
   MenuGroup,
@@ -15,7 +13,6 @@ import {
   MenuRadioItem,
   MenuSeparator,
   MenuTrigger,
-  Spinner,
 } from "@/components/primitives";
 import type { BooleanCapability, Template } from "../api/contracts";
 import type { ActiveChatStore } from "../state/active-chat";
@@ -30,20 +27,19 @@ import { QueuedMessages } from "./queued-messages";
 import { AttachmentStrip } from "./attachment-strip";
 import { composerSlashCommands } from "./composer-slash-commands";
 import { fileFromPastedText, insertTextAt, shouldAttachPastedText } from "./large-paste";
-import { COMPOSER_SURFACE_CHANGE_EVENT, selectedComposerSurface, type ComposerSurfaceMode } from "./composer-surface";
 import { createVoiceDictationClient, type VoiceDictationState } from "./voice-dictation-client";
 import { ContextGauge } from "./context-gauge";
 import type { AudioSignalLevel } from "./voice-audio";
 import { toast } from "solid-sonner";
 import { audioTransferLost, beginDictatedRange, matchesShortcut, releasesShortcut, replaceDictatedRange, shouldAutoSend, shouldReportNoSignal } from "./voice-dictation";
-import { createVoiceWaveformController, MAX_RESPONSIVE_BAR_COUNT, VoiceWaveform, type VoiceWaveformController } from "./voice-waveform";
+import { createVoiceWaveformController, MAX_RESPONSIVE_BAR_COUNT, type VoiceWaveformController } from "./voice-waveform";
 import { ModelSelector } from "./model-selector";
 import { HarnessMark } from "../harness-brand";
 import { parseReviewComments, removeReviewComment, reviewComments, updateReviewComment } from "./review-comments";
 import { ReviewCommentCards } from "./review-comment-cards";
 import "./performance-composer.css";
 import "./composer-desktop.css";
-import "./composer-voice.css";
+import { HostUiRequests } from "./host-ui-card";
 
 export const SPINNING_ACTIVITY = new Set(["starting", "reconnecting", "thinking", "responding", "using_tool", "retrying", "compacting", "stopping", "waiting_for_model"]);
 
@@ -107,16 +103,14 @@ function ComposerBody(props: {
   supports?: (capability: BooleanCapability) => boolean;
 }) {
   let input!: HTMLTextAreaElement;
-  let mobileActions!: HTMLDivElement;
-  let actionsRow!: HTMLDivElement;
-  let actionsLeft!: HTMLDivElement;
+  let actionsRow: HTMLDivElement | undefined;
+  const actionsLeft = () => actionsRow!.firstElementChild as HTMLElement;
   const [slashOpen, setSlashOpen] = createSignal(false);
   const [dictationState, setDictationState] = createSignal<VoiceDictationState>("idle");
   const [dictationError, setDictationError] = createSignal("");
   const [transcriberReady, setTranscriberReady] = createSignal(false);
   const [dictatedRange, setDictatedRange] = createSignal<{ start: number; end: number } | null>(null);
   const [dictationSelectionOwned, setDictationSelectionOwned] = createSignal(false);
-  const [composerSurface, setComposerSurface] = createSignal<ComposerSurfaceMode>(selectedComposerSurface());
   const [phoneLayout, setPhoneLayout] = createSignal(isMobileLayout());
   /* Voice-first phone layouts: idle is a row of buttons with no text line;
      typing (focused, or a draft kept) adds the text row on top; listening
@@ -128,9 +122,6 @@ function ComposerBody(props: {
   const [keyboardWanted, setKeyboardWanted] = createSignal(false);
   const [sendingTake, setSendingTake] = createSignal(false);
   const sendingOut = () => sendingTake() || props.chat.generation() === "submitting";
-  // The floating scroll-to-latest gives way to the row's own in these layouts.
-  createEffect(() => document.documentElement.toggleAttribute("data-voice-composer", voiceFirst()));
-  onCleanup(() => document.documentElement.removeAttribute("data-voice-composer"));
   const toggleKeyboard = () => {
     if (keyboardWanted()) { setKeyboardWanted(false); input.blur(); return; }
     // Focused with the keyboard down and nothing left (a dictation cleared
@@ -144,8 +135,6 @@ function ComposerBody(props: {
   let refocusing = false;
   // A phone has one composer, voice-first: a field over a bar of buttons.
   const voiceFirst = () => phoneLayout();
-  // components v2 draws the desktop composer in the gallery's Library previews; a phone's is Pills.
-  const v2 = () => composerSurface() === "library" && !voiceFirst();
   const phoneMode = () => !voiceFirst() ? undefined
     // Finishing and transcribing still look like listening, so stopping goes
     // straight to the result instead of flashing through the text row.
@@ -155,55 +144,16 @@ function ComposerBody(props: {
     // once rather than holding the draft until the agent takes it.
     : sendingOut() ? "idle"
     : inputFocused() || hasText() ? "typing" : "idle";
-  // Library previews of the bar layout: the row is components v2's PhoneComposer, built from Pills, so its moves are
-  // the library's own (components/ui/swap.ts); this composer only wires its behaviour in.
-  const phoneV2 = () => composerSurface() === "library" && voiceFirst();
   const [optionsOpen, setOptionsOpen] = createSignal(false);
   // The text row was zero wide while hidden; measure it again once shown.
   createEffect(on(phoneMode, () => scheduleResize(), { defer: true }));
-  // Just back from listening: the row's buttons fade back in together, scroll
-  // to latest too, without the delay it takes when it first appears.
-  const [leftListening, setLeftListening] = createSignal(false);
-  let leftListeningTimer: number | undefined;
-  createEffect(on(phoneMode, (mode, previous) => {
-    if (previous !== "listening" || mode === "listening") return;
-    setLeftListening(true);
-    window.clearTimeout(leftListeningTimer);
-    leftListeningTimer = window.setTimeout(() => setLeftListening(false), 400);
-  }, { defer: true }));
-  onCleanup(() => window.clearTimeout(leftListeningTimer));
   // Dictation failures go through the app's normal toasts.
   createEffect(on(dictationError, (message) => { if (message) toast.error(message); }, { defer: true }));
-  /* A new caption line pushes the old ones up; glide them instead of jumping. */
-  const glideCaptions = (element: HTMLElement) => {
-    let height = 0;
-    const observer = new ResizeObserver(() => {
-      const next = element.offsetHeight;
-      if (height && next > height) element.animate([{ transform: `translateY(${next - height}px)` }, { transform: "none" }], { duration: 180, easing: "ease-out" });
-      height = next;
-      // The transcript's scroll-to-latest button sits above the captions.
-      window.dispatchEvent(new CustomEvent("conduit:voice-captions"));
-    });
+  // The transcript's scroll-to-latest and cancel editing ride above the captions.
+  const announceCaptions = (element: HTMLElement) => {
+    const observer = new ResizeObserver(() => window.dispatchEvent(new CustomEvent("conduit:voice-captions")));
     observer.observe(element);
     onCleanup(() => { observer.disconnect(); queueMicrotask(() => window.dispatchEvent(new CustomEvent("conduit:voice-captions"))); });
-  };
-  /* The bars are 2px on a 4px pitch, which on a fractional pixel ratio lands
-     some on 5 device pixels and some on 6, and partly covered ones paint
-     dimmer. Width and gap become whole device pixels, and the plot's right
-     edge, where the bars start, is moved onto one. */
-  const snapWaveform = (track: HTMLElement) => {
-    const snap = () => {
-      const ratio = window.devicePixelRatio || 1;
-      track.style.setProperty("--wave-bar", `${Math.max(1, Math.round(2 * ratio)) / ratio}px`);
-      const plot = track.querySelector<HTMLElement>(".voice-waveform-plot");
-      if (!plot) return;
-      plot.style.paddingRight = "0px";
-      const offset = (plot.getBoundingClientRect().right * ratio) % 1;
-      plot.style.paddingRight = `${offset / ratio}px`;
-    };
-    const observer = new ResizeObserver(snap);
-    queueMicrotask(() => { const plot = track.querySelector(".voice-waveform-plot"); if (plot) observer.observe(plot); snap(); });
-    onCleanup(() => observer.disconnect());
   };
   /* Captions open with the end of what is already in the composer, upright,
      so the new dictation reads as continuing it. Only the tail is kept: three
@@ -216,7 +166,6 @@ function ComposerBody(props: {
     const model = phoneLayout() && (props.models.models().find((item) => item.spec === props.models.model())?.label || props.models.model());
     return model || "Send a message...";
   };
-  const [mobileActionsStacked, setMobileActionsStacked] = createSignal(false);
   /* Desktop: the row's controls keep their size; those that do not fit fold
      into the + menu, least used first. Each one's width is kept from when it
      was last drawn, so a folded control comes back exactly when it fits. */
@@ -233,14 +182,14 @@ function ComposerBody(props: {
     cancelAnimationFrame(refitFrame);
     refitFrame = requestAnimationFrame(() => {
       if (phoneLayout() || !actionsRow?.isConnected) { if (folded().size) setFolded(new Set<ComposerFold>()); return; }
-      for (const element of actionsLeft.querySelectorAll<HTMLElement>(":scope > [data-composer-fold]")) foldWidths.set(element.dataset.composerFold as ComposerFold, element.getBoundingClientRect().width);
+      for (const element of actionsLeft().querySelectorAll<HTMLElement>(":scope > [data-composer-fold]")) foldWidths.set(element.dataset.composerFold as ComposerFold, element.getBoundingClientRect().width);
       const widths = new Map<ComposerFold, number>();
       for (const key of COMPOSER_FOLDS) if (foldPresent[key]() && foldWidths.has(key)) widths.set(key, foldWidths.get(key)!);
-      const gap = parseFloat(getComputedStyle(actionsLeft).columnGap) || 0;
-      const fixedChildren = ([...actionsLeft.children] as HTMLElement[]).filter((child) => !child.dataset.composerFold);
+      const gap = parseFloat(getComputedStyle(actionsLeft()).columnGap) || 0;
+      const fixedChildren = ([...actionsLeft().children] as HTMLElement[]).filter((child) => !child.dataset.composerFold);
       const fixed = fixedChildren.reduce((sum, child) => sum + child.getBoundingClientRect().width, 0) + gap * Math.max(0, fixedChildren.length - 1);
       const row = getComputedStyle(actionsRow);
-      const others = ([...actionsRow.children] as HTMLElement[]).filter((child) => child !== actionsLeft);
+      const others = ([...actionsRow.children] as HTMLElement[]).filter((child) => child !== actionsLeft());
       const available = actionsRow.clientWidth - (parseFloat(row.paddingLeft) || 0) - (parseFloat(row.paddingRight) || 0)
         - others.reduce((sum, child) => sum + child.getBoundingClientRect().width + (parseFloat(row.columnGap) || 0), 0);
       const next = foldsFor(available, fixed, widths, gap);
@@ -249,6 +198,10 @@ function ComposerBody(props: {
     });
   };
   const shows = (key: ComposerFold) => phoneLayout() || !folded().has(key);
+  // The desktop row's folding, observed from whenever its Toolbar is drawn; a phone's row has none of it.
+  const foldObserver = new ResizeObserver(refit);
+  onCleanup(() => foldObserver.disconnect());
+  const toolbarRef = (element: HTMLDivElement) => { actionsRow = element; foldObserver.observe(element); refit(); };
   const dictationWaveform = createVoiceWaveformController(MAX_RESPONSIVE_BAR_COUNT);
   let pushToTalkActive = false;
   /* One take per press of the mic. A stopped take keeps finalising on its own
@@ -321,16 +274,6 @@ function ComposerBody(props: {
   const resize = () => {
     input.style.height = "auto";
     input.style.height = `${Math.min(input.scrollHeight, 192)}px`;
-    if (!phoneLayout() || voiceFirst() || !mobileActions) return setMobileActionsStacked(false);
-    /* The actions stack the moment the draft reaches its third line. Stacked,
-       the draft is a button wider and may rewrap to two lines; it stays
-       stacked until it fits on one, which at the narrower width is at most
-       two -- so the layout never flips back and forth. */
-    const style = getComputedStyle(input);
-    const lineHeight = Number.parseFloat(style.lineHeight) || Number.parseFloat(style.fontSize) * 1.4;
-    const padding = Number.parseFloat(style.paddingTop) + Number.parseFloat(style.paddingBottom);
-    const lines = Math.round((input.scrollHeight - padding) / lineHeight);
-    setMobileActionsStacked(mobileActionsStacked() ? lines >= 2 : lines >= 3);
   };
 
   // Every reason to resize that arrives in one task resizes once: the first
@@ -759,10 +702,6 @@ function ComposerBody(props: {
     };
     syncPhoneLayout();
     media?.addEventListener("change", syncPhoneLayout);
-    const foldObserver = new ResizeObserver(refit);
-    // The desktop row's folding; a v2 phone row has none of it (phoneV2 renders no actions row).
-    if (actionsRow) foldObserver.observe(actionsRow);
-    if (mobileActions) foldObserver.observe(mobileActions);
     // What the controls say changes their width: a model's name, a permission.
     createEffect(() => {
       props.models.model(); props.models.effort(); props.permissions?.selected(); props.serviceLevels?.selected();
@@ -770,7 +709,7 @@ function ComposerBody(props: {
       for (const key of COMPOSER_FOLDS) foldPresent[key]();
       refit();
     });
-    onCleanup(() => { foldObserver.disconnect(); cancelAnimationFrame(refitFrame); });
+    onCleanup(() => cancelAnimationFrame(refitFrame));
     props.onStatusChange?.(composerStatus);
     createEffect(() => {
       props.chat.draft();
@@ -783,8 +722,6 @@ function ComposerBody(props: {
       historyIndex = null;
       historyDraft = "";
     });
-    // A v2 composer has one material; the setting picks between the classic ones.
-    const composerSurfaceChanged = (event: Event) => { if (composerSurface() !== "library") setComposerSurface((event as CustomEvent<ComposerSurfaceMode>).detail); };
     const voiceKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented || document.querySelector('.settings-dialog[data-state="open"]')) return;
       if (props.keyboardOwner && !props.keyboardOwner()) return;
@@ -819,14 +756,12 @@ function ComposerBody(props: {
     };
     window.addEventListener(KEYBOARD_HIDDEN_EVENT, keyboardHidden);
     onCleanup(() => window.removeEventListener(KEYBOARD_HIDDEN_EVENT, keyboardHidden));
-    window.addEventListener(COMPOSER_SURFACE_CHANGE_EVENT, composerSurfaceChanged);
     window.addEventListener("keydown", voiceKeyDown, true);
     window.addEventListener("keyup", voiceKeyUp, true);
     window.addEventListener("conduit:toggle-dictation", voiceToggle);
     onCleanup(() => {
       media?.removeEventListener("change", syncPhoneLayout);
       props.onStatusChange?.(null);
-      window.removeEventListener(COMPOSER_SURFACE_CHANGE_EVENT, composerSurfaceChanged);
       window.removeEventListener("keydown", voiceKeyDown, true);
       window.removeEventListener("keyup", voiceKeyUp, true);
       window.removeEventListener("conduit:toggle-dictation", voiceToggle);
@@ -835,111 +770,69 @@ function ComposerBody(props: {
   });
 
   const field = () => <>
-            <textarea ref={input} rows={1} class={useLibrary() ? "ui-textarea" : undefined} aria-label="Message the agent" data-has-text={hasText() ? "true" : "false"} data-dictated-range={dictationSelectionOwned() && dictatedRange() ? "true" : undefined} placeholder={!props.serverOnline ? "Server unavailable" : !props.chat.loadedId() ? "New chat" : interactive() ? placeholder() : "Reconnecting..."} value={props.chat.draft()} disabled={!props.serverOnline || !interactive()} onInput={(event) => change(event.currentTarget.value)} onPaste={paste} onSelect={selectionChanged} onKeyDown={keydown} inputMode={voiceFirst() && !keyboardWanted() ? "none" : undefined} onFocus={() => setInputFocused(true)} onBlur={() => { setInputFocused(false); if (!refocusing) setKeyboardWanted(false); }} />
-            <Show when={slashOpen() && slashCommand()}>{(item) => <div class="slash-completion" aria-hidden="true"><span>{props.chat.draft()}</span>{item().command.slice(props.chat.draft().length)} <small>{item().description}</small></div>}</Show>
+    <textarea ref={input} rows={1} class="ui-textarea" data-composer-input="" aria-label="Message the agent" data-held={dictationSelectionOwned() && dictatedRange() ? "" : undefined} placeholder={!props.serverOnline ? "Server unavailable" : !props.chat.loadedId() ? "New chat" : interactive() ? placeholder() : "Reconnecting..."} value={props.chat.draft()} disabled={!props.serverOnline || !interactive()} onInput={(event) => change(event.currentTarget.value)} onPaste={paste} onSelect={selectionChanged} onKeyDown={keydown} inputMode={voiceFirst() && !keyboardWanted() ? "none" : undefined} onFocus={() => setInputFocused(true)} onBlur={() => { setInputFocused(false); if (!refocusing) setKeyboardWanted(false); }} />
+    <Show when={slashOpen() && slashCommand()}>{(item) => <Completion typed={props.chat.draft()} rest={item().command.slice(props.chat.draft().length)} detail={item().description} />}</Show>
   </>;
-  return <div class={v2() ? "composer-wrap ui-composer-width" : "composer-wrap"} data-part="composer" data-library={composerSurface() === "library" ? "" : undefined} data-phone-layout={voiceFirst() ? "bar" : undefined} data-latest-away={voiceFirst() && latestAway() ? "" : undefined} data-phone-mode={phoneMode()} data-left-listening={leftListening() ? "" : undefined} data-primary-hidden={voiceFirst() && !hasPayload() && !stoppable() ? "" : undefined} style={phoneMode() === "listening" ? { "--voice-level": String(dictationWaveform.level()) } : undefined}>
-    <Show when={!phoneV2()}><div class="composer-edit-actions" data-shown={editing() ? "" : undefined} aria-hidden={editing() ? undefined : "true"}>
-      <For each={EDIT_ACTIONS}>{(action) => <Button variant="ghost" size="icon-sm" class="composer-edit-action composer-surface-material" data-composer-surface={composerSurface()} aria-label={action.label} title={action.label} tabIndex={editing() ? 0 : -1} onPointerDown={(event) => event.preventDefault()} onClick={() => editActions[action.key]()}>{action.icon()}</Button>}</For>
-    </div></Show>
-    <Show when={phoneMode() === "listening" && !phoneV2()}>
-      <Show when={phoneMode() === "listening"}><div class="composer-voice-captions" data-empty={captionLead() || dictatedText() ? undefined : ""} data-lead={captionLead() ? "" : undefined} aria-live="polite"><p><span ref={glideCaptions} class="composer-voice-words"><Show when={captionLead()}><span class="composer-voice-lead">{captionLead()}</span></Show><Index each={dictatedText().split(/(?<=\s)/)}>{(word) => <span>{word()}</span>}</Index></span></p></div></Show>
-    </Show>
-    <QueuedMessages
-      messages={props.chat.pendingMessages()}
-      surface={composerSurface()}
-      busy={busy()}
-      canInterrupt={supports("cancel")}
-      onInterruptAndSend={() => void props.chat.interruptAndSend()}
-      onEdit={props.chat.editQueued}
-      onDiscard={props.chat.discardQueued}
-    />
+  const riders = () => <>
+    <QueuedMessages messages={props.chat.pendingMessages()} surface="library" busy={busy()} canInterrupt={supports("cancel")} onInterruptAndSend={() => void props.chat.interruptAndSend()} onEdit={props.chat.editQueued} onDiscard={props.chat.discardQueued} />
     <ReviewCommentCards items={comments()} chatId={props.chat.loadedId() ?? ""} label="File references" onRemove={(comment) => removeReviewComment(comment.id)} onUpdate={(comment, note) => updateReviewComment(comment.id, note)} />
     <Show when={props.attachmentsSupported !== false}>
-      <AttachmentStrip items={props.attachments.items()} chatId={props.chat.loadedId()} surface={composerSurface()} onRemove={(item) => props.attachments.remove(item)} onRetry={(item) => props.attachments.retry(item)} />
+      <AttachmentStrip items={props.attachments.items()} chatId={props.chat.loadedId()} surface="library" onRemove={(item) => props.attachments.remove(item)} onRetry={(item) => props.attachments.retry(item)} />
     </Show>
-    <Show when={phoneV2()}>
-      <PhoneComposer mode={phoneMode() ?? "idle"} layout="bar" under={optionsOpen()} editing={editing()} level={Math.min(1, dictationWaveform.level() * 2.5)} onTrack={toggleDictation}
-        field={<PillField>{field()}</PillField>}
-        track={<PillWave levels={dictationWaveform.history()} gain={2.5} />}
-        captions={<Show when={captionLead() || dictatedText()}><p><span ref={glideCaptions} class="composer-voice-words"><Show when={captionLead()}><span class="composer-voice-lead">{captionLead()}</span></Show><Index each={dictatedText().split(/(?<=\s)/)}>{(word) => <span>{word()}</span>}</Index></span></p></Show>}
-        edit={<For each={EDIT_ACTIONS}>{(action) => <PillButton label={action.label} icon={action.icon()} button={{ tabIndex: editing() ? 0 : -1, onPointerDown: (event) => event.preventDefault(), onClick: () => editActions[action.key]() }} />}</For>}>
-        <MobileComposerOptions composer={props} pill onOpenChange={setOptionsOpen} />
-        <Show when={props.attachmentsSupported !== false}>
-          <input ref={cameraInput} type="file" accept="image/*" capture="environment" hidden onChange={(event) => { const files = Array.from(event.currentTarget.files || []); event.currentTarget.value = ""; if (files.length) props.attachments.addFiles(files); }} />
-          <PillButton label="Take a photo" icon={<CameraIcon />} button={{ title: "Take a photo (hold to choose files)", disabled: !props.serverOnline || !interactive(), onPointerDown: cameraPointerDown, onPointerUp: cameraPointerUp, onPointerLeave: cameraPointerCancel, onPointerCancel: cameraPointerCancel, onContextMenu: (event) => event.preventDefault() }} />
-        </Show>
-        <PillButton label={keyboardWanted() ? "Close the keyboard" : "Type a message"} icon={<KeyboardIcon />} button={{ disabled: !props.serverOnline || !interactive(), onPointerDown: (event) => event.preventDefault(), onClick: toggleKeyboard }} />
-        <PillButton folded={!latestAway()} label="Scroll to latest" icon={<ArrowDownIcon />} button={{ onPointerDown: (event) => event.preventDefault(), onClick: scrollToLatest }} />
-        <PillButton stretch aura label={["starting", "listening"].includes(dictationState()) ? "Stop voice dictation" : "Start voice dictation"} icon={<MicIcon />} button={{ "data-state": dictationState(), "aria-pressed": dictating(), title: `Voice dictation (${props.voiceSettings.shortcut})`, disabled: !props.serverOnline || !interactive(), onPointerDown: captureDictationLaunch, onClick: toggleDictation }} />
-        <PillButton folded={phoneMode() === "listening" || !(stoppable() && newDraft())} label="Stop response" icon={<Show when={props.chat.stopping()} fallback={<SquareIcon />}><Spinner /></Show>} button={{ onClick: props.chat.stop }} />
-        {/* One slot, one arrow: Stop and send while listening, Send with a draft, Stop while the agent works; folded with none. */}
-        <PillButton voice folded={phoneMode() !== "listening" && !hasPayload() && !stoppable()}
-          label={phoneMode() === "listening" ? "Stop and send" : stoppable() && !newDraft() ? "Stop response" : busy() ? "Send to the agent" : "Send message"}
-          icon={<Show when={phoneMode() !== "listening" && stoppable() && !newDraft()} fallback={<ArrowUpIcon />}><Show when={props.chat.stopping()} fallback={<SquareIcon />}><Spinner /></Show></Show>}
-          button={{ disabled: phoneMode() !== "listening" && !(stoppable() && !newDraft()) && !canSend(), onPointerDown: (event) => { if (phoneMode() === "listening") event.preventDefault(); },
-            onClick: () => phoneMode() === "listening" ? stopAndSend() : stoppable() && !newDraft() ? props.chat.stop() : sendMessage() }} />
-      </PhoneComposer>
+  </>;
+  // What the agent is blocked on: on a desktop it takes the composer's place; on a phone it rides over the field.
+  const question = () => <Show when={props.chat.hostUiRequests().length}><HostUiRequests requests={props.chat.hostUiRequests()} onRespond={props.chat.respondHostUi} onStop={() => props.chat.stop()} /></Show>;
+  const stopButton = () => <LibraryButton variant="ghost" size="icon-sm" aria-label="Stop response" onClick={props.chat.stop}><Show when={props.chat.stopping()} fallback={<StopGlyph />}><Spinner /></Show></LibraryButton>;
+  // While dictating, the voice; otherwise what the composer or the agent is doing.
+  const status = (): JSX.Element => <Show when={!recording()} fallback={<PillWave levels={dictationWaveform.history()} gain={2.5} />}>
+    <Show when={dictationLabel()} fallback={<Show when={activity()?.label && activity()?.label !== "Ready"}>
+      <Show when={SPINNING_ACTIVITY.has(activity()?.kind || "")}><Spinner /></Show><Show when={["request_failed", "runtime_failed"].includes(activity()?.kind || "")}><TriangleAlertIcon aria-hidden="true" /></Show>{activity()?.label}
+    </Show>}>{dictationLabel()}</Show>
+  </Show>;
+  const desktop = () => <DesktopComposer riders={riders()} takeover={question()}>
+    <ComposerField>{field()}</ComposerField>
+    <Toolbar ref={toolbarRef} status={status()}
+      start={<>
+        <ComposerPlusMenu folded={folded()} chat={props.chat} models={props.models} permissions={props.permissions} serviceLevels={props.serviceLevels}
+          profiles={props.profiles} activeProfile={props.activeProfile} place={props.place} disabled={!props.serverOnline || !interactive()} modelSwitch={supports("modelSwitch")}
+          onChooseProfile={props.onChooseProfile} onOpenModelSelector={props.onOpenModelSelector} modelSelectorShortcut={props.modelSelectorShortcut}
+          onAttach={props.attachmentsSupported !== false ? attach : undefined} />
+        <Show when={props.folder}>{(folder) => <FolderPicker {...folder()} />}</Show>
+        <Show when={shows("context")}><div data-composer-fold="context"><ContextGauge chat={props.chat} compact canCompact={supports("compaction")} /></div></Show>
+        <Show when={props.profiles.length && shows("profile")}><div data-composer-fold="profile"><Menu><MenuTrigger {...libraryPiece("select").data} class={`model-trigger composer-profile-trigger ${libraryPiece("select").class}`.trim()} title={props.activeProfile?.label || "Profile"} aria-label={`Profile ${props.activeProfile?.label || "General"}`} disabled={!props.serverOnline || !interactive()}><HarnessMark id={props.activeProfile?.implementation || "conduit"} class="size-4" /><ChevronDownIcon /></MenuTrigger><MenuContent class="w-72"><MenuGroup><MenuLabel>Profile</MenuLabel><MenuRadioGroup value={props.activeProfile?.id || ""} onChange={props.onChooseProfile}><For each={props.profiles}>{(item) => <MenuRadioItem value={item.id} disabled={(props.chat.status() !== "draft" && item.id !== props.activeProfile?.id) || item.disabled}><HarnessMark id={item.implementation || "conduit"} class="size-4" /><span class="composer-profile-copy"><span>{item.label}</span><small>{item.implementation || "conduit"}</small></span></MenuRadioItem>}</For></MenuRadioGroup></MenuGroup></MenuContent></Menu></div></Show>
+        <Show when={shows("model")}><div data-composer-fold="model">
+          <ModelSelector models={props.models.models()} model={props.models.model()} thinkingLevel={props.models.effort()} notice={props.models.notice()} loading={props.modelsLoading} disabled={!props.serverOnline || !interactive() || !supports("modelSwitch")} onModelChange={(value) => void props.models.chooseModel(value)} onThinkingLevelChange={(value) => void props.models.chooseEffort(value)} onSearchModels={props.onOpenModelSelector} searchShortcut={props.modelSelectorShortcut} />
+        </div></Show>
+        <Show when={(props.permissions?.profiles().length || props.serviceLevels?.levels().length) && shows("permissions")}><div data-composer-fold="permissions"><Menu><MenuTrigger {...libraryPiece("select").data} class={`model-trigger composer-permission-trigger ${libraryPiece("select").class}`.trim()} aria-label="Session settings" disabled={!props.serverOnline || !interactive()}><ShieldCheckIcon /><span>{props.permissions?.profiles().find((profile) => profile.id === props.permissions?.selected())?.label || "Settings"}</span><ChevronDownIcon /></MenuTrigger><MenuContent class="w-72"><Show when={props.permissions?.profiles().length}><MenuGroup><MenuLabel>Permissions</MenuLabel><MenuRadioGroup value={props.permissions?.selected() || ""} onChange={(value) => void props.permissions?.choose(value)}><For each={props.permissions?.profiles() || []}>{(profile) => <MenuRadioItem value={profile.id} disabled={!profile.allowed}><span class="shrink-0 whitespace-nowrap">{profile.label}</span><Show when={profile.description}><span class="ml-auto max-w-40 truncate text-xs text-muted-foreground">{profile.description}</span></Show></MenuRadioItem>}</For></MenuRadioGroup></MenuGroup></Show><Show when={props.serviceLevels?.levels().length}><Show when={props.permissions?.profiles().length}><MenuSeparator /></Show><MenuGroup><MenuLabel>Service level</MenuLabel><MenuRadioGroup value={props.serviceLevels?.selected() || ""} onChange={(value) => void props.serviceLevels?.choose(value)}><For each={props.serviceLevels?.levels() || []}>{(level) => <MenuRadioItem value={level.id}>{level.label}</MenuRadioItem>}</For></MenuRadioGroup></MenuGroup></Show></MenuContent></Menu></div></Show>
+      </>}
+      end={<LibraryButton variant="ghost" size="icon-sm" data-state={dictationState()} aria-label={["starting", "listening"].includes(dictationState()) ? "Stop voice dictation" : "Start voice dictation"} aria-pressed={dictating()} title={`Voice dictation (${props.voiceSettings.shortcut})`} disabled={!props.serverOnline || !interactive()} onPointerDown={captureDictationLaunch} onClick={toggleDictation}><Show when={dictationState() === "starting"} fallback={<MicIcon />}><Spinner /></Show></LibraryButton>}
+      // One primary slot, so nothing beside it moves: Stop while the agent works; once a draft is typed, Send again
+      // (which queues the message for the agent), and Stop steps in beside it.
+      aside={<Show when={stoppable() && newDraft()}>{stopButton()}</Show>}
+      primary={<Show when={stoppable() && !newDraft()} fallback={<LibraryButton variant="ghost" size="icon-sm" aria-label={busy() ? "Send to the agent" : "Send message"} title={busy() ? "Send — the agent takes it when the current step finishes" : undefined} disabled={!canSend()} onClick={() => sendMessage()}><ArrowUpIcon /></LibraryButton>}>{stopButton()}</Show>} />
+  </DesktopComposer>;
+  const phone = () => <PhoneComposer mode={phoneMode() ?? "idle"} layout="bar" under={optionsOpen()} editing={editing()} level={Math.min(1, dictationWaveform.level() * 2.5)} onTrack={toggleDictation}
+    riders={<>{question()}{riders()}</>}
+    field={<PillField>{field()}</PillField>}
+    track={<PillWave levels={dictationWaveform.history()} gain={2.5} />}
+    captions={<Show when={captionLead() || dictatedText()}><Captions lead={captionLead()} words={dictatedText().split(/(?<=\s)/)} ref={announceCaptions} /></Show>}
+    edit={<For each={EDIT_ACTIONS}>{(action) => <PillButton label={action.label} icon={action.icon()} button={{ tabIndex: editing() ? 0 : -1, onPointerDown: (event) => event.preventDefault(), onClick: () => editActions[action.key]() }} />}</For>}>
+    <MobileComposerOptions composer={props} pill onOpenChange={setOptionsOpen} />
+    <Show when={props.attachmentsSupported !== false}>
+      {/* Tap: the camera, through the platform's own capture. Hold: the same picker as Attach files. */}
+      <input ref={cameraInput} type="file" accept="image/*" capture="environment" hidden onChange={(event) => { const files = Array.from(event.currentTarget.files || []); event.currentTarget.value = ""; if (files.length) props.attachments.addFiles(files); }} />
+      <PillButton label="Take a photo" icon={<CameraIcon />} button={{ title: "Take a photo (hold to choose files)", disabled: !props.serverOnline || !interactive(), onPointerDown: cameraPointerDown, onPointerUp: cameraPointerUp, onPointerLeave: cameraPointerCancel, onPointerCancel: cameraPointerCancel, onContextMenu: (event) => event.preventDefault() }} />
     </Show>
-    <Show when={!phoneV2()}>
-    <div class="composer-surface-shell" data-composer-surface={composerSurface()}>
-      {/* Library previews on a desktop: components v2's DesktopComposer -- its frost, Field and Toolbar (components/ui/swap.ts). */}
-      <div class={v2() ? "composer ui-frost ui-desktop-composer" : "composer composer-surface-material"} data-composer-surface={composerSurface()} data-surface={v2() ? "frost" : undefined} data-lift={v2() ? "rest" : undefined}>
-                <Show when={voiceFirst()}><div ref={snapWaveform} class="composer-voice-track" onClick={() => { if (phoneMode() === "listening") toggleDictation(); }}><div class="composer-voice-glow" aria-hidden="true"><i /><i /><i /><i /></div><VoiceWaveform class="chat-status-waveform composer-voice-waveform" history={dictationWaveform.history} level={dictationWaveform.level} peak={dictationWaveform.peak} state={recorderMonitorState()} variant="compact" barDensity={4} gain={2.5} ariaLabel="Microphone input level" /></div></Show>
-        <div class="composer-content">
-          <MobileComposerOptions composer={props} />
-          <div class={v2() ? "ui-composer-field" : "composer-input-shell"}>{field()}</div>
-          <div ref={actionsRow} class={v2() ? "ui-toolbar" : "composer-actions"} data-mobile-actions-stacked={mobileActionsStacked()}
-            onPointerDown={(event) => { const control = (event.target as Element).closest("button"); if (control) control.dataset.pointerOpened = ""; }}
-            onKeyDown={(event) => { if (["Enter", " ", "ArrowDown", "ArrowUp"].includes(event.key)) delete (event.target as HTMLElement).dataset?.pointerOpened; }}>
-            <div ref={actionsLeft} class={v2() ? "ui-toolbar-start" : "composer-actions-left"}>
-              <Show when={voiceFirst() && props.attachmentsSupported !== false}>
-                {/* Tap: the camera, through the platform's own capture. Hold:
-                    the same picker as Attach files. */}
-                <input ref={cameraInput} type="file" accept="image/*" capture="environment" hidden onChange={(event) => { const files = Array.from(event.currentTarget.files || []); event.currentTarget.value = ""; if (files.length) props.attachments.addFiles(files); }} />
-                <Button variant="ghost" size="icon-sm" class="composer-camera-trigger" aria-label="Take a photo" title="Take a photo (hold to choose files)" disabled={!props.serverOnline || !interactive()} onPointerDown={cameraPointerDown} onPointerUp={cameraPointerUp} onPointerLeave={cameraPointerCancel} onPointerCancel={cameraPointerCancel} onContextMenu={(event) => event.preventDefault()}><CameraIcon /></Button>
-              </Show>
-              <Show when={voiceFirst()}><Button variant="ghost" size="icon-sm" class="composer-latest-trigger" data-shown={latestAway() ? "" : undefined} aria-label="Scroll to latest" title="Scroll to latest" tabIndex={latestAway() ? 0 : -1} aria-hidden={latestAway() ? undefined : "true"} onPointerDown={(event) => event.preventDefault()} onClick={scrollToLatest}><ArrowDownIcon /></Button></Show>
-              <Show when={voiceFirst()}><Button variant="ghost" size="icon-sm" class="composer-keyboard-trigger" aria-label={keyboardWanted() ? "Close the keyboard" : "Type a message"} disabled={!props.serverOnline || !interactive()} onPointerDown={(event) => event.preventDefault()} onClick={toggleKeyboard}><KeyboardIcon /></Button></Show>
-              <Show when={!phoneLayout()}><ComposerPlusMenu folded={folded()} chat={props.chat} models={props.models} permissions={props.permissions} serviceLevels={props.serviceLevels}
-                profiles={props.profiles} activeProfile={props.activeProfile} place={props.place} disabled={!props.serverOnline || !interactive()} modelSwitch={supports("modelSwitch")}
-                onChooseProfile={props.onChooseProfile} onOpenModelSelector={props.onOpenModelSelector} modelSelectorShortcut={props.modelSelectorShortcut}
-                onAttach={props.attachmentsSupported !== false ? attach : undefined} /></Show>
-              <Show when={props.folder}>{(folder) => <FolderPicker {...folder()} />}</Show>
-              <Show when={shows("context")}><div class="composer-desktop-setting" data-composer-fold="context"><ContextGauge chat={props.chat} compact canCompact={supports("compaction")} /></div></Show>
-              <Show when={props.profiles.length && shows("profile")}><div class="composer-desktop-setting" data-composer-fold="profile"><Menu><MenuTrigger {...libraryPiece("select").data} class={`model-trigger composer-profile-trigger ${libraryPiece("select").class}`.trim()} title={props.activeProfile?.label || "Profile"} aria-label={`Profile ${props.activeProfile?.label || "General"}`} disabled={!props.serverOnline || !interactive()}><HarnessMark id={props.activeProfile?.implementation || "conduit"} class="size-4" /><ChevronDownIcon /></MenuTrigger><MenuContent class="w-72"><MenuGroup><MenuLabel>Profile</MenuLabel><MenuRadioGroup value={props.activeProfile?.id || ""} onChange={props.onChooseProfile}><For each={props.profiles}>{(item) => <MenuRadioItem value={item.id} disabled={(props.chat.status() !== "draft" && item.id !== props.activeProfile?.id) || item.disabled}><HarnessMark id={item.implementation || "conduit"} class="size-4" /><span class="composer-profile-copy"><span>{item.label}</span><small>{item.implementation || "conduit"}</small></span></MenuRadioItem>}</For></MenuRadioGroup></MenuGroup></MenuContent></Menu></div></Show>
-              <Show when={shows("model")}><div class="composer-desktop-setting" data-composer-fold="model">
-                <ModelSelector models={props.models.models()} model={props.models.model()} thinkingLevel={props.models.effort()} notice={props.models.notice()} loading={props.modelsLoading} disabled={!props.serverOnline || !interactive() || !supports("modelSwitch")} onModelChange={(value) => void props.models.chooseModel(value)} onThinkingLevelChange={(value) => void props.models.chooseEffort(value)} onSearchModels={props.onOpenModelSelector} searchShortcut={props.modelSelectorShortcut} />
-              </div></Show>
-              <Show when={(props.permissions?.profiles().length || props.serviceLevels?.levels().length) && shows("permissions")}><div class="composer-desktop-setting" data-composer-fold="permissions"><Menu><MenuTrigger {...libraryPiece("select").data} class={`model-trigger composer-permission-trigger ${libraryPiece("select").class}`.trim()} aria-label="Session settings" disabled={!props.serverOnline || !interactive()}><ShieldCheckIcon /><span>{props.permissions?.profiles().find((profile) => profile.id === props.permissions?.selected())?.label || "Settings"}</span><ChevronDownIcon /></MenuTrigger><MenuContent class="w-72"><Show when={props.permissions?.profiles().length}><MenuGroup><MenuLabel>Permissions</MenuLabel><MenuRadioGroup value={props.permissions?.selected() || ""} onChange={(value) => void props.permissions?.choose(value)}><For each={props.permissions?.profiles() || []}>{(profile) => <MenuRadioItem value={profile.id} disabled={!profile.allowed}><span class="shrink-0 whitespace-nowrap">{profile.label}</span><Show when={profile.description}><span class="ml-auto max-w-40 truncate text-xs text-muted-foreground">{profile.description}</span></Show></MenuRadioItem>}</For></MenuRadioGroup></MenuGroup></Show><Show when={props.serviceLevels?.levels().length}><Show when={props.permissions?.profiles().length}><MenuSeparator /></Show><MenuGroup><MenuLabel>Service level</MenuLabel><MenuRadioGroup value={props.serviceLevels?.selected() || ""} onChange={(value) => void props.serviceLevels?.choose(value)}><For each={props.serviceLevels?.levels() || []}>{(level) => <MenuRadioItem value={level.id}>{level.label}</MenuRadioItem>}</For></MenuRadioGroup></MenuGroup></Show></MenuContent></Menu></div></Show>
-            </div>
-            <Show when={recording() && !phoneLayout()}><VoiceWaveform class="composer-status-waveform composer-actions-waveform" history={dictationWaveform.history} level={dictationWaveform.level} peak={dictationWaveform.peak} state={recorderMonitorState()} variant="compact" barDensity={3} ariaLabel={dictationLabel() || "Microphone input level"} /></Show>
-            <div ref={mobileActions} class={v2() ? "ui-toolbar-end" : "composer-actions-right"}>
-              <Show when={!recording() && (dictationLabel() || (activity()?.label && activity()?.label !== "Ready"))}><span class="composer-status-state composer-actions-status" role="status" aria-live="polite"><Show when={dictationLabel()} fallback={<><Show when={SPINNING_ACTIVITY.has(activity()?.kind || "")}><Spinner /></Show><Show when={["request_failed", "runtime_failed"].includes(activity()?.kind || "")}><TriangleAlertIcon aria-hidden="true" /></Show>{activity()?.label || "Ready"}</>}>{dictationLabel()}</Show></span></Show>
-              <Button variant="ghost" size="icon-sm" class="dictation-trigger" data-state={dictationState()} aria-label={["starting", "listening"].includes(dictationState()) ? "Stop voice dictation" : "Start voice dictation"} aria-pressed={dictating()} title={`Voice dictation (${props.voiceSettings.shortcut})`} disabled={!props.serverOnline || !interactive()} onPointerDown={captureDictationLaunch} onClick={toggleDictation}><Show when={voiceFirst()} fallback={<Show when={dictationState() === "starting"} fallback={<MicIcon />}><Spinner /></Show>}><div class="composer-voice-glow" aria-hidden="true"><i /><i /><i /><i /></div><span class="composer-voice-mic"><MicIcon /></span><ThinkingOrb state="listening" class="composer-voice-orb" paused={phoneMode() !== "listening"} /></Show></Button>
-              {/* One primary slot, so nothing beside it moves. While the agent
-                  works it is Stop; once a draft is typed it is Send again --
-                  which queues the message for the agent -- and Stop steps to
-                  its left. Each change scales the new action in. */}
-              <Show when={stoppable() && newDraft()}>
-                <Button variant="ghost" size="icon-sm" class={v2() ? "composer-stop-aside ui-toolbar-aside" : "composer-stop-aside"} aria-label="Stop response" onClick={props.chat.stop}><Show when={props.chat.stopping()} fallback={<SquareIcon />}><Spinner /></Show></Button>
-              </Show>
-              <Show when={voiceFirst() || !(phoneMode() === "idle" && !stoppable())}><span class={v2() ? "ui-toolbar-primary" : "composer-primary-slot"}>
-                <Show when={voiceFirst()}>
-                  <Button variant="ghost" size="icon-sm" class="composer-stop-send" data-shown={phoneMode() === "listening" ? "" : undefined} aria-hidden={phoneMode() === "listening" ? undefined : "true"} tabIndex={phoneMode() === "listening" ? 0 : -1} aria-label="Stop and send" title="Stop dictating and send" onPointerDown={(event) => event.preventDefault()} onClick={stopAndSend}><ArrowUpIcon /></Button>
-                </Show>
-                <Show when={phoneMode() !== "listening"}>
-                <Show when={stoppable() && !newDraft()} fallback={
-                  <Button variant="ghost" size="icon-sm" class="composer-send-trigger" aria-label={busy() ? "Send to the agent" : "Send message"} title={busy() ? "Send — the agent takes it when the current step finishes" : undefined} disabled={!canSend()} onClick={() => sendMessage()}><ArrowUpIcon /></Button>}>
-                  <Button variant="ghost" size="icon-sm" class="composer-stop-trigger" aria-label="Stop response" onClick={props.chat.stop}><Show when={props.chat.stopping()} fallback={<SquareIcon />}><Spinner /></Show></Button>
-                </Show>
-                </Show>
-              </span></Show>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-    </Show>
-  </div>;
+    <PillButton label={keyboardWanted() ? "Close the keyboard" : "Type a message"} icon={<KeyboardIcon />} button={{ disabled: !props.serverOnline || !interactive(), onPointerDown: (event) => event.preventDefault(), onClick: toggleKeyboard }} />
+    <PillButton folded={!latestAway()} label="Scroll to latest" icon={<ArrowDownIcon />} button={{ onPointerDown: (event) => event.preventDefault(), onClick: scrollToLatest }} />
+    <PillButton stretch aura label={["starting", "listening"].includes(dictationState()) ? "Stop voice dictation" : "Start voice dictation"} icon={<MicIcon />} button={{ "data-state": dictationState(), "aria-pressed": dictating(), title: `Voice dictation (${props.voiceSettings.shortcut})`, disabled: !props.serverOnline || !interactive(), onPointerDown: captureDictationLaunch, onClick: toggleDictation }} />
+    <PillButton folded={phoneMode() === "listening" || !(stoppable() && newDraft())} label="Stop response" icon={<Show when={props.chat.stopping()} fallback={<StopGlyph />}><Spinner /></Show>} button={{ onClick: props.chat.stop }} />
+    {/* One slot, one arrow: Stop and send while listening, Send with a draft, Stop while the agent works; folded with none. */}
+    <PillButton voice folded={phoneMode() !== "listening" && !hasPayload() && !stoppable()}
+      label={phoneMode() === "listening" ? "Stop and send" : stoppable() && !newDraft() ? "Stop response" : busy() ? "Send to the agent" : "Send message"}
+      icon={<Show when={phoneMode() !== "listening" && stoppable() && !newDraft()} fallback={<ArrowUpIcon />}><Show when={props.chat.stopping()} fallback={<StopGlyph />}><Spinner /></Show></Show>}
+      button={{ disabled: phoneMode() !== "listening" && !(stoppable() && !newDraft()) && !canSend(), onPointerDown: (event) => { if (phoneMode() === "listening") event.preventDefault(); },
+        onClick: () => phoneMode() === "listening" ? stopAndSend() : stoppable() && !newDraft() ? props.chat.stop() : sendMessage() }} />
+  </PhoneComposer>;
+  return <Show when={voiceFirst()} fallback={desktop()}>{phone()}</Show>;
 }

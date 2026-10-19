@@ -1,7 +1,6 @@
 /* Current-main Voice settings additions retained by the performance rebuild. */
 
 /* Current Voice lifecycle names, rendered by the rebuild composer. */
-.dictation-trigger[data-state="listening"] { box-shadow: 0 0 0 2.4px color-mix(in oklch, var(--ring), transparent 70%); }
 
 .voice-settings { gap: 8px; }
 .voice-settings-intro { margin: 0; color: var(--muted-foreground); font-size: 9.6px; line-height: 1.4; }
@@ -48,7 +47,6 @@
 /* Current-main Voice settings additions retained by the performance rebuild. */
 
 /* Current Voice lifecycle names, rendered by the rebuild composer. */
-.dictation-trigger[data-state="listening"] { box-shadow: 0 0 0 3px color-mix(in oklch, var(--ring), transparent 70%); }
 
 .voice-settings { gap: 10px; }
 .voice-settings-intro { margin: 0; color: var(--muted-foreground); font-size: 12px; line-height: 1.4; }

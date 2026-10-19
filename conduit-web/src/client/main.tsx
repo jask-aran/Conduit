@@ -1075,7 +1075,7 @@ function App() {
    */
   const DASHBOARD_LEAVE_MS = 200;
   const leaveDashboard = (): Promise<DOMRect | null> => {
-    const wrap = document.querySelector<HTMLElement>('.chat-main [data-part="composer"]');
+    const wrap = document.querySelector<HTMLElement>('.chat-main :is(.ui-composer-slot, .ui-phone-composer)');
     if (!wrap || matchMedia("(prefers-reduced-motion: reduce)").matches) return Promise.resolve(null);
     const from = wrap.getBoundingClientRect();
     document.documentElement.dataset.routeMotion = "leaving";
@@ -1093,7 +1093,7 @@ function App() {
     if (!from) return void delete root.dataset.routeMotion;
     requestAnimationFrame(noteEmptyComposer);
     root.dataset.routeMotion = "arriving";
-    const wrap = chatComposerStack?.querySelector<HTMLElement>('[data-part="composer"]');
+    const wrap = chatComposerStack?.querySelector<HTMLElement>(':is(.ui-composer-slot, .ui-phone-composer)');
     if (wrap) {
       const to = wrap.getBoundingClientRect();
       const dx = from.left + from.width / 2 - (to.left + to.width / 2);
@@ -1871,11 +1871,11 @@ function App() {
     const target = event.target instanceof Element ? event.target : null;
     // A press in a menu or popover belongs to it, and Solid carries portal
     // events up to where the portal was declared, so skip those as well.
-    if (target?.closest(".composer,button,a,input,textarea,select,[contenteditable='true'],[role='button'],[role='link'],[role='option'],[data-slot='menu-content'],[data-slot='menu-sub-content'],[data-slot='context-menu-content'],[data-slot='context-menu-sub-content'],[data-slot='popover-content']")) return;
+    if (target?.closest(".ui-composer-slot,.ui-phone-composer,button,a,input,textarea,select,[contenteditable='true'],[role='button'],[role='link'],[role='option'],[data-slot='menu-content'],[data-slot='menu-sub-content'],[data-slot='context-menu-content'],[data-slot='context-menu-sub-content'],[data-slot='popover-content']")) return;
     if (!(event.currentTarget instanceof HTMLElement)) return;
     event.currentTarget.focus({ preventScroll: true });
   };
-  const hasComposer = () => Boolean(document.querySelector(".composer textarea:not([disabled])"));
+  const hasComposer = () => Boolean(document.querySelector("textarea[data-composer-input]:not([disabled])"));
   // A click on empty space leaves focus on the main pane itself; the next key
   // decides where it goes. Typing, Enter and Esc go to the composer (the
   // character typed lands there); on a dashboard ↑/↓ start the cursor in the
@@ -1898,7 +1898,7 @@ function App() {
     if (handled) event.preventDefault();
   };
   const focusComposer = () => {
-    const composer = ".composer textarea:not([disabled])";
+    const composer = "textarea[data-composer-input]:not([disabled])";
     ((keyboardSlot() !== null ? document.querySelector<HTMLTextAreaElement>(`${paneSelector(keyboardSlot()!)} ${composer}`) : null)
       ?? document.querySelector<HTMLTextAreaElement>(`.chat-main ${composer}`)
       ?? document.querySelector<HTMLTextAreaElement>(composer))?.focus({ preventScroll: true });
@@ -1974,7 +1974,7 @@ function App() {
     if (attempt > 0 && active !== from && active !== document.body) return;
     if (hasComposer()) return focusComposer();
     if (active !== pane) pane?.focus({ preventScroll: true });
-    if (document.querySelector(".composer textarea") && attempt < 20) setTimeout(() => enterMainPane(attempt + 1, pane), 100);
+    if (document.querySelector("textarea[data-composer-input]") && attempt < 20) setTimeout(() => enterMainPane(attempt + 1, pane), 100);
   };
   const focusMainPane = () => {
     if (isMobileLayout()) setMobileSidebarOpen(false);
@@ -2398,7 +2398,7 @@ function App() {
     return element?.closest(".chat-main") ? "main" : null;
   };
   const focusSplit = (slot: number | null = toolSlot() ?? shownSlots()[0] ?? null) => requestAnimationFrame(() => {
-    const content = slot === null ? null : paneSlot(slot).host()?.querySelector<HTMLElement>(".workspace-panel-content, .composer textarea:not([disabled]), .file-viewer-surface");
+    const content = slot === null ? null : paneSlot(slot).host()?.querySelector<HTMLElement>(".workspace-panel-content, textarea[data-composer-input]:not([disabled]), .file-viewer-surface");
     focusFirst(content);
     if (!content?.contains(document.activeElement)) content?.focus({ preventScroll: true });
   });
