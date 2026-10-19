@@ -76,9 +76,9 @@ What each v2 family replaces and where it stands. Update a row in the commit tha
 | Pill, PhoneComposer | phone header pills, sidebar header, `chat/composer.tsx` (phone: the voice bar, a phone's only composer) | the voice bar is cut over: `PhoneComposer` (riders, `Captions`) and `Pill*`; header pills previews |
 | Transcript, CodeBlock | `chat/transcript.tsx`, the Markdown renderers | cut over: rows (`TranscriptRow`), the user's `Message`, the answer's `Turn`, `Answer`, `MessageFoot`, `Failure`, `HarnessPrompt`, `Changes`, the `RiderButton`s, the Markdown, drawn by `Answer` through `ANSWER_MARKDOWN` (the renderers' wrappers, tables, links, citations, formulas, streamed words, a wide block's bleed)., the code block (`CodeBlock`, the renderer's highlighted lines grown in place as its children; `codeBlockHtml` for the marked renderer) |
 
-**Shared dialogs and notifications are cut over.** `components/dialog.tsx` supplies Kobalte behavior around the library's `Scrim` and `Card`; `components/notifications.tsx` supplies Sonner behavior around `Toaster` and `Toast`. App callers supply content and handlers. Dialog shell, headings, actions, close controls, fields, spacing and motion come from v2, with no caller surface classes or classic path. Embedded domain widgets (the Computer explorer, workspace identity editor, server connection form and code viewer) remain content slots owned by their subsystems; this does not permit them to override the dialog surface.
+**Shared dialogs and notifications are cut over.** `components/dialog.tsx` supplies Kobalte behavior around the library's `Scrim` and `Card`; `components/notifications.tsx` supplies Sonner behavior around `Toaster` and `Toast`. App callers supply content and handlers. Dialog shell, headings, actions, close controls, fields, spacing and motion come from v2, with no caller surface classes or classic path. The embedded Computer explorer, workspace identity editor, server connection form, camera preview and code excerpt also render v2 components. Their callers keep domain state and engine behavior; `Browser`, `IdentityEditor`, `ConnectionForm`, `CameraPreview` and `CodeExcerpt` own their presentation and tokens. The editable file viewer remains part of the workspace-tools migration.
 
-Browser-native `window.confirm` and `window.prompt` calls in pane/file navigation and settings remain outside this shared in-app dialog cutover. Replacing their synchronous return values requires a separate change to those navigation flows.
+Internal confirmations and prompts use `createDecisionScope` from `components/decision-dialog.tsx`. Await the answer before changing state. Its shared queue restores focus before resuming the caller, cancels pending requests when its host unmounts, and rejects answers when the caller unmounts or its target changes. Supply a `valid` guard for targets that can change within the same view. Only browser-owned tab-close protection (`beforeunload`) remains native: browsers require their own synchronous safeguard there.
 
 **Large overlays until Overlay graduates:** use `FrostOverlay` from `components/frost.tsx`. `npm run build` rejects a hand-rolled Kobalte dialog or a direct notification call that bypasses the shared adapter (`scripts/check-bundle.mjs`).
 
@@ -86,7 +86,7 @@ Browser-native `window.confirm` and `window.prompt` calls in pane/file navigatio
 | --- | --- |
 | a palette, search or anything that filters | `FrostOverlay` (`placement="center"` for one that does not filter, like Settings) |
 | a confirm, a one-field prompt, a small piece of content | `Dialog` from `components/dialog.tsx` (`alert` for a destructive choice, `size="wide"` or `"large"` for content, `close`, `actions`); `CardForm`, `CardBody` and `CardActions` for its form |
-| a menu, context menu or submenu | `Menu*` / `ContextMenu*` (`primitives.tsx`) |
+| a migrated menu or context menu | `components/menus.tsx` supplies Kobalte behavior around v2 `Menu` and `MenuAction`; older subsystems still use `primitives.tsx` |
 | a pick list anchored to a control | `PopoverContent` holding `PopoverSearchList` |
 | a card that floats without covering the page | `frost-card` alone |
 

@@ -1,3 +1,4 @@
+import { createDecisionScope } from "@/components/decision-dialog";
 import { batch, createMemo, createSignal, For, onCleanup, Show, type Accessor, type JSX } from "solid-js";
 import { ChevronRightIcon, ChevronsUpIcon, Columns2Icon, CopyIcon, DownloadIcon, EllipsisIcon, EyeIcon, EyeOffIcon, FilePlusIcon, FolderIcon, FolderPlusIcon, FolderUpIcon, MoveIcon, PanelLeftCloseIcon, PanelLeftOpenIcon, PencilIcon, PinIcon, PinOffIcon, RefreshCwIcon, SearchIcon, Trash2Icon, UploadIcon } from "lucide-solid";
 import { toast } from "@/components/notifications";
@@ -54,6 +55,7 @@ export function createFiles(options: {
    */
   openElsewhere?: (path: string, beside: boolean, edit: boolean) => boolean;
 }) {
+  const { confirm: confirmDialog, prompt: promptDialog } = createDecisionScope(options.projectId);
   const { requests, settings } = options;
   const [directories, setDirectories] = createSignal<Record<string, DirectoryListing>>({});
   const [expanded, setExpanded] = createSignal<Set<string>>(new Set());
@@ -129,14 +131,14 @@ export function createFiles(options: {
   };
   // Only the slot being retargeted can lose a draft, so editing on one side is
   // never discarded by opening a file on the other.
-  const openInSlot = (slot: FileSlotId, path: string) => {
+  const openInSlot = async (slot: FileSlotId, path: string) => {
     const handle = slotHandles.get(slot);
     if (openPaths()[slot] === path) {
       setFocusedSlot(slot);
       return true;
     }
     if (handle?.hasUnsavedChanges()) {
-      if (!window.confirm("Discard unsaved changes and open another file?")) return false;
+      if (!(await confirmDialog("Discard unsaved changes and open another file?", { destructive: true, confirmLabel: "Discard", valid: () => slotHandles.get(slot) === handle }))) return false;
       handle.discardChanges();
     }
     setSlotPath(slot, path);
@@ -152,12 +154,12 @@ export function createFiles(options: {
   const showFileNavigator = () => filesWide() ? toggleTreeCollapsed() : setNavigatorOpen(true);
   // The tree opens into the view's own slot; the file beside is opened only
   // by asking for it.
-  const openFile = (path: string) => {
+  const openFile = async (path: string) => {
     if (options.openElsewhere?.(path, false, false)) return;
-    if (openInSlot("primary", path)) setNavigatorOpen(false);
+    if ((await openInSlot("primary", path))) setNavigatorOpen(false);
   };
   let pendingEdit: string | null = null;
-  const editFile = (path: string) => {
+  const editFile = async (path: string) => {
     if (options.openElsewhere?.(path, false, true)) return;
     const slot = slotForPath(path);
     if (slot) {
@@ -166,7 +168,7 @@ export function createFiles(options: {
       return;
     }
     pendingEdit = path;
-    openFile(path);
+    await openFile(path);
   };
   const noteSlotLoaded = (slot: FileSlotId, file: FileSummary | null) => {
     if (file && pendingEdit === file.path) {
@@ -175,8 +177,9 @@ export function createFiles(options: {
     }
   };
   // The slots sit in different panes, so closing one leaves the other where it is.
-  const closeSlot = (slot: FileSlotId) => {
-    if (slotHandles.get(slot)?.hasUnsavedChanges() && !window.confirm("Discard unsaved changes and close this file?")) return;
+  const closeSlot = async (slot: FileSlotId) => {
+    const handle = slotHandles.get(slot);
+    if (handle?.hasUnsavedChanges() && !(await confirmDialog("Discard unsaved changes and close this file?", { destructive: true, confirmLabel: "Discard", valid: () => slotHandles.get(slot) === handle }))) return;
     setSlotPath(slot, null);
     setFocusedSlot("primary");
   };
@@ -240,7 +243,7 @@ export function createFiles(options: {
     const target = uploadTarget();
     const replacement = files.item(0);
     if (!replacement) return;
-    if (target.kind === "replacement" && !window.confirm(`Replace "${target.path}" with "${replacement.name}"?`)) return;
+    if (target.kind === "replacement" && !(await confirmDialog(`Replace "${target.path}" with "${replacement.name}"?`))) return;
     setUploading(true);
     try {
       if (target.kind === "replacement") {
@@ -272,7 +275,7 @@ export function createFiles(options: {
     }
   };
   const deleteFile = async (path: string) => {
-    if (!window.confirm(`Delete "${path}"? This action cannot be undone.`)) return;
+    if (!(await confirmDialog(`Delete "${path}"? This action cannot be undone.`, { destructive: true, confirmLabel: "Delete" }))) return;
     setUploading(true);
     try {
       await api<void>(`/v0/projects/${encodeURIComponent(options.projectId())}/file?path=${encodeURIComponent(path)}`, { method: "DELETE" });
@@ -285,8 +288,8 @@ export function createFiles(options: {
       setUploading(false);
     }
   };
-  const requestedName = (label: string, initial = "") => {
-    const value = window.prompt(label, initial);
+  const requestedName = async (label: string, initial = "") => {
+    const value = (await promptDialog(label, initial));
     if (value == null) return null;
     const name = value.trim();
     if (!name || name === "." || name === ".." || name.includes("/") || name.includes("\\")) {
@@ -297,7 +300,7 @@ export function createFiles(options: {
   };
   const joinPath = (parent: string, name: string) => parent ? `${parent}/${name}` : name;
   const createFile = async (parent = "") => {
-    const name = requestedName("New file name:");
+    const name = (await requestedName("New file name:"));
     if (!name) return;
     const path = joinPath(parent, name);
     setUploading(true);
@@ -308,7 +311,7 @@ export function createFiles(options: {
         body: new Blob([]),
       });
       await loadDirectory(parent, true);
-      openFile(path);
+      await openFile(path);
       toast.success(`Created ${path}`);
     } catch (cause) {
       reportError((cause as Error).message);
@@ -318,7 +321,7 @@ export function createFiles(options: {
     }
   };
   const createDirectory = async (parent = "") => {
-    const name = requestedName("New folder name:");
+    const name = (await requestedName("New folder name:"));
     if (!name) return;
     const path = joinPath(parent, name);
     setUploading(true);
@@ -358,15 +361,15 @@ export function createFiles(options: {
       setUploading(false);
     }
   };
-  const renameEntry = (entry: TreeEntry) => {
-    const name = requestedName(`Rename "${entry.name}" to:`, entry.name);
+  const renameEntry = async (entry: TreeEntry) => {
+    const name = (await requestedName(`Rename "${entry.name}" to:`, entry.name));
     if (!name || name === entry.name) return;
     const parent = entry.path.split("/").slice(0, -1).join("/");
     void moveEntry(entry, joinPath(parent, name));
   };
-  const moveEntryToFolder = (entry: TreeEntry) => {
+  const moveEntryToFolder = async (entry: TreeEntry) => {
     const currentParent = entry.path.split("/").slice(0, -1).join("/");
-    const value = window.prompt(`Move "${entry.name}" to folder (relative to workspace root; leave blank for root):`, currentParent);
+    const value = (await promptDialog(`Move "${entry.name}" to folder (relative to workspace root; leave blank for root):`, currentParent));
     if (value == null) return;
     const parent = value.trim().replaceAll("\\", "/").replace(/^\/+|\/+$/g, "");
     void moveEntry(entry, joinPath(parent, entry.name));
@@ -376,7 +379,7 @@ export function createFiles(options: {
       reportError("Save or discard changes in this folder before deleting it");
       return;
     }
-    if (!window.confirm(`Delete folder "${path}" and all its contents? This action cannot be undone.`)) return;
+    if (!(await confirmDialog(`Delete folder "${path}" and all its contents? This action cannot be undone.`, { destructive: true, confirmLabel: "Delete folder" }))) return;
     setUploading(true);
     try {
       await api<void>(`/v0/projects/${encodeURIComponent(options.projectId())}/directory?path=${encodeURIComponent(path)}`, { method: "DELETE" });
@@ -576,11 +579,11 @@ export function createFiles(options: {
     /** Anything loaded that a change could make stale. */
     hasContent: () => Boolean(Object.keys(directories()).length || openSlotHandles().length),
     /** Ask before a navigation replaces this file's unsaved edit; false if the reader keeps it. */
-    confirmDiscard: (path: string, message: string) => {
+    confirmDiscard: async (path: string, message: string) => {
       const slot = slotForPath(path);
       const handle = slot ? slotHandles.get(slot) : undefined;
       if (handle?.hasUnsavedChanges()) {
-        if (!window.confirm(message)) return false;
+        if (!(await confirmDialog(message, { destructive: true, confirmLabel: "Discard", valid: () => Boolean(slot && slotHandles.get(slot) === handle) }))) return false;
         handle.discardChanges();
       }
       return true;

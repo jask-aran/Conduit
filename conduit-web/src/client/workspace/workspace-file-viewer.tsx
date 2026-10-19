@@ -1,3 +1,4 @@
+import { createDecisionScope } from "@/components/decision-dialog";
 import { createEffect, createResource, createSignal, Index, lazy, onCleanup, Show, Suspense, type JSX } from "solid-js";
 import { ArrowLeftRightIcon, Columns2Icon, FileDiffIcon, FileTextIcon, GitCompareArrowsIcon, XIcon } from "lucide-solid";
 import { MenuItem } from "@/components/primitives";
@@ -57,6 +58,7 @@ export default function FileViewer(props: {
   /** A review comment to scroll to, when it is on one of the entries. */
   reveal?: { entry: FileEntry; request: ReviewNavigationRequest } | null;
 }) {
+  const { confirm: confirmDialog } = createDecisionScope(() => props.entries.map(entryKey).join("|"));
   const handles: (FileSlotHandle | undefined)[] = [];
   const [visible, setVisible] = createSignal(document.visibilityState === "visible");
   const noteVisibility = () => setVisible(document.visibilityState === "visible");
@@ -145,13 +147,14 @@ export default function FileViewer(props: {
   const resized = new ResizeObserver(fitHeaders);
   const changed = new MutationObserver(fitHeaders);
   onCleanup(() => { resized.disconnect(); changed.disconnect(); });
-  const leaveContents = (index: number) => !handles[index]?.hasUnsavedChanges() || window.confirm("Discard unsaved changes to this file?");
-  const closeEntry = (index: number) => {
-    if (handles[index]?.hasUnsavedChanges() && !window.confirm("Discard unsaved changes and close this file?")) return;
+  const leaveContents = async (index: number) => !handles[index]?.hasUnsavedChanges() || (await confirmDialog("Discard unsaved changes to this file?"));
+  const closeEntry = async (index: number) => {
+    if (handles[index]?.hasUnsavedChanges() && !(await confirmDialog("Discard unsaved changes and close this file?"))) return;
+    handles[index]?.discardChanges();
     props.onCloseEntry(index);
   };
   const deleteFile = async (entry: FileEntry) => {
-    if (!window.confirm(`Delete "${entry.path}"? This action cannot be undone.`)) return;
+    if (!(await confirmDialog(`Delete "${entry.path}"? This action cannot be undone.`))) return;
     try {
       await api<void>(`/v0/projects/${encodeURIComponent(entry.projectId)}/file?path=${encodeURIComponent(entry.path)}`, { method: "DELETE" });
       toast.success(`Deleted ${entry.path}`);
@@ -189,7 +192,7 @@ export default function FileViewer(props: {
           onToggleWrap={() => props.onToggleWrap(index)}
           annotationChatId={props.commentChatId}
           gitFile={statuses()[entryKey(entry())]}
-          onShowDiff={(staged) => { if (leaveContents(index)) props.onSetMode(index, staged ? "staged" : "changes"); }}
+          onShowDiff={async (staged) => { if ((await leaveContents(index))) props.onSetMode(index, staged ? "staged" : "changes"); }}
           headerSuffix={splitButton()}
           headerTabs={props.tabs?.(index)}
           headerEnd={index === props.entries.length - 1 && !(props.splitEmpty && !props.emptyFirst) ? props.paneActions?.() : undefined}

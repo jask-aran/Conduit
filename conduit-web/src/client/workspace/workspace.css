@@ -259,12 +259,6 @@
 .workspace-code-surface[data-editable="false"] .cm-content { caret-color: transparent !important; }
 .workspace-code-surface[data-editable="false"] .cm-cursor { display: none; }
 .workspace-editor-content { position: relative; display: flex; min-width: 0; min-height: 0; flex: 1; overflow: hidden; }
-.workspace-excerpt .cm-editor { background: transparent; }
-.workspace-excerpt .cm-scroller { font: 11px/1.6 ui-monospace, SFMono-Regular, Consolas, monospace; }
-.workspace-excerpt .cm-content { padding: 6px 0; }
-.workspace-excerpt .cm-gutters { background: transparent; }
-.workspace-excerpt .cm-review-comment { box-shadow: none; background: color-mix(in oklch, var(--warn), transparent 78%); }
-.workspace-excerpt .cm-review-context { color: var(--muted-foreground); opacity: .55; }
 /* A comment leaves its lines faintly marked, and hovering them previews the note. */
 .cm-review-comment { border-radius: 2px; background: color-mix(in oklch, var(--warn), transparent 90%); box-shadow: inset 2px 0 0 color-mix(in oklch, var(--warn), transparent 55%); }
 .cm-tooltip.cm-tooltip-hover:has(.workspace-review-comment-tooltip) { border: 1px solid var(--border); border-radius: 6px; background: var(--popover); box-shadow: var(--shadow-md); }

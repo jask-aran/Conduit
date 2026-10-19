@@ -84,9 +84,9 @@ export const inlineLineNumbers = {
  * numbered as the side it came from. Selection, search and copy work on the
  * removed lines because they are lines, not widgets.
  */
-export function workspaceInlineDiff(rows: readonly InlineRow[]): Extension {
+export function workspaceInlineDiff(rows: readonly InlineRow[], styled = true): Extension {
   return [
-    workspaceDiffTheme,
+    ...(styled ? [workspaceDiffTheme] : []),
     inlineRows.init(() => rows),
     EditorView.decorations.compute([inlineRows, "doc"], (state) => {
       const marks: ReturnType<typeof removedLine.range>[] = [];

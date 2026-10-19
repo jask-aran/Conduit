@@ -1,3 +1,8 @@
+import { createDecisionDialogs } from "@/components/decision-dialog";
+import { WorkspaceAppearanceEditor } from "../client/project/workspace-appearance-editor";
+import { ComputerExplorer } from "../client/dashboard/computer-dashboard";
+import WorkspaceExcerptView from "../client/workspace/workspace-excerpt-view";
+import { ConnectionForm, ConnectionChoices, ConnectionChoice, ConnectionGroup, CameraPreview } from "@/components/ui/connection";
 import { NotificationToaster, toast } from "@/components/notifications";
 import { Dialog } from "@/components/dialog";
 import { CardActions, CardForm, CardBody, CardNote, CardRead, CardDetails, CardQR, CardPreview, CardAttachments, CardAttachment } from "@/components/ui/card";
@@ -327,7 +332,57 @@ function DialogBehaviorDemo(props: { alert?: boolean; busy?: boolean }) {
       <Field label="Example name"><Input value="Example" /></Field>
     </Dialog></>;
 }
+function DecisionDemo() {
+  const decisions = createDecisionDialogs();
+  const [answer, setAnswer] = createSignal("No decision yet");
+  const [valid, setValid] = createSignal(true);
+  return <CardBody>
+    <Button onClick={async () => setAnswer(`Confirm: ${await decisions.confirm("Discard example changes?", { destructive: true, confirmLabel: "Discard" })}`)}>Try confirmation</Button>
+    <Button onClick={async () => { const value = await decisions.prompt("Rename example", "Example"); setAnswer(value === null ? "Prompt cancelled" : `Prompt: ${JSON.stringify(value)}`); }}>Try prompt</Button>
+    <Button onClick={() => {
+      const first = decisions.confirm("First queued decision");
+      const second = decisions.prompt("Second queued decision", "Queued");
+      void Promise.all([first, second]).then((values) => setAnswer(JSON.stringify(values)));
+    }}>Queue two decisions</Button>
+    <Button onClick={async () => { setValid(true); const pending = decisions.confirm("This target expires while open", { valid }); setValid(false); setAnswer(`Expired: ${await pending}`); }}>Try expired target</Button>
+    <CardNote>{answer()}</CardNote><decisions.Host />
+  </CardBody>;
+}
+function ExplorerDemo() {
+  const [result, setResult] = createSignal("No action yet");
+  const project = PROJECTS[0]!;
+  const [location, setLocation] = createSignal({ project, home: "/home/you", parent: "/home", repository: false,
+    listing: { entries: [{ name: "src", path: "src", type: "directory" as const }, { name: "README.md", path: "README.md", type: "file" as const, size: 1024 }, { name: ".hidden", path: ".hidden", type: "file" as const }] } });
+  return <CardBody><ComputerExplorer dialog projects={PROJECTS} location={location()} loading={false} error=""
+    onBrowse={(path) => { setResult(`Browse: ${path ?? "Home"}`); setLocation((current) => ({ ...current, project: { ...current.project, workingRoot: path ?? "/home/you" } })); }}
+    onPrefetch={() => {}} onMakeWorkspace={() => setResult("Make workspace")} onCreateWorkspace={(path) => setResult(`Create workspace: ${path}`)}
+    onOpenWorkspace={(target) => setResult(`Open: ${target.name}`)} onManageWorkspace={(action) => setResult(action)} onStartWorkspaceAction={(action) => setResult(action)}
+    onOpenView={(view) => setResult(view)} onOpenFile={(path) => setResult(`Open: ${path}`)} onSelectFolder={() => setResult("Select folder")}
+    onCreateFolder={() => setResult("Create folder")} onCloneRepository={() => setResult("Clone repository")} /><CardNote>{result()}</CardNote></CardBody>;
+}
+function ConnectionDemo() {
+  const [verified, setVerified] = createSignal(false);
+  const [busy, setBusy] = createSignal(false);
+  const [error, setError] = createSignal(false);
+  return <ConnectionForm onSubmit={(event) => { event.preventDefault(); setVerified(true); }}>
+    <ConnectionChoices><ConnectionChoice icon={<QrCodeIcon />} detail="conduit-server pair" onClick={() => setError(true)}>Scan QR code</ConnectionChoice><ConnectionChoice icon={<MonitorIcon />} detail="localhost:4310" onClick={() => setVerified(true)}>This computer</ConnectionChoice></ConnectionChoices>
+    <ConnectionGroup>On this network<Show when={busy()}><Spinner /></Show></ConnectionGroup>
+    <ConnectionChoices><ConnectionChoice disabled={busy()} icon={<ServerIcon />} detail="laptop.ts.net" onClick={() => setVerified(true)}>Laptop</ConnectionChoice></ConnectionChoices>
+    <Field label="Server address"><Input value="https://laptop.ts.net" disabled={busy() || verified()} /></Field>
+    <Show when={verified()}><Field label="Password"><Input type="password" autocomplete="off" /></Field></Show>
+    <Show when={error()}><CardNote error>Camera unavailable. Paste the pairing link.</CardNote></Show>
+    <Button type="submit" disabled={busy()}>{busy() ? "Checking…" : verified() ? "Sign in" : "Connect"}</Button>
+    <Button variant="ghost" onClick={() => setBusy(!busy())}>Toggle loading</Button>
+    <Button variant="ghost" onClick={() => { setVerified(false); setError(false); }}>Reset example</Button>
+  </ConnectionForm>;
+}
 const CARDS: FormRow[] = [
+  form("async decisions", "confirm, prompt, queue, cancellation and stale target guard", () => <DecisionDemo />, "createDecisionDialogs > Dialog", "the live app's shared decision queue"),
+  form("workspace identity", "mark, icon search, palette and custom colour; Save retains the draft", () => <WorkspaceAppearanceEditor compact onSave={() => {}} />, "WorkspaceAppearanceEditor > IdentityEditor", "v2 controls and tokens"),
+  form("folder explorer", "search, sort, tiles/details, hidden files and context menus", () => <ExplorerDemo />, "ComputerExplorer > Browser", "same presentation as the live folder dialog"),
+  form("server connection", "choices, address, password, loading and errors", () => <ConnectionDemo />, "ConnectionForm > Field · Input · Button", "no discovery or connection requests"),
+  form("camera preview", "camera display and cancel, without opening a real camera", () => <CameraPreview videoRef={() => {}} message="Point the camera at a pairing code" onClose={() => {}} />, "CameraPreview", "the real scanner's v2 presentation"),
+  form("code excerpt", "real read-only code with line numbers and highlighted selection", () => <WorkspaceExcerptView path="example.ts" text={"const total = 42;\nconsole.log(total);"} firstLine={12} startColumn={7} endColumn={13} />, "WorkspaceExcerptView > CodeExcerpt", "CodeMirror uses v2 syntax and size tokens"),
   form("modal", "focus is trapped, Escape or a press on the dim closes; focus returns to the trigger", () => <DialogBehaviorDemo />, "Dialog > Scrim + Card", "Kobalte behavior, v2 surface"),
   form("modal alert", "a press on the dim does not dismiss a confirmation", () => <DialogBehaviorDemo alert />, "<Dialog alert>", "Kobalte alert-dialog"),
   form("modal busy", "Escape, the dim and close cannot dismiss while busy; finish releases the dialog", () => <DialogBehaviorDemo busy />, "<Dialog busy>", "all dismissal paths share the busy guard"),
@@ -356,10 +411,10 @@ const IN_APP: FormRow[] = [
   form("Delete workspace and files", "type its name to confirm; Delete waits until it matches", () => <Card title="Delete workspace and files?" detail="Type the workspace's name, Japan, to continue." actions={<>{cancel()}<Button variant="destructive" disabled><Trash2Icon />Delete workspace</Button></>}><Field label="Workspace name"><Input /></Field></Card>, "project/dashboard.tsx", status()),
   form("Open external link", "the address, shown before it opens", () => <Card title="Open external link?" actions={<>{cancel()}<Button outline>Open link</Button></>}><CardRead>https://example.com/a/long/path?q=1&amp;ref=conduit</CardRead></Card>, "chat/external-link-dialog.tsx", status()),
   form("Attachments", "every file on the draft, opened from the strip: remove one, or all", () => <Card size="wide" title="2 attachments" actions={<><Button variant="ghost" outline>Remove all</Button><Button outline>Done</Button></>}><CardAttachments><For each={files}>{(file) => <CardAttachment name={file.name} detail={file.detail} icon={file.icon()} onRemove={() => {}} />}</For></CardAttachments></Card>, "chat/attachment-strip.tsx", status()),
-  form("Edit review comment", "the excerpt it is on, and its text", () => <Card size="wide" close title="Edit review comment" detail="src/main.tsx · lines 12–14" actions={<>{cancel()}<Button outline>Save comment</Button></>}><Preview>{"const total = items.reduce(\n  (sum, item) => sum + item.size, 0);"}</Preview><TextArea value="This could use the size label helper." /></Card>, "chat/review-comment-cards.tsx", status("the excerpt's highlighted selection (WorkspaceExcerptView)")),
-  form("Pair a device", "a code to scan, and what it opens", () => <Card size="wide" close title="Pair a device" actions={<><Button variant="ghost" outline>Copy link</Button><Button outline>New code</Button></>}><div class="g-slot g-qr">QR code</div><Section><Item field meta="Laptop">Server</Item><Item field meta="Tailscale · laptop.ts.net">Opens on</Item><Item field meta="Expires in 4:52">Code</Item></Section></Card>, "navigation/pair-dialog.tsx", status("the QR code itself (an image, not a v2 piece)")),
+  form("Edit review comment", "the excerpt it is on, and its text", () => <Card size="wide" close title="Edit review comment" detail="src/main.tsx · lines 12–14" actions={<>{cancel()}<Button outline>Save comment</Button></>}><Preview>{"const total = items.reduce(\n  (sum, item) => sum + item.size, 0);"}</Preview><TextArea value="This could use the size label helper." /></Card>, "chat/review-comment-cards.tsx", status()),
+  form("Pair a device", "a code to scan, and what it opens", () => <Card size="wide" close title="Pair a device" actions={<><Button variant="ghost" outline>Copy link</Button><Button outline>New code</Button></>}><div class="g-slot g-qr">QR code</div><Section><Item field meta="Laptop">Server</Item><Item field meta="Tailscale · laptop.ts.net">Opens on</Item><Item field meta="Expires in 4:52">Code</Item></Section></Card>, "navigation/pair-dialog.tsx", status()),
   form("Add server", "an address, or a code to scan", () => <Card size="wide" close title="Add server" actions={<><Button variant="ghost" outline>Scan QR code</Button><Button outline>Connect</Button></>}><Field label="Server address"><Input placeholder="https://laptop.ts.net" /></Field></Card>, "main.tsx (ServerConnectForm)", status()),
-  form("Workspace identity", "a short mark or an icon, then its colour", () => <Card size="wide" close title="Workspace identity" actions={<Button outline>Save</Button>}><Segmented label="Kind" value="mark" options={[{ value: "mark", label: "Mark" }, { value: "icon", label: "Icon" }]} onChange={() => {}} /><Field label="Mark"><Input value="JP" /></Field></Card>, "main.tsx · project/dashboard.tsx (WorkspaceAppearanceEditor)", status("the icon picker and colour swatches")),
+  form("Workspace identity", "a short mark or an icon, then its colour", () => <Card size="wide" close title="Workspace identity" actions={<Button outline>Save</Button>}><Segmented label="Kind" value="mark" options={[{ value: "mark", label: "Mark" }, { value: "icon", label: "Icon" }]} onChange={() => {}} /><Field label="Mark"><Input value="JP" /></Field></Card>, "main.tsx · project/dashboard.tsx (WorkspaceAppearanceEditor)", status()),
 ];
 
 /* Toast: measured in use, each kind and form at each density, and every toast the app raises. */

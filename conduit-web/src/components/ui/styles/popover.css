@@ -72,3 +72,5 @@
 [data-density="phone"] .ui-keys { display: none; }
 @media (--conduit-phone-layout) { .ui-keys { display: none; } }
 .ui-keys[data-first] { display: inline-flex; min-width: calc(2 * var(--control-xs)); flex: none; gap: var(--space-xs); }
+
+.ui-menu-action > :is(svg, img), .ui-menu-action > :first-child:not(:last-child) { width: var(--icon); height: var(--icon); flex: none; }

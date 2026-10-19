@@ -192,7 +192,7 @@ function indentationGuideDecorations(view: EditorView): DecorationSet {
   return builder.finish();
 }
 
-const indentationGuides = ViewPlugin.fromClass(class {
+export const indentationGuides = ViewPlugin.fromClass(class {
   decorations: DecorationSet;
 
   constructor(view: EditorView) {
@@ -205,22 +205,6 @@ const indentationGuides = ViewPlugin.fromClass(class {
     }
   }
 }, { decorations: (plugin) => plugin.decorations });
-
-/**
- * The file viewer's renderer, narrowed to a few lines of a document: the same
- * theme, gutter, highlighting and indent guides, with none of the editing or
- * navigation affordances a preview has no room for. `firstLine` offsets the
- * gutter so the numbers are the ones in the real file.
- */
-export const workspaceExcerptSetup = (numbers: Parameters<typeof lineNumbers>[0] = {}) => [
-  editorTheme,
-  lineNumbers(numbers),
-  highlightSpecialChars(),
-  syntaxHighlighting(workspaceHighlightStyle, { fallback: true }),
-  indentationGuides,
-  EditorState.readOnly.of(true),
-  EditorView.editable.of(false),
-];
 
 export const workspaceReadOnlySetup = (numbers: Parameters<typeof lineNumbers>[0] = {}) => [
   editorTheme,

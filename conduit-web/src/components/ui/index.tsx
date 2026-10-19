@@ -22,3 +22,9 @@ export * from "./rider";
 export * from "./transcript";
 export * from "./code";
 export * from "./trace";
+
+export * from "./identity";
+
+export * from "./connection";
+
+export * from "./browser";

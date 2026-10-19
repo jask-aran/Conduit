@@ -1,12 +1,13 @@
-import { For, Show, type JSX } from "solid-js";
+import { For, Show, splitProps, type JSX } from "solid-js";
 import { ChevronRightIcon, SearchIcon } from "lucide-solid";
 import { cn } from "@/lib/utils";
 import { Keycap } from "./controls";
 import { type Density, type Motion, motionOf, moveCursor } from "./shared";
 
 /** under: a phone's submenu is open as a panel over it, so it dims and takes no taps. */
-export function Menu(props: { class?: string; density?: Density; motion?: Motion; under?: boolean; children: JSX.Element }) {
-  return <div role="menu" class={cn("ui-frost ui-menu", props.class)} onPointerOver={moveCursor} data-density={props.density} data-surface="frost" data-lift="raised" data-under={props.under ? "" : undefined} {...motionOf(props.motion)}>{props.children}</div>;
+export function Menu(props: JSX.HTMLAttributes<HTMLDivElement> & { density?: Density; motion?: Motion; under?: boolean }) {
+  const [, rest] = splitProps(props, ["class", "density", "motion", "under", "children"]);
+  return <div role="menu" class={cn("ui-frost ui-menu", props.class)} onPointerOver={moveCursor} {...rest} data-density={props.density} data-surface="frost" data-lift="raised" data-under={props.under ? "" : undefined} {...motionOf(props.motion)}>{props.children}</div>;
 }
 
 /** A menu's section: a list of items (the default) or a slider, with an optional title and a note beside it. */
@@ -68,3 +69,6 @@ const Keys = (props: { keys: string[]; first?: boolean }) => <span class="ui-key
 export const Rule = () => <hr class="ui-rule" />;
 /** A row's meta: muted, after its label (a value, a latency). */
 export const Meta = (props: { children: JSX.Element }) => <span class="ui-meta">{props.children}</span>;
+
+/** A behavior engine can supply focus, selection and keyboard attributes. */
+export const MenuAction = (props: JSX.HTMLAttributes<HTMLDivElement>) => <div {...props} class="ui-row ui-menu-action" />;

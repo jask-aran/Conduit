@@ -14,13 +14,13 @@ control does not make its subsystem complete.
 
 | ID | Subsystem | Full scope | Status and evidence | Ownership |
 | --- | --- | --- | --- | --- |
-| V2-01 | Settings | Settings overlay, section navigation, all settings pages, fields, switches, selectors, shortcut recording, save and error states. | Partial. Switches use v2 (`e43ebf72`). The rest of Settings remains to migrate, including its native reset confirmation. | Unassigned |
+| V2-01 | Settings | Settings overlay, section navigation, all settings pages, fields, switches, selectors, shortcut recording, save and error states. | Partial. Switches use v2 (`e43ebf72`). Reset confirmation uses the shared v2 decision queue; the rest of Settings remains to migrate. | Unassigned |
 | V2-02 | Sidebar and navigation | Expanded sidebar, collapsed rail, project and chat rows, server switcher, header controls, status indicators, context menus. | Open. Shared dialogs used here already use v2; navigation and its menus still need their own cutover. | Unassigned |
 | V2-03 | Search and commands | Chat search, command palette, leader palette, results, keyboard hints, empty and loading states. | Open. The shared delete confirmation uses v2; the palettes and their controls remain. | Unassigned |
-| V2-04 | Dashboards | Conduit, project, workspace, harness, and Computer screens; headings, lists, actions, menus, and empty states. | Open. Include the Computer explorer and workspace identity editor used inside dialogs. Coordinate dashboard composers with Claude. | Unassigned; composer changes require coordination |
-| V2-05 | Panes and workspace tools | Pane headers, tabs, resize and drag controls, dock, Files, file viewer, Source Control, Chat review, and Terminal controls. | Open. Include browser-native unsaved-change confirmations, file prompts and confirmations, and the embedded code viewer. Preserve navigation and discard decisions. | Unassigned |
-| V2-06 | Notifications and shared dialogs | Toasts, confirmations, prompts, previews, and other dialogs used across subsystems. | Partial. All notification calls and former `FrostDialog` surfaces use v2 (`84a154e7`, `164f3679`, `08b8564d`). Native prompts and embedded domain widgets remain; see the boundary tasks below. | Shared surface work delivered in this session; remaining work unassigned |
-| V2-07 | Connection and access screens | Sign-in, first connection, server selection, reconnect, and connection error states. | Open. The Add server and pairing dialog surfaces use v2. Include the embedded server connection form. | Unassigned |
+| V2-04 | Dashboards | Conduit, project, workspace, harness, and Computer screens; headings, lists, actions, menus, and empty states. | Open. Computer explorer and workspace identity editor now render v2; the other dashboard presentations remain. Coordinate dashboard composers with Claude. | Unassigned; composer changes require coordination |
+| V2-05 | Panes and workspace tools | Pane headers, tabs, resize and drag controls, dock, Files, file viewer, Source Control, Chat review, and Terminal controls. | Open. Confirmations, file prompts and the embedded code excerpt now use v2; pane controls and the editable file viewer remain. | Unassigned |
+| V2-06 | Notifications and shared dialogs | Toasts, confirmations, prompts, previews, and other dialogs used across subsystems. | Complete cutover. Sonner and Kobalte retain engine behavior. All internal native decisions and the embedded widgets now render v2. Verification has one pane-smoke failure; see below. | Delivered in this session |
+| V2-07 | Connection and access screens | Sign-in, first connection, server selection, reconnect, and connection error states. | Open. Add server, pairing, the shared server connection form and camera preview use v2; remaining access screens need migration. | Unassigned |
 | V2-08 | Composer and transcript | Composer, riders, questions, approvals, pickers, message rows, answers, traces, Markdown, code blocks, and message actions. | Partial; Claude's scope. Recent commits record substantial cutover, including `d7ac7e33` and `17731746`. The remaining pickers, header pills and migration scaffolding need an ownership and source check before edits. | Claude; confirm remaining scope before touching it |
 | V2-09 | Shared v2 foundations | Controls, navigation rows, menus, cards, overlays, keycaps, loading indicators, and status indicators. | Partial. Extend these as each subsystem needs them. Use DESIGN.md's family table for the remaining old implementations. | The agent migrating a subsystem owns its required extensions; coordinate shared-file edits |
 
@@ -46,8 +46,8 @@ control does not make its subsystem complete.
 
 ## V2-06 boundary tasks
 
-The shared in-app surfaces are delivered. These tasks remain part of the full
-dialog scope and must not disappear behind a Complete label:
+The full dialog scope includes shared surfaces, async decisions and embedded
+content. All paths below now use v2:
 
 - [x] Route all app notifications through `components/notifications.tsx` and
   v2 `Toaster`/`Toast`, with Sonner retaining notification behavior.
@@ -58,11 +58,11 @@ dialog scope and must not disappear behind a Complete label:
 - [x] Fix toast frost at the shared frame. The element that fades carries the
   frost; no partially transparent ancestor sits above a nested frost surface.
 - [x] Add real notification controls under Gallery → Toast → Live engine.
-- [ ] Replace native `window.confirm` and `window.prompt` paths in Settings,
-  file/workspace tools and pane navigation. Assign these with V2-01 and V2-05.
+- [x] Replace native `window.confirm` and `window.prompt` paths in Settings,
+  file/workspace tools and pane navigation.
   Custom dialogs require asynchronous decisions; preserve cancellation,
   navigation order and unsaved-change protection.
-- [ ] Migrate the domain widgets supplied as dialog content: Computer
+- [x] Migrate the domain widgets supplied as dialog content: Computer
   explorer and workspace identity editor (V2-04), code viewer (V2-05), and
   server connection form (V2-07). They must not override the shared surface.
 
@@ -83,3 +83,37 @@ confirmed that the dialogs and corrected toast appearance looked good.
 
 These checks do not prove every dialog action, native-client interaction or
 embedded widget. Keep that distinction when planning the next subsystem.
+
+### Full decision and content cutover
+
+`components/decision-dialog.tsx` replaces every internal `window.confirm` and
+`window.prompt` call. Pane/file callers await Cancel or acceptance before
+changing state; scoped identity and per-target guards reject stale answers.
+The queue restores focus before resolving and cancels requests if its host
+unmounts. Browser-owned `beforeunload` tab-close protection remains native.
+
+The embedded content now uses `components/ui/identity.tsx`, `browser.tsx`,
+`connection.tsx` and `code-excerpt.tsx`. Domain state stays with the app;
+CodeMirror, Kobalte and Sonner retain their engine roles. The old identity,
+Computer, connection, scanner and excerpt presentation CSS was removed.
+Card → Forms covers real decisions and the embedded content at both densities.
+
+Executed: typecheck, gallery build, production build and bundle checks passed.
+Headed Chrome covered prompt initial selection, Escape, queue ordering, empty
+prompt values, stale-target rejection and focus return. The live file viewer
+also kept an unsaved edit after Cancel, asked again on close, then closed after
+Discard; no file was saved. Explorer search, details, hidden files and context
+menus passed. Identity icon search, custom colour and monogram controls passed;
+changing its v2 text token changed the live input from 10.4px to 20px and was
+then removed.
+
+`npm run smoke:panes -- --project NHP` passed 7/8 scenarios. The remaining
+failure is `file still bold once focus leaves`. A direct empty-main-space
+focus check changes the file marker to `shown`; the smoke's coordinate click
+remains unproven. The default smoke selected Conduit, which has only five
+visible files despite enough API entries including hidden files; its first
+two scenarios timed out waiting for the sixth. That run was stopped. The
+fixture selection needs a test-tool follow-up. The remaining assertion needs
+further diagnosis; its cause is not established.
+Camera hardware, server discovery/sign-in, push and destructive filesystem
+actions were not exercised.

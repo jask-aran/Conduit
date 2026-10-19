@@ -5,9 +5,9 @@ import type { ReviewCommentCounterpart, ReviewCommentSide } from "../chat/review
 import { commentRange } from "./workspace-annotate";
 import { inlineLineNumbers, workspaceInlineDiff } from "./workspace-diff-setup";
 import { buildInlineDiff, inlineDocLine } from "./workspace-inline-diff";
-import { workspaceExcerptSetup } from "./workspace-editor-base";
+import { indentationGuides } from "./workspace-editor-base";
 import { workspaceLanguageForFilename } from "./workspace-languages";
-import "./workspace.css";
+import { CodeExcerpt, codeExcerptSetup } from "@/components/ui/code-excerpt";
 
 /**
  * A window onto the lines a review comment was written against, rendered by the
@@ -50,11 +50,12 @@ export default function WorkspaceExcerptView(props: {
       state: EditorState.create({
         doc: diff ? diff.doc : props.text,
         extensions: [
-          workspaceExcerptSetup(diff ? inlineLineNumbers : { formatNumber: (number) => String(number + props.firstLine - 1) }),
+          codeExcerptSetup(diff ? inlineLineNumbers : { formatNumber: (number) => String(number + props.firstLine - 1) }),
+          indentationGuides,
           language.of([]),
           EditorView.lineWrapping,
           EditorView.contentAttributes.of({ "aria-label": `${props.path} lines ${highlight.from} to ${highlight.to}` }),
-          ...(diff ? [workspaceInlineDiff(diff.rows)] : []),
+          ...(diff ? [workspaceInlineDiff(diff.rows, false)] : []),
           // The commented characters read as they do when a chip reveals them;
           // the lines that came along for context step back.
           EditorView.decorations.of((target) => {
@@ -94,5 +95,5 @@ export default function WorkspaceExcerptView(props: {
       view.destroy();
     });
   });
-  return <div ref={host} class="workspace-excerpt" data-side={props.side} data-comparison={props.counterpart ? "true" : undefined} />;
+  return <CodeExcerpt ref={host} data-side={props.side} data-comparison={props.counterpart ? "true" : undefined} />;
 }

@@ -1,3 +1,4 @@
+import { createDecisionScope } from "@/components/decision-dialog";
 import { createEffect, createMemo, createSignal, For, lazy, on, onCleanup, onMount, Show } from "solid-js";
 import * as KDialog from "@kobalte/core/dialog";
 import { ActivityIcon, BotIcon, ChevronLeftIcon, ChevronRightIcon, FileTextIcon, XIcon, KeyboardIcon, Mic2Icon, MonitorIcon, SearchIcon } from "lucide-solid";
@@ -238,6 +239,7 @@ export function Settings(props: {
   onOpenModelSelector: () => void;
   shortcuts: ShortcutManager;
 }) {
+  const { confirm: confirmDialog } = createDecisionScope(() => props.open ? promptId() : null);
   const [section, setSection] = createSignal<Section>(props.initialSection || "ui");
   const [frosted, setFrosted] = createSignal(tabFrost());
   const [transcriptFontChoice, setTranscriptFontChoice] = createSignal(transcriptFont());
@@ -545,7 +547,7 @@ export function Settings(props: {
     const current = prompts().find((item) => item.id === promptId());
     if (!current) return;
     if (!current.modified && promptDraft() === promptBaseline()) return;
-    if (!window.confirm(`Reset ${current.label} to its shipped default?`)) return;
+    if (!(await confirmDialog(`Reset ${current.label} to its shipped default?`))) return;
     promptAutosave.hold();
     setPromptSaving(true);
     setPromptError("");

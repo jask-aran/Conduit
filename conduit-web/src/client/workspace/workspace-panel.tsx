@@ -1,3 +1,4 @@
+import { createDecisionScope } from "@/components/decision-dialog";
 import { batch, createEffect, createSignal, For, on, onCleanup, onMount, Show, type Accessor } from "solid-js";
 import { Portal } from "solid-js/web";
 import { MIN_MAIN_PANE_WIDTH } from "../layout-geometry";
@@ -44,7 +45,8 @@ function panelTab(value: string): PanelTab | null {
 
 const MIN_WORKSPACE_PANE_WIDTH = 240;
 
-export default function WorkspacePanel(props: { connectivity?: () => Connectivity; projectId: Accessor<string>; projectName: Accessor<string>; sourceControlEnabled: Accessor<boolean>; workingRoot: Accessor<string>; chatId: Accessor<string>; artifactChatId?: Accessor<string | null>; commentChatId?: Accessor<string | null>; historyAvailable?: Accessor<boolean>; open: Accessor<boolean>; expanded: Accessor<boolean>; focusRequest: Accessor<number>; onFocusRequestComplete?: () => void; requestedTab?: Accessor<{ tab: PanelTab; terminalId?: string; nonce: number } | null>; onRequestOpen?: () => void; onToggleExpanded: () => void; onClose: () => void; onTabChange?: (tab: PanelTab) => void; splitView?: Accessor<SplitView | null>; splitHost?: Accessor<HTMLElement | undefined>; onOpenBeside?: (view: SplitView) => void; onMoveToDock?: (view: SplitView) => void; onCloseSplit?: (focus?: boolean) => void; bindSplit?: (release: (toDock: boolean) => boolean) => () => void; shortcuts: ShortcutManager; onBrowseDirectory?: (path: string) => void; onBrowseParent?: () => void; requestedFile?: Accessor<{ path: string } | null>; settingsScope?: Accessor<string>; initialDirectory?: Accessor<DirectoryListing>; onOpenFile?: (entry: FileEntry, options: { beside: boolean; edit: boolean; reveal?: ReviewNavigationRequest }) => void; openFiles?: Accessor<Map<string, "focused" | "shown">>; documentShown?: Accessor<boolean>; minWidth?: Accessor<number>; widthRequest?: Accessor<{ width: number; nonce: number } | null>; overlay?: Accessor<boolean>; documentHost?: (element: HTMLElement | undefined) => void }) {
+export default function WorkspacePanel(props: { connectivity?: () => Connectivity; projectId: Accessor<string>; projectName: Accessor<string>; sourceControlEnabled: Accessor<boolean>; workingRoot: Accessor<string>; chatId: Accessor<string>; artifactChatId?: Accessor<string | null>; commentChatId?: Accessor<string | null>; historyAvailable?: Accessor<boolean>; open: Accessor<boolean>; expanded: Accessor<boolean>; focusRequest: Accessor<number>; onFocusRequestComplete?: () => void; requestedTab?: Accessor<{ tab: PanelTab; terminalId?: string; nonce: number } | null>; onRequestOpen?: () => void; onToggleExpanded: () => void; onClose: () => void; onTabChange?: (tab: PanelTab) => void; splitView?: Accessor<SplitView | null>; splitHost?: Accessor<HTMLElement | undefined>; onOpenBeside?: (view: SplitView) => void; onMoveToDock?: (view: SplitView) => void; onCloseSplit?: (focus?: boolean) => void; bindSplit?: (release: (toDock: boolean) => Promise<boolean>) => () => void; shortcuts: ShortcutManager; onBrowseDirectory?: (path: string) => void; onBrowseParent?: () => void; requestedFile?: Accessor<{ path: string } | null>; settingsScope?: Accessor<string>; initialDirectory?: Accessor<DirectoryListing>; onOpenFile?: (entry: FileEntry, options: { beside: boolean; edit: boolean; reveal?: ReviewNavigationRequest }) => void; openFiles?: Accessor<Map<string, "focused" | "shown">>; documentShown?: Accessor<boolean>; minWidth?: Accessor<number>; widthRequest?: Accessor<{ width: number; nonce: number } | null>; overlay?: Accessor<boolean>; documentHost?: (element: HTMLElement | undefined) => void }) {
+  const { confirm: confirmDialog } = createDecisionScope(props.projectId);
   let panelRoot: HTMLElement | undefined;
   let resizeHandle: HTMLDivElement | undefined;
   let panelMotionId = 0;
@@ -113,17 +115,22 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
     if (view !== "file" && path) files.setSlotPath("secondary", null);
     else if (view === "file" && !path) props.onCloseSplit?.(false);
   });
-  const releaseFileBeside = (toDock: boolean) => {
+  const releaseFileBeside = async (toDock: boolean) => {
     const path = files.openPaths().secondary;
     if (!path) return true;
-    if (files.slotHandles.get("secondary")?.hasUnsavedChanges() && !window.confirm(toDock ? "Discard unsaved changes and move this file to the dock?" : "Discard unsaved changes and close this file?")) return false;
-    return toDock ? files.openInSlot("primary", path) : true;
+    if (files.slotHandles.get("secondary")?.hasUnsavedChanges() && !(await confirmDialog(toDock ? "Discard unsaved changes and move this file to the dock?" : "Discard unsaved changes and close this file?"))) return false;
+    if (files.openPaths().secondary !== path) return false;
+    if (toDock && !(await files.openInSlot("primary", path))) return false;
+    files.slotHandles.get("secondary")?.discardChanges();
+    return true;
   };
   const unbindSplit = props.bindSplit?.(releaseFileBeside);
   onCleanup(() => unbindSplit?.());
-  const openFileBeside = (path: string) => {
+  const openFileBeside = async (path: string) => {
     if (openFileDocument(path, true, false)) return;
     if (!props.onOpenBeside) return files.openFile(path);
+    const previous = files.openPaths().secondary;
+    if (previous && previous !== path && !(await files.confirmDiscard(previous, "Discard unsaved changes and open another file?"))) return;
     batch(() => {
       props.onOpenBeside!("file");
       files.openInSlot("secondary", path);
@@ -259,7 +266,7 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
   // file, and a comment chip or turn artifact to whichever view shows it.
   // Beside, the review opens in the main pane's split rather than the dock.
   const openSourceControlReview = async (scope: DiffScope, path: string, beside = false) => {
-    if (!files.confirmDiscard(path, "Discard unsaved changes and review this file?")) return;
+    if (!(await files.confirmDiscard(path, "Discard unsaved changes and review this file?"))) return;
     sourceControl.showReview(scope);
     if (beside && props.onOpenBeside) props.onOpenBeside("diff");
     else {
@@ -285,9 +292,9 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
     if (target?.kind === "file") openFileBeside(target.path);
     else if (target) inspectFileDiff(target.path, target.staged, true);
   };
-  const openWorkingFile = (path: string) => {
+  const openWorkingFile = async (path: string) => {
     if (openFileDocument(path, false, false)) return;
-    if (!files.openInSlot("primary", path)) return;
+    if (!(await files.openInSlot("primary", path))) return;
     if (inSplit("files")) return focusSplit();
     props.onRequestOpen?.();
     if (!tabVisible("files")) setPaneTab("files");

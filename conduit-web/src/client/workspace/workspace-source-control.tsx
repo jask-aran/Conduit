@@ -1,3 +1,4 @@
+import { createDecisionScope } from "@/components/decision-dialog";
 import { createEffect, createMemo, createSignal, For, on, Show, type Accessor } from "solid-js";
 import { CheckIcon, ChevronRightIcon, CirclePlusIcon, CopyIcon, DownloadIcon, EyeIcon, FileDiffIcon, GitBranchIcon, GitCommitHorizontalIcon, GitCompareArrowsIcon, RefreshCwIcon, SendIcon, Undo2Icon } from "lucide-solid";
 import { Button, ContextMenu, ContextMenuContent, ContextMenuGroup, ContextMenuItem, ContextMenuTrigger, Spinner } from "@/components/primitives";
@@ -79,6 +80,7 @@ function PatchView(props: { content: string }) {
  * back keeps a half-written message and the file under review.
  */
 export function createSourceControl(options: { projectId: Accessor<string>; enabled: Accessor<boolean>; chatId: Accessor<string | null>; requests: RequestScope; settings: WorkspaceSettings; settingsScope: string }) {
+  const { confirm: confirmDialog } = createDecisionScope(options.projectId);
   const { requests, settings } = options;
   const [diff, setDiff] = createSignal<DiffPayload | null>(null);
   const [commitDetail, setCommitDetail] = createSignal<GitCommitDetail | null>(null);
@@ -164,7 +166,7 @@ export function createSourceControl(options: { projectId: Accessor<string>; enab
   const runGitAction = async (action: GitAction, path?: string) => {
     if (gitAction()) return;
     if (action === "commit" && !commitMessage().trim()) return;
-    if (action === "push" && !window.confirm(`Push ${diff()?.branch || "the current branch"} to its configured remote?`)) return;
+    if (action === "push" && !(await confirmDialog(`Push ${diff()?.branch || "the current branch"} to its configured remote?`))) return;
     setGitAction(action);
     try {
       await api<GitActionResult>(`/v0/projects/${encodeURIComponent(options.projectId())}/git`, {
