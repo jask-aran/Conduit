@@ -67,7 +67,6 @@ What each v2 family replaces and where it stands. Update a row in the commit tha
 | Frost | `.composer-surface-material`, `chat/composer-surface.ts` | previews |
 | Popover: `Menu`, `Section`, `Item` | `Menu*`, `ContextMenu*`, `Popover*`, `PopoverSearchList` in `primitives.tsx`; `.menu-row` (terminal pane, leader, context gauge, place picker) | each section's menus with its section (the composer's are graduated with it); previews elsewhere |
 | Card | `FrostDialog` (`frost.tsx`) | gallery only |
-| Toast | solid-sonner's toasts | gallery only |
 | Overlay, Glance | `FrostOverlay` (`frost.tsx`), command menu, chat search, Settings | gallery only |
 | Leader | `navigation/leader-palette.tsx`, `frost-card` | gallery only |
 | DesktopComposer | `chat/composer.tsx` (desktop) | cut over: `DesktopComposer` (riders, the question as its takeover), `ComposerField` with `Completion`, `Toolbar` (status, aside, primary, `StopGlyph`); its pickers are the menus still to cut over |

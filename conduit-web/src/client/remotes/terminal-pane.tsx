@@ -1,6 +1,6 @@
 import { createEffect, createMemo, createSignal, For, on, onCleanup, onMount, Show, type JSX } from "solid-js";
 import { ArrowLeftIcon, CheckIcon, ChevronDownIcon, Columns2Icon, EllipsisIcon, FocusIcon, KeyboardIcon, Maximize2Icon, Minimize2Icon, GripVerticalIcon, PencilIcon, PlusIcon, Settings2Icon, TerminalIcon, Trash2Icon, UnplugIcon } from "lucide-solid";
-import { toast } from "solid-sonner";
+import { toast } from "@/components/notifications";
 import { FrostDialog } from "@/components/frost";
 import {
   Button,

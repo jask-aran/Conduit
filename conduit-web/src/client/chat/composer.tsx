@@ -30,7 +30,7 @@ import { fileFromPastedText, insertTextAt, shouldAttachPastedText } from "./larg
 import { createVoiceDictationClient, type VoiceDictationState } from "./voice-dictation-client";
 import { ContextGauge } from "./context-gauge";
 import type { AudioSignalLevel } from "./voice-audio";
-import { toast } from "solid-sonner";
+import { toast } from "@/components/notifications";
 import { audioTransferLost, beginDictatedRange, matchesShortcut, releasesShortcut, replaceDictatedRange, shouldAutoSend, shouldReportNoSignal } from "./voice-dictation";
 import { createVoiceWaveformController, MAX_RESPONSIVE_BAR_COUNT, type VoiceWaveformController } from "./voice-waveform";
 import { ModelSelector } from "./model-selector";

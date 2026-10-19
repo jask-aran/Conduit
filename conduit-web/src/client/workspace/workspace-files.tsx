@@ -1,6 +1,6 @@
 import { batch, createMemo, createSignal, For, onCleanup, Show, type Accessor, type JSX } from "solid-js";
 import { ChevronRightIcon, ChevronsUpIcon, Columns2Icon, CopyIcon, DownloadIcon, EllipsisIcon, EyeIcon, EyeOffIcon, FilePlusIcon, FolderIcon, FolderPlusIcon, FolderUpIcon, MoveIcon, PanelLeftCloseIcon, PanelLeftOpenIcon, PencilIcon, PinIcon, PinOffIcon, RefreshCwIcon, SearchIcon, Trash2Icon, UploadIcon } from "lucide-solid";
-import { toast } from "solid-sonner";
+import { toast } from "@/components/notifications";
 import { ContextMenu, ContextMenuContent, ContextMenuGroup, ContextMenuItem, ContextMenuSeparator, ContextMenuTrigger, Menu, MenuContent, MenuItem, MenuTrigger, Spinner } from "@/components/primitives";
 import { api, asList } from "../api/client";
 import { authorizedFetch } from "../api/native-auth-client";

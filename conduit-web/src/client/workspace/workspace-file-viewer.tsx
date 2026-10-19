@@ -2,7 +2,7 @@ import { createEffect, createResource, createSignal, Index, lazy, onCleanup, Sho
 import { ArrowLeftRightIcon, Columns2Icon, FileDiffIcon, FileTextIcon, GitCompareArrowsIcon, XIcon } from "lucide-solid";
 import { MenuItem } from "@/components/primitives";
 import type { ReviewNavigationRequest } from "../chat/review-navigation";
-import { toast } from "solid-sonner";
+import { toast } from "@/components/notifications";
 import { api } from "../api/client";
 import type { FileEntry } from "./file-documents";
 import type { ComparisonPayload } from "./workspace-comparison";
