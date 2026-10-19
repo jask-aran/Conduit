@@ -518,9 +518,11 @@ export function mountTranscriptVisibility(
       // The block itself counts: a heading losing the caret's placeholder, the last block no longer, is a change to
       // its own children, and kept it 0.6px taller than it was until it was shown.
       if (hidden && managed.has(hidden) && !unwrapsFade(record)) (changedHidden ??= new Set()).add(hidden);
-      if (withinBlock(record)) continue;
+      if (withinBlock(record) || !rows) continue;
       const row = record.target === thread ? null : (record.target as Element).closest?.(ROW_SELECTOR) as HTMLElement | null;
-      if (!row) { rows = null; break; }
+      // Outside any row (a row added or removed): every row syncs. The records after it are still read for changes to
+      // hidden blocks: breaking here missed a turn's header losing its latest line in the update that added a row.
+      if (!row) { rows = null; continue; }
       rows.add(row);
     }
     if (changedHidden && !activeIds.size) remeasure(changedHidden);
