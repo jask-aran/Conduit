@@ -71,7 +71,7 @@ What each v2 family replaces and where it stands. Update a row in the commit tha
 | Overlay, Glance | `FrostOverlay` (`frost.tsx`), command menu, chat search, Settings | gallery only |
 | Leader | `navigation/leader-palette.tsx`, `frost-card` | gallery only |
 | DesktopComposer | `chat/composer.tsx` (desktop) | cut over: `DesktopComposer` (riders, the question as its takeover), `ComposerField` with `Completion`, `Toolbar` (status, aside, primary, `StopGlyph`); its pickers are the menus still to cut over |
-| Rider | queued messages, attachment strip, question card | in the app (v2 classes, not components) |
+| Rider | queued messages, attachment strip, file references, question card | cut over: `Rider` with `Lines`/`Line` (measures its own clipping), `Chips`/`Chip` (open, retry, remove), `References`/`Reference` (also under a sent message), and the question as a card of `Tabs`/`Tab`, `Choices`/`Choice` (own answer), `Summary`, `Hints`; their dialogs are overlays still to cut over |
 | Pill, PhoneComposer | phone header pills, sidebar header, `chat/composer.tsx` (phone: the voice bar, a phone's only composer) | the voice bar is cut over: `PhoneComposer` (riders, `Captions`) and `Pill*`; header pills previews |
 | Transcript, CodeBlock | `chat/transcript.tsx`, the Markdown renderers | cut over: rows (`TranscriptRow`), the user's `Message`, the answer's `Turn`, `Answer`, `MessageFoot`, `Failure`, `HarnessPrompt`, `Changes`, the `RiderButton`s, the Markdown, drawn by `Answer` through `ANSWER_MARKDOWN` (the renderers' wrappers, tables, links, citations, formulas, streamed words, a wide block's bleed)., the code block (`CodeBlock`, the renderer's highlighted lines grown in place as its children; `codeBlockHtml` for the marked renderer) |
 

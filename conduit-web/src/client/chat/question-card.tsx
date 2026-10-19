@@ -1,10 +1,8 @@
-import { createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js";
+import { createMemo, createSignal, For, onMount, Show } from "solid-js";
 import { createStore } from "solid-js/store";
-import { CheckIcon, XIcon } from "lucide-solid";
-import { Button } from "@/components/primitives";
+import { XIcon } from "lucide-solid";
+import { Button, Choice, ChoiceInput, Choices, ChoicesPage, Hints, Input, Preview, Prompt, Rider, RiderFoot, RiderTop, RiderTitle, Summary, Tab, Tabs } from "@/components/ui";
 import type { HostUiRequest, Question, QuestionAnswer } from "../api/contracts";
-import { COMPOSER_SURFACE_CHANGE_EVENT, selectedComposerSurface, type ComposerSurfaceMode } from "./composer-surface";
-import "./question-card.css";
 
 export type QuestionResponse = { id: string; cancelled?: boolean; answers?: QuestionAnswer[] };
 
@@ -36,14 +34,10 @@ export function QuestionCard(props: { request: HostUiRequest; dismissLabel?: str
   const lastQuestion = () => page() === questions().length - 1;
   const ready = createMemo(() => questions().every((question) => !question.required || answered(draft(question)))
     && questions().some((question) => answered(draft(question))));
-  const [surface, setSurface] = createSignal<ComposerSurfaceMode>(selectedComposerSurface());
   let root: HTMLElement | undefined;
   let own: HTMLInputElement | HTMLTextAreaElement | undefined;
 
   onMount(() => {
-    const changed = (event: Event) => setSurface((event as CustomEvent<ComposerSurfaceMode>).detail);
-    window.addEventListener(COMPOSER_SURFACE_CHANGE_EVENT, changed);
-    onCleanup(() => window.removeEventListener(COMPOSER_SURFACE_CHANGE_EVENT, changed));
     // The card stands in for the composer while it is up, so it takes the
     // keyboard; a half-typed message waits in the composer for its return.
     root?.focus({ preventScroll: true });
@@ -127,95 +121,62 @@ export function QuestionCard(props: { request: HostUiRequest; dismissLabel?: str
     ...question.options.filter((option) => draft(question).optionIds.includes(option.id)).map((option) => option.label),
     ...(draft(question).freeform.trim() ? [question.secret ? "••••" : draft(question).freeform.trim()] : []),
   ].join(", ");
-  const hints = () => [
-    ...(pages() > 1 ? [["⇥", "tab"]] : []),
-    ...(current() ? [["↑↓", "select"], ["↵", current()!.multiSelect ? "toggle" : "confirm"]] : [["↵", "submit"]]),
+  const hints = (): [string, string][] => [
+    ...(pages() > 1 ? [["⇥", "tab"] as [string, string]] : []),
+    ...(current() ? [["↑↓", "select"], ["↵", current()!.multiSelect ? "toggle" : "confirm"]] as [string, string][] : [["↵", "submit"] as [string, string]]),
     ["esc", props.dismissLabel || "dismiss"],
   ];
   const preview = () => current()?.options[cursor()]?.preview;
 
-  // components v2 in the gallery's Library previews (components/ui/swap.ts): a card Rider of Choices.
-  const v2 = () => surface() === "library";
-  const k = (app: string, v2Class: string) => v2() ? v2Class : app;
-  return <section ref={root} class={v2() ? "question-card ui-frost ui-rider" : "question-card composer-surface-material"} data-composer-surface={surface()} data-surface={v2() ? "frost" : undefined} data-lift={v2() ? "rest" : undefined} data-layout={v2() ? "card" : undefined}
-    tabIndex={-1} aria-label={props.request.title || "The agent has a question"} onKeyDown={keydown}>
-    <div class={k("question-top", "ui-rider-top")}>
-      <Show when={pages() > 1} fallback={<span class={k("question-title", "ui-title-text")}>{current()?.header || props.request.title}</span>}>
-        <div class={k("question-tabs", "ui-tabs")} role="tablist">
-          <For each={questions()}>{(question, index) => <button type="button" role="tab" aria-selected={page() === index()}
-            tabIndex={-1} onClick={() => go(index())}>
-            <Show when={answered(draft(question))}><CheckIcon aria-label="Answered" /></Show>
-            {question.header || `Question ${index() + 1}`}
-          </button>}</For>
-          <Show when={review()}><button type="button" role="tab" tabIndex={-1} aria-selected={!current()}
-            onClick={() => go(questions().length)}>Submit</button></Show>
-        </div>
+  return <Rider ref={(element: HTMLDivElement) => { root = element; }} layout="card" motion="entering" tabIndex={-1} label={props.request.title || "The agent has a question"} onKeyDown={keydown}>
+    <RiderTop>
+      <Show when={pages() > 1} fallback={<RiderTitle>{current()?.header || props.request.title}</RiderTitle>}>
+        <Tabs>
+          <For each={questions()}>{(question, index) => <Tab selected={page() === index()} done={answered(draft(question))} onClick={() => go(index())}>{question.header || `Question ${index() + 1}`}</Tab>}</For>
+          <Show when={review()}><Tab selected={!current()} onClick={() => go(questions().length)}>Submit</Tab></Show>
+        </Tabs>
       </Show>
-      <button type="button" class={k("question-close", "ui-button")} data-variant={v2() ? "ghost" : undefined} data-size={v2() ? "icon-sm" : undefined} tabIndex={-1} aria-label={props.dismissLabel === "deny" ? "Deny" : "Dismiss"} onClick={dismiss}><XIcon /></button>
-    </div>
+      <Button variant="ghost" size="icon-sm" tabIndex={-1} aria-label={props.dismissLabel === "deny" ? "Deny" : "Dismiss"} onClick={dismiss}><XIcon /></Button>
+    </RiderTop>
 
-    <Show when={current()} keyed fallback={
-      <div class={k("question-summary", "ui-summary")}>
-        <For each={questions()}>{(question, index) => <button type="button" tabIndex={-1} onClick={() => go(index())}>
-          <span class={k("question-summary-header", "")}>{question.header || question.prompt}</span>
-          <span class={k("question-summary-answer", "")} data-empty={answered(draft(question)) ? undefined : "true"}>
-            {answered(draft(question)) ? answerText(question) : question.required ? "Needs an answer" : "Not answered"}</span>
-        </button>}</For>
-      </div>}>
-      {(question) => <div class={k("question-page", "ui-choices-page")}>
-        <p class={k("question-prompt", "ui-prompt")}>{question.prompt}<Show when={question.multiSelect}><span> · pick any</span></Show></p>
-        <div class={k("question-options", "ui-choices")} role="listbox" aria-multiselectable={question.multiSelect}>
-          <For each={question.options}>{(option, index) => {
-            const chosen = () => draft(question).optionIds.includes(option.id);
-            return <div role="option" class={k("question-option", "ui-choice")} aria-selected={chosen()} data-active={cursor() === index()}
-              title={option.description || undefined} onPointerMove={() => setCursor(index())} onClick={() => choose(question, index())}>
-              <span class={k("question-number", "ui-choice-key")}>{index() + 1}</span>
-              <span class={k("question-option-label", "ui-choice-label")}>{option.label}</span>
-              <Show when={option.description}><span class={k("question-option-description", "ui-choice-detail")}>{option.description}</span></Show>
-              <span class={k("question-check", "ui-choice-check")} data-multi={question.multiSelect ? "true" : undefined}><Show when={chosen()}><CheckIcon /></Show></span>
-            </div>;
-          }}</For>
+    <Show when={current()} keyed fallback={<Summary rows={questions().map((question, index) => ({ label: question.header || question.prompt,
+      value: answered(draft(question)) ? answerText(question) : question.required ? "Needs an answer" : "Not answered", empty: !answered(draft(question)), onOpen: () => go(index) }))} />}>
+      {(question) => <ChoicesPage>
+        <Prompt multi={question.multiSelect}>{question.prompt}</Prompt>
+        <Choices multi={question.multiSelect}>
+          <For each={question.options}>{(option, index) => <Choice n={index() + 1} label={option.label} detail={option.description || undefined} title={option.description || undefined}
+            chosen={draft(question).optionIds.includes(option.id)} active={cursor() === index()} multi={question.multiSelect} onPoint={() => setCursor(index())} onPick={() => choose(question, index())} />}</For>
           <Show when={question.freeform}>{(freeform) => {
             const placeholder = freeform().placeholder || (question.options.length ? "Type your own answer" : "Type your answer");
             const input = (event: InputEvent & { currentTarget: HTMLInputElement | HTMLTextAreaElement }) => type(question, event.currentTarget.value);
-            return <div class={k("question-option question-own", "ui-choice")} data-active={cursor() === question.options.length}
-              onPointerMove={() => setCursor(question.options.length)} onClick={() => own?.focus()}>
-              <span class={k("question-number", "ui-choice-key")}>{question.options.length + 1}</span>
-              {freeform().multiline
-                ? <textarea ref={(element) => { own = element; }} rows={2} class={k("question-own-input", "ui-textarea")} placeholder={placeholder} aria-label={placeholder}
-                  value={draft(question).freeform} onInput={input} onFocus={() => setCursor(question.options.length)} />
-                : v2() && !question.secret
-                  // components v2: one line is a TextArea too, held to one line (a secret stays a masked input).
-                  ? <textarea ref={(element) => { own = element; }} rows={1} class="ui-textarea" placeholder={placeholder} aria-label={placeholder}
-                    inputmode={freeform().numeric ? "decimal" : undefined} value={draft(question).freeform}
-                    onKeyDown={(event) => { if (event.key === "Enter") event.preventDefault(); }}
-                    onInput={(event) => { if (event.currentTarget.value.includes("\n")) event.currentTarget.value = event.currentTarget.value.replace(/\n/g, " "); input(event); }}
-                    onFocus={() => setCursor(question.options.length)} />
-                  : <input ref={(element) => { own = element; }} class={k("question-own-input", "ui-choice-input")} placeholder={placeholder} aria-label={placeholder}
-                  type={question.secret ? "password" : "text"} inputmode={freeform().numeric ? "decimal" : undefined}
-                  value={draft(question).freeform} onInput={input} onFocus={() => setCursor(question.options.length)} />}
-              <span class={k("question-check", "ui-choice-check")}><Show when={draft(question).freeform.trim()}><CheckIcon /></Show></span>
-            </div>;
+            const mine = () => setCursor(question.options.length);
+            // A TextArea, held to one line unless the question asks for more; a secret stays a masked input.
+            return <Choice n={question.options.length + 1} chosen={Boolean(draft(question).freeform.trim())} active={cursor() === question.options.length} onPoint={mine} onPick={() => own?.focus()}
+              own={question.secret
+                ? <ChoiceInput ref={(element) => { own = element; }} placeholder={placeholder} aria-label={placeholder} type="password" inputmode={freeform().numeric ? "decimal" : undefined}
+                  value={draft(question).freeform} onInput={input} onFocus={mine} />
+                : <textarea ref={(element) => { own = element; }} rows={freeform().multiline ? 2 : 1} class="ui-textarea" placeholder={placeholder} aria-label={placeholder}
+                  inputmode={freeform().numeric ? "decimal" : undefined} value={draft(question).freeform}
+                  onKeyDown={(event) => { if (!freeform().multiline && event.key === "Enter") event.preventDefault(); }}
+                  onInput={(event) => { if (!freeform().multiline && event.currentTarget.value.includes("\n")) event.currentTarget.value = event.currentTarget.value.replace(/\n/g, " "); input(event); }}
+                  onFocus={mine} />} />;
           }}</Show>
-        </div>
-        <Show when={preview()}>{(shown) => <pre class={k("question-preview", "ui-preview")} data-format={shown().format}>{shown().text}</pre>}</Show>
+        </Choices>
+        <Show when={preview()}>{(shown) => <Preview format={shown().format}>{shown().text}</Preview>}</Show>
         <Show when={props.request.notes && answered(draft(question))}>
-          <input class={k("question-note", "ui-input")} data-note={v2() ? "" : undefined} placeholder="Add a note (optional)" aria-label="Note"
-            value={draft(question).note} onInput={(event) => setDrafts(question.id, "note", event.currentTarget.value)} />
+          <Input data-note="" placeholder="Add a note (optional)" aria-label="Note" value={draft(question).note} onInput={(event) => setDrafts(question.id, "note", event.currentTarget.value)} />
         </Show>
-      </div>}
+      </ChoicesPage>}
     </Show>
 
-    <div class={k("question-footer", "ui-rider-foot")}>
-      <div class={k("question-hints", "ui-hints")} aria-hidden="true">
-        <For each={hints()}>{([key, label]) => <span><kbd class={k("command-hint-key", "ui-keycap")}>{key}</kbd>{label}</span>}</For>
-      </div>
+    <RiderFoot>
+      <Hints hints={hints()} />
       <Show when={props.onStop}>
-        <Button variant="ghost" size="sm" class="question-stop" tabIndex={-1} onClick={() => props.onStop?.()}>Stop</Button>
+        <Button variant="ghost" size="sm" tabIndex={-1} onClick={() => props.onStop?.()}>Stop</Button>
       </Show>
-      <Button size="sm" class="question-submit" tabIndex={-1} disabled={!current() && !ready()} onClick={() => current() ? advance() : submit()}>
+      <Button variant="primary" size="sm" tabIndex={-1} disabled={!current() && !ready()} onClick={() => current() ? advance() : submit()}>
         {!current() || (lastQuestion() && !review()) ? "Submit" : "Next"}
       </Button>
-    </div>
-  </section>;
+    </RiderFoot>
+  </Rider>;
 }

@@ -1,17 +1,20 @@
-import { createSignal, For, Show, splitProps, type JSX } from "solid-js";
-import { CheckIcon, ChevronDownIcon, XIcon } from "lucide-solid";
+import { children, createEffect, createSignal, For, Show, splitProps, type JSX } from "solid-js";
+import { CheckIcon, ChevronDownIcon, PencilIcon, RotateCwIcon, XIcon } from "lucide-solid";
 import { cn } from "@/lib/utils";
-import { Keycap } from "./controls";
+import { Button, Keycap } from "./controls";
 import { type Motion, motionOf, moveCursor } from "./shared";
 
 /*
  * Rider: frost on a composer's top edge, either composer's. A row (title,
- * body, actions), a strip (chips, actions) or a card (the question).
+ * body, actions), a strip (chips, actions) or a card (the question, which takes
+ * the keyboard: the app passes its ref, tabIndex and keys).
  */
-export function Rider(props: { label?: string; layout?: "row" | "strip" | "card"; class?: string; motion?: Motion; children: JSX.Element }) {
-  return <div class={cn("ui-frost ui-rider", props.class)} data-surface="frost" data-lift="rest" data-layout={props.layout ?? "row"} role="group" aria-label={props.label} {...motionOf(props.motion)}>{props.children}</div>;
+export function Rider(props: JSX.HTMLAttributes<HTMLDivElement> & { label?: string; layout?: "row" | "strip" | "card"; motion?: Motion; children: JSX.Element }) {
+  const [local, rest] = splitProps(props, ["label", "layout", "motion", "class", "children"]);
+  return <div role="group" {...rest} class={cn("ui-frost ui-rider", local.class)} data-surface="frost" data-lift="rest" data-layout={local.layout ?? "row"} aria-label={local.label} {...motionOf(local.motion)}>{local.children}</div>;
 }
-export const RiderTitle = (props: { children: JSX.Element }) => <span class="ui-title-text">{props.children}</span>;
+/** A rider's title; title: what it means, on hover. */
+export const RiderTitle = (props: { title?: string; children: JSX.Element }) => <span class="ui-title-text" title={props.title}>{props.children}</span>;
 /** A button riding over the transcript just above the composer: scroll to latest (an icon alone), cancel an edit
  *  (an icon and its words). Resting frost at the surface radius. hidden: kept where it rides but faded out and out of
  *  reach, so it fades back in rather than being drawn again. */
@@ -22,32 +25,54 @@ export function RiderButton(props: JSX.ButtonHTMLAttributes<HTMLButtonElement> &
     aria-label={local.show === "label" ? undefined : local.label} title={local.show === "label" ? undefined : local.label}>{local.icon}<Show when={local.show === "label"}><span>{local.label}</span></Show></button>;
 }
 export const RiderActions = (props: { stack?: boolean; children: JSX.Element }) => <div class="ui-rider-actions" data-stack={props.stack ? "" : undefined}>{props.children}</div>;
-/** A line of waiting text, one line until opened. */
+/** A line of waiting text, one line until opened; it offers to open only when it is really cut short (measured, not
+ *  guessed from its length, since that depends on its width). clipped: decided by the caller instead. */
 export function Line(props: { text: string; clipped?: boolean }) {
   const [open, setOpen] = createSignal(false);
-  return <li class="ui-line" data-expanded={open() ? "true" : "false"}><p class="ui-line-body">{props.text}</p>
-    <Show when={props.clipped}><button type="button" class="ui-line-more" aria-label={open() ? "Show less" : "Show more"} onClick={() => setOpen(!open())}><ChevronDownIcon /></button></Show></li>;
+  const [measured, setMeasured] = createSignal(false);
+  let body!: HTMLParagraphElement;
+  createEffect(() => { props.text; if (!open()) setMeasured(body.scrollHeight > body.clientHeight + 1); });
+  return <li class="ui-line" data-expanded={open() ? "true" : "false"}><p ref={body} class="ui-line-body">{props.text}</p>
+    <Show when={props.clipped ?? measured()}><button type="button" class="ui-line-more" aria-label={open() ? "Show less" : "Show more"} aria-expanded={open()} onClick={() => setOpen(!open())}><ChevronDownIcon /></button></Show></li>;
 }
-/** An attached thing: an image's thumbnail, or a file's mark, name and size. */
-export function Chip(props: { name: string; detail?: string; image?: string; icon?: JSX.Element; status?: "uploading" | "error" | "done"; progress?: number; motion?: Motion }) {
+/** An attached thing: an image's thumbnail, or a file's mark, name and size. image: its source, or the app's own image
+ *  (one that loads itself); icon: a file's mark. status: queued or uploading rings its progress (0-100); error outlines
+ *  it, and retry marks it so a press retries. onOpen: a press; onRemove: its remove button, handed the chip. */
+export function Chip(props: { name: string; detail?: string; image?: string | JSX.Element; icon?: JSX.Element; status?: "queued" | "uploading" | "error" | "done"; progress?: number; retry?: boolean; title?: string; motion?: Motion;
+  onOpen?: () => void; onRetry?: () => void; onRemove?: (chip: HTMLElement) => void }) {
   const ring = 2 * Math.PI * 9;
-  return <div class="ui-chip" data-kind={props.image ? "image" : "file"} data-status={props.status ?? "done"} {...motionOf(props.motion)}>
-    <button type="button" class="ui-chip-body" aria-label={`Show ${props.name}`}>
-      <span class="ui-chip-media"><Show when={props.image} fallback={props.icon}><img src={props.image} alt="" /></Show>
-        <Show when={props.status === "uploading"}><svg class="ui-chip-ring" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" /><circle cx="12" cy="12" r="9" stroke-dasharray={`${ring}`} stroke-dashoffset={ring * (1 - (props.progress ?? 40) / 100)} /></svg></Show></span>
-      <Show when={!props.image}><span class="ui-chip-copy"><strong>{props.name}</strong><small>{props.detail}</small></span></Show>
+  const image = children(() => props.image);
+  let chip!: HTMLDivElement;
+  return <div ref={chip} class="ui-chip" data-kind={image() ? "image" : "file"} data-status={props.status ?? "done"} title={props.title} {...motionOf(props.motion)}>
+    <button type="button" class="ui-chip-body" aria-label={props.retry ? `Retry ${props.name}` : `Show ${props.name}`} onClick={() => props.retry ? props.onRetry?.() : props.onOpen?.()}>
+      <span class="ui-chip-media"><Show when={image()} fallback={props.icon}>{typeof image() === "string" ? <img src={image() as string} alt="" /> : image()}</Show>
+        <Show when={props.status === "uploading" || props.status === "queued"}><svg class="ui-chip-ring" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" /><circle cx="12" cy="12" r="9" stroke-dasharray={`${ring}`} stroke-dashoffset={ring * (1 - Math.min(100, props.progress ?? 40) / 100)} /></svg></Show>
+        <Show when={props.retry}><RotateCwIcon class="ui-chip-retry" /></Show></span>
+      <Show when={!image()}><span class="ui-chip-copy"><strong>{props.name}</strong><small>{props.detail}</small></span></Show>
     </button>
-    <button type="button" class="ui-chip-remove" aria-label={`Remove ${props.name}`}><XIcon /></button>
+    <button type="button" class="ui-chip-remove" aria-label={`Remove ${props.name}`} onClick={() => props.onRemove?.(chip)}><XIcon /></button>
   </div>;
 }
+/** A reference to lines of a file (a review comment): its mark, the file's name, the lines, the note, each cut short
+ *  before the name is. onOpen: a press goes to it; onEdit, onRemove: small actions after it (in a composer's rider). */
+export function Reference(props: { icon: JSX.Element; name: string; at?: string; note?: string; title?: string; label?: string; onOpen?: () => void; onEdit?: () => void; onRemove?: () => void }) {
+  return <span class="ui-reference" title={props.title}>
+    <button type="button" class="ui-reference-body" title={props.label} disabled={!props.onOpen} onClick={() => props.onOpen?.()}>{props.icon}<strong>{props.name}</strong><Show when={props.at}><span>{props.at}</span></Show><Show when={props.note}><span>· {props.note}</span></Show></button>
+    <Show when={props.onEdit}><Button variant="ghost" size="icon-sm" aria-label={`Edit comment for ${props.name}`} onClick={() => props.onEdit?.()}><PencilIcon /></Button></Show>
+    <Show when={props.onRemove}><Button variant="ghost" size="icon-sm" aria-label={`Remove reference to ${props.name}`} onClick={() => props.onRemove?.()}><XIcon /></Button></Show>
+  </span>;
+}
+/** References to files, wrapping onto as many lines as they need. */
+export const References = (props: { label?: string; children: JSX.Element }) => <div class="ui-references" role="group" aria-label={props.label}>{props.children}</div>;
 /** A list of Choices: one answer, or several (pick any). */
 export const Choices = (props: { multi?: boolean; children: JSX.Element }) =>
   <div class="ui-choices" role="listbox" aria-multiselectable={props.multi ? "true" : undefined} onPointerOver={moveCursor}>{props.children}</div>;
 
-/** A numbered answer: label, description, and a check (a box when several may be chosen). */
-export function Choice(props: { n: number; label: string; detail?: string; chosen?: boolean; active?: boolean; multi?: boolean }) {
-  return <div role="option" class="ui-choice" aria-selected={props.chosen} data-active={props.active ? "true" : undefined}>
-    <span class="ui-choice-key">{props.n}</span><span class="ui-choice-label">{props.label}</span>
+/** A numbered answer: label, description, and a check (a box when several may be chosen). own: the typed answer's
+ *  field in place of the label. onPick: chosen by a press; onPoint: the pointer is over it (the cursor moves to it). */
+export function Choice(props: { n: number; label?: string; detail?: string; title?: string; chosen?: boolean; active?: boolean; multi?: boolean; own?: JSX.Element; onPick?: () => void; onPoint?: () => void }) {
+  return <div role="option" class="ui-choice" aria-selected={props.chosen} data-active={props.active ? "true" : undefined} title={props.title} onClick={() => props.onPick?.()} onPointerMove={() => props.onPoint?.()}>
+    <span class="ui-choice-key">{props.n}</span><Show when={props.own} fallback={<span class="ui-choice-label">{props.label}</span>}>{props.own}</Show>
     <Show when={props.detail}><span class="ui-choice-detail">{props.detail}</span></Show>
     <span class="ui-choice-check" data-multi={props.multi ? "true" : undefined}><Show when={props.chosen}><CheckIcon /></Show></span>
   </div>;
@@ -65,8 +90,11 @@ export const Preview = (props: { format?: string; children: JSX.Element }) => <p
 export const RiderTop = (props: { children: JSX.Element }) => <div class="ui-rider-top">{props.children}</div>;
 /** A card rider's foot: its Hints, then its actions. */
 export const RiderFoot = (props: { children: JSX.Element }) => <div class="ui-rider-foot">{props.children}</div>;
-/** A card rider's pages (one question each, then Submit), as tabs: buttons with role tab. */
+/** A card rider's pages (one question each, then Submit), as Tabs. */
 export const Tabs = (props: { label?: string; children: JSX.Element }) => <div class="ui-tabs" role="tablist" aria-label={props.label}>{props.children}</div>;
+/** One page's tab; done: ticked (answered). Out of the Tab order: the card's own keys turn its pages. */
+export const Tab = (props: { selected?: boolean; done?: boolean; onClick?: () => void; children: JSX.Element }) =>
+  <button type="button" role="tab" tabIndex={-1} aria-selected={Boolean(props.selected)} onClick={() => props.onClick?.()}><Show when={props.done}><CheckIcon aria-label="Answered" /></Show>{props.children}</button>;
 /** The keys along a rider's foot: [key, what it does]. */
 export const Hints = (props: { hints: [string, string][] }) =>
   <div class="ui-hints" aria-hidden="true"><For each={props.hints}>{([key, label]) => <span><Keycap>{key}</Keycap>{label}</span>}</For></div>;

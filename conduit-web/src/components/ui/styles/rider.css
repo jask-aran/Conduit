@@ -28,6 +28,20 @@
 .ui-line-more { display: inline-flex; width: var(--icon-lg); height: var(--icon-lg); flex: none; align-items: center; justify-content: center; margin-top: var(--hairline); border: 0; border-radius: var(--radius-control); background: transparent; padding: 0; color: var(--muted-foreground); cursor: pointer; }
 .ui-line-more:is(:hover, :focus-visible) { background: var(--tint); color: inherit; }
 .ui-line-more svg { width: var(--icon); height: var(--icon); }
+.ui-line-more svg { transition: rotate var(--duration-quick) var(--ease-change); }
+.ui-line[data-expanded="true"] .ui-line-more svg { rotate: 180deg; }
+/* References: a file's lines, wrapping; each a quiet tinted capsule, its name strong and the rest muted, cut short. */
+.ui-references { display: flex; min-width: 0; flex: 1; flex-wrap: wrap; gap: var(--space-xs); }
+.ui-reference { display: inline-flex; min-width: 0; max-width: 100%; align-items: center; gap: var(--space-2xs); border-radius: var(--radius-control); background: var(--tint); padding: 0 var(--space-2xs) 0 var(--space-sm); font-size: var(--text-caption); }
+.ui-reference-body { display: inline-flex; min-width: 0; height: var(--control-xs); align-items: center; gap: var(--space-xs); border: 0; background: transparent; padding: 0; color: inherit; font: inherit; cursor: pointer; }
+.ui-reference-body:disabled { cursor: default; }
+.ui-reference-body:focus-visible { outline: 0; color: var(--foreground); text-decoration: underline; }
+.ui-reference-body > svg { width: var(--icon-xs); height: var(--icon-xs); flex: none; color: var(--muted-foreground); }
+.ui-reference-body > strong { flex: none; font-weight: var(--weight-strong); }
+.ui-reference-body > span { overflow: hidden; color: var(--muted-foreground); text-overflow: ellipsis; white-space: nowrap; }
+.ui-reference > .ui-button[data-size^="icon"] { width: var(--control-xs); min-width: var(--control-xs); height: var(--control-xs); padding: 0; color: var(--muted-foreground); }
+.ui-reference > .ui-button[data-size^="icon"]:is(:hover, :focus-visible) { color: var(--foreground); }
+.ui-reference > .ui-button svg { width: var(--icon-xs); height: var(--icon-xs); }
 
 /* Chips: things attached, scrolling sideways with faded edges. An image is its
    thumbnail; a file its mark, name and size. Uploading: a ring; failed: red, a retry mark. */

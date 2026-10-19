@@ -1,5 +1,6 @@
 import { createSignal, For, lazy, Show, Suspense } from "solid-js";
-import { FileCode2Icon, FileDiffIcon, PencilIcon, XIcon } from "lucide-solid";
+import { FileCode2Icon, FileDiffIcon } from "lucide-solid";
+import { Reference, References } from "@/components/ui";
 import { reviewCommentParts, type ProjectedReviewComment, type ReviewComment } from "./review-comments";
 import { Button, Textarea } from "@/components/primitives";
 import { FrostDialog } from "@/components/frost";
@@ -8,6 +9,7 @@ import { requestReviewNavigation } from "./review-navigation";
 // The preview pulls in CodeMirror, so it arrives with the dialog, not the chat.
 const WorkspaceExcerptView = lazy(() => import("../workspace/workspace-excerpt-view"));
 
+/** Review comments as References: under a sent message, or (editable) in the composer's rider. */
 export function ReviewCommentCards(props: {
   items: readonly (ReviewComment | ProjectedReviewComment)[];
   label: string;
@@ -15,7 +17,7 @@ export function ReviewCommentCards(props: {
   onRemove?: (item: ReviewComment) => void;
   onUpdate?: (item: ReviewComment, note: string) => void;
 }) {
-  return <Show when={props.items.length}><div class="review-comment-tray" aria-label={props.label}>
+  return <Show when={props.items.length}><References label={props.label}>
     <For each={[...props.items]}>{(item) => {
       const removable = "id" in item ? item : null;
       const [editing, setEditing] = createSignal(false);
@@ -34,16 +36,9 @@ export function ReviewCommentCards(props: {
       const diff = item.scope !== "file";
       const parts = () => reviewCommentParts(item);
       return <>
-        <div class="review-comment-chip" title={item.excerpt}>
-          <button type="button" class="review-comment-chip-link" title={diff ? "Comment on a comparison" : "Comment on the working file"} disabled={!props.chatId} onClick={() => props.chatId && requestReviewNavigation(props.chatId, item)}>
-            <Show when={diff} fallback={<FileCode2Icon />}><FileDiffIcon /></Show>
-            <strong>{item.path.split("/").at(-1)}</strong>
-            <span>{lines}</span>
-            <Show when={item.note}><span>· {item.note}</span></Show>
-          </button>
-          <Show when={props.onUpdate && removable}>{(comment) => <Button variant="ghost" size="icon-sm" aria-label={`Edit comment for ${item.path}`} onClick={() => { setNote(comment().note); setEditing(true); }}><PencilIcon /></Button>}</Show>
-          <Show when={props.onRemove && removable}>{(comment) => <Button variant="ghost" size="icon-sm" aria-label={`Remove reference to ${item.path}`} onClick={() => props.onRemove?.(comment())}><XIcon /></Button>}</Show>
-        </div>
+        <Reference icon={diff ? <FileDiffIcon /> : <FileCode2Icon />} name={item.path.split("/").at(-1) ?? item.path} at={lines} note={item.note || undefined} title={item.excerpt}
+          label={diff ? "Comment on a comparison" : "Comment on the working file"} onOpen={props.chatId ? () => requestReviewNavigation(props.chatId!, item) : undefined}
+          onEdit={props.onUpdate && removable ? () => { setNote(removable.note); setEditing(true); } : undefined} onRemove={props.onRemove && removable ? () => props.onRemove?.(removable) : undefined} />
         <Show when={props.onUpdate && removable}><FrostDialog open={editing()} onOpenChange={(open) => {
           if (!open) setNote(item.note);
           setEditing(open);
@@ -63,5 +58,5 @@ export function ReviewCommentCards(props: {
         </FrostDialog></Show>
       </>;
     }}</For>
-  </div></Show>;
+  </References></Show>;
 }
