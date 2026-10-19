@@ -1,10 +1,9 @@
 import { createSignal, For, lazy, onCleanup, onMount, Show } from "solid-js";
 import { ExternalLinkIcon, PlusIcon, QrCodeIcon, RefreshCwIcon } from "lucide-solid";
-import { Menu, MenuContent, MenuSection, MenuRow, MenuRadioGroup, MenuRadioItem, MenuSub, MenuSubContent, MenuSubTrigger, PhoneMenuPanel } from "@/components/menus";
-import { Rule, MenuParent, MenuNote } from "@/components/ui/popover";
+import { Menu, MenuContent, MenuSection, MenuRow, MenuRadioGroup, MenuRadioItem, MenuSub, MenuSubContent, MenuSubTrigger } from "@/components/menus";
+import { Rule, MenuNote } from "@/components/ui/popover";
 import { Spinner } from "@/components/ui/controls";
 import { ServerControl } from "@/components/ui/connection";
-import { createPhoneMenuPanels } from "@/components/phone-menu-panels";
 import { isMobileLayout } from "./mobile-layout";
 import { buildHttpUrl } from "../api/transport";
 import { proveServer } from "../platform/server-proof";
@@ -191,10 +190,6 @@ export function ServerSwitcher(props: {
 
   // Read as the menu opens; its content mounts afresh each time.
   const phone = () => isMobileLayout();
-  const [menuOpen, setMenuOpen] = createSignal(false);
-  const { panel, go, settling, returnToRoot, keepForChild, reset } = createPhoneMenuPanels<"root" | "routes">("root", menuOpen, ".ui-menu-panel");
-  // Its own group: the phone panel renders it outside the menu's groups, and
-  // a group label needs one.
   const RouteChoices = () => <MenuSection title={`Route to ${serverName()}`}>
     <MenuRadioGroup value={pathIsPinned() ? activePath() || "" : AUTOMATIC} onChange={(origin) => void chooseRoute(origin)}>
       <Show when={isInstalledClient()}>
@@ -212,7 +207,7 @@ export function ServerSwitcher(props: {
   </MenuSection>;
   const routeDetail = () => inUse() ? `${serverPathLabel(inUse()!)} · ${shortOrigin(inUse()!.origin)}` : undefined;
 
-  return <><Menu onOpenChange={(open) => { setMenuOpen(open); if (!open) reset(); onOpenChange(open); }}>
+  return <><Menu onOpenChange={onOpenChange}>
     <Menu.Trigger as={ServerControl} compact={props.compact} name={serverName()} detail={triggerDetail()} connectivity={props.connectivity}
       tabIndex={-1} onPointerDown={() => { focusBefore = document.activeElement; }} onFocus={(event: FocusEvent) => {
         if (giveBack === undefined) return;
@@ -221,45 +216,38 @@ export function ServerSwitcher(props: {
         if (before instanceof HTMLElement && before.isConnected && before !== event.currentTarget) before.focus({ preventScroll: true });
         else (event.currentTarget as HTMLElement).blur();
       }} onMouseDown={(event: MouseEvent) => event.preventDefault()} aria-label={`${serverName()} · ${triggerDetail()}`} title={`${activeOrigin() || "No server"} — ${triggerDetail()}`} />
-    <MenuContent data-settling={settling()} onPointerDownOutside={keepForChild} onFocusOutside={keepForChild} onCloseAutoFocus={(event) => event.preventDefault()}>
-      <MenuParent under={panel() !== "root"} onPointerDown={returnToRoot}>
-        <Show when={servers().length > 0}>
-          <MenuSection title="Servers">
-            <MenuRadioGroup value={activeOrigin() || ""} onChange={(origin) => switchToServer(origin, isInstalledClient())}>
-              <For each={servers()}>{(entry) =>
-                <MenuRadioItem value={entry.origin} disabled={(!canReachOtherOrigins() && entry.origin !== location.origin)
-                  || (entry.origin !== activeOrigin() && pathsOf(entry).every((path) => unreachable(path.origin)))}
-                  end={away(entry) ? <ExternalLinkIcon /> : undefined} meta={latencyLabel(entry.origin)}>{entry.name}</MenuRadioItem>
-              }</For>
-            </MenuRadioGroup>
-          </MenuSection><Rule />
-        </Show>
-        <Show when={activeServerPaths().length > 0}>
-          <MenuSection>
-            <Show when={phone()} fallback={<MenuSub>
-              <MenuSubTrigger detail={routeDetail()} title={inUse()?.origin}>Route</MenuSubTrigger>
-              <MenuSubContent><RouteChoices /></MenuSubContent>
-            </MenuSub>}>
-              <MenuRow detail={routeDetail()} title={inUse()?.origin} opens closeOnSelect={false} onSelect={() => go("routes")}>Route</MenuRow>
-            </Show>
-            <Show when={routeError()}><MenuNote error>{routeError()}</MenuNote></Show>
-          </MenuSection><Rule />
-        </Show>
-        <MenuRow icon={<QrCodeIcon />} onSelect={() => setTimeout(() => setPairing(true), 0)}>Pair a device</MenuRow>
-        <MenuRow icon={<PlusIcon />} onSelect={props.onAddServer}>Add server</MenuRow><Rule />
-        <MenuRow onSelect={props.onOpenSettings}>Manage settings</MenuRow>
-        <MenuRow disabled={props.pwaUpdating} onSelect={props.onUpdatePwa} icon={<Show when={props.pwaUpdating} fallback={<RefreshCwIcon />}><Spinner /></Show>}>
-          {props.pwaUpdating ? "Checking for updates…" : "Check for updates"}
-        </MenuRow>
-        <Show when={props.downloads}>
-          <MenuRow onSelect={() => download(release()?.windowsUrl)}>Download for Windows</MenuRow>
-          <MenuRow onSelect={() => download(release()?.apkUrl)}>Download for Android</MenuRow>
-        </Show>
-        <MenuRow onSelect={props.onLogout}>{servers().length > 1 ? `Sign out of ${serverName()}` : "Sign out"}</MenuRow>
-      </MenuParent>
-      <Show when={panel() === "routes"}>
-        <PhoneMenuPanel parent="[data-slot='ui-menu-content']" settling={settling()}><RouteChoices /><Show when={routeError()}><MenuNote error>{routeError()}</MenuNote></Show></PhoneMenuPanel>
+    <MenuContent onCloseAutoFocus={(event) => event.preventDefault()}>
+      <Show when={servers().length > 0}>
+        <MenuSection title="Servers">
+          <MenuRadioGroup value={activeOrigin() || ""} onChange={(origin) => switchToServer(origin, isInstalledClient())}>
+            <For each={servers()}>{(entry) =>
+              <MenuRadioItem value={entry.origin} disabled={(!canReachOtherOrigins() && entry.origin !== location.origin)
+                || (entry.origin !== activeOrigin() && pathsOf(entry).every((path) => unreachable(path.origin)))}
+                end={away(entry) ? <ExternalLinkIcon /> : undefined} meta={latencyLabel(entry.origin)}>{entry.name}</MenuRadioItem>
+            }</For>
+          </MenuRadioGroup>
+        </MenuSection><Rule />
       </Show>
+      <Show when={activeServerPaths().length > 0}>
+        <MenuSection>
+          <MenuSub phone={phone()}>
+            <MenuSubTrigger detail={routeDetail()} title={inUse()?.origin}>Route</MenuSubTrigger>
+            <MenuSubContent><RouteChoices /><Show when={routeError()}><MenuNote error>{routeError()}</MenuNote></Show></MenuSubContent>
+          </MenuSub>
+          <Show when={routeError()}><MenuNote error>{routeError()}</MenuNote></Show>
+        </MenuSection><Rule />
+      </Show>
+      <MenuRow icon={<QrCodeIcon />} onSelect={() => setTimeout(() => setPairing(true), 0)}>Pair a device</MenuRow>
+      <MenuRow icon={<PlusIcon />} onSelect={props.onAddServer}>Add server</MenuRow><Rule />
+      <MenuRow onSelect={props.onOpenSettings}>Manage settings</MenuRow>
+      <MenuRow disabled={props.pwaUpdating} onSelect={props.onUpdatePwa} icon={<Show when={props.pwaUpdating} fallback={<RefreshCwIcon />}><Spinner /></Show>}>
+        {props.pwaUpdating ? "Checking for updates…" : "Check for updates"}
+      </MenuRow>
+      <Show when={props.downloads}>
+        <MenuRow onSelect={() => download(release()?.windowsUrl)}>Download for Windows</MenuRow>
+        <MenuRow onSelect={() => download(release()?.apkUrl)}>Download for Android</MenuRow>
+      </Show>
+      <MenuRow onSelect={props.onLogout}>{servers().length > 1 ? `Sign out of ${serverName()}` : "Sign out"}</MenuRow>
     </MenuContent>
   </Menu>
   <Show when={pairing()}><PairDialog open={pairing()} onOpenChange={setPairing} /></Show></>;
