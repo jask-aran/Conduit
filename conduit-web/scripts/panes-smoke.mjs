@@ -64,7 +64,8 @@ let project;
     // The Chats place has no project page Files list; a named one is taken as asked.
     if (wanted ? candidate.name !== wanted : candidate.kind === "unstructured") continue;
     const tree = await (await context.request.get(`${origin}/v0/projects/${encodeURIComponent(candidate.id)}/tree?path=`)).json().catch(() => ({}));
-    const files = (tree.entries ?? []).filter((entry) => entry.type === "file");
+    // Files hides dotfiles until asked, so only the visible ones count.
+    const files = (tree.entries ?? []).filter((entry) => entry.type === "file" && !(entry.name ?? entry.path?.split("/").pop() ?? "").startsWith("."));
     if (files.length >= 6) { project = candidate; break; }
   }
   await context.close();

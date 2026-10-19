@@ -2,22 +2,39 @@ import { DropdownMenu as KMenu } from "@kobalte/core/dropdown-menu";
 import { Popover as KPopover } from "@kobalte/core/popover";
 import { ContextMenu as KContextMenu } from "@kobalte/core/context-menu";
 import type { FocusOutsideEvent } from "@kobalte/core";
-import { createContext, createEffect, createMemo, createSignal, createUniqueId, For, on, onCleanup, useContext, type ComponentProps, type JSX, type ParentProps } from "solid-js";
+import { createContext, createEffect, createMemo, createSignal, createUniqueId, For, on, onCleanup, splitProps, useContext, type ComponentProps, type JSX, type ParentProps } from "solid-js";
 import { createFullscreenPortalMount } from "./primitives";
 import { Menu as Surface, MenuAction, Item, Section, MenuPanel, MenuParent, MenuNote, SearchSection } from "./ui/popover";
 import { Button, SliderValue } from "./ui/controls";
+import { PillButton } from "./ui/pill";
 export const Menu = KMenu;
 export const ContextMenu = (props: ParentProps) => <KContextMenu modal={false} fitViewport overflowPadding={8} placement="right-start">{props.children}</KContextMenu>;
 export const ContextMenuTrigger = KContextMenu.Trigger;
 export const MenuGroup = KMenu.Group;
 export const ContextMenuGroup = KContextMenu.Group;
 export function MenuTrigger(props: ParentProps<{ disabled?: boolean; "aria-label"?: string }>) { return <KMenu.Trigger as={Button} variant="ghost" {...props} />; }
-type ContentProps = ParentProps<{ "data-settling"?: boolean; onOpenAutoFocus?: (event: Event) => void; onPointerDownOutside?: (event: Event) => void; onFocusOutside?: (event: FocusOutsideEvent) => void; onCloseAutoFocus?: (event: Event) => void }>;
+/** A pill that opens a menu without taking focus from what is being typed: a tap leaves focus where it
+ *  is, and while `keep()` the menu's closing focus is not handed to it either (on a phone, even a
+ *  moment away from the text makes Android drop and re-raise the keyboard). */
+export function MenuPillTrigger(props: { label: string; icon: JSX.Element; open?: boolean; disabled?: boolean; keep: () => boolean; ref?: (element: HTMLButtonElement) => void }) {
+  return <KMenu.Trigger as={(attrs: ComponentProps<typeof PillButton>["button"]) => <PillButton label={props.label} icon={props.icon} open={props.open} button={attrs} />}
+    disabled={props.disabled} onPointerDown={(event: PointerEvent) => event.preventDefault()}
+    ref={(element: HTMLButtonElement) => { holdFocus(element, props.keep); props.ref?.(element); }} />;
+}
+/** An element that declines focus while `keep()`: Kobalte's own focus calls (the trigger on close, the menu on open) leave the typing where it is. */
+function holdFocus(element: HTMLElement, keep: () => boolean) {
+  const focus = element.focus.bind(element);
+  element.focus = (options?: FocusOptions) => { if (!keep()) focus(options); };
+}
+type ContentProps = ParentProps<{ "data-settling"?: boolean; keep?: () => boolean; onOpenAutoFocus?: (event: Event) => void; onPointerDownOutside?: (event: Event) => void; onFocusOutside?: (event: FocusOutsideEvent) => void; onCloseAutoFocus?: (event: Event) => void }>;
 type RowProps = Omit<ComponentProps<typeof Item>, "onSelect"> & { onSelect?: () => void; closeOnSelect?: boolean };
 type ChoiceProps = RowProps & { value: string };
+/** keep: while true, opening leaves focus where it is (MenuPillTrigger's typing). */
 export function MenuContent(props: ContentProps) {
   const mount = createFullscreenPortalMount();
-  return <KMenu.Portal mount={mount()}><KMenu.Content as={Surface} data-slot="ui-menu-content" {...props}><MenuBody>{props.children}</MenuBody></KMenu.Content></KMenu.Portal>;
+  const [local, rest] = splitProps(props, ["keep"]);
+  return <KMenu.Portal mount={mount()}><KMenu.Content as={Surface} data-slot="ui-menu-content" fit style={{ "--menu-room": "var(--kb-popper-content-available-height)" }}
+    ref={(element: HTMLElement) => { if (local.keep) holdFocus(element, local.keep); }} {...rest}><MenuBody>{props.children}</MenuBody></KMenu.Content></KMenu.Portal>;
 }
 export function ContextMenuContent(props: ParentProps) {
   const mount = createFullscreenPortalMount();

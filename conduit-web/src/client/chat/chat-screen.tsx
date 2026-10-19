@@ -1,7 +1,8 @@
 import { createSignal, Show, type JSX } from "solid-js";
-import { ChevronRightIcon, EllipsisIcon, MessageSquarePlusIcon, PanelLeftIcon, PanelRightIcon, PencilIcon, RefreshCwIcon, SearchIcon, ShareIcon, TerminalIcon, Trash2Icon } from "lucide-solid";
-import { Button, Menu, MenuContent, MenuGroup, MenuItem, MenuLabel, MenuSeparator, MenuTrigger } from "@/components/primitives";
-import { useLibrary } from "@/components/ui/swap";
+import { EllipsisIcon, MessageSquarePlusIcon, PanelLeftIcon, PanelRightIcon, PencilIcon, RefreshCwIcon, SearchIcon, ShareIcon, TerminalIcon, Trash2Icon } from "lucide-solid";
+import { Button, MenuTrigger } from "@/components/primitives";
+import { Menu, MenuContent, MenuRow, MenuSection } from "@/components/menus";
+import { HeadingSection, MenuNote, Rule, Spinner } from "@/components/ui";
 import type { Project, RuntimeIdentity, Template } from "../api/contracts";
 import type { ActiveChatStore } from "../state/active-chat";
 import { SPINNING_ACTIVITY, type ComposerStatus } from "./composer";
@@ -118,46 +119,41 @@ export function ChatHeader(props: {
         </Show>
         <Show when={!props.appDashboard}><Menu modal={false}>
           <MenuTrigger class="chat-header-more" tabIndex={-1} aria-label={props.dashboard ? `More ${placeKind()} options` : "More chat options"} title={props.dashboard ? `More ${placeKind()} options` : "More chat options"}><EllipsisIcon /></MenuTrigger>
-          <MenuContent class="chat-header-menu">
-            {/* Library previews: the library's heading section (components/ui/swap.ts). */}
-            <Show when={useLibrary()} fallback={<MenuGroup>
-              <MenuLabel class="chat-header-menu-title">{props.title}</MenuLabel>
-              <MenuLabel class="chat-header-menu-meta">{menuLine()}</MenuLabel>
-            </MenuGroup>}>
-              <div class="ui-section ui-heading" data-kind="heading"><div class="ui-heading-title">{props.title}</div><div class="ui-heading-detail">{menuLine()}</div></div>
-            </Show>
+          <MenuContent>
+            <HeadingSection title={props.title} detail={menuLine()} />
             <Show when={!props.dashboard}>
               <Show when={props.chat}>{(chat) => {
                 // Opens in place: a submenu has nowhere to go beside a menu that fills a phone.
                 const [expanded, setExpanded] = createSignal(false);
                 const used = () => contextUsagePercent(chat().contextUsage());
-                return <div class={useLibrary() ? undefined : "chat-header-menu-context-block"}>
-                  <Show when={useLibrary()}><div role="menuitem" class="ui-row" data-field="" aria-expanded={expanded()} onClick={() => { if (!expanded()) chat().refreshContext(); setExpanded(!expanded()); }}>
-                    <span class="ui-label">Context</span><small>{used() == null ? "Unavailable" : `${Math.round(used()!)}% used`}</small><ChevronRightIcon class="ui-chevron" /></div></Show>
-                  <Show when={!useLibrary()}><button type="button" class="chat-header-menu-context-trigger" aria-expanded={expanded()}
-                    onClick={() => { if (!expanded()) chat().refreshContext(); setExpanded(!expanded()); }}>
-                    <span class="chat-header-menu-context-line"><span class="chat-header-menu-section-label">Context</span>
-                      <span>{used() == null ? "Unavailable" : `${Math.round(used()!)}% used`}</span><ChevronRightIcon class="chat-header-menu-context-chevron" /></span>
+                return <>
+                  <MenuSection>
+                    <MenuRow closeOnSelect={false} aria-expanded={expanded()} opens meta={used() == null ? "Unavailable" : `${Math.round(used()!)}% used`}
+                      onSelect={() => { if (!expanded()) chat().refreshContext(); setExpanded(!expanded()); }}>Context</MenuRow>
                     <Show when={!expanded()}><ContextBar chat={chat()} /></Show>
-                  </button></Show>
+                  </MenuSection>
                   <Show when={expanded()}><ContextBreakdown chat={chat()} bare canCompact={chat().capabilities()?.compaction !== false} /></Show>
-                </div>;
+                </>;
               }}</Show>
-              <Show when={sessionId()}><MenuGroup class="chat-header-menu-context" aria-label="Session"><MenuLabel class="chat-header-menu-section-label">Session ID</MenuLabel><div class="chat-header-menu-context-values"><code>{sessionId()}</code></div></MenuGroup></Show>
+              <Show when={sessionId()}><MenuSection title="Session ID"><MenuNote>{sessionId()}</MenuNote></MenuSection></Show>
             </Show>
-            <MenuSeparator />
+            <Rule />
             <Show when={!props.dashboard && !nativeApp}>
-              <MenuItem disabled={props.pwaUpdating()} onSelect={props.onUpdatePwa}><RefreshCwIcon class={props.pwaUpdating() ? "pwa-update-icon pwa-update-icon-active" : "pwa-update-icon"} />{props.pwaUpdating() ? "Updating app…" : "Update app"}</MenuItem>
-              <MenuSeparator />
+              <MenuSection>
+                <MenuRow disabled={props.pwaUpdating()} onSelect={props.onUpdatePwa} icon={<Show when={props.pwaUpdating()} fallback={<RefreshCwIcon />}><Spinner /></Show>}>{props.pwaUpdating() ? "Updating app…" : "Update app"}</MenuRow>
+              </MenuSection>
+              <Rule />
             </Show>
-            <Show when={isMobileLayout()}><MenuItem onSelect={props.onTogglePanel}><PanelRightIcon />Workspace panel</MenuItem></Show>
-            <MenuItem onSelect={props.onShare}><ShareIcon />Share</MenuItem>
-            <Show when={props.onRename}>
-              <MenuItem onSelect={() => props.onRename?.()}><PencilIcon />{props.dashboard ? `Rename ${placeKind()}` : "Rename"}</MenuItem>
-            </Show>
-            <Show when={props.onDelete}>
-              <MenuItem variant="destructive" onSelect={() => props.onDelete?.()}><Trash2Icon />{props.dashboard ? (placeKind() === "workspace" ? "Unlink workspace" : "Delete project") : "Delete"}</MenuItem>
-            </Show>
+            <MenuSection>
+              <Show when={isMobileLayout()}><MenuRow icon={<PanelRightIcon />} onSelect={props.onTogglePanel}>Workspace panel</MenuRow></Show>
+              <MenuRow icon={<ShareIcon />} onSelect={props.onShare}>Share</MenuRow>
+              <Show when={props.onRename}>
+                <MenuRow icon={<PencilIcon />} onSelect={() => props.onRename?.()}>{props.dashboard ? `Rename ${placeKind()}` : "Rename"}</MenuRow>
+              </Show>
+              <Show when={props.onDelete}>
+                <MenuRow destructive icon={<Trash2Icon />} onSelect={() => props.onDelete?.()}>{props.dashboard ? (placeKind() === "workspace" ? "Unlink workspace" : "Delete project") : "Delete"}</MenuRow>
+              </Show>
+            </MenuSection>
           </MenuContent>
         </Menu></Show>
         {props.actions}

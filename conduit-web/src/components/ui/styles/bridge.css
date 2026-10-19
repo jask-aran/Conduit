@@ -12,9 +12,3 @@
   backdrop-filter: var(--frost-blur);
   box-shadow: var(--frost-lift-rest), var(--frost-highlight);
 }
-/* App menus drawn as library menus (until they graduate). */
-/* A rule between groups of an app menu's rows, where a library menu has sections. */
-/* A menu keeps its caller's class for its width and placement; its shell
-   (inset, radius, lift) is the library's. */
-/* An app row's own text runs out in an ellipsis, as a library label does. */
-.ui-row > span:not(.ui-icon, .ui-keys, .ui-meta, .ui-row-end) { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

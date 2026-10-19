@@ -27,7 +27,6 @@ import { HarnessMark } from "../harness-brand";
 import { parseReviewComments, removeReviewComment, reviewComments, updateReviewComment } from "./review-comments";
 import { ReviewCommentCards } from "./review-comment-cards";
 import "./performance-composer.css";
-import "./composer-desktop.css";
 import { HostUiRequests } from "./host-ui-card";
 
 export const SPINNING_ACTIVITY = new Set(["starting", "reconnecting", "thinking", "responding", "using_tool", "retrying", "compacting", "stopping", "waiting_for_model"]);

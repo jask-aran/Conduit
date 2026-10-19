@@ -1,12 +1,7 @@
-import { For, Show, createEffect, createSignal, createUniqueId, onCleanup } from "solid-js";
-// Kobalte's public dropdown-menu entrypoint does not expose this hook, but its
-// menu content uses the same context. The compiled chunk keeps the context
-// identity shared with the public component.
-// @ts-expect-error Kobalte does not publish declarations for this internal chunk.
-import { useMenuContext } from "../../../node_modules/@kobalte/core/dist/chunk/L544S5A4.jsx";
+import { For, Show, createEffect, createSignal, onCleanup } from "solid-js";
 import { FolderIcon, PaperclipIcon, PlusIcon, SearchIcon, ShieldCheckIcon } from "lucide-solid";
-import { PillButton, Section, Slider } from "@/components/ui";
-import { Menu, MenuContent, MenuRadioGroup, MenuRadioItem, MenuRow, MenuSection, MenuSub, MenuSubContent, MenuSubTrigger, MenuSubValue, useMenuBack } from "@/components/menus";
+import { Section, Slider } from "@/components/ui";
+import { Menu, MenuContent, MenuPillTrigger, MenuRadioGroup, MenuRadioItem, MenuRow, MenuSection, MenuSub, MenuSubContent, MenuSubTrigger, MenuSubValue, useMenuBack } from "@/components/menus";
 import type { Template } from "../api/contracts";
 import type { ActiveChatStore } from "../state/active-chat";
 import type { ComposerModels } from "./composer-models";
@@ -83,8 +78,8 @@ export function MobileComposerOptions(props: {
 
   const placed = () => composer.place?.current && composer.place.current.slug !== "chat" ? composer.place.current : null;
   return <Menu modal={false} placement="top-start" gutter={8} open={open()} onOpenChange={(value) => { if (value) typingAtOpen = composerTextarea(); setOpen(value); }}>
-      <MobileComposerPlusTrigger serverOnline={composer.serverOnline} open={open()} holdFocus={() => typingAtOpen !== null} bind={(element) => { root = element; }} />
-      <MenuContent onOpenAutoFocus={preserveFocus} onCloseAutoFocus={(event) => { event.preventDefault(); restoreTyping(); }} onFocusOutside={preserveFocus}>
+      <MenuPillTrigger label="Message options" icon={<PlusIcon />} open={open()} disabled={!composer.serverOnline} keep={() => typingAtOpen !== null} ref={(element) => { root = element; }} />
+      <MenuContent keep={() => typingAtOpen !== null} onOpenAutoFocus={preserveFocus} onCloseAutoFocus={(event) => { event.preventDefault(); restoreTyping(); }} onFocusOutside={preserveFocus}>
         {/* A phone option shows its value, not its name: the section names it. */}
         <MenuSection title={composer.profiles.length ? "Profile" : "Model"} note={context() != null ? `${Math.round(context()!)}% context` : undefined}>
           <Show when={composer.profiles.length}>
@@ -168,36 +163,6 @@ function PlaceChoices(props: { place: PlaceOptions }) {
     </Show>
     <For each={places()}>{(project) => <MenuRadioItem value={project.id} icon={<PlaceGlyph project={project} />}>{project.name}</MenuRadioItem>}</For>
   </MenuRadioGroup></MenuSection>;
-}
-
-function MobileComposerPlusTrigger(props: {
-  serverOnline: boolean;
-  open: boolean;
-  bind: (element: HTMLButtonElement) => void;
-  /* While the text pill has the keyboard, the menu's closing focus never lands
-     here: even a moment away from the textarea makes Android drop and re-raise
-     the keyboard. */
-  holdFocus: () => boolean;
-}) {
-  const menu = useMenuContext();
-  const triggerId = `composer-plus-${createUniqueId()}`;
-  onCleanup(menu.registerTriggerId(triggerId));
-
-  return <PillButton label="Message options" icon={<PlusIcon />} open={props.open} button={{
-    ref: (element: HTMLButtonElement) => {
-      const focus = element.focus.bind(element);
-      element.focus = (options?: FocusOptions) => { if (!props.holdFocus()) focus(options); };
-      menu.setTriggerRef(element);
-      props.bind(element);
-    },
-    id: triggerId,
-    "aria-haspopup": "true",
-    get "aria-expanded"() { return menu.isOpen(); },
-    get "aria-controls"() { return menu.isOpen() ? menu.contentId() : undefined; },
-    get disabled() { return !props.serverOnline; },
-    onPointerDown: (event: PointerEvent) => { event.preventDefault(); },
-    onClick: (event: MouseEvent) => { event.preventDefault(); menu.toggle(false); },
-  }} />;
 }
 
 export default MobileComposerOptions;

@@ -9,13 +9,12 @@ import type { JSX } from "solid-js";
  *                 search, Settings. Pinned near the top by default.
  *   Keycap        a key, in rows and in the foot rail.
  *
- *   Menus, context menus and popovers are the Menu* / ContextMenu* /
- *   Popover* primitives (components/primitives.tsx), which wear frost through
- *   their data-slot; a pick list in a popover is PopoverSearchList.
+ *   Menus, context menus and popovers are the v2 Menu, Section and Item
+ *   through the Kobalte adapter (components/menus.tsx); a pick list in a
+ *   popover is its SearchList. Dialogs are components/dialog.tsx.
  *
  * Inside: rows take `frost-row` (the cursor wash on data-highlighted, where
- * you are by weight), the foot `frost-rail`. Dialogs use components/dialog.tsx
- * and the v2 Card. Styles are the frost blocks at the end of styles.css; no surface sets its own blur, fill, stroke, radius, dim or
+ * you are by weight), the foot `frost-rail`. Styles are the frost blocks at the end of styles.css; no surface sets its own blur, fill, stroke, radius, dim or
  * arrival.
  */
 

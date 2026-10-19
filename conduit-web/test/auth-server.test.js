@@ -68,8 +68,16 @@ async function spawnServer(env, { password } = {}) {
   const clientDist = path.join(root, "client-dist");
   await fs.mkdir(clientDist);
   // Login is built from v2; the fixture serves that build beside its tiny SPA.
-  await fs.cp(path.resolve("dist/access"), path.join(clientDist, "access"), { recursive: true });
-  await fs.symlink(path.resolve("dist/assets"), path.join(clientDist, "assets"), "dir");
+  // Without a build (a fresh checkout), a stand-in form with the same
+  // placeholders keeps the server's auth behaviour testable.
+  if (await fs.stat(path.resolve("dist/access/templates.json")).catch(() => null)) {
+    await fs.cp(path.resolve("dist/access"), path.join(clientDist, "access"), { recursive: true });
+    await fs.symlink(path.resolve("dist/assets"), path.join(clientDist, "assets"), "dir");
+  } else {
+    const form = (error = "") => `<form method="post" action="/login">${error}<input type="hidden" name="after" value="__CONDUIT_ACCESS_AFTER__"><input type="password" name="password"></form>`;
+    await fs.mkdir(path.join(clientDist, "access"));
+    await fs.writeFile(path.join(clientDist, "access/templates.json"), JSON.stringify({ css: [], normal: form(), error: form("<p role=\"alert\">__CONDUIT_ACCESS_ERROR__</p>") }));
+  }
   await fs.writeFile(path.join(clientDist, "index.html"), "<!doctype html><title>Conduit test SPA</title>");
   const child = spawn(process.execPath, ["src/server.js"], {
     cwd: path.resolve(import.meta.dirname, ".."),

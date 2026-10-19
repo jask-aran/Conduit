@@ -78,7 +78,8 @@ export function Gauge(props: { value: number; tone?: "idle" | "normal" | "warnin
 }
 
 /** A colour standing for a kind of thing (a meter's part): the icon-dot's size; hollow, a ring for what holds nothing. */
-export const Swatch = (props: { colour?: string; hollow?: boolean }) => <i class="ui-swatch" data-hollow={props.hollow ? "" : undefined} style={{ background: props.hollow ? undefined : props.colour }} aria-hidden="true" />;
+/** fill: the whole of its host (a colour choice) rather than a dot beside a label. */
+export const Swatch = (props: { colour?: string; hollow?: boolean; fill?: boolean }) => <i class="ui-swatch" data-hollow={props.hollow ? "" : undefined} data-fill={props.fill ? "" : undefined} style={{ background: props.hollow ? undefined : props.colour }} aria-hidden="true" />;
 
 /** A whole as one bar of its parts, each in its colour and grown by its value; mark: a rule where something happens, named under it. */
 export function Meter(props: { parts: { value: number; colour: string }[]; mark?: { at: number; label: string } }) {

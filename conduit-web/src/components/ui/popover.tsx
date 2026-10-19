@@ -6,9 +6,10 @@ import { type Density, type Motion, motionOf, moveCursor } from "./shared";
 
 /** under: a phone's submenu is open as a panel over it, so it dims and takes no taps. */
 /** wide: a readout rather than a list, at a measure of its own (the context breakdown). */
-export function Menu(props: JSX.HTMLAttributes<HTMLDivElement> & { density?: Density; motion?: Motion; under?: boolean; wide?: boolean }) {
-  const [, rest] = splitProps(props, ["class", "density", "motion", "under", "wide", "children"]);
-  return <div role="menu" class={cn("ui-frost ui-menu", props.class)} onPointerOver={moveCursor} {...rest} data-wide={props.wide ? "" : undefined} data-density={props.density} data-surface="frost" data-lift="raised" data-under={props.under ? "" : undefined} {...motionOf(props.motion)}>{props.children}</div>;
+/** fit: never taller than the room its host gives it (--menu-room); a longer menu scrolls inside. */
+export function Menu(props: JSX.HTMLAttributes<HTMLDivElement> & { density?: Density; motion?: Motion; under?: boolean; wide?: boolean; fit?: boolean }) {
+  const [, rest] = splitProps(props, ["class", "density", "motion", "under", "wide", "fit", "children"]);
+  return <div role="menu" class={cn("ui-frost ui-menu", props.class)} onPointerOver={moveCursor} {...rest} data-wide={props.wide ? "" : undefined} data-fit={props.fit ? "" : undefined} data-density={props.density} data-surface="frost" data-lift="raised" data-under={props.under ? "" : undefined} {...motionOf(props.motion)}>{props.children}</div>;
 }
 
 /** A menu's section: a list of items (the default) or a slider, with an optional title and a note beside it.
