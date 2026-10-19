@@ -381,16 +381,6 @@ svg.lucide { stroke-width: 2.4; }
 .attachment-copy { display: flex; min-width: 0; flex: 1; flex-direction: column; }
 .attachment-copy strong, .attachment-copy small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .attachment-copy small { color: var(--muted-foreground); }
-.review-comment-tray { display: flex; max-width: 100%; flex-wrap: wrap; gap: 4px; margin: 0 0 6px; }
-.review-comment-chip { display: inline-flex; min-width: 0; max-width: min(360px, 100%); align-items: center; gap: 4px; padding: 3px 6px; border: 1px solid var(--border); border-radius: 6px; background: var(--card); font-size: 10px; line-height: 1.2; }
-.review-comment-chip-link { display: inline-flex; min-width: 0; align-items: center; gap: 4px; border: 0; padding: 0; background: transparent; color: inherit; font: inherit; cursor: pointer; }
-.review-comment-chip-link:disabled { cursor: default; }
-.review-comment-chip-link:focus-visible { border-radius: 3px; outline: none; background: var(--accent); color: var(--foreground); }
-.review-comment-chip-link > svg { width: 11px; height: 11px; flex: none; color: var(--muted-foreground); }
-.review-comment-chip-link strong { flex: none; font-weight: 600; }
-.review-comment-chip-link > span { overflow: hidden; color: var(--muted-foreground); text-overflow: ellipsis; white-space: nowrap; }
-.review-comment-chip [data-slot="button"] { width: 16px; height: 16px; flex: none; padding: 0; }
-.review-comment-chip [data-slot="button"] svg { width: 10px; height: 10px; }
 .review-comment-editor { gap: 10px; max-width: 640px; border-color: var(--border); border-radius: 11px; background: var(--popover); }
 .review-comment-editor textarea { min-height: 64px; max-height: 36vh; resize: vertical; font: 13px/1.45 var(--font-sans); }
 /* The commented lines, whole, with the part the comment covers picked out. */
@@ -1827,54 +1817,6 @@ svg.lucide { stroke-width: 2.4; }
   -webkit-mask-position: center;
   -webkit-mask-repeat: no-repeat;
   -webkit-mask-size: contain;
-}
-
-/* Messages sent while the agent is working, docked just above the composer.
-
-   In flow rather than floating: the composer stack is bottom-anchored, so a
-   docked card grows the stack upward without moving the composer, and the
-   transcript - which reserves the stack's measured height - dodges the card
-   instead of letting it cover the output it is about. Frosted glass matches
-   the composer surface, so it reads as belonging to the composer rather than
-   to the transcript scrolling behind it.
-
-   One row: label, what is waiting, and icon actions. */
-.queued-float {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 6px;
-  padding: 3px 4px 3px 10px;
-  /* Material comes from .composer-surface-material, which the composer, the
-     Follow button and the header pill also use. Nothing about border,
-     background, blur or shadow belongs here. */
-  border-radius: var(--composer-radius, 12px);
-}
-.queued-float-title { flex: none; color: color-mix(in oklch, var(--foreground), transparent 52%); font-family: inherit; font-size: 9.6px; font-weight: 700; line-height: 1.5; letter-spacing: 0.02em; text-transform: none; }
-
-.queued-float-list { display: flex; min-width: 0; flex: 1; flex-direction: column; gap: 3px; margin: 0; padding: 0; list-style: none; }
-.queued-line { display: flex; align-items: flex-start; gap: 6px; min-width: 0; }
-.queued-line-body {
-  flex: 1; min-width: 0; margin: 0; font-size: 12px; line-height: 1.45;
-  white-space: pre-wrap; overflow-wrap: anywhere;
-  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 1; overflow: hidden;
-}
-.queued-line[data-expanded="true"] .queued-line-body { -webkit-line-clamp: unset; overflow: visible; }
-.queued-line-expander {
-  flex: none; display: inline-flex; align-items: center; justify-content: center;
-  width: 16px; height: 16px; margin-top: 1px; padding: 0;
-  border: 0; border-radius: 4px; background: transparent;
-  color: var(--muted-foreground); cursor: pointer;
-}
-.queued-line-expander:hover { background: oklch(1 0 0 / 10%); color: inherit; }
-.queued-line-expander svg { width: 12px; height: 12px; }
-
-.queued-float-actions { display: flex; flex: none; align-items: center; gap: 2px; }
-.queued-float-actions [data-slot="button"] { width: 24px; height: 24px; border-radius: 8px; }
-.queued-float-actions [data-slot="button"] svg { width: 13px; height: 13px; }
-
-@media (--conduit-phone-layout) {
-  .queued-float { gap: 6px; padding: 3px 4px 3px 8px; }
 }
 
 /* The first open (main.tsx): until the route is ready and laid out only the

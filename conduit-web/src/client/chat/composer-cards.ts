@@ -1,5 +1,5 @@
 import { createEffect, createSignal, onCleanup, untrack } from "solid-js";
-import "./composer-cards.css";
+import type { Motion } from "@/components/ui";
 
 /**
  * How a card that belongs to the composer goes: back down into it when the
@@ -17,7 +17,7 @@ const reduced = () => typeof matchMedia === "function" && matchMedia("(prefers-r
  * The data a card draws from empties the moment the composer takes it back, and
  * Solid removes the card with it, so there is nothing left to leave. This holds
  * the last present value for the length of the exit and says it is leaving;
- * the card draws that value with `data-leaving`, and CSS plays the exit.
+ * the card draws that value as its Rider's motion (riderMotion), and the library plays the exit.
  */
 export function createLeaving<T>(source: () => T, present: (value: T) => boolean, exit: () => CardExit = () => "drop") {
   const [held, setHeld] = createSignal<T>(source());
@@ -33,6 +33,9 @@ export function createLeaving<T>(source: () => T, present: (value: T) => boolean
   });
   return { value: held, leaving };
 }
+
+/** A leaving card's Rider motion: dropping back into the composer, or removed (faded in place); else it rises in. */
+export const riderMotion = (leaving: Exclude<CardExit, "none"> | null): Motion => leaving === "drop" ? "leaving" : leaving === "fade" ? "removing" : "entering";
 
 /**
  * Fade one card out in place before it is taken away. The animation is handed

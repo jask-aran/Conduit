@@ -1,36 +1,8 @@
 import { createSignal, createEffect, For, Show } from "solid-js";
-import { Button } from "@/components/primitives";
-import { ChevronDownIcon, ChevronUpIcon, PencilIcon, SendHorizontalIcon, XIcon } from "lucide-solid";
+import { Button, Line, Lines, Rider, RiderActions, RiderTitle } from "@/components/ui";
+import { PencilIcon, SendHorizontalIcon, XIcon } from "lucide-solid";
 import type { Message } from "../api/contracts";
-import { createLeaving, type CardExit } from "./composer-cards";
-
-/**
- * One queued line, clamped to a single line. The expander appears only when the
- * text is really clipped, measured rather than guessed from length: wrapping
- * depends on the rendered width, which a character count cannot know.
- */
-function QueuedLine(props: { text: string; v2?: boolean }) {
-  const [expanded, setExpanded] = createSignal(false);
-  const [clipped, setClipped] = createSignal(false);
-  let body!: HTMLParagraphElement;
-  createEffect(() => {
-    props.text;
-    if (!expanded()) setClipped(body.scrollHeight > body.clientHeight + 1);
-  });
-
-  return <li class={props.v2 ? "ui-line" : "queued-line"} data-expanded={expanded() ? "true" : "false"}>
-    <p class={props.v2 ? "ui-line-body" : "queued-line-body"} ref={body}>{props.text}</p>
-    <Show when={clipped()}>
-      <button
-        type="button"
-        class={props.v2 ? "ui-line-more" : "queued-line-expander"}
-        aria-label={expanded() ? "Show less" : "Show more"}
-        aria-expanded={expanded()}
-        onClick={() => setExpanded((value) => !value)}
-      >{expanded() ? <ChevronUpIcon /> : <ChevronDownIcon />}</button>
-    </Show>
-  </li>;
-}
+import { createLeaving, riderMotion, type CardExit } from "./composer-cards";
 
 /**
  * Messages sent while the agent is working, sitting directly above the composer
@@ -47,7 +19,6 @@ function QueuedLine(props: { text: string; v2?: boolean }) {
  */
 export function QueuedMessages(props: {
   messages: Message[];
-  surface: string;
   busy: boolean;
   canInterrupt: boolean;
   onInterruptAndSend: () => void;
@@ -55,8 +26,6 @@ export function QueuedMessages(props: {
   onDiscard: () => void;
 }) {
   const lines = () => props.messages.map((message) => message.content || "").filter((text) => text.trim());
-  // components v2 in the gallery's Library previews (components/ui/swap.ts): a Rider of Lines.
-  const v2 = () => props.surface === "library";
   const hint = () => props.busy ? "Sent when the current step finishes" : "Sends next";
   // Taken by the model or put back to edit, it drops into the composer;
   // discarded, it fades where it is.
@@ -65,16 +34,16 @@ export function QueuedMessages(props: {
   const shown = createLeaving(lines, (list) => list.length > 0, exit);
 
   return <Show when={shown.value().length}>
-    <aside class={v2() ? "queued-float ui-frost ui-rider composer-card" : "queued-float composer-surface-material composer-card"} data-composer-surface={props.surface} data-surface={v2() ? "frost" : undefined} data-lift={v2() ? "rest" : undefined} data-layout={v2() ? "row" : undefined} data-leaving={shown.leaving() || undefined} aria-label="Messages waiting for the agent">
-      <span class={v2() ? "ui-title-text" : "queued-float-title"} title={hint()}>{props.busy ? "Steering" : "Queued"}</span>
-      <ul class={v2() ? "ui-lines" : "queued-float-list"}><For each={shown.value()}>{(text) => <QueuedLine text={text} v2={v2()} />}</For></ul>
-      <div class={v2() ? "ui-rider-actions" : "queued-float-actions"}>
+    <Rider label="Messages waiting for the agent" motion={riderMotion(shown.leaving())}>
+      <RiderTitle title={hint()}>{props.busy ? "Steering" : "Queued"}</RiderTitle>
+      <Lines><For each={shown.value()}>{(text) => <Line text={text} />}</For></Lines>
+      <RiderActions>
         <Show when={props.busy && props.canInterrupt}>
           <Button size="icon-sm" variant="ghost" aria-label="Interrupt and send now" title="Interrupt and send now" onClick={props.onInterruptAndSend}><SendHorizontalIcon /></Button>
         </Show>
         <Button size="icon-sm" variant="ghost" aria-label="Edit" title="Edit in the composer" onClick={props.onEdit}><PencilIcon /></Button>
         <Button size="icon-sm" variant="ghost" aria-label="Discard" title="Discard" onClick={() => { setExit("fade"); props.onDiscard(); }}><XIcon /></Button>
-      </div>
-    </aside>
+      </RiderActions>
+    </Rider>
   </Show>;
 }

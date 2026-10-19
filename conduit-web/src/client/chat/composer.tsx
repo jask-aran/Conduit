@@ -1,5 +1,5 @@
 import { LibraryContext, useLibraryPiece } from "@/components/ui/swap";
-import { Button as LibraryButton, Captions, Completion, ComposerField, DesktopComposer, PhoneComposer, PillButton, PillField, PillWave, Spinner, StopGlyph, Toolbar } from "@/components/ui";
+import { Button as LibraryButton, Captions, Completion, ComposerField, DesktopComposer, PhoneComposer, PillButton, PillField, PillWave, Rider, Spinner, StopGlyph, Toolbar } from "@/components/ui";
 import { libraryPiece } from "@/components/ui/swap";
 import { latestAway, scrollToLatest } from "./latest-away";
 import { createEffect, createMemo, createSignal, For, lazy, on, onCleanup, onMount, Show, type JSX } from "solid-js";
@@ -774,10 +774,10 @@ function ComposerBody(props: {
     <Show when={slashOpen() && slashCommand()}>{(item) => <Completion typed={props.chat.draft()} rest={item().command.slice(props.chat.draft().length)} detail={item().description} />}</Show>
   </>;
   const riders = () => <>
-    <QueuedMessages messages={props.chat.pendingMessages()} surface="library" busy={busy()} canInterrupt={supports("cancel")} onInterruptAndSend={() => void props.chat.interruptAndSend()} onEdit={props.chat.editQueued} onDiscard={props.chat.discardQueued} />
-    <ReviewCommentCards items={comments()} chatId={props.chat.loadedId() ?? ""} label="File references" onRemove={(comment) => removeReviewComment(comment.id)} onUpdate={(comment, note) => updateReviewComment(comment.id, note)} />
+    <QueuedMessages messages={props.chat.pendingMessages()} busy={busy()} canInterrupt={supports("cancel")} onInterruptAndSend={() => void props.chat.interruptAndSend()} onEdit={props.chat.editQueued} onDiscard={props.chat.discardQueued} />
+    <Show when={comments().length}><Rider label="File references"><ReviewCommentCards items={comments()} chatId={props.chat.loadedId() ?? ""} label="File references" onRemove={(comment) => removeReviewComment(comment.id)} onUpdate={(comment, note) => updateReviewComment(comment.id, note)} /></Rider></Show>
     <Show when={props.attachmentsSupported !== false}>
-      <AttachmentStrip items={props.attachments.items()} chatId={props.chat.loadedId()} surface="library" onRemove={(item) => props.attachments.remove(item)} onRetry={(item) => props.attachments.retry(item)} />
+      <AttachmentStrip items={props.attachments.items()} chatId={props.chat.loadedId()} onRemove={(item) => props.attachments.remove(item)} onRetry={(item) => props.attachments.retry(item)} />
     </Show>
   </>;
   // What the agent is blocked on: on a desktop it takes the composer's place; on a phone it rides over the field.
