@@ -12,12 +12,6 @@
   backdrop-filter: var(--frost-blur);
   box-shadow: var(--frost-lift-rest), var(--frost-highlight);
 }
-/* In the gallery's previews the app's scroll-to-latest and cancel editing draw as RiderButtons: the
-   app keeps where they sit, the library how they look. */
-.message-scroller-button.ui-rider-button[data-slot="button"] { width: var(--control-lg); min-height: 0; height: var(--control-lg); border-radius: var(--radius-surface); background: var(--frost-fill); color: var(--foreground); }
-.message-scroller-button.ui-rider-button[data-labelled][data-slot="button"] { width: auto; gap: var(--space-sm); padding: 0 var(--space-xl) 0 var(--space-lg); font: var(--weight-lift) var(--text-row) var(--font-sans); }
-.message-scroller-button.ui-rider-button[data-slot="button"] svg { width: var(--icon-lg); height: var(--icon-lg); }
-.message-scroller-button.ui-rider-button[data-labelled][data-slot="button"] svg { width: var(--icon); height: var(--icon); }
 /* App menus drawn as library menus (until they graduate). */
 /* A rule between groups of an app menu's rows, where a library menu has sections. */
 /* A menu keeps its caller's class for its width and placement; its shell

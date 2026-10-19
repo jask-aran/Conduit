@@ -145,5 +145,8 @@
 .ui-rider-button[data-entering] { animation: ui-fade-in var(--duration-gentle) var(--ease-arrive) backwards; }
 .ui-rider-button[data-leaving] { animation: ui-fade-out var(--duration-quick) var(--ease-leave) forwards; pointer-events: none; }
 /* Hidden in place: it fades out quickly and back in gently, never redrawn. */
-.ui-rider-button { transition: opacity var(--duration-gentle) var(--ease-arrive); }
+.ui-rider-button { transition: opacity var(--duration-gentle) var(--ease-arrive), bottom var(--duration-gentle) var(--ease-arrive); }
+/* Riding: centred over what it rides, as high as its host says; beside: to the left of the centred one, a gap apart. */
+.ui-rider-button[data-ride] { position: absolute; left: 50%; bottom: var(--ride-bottom, var(--space-lg)); z-index: 4; translate: -50% 0; }
+.ui-rider-button[data-ride="beside"] { translate: calc(-100% - var(--control-lg) / 2 - var(--space-sm)) 0; }
 .ui-rider-button[data-hidden] { opacity: 0; pointer-events: none; transition-duration: var(--duration-quick); transition-timing-function: var(--ease-leave); }

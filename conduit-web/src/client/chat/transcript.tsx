@@ -43,8 +43,7 @@ import {
 import { captureTranscriptAnchor, restoreTranscriptAnchor } from "./transcript-anchor";
 import { api } from "../api/client";
 import { requestTurnArtifactNavigation } from "./turn-artifact-navigation";
-import { LibraryContext, useLibraryPiece } from "@/components/ui/swap";
-import { Answer, Button as LibraryButton, Changes, CopyButton, Failure, HarnessPrompt, LoadingEarlier, Message as LibraryMessage, MessageFoot, RiderButton, StopLine, Transcript as LibraryTranscript, TranscriptRow, Turn } from "@/components/ui";
+import { Welcome, Answer, Button as LibraryButton, Changes, CopyButton, Failure, HarnessPrompt, LoadingEarlier, Message as LibraryMessage, MessageFoot, RiderButton, StopLine, Transcript as LibraryTranscript, TranscriptRow, Turn } from "@/components/ui";
 import { ChatMarkdown } from "./lazy-markdown";
 import { fullDateTime } from "./full-date-time";
 
@@ -132,12 +131,7 @@ function AnswerFoot(props: { message: Message; precedingUserId?: string; chat: T
    caret there once the draft has been swapped in. */
 const focusComposerSoon = () => requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>("textarea[data-composer-input]:not([disabled])")?.focus({ preventScroll: true }));
 
-/** The transcript is drawn with components v2 (graduated in components/ui/swap.ts): its bubbles, answers, feet and disclosures. */
-export function Transcript(props: Parameters<typeof TranscriptBody>[0]) {
-  return <LibraryContext.Provider value={useLibraryPiece("transcript")}><TranscriptBody {...props} /></LibraryContext.Provider>;
-}
-
-function TranscriptBody(props: { chat: TranscriptSource; supports: (capability: BooleanCapability) => boolean; partialContinue: boolean; markdownRenderer: MarkdownRendererId; profileLabel?: string; projectId?: string }) {
+export function Transcript(props: { chat: TranscriptSource; supports: (capability: BooleanCapability) => boolean; partialContinue: boolean; markdownRenderer: MarkdownRendererId; profileLabel?: string; projectId?: string }) {
   let transcriptRoot!: HTMLDivElement;
   let motionShell!: HTMLDivElement;
   let viewport!: HTMLDivElement;
@@ -732,7 +726,7 @@ function TranscriptBody(props: { chat: TranscriptSource; supports: (capability: 
       if (shellRect.width <= 0 || shellRect.height <= 0 || composerRect.width <= 0 || composerRect.height <= 0) return;
       const bottom = `${Math.max(isMobileLayout() ? 8 : 6.4, shellRect.bottom - Math.min(composerRect.top, captionsTop, editTop) + (isMobileLayout() ? 10 : 8))}px`;
       for (const button of anchored) {
-        if (button.style.getPropertyValue("--message-scroller-button-bottom") !== bottom) button.style.setProperty("--message-scroller-button-bottom", bottom);
+        if (button.style.getPropertyValue("--ride-bottom") !== bottom) button.style.setProperty("--ride-bottom", bottom);
       }
     };
     scheduleLatestButtonAnchor = () => {
@@ -1001,7 +995,7 @@ function TranscriptBody(props: { chat: TranscriptSource; supports: (capability: 
       scrollerResizeObserver.disconnect();
       visualViewport?.removeEventListener("resize", scheduleLatestButtonAnchor);
       if (latestButtonAnchorFrame != null) cancelAnimationFrame(latestButtonAnchorFrame);
-      latestButton?.style.removeProperty("--message-scroller-button-bottom");
+      latestButton?.style.removeProperty("--ride-bottom");
       transcriptRoot.style.removeProperty("--transcript-composer-inset");
       scheduleLatestButtonAnchor = () => {};
       if (scrollFrame != null) cancelAnimationFrame(scrollFrame);
@@ -1019,7 +1013,7 @@ function TranscriptBody(props: { chat: TranscriptSource; supports: (capability: 
     <div ref={motionShell} class="transcript-motion-shell">
       <div ref={viewport} class="message-scroller-viewport" data-slot="message-scroller-viewport" tabIndex={-1} aria-label="Transcript">
         <div class="thread">
-        <Show when={empty()}><div class="empty-thread"><div class="welcome"><h1>How can I help you today?</h1></div></div></Show>
+        <Show when={empty()}><div class="empty-thread"><Welcome title="How can I help you today?" /></div></Show>
         <LibraryTranscript ref={thread} data-slot="message-scroller-content">
         <Show when={props.chat.loadingOlder()}><TranscriptRow data-slot="message-scroller-item"><LoadingEarlier /></TranscriptRow></Show>
         <For each={timeline}>{(item) => {
@@ -1129,12 +1123,12 @@ function TranscriptBody(props: { chat: TranscriptSource; supports: (capability: 
         */}
       {/* Always mounted, so it fades out as well as in: when pressed, and when
            somebody scrolls back down themselves. */}
-      <RiderButton ref={(element: HTMLButtonElement) => { latestButton = element; scheduleLatestButtonAnchor(); }} class="message-scroller-button" icon={<ArrowDownIcon />} label="Scroll to latest"
+      <RiderButton ref={(element: HTMLButtonElement) => { latestButton = element; scheduleLatestButtonAnchor(); }} ride="centre" icon={<ArrowDownIcon />} label="Scroll to latest"
         hidden={phoneLayout() || following() || latestDistance() < TAIL_NEAR_LATEST_PX} onMouseDown={(event) => event.preventDefault()} onClick={() => followLatest()} />
       {/* Editing an earlier message: a way out that is always there, floating
           over the composer where the edit happens, as the pencil would. */}
-      <Show when={props.chat.editingEntryId()}><RiderButton ref={(element: HTMLButtonElement) => { cancelEditButton = element; scheduleLatestButtonAnchor(); }} class="message-scroller-button message-cancel-edit" icon={<XIcon />} label="Cancel editing" show="label"
-        data-beside-latest={!following() && latestDistance() >= TAIL_NEAR_LATEST_PX ? "" : undefined} onMouseDown={(event) => event.preventDefault()} onClick={() => { props.chat.cancelEdit(); focusComposerSoon(); }} /></Show>
+      <Show when={props.chat.editingEntryId()}><RiderButton ref={(element: HTMLButtonElement) => { cancelEditButton = element; scheduleLatestButtonAnchor(); }} icon={<XIcon />} label="Cancel editing" show="label"
+        ride={!following() && latestDistance() >= TAIL_NEAR_LATEST_PX ? "beside" : "centre"} onMouseDown={(event) => event.preventDefault()} onClick={() => { props.chat.cancelEdit(); focusComposerSoon(); }} /></Show>
     </div>
   </div>;
 }

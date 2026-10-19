@@ -403,3 +403,5 @@ html, body { background: var(--frame, #08090a); color: var(--foreground); }
 .g-anatomy :is(.ui-trace-line, .ui-trace-latest, .ui-trail) { outline: 1px dashed #d99a2299; outline-offset: 1px; }
 .g-trace-anatomy { width: 560px; }
 .g-inuse-scene > .g-anatomy { padding-block: 20px; }
+/* Something RiderButtons ride over: they float centred at its foot. */
+.g-ride { position: relative; width: 100%; height: calc(2.5 * var(--control-lg)); border: var(--hairline) dashed var(--tint); border-radius: var(--radius-surface); }
