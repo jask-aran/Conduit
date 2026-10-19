@@ -42,6 +42,13 @@ with its overlays, and `?live=<chat>`, a real chat from the server opened from
 the real one is never opened. The bar's speed control slows every animation;
 Tune CSS applies CSS everywhere without writing source.
 
+Toast → **Live engine** in the gallery uses the app's real Sonner adapter,
+with its own notification ID scope. Use Show success/error, Repeat same toast,
+Count action and Dismiss demo toasts to check entrance, stacking, replacement,
+actions and exit. The animated `[data-sonner-toast]` must itself be the
+`.ui-frost.ui-toast-frame`; its embedded `.ui-toast` has no second frost.
+Check through the entrance and dismissal, not only once the toast settles.
+
 ### Swapping a piece to v2
 
 The bar is no visual change the swap didn't intend. Start with

@@ -1,7 +1,8 @@
+import { NotificationToaster, toast } from "@/components/notifications";
 import { Dialog } from "@/components/dialog";
 import { CardActions, CardForm, CardBody, CardNote, CardRead, CardDetails, CardQR, CardPreview, CardAttachments, CardAttachment } from "@/components/ui/card";
 import { ArrowDownIcon, PanelLeftIcon, MessageSquarePlusIcon, EllipsisIcon, CameraIcon, KeyboardIcon, MicIcon, ArrowUpIcon, ChevronDownIcon, CircleIcon, FileTextIcon, ClockIcon, Maximize2Icon, SendHorizontalIcon, XIcon, CheckIcon } from "lucide-solid";
-import { createSignal, For, Index, onCleanup, onMount, Show, type JSX } from "solid-js";
+import { createSignal, createUniqueId, For, Index, onCleanup, onMount, Show, type JSX } from "solid-js";
 import { LightbulbIcon, MessageSquareTextIcon, FilePenLineIcon, SquareTerminalIcon, CodeXmlIcon, WrenchIcon } from "lucide-solid";
 import { FileCode2Icon, FileDiffIcon, Undo2Icon, DeleteIcon, ChevronLeftIcon, TextCursorInputIcon } from "lucide-solid";
 import { PanelRightIcon, ClipboardCopyIcon, Columns2Icon, CopyIcon, FolderIcon, FolderInputIcon, LayoutDashboardIcon, MenuIcon, MonitorIcon, PaperclipIcon, PencilIcon, PinIcon, PlusIcon, QrCodeIcon, RefreshCwIcon, SearchIcon, ShareIcon, ShieldCheckIcon, SquarePenIcon, TerminalIcon, Trash2Icon } from "lucide-solid";
@@ -362,6 +363,25 @@ const IN_APP: FormRow[] = [
 ];
 
 /* Toast: measured in use, each kind and form at each density, and every toast the app raises. */
+function LiveNotifications() {
+  const toasterId = createUniqueId();
+  const emitted = new Set<string | number>();
+  const [actions, setActions] = createSignal(0);
+  const show = (kind: "success" | "info" | "warning" | "error", repeat = false) => {
+    emitted.add(toast[kind]("Example notification", {
+      toasterId, id: repeat ? `${toasterId}-repeat` : undefined, duration: 8000,
+      description: "The real Sonner host with the library's frost frame.",
+      action: { label: "Count action", onClick: () => setActions((count) => count + 1) },
+    }));
+  };
+  onCleanup(() => { emitted.forEach((id) => toast.dismiss(id)); });
+  return <div class="g-stack">
+    <div class="g-row"><Button onClick={() => show("success")}>Show success toast</Button><Button variant="ghost" outline onClick={() => show("error")}>Show error toast</Button></div>
+    <div class="g-row"><Button variant="ghost" outline onClick={() => show("info", true)}>Repeat same toast</Button><Button variant="ghost" outline onClick={() => emitted.forEach((id) => toast.dismiss(id))}>Dismiss demo toasts</Button></div>
+    <CardNote>Actions run: {actions()}. Hover to pause; use × or swipe to dismiss. Each notification lasts eight seconds.</CardNote>
+    <NotificationToaster id={toasterId} />
+  </div>;
+}
 const toastScene = () => <div class="g-card-scene"><Toaster><Toast kind="info" action={{ label: "Open workspace" }}>This folder is the Japan workspace.</Toast><Toast kind="success">Renamed chat to Trip notes</Toast></Toaster></div>;
 const TOAST_MARKS: Mark[] = [
   { selector: ".ui-toast", label: "raised frost, --radius-surface; at most 25 units wide (a phone: its width)", read: (el) => `${rounding(el)} · ${px(`${el.getBoundingClientRect().width}px`)} wide` },
@@ -685,6 +705,9 @@ export const libraryFamilies: Family[] = [
   { title: "Toast", note: "raised frost at the window's edge, one sentence about what just happened: its kind a glyph in the state's colour, an action under it when there is one thing to do, a × to dismiss. Desktop: bottom right, above nothing; a phone: the top, inside the overlay's inset, clear of the composer and keyboard", groups: [
     { title: "In use", note: "two toasts stacked, measured", layout: "desktop", atoms: [
       lib("toast-inuse", "Toast in use", "both", "toast", "Toaster > Toast kind action", () => <InUse scene={toastScene} marks={TOAST_MARKS} spacing={[".ui-toast"]} />, "row"),
+    ] },
+    { title: "Live engine", note: "the app's real notification adapter and Sonner behavior: the animated element itself is the library's frost frame, so its blur works throughout the fade, stack and swipe", layout: "desktop", atoms: [
+      lib("toast-live", "Live notifications", "desktop", "toast", "components/notifications.tsx > Toaster > Toast embedded", () => <LiveNotifications />, "row"),
     ] },
     { title: "Forms", note: "each kind and form at each density", layout: "desktop", atoms: [
       lib("toast-forms", "Toast · forms × densities", "both", "toast", "Toast", () => <FormTable rows={TOASTS} on={["desktop", "phone"]} widths={["200px", "minmax(0, 1fr)", "360px"]} />, "row"),

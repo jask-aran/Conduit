@@ -6,5 +6,7 @@
   box-shadow: var(--frost-lift-rest), var(--frost-highlight);
   color: var(--foreground);
 }
-.ui-frost[data-lift="raised"] { box-shadow: var(--frost-lift-raised), var(--frost-highlight); }
+/* A behavioral host that accepts classes but not data attributes uses the
+   modifier on its own animated frame, never on a child below its fade. */
+.ui-frost:is([data-lift="raised"], .ui-frost-raised) { box-shadow: var(--frost-lift-raised), var(--frost-highlight); }
 .ui-frost[data-core] { background: linear-gradient(var(--frost-fill), var(--frost-fill)), var(--frost-core-ground); }
