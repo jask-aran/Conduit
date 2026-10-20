@@ -2,7 +2,7 @@ import { For, Show, splitProps, type JSX } from "solid-js";
 import { CheckIcon, ChevronRightIcon, ExternalLinkIcon, SearchIcon } from "lucide-solid";
 import { cn } from "@/lib/utils";
 import { Keycap } from "./controls";
-import { type Density, type Motion, motionOf, moveCursor } from "./shared";
+import { type Density, type Motion, hovers, motionOf, moveCursor } from "./shared";
 
 /** under: a phone's submenu is open as a panel over it, so it dims and takes no taps. */
 /** wide: a readout rather than a list, at a measure of its own (the context breakdown). */
@@ -58,14 +58,16 @@ export function Item(props: JSX.HTMLAttributes<HTMLDivElement> & {
   end?: JSX.Element; reveal?: boolean;
   /** away: choosing it opens somewhere else (another window or origin): the mark sits where a submenu's chevron does. */
   away?: boolean;
+  /** onCursor: the pointer is over the row, for a list that keeps its own cursor (never a touch: see moveCursor). */
+  onCursor?: () => void;
   /** onOpens: the chevron is a press of its own (a folder's: open it in place, where the row's press goes in); aria-expanded turns it. */
   onOpens?: () => void; opensLabel?: string;
   /** indent: a child, under the row it belongs to. picked: in an edit, chosen or not -- a check column, and the wash on each chosen. */
   indent?: boolean; picked?: boolean;
 }) {
-  const [, rest] = splitProps(props, ["icon", "meta", "detail", "keys", "opens", "active", "field", "keysFirst", "checked", "disabled", "destructive", "children", "end", "class", "onOpens", "opensLabel", "indent", "picked", "reveal", "away"]);
+  const [, rest] = splitProps(props, ["icon", "meta", "detail", "keys", "opens", "active", "field", "keysFirst", "checked", "disabled", "destructive", "children", "end", "class", "onOpens", "opensLabel", "indent", "picked", "reveal", "away", "onCursor"]);
   return <div role={props.checked !== undefined ? "menuitemradio" : "menuitem"} class="ui-row" aria-checked={props.checked} data-field={props.field ? "" : undefined}
-    data-highlighted={props.active ? "" : undefined} data-checked={props.checked ? "" : undefined} data-disabled={props.disabled ? "" : undefined} data-destructive={props.destructive ? "" : undefined} data-indent={props.indent ? "" : undefined} data-picked={props.picked ? "" : undefined} {...rest}>
+    data-highlighted={props.active ? "" : undefined} data-checked={props.checked ? "" : undefined} data-disabled={props.disabled ? "" : undefined} data-destructive={props.destructive ? "" : undefined} data-indent={props.indent ? "" : undefined} data-picked={props.picked ? "" : undefined} onPointerMove={props.onCursor ? (event: PointerEvent) => { if (hovers(event)) props.onCursor!(); } : undefined} {...rest}>
     <Show when={props.picked !== undefined}><span class="ui-row-check" aria-hidden="true"><Show when={props.picked}><CheckIcon /></Show></span></Show>
     <Show when={props.keysFirst && props.keys}><Keys keys={props.keys!} first /></Show>
     <Show when={props.icon}><span class="ui-icon">{props.icon}</span></Show><span class="ui-label" data-stacked={props.detail ? "" : undefined}><Show when={props.detail} fallback={props.children}><span>{props.children}</span><small class="ui-detail">{props.detail}</small></Show></span>

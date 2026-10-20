@@ -6,7 +6,7 @@
 export { ChevronDownIcon } from "lucide-solid";
 export { Orb, settledOrbRate, type ModeFrame, type ModeOpts, type OrbState } from "./orb";
 export { PLAIN_SPHERE, SPUTTERING_SPHERE, ORBITS_TRAILED } from "./orb-frames";
-export { moveCursor, cssTime, type Density, type Motion } from "./shared";
+export { moveCursor, hovers, cssTime, type Density, type Motion } from "./shared";
 export { Expand } from "./expand";
 // In the stylesheets' cascade order (styles/index.ts), so a family reads the same in code, CSS and the gallery.
 export * from "./controls";

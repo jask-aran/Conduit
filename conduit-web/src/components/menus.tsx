@@ -213,7 +213,7 @@ export function SearchList<T>(props: {
       <For each={rows()} fallback={<MenuNote>{props.empty ?? "No matches."}</MenuNote>}>{(item, index) => {
         const row = props.row(item);
         return <Item role="option" id={`${id}-${index()}`} tabIndex={-1} aria-selected={active() === index()} active={active() === index()} checked={props.isCurrent?.(item) || undefined}
-          icon={row.icon} meta={row.meta} title={row.title} onPointerMove={() => setActive(index())} onClick={() => props.onChoose(item)}>{row.label}</Item>;
+          icon={row.icon} meta={row.meta} title={row.title} onCursor={() => setActive(index())} onClick={() => props.onChoose(item)}>{row.label}</Item>;
       }}</For>
     </Section>
   </>;
