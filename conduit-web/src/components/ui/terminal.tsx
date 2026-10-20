@@ -1,11 +1,39 @@
-import { Show, splitProps, type JSX } from "solid-js";
+import { onCleanup, onMount, Show, splitProps, type JSX } from "solid-js";
 import { Button, Spinner } from "./controls";
 import { haptic } from "./haptics";
 
-/** A terminal's header: leading controls, identity, shortcuts, overflow, then divided actions. */
+/** What a header folds when it is too narrow, first to last: the shortcuts into the ⋯, then the actions' labels. */
+const TERM_FOLDS = ["shortcuts", "labels"] as const;
+
+/** A terminal's header: leading controls, identity, shortcuts, overflow, then actions. It folds by measure: while
+ *  its content overflows or the identity's title or context is cut, the next fold goes; each comes back once the header is as wide as it
+ *  was needed at. A change to what it holds (a shortcut, the running command) measures it again from unfolded. */
 export function TermHeader(props: Omit<JSX.HTMLAttributes<HTMLElement>, "class"> & { actions?: JSX.Element }) {
   const [local, rest] = splitProps(props, ["children", "actions"]);
-  return <header {...rest} class="ui-term-header">{local.children}<span class="ui-term-divider" aria-hidden="true" />{local.actions}</header>;
+  let header!: HTMLElement;
+  onMount(() => {
+    let folds = 0;
+    const needs: number[] = [];
+    const set = (count: number) => { folds = count; if (count) header.dataset.folded = TERM_FOLDS.slice(0, count).join(" "); else delete header.dataset.folded; };
+    const over = () => {
+      // The identity's title and context truncate rather than overflow: what they cut is what is missing.
+      const parts = [...header.querySelectorAll<HTMLElement>(".ui-term-identity > *")];
+      return Math.max(header.scrollWidth - header.clientWidth, parts.reduce((cut, part) => cut + Math.max(0, part.scrollWidth - part.clientWidth), 0));
+    };
+    const fit = (fresh = false) => {
+      if (!header.clientWidth) return;
+      if (fresh) set(0);
+      while (folds && header.clientWidth >= needs[folds - 1]!) set(folds - 1);
+      for (let cut = over(); cut > 0.5 && folds < TERM_FOLDS.length; cut = over()) { needs[folds] = header.clientWidth + cut; set(folds + 1); }
+    };
+    const resize = new ResizeObserver(() => fit());
+    const content = new MutationObserver(() => fit(true));
+    resize.observe(header);
+    content.observe(header, { childList: true, subtree: true, characterData: true });
+    fit(true);
+    onCleanup(() => { resize.disconnect(); content.disconnect(); });
+  });
+  return <header ref={header} data-surface="ground" {...rest} class="ui-term-header">{local.children}{local.actions}</header>;
 }
 /** A terminal's state: a dot or busy ring, with a label when needed. */
 export function TermStatus(props: Omit<JSX.HTMLAttributes<HTMLDivElement>, "class"> & { tone: "success" | "busy" | "warn" | "danger" | "muted"; busy?: boolean; label?: string }) {
@@ -49,39 +77,6 @@ export function TermState(props: Omit<JSX.HTMLAttributes<HTMLDivElement>, "class
 export function TermError(props: Omit<JSX.HTMLAttributes<HTMLParagraphElement>, "class">) {
   return <p role="alert" {...props} class="ui-term-error" />;
 }
-/** A shortcut editor; submit and keyboard handling remain with the caller. */
-export const ShortcutForm = (props: Omit<JSX.FormHTMLAttributes<HTMLFormElement>, "class">) => <form {...props} class="ui-term-shortcut-form" />;
-/** The shortcut's name and target on one line. */
-export const ShortcutFormLine = (props: Omit<JSX.HTMLAttributes<HTMLDivElement>, "class">) => <div {...props} class="ui-term-shortcut-form-line" />;
-/** The shortcut's shell choices, with caller supplied pressed states. */
-export const ShortcutTarget = (props: Omit<JSX.HTMLAttributes<HTMLDivElement>, "class">) => <div {...props} class="ui-term-shortcut-target" />;
-/** A command field with its shell prompt. */
-export const ShortcutCommand = (props: Omit<JSX.LabelHTMLAttributes<HTMLLabelElement>, "class">) => <label {...props} class="ui-term-shortcut-command" />;
-/** The on-start choice and the editor's save and cancel controls. */
-export const ShortcutFormActions = (props: Omit<JSX.HTMLAttributes<HTMLDivElement>, "class">) => <div {...props} class="ui-term-shortcut-form-actions" />;
-
-/** A draggable shortcut in the editor, with its command and caller supplied controls. */
-export function TermShortcutRow(props: Omit<JSX.HTMLAttributes<HTMLDivElement>, "class"> & { label: string; detail: string; dragging?: boolean; dropTarget?: boolean }) {
-  const [local, rest] = splitProps(props, ["label", "detail", "dragging", "dropTarget", "children"]);
-  return <div {...rest} class="ui-term-shortcut-row" data-dragging={local.dragging ? "" : undefined} data-drop-target={local.dropTarget ? "" : undefined}>
-    <span class="ui-term-shortcut-copy"><strong>{local.label}</strong><small>{local.detail}</small></span>{local.children}
-  </div>;
-}
-/** A shortcut's drag handle, which also accepts keyboard reorder commands. */
-export function TermShortcutGrip(props: Omit<JSX.ButtonHTMLAttributes<HTMLButtonElement>, "class">) {
-  return <button type="button" {...props} class="ui-term-shortcut-grip" />;
-}
-/** The shortcut's target shell and on-start mark. */
-export function TermShortcutTag(props: Omit<JSX.HTMLAttributes<HTMLSpanElement>, "class">) {
-  return <span {...props} class="ui-term-shortcut-tag" />;
-}
-
-/** A small terminal row action; destructive actions take the danger colour on hover or focus. */
-export function TermMenuAction(props: Omit<JSX.ButtonHTMLAttributes<HTMLButtonElement>, "class"> & { destructive?: boolean }) {
-  const [local, rest] = splitProps(props, ["destructive"]);
-  return <Button variant="ghost" size="icon-xs" {...rest} class="ui-term-menu-action" data-destructive={local.destructive ? "" : undefined} />;
-}
-
 /** TermKeys: a phone's key bar under the terminal, the keys its keyboard lacks in one row that scrolls sideways. A tap
  *  on it never takes the focus from the terminal (so the keyboard stays up). */
 export function TermKeys(props: Omit<JSX.HTMLAttributes<HTMLDivElement>, "class" | "onMouseDown">) {

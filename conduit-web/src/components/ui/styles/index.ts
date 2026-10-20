@@ -18,7 +18,7 @@
  *                   ToolBar, ToolButton, ToolFilter, ToolNotice, Tree > TreeRow
  *   source          ToolLine, CommitBox, ChangeLedger > ChangeSection > ChangeList > ChangeItem, CommitList, PatchLines
  *   history         HistoryList > HistoryRow, HistoryBranch
- *   terminal        TermHeader and its parts, TermState, ShortcutForm, TermShortcutRow
+ *   terminal        TermHeader and its parts, TermState, TermKeys
  *   file, viewer    FileView > FileHead, FileBody, StatusBar; FileViewer's sides; FileImage, FileMedia, FileCard
  *   editor          CodeSurface > CodeHost, SearchBar, AnnotationPopup, Comparison, DiffShell
  *   header          Header, HeaderCrumb, HeaderButton, HeaderNote
