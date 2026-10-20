@@ -1,7 +1,7 @@
 import { Show, createUniqueId, splitProps, type JSX } from "solid-js";
-import { ArrowRightIcon } from "lucide-solid";
+import { ArrowRightIcon, CheckIcon, CircleAlertIcon } from "lucide-solid";
 import { StatusDot } from "./nav";
-import { Button, Input } from "./controls";
+import { Button, Input, Spinner } from "./controls";
 
 export function ConnectionForm(props: JSX.FormHTMLAttributes<HTMLFormElement>) {
   return <form {...props} class="ui-connection" />;
@@ -20,16 +20,48 @@ export function CameraPreview(props: { videoRef: (element: HTMLVideoElement) => 
 /** Shared access page, including safe-area room and a scrollable keyboard layout. */
 export const ConnectionScreen = (props: { children: JSX.Element; embedded?: boolean }) => <main class="ui-connection-screen" data-embedded={props.embedded ? "" : undefined}>{props.children}</main>;
 
+/*
+ * Signing in, one set of pieces for every place that does it (the sign-in screen, Connect, a server's own page):
+ * an address that says what it found, a line saying so, and the password row that appears beneath it.
+ */
+export type AddressState = "checking" | "found" | "missing";
+
+/** An address field that ticks once a server answered there; the looking is said by the ConnectionStatus beneath. */
+export function ConnectionAddress(props: JSX.InputHTMLAttributes<HTMLInputElement> & { state?: AddressState }) {
+  const [local, rest] = splitProps(props, ["state"]);
+  return <div class="ui-connection-address" data-state={local.state}>
+    <Input {...rest} type="text" inputMode="url" autocomplete="url" autocapitalize="none" spellcheck={false} aria-invalid={local.state === "missing" ? "true" : undefined} />
+    <span class="ui-connection-address-mark" aria-hidden="true"><Show when={local.state === "found"}><CheckIcon /></Show></span>
+  </div>;
+}
+
+/** What the check found, one line: the server's name (or its host) and a detail, or why nothing answered. It rises in. */
+export function ConnectionStatus(props: { state: AddressState; title: string; detail?: string }) {
+  return <p class="ui-connection-status" data-state={props.state} role={props.state === "missing" ? "alert" : "status"}>
+    <span class="ui-connection-status-mark" aria-hidden="true"><Show when={props.state === "checking"} fallback={props.state === "found" ? <span class="ui-status-dot" /> : <CircleAlertIcon />}><Spinner /></Show></span>
+    <strong>{props.title}</strong><Show when={props.detail}><small title={props.detail}>{props.detail}</small></Show>
+  </p>;
+}
+
+/** The password and its arrow, one row; busy while it signs in, its error beneath. Rises in when it follows an address. */
+export function ConnectionPassword(props: JSX.InputHTMLAttributes<HTMLInputElement> & { busy?: boolean; error?: string | null; reveal?: boolean }) {
+  const [local, rest] = splitProps(props, ["busy", "error", "reveal", "id"]);
+  const id = local.id ?? createUniqueId();
+  return <div class="ui-connection-password-step" data-reveal={local.reveal ? "" : undefined}>
+    <div class="ui-connection-password">
+      <Input {...rest} id={id} type="password" autocomplete="current-password" aria-label="Password" placeholder="Password" aria-invalid={local.error ? "true" : undefined} aria-describedby={local.error ? `${id}-error` : undefined} />
+      <Button type="submit" variant="ghost" size="icon" aria-label="Sign in" title="Sign in" disabled={local.busy || rest.disabled}><Show when={local.busy} fallback={<ArrowRightIcon />}><Spinner /></Show></Button>
+    </div>
+    <Show when={local.error}><p id={`${id}-error`} class="ui-connection-error" role="alert">{local.error}</p></Show>
+  </div>;
+}
+
 /** Plain HTML form: works unchanged when server-rendered, with JavaScript off. */
 export function PasswordSignIn(props: { after: string; error?: string | null; onSubmit?: JSX.FormHTMLAttributes<HTMLFormElement>["onSubmit"] }) {
   const id = createUniqueId();
   return <ConnectionForm action="/v0/auth/login" method="post" autocomplete="on" onSubmit={props.onSubmit}>
-    <div class="ui-connection-password">
-      <Input id={`${id}-password`} name="password" type="password" autocomplete="current-password" aria-label="Password" placeholder="Password" autofocus required aria-invalid={props.error ? "true" : undefined} aria-describedby={props.error ? `${id}-error` : undefined} />
-      <Button type="submit" variant="ghost" size="icon" aria-label="Sign in" title="Sign in"><ArrowRightIcon /></Button>
-    </div>
+    <ConnectionPassword id={`${id}-password`} name="password" autofocus required error={props.error} />
     <input name="after" type="hidden" value={props.after} />
-    <Show when={props.error}><p id={`${id}-error`} class="ui-connection-error" role="alert">{props.error}</p></Show>
   </ConnectionForm>;
 }
 

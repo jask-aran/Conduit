@@ -85,6 +85,9 @@ export function registerRuntimeRoutes(app, {
     response.status(isShuttingDown() ? 503 : 200).json({
       ok: !isShuttingDown(),
       status: isShuttingDown() ? "stopping" : "ready",
+      // The name is already on the network (mDNS); a client adding this
+      // server by address shows it once the address answers.
+      name: serverIdentity.name,
       release: config.release,
       startedAt: STARTED_AT,
       activeGenerations,
