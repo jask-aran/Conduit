@@ -114,14 +114,13 @@
 [data-density="phone"] {
   --u-base: var(--u-phone); --row-min-floor: 44px; --row-min-units: 2.75; --row-text-units: 0.90625;
   --frost-inset: var(--space-sm); --nav-label-pad: var(--space-sm) var(--space-md);
-  /* The same Paper Mono capitals as desktop's, a step larger and heavier and less tracked: at desktop's size they read
-     as a smaller, fainter voice beside rows at finger size. */
-  --label-face: var(--font-label); --label-weight: var(--weight-lift); --label-case: uppercase; --label-tracking: .05em; --label-size: var(--text-caption);
+  /* Desktop's label, declared again so its size resolves at the phone's unit (scaled up like everything else). */
+  --label-face: var(--font-label); --label-weight: var(--weight-rest); --label-case: uppercase; --label-tracking: .07em; --label-size: var(--text-label);
 }
 @media (--conduit-phone-layout) { :root {
   --u-base: var(--u-phone); --row-min-floor: 44px; --row-min-units: 2.75; --row-text-units: 0.90625;
   --frost-inset: var(--space-sm); --nav-label-pad: var(--space-sm) var(--space-md);
-  --label-face: var(--font-label); --label-weight: var(--weight-lift); --label-case: uppercase; --label-tracking: .05em; --label-size: var(--text-caption);
+  --label-face: var(--font-label); --label-weight: var(--weight-rest); --label-case: uppercase; --label-tracking: .07em; --label-size: var(--text-label);
 } }
 /* What you read takes the transcript's scale: the units below are worked out again inside it. There a row's
    text (a trace, a trail, a table) is a step under the body on both densities, not a finger list's. */
