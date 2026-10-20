@@ -14,13 +14,13 @@ const MOTION_RULES = `
 :root[data-arrival="waiting"] :is(
   [data-region="sidebar"],
   [data-region="workspace-panel"],
-  .workspace-rail,
+  [data-region="workspace-rail"],
   :is(.chat-main, .main-split, :is(.chat-main, .main-split) :has(:is(.ui-composer-slot, .ui-phone-composer))) > :not(:is(.ui-composer-slot, .ui-phone-composer), :has(:is(.ui-composer-slot, .ui-phone-composer)))
 ) { opacity: 0; }
 :root[data-arrival="arriving"] :is(
   [data-region="sidebar"],
   [data-region="workspace-panel"],
-  .workspace-rail,
+  [data-region="workspace-rail"],
   :is(.chat-main, .main-split, :is(.chat-main, .main-split) :has(:is(.ui-composer-slot, .ui-phone-composer))) > :not(:is(.ui-composer-slot, .ui-phone-composer), :has(:is(.ui-composer-slot, .ui-phone-composer)))
 ) { animation: ui-arrive 300ms cubic-bezier(.2, .8, .2, 1) both; }
 

@@ -31,3 +31,4 @@ export * from "./connection";
 export * from "./browser";
 
 export * from "./dashboard";
+export * from "./pane";

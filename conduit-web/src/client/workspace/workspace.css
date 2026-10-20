@@ -24,29 +24,14 @@
 /* Over the panes: the dock takes no room in the row and floats above it. */
 .workspace-panel.workspace-panel-overlay { z-index: 40; width: 0 !important; margin-right: 0 !important; background: transparent; }
 .workspace-panel-overlay .workspace-panel-surface { right: 8px; left: auto; width: var(--workspace-shell-width); box-shadow: 0 18px 48px oklch(0 0 0 / 45%), 0 0 0 1px var(--border); }
-.workspace-panel-overlay .workspace-resize-handle { left: calc(-1 * var(--workspace-shell-width) - 20px); }
+.workspace-panel-overlay .ui-pane-edge[data-dock] { left: calc(-1 * var(--workspace-shell-width) - 20px); }
 /* Surface keeps settled panel width, right-anchored inside the shell. */
 .workspace-panel-surface { position: absolute; inset: 0; display: flex; min-width: 0; height: 100%; contain: layout paint; container-name: workspace-surface; container-type: inline-size; flex: none; flex-direction: column; overflow: hidden; border-radius: 12.8px; background: var(--background); }
 .workspace-panel-surface > * { max-width: 100%; }
 /* The dock's header shares the top line of the app: the main header's height
    and padding, the name at the breadcrumb's size, 14px icons, no hairline. */
-.workspace-panel-header { display: flex; height: 44.8px; flex: none; align-items: center; gap: 6.4px; overflow: hidden; padding: 6.4px 11.2px; }
-.workspace-panel-header strong { overflow: hidden; flex: none; font-size: 11.2px; font-weight: 600; line-height: 16px; text-overflow: ellipsis; white-space: nowrap; }
-.workspace-panel-header[data-compact="name"] strong { display: none; }
-.workspace-panel-place { overflow: hidden; min-width: 0; flex: 0 1 auto; color: var(--muted-foreground); font-size: 11.2px; line-height: 16px; text-overflow: ellipsis; white-space: nowrap; }
-.workspace-panel-header[data-compact] .workspace-panel-place { display: none; }
-.workspace-panel-header [data-slot="button"] svg { width: 14px; height: 14px; }
 /* Its modes are the dashboard heading's switch (components/ui/styles/dashboard.css), folding to icons
    when the header runs out of room. */
-.workspace-panel-header .settings-segmented { flex: none; grid-template-columns: repeat(var(--segments), auto); padding: 1px; border-radius: 7px; }
-.workspace-panel-header .settings-segmented-thumb { display: none; }
-.workspace-panel-header .settings-segmented button { min-height: 20px; gap: 5px; border-radius: 5px; padding: 0 8px; font-size: 9.6px; font-weight: 560; white-space: nowrap; transition: background 200ms cubic-bezier(.2, .8, .2, 1), color 200ms; }
-.workspace-panel-header .settings-segmented button svg { width: 12px; height: 12px; }
-.workspace-panel-header .settings-segmented button[aria-checked="true"] { background: var(--accent); }
-.workspace-panel-header .settings-segmented button:is(:hover, :focus-visible):not([aria-checked="true"]) { background: color-mix(in oklch, var(--accent), transparent 35%); color: var(--foreground); }
-.workspace-panel-header .settings-segmented button[aria-checked="true"]:focus-visible { background: color-mix(in oklch, var(--accent), var(--foreground) 14%); }
-.workspace-panel-header[data-compact] .settings-segmented button span { display: none; }
-.workspace-panel-header[data-compact] .settings-segmented button { padding: 0 6px; }
 .chat-main { flex: 1 1 auto; min-width: 0; }
 .chat-main.workspace-expanded { margin-inline: 0; pointer-events: none; }
 .workspace-layout { position: relative; overflow: hidden; container-type: inline-size; }
@@ -60,37 +45,16 @@
 }
 .workspace-panel-surface { right: 0; left: auto; width: 100%; transition: width 260ms var(--panel-motion-easing); }
 .workspace-panel-expanded .workspace-panel-surface { width: calc(100cqw - 8px); }
-.workspace-panel-expanded .workspace-resize-handle { display: none; }
+.workspace-panel-expanded .ui-pane-edge[data-dock] { display: none; }
 /* The rail stands in for the tabs on a desktop; a phone keeps them. */
-.workspace-panel-tabs-space { display: none; min-width: 0; flex: 1; justify-content: flex-end; overflow: hidden; }
-.workspace-panel-tabs { display: flex; width: max-content; flex: none; }
-.workspace-panel-tabs button { flex: none; }
-.workspace-panel-tabs-space[data-icons-only] .workspace-panel-tabs span { display: none; }
-.workspace-panel-tabs button { display: flex; min-height: 22.4px; align-items: center; justify-content: center; gap: 4.8px; border: 0; border-radius: 4.8px; background: transparent; padding-inline: 8px; color: var(--muted-foreground); font-size: 8.8px; }
-.workspace-panel-tabs button[aria-selected="true"] { background: var(--accent); color: var(--foreground); box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--foreground), transparent 88%); }
-.workspace-panel-tabs span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.workspace-panel-tabs button:disabled { opacity: .4; cursor: not-allowed; }
 /* Keyboard focus on a tab is the wash, as on a row: no ring. */
-.workspace-panel-tabs button:focus-visible { outline: none; background: var(--accent); color: var(--foreground); }
-.workspace-panel-tabs svg, .workspace-status-strip svg { width: 12px; height: 12px; }
 .workspace-panel-content { position: relative; display: flex; min-width: 0; min-height: 0; flex: 1; overflow: hidden; outline: none; }
 .workspace-panel-content > * { min-width: 0; flex: 1; }
-.workspace-panel-header-actions { display: flex; flex: none; align-items: center; gap: 1.6px; margin-left: auto; }
 .workspace-split-resizing { cursor: col-resize; user-select: none; }
 /* The right edge's rail mirrors the sidebar's collapsed one: on the frame,
    28.8px targets 8px from the pane and 6.4px from the window's edge, the
    cursor the wash, the current tool white at the heavier stroke. */
-.workspace-rail { display: flex; width: 35.2px; flex: none; flex-direction: column; align-items: flex-start; gap: 1.6px; padding: 14.4px 6.4px 0 0; }
-.workspace-rail-action { display: grid; width: 28.8px; height: 28.8px; flex: none; place-items: center; border: 0; border-radius: var(--radius-md); background: transparent; color: color-mix(in oklch, var(--sidebar-foreground), transparent 20%); }
-.workspace-rail-action:is(:hover, :focus-visible, :active):not(:disabled) { outline: none; background: var(--sidebar-accent); color: var(--sidebar-accent-foreground); }
-.workspace-rail-action[aria-current="true"] { color: var(--sidebar-accent-foreground); }
-.workspace-rail-action[aria-current="true"] svg { stroke-width: 3; }
-.workspace-rail-action:disabled { opacity: .4; cursor: not-allowed; }
-.workspace-rail-action svg { width: 14px; height: 14px; }
-.workspace-rail-separator { width: 14px; height: 0.8px; flex: none; margin: 4.8px 7.2px; background: color-mix(in oklch, var(--sidebar-foreground), transparent 80%); }
 /* A tool in the main pane's split is open there without being the dock's. */
-.workspace-rail-action[data-open="true"] { color: var(--sidebar-accent-foreground); }
-
 /* The main pane's split: a view moved out of the dock, its own sheet on the
    frame beside the chat, as the dock is. The chat's 8px right margin is the
    gutter; the drag edge sits in it. */
@@ -102,15 +66,13 @@
 .workspace-dock-document > div { display: contents; }
 .main-split.main-split-docked-hidden { display: none; }
 .main-split.main-split-docked { height: auto; min-height: 0; flex: 1; margin: 0; border-radius: inherit; }
-.main-split > div:not(.main-split-resize) { display: flex; min-width: 0; min-height: 0; flex: 1; flex-direction: column; overflow: hidden; border-radius: inherit; }
+.main-split > div:not(.ui-pane-edge) { display: flex; min-width: 0; min-height: 0; flex: 1; flex-direction: column; overflow: hidden; border-radius: inherit; }
 /* Pane A holding the dock's tool, over its route (5f). */
 .pane-a-tool-host { display: flex; min-width: 0; min-height: 0; flex: 1; flex-direction: column; }
 .workspace-split-surface { display: flex; min-width: 0; min-height: 0; flex: 1; flex-direction: column; container-name: workspace-surface; container-type: inline-size; }
 /* A chat beside the main one: laid out as the main pane's chat is, measured by its own width. */
 .main-split-chat { --chat-header-height: 44.8px; position: relative; isolation: isolate; container-type: inline-size; container-name: chat-main; color: var(--foreground); }
-.main-split-resize { position: absolute; z-index: 5; inset-block: 0; left: -8px; width: 8px; cursor: col-resize; touch-action: none; }
 /* Where a view dragged from the dock will land: the chat's right half, washed. */
-.main-split-drop { position: absolute; z-index: 30; inset: 8px 8px 8px 50%; border-radius: 10px; background: var(--accent); pointer-events: none; }
 .workspace-files { position: relative; display: flex; min-height: 0; flex: 1; flex-direction: column; }
 /* A pane's file viewer: one file, or two side by side (6d-2). */
 .workspace-file-viewer { position: relative; flex-direction: row; }
@@ -162,15 +124,15 @@
 .workspace-turn-navigation { display: flex; align-items: center; }
 .workspace-preview-header { flex-wrap: nowrap; font: var(--workbench-font-size)/1.45 var(--font-sans); }
 .workspace-preview-header > .workspace-preview-file { min-width: 0; }
-.workspace-preview-header button:not(.pane-tabs button, .workspace-preview-more) { display: inline-flex; flex: none; align-items: center; justify-content: center; gap: 4px; min-width: var(--workbench-control-size); height: var(--workbench-control-size); min-height: 0; padding: 0 5px; color: var(--muted-foreground); font: inherit; }
-.workspace-preview-header button:not(.pane-tabs button, .workspace-preview-more) svg { width: var(--workbench-icon-size); height: var(--workbench-icon-size); }
+.workspace-preview-header button:not(.ui-tabs button, .ui-pane-action, .workspace-preview-more) { display: inline-flex; flex: none; align-items: center; justify-content: center; gap: 4px; min-width: var(--workbench-control-size); height: var(--workbench-control-size); min-height: 0; padding: 0 5px; color: var(--muted-foreground); font: inherit; }
+.workspace-preview-header button:not(.ui-tabs button, .ui-pane-action, .workspace-preview-more) svg { width: var(--workbench-icon-size); height: var(--workbench-icon-size); }
 .workspace-preview-header button[aria-pressed="true"] { background: var(--accent); color: var(--foreground); }
 .workspace-preview-header > button { order: 2; }
 .workspace-preview-header > .workspace-file-actions { display: flex; flex: none; align-items: center; gap: 2px; order: 4; }
 .workspace-preview-header > .workspace-editor-header-tools { display: flex; flex: none; align-items: center; gap: 2px; order: 5; }
 .workspace-preview-header > .workspace-preview-close { order: 10; }
-.workspace-preview-header > .pane-tab-actions { order: 11; }
-.workspace-preview-header > .file-side-tabs { flex: 1 1 auto; min-width: 0; }
+.workspace-preview-header > .ui-pane-actions { order: 11; }
+.workspace-preview-header > .ui-tabs-row { flex: 1 1 auto; min-width: 0; }
 .workspace-files[data-wide="false"] { display: grid; grid-template-columns: 31px minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
 .workspace-files[data-wide="false"] > .workspace-preview { grid-column: 2; grid-row: 1; height: auto !important; }
 .workspace-files[data-wide="false"][data-navigator-open="true"] > .workspace-preview { grid-column: 1 / -1; }
@@ -430,9 +392,7 @@
 .workspace-terminal-slot { display: flex; min-width: 0; min-height: 0; overflow: hidden; }
 .workspace-detail-dock-header { position: relative; display: flex; min-height: 28px; flex: none; align-items: center; gap: 5px; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); background: color-mix(in oklch, var(--background), var(--accent) 18%); padding: 3px 5px 3px 7px; }
 .workspace-panel-empty { display: grid; min-height: 96px; flex: 1; place-items: center; padding: 16px; color: var(--muted-foreground); font-size: 9.6px; text-align: center; }
-.workspace-panel-loading { position: absolute; inset: auto 9.6px 9.6px auto; display: flex; align-items: center; gap: 5.6px; padding: 4.8px 7.2px; border: 0.8px solid var(--border); border-radius: 999px; background: var(--popover); color: var(--muted-foreground); font-size: 8.8px; box-shadow: 0 6.4px 19.2px rgb(0 0 0 / 25%); }
 /* 19.2px hit target centered on the gap between chat-main and the panel edge. */
-.workspace-resize-handle { position: absolute; inset-block: 0; left: -12px; z-index: 40; width: 19.2px; cursor: col-resize; touch-action: none; }
 .workspace-detail-resizing { cursor: row-resize; user-select: none; }
 .workspace-chat-view { display: flex; min-height: 0; flex: 1; flex-direction: column; }
 .workspace-chat-modes { display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 3px 6px; border-bottom: 1px solid var(--border); }
@@ -545,10 +505,7 @@
 }
 
 @media (--conduit-phone-layout) {
-  .workspace-rail, .main-split, .workspace-move-toggle { display: none; }
-  .workspace-panel-tabs-space { display: flex; }
-  .workspace-panel-header { height: auto; flex-wrap: wrap; }
-  .workspace-panel-header .settings-segmented { order: 1; flex-basis: 100%; margin-bottom: 4px; }
+  [data-region="workspace-rail"], .main-split { display: none; }
   .chat-main.workspace-expanded { display: flex; }
   .workspace-expand-toggle { display: none; }
   .workspace-panel {
@@ -561,7 +518,6 @@
   .workspace-panel.workspace-panel-open { margin: 0; transform: translateX(0); }
   .workspace-panel-surface { width: 100%; border: 0; overscroll-behavior: contain; opacity: 1; transform: none; }
   .workspace-tree, .workspace-preview, .workspace-diff, .workspace-changes, .workspace-diff-content { overscroll-behavior: contain; }
-  .workspace-resize-handle { display: none; }
   .workspace-files { grid-template-rows: minmax(128px, 42%) 1fr; }
   html[data-vv-shell] .workspace-panel { height: var(--app-height, 100dvh); }
 }
@@ -581,13 +537,6 @@
 /* Surface keeps settled panel width, right-anchored inside the shell. */
 .workspace-panel-surface { position: absolute; inset: 0; display: flex; min-width: 0; height: 100%; contain: layout paint; flex: none; flex-direction: column; overflow: hidden; border-radius: 16px; background: var(--background); }
 .workspace-panel-surface > * { max-width: 100%; }
-.workspace-panel-header { display: flex; min-height: 40px; flex: none; align-items: center; justify-content: space-between; padding: 4px 8px 4px 14px; border-bottom: 1px solid var(--border); }
-.workspace-panel-header strong { font-size: 14px; }
-.workspace-panel-header small { color: var(--muted-foreground); font-size: 11px; }
-.workspace-panel-tabs { display: grid; grid-template-columns: repeat(4, 1fr); padding: 3px 6px; }
-.workspace-panel-tabs button { display: flex; min-height: 28px; align-items: center; justify-content: center; gap: 6px; border: 0; border-radius: 6px; background: transparent; color: var(--muted-foreground); font-size: 11px; }
-.workspace-panel-tabs button[aria-selected="true"] { background: var(--accent); color: var(--foreground); }
-.workspace-panel-tabs svg, .workspace-panel-header svg, .workspace-status-strip svg { width: 15px; height: 15px; }
 .workspace-files { display: flex; min-height: 0; flex: 1; flex-direction: column; }
 .workspace-tree-tools { min-height: 35px; gap: 3px; padding: 4px 6px; }
 .workspace-tree-tools > button { width: 28px; height: 28px; border-radius: 6px; }
@@ -643,9 +592,7 @@
 .workspace-patch { display: flex; min-height: 0; flex: none; flex-direction: column; overflow: hidden; }
 .workspace-detail-dock-header { min-height: 35px; gap: 7px; padding: 4px 6px 4px 10px; }
 .workspace-panel-empty { display: grid; min-height: 120px; flex: 1; place-items: center; padding: 20px; color: var(--muted-foreground); font-size: 12px; text-align: center; }
-.workspace-panel-loading { position: absolute; inset: auto 12px 12px auto; display: flex; align-items: center; gap: 7px; padding: 6px 9px; border: 1px solid var(--border); border-radius: 999px; background: var(--popover); color: var(--muted-foreground); font-size: 11px; box-shadow: 0 8px 24px rgb(0 0 0 / 25%); }
 /* 24px hit target centered on the gap between chat-main and the panel edge. */
-.workspace-resize-handle { position: absolute; inset-block: 0; left: -12px; z-index: 40; width: 24px; cursor: col-resize; touch-action: none; }
 .workspace-detail-resizing { cursor: row-resize; user-select: none; }
 .workspace-chat-view { display: flex; min-height: 0; flex: 1; flex-direction: column; }
 .workspace-chat-modes { display: flex; align-items: center; justify-content: space-between; gap: 3px; padding: 4px 8px; border-bottom: 1px solid var(--border); }
@@ -675,7 +622,6 @@
   .workspace-panel.workspace-panel-open { margin: 0; transform: translateX(0); }
   .workspace-panel-surface { width: 100%; border: 0; border-radius: 0; overscroll-behavior: contain; opacity: 1; transform: none; }
   .workspace-tree, .workspace-preview, .workspace-diff, .workspace-changes, .workspace-diff-content { overscroll-behavior: contain; }
-  .workspace-resize-handle { display: none; }
   .workspace-files { grid-template-rows: minmax(160px, 42%) 1fr; }
   /* Full-bleed, the panel sits under the system's status and navigation bars,
      so its surface starts and ends inside them, as the chat's header and
@@ -695,9 +641,6 @@
     --workbench-icon-size: 15px;
     --workbench-font-size: 11px;
   }
-  .workspace-panel-header { min-height: 44px; }
-  .workspace-panel-tabs button { min-width: 32px; min-height: 32px; }
-  .workspace-panel-tabs svg, .workspace-panel-header svg { width: 16px; height: 16px; }
   .workspace-files[data-wide="false"] { grid-template-columns: 40px minmax(0, 1fr); }
   .workspace-tree-collapsed-rail { gap: 4px; padding-block: 6px; }
   .workspace-tree-collapsed-rail button { width: 32px; height: 32px; border-radius: 6px; }
@@ -734,24 +677,17 @@
 /* A shell as a pane's document: the terminal fills the pane, its header
    carrying the pane's swap and close. */
 .pane-terminal { display: flex; min-width: 0; min-height: 0; flex: 1; flex-direction: column; overflow: hidden; border-radius: inherit; }
-.pane-terminal .terminal-pane-identity .pane-tab-actions { margin-left: auto; }
+.pane-terminal .terminal-pane-identity .ui-pane-actions { margin-left: auto; }
 .pane-terminal-gone { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 12px 16px; color: var(--muted-foreground); font-size: 12px; }
 /* Where a document dragged over a pane will land: a third's half, or the whole pane. */
-.doc-drop { position: fixed; z-index: 60; border-radius: 10px; background: var(--accent); opacity: 0.6; pointer-events: none; transition: left 120ms var(--ease-out, ease-out), width 120ms var(--ease-out, ease-out); }
 /* The rail's foot: pane layout controls, pushed to the bottom. */
-.workspace-rail { padding-bottom: 14.4px; }
-.workspace-rail-foot { display: flex; flex-direction: column; gap: 1.6px; margin-top: auto; }
 /* A folded pane: its letter on a hairline tile, set apart from the tools. */
 body.panes-settling :is(.chat-main, .main-split) { transition: flex-grow 220ms cubic-bezier(0.2, 0, 0, 1), margin 220ms cubic-bezier(0.2, 0, 0, 1); }
-.pane-layouts [role="menuitem"] { gap: 10px; }
-.pane-layout-glyph { display: flex; width: 28px; height: 14px; flex: none; gap: 2px; }
-.pane-layout-glyph i { min-width: 0; border-radius: 2px; background: color-mix(in oklch, currentColor, transparent 60%); }
 /* A file viewer's header: copying and wrapping live in its ⋯, which is always there;
    the other actions fold into it one at a time (data-folded). */
 .workspace-file-viewer .workspace-preview-header :is(.workspace-file-copy, .workspace-editor-wrap) { display: none; }
 .workspace-file-viewer .workspace-preview-header .workspace-preview-more { display: inline-flex; order: 9; }
 .workspace-file-viewer .workspace-preview-header [data-folded] { display: none !important; }
-.pane-tab-none .pane-tab-open { color: var(--muted-foreground); font-weight: 450; }
 /* The ⇄ on the rule between two sides trades them; the headers keep clear of it. */
 .file-viewer-swap { position: absolute; top: 5.6px; z-index: 7; display: inline-flex; width: 20px; height: 20px; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: var(--radius-sm); background: var(--background); color: var(--muted-foreground); transform: translateX(-50%); }
 .file-viewer-swap:hover { background: var(--accent); color: var(--foreground); }

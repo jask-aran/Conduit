@@ -24,7 +24,10 @@ import { NotificationToaster, toast } from "@/components/notifications";
 import { DefaultMeteorShower } from "@jask-aran/solid-components/meteor-shower";
 import "@jask-aran/solid-components/meteor-shower.css";
 import { phoneLayerOpen } from "@/components/phone-overlays";
-import { attachRowMenus, Button, Menu, MenuContent, MenuGroup, MenuItem, MenuLabel, MenuTrigger, Spinner } from "@/components/primitives";
+import { attachRowMenus, Button, MenuItem, Spinner } from "@/components/primitives";
+import { Menu, MenuContent, MenuControl, MenuRow, MenuSection } from "@/components/menus";
+import { Header, HeaderCrumb } from "@/components/ui/header";
+import { DragPill, DropWash, PaneAction, PaneActions, PaneEdge, PaneTab, TabPlace, PaneTabRow, PaneTabs } from "@/components/ui/pane";
 import { ChatHeader, Conversation } from "./chat/chat-screen";
 import { api, apiWhenServed, asList, pathChatId, pathProjectId, projectMatchesPath, projectPath } from "./api/client";
 import { buildHttpUrl, loginUrl, logoutUrl, normalizeServerOrigin, transcriptUrl } from "./api/transport";
@@ -2684,7 +2687,7 @@ function App() {
   };
   const onDocDragOver = (event: DragEvent) => {
     if (!draggedView || !event.dataTransfer?.types.includes(DOC_DRAG_TYPE)) return;
-    const dockTarget = draggedPane !== null && event.target instanceof Element ? event.target.closest<HTMLElement>(".workspace-panel-open, .workspace-rail") : null;
+    const dockTarget = draggedPane !== null && event.target instanceof Element ? event.target.closest<HTMLElement>(".workspace-panel-open, [data-region=\"workspace-rail\"]") : null;
     if (dockTarget && draggedPane !== null && canDock(draggedPane)) {
       event.preventDefault();
       event.dataTransfer.dropEffect = "move";
@@ -3037,7 +3040,7 @@ function App() {
     // Focusable itself, so an image or PDF side still takes the keyboard (a click, Ctrl+Shift+2).
     return <div class="workspace-split-surface file-viewer-surface" tabIndex={-1}>
       <Show when={entries().length} fallback={<>
-        <header class="chat-header file-tabs-header"><nav class="chat-header-title"><strong>No file open</strong></nav><div class="chat-header-actions">{paneTabActions(pane)}</div></header>
+        <Header actions={paneTabActions(pane)}><HeaderCrumb title="No file open" /></Header>
         <div class="file-viewer-empty" role="status">Open a file from Files, or Ctrl-click one to add it as a tab.</div>
       </>}>
         <FileViewer entries={entries()} focused={keyboardPane() === pane ? fileFocus()[String(pane)] ?? 0 : -1} wrap={(side) => sideWrap(pane, side)} onToggleWrap={(side) => toggleSideWrap(pane, side)} commentChatId={focusedChat().loadedId()}
@@ -3048,10 +3051,7 @@ function App() {
           emptySide={<Show when={hasEmptySide(pane)}>
             <section class="workspace-preview file-viewer-empty-side" tabIndex={-1} style={emptyFirst(pane) ? { order: -1 } : undefined} data-focused={keyboardPane() === pane && emptyFocused(pane)} onPointerDown={() => { focusFileEntry(pane, 1); setFilePane(pane); }}>
               <header class="workspace-preview-header">
-                <nav aria-label="Tabs" class="chat-header-title chat-header-tabs file-side-tabs"><div class="pane-tabs"><span class="pane-tab pane-tab-active pane-tab-none">
-                  <span class="pane-tab-open"><span class="pane-tab-title"><span>No file open</span></span></span>
-                  <button type="button" class="pane-tab-close" tabIndex={-1} aria-label="Close this side" title="Close this side" onClick={() => closeEmptySide(pane)}><XIcon /></button>
-                </span></div></nav>
+                <PaneTabRow><PaneTabs><PaneTab none lit title="No file open" closeLabel="Close this side" closeTitle="Close this side" onClose={() => closeEmptySide(pane)} /></PaneTabs></PaneTabRow>
                 <Show when={!emptyFirst(pane)}>{paneTabActions(pane)}</Show>
               </header>
               <div class="file-viewer-empty" role="status">Open a file from Files to show it here.</div>
@@ -3861,7 +3861,7 @@ function App() {
       dragView: (key) => { const entry = fileTabsOf(pane, side)?.entries.find((item) => fileEntryKey(item) === key); return entry ? formatFileView([entry]) : ""; },
       dragLit: true,
     });
-    return <nav aria-label="Tabs" class="chat-header-title chat-header-tabs file-side-tabs" data-file-side={side}>{row()}</nav>;
+    return <PaneTabRow side={String(side)}>{row()}</PaneTabRow>;
   };
   /*
    * A pane's tab row, for chats and files alike (6c): tabs keep their order
@@ -3904,8 +3904,13 @@ function App() {
     let strip: HTMLDivElement | undefined;
     const fit = () => {
       if (!strip) return;
-      const groupElements = [...strip.querySelectorAll<HTMLElement>(".pane-tab-group")];
-      const tabElements = [...strip.querySelectorAll<HTMLElement>(".pane-tab")];
+      const groupElements = [...strip.querySelectorAll<HTMLElement>(".ui-tab-place")];
+      const tabElements = [...strip.querySelectorAll<HTMLElement>(".ui-tab")];
+      // The row's spacing, as pane.css sets it (registered lengths, so they read back in px).
+      const style = getComputedStyle(strip);
+      const tabGap = parseFloat(style.getPropertyValue("--tab-gap")) || 0;
+      const placeGap = parseFloat(style.getPropertyValue("--tab-place-gap")) || 0;
+      const moreWidth = parseFloat(style.getPropertyValue("--tab-more")) || 0;
       for (const element of [...groupElements, ...tabElements]) element.style.display = "";
       for (const element of tabElements) element.removeAttribute("data-lead");
       const runs = groups();
@@ -3914,25 +3919,25 @@ function App() {
       // What every tab needs, for a header that folds its own actions first.
       // Tabs give way to a squeeze by cutting their titles, so each is measured with its whole title.
       // A tab's own cap (max-width) still holds.
-      const whole = (tab: HTMLElement) => { const title = tab.querySelector<HTMLElement>(".pane-tab-title > span"); const width = tab.getBoundingClientRect().width; return Math.min(width + (title ? title.scrollWidth - title.clientWidth : 0), Math.max(width, parseFloat(getComputedStyle(tab).maxWidth) || Infinity)); };
-      const natural = (element: HTMLElement) => element.classList.contains("pane-tab") ? whole(element) : element.getBoundingClientRect().width + [...element.querySelectorAll<HTMLElement>(".pane-tab")].reduce((sum, tab) => sum + whole(tab) - tab.getBoundingClientRect().width, 0);
-      const all = groupElements.reduce((sum, element) => sum + natural(element) + (element === groupElements[0] ? 0 : 33), 0);
+      const whole = (tab: HTMLElement) => { const title = tab.querySelector<HTMLElement>(".ui-tab-title > span"); const width = tab.getBoundingClientRect().width; return Math.min(width + (title ? title.scrollWidth - title.clientWidth : 0), Math.max(width, parseFloat(getComputedStyle(tab).maxWidth) || Infinity)); };
+      const natural = (element: HTMLElement) => element.classList.contains("ui-tab") ? whole(element) : element.getBoundingClientRect().width + [...element.querySelectorAll<HTMLElement>(".ui-tab")].reduce((sum, tab) => sum + whole(tab) - tab.getBoundingClientRect().width, 0);
+      const all = groupElements.reduce((sum, element) => sum + natural(element) + (element === groupElements[0] ? 0 : placeGap), 0);
       // What must stay -- the lit and showing tabs, their labels and the ⋯ -- for a header
       // that folds its own actions only after the other tabs have folded.
       const litKey = options.lit();
       const staying = tabElements.filter((element) => element.dataset.tab === litKey || options.shown?.(element.dataset.tab!));
-      const need = String(Math.ceil(staying.reduce((sum, element) => sum + natural(element) + 10, 0) + (staying.length < tabElements.length ? 28 : 0)
-        + groupElements.filter((group) => staying.some((element) => group.contains(element))).reduce((sum, group) => sum + (group.querySelector<HTMLElement>(".pane-tab-group-label")?.getBoundingClientRect().width ?? 0), 0)));
+      const need = String(Math.ceil(staying.reduce((sum, element) => sum + natural(element) + tabGap, 0) + (staying.length < tabElements.length ? moreWidth : 0)
+        + groupElements.filter((group) => staying.some((element) => group.contains(element))).reduce((sum, group) => sum + (group.querySelector<HTMLElement>(".ui-tab-place-label")?.getBoundingClientRect().width ?? 0), 0)));
       if (strip.dataset.need !== need) strip.dataset.need = need;
       if (all <= room) return setFolded([]);
       // Each tab with the gap and middot before it; each place with its label and the rule before it.
-      const width = new Map(tabElements.map((element) => [element.dataset.tab!, natural(element) + 10]));
-      const labels = groupElements.map((element, index) => (element.querySelector<HTMLElement>(".pane-tab-group-label")?.getBoundingClientRect().width ?? 0) + 8 + (index ? 33 : 0));
+      const width = new Map(tabElements.map((element) => [element.dataset.tab!, natural(element) + tabGap]));
+      const labels = groupElements.map((element, index) => (element.querySelector<HTMLElement>(".ui-tab-place-label")?.getBoundingClientRect().width ?? 0) + tabGap + (index ? placeGap : 0));
       // The lit tab and any other showing (a viewer's other side) never fold.
       const lit = options.lit();
       const reserved = (options.keys() ?? []).filter((key) => key === lit || options.shown?.(key));
       const kept = new Set(runs.flatMap((run, index) => run.keys.some((key) => reserved.includes(key)) ? [index] : []));
-      let budget = room - 28 - reserved.reduce((sum, key) => sum + (width.get(key) ?? 0), 0) - [...kept].reduce((sum, index) => sum + (labels[index] ?? 0), 0);
+      let budget = room - moreWidth - reserved.reduce((sum, key) => sum + (width.get(key) ?? 0), 0) - [...kept].reduce((sum, index) => sum + (labels[index] ?? 0), 0);
       const hidden: string[] = [];
       runs.forEach((run, index) => run.keys.forEach((key) => {
         if (reserved.includes(key)) return;
@@ -3941,12 +3946,12 @@ function App() {
       }));
       tabElements.forEach((element) => { if (hidden.includes(element.dataset.tab!)) element.style.display = "none"; });
       // A folded tab's middot goes with it: the first tab left in a place leads it.
-      groupElements.forEach((group) => { let lead = true; group.querySelectorAll<HTMLElement>(".pane-tab").forEach((element) => { const shown = element.style.display !== "none"; element.toggleAttribute("data-lead", shown && lead); if (shown) lead = false; }); });
+      groupElements.forEach((group) => { let lead = true; group.querySelectorAll<HTMLElement>(".ui-tab").forEach((element) => { const shown = element.style.display !== "none"; element.toggleAttribute("data-lead", shown && lead); if (shown) lead = false; }); });
       groupElements.forEach((element, index) => { if (!kept.has(index)) element.style.display = "none"; });
       setFolded(hidden);
     };
     const has = createMemo(() => Boolean(options.keys()));
-    return createMemo(() => has() ? untrack(() => <div class="pane-tabs" ref={(element) => {
+    return createMemo(() => has() ? untrack(() => <PaneTabs ref={(element) => {
       strip = element;
       const observer = new ResizeObserver(() => fit());
       observer.observe(element);
@@ -3958,35 +3963,32 @@ function App() {
         const label = () => options.placeLabel?.(run.keys[0]!) ?? "";
         // The place's label goes to the tab of it used last.
         const recent = () => options.used().find((key) => run.keys.includes(key)) ?? run.keys[0]!;
-        return <span class="pane-tab-group" classList={{ "pane-tab-group-current": current() }}>
-          <Show when={options.placeLabel}><button type="button" class="pane-tab-group-label chat-header-place" tabIndex={-1} title={label()} {...(options.groupDrag ? { draggable: "true", "data-doc-view": options.dragView?.(recent()), ...options.groupDrag(run.keys) } : {})} onClick={() => { if (!current()) options.select(recent()); }}><span>{label()}</span></button></Show>
+        return <TabPlace current={current()} label={options.placeLabel ? label() : undefined} onLabel={() => { if (!current()) options.select(recent()); }}
+          labelProps={options.groupDrag ? { draggable: "true", "data-doc-view": options.dragView?.(recent()), ...options.groupDrag(run.keys) } as JSX.ButtonHTMLAttributes<HTMLButtonElement> : undefined}>
           <For each={run.keys}>{(key) => {
             const lit = () => options.lit() === key;
             const name = () => options.title(key);
-            return <span class="pane-tab" role="tab" data-tab={key} aria-selected={lit()} classList={{ "pane-tab-active": lit(), "pane-tab-shown": !lit() && Boolean(options.shown?.(key)), "pane-tab-unsaved": Boolean(options.unsaved?.(key)) }} draggable={(lit() && !options.dragLit) || !options.dragView ? undefined : "true"} data-doc-view={lit() && !options.dragLit ? undefined : options.dragView?.(key)}>
-              <button type="button" class="pane-tab-open" tabIndex={-1} title={options.hint?.(key) ?? `${label()} / ${name()}`} onClick={() => { if (!lit()) options.select(key); }}>
-                {options.icon?.(key)}
-                <Show when={options.live?.(key)}><i class="pane-tab-live" aria-label="Running" /></Show>
-                <span class="pane-tab-title" data-text={name()}><span>{name()}</span></span>
-              </button>
-              <button type="button" class="pane-tab-close" tabIndex={-1} aria-label={`Close ${name()}`} title={options.unsaved?.(key) ? "Unsaved changes: close tab" : "Close tab"} onClick={() => options.close(key)}><XIcon /></button>
-            </span>;
+            return <PaneTab id={key} lit={lit()} shown={!lit() && Boolean(options.shown?.(key))} unsaved={Boolean(options.unsaved?.(key))}
+              drag={{ draggable: (lit() && !options.dragLit) || !options.dragView ? undefined : "true", "data-doc-view": lit() && !options.dragLit ? undefined : options.dragView?.(key) }}
+              icon={options.icon?.(key)} live={options.live?.(key)} title={name()} hint={options.hint?.(key) ?? `${label()} / ${name()}`}
+              closeTitle={options.unsaved?.(key) ? "Unsaved changes: close tab" : "Close tab"}
+              onOpen={() => { if (!lit()) options.select(key); }} onClose={() => options.close(key)} />;
           }}</For>
-        </span>;
+        </TabPlace>;
       }}</For>
       <Show when={folded().length}>
         <Menu modal={false} placement="bottom-end">
-          <MenuTrigger class="pane-tab-action pane-tabs-more" tabIndex={-1} aria-label={`${folded().length} more tabs`} title={`${folded().length} more tabs`}><EllipsisIcon /></MenuTrigger>
-          <MenuContent class="pane-tabs-menu">
+          <MenuControl as={PaneAction} label={`${folded().length} more tabs`}><EllipsisIcon /></MenuControl>
+          <MenuContent>
             <For each={groups().filter((run) => run.keys.some((key) => folded().includes(key)))}>{(run) =>
-              <MenuGroup><Show when={options.placeLabel}><MenuLabel>{options.placeLabel?.(run.keys[0]!)}</MenuLabel></Show>
-                <For each={run.keys.filter((key) => folded().includes(key))}>{(key) => <MenuItem textValue={options.title(key)} onSelect={() => options.select(key)}>{options.title(key)}</MenuItem>}</For>
-              </MenuGroup>}
+              <MenuSection title={options.placeLabel?.(run.keys[0]!)}>
+                <For each={run.keys.filter((key) => folded().includes(key))}>{(key) => <MenuRow onSelect={() => options.select(key)}>{options.title(key)}</MenuRow>}</For>
+              </MenuSection>}
             </For>
           </MenuContent>
         </Menu>
       </Show>
-    </div>) : undefined);
+    </PaneTabs>) : undefined);
   };
   const placeLabelOf = (projectId: string) => { const project = catalogue.projects().find((item) => item.id === projectId); return !project || project.slug === "chat" ? "Chats" : project.name || project.slug; };
   const paneTabRow = (pane: PaneKey) => {
@@ -4072,7 +4074,7 @@ function App() {
       const page = () => slotPage(slot);
       const attachInput = () => <input ref={side.setAttachInput} type="file" multiple hidden aria-hidden="true" onChange={(event) => { if (event.currentTarget.files) side.attachments.addFiles(event.currentTarget.files); event.currentTarget.value = ""; }} />;
       return <section ref={(element) => { pane.setHost(element); onCleanup(() => { if (pane.host() === element) pane.setHost(undefined); }); }} class="main-split" classList={{ "main-split-docked": docked, "main-split-docked-hidden": docked && dockSlot() !== slot }} data-pane-slot={slot} data-region={slotChatId(slot) ? "chat" : page() ? "dashboard" : "workspace-panel"} aria-label={docked ? "Docked pane" : position() === 0 ? "Pane B" : "Pane C"} style={docked ? undefined : { flex: `${paneWeights()[position() + 1] ?? 0.5} 1 0`, "min-width": paneMotion()?.slot === slot ? "0px" : `${paneMinWidth(slot)}px`, ...(paneMotion()?.slot === slot ? { opacity: 0, overflow: "hidden" } : {}), ...(paneMotion()?.slot === slot && paneMotion()!.collapsed ? { "margin-right": "0px" } : {}) }}>
-        <Show when={!docked}><div class="main-split-resize" role="separator" aria-label="Resize panes" aria-orientation="vertical" onPointerDown={(event) => startSplitResize(event, position() + 1)} /></Show>
+        <Show when={!docked}><PaneEdge aria-label="Resize panes" onPointerDown={(event) => startSplitResize(event, position() + 1)} /></Show>
         <Show when={parseFileView(slotView(slot))}>{renderFileViewer(slot)}</Show>
         <Show when={slotView(slot)?.startsWith("term:")}>{renderTerminalDocument(slot, () => slotView(slot)!.slice("term:".length))}</Show>
         <Show when={page() === "computer"}>
@@ -4169,17 +4171,17 @@ function App() {
     showDocked(slot);
   };
   const paneTabActions = (pane: PaneKey) => <Show when={inDock(pane)} fallback={paneRowActions(pane)}>
-    <span class="pane-tab-actions">
-      <Show when={isDocked(pane)}><button type="button" class="pane-tab-action" tabIndex={-1} aria-label="Move to a pane" title="Move to a pane" onClick={() => void undockPane(pane as number)}><Columns2Icon /></button></Show>
-      <button type="button" class="pane-tab-action" tabIndex={-1} aria-label="Close this pane" title="Close" onClick={() => closeSlot(pane as number)}><XIcon /></button>
-    </span>
+    <PaneActions>
+      <Show when={isDocked(pane)}><PaneAction label="Move to a pane" onClick={() => void undockPane(pane as number)}><Columns2Icon /></PaneAction></Show>
+      <PaneAction aria-label="Close this pane" title="Close" onClick={() => closeSlot(pane as number)}><XIcon /></PaneAction>
+    </PaneActions>
   </Show>;
   const paneRowActions = (pane: PaneKey) => <Show when={splitShown()}>
-    <span class="pane-tab-actions">
-      <Show when={canDock(pane)}><button type="button" class="pane-tab-action" tabIndex={-1} aria-label="Move to dock" title="Move to dock" onClick={() => dockPane(pane)}><PanelRightIcon /></button></Show>
-      <Show when={swapPartner(pane) !== null}><button type="button" class="pane-tab-action" tabIndex={-1} aria-label="Swap with the pane beside" title="Swap" onPointerDown={() => { keyboardBeforePress = keyboardPane(); }} onClick={(event) => { const target = swapTarget(pane); keyboardBeforePress = null; if (target !== null) void swapPanes(pane, event.shiftKey, target); }}><ArrowLeftRightIcon /></button></Show>
-      <Show when={pane !== "main" || shownSlots()[0] !== undefined}><button type="button" class="pane-tab-action" tabIndex={-1} aria-label="Close this pane" title="Close" onClick={() => closePane(pane)}><XIcon /></button></Show>
-    </span>
+    <PaneActions>
+      <Show when={canDock(pane)}><PaneAction label="Move to dock" onClick={() => dockPane(pane)}><PanelRightIcon /></PaneAction></Show>
+      <Show when={swapPartner(pane) !== null}><PaneAction aria-label="Swap with the pane beside" title="Swap" onPointerDown={() => { keyboardBeforePress = keyboardPane(); }} onClick={(event) => { const target = swapTarget(pane); keyboardBeforePress = null; if (target !== null) void swapPanes(pane, event.shiftKey, target); }}><ArrowLeftRightIcon /></PaneAction></Show>
+      <Show when={pane !== "main" || shownSlots()[0] !== undefined}><PaneAction aria-label="Close this pane" title="Close" onClick={() => closePane(pane)}><XIcon /></PaneAction></Show>
+    </PaneActions>
   </Show>;
   /*
    * The URL carries every pane (5f). The path stays pane A's route; `a` is a
@@ -5293,7 +5295,7 @@ function App() {
     } /></Show>
     <div class="workspace-layout" ref={(element) => { const observer = new ResizeObserver(() => setLayoutWidth(element.clientWidth)); observer.observe(element); onCleanup(() => observer.disconnect()); }}>
     <main data-slot="sidebar-inset" data-region={paneAOverride() ? "workspace-panel" : routeKind() === "chat" || harnessThread() ? "chat" : routeKind() === "terminal" ? "terminal" : "dashboard"} tabIndex={-1} onPointerDown={focusChatSurface} onKeyDown={paneKeydown} class={`chat-main${routeKind() === "chat" && emptyLayout() ? " chat-main-empty" : ""}${routeKind() === "chat" && emptyChat() && !emptyLayout() ? " chat-main-sending" : ""}${routeKind() === "chat" && withheldLiveChat() ? " chat-main-live-opening" : ""}${workspaceExpanded() ? " workspace-expanded" : ""}`} style={{ ...(splitShown() ? { flex: `${paneWeights()[0]} 1 0`, "min-width": paneMotion()?.slot === "main" ? "0px" : `${paneMinWidth("main")}px` } : {}), ...(paneMotion()?.slot === "main" ? { opacity: 0 } : {}), ...(paneMotion()?.slot === "main" && paneMotion()!.collapsed ? { "margin-left": "0px", "margin-right": "0px" } : {}) }} {...mainDropHandlers}>
-      <Show when={splitDropActive()}><div class="main-split-drop" aria-hidden="true" /></Show>
+      <Show when={splitDropActive()}><DropWash within /></Show>
       {/* Pane A holding a file viewer or a tool, over its route (5f). */}
       <Show when={parseFileView(paneAOverride())}>{renderFileViewer("main")}</Show>
       <Show when={paneAOverride()?.startsWith("term:")}>{renderTerminalDocument("main", () => paneAOverride()!.slice("term:".length))}</Show>
@@ -5400,10 +5402,9 @@ function App() {
     <Show when={routeKind() === "computer" && computerLocation()}><WorkspacePanel connectivity={runtime.connectivity} projectId={() => computerLocation()!.project.id} projectName={() => computerLocation()!.project.name} sourceControlEnabled={() => computerLocation()!.repository} workingRoot={() => computerLocation()!.project.workingRoot} chatId={() => "computer"} settingsScope={() => "computer"} initialDirectory={() => computerLocation()!.listing} requestedFile={computerFile} open={panelOpen} expanded={workspaceExpanded} focusRequest={workspaceFocusRequest} onFocusRequestComplete={acknowledgeWorkspaceFocus} requestedTab={workspaceViewRequest} onTabChange={setDockTool} splitView={toolView} splitHost={toolHost} documentShown={() => dockSlot() !== null} widthRequest={dockWidthRequest} documentHost={(element) => setDockDocHost((current) => element ?? (current?.isConnected ? current : undefined))} minWidth={dockMinWidth} overlay={dockOverlay} onOpenBeside={isMobileLayout() ? undefined : openBeside} onMoveToDock={moveToDock} onCloseSplit={closeSplit} bindSplit={bindSplit} onOpenFile={canOpenFilePanes() ? openFileDocument : undefined} openFiles={openFileKeys} onToggleExpanded={toggleWorkspaceExpanded} onClose={closePanel} shortcuts={shortcutManager} onBrowseDirectory={(path) => void browseComputer(`${computerLocation()!.project.workingRoot}/${path}`)} onBrowseParent={() => void browseComputer(computerLocation()!.parent)} /></Show>
     <Show when={["chat", "project", "dashboard"].includes(routeKind()) && Boolean(selectedProject()) && Boolean(workspacePanelScope())}><WorkspacePanel connectivity={runtime.connectivity} projectId={() => dockProject()!.id} projectName={() => dockProject()!.name} sourceControlEnabled={() => dockProject()!.kind === "workspace"} workingRoot={() => dockProject()!.workingRoot} chatId={() => dockScope()!} artifactChatId={() => sideFocused() ? focusedChat().loadedId() : routeKind() === "chat" ? chat.loadedId() : null} commentChatId={() => focusedChat().loadedId()} historyAvailable={() => sideFocused() ? focusedSession().history() !== "none" : routeKind() !== "chat" || chatHistory() !== "none"} open={panelOpen} expanded={workspaceExpanded} focusRequest={workspaceFocusRequest} onFocusRequestComplete={acknowledgeWorkspaceFocus} requestedTab={workspaceViewRequest} onTabChange={setDockTool} splitView={toolView} splitHost={toolHost} documentShown={() => dockSlot() !== null} widthRequest={dockWidthRequest} documentHost={(element) => setDockDocHost((current) => element ?? (current?.isConnected ? current : undefined))} minWidth={dockMinWidth} overlay={dockOverlay} onOpenBeside={isMobileLayout() ? undefined : openBeside} onMoveToDock={moveToDock} onCloseSplit={closeSplit} bindSplit={bindSplit} onOpenFile={canOpenFilePanes() ? openFileDocument : undefined} openFiles={openFileKeys} onRequestOpen={() => setPanelOpenForChat(true)} onToggleExpanded={toggleWorkspaceExpanded} onClose={closePanel} shortcuts={shortcutManager} /></Show>
     </div>
-    <Show when={dragHintContent()}>{(hint) => <div class="drag-hint" aria-hidden="true" ref={(element) => { dragHintElement = element; placeDragHint(); onCleanup(() => { if (dragHintElement === element) dragHintElement = undefined; }); }}>
-      <Show when={hint().icon} keyed>{(icon) => ({ left: <PanelLeftIcon />, right: <PanelRightIcon />, column: <Columns2Icon />, tab: <PanelTopIcon />, swap: <ArrowLeftRightIcon />, here: <PanelTopIcon /> })[icon]}</Show>{hint().text}
-    </div>}</Show>
-    <Show when={docDrop() && ["left", "middle", "right", "dock"].includes(docDrop()!.zone) ? docDrop() : null}>{(drop) => <div class="doc-drop" aria-hidden="true" style={{ left: `${drop().rect.left}px`, top: `${drop().rect.top}px`, width: `${drop().rect.width}px`, height: `${drop().rect.height}px` }} />}</Show>
+    <Show when={dragHintContent()}>{(hint) => <DragPill ref={(element) => { dragHintElement = element; placeDragHint(); onCleanup(() => { if (dragHintElement === element) dragHintElement = undefined; }); }}
+      icon={<Show when={hint().icon} keyed>{(icon) => ({ left: <PanelLeftIcon />, right: <PanelRightIcon />, column: <Columns2Icon />, tab: <PanelTopIcon />, swap: <ArrowLeftRightIcon />, here: <PanelTopIcon /> })[icon]}</Show>}>{hint().text}</DragPill>}</Show>
+    <Show when={docDrop() && ["left", "middle", "right", "dock"].includes(docDrop()!.zone) ? docDrop() : null}>{(drop) => <DropWash style={{ left: `${drop().rect.left}px`, top: `${drop().rect.top}px`, width: `${drop().rect.width}px`, height: `${drop().rect.height}px` }} />}</Show>
     <WorkspaceRail tools={Boolean(routeKind() === "computer" ? computerLocation() : ["chat", "project", "dashboard"].includes(routeKind()) && selectedProject() && workspacePanelScope())} onOpenSearch={toggleSearchPalette} onOpenPalette={() => openPalette(null)}
       panes={splitShown() ? shownSlots().length + 1 : 1} onLayout={applyPaneLayout}
       docked={dockContents().filter((slot) => slotView(slot)).map((slot) => ({ slot, view: slotView(slot)!, name: isDocked(slot) ? viewName(slotView(slot)) : `${viewName(slotView(slot))} (no room; returns when there is)` }))} currentDocked={panelOpen() ? dockSlot() : null} onChooseDocked={chooseDocked} dockOverlay={dockOverlay()} onToggleDockOverlay={toggleDockOverlay}
