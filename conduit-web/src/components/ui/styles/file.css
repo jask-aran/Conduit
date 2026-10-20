@@ -49,7 +49,7 @@
 .ui-file-viewer > .ui-file { flex: var(--side-a, 1) 1 0; }
 .ui-file-viewer > .ui-file + .ui-file { flex-grow: var(--side-b, 1); border-left: var(--hairline) solid var(--border); }
 
-.ui-status-bar { display: flex; min-height: calc(2.25 * var(--u-space)); flex: none; align-items: center; gap: var(--space-2xs); overflow: hidden; border-top: var(--hairline) solid var(--border); background: color-mix(in oklch, var(--background), black 3%); padding: var(--space-xs) var(--space-sm); color: var(--muted-foreground); font-size: var(--text-caption); }
+.ui-status-bar { display: flex; min-height: var(--control); flex: none; align-items: center; gap: var(--space-2xs); overflow: hidden; border-top: var(--hairline) solid var(--border); background: color-mix(in oklch, var(--background), black 3%); padding: var(--space-xs) var(--space-sm); color: var(--muted-foreground); font-size: var(--text-caption); }
 .ui-status-group { display: flex; min-width: 0; height: var(--control-xs); flex: none; align-items: center; gap: var(--space-2xs); overflow-x: auto; scrollbar-width: none; }
 .ui-status-group::-webkit-scrollbar { display: none; }
 .ui-status-group[data-details] { flex: 1; justify-content: flex-end; }
@@ -65,7 +65,7 @@
 
 /* A phone's controls are touch targets. */
 @media (--conduit-phone-layout) {
-  .ui-file-head { min-height: calc(2.5 * var(--u-space)); }
+  .ui-file-head { min-height: var(--control-lg); }
   .ui-file-head .ui-file-button, .ui-status-bar .ui-file-button, .ui-status-picker { min-width: var(--control-sm); height: var(--control-sm); }
   .ui-file-button > svg { width: var(--icon); height: var(--icon); }
 }

@@ -132,11 +132,11 @@
 .ui-folder { position: relative; display: flex; min-width: 0; flex-direction: column; align-items: flex-start; gap: var(--space-xs); border: 0; border-radius: var(--radius-surface); background: transparent;
   padding: var(--space-md) var(--row-inset); color: inherit; text-align: left; text-decoration: none; cursor: pointer; }
 .ui-folder:is(:hover, :focus-visible, [data-expanded], [data-held]) { outline: none; background: var(--sidebar-accent); }
-.ui-folder-mark { width: calc(2.03 * var(--u-icon)); height: calc(1.64 * var(--u-icon)); }
+.ui-folder-mark { width: calc(2.03 * var(--u-icon)); height: var(--control-tool); }
 .ui-folder-mark [data-part="back"] { fill: color-mix(in oklch, var(--foreground), transparent 80%); }
 .ui-folder-mark [data-part="front"] { fill: color-mix(in oklch, var(--foreground), transparent 70%); transition: fill var(--duration-quick) var(--ease-change); }
 .ui-folder:is(:hover, :focus-visible) .ui-folder-mark [data-part="front"] { fill: color-mix(in oklch, var(--foreground), transparent 55%); }
-.ui-folder > :not(.ui-folder-mark, .ui-folder-live, span) { width: calc(1.64 * var(--u-icon)); height: calc(1.64 * var(--u-icon)); margin: 0 var(--space-2xs); color: var(--muted-foreground); }
+.ui-folder > :not(.ui-folder-mark, .ui-folder-live, span) { width: var(--control-tool); height: var(--control-tool); margin: 0 var(--space-2xs); color: var(--muted-foreground); }
 .ui-folder-live { position: absolute; top: calc(var(--space-md) + var(--space-2xs)); left: calc(var(--row-inset) + 1.75 * var(--u-icon)); width: var(--icon-dot); height: var(--icon-dot); border-radius: var(--radius-round); background: var(--live); }
 .ui-folder-name { max-width: 100%; overflow: hidden; color: var(--foreground); font-size: var(--row-text); text-overflow: ellipsis; white-space: nowrap; }
 .ui-folder[data-new] .ui-folder-name { color: var(--muted-foreground); }

@@ -9,14 +9,14 @@
 .cm-tooltip.cm-tooltip-hover:has(.ui-review-tooltip) { border: var(--hairline) solid var(--border); border-radius: var(--radius-control); background: var(--popover); box-shadow: var(--shadow-md); }
 .ui-review-tooltip { max-width: calc(21.875 * var(--u-space)); padding: var(--space-sm) var(--space-md); color: var(--popover-foreground); font: var(--text-caption)/1.45 var(--font-sans); white-space: pre-wrap; overflow-wrap: anywhere; }
 .ui-annotation { position: absolute; z-index: 8; display: flex; gap: var(--space-xs); max-width: min(calc(21.875 * var(--u-space)), calc(100% - var(--space-xl))); transform: translate(var(--space-sm), var(--space-xs)); padding: var(--space-xs); border: var(--hairline) solid var(--border); border-radius: var(--radius-control); background: var(--popover); box-shadow: var(--shadow-md); }
-.ui-annotation-button { min-height: calc(1.875 * var(--u-space)); border: 0; border-radius: var(--radius-control); padding: var(--space-2xs) var(--space-md); background: var(--accent); color: var(--foreground); font: var(--text-caption) var(--font-sans); cursor: pointer; }
+.ui-annotation-button { min-height: var(--control-sm); border: 0; border-radius: var(--radius-control); padding: var(--space-2xs) var(--space-md); background: var(--accent); color: var(--foreground); font: var(--text-caption) var(--font-sans); cursor: pointer; }
 .ui-annotation-input { min-width: calc(14.0625 * var(--u-space)); resize: both; border: var(--hairline) solid var(--border); border-radius: var(--radius-control); padding: var(--space-sm) var(--space-md); background: var(--background); color: var(--foreground); font: var(--text-caption) var(--font-sans); }
 .ui-code-host .cm-editor { height: 100%; }
 .ui-code-host .cm-scroller { color-scheme: dark; scrollbar-color: var(--native-scrollbar-color); scrollbar-width: var(--native-scrollbar-width); }
 .ui-code-host[data-wrap="false"] .cm-content { white-space: pre; }
 .ui-code-host[data-markdown="true"] .cm-content { font-family: var(--font-sans); }
 .ui-code-host[data-markdown="true"] .cm-line { padding-inline: var(--space-lg); }
-.ui-search-bar { display: flex; min-width: 0; min-height: calc(2.1875 * var(--u-space)); align-items: center; gap: var(--space-2xs); overflow-x: auto; padding: var(--space-xs) var(--space-sm); background: color-mix(in oklch, var(--background), var(--accent) 20%); color-scheme: dark; scrollbar-width: none; }
+.ui-search-bar { display: flex; min-width: 0; min-height: var(--control); align-items: center; gap: var(--space-2xs); overflow-x: auto; padding: var(--space-xs) var(--space-sm); background: color-mix(in oklch, var(--background), var(--accent) 20%); color-scheme: dark; scrollbar-width: none; }
 .ui-search-bar::-webkit-scrollbar { display: none; }
 .ui-search-bar .ui-search-field > .ui-input { width: clamp(calc(8.125 * var(--u-space)), 24%, calc(17.1875 * var(--u-space))); height: var(--control-xs); flex: 1 0 calc(8.125 * var(--u-space)); border: var(--hairline) solid var(--input); border-radius: var(--radius-control); background: color-mix(in oklch, var(--background), black 2%); padding: var(--space-2xs) var(--space-sm); color: var(--foreground); font: var(--text-label)/1 var(--font-data); }
 .ui-search-bar .ui-search-field > .ui-input:focus { border-color: var(--ring); }
