@@ -1,6 +1,6 @@
 import { For, Show, splitProps, type JSX } from "solid-js";
 import { Button } from "./controls";
-import { GroupToggle } from "./dashboard";
+import { ChevronRightIcon } from "lucide-solid";
 
 /*
  * Source control (DESIGN Panes and windows): the branch's line, the commit box, the staged and unstaged groups of
@@ -32,16 +32,19 @@ export function CommitBox(props: {
     <textarea aria-label="Commit message" placeholder={props.placeholder} rows="1" value={props.value}
       onInput={(event) => { const input = event.currentTarget; props.onInput(input.value); input.style.height = "auto"; input.style.height = `${input.scrollHeight}px`; }}
       onKeyDown={(event) => { if (event.key === "Enter" && event.ctrlKey) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} />
-    <Button type="submit" variant="primary" size="sm" disabled={props.disabled}>{props.busy ? props.busyIcon : props.icon}<span>Commit</span><Show when={props.count}><small>{props.count}</small></Show></Button>
+    <Button type="submit" variant="primary" size="sm" disabled={props.disabled}>{props.busy ? props.busyIcon : props.icon}<span>Commit</span><small>{props.count || ""}</small></Button>
   </form>;
 }
 
 /** Changes in a run of groups: two side by side when the tool is wide enough. */
 export const ChangeLedger = (props: { children: JSX.Element }) => <div class="ui-change-ledger"><div>{props.children}</div></div>;
-/** A group of changes: its heading folds it, an action at the heading's right (stage all); then its rows, or a note. */
-export function ChangeSection(props: { open: boolean; label: string; count?: number; onToggle: () => void; action?: JSX.Element; children: JSX.Element }) {
+/** A group of changes: its heading (chevron, mark, name, count) folds it, an action at the heading's right (stage all); then its rows, or a note. */
+export function ChangeSection(props: { open: boolean; label: string; count?: number; icon?: JSX.Element; onToggle: () => void; action?: JSX.Element; children: JSX.Element }) {
   return <section class="ui-change-section" data-open={props.open ? "" : undefined}>
-    <header><GroupToggle open={props.open} count={props.count} onClick={props.onToggle}>{props.label}</GroupToggle>{props.action}</header>
+    <header>
+      <button type="button" class="ui-change-disclosure" aria-expanded={props.open} onClick={props.onToggle}><ChevronRightIcon />{props.icon}<span>{props.label}</span><Show when={props.count !== undefined}><small>{props.count}</small></Show></button>
+      {props.action}
+    </header>
     <Show when={props.open}>{props.children}</Show>
   </section>;
 }
