@@ -272,7 +272,7 @@ export function SourceControlView(props: {
           disabled={!c.commitMessage().trim() || !c.stagedFiles().length || Boolean(c.gitAction())}
           onInput={c.setCommitMessage} onSubmit={() => void c.runGitAction("commit")} />
         <ChangeLedger>
-          <ChangeSection open={c.stagedOpen()} label="Staged changes" icon={<CheckIcon />} count={c.stagedFiles().length} onToggle={() => c.setStagedOpen((open) => !open)}
+          <ChangeSection open={c.stagedOpen()} label="Staged changes" count={c.stagedFiles().length} onToggle={() => c.setStagedOpen((open) => !open)}
             action={<ToolButton label="Unstage all" disabled={!c.stagedFiles().length || Boolean(c.gitAction())} onClick={() => void c.runGitAction("unstage-all")}><Undo2Icon /></ToolButton>}>
             <Show when={c.stagedFiles().length} fallback={<ChangeEmpty>No staged changes</ChangeEmpty>}>
               <ChangeList><For each={c.stagedFiles()}>{(file) =>
@@ -284,7 +284,7 @@ export function SourceControlView(props: {
               }</For></ChangeList>
             </Show>
           </ChangeSection>
-          <ChangeSection open={c.changesOpen()} label="Changes" icon={<FileDiffIcon />} count={c.unstagedFiles().length} onToggle={() => c.setChangesOpen((open) => !open)}
+          <ChangeSection open={c.changesOpen()} label="Changes" count={c.unstagedFiles().length} onToggle={() => c.setChangesOpen((open) => !open)}
             action={<ToolButton label="Stage all" disabled={!c.unstagedFiles().length || Boolean(c.gitAction())} onClick={() => void c.runGitAction("stage-all")}><CirclePlusIcon /></ToolButton>}>
             <Show when={c.unstagedFiles().some((file) => file.status === "??" && file.path.endsWith("/"))}><ToolNotice>Untracked folders are grouped. Staging a folder includes its contents.</ToolNotice></Show>
             <Show when={c.unstagedFiles().length} fallback={<ChangeEmpty>Working tree clean</ChangeEmpty>}>
