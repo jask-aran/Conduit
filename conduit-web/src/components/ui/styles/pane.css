@@ -62,8 +62,8 @@
 .ui-pane-action > svg { width: var(--icon); height: var(--icon); }
 
 /* An edge: its hit target centred on the frame's gap, the gutter you drag. */
-.ui-pane-edge { position: absolute; z-index: 5; inset-block: 0; left: calc(-1 * var(--space-lg)); width: var(--space-lg); cursor: col-resize; touch-action: none; }
-.ui-pane-edge[data-dock] { z-index: 40; left: calc(-1 * var(--space-lg)); width: calc(1.5 * var(--u-space)); }
+.ui-pane-edge { position: absolute; z-index: 5; inset-block: 0; left: calc(-0.625 * var(--u-space)); width: calc(0.625 * var(--u-space)); cursor: col-resize; touch-action: none; }
+.ui-pane-edge[data-dock] { z-index: 40; left: calc(-0.9375 * var(--u-space)); width: calc(1.5 * var(--u-space)); }
 .ui-pane-edge:focus-visible { outline: none; }
 .ui-pane-edge[data-dock]:focus-visible::after { position: absolute; inset-block: var(--space-xl); left: 50%; width: var(--stroke-thin, 2px); border-radius: var(--radius-round); background: var(--tint); content: ""; translate: -50% 0; }
 
