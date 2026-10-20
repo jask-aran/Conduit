@@ -10,7 +10,7 @@ import { ChevronRightIcon, SearchIcon, XIcon } from "lucide-solid";
 /** A pane's tab row (PaneTabRow, in its header's title) and its strip (Tabs): runs of tabs by place, then the ⋯ for what folded. The app
  *  measures the row (--tab-gap, --tab-place-gap and --tab-more are registered lengths) and hides what does not fit. */
 export const PaneTabRow = (props: { side?: string; children: JSX.Element }) => <nav aria-label="Tabs" class="ui-tabs-row" data-file-side={props.side}>{props.children}</nav>;
-export const PaneTabs = (props: { ref?: (element: HTMLDivElement) => void; children: JSX.Element }) => <div ref={props.ref} class="ui-tabs">{props.children}</div>;
+export const PaneTabs = (props: { ref?: (element: HTMLDivElement) => void; children: JSX.Element }) => <div ref={props.ref} class="ui-pane-tabs">{props.children}</div>;
 
 /** One place's run of tabs: the place named once in caps (a button that goes to the tab used there last). */
 export function TabPlace(props: { current?: boolean; label?: string; labelProps?: JSX.ButtonHTMLAttributes<HTMLButtonElement>; onLabel?: () => void; children: JSX.Element }) {
