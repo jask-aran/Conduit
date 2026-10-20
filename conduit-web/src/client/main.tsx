@@ -47,6 +47,7 @@ import { createErrorDiagnostic, formatRuntimeDiagnosticPrompt, type ErrorDiagnos
 import { Composer } from "./chat/composer";
 import { AppDashboard } from "./dashboard/app-dashboard";
 import { applyTabFrost } from "./preferences/tab-frost";
+import { watchStrayFrost } from "./platform/stray-frost";
 import { applyStreamFade } from "./preferences/stream-fade";
 import { installFocusShown } from "./preferences/focus-shown";
 import type { VoiceDictationSettings } from "./chat/voice-dictation-types";
@@ -627,6 +628,7 @@ function App() {
   // layout; any other URL -- an old link, someone else's share -- pane A alone.
   applyTabFrost();
   applyStreamFade();
+  watchStrayFrost();
   installFocusShown();
   const launchUrl = new URL(location.href);
   const urlNamesPanes = launchUrl.searchParams.has("pane") || launchUrl.searchParams.has("a");
