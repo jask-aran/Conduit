@@ -41,7 +41,6 @@ import type { ChatSummary, DashboardChat, HarnessManifestView, Installation, Pro
 import { createErrorDiagnostic, formatRuntimeDiagnosticPrompt, type ErrorDiagnostic, type ErrorDiagnosticContext } from "./error-diagnostics";
 import { Composer } from "./chat/composer";
 import { AppDashboard } from "./dashboard/app-dashboard";
-import { COMPOSER_SURFACE_CHANGE_EVENT, COMPOSER_SURFACE_STORAGE_KEY, selectedComposerSurface } from "./chat/composer-surface";
 import { applyTabFrost } from "./preferences/tab-frost";
 import { applyStreamFade } from "./preferences/stream-fade";
 import { installFocusShown } from "./preferences/focus-shown";
@@ -1155,7 +1154,7 @@ function App() {
 
   const setPanelOpenForChat = (next: boolean) => {
     if (!next && document.activeElement instanceof HTMLElement && document.activeElement.closest(".workspace-panel")) {
-      if (isMobileLayout()) document.querySelector<HTMLElement>(".chat-header .chat-header-more")?.focus({ preventScroll: true });
+      if (isMobileLayout()) document.querySelector<HTMLElement>("[data-header-more]")?.focus({ preventScroll: true });
       else focusChatPane();
     }
     if (!next) setWorkspaceExpanded(false);
@@ -4661,7 +4660,6 @@ function App() {
       collapsedProjectIds: parseStringArray("conduit.sidebar.collapsed-projects"),
       sidebarCollapsed: localStorage.getItem("conduit.sidebar") === "collapsed",
       markdownRenderer: localStorage.getItem(MARKDOWN_RENDERER_STORAGE_KEY) || selectedMarkdownRenderer(),
-      composerSurface: selectedComposerSurface(),
       meteorField: selectedMeteorField(),
       transcriptWidth: selectedTranscriptWidth(),
       transcriptWideBlocks: selectedTranscriptWideBlocks(),
@@ -4686,7 +4684,6 @@ function App() {
       collapsedProjectIds: "conduit.sidebar.collapsed-projects",
       sidebarCollapsed: "conduit.sidebar",
       markdownRenderer: MARKDOWN_RENDERER_STORAGE_KEY,
-      composerSurface: COMPOSER_SURFACE_STORAGE_KEY,
       meteorField: METEOR_FIELD_STORAGE_KEY,
       transcriptWidth: TRANSCRIPT_WIDTH_STORAGE_KEY,
       transcriptWideBlocks: TRANSCRIPT_WIDE_BLOCKS_STORAGE_KEY,
@@ -4744,9 +4741,6 @@ function App() {
         setVoiceSettings(next);
       }
       window.dispatchEvent(new CustomEvent(UI_PREFERENCE_CHANGE_EVENT, { detail: { key, value } }));
-      if (key === "composerSurface") {
-        window.dispatchEvent(new CustomEvent(COMPOSER_SURFACE_CHANGE_EVENT, { detail: value }));
-      }
     };
     void apiWhenServed<UiPreferences & { knownServers?: Array<{ origin?: unknown; name?: unknown }> }>("/v0/preferences").then(async (serverPreferences) => {
       setSidebarPins(Array.isArray(serverPreferences.sidebarPins) ? serverPreferences.sidebarPins : []);
@@ -5179,7 +5173,7 @@ function App() {
     const current = props.session;
     const surfaceChat = current.chat;
     return <>
-      <ChatHeader project={props.project} onOpenPlace={openPlace} title={surfaceChat.title() || (surfaceChat.status() === "active" ? "Untitled chat" : "New chat")} profile={current.activeProfile()} runtime={surfaceChat.runtimeIdentity()} live={surfaceChat.live() as unknown as Record<string, unknown>} chat={surfaceChat} composerStatus={current.composerStatus()} connectivity={runtime.connectivity()} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void startNewChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={props.onShare} onRename={props.onRename} onDelete={props.onDelete} onUpdatePwa={() => void runPwaUpdate()} pwaUpdating={pwaUpdating} actions={props.actions} tabActions={props.tabActions} tabs={props.tabs} />
+      <ChatHeader project={props.project} onOpenPlace={openPlace} title={surfaceChat.title() || (surfaceChat.status() === "active" ? "Untitled chat" : "New chat")} profile={current.activeProfile()} runtime={surfaceChat.runtimeIdentity()} live={surfaceChat.live() as unknown as Record<string, unknown>} chat={surfaceChat} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void startNewChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={props.onShare} onRename={props.onRename} onDelete={props.onDelete} onUpdatePwa={() => void runPwaUpdate()} pwaUpdating={pwaUpdating} actions={props.actions} tabActions={props.tabActions} tabs={props.tabs} />
       {props.notice}
       <Conversation chat={surfaceChat} busy={surfaceChat.presentation().kind === "opening_live"} stackRef={props.stackRef}
         transcript={<Transcript chat={surfaceChat} supports={current.capability} partialContinue={partialContinue()} markdownRenderer={markdownRenderer()} profileLabel={current.activeProfile()?.label || current.activeProfile()?.id || surfaceChat.templateId() || undefined} projectId={props.project?.id} />}
@@ -5305,7 +5299,7 @@ function App() {
             const label = () => harnessLabelFor(thread().harnessId) || thread().harnessId;
             return <>
               <Show when={dropActive()}><div class="chat-drop-overlay"><div>Drop files to attach</div></div></Show>
-              <ChatHeader project={workspace()} placeLabel={label()} onOpenPlace={() => openComputerHarness(thread().harnessId, "push", thread().path)} title={chat.title() || thread().title || "Untitled thread"} badge={<OutsideThreadChip harness={label()} folder={thread().path} workspace={Boolean(workspace())} busy={trackingThread()} onTrack={() => void trackHarnessThread()} />} profile={activeProfile()} runtime={chat.runtimeIdentity()} live={chat.live() as unknown as Record<string, unknown>} chat={chat} composerStatus={composerStatus()} connectivity={runtime.connectivity()} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => openComputerHarness(thread().harnessId, "push", thread().path)} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => void shareHarnessThread()} onUpdatePwa={() => void runPwaUpdate()} pwaUpdating={pwaUpdating} />
+              <ChatHeader project={workspace()} placeLabel={label()} onOpenPlace={() => openComputerHarness(thread().harnessId, "push", thread().path)} title={chat.title() || thread().title || "Untitled thread"} badge={<OutsideThreadChip harness={label()} folder={thread().path} workspace={Boolean(workspace())} busy={trackingThread()} onTrack={() => void trackHarnessThread()} />} profile={activeProfile()} runtime={chat.runtimeIdentity()} live={chat.live() as unknown as Record<string, unknown>} chat={chat} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => openComputerHarness(thread().harnessId, "push", thread().path)} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => void shareHarnessThread()} onUpdatePwa={() => void runPwaUpdate()} pwaUpdating={pwaUpdating} />
               {/* The same conversation a chat page has; only moving it to another
                   place is missing, since the thread's folder is where it ran. */}
               <Conversation chat={chat} busy={openingLiveChat()} stackRef={(element) => { chatComposerStack = element; }}

@@ -26,6 +26,8 @@ export const ContextMenu = (props: ParentProps<{ placement?: "right-start" | "bo
 export const ContextMenuTrigger = KContextMenu.Trigger;
 export const MenuGroup = KMenu.Group;
 export const ContextMenuGroup = KContextMenu.Group;
+/** A menu opened by the caller's own control (`as`: a HeaderButton). */
+export const MenuControl = KMenu.Trigger;
 export function MenuTrigger(props: ParentProps<{ disabled?: boolean; "aria-label"?: string }>) { return <KMenu.Trigger as={Button} variant="ghost" {...props} />; }
 /** A pill that opens a menu without taking focus from what is being typed: a tap leaves focus where it
  *  is, and while `keep()` the menu's closing focus is not handed to it either (on a phone, even a

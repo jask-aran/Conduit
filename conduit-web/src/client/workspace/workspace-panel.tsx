@@ -419,7 +419,7 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
     } else if (!open && mobileWasOpen) {
       const previous = mobileReturnFocus;
       mobileReturnFocus = null;
-      queueMicrotask(() => restoreFocus(previous, ["textarea[data-composer-input]", 'button[aria-label="Toggle workspace panel"]', ".mobile-sidebar-trigger"]));
+      queueMicrotask(() => restoreFocus(previous, ["textarea[data-composer-input]", 'button[aria-label="Toggle workspace panel"]', 'button[aria-label="Toggle Sidebar"]']));
     }
     mobileWasOpen = open;
   });

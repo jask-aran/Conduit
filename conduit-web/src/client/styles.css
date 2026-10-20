@@ -111,9 +111,7 @@ svg.lucide { stroke-width: 2.4; }
 
 .model-trigger { display: flex; min-width: 0; align-items: center; gap: 6.4px; border: 0; border-radius: var(--radius-md); background: transparent; color: inherit; }
 /* One icon size across the top of the app, the sidebar's header included. */
-.chat-header [data-slot="button"] svg { width: 14px; height: 14px; }
 /* On a desktop search and the palette are the right rail's; a phone's header keeps them. */
-.palette-trigger, .search-trigger { display: none; flex: none; }
 .chat-header-actions { display: flex; margin-left: auto; flex: none; align-items: center; gap: 1.6px; }
 /* Sits in the composer's left cluster beside the attach button, at that
    button's height, with the percentage reading as its label. */
@@ -178,26 +176,11 @@ svg.lucide { stroke-width: 2.4; }
 /* A file viewer with no file showing stays open, saying how to fill it. */
 .file-viewer-empty { display: grid; flex: 1; place-items: center; padding: 24px; color: var(--muted-foreground); font-size: 11.2px; text-align: center; }
 .file-tabs-header { flex: none; }
-.chat-header-title span, .chat-header-title strong, .chat-header-title .breadcrumb-link { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-/* The place crumb is a link to its page: the crumb at rest, white under the pointer. */
-.breadcrumb-link { border: 0; background: none; padding: 0; color: inherit; font: inherit; cursor: pointer; }
-.breadcrumb-link:hover { color: var(--foreground); }
-/* A breadcrumb's place: the menus' group label (9.6px caps), which sets it
-   apart from the title by type alone, without a slash. */
+.chat-header-title span, .chat-header-title strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* A tab group's place: the menus' group label (9.6px caps), which sets it
+   apart from the titles by type alone, without a slash. */
 /* Caps on the title's baseline, not the line's centre, or they sit high. */
-.chat-header-title:has(> .chat-header-place) { align-items: baseline; }
 .chat-header-title .chat-header-place { flex: 0 1 auto; max-width: 120px; margin-right: 2.4px; color: var(--foreground); font-size: 9.6px; font-weight: 700; letter-spacing: 0.04em; line-height: 16px; text-transform: uppercase; }
-.chat-status-line { display: none; }
-.chat-status-line[data-state="error"] { color: color-mix(in oklch, var(--destructive), var(--foreground) 25%); }
-.chat-status-line[data-state="listening"], .chat-status-line[data-state="active"] { color: var(--muted-foreground); }
-.chat-status-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 8.8px/1.2 ui-monospace, SFMono-Regular, Consolas, monospace; }
-.chat-status-waveform.voice-waveform { display: inline-flex; width: 43.2px; height: 22.4px; flex: 0 0 43.2px; box-sizing: border-box; align-items: center; justify-content: center; padding: 0 3.2px; border: 0; border-radius: 0; background: transparent; }
-.chat-status-waveform .voice-waveform-header, .chat-status-waveform .voice-waveform-readout, .chat-status-waveform .voice-waveform-scale { display: none; }
-.chat-status-waveform .voice-waveform-plot { width: 100%; height: 100%; align-items: center; justify-content: space-between; gap: 1.6px; padding: 0; border: 0; border-radius: 0; background: transparent; }
-.chat-status-waveform .voice-waveform-bar { width: 0.8px; max-width: 0.8px; min-width: 0.8px; min-height: 1.6px; flex: 0 0 0.8px; border-radius: 999px; background: currentColor; opacity: 0.78; }
-.chat-status-waveform .voice-waveform-gridline, .chat-status-waveform .voice-waveform-peak { display: none; }
-.chat-header-more { display: none; }
-.chat-header-more svg { width: 12.8px; height: 12.8px; }
 .workspace-warning { position: relative; z-index: 2; display: flex; width: min(var(--composer-desktop-reference-width), calc(100% - 38.4px)); gap: 8px; margin: 6.4px auto; padding: 9.6px; border: 0.8px solid var(--border); border-radius: 8px; }
 .workspace-warning svg { width: 14.4px; flex: none; }
 .workspace-warning p { margin: 2.4px 0 0; color: var(--muted-foreground); font-size: 10.4px; }
@@ -268,25 +251,6 @@ svg.lucide { stroke-width: 2.4; }
    already pinned this for its own subtree; every renderer needs it. */
 .markdown-skeleton { min-height: 4em; }
 .marker { color: var(--muted-foreground); font-size: 9.6px; }
-/* A single class owns the material. Do not add material declarations to each
-   component: the composer, Follow button, and desktop header pill must match. */
-.composer-surface-material[data-composer-surface="static"] {
-  border: 1px solid color-mix(in oklch, oklch(1 0 0 / 30%), transparent 20%);
-  background:
-    linear-gradient(180deg, oklch(1 0 0 / 9%), oklch(1 0 0 / 2%) 58%),
-    var(--background);
-  backdrop-filter: none;
-  box-shadow: 0 6.4px 22.4px rgb(0 0 0 / 10%);
-}
-.composer-surface-material[data-composer-surface="frosted-live"] {
-  border: 1px solid #ffffff4d;
-  background: #ffffff2b;
-  backdrop-filter: blur(19.2px);
-  box-shadow:
-    0 6.4px 25.6px rgb(0 0 0 / 10%),
-    inset 0 0.8px 0 rgb(255 255 255 / 50%),
-    inset 0 -1px 0 rgb(255 255 255 / 10%);
-}
 
 
 /* Runtime transparency indicators (parity with main): spinner while
@@ -565,48 +529,7 @@ svg.lucide { stroke-width: 2.4; }
     min-height: 38.4px;
     padding: calc(3.2px + var(--safe-area-inset-top, env(safe-area-inset-top, 0px))) 8px 3.2px;
   }
-  .chat-header-desktop-action { display: none !important; }
-  /* Retired on the phone for now: the trace says how a turn went. */
-  .chat-status-line {
-    min-width: 0;
-    min-height: 32px;
-    flex: 1 1 0;
-    align-items: center;
-    justify-content: flex-start;
-    gap: 3.2px;
-    overflow: hidden;
-    border-radius: var(--radius-md);
-    background: transparent;
-    padding: 0 3.2px;
-    border: 0;
-    box-shadow: none;
-    color: var(--muted-foreground);
-    text-align: left;
-  }
-  .chat-status-line[data-state="ready"] { color: var(--muted-foreground); }
-  .chat-status-line[data-state="listening"] { min-width: 0; }
-  .chat-status-line[data-state="listening"] .chat-status-waveform.voice-waveform { width: auto; height: 22.4px; min-width: 0; flex: 1 1 auto; padding: 0 1.6px; }
-  .mobile-header-leading > .mobile-sidebar-trigger,
-  .mobile-header-leading > .mobile-new-chat-trigger,
-  .chat-header-actions > [data-slot="button"],
-  .chat-header-actions > .chat-header-more {
-    width: 32px;
-    min-width: 32px;
-    height: 32px;
-    min-height: 32px;
-  }
-  .mobile-header-leading, .chat-header-actions { gap: 0; }
-  /* Two pills of the composer's material (headerPill in main.tsx); the
-     header's own fade gives way so the transcript runs under them. */
-  /* Buttons concentric in the pill: 2px all round (1px edge, 1px padding). */
-  :is(.mobile-header-leading, .chat-header-actions).composer-surface-material { display: flex; height: 44px; align-items: center; gap: 2px; padding: 0 1px; border-radius: 999px; }
-  /* Neighbours in one pill are capsules, narrower than tall: the icons sit
-     close and the pill reads as one control. The tap height stays 40px. */
-  :is(.mobile-header-leading, .chat-header-actions).composer-surface-material > * { width: 34px; min-width: 34px; height: 40px; border-radius: 999px; }
-  .chat-header:has(> .composer-surface-material) { height: calc(56px + var(--safe-area-inset-top, env(safe-area-inset-top, 0px))); padding-top: calc(8px + var(--safe-area-inset-top, env(safe-area-inset-top, 0px))); padding-bottom: 4px; background: linear-gradient(to bottom, var(--background) 0 var(--safe-area-inset-top, env(safe-area-inset-top, 0px)), transparent calc(var(--safe-area-inset-top, env(safe-area-inset-top, 0px)) + 20px)); }
   .chat-header-actions { justify-content: flex-end; }
-  .chat-header-more { flex: none; align-items: center; justify-content: center; border: 0; border-radius: var(--radius-md); background: transparent; color: inherit; }
-  .chat-header-more:hover { background: var(--accent); }
   .settings-shell { height: calc(100dvh - 19.2px); }
   /* The mobile palette fills the visual viewport while keeping the inset frame
      that distinguishes it from a separate full-screen route. */
@@ -666,27 +589,14 @@ svg { stroke-width: 1.5; }
 svg.lucide { stroke-width: 2.4; }
 
 .model-trigger { display: flex; min-width: 0; align-items: center; gap: 8px; border: 0; border-radius: var(--radius-md); background: transparent; color: inherit; }
-.chat-header [data-slot="button"] svg { width: 16px; height: 16px; }
-.palette-trigger, .search-trigger { display: inline-flex; flex: none; }
 .chat-header-actions { display: flex; margin-left: auto; flex: none; align-items: center; gap: 2px; }
 
 /* Inset panel: the rounded fill sits directly on the darker frame. */
 .chat-main { --chat-header-height: 56px; position: relative; isolation: isolate; display: flex; min-width: 0; height: calc(100dvh - 16px); margin: 8px 10px 8px 2px; flex: 1; flex-direction: column; overflow: hidden; container-type: inline-size; container-name: chat-main; border-radius: 16px; background: var(--background); color: var(--foreground); }
 .chat-header { position: relative; z-index: 2; display: flex; height: var(--chat-header-height); flex: none; align-items: center; gap: 8px; padding: 8px 14px; background: linear-gradient(to bottom, var(--background) 0 50%, transparent 100%); }
 .chat-header-title { display: flex; min-width: 0; align-items: center; gap: 7px; overflow: hidden; font-size: 14px; line-height: 20px; }
-.chat-header-title span, .chat-header-title strong, .chat-header-title .breadcrumb-link { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chat-header-title span, .chat-header-title strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .chat-header-title .chat-header-place { font-size: 12px; }
-.chat-status-line { display: none; }
-.chat-status-line[data-state="error"] { color: color-mix(in oklch, var(--destructive), var(--foreground) 25%); }
-.chat-status-line[data-state="listening"], .chat-status-line[data-state="active"] { color: var(--muted-foreground); }
-.chat-status-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 11px/1.2 ui-monospace, SFMono-Regular, Consolas, monospace; }
-.chat-status-waveform.voice-waveform { display: inline-flex; width: 54px; height: 28px; flex: 0 0 54px; box-sizing: border-box; align-items: center; justify-content: center; padding: 0 4px; border: 0; border-radius: 0; background: transparent; }
-.chat-status-waveform .voice-waveform-header, .chat-status-waveform .voice-waveform-readout, .chat-status-waveform .voice-waveform-scale { display: none; }
-.chat-status-waveform .voice-waveform-plot { width: 100%; height: 100%; align-items: center; justify-content: space-between; gap: 2px; padding: 0; border: 0; border-radius: 0; background: transparent; }
-.chat-status-waveform .voice-waveform-bar { width: 1px; max-width: 1px; min-width: 1px; min-height: 2px; flex: 0 0 1px; border-radius: 999px; background: currentColor; opacity: 0.78; }
-.chat-status-waveform .voice-waveform-gridline, .chat-status-waveform .voice-waveform-peak { display: none; }
-.chat-header-more { display: none; }
-.chat-header-more svg { width: 16px; height: 16px; }
 .workspace-warning { position: relative; z-index: 2; display: flex; width: min(var(--composer-desktop-reference-width), calc(100% - 48px)); gap: 10px; margin: 8px auto; padding: 12px; border: 1px solid var(--border); border-radius: 10px; }
 .workspace-warning svg { width: 18px; flex: none; }
 .workspace-warning p { margin: 3px 0 0; color: var(--muted-foreground); font-size: 13px; }
@@ -735,25 +645,6 @@ svg.lucide { stroke-width: 2.4; }
    already pinned this for its own subtree; every renderer needs it. */
 .markdown-skeleton { min-height: 5em; }
 .marker { color: var(--muted-foreground); font-size: 12px; }
-/* A single class owns the material. Do not add material declarations to each
-   component: the composer, Follow button, and desktop header pill must match. */
-.composer-surface-material[data-composer-surface="static"] {
-  border: 1px solid color-mix(in oklch, oklch(1 0 0 / 30%), transparent 20%);
-  background:
-    linear-gradient(180deg, oklch(1 0 0 / 9%), oklch(1 0 0 / 2%) 58%),
-    var(--background);
-  backdrop-filter: none;
-  box-shadow: 0 8px 28px rgb(0 0 0 / 10%);
-}
-.composer-surface-material[data-composer-surface="frosted-live"] {
-  border: 1px solid #ffffff4d;
-  background: #ffffff2b;
-  backdrop-filter: blur(24px);
-  box-shadow:
-    0 8px 32px rgb(0 0 0 / 10%),
-    inset 0 1px 0 rgb(255 255 255 / 50%),
-    inset 0 -1px 0 rgb(255 255 255 / 10%);
-}
 
 
 /* Runtime transparency indicators (parity with main): spinner while
@@ -1074,51 +965,7 @@ svg.lucide { stroke-width: 2.4; }
     background: linear-gradient(to bottom, var(--background) 0 72%, transparent 100%);
   }
   .chat-header-title { display: none; }
-  .chat-header-desktop-action { display: none !important; }
-  /* Retired on the phone for now: the trace says how a turn went. */
-  .chat-status-line {
-    display: none;
-    min-width: 0;
-    min-height: 40px;
-    flex: 1 1 0;
-    align-items: center;
-    justify-content: flex-start;
-    gap: 4px;
-    overflow: hidden;
-    border-radius: var(--radius-md);
-    background: transparent;
-    padding: 0 4px;
-    border: 0;
-    box-shadow: none;
-    color: var(--muted-foreground);
-    text-align: left;
-  }
-  .chat-status-line[data-state="ready"] { color: var(--muted-foreground); }
-  .chat-status-line[data-state="error"] { color: var(--destructive); }
-  .chat-status-line[data-state="listening"], .chat-status-line[data-state="active"] { color: var(--muted-foreground); }
-  .chat-status-line[data-state="listening"] { min-width: 0; }
-  .chat-status-line[data-state="listening"] .chat-status-waveform.voice-waveform { width: auto; height: 28px; min-width: 0; flex: 1 1 auto; padding: 0 2px; }
-  .mobile-header-leading > .mobile-sidebar-trigger,
-  .mobile-header-leading > .mobile-new-chat-trigger,
-  .chat-header-actions > [data-slot="button"],
-  .chat-header-actions > .chat-header-more {
-    width: 40px;
-    min-width: 40px;
-    height: 40px;
-    min-height: 40px;
-  }
-  .mobile-header-leading, .chat-header-actions { gap: 0; }
-  /* Two pills of the composer's material (headerPill in main.tsx); the
-     header's own fade gives way so the transcript runs under them. */
-  /* Buttons concentric in the pill: 2px all round (1px edge, 1px padding). */
-  :is(.mobile-header-leading, .chat-header-actions).composer-surface-material { display: flex; height: 44px; align-items: center; gap: 2px; padding: 0 1px; border-radius: 999px; }
-  /* Neighbours in one pill are capsules, narrower than tall: the icons sit
-     close and the pill reads as one control. The tap height stays 40px. */
-  :is(.mobile-header-leading, .chat-header-actions).composer-surface-material > * { width: 34px; min-width: 34px; height: 40px; border-radius: 999px; }
-  .chat-header:has(> .composer-surface-material) { height: calc(56px + var(--safe-area-inset-top, env(safe-area-inset-top, 0px))); padding-top: calc(8px + var(--safe-area-inset-top, env(safe-area-inset-top, 0px))); padding-bottom: 4px; background: linear-gradient(to bottom, var(--background) 0 var(--safe-area-inset-top, env(safe-area-inset-top, 0px)), transparent calc(var(--safe-area-inset-top, env(safe-area-inset-top, 0px)) + 20px)); }
   .chat-header-actions { margin-left: auto; justify-content: flex-end; }
-  .chat-header-more { display: inline-flex; flex: none; align-items: center; justify-content: center; border: 0; border-radius: var(--radius-md); background: transparent; color: inherit; }
-  .chat-header-more:hover { background: var(--accent); }
   /* The server switcher's rows take the chat menu's touch size; their
      secondary text (latency, route kind) steps down so the names lead. */
   /* Outranks the menus' rule that sizes every span in a row to the row. */
@@ -1542,12 +1389,6 @@ svg.lucide { stroke-width: 2.4; }
 .workspace-glyph { display: inline-grid; flex: none; place-items: center; font-size: calc(0.5625 * var(--u-type)); font-weight: 750; letter-spacing: -.04em; line-height: 1; }
 .workspace-glyph[data-mode="monogram"] { font-size: calc(0.5 * var(--u-type)); }
 .workspace-glyph svg { width: 100%; height: 100%; }
-/* The chat header's leading controls are a phone's (on desktop the sidebar's head holds the toggle). */
-.chat-header .mobile-header-leading { display: none; }
-@media (--conduit-phone-layout) {
-  .chat-header .mobile-header-leading { display: flex; flex: none; }
-  .chat-header :is(.mobile-sidebar-trigger, .mobile-new-chat-trigger) { display: inline-flex; flex: none; }
-}
 /* The dashboards' right-click menus (V2-04 moves them onto the adapter, as the sidebar's are). */
 .sidebar-context-menu [role="menuitem"], .sidebar-context-menu [role="menuitemradio"] { font-size: 12px; }
 .sidebar-context-menu svg { width: 14.4px; height: 14.4px; }

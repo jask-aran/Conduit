@@ -148,7 +148,7 @@ function Canvas() {
         </div>
       </div>
       <Show when={tuning()}><textarea class="g-tune" spellcheck={false} value={tune()} onInput={(event) => update(event.currentTarget.value)}
-        placeholder={".composer-surface-material[data-composer-surface=\"frosted-live\"] {\n  backdrop-filter: blur(30px);\n}"} /></Show>
+        placeholder={".ui-frost {\n  backdrop-filter: blur(30px);\n}"} /></Show>
       <For each={shown()}>{(family) => <section class="g-family">
         <h2 class="g-family-title">{family.title} <small>{family.note}</small></h2>
         <Show when={family.stage}><div class="g-stage">
@@ -202,8 +202,6 @@ export function mount(frame: string | null) {
   const root = document.getElementById("root")!;
   applyFaces(document);
   applyScale(document);
-  // Frosted only: the static material is on its way out.
-  try { localStorage.setItem("conduit:composer-surface", "frosted-live"); } catch { /* private window */ }
   // The phone screens, drawn with components v2, in a frame with a phone's root size and media rules.
   if (frame === "sidebar") { document.body.classList.add("g-solo-body"); render(() => <LibraryContext.Provider value={true}><SidebarScreen /></LibraryContext.Provider>, root); }
   else if (frame === "live") { document.body.classList.add("g-solo-body"); const chat = new URLSearchParams(location.search).get("chat") ?? ""; void import("./live-chat").then(({ LiveChatScreen }) => render(() => <LibraryContext.Provider value={true}><LiveChatScreen chatId={chat} /></LibraryContext.Provider>, root)); }

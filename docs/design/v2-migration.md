@@ -14,14 +14,14 @@ control does not make its subsystem complete.
 
 | ID | Subsystem | Full scope | Status and evidence | Ownership |
 | --- | --- | --- | --- | --- |
-| V2-01 | Settings | Settings overlay, section navigation, all settings pages, fields, switches, selectors, shortcut recording, save and error states. | Partial. Switches use v2 (`e43ebf72`). Reset confirmation uses the shared v2 decision queue; the rest of Settings remains to migrate. | Unassigned |
-| V2-02 | Sidebar and navigation | Expanded sidebar, collapsed rail, project and chat rows, server switcher, header controls, status indicators, context menus. | Partial. The sidebar is cut over: `NavPane` and the Nav pieces (`components/ui/nav.tsx`), `Segmented`/`PillSwitch` for its sections, `StatusDot` for every `RuntimeIndicator`, and its right-click menus through the adapter's `ContextMenu` (now with sections, radio choices and submenus, the phone's panels included). `sidebar.css` is gone. Remaining: the chat header's pills (`header-pill.tsx`, `PillShell`) and the outside-thread chip, which still wear the composer-surface material (the setting retires with them, coordinating with V2-01), and the Move chat dialog, kept for the palette's Move command until the dashboards' menus (V2-04) move onto the adapter. See V2-02 evidence below. | Claude |
+| V2-01 | Settings | Settings overlay, section navigation, all settings pages, fields, switches, selectors, shortcut recording, save and error states. | Partial. Switches use v2 (`e43ebf72`). The Composer material setting is retired (V2-02). Reset confirmation uses the shared v2 decision queue; the rest of Settings remains to migrate. | Unassigned |
+| V2-02 | Sidebar and navigation | Expanded sidebar, collapsed rail, project and chat rows, server switcher, header controls, status indicators, context menus. | Complete cutover. The sidebar is cut over: `NavPane` and the Nav pieces (`components/ui/nav.tsx`), `Segmented`/`PillSwitch` for its sections, `StatusDot` for every `RuntimeIndicator`, and its right-click menus through the adapter's `ContextMenu` (now with sections, radio choices and submenus, the phone's panels included). `sidebar.css` is gone. The chat and project menus are one piece with the dashboards' (`item-menus.tsx`). Every page's header is `Header` (`components/ui/header.tsx`): crumb, `HeaderNote` for the outside-thread chip, `HeaderButton`s, frost pills on a phone; `header-pill.tsx`, `PillShell`, the composer-surface setting and `bridge.css` are gone. The Move chat dialog (the palette's Move) is a v2 `Dialog`. A pane's tab row and the file viewer's headers stay with V2-05. See V2-02 evidence below. | Claude |
 | V2-03 | Search and commands | Chat search, command palette, leader palette, results, keyboard hints, empty and loading states. | Open. The shared delete confirmation uses v2; the palettes and their controls remain. | Unassigned |
 | V2-04 | Dashboards | Conduit, project, workspace, harness, and Computer screens; headings, lists, actions, menus, and empty states. | Open. Computer explorer and workspace identity editor now render v2; the other dashboard presentations remain. Coordinate dashboard composers with Claude. | Unassigned; composer changes require coordination |
 | V2-05 | Panes and workspace tools | Pane headers, tabs, resize and drag controls, dock, Files, file viewer, Source Control, Chat review, and Terminal controls. | Open. Confirmations, file prompts and the embedded code excerpt now use v2; pane controls and the editable file viewer remain. | Unassigned |
 | V2-06 | Notifications and shared dialogs | Toasts, confirmations, prompts, previews, and other dialogs used across subsystems. | Complete cutover. Sonner and Kobalte retain engine behavior. All internal native decisions and the embedded widgets now render v2. `npm run smoke:panes -- --project NHP` passes 8/8 (2026-10-20); see below. | Delivered in this session |
 | V2-07 | Connection and access screens | Sign-in, first connection, server selection, reconnect, and connection error states. | Complete cutover. Browser sign-in, first connection, server/route selection and recovery render v2. Desktop and phone share Kobalte submenu behavior; the phone initial-focus blocker is resolved. See V2-07 evidence below. | Delivered in this session |
-| V2-08 | Composer and transcript | Composer, riders, questions, approvals, pickers, message rows, answers, traces, Markdown, code blocks, and message actions. | Partial; Claude's scope. Shell `d7ac7e33`, riders `17731746`; the menus and pickers now use `components/menus.tsx` (+ menu, model, profile, permissions, folder and project lists, context gauge and breakdown, the phone options menu with shared phone submenus). The composer and transcript no longer use `LibraryContext`, graduation or bridge rules; the riding buttons and the welcome are library pieces. Composer and transcript markup is v2 throughout. The chat header's menu (its context row and breakdown on the phone) is v2 too: `HeadingSection`, the adapter's rows, `Menu fit`; its old classic branches and CSS are gone. The phone + trigger is the adapter's `MenuPillTrigger`, with no private Kobalte import. Outside V2-08: the composer-surface setting (Settings, V2-01) still styles the phone header pills, sidebar toggle and the outside-thread chip, and the header's buttons are still classic (V2-02); the chat pane's empty-chat placement (`.chat-main-empty`, `.composer-stack`) is screen layout. | Claude |
+| V2-08 | Composer and transcript | Composer, riders, questions, approvals, pickers, message rows, answers, traces, Markdown, code blocks, and message actions. | Partial; Claude's scope. Shell `d7ac7e33`, riders `17731746`; the menus and pickers now use `components/menus.tsx` (+ menu, model, profile, permissions, folder and project lists, context gauge and breakdown, the phone options menu with shared phone submenus). The composer and transcript no longer use `LibraryContext`, graduation or bridge rules; the riding buttons and the welcome are library pieces. Composer and transcript markup is v2 throughout. The chat header's menu (its context row and breakdown on the phone) is v2 too: `HeadingSection`, the adapter's rows, `Menu fit`; its old classic branches and CSS are gone. The phone + trigger is the adapter's `MenuPillTrigger`, with no private Kobalte import. Outside V2-08: the chat pane's empty-chat placement (`.chat-main-empty`, `.composer-stack`) is screen layout. | Claude |
 | V2-09 | Shared v2 foundations | Controls, navigation rows, menus, cards, overlays, keycaps, loading indicators, and status indicators. | Partial. Extend these as each subsystem needs them. Use DESIGN.md's family table for the remaining old implementations. | The agent migrating a subsystem owns its required extensions; coordinate shared-file edits |
 
 ## Completion criteria
@@ -200,6 +200,24 @@ for every Move list): the sidebar binds them to its own dialogs, the app and
 project dashboards to one `ItemActions` from `main.tsx`, so the dashboards'
 chat and project menus are v2 and match the sidebar's (Move to folder is a
 submenu there too). Their terminal menus are still classic (V2-04).
+
+The header is the library's `Header`: `HeaderCrumb` (the place in caps, a
+link when it opens), `HeaderNote` beside it (the outside-thread chip),
+`HeaderButton`s (`only` phone or desktop: search, palette and ⋯ on a phone,
+share on a desktop) and the pane's own actions last; a tab row's strip is frost
+through `frost` (the Tab row setting, `tabFrostOn`). On a phone its lead and
+actions groups are frost pills; the title and the status line are not shown
+there (the status line stays retired). The ⋯ opens through the adapter's
+`MenuControl as={HeaderButton}`. The composer-surface setting, its module,
+test, rules and `bridge.css` are gone; `check-bundle.mjs` now checks the
+library's `.ui-frost` keeps both blur spellings.
+
+Executed: typecheck passed. In headed Chrome (:9222): a desktop chat's header
+(crumb and share) and the dashboard's; a phone's (412×860) pills, lead
+78×44 and actions 116×44 on a chat, the ⋯ opening by keyboard there and by a
+touch tap in headless (a mouse click under touch emulation does not, which is
+the emulation). The gallery's Header family and the Phone preview were looked
+at in the same Chrome.
 `sidebar-cursor.ts`, `focus-shown.ts` and the go-to (`main.tsx`) select the
 library's classes (`.ui-nav-row`, `.ui-nav-link`, `.ui-nav-toggle`,
 `.ui-nav-folder-*`, `.ui-rail-button`, the switch's `[aria-checked]`). The

@@ -9,7 +9,6 @@ import { DesktopSettingsTile } from "./desktop-settings";
 import { toast } from "@/components/notifications";
 import { Button, Field, FieldLabel, Input, Spinner } from "@/components/primitives";
 import { api } from "../api/client";
-import { COMPOSER_SURFACE_OPTIONS, type ComposerSurfaceMode } from "../chat/composer-surface";
 import { MARKDOWN_RENDERER_OPTIONS, type MarkdownRendererId } from "../chat/markdown-settings";
 import { formatMicrophoneError, hasAudioSignal, rematchInputDevice, isUnavailableAudioInputError, listAudioInputDevices, MAX_AUDIO_INPUT_TEST_DURATION_MS, revokeAudioInputRecording, startAudioInputTest as beginAudioInputTest, type AudioInputDevice, type AudioInputTestResult, type AudioInputTestSession, } from "../chat/voice-audio";
 import { shortcutFromKeyboardEvent } from "../chat/voice-dictation";
@@ -228,8 +227,6 @@ export function Settings(props: {
   onPanelMotionChange: (mode: PanelMotionMode) => void;
   userMessageCollapse: UserMessageCollapseMode;
   onUserMessageCollapseChange: (mode: UserMessageCollapseMode) => void;
-  composerSurface: ComposerSurfaceMode;
-  onComposerSurfaceChange: (surface: ComposerSurfaceMode) => void;
   interfaceScale: UiScale;
   onInterfaceScaleChange: (scale: UiScale) => void;
   voiceSettings: VoiceDictationSettings;
@@ -1172,11 +1169,6 @@ export function Settings(props: {
                   </label>
                   <label class="settings-line" for="sidebar-chat-limit"><span>Sidebar chats</span>
                     <Input id="sidebar-chat-limit" type="number" min={MIN_SIDEBAR_CHAT_LIMIT} max={MAX_SIDEBAR_CHAT_LIMIT} step="1" value={props.sidebarChatLimit} onChange={(event) => props.onSidebarChatLimitChange(Number(event.currentTarget.value))} onBlur={(event) => props.onSidebarChatLimitChange(Number(event.currentTarget.value))} />
-                  </label>
-                  <label class="settings-line" for="composer-surface-mode"><span>Composer</span>
-                    <Select id="composer-surface-mode" aria-label="Composer material" title={COMPOSER_SURFACE_OPTIONS.find((option) => option.value === props.composerSurface)?.description} value={props.composerSurface} onChange={(event) => props.onComposerSurfaceChange(event.currentTarget.value as ComposerSurfaceMode)}>
-                      <For each={COMPOSER_SURFACE_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
-                    </Select>
                   </label>
                   <label class="settings-line" for="tab-frost"><span>Tab row</span>
                     <Switch id="tab-frost" label="Frosted tab row" checked={frosted()} onChange={(on) => setFrosted(saveTabFrost(on))} />
