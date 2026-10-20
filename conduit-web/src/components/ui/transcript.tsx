@@ -2,6 +2,7 @@ import { children, createEffect, createRenderEffect, createSignal, For, onCleanu
 import { BellIcon, ChevronDownIcon, SquareIcon, TriangleAlertIcon } from "lucide-solid";
 import { cn } from "@/lib/utils";
 import { Spinner } from "./controls";
+import { haptic } from "./haptics";
 import { type Motion, motionOf, sinceOf } from "./shared";
 export { ANSWER_MARKDOWN } from "./shared";
 
@@ -77,7 +78,7 @@ export function foldBody(props: { opens?: boolean; open?: boolean; children?: JS
 export function Disclosure(props: { header: JSX.Element; open?: boolean; onToggle?: () => void; disabled?: boolean; opens?: boolean; children?: JSX.Element }) {
   const { body } = foldBody(props);
   return <div class="ui-disclosure" data-open={props.open ? "true" : "false"}>
-    <button type="button" class="ui-disclosure-header" aria-expanded={Boolean(props.open)} disabled={props.disabled} onClick={() => props.onToggle?.()}>{props.header}<ChevronDownIcon class="ui-disclosure-chevron" /></button>
+    <button type="button" class="ui-disclosure-header" aria-expanded={Boolean(props.open)} disabled={props.disabled} onClick={() => { haptic("fold"); props.onToggle?.(); }}>{props.header}<ChevronDownIcon class="ui-disclosure-chevron" /></button>
     <div class="ui-disclosure-body" aria-hidden={!props.open}>{body()}</div>
   </div>;
 }

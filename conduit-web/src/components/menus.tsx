@@ -29,12 +29,12 @@ export function edgePadding() {
   probe.remove();
   return 8 + inset;
 }
-export const Menu = Object.assign((props: ComponentProps<typeof KMenu>) => <KMenu overflowPadding={edgePadding()} {...props} />, KMenu);
+export const Menu = Object.assign((props: ComponentProps<typeof KMenu>) => <KMenu overflowPadding={edgePadding()} {...props} onOpenChange={(open) => { if (!open) haptic("dismiss"); props.onOpenChange?.(open); }} />, KMenu);
 /** A row's right-click (or long-press, Menu, Shift+F10) menu. Its rows, sections, choices and submenus are the
  *  Menu's own (MenuRow, MenuSection, MenuRadioItem, MenuSub), which work in either. */
 export const ContextMenu = (props: ParentProps<{ placement?: "right-start" | "bottom-start"; onOpenChange?: (open: boolean) => void }>) =>
   <Show when={rowMenusAttached()} fallback={<RowMenuDeferred.Provider value={true}>{props.children}</RowMenuDeferred.Provider>}>
-    <KContextMenu modal={false} fitViewport overflowPadding={edgePadding()} placement={props.placement ?? "right-start"} onOpenChange={(open) => { if (open) haptic("hold"); props.onOpenChange?.(open); }}>{props.children}</KContextMenu>
+    <KContextMenu modal={false} fitViewport overflowPadding={edgePadding()} placement={props.placement ?? "right-start"} onOpenChange={(open) => { haptic(open ? "hold" : "dismiss"); props.onOpenChange?.(open); }}>{props.children}</KContextMenu>
   </Show>;
 /* Until the first open has been shown (attachRowMenus), a row draws as the element it wraps and has no menu:
    building every row's menu machinery was a tenth of a second of a phone's first open. */
@@ -161,12 +161,12 @@ export function MenuSub(props: ParentProps<{ phone?: boolean }>) {
     const size = panel.getBoundingClientRect();
     return { x: Math.max(inset, Math.min(box.left + offset, innerWidth - size.width - inset)), y: box.bottom - size.height, width: 0, height: 0 };
   };
-  return <SubmenuContext.Provider value={{ phone: () => !!props.phone, close, setTrigger, setContent }}><KMenu.Sub open={open()} onOpenChange={setOpen} getAnchorRect={anchorRect} fitViewport overflowPadding={edgePadding()}>{props.children}</KMenu.Sub></SubmenuContext.Provider>;
+  return <SubmenuContext.Provider value={{ phone: () => !!props.phone, close, setTrigger, setContent }}><KMenu.Sub open={open()} onOpenChange={(next) => { if (!next) haptic("dismiss"); setOpen(next); }} getAnchorRect={anchorRect} fitViewport overflowPadding={edgePadding()}>{props.children}</KMenu.Sub></SubmenuContext.Provider>;
 }
 
 /** Something edited in place over the page: the menu's surface without a menu's keys, which would take the typing. */
 export function Popover(props: ParentProps<{ open?: boolean; onOpenChange?: (open: boolean) => void; anchorRef?: () => HTMLElement | undefined; placement?: "bottom-start" | "bottom-end" | "top-start" | "top-end" }>) {
-  return <KPopover open={props.open} onOpenChange={props.onOpenChange} anchorRef={props.anchorRef} placement={props.placement || "bottom-end"} gutter={4} fitViewport overflowPadding={8}>{props.children}</KPopover>;
+  return <KPopover open={props.open} onOpenChange={(open) => { if (!open) haptic("dismiss"); props.onOpenChange?.(open); }} anchorRef={props.anchorRef} placement={props.placement || "bottom-end"} gutter={4} fitViewport overflowPadding={8}>{props.children}</KPopover>;
 }
 export const PopoverTrigger = KPopover.Trigger;
 export function PopoverContent(props: ParentProps<{ "aria-label"?: string; wide?: boolean; onPointerDownOutside?: (event: Event & { target: EventTarget | null }) => void; onOpenAutoFocus?: (event: Event) => void; onCloseAutoFocus?: (event: Event) => void }>) {

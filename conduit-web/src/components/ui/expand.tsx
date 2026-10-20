@@ -1,4 +1,5 @@
 import { createComputed, createEffect, createSignal, on, onCleanup, Show, type JSX } from "solid-js";
+import { haptic } from "./haptics";
 import { cssTime } from "./shared";
 
 /**
@@ -32,6 +33,7 @@ export function Expand(props: { open: boolean; class?: string; children: JSX.Ele
     const wanted = props.open;
     if (was === wanted) return;
     was = wanted;
+    haptic("fold");
     const from = still ?? box;
     // Shutting, the height is the one the rows had before the update that may have taken them.
     const height = !wanted && takenHeight ? takenHeight : from ? from.getBoundingClientRect().height : 0;
