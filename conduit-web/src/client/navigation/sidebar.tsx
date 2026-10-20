@@ -2,7 +2,7 @@ import { Dialog } from "@/components/dialog";
 import { Section as DialogSection, Item as DialogItem } from "@/components/ui/popover";
 import { CardActions, CardForm, CardBody, CardRead, CardNote } from "@/components/ui/card";
 import { Button as DialogButton, Input as DialogInput, Field as DialogField } from "@/components/ui/controls";
-import { Button, NavBrand, NavFolder, NavFolderRow, NavGroup, NavLinks, NavNote, NavNotice, NavPane, NavRail, NavRailSection, NavRow, NavSkeleton, PillSwitch, RailButton, Segmented, StatusDot } from "@/components/ui";
+import { Backdrop, Button, NavBrand, NavFolder, NavFolderRow, NavGroup, NavLinks, NavNote, NavNotice, NavPane, NavRail, NavRailSection, NavRow, NavSkeleton, PillSwitch, RailButton, Segmented, StatusDot } from "@/components/ui";
 import { ContextMenu, ContextMenuContent, ContextMenuTrigger, MenuRow, MenuSection } from "@/components/menus";
 import { isConduitManagedProject } from "./sidebar-preferences";
 import { ServerSwitcher } from "./server-switcher";
@@ -965,7 +965,7 @@ export function Sidebar(props: {
   const areas = [{ value: "conduit" as const, label: "Conduit", icon: <LayoutDashboardIcon /> }, { value: "computer" as const, label: "Computer", icon: <MonitorIcon /> }];
   return <>
     <Show when={props.mobileOpen}>
-      <button type="button" class="mobile-panel-backdrop" data-mobile-backdrop="sidebar" data-for="sidebar" aria-label="Dismiss sidebar" onClick={closeMobile} />
+      <Backdrop layer="drawer" label="Dismiss sidebar" onDismiss={closeMobile} />
     </Show>
     <NavPane ref={(element) => { sidebarRoot = element; }} listRef={(element) => { sidebarList = element; }} data-region="sidebar"
       data-state={phoneLayout() ? "expanded" : collapsed() ? "collapsed" : "expanded"}

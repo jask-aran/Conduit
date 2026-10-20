@@ -5,6 +5,7 @@ import { MIN_MAIN_PANE_WIDTH } from "../layout-geometry";
 import { Columns2Icon, FolderIcon, GitCompareArrowsIcon, Maximize2Icon, MessageSquareIcon, Minimize2Icon, PanelRightIcon, TerminalIcon, XIcon } from "lucide-solid";
 import { Spinner } from "@/components/ui/controls";
 import { HeaderButton } from "@/components/ui/header";
+import { Backdrop } from "@/components/ui/overlay";
 import { PaneEdge, PaneLoading, ToolHeader, ToolView, ToolViews } from "@/components/ui/pane";
 import { COMMAND_IDS } from "../commands/command-registry";
 import { focusFirst, isMobileLayout, restoreFocus } from "../navigation/mobile-layout";
@@ -627,7 +628,7 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
 
   return <>
     <Show when={props.open()}>
-      <button type="button" class="mobile-panel-backdrop" data-mobile-backdrop="workspace" data-for="workspace" aria-label="Dismiss workspace panel" onClick={props.onClose} />
+      <Backdrop layer="panel" label="Dismiss workspace panel" onDismiss={props.onClose} />
     </Show>
     <aside ref={panelRoot} class="workspace-panel" data-region="workspace-panel" classList={{ "workspace-panel-open": props.open() || shellWidth() > 0.5, "workspace-panel-expanded": props.expanded(), "workspace-panel-overlay": Boolean(props.overlay?.()) }} aria-label="Workspace panel" aria-hidden={!props.open()} inert={!props.open()} {...dockDrop} style={{ "--workspace-panel-width": `${width()}px`, "--workspace-shell-width": `${shellWidth()}px`, width: `${shellWidth()}px`, "margin-right": `${shellGap()}px` }}>
     <PaneEdge dock ref={(element) => { resizeHandle = element; }} aria-label="Resize workspace panel" aria-valuemin={minWidth()} aria-valuemax={Math.floor(window.innerWidth * 0.65)} aria-valuenow={width()} tabIndex={0} onPointerDown={startResize} onKeyDown={(event) => { if (event.key === "ArrowLeft") saveWidth(width() + 16); if (event.key === "ArrowRight") saveWidth(width() - 16); }} />

@@ -142,7 +142,7 @@
 
 /* A phone's: a drawer over the page, the whole width, the head in pills on the top line (the server between the
    wordmark and the switch, its text giving way first), and no foot. */
-.ui-nav-pane[data-drawer] { position: fixed; inset-block: 0; left: 0; z-index: 55; width: 100vw; background: var(--frame); transform: translateX(-102%); transition: transform var(--panel-motion-duration) var(--panel-motion-easing); }
+.ui-nav-pane[data-drawer] { position: fixed; inset-block: 0; left: 0; z-index: var(--layer-drawer); width: 100vw; background: var(--frame); transform: translateX(-102%); transition: transform var(--panel-motion-duration) var(--panel-motion-easing); }
 .ui-nav-pane[data-drawer="open"] { transform: translateX(0); }
 .ui-nav-pane[data-drawer] .ui-nav-pane-body { width: 100%; height: var(--app-height, 100dvh); padding-top: var(--safe-area-inset-top, env(safe-area-inset-top, 0px)); padding-bottom: var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)); background: var(--frame); overscroll-behavior: contain; }
 .ui-nav-pane[data-drawer] .ui-nav-list { overscroll-behavior: contain; padding-bottom: var(--space-lg); }

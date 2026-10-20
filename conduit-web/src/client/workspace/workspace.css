@@ -133,7 +133,7 @@
   .chat-main.workspace-expanded { display: flex; }
   .workspace-panel {
     inset: 0;
-    z-index: 70;
+    z-index: var(--layer-panel);
     width: 100vw !important;
     height: 100dvh;
     transform: translateX(100%);
@@ -174,7 +174,7 @@
   .workspace-panel {
     position: fixed;
     inset: 0;
-    z-index: 70;
+    z-index: var(--layer-panel);
     width: 100vw !important;
     height: 100dvh;
     margin: 0;

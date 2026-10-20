@@ -29,6 +29,9 @@
   --ease-arrive: cubic-bezier(.2, .8, .2, 1);
   --ease-leave: cubic-bezier(.4, 0, 1, 1);
   --ease-change: ease;
+  /* A phone's drawers over the page: the sidebar's, then the workspace panel's over it; each one's Backdrop just under it. */
+  --layer-drawer: 55;
+  --layer-panel: 70;
   /* The leader's dim, its card one above: over the page, under a dialog. */
   --layer-leader: 74;
   --layer-dialog: 100;

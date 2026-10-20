@@ -5,6 +5,10 @@
 .ui-scrim[data-entering] { animation: ui-fade-in var(--duration-gentle) var(--ease-change) backwards; }
 .ui-scrim[data-leaving] { animation: ui-fade-out var(--duration-quick) var(--ease-leave) forwards; pointer-events: none; }
 .ui-scrim[data-placement="center"] { align-items: center; }
+/* Backdrop: the dim, the whole screen, one layer under its drawer. */
+.ui-backdrop { position: fixed; inset: 0; z-index: calc(var(--layer-drawer) - 1); border: 0; padding: 0; background: var(--dim); cursor: pointer; -webkit-tap-highlight-color: transparent;
+  animation: ui-fade-in var(--duration-gentle) var(--ease-change) backwards; }
+.ui-backdrop[data-layer="panel"] { z-index: calc(var(--layer-panel) - 1); }
 .ui-frost.ui-overlay { display: flex; width: min(var(--overlay-width, var(--measure-2xl)), 100%); max-height: var(--overlay-height, none); flex-direction: column; overflow: hidden; border-radius: var(--radius-surface); padding: 0; color: var(--foreground); font-size: var(--text-body); }
 /* A rail overlay holds its height (--overlay-height) whichever section it shows, short of the window. */
 .ui-overlay[data-layout="rail"] { height: var(--overlay-height, auto); max-height: calc(100dvh - 2 * var(--space-xl)); flex-direction: row; }

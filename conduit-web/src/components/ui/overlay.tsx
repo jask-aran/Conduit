@@ -17,6 +17,11 @@ export function Scrim(props: JSX.HTMLAttributes<HTMLDivElement> & { placement?: 
   return <div {...rest} class={cn("ui-scrim", local.class)} data-placement={local.placement ?? "top"} data-dialog={local.dialog ? "" : undefined} {...motionOf(local.motion)} />;
 }
 
+/** Backdrop: the page dimmed under a phone's drawer (layer: the sidebar's, or the workspace panel's), a tap on it
+ *  dismissing the drawer; it fades in. */
+export const Backdrop = (props: { layer: "drawer" | "panel"; label: string; onDismiss: () => void }) =>
+  <button type="button" class="ui-backdrop" data-layer={props.layer} aria-label={props.label} onClick={() => props.onDismiss()} />;
+
 /** core: frost on a solid backing, kept for the phone's full-screen overlays should the page behind them be too busy -- off for now.
  *  embedded: inside a behaviour's dialog (OverlayDialog), which carries the role and the name. */
 export function Overlay(props: { label: string; layout?: "stack" | "rail"; core?: boolean; embedded?: boolean; density?: Density; class?: string; style?: JSX.CSSProperties; motion?: Motion; children: JSX.Element }) {

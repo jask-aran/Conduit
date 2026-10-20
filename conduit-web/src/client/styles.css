@@ -265,18 +265,6 @@ svg.lucide { stroke-width: 2.4; }
 }
 
 @media (--conduit-phone-layout) {
-  .mobile-panel-backdrop {
-    display: block;
-    position: fixed;
-    inset: 0;
-    border: 0;
-    padding: 0;
-    background: rgb(0 0 0 / 48%);
-    cursor: pointer;
-    -webkit-tap-highlight-color: transparent;
-  }
-  .mobile-panel-backdrop[data-for="sidebar"] { z-index: 50; }
-  .mobile-panel-backdrop[data-for="workspace"] { z-index: 65; }
   html[data-mobile-overlay] { overscroll-behavior-y: none; }
 
   /* Shell height tracks the visual viewport so the composer rides the keyboard. */
@@ -481,18 +469,6 @@ svg.lucide { stroke-width: 2.4; }
 }
 
 @media (--conduit-phone-layout) {
-  .mobile-panel-backdrop {
-    display: block;
-    position: fixed;
-    inset: 0;
-    border: 0;
-    padding: 0;
-    background: rgb(0 0 0 / 48%);
-    cursor: pointer;
-    -webkit-tap-highlight-color: transparent;
-  }
-  .mobile-panel-backdrop[data-for="sidebar"] { z-index: 50; }
-  .mobile-panel-backdrop[data-for="workspace"] { z-index: 65; }
   html[data-mobile-overlay] { overscroll-behavior-y: none; }
 
   /* Shell height tracks the visual viewport so the composer rides the keyboard. */
