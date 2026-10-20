@@ -25,10 +25,10 @@
 .ui-dash-context { display: flex; min-width: 0; grid-area: status; align-items: baseline; margin: var(--space-md) 0 0; overflow: hidden; color: var(--muted-foreground); font-size: var(--text-caption); }
 .ui-dash-context > span { flex: none; white-space: nowrap; }
 .ui-dash-context > span:not(:last-child)::after { margin-inline: var(--space-md); opacity: .6; content: "·"; }
-.ui-dash-context code { color: color-mix(in oklch, var(--foreground), transparent var(--tone-rest)); font: var(--weight-light) var(--text-caption)/var(--leading-row) var(--font-data); }
-.ui-dash-context button { border: 0; border-radius: var(--radius-inset); background: transparent; padding: 0; color: inherit; font: inherit; cursor: pointer; }
-.ui-dash-context button:is(:focus-visible) code { color: var(--foreground); }
-@media (hover: hover) { .ui-dash-context button:is(:hover, :focus-visible) code { color: var(--foreground); } }
+:is(.ui-dash-context, .ui-dash-path) code { color: color-mix(in oklch, var(--foreground), transparent var(--tone-rest)); font: var(--weight-light) var(--text-caption)/var(--leading-row) var(--font-data); }
+.ui-dash-path { border: 0; border-radius: var(--radius-inset); background: transparent; padding: 0; color: inherit; font: inherit; cursor: pointer; }
+.ui-dash-path:is(:focus-visible) code { color: var(--foreground); }
+@media (hover: hover) { .ui-dash-path:is(:hover, :focus-visible) code { color: var(--foreground); } }
 .ui-dash-context button:focus-visible { outline: none; background: var(--tint); }
 
 .ui-dash-quick { position: relative; display: flex; min-width: var(--control-sm); flex: 1 1 0; grid-area: actions; justify-content: flex-end; margin: 0 calc(-1 * var(--space-md)) 0 var(--space-2xl); }
