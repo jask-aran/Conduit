@@ -27,6 +27,7 @@ import { Header, HeaderButton, HeaderCrumb, HeaderNote } from "@/components/ui";
 import { NavPane, NavBrand, NavGroup as GNavGroup, NavRow as GNavRow, NavFolder, NavFolderRow, NavNote, NavSkeleton, NavNotice, NavLinks, NavRail, NavRailSection, RailButton, Segmented as GSegmented, Button as GButton } from "@/components/ui";
 import { DownloadIcon, ExternalLinkIcon, FolderPlusIcon, SearchIcon as GSearchIcon, TerminalIcon as GTerminalIcon } from "lucide-solid";
 import katex from "katex";
+import { Dashboard, DashHeader, QuickActions, QuickAction, QuickMore, DashIconButton, GroupHeading, GroupToggle, GroupSwitches, Group, GroupAction, DashDay, DashMore, DashRow, ChangeRow, Counts, DashEmpty, DashNote, FolderShelf, FolderTile } from "@/components/ui/dashboard";
 
 /*
  * The unified library, as a tree: Frost is the material; Popover, Card, Pill
@@ -763,6 +764,44 @@ export const libraryFamilies: Family[] = [
         <GNavGroup label="Projects"><NavFolder open row={<NavFolderRow icon={<FolderIcon />} open within link={{}} toggle={{ "aria-label": "Collapse" }}>Japan</NavFolderRow>}><GNavRow indent icon={<MessageSquareIcon />}>Plan the trip</GNavRow></NavFolder></GNavGroup>
         <GNavGroup label="Chats"><GNavRow icon={<MessageSquareIcon />}>Fix the build</GNavRow><GNavRow quiet icon={<GSearchIcon />} meta="7 more">View all chats</GNavRow></GNavGroup>
       </NavPane></div>)}</div>, true),
+    ] },
+  ] },
+  { title: "Dashboard", note: "a place's page: a header, quick actions and composer, with chats beside projects and workspaces", groups: [
+    { title: "Forms", note: "each piece and state at each density", layout: "desktop", atoms: [
+      lib("dash-forms", "Dashboard · forms", "both", "dashboard", "components/ui/dashboard.tsx", () => <FormTable rows={[
+        form("GroupHeading · the two section roles", "the strong one for dashboards and big lists; the quiet one for menus, Settings and the sidebar (a phone's quiet label takes the strong one's voice)", () => <div class="g-row g-top"><GroupHeading count={4}>Projects</GroupHeading><GNavGroup label="Projects"><GNavRow icon={<FolderIcon />}>Japan</GNavRow></GNavGroup></div>, "<GroupHeading count> · <NavGroup label>"),
+        form("GroupToggle", "open and shut", () => <States states={["Open", "Shut"] as const}>{(state) => <GroupToggle open={state() === "Open"} count={4} onClick={() => {}}>Projects</GroupToggle>}</States>, "<GroupToggle open count onClick>"),
+        form("Group", "switches and actions above chats, with a day and more below", () => <Group id="g-chats" labelled section="chats" heading={<GroupSwitches><span id="g-chats"><Segmented label="Show" value="all" onChange={() => {}} options={[{ value: "all", label: "All", count: 3 }, { value: "unread", label: "Unread", count: 0 }]} /></span></GroupSwitches>} actions={<GroupAction>Filters</GroupAction>}>
+          <DashDay>Today</DashDay>
+          <DashRow element="button" lead={<MessageSquareIcon />} primary="Plan the trip" context="Japan" trailing="2d" />
+          <DashRow element="button" lead={<MessageSquareIcon />} primary="Fix the build" context="Conduit" trailing="3d" />
+          <DashRow element="button" lead={<MessageSquareIcon />} primary="Review the changes" context="Website" trailing="4d" />
+          <DashMore count={12} onClick={() => {}}>Show more</DashMore>
+        </Group>, "<Group labelled section heading actions> · <DashDay> · <DashRow> · <DashMore count>"),
+        form("DashRow · ChangeRow · Counts", "modified and added files with line counts", () => <div><ChangeRow icon={<FileCode2Icon />} name="dashboard.tsx" directory="components/ui" added={24} removed={8} status="M" /><ChangeRow icon={<FileTextIcon />} name="notes.md" directory="docs" added={12} removed={0} status="A" /><Counts added={36} removed={8} /></div>, "<ChangeRow icon name directory added removed status> · <Counts added removed>"),
+        form("DashEmpty · DashNote", "an empty list, a note and an error", () => <div><DashEmpty>No chats</DashEmpty><DashNote>Choose a project to start.</DashNote><DashNote error>Could not load projects.</DashNote></div>, "<DashEmpty> · <DashNote error>"),
+        form("FolderShelf · FolderTile", "four projects, one live, and a new project action", () => <FolderShelf all><FolderTile name="Conduit" meta="3 chats" live /><FolderTile name="Japan" meta="2 chats" /><FolderTile name="Website" meta="1 chat" /><FolderTile name="Notes" meta="No chats" /><FolderTile name="New project" icon={<FolderPlusIcon />} /></FolderShelf>, "<FolderShelf all> · <FolderTile name meta live icon>"),
+      ]} on={["desktop", "phone"]} />, "row"),
+    ] },
+    { title: "Assembled", note: "a page with chats beside projects and workspaces", layout: "desktop", atoms: [
+      lib("dash-page", "Dashboard · a page", "desktop", "dashboard", "dashboard/primitives/split.tsx", () => <div style={{ width: "1100px", height: "640px", display: "flex" }}><Dashboard label="Conduit"
+        head={<DashHeader title="Conduit" context={["Nothing running"]} />}
+        actions={<QuickActions><QuickAction icon={<TerminalIcon />} label="Terminal" onClick={() => {}} /><QuickMore keep><DashIconButton aria-label="More" /></QuickMore></QuickActions>}
+        composer={<div class="g-slot">Composer</div>}
+        list={<Group id="g-page-chats" labelled section="chats" order="list" heading={<GroupSwitches><span id="g-page-chats"><Segmented label="Show" value="all" onChange={() => {}} options={[{ value: "all", label: "All", count: 6 }, { value: "unread", label: "Unread", count: 0 }]} /></span></GroupSwitches>} actions={<GroupAction>Filters</GroupAction>}>
+          <DashDay>Today</DashDay>
+          <DashRow element="button" lead={<MessageSquareIcon />} primary="Plan the trip" context="Japan" trailing="2d" />
+          <DashRow element="button" lead={<MessageSquareIcon />} primary="Fix the build" context="Conduit" trailing="3d" />
+          <DashRow element="button" lead={<MessageSquareIcon />} primary="Review the changes" context="Website" trailing="4d" />
+          <DashDay>Earlier</DashDay>
+          <DashRow element="button" lead={<MessageSquareIcon />} primary="Choose a route" context="Japan" trailing="5d" />
+          <DashRow element="button" lead={<MessageSquareIcon />} primary="Update the guide" context="Conduit" trailing="6d" />
+          <DashRow element="button" lead={<MessageSquareIcon />} primary="Collect ideas" context="Notes" trailing="7d" />
+          <DashMore count={12} onClick={() => {}}>Show more</DashMore>
+        </Group>}
+        aside={<><Group id="g-page-projects" labelled section="projects" heading={<GroupHeading id="g-page-projects" count={4}>Projects</GroupHeading>}><FolderShelf all><FolderTile name="Conduit" meta="3 chats" live /><FolderTile name="Japan" meta="2 chats" /><FolderTile name="Website" meta="1 chat" /><FolderTile name="Notes" meta="No chats" /><FolderTile name="New project" icon={<FolderPlusIcon />} /></FolderShelf></Group>
+          <Group id="g-page-workspaces" labelled section="workspaces" heading={<GroupHeading id="g-page-workspaces" count={2}>Workspaces</GroupHeading>}><DashRow element="button" lead={<FolderIcon />} primary="Main" context="Conduit" trailing="2d" /><DashRow element="button" lead={<FolderIcon />} primary="Travel" context="Japan" trailing="3d" /></Group></>}
+      /></div>, true),
     ] },
   ] },
   { title: "Header", note: "a pane's top line: the name (a place's caps crumb, then the title) or the tab row at the left, what the page is beside it, quiet ghost controls at the right, the pane's swap and close last. It fades into what scrolls under it; a tab row's strip may be frost. On a phone the title gives way and the leading controls and actions float as frost pills -- see the Phone preview, which draws the app's own ChatHeader", groups: [

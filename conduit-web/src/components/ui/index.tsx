@@ -29,3 +29,5 @@ export * from "./identity";
 export * from "./connection";
 
 export * from "./browser";
+
+export * from "./dashboard";

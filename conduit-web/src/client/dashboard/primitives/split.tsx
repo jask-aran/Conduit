@@ -1,30 +1,27 @@
 import { createContext, createEffect, createSignal, For, Index, onCleanup, onMount, Show, splitProps, useContext, type Accessor, type JSX } from "solid-js";
-import { ChevronRightIcon, EllipsisIcon } from "lucide-solid";
-import { Menu, MenuContent, MenuGroup, MenuItem, MenuSeparator, MenuTrigger } from "@/components/primitives";
-import { Dynamic } from "solid-js/web";
+import { Menu, MenuContent, MenuControl, MenuRow, MenuSection } from "@/components/menus";
+import { Counts, DashEmpty, DashHeader, DashIconButton, Dashboard, DashMore, DashRow, Group, GroupHeading, GroupToggle, QuickAction, QuickActions, QuickMore } from "@/components/ui/dashboard";
 import { installSplitCursor, type SplitPage } from "./split-cursor";
 import { isMobileLayout, MOBILE_LAYOUT_QUERY } from "../../navigation/mobile-layout";
-import "./split.css";
 
-// The project and workspace dashboards: a header across the top, then the
+// The library's Dashboard (components/ui/dashboard.tsx) with its behaviour:
+// when to go to one column, the glide between layouts, the keyboard's cursor,
+// folding. The project and workspace dashboards: a header across the top, then the
 // composer with the threads list under it on the left and what is live and
 // what changed on the right. The pane's width, not the window's, decides
 // when the two columns become one, so opening the workspace panel reflows it
 // the way a narrow window does. The Conduit dashboard still uses ./dashboard.
 
-const classes = (...values: Array<string | false | null | undefined>) => values.filter(Boolean).join(" ");
-
 // A phone. Groups read it to trade their heading for a compact one and to
-// fold; on desktop a narrow pane only stacks its columns (split.css).
+// fold; on desktop a narrow pane only stacks its columns (dashboard.css).
 const Phone = createContext<Accessor<boolean>>(() => false);
 
 // Two columns only while the left one holds its controls at full size: the
-// composer's (which never squeeze, split.css) and the chats heading's
+// composer's (which never squeeze, dashboard.css) and the chats heading's
 // switches, ⋯ and search. The breakpoint is measured from them, not tuned.
-const BODY_GUTTERS = 48; // .split-dashboard-body: calc(100% - 48px)
 const WATCHED = [
   ".ui-toolbar-start > *", ".ui-toolbar-end",
-  ".split-group[data-order='list'] > .split-group-heading > *", ".split-group[data-order='list'] .split-group-actions > *",
+  ".ui-dash-group[data-order='list'] > .ui-dash-group-head > *", ".ui-dash-group[data-order='list'] .ui-dash-group-actions > *",
 ].join(", ");
 
 /** The width a flex row needs with nothing in it squeezed: its fixed
@@ -55,7 +52,7 @@ function glide(root: HTMLElement, change: () => void, shown?: DOMRect) {
   for (const animation of running) animation.cancel();
   running = [];
   if (matchMedia("(prefers-reduced-motion: reduce)").matches) return change();
-  const composer = root.querySelector<HTMLElement>(".split-dashboard-composer");
+  const composer = root.querySelector<HTMLElement>(".ui-dash-composer");
   // Where the composer was last drawn: by now the pane has already resized
   // around the old layout, which may have squeezed it.
   const before = shown ?? composer?.getBoundingClientRect();
@@ -64,8 +61,8 @@ function glide(root: HTMLElement, change: () => void, shown?: DOMRect) {
   // Into two columns the composer narrows out of the right column's way; its
   // sections wait until it mostly has, so it never draws over them.
   const narrowing = !root.hasAttribute("data-one-column") && Boolean(before && after && after.width < before.width - 1);
-  for (const section of root.querySelectorAll<HTMLElement>(".split-group, .split-dashboard-notice")) {
-    const delay = narrowing && section.closest(".split-dashboard-aside") ? 200 : 0;
+  for (const section of root.querySelectorAll<HTMLElement>(".ui-dash-group, .ui-dash-notice")) {
+    const delay = narrowing && section.closest(".ui-dash-aside") ? 200 : 0;
     running.push(section.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 180, delay, easing: "ease-out", fill: "backwards" }));
   }
   if (composer && before && after && Math.abs(before.width - after.width) > 1) running.push(composer.animate([
@@ -77,16 +74,17 @@ function glide(root: HTMLElement, change: () => void, shown?: DOMRect) {
 
 /** The narrowest pane that fits both columns. */
 function twoColumnWidth(root: HTMLElement) {
-  const body = root.querySelector<HTMLElement>(".split-dashboard-body");
+  const body = root.querySelector<HTMLElement>(".ui-dash-body");
   if (!body) return 0;
   const style = getComputedStyle(body);
   const needs = [0];
-  const composer = root.querySelector<HTMLElement>(".split-dashboard-composer");
+  const composer = root.querySelector<HTMLElement>(".ui-dash-composer");
   const actions = composer?.querySelector<HTMLElement>(".ui-toolbar");
   if (composer && actions) needs.push(rowNeed(actions) + composer.getBoundingClientRect().width - actions.getBoundingClientRect().width);
-  const heading = root.querySelector<HTMLElement>(".split-group[data-order='list'] > .split-group-heading");
+  const heading = root.querySelector<HTMLElement>(".ui-dash-group[data-order='list'] > .ui-dash-group-head");
   if (heading) needs.push(rowNeed(heading) + heading.parentElement!.getBoundingClientRect().width - heading.getBoundingClientRect().width);
-  return Math.max(...needs) + (parseFloat(style.columnGap) || 0) + (parseFloat(style.getPropertyValue("--split-aside-width")) || 0) + BODY_GUTTERS;
+  // --dash-aside and --dash-gutter are registered lengths (dashboard.css), so they read back in px.
+  return Math.max(...needs) + (parseFloat(style.columnGap) || 0) + (parseFloat(style.getPropertyValue("--dash-aside")) || 0) + 2 * (parseFloat(style.getPropertyValue("--dash-gutter")) || 0);
 }
 
 export function SplitDashboard(props: {
@@ -133,7 +131,7 @@ export function SplitDashboard(props: {
       frame = 0;
       setPaneWidth(root.clientWidth);
       setNeed(twoColumnWidth(root));
-      shown = root.querySelector(".split-dashboard-composer")?.getBoundingClientRect();
+      shown = root.querySelector(".ui-dash-composer")?.getBoundingClientRect();
       if (!measured) requestAnimationFrame(() => { measured = true; });
     };
     const schedule = () => { if (!frame) frame = requestAnimationFrame(measure); };
@@ -144,18 +142,10 @@ export function SplitDashboard(props: {
     watch();
     onCleanup(() => { cancelAnimationFrame(frame); sizes.disconnect(); tree.disconnect(); });
   });
-  return <Phone.Provider value={phone}><section ref={root} class={classes("split-dashboard", props.class)} data-compact={phone() ? "" : undefined} data-one-column={oneColumn() ? "" : undefined} data-page={props.page} aria-label={props.label}>
-    <div class="split-dashboard-body">
-      <div class="split-dashboard-head">{props.header}{props.quickActions}</div>
-      <Show when={props.notice}><div class="split-dashboard-notice">{props.notice}</div></Show>
-      <div class="split-dashboard-main">
-        <Show when={!phone() && props.composer}><div class="split-dashboard-composer">{props.composer}</div></Show>
-        {props.list}
-      </div>
-      <div class="split-dashboard-aside">{props.aside}</div>
-    </div>
-    <Show when={phone() && props.composer}><div class="composer-stack split-dashboard-composer">{props.composer}</div></Show>
-  </section></Phone.Provider>;
+  // A phone docks the composer at the foot, as a chat does (composer-stack is the chat screen's layout).
+  return <Phone.Provider value={phone}><Dashboard ref={(element) => { root = element; }} label={props.label} page={props.page} compact={phone()} oneColumn={oneColumn()}
+    head={props.header} actions={props.quickActions} notice={props.notice} composer={!phone() ? props.composer : undefined} list={props.list} aside={props.aside}
+    dock={<Show when={phone() && props.composer}><div class="composer-stack" data-dash-dock="">{props.composer}</div></Show>} /></Phone.Provider>;
 }
 
 /** The page's mark, centred on its name and, under the name, its kind and
@@ -166,16 +156,7 @@ export function SplitHeader(props: {
   glyph?: JSX.Element;
   context?: Array<JSX.Element | false | null | undefined>;
 }) {
-  const items = () => [props.kind, ...(props.context ?? [])].filter(Boolean);
-  return <header class="split-header">
-    <Show when={props.glyph}><span class="split-header-glyph">{props.glyph}</span></Show>
-    <div class="split-header-copy">
-      <h1>{props.title}</h1>
-      <Show when={items().length}>
-        <p class="split-header-context"><For each={items()}>{(item) => <span>{item}</span>}</For></p>
-      </Show>
-    </div>
-  </header>;
+  return <DashHeader title={props.title} glyph={props.glyph} context={[props.kind, ...(props.context ?? [])]} />;
 }
 
 /**
@@ -230,21 +211,18 @@ export function SplitQuickActions(props: { items: Array<SplitQuickAction | false
   const folded = () => items().slice(fit());
   let more!: HTMLSpanElement;
   onMount(() => watchFold(more, setFit));
-  return <nav class="split-quick-actions" aria-label="Quick actions">
-    <Index each={items()}>{(item, index) => <button type="button" tabIndex={-1} data-fold data-folded={index >= fit() ? "" : undefined} onClick={() => item().onClick()}>{item().icon}<span>{item().label}</span></button>}</Index>
-    <span ref={more} data-fold-more data-fold-keep={props.manage ? "" : undefined} data-folded={!props.manage && !folded().length ? "" : undefined}>
+  return <QuickActions>
+    <Index each={items()}>{(item, index) => <QuickAction icon={item().icon} label={item().label} folded={index >= fit()} onClick={() => item().onClick()} />}</Index>
+    <QuickMore ref={(element) => { more = element; }} keep={Boolean(props.manage)} hidden={!props.manage && !folded().length}>
       <Menu modal={false}>
-        <MenuTrigger class="workspace-dashboard-manage" tabIndex={-1} aria-label={props.label ?? "More"} title={props.label ?? "More"}><EllipsisIcon /></MenuTrigger>
+        <MenuControl as={DashIconButton} tabIndex={-1} aria-label={props.label ?? "More"} title={props.label ?? "More"} />
         <MenuContent>
-          <Show when={folded().length}>
-            <MenuGroup><For each={folded()}>{(item) => <MenuItem onSelect={() => item.onClick()}>{item.icon}{item.label}</MenuItem>}</For></MenuGroup>
-            <Show when={props.manage}><MenuSeparator /></Show>
-          </Show>
-          {props.manage?.()}
+          <Show when={folded().length}><MenuSection><For each={folded()}>{(item) => <MenuRow icon={item.icon} onSelect={() => item.onClick()}>{item.label}</MenuRow>}</For></MenuSection></Show>
+          <Show when={props.manage}><MenuSection>{props.manage?.()}</MenuSection></Show>
         </MenuContent>
       </Menu>
-    </span>
-  </nav>;
+    </QuickMore>
+  </QuickActions>;
 }
 
 /**
@@ -278,55 +256,25 @@ export function SplitGroup(props: {
     try { localStorage.setItem(key, open() ? "1" : "0"); } catch { /* a per-viewer convenience */ }
   };
   const folds = () => Boolean(props.collapsible && narrow());
-  const title = () => <>{props.label}<Show when={props.count != null}><small>{props.count}</small></Show></>;
   const heading = () => narrow() && props.compactHeading ? props.compactHeading
-    : folds() ? <h2 id={props.id}><button type="button" class="split-group-toggle" aria-expanded={open()} onClick={toggle}><ChevronRightIcon />{title()}</button></h2>
-    : props.heading ?? <h2 id={props.id}>{title()}</h2>;
+    : folds() ? <GroupToggle id={props.id} open={open()} count={props.count} onClick={toggle}>{props.label}</GroupToggle>
+    : props.heading ?? <GroupHeading id={props.id} count={props.count}>{props.label}</GroupHeading>;
   const actions = () => narrow() && props.compactActions ? props.compactActions : props.actions;
-  return <section class={classes("split-group", props.class)} data-folded={folds() && !open() ? "" : undefined} data-section={props.id.replace(/^.*-/, "").replace("threads", "chats")} data-order={props.order || "rest"} aria-labelledby={props.label ? props.id : undefined} aria-label={props.label ? undefined : props.id} aria-busy={props.busy || undefined}>
-    <header class="split-group-heading">
-      {heading()}
-      <Show when={actions()}><div class="split-group-actions">{actions()}</div></Show>
-    </header>
-    <div class="split-group-rows" hidden={folds() && !open()}>{props.children}{props.more}</div>
-  </section>;
+  return <Group id={props.id} labelled={Boolean(props.label)} section={props.id.replace(/^.*-/, "").replace("threads", "chats")} order={props.order} folded={folds() && !open()} busy={props.busy}
+    heading={heading()} actions={actions()} more={props.more}>{props.children}</Group>;
 }
 
-export function SplitGroupMore(props: { children: JSX.Element; onClick: () => void }) {
-  return <button type="button" class="split-group-more" onClick={props.onClick}>{props.children}</button>;
+export function SplitGroupMore(props: { children: JSX.Element; count?: number | string; onClick: () => void }) {
+  return <DashMore count={props.count} onClick={props.onClick}>{props.children}</DashMore>;
 }
 
 export function SplitEmpty(props: { children: JSX.Element }) {
-  return <div class="split-group-empty">{props.children}</div>;
+  return <DashEmpty>{props.children}</DashEmpty>;
 }
 
-// One flat props type, so Kobalte's polymorphic `as`
-// keeps the anchor- and button-specific attributes.
-type SplitRowProps = {
-  lead?: JSX.Element;
-  primary: JSX.Element;
-  context?: JSX.Element;
-  trailing?: JSX.Element;
-  element?: "div" | "button" | "a";
-}
-  & Omit<JSX.HTMLAttributes<HTMLElement>, "children" | "ref">
-  & { ref?: (element: HTMLElement) => void }
-  & Partial<Pick<JSX.AnchorHTMLAttributes<HTMLAnchorElement>, "href" | "target" | "rel">>
-  & Partial<Pick<JSX.ButtonHTMLAttributes<HTMLButtonElement>, "type" | "disabled">>;
-
-export function SplitRow(props: SplitRowProps) {
-  const [local, rest] = splitProps(props, ["element", "lead", "primary", "context", "trailing", "class"]);
-  return <Dynamic component={local.element || "div"} {...rest} class={classes("split-row", local.class)}>
-    <span class="split-row-lead">{local.lead}</span>
-    <span class="split-row-primary">{local.primary}</span>
-    <span class="split-row-context">{local.context}</span>
-    <Show when={local.trailing}><span class="split-row-trailing">{local.trailing}</span></Show>
-  </Dynamic>;
-}
+/** A row: the library's DashRow, which keeps one flat props type so Kobalte's polymorphic `as` keeps the
+ *  anchor- and button-specific attributes. */
+export const SplitRow = DashRow;
 
 /** The workspace panel's line counts: removed, then added. */
-export function SplitCounts(props: { added: number | null; removed: number | null }) {
-  return <span class="split-counts" aria-label={`${props.added ?? 0} added, ${props.removed ?? 0} removed`}>
-    <span data-change="removed">−{props.removed ?? 0}</span><span data-change="added">+{props.added ?? 0}</span>
-  </span>;
-}
+export const SplitCounts = Counts;

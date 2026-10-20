@@ -36,7 +36,7 @@
 .workspace-panel-place { overflow: hidden; min-width: 0; flex: 0 1 auto; color: var(--muted-foreground); font-size: 11.2px; line-height: 16px; text-overflow: ellipsis; white-space: nowrap; }
 .workspace-panel-header[data-compact] .workspace-panel-place { display: none; }
 .workspace-panel-header [data-slot="button"] svg { width: 14px; height: 14px; }
-/* Its modes are the dashboard heading's switch (split.css), folding to icons
+/* Its modes are the dashboard heading's switch (components/ui/styles/dashboard.css), folding to icons
    when the header runs out of room. */
 .workspace-panel-header .settings-segmented { flex: none; grid-template-columns: repeat(var(--segments), auto); padding: 1px; border-radius: 7px; }
 .workspace-panel-header .settings-segmented-thumb { display: none; }

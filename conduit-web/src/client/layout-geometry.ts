@@ -8,7 +8,7 @@ export const PHONE_LAYOUT_QUERY = `(max-width: ${MOBILE_LAYOUT_BREAKPOINT_PX}px)
 export const NON_PHONE_LAYOUT_QUERY = `(min-width: ${MOBILE_LAYOUT_BREAKPOINT_PX + 1}px), (hover: hover), (pointer: fine), (pointer: none)`;
 
 /** The narrowest the main pane goes on desktop: a dashboard's composer at its
- *  least (split.css) and its gutters. The workspace panel stops growing here. */
+ *  least (components/ui/styles/dashboard.css) and its gutters. The workspace panel stops growing here. */
 export const MIN_MAIN_PANE_WIDTH = 420;
 
 /** The narrowest a workspace view goes beside the chat in the main pane's

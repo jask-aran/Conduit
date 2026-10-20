@@ -1,0 +1,173 @@
+/* Dashboard (dashboard.tsx): a place's page. Two columns while the left one holds the composer's controls and the chats
+   heading at full size beside the aside (the app measures it and sets data-one-column); the composer and the list on
+   the left, what is live and what changed on the right, each scrolling on its own. In units, so a phone's sizes are
+   its density's; data-compact (a phone) changes only the layout. */
+/* Registered, so the app reads them back as lengths when it measures where two columns stop fitting. */
+@property --dash-aside { syntax: "<length>"; inherits: true; initial-value: 0px; }
+@property --dash-gutter { syntax: "<length>"; inherits: true; initial-value: 0px; }
+.ui-dash { --dash-aside: calc(21.875 * var(--u-space)); --dash-gap: calc(2.5 * var(--u-space)); --dash-gutter: calc(1.875 * var(--u-space));
+  --dash-max: calc(var(--composer-desktop-reference-width) + var(--dash-gap) + var(--dash-aside));
+  position: relative; z-index: 1; display: flex; min-height: 0; flex: 1; flex-direction: column; overflow: auto; scrollbar-width: var(--native-scrollbar-width); }
+/* Centred when there is room; otherwise its left gutter holds and a body at its minimum runs off the right, so nothing drifts sideways. */
+.ui-dash-body { display: grid; width: min(var(--dash-max), calc(100% - 2 * var(--dash-gutter))); min-width: calc(29.6875 * var(--u-space)); min-height: 0; flex: 1;
+  grid-template-areas: "head head" "notice notice" "main aside"; grid-template-columns: minmax(0, var(--composer-desktop-reference-width)) var(--dash-aside);
+  grid-template-rows: auto auto minmax(calc(21.875 * var(--u-space)), 1fr); column-gap: var(--dash-gap);
+  margin: 0 0 0 max(var(--dash-gutter), calc((100% - var(--dash-max)) / 2)); padding: var(--space-3xl) 0 var(--space-2xl); }
+
+/* The head is one grid: the mark centred on both lines, the title with the quick actions at the right of its line, the
+   status line under both. The title keeps its size and the quick actions fold first; the status line stays one line. */
+.ui-dash-head { display: grid; min-width: 0; grid-area: head; grid-template-columns: auto minmax(0, max-content) minmax(var(--control-lg), 1fr);
+  grid-template-areas: "glyph title actions" "glyph status status"; align-items: center; margin: 0 0 var(--space-3xl); }
+.ui-dash-glyph { display: grid; width: clamp(calc(2 * var(--u-icon)), 3vw, calc(2.65 * var(--u-icon))); aspect-ratio: 1; grid-area: glyph; margin-right: var(--space-xl); place-items: center; color: var(--muted-foreground); }
+.ui-dash-glyph > :is(svg, img, *) { width: 80%; height: 80%; }
+.ui-dash-glyph > .workspace-glyph[data-mode="monogram"] { font-size: calc(1.1 * var(--u-type)); }
+.ui-dash-title { min-width: 0; grid-area: title; margin: 0; overflow: hidden; font-size: clamp(calc(1.71875 * var(--u-type)), 2.6vw, calc(2.421875 * var(--u-type)));
+  font-weight: var(--weight-strong); letter-spacing: -.035em; line-height: var(--leading-none); text-overflow: ellipsis; white-space: nowrap; }
+.ui-dash-context { display: flex; min-width: 0; grid-area: status; align-items: baseline; margin: var(--space-md) 0 0; overflow: hidden; color: var(--muted-foreground); font-size: var(--text-caption); }
+.ui-dash-context > span { flex: none; white-space: nowrap; }
+.ui-dash-context > span:not(:last-child)::after { margin-inline: var(--space-md); opacity: .6; content: "·"; }
+.ui-dash-context code { color: color-mix(in oklch, var(--foreground), transparent var(--tone-rest)); font: var(--weight-light) var(--text-caption)/var(--leading-row) var(--font-data); }
+.ui-dash-context button { border: 0; border-radius: var(--radius-inset); background: transparent; padding: 0; color: inherit; font: inherit; cursor: pointer; }
+.ui-dash-context button:is(:hover, :focus-visible) code { color: var(--foreground); }
+.ui-dash-context button:focus-visible { outline: none; background: var(--tint); }
+
+.ui-dash-quick { position: relative; display: flex; min-width: var(--control-sm); flex: 1 1 0; grid-area: actions; justify-content: flex-end; margin: 0 calc(-1 * var(--space-md)) 0 var(--space-2xl); }
+.ui-dash-quick-action { display: inline-flex; height: var(--control-sm); align-items: center; gap: var(--space-md); border: 0; border-radius: var(--radius-control); background: transparent;
+  padding: 0 var(--space-md); color: color-mix(in oklch, var(--foreground), transparent var(--tone-rest)); font-size: var(--text-row); white-space: nowrap; }
+.ui-dash-quick-action:is(:hover, :focus-visible) { outline: none; background: var(--sidebar-accent); color: var(--foreground); }
+.ui-dash-quick-action > svg { display: none; }
+.ui-dash-icon { display: inline-grid; width: var(--control-sm); height: var(--control-sm); flex: none; place-items: center; border: 0; border-radius: var(--radius-control); background: transparent; color: var(--muted-foreground); }
+.ui-dash-icon:is(:hover, :focus-visible, [data-expanded]) { outline: none; background: var(--sidebar-accent); color: var(--foreground); }
+.ui-dash-icon > svg { width: var(--icon); height: var(--icon); }
+/* Folding (the app's watchFold): a folded item stays laid out, hidden, so its width is known when room comes back. */
+:is(.ui-dash-group-actions, .ui-dash-quick) > :is([data-fold], [data-fold-more]) { display: inline-flex; }
+:is(.ui-dash-group-actions, .ui-dash-quick) > [data-folded] { position: absolute; top: 0; right: 0; visibility: hidden; pointer-events: none; }
+
+.ui-dash-notice { grid-area: notice; margin-bottom: var(--space-xl); }
+.ui-dash-main { display: flex; min-width: 0; min-height: 0; grid-area: main; flex-direction: column; }
+.ui-dash-composer { --composer-width: 100%; }
+.ui-dash-main > .ui-dash-group { min-height: 0; flex: 1; margin-top: var(--space-xl); }
+.ui-dash-main > .ui-dash-group > .ui-dash-group-rows { min-height: 0; flex: 1; overflow-y: auto; scrollbar-width: var(--native-scrollbar-width); }
+.ui-dash-aside { min-width: 0; min-height: 0; grid-area: aside; overflow-y: auto; scrollbar-width: var(--native-scrollbar-width); }
+.ui-dash-aside > .ui-dash-group + .ui-dash-group { margin-top: var(--space-xl); border-top: var(--hairline) solid var(--tint); padding-top: var(--space-lg); }
+
+/* A group: its heading (or switches) with actions at the right, then rows. */
+.ui-dash-group { display: flex; min-width: 0; flex-direction: column; }
+.ui-dash-group-head { display: flex; min-height: var(--control-sm); align-items: center; justify-content: space-between; gap: var(--space-md); padding: 0 var(--space-2xs) var(--space-2xs) var(--row-inset); }
+.ui-dash-main .ui-dash-group-head { padding-left: 0; }
+.ui-dash-group[data-folded] .ui-dash-group-head { padding-bottom: 0; }
+.ui-dash-group-actions { display: flex; flex: none; align-items: center; gap: var(--space-2xs); }
+.ui-dash-group-rows { display: flex; min-width: 0; flex-direction: column; }
+/* Switches in the heading's place keep their size on one line; the actions take the rest and fold. */
+.ui-group-switches { display: flex; min-width: 0; flex: none; flex-wrap: nowrap; align-items: center; gap: var(--space-md); }
+.ui-group-switches > * { flex: none; white-space: nowrap; }
+.ui-dash-group-head:has(> .ui-group-switches) > .ui-dash-group-actions { position: relative; min-width: 0; flex: 1 1 0; justify-content: flex-end; }
+.ui-dash-group-actions > * { flex: none; white-space: nowrap; }
+
+/* GroupHeading: the strong section name. Geist at the strong weight in sentence case, a step under the row, its
+   count in data. (The quiet label is .ui-title; a phone's labels take this voice through --label-*.) */
+.ui-group-heading { min-width: 0; margin: 0; overflow: hidden; color: color-mix(in oklch, var(--foreground), transparent 52%);
+  font: var(--weight-strong) var(--text-caption)/var(--leading-row) var(--font-sans); text-overflow: ellipsis; white-space: nowrap; }
+.ui-group-heading small { margin-left: var(--space-md); color: var(--muted-foreground); font: var(--weight-rest) var(--text-caption)/var(--leading-row) var(--font-data); }
+.ui-group-heading > span { margin-left: var(--space-md); color: var(--muted-foreground); font-weight: var(--weight-rest); }
+.ui-group-toggle { display: inline-flex; align-items: center; gap: var(--space-xs); margin-left: calc(-1 * var(--space-xs)); border: 0; border-radius: var(--radius-inset); background: transparent;
+  padding: var(--space-2xs) var(--space-xs) var(--space-2xs) var(--space-2xs); color: inherit; font: inherit; }
+.ui-group-toggle > svg { width: var(--icon-sm); height: var(--icon-sm); transition: rotate var(--duration-quick) var(--ease-change); }
+.ui-group-toggle[aria-expanded="true"] > svg { rotate: 90deg; }
+.ui-group-toggle:is(:hover, :focus-visible, [data-held]) { outline: none; background: var(--tint); color: var(--foreground); }
+.ui-group-action { display: inline-flex; height: var(--control-xs); align-items: center; gap: var(--space-2xs); border: 0; border-radius: var(--radius-control); background: transparent;
+  padding: 0 var(--space-md); color: var(--muted-foreground); font-size: var(--text-caption); }
+.ui-group-action:is(:hover, :focus-visible, [data-expanded], [data-held]) { outline: none; background: var(--sidebar-accent); color: var(--foreground); }
+.ui-group-action > svg { width: var(--icon-sm); height: var(--icon-sm); }
+.ui-group-action small { margin-left: auto; padding-left: var(--space-lg); color: var(--muted-foreground); font: var(--weight-rest) var(--text-caption)/var(--leading-row) var(--font-data); }
+.ui-dash-group-actions > .ui-counts { padding-inline: var(--space-md); font-size: var(--text-caption); }
+
+/* Rows: the sidebar's, at a page. */
+/* A page has room for a taller row than the sidebar: two units at least, the sidebar's where that is taller (a phone). */
+.ui-dash-row { display: flex; width: 100%; min-width: 0; min-height: max(var(--row-min), calc(2.03125 * var(--u-space))); flex: none; align-items: center; gap: var(--row-gap); border: 0; border-radius: var(--radius-control);
+  background: transparent; padding: var(--space-2xs) var(--row-inset); color: color-mix(in oklch, var(--foreground), transparent var(--tone-rest)); font-size: var(--row-text); text-align: left; text-decoration: none; }
+.ui-dash-row:is(button, a):is(:hover, :focus-visible, :active, [data-expanded], [data-held]), .ui-dash-row:is([data-current], [aria-current="true"], [aria-current="page"]) { outline: none; background: var(--sidebar-accent); color: var(--foreground); }
+.ui-dash-row:disabled { cursor: default; opacity: var(--opacity-disabled); }
+.ui-dash-row-lead { display: grid; width: var(--icon); height: var(--icon); flex: none; place-items: center; color: var(--muted-foreground); }
+.ui-dash-row-lead > :is(svg, img) { width: var(--icon-sm); height: var(--icon-sm); }
+.ui-dash-row-primary { min-width: 0; flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ui-dash-row-context { min-width: 0; flex: 1 1 0; overflow: hidden; color: var(--muted-foreground); font-size: var(--text-caption); text-overflow: ellipsis; white-space: nowrap; }
+.ui-dash-row-context code { font: var(--weight-light) var(--text-caption)/var(--leading-row) var(--font-data); }
+.ui-dash-row-trailing { flex: none; color: var(--muted-foreground); font: var(--weight-light) var(--text-caption)/var(--leading-row) var(--font-data); font-variant-numeric: tabular-nums; }
+/* A chat's harness mark in a row: greyed with its row, its own colours on the cursor (as a nav row's). */
+.ui-dash-row:is(:hover, :focus-visible, [data-held]) .thread-harness-mark[data-lively] { color: var(--foreground); opacity: 1; }
+.ui-dash-row:is(:hover, :focus-visible) .thread-harness-mark[data-lively] .harness-mark-tinted { background-color: var(--harness-brand, currentColor); }
+.ui-dash-row:is(:hover, :focus-visible) .thread-harness-mark[data-artwork] .harness-mark-tinted { opacity: 0; }
+.ui-dash-row:is(:hover, :focus-visible) .thread-harness-mark[data-artwork] .harness-mark-artwork { opacity: 1; }
+.ui-dash-day { padding: var(--space-md) var(--row-inset) var(--space-2xs); color: var(--muted-foreground); font-size: var(--text-caption); }
+.ui-dash-group-rows > .ui-dash-day:first-child { padding-top: 0; }
+.ui-dash-more { display: flex; width: 100%; min-height: var(--control-sm); align-items: center; border: 0; border-radius: var(--radius-control); background: transparent;
+  padding: var(--space-xs) var(--row-inset) var(--space-xs) calc(var(--row-inset) + var(--icon) + var(--row-gap)); color: color-mix(in oklch, var(--foreground), transparent 52%); font-size: var(--text-caption); text-align: left; }
+.ui-dash-more:is(:hover, :focus-visible, [data-held]) { outline: none; background: var(--sidebar-accent); color: var(--foreground); }
+.ui-dash-more small { margin-left: var(--space-sm); color: var(--muted-foreground); font: var(--weight-light) var(--text-caption)/var(--leading-row) var(--font-data); }
+.ui-dash-empty { display: flex; align-items: center; gap: var(--space-md); padding: var(--space-md) var(--row-inset); color: var(--muted-foreground); font-size: var(--text-caption); }
+.ui-dash-note { margin: 0; padding: var(--space-md) var(--row-inset); color: var(--muted-foreground); font-size: var(--text-caption); }
+.ui-dash-note[data-error] { color: var(--destructive); }
+
+/* Changes: the workspace panel's rows -- file mark, name, folder, counts, a status letter in its colour. */
+.ui-dash-row[data-change-row] > svg { width: var(--icon-sm); height: var(--icon-sm); flex: none; }
+.ui-change-name { min-width: 0; flex: 0 1 auto; overflow: hidden; color: var(--foreground); text-overflow: ellipsis; white-space: nowrap; }
+.ui-change-directory { min-width: 0; flex: 1; overflow: hidden; color: var(--muted-foreground); font-size: var(--text-caption); text-overflow: ellipsis; white-space: nowrap; }
+.ui-change-status { width: var(--icon-sm); flex: none; color: var(--muted-foreground); font: var(--weight-strong) var(--text-caption)/var(--leading-row) var(--font-data); text-align: center; }
+.ui-change-status:is([data-status="M"], [data-status="T"]) { color: var(--workspace-git-modified, #e5c07b); }
+.ui-change-status:is([data-status="A"], [data-status="U"], [data-status="R"], [data-status="C"]) { color: var(--workspace-git-added, #98c379); }
+.ui-change-status[data-status="D"] { color: var(--destructive); }
+.ui-counts { display: inline-flex; flex: none; gap: var(--space-xs); margin-left: auto; font: var(--weight-light) var(--text-caption)/var(--leading-row) var(--font-data); }
+.ui-counts [data-change="removed"] { color: var(--destructive); }
+.ui-counts [data-change="added"] { color: var(--workspace-git-added, #98c379); }
+/* Compact: under the muted chats, changes keep their colour only as a hint. */
+.ui-dash[data-compact] .ui-dash-row[data-change-row] > svg { opacity: .7; filter: grayscale(1); }
+.ui-dash[data-compact] .ui-change-name { color: color-mix(in oklch, var(--foreground), transparent var(--tone-rest)); }
+.ui-dash[data-compact] :is(.ui-dash-row[data-change-row] .ui-counts [data-change], .ui-change-status) { color: var(--muted-foreground); }
+
+/* The folder shelf: project folders as folders, no box, the wash as cursor; two rows until all. */
+.ui-folder-shelf { display: grid; grid-template-columns: repeat(auto-fill, minmax(calc(7.1875 * var(--u-space)), 1fr)); gap: var(--space-2xs); }
+.ui-folder-shelf:not([data-all]) { grid-template-rows: repeat(2, auto); grid-auto-rows: 0; row-gap: 0; overflow: hidden; }
+.ui-dash[data-one-column]:not([data-compact]) .ui-folder-shelf { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.ui-folder { position: relative; display: flex; min-width: 0; flex-direction: column; align-items: flex-start; gap: var(--space-xs); border: 0; border-radius: var(--radius-surface); background: transparent;
+  padding: var(--space-md) var(--row-inset); color: inherit; text-align: left; text-decoration: none; cursor: pointer; }
+.ui-folder:is(:hover, :focus-visible, [data-expanded], [data-held]) { outline: none; background: var(--sidebar-accent); }
+.ui-folder-mark { width: calc(2.03 * var(--u-icon)); height: calc(1.64 * var(--u-icon)); }
+.ui-folder-mark [data-part="back"] { fill: color-mix(in oklch, var(--foreground), transparent 80%); }
+.ui-folder-mark [data-part="front"] { fill: color-mix(in oklch, var(--foreground), transparent 70%); transition: fill var(--duration-quick) var(--ease-change); }
+.ui-folder:is(:hover, :focus-visible) .ui-folder-mark [data-part="front"] { fill: color-mix(in oklch, var(--foreground), transparent 55%); }
+.ui-folder > :not(.ui-folder-mark, .ui-folder-live, span) { width: calc(1.64 * var(--u-icon)); height: calc(1.64 * var(--u-icon)); margin: 0 var(--space-2xs); color: var(--muted-foreground); }
+.ui-folder-live { position: absolute; top: calc(var(--space-md) + var(--space-2xs)); left: calc(var(--row-inset) + 1.75 * var(--u-icon)); width: var(--icon-dot); height: var(--icon-dot); border-radius: var(--radius-round); background: var(--live); }
+.ui-folder-name { max-width: 100%; overflow: hidden; color: var(--foreground); font-size: var(--row-text); text-overflow: ellipsis; white-space: nowrap; }
+.ui-folder[data-new] .ui-folder-name { color: var(--muted-foreground); }
+.ui-folder-meta { max-width: 100%; overflow: hidden; color: var(--muted-foreground); font: var(--weight-light) var(--text-caption)/var(--leading-row) var(--font-data); text-overflow: ellipsis; white-space: nowrap; }
+
+/* The keyboard's cursor (the app's): a row left under a still pointer draws at rest until the pointer moves. */
+.ui-dash[data-keyboard-cursor] :is(.ui-dash-row, .ui-dash-more, .ui-folder):hover:not(:focus-visible, [data-expanded], [data-held]) { background: transparent; }
+
+/* One column: everything in one flow, ordered. */
+.ui-dash[data-one-column] .ui-dash-body { display: flex; width: calc(100% - 2 * var(--dash-gutter)); flex-direction: column; }
+.ui-dash[data-one-column] .ui-dash-notice { order: 1; }
+.ui-dash[data-one-column] :is(.ui-dash-main, .ui-dash-aside) { display: contents; }
+.ui-dash[data-one-column] .ui-dash-composer { order: 2; }
+.ui-dash[data-one-column] .ui-dash-group { min-height: auto; flex: none; margin-top: var(--space-xl); border-top: var(--hairline) solid var(--tint); padding-top: var(--space-lg); }
+.ui-dash[data-one-column] .ui-dash-main > .ui-dash-group > .ui-dash-group-rows { overflow: visible; }
+.ui-dash[data-one-column] .ui-dash-group[data-order="first"] { order: 3; }
+.ui-dash[data-one-column] .ui-dash-group[data-order="list"] { order: 4; }
+.ui-dash[data-one-column] .ui-dash-group[data-order="rest"] { order: 5; }
+
+/* A phone: edge to edge at the phone's gutter, the composer docked at the foot (dock), quick actions a row of large
+   targets with their icons, the ⋯ in the chat header instead. */
+.ui-dash[data-compact] { overflow: hidden; }
+.ui-dash[data-compact] .ui-dash-body { width: 100%; min-width: 0; box-sizing: border-box; margin-inline: 0; overflow-y: auto;
+  padding: var(--space-lg) var(--space-lg) calc(6.25 * var(--u-space) + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))); }
+.ui-dash[data-compact] .ui-dash-head { grid-template-columns: auto minmax(0, 1fr); grid-template-areas: "glyph title" "glyph status" "actions actions"; }
+.ui-dash[data-compact] .ui-dash-title { font-size: calc(1.5 * var(--u-type)); }
+.ui-dash[data-compact] .ui-dash-context { flex-wrap: wrap; margin-top: var(--space-xs); line-height: var(--leading-text); }
+.ui-dash[data-compact] .ui-dash-quick { display: grid; flex: none; grid-auto-columns: minmax(0, 1fr); grid-auto-flow: column; gap: var(--space-xs); margin: var(--space-md) calc(-1 * var(--space-md)) 0; }
+.ui-dash[data-compact] .ui-dash-quick-action { height: calc(3.75 * var(--u-space)); flex-direction: column; justify-content: center; gap: var(--space-md); border-radius: var(--radius-surface); font-size: var(--text-caption); }
+.ui-dash[data-compact] .ui-dash-quick-action > svg { display: block; width: var(--icon-lg); height: var(--icon-lg); color: var(--muted-foreground); }
+.ui-dash[data-compact] .ui-dash-quick-more { display: none; }
+.ui-dash[data-compact] .ui-dash-group-head { padding-left: 0; }
+
+@media (prefers-reduced-motion: reduce) { .ui-group-toggle > svg, .ui-folder-mark [data-part="front"] { transition: none; } }

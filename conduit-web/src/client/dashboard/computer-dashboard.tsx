@@ -9,7 +9,6 @@ import { isConduitManagedProject } from "../navigation/sidebar-preferences";
 import { WorkspaceGlyph } from "../project/workspace-appearance";
 import { FileTypeIcon } from "../workspace/file-type-icon";
 import { HarnessMark } from "../harness-brand";
-import "./app-dashboard.css";
 
 
 type Entry = {
