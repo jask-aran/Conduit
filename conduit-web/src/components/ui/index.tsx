@@ -32,3 +32,6 @@ export * from "./browser";
 
 export * from "./dashboard";
 export * from "./pane";
+export * from "./source";
+export * from "./history";
+export * from "./terminal";

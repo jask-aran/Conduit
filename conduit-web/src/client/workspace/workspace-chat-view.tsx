@@ -1,5 +1,5 @@
 import { createEffect, createMemo, createSignal, For, on, Show, type Accessor } from "solid-js";
-import { ChevronDownIcon, FileDiffIcon, HistoryIcon, ListCollapseIcon, WrapTextIcon } from "lucide-solid";
+import { FileDiffIcon, HistoryIcon, ListCollapseIcon, WrapTextIcon } from "lucide-solid";
 import { api } from "../api/client";
 import type { ReviewNavigationRequest } from "../chat/review-navigation";
 import { readSetting, writeSetting, WORKSPACE_PANEL_GLOBAL_SCOPE } from "./workspace-panel-storage";
@@ -7,7 +7,8 @@ import { reportError } from "./workspace-shared";
 import { ComparisonSourceControls } from "./workspace-comparison-source";
 import { WorkspaceDiffView } from "./workspace-diff-view";
 import { createWorkspaceReview, diffScopes, type DiffScope } from "./workspace-review-source";
-import { WorkbenchButton } from "./workspace-workbench";
+import { HistoryBranch, HistoryList, HistoryRow } from "@/components/ui/history";
+import { PaneEmpty, ToolBar, ToolButton } from "@/components/ui/pane";
 import type { ChatMode, GitChangedFile, HistoryNode, HistoryTree, WorkspaceSettings } from "./workspace-types";
 import { Segmented } from "@/components/ui/controls";
 import "./workspace.css";
@@ -74,26 +75,20 @@ function HistoryToolRun(props: {
   const active = () => props.run.some((node) => props.activePath.has(node.entry.id));
   const leaf = () => props.run.some((node) => props.leafId === node.entry.id);
   const detail = () => props.run.map((node) => historyEntryLabel(node)).join("\n");
-  return <button type="button" class="workspace-history-row workspace-history-run" data-kind="tool"
-    data-collapsed={props.open ? undefined : "true"} data-active={active()} data-leaf={leaf()}
+  return <HistoryRow run kind="tool" open={props.open} active={active()} leaf={leaf()}
+    connected={props.connected} time={historyEntryTime(last().entry)} datetime={last().entry.timestamp}
     aria-expanded={props.open} title={detail()} onClick={props.onToggle}>
-      <Show when={props.connected}><span class="workspace-history-branch-tick" aria-hidden="true" /></Show>
-      <Show when={historyEntryTime(last().entry)}>{(time) => <time class="workspace-history-time" datetime={last().entry.timestamp}>{time()}</time>}</Show>
-      <span class="workspace-history-text">
-        <ChevronDownIcon class="workspace-history-run-chevron" data-open={props.open ? "true" : "false"} aria-hidden="true" />
-        {`${props.run.length} tool calls`}
-      </span>
-    </button>;
+      {`${props.run.length} tool calls`}
+    </HistoryRow>;
 }
 
 function HistoryNodeRow(props: { node: HistoryNode; activePath: Set<string>; leafId: string | null; connected: boolean }) {
   const node = () => props.node;
   const time = () => historyEntryTime(node().entry);
-  return <div class="workspace-history-row" data-kind={node().entry.kind} data-discarded={node().entry.discarded ? "true" : undefined} data-active={props.activePath.has(node().entry.id)} data-leaf={props.leafId === node().entry.id} title={`${node().entry.discarded ? "Interrupted, not kept · " : ""}${time() ? `${new Date(node().entry.timestamp).toLocaleString()} · ` : ""}${historyEntryLabel(node())}`}>
-      <Show when={props.connected}><span class="workspace-history-branch-tick" aria-hidden="true" /></Show>
-      <Show when={time()}><time class="workspace-history-time" datetime={node().entry.timestamp}>{time()}</time></Show>
-      <span class="workspace-history-text"><Show when={node().entry.kind === "user" || node().entry.kind === "assistant"} fallback={historyEntryLabel(node())}><strong>{node().entry.kind}:</strong>{` ${historyEntryLabel(node()).replace(/^\w+:\s*/, "")}`}</Show></span>
-    </div>;
+  return <HistoryRow kind={node().entry.kind} discarded={node().entry.discarded} active={props.activePath.has(node().entry.id)} leaf={props.leafId === node().entry.id}
+    connected={props.connected} time={time()} datetime={node().entry.timestamp} title={`${node().entry.discarded ? "Interrupted, not kept · " : ""}${time() ? `${new Date(node().entry.timestamp).toLocaleString()} · ` : ""}${historyEntryLabel(node())}`}>
+      <Show when={node().entry.kind === "user" || node().entry.kind === "assistant"} fallback={historyEntryLabel(node())}><strong>{node().entry.kind}:</strong>{` ${historyEntryLabel(node()).replace(/^\w+:\s*/, "")}`}</Show>
+    </HistoryRow>;
 }
 
 function HistoryNodes(props: { nodes: HistoryNode[]; activePath: Set<string>; leafId: string | null; connected?: boolean; depth?: number; collapseTools?: boolean; openRuns?: Set<string>; onToggleRun?: (id: string) => void }) {
@@ -126,10 +121,7 @@ function HistoryNodes(props: { nodes: HistoryNode[]; activePath: Set<string>; le
   // timestamp column has to stay at the far left, so only the text and the
   // tree lines may move right.
   return <For each={props.nodes}>{(node, index) => <Show when={index() !== primary()} fallback={content(node, Boolean(props.connected), depth())}>
-    <div class="workspace-history-branch" style={{ "--history-depth": String(depth() + 1) }}>
-      <span class="workspace-history-branch-rail" aria-hidden="true" />
-      <div class="workspace-history-branch-content">{content(node, true, depth() + 1)}</div>
-    </div>
+    <HistoryBranch depth={depth() + 1}>{content(node, true, depth() + 1)}</HistoryBranch>
   </Show>}</For>;
 }
 
@@ -346,14 +338,12 @@ export function ChatView(props: {
 }) {
   const c = props.control;
   return <section class="workspace-chat-view">
-      <Show when={c.mode() === "history"}><div class="workspace-chat-modes">
-          <div class="workspace-history-toolbar">
-            <WorkbenchButton class="workspace-history-toggle" aria-label={c.collapseTools() ? "Expand tool calls" : "Collapse sequential tool calls"} aria-pressed={c.collapseTools()} title={c.collapseTools() ? "Expand tool calls" : "Collapse sequential tool calls"} onClick={c.toggleCollapseTools}><ListCollapseIcon /></WorkbenchButton>
-            <WorkbenchButton class="workspace-history-toggle" aria-label={c.historyWrap() ? "Disable line wrapping" : "Enable line wrapping"} aria-pressed={c.historyWrap()} title={c.historyWrap() ? "Disable line wrapping" : "Enable line wrapping"} onClick={c.toggleHistoryWrap}><WrapTextIcon /></WorkbenchButton>
-          </div>
-        </div></Show>
-      <Show when={c.mode() === "history"}><Show when={!c.historyLoading()} fallback={<div class="workspace-panel-empty">Loading history…</div>}><Show when={c.historyTree()?.tree.length} fallback={<div class="workspace-panel-empty"><div><HistoryIcon /><Show when={props.chatId} fallback={<><strong>No chat open</strong><p>Open a chat to see its history.</p></>}><strong>No chat history</strong><p>Send a message to start this tree.</p></Show></div></div>}><div class="workspace-chat-history" role="tree" aria-label="Chat history" data-wrap={c.historyWrap() ? "true" : "false"}
-          ref={c.bindHistoryScroller} onScroll={c.trackHistoryScroll}><HistoryNodes nodes={c.historyTree()!.tree} activePath={c.historyActivePath()} leafId={c.historyTree()!.leafId} collapseTools={c.collapseTools()} openRuns={c.openRuns()} onToggleRun={c.toggleRun} /></div></Show></Show></Show>
+      <Show when={c.mode() === "history"}><ToolBar>
+            <ToolButton aria-label={c.collapseTools() ? "Expand tool calls" : "Collapse sequential tool calls"} aria-pressed={c.collapseTools()} title={c.collapseTools() ? "Expand tool calls" : "Collapse sequential tool calls"} onClick={c.toggleCollapseTools}><ListCollapseIcon /></ToolButton>
+            <ToolButton aria-label={c.historyWrap() ? "Disable line wrapping" : "Enable line wrapping"} aria-pressed={c.historyWrap()} title={c.historyWrap() ? "Disable line wrapping" : "Enable line wrapping"} onClick={c.toggleHistoryWrap}><WrapTextIcon /></ToolButton>
+          </ToolBar></Show>
+      <Show when={c.mode() === "history"}><Show when={!c.historyLoading()} fallback={<PaneEmpty>Loading history…</PaneEmpty>}><Show when={c.historyTree()?.tree.length} fallback={<PaneEmpty><div><HistoryIcon /><Show when={props.chatId} fallback={<><strong>No chat open</strong><p>Open a chat to see its history.</p></>}><strong>No chat history</strong><p>Send a message to start this tree.</p></Show></div></PaneEmpty>}><HistoryList role="tree" aria-label="Chat history" wrap={c.historyWrap()}
+          ref={c.bindHistoryScroller} onScroll={c.trackHistoryScroll}><HistoryNodes nodes={c.historyTree()!.tree} activePath={c.historyActivePath()} leafId={c.historyTree()!.leafId} collapseTools={c.collapseTools()} openRuns={c.openRuns()} onToggleRun={c.toggleRun} /></HistoryList></Show></Show></Show>
       <Show when={c.mode() === "changes"}><WorkspaceDiffView
         title="Changed files"
         files={c.review.files()}

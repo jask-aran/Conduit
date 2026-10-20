@@ -1,7 +1,7 @@
 import { createDecisionScope } from "@/components/decision-dialog";
 import { createEffect, createMemo, createSignal, For, on, Show, type Accessor } from "solid-js";
-import { CheckIcon, ChevronRightIcon, CirclePlusIcon, CopyIcon, DownloadIcon, EyeIcon, FileDiffIcon, GitBranchIcon, GitCommitHorizontalIcon, GitCompareArrowsIcon, RefreshCwIcon, SendIcon, Undo2Icon } from "lucide-solid";
-import { Button, ContextMenu, ContextMenuContent, ContextMenuGroup, ContextMenuItem, ContextMenuTrigger, Spinner } from "@/components/primitives";
+import { CheckIcon, CirclePlusIcon, CopyIcon, DownloadIcon, EyeIcon, FileDiffIcon, GitBranchIcon, GitCommitHorizontalIcon, GitCompareArrowsIcon, RefreshCwIcon, SendIcon, Undo2Icon } from "lucide-solid";
+import { ContextMenu, ContextMenuContent, ContextMenuGroup, ContextMenuItem, ContextMenuTrigger, Spinner } from "@/components/primitives";
 import { api } from "../api/client";
 import type { ReviewNavigationRequest } from "../chat/review-navigation";
 import { FileTypeIcon, FolderTypeIcon } from "./file-type-icon";
@@ -11,7 +11,10 @@ import { ComparisonSourceControls } from "./workspace-comparison-source";
 import { WorkspaceDiffView } from "./workspace-diff-view";
 import { createWorkspaceReview, diffScopes, type DiffScope } from "./workspace-review-source";
 import type { DiffPayload, GitAction, GitActionResult, GitChangedFile, GitCommit, GitCommitDetail, GitRef, SourceControlMode, WorkspaceSettings } from "./workspace-types";
-import { Segmented } from "@/components/ui/controls";
+import { Button, Segmented } from "@/components/ui/controls";
+import { ToolLine, CommitBox, ChangeLedger, ChangeSection, ChangeList, ChangeItem, ChangeEmpty, CommitRow, CommitList, PatchLines } from "@/components/ui/source";
+import { ChangeRow } from "@/components/ui/dashboard";
+import { ToolBar, ToolButton, ToolNotice, PaneEmpty } from "@/components/ui/pane";
 import "./workspace.css";
 
 const sourceControlScopes = diffScopes.filter((scope) => scope.value === "head" || scope.value === "changes" || scope.value === "staged");
@@ -20,45 +23,34 @@ function isSourceControlMode(value: string | null): value is SourceControlMode {
   return value === "changes" || value === "review" || value === "graph" || value === "patch";
 }
 
-function GitFileLabel(props: { file: GitChangedFile; staged: boolean }) {
-  const name = () => props.file.path.replace(/\/$/, "").split("/").at(-1) ?? props.file.path;
-  const directory = () => props.file.path.replace(/\/$/, "").split("/").slice(0, -1).join("/");
-  const status = () => props.file.status === "??" ? "U" : props.file.status[props.staged ? 0 : 1] ?? "";
+function changeDetails(file: GitChangedFile, staged: boolean) {
+  const name = file.path.replace(/\/$/, "").split("/").at(-1) ?? file.path;
+  const directory = file.path.replace(/\/$/, "").split("/").slice(0, -1).join("/");
+  const status = file.status === "??" ? "U" : file.status[staged ? 0 : 1] ?? "";
   const statusLabels: Record<string, string> = { M: "Modified", A: "Added", D: "Deleted", R: "Renamed", C: "Copied", U: "Unmerged", T: "Type changed" };
-  const counts = () => props.staged ? props.file.stagedCounts : props.file.workingCounts;
-  return <>
-    <Show when={props.file.path.endsWith("/")} fallback={<FileTypeIcon name={name()} />}><FolderTypeIcon name={name()} expanded={false} /></Show>
-    <span class="workspace-change-name">{name()}</span>
-    <span class="workspace-change-directory">{directory()}</span>
-    <Show when={counts()} fallback={<small class="workspace-change-counts" title="Line counts unavailable for this entry">—</small>}>{(count) =>
-      <small class="workspace-change-counts" aria-label={`${count().added} added, ${count().removed} removed`}><span class="workspace-git-removed">−{count().removed}</span><span class="workspace-git-added">+{count().added}</span></small>
-    }</Show>
-    <code data-status={status()} data-conflict={props.file.status !== "??" && props.file.status.includes("U")} title={props.file.status === "??" ? "Untracked" : statusLabels[status()] ?? status()}>{status()}</code>
-  </>;
+  const counts = staged ? file.stagedCounts : file.workingCounts;
+  return { name, directory, status, statusTitle: file.status === "??" ? "Untracked" : statusLabels[status] ?? status,
+    conflict: file.status !== "??" && file.status.includes("U"), added: counts?.added, removed: counts?.removed };
 }
 
 function CommitHistory(props: { commits: GitCommit[]; refs: GitRef[]; branch?: string; onCopy: (hash: string) => void; onInspect: (commit: GitCommit) => void; labelled?: boolean }) {
-  return <section class="workspace-history">
-    <Show when={props.labelled}><header><div><GitCommitHorizontalIcon /><span>History</span></div><small>{props.commits.length} recent</small></header></Show>
-    <div class="workspace-history-list">
+  return <>
+    <Show when={props.labelled}><ToolLine icon={<GitCommitHorizontalIcon />} title="History" detail={`${props.commits.length} recent`} /></Show>
+    <CommitList>
       <For each={props.commits}>{(commit) =>
-        <div class="workspace-commit">
-          <code class="workspace-graph-rail" aria-hidden="true">{commit.graph || "*"}</code>
-          <ContextMenu>
-          <ContextMenuTrigger as="button" type="button" title={`Copy ${commit.hash} · ${commit.author} · ${new Date(commit.authoredAt).toLocaleString()}`} onClick={() => props.onCopy(commit.hash)}>
-            <div class="workspace-commit-copy"><span>{commit.subject}</span><Show when={props.refs.some((ref) => ref.hash === commit.hash)}><div class="workspace-commit-refs"><For each={props.refs.filter((ref) => ref.hash === commit.hash)}>{(ref) => <code data-kind={ref.kind} data-current={ref.kind === "local" && ref.name === props.branch}>{ref.kind === "local" && ref.name === props.branch ? `HEAD · ${ref.name}` : ref.name}</code>}</For></div></Show></div>
-            <small>{commit.author}</small>
-            <code>{commit.shortHash}</code>
-          </ContextMenuTrigger>
+        <ContextMenu>
+          <ContextMenuTrigger as={CommitRow} graph={commit.graph || "*"} subject={commit.subject}
+            refs={props.refs.filter((ref) => ref.hash === commit.hash).map((ref) => ({ label: ref.kind === "local" && ref.name === props.branch ? `HEAD · ${ref.name}` : ref.name, current: ref.kind === "local" && ref.name === props.branch, kind: ref.kind }))}
+            author={commit.author} hash={commit.shortHash}
+            title={`Copy ${commit.hash} · ${commit.author} · ${new Date(commit.authoredAt).toLocaleString()}`} onClick={() => props.onCopy(commit.hash)} />
           <ContextMenuContent shortcutScope="workspace-panel" class="w-48 workspace-file-menu"><ContextMenuGroup>
             <ContextMenuItem onSelect={() => props.onInspect(commit)}><EyeIcon />Inspect commit</ContextMenuItem>
             <ContextMenuItem onSelect={() => props.onCopy(commit.hash)}><CopyIcon />Copy commit ID</ContextMenuItem>
           </ContextMenuGroup></ContextMenuContent>
-          </ContextMenu>
-        </div>
+        </ContextMenu>
       }</For>
-    </div>
-  </section>;
+    </CommitList>
+  </>;
 }
 
 function PatchView(props: { content: string }) {
@@ -66,12 +58,10 @@ function PatchView(props: { content: string }) {
   const lines = createMemo(() => props.content.split("\n"));
   createEffect(on(() => props.content, () => setPage(0)));
   return <><Show when={lines().length > 400}><div>
-    <button type="button" disabled={page() === 0} onClick={() => setPage(page() - 1)}>Previous lines</button>
+    <Button variant="ghost" size="sm" disabled={page() === 0} onClick={() => setPage(page() - 1)}>Previous lines</Button>
     <span> · Lines {page() * 400 + 1}–{Math.min((page() + 1) * 400, lines().length)} of {lines().length} · </span>
-    <button type="button" disabled={(page() + 1) * 400 >= lines().length} onClick={() => setPage(page() + 1)}>Next lines</button>
-  </div></Show><pre class="workspace-diff-content"><code><For each={lines().slice(page() * 400, (page() + 1) * 400)}>{(line) =>
-    <span class="workspace-patch-line" data-kind={line.startsWith("+") && !line.startsWith("+++") ? "addition" : line.startsWith("-") && !line.startsWith("---") ? "deletion" : line.startsWith("@@") ? "hunk" : line.startsWith("# ") || line.startsWith("diff ") ? "heading" : "context"}>{line || " "}</span>
-  }</For></code></pre></>;
+    <Button variant="ghost" size="sm" disabled={(page() + 1) * 400 >= lines().length} onClick={() => setPage(page() + 1)}>Next lines</Button>
+  </div></Show><PatchLines lines={lines().slice(page() * 400, (page() + 1) * 400)} /></>;
 }
 
 /**
@@ -261,45 +251,52 @@ export function SourceControlView(props: {
 }) {
   const c = props.control;
   return <section class="workspace-diff">
-      <header class="workspace-detail-dock-header workspace-source-header">
+      <ToolBar>
         <small>{c.mode() === "graph" ? `${c.diff()?.commits?.length || 0} recent` : `${c.diff()?.files.length || 0} changed`}</small>
-        <div class="workspace-source-actions">
-          <button type="button" aria-label="Fetch all remotes" title="Fetch all remotes" disabled={Boolean(c.gitAction())} onClick={() => void c.runGitAction("fetch")}><Show when={c.gitAction() === "fetch"} fallback={<RefreshCwIcon />}><Spinner /></Show><span>Fetch</span></button>
-          <button type="button" aria-label="Pull current branch" title="Pull current branch (fast-forward only)" disabled={!c.diff()?.upstream || Boolean(c.gitAction())} onClick={() => void c.runGitAction("pull")}><DownloadIcon /><span>Pull</span></button>
-          <button type="button" aria-label="Push current branch" title="Push current branch" disabled={!c.diff()?.upstream || Boolean(c.gitAction())} onClick={() => void c.runGitAction("push")}><SendIcon /><span>Push</span></button>
-        </div>
-      </header>
+          <ToolButton aria-label="Fetch all remotes" title="Fetch all remotes" disabled={Boolean(c.gitAction())} onClick={() => void c.runGitAction("fetch")}><Show when={c.gitAction() === "fetch"} fallback={<RefreshCwIcon />}><Spinner /></Show></ToolButton>
+          <ToolButton aria-label="Pull current branch" title="Pull current branch (fast-forward only)" disabled={!c.diff()?.upstream || Boolean(c.gitAction())} onClick={() => void c.runGitAction("pull")}><DownloadIcon /></ToolButton>
+          <ToolButton aria-label="Push current branch" title="Push current branch" disabled={!c.diff()?.upstream || Boolean(c.gitAction())} onClick={() => void c.runGitAction("push")}><SendIcon /></ToolButton>
+      </ToolBar>
       <Show when={c.mode() === "changes"}>
       <div class="workspace-diff-overview">
-      <div class="workspace-status-strip">
-        <div><GitBranchIcon /><strong>{c.diff() ? c.diff()!.repository ? c.diff()!.branch : "Not a Git repository" : "Loading Git status…"}</strong><Show when={c.diff()?.upstream}><small>{c.diff()?.upstream}</small></Show></div>
-        <div><Show when={c.diff()?.ahead || c.diff()?.behind}><span class="workspace-sync-state">↑ {c.diff()?.ahead || 0} ↓ {c.diff()?.behind || 0}</span></Show><Button variant="ghost" size="icon-sm" aria-label="Copy branch name" disabled={!c.diff()?.branch} onClick={() => copyText(c.diff()?.branch)}><CopyIcon /></Button><Button variant="ghost" size="icon-sm" aria-label="Refresh Git status" disabled={c.diffLoading()} onClick={() => void c.loadDiff(c.mode() === "patch", c.mode() === "graph")}><RefreshCwIcon /></Button></div>
-      </div>
-      <Show when={props.stale}><div class="workspace-freshness-notice" role="status" aria-live="polite"><span>Not updating</span><span aria-hidden="true">·</span><button type="button" onClick={props.onRetryPoll}>Retry</button></div></Show>
+      <ToolLine icon={<GitBranchIcon />} title={c.diff() ? c.diff()!.repository ? c.diff()!.branch : "Not a Git repository" : "Loading Git status…"} detail={c.diff()?.upstream} end={<>
+        <Show when={c.diff()?.ahead || c.diff()?.behind}><span>↑ {c.diff()?.ahead || 0} ↓ {c.diff()?.behind || 0}</span></Show>
+        <ToolButton label="Copy branch name" disabled={!c.diff()?.branch} onClick={() => copyText(c.diff()?.branch)}><CopyIcon /></ToolButton>
+        <ToolButton label="Refresh Git status" disabled={c.diffLoading()} onClick={() => void c.loadDiff(c.mode() === "patch", c.mode() === "graph")}><RefreshCwIcon /></ToolButton>
+      </>} />
+      <Show when={props.stale}><ToolNotice tone="warn" live action={{ label: "Retry", onClick: () => props.onRetryPoll() }}><span>Not updating</span><span aria-hidden="true">·</span></ToolNotice></Show>
       <Show when={c.diff()?.repository}>
-        <form class="workspace-commit-composer" onSubmit={(event) => { event.preventDefault(); void c.runGitAction("commit"); }}>
-          <textarea aria-label="Commit message" placeholder="Message (Ctrl+Enter to commit)" rows="1" value={c.commitMessage()} onInput={(event) => { const input = event.currentTarget; c.setCommitMessage(input.value); input.style.height = "auto"; input.style.height = `${input.scrollHeight}px`; }} onKeyDown={(event) => { if (event.key === "Enter" && event.ctrlKey) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} />
-          <button type="submit" disabled={!c.commitMessage().trim() || !c.stagedFiles().length || Boolean(c.gitAction())}><Show when={c.gitAction() === "commit"} fallback={<CheckIcon />}><Spinner /></Show><span>Commit</span><small>{c.stagedFiles().length || ""}</small></button>
-        </form>
-        <div class="workspace-change-ledger">
-          <section class="workspace-change-section" data-open={c.stagedOpen()}>
-            <header><button type="button" class="workspace-change-disclosure" aria-expanded={c.stagedOpen()} onClick={() => c.setStagedOpen((open) => !open)}><ChevronRightIcon /><CheckIcon /><span>Staged changes</span><small>{c.stagedFiles().length}</small></button><button type="button" aria-label="Unstage all" title="Unstage all" disabled={!c.stagedFiles().length || Boolean(c.gitAction())} onClick={() => void c.runGitAction("unstage-all")}><Undo2Icon /></button></header>
-            <Show when={c.stagedOpen()}><Show when={c.stagedFiles().length} fallback={<div class="workspace-clean-state">No staged changes</div>}>
-              <div class="workspace-changes"><For each={c.stagedFiles()}>{(file) =>
-<div class="workspace-change-row"><button type="button" title={`Inspect changes in ${file.path}`} data-change-path={file.path} data-staged="true" onClick={(event) => props.onInspectFile(file.path, true, event.altKey)}><GitFileLabel file={file} staged={true} /></button><button type="button" class="workspace-change-action" aria-label={`Unstage ${file.path}`} title="Unstage" disabled={Boolean(c.gitAction())} onClick={() => void c.runGitAction("unstage", file.path)}><Undo2Icon /></button></div>
-              }</For></div>
-            </Show></Show>
-          </section>
-          <section class="workspace-change-section" data-open={c.changesOpen()}>
-            <header><button type="button" class="workspace-change-disclosure" aria-expanded={c.changesOpen()} onClick={() => c.setChangesOpen((open) => !open)}><ChevronRightIcon /><FileDiffIcon /><span>Changes</span><small>{c.unstagedFiles().length}</small></button><button type="button" aria-label="Stage all" title="Stage all" disabled={!c.unstagedFiles().length || Boolean(c.gitAction())} onClick={() => void c.runGitAction("stage-all")}><CirclePlusIcon /></button></header>
-            <Show when={c.changesOpen() && c.unstagedFiles().some((file) => file.status === "??" && file.path.endsWith("/"))}><div class="workspace-tree-notice">Untracked folders are grouped. Staging a folder includes its contents.</div></Show>
-            <Show when={c.changesOpen()}><Show when={c.unstagedFiles().length} fallback={<div class="workspace-clean-state">Working tree clean</div>}>
-              <div class="workspace-changes"><For each={c.unstagedFiles()}>{(file) =>
-                <div class="workspace-change-row"><button type="button" title={`Inspect changes in ${file.path}`} data-change-path={file.path} data-staged="false" onClick={(event) => props.onInspectFile(file.path, false, event.altKey)}><GitFileLabel file={file} staged={false} /></button><button type="button" class="workspace-change-action" aria-label={`Stage ${file.path}`} title="Stage" disabled={Boolean(c.gitAction())} onClick={() => void c.runGitAction("stage", file.path)}><CirclePlusIcon /></button></div>
-              }</For></div>
-            </Show></Show>
-          </section>
-        </div>
+        <CommitBox value={c.commitMessage()} placeholder="Message (Ctrl+Enter to commit)" count={c.stagedFiles().length}
+          busy={c.gitAction() === "commit"} busyIcon={<Spinner />} icon={<CheckIcon />}
+          disabled={!c.commitMessage().trim() || !c.stagedFiles().length || Boolean(c.gitAction())}
+          onInput={c.setCommitMessage} onSubmit={() => void c.runGitAction("commit")} />
+        <ChangeLedger>
+          <ChangeSection open={c.stagedOpen()} label="Staged changes" count={c.stagedFiles().length} onToggle={() => c.setStagedOpen((open) => !open)}
+            action={<ToolButton label="Unstage all" disabled={!c.stagedFiles().length || Boolean(c.gitAction())} onClick={() => void c.runGitAction("unstage-all")}><Undo2Icon /></ToolButton>}>
+            <Show when={c.stagedFiles().length} fallback={<ChangeEmpty>No staged changes</ChangeEmpty>}>
+              <ChangeList><For each={c.stagedFiles()}>{(file) =>
+                <ChangeItem action={<ToolButton label={`Unstage ${file.path}`} title="Unstage" disabled={Boolean(c.gitAction())} onClick={() => void c.runGitAction("unstage", file.path)}><Undo2Icon /></ToolButton>}>
+                  <ChangeRow {...changeDetails(file, true)} title={`Inspect changes in ${file.path}`} data-change-path={file.path} data-staged="true"
+                    onClick={(event) => props.onInspectFile(file.path, true, event.altKey)}
+                    icon={file.path.endsWith("/") ? <FolderTypeIcon name={changeDetails(file, true).name} expanded={false} /> : <FileTypeIcon name={changeDetails(file, true).name} />} />
+                </ChangeItem>
+              }</For></ChangeList>
+            </Show>
+          </ChangeSection>
+          <ChangeSection open={c.changesOpen()} label="Changes" count={c.unstagedFiles().length} onToggle={() => c.setChangesOpen((open) => !open)}
+            action={<ToolButton label="Stage all" disabled={!c.unstagedFiles().length || Boolean(c.gitAction())} onClick={() => void c.runGitAction("stage-all")}><CirclePlusIcon /></ToolButton>}>
+            <Show when={c.unstagedFiles().some((file) => file.status === "??" && file.path.endsWith("/"))}><ToolNotice>Untracked folders are grouped. Staging a folder includes its contents.</ToolNotice></Show>
+            <Show when={c.unstagedFiles().length} fallback={<ChangeEmpty>Working tree clean</ChangeEmpty>}>
+              <ChangeList><For each={c.unstagedFiles()}>{(file) =>
+                <ChangeItem action={<ToolButton label={`Stage ${file.path}`} title="Stage" disabled={Boolean(c.gitAction())} onClick={() => void c.runGitAction("stage", file.path)}><CirclePlusIcon /></ToolButton>}>
+                  <ChangeRow {...changeDetails(file, false)} title={`Inspect changes in ${file.path}`} data-change-path={file.path} data-staged="false"
+                    onClick={(event) => props.onInspectFile(file.path, false, event.altKey)}
+                    icon={file.path.endsWith("/") ? <FolderTypeIcon name={changeDetails(file, false).name} expanded={false} /> : <FileTypeIcon name={changeDetails(file, false).name} />} />
+                </ChangeItem>
+              }</For></ChangeList>
+            </Show>
+          </ChangeSection>
+        </ChangeLedger>
       </Show>
       </div>
       </Show>
@@ -320,8 +317,8 @@ export function SourceControlView(props: {
         onOpenWorkingFile={props.onOpenWorkingFile}
         onViewStateChange={c.review.setViewState}
       /></Show>
-        <Show when={c.mode() === "graph" || c.mode() === "patch"}><Show when={c.mode() === "patch"} fallback={<Show when={Boolean(c.diff()?.commits?.length)} fallback={<div class="workspace-panel-empty">No commit history available.</div>}><CommitHistory commits={c.diff()?.commits || []} refs={c.diff()?.refs || []} branch={c.diff()?.branch} onCopy={copyText} onInspect={(commit) => void c.inspectCommit(commit)} /></Show>}>
-          <div class="workspace-patch"><Show when={c.commitDetailLoading()} fallback={<Show when={c.commitDetail()} fallback={<Show when={c.diff()?.diff} fallback={<div class="workspace-panel-empty">{c.diff()?.repository ? "Working tree is clean." : "Diff is available for Git projects."}</div>}>{(content) => <PatchView content={content()} />}</Show>}>{(detail) => <PatchView content={detail().content} />}</Show>}><div class="workspace-panel-empty">Loading commit…</div></Show></div>
+        <Show when={c.mode() === "graph" || c.mode() === "patch"}><Show when={c.mode() === "patch"} fallback={<Show when={Boolean(c.diff()?.commits?.length)} fallback={<PaneEmpty>No commit history available.</PaneEmpty>}><CommitHistory commits={c.diff()?.commits || []} refs={c.diff()?.refs || []} branch={c.diff()?.branch} onCopy={copyText} onInspect={(commit) => void c.inspectCommit(commit)} /></Show>}>
+          <div class="workspace-patch"><Show when={c.commitDetailLoading()} fallback={<Show when={c.commitDetail()} fallback={<Show when={c.diff()?.diff} fallback={<PaneEmpty>{c.diff()?.repository ? "Working tree is clean." : "Diff is available for Git projects."}</PaneEmpty>}>{(content) => <PatchView content={content()} />}</Show>}>{(detail) => <PatchView content={detail().content} />}</Show>}><PaneEmpty>Loading commit…</PaneEmpty></Show></div>
         </Show></Show>
     </section>;
 }

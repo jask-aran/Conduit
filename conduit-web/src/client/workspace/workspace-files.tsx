@@ -8,6 +8,7 @@ import { authorizedFetch } from "../api/native-auth-client";
 import { httpUrl } from "../api/transport";
 import type { ReviewNavigationRequest } from "../chat/review-navigation";
 import { isMobileLayout } from "../navigation/mobile-layout";
+import { PaneEmpty, ToolBar, ToolButton, ToolFilter, ToolNotice, Tree as TreeList, TreeRow } from "@/components/ui/pane";
 import { FileTypeIcon, FolderTypeIcon } from "./file-type-icon";
 import WorkspaceFileSlot, { preloadWorkspaceEditor, type FileSlotHandle, type FileSummary } from "./workspace-file-slot";
 import { readSetting, WORKSPACE_PANEL_GLOBAL_SCOPE, writeSetting } from "./workspace-panel-storage";
@@ -755,7 +756,7 @@ export function FilesView(props: {
     { id: "refresh", label: () => "Refresh files", title: () => "Refresh files", icon: () => <RefreshCwIcon />, disabled: c.filesLoading, run: () => void c.refreshFiles() },
   ];
   const treeActionButton = (action: TreeAction) =>
-    <button type="button" data-tree-action={action.id} aria-label={action.label()} title={action.title()} aria-pressed={action.pressed?.()} disabled={action.disabled?.()} onClick={action.run}>{action.icon()}</button>;
+    <ToolButton data-tree-action={action.id} aria-label={action.label()} title={action.title()} aria-pressed={action.pressed?.()} disabled={action.disabled?.()} onClick={action.run}>{action.icon()}</ToolButton>;
   const [visibleTreeActions, setVisibleTreeActions] = createSignal(treeActions.length);
   // Buttons are uniform, so one measured button plus the row gap is enough to
   // work out how many fit; the cache is invalidated on a height change, which
@@ -780,23 +781,26 @@ export function FilesView(props: {
   const Tree = (treeProps: { directory: string; depth?: number }) => {
     const depth = () => treeProps.depth || 0;
     return <>
-      <For each={c.visibleEntries(treeProps.directory)}>{(entry, index) => <div class="workspace-tree-node">
+      <For each={c.visibleEntries(treeProps.directory)}>{(entry, index) => <div>
         <ContextMenu>
           <ContextMenuTrigger
-            as="button"
-            type="button"
+            as={TreeRow}
             role="treeitem"
             aria-expanded={entry.type === "directory" ? c.directoryIsOpen(entry.path) : undefined}
             aria-level={depth() + 1}
             aria-posinset={index() + 1}
             aria-setsize={c.visibleEntries(treeProps.directory).length}
             aria-selected={c.isFileOpen(entry.path)}
-            class="workspace-tree-row"
-            style={{ "padding-left": `${4 + depth() * 11.2}px` }}
+            depth={depth()}
+            folder={entry.type === "directory"}
+            open={c.directoryIsOpen(entry.path)}
+            icon={entry.type === "directory" ? <FolderTypeIcon name={entry.name} expanded={c.directoryIsOpen(entry.path)} /> : <FileTypeIcon name={entry.name} />}
+            name={entry.name}
+            end={c.keptVisible().has(entry.path) ? <PinIcon aria-label="Always visible" /> : undefined}
+            selected={c.isFileOpen(entry.path)}
             data-name={entry.name.toLowerCase()}
             data-path={entry.path}
             draggable={entry.type !== "directory"}
-            data-selected={c.isFileOpen(entry.path)}
             data-focused-file={c.openPaths().primary === entry.path}
             data-open-file={entry.type !== "directory" ? props.openInPane?.(entry.path) : undefined}
             tabIndex={c.treeTabStop() === entry.path ? 0 : -1}
@@ -810,13 +814,7 @@ export function FilesView(props: {
             onKeyDown={onTreeKeyDown}
             onDblClick={() => { if (entry.type === "directory") props.onBrowseDirectory?.(entry.path); }}
             onClick={(event) => entry.type === "directory" ? void c.toggleDirectory(entry.path) : entry.type === "file" ? (event.altKey && props.onOpenBeside ? props.onOpenBeside(entry.path) : c.openFile(entry.path)) : undefined}
-          >
-            <Show when={entry.type === "directory"} fallback={<><span class="workspace-tree-chevron-placeholder" /><FileTypeIcon name={entry.name} /></>}>
-              <ChevronRightIcon class="workspace-tree-chevron" data-open={c.directoryIsOpen(entry.path)} /><FolderTypeIcon name={entry.name} expanded={c.directoryIsOpen(entry.path)} />
-            </Show>
-            <span>{entry.name}</span>
-            <Show when={c.keptVisible().has(entry.path)}><PinIcon class="workspace-tree-kept" aria-label="Always visible" /></Show>
-          </ContextMenuTrigger>
+          />
           <ContextMenuContent shortcutScope="workspace-panel" class="w-48 workspace-file-menu">
             <ContextMenuGroup>
               <Show when={entry.type === "file"}>
@@ -859,12 +857,11 @@ export function FilesView(props: {
           <div role="group"><Tree directory={entry.path} depth={depth() + 1} /></div>
         </Show>
       </div>}</For>
-      <Show when={c.directories()[treeProps.directory]?.oversize}><div class="workspace-tree-notice">Directory exceeds the 50,000-entry limit. Open a smaller directory.</div></Show>
-      <Show when={c.directories()[treeProps.directory]?.truncated}><div class="workspace-tree-notice">
+      <Show when={c.directories()[treeProps.directory]?.oversize}><ToolNotice>Directory exceeds the 50,000-entry limit. Open a smaller directory.</ToolNotice></Show>
+      <Show when={c.directories()[treeProps.directory]?.truncated}><ToolNotice action={{ label: "Show more", disabled: c.filesLoading(), onClick: () => void c.loadDirectory(treeProps.directory, false, true) }}>
         <Show when={c.fileFilter().trim()}>Filter covers loaded entries only. </Show>
-        <span>{c.directories()[treeProps.directory]?.entries.length} of {c.directories()[treeProps.directory]?.total ?? "more"} entries loaded. </span>
-        <button type="button" disabled={c.filesLoading()} onClick={() => void c.loadDirectory(treeProps.directory, false, true)}>Show more</button>
-      </div></Show>
+        <span>{c.directories()[treeProps.directory]?.entries.length} of {c.directories()[treeProps.directory]?.total ?? "more"} entries loaded.</span>
+      </ToolNotice></Show>
     </>;
   };
 
@@ -899,13 +896,10 @@ export function FilesView(props: {
         }}
       >
         <div class="workspace-tree-pane">
-          <div class="workspace-tree-tools workspace-tree-search">
-            <Show when={!props.navigatorOnly}><button type="button" aria-label="Hide file navigator" title="Hide file navigator" onClick={c.hideFileNavigator}><PanelLeftCloseIcon /></button></Show>
-            <label class="workspace-tree-filter">
-              <SearchIcon />
-              <input
+          <ToolBar>
+            <Show when={!props.navigatorOnly}><ToolButton label="Hide file navigator" onClick={c.hideFileNavigator}><PanelLeftCloseIcon /></ToolButton></Show>
+            <ToolFilter
                 ref={(element) => { c.elements.filter = element; }}
-                type="search"
                 aria-label="Filter loaded files"
                 placeholder="Filter loaded files"
                 title="Filter loaded files and folders"
@@ -913,18 +907,17 @@ export function FilesView(props: {
                 onInput={(event) => c.setFileFilter(event.currentTarget.value)}
                 onKeyDown={c.onFileFilterKeyDown}
               />
-            </label>
-          </div>
-          <Show when={props.stale}><div class="workspace-freshness-notice" role="status" aria-live="polite"><span>Not updating</span><span aria-hidden="true">·</span><button type="button" onClick={props.onRetryPoll}>Retry</button></div></Show>
-          <nav ref={(element) => {
+          </ToolBar>
+          <Show when={props.stale}><ToolNotice tone="warn" live action={{ label: "Retry", onClick: () => props.onRetryPoll?.() }}><span>Not updating</span><span aria-hidden="true">·</span></ToolNotice></Show>
+          <TreeList ref={(element) => {
             c.elements.tree = element;
             queueMicrotask(() => { element.scrollTop = peekCachedWorkspace(props.projectId)?.treeScrollTop || 0; });
-          }} aria-label="Project files" role="tree" aria-busy={c.filesLoading()} class="workspace-tree" onScroll={c.saveTreeScroll}>
-            <Show when={props.onBrowseParent}><button type="button" class="workspace-tree-row workspace-tree-parent" onClick={props.onBrowseParent} title={`Open parent of ${props.workingRoot}`}><span class="workspace-tree-chevron-placeholder" /><FolderUpIcon /><span>..</span></button></Show>
+          }} aria-label="Project files" aria-busy={c.filesLoading()} onScroll={c.saveTreeScroll}>
+            <Show when={props.onBrowseParent}><TreeRow onClick={props.onBrowseParent} title={`Open parent of ${props.workingRoot}`} icon={<FolderUpIcon />} name=".." /></Show>
             <Tree directory="" />
-            <Show when={c.directories()[""] && !c.directories()[""]?.oversize && c.visibleEntries("").length === 0}><div class="workspace-tree-empty">{c.fileFilter() ? "No loaded files match this filter." : "No files to show."}</div></Show>
-          </nav>
-          <div class="workspace-tree-tools workspace-tree-actions" role="toolbar" aria-label="File tree actions" ref={(element) => {
+            <Show when={c.directories()[""] && !c.directories()[""]?.oversize && c.visibleEntries("").length === 0}><PaneEmpty>{c.fileFilter() ? "No loaded files match this filter." : "No files to show."}</PaneEmpty></Show>
+          </TreeList>
+          <ToolBar edge="top" role="toolbar" aria-label="File tree actions" ref={(element) => {
             treeActionsRow = element;
             const observer = new ResizeObserver((entries) => {
               const box = entries[entries.length - 1]?.contentBoxSize?.[0];
@@ -936,7 +929,7 @@ export function FilesView(props: {
             <For each={treeActions}>{(action, index) => <Show when={index() < visibleTreeActions()}>{treeActionButton(action)}</Show>}</For>
             <Show when={visibleTreeActions() < treeActions.length}>
               <Menu>
-                <MenuTrigger class="workspace-tree-more" aria-label="More file actions" title="More file actions"><EllipsisIcon /></MenuTrigger>
+                <MenuTrigger as={ToolButton} label="More file actions"><EllipsisIcon /></MenuTrigger>
                 <MenuContent>
                   <For each={treeActions.slice(visibleTreeActions())}>{(action) =>
                     <MenuItem disabled={action.disabled?.()} onSelect={action.run}>{action.icon()}{action.label()}</MenuItem>
@@ -944,16 +937,16 @@ export function FilesView(props: {
                 </MenuContent>
               </Menu>
             </Show>
-            <input ref={(element) => { c.elements.upload = element; }} class="workspace-file-input" type="file" multiple={c.uploadTarget().kind === "directory"} onChange={(event) => void c.uploadFiles(event.currentTarget.files)} />
-          </div>
+            <input ref={(element) => { c.elements.upload = element; }} hidden type="file" multiple={c.uploadTarget().kind === "directory"} onChange={(event) => void c.uploadFiles(event.currentTarget.files)} />
+          </ToolBar>
         </div>
         <Show when={!props.navigatorOnly && (c.filesWide() ? c.treeCollapsed() : !c.navigatorOpen())}>
-          <div class="workspace-tree-collapsed-rail">
-            <button type="button" aria-label="Show file navigator" title="Show file navigator" onClick={c.showFileNavigator}><PanelLeftOpenIcon /></button>
-            <div class="workspace-tree-rail-actions" role="toolbar" aria-label="File tree actions">
+          <ToolBar vertical data-tree-rail="">
+            <ToolButton label="Show file navigator" onClick={c.showFileNavigator}><PanelLeftOpenIcon /></ToolButton>
+            <div role="toolbar" aria-label="File tree actions">
               <For each={treeActions}>{(action) => treeActionButton(action)}</For>
             </div>
-          </div>
+          </ToolBar>
         </Show>
         <Show when={!props.navigatorOnly && c.filesWide()}>
           <div

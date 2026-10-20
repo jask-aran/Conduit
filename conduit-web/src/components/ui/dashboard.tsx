@@ -149,12 +149,12 @@ export function DashRow(props: RowProps) {
 }
 
 /** A change's row, as the workspace panel draws it: file mark, name, folder, line counts, a status letter. */
-export function ChangeRow(props: Omit<JSX.ButtonHTMLAttributes<HTMLButtonElement>, "children" | "class"> & { icon: JSX.Element; name: string; directory?: string; added?: number | null; removed?: number | null; status: string }) {
-  const [local, rest] = splitProps(props, ["icon", "name", "directory", "added", "removed", "status"]);
-  return <button type="button" {...rest} class="ui-dash-row" data-change-row="">
+export function ChangeRow(props: Omit<JSX.ButtonHTMLAttributes<HTMLButtonElement>, "children" | "class"> & { icon: JSX.Element; name: string; directory?: string; added?: number | null; removed?: number | null; status: string; statusTitle?: string; conflict?: boolean; selected?: boolean }) {
+  const [local, rest] = splitProps(props, ["icon", "name", "directory", "added", "removed", "status", "statusTitle", "conflict", "selected"]);
+  return <button type="button" {...rest} class="ui-dash-row" data-change-row="" data-selected={local.selected ? "" : undefined}>
     {local.icon}<span class="ui-change-name">{local.name}</span><span class="ui-change-directory">{local.directory}</span>
     <Show when={local.added != null} fallback={<span class="ui-counts" aria-label="Counts unknown">—</span>}><Counts added={local.added ?? 0} removed={local.removed ?? 0} /></Show>
-    <code class="ui-change-status" data-status={local.status}>{local.status}</code>
+    <code class="ui-change-status" data-status={local.status} data-conflict={local.conflict ? "" : undefined} title={local.statusTitle}>{local.status}</code>
   </button>;
 }
 

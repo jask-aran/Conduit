@@ -171,3 +171,5 @@
 .ui-dash[data-compact] .ui-dash-group-head { padding-left: 0; }
 
 @media (prefers-reduced-motion: reduce) { .ui-group-toggle > svg, .ui-folder-mark [data-part="front"] { transition: none; } }
+.ui-change-status[data-conflict] { color: var(--destructive); }
+.ui-dash-row[data-change-row][data-selected] { background: var(--tint); }
