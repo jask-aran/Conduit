@@ -30,6 +30,8 @@
   --ease-leave: cubic-bezier(.4, 0, 1, 1);
   --ease-change: ease;
   --layer-dialog: 100;
+  /* A popover (menu, submenu, picker) over everything it opens from: the app's chrome (the sidebar, a pane header) and a dialog. */
+  --layer-popover: 105;
   --layer-notification: 110;
   --duration-quick: 150ms;   /* leaving, folding away; a change in place */
   --duration-gentle: 250ms;  /* arriving, opening, settling into place */

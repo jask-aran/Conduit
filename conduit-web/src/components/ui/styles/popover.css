@@ -79,7 +79,7 @@
 .ui-menu-parent { display: flex; flex-direction: column; transition: filter var(--duration-quick) var(--ease-change); }
 .ui-menu-parent[data-under] { filter: var(--dim-under); }
 .ui-menu-parent[data-under] > *, .ui-menu[data-settling="true"] * { pointer-events: none; }
-.ui-menu-panel { pointer-events: auto; z-index: calc(var(--layer-dialog) + 1); width: var(--measure-md); max-height: var(--measure-2xl); overflow: auto; }
+.ui-menu-panel { pointer-events: auto; z-index: calc(var(--layer-popover) + 1); width: var(--measure-md); max-height: var(--measure-2xl); overflow: auto; }
 .ui-menu-note { margin: 0; padding: var(--row-pad); color: var(--muted-foreground); font-size: var(--text-caption); line-height: var(--leading-row); white-space: normal; overflow-wrap: anywhere; }
 .ui-menu-note[data-error] { color: var(--destructive); }
 .ui-row > .ui-label[data-stacked] > small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -93,6 +93,8 @@
 /* A long list scrolls in its own height, under the search that filters it. */
 .ui-section[data-scroll] { max-height: var(--measure-sm); overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--tint) transparent; }
 /* A readout: a menu at its own measure, its lines caption type, tabular, the value at the end. */
+/* Kobalte lifts its positioner to the surface's own layer. */
+.ui-menu:not(.ui-menu-panel) { z-index: var(--layer-popover); }
 .ui-menu[data-fit] { max-height: var(--menu-room, none); overflow-y: auto; overscroll-behavior: contain; }
 .ui-menu[data-wide] { width: var(--measure-md); max-width: calc(100vw - 2 * var(--space-lg)); }
 .ui-readout { display: flex; justify-content: space-between; gap: var(--row-gap); padding: 0 var(--space-md); color: var(--muted-foreground); font-size: var(--text-caption); font-variant-numeric: tabular-nums; }
