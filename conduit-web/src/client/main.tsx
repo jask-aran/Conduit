@@ -2762,8 +2762,11 @@ function App() {
    * neighbours; its near edge is where the document already is, so nothing.
    */
   const movePaneDocument = async (from: PaneKey, target: { pane: PaneKey; zone: "left" | "middle" | "right" }) => {
-    if (target.zone === "middle") return void await swapPanes(from, false, target.pane);
+    // Focus stays with the place that had it before the drag began.
+    const keep = paneBeforePress ?? keyboardPane();
+    if (target.zone === "middle") return void await swapPanes(from, false, target.pane, true, keep);
     const panes = panesShown();
+    const kept = panes.indexOf(keep);
     let at = panes.indexOf(from);
     const to = panes.indexOf(target.pane);
     // Neighbour by neighbour, each a swap, by position (a swap of two panes
@@ -2774,11 +2777,11 @@ function App() {
       while (at !== to) {
         const next = at < to ? at + 1 : at - 1;
         const now = panesShown();
-        await swapPanes(now[Math.min(at, next)]!, false, now[Math.max(at, next)]!, false);
+        await swapPanes(now[Math.min(at, next)]!, false, now[Math.max(at, next)]!, false, null);
         at = next;
       }
     });
-    focusAnyPane(panesShown()[to]!);
+    focusAnyPane(panesShown()[kept >= 0 ? kept : to]!);
   };
   const nearEdge = (from: PaneKey, pane: PaneKey, zone: "left" | "middle" | "right") => {
     const panes = panesShown();
@@ -2889,7 +2892,7 @@ function App() {
     if (target.zone === "right") { if ((await setSlotView(free, next, false, index))) focusPane(free); return; }
     if (index > 0) { if ((await setSlotView(free, next, false, index - 1))) focusPane(free); return; }
     // Left of pane A: the new document takes pane A, and pane A's moves right.
-    if ((await setSlotView(free, next, false, 0))) await swapPanes("main");
+    if ((await setSlotView(free, next, false, 0))) await swapPanes("main", false, undefined, true, "main");
     focusAnyPane("main");
   };
   document.addEventListener("dragstart", onDocDragStart);
@@ -3111,7 +3114,9 @@ function App() {
   };
   document.addEventListener("focusin", noteKeyboardSide);
   // A press on what takes no focus (an image), or into a frame (a PDF), still gives its pane the keyboard.
-  const notePanePress = (event: PointerEvent) => { const pane = paneOf(event.target instanceof Element ? event.target : null); if (pane !== null) setKeyboardPane(pane); };
+  // The pane that had the keyboard before this press: a pane's own swap keeps focus there.
+  let paneBeforePress: PaneKey | null = null;
+  const notePanePress = (event: PointerEvent) => { paneBeforePress = keyboardPane(); const pane = paneOf(event.target instanceof Element ? event.target : null); if (pane !== null) setKeyboardPane(pane); };
   const noteFrameFocus = () => setTimeout(() => { const frame = document.activeElement; if (frame instanceof HTMLIFrameElement || frame instanceof HTMLEmbedElement || frame instanceof HTMLObjectElement) { const pane = paneOf(frame); if (pane !== null) setKeyboardPane(pane); } });
   document.addEventListener("pointerdown", notePanePress, true);
   window.addEventListener("blur", noteFrameFocus);
@@ -3230,7 +3235,8 @@ function App() {
      * closes unsent, and the pane's chat once it is sent.
      */
     createEffect(on(() => [slotPage(slot), catalogue.loaded(), templatesLoading(), shownSlots().includes(slot)] as const, ([page, loaded, loading, shown]) => {
-      if (!page || page === "computer" || page.startsWith("harness:")) return discardPaneDraft(pane);
+      // A page giving way to a chat: the chat is already opening in the session, so the draft goes without closing it.
+      if (!page || page === "computer" || page.startsWith("harness:")) return discardPaneDraft(pane, Boolean(untrack(() => slotChatId(slot))));
       if (!loaded || loading || !shown) return;
       const project = untrack(() => slotPageProject(slot));
       if (!project) return void setSlotView(slot, null);
@@ -3247,11 +3253,11 @@ function App() {
       }).catch(showDraftError);
     }));
   }
-  function discardPaneDraft(pane: PaneSlot) {
+  function discardPaneDraft(pane: PaneSlot, keepSession = false) {
     const draft = pane.draft;
     if (!draft) return;
     pane.draft = null;
-    if (untrack(pane.session.selectedId) === draft.id) pane.session.close();
+    if (!keepSession && untrack(pane.session.selectedId) === draft.id) pane.session.close();
     void api(`/v0/chats/${encodeURIComponent(draft.id)}?ifEmpty=true`, { method: "DELETE" }).catch(() => {});
   }
   const sendFromPanePage = async (pane: PaneSlot, prompt: string) => {
@@ -3418,6 +3424,11 @@ function App() {
     }
   };
   const crossfadeSwap = (left: HTMLElement, right: HTMLElement, place: () => Promise<void>) => crossfadeUnder([left, right], place);
+  // A pane moved in the DOM loses its scrollers' places; hold them across the move and put them back.
+  const holdScroll = (elements: HTMLElement[]) => {
+    const held = elements.flatMap((element) => [...element.querySelectorAll<HTMLElement>("*")].filter((node) => node.scrollTop || node.scrollLeft).map((node) => [node, node.scrollTop, node.scrollLeft] as const));
+    return () => held.forEach(([node, top, left]) => { node.scrollTop = top; node.scrollLeft = left; });
+  };
   const animateSwap = async (left: HTMLElement, right: HTMLElement, reorder: boolean, placeRight: () => Promise<void> | void, placeLeft: () => Promise<void> | void) => {
     const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     if (!still) {
@@ -3436,10 +3447,14 @@ function App() {
     if (!still) await incoming.animate([{ opacity: 0 }, { opacity: 1 }], { duration: SWAP_FADE_MS, easing: "ease-out" }).finished;
     incoming.style.opacity = "";
   };
-  // `fade: false` places the documents at once, for a caller fading around several swaps.
-  const swapPanes = async (pane: PaneKey, slide = false, withPane?: PaneKey, fade = true) => {
+  // `fade: false` places the documents at once, for a caller fading around several swaps. Focus is the pane's, not
+  // the document's: the place that had the keyboard (`keep`) has it after the swap, whatever now shows there;
+  // null leaves focus to the caller.
+  const swapPanes = async (pane: PaneKey, slide = false, withPane?: PaneKey, fade = true, keep: PaneKey | null = keyboardPane()) => {
     const partner = withPane ?? swapPartner(pane);
     if (partner === null || swappingPanes) return;
+    const place = keep === null ? -1 : panesShown().indexOf(keep);
+    const settleFocus = () => { const target = panesShown()[place]; if (place >= 0 && target !== undefined) focusAnyPane(target); };
     const [leftPane, rightPane] = pane === "main" || (partner !== "main" && shownSlots().indexOf(partner) > shownSlots().indexOf(pane as number)) ? [pane, partner] : [partner, pane];
     const left = paneElement(leftPane);
     const right = paneElement(rightPane);
@@ -3460,24 +3475,27 @@ function App() {
           await waitFor(() => !id || (paneSlot(slot).session.chat.loadedId() === id && chatDrawn(slot)), 1500);
         };
         const placeLeft = async () => { if (isPaneView(bView)) { setPaneAOverride(null); await openInPaneA(bView); } else await setPaneView("main", bView); };
-        if (slide) await animateSwap(left, right, false, placeRight, placeLeft);
+        if (slide) await animateSwap(left, right, false, placeRight, async () => { await placeLeft(); settleFocus(); });
         else if (!fade) await Promise.all([placeRight(), placeLeft()]);
-        else await crossfadeSwap(left, right, async () => { await Promise.all([placeRight(), placeLeft()]); });
+        else await crossfadeSwap(left, right, async () => { await Promise.all([placeRight(), placeLeft()]); settleFocus(); });
       } else {
         const a = leftPane as number;
         const b = rightPane as number;
         const reorder = () => {
+          const restore = holdScroll([left, right]);
           setSlotOrder((order) => order.map((slot) => slot === a ? b : slot === b ? a : slot));
           persistSlots();
+          restore();
         };
-        if (slide) await animateSwap(left, right, true, reorder, () => {});
+        if (slide) await animateSwap(left, right, true, reorder, settleFocus);
         else if (!fade) reorder();
-        else await crossfadeSwap(left, right, async () => reorder());
+        else await crossfadeSwap(left, right, async () => { reorder(); settleFocus(); });
       }
     } finally {
       swappingPanes = false;
       movingDocuments = false;
       reconcileTabs();
+      if (fade || slide) settleFocus();
     }
   };
   /*
@@ -4182,7 +4200,7 @@ function App() {
   const paneRowActions = (pane: PaneKey) => <Show when={splitShown()}>
     <PaneActions>
       <Show when={canDock(pane)}><PaneAction label="Move to dock" onClick={() => dockPane(pane)}><PanelRightIcon /></PaneAction></Show>
-      <Show when={swapPartner(pane) !== null}><PaneAction aria-label="Swap with the pane beside" title="Swap" onPointerDown={() => { keyboardBeforePress = keyboardPane(); }} onClick={(event) => { const target = swapTarget(pane); keyboardBeforePress = null; if (target !== null) void swapPanes(pane, event.shiftKey, target); }}><ArrowLeftRightIcon /></PaneAction></Show>
+      <Show when={swapPartner(pane) !== null}><PaneAction aria-label="Swap with the pane beside" title="Swap" onPointerDown={() => { keyboardBeforePress = keyboardPane(); }} onClick={(event) => { const target = swapTarget(pane); keyboardBeforePress = null; if (target !== null) void swapPanes(pane, event.shiftKey, target, true, paneBeforePress ?? keyboardPane()); }}><ArrowLeftRightIcon /></PaneAction></Show>
       <Show when={pane !== "main" || shownSlots()[0] !== undefined}><PaneAction aria-label="Close this pane" title="Close" onClick={() => closePane(pane)}><XIcon /></PaneAction></Show>
     </PaneActions>
   </Show>;
