@@ -24,9 +24,11 @@ import { NotificationToaster, toast } from "@/components/notifications";
 import { DefaultMeteorShower } from "@jask-aran/solid-components/meteor-shower";
 import "@jask-aran/solid-components/meteor-shower.css";
 import { phoneLayerOpen } from "@/components/phone-overlays";
-import { attachRowMenus, Button, MenuItem, Spinner } from "@/components/primitives";
-import { Menu, MenuContent, MenuControl, MenuRow, MenuSection } from "@/components/menus";
+import { Button, Spinner } from "@/components/ui/controls";
+import { attachRowMenus, Menu, MenuContent, MenuControl, MenuRow, MenuSection } from "@/components/menus";
 import { Header, HeaderCrumb } from "@/components/ui/header";
+import { FileHead } from "@/components/ui/file";
+import { FileEmpty, FileEmptySide } from "@/components/ui/viewer";
 import { DragPill, DropWash, PaneAction, PaneActions, PaneEdge, PaneTab, TabPlace, PaneTabRow, PaneTabs } from "@/components/ui/pane";
 import { ChatHeader, Conversation } from "./chat/chat-screen";
 import { api, apiWhenServed, asList, pathChatId, pathProjectId, projectMatchesPath, projectPath } from "./api/client";
@@ -2717,7 +2719,7 @@ function App() {
     const held = draggedPane === null && parseFileView(draggedView) ? parseFileView(viewOf(pane)) : null;
     const fifth = viewer && zone !== "middle" ? zone : null;
     if (held?.length && !fifth && event.target instanceof Element) {
-      const column = event.target.closest<HTMLElement>(".workspace-file-viewer > .workspace-preview");
+      const column = event.target.closest<HTMLElement>(".ui-file-viewer > .ui-file");
       const hint = (next: { zone: "side" | "column" | "fill"; side?: number; text: string } | null) => {
         if (!next) { setDocDrop(null); return void setDragHint(null); }
         setDragHint({ x: event.clientX, y: event.clientY, text: next.text, icon: next.zone === "column" ? "column" : "tab" });
@@ -2726,11 +2728,11 @@ function App() {
         setDocDrop({ pane, zone: next.zone, side: next.side, rect: { left: 0, top: 0, width: 0, height: 0 } });
       };
       if (!column) return hint(null);
-      if (column.classList.contains("file-viewer-empty-side")) return hint({ zone: "fill", text: "Open in this column" });
-      const side = [...column.parentElement!.children].filter((child) => child.classList.contains("workspace-preview") && !child.classList.contains("file-viewer-empty-side")).indexOf(column);
+      if (column.classList.contains("ui-file-empty-side")) return hint({ zone: "fill", text: "Open in this column" });
+      const side = [...column.parentElement!.children].filter((child) => child.classList.contains("ui-file") && !child.classList.contains("ui-file-empty-side")).indexOf(column);
       const own = draggedFileTab?.pane === pane ? draggedFileTab : null;
       const rect = column.getBoundingClientRect();
-      const beside = held.length === 1 && !hasEmptySide(pane) && !event.target.closest(".workspace-preview-header") && event.clientX > rect.left + rect.width / 2;
+      const beside = held.length === 1 && !hasEmptySide(pane) && !event.target.closest(".ui-file-head") && event.clientX > rect.left + rect.width / 2;
       if (beside) return hint(own && (fileTabsOf(pane, own.side)?.entries.length ?? 1) < 2 ? null : { zone: "column", text: "Open in a new column" });
       return hint(own?.side === side ? null : { zone: "side", side, text: "Add as a tab here" });
     }
@@ -2935,12 +2937,12 @@ function App() {
     let tries = 0;
     const land = () => {
       const surface = paneElement(pane)?.querySelector<HTMLElement>(".file-viewer-surface");
-      const columns = [...(surface?.querySelectorAll<HTMLElement>(".workspace-file-viewer > .workspace-preview:not(.file-viewer-empty-side)") ?? [])];
-      const column = side >= columns.length ? surface?.querySelector<HTMLElement>(".file-viewer-empty-side") : columns[side];
+      const columns = [...(surface?.querySelectorAll<HTMLElement>(".ui-file-viewer > .ui-file:not(.ui-file-empty-side)") ?? [])];
+      const column = side >= columns.length ? surface?.querySelector<HTMLElement>(".ui-file-empty-side") : columns[side];
       const active = document.activeElement;
       if (column?.contains(active) && active !== column) return;
       // Focus taken elsewhere meanwhile is left there; the pane's own frame or a column is not elsewhere.
-      const idle = !active || active === document.body || Boolean(paneElement(pane)?.contains(active) && active.matches(".file-viewer-surface, .workspace-file-viewer > .workspace-preview"));
+      const idle = !active || active === document.body || Boolean(paneElement(pane)?.contains(active) && active.matches(".file-viewer-surface, .ui-file-viewer > .ui-file"));
       if (tries && !idle) return;
       const editor = column?.querySelector<HTMLElement>(".cm-content");
       (editor ?? column ?? surface)?.focus({ preventScroll: true });
@@ -3041,7 +3043,7 @@ function App() {
     return <div class="workspace-split-surface file-viewer-surface" tabIndex={-1}>
       <Show when={entries().length} fallback={<>
         <Header actions={paneTabActions(pane)}><HeaderCrumb title="No file open" /></Header>
-        <div class="file-viewer-empty" role="status">Open a file from Files, or Ctrl-click one to add it as a tab.</div>
+        <FileEmpty role="status">Open a file from Files, or Ctrl-click one to add it as a tab.</FileEmpty>
       </>}>
         <FileViewer entries={entries()} focused={keyboardPane() === pane ? fileFocus()[String(pane)] ?? 0 : -1} wrap={(side) => sideWrap(pane, side)} onToggleWrap={(side) => toggleSideWrap(pane, side)} commentChatId={focusedChat().loadedId()}
           tabs={(side) => fileSideTabs(pane, side)} paneActions={() => paneTabActions(pane)}
@@ -3049,13 +3051,13 @@ function App() {
           share={sideShares()[String(pane)]} onShare={(share) => setSideShares((current) => ({ ...current, [String(pane)]: share }))}
           splitEmpty={hasEmptySide(pane)} emptyFirst={emptyFirst(pane)}
           emptySide={<Show when={hasEmptySide(pane)}>
-            <section class="workspace-preview file-viewer-empty-side" tabIndex={-1} style={emptyFirst(pane) ? { order: -1 } : undefined} data-focused={keyboardPane() === pane && emptyFocused(pane)} onPointerDown={() => { focusFileEntry(pane, 1); setFilePane(pane); }}>
-              <header class="workspace-preview-header">
+            <FileEmptySide tabIndex={-1} style={emptyFirst(pane) ? { order: -1 } : undefined} focused={keyboardPane() === pane && emptyFocused(pane)} onPointerDown={() => { focusFileEntry(pane, 1); setFilePane(pane); }}>
+              <FileHead>
                 <PaneTabRow><PaneTabs><PaneTab none lit title="No file open" closeLabel="Close this side" closeTitle="Close this side" onClose={() => closeEmptySide(pane)} /></PaneTabs></PaneTabRow>
                 <Show when={!emptyFirst(pane)}>{paneTabActions(pane)}</Show>
-              </header>
-              <div class="file-viewer-empty" role="status">Open a file from Files to show it here.</div>
-            </section>
+              </FileHead>
+              <FileEmpty role="status">Open a file from Files to show it here.</FileEmpty>
+            </FileEmptySide>
           </Show>}
           onFocusEntry={(index) => { focusFileEntry(pane, index); setFilePane(pane); }} onSplit={() => splitFileViewer(pane)} onCloseEntry={async (index) => { const entry = entries()[index]; if (entry) await closeFileTab(pane, index, fileEntryKey(entry)); }}
           onSetMode={(index, mode) => setFileMode(pane, index, mode)}
@@ -3839,9 +3841,9 @@ function App() {
     focusPane(free);
   };
   const fileSideMenu = (pane: PaneKey, side: number) => <>
-    <Show when={(fileTabsOf(pane, side)?.entries.length ?? 0) > 1}><MenuItem onSelect={() => closeOtherTabs(pane, side)}><XIcon />Close other tabs</MenuItem></Show>
-    <Show when={(parseFileView(viewOf(pane))?.length ?? 0) === 2 && roomBeside(formatFileView([parseFileView(viewOf(pane))![side]!]))}><MenuItem onSelect={() => moveSideToPane(pane, side)}><PanelRightIcon />Move to new pane</MenuItem></Show>
-    <MenuItem onSelect={() => closeSide(pane, side)}><XIcon />Close side</MenuItem>
+    <Show when={(fileTabsOf(pane, side)?.entries.length ?? 0) > 1}><MenuRow onSelect={() => closeOtherTabs(pane, side)} icon={<XIcon />}>Close other tabs</MenuRow></Show>
+    <Show when={(parseFileView(viewOf(pane))?.length ?? 0) === 2 && roomBeside(formatFileView([parseFileView(viewOf(pane))![side]!]))}><MenuRow onSelect={() => moveSideToPane(pane, side)} icon={<PanelRightIcon />}>Move to new pane</MenuRow></Show>
+    <MenuRow onSelect={() => closeSide(pane, side)} icon={<XIcon />}>Close side</MenuRow>
   </>;
   const fileSideTabs = (pane: PaneKey, side: number) => {
     const row = createTabStrip({

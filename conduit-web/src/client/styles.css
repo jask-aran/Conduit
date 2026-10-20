@@ -118,7 +118,6 @@ svg.lucide { stroke-width: 2.4; }
 /* Inset panel: the rounded fill sits directly on the darker frame. */
 .chat-main { --chat-header-height: 44.8px; position: relative; isolation: isolate; display: flex; min-width: 0; height: calc(100dvh - 12.8px); margin: 6.4px 8px 6.4px 1.6px; flex: 1; flex-direction: column; overflow: hidden; container-type: inline-size; container-name: chat-main; border-radius: 12.8px; background: var(--background); color: var(--foreground); }
 /* A file viewer with no file showing stays open, saying how to fill it. */
-.file-viewer-empty { display: grid; flex: 1; place-items: center; padding: 24px; color: var(--muted-foreground); font-size: 11.2px; text-align: center; }
 .workspace-warning { position: relative; z-index: 2; display: flex; width: min(var(--composer-desktop-reference-width), calc(100% - 38.4px)); gap: 8px; margin: 6.4px auto; padding: 9.6px; border: 0.8px solid var(--border); border-radius: 8px; }
 .workspace-warning svg { width: 14.4px; flex: none; }
 .workspace-warning p { margin: 2.4px 0 0; color: var(--muted-foreground); font-size: 10.4px; }
@@ -251,9 +250,9 @@ svg.lucide { stroke-width: 2.4; }
 .chat-bootstrap { display: grid; min-height: 100%; place-items: center; color: var(--muted-foreground); font-size: 11.2px; }
 
 
-.attachment-tray, .ui-tree, .workspace-preview pre, .ui-change-list, .ui-patch { scrollbar-color: var(--native-scrollbar-color); scrollbar-width: var(--native-scrollbar-width); }
-.attachment-tray::-webkit-scrollbar, .ui-tree::-webkit-scrollbar, .workspace-preview pre::-webkit-scrollbar, .ui-change-list::-webkit-scrollbar, .ui-patch::-webkit-scrollbar { width: 5.6px; height: 5.6px; }
-.attachment-tray::-webkit-scrollbar-thumb, .ui-tree::-webkit-scrollbar-thumb, .workspace-preview pre::-webkit-scrollbar-thumb, .ui-change-list::-webkit-scrollbar-thumb, .ui-patch::-webkit-scrollbar-thumb { border: 1.6px solid transparent; border-radius: 999px; background: color-mix(in oklch, var(--foreground), transparent 72%); background-clip: padding-box; }
+.attachment-tray, .ui-tree, .ui-change-list, .ui-patch { scrollbar-color: var(--native-scrollbar-color); scrollbar-width: var(--native-scrollbar-width); }
+.attachment-tray::-webkit-scrollbar, .ui-tree::-webkit-scrollbar, .ui-change-list::-webkit-scrollbar, .ui-patch::-webkit-scrollbar { width: 5.6px; height: 5.6px; }
+.attachment-tray::-webkit-scrollbar-thumb, .ui-tree::-webkit-scrollbar-thumb, .ui-change-list::-webkit-scrollbar-thumb, .ui-patch::-webkit-scrollbar-thumb { border: 1.6px solid transparent; border-radius: 999px; background: color-mix(in oklch, var(--foreground), transparent 72%); background-clip: padding-box; }
 
 .workspace-warning,
 .attachment-card {
@@ -467,9 +466,9 @@ svg.lucide { stroke-width: 2.4; }
 .chat-bootstrap { display: grid; min-height: 100%; place-items: center; color: var(--muted-foreground); font-size: 14px; }
 
 
-.attachment-tray, .ui-tree, .workspace-preview pre, .ui-change-list, .ui-patch { scrollbar-color: var(--native-scrollbar-color); scrollbar-width: var(--native-scrollbar-width); }
-.attachment-tray::-webkit-scrollbar, .ui-tree::-webkit-scrollbar, .workspace-preview pre::-webkit-scrollbar, .ui-change-list::-webkit-scrollbar, .ui-patch::-webkit-scrollbar { width: 7px; height: 7px; }
-.attachment-tray::-webkit-scrollbar-thumb, .ui-tree::-webkit-scrollbar-thumb, .workspace-preview pre::-webkit-scrollbar-thumb, .ui-change-list::-webkit-scrollbar-thumb, .ui-patch::-webkit-scrollbar-thumb { border: 2px solid transparent; border-radius: 999px; background: color-mix(in oklch, var(--foreground), transparent 72%); background-clip: padding-box; }
+.attachment-tray, .ui-tree, .ui-change-list, .ui-patch { scrollbar-color: var(--native-scrollbar-color); scrollbar-width: var(--native-scrollbar-width); }
+.attachment-tray::-webkit-scrollbar, .ui-tree::-webkit-scrollbar, .ui-change-list::-webkit-scrollbar, .ui-patch::-webkit-scrollbar { width: 7px; height: 7px; }
+.attachment-tray::-webkit-scrollbar-thumb, .ui-tree::-webkit-scrollbar-thumb, .ui-change-list::-webkit-scrollbar-thumb, .ui-patch::-webkit-scrollbar-thumb { border: 2px solid transparent; border-radius: 999px; background: color-mix(in oklch, var(--foreground), transparent 72%); background-clip: padding-box; }
 
 .workspace-warning,
 .attachment-card {

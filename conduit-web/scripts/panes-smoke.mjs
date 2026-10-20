@@ -108,14 +108,14 @@ const open = async (page) => {
 };
 const navFiles = (page) => page.locator('.workspace-panel [role="treeitem"][data-path]:not([aria-expanded])');
 // n columns, each headed by its tab.
-const twoColumns = (page) => until(page, () => { const columns = [...document.querySelectorAll(".workspace-file-viewer > .workspace-preview")]; return columns.length === 2 && columns.every((column) => column.querySelector(".ui-tab")); });
+const twoColumns = (page) => until(page, () => { const columns = [...document.querySelectorAll(".ui-file-viewer > .ui-file")]; return columns.length === 2 && columns.every((column) => column.querySelector(".ui-tab")); });
 const until = async (page, fn, arg, timeout = 4000) => page.waitForFunction(fn, arg, { timeout, polling: 50 }).then(() => true, () => false);
-const columns = (page) => page.evaluate(() => [...document.querySelectorAll(".workspace-file-viewer > .workspace-preview")].map((column) =>
-  column.classList.contains("file-viewer-empty-side") ? "EMPTY" : [...column.querySelectorAll(".ui-tab")].map((tab) => tab.textContent.trim() + (tab.hasAttribute("data-lit") ? "*" : "")).join("|")));
+const columns = (page) => page.evaluate(() => [...document.querySelectorAll(".ui-file-viewer > .ui-file")].map((column) =>
+  column.classList.contains("ui-file-empty-side") ? "EMPTY" : [...column.querySelectorAll(".ui-tab")].map((tab) => tab.textContent.trim() + (tab.hasAttribute("data-lit") ? "*" : "")).join("|")));
 const focusIn = (page) => page.evaluate(() => {
   const active = document.activeElement;
-  const column = active?.closest(".workspace-file-viewer > .workspace-preview");
-  return active?.closest(".workspace-file-viewer") ? `viewer:${column ? [...column.parentElement.children].filter((child) => child.classList.contains("workspace-preview")).indexOf(column) : "?"}`
+  const column = active?.closest(".ui-file-viewer > .ui-file");
+  return active?.closest(".ui-file-viewer") ? `viewer:${column ? [...column.parentElement.children].filter((child) => child.classList.contains("ui-file")).indexOf(column) : "?"}`
     : active?.closest("[data-pane-slot]") ? `slot:${active.tagName}.${String(active.className).slice(0, 40)}` : active?.closest(".workspace-panel") ? "dock" : "main";
 });
 const fileName = (page, index) => navFiles(page).nth(index).getAttribute("data-path");
@@ -138,9 +138,9 @@ await scenario("opening a file gives its viewer the keyboard and marks it in Fil
   await open(page);
   const name = await fileName(page, 0);
   await navFiles(page).nth(0).click();
-  check("viewer opened", await until(page, () => document.querySelector("[data-pane-slot] .workspace-file-viewer")), `${name} -> ${decodeURIComponent(page.url().replace(origin, ""))}`);
+  check("viewer opened", await until(page, () => document.querySelector("[data-pane-slot] .ui-file-viewer")), `${name} -> ${decodeURIComponent(page.url().replace(origin, ""))}`);
   // A cold first load fetches the viewer's chunks: allow it the 6s focus waits.
-  check("focus in the viewer", await until(page, () => document.activeElement?.closest(".workspace-file-viewer .cm-content") || document.activeElement?.closest(".workspace-file-viewer"), undefined, 8000), await focusIn(page));
+  check("focus in the viewer", await until(page, () => document.activeElement?.closest(".ui-file-viewer .cm-content") || document.activeElement?.closest(".ui-file-viewer"), undefined, 8000), await focusIn(page));
   check("file bold as focused", await until(page, (path) => document.querySelector(`[data-path="${CSS.escape(path)}"][data-open-file="focused"]`), name));
   await page.locator(".chat-main").first().click({ position: { x: 300, y: 400 } }).catch(() => {});
   check("file still bold once focus leaves", await until(page, (path) => document.querySelector(`[data-path="${CSS.escape(path)}"][data-open-file="shown"]`), name));
@@ -150,7 +150,7 @@ await scenario("click replaces, Ctrl keeps as a tab, Alt opens a column; tabs su
   await open(page);
   const names = await Promise.all([0, 1, 2, 3, 4].map((index) => fileName(page, index)));
   await navFiles(page).nth(0).click();
-  await until(page, () => document.querySelector(".workspace-file-viewer"));
+  await until(page, () => document.querySelector(".ui-file-viewer"));
   await navFiles(page).nth(1).click();
   check("click replaced", await until(page, (n) => document.querySelectorAll("[data-file-side] .ui-tab").length === 1 && document.querySelector("[data-file-side] .ui-tab")?.textContent.includes(n), names[1]), JSON.stringify(await columns(page)));
   await navFiles(page).nth(2).click({ modifiers: ["Control"] });
@@ -165,22 +165,22 @@ await scenario("click replaces, Ctrl keeps as a tab, Alt opens a column; tabs su
   const bare = async () => JSON.stringify((await columns(page)).map((column) => column.replaceAll("*", "")));
   const before = await bare();
   await page.reload();
-  check("tabs survive a reload", await until(page, (want) => JSON.stringify([...document.querySelectorAll(".workspace-file-viewer > .workspace-preview")].map((column) => [...column.querySelectorAll(".ui-tab")].map((tab) => tab.textContent.trim()).join("|"))) === want, before, 8000), `${before} vs ${await bare()}`);
+  check("tabs survive a reload", await until(page, (want) => JSON.stringify([...document.querySelectorAll(".ui-file-viewer > .ui-file")].map((column) => [...column.querySelectorAll(".ui-tab")].map((tab) => tab.textContent.trim()).join("|"))) === want, before, 8000), `${before} vs ${await bare()}`);
 });
 
 await scenario("swap trades columns; a column's last tab dragged away leaves it empty", async (page, check) => {
   await open(page);
   await navFiles(page).nth(0).click();
-  await until(page, () => document.querySelector(".workspace-file-viewer"));
+  await until(page, () => document.querySelector(".ui-file-viewer"));
   await navFiles(page).nth(1).click({ modifiers: ["Alt"] });
   await twoColumns(page);
   const [a, b] = await columns(page);
-  await page.locator(".file-viewer-swap").click();
-  check("swapped", await until(page, (want) => [...document.querySelectorAll(".workspace-file-viewer > .workspace-preview")].map((column) => column.querySelector(".ui-tab")?.textContent.trim()).join() === want, [b, a].map((tab) => tab.replace("*", "")).join()), JSON.stringify(await columns(page)));
-  const viewer = page.locator(".workspace-file-viewer > .workspace-preview");
+  await page.locator(".ui-file-swap").click();
+  check("swapped", await until(page, (want) => [...document.querySelectorAll(".ui-file-viewer > .ui-file")].map((column) => column.querySelector(".ui-tab")?.textContent.trim()).join() === want, [b, a].map((tab) => tab.replace("*", "")).join()), JSON.stringify(await columns(page)));
+  const viewer = page.locator(".ui-file-viewer > .ui-file");
   const left = await viewer.nth(0).boundingBox();
   await viewer.nth(1).locator(".ui-tab").first().dragTo(viewer.nth(0), { targetPosition: { x: left.width * 0.6, y: 300 } });
-  check("right column left empty", await until(page, () => document.querySelector(".file-viewer-empty-side")), JSON.stringify(await columns(page)));
+  check("right column left empty", await until(page, () => document.querySelector(".ui-file-empty-side")), JSON.stringify(await columns(page)));
   const after = await columns(page);
   check("left column took the tab", after[0]?.split("|").length === 2, JSON.stringify(after));
   check("still one file viewer pane", await page.locator("[data-pane-slot]").count() === 1);
@@ -189,7 +189,7 @@ await scenario("swap trades columns; a column's last tab dragged away leaves it 
 await scenario("drag pills and washes name every target", async (page, check) => {
   await open(page);
   await navFiles(page).nth(0).click();
-  await until(page, () => document.querySelector("[data-pane-slot] .workspace-file-viewer"));
+  await until(page, () => document.querySelector("[data-pane-slot] .ui-file-viewer"));
   const viewer = page.locator("[data-pane-slot]").first();
   const box = await viewer.boundingBox();
   const source = navFiles(page).nth(1);
@@ -213,14 +213,14 @@ await scenario("drag pills and washes name every target", async (page, check) =>
 await scenario("split opens an empty column; narrowing folds actions in order into the ⋯", async (page, check) => {
   await open(page);
   await navFiles(page).nth(0).click();
-  await until(page, () => document.querySelector(".workspace-file-viewer"));
-  await page.locator('.workspace-file-viewer [aria-label="Open this file again beside"]').click();
-  check("empty column", await until(page, () => document.querySelector(".file-viewer-empty-side")));
+  await until(page, () => document.querySelector(".ui-file-viewer"));
+  await page.locator('.ui-file-viewer [aria-label="Open this file again beside"]').click();
+  check("empty column", await until(page, () => document.querySelector(".ui-file-empty-side")));
   await navFiles(page).nth(1).click();
-  check("a file fills it", await until(page, () => !document.querySelector(".file-viewer-empty-side") && document.querySelectorAll(".workspace-file-viewer > .workspace-preview").length === 2), JSON.stringify(await columns(page)));
-  const shares = () => page.evaluate(() => [...document.querySelectorAll(".workspace-file-viewer > .workspace-preview")].map((column) => Math.round(column.getBoundingClientRect().width)));
+  check("a file fills it", await until(page, () => !document.querySelector(".ui-file-empty-side") && document.querySelectorAll(".ui-file-viewer > .ui-file").length === 2), JSON.stringify(await columns(page)));
+  const shares = () => page.evaluate(() => [...document.querySelectorAll(".ui-file-viewer > .ui-file")].map((column) => Math.round(column.getBoundingClientRect().width)));
   const before = await shares();
-  const divider = page.locator(".file-viewer-divider");
+  const divider = page.locator(".ui-file-divider");
   for (let step = 0; step < 5; step++) {
     const box = await divider.boundingBox();
     await page.mouse.move(box.x + box.width / 2, box.y + 200);
@@ -231,12 +231,12 @@ await scenario("split opens an empty column; narrowing folds actions in order in
   const after = await shares();
   check("divider resizes the columns", after[0] < before[0] - 100, `${before} -> ${after}`);
   await page.waitForTimeout(300);
-  const folded = await page.evaluate(() => document.querySelector(".workspace-file-viewer > .workspace-preview .workspace-preview-header")?.dataset.foldedActions ?? "");
+  const folded = await page.evaluate(() => document.querySelector(".ui-file-viewer > .ui-file .ui-file-head")?.dataset.foldedActions ?? "");
   const order = folded.split(",").filter(Boolean).map(Number);
   check("some actions folded", order.length > 0, folded);
   check("folded lowest priority first", order.every((value, index) => index === 0 || value > order[index - 1]) && order[0] === 0, folded);
-  check("no header overflows", await page.evaluate(() => [...document.querySelectorAll(".workspace-file-viewer .workspace-preview-header")].every((header) => header.scrollWidth <= header.clientWidth + 1)));
-  await page.locator(".workspace-file-viewer .workspace-preview-more").first().click();
+  check("no header overflows", await page.evaluate(() => [...document.querySelectorAll(".ui-file-viewer .ui-file-head")].every((header) => header.scrollWidth <= header.clientWidth + 1)));
+  await page.locator(".ui-file-viewer .ui-file-button[data-more]").first().click();
   const items = await page.evaluate(() => [...document.querySelectorAll('[role="menuitem"]')].map((item) => item.textContent.trim()));
   for (const want of ["Wrap lines", "Copy contents", "Copy path"]) check(`⋯ lists ${want}`, items.some((item) => item.startsWith(want)), items.join(" | "));
   check("⋯ lists the folded download", !order.includes(0) || items.some((item) => /download/i.test(item)), items.join(" | "));
@@ -246,29 +246,29 @@ await scenario("split opens an empty column; narrowing folds actions in order in
 await scenario("focus: Alt+] steps tabs across columns; Ctrl+Shift+2 steps panes; closing returns it", async (page, check) => {
   await open(page);
   await navFiles(page).nth(0).click();
-  await until(page, () => document.querySelector(".workspace-file-viewer"));
+  await until(page, () => document.querySelector(".ui-file-viewer"));
   await navFiles(page).nth(1).click({ modifiers: ["Alt"] });
   await twoColumns(page);
-  await page.locator(".workspace-file-viewer > .workspace-preview").nth(0).click({ position: { x: 200, y: 300 } });
-  check("click takes column 0", await until(page, () => document.activeElement?.closest(".workspace-file-viewer > .workspace-preview:first-of-type") || document.activeElement?.closest(".workspace-file-viewer") && [...document.querySelectorAll(".workspace-file-viewer > .workspace-preview")][0].contains(document.activeElement)), await focusIn(page));
+  await page.locator(".ui-file-viewer > .ui-file").nth(0).click({ position: { x: 200, y: 300 } });
+  check("click takes column 0", await until(page, () => document.activeElement?.closest(".ui-file-viewer > .ui-file:first-of-type") || document.activeElement?.closest(".ui-file-viewer") && [...document.querySelectorAll(".ui-file-viewer > .ui-file")][0].contains(document.activeElement)), await focusIn(page));
   const steps = [];
   for (let step = 0; step < 3; step++) { await page.keyboard.press("Alt+BracketRight"); await page.waitForTimeout(250); steps.push(await focusIn(page)); }
   check("Alt+] steps the tabs of both columns", steps.join() === "viewer:1,viewer:0,viewer:1", steps.join());
   await page.keyboard.press("Control+Shift+Digit2");
   check("Ctrl+Shift+2 leaves the viewer for pane A", await until(page, () => !document.activeElement?.closest("[data-pane-slot]")), await focusIn(page));
   await page.keyboard.press("Control+Shift+Digit2");
-  check("Ctrl+Shift+2 comes back to the viewer", await until(page, () => document.activeElement?.closest(".workspace-file-viewer")), await focusIn(page));
+  check("Ctrl+Shift+2 comes back to the viewer", await until(page, () => document.activeElement?.closest(".ui-file-viewer")), await focusIn(page));
   const place = () => page.evaluate(() => document.querySelector('[data-region="workspace-panel"] .ui-tool-head')?.textContent?.trim().slice(0, 60));
   const viewerPlace = await place();
   await page.locator("[data-pane-slot] [aria-label='Close this pane']").first().click();
-  check("closing returns focus to pane A", await until(page, () => !document.querySelector("[data-pane-slot] .workspace-file-viewer") && !document.activeElement?.closest(".workspace-panel")), await focusIn(page));
+  check("closing returns focus to pane A", await until(page, () => !document.querySelector("[data-pane-slot] .ui-file-viewer") && !document.activeElement?.closest(".workspace-panel")), await focusIn(page));
   check("the dock names pane A's place", (await place()) === viewerPlace, `${viewerPlace} vs ${await place()}`);
 });
 
 await scenario("dragging the dock's edge and a pane's edge resizes them in place", async (page, check) => {
   await open(page);
   await navFiles(page).nth(0).click();
-  await until(page, () => document.querySelector("[data-pane-slot] .workspace-file-viewer"));
+  await until(page, () => document.querySelector("[data-pane-slot] .ui-file-viewer"));
   const geometry = () => page.evaluate(() => { const box = (selector) => { const r = document.querySelector(selector)?.getBoundingClientRect(); return r ? { left: Math.round(r.left), right: Math.round(r.right) } : null; }; return { dock: box(".workspace-panel"), main: box(".chat-main"), slot: box("[data-pane-slot]") }; });
   const dragBy = async (selector, dx) => {
     const handle = await page.locator(selector).first().boundingBox();
@@ -300,7 +300,7 @@ await scenario("a project page's files open as the navigator's", async (page, ch
   if (!await rows.count()) return `${project.name}'s page lists no files; try --project <name>`;
   const name = await rows.first().getAttribute("title");
   await rows.first().click();
-  check("opened in a viewer with the keyboard", await until(page, () => document.activeElement?.closest("[data-pane-slot] .workspace-file-viewer")), await focusIn(page));
+  check("opened in a viewer with the keyboard", await until(page, () => document.activeElement?.closest("[data-pane-slot] .ui-file-viewer")), await focusIn(page));
   check("its tab", (await columns(page))[0]?.includes(name), JSON.stringify(await columns(page)));
 });
 

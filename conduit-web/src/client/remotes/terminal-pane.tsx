@@ -8,18 +8,10 @@ import { createEffect, createMemo, createSignal, For, on, onCleanup, onMount, Sh
 import { ArrowLeftIcon, CheckIcon, ChevronDownIcon, Columns2Icon, EllipsisIcon, FocusIcon, KeyboardIcon, Maximize2Icon, Minimize2Icon, GripVerticalIcon, PencilIcon, PlusIcon, Settings2Icon, TerminalIcon, Trash2Icon, UnplugIcon } from "lucide-solid";
 import { toast } from "@/components/notifications";
 
-import {
-  Menu,
-  MenuContent,
-  MenuGroup,
-  MenuItem,
-  MenuLabel,
-  MenuSeparator,
-  MenuTrigger,
-  Popover,
-  PopoverContent,
-  Spinner,
-} from "@/components/primitives";
+import { Menu, MenuContent, MenuControl, MenuSection, MenuRow, Popover, PopoverContent } from "@/components/menus";
+import { Rule, Section, MenuNote } from "@/components/ui/popover";
+import { Spinner } from "@/components/ui/controls";
+import { TermShortcutRow, TermShortcutGrip, TermShortcutTag, TermMenuAction } from "@/components/ui/terminal";
 import { api } from "../api/client";
 import type { Connectivity } from "../state/runtime";
 import { onPathChange } from "../platform/servers";
@@ -1085,16 +1077,15 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
     </Dialog>
     <Popover open={shortcutEditorOpen()} anchorRef={shortcutAnchor}
       onOpenChange={(open) => { setShortcutEditorOpen(open); if (!open) setEditingShortcut(null); }}>
-      <PopoverContent class="terminal-menu" aria-label="Terminal shortcuts"
+      <PopoverContent wide aria-label="Terminal shortcuts"
         onPointerDownOutside={(event) => { if (shortcutGear?.contains(event.target as Node)) event.preventDefault(); }}>
-        <div class="terminal-menu-label">Shortcuts</div>
-        <Show when={shortcuts().length > 0 || editingShortcut()} fallback={<div class="terminal-menu-empty">No shortcuts yet. Add a command you run often.</div>}>
-          <div class="terminal-menu-list">
+        <Section title="Shortcuts" scroll>
+        <Show when={shortcuts().length > 0 || editingShortcut()} fallback={<MenuNote>No shortcuts yet. Add a command you run often.</MenuNote>}>
             <For each={shortcuts()}>{(shortcut, index) =>
               <Show when={editingShortcut()?.id !== shortcut.id} fallback={shortcutForm()}>
-                <div class="terminal-menu-row terminal-shortcut-row" draggable="true"
-                  data-dragging={draggingShortcut() === index() ? "true" : undefined}
-                  data-drop-target={shortcutDropTarget() === index() && draggingShortcut() !== index() ? "true" : undefined}
+                <TermShortcutRow label={shortcut.label} detail={`$ ${shortcut.command}`} draggable="true"
+                  dragging={draggingShortcut() === index()}
+                  dropTarget={shortcutDropTarget() === index() && draggingShortcut() !== index()}
                   onClick={() => setEditingShortcut({ ...shortcut })}
                   onDragStart={(event) => { setDraggingShortcut(index()); event.dataTransfer?.setData("text/plain", shortcut.id); }}
                   onDragOver={(event) => { if (draggingShortcut() === null) return; event.preventDefault(); setShortcutDropTarget(index()); }}
@@ -1106,78 +1097,59 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
                     if (from !== null) moveShortcut(from, index());
                   }}
                   onDragEnd={() => { setDraggingShortcut(null); setShortcutDropTarget(null); }}>
-                  <button type="button" class="terminal-menu-grip" aria-label={`Move ${shortcut.label}; use the arrow keys`} title="Drag to reorder"
+                  <TermShortcutGrip aria-label={`Move ${shortcut.label}; use the arrow keys`} title="Drag to reorder"
                     onClick={(event) => event.stopPropagation()}
                     onKeyDown={(event) => {
                       if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
                       event.preventDefault();
                       moveShortcut(index(), index() + (event.key === "ArrowUp" ? -1 : 1));
-                    }}><GripVerticalIcon /></button>
-                  <span class="terminal-menu-copy"><strong>{shortcut.label}</strong><small>$ {shortcut.command}</small></span>
-                  <span class="terminal-menu-tag" title={`${shortcut.target === "new" ? "Runs in a new shell" : "Runs in this shell"}${shortcut.onStart ? "; also when /terminal starts or recovers a shell" : ""}`}>
+                    }}><GripVerticalIcon /></TermShortcutGrip>
+                  <TermShortcutTag title={`${shortcut.target === "new" ? "Runs in a new shell" : "Runs in this shell"}${shortcut.onStart ? "; also when /terminal starts or recovers a shell" : ""}`}>
                     {shortcut.target === "new" ? "new" : "this"}{shortcut.onStart ? " · start" : ""}
-                  </span>
-                  <span class="terminal-menu-actions">
-                    <button type="button" class="terminal-menu-action" aria-label={`Edit ${shortcut.label}`} title="Edit"
-                      onClick={(event) => { event.stopPropagation(); setEditingShortcut({ ...shortcut }); }}><PencilIcon /></button>
-                    <button type="button" class="terminal-menu-action" data-variant="destructive" aria-label={`Remove ${shortcut.label}`} title="Remove"
-                      disabled={shortcutSaving()} onClick={(event) => { event.stopPropagation(); removeShortcut(shortcut.id); }}><Trash2Icon /></button>
-                  </span>
-                </div>
+                  </TermShortcutTag>
+                  <>
+                    <TermMenuAction aria-label={`Edit ${shortcut.label}`} title="Edit"
+                      onClick={(event) => { event.stopPropagation(); setEditingShortcut({ ...shortcut }); }}><PencilIcon /></TermMenuAction>
+                    <TermMenuAction destructive aria-label={`Remove ${shortcut.label}`} title="Remove"
+                      disabled={shortcutSaving()} onClick={(event) => { event.stopPropagation(); removeShortcut(shortcut.id); }}><Trash2Icon /></TermMenuAction>
+                  </>
+                </TermShortcutRow>
               </Show>
             }</For>
             <Show when={editingShortcut() && !shortcuts().some((shortcut) => shortcut.id === editingShortcut()!.id)}>{shortcutForm()}</Show>
-          </div>
         </Show>
-        <Show when={shortcutError()}><p class="terminal-menu-error">{shortcutError()}</p></Show>
-        <div class="terminal-menu-separator" />
-        <button type="button" class="terminal-menu-footer" disabled={shortcuts().length >= 12 || Boolean(editingShortcut())} onClick={addShortcut}>
+        </Section>
+        <Show when={shortcutError()}><MenuNote error>{shortcutError()}</MenuNote></Show>
+        <Rule />
+        <TermButton variant="ghost" size="sm" disabled={shortcuts().length >= 12 || Boolean(editingShortcut())} onClick={addShortcut}>
           <PlusIcon /><span>Add shortcut</span>
-        </button>
+        </TermButton>
       </PopoverContent>
     </Popover>
     <section ref={pane} class="terminal-pane" aria-label="Terminal pane" data-terminal-focused={terminalFocused() ? "true" : "false"} onKeyDown={scopeTerminalKeyboard}>
     <TermHeader actions={<TermActions>
         <Menu onOpenChange={(open) => { if (open) void refreshSessions().catch((cause) => setError((cause as Error).message)); }}>
-          <MenuTrigger class="terminal-sessions-trigger" aria-label="Active terminal sessions" title="Active terminal sessions">
+          <MenuControl as={TermButton} variant="ghost" size="sm" aria-label="Active terminal sessions" title="Active terminal sessions">
             <TerminalIcon /><span>{sessions().length}</span><ChevronDownIcon />
-          </MenuTrigger>
-          <MenuContent class="terminal-menu">
-            <MenuGroup>
-              <MenuLabel class="terminal-menu-label">Active terminals · {props.projectName || "Chats"}</MenuLabel>
-              <Show when={sessions().length > 0} fallback={<div class="terminal-menu-empty">No active terminals in {props.projectName || "Chats"}.</div>}>
+          </MenuControl>
+          <MenuContent>
+            <MenuSection title={`Active terminals · ${props.projectName || "Chats"}`}>
+              <Show when={sessions().length > 0} fallback={<MenuNote>No active terminals in {props.projectName || "Chats"}.</MenuNote>}>
                 <For each={sessions()}>{(session) => {
                   const name = () => session.title || "Shell";
-                  return <div class="terminal-menu-row" data-current={pty()?.id === session.id ? "true" : undefined}>
-                    <MenuItem class="terminal-menu-primary" onSelect={() => void attachSession(session)}>
-                      <span class="terminal-menu-copy"><strong>{name()}</strong><small>{sessionMetadata(session)}</small></span>
-                    </MenuItem>
-                    <span class="terminal-menu-actions">
-                      <Show when={props.onOpenBeside}>
-                        <MenuItem class="terminal-menu-action" aria-label={`Open ${name()} beside`} textValue={`Open ${name()} beside`} onSelect={() => props.onOpenBeside?.(session.id)}>
-                          <Columns2Icon />
-                        </MenuItem>
-                      </Show>
-                      <MenuItem class="terminal-menu-action" aria-label={`Rename ${name()}`} textValue={`Rename ${name()}`} onSelect={() => requestRename(session)}>
-                        <PencilIcon />
-                      </MenuItem>
-                      <MenuItem class="terminal-menu-action" aria-label={`Detach from ${name()}`} textValue={`Detach from ${name()}`}
-                        disabled={pty()?.id !== session.id || connectionState() !== "live"} onSelect={() => detachSession(session)}>
-                        <UnplugIcon />
-                      </MenuItem>
-                      <MenuItem class="terminal-menu-action" variant="destructive" aria-label={`Destroy ${name()}`} textValue={`Destroy ${name()}`}
-                        disabled={sessionBusy() === session.id} onSelect={() => void removeSession(session)}>
-                        <Show when={sessionBusy() === session.id} fallback={<Trash2Icon />}><Spinner /></Show>
-                      </MenuItem>
-                    </span>
-                  </div>;
+                  return <MenuRow {...{ textValue: name() }} checked={pty()?.id === session.id} detail={sessionMetadata(session)} onSelect={() => void attachSession(session)} reveal end={<>
+                    <Show when={props.onOpenBeside}><TermMenuAction aria-label={`Open ${name()} beside`} onClick={(event) => { event.stopPropagation(); props.onOpenBeside?.(session.id); }}><Columns2Icon /></TermMenuAction></Show>
+                    <TermMenuAction aria-label={`Rename ${name()}`} onClick={(event) => { event.stopPropagation(); requestRename(session); }}><PencilIcon /></TermMenuAction>
+                    <TermMenuAction aria-label={`Detach from ${name()}`} disabled={pty()?.id !== session.id || connectionState() !== "live"} onClick={(event) => { event.stopPropagation(); detachSession(session); }}><UnplugIcon /></TermMenuAction>
+                    <TermMenuAction destructive aria-label={`Destroy ${name()}`} disabled={sessionBusy() === session.id} onClick={(event) => { event.stopPropagation(); void removeSession(session); }}><Show when={sessionBusy() === session.id} fallback={<Trash2Icon />}><Spinner /></Show></TermMenuAction>
+                  </>}>{name()}</MenuRow>;
                 }}</For>
               </Show>
-            </MenuGroup>
-            <MenuSeparator />
-            <MenuItem class="terminal-menu-footer" disabled={starting()} onSelect={() => void start()}>
-              <PlusIcon /><span>{starting() ? "Starting…" : "New terminal"}</span>
-            </MenuItem>
+            </MenuSection>
+            <Rule />
+            <MenuRow icon={<PlusIcon />} disabled={starting()} onSelect={() => void start()}>
+              {starting() ? "Starting…" : "New terminal"}
+            </MenuRow>
           </MenuContent>
         </Menu>
         <Show when={pty()?.status === "running"}>
@@ -1232,8 +1204,8 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
       {/* The same shortcuts, for a pane too narrow to lay them out inline. */}
       <TermOverflow>
         <Menu>
-          <MenuTrigger ref={shortcutOverflow} class="terminal-sessions-trigger" aria-label="Terminal shortcuts" title="Terminal shortcuts"><EllipsisIcon /></MenuTrigger>
-          <MenuContent class="terminal-menu" onCloseAutoFocus={(event) => {
+          <MenuControl as={ToolButton} ref={shortcutOverflow} aria-label="Terminal shortcuts" title="Terminal shortcuts"><EllipsisIcon /></MenuControl>
+          <MenuContent onCloseAutoFocus={(event) => {
             // Handing focus back to the trigger would count as a click outside
             // the editor that is about to open, and close it again.
             if (!openEditorAfterMenu) return;
@@ -1241,16 +1213,13 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
             openEditorAfterMenu = false;
             openShortcutEditor();
           }}>
-            <MenuGroup>
-              <MenuLabel class="terminal-menu-label">Shortcuts</MenuLabel>
+            <MenuSection title="Shortcuts">
               <For each={shortcuts()}>{(shortcut) =>
-                <MenuItem class="terminal-menu-row" disabled={starting() || (shortcut.target === "current" && !writable())} onSelect={() => runShortcut(shortcut)}>
-                  <span class="terminal-menu-copy"><strong>{shortcut.label}</strong><small>$ {shortcut.command}</small></span>
-                </MenuItem>
+                <MenuRow {...{ textValue: shortcut.label }} detail={`$ ${shortcut.command}`} disabled={starting() || (shortcut.target === "current" && !writable())} onSelect={() => runShortcut(shortcut)}>{shortcut.label}</MenuRow>
               }</For>
-            </MenuGroup>
-            <MenuSeparator />
-            <MenuItem class="terminal-menu-footer" onSelect={() => { openEditorAfterMenu = true; }}><Settings2Icon /><span>Edit shortcuts…</span></MenuItem>
+            </MenuSection>
+            <Rule />
+            <MenuRow icon={<Settings2Icon />} onSelect={() => { openEditorAfterMenu = true; }}>Edit shortcuts…</MenuRow>
           </MenuContent>
         </Menu>
       </TermOverflow>

@@ -3,7 +3,7 @@ import { batch, createEffect, createSignal, For, on, onCleanup, onMount, Show, t
 import { Portal } from "solid-js/web";
 import { MIN_MAIN_PANE_WIDTH } from "../layout-geometry";
 import { Columns2Icon, FolderIcon, GitCompareArrowsIcon, Maximize2Icon, MessageSquareIcon, Minimize2Icon, PanelRightIcon, TerminalIcon, XIcon } from "lucide-solid";
-import { Spinner } from "@/components/primitives";
+import { Spinner } from "@/components/ui/controls";
 import { HeaderButton } from "@/components/ui/header";
 import { PaneEdge, PaneLoading, ToolHeader, ToolView, ToolViews } from "@/components/ui/pane";
 import { COMMAND_IDS } from "../commands/command-registry";

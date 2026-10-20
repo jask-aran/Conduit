@@ -1,9 +1,11 @@
+import { FileButton } from "@/components/ui/file";
+import { SearchBar, SearchActions, SearchField, searchPanelClass } from "@/components/ui/editor";
 import { SearchQuery, closeSearchPanel, findNext, findPrevious, getSearchQuery, replaceAll, replaceNext, setSearchQuery } from "@codemirror/search";
 import type { EditorView, Panel, ViewUpdate } from "@codemirror/view";
 import { CaseSensitiveIcon, ChevronDownIcon, ChevronUpIcon, RegexIcon, ReplaceAllIcon, ReplaceIcon, WholeWordIcon, XIcon } from "lucide-solid";
 import { createSignal, Show, type Accessor } from "solid-js";
 import { render } from "solid-js/web";
-import { Button, Input } from "@/components/primitives";
+
 
 function nextQuery(query: SearchQuery, change: Partial<Pick<SearchQuery, "search" | "replace" | "caseSensitive" | "regexp" | "wholeWord">>) {
   return new SearchQuery({
@@ -26,15 +28,14 @@ function WorkspaceSearchControls(props: {
   };
   const run = (command: (view: EditorView) => boolean) => command(props.view);
 
-  return <div class="workspace-search-controls" onKeyDown={(event) => {
+  return <SearchBar onKeyDown={(event) => {
     if (event.key !== "Escape") return;
     event.preventDefault();
     run(closeSearchPanel);
     props.view.focus();
   }}>
-    <Input
+    <SearchField
       ref={(element) => element.setAttribute("main-field", "true")}
-      class="workspace-search-field"
       aria-label="Find"
       placeholder="Find"
       value={props.query().search}
@@ -47,8 +48,7 @@ function WorkspaceSearchControls(props: {
       }}
     />
     <Show when={props.editable()}>
-      <Input
-        class="workspace-search-field workspace-replace-field"
+      <SearchField
         aria-label="Replace"
         placeholder="Replace"
         value={props.query().replace}
@@ -61,24 +61,24 @@ function WorkspaceSearchControls(props: {
         }}
       />
     </Show>
-    <div class="workspace-search-actions">
-      <Button variant="ghost" size="icon-sm" aria-label="Previous match" title="Previous match (Shift+Enter)" onClick={() => run(findPrevious)}><ChevronUpIcon /></Button>
-      <Button variant="ghost" size="icon-sm" aria-label="Next match" title="Next match (Enter)" onClick={() => run(findNext)}><ChevronDownIcon /></Button>
-      <Button variant="ghost" size="icon-sm" aria-label="Match case" title="Match case" aria-pressed={props.query().caseSensitive} onClick={() => updateQuery({ caseSensitive: !props.query().caseSensitive })}><CaseSensitiveIcon /></Button>
-      <Button variant="ghost" size="icon-sm" aria-label="Use regular expression" title="Use regular expression" aria-pressed={props.query().regexp} onClick={() => updateQuery({ regexp: !props.query().regexp })}><RegexIcon /></Button>
-      <Button variant="ghost" size="icon-sm" aria-label="Match whole word" title="Match whole word" aria-pressed={props.query().wholeWord} onClick={() => updateQuery({ wholeWord: !props.query().wholeWord })}><WholeWordIcon /></Button>
+    <SearchActions>
+      <FileButton aria-label="Previous match" title="Previous match (Shift+Enter)" onClick={() => run(findPrevious)}><ChevronUpIcon /></FileButton>
+      <FileButton aria-label="Next match" title="Next match (Enter)" onClick={() => run(findNext)}><ChevronDownIcon /></FileButton>
+      <FileButton aria-label="Match case" title="Match case" aria-pressed={props.query().caseSensitive} onClick={() => updateQuery({ caseSensitive: !props.query().caseSensitive })}><CaseSensitiveIcon /></FileButton>
+      <FileButton aria-label="Use regular expression" title="Use regular expression" aria-pressed={props.query().regexp} onClick={() => updateQuery({ regexp: !props.query().regexp })}><RegexIcon /></FileButton>
+      <FileButton aria-label="Match whole word" title="Match whole word" aria-pressed={props.query().wholeWord} onClick={() => updateQuery({ wholeWord: !props.query().wholeWord })}><WholeWordIcon /></FileButton>
       <Show when={props.editable()}>
-        <Button variant="ghost" size="icon-sm" aria-label="Replace next match" title="Replace next match" onClick={() => run(replaceNext)}><ReplaceIcon /></Button>
-        <Button variant="ghost" size="icon-sm" aria-label="Replace all matches" title="Replace all matches" onClick={() => run(replaceAll)}><ReplaceAllIcon /></Button>
+        <FileButton aria-label="Replace next match" title="Replace next match" onClick={() => run(replaceNext)}><ReplaceIcon /></FileButton>
+        <FileButton aria-label="Replace all matches" title="Replace all matches" onClick={() => run(replaceAll)}><ReplaceAllIcon /></FileButton>
       </Show>
-      <Button variant="ghost" size="icon-sm" aria-label="Close search" title="Close search (Escape)" onClick={() => run(closeSearchPanel)}><XIcon /></Button>
-    </div>
-  </div>;
+      <FileButton aria-label="Close search" title="Close search (Escape)" onClick={() => run(closeSearchPanel)}><XIcon /></FileButton>
+    </SearchActions>
+  </SearchBar>;
 }
 
 export function createWorkspaceSearchPanel(view: EditorView): Panel {
   const dom = document.createElement("div");
-  dom.className = "workspace-search-panel";
+  dom.className = searchPanelClass;
   const [query, setQuery] = createSignal(getSearchQuery(view.state));
   const [editable, setEditable] = createSignal(!view.state.readOnly);
   const dispose = render(() => <WorkspaceSearchControls view={view} query={query} editable={editable} />, dom);

@@ -82,3 +82,28 @@
 .ui-term-shortcut-form-actions > [data-on-start] svg { width: var(--icon-sm); height: var(--icon-sm); padding: var(--hairline); border: var(--hairline) solid var(--tint); border-radius: var(--radius-inset); color: transparent; }
 .ui-term-shortcut-form-actions > [data-on-start] svg[data-on="true"] { color: var(--foreground); }
 .ui-term-shortcut-form-actions [data-slot="button"] { min-height: var(--control-sm); height: var(--control-sm); padding-inline: var(--space-md); font-size: var(--text-caption); }
+
+.ui-term-shortcut-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2xs);
+  min-height: var(--control);
+  padding: var(--space-2xs);
+  border-radius: var(--radius-control);
+  cursor: default;
+}
+.ui-term-shortcut-row:hover, .ui-term-shortcut-row:focus-within { background: var(--tint); }
+.ui-term-shortcut-row[data-dragging] { opacity: .45; }
+.ui-term-shortcut-row[data-drop-target] { box-shadow: inset 0 var(--hairline) 0 var(--foreground); }
+.ui-term-shortcut-copy { display: flex; flex: 1; min-width: 0; gap: var(--space-xs); align-items: center; }
+.ui-term-shortcut-copy strong { max-width: 60%; font-size: var(--text-label); }
+.ui-term-shortcut-copy small { flex: 1; min-width: 0; color: var(--muted-foreground); font: var(--text-caption) var(--font-data); }
+.ui-term-shortcut-copy strong, .ui-term-shortcut-copy small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ui-term-shortcut-tag { flex: none; color: var(--muted-foreground); font: var(--text-caption) var(--font-data); }
+.ui-term-shortcut-grip { order: -1; display: inline-flex; align-items: center; justify-content: center; width: var(--control-xs); align-self: stretch; border: 0; padding: 0; background: transparent; color: var(--muted-foreground); cursor: grab; }
+.ui-term-shortcut-grip svg { width: var(--icon-xs); height: var(--icon-xs); }
+
+.ui-term-menu-action[data-destructive]:is(:hover, :focus-visible) {
+  background: color-mix(in oklch, var(--destructive), transparent var(--tone-wash));
+  color: var(--destructive);
+}

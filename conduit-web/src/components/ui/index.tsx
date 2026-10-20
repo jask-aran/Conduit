@@ -35,3 +35,6 @@ export * from "./pane";
 export * from "./source";
 export * from "./history";
 export * from "./terminal";
+export * from "./file";
+export * from "./viewer";
+export * from "./editor";

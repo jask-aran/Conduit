@@ -58,3 +58,25 @@ export const ShortcutTarget = (props: Omit<JSX.HTMLAttributes<HTMLDivElement>, "
 export const ShortcutCommand = (props: Omit<JSX.LabelHTMLAttributes<HTMLLabelElement>, "class">) => <label {...props} class="ui-term-shortcut-command" />;
 /** The on-start choice and the editor's save and cancel controls. */
 export const ShortcutFormActions = (props: Omit<JSX.HTMLAttributes<HTMLDivElement>, "class">) => <div {...props} class="ui-term-shortcut-form-actions" />;
+
+/** A draggable shortcut in the editor, with its command and caller supplied controls. */
+export function TermShortcutRow(props: Omit<JSX.HTMLAttributes<HTMLDivElement>, "class"> & { label: string; detail: string; dragging?: boolean; dropTarget?: boolean }) {
+  const [local, rest] = splitProps(props, ["label", "detail", "dragging", "dropTarget", "children"]);
+  return <div {...rest} class="ui-term-shortcut-row" data-dragging={local.dragging ? "" : undefined} data-drop-target={local.dropTarget ? "" : undefined}>
+    <span class="ui-term-shortcut-copy"><strong>{local.label}</strong><small>{local.detail}</small></span>{local.children}
+  </div>;
+}
+/** A shortcut's drag handle, which also accepts keyboard reorder commands. */
+export function TermShortcutGrip(props: Omit<JSX.ButtonHTMLAttributes<HTMLButtonElement>, "class">) {
+  return <button type="button" {...props} class="ui-term-shortcut-grip" />;
+}
+/** The shortcut's target shell and on-start mark. */
+export function TermShortcutTag(props: Omit<JSX.HTMLAttributes<HTMLSpanElement>, "class">) {
+  return <span {...props} class="ui-term-shortcut-tag" />;
+}
+
+/** A small terminal row action; destructive actions take the danger colour on hover or focus. */
+export function TermMenuAction(props: Omit<JSX.ButtonHTMLAttributes<HTMLButtonElement>, "class"> & { destructive?: boolean }) {
+  const [local, rest] = splitProps(props, ["destructive"]);
+  return <Button variant="ghost" size="icon-xs" {...rest} class="ui-term-menu-action" data-destructive={local.destructive ? "" : undefined} />;
+}
