@@ -17,11 +17,11 @@ const { page, close } = await open({ width: 1900, height: 1100 });
 const [a, b] = await recentChats(page, 2);
 await visit(page, `/chat/${a}?pane=chat%3A${b}`);
 if (await page.locator(".main-split").count() === 0) { await page.keyboard.press("Control+KeyB"); await page.waitForTimeout(800); }
-const beside = page.locator('.workspace-rail [aria-label="Dock beside the panes"]');
+const beside = page.locator('[data-region="workspace-rail"] [aria-label="Dock beside the panes"]');
 if (await beside.count()) await beside.click();
 await page.locator('.main-split [aria-label="Move to dock"]').first().click({ timeout: 10_000 });
 await page.waitForTimeout(800);
-await page.locator('.workspace-rail [aria-label$="(docked)"]').first().click();
+await page.locator('[data-region="workspace-rail"] [aria-label$="(docked)"]').first().click();
 await page.waitForTimeout(1200);
 await page.keyboard.press("Control+Shift+Digit3");
 await page.waitForTimeout(600);
@@ -39,7 +39,7 @@ const sample = () => page.evaluate(() => new Promise((done) => {
     if (performance.now() - t0 < 500) requestAnimationFrame(tick); else done(rows);
   };
   requestAnimationFrame(tick);
-  document.querySelector('.workspace-rail [aria-label^="Dock "][aria-pressed]').click();
+  document.querySelector('[data-region="workspace-rail"] [aria-label^="Dock "][aria-pressed]').click();
 }));
 for (const label of ["beside → over", "over → beside"]) {
   const rows = await sample();

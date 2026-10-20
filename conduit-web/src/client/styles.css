@@ -112,75 +112,13 @@ svg.lucide { stroke-width: 2.4; }
 .model-trigger { display: flex; min-width: 0; align-items: center; gap: 6.4px; border: 0; border-radius: var(--radius-md); background: transparent; color: inherit; }
 /* One icon size across the top of the app, the sidebar's header included. */
 /* On a desktop search and the palette are the right rail's; a phone's header keeps them. */
-.chat-header-actions { display: flex; margin-left: auto; flex: none; align-items: center; gap: 1.6px; }
 /* Sits in the composer's left cluster beside the attach button, at that
    button's height, with the percentage reading as its label. */
 
 /* Inset panel: the rounded fill sits directly on the darker frame. */
 .chat-main { --chat-header-height: 44.8px; position: relative; isolation: isolate; display: flex; min-width: 0; height: calc(100dvh - 12.8px); margin: 6.4px 8px 6.4px 1.6px; flex: 1; flex-direction: column; overflow: hidden; container-type: inline-size; container-name: chat-main; border-radius: 12.8px; background: var(--background); color: var(--foreground); }
-/* The header is a flow item, so it reserves its own height for whatever the
-   pane holds and no surface has to know it is there. It still paints over
-   what runs beneath it -- see `.transcript`, the one surface that asks to. */
-.chat-header { position: relative; z-index: 2; display: flex; height: var(--chat-header-height); flex: none; align-items: center; gap: 6.4px; padding: 6.4px 11.2px; background: linear-gradient(to bottom, var(--background) 0 50%, transparent 100%); }
-.chat-header-title { display: flex; min-width: 0; align-items: center; gap: 5.6px; overflow: hidden; font-size: 11.2px; line-height: 16px; }
-/* A pane's swap and close follow its title, with two or more panes. */
-.pane-tab-actions { display: inline-flex; flex: none; align-items: center; gap: 1.6px; margin-left: 1.6px; }
-.pane-tab-action { display: inline-flex; width: 20px; height: 20px; flex: none; align-items: center; justify-content: center; border: 0; border-radius: var(--radius-md); background: transparent; color: var(--muted-foreground); }
-.pane-tab-action:hover { background: var(--accent); color: var(--foreground); }
-.pane-tab-action svg { width: 12.8px; height: 12.8px; }
-/* A pane's chat tabs (6c), grouped by place: each run from one place is one
-   breadcrumb -- the place's caps label, then the titles with a muted middot
-   between -- and one hairline between runs. Where you are is text alone:
-   the active title and its place white at 660, the rest grey; the wash is
-   only the pointer. Titles reserve their bold width, so switching moves
-   nothing; what does not fit waits in the menu at the row's end. */
-.chat-header-tabs { flex: 1 1 auto; }
-/* With the Tab row setting on, a header holding tabs is a frosted strip, so
-   the row reads over the transcript scrolling under it. */
-:root[data-tab-frost] .chat-header:has(.chat-header-tabs) { background: color-mix(in oklch, var(--background), transparent 30%); -webkit-backdrop-filter: blur(19.2px) saturate(125%); backdrop-filter: blur(19.2px) saturate(125%); }
-.pane-tabs { display: flex; height: 100%; min-width: 0; flex: 1; align-items: center; overflow: hidden; }
-.chat-header-title .pane-tab-group { position: relative; display: inline-flex; min-width: 0; flex: 0 1 auto; align-items: baseline; overflow: visible; }
-.pane-tab-group + .pane-tab-group { margin-left: 33px; }
-.pane-tab-group + .pane-tab-group::before { position: absolute; top: 2px; bottom: 2px; left: -17px; width: 0.8px; background: color-mix(in oklch, var(--foreground), transparent 85%); content: ""; }
-.chat-header-title .pane-tab-group-label { display: inline-block; flex: none; padding: 0; border: 0; background: transparent; color: color-mix(in oklch, var(--foreground), transparent 55%); cursor: pointer; }
-.pane-tab-group-label:hover, .pane-tab-group-current .pane-tab-group-label { color: var(--foreground); }
-.chat-header-title .pane-tab { position: relative; display: inline-flex; min-width: 0; max-width: 220px; height: 24px; flex: 0 1 auto; align-items: center; overflow: visible; border-radius: var(--radius-md); }
-.pane-tab + .pane-tab { margin-left: 10px; }
-.pane-tab + .pane-tab::before { position: absolute; left: -7.2px; color: color-mix(in oklch, var(--foreground), transparent 70%); content: "·"; pointer-events: none; }
-.pane-tab[data-lead]::before { content: none; }
-.pane-tab:hover { background: var(--accent); }
-.pane-tab-open { display: inline-flex; min-width: 0; height: 100%; flex: 1; align-items: center; gap: 5.6px; padding: 0 4px; border: 0; background: transparent; color: color-mix(in oklch, var(--foreground), transparent 45%); font: inherit; font-weight: 450; }
-.chat-header-title .pane-tab-title { display: inline-flex; min-width: 0; flex-direction: column; overflow: hidden; }
-.chat-header-title .pane-tab-title > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.pane-tab-title::after { height: 0; overflow: hidden; visibility: hidden; font-weight: 660; white-space: nowrap; content: attr(data-text); }
-.pane-tab:hover .pane-tab-open { color: var(--foreground); }
-.pane-tab-active .pane-tab-open { color: var(--foreground); font-weight: 660; }
-/* The X takes room only on the active tab; on another it lays over the
-   title's end with the pointer, so unlit tabs sit close within their place. */
-.pane-tab-close { display: inline-flex; width: 16px; height: 16px; flex: none; align-items: center; justify-content: center; margin: 0 2px 0 0; border: 0; border-radius: var(--radius-sm); background: var(--background); color: var(--muted-foreground); }
-.pane-tab:not(.pane-tab-active) .pane-tab-close { position: absolute; right: 2px; opacity: 0; box-shadow: -8px 0 6px var(--background); }
-.pane-tab:not(.pane-tab-active):hover .pane-tab-close { background: var(--accent); box-shadow: -8px 0 6px var(--accent); opacity: 1; }
-.pane-tab-active .pane-tab-close { background: transparent; }
-.pane-tab-close:hover { color: var(--foreground); }
-/* Unsaved: a dot where the X sits, the X on the pointer. */
-.pane-tab-unsaved .pane-tab-close { opacity: 1; }
-.pane-tab-unsaved:not(:hover) .pane-tab-close { background: transparent; box-shadow: none; }
-.pane-tab-unsaved:not(:hover) .pane-tab-close svg { display: none; }
-.pane-tab-unsaved:not(:hover) .pane-tab-close::after { width: 6.4px; height: 6.4px; border-radius: 50%; background: currentColor; content: ""; }
-.pane-tab-unsaved .pane-tab-close { color: var(--foreground); }
-.pane-tab-close svg { width: 11.2px; height: 11.2px; }
-.pane-tab-live { width: 5px; height: 5px; flex: none; border-radius: 50%; background: var(--live, oklch(0.62 0.17 145)); }
-.pane-tabs-more { margin-left: 8px; }
-/* A file showing on the viewer's other side: in the text colour, not lit. */
-.pane-tab-shown .pane-tab-open { color: var(--foreground); }
 /* A file viewer with no file showing stays open, saying how to fill it. */
 .file-viewer-empty { display: grid; flex: 1; place-items: center; padding: 24px; color: var(--muted-foreground); font-size: 11.2px; text-align: center; }
-.file-tabs-header { flex: none; }
-.chat-header-title span, .chat-header-title strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-/* A tab group's place: the menus' group label (9.6px caps), which sets it
-   apart from the titles by type alone, without a slash. */
-/* Caps on the title's baseline, not the line's centre, or they sit high. */
-.chat-header-title .chat-header-place { flex: 0 1 auto; max-width: 120px; margin-right: 2.4px; color: var(--foreground); font-size: 9.6px; font-weight: 700; letter-spacing: 0.04em; line-height: 16px; text-transform: uppercase; }
 .workspace-warning { position: relative; z-index: 2; display: flex; width: min(var(--composer-desktop-reference-width), calc(100% - 38.4px)); gap: 8px; margin: 6.4px auto; padding: 9.6px; border: 0.8px solid var(--border); border-radius: 8px; }
 .workspace-warning svg { width: 14.4px; flex: none; }
 .workspace-warning p { margin: 2.4px 0 0; color: var(--muted-foreground); font-size: 10.4px; }
@@ -402,13 +340,6 @@ svg.lucide { stroke-width: 2.4; }
     margin: 0;
     padding: 8px 9.6px calc(9.6px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)));
   }
-  .chat-header {
-    width: 100%;
-    height: calc(38.4px + var(--safe-area-inset-top, env(safe-area-inset-top, 0px)));
-    min-height: 38.4px;
-    padding: calc(3.2px + var(--safe-area-inset-top, env(safe-area-inset-top, 0px))) 8px 3.2px;
-  }
-  .chat-header-actions { justify-content: flex-end; }
 }
 
 
@@ -434,14 +365,8 @@ svg { stroke-width: 1.5; }
 svg.lucide { stroke-width: 2.4; }
 
 .model-trigger { display: flex; min-width: 0; align-items: center; gap: 8px; border: 0; border-radius: var(--radius-md); background: transparent; color: inherit; }
-.chat-header-actions { display: flex; margin-left: auto; flex: none; align-items: center; gap: 2px; }
-
 /* Inset panel: the rounded fill sits directly on the darker frame. */
 .chat-main { --chat-header-height: 56px; position: relative; isolation: isolate; display: flex; min-width: 0; height: calc(100dvh - 16px); margin: 8px 10px 8px 2px; flex: 1; flex-direction: column; overflow: hidden; container-type: inline-size; container-name: chat-main; border-radius: 16px; background: var(--background); color: var(--foreground); }
-.chat-header { position: relative; z-index: 2; display: flex; height: var(--chat-header-height); flex: none; align-items: center; gap: 8px; padding: 8px 14px; background: linear-gradient(to bottom, var(--background) 0 50%, transparent 100%); }
-.chat-header-title { display: flex; min-width: 0; align-items: center; gap: 7px; overflow: hidden; font-size: 14px; line-height: 20px; }
-.chat-header-title span, .chat-header-title strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.chat-header-title .chat-header-place { font-size: 12px; }
 .workspace-warning { position: relative; z-index: 2; display: flex; width: min(var(--composer-desktop-reference-width), calc(100% - 48px)); gap: 10px; margin: 8px auto; padding: 12px; border: 1px solid var(--border); border-radius: 10px; }
 .workspace-warning svg { width: 18px; flex: none; }
 .workspace-warning p { margin: 3px 0 0; color: var(--muted-foreground); font-size: 13px; }
@@ -658,17 +583,6 @@ svg.lucide { stroke-width: 2.4; }
     transform: none;
     background: var(--background);
   }
-  .chat-header {
-    position: relative;
-    width: 100%;
-    height: calc(48px + var(--safe-area-inset-top, env(safe-area-inset-top, 0px)));
-    min-height: 48px;
-    padding: calc(4px + var(--safe-area-inset-top, env(safe-area-inset-top, 0px))) 10px 4px;
-    gap: 4px;
-    background: linear-gradient(to bottom, var(--background) 0 72%, transparent 100%);
-  }
-  .chat-header-title { display: none; }
-  .chat-header-actions { margin-left: auto; justify-content: flex-end; }
 }
 
 
@@ -899,8 +813,6 @@ svg.lucide { stroke-width: 2.4; }
 
 .file-viewer-surface:focus { outline: none; }
 /* What a file dropped on a file viewer's column will do, by the pointer (main.tsx dragHint). */
-.drag-hint { position: fixed; top: 0; left: 0; z-index: 80; will-change: transform; display: inline-flex; align-items: center; gap: 5.6px; padding: 3.2px 8px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--popover); color: var(--popover-foreground); box-shadow: 0 4px 14px rgb(0 0 0 / 22%); font-size: 11.2px; pointer-events: none; white-space: nowrap; }
-.drag-hint svg { width: 12px; height: 12px; color: var(--muted-foreground); }
 
 /* conduit-server pair: the camera fills the screen until it sees the code. */
 

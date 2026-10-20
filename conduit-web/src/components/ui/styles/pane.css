@@ -1,0 +1,117 @@
+/* Panes (pane.tsx): the tab row, a pane's controls, its edges, the drop wash and pill, the workspace rail and the
+   dock's header. */
+
+/* Registered, so the app reads them back as lengths when it fits the tab row. */
+@property --tab-gap { syntax: "<length>"; inherits: true; initial-value: 0px; }
+@property --tab-place-gap { syntax: "<length>"; inherits: true; initial-value: 0px; }
+@property --tab-more { syntax: "<length>"; inherits: true; initial-value: 0px; }
+
+/* The tab row (DESIGN Tabs): runs by place, each a breadcrumb -- the place's caps, the titles with a muted middot
+   between -- and a hairline between runs. Where you are is text alone: the lit title and its place white at the
+   current weight, the rest grey; the wash is only the pointer. Titles hold their lit width, so switching moves
+   nothing; what does not fit waits in the ⋯ at the row's end. */
+.ui-tabs-row { display: flex; min-width: 0; flex: 1 1 auto; align-self: stretch; align-items: center; overflow: hidden; font-size: var(--text-row); line-height: var(--leading-row); }
+.ui-tabs { --tab-gap: var(--space-lg); --tab-place-gap: calc(2.5 * var(--u-space)); --tab-more: calc(var(--control-xs) + var(--space-md));
+  display: flex; height: 100%; min-width: 0; flex: 1; align-items: center; overflow: hidden; }
+.ui-tab-place { position: relative; display: inline-flex; min-width: 0; flex: 0 1 auto; align-items: baseline; overflow: visible; }
+.ui-tab-place + .ui-tab-place { margin-left: var(--tab-place-gap); }
+.ui-tab-place + .ui-tab-place::before { position: absolute; top: var(--space-2xs); bottom: var(--space-2xs); left: calc(-1 * var(--tab-place-gap) / 2); width: var(--hairline); background: var(--tint); content: ""; }
+/* The place: the crumb's caps (HeaderCrumb), on the titles' baseline. */
+.ui-tab-place-label { flex: 0 1 auto; max-width: var(--measure-xs); margin-right: var(--space-2xs); overflow: hidden; border: 0; background: none; padding: 0;
+  color: color-mix(in oklch, var(--foreground), transparent var(--tone-quiet)); font: var(--weight-strong) var(--text-label)/var(--leading-row) var(--font-label);
+  letter-spacing: .07em; text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; cursor: pointer; }
+.ui-tab-place-label > span { overflow: hidden; text-overflow: ellipsis; }
+.ui-tab-place-label:hover, .ui-tab-place[data-current] .ui-tab-place-label { color: var(--foreground); }
+
+.ui-tab { position: relative; display: inline-flex; min-width: 0; max-width: calc(17.1875 * var(--u-space)); height: var(--control-sm); flex: 0 1 auto; align-items: center; overflow: visible; border-radius: var(--radius-control); }
+.ui-tab + .ui-tab { margin-left: var(--tab-gap); }
+.ui-tab + .ui-tab::before { position: absolute; left: calc(-1 * var(--tab-gap) * .72); color: color-mix(in oklch, var(--foreground), transparent var(--tone-line)); content: "·"; pointer-events: none; }
+.ui-tab[data-lead]::before { content: none; }
+/* The pointer's wash is solid here, so an unlit tab's × can cover the title's end in it. */
+.ui-tab:hover { background: var(--accent); }
+.ui-tab-open { display: inline-flex; min-width: 0; height: 100%; flex: 1; align-items: center; gap: var(--space-sm); border: 0; background: transparent; padding: 0 var(--space-xs);
+  color: color-mix(in oklch, var(--foreground), transparent var(--tone-quiet)); font: inherit; font-weight: var(--weight-rest); }
+.ui-tab-open > svg, .ui-tab-open > .harness-mark, .ui-tab-open > .workspace-glyph { width: var(--icon-sm); height: var(--icon-sm); flex: none; }
+.ui-tab-title { display: inline-flex; min-width: 0; flex-direction: column; overflow: hidden; }
+.ui-tab-title > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ui-tab-title::after { height: 0; overflow: hidden; visibility: hidden; font-weight: var(--weight-current); white-space: nowrap; content: attr(data-text); }
+.ui-tab:hover .ui-tab-open, .ui-tab[data-shown] .ui-tab-open { color: var(--foreground); }
+.ui-tab[data-lit] .ui-tab-open { color: var(--foreground); font-weight: var(--weight-current); }
+.ui-tab[data-none] .ui-tab-open { color: var(--muted-foreground); font-weight: var(--weight-rest); }
+.ui-tab-live { width: var(--space-sm); height: var(--space-sm); flex: none; border-radius: var(--radius-round); background: var(--live); }
+/* The × takes room only on the lit tab; on another it lays over the title's end with the pointer, so unlit tabs
+   sit close within their place. */
+.ui-tab-close { display: inline-flex; width: var(--control-2xs); height: var(--control-2xs); flex: none; align-items: center; justify-content: center; margin-right: var(--space-2xs);
+  border: 0; border-radius: var(--radius-inset); background: var(--background); color: var(--muted-foreground); }
+.ui-tab-close > svg { width: var(--icon-xs); height: var(--icon-xs); }
+.ui-tab:not([data-lit]) .ui-tab-close { position: absolute; right: var(--space-2xs); opacity: 0; box-shadow: calc(-1 * var(--space-md)) 0 var(--space-sm) var(--background); }
+.ui-tab:not([data-lit]):hover .ui-tab-close { background: var(--accent); box-shadow: calc(-1 * var(--space-md)) 0 var(--space-sm) var(--accent); opacity: 1; }
+.ui-tab[data-lit] .ui-tab-close { background: transparent; }
+.ui-tab-close:hover { color: var(--foreground); }
+/* Unsaved: a dot where the × sits, the × on the pointer. */
+.ui-tab[data-unsaved] .ui-tab-close { color: var(--foreground); opacity: 1; }
+.ui-tab[data-unsaved]:not(:hover) .ui-tab-close { background: transparent; box-shadow: none; }
+.ui-tab[data-unsaved]:not(:hover) .ui-tab-close > svg { display: none; }
+.ui-tab[data-unsaved]:not(:hover) .ui-tab-close::after { width: var(--space-md); height: var(--space-md); border-radius: var(--radius-round); background: currentColor; content: ""; }
+.ui-tabs > .ui-pane-action { margin-left: var(--space-md); }
+
+/* A pane's controls after its title: small, quiet, the wash on the pointer. */
+.ui-pane-actions { display: inline-flex; flex: none; align-items: center; gap: var(--space-2xs); margin-left: var(--space-2xs); }
+.ui-pane-action { display: inline-grid; width: var(--control-xs); height: var(--control-xs); flex: none; place-items: center; border: 0; border-radius: var(--radius-control); background: transparent; color: var(--muted-foreground); }
+.ui-pane-action:is(:hover, :focus-visible, [data-expanded]) { outline: none; background: var(--tint); color: var(--foreground); }
+.ui-pane-action > svg { width: var(--icon); height: var(--icon); }
+
+/* An edge: its hit target centred on the frame's gap, the gutter you drag. */
+.ui-pane-edge { position: absolute; z-index: 5; inset-block: 0; left: calc(-1 * var(--space-lg)); width: var(--space-lg); cursor: col-resize; touch-action: none; }
+.ui-pane-edge[data-dock] { z-index: 40; left: calc(-1 * var(--space-lg)); width: calc(1.5 * var(--u-space)); }
+.ui-pane-edge:focus-visible { outline: none; }
+.ui-pane-edge[data-dock]:focus-visible::after { position: absolute; inset-block: var(--space-xl); left: 50%; width: var(--stroke-thin, 2px); border-radius: var(--radius-round); background: var(--tint); content: ""; translate: -50% 0; }
+
+/* A drop: the band washes where it lands; a pill by the pointer names the result. */
+.ui-drop-wash { position: fixed; z-index: 60; border-radius: var(--radius-surface); background: var(--tint); pointer-events: none;
+  transition: left var(--duration-quick) var(--ease-change), width var(--duration-quick) var(--ease-change); }
+.ui-drop-wash[data-within] { position: absolute; z-index: 30; inset: var(--space-md) var(--space-md) var(--space-md) 50%; transition: none; }
+.ui-drag-pill { position: fixed; top: 0; left: 0; z-index: 80; display: inline-flex; align-items: center; gap: var(--space-sm); border-radius: var(--radius-control);
+  padding: var(--space-2xs) var(--space-md); color: var(--foreground); font-size: var(--text-row); pointer-events: none; white-space: nowrap; will-change: transform; }
+.ui-drag-pill > svg { width: var(--icon-sm); height: var(--icon-sm); color: var(--muted-foreground); }
+@media (prefers-reduced-motion: reduce) { .ui-drop-wash { transition: none; } }
+
+/* The workspace rail: the frame's narrow column at the window's right, its buttons the sidebar rail's. */
+.ui-tool-rail { display: flex; width: calc(var(--control) + var(--space-md)); flex: none; flex-direction: column; align-items: flex-start; gap: var(--space-2xs); padding: var(--space-xl) var(--space-md) var(--space-xl) 0; }
+.ui-tool-rail-foot { display: flex; flex-direction: column; gap: var(--space-2xs); margin-top: auto; }
+.ui-rail-rule { width: var(--icon); height: var(--hairline); flex: none; margin: var(--space-xs) calc((var(--control) - var(--icon)) / 2); background: var(--tint); }
+.ui-layout-glyph { display: flex; width: calc(2 * var(--icon)); height: var(--icon); flex: none; gap: var(--space-2xs); }
+.ui-layout-glyph > i { min-width: 0; border-radius: var(--radius-inset); background: color-mix(in oklch, currentColor, transparent 60%); }
+
+/* A tool's header: the name strong, the place muted; then its modes; its controls at the right. When the app
+   measures it short, the modes drop their words, then the name goes. */
+.ui-tool-head { display: flex; height: var(--header-height); flex: none; align-items: center; gap: var(--space-md); overflow: hidden; padding: var(--space-md) var(--space-lg); font-size: var(--text-row); line-height: var(--leading-row); }
+.ui-tool-head > strong { flex: none; overflow: hidden; font-weight: var(--weight-strong); text-overflow: ellipsis; white-space: nowrap; }
+.ui-tool-place { min-width: 0; flex: 0 1 auto; overflow: hidden; color: var(--muted-foreground); text-overflow: ellipsis; white-space: nowrap; }
+.ui-tool-head > .ui-seg { flex: none; }
+.ui-tool-head[data-compact] .ui-tool-place, .ui-tool-head[data-compact="name"] > strong { display: none; }
+.ui-tool-head[data-compact] > .ui-seg button > span { display: none; }
+.ui-tool-head[data-compact] > .ui-seg button { padding-inline: var(--space-md); }
+.ui-tool-actions { display: flex; flex: none; align-items: center; gap: var(--space-2xs); margin-left: auto; }
+.ui-tool-actions:empty { display: none; }
+
+/* A phone's views strip: icons with their names, the names away when they do not fit. */
+.ui-tool-views { display: none; min-width: 0; flex: 1; justify-content: flex-end; overflow: hidden; }
+.ui-tool-views > [role="toolbar"] { display: flex; width: max-content; flex: none; gap: var(--space-2xs); }
+.ui-tool-view { display: flex; min-width: var(--control); min-height: var(--control); flex: none; align-items: center; justify-content: center; gap: var(--space-sm); border: 0; border-radius: var(--radius-control);
+  background: transparent; padding-inline: var(--space-md); color: var(--muted-foreground); font-size: var(--text-caption); }
+.ui-tool-view > svg { width: var(--icon); height: var(--icon); }
+.ui-tool-view > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ui-tool-views[data-icons-only] .ui-tool-view > span { display: none; }
+.ui-tool-view:is([aria-selected="true"], :hover, :focus-visible) { outline: none; background: var(--tint); color: var(--foreground); }
+.ui-tool-view:disabled { cursor: not-allowed; opacity: var(--opacity-disabled); }
+@media (--conduit-phone-layout) {
+  .ui-tool-views { display: flex; }
+  .ui-tool-head { height: auto; flex-wrap: wrap; }
+  .ui-tool-head > .ui-seg { order: 1; flex-basis: 100%; margin-bottom: var(--space-xs); }
+  .ui-tool-head [data-only="desktop"] { display: none; }
+}
+
+.ui-pane-empty { display: grid; min-height: calc(7.5 * var(--u-space)); flex: 1; place-items: center; padding: var(--space-xl); color: var(--muted-foreground); font-size: var(--text-caption); text-align: center; }
+.ui-pane-loading { position: absolute; inset: auto var(--space-lg) var(--space-lg) auto; display: flex; align-items: center; gap: var(--space-sm); border-radius: var(--radius-round);
+  padding: var(--space-xs) var(--space-md); color: var(--muted-foreground); font-size: var(--text-caption); }

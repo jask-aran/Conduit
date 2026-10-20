@@ -99,19 +99,19 @@ async function scenario(name, run) {
 // Helpers over the page.
 const open = async (page) => {
   await page.goto(`${origin}/project/${project.id}`);
-  await page.locator(".workspace-rail").waitFor();
+  await page.locator('[data-region="workspace-rail"]').waitFor();
   const dock = await page.evaluate(() => document.querySelector(".workspace-panel")?.getBoundingClientRect().width ?? 0);
-  if (dock < 10) await page.locator('.workspace-rail [data-tool="files"]').click();
+  if (dock < 10) await page.locator('[data-region="workspace-rail"] [data-tool="files"]').click();
   const show = page.locator('.workspace-panel [aria-label="Show file navigator"]');
   if (await show.isVisible().catch(() => false)) await show.click();
   await navFiles(page).nth(5).waitFor();
 };
 const navFiles = (page) => page.locator('.workspace-panel [role="treeitem"][data-path]:not([aria-expanded])');
 // n columns, each headed by its tab.
-const twoColumns = (page) => until(page, () => { const columns = [...document.querySelectorAll(".workspace-file-viewer > .workspace-preview")]; return columns.length === 2 && columns.every((column) => column.querySelector(".pane-tab")); });
+const twoColumns = (page) => until(page, () => { const columns = [...document.querySelectorAll(".workspace-file-viewer > .workspace-preview")]; return columns.length === 2 && columns.every((column) => column.querySelector(".ui-tab")); });
 const until = async (page, fn, arg, timeout = 4000) => page.waitForFunction(fn, arg, { timeout, polling: 50 }).then(() => true, () => false);
 const columns = (page) => page.evaluate(() => [...document.querySelectorAll(".workspace-file-viewer > .workspace-preview")].map((column) =>
-  column.classList.contains("file-viewer-empty-side") ? "EMPTY" : [...column.querySelectorAll(".pane-tab")].map((tab) => tab.textContent.trim() + (tab.classList.contains("pane-tab-active") ? "*" : "")).join("|")));
+  column.classList.contains("file-viewer-empty-side") ? "EMPTY" : [...column.querySelectorAll(".ui-tab")].map((tab) => tab.textContent.trim() + (tab.hasAttribute("data-lit") ? "*" : "")).join("|")));
 const focusIn = (page) => page.evaluate(() => {
   const active = document.activeElement;
   const column = active?.closest(".workspace-file-viewer > .workspace-preview");
@@ -127,8 +127,8 @@ const dragProbe = (page, source, target, fx, fy = 0.5) => source.elementHandle()
     element.dispatchEvent(new DragEvent("dragstart", { bubbles: true, dataTransfer: transfer }));
     document.elementFromPoint(x, y).dispatchEvent(new DragEvent("dragover", { bubbles: true, cancelable: true, dataTransfer: transfer, clientX: x, clientY: y }));
     return new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(() => {
-      const wash = document.querySelector(".doc-drop")?.getBoundingClientRect();
-      done({ pill: document.querySelector(".drag-hint")?.textContent?.trim() ?? null, wash: wash ? { left: Math.round(wash.left), width: Math.round(wash.width) } : null });
+      const wash = document.querySelector(".ui-drop-wash:not([data-within])")?.getBoundingClientRect();
+      done({ pill: document.querySelector(".ui-drag-pill")?.textContent?.trim() ?? null, wash: wash ? { left: Math.round(wash.left), width: Math.round(wash.width) } : null });
       document.dispatchEvent(new DragEvent("dragend", { bubbles: true }));
     })));
   }, [handle, box.x + box.width * fx, box.y + box.height * fy]);
@@ -152,10 +152,10 @@ await scenario("click replaces, Ctrl keeps as a tab, Alt opens a column; tabs su
   await navFiles(page).nth(0).click();
   await until(page, () => document.querySelector(".workspace-file-viewer"));
   await navFiles(page).nth(1).click();
-  check("click replaced", await until(page, (n) => document.querySelectorAll(".file-side-tabs .pane-tab").length === 1 && document.querySelector(".file-side-tabs .pane-tab")?.textContent.includes(n), names[1]), JSON.stringify(await columns(page)));
+  check("click replaced", await until(page, (n) => document.querySelectorAll("[data-file-side] .ui-tab").length === 1 && document.querySelector("[data-file-side] .ui-tab")?.textContent.includes(n), names[1]), JSON.stringify(await columns(page)));
   await navFiles(page).nth(2).click({ modifiers: ["Control"] });
   await navFiles(page).nth(3).click({ modifiers: ["Control"] });
-  check("Ctrl added at the end", await until(page, () => document.querySelectorAll(".file-side-tabs .pane-tab").length === 3));
+  check("Ctrl added at the end", await until(page, () => document.querySelectorAll("[data-file-side] .ui-tab").length === 3));
   const one = await columns(page);
   check("tab order", one[0]?.split("|").map((tab) => tab.replace("*", "")).join() === names.slice(1, 4).map((n) => n.split("/").pop()).join(), JSON.stringify(one));
   check("newest active", one[0]?.split("|")[2]?.endsWith("*"), JSON.stringify(one));
@@ -165,7 +165,7 @@ await scenario("click replaces, Ctrl keeps as a tab, Alt opens a column; tabs su
   const bare = async () => JSON.stringify((await columns(page)).map((column) => column.replaceAll("*", "")));
   const before = await bare();
   await page.reload();
-  check("tabs survive a reload", await until(page, (want) => JSON.stringify([...document.querySelectorAll(".workspace-file-viewer > .workspace-preview")].map((column) => [...column.querySelectorAll(".pane-tab")].map((tab) => tab.textContent.trim()).join("|"))) === want, before, 8000), `${before} vs ${await bare()}`);
+  check("tabs survive a reload", await until(page, (want) => JSON.stringify([...document.querySelectorAll(".workspace-file-viewer > .workspace-preview")].map((column) => [...column.querySelectorAll(".ui-tab")].map((tab) => tab.textContent.trim()).join("|"))) === want, before, 8000), `${before} vs ${await bare()}`);
 });
 
 await scenario("swap trades columns; a column's last tab dragged away leaves it empty", async (page, check) => {
@@ -176,10 +176,10 @@ await scenario("swap trades columns; a column's last tab dragged away leaves it 
   await twoColumns(page);
   const [a, b] = await columns(page);
   await page.locator(".file-viewer-swap").click();
-  check("swapped", await until(page, (want) => [...document.querySelectorAll(".workspace-file-viewer > .workspace-preview")].map((column) => column.querySelector(".pane-tab")?.textContent.trim()).join() === want, [b, a].map((tab) => tab.replace("*", "")).join()), JSON.stringify(await columns(page)));
+  check("swapped", await until(page, (want) => [...document.querySelectorAll(".workspace-file-viewer > .workspace-preview")].map((column) => column.querySelector(".ui-tab")?.textContent.trim()).join() === want, [b, a].map((tab) => tab.replace("*", "")).join()), JSON.stringify(await columns(page)));
   const viewer = page.locator(".workspace-file-viewer > .workspace-preview");
   const left = await viewer.nth(0).boundingBox();
-  await viewer.nth(1).locator(".pane-tab").first().dragTo(viewer.nth(0), { targetPosition: { x: left.width * 0.6, y: 300 } });
+  await viewer.nth(1).locator(".ui-tab").first().dragTo(viewer.nth(0), { targetPosition: { x: left.width * 0.6, y: 300 } });
   check("right column left empty", await until(page, () => document.querySelector(".file-viewer-empty-side")), JSON.stringify(await columns(page)));
   const after = await columns(page);
   check("left column took the tab", after[0]?.split("|").length === 2, JSON.stringify(after));
@@ -258,7 +258,7 @@ await scenario("focus: Alt+] steps tabs across columns; Ctrl+Shift+2 steps panes
   check("Ctrl+Shift+2 leaves the viewer for pane A", await until(page, () => !document.activeElement?.closest("[data-pane-slot]")), await focusIn(page));
   await page.keyboard.press("Control+Shift+Digit2");
   check("Ctrl+Shift+2 comes back to the viewer", await until(page, () => document.activeElement?.closest(".workspace-file-viewer")), await focusIn(page));
-  const place = () => page.evaluate(() => document.querySelector(".workspace-panel-header")?.textContent?.trim().slice(0, 60));
+  const place = () => page.evaluate(() => document.querySelector('[data-region="workspace-panel"] .ui-tool-head')?.textContent?.trim().slice(0, 60));
   const viewerPlace = await place();
   await page.locator("[data-pane-slot] [aria-label='Close this pane']").first().click();
   check("closing returns focus to pane A", await until(page, () => !document.querySelector("[data-pane-slot] .workspace-file-viewer") && !document.activeElement?.closest(".workspace-panel")), await focusIn(page));
@@ -281,13 +281,13 @@ await scenario("dragging the dock's edge and a pane's edge resizes them in place
     return mid;
   };
   const before = await geometry();
-  const mid = await dragBy(".workspace-resize-handle", -120);
+  const mid = await dragBy(".ui-pane-edge[data-dock]", -120);
   const after = await geometry();
   check("mid-drag the dock stays at the right edge", mid.dock && Math.abs(mid.dock.right - before.dock.right) <= 2 && mid.dock.left < before.dock.left - 60, JSON.stringify({ before: before.dock, mid: mid.dock }));
   check("the dock took the width", after.dock.left < before.dock.left - 60 && Math.abs(after.dock.right - before.dock.right) <= 2, JSON.stringify({ before: before.dock, after: after.dock }));
   check("the panes gave it up", after.slot.right <= after.dock.left + 2 && after.main.left === before.main.left, JSON.stringify(after));
   const beforePanes = await geometry();
-  const midPanes = await dragBy(".main-split-resize", -100);
+  const midPanes = await dragBy(".ui-pane-edge:not([data-dock])", -100);
   const afterPanes = await geometry();
   check("mid-drag the panes follow the edge", midPanes.main.right < beforePanes.main.right - 50 && midPanes.slot.right === beforePanes.slot.right, JSON.stringify({ before: beforePanes, mid: midPanes }));
   check("the edge stays where it was dropped", Math.abs(afterPanes.main.right - midPanes.main.right) <= 4 && afterPanes.dock.left === beforePanes.dock.left, JSON.stringify({ mid: midPanes, after: afterPanes }));

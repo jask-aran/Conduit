@@ -1,6 +1,7 @@
 import { createSignal, Show, type JSX } from "solid-js";
 import { EllipsisIcon, MessageSquarePlusIcon, PanelLeftIcon, PanelRightIcon, PencilIcon, RefreshCwIcon, SearchIcon, ShareIcon, TerminalIcon, Trash2Icon } from "lucide-solid";
 import { Menu, MenuContent, MenuControl, MenuRow, MenuSection } from "@/components/menus";
+import { PaneTabRow } from "@/components/ui/pane";
 import { Header, HeaderButton, HeaderCrumb, HeadingSection, MenuNote, Rule, Spinner } from "@/components/ui";
 import type { Project, RuntimeIdentity, Template } from "../api/contracts";
 import type { ActiveChatStore } from "../state/active-chat";
@@ -63,7 +64,7 @@ export function ChatHeader(props: {
   const menuLine = () => [projectLabel(), runtimeLabel(), props.live?.binaryVersion || props.runtime?.binaryVersion ? `v${props.live?.binaryVersion || props.runtime?.binaryVersion}` : null, profileLabel(), posture()].filter(Boolean).join(" · ");
   const sessionId = () => typeof props.live?.sessionId === "string" ? props.live.sessionId : "";
   const crumb = () => <Show when={props.tabs} fallback={<HeaderCrumb place={props.dashboard || props.alone ? undefined : projectLabel()} onPlace={props.onOpenPlace ? () => props.onOpenPlace!(props.project) : undefined} title={props.title} />}>
-    <nav aria-label="Tabs" class="chat-header-title chat-header-tabs">{props.tabs}</nav>
+    <PaneTabRow>{props.tabs}</PaneTabRow>
   </Show>;
   const moreLabel = () => props.dashboard ? `More ${placeKind()} options` : "More chat options";
   const shareLabel = () => props.dashboard ? `Copy Tailscale ${placeKind()} link` : "Copy Tailscale chat link";

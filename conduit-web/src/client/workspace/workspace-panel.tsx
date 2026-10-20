@@ -3,7 +3,9 @@ import { batch, createEffect, createSignal, For, on, onCleanup, onMount, Show, t
 import { Portal } from "solid-js/web";
 import { MIN_MAIN_PANE_WIDTH } from "../layout-geometry";
 import { Columns2Icon, FolderIcon, GitCompareArrowsIcon, Maximize2Icon, MessageSquareIcon, Minimize2Icon, PanelRightIcon, TerminalIcon, XIcon } from "lucide-solid";
-import { Button, Spinner } from "@/components/primitives";
+import { Spinner } from "@/components/primitives";
+import { HeaderButton } from "@/components/ui/header";
+import { PaneEdge, PaneLoading, ToolHeader, ToolView, ToolViews } from "@/components/ui/pane";
 import { COMMAND_IDS } from "../commands/command-registry";
 import { focusFirst, isMobileLayout, restoreFocus } from "../navigation/mobile-layout";
 import type { Connectivity } from "../state/runtime";
@@ -194,23 +196,22 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
     : candidate === "chat" ? <MessageSquareIcon />
     : <TerminalIcon />;
   // A phone has no rail, so its header keeps a strip of the views.
+  const [viewIconsOnly, setViewIconsOnly] = createSignal(false);
   const tabStrip = () => (
-    <div class="workspace-panel-tabs-space" ref={(element) => {
+    <ToolViews iconsOnly={viewIconsOnly()} ref={(element) => {
       const observer = new ResizeObserver(() => {
-        element.removeAttribute("data-icons-only");
+        setViewIconsOnly(false);
         const tabs = element.firstElementChild;
-        if (tabs && tabs.scrollWidth > element.clientWidth) element.setAttribute("data-icons-only", "true");
+        if (tabs && tabs.scrollWidth > element.clientWidth) setViewIconsOnly(true);
       });
       observer.observe(element);
       onCleanup(() => observer.disconnect());
     }}>
-      <div class="workspace-panel-tabs" role="toolbar" aria-label="Workspace views">
-        <For each={PANEL_TABS}>{(item) => {
-          const disabled = () => item === "diff" && !props.sourceControlEnabled();
-          return <button type="button" role="tab" data-workspace-tab={item} disabled={disabled()} aria-label={disabled() ? `${tabLabel(item)}: ${props.onBrowseDirectory ? "open a Git folder" : "unavailable for Chats and managed projects"}` : tabLabel(item)} title={disabled() ? (props.onBrowseDirectory ? "Open a Git folder to use Source Control" : "Source Control is available only for Workspaces") : tabLabel(item)} aria-selected={tab() === item} onClick={() => changePaneTab(item)}>{tabIcon(item)}<span>{tabLabel(item)}</span></button>;
-        }}</For>
-      </div>
-    </div>
+      <For each={PANEL_TABS}>{(item) => {
+        const disabled = () => item === "diff" && !props.sourceControlEnabled();
+        return <ToolView data-workspace-tab={item} disabled={disabled()} icon={tabIcon(item)} label={tabLabel(item)} aria-label={disabled() ? `${tabLabel(item)}: ${props.onBrowseDirectory ? "open a Git folder" : "unavailable for Chats and managed projects"}` : tabLabel(item)} title={disabled() ? (props.onBrowseDirectory ? "Open a Git folder to use Source Control" : "Source Control is available only for Workspaces") : tabLabel(item)} selected={tab() === item} onClick={() => changePaneTab(item)} />;
+      }}</For>
+    </ToolViews>
   );
   const changePaneTab = (next: PanelTab) => {
     setPaneTab(next);
@@ -579,28 +580,25 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
     props.onCloseSplit?.();
   };
   const toolHeader = (tool: Accessor<SplitView>, where: "dock" | "split") => (
-    <header ref={fitHeader} class="workspace-panel-header" draggable={!isMobileLayout()}
+    // The dock follows places (6d-1): its header says which one it shows.
+    <ToolHeader ref={fitHeader} draggable={!isMobileLayout()}
       onDragStart={(event) => { event.dataTransfer?.setData(TOOL_DRAG_TYPE, JSON.stringify({ tool: tool(), from: where })); if (event.dataTransfer) event.dataTransfer.effectAllowed = "move"; document.body.dataset.toolDrag = where; }}
-      onDragEnd={() => delete document.body.dataset.toolDrag}>
-      <strong title={tool() === "file" ? files.openPaths().secondary ?? "" : props.workingRoot()}>{viewLabel(tool())}</strong>
-      {/* The dock follows places (6d-1): it says which one it shows. */}
-      <Show when={where === "dock"}><span class="workspace-panel-place" title={props.workingRoot()}>{props.projectName()}</span></Show>
-      <Show when={tool() === "diff" && props.sourceControlEnabled()}><SourceControlModes control={sourceControl} /></Show>
-      <Show when={tool() === "chat"}><ChatModes control={chat} historyAvailable={Boolean(props.historyAvailable?.())} /></Show>
-      {where === "dock" ? tabStrip() : null}
-      <div class="workspace-panel-header-actions">
-        <Show when={where === "dock"} fallback={<>
-          <Button variant="ghost" size="icon-sm" title="Move to dock" aria-label={`Move ${viewLabel(tool())} to the dock`} onClick={() => props.onMoveToDock?.(tool())}><PanelRightIcon /></Button>
-          <Button variant="ghost" size="icon-sm" aria-label={`Close ${viewLabel(tool())}`} onClick={() => closeSplitView(tool())}><XIcon /></Button>
+      onDragEnd={() => delete document.body.dataset.toolDrag}
+      name={viewLabel(tool())} nameTitle={tool() === "file" ? files.openPaths().secondary ?? "" : props.workingRoot()}
+      place={where === "dock" ? props.projectName() : undefined} placeTitle={props.workingRoot()}
+      modes={<>
+        <Show when={tool() === "diff" && props.sourceControlEnabled()}><SourceControlModes control={sourceControl} /></Show>
+        <Show when={tool() === "chat"}><ChatModes control={chat} historyAvailable={Boolean(props.historyAvailable?.())} /></Show>
+      </>}
+      views={where === "dock" ? tabStrip() : undefined}
+      actions={<Show when={where === "dock"} fallback={<>
+          <HeaderButton label="Move to dock" aria-label={`Move ${viewLabel(tool())} to the dock`} icon={<PanelRightIcon />} onClick={() => props.onMoveToDock?.(tool())} />
+          <HeaderButton label={`Close ${viewLabel(tool())}`} icon={<XIcon />} onClick={() => closeSplitView(tool())} />
         </>}>
-          <Show when={props.onOpenBeside && !(tool() === "files" && props.onOpenFile)}><Button variant="ghost" size="icon-sm" class="workspace-move-toggle" title="Move to main pane" aria-label={`Move ${viewLabel(tool())} to the main pane`} onClick={() => props.onOpenBeside?.(tool())}><Columns2Icon /></Button></Show>
-          <Button variant="ghost" size="icon-sm" class="workspace-expand-toggle" title={props.expanded() ? "Restore" : "Maximise"} aria-label={props.expanded() ? "Restore workspace panel" : "Maximise workspace panel"} aria-pressed={props.expanded()} onClick={props.onToggleExpanded}>
-            <Show when={props.expanded()} fallback={<Maximize2Icon />}><Minimize2Icon /></Show>
-          </Button>
-          <Button variant="ghost" size="icon-sm" aria-label="Close workspace panel" onClick={props.onClose}><XIcon /></Button>
-        </Show>
-      </div>
-    </header>
+          <Show when={props.onOpenBeside && !(tool() === "files" && props.onOpenFile)}><HeaderButton only="desktop" label="Move to main pane" aria-label={`Move ${viewLabel(tool())} to the main pane`} icon={<Columns2Icon />} onClick={() => props.onOpenBeside?.(tool())} /></Show>
+          <HeaderButton label={props.expanded() ? "Restore" : "Maximise"} aria-label={props.expanded() ? "Restore workspace panel" : "Maximise workspace panel"} aria-pressed={props.expanded()} icon={<Show when={props.expanded()} fallback={<Maximize2Icon />}><Minimize2Icon /></Show>} onClick={props.onToggleExpanded} />
+          <HeaderButton label="Close workspace panel" icon={<XIcon />} onClick={props.onClose} />
+        </Show>} />
   );
   const toolView = (tool: PanelTab, where: "dock" | "split") => tool === "files"
     ? <FilesView control={files} expanded={where === "dock" && props.expanded()} projectId={props.projectId()} workingRoot={props.workingRoot()}
@@ -632,7 +630,7 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
       <button type="button" class="mobile-panel-backdrop" data-mobile-backdrop="workspace" data-for="workspace" aria-label="Dismiss workspace panel" onClick={props.onClose} />
     </Show>
     <aside ref={panelRoot} class="workspace-panel" data-region="workspace-panel" classList={{ "workspace-panel-open": props.open() || shellWidth() > 0.5, "workspace-panel-expanded": props.expanded(), "workspace-panel-overlay": Boolean(props.overlay?.()) }} aria-label="Workspace panel" aria-hidden={!props.open()} inert={!props.open()} {...dockDrop} style={{ "--workspace-panel-width": `${width()}px`, "--workspace-shell-width": `${shellWidth()}px`, width: `${shellWidth()}px`, "margin-right": `${shellGap()}px` }}>
-    <div ref={resizeHandle} class="workspace-resize-handle" role="separator" aria-label="Resize workspace panel" aria-orientation="vertical" aria-valuemin={minWidth()} aria-valuemax={Math.floor(window.innerWidth * 0.65)} aria-valuenow={width()} tabIndex={0} onPointerDown={startResize} onKeyDown={(event) => { if (event.key === "ArrowLeft") saveWidth(width() + 16); if (event.key === "ArrowRight") saveWidth(width() - 16); }} />
+    <PaneEdge dock ref={(element) => { resizeHandle = element; }} aria-label="Resize workspace panel" aria-valuemin={minWidth()} aria-valuemax={Math.floor(window.innerWidth * 0.65)} aria-valuenow={width()} tabIndex={0} onPointerDown={startResize} onKeyDown={(event) => { if (event.key === "ArrowLeft") saveWidth(width() + 16); if (event.key === "ArrowRight") saveWidth(width() - 16); }} />
     <div class="workspace-panel-surface" classList={{ "workspace-panel-documented": Boolean(props.documentShown?.()) }} onPointerDown={focusWorkspaceSurface}>
     {toolHeader(tab, "dock")}
     <main class="workspace-panel-content" tabIndex={-1}>
@@ -640,7 +638,7 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
     </main>
     {/* A pane's document moved into the dock draws here, over the tools. */}
     <div class="workspace-dock-document" ref={(element) => { props.documentHost?.(element); onCleanup(() => props.documentHost?.(undefined)); }} />
-    <Show when={requests.loading()}><div class="workspace-panel-loading"><Spinner /><span>Loading workspace</span></div></Show>
+    <Show when={requests.loading()}><PaneLoading><Spinner /><span>Loading workspace</span></PaneLoading></Show>
     </div>
   </aside>
     <Show when={props.splitHost?.() && props.splitView?.() && !/^(chat|page|files):/.test(props.splitView()!) && props.splitView()}>{(tool) =>
