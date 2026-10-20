@@ -17,37 +17,61 @@ export function Scrim(props: JSX.HTMLAttributes<HTMLDivElement> & { placement?: 
   return <div {...rest} class={cn("ui-scrim", local.class)} data-placement={local.placement ?? "top"} data-dialog={local.dialog ? "" : undefined} {...motionOf(local.motion)} />;
 }
 
-/** core: frost on a solid backing, kept for the phone's full-screen overlays should the page behind them be too busy -- off for now. */
-export function Overlay(props: { label: string; layout?: "stack" | "rail"; core?: boolean; density?: Density; class?: string; style?: JSX.CSSProperties; motion?: Motion; children: JSX.Element }) {
-  return <div role="dialog" aria-label={props.label} class={cn("ui-frost ui-overlay", props.class)} style={props.style} data-layout={props.layout ?? "stack"}
+/** core: frost on a solid backing, kept for the phone's full-screen overlays should the page behind them be too busy -- off for now.
+ *  embedded: inside a behaviour's dialog (OverlayDialog), which carries the role and the name. */
+export function Overlay(props: { label: string; layout?: "stack" | "rail"; core?: boolean; embedded?: boolean; density?: Density; class?: string; style?: JSX.CSSProperties; motion?: Motion; children: JSX.Element }) {
+  return <div role={props.embedded ? undefined : "dialog"} aria-label={props.embedded ? undefined : props.label} class={cn("ui-frost ui-overlay", props.class)} style={props.style} data-layout={props.layout ?? "stack"}
     data-surface="frost" data-lift="raised" data-core={props.core ? "" : undefined} data-density={props.density} {...motionOf(props.motion)}>{props.children}</div>;
 }
 
-/** The field across the top: a lead (a prompt glyph, a search icon, a back button), the input, then end controls and close. */
-export function OverlayBar(props: { lead?: JSX.Element; placeholder: string; value?: string; onInput?: (value: string) => void; end?: JSX.Element; onClose?: () => void }) {
+/** The field across the top: a lead (a prompt glyph, a search icon, a back button), chips (OverlayChip: a scope, a view),
+ *  the input, then end controls and close. field: what a behaviour adds to the input (combobox state, keys, focus).
+ *  Neither the close nor a chip takes focus from the field. */
+export function OverlayBar(props: { lead?: JSX.Element; chips?: JSX.Element; placeholder: string; value?: string; onInput?: (value: string) => void; field?: JSX.InputHTMLAttributes<HTMLInputElement>; end?: JSX.Element; onClose?: () => void; closeLabel?: string }) {
   return <div class="ui-overlay-bar">
     <Show when={props.lead}><span class="ui-overlay-lead">{props.lead}</span></Show>
-    <input class="ui-overlay-input" placeholder={props.placeholder} value={props.value ?? ""} onInput={(event) => props.onInput?.(event.currentTarget.value)} />
+    {props.chips}
+    <input {...props.field} class="ui-overlay-input" placeholder={props.placeholder} value={props.value ?? ""} onInput={(event) => props.onInput?.(event.currentTarget.value)} />
     {props.end}
-    <Show when={props.onClose}><Button variant="ghost" size="icon-sm" aria-label="Close" onClick={() => props.onClose?.()}><XIcon /></Button></Show>
+    <Show when={props.onClose}><Button variant="ghost" size="icon-sm" aria-label={props.closeLabel ?? "Close"} title="Close" onMouseDown={(event) => event.preventDefault()} onClick={() => props.onClose?.()}><XIcon /></Button></Show>
   </div>;
 }
 
-/** The scrolling body: Sections of Items, titled as groups. */
-export const OverlayList = (props: { children: JSX.Element }) => <div class="ui-overlay-list" role="listbox" onPointerOver={moveCursor}>{props.children}</div>;
+/** A scope or a view narrowing the field (in:Japan, is:unread): a mono token, removed by its × (or Backspace on an empty query, the host's). */
+export const OverlayChip = (props: { children: string; onRemove: () => void }) =>
+  <button type="button" class="ui-overlay-chip" title={`Remove ${props.children}`} onMouseDown={(event) => event.preventDefault()} onClick={() => props.onRemove()}>{props.children}<XIcon /></button>;
+
+/** The scrolling body: Sections of Items, titled as groups. managed: the host moves the cursor (aria-activedescendant,
+ *  each Item's active), so the pointer leaves it to the host; the rest is the host's (role, keys, focus). */
+export function OverlayList(props: JSX.HTMLAttributes<HTMLDivElement> & { managed?: boolean }) {
+  const [local, rest] = splitProps(props, ["managed", "children"]);
+  return <div role="listbox" {...rest} class="ui-overlay-list" onPointerOver={local.managed ? undefined : moveCursor}>{local.children}</div>;
+}
+/** In place of a list's rows: nothing matched, nothing yet. */
+export const OverlayEmpty = (props: { children: JSX.Element }) => <p class="ui-overlay-empty">{props.children}</p>;
 
 /** A list beside an aside (a preview of what the list has selected). */
 /** aside: optional, so a preview that can be hidden (chat search's Ctrl+P) leaves the list the whole width. */
 export const OverlaySplit = (props: { aside?: JSX.Element; children: JSX.Element }) =>
   <div class="ui-overlay-split" data-aside={props.aside ? "" : undefined}>{props.children}<Show when={props.aside}><aside class="ui-overlay-aside">{props.aside}</aside></Show></div>;
 
-/** The keys along the foot: [keys, what they do], at the start and the end. */
-export type Hint = [string[], string];
-export function OverlayHints(props: { start: Hint[]; end?: Hint[] }) {
-  const hint = ([keys, label]: Hint) => <span><For each={keys}>{(key) => <Keycap>{key}</Keycap>}</For>{label}</span>;
-  return <div class="ui-overlay-hints" aria-hidden="true"><For each={props.start}>{hint}</For>
+/** The keys along the foot: [keys, what they do], at the start and the end; with a press, the hint is that action's button too.
+ *  count: what an edit has chosen ("2 selected"), first. */
+export type Hint = [string[], string, (() => void)?];
+export function OverlayHints(props: { start: Hint[]; end?: Hint[]; count?: string }) {
+  const hint = ([keys, label, press]: Hint) => {
+    const inner = () => <><For each={keys}>{(key) => <Keycap>{key}</Keycap>}</For>{label}</>;
+    return press ? <button type="button" tabIndex={-1} onMouseDown={(event) => event.preventDefault()} onClick={() => press()}>{inner()}</button> : <span>{inner()}</span>;
+  };
+  return <div class="ui-overlay-hints" role="note" aria-label="Keys"><Show when={props.count}><b>{props.count}</b></Show><For each={props.start}>{hint}</For>
     <Show when={props.end}><span class="ui-overlay-hints-end"><For each={props.end}>{hint}</For></span></Show></div>;
 }
+
+/** On a phone the keys mean nothing: the hints give way to a bar of the view's actions, as buttons. */
+export type OverlayAction = { label: string; onClick: () => void; disabled?: boolean; destructive?: boolean };
+export const OverlayActions = (props: { actions: OverlayAction[] }) => <div class="ui-overlay-actions">
+  <For each={props.actions}>{(action) => <Button variant={action.destructive ? "destructive" : "ghost"} outline disabled={action.disabled} onClick={() => action.onClick()}>{action.label}</Button>}</For>
+</div>;
 
 /** A rail of sections down the side: a title, NavGroups, and a foot. */
 export function OverlayRail(props: { title: string; foot?: JSX.Element; children: JSX.Element }) {

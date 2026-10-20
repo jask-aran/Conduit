@@ -1,5 +1,5 @@
 import { For, Show, splitProps, type JSX } from "solid-js";
-import { ChevronRightIcon, SearchIcon } from "lucide-solid";
+import { CheckIcon, ChevronRightIcon, SearchIcon } from "lucide-solid";
 import { cn } from "@/lib/utils";
 import { Keycap } from "./controls";
 import { type Density, type Motion, motionOf, moveCursor } from "./shared";
@@ -54,25 +54,51 @@ export function Item(props: JSX.HTMLAttributes<HTMLDivElement> & {
   /** keysFirst: the keycaps lead the row (the leader menu, where the key is what you read first). */
   keysFirst?: boolean;
   checked?: boolean; disabled?: boolean; destructive?: boolean; children: JSX.Element;
-  /** end: a control at the row's end, after its meta (a remove ×). */
-  end?: JSX.Element;
+  /** end: a control at the row's end, after its meta (a remove ×); reveal: shown only on the lit or hovered row, never on a phone. */
+  end?: JSX.Element; reveal?: boolean;
+  /** onOpens: the chevron is a press of its own (a folder's: open it in place, where the row's press goes in); aria-expanded turns it. */
+  onOpens?: () => void; opensLabel?: string;
+  /** indent: a child, under the row it belongs to. picked: in an edit, chosen or not -- a check column, and the wash on each chosen. */
+  indent?: boolean; picked?: boolean;
 }) {
-  const [, rest] = splitProps(props, ["icon", "meta", "detail", "keys", "opens", "active", "field", "keysFirst", "checked", "disabled", "destructive", "children", "end", "class"]);
+  const [, rest] = splitProps(props, ["icon", "meta", "detail", "keys", "opens", "active", "field", "keysFirst", "checked", "disabled", "destructive", "children", "end", "class", "onOpens", "opensLabel", "indent", "picked", "reveal"]);
   return <div role={props.checked !== undefined ? "menuitemradio" : "menuitem"} class="ui-row" aria-checked={props.checked} data-field={props.field ? "" : undefined}
-    data-highlighted={props.active ? "" : undefined} data-checked={props.checked ? "" : undefined} data-disabled={props.disabled ? "" : undefined} data-destructive={props.destructive ? "" : undefined} {...rest}>
+    data-highlighted={props.active ? "" : undefined} data-checked={props.checked ? "" : undefined} data-disabled={props.disabled ? "" : undefined} data-destructive={props.destructive ? "" : undefined} data-indent={props.indent ? "" : undefined} data-picked={props.picked ? "" : undefined} {...rest}>
+    <Show when={props.picked !== undefined}><span class="ui-row-check" aria-hidden="true"><Show when={props.picked}><CheckIcon /></Show></span></Show>
     <Show when={props.keysFirst && props.keys}><Keys keys={props.keys!} first /></Show>
     <Show when={props.icon}><span class="ui-icon">{props.icon}</span></Show><span class="ui-label" data-stacked={props.detail ? "" : undefined}><Show when={props.detail} fallback={props.children}><span>{props.children}</span><small class="ui-detail">{props.detail}</small></Show></span>
     <Show when={props.meta}><small>{props.meta}</small></Show>
     <Show when={!props.keysFirst && props.keys}><Keys keys={props.keys!} /></Show>
-    <Show when={props.opens}><ChevronRightIcon class="ui-chevron" /></Show>
-    <Show when={props.end}><span class="ui-row-end">{props.end}</span></Show>
+    <Show when={props.opens}><Show when={props.onOpens} fallback={<ChevronRightIcon class="ui-chevron" />}>
+      <button type="button" class="ui-chevron" tabIndex={-1} aria-label={props.opensLabel} onMouseDown={(event) => event.preventDefault()} onClick={(event) => { event.stopPropagation(); props.onOpens?.(); }}><ChevronRightIcon /></button>
+    </Show></Show>
+    <Show when={props.end}><span class="ui-row-end" data-reveal={props.reveal ? "" : undefined}>{props.end}</span></Show>
   </div>;
+}
+
+/** The letters of a label a query matched: the run when it holds the query, else its letters in order; null when it
+ *  matched on something unseen (a keyword). */
+export function matchedLetters(text: string, query: string): Set<number> | null {
+  const q = query.trim().toLowerCase();
+  if (!q) return null;
+  const lower = text.toLowerCase();
+  const at = lower.indexOf(q);
+  if (at >= 0) return new Set(Array.from({ length: q.length }, (_, index) => at + index));
+  const hits = new Set<number>();
+  let from = 0;
+  for (const char of q.replace(/\s+/g, "")) {
+    const index = lower.indexOf(char, from);
+    if (index < 0) return null;
+    hits.add(index); from = index + 1;
+  }
+  return hits;
 }
 
 /** Typing lights the match: the matched letters white and heavier, the rest of the label muted. A keyword-only match stays plain. */
 export function Match(props: { text: string; query: string }) {
-  const at = () => props.query ? props.text.toLowerCase().indexOf(props.query.toLowerCase()) : -1;
-  return <Show when={at() >= 0} fallback={props.text}><span class="ui-match">{props.text.slice(0, at())}<b>{props.text.slice(at(), at() + props.query.length)}</b>{props.text.slice(at() + props.query.length)}</span></Show>;
+  const hits = () => matchedLetters(props.text, props.query);
+  return <Show when={hits()} fallback={props.text}>{(lit) =>
+    <span class="ui-match">{[...props.text].map((char, index) => lit().has(index) ? <b>{char}</b> : char)}</span>}</Show>;
 }
 
 /** A run of keys, a keycap each; first: they lead the row (the leader). */

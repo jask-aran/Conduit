@@ -3,7 +3,7 @@ import * as KAlertDialog from "@kobalte/core/alert-dialog";
 import { createEffect, Show, type ComponentProps, type JSX } from "solid-js";
 import { createFullscreenPortalMount } from "./primitives";
 import { Card } from "./ui/card";
-import { Scrim } from "./ui/overlay";
+import { Overlay, Scrim } from "./ui/overlay";
 
 /** Kobalte owns modality and focus; Card and Scrim own every part of the surface. */
 export function Dialog(props: {
@@ -61,4 +61,29 @@ export function Dialog(props: {
       </K.Content>
     </K.Portal>
   </K.Root>;
+}
+
+/** A large overlay (a palette, chat search): Kobalte owns modality and focus; Scrim and Overlay own the surface.
+ *  Pinned near the top so filtering shrinks it from the bottom (placement="center" for one that does not filter). */
+export function OverlayDialog(props: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  label: string;
+  placement?: "top" | "center";
+  style?: JSX.CSSProperties;
+  onOpenAutoFocus?: (event: Event) => void;
+  onCloseAutoFocus?: (event: Event) => void;
+  onEscapeKeyDown?: (event: KeyboardEvent) => void;
+  children: JSX.Element;
+}) {
+  const mount = createFullscreenPortalMount();
+  return <KDialog.Root open={props.open} onOpenChange={props.onOpenChange}>
+    <KDialog.Portal mount={mount()}>
+      <KDialog.Content as={Scrim} dialog placement={props.placement ?? "top"} aria-label={props.label} data-state={props.open ? "open" : "closed"}
+        onOpenAutoFocus={props.onOpenAutoFocus} onCloseAutoFocus={props.onCloseAutoFocus} onEscapeKeyDown={props.onEscapeKeyDown}
+        onPointerDown={(event: PointerEvent) => { if (event.target === event.currentTarget) props.onOpenChange(false); }}>
+        <Overlay embedded label={props.label} style={props.style} motion={props.open ? "entering" : "leaving"}>{props.children}</Overlay>
+      </KDialog.Content>
+    </KDialog.Portal>
+  </KDialog.Root>;
 }

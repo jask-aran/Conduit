@@ -268,7 +268,8 @@ export class ShortcutManager {
       if (browse !== null) {
         event.preventDefault();
         event.stopPropagation();
-        if (browsable[browse] !== pending.shown) {
+        // No level with keys (an exclusive region's own): nothing to browse to.
+        if (browsable.length && browsable[browse] !== pending.shown) {
           this.pending = { ...pending, shown: browsable[browse]! };
           this.emit();
         }

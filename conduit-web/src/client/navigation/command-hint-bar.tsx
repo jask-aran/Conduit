@@ -1,4 +1,5 @@
-import { createMemo, createSignal, For, onCleanup, Show } from "solid-js";
+import { createMemo, createSignal, onCleanup } from "solid-js";
+import { OverlayHints, type Hint as KeyHint } from "@/components/ui/overlay";
 import { COMMAND_IDS, getCommandDefinition } from "../commands/command-registry";
 import type { ShortcutManager } from "../shortcuts/shortcut-manager";
 import {
@@ -13,8 +14,6 @@ type Hint = {
   commandId?: string;
   label: string;
   keys?: string[];
-  /* Which hints go first as the rail narrows: 3 soonest, 1 never. */
-  drop?: 1 | 2 | 3;
 };
 
 const fixedHint = (label: string, ...keys: string[]): Hint => ({ label, keys });
@@ -25,24 +24,6 @@ const genericBrowseHints = [
   fixedHint("Open", "Enter"),
   fixedHint("Close", "Esc"),
 ];
-
-function HintContents(props: { hint: Hint }) {
-  return <>
-    <For each={props.hint.keys || []}>{(key) => <kbd class="keycap command-hint-key">{key}</kbd>}</For>
-    <span class="command-hint-label">{props.hint.label}</span>
-  </>;
-}
-
-function HintItem(props: { hint: Hint; onClick?: () => void }) {
-  return <Show
-    when={props.onClick}
-    fallback={<span class="command-hint-item" data-drop={props.hint.drop}><HintContents hint={props.hint} /></span>}
-  >
-    <button type="button" class="command-hint-item command-hint-action" data-drop={props.hint.drop} onClick={() => props.onClick?.()}>
-      <HintContents hint={props.hint} />
-    </button>
-  </Show>;
-}
 
 export function CommandHintBar(props: {
   context: CommandHintContext;
@@ -119,12 +100,12 @@ export function CommandHintBar(props: {
     if (props.context === "chat") return [
       commandHint(COMMAND_IDS.toggleChatEdit, "Edit"),
       commandHint(COMMAND_IDS.renameHighlightedChat, "Rename"),
-      { ...commandHint(COMMAND_IDS.deleteHighlightedChat, "Delete"), drop: 2 },
-      { ...commandHint(COMMAND_IDS.moveHighlightedChat, "Move"), drop: 2 },
-      { ...fixedHint("Expand", "→"), drop: 3 },
-      { ...fixedHint("Search in", "/"), drop: 3 },
-      { ...fixedHint("Project", "Ctrl", "Enter"), drop: 3 },
-      { ...fixedHint("Preview", "Ctrl", "P"), drop: 2 },
+      commandHint(COMMAND_IDS.deleteHighlightedChat, "Delete"),
+      commandHint(COMMAND_IDS.moveHighlightedChat, "Move"),
+      fixedHint("Expand", "→"),
+      fixedHint("Search in", "/"),
+      fixedHint("Project", "Ctrl", "Enter"),
+      fixedHint("Preview", "Ctrl", "P"),
       fixedHint("Open", "Enter"),
       fixedHint(props.scoped ? "Out" : "Close", "Esc"),
     ];
@@ -152,21 +133,8 @@ export function CommandHintBar(props: {
     return undefined;
   };
 
-  return <div class="frost-rail command-hint-bar" role="note" aria-label={props.context === "chat" ? "Chat search controls and keyboard shortcuts" : "Keyboard shortcuts"} data-mode={props.mode} data-chat-search={props.context === "chat" || undefined}>
-    <Show when={props.selectedCount !== null}><span class="command-selection-count">{props.selectedCount} selected</span></Show>
-    <div class="command-hint-items command-hint-primary">
-      <For each={primary()}>{(hint) => <HintItem hint={hint} onClick={hintAction(hint)} />}</For>
-    </div>
-    <div class="command-hint-items command-hint-secondary">
-      <For each={secondary()}>{(hint) => <HintItem hint={hint} />}</For>
-    </div>
-    <Show when={secondary().length}>
-      <details class="command-hint-more">
-        <summary>More shortcuts</summary>
-        <div class="command-hint-more-list">
-          <For each={secondary()}>{(hint) => <HintItem hint={hint} />}</For>
-        </div>
-      </details>
-    </Show>
-  </div>;
+  // The view's actions first, then the keys that move through it, at the end; an action is its hint's button too.
+  const keyHint = (hint: Hint): KeyHint => [hint.keys || [], hint.label, hintAction(hint)];
+  return <OverlayHints count={props.selectedCount !== null ? `${props.selectedCount} selected` : undefined}
+    start={primary().map(keyHint)} end={secondary().map(keyHint)} />;
 }

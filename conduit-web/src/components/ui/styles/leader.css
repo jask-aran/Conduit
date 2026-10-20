@@ -16,3 +16,20 @@
 .ui-spotlight-lit[data-whole] { top: 50%; left: 50%; width: 0; height: 0; }
 @media (prefers-reduced-motion: reduce) { .ui-spotlight-lit { transition: none; } }
 .ui-leader .ui-overlay-hints { gap: var(--space-xs) var(--space-lg); }
+/* In-cell by default; foot keeps the card above the composer, including its safe inset. */
+.ui-leader-placement { display: contents; }
+.ui-leader-placement[data-placement="foot"] {
+  position: fixed; bottom: calc(7.5rem + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)));
+  left: 50%; z-index: calc(var(--layer-leader) + 1); display: flex;
+  width: min(var(--measure-xl), calc(100vw - 2 * var(--space-lg))); translate: -50% 0; user-select: none;
+}
+/* A phone's leader stays a small card, with its go-to rail, rather than filling the screen. */
+.ui-leader-placement[data-placement="foot"] > .ui-frost.ui-leader {
+  width: 100%; height: auto; max-height: min(72dvh, calc(35 * var(--space-xl)));
+}
+.ui-leader-placement[data-placement="foot"] .ui-overlay-hints { display: flex; }
+/* The fixed dim takes presses outside the card; the in-cell spotlight stays transparent to them. */
+.ui-spotlight[data-fixed] { position: fixed; z-index: var(--layer-leader); pointer-events: auto; }
+.ui-spotlight[data-entering] { animation: ui-fade-in var(--duration-quick) var(--ease-change) backwards; }
+.ui-spotlight[data-leaving] { animation: ui-fade-out var(--duration-quick) var(--ease-leave) forwards; pointer-events: none; }
+@media (prefers-reduced-motion: reduce) { .ui-spotlight:is([data-entering], [data-leaving]) { animation: none; } }

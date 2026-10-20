@@ -13,7 +13,12 @@
 .ui-overlay-lead svg { width: var(--icon-lg); height: var(--icon-lg); color: var(--muted-foreground); }
 .ui-overlay-input { min-width: 0; height: var(--control-lg); flex: 1; border: 0; outline: 0; background: transparent; padding: 0; color: var(--foreground); font-size: var(--text-body); font-weight: var(--weight-rest); line-height: var(--leading-text); }
 .ui-overlay-input::placeholder { color: var(--muted-foreground); }
-.ui-overlay-bar .ui-seg { flex: none; }
+.ui-overlay-bar :is(.ui-seg, .ui-crumbs) { flex: none; }
+/* A chip: a scope or a view as a mono token on the keycap's tint, its × muted until pressed near. */
+.ui-overlay-chip { display: inline-flex; height: var(--control-xs); flex: none; align-items: center; gap: var(--space-2xs); border: 0; border-radius: var(--radius-inset); background: var(--tint); padding: 0 var(--space-xs) 0 var(--space-sm);
+  color: var(--foreground); font: var(--weight-rest) var(--text-caption)/var(--leading-none) var(--font-data); white-space: nowrap; cursor: pointer; }
+.ui-overlay-chip > svg { width: var(--icon-xs); height: var(--icon-xs); color: var(--muted-foreground); }
+.ui-overlay-chip:is(:hover, :focus-visible) > svg { color: var(--foreground); }
 /* Its rows: a popover's Items at the overlay's scale, full colour; its group titles plain, not ruled. */
 /* Its rows are the shared row (Type · Scale, Space). */
 .ui-overlay-list {
@@ -27,6 +32,14 @@
 .ui-overlay-hints { display: flex; min-height: var(--control-lg); flex: none; flex-wrap: wrap; align-items: center; gap: var(--space-sm) var(--space-xl); border-top: var(--hairline) solid var(--tint); padding: var(--space-md) var(--space-lg); color: var(--muted-foreground); font-size: var(--text-caption); }
 .ui-overlay-hints span { display: inline-flex; align-items: center; gap: var(--space-xs); white-space: nowrap; }
 .ui-overlay-hints-end { margin-left: auto; gap: var(--space-xl) !important; }
+/* A hint that is also its action's button: the hint as drawn, its label white, the wash under the pointer. */
+.ui-overlay-hints button { display: inline-flex; align-items: center; gap: var(--space-xs); margin: calc(-1 * var(--space-2xs)) calc(-1 * var(--space-xs)); border: 0; border-radius: var(--radius-control); background: transparent;
+  padding: var(--space-2xs) var(--space-xs); color: var(--foreground); font: inherit; white-space: nowrap; cursor: pointer; }
+.ui-overlay-hints button:is(:hover, :focus-visible) { outline: none; background: var(--tint); }
+.ui-overlay-hints > b { color: var(--foreground); font-weight: var(--weight-strong); white-space: nowrap; }
+.ui-overlay-empty { margin: 0; padding: var(--space-2xl) var(--space-lg); color: var(--muted-foreground); font-size: var(--text-row); text-align: center; }
+/* The phone's bar of actions, in the hints' place: a desktop has the hints. */
+.ui-overlay-actions { display: none; }
 .ui-overlay-title { margin: 0; font-size: var(--text-heading); font-weight: var(--weight-strong); line-height: var(--leading-text); letter-spacing: -0.02em; }
 /* The rail beside a page: the sidebar's NavGroups, washed as a popover's rows are. */
 .ui-overlay-rail { display: flex; width: var(--measure-sm); flex: none; flex-direction: column; gap: var(--space-xs); overflow: auto; border-right: var(--hairline) solid var(--tint); padding: var(--space-2xl) var(--space-lg); }
@@ -95,6 +108,18 @@
 [data-density="phone"] .ui-overlay-aside { display: none; }
 [data-density="phone"] .ui-overlay-rail { width: 100%; border-right: 0; }
 [data-density="phone"] .ui-overlay-hints { display: none; }
+[data-density="phone"] .ui-overlay-actions { display: flex; flex: none; gap: var(--space-md); border-top: var(--hairline) solid var(--tint); padding: var(--space-md); }
+[data-density="phone"] .ui-overlay-actions > .ui-button { min-height: var(--control-lg); flex: 1; }
+/* The app's phone: a palette's dialog (pinned to the top) fills the screen inside the safe area; a centred one keeps its inset. */
+@media (--conduit-phone-layout) {
+  .ui-scrim[data-dialog][data-placement="top"] { padding: var(--phone-overlay-padding, var(--space-md)); background: transparent; }
+  .ui-scrim > .ui-frost.ui-overlay { width: 100%; height: 100%; max-height: none; }
+  .ui-scrim .ui-overlay-split { grid-template-columns: minmax(0, 1fr); }
+  .ui-scrim :is(.ui-overlay-aside, .ui-overlay-hints) { display: none; }
+  .ui-scrim .ui-overlay-rail { width: 100%; border-right: 0; }
+  .ui-scrim .ui-overlay-actions { display: flex; flex: none; gap: var(--space-md); border-top: var(--hairline) solid var(--tint); padding: var(--space-md); }
+  .ui-scrim .ui-overlay-actions > .ui-button { min-height: var(--control-lg); flex: 1; }
+}
 
 /* Glance: chat search's preview column, in the row's voice: the title at the strong weight, facts in
    the data face, the prompt as the user's message is drawn, the answer a step under the text colour. */

@@ -376,70 +376,14 @@ svg.lucide { stroke-width: 2.4; }
 .installations h3, .workspace-settings-card h3 { margin: 0; }
 .installations p, .workspace-settings-card p { margin: 4px 0; color: var(--muted-foreground); }
 .search-settings { display: grid; gap: 12.8px; }
-.command-dialog { width: 100vw; height: 100dvh; margin: 0; }
-.command-shell { display: flex; flex-direction: column; max-height: min(480px, calc(100dvh - 22.4px)); overflow: hidden; }
-.command-dialog-chat-search .command-shell { max-height: min(576px, calc(100dvh - 22.4px)); }
-.command-dialog-model-selector { z-index: 90; }
-.command-input-row { display: flex; align-items: center; border-bottom: 1px solid var(--border); }
-.command-page-prefix { color: var(--muted-foreground); font-size: 10.4px; white-space: nowrap; }
-.command-filter-chip { display: inline-flex; align-items: center; font-size: 9.6px; }
-.command-filter-chip span { line-height: 1; }
-.command-input { min-width: 0; flex: 1; border: 0; outline: 0; background: transparent; padding: 0; color: inherit; }
-.command-close { flex: none; color: var(--muted-foreground); }
-.command-close svg { width: 12.8px; height: 12.8px; }
-.command-selection-count { flex: none; white-space: nowrap; }
-.command-list { min-height: 0; flex: 1; overflow-y: auto; }
-.command-list:focus-visible { outline: none; }
-.command-hint-bar { display: flex; min-width: 0; align-items: center; border-top: 1px solid var(--border); background: var(--popover); color: var(--muted-foreground); }
-.command-sort-toggle { display: flex; flex: none; align-items: center; gap: 1.6px; border: 0.8px solid var(--border); padding: 1.6px; }
-.command-sort-toggle button { border: 0; background: transparent; }
-.command-sort-toggle button:focus-visible { background: oklch(1 0 0 / 10%); }
-.command-hint-items { display: flex; min-width: 0; flex-wrap: wrap; align-items: center; gap: 4.8px 9.6px; }
-.command-hint-primary { flex: none; }
-.command-hint-secondary { min-width: 0; flex: 1; }
-.command-hint-item { display: inline-flex; min-height: 16px; align-items: center; gap: 4px; white-space: nowrap; }
-.command-hint-label { color: var(--muted-foreground); }
-.command-hint-primary .command-hint-item:first-child .command-hint-label { color: var(--foreground); font-weight: 550; }
-.command-hint-action { border: 0.8px solid color-mix(in oklch, var(--border), var(--foreground) 10%); color: inherit; }
-.command-hint-action .command-hint-label { color: var(--foreground); font-weight: 550; }
-.command-hint-action:hover { border-color: color-mix(in oklch, var(--border), var(--foreground) 22%); }
-.command-hint-action:focus-visible { background: oklch(1 0 0 / 10%); }
-.command-hint-key { display: inline-grid; place-items: center; border: 0.8px solid color-mix(in oklch, var(--border), var(--foreground) 12%); padding: 0 4px; font: 500 8px/1 ui-monospace, SFMono-Regular, Menlo, monospace; }
-.command-hint-more { display: none; margin-left: auto; }
-.command-hint-more summary { cursor: pointer; list-style: none; color: var(--muted-foreground); }
-.command-hint-more summary::-webkit-details-marker { display: none; }
-.command-hint-more summary::after { content: "▾"; margin-left: 4px; color: var(--muted-foreground); }
-.command-hint-more[open] summary::after { content: "▴"; }
-.command-hint-more-list { display: flex; flex-wrap: wrap; gap: 4.8px 9.6px; margin-top: 6.4px; border-top: 1px solid var(--border); padding-top: 6.4px; }
-.command-list, .settings-content, .attachment-tray, .workspace-tree, .workspace-preview pre, .workspace-changes, .workspace-diff-content { scrollbar-color: var(--native-scrollbar-color); scrollbar-width: var(--native-scrollbar-width); }
-.command-list::-webkit-scrollbar, .settings-content::-webkit-scrollbar, .attachment-tray::-webkit-scrollbar, .workspace-tree::-webkit-scrollbar, .workspace-preview pre::-webkit-scrollbar, .workspace-changes::-webkit-scrollbar, .workspace-diff-content::-webkit-scrollbar { width: 5.6px; height: 5.6px; }
-.command-list::-webkit-scrollbar-thumb, .settings-content::-webkit-scrollbar-thumb, .attachment-tray::-webkit-scrollbar-thumb, .workspace-tree::-webkit-scrollbar-thumb, .workspace-preview pre::-webkit-scrollbar-thumb, .workspace-changes::-webkit-scrollbar-thumb, .workspace-diff-content::-webkit-scrollbar-thumb { border: 1.6px solid transparent; border-radius: 999px; background: color-mix(in oklch, var(--foreground), transparent 72%); background-clip: padding-box; }
-.command-empty { color: var(--muted-foreground); font-size: 11.2px; text-align: center; }
-.command-option { display: flex; width: 100%; align-items: center; border: 0; background: transparent; color: inherit; text-align: left; cursor: pointer; }
-.command-option[data-highlighted] { color: var(--accent-foreground); }
-.command-option[data-danger] { color: var(--destructive); }
-.command-icon { flex: none; color: var(--muted-foreground); }
-.command-option[data-danger] .command-icon { color: var(--destructive); }
-.command-copy { display: flex; min-width: 0; flex: 1; flex-direction: column; }
-.command-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.command-option[data-chat-row="true"] .command-label { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; white-space: normal; }
-.command-copy small { overflow: hidden; color: var(--muted-foreground); text-overflow: ellipsis; white-space: nowrap; }
-.command-model-option { gap: 12.8px; }
-.command-model-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.command-model-spec { min-width: 0; margin-left: auto; overflow: hidden; color: var(--muted-foreground); text-align: right; text-overflow: ellipsis; white-space: nowrap; }
-.command-chevron { width: 12px; height: 12px; flex: none; color: var(--muted-foreground); }
-.command-shortcut { color: var(--muted-foreground); font-size: 8.8px; font-family: inherit; }
-.command-option[data-checked]:not([data-highlighted]) { background: color-mix(in oklch, var(--accent), transparent 45%); }
-.command-select-mark { display: grid; width: 13.6px; height: 13.6px; flex: none; place-items: center; border: 0.8px solid var(--border); color: var(--primary); }
-.command-select-mark svg { width: 10.4px; height: 10.4px; }
-.command-rename-input { min-width: 0; width: 100%; outline: 0; color: inherit; font: inherit; }
-.command-detail-pane { width: min(256px, calc(100vw - 22.4px)); max-height: min(480px, calc(100dvh - 22.4px)); overflow: auto; border: 0.8px solid var(--border); border-left: 0; border-radius: 0 11.2px 11.2px 0; background: var(--popover); padding: 12.8px; }
+.settings-content, .attachment-tray, .workspace-tree, .workspace-preview pre, .workspace-changes, .workspace-diff-content { scrollbar-color: var(--native-scrollbar-color); scrollbar-width: var(--native-scrollbar-width); }
+.settings-content::-webkit-scrollbar, .attachment-tray::-webkit-scrollbar, .workspace-tree::-webkit-scrollbar, .workspace-preview pre::-webkit-scrollbar, .workspace-changes::-webkit-scrollbar, .workspace-diff-content::-webkit-scrollbar { width: 5.6px; height: 5.6px; }
+.settings-content::-webkit-scrollbar-thumb, .attachment-tray::-webkit-scrollbar-thumb, .workspace-tree::-webkit-scrollbar-thumb, .workspace-preview pre::-webkit-scrollbar-thumb, .workspace-changes::-webkit-scrollbar-thumb, .workspace-diff-content::-webkit-scrollbar-thumb { border: 1.6px solid transparent; border-radius: 999px; background: color-mix(in oklch, var(--foreground), transparent 72%); background-clip: padding-box; }
 .palette-move-list { display: flex; flex-direction: column; gap: 1.6px; max-height: 256px; overflow-y: auto; margin-top: 9.6px; }
 .palette-move-option { width: 100%; justify-content: flex-start; gap: 8px; }
 
 /* The old solid surface. Palettes, Settings and menus have moved to frost
    (the frost blocks at the end of this file); dialogs still use it. */
-.command-shell,
 .settings-shell {
   background: var(--popover);
   border: 1px solid var(--border);
@@ -531,37 +475,10 @@ svg.lucide { stroke-width: 2.4; }
   }
   .chat-header-actions { justify-content: flex-end; }
   .settings-shell { height: calc(100dvh - 19.2px); }
-  /* The mobile palette fills the visual viewport while keeping the inset frame
-     that distinguishes it from a separate full-screen route. */
-  .command-dialog {
-    display: flex;
-    align-items: stretch;
-    justify-content: stretch;
-    height: var(--app-height, 100dvh);
-    padding: 6.4px;
-  }
-  .command-dialog .command-shell {
-    width: 100%;
-    height: 100%;
-    max-height: none;
-  }
-  .command-option { min-height: 35.2px; }
 }
 
-/* Very narrow phones retain the inset shell but use denser inner gutters. */
-@media (max-width: 384px) {
-  .command-input-row { padding-inline: 11.2px; }
-  .command-list { padding: 6.4px 8px calc(9.6px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))); }
-}
 
 @media (max-width: 416px) {
-  .command-hint-bar { align-items: flex-start; gap: 6.4px; padding: 5.6px 8px; }
-  .command-hint-bar[data-mode="edit"] .command-hint-primary { width: 100%; flex: 1 1 100%; }
-  .command-hint-secondary { display: none; }
-  .command-hint-more { display: block; }
-  .command-hint-more[open] { flex: 1; }
-  .command-hint-more-list { gap: 4.8px 8px; }
-  .command-hint-key { min-width: 15.2px; height: 15.2px; }
   .settings-rail { width: 60.8px; padding-inline: 4px; }
   .settings-rail h2 { display: none; }
   .settings-rail button { overflow: hidden; padding-inline: 4px; font-size: 8.8px; text-overflow: ellipsis; }
@@ -781,80 +698,15 @@ svg.lucide { stroke-width: 2.4; }
 .installations h3, .workspace-settings-card h3 { margin: 0; }
 .installations p, .workspace-settings-card p { margin: 5px 0; color: var(--muted-foreground); }
 .search-settings { display: grid; gap: 16px; }
-.command-dialog { width: 100vw; height: 100dvh; margin: 0; }
-.command-shell { display: flex; flex-direction: column; width: min(640px, calc(100vw - 28px)); max-height: min(600px, calc(100dvh - 28px)); overflow: hidden; border-radius: 14px; }
-.command-dialog-chat-search .command-shell { width: min(900px, calc(100vw - 28px)); max-height: min(720px, calc(100dvh - 28px)); }
-.command-dialog-model-selector { z-index: 90; }
-.command-dialog-model-selector .command-shell { width: min(720px, calc(100vw - 28px)); }
-.command-input-row { display: flex; align-items: center; gap: 8px; padding: 0 8px 0 13px; border-bottom: 1px solid var(--border); }
-.command-page-prefix { color: var(--muted-foreground); font-size: 13px; white-space: nowrap; }
-.command-filter-chip { display: inline-flex; flex: none; align-items: center; gap: 5px; border: 1px solid var(--border); border-radius: 999px; background: var(--accent); padding: 3px 7px 3px 9px; color: var(--accent-foreground); font-size: 12px; }
-.command-filter-chip span { color: var(--muted-foreground); font-size: 14px; line-height: 1; }
-.command-filter-chip:hover, .command-filter-chip:focus-visible { border-color: var(--ring); }
-.command-input { min-width: 0; flex: 1; min-height: 50px; border: 0; outline: 0; background: transparent; padding: 0; color: inherit; font-size: 15px; }
-.command-input::placeholder { color: var(--muted-foreground); }
-.command-close { flex: none; color: var(--muted-foreground); }
-.command-close svg { width: 16px; height: 16px; }
-.command-selection-count { flex: none; color: var(--muted-foreground); font-size: 12px; white-space: nowrap; }
-.command-list { min-height: 0; flex: 1; overflow-y: auto; padding: 7px; }
-.command-list:focus-visible { outline: none; }
-.command-hint-bar { display: flex; min-width: 0; min-height: 36px; align-items: center; gap: 10px; border-top: 1px solid var(--border); background: var(--popover); padding: 7px 12px; color: var(--muted-foreground); font-size: 11px; }
-.command-sort-toggle { display: flex; flex: none; align-items: center; gap: 2px; border: 1px solid var(--border); border-radius: 7px; padding: 2px; }
-.command-sort-toggle button { min-height: 20px; border: 0; border-radius: 5px; background: transparent; padding: 2px 6px; color: var(--muted-foreground); font-size: 8.5px; }
-.command-sort-toggle button[aria-pressed="true"] { background: var(--accent); color: var(--foreground); }
-.command-sort-toggle button:focus-visible { outline: none; background: oklch(1 0 0 / 10%); }
-.command-hint-items { display: flex; min-width: 0; flex-wrap: wrap; align-items: center; gap: 6px 12px; }
-.command-hint-primary { flex: none; }
-.command-hint-secondary { min-width: 0; flex: 1; }
-.command-hint-item { display: inline-flex; min-height: 20px; align-items: center; gap: 5px; white-space: nowrap; }
-.command-hint-label { color: var(--muted-foreground); }
-.command-hint-primary .command-hint-item:first-child .command-hint-label { color: var(--foreground); font-weight: 550; }
-.command-hint-action { min-height: 28px; border: 1px solid color-mix(in oklch, var(--border), var(--foreground) 10%); border-radius: 6px; background: transparent; padding: 3px 7px 3px 4px; color: inherit; }
-.command-hint-action .command-hint-label { color: var(--foreground); font-weight: 550; }
-.command-hint-action:hover { border-color: color-mix(in oklch, var(--border), var(--foreground) 22%); background: var(--accent); }
-.command-hint-action:focus-visible { outline: none; background: oklch(1 0 0 / 10%); }
-.command-hint-key { display: inline-grid; min-width: 20px; height: 20px; place-items: center; border: 1px solid color-mix(in oklch, var(--border), var(--foreground) 12%); border-radius: 4px; background: var(--background); padding: 0 5px; color: var(--muted-foreground); font: 500 10px/1 ui-monospace, SFMono-Regular, Menlo, monospace; }
-.command-hint-more { display: none; margin-left: auto; }
-.command-hint-more summary { cursor: pointer; list-style: none; color: var(--muted-foreground); }
-.command-hint-more summary::-webkit-details-marker { display: none; }
-.command-hint-more summary::after { content: "▾"; margin-left: 5px; color: var(--muted-foreground); }
-.command-hint-more[open] summary::after { content: "▴"; }
-.command-hint-more-list { display: flex; flex-wrap: wrap; gap: 6px 12px; margin-top: 8px; border-top: 1px solid var(--border); padding-top: 8px; }
-.command-list, .settings-content, .attachment-tray, .workspace-tree, .workspace-preview pre, .workspace-changes, .workspace-diff-content { scrollbar-color: var(--native-scrollbar-color); scrollbar-width: var(--native-scrollbar-width); }
-.command-list::-webkit-scrollbar, .settings-content::-webkit-scrollbar, .attachment-tray::-webkit-scrollbar, .workspace-tree::-webkit-scrollbar, .workspace-preview pre::-webkit-scrollbar, .workspace-changes::-webkit-scrollbar, .workspace-diff-content::-webkit-scrollbar { width: 7px; height: 7px; }
-.command-list::-webkit-scrollbar-thumb, .settings-content::-webkit-scrollbar-thumb, .attachment-tray::-webkit-scrollbar-thumb, .workspace-tree::-webkit-scrollbar-thumb, .workspace-preview pre::-webkit-scrollbar-thumb, .workspace-changes::-webkit-scrollbar-thumb, .workspace-diff-content::-webkit-scrollbar-thumb { border: 2px solid transparent; border-radius: 999px; background: color-mix(in oklch, var(--foreground), transparent 72%); background-clip: padding-box; }
-.command-empty { padding: 18px 12px; color: var(--muted-foreground); font-size: 14px; text-align: center; }
-.command-group-label { margin: 8px 8px 3px; color: var(--muted-foreground); font-size: 11px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; }
-.command-list > .command-group-label:first-child { margin-top: 2px; }
-.command-option { display: flex; width: 100%; align-items: center; gap: 10px; border: 0; border-radius: 8px; background: transparent; padding: 8px 10px; color: inherit; text-align: left; cursor: pointer; }
-.command-option[data-highlighted] { background: var(--accent); color: var(--accent-foreground); }
-.command-option[data-danger] { color: var(--destructive); }
-.command-icon { width: 16px; height: 16px; flex: none; color: var(--muted-foreground); }
-.command-option[data-danger] .command-icon { color: var(--destructive); }
-.command-copy { display: flex; min-width: 0; flex: 1; flex-direction: column; }
-.command-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.command-option[data-chat-row="true"] .command-label { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; white-space: normal; }
-.command-copy small { overflow: hidden; color: var(--muted-foreground); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
-.command-model-option { gap: 16px; }
-.command-model-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.command-model-option[data-scoped] .command-model-label { font-weight: 700; }
-.command-model-spec { min-width: 0; margin-left: auto; overflow: hidden; color: var(--muted-foreground); font: 12px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace; text-align: right; text-overflow: ellipsis; white-space: nowrap; }
-.command-chevron { width: 15px; height: 15px; flex: none; color: var(--muted-foreground); }
-.command-shortcut { flex: none; color: var(--muted-foreground); font-size: 11px; font-family: inherit; }
-.command-option[data-checked]:not([data-highlighted]) { background: color-mix(in oklch, var(--accent), transparent 45%); }
-.command-option[data-checked] .command-label { font-weight: 620; }
-.command-select-mark { display: grid; width: 17px; height: 17px; flex: none; place-items: center; border: 1px solid var(--border); border-radius: 4px; color: var(--primary); }
-.command-select-mark svg { width: 13px; height: 13px; }
-.command-option[data-chat-selected="true"] { background: var(--accent); }
-.command-rename-input { min-width: 0; width: 100%; border: 1px solid var(--ring); border-radius: 5px; outline: 0; background: var(--background); padding: 2px 5px; color: inherit; font: inherit; }
-.command-detail-pane { width: min(320px, calc(100vw - 28px)); max-height: min(600px, calc(100dvh - 28px)); overflow: auto; border: 1px solid var(--border); border-left: 0; border-radius: 0 14px 14px 0; background: var(--popover); padding: 16px; }
+.settings-content, .attachment-tray, .workspace-tree, .workspace-preview pre, .workspace-changes, .workspace-diff-content { scrollbar-color: var(--native-scrollbar-color); scrollbar-width: var(--native-scrollbar-width); }
+.settings-content::-webkit-scrollbar, .attachment-tray::-webkit-scrollbar, .workspace-tree::-webkit-scrollbar, .workspace-preview pre::-webkit-scrollbar, .workspace-changes::-webkit-scrollbar, .workspace-diff-content::-webkit-scrollbar { width: 7px; height: 7px; }
+.settings-content::-webkit-scrollbar-thumb, .attachment-tray::-webkit-scrollbar-thumb, .workspace-tree::-webkit-scrollbar-thumb, .workspace-preview pre::-webkit-scrollbar-thumb, .workspace-changes::-webkit-scrollbar-thumb, .workspace-diff-content::-webkit-scrollbar-thumb { border: 2px solid transparent; border-radius: 999px; background: color-mix(in oklch, var(--foreground), transparent 72%); background-clip: padding-box; }
 .palette-move-list { display: flex; flex-direction: column; gap: 2px; max-height: 320px; overflow-y: auto; margin-top: 12px; }
 .palette-move-option { width: 100%; justify-content: flex-start; gap: 10px; }
 
 /* Overlays, dialogs, and cards share the menu's solid dark surface. The
    glass treatment is reserved for the composer (and the drop overlay's
    native blur); everywhere else translucent grey read as flat, not glassy. */
-.command-shell,
 .settings-shell {
   background: var(--popover);
   border: 1px solid var(--border);
@@ -971,39 +823,10 @@ svg.lucide { stroke-width: 2.4; }
   /* Outranks the menus' rule that sizes every span in a row to the row. */
   .settings-shell { width: calc(100vw - 24px); height: calc(100dvh - 24px); }
   .settings-rail { width: 132px; }
-  /* The mobile palette fills the visual viewport while keeping the inset frame
-     that distinguishes it from a separate full-screen route. */
-  .command-dialog {
-    display: flex;
-    align-items: stretch;
-    justify-content: stretch;
-    height: var(--app-height, 100dvh);
-    padding: 8px;
-  }
-  .command-dialog .command-shell {
-    width: 100%;
-    height: 100%;
-    max-height: none;
-  }
-  .command-input { min-height: 52px; font-size: 16px; }
-  .command-option { min-height: 44px; padding: 10px 12px; }
-  .command-icon { width: 18px; height: 18px; }
 }
 
-/* Very narrow phones retain the inset shell but use denser inner gutters. */
-@media (max-width: 480px) {
-  .command-input-row { padding-inline: 14px; }
-  .command-list { padding: 8px 10px calc(12px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))); }
-}
 
 @media (max-width: 520px) {
-  .command-hint-bar { align-items: flex-start; gap: 8px; padding: 7px 10px; }
-  .command-hint-bar[data-mode="edit"] .command-hint-primary { width: 100%; flex: 1 1 100%; }
-  .command-hint-secondary { display: none; }
-  .command-hint-more { display: block; }
-  .command-hint-more[open] { flex: 1; }
-  .command-hint-more-list { gap: 6px 10px; }
-  .command-hint-key { min-width: 19px; height: 19px; }
   .settings-rail { width: 76px; padding-inline: 5px; }
   .settings-rail h2 { display: none; }
   .settings-rail button { overflow: hidden; padding-inline: 5px; font-size: 11px; text-overflow: ellipsis; }
@@ -1486,84 +1309,6 @@ svg.lucide { stroke-width: 2.4; }
   .settings-dialog .settings-save-status { position: absolute; top: 12px; right: 48px; min-width: 0; height: 32px; margin: 0; }
 }
 
-/* Command and search overlays: layout. The material is the frost block at
-   the end of this file. */
-.command-dialog { align-items: start; padding-top: clamp(40px, 10vh, 92px); }
-.command-shell {
-  width: min(512px, calc(100vw - 22px));
-  max-height: min(480px, 72dvh);
-  border: 1px solid oklch(1 0 0 / 10%);
-  border-radius: 12px;
-  box-shadow: 0 28px 84px rgb(0 0 0 / 55%);
-}
-.command-dialog-chat-search .command-shell { width: min(720px, calc(100vw - 22px)); max-height: min(576px, 76dvh); }
-.command-dialog-model-selector .command-shell { width: min(576px, calc(100vw - 22px)); }
-.command-input-row { min-height: 44px; gap: 8px; padding: 4px 11px; border-bottom-color: oklch(1 0 0 / 10%); }
-.command-input { min-height: 36px; }
-.command-input::placeholder { color: oklch(0.65 0.004 264); }
-.command-input-glyph { color: var(--foreground); font: 600 16px/1 ui-monospace, SFMono-Regular, Menlo, monospace; }
-.command-input-icon { width: 14px; height: 14px; flex: none; color: var(--muted-foreground); }
-.command-back { width: 24px; min-width: 24px; height: 24px; min-height: 24px; flex: none; color: var(--muted-foreground); }
-.command-back svg { width: 12px; height: 12px; }
-.command-page-prefix { font-weight: 580; }
-.command-filter-chip { border-color: oklch(1 0 0 / 10%); background: oklch(1 0 0 / 10%); }
-.command-filter-chip:hover, .command-filter-chip:focus-visible { outline: none; border-color: color-mix(in oklch, oklch(1 0 0 / 10%), var(--foreground) 24%); }
-.command-sort-toggle { border-color: oklch(1 0 0 / 10%); }
-.command-sort-toggle button { min-height: 18px; }
-.command-sort-toggle button:focus-visible { outline: none; background: oklch(1 0 0 / 10%); }
-.command-list { padding: 5px 6px; }
-.command-group-label { color: oklch(0.68 0.004 264); }
-.command-list > .command-group-label:first-child { margin-top: 2px; }
-.command-option { min-height: 29px; gap: 8px; border-radius: 7px; padding: 5px 8px; }
-.command-option[data-highlighted], .command-option[data-chat-selected="true"] { background: oklch(1 0 0 / 10%); }
-.command-option:not(.command-model-option):not([data-danger]) { color: color-mix(in oklch, var(--foreground), transparent 32%); }
-.command-option:not(.command-model-option):is([data-highlighted], [data-chat-selected="true"], :hover, [aria-current="page"]) { color: var(--foreground); }
-.command-copy { gap: 0; }
-.command-label { min-width: 0; }
-.command-option:not(.command-model-option) .command-copy { flex-direction: row; align-items: baseline; gap: 10px; }
-.command-option:not(.command-model-option) .command-copy small { max-width: 40%; margin-left: auto; }
-.command-dialog-chat-search .command-option[data-chat-row="true"] { min-height: 30px; align-items: center; }
-.command-dialog-chat-search .command-option[data-chat-row="true"] .command-label { display: block; min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.command-dialog-chat-search .command-option[data-chat-row="true"] .command-copy small { flex: none; }
-.command-option[data-chat-row="true"] .thread-harness-mark { width: 12px; height: 12px; }
-.command-option[data-chat-child="true"] { padding-left: 29px; }
-.command-folder-option .command-label { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.command-folder-option[aria-current="page"] .command-label { color: var(--foreground); }
-.command-folder-option small { flex: none; margin-left: auto; color: var(--muted-foreground); white-space: nowrap; }
-.command-folder-option .command-icon, .command-folder-option .workspace-glyph { width: 13px; height: 13px; flex: none; }
-.command-folder-toggle, .command-folder-chevron { display: inline-grid; width: 13px; height: 16px; flex: none; place-items: center; border: 0; background: transparent; padding: 0; color: var(--muted-foreground); }
-.command-folder-toggle { cursor: pointer; }
-.command-folder-toggle svg { width: 11px; height: 11px; transition: transform 120ms ease; }
-.command-folder-toggle svg[data-expanded] { transform: rotate(90deg); }
-.command-folder-search { display: inline-grid; width: 17px; height: 17px; flex: none; place-items: center; border: 0; border-radius: 4px; background: transparent; padding: 0; color: var(--muted-foreground); opacity: 0; cursor: pointer; }
-.command-folder-search svg { width: 12px; height: 12px; }
-.command-folder-option:is([data-highlighted], :hover) .command-folder-search { opacity: 1; }
-.command-folder-search:hover, .command-folder-search:focus-visible { outline: none; background: oklch(1 0 0 / 10%); color: var(--foreground); opacity: 1; }
-.command-browse-all { padding-left: 29px; color: var(--muted-foreground); }
-.command-browse-all .command-label { font-size: 10px; }
-.command-browse-indent { display: none; }
-.command-option[data-chat-row="true"]:is([data-highlighted], [data-chat-selected="true"], [aria-current="page"], :hover) .thread-harness-mark[data-lively] { color: var(--foreground); opacity: 1; }
-.command-option[data-chat-row="true"]:is([data-highlighted], [data-chat-selected="true"], [aria-current="page"], :hover) .thread-harness-mark[data-lively] .harness-mark-tinted { background-color: var(--harness-brand, currentColor); }
-.command-option[data-chat-row="true"]:is([data-highlighted], [data-chat-selected="true"], [aria-current="page"], :hover) .thread-harness-mark[data-artwork] .harness-mark-tinted { opacity: 0; }
-.command-option[data-chat-row="true"]:is([data-highlighted], [data-chat-selected="true"], [aria-current="page"], :hover) .thread-harness-mark[data-artwork] .harness-mark-artwork { opacity: 1; }
-.command-chat-status { position: relative; display: inline-flex; width: 16px; height: 16px; flex: none; align-items: center; justify-content: center; }
-.command-chat-status .runtime-indicator { width: 16px; height: 16px; }
-.command-chat-unread { position: absolute; right: -2px; bottom: 0; width: 5px; height: 5px; border-radius: 50%; background: oklch(0.68 0.17 250); }
-.command-chat-meta { display: flex; min-width: 0; align-items: center; gap: 4px; }
-.command-chat-activity, .command-chat-project { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.command-chat-activity { max-width: 116px; }
-.command-chat-activity[data-attention] { color: var(--foreground); }
-.command-chat-project { max-width: 94px; }
-.command-chat-date { flex: none; white-space: nowrap; }
-.command-hint-bar[data-chat-search] { min-height: 62px; flex-wrap: wrap; align-content: center; gap: 4px 9px; }
-.command-hint-bar[data-chat-search][data-mode="move"] { min-height: 32px; }
-.command-hint-bar[data-chat-search] .command-hint-primary { min-height: 20px; }
-.command-shortcut, .command-model-spec { font: 500 8.5px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace; }
-.command-empty { padding: 16px 9px; }
-.command-hint-bar { min-height: 32px; gap: 9px; border-top-color: oklch(1 0 0 / 10%); padding: 5px 10px; font-size: 8.8px; }
-.command-hint-key { min-width: 16px; height: 16px; border-color: oklch(1 0 0 / 10%); border-radius: 4px; background: oklch(1 0 0 / 5%); font-size: 8px; }
-.command-hint-action { border-color: oklch(1 0 0 / 10%); }
-.command-hint-action:hover, .command-hint-action:focus-visible { outline: none; background: oklch(1 0 0 / 10%); }
 
 @media (--conduit-mobile-layout) {
   /*
@@ -1574,117 +1319,8 @@ svg.lucide { stroke-width: 2.4; }
    */
   .frost-overlay { height: var(--app-height, 100dvh); }
   .settings-dialog .settings-shell { height: var(--app-height, 100dvh); }
-  .command-dialog { display: flex; height: var(--app-height, 100dvh); align-items: stretch; justify-content: stretch; padding: var(--phone-overlay-padding); }
-  .command-dialog .command-shell { width: 100%; height: 100%; max-height: none; border-radius: 14px; }
-  .command-input-row { min-height: 52px; padding-inline: 12px; }
-  .command-input { min-height: 44px; font-size: 16px; }
-  .command-list { padding: 8px 10px calc(12px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))); }
-  .command-option, .command-dialog-chat-search .command-option[data-chat-row="true"] { min-height: 44px; }
-  .command-icon { width: 16px; height: 16px; }
-  .command-hint-bar { flex-wrap: wrap; }
 }
 
-/* Search and the command palette in the composer's frost (the palette sketch,
-   docs/design/palette-sketch): pinned near the top, sidebar-weight group labels,
-   one-line rows, keycaps on rows as in the rail, scope and activity as chips
-   in the bar, and a preview column in chat search. */
-.command-dialog-with-preview .command-shell { width: min(1040px, calc(100vw - 22px)); }
-.command-input-row { border-bottom-color: oklch(1 0 0 / 10%); }
-.command-input { font-size: 13px; font-weight: 450; }
-.command-input::placeholder { color: color-mix(in oklch, var(--foreground), transparent 45%); }
-.command-filter-chip, .command-filter-chip:hover { flex: none; gap: 5px; border: 0; border-radius: 6px; background: oklch(1 0 0 / 10%); padding: 2px 6px; color: var(--foreground); font: 500 9.6px/1.3 ui-monospace, SFMono-Regular, Consolas, monospace; cursor: pointer; }
-.command-filter-chip:hover, .command-filter-chip:focus-visible { background: oklch(1 0 0 / 16%); }
-.command-filter-chip span { color: var(--muted-foreground); font-size: 11px; }
-.command-sort-toggle { border-color: oklch(1 0 0 / 12%); border-radius: 7px; }
-.command-sort-toggle button { font-size: 9.6px; padding: 2px 7px; border-radius: 5px; color: var(--muted-foreground); cursor: pointer; }
-.command-sort-toggle button[aria-pressed="true"] { background: oklch(1 0 0 / 12%); color: var(--foreground); }
-.command-body { display: flex; min-height: 0; flex: 1; }
-.command-body .command-list { min-width: 0; flex: 1; }
-.command-group-label { margin: 10px 8px 4px; color: color-mix(in oklch, var(--foreground), transparent 50%); font-size: 9.6px; font-weight: 700; letter-spacing: 0; text-transform: none; }
-.command-option[data-chat-selected="true"] { background: oklch(1 0 0 / 10%); box-shadow: none; }
-/* The row role: the sidebar row's size, a touch heavier over frost. */
-.command-label, .command-dialog-chat-search .command-option[data-chat-row="true"] .command-label { font-size: 10.4px; font-weight: 500; }
-.command-dialog-chat-search .command-option[data-chat-row="true"][aria-current="page"] .command-label, .command-folder-option[aria-current="page"] .command-label { font-weight: 680; }
-.command-copy small, .command-folder-option small, .command-dialog-chat-search .command-option[data-chat-row="true"] .command-copy small { font-size: 10px; }
-.command-chat-date, .command-folder-count { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-variant-numeric: tabular-nums; }
-.command-chat-date { min-width: 34px; text-align: right; }
-.command-folder-meta { display: inline-flex; align-items: center; gap: 10px; }
-.command-folder-count { min-width: 18px; text-align: right; }
-.command-folder-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--foreground); }
-.command-folder-dot[data-live] { background: var(--live); }
-.command-chat-unread { background: var(--foreground); box-shadow: none; }
-.command-icon { width: 14px; height: 14px; }
-.command-shortcut { display: inline-flex; flex: none; gap: 3px; opacity: .75; }
-.command-option[data-highlighted] .command-shortcut { opacity: 1; }
-.command-option[data-highlighted] .command-shortcut kbd { color: var(--foreground); }
-.command-rename-input { border: 1px solid oklch(1 0 0 / 16%); border-radius: 7px; background: oklch(0 0 0 / 18%); padding: 3px 7px; }
-.command-select-mark { border-color: oklch(1 0 0 / 24%); border-radius: 4px; }
-.command-preview { display: grid; width: 380px; flex: none; align-content: start; gap: 10px; overflow: auto; border-left: 1px solid oklch(1 0 0 / 10%); padding: 14px 16px; color: var(--muted-foreground); font-size: 11px; }
-.command-preview-title { display: flex; gap: 8px; align-items: flex-start; color: var(--foreground); font-size: 12.5px; font-weight: 600; line-height: 1.3; }
-.command-preview-title .thread-harness-mark { width: 14px; height: 14px; flex: none; margin-top: 1px; }
-.command-preview-facts { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font: 10px/1.5 ui-monospace, SFMono-Regular, Consolas, monospace; }
-.command-preview-empty { margin: auto 0; text-align: center; }
-.command-hint-secondary { flex-wrap: nowrap; justify-content: flex-end; overflow: hidden; }
-.command-hint-key { color: var(--muted-foreground); }
-.command-hint-action, .command-hint-action:hover { min-height: 0; border: 0; border-radius: 6px; background: transparent; margin: -2px -4px; padding: 2px 4px; }
-.command-hint-action:hover, .command-hint-action:focus-visible { background: oklch(1 0 0 / 10%); }
-.command-hint-action .command-hint-key { color: var(--foreground); }
-.command-selection-count { color: var(--foreground); font-size: 10px; }
-@media (max-width: 1000px) { .command-preview { display: none; } .command-dialog-with-preview .command-shell { width: min(720px, calc(100vw - 22px)); } }
-@media (--conduit-mobile-layout) { .command-preview { display: none; } .command-dialog-with-preview .command-shell { width: 100%; } .command-label, .command-dialog-chat-search .command-option[data-chat-row="true"] .command-label { font-size: 14.5px; } }
-/* Typing lights the letters that matched and dims the rest of the label. */
-.command-label[data-matching], .command-model-label[data-matching] { color: var(--muted-foreground); }
-.command-label mark, .command-model-label mark { background: none; color: var(--foreground); font-weight: 700; }
-.command-preview-prompt { justify-self: end; max-width: 92%; margin: 2px 0 0; border: 1px solid oklch(1 0 0 / 10%); border-radius: 12px; background: var(--glass-bg); padding: 6px 10px; color: var(--foreground); font-size: 11.5px; line-height: 1.45; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
-.command-preview-answer { margin: 0; color: color-mix(in oklch, var(--foreground), transparent 20%); font-size: 11.5px; line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 7; -webkit-box-orient: vertical; overflow: hidden; }
-/* An answer with formulas: KaTeX in the answer's own colour, no box, left on
-   the column like the words around it. Display maths cannot line-clamp, so
-   the answer stops at a height and fades out, as the folded user message does;
-   a formula wider than the column fades at its right edge. */
-.command-preview-answer-math { display: block; max-height: 15em; -webkit-line-clamp: unset; mask-image: linear-gradient(to bottom, #000 12.5em, transparent 15em); }
-.command-preview-answer-math .katex { font-size: 1.08em; }
-.command-preview-answer-math .katex-display > .katex { font-size: 0.95em; }
-.command-preview-answer-math .katex-display { margin: 0.55em 0; overflow: hidden; text-align: left; mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent); }
-.command-preview-answer-math .katex-display > .katex { text-align: left; }
-.command-preview-turn { display: flex; align-items: center; gap: 8px; font-size: 11px; }
-.command-preview-turn b { color: var(--foreground); font-weight: 560; }
-.command-preview-turn .thinking-orb { width: 16px; height: 16px; flex: none; }
-.command-group-break { display: block; height: 8px; }
-/* The rail drops its least-needed hints as the card narrows rather than
-   cutting them off at the edge. */
-.command-hint-bar { container-type: inline-size; }
-@container (max-width: 900px) { .command-hint-bar [data-drop="3"] { display: none; } }
-@container (max-width: 640px) { .command-hint-bar [data-drop="2"] { display: none; } }
-.command-preview-title .workspace-glyph, .command-preview-title .command-icon { width: 14px; height: 14px; flex: none; margin-top: 1px; }
-.command-preview-chats { display: grid; gap: 2px; margin-top: 4px; }
-.command-preview-chat { min-width: 0; display: flex; align-items: center; gap: 8px; min-height: 24px; color: color-mix(in oklch, var(--foreground), transparent 15%); font-size: 11.5px; }
-.command-preview-chat-title { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.command-preview-chat small { flex: none; color: var(--muted-foreground); font: 10px ui-monospace, SFMono-Regular, Consolas, monospace; }
-.command-preview-chat .thread-harness-mark { width: 12px; height: 12px; flex: none; }
-.command-preview > * { min-width: 0; }
-/* Chat search on a phone: buttons at the foot instead of the key rail, sort
-   among them rather than in the search row, chips that scroll sideways, and a
-   folder chevron big enough to tap (the rest of the row scopes into it). */
-.command-phone-bar { display: none; }
-@media (--conduit-mobile-layout) {
-  .command-dialog-chat-search .command-hint-bar { display: none; }
-  .command-phone-bar { display: flex; gap: 8px; border-top: 1px solid oklch(1 0 0 / 10%); padding: 8px 8px calc(8px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))); }
-  .command-phone-bar button { min-height: 40px; flex: 1; border: 1px solid oklch(1 0 0 / 14%); border-radius: 11px; background: transparent; color: var(--foreground); font: 560 14px "Geist Variable", sans-serif; }
-  .command-phone-bar button:disabled { opacity: .45; }
-  .command-phone-bar .command-phone-danger:not(:disabled) { color: var(--destructive); }
-  .command-dialog-chat-search .command-sort-toggle { display: none; }
-  .command-dialog-chat-search .command-input-row { overflow-x: auto; scrollbar-width: none; }
-  .command-dialog-chat-search .command-input { min-width: 55%; }
-  .command-folder-toggle { width: 32px; height: 36px; margin-left: -8px; }
-  .command-folder-toggle svg { width: 14px; height: 14px; }
-  .command-folder-search { display: none; }
-  .command-list { padding-bottom: 8px; }
-}
-/* Models: scoped is the white of a place you use, unscoped the sidebar's grey,
-   not bold throughout. */
-.command-model-option:not([data-scoped]) .command-model-label { color: var(--muted-foreground); }
-.command-model-label { font-size: 12px; }
-.command-model-spec { font-size: 10px; }
 
 /* The frost overlay (DESIGN.md, Surfaces; components/frost.tsx): anything that
    opens on top of the app. The page dims, the card is pinned near the top in
@@ -1717,13 +1353,7 @@ svg.lucide { stroke-width: 2.4; }
   .frost-overlay .frost-card { width: 100%; height: 100%; max-height: none; background: var(--frost-core); }
 }
 @media (prefers-reduced-motion: reduce) { .frost-overlay .frost-card { animation: none; } }
-/* A frost row follows DESIGN Interaction: grey at rest (a touch brighter over frost), white on the cursor or where you are. */
-.frost-row { min-height: 30px; gap: 10px; border-radius: 8px; padding: 4px 8px; color: color-mix(in oklch, var(--foreground), transparent 28%); }
-.frost-row[data-highlighted] { background: oklch(1 0 0 / 10%); box-shadow: none; color: var(--foreground); }
-.frost-row[aria-current="page"] { color: var(--foreground); }
 .keycap { display: inline-grid; min-width: 16px; height: 16px; place-items: center; border: 1px solid oklch(1 0 0 / 16%); border-radius: 4px; background: oklch(0 0 0 / 12%); padding: 0 4px; color: var(--muted-foreground); font: 550 9px/1 ui-monospace, SFMono-Regular, Menlo, monospace; }
-.frost-row[data-highlighted] .keycap { color: var(--foreground); }
-.frost-rail { display: flex; min-height: 34px; flex-wrap: nowrap; align-items: center; gap: 12px; overflow: hidden; border-top: 1px solid oklch(1 0 0 / 8%); background: transparent; padding: 6px 10px; font-size: 10px; }
 
 /* Settings is a frost overlay (DESIGN.md, Surfaces): the card is the frost,
    the near-black ground it had as a pane is gone, and on a phone it is the
@@ -1758,10 +1388,9 @@ svg.lucide { stroke-width: 2.4; }
 /* Where you are, in every menu and picker, is white and semibold with its
    icon at a heavier stroke and no fill (DESIGN.md, Interaction); the wash is
    only the cursor. */
-[data-slot*="menu"]:not([data-slot^="ui-"]) [data-checked], .command-option[data-checked], .menu-row[data-checked] { color: var(--foreground); font-weight: 660; }
-[data-slot*="menu"]:not([data-slot^="ui-"]) [data-checked] > span:first-of-type, .command-option[data-checked] .command-label { font-weight: 660; }
-[data-slot*="menu"]:not([data-slot^="ui-"]) [data-checked] svg, .command-option[data-checked] svg, .menu-row[data-checked] svg { stroke-width: 3; }
-.command-option[data-checked]:not([data-highlighted]) { background: transparent; }
+[data-slot*="menu"]:not([data-slot^="ui-"]) [data-checked], .menu-row[data-checked] { color: var(--foreground); font-weight: 660; }
+[data-slot*="menu"]:not([data-slot^="ui-"]) [data-checked] > span:first-of-type { font-weight: 660; }
+[data-slot*="menu"]:not([data-slot^="ui-"]) [data-checked] svg, .menu-row[data-checked] svg { stroke-width: 3; }
 
 /* `menu-row` is the menu row for lists that are not a Kobalte menu (a
    searchable picker in a popover): same geometry, and every rule below
@@ -1783,12 +1412,6 @@ svg.lucide { stroke-width: 2.4; }
 :is([data-slot*="menu"]:not([data-slot^="ui-"]) [role^="menuitem"], .menu-row):not([data-variant="destructive"]):is([data-highlighted], [data-expanded], [data-checked]) { color: var(--foreground); }
 :is([data-slot*="menu"]:not([data-slot^="ui-"]) [role^="menuitem"], .menu-row)[data-checked] { font-weight: 660; }
 :is([data-slot*="menu"]:not([data-slot^="ui-"]) [role^="menuitem"], .menu-row) small { font-weight: 400; }
-/* The model selector: scoped and unscoped differ by colour, at one weight;
-   the current model is the only bold one. */
-.command-model-option[data-scoped] .command-model-label { font-weight: 450; color: color-mix(in oklch, var(--foreground), transparent 12%); }
-.command-model-option:not([data-scoped]) .command-model-label { font-weight: 450; }
-.command-model-option[data-checked] .command-model-label, .command-model-option[data-highlighted] .command-model-label { color: var(--foreground); }
-.command-model-option[data-checked] .command-model-label { font-weight: 660; }
 /* Menu rows at the sidebar row's size, a step under the old text-sm. */
 :is([data-slot*="menu"]:not([data-slot^="ui-"]) [role^="menuitem"], .menu-row) { font-size: 10.4px; }
 :is([data-slot*="menu"]:not([data-slot^="ui-"]) [role^="menuitem"], .menu-row) :is(span, strong):not(.composer-menu-shortcut) { font-size: inherit; }

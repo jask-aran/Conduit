@@ -1,16 +1,17 @@
-import { Dialog } from "@/components/dialog";
-import { Button as DialogButton } from "@/components/ui/controls";
+import { Dialog, OverlayDialog } from "@/components/dialog";
+import { Button, Input, Segmented } from "@/components/ui/controls";
+import { Crumbs } from "@/components/ui/leader";
+import { StatusDot } from "@/components/ui/nav";
+import { OverlayActions, OverlayBar, OverlayChip, OverlayEmpty, OverlayList, OverlaySplit, type OverlayAction } from "@/components/ui/overlay";
+import { Item, Match, Section } from "@/components/ui/popover";
 import { createEffect, createMemo, createSignal, For, onCleanup, Show } from "solid-js";
 import type { JSX } from "solid-js";
-import * as KDialog from "@kobalte/core/dialog";
 import {
-  ArrowLeftIcon, BrainIcon, CheckIcon, ChevronRightIcon, CopyIcon, FileInputIcon, FilePlus2Icon,
+  ArrowLeftIcon, BrainIcon, ChevronRightIcon, CopyIcon, FileInputIcon, FilePlus2Icon,
   FolderIcon, FolderInputIcon, FolderPlusIcon, LayersIcon, LogOutIcon, MessageSquareIcon, MicIcon,
   MessageSquarePlusIcon, PanelLeftIcon, PanelRightIcon, PencilIcon, PlayIcon, RefreshCwIcon, SearchIcon, SettingsIcon,
-  SlashIcon, SlidersHorizontalIcon, SquareIcon, TerminalIcon, Trash2Icon, XIcon,
+  SlashIcon, SlidersHorizontalIcon, SquareIcon, TerminalIcon, Trash2Icon,
 } from "lucide-solid";
-import { Button } from "@/components/primitives";
-import { FrostOverlay, Keycap } from "@/components/frost";
 import { activityLabel } from "../../activity.js";
 import type { ChatSummary, ModelOption, Project } from "../api/contracts";
 import {
@@ -32,7 +33,8 @@ import { CommandHintBar } from "./command-hint-bar";
 import type { CommandHintContext, CommandHintMode } from "./command-hint-bar";
 import { RuntimeIndicator, visibleRuntimeActivity } from "./runtime-indicator";
 import type { RuntimeStore } from "../state/runtime";
-import { WorkspaceGlyph } from "../project/workspace-appearance";
+import { PlaceGlyph } from "../chat/place-picker";
+import { isMobileLayout } from "./mobile-layout";
 
 const icons: Record<string, (props: { class?: string }) => JSX.Element> = {
   "new-chat": MessageSquarePlusIcon,
@@ -63,24 +65,6 @@ const icons: Record<string, (props: { class?: string }) => JSX.Element> = {
 };
 
 const GROUP_HEADINGS: Record<string, string> = Object.fromEntries(PALETTE_GROUPS.map((group) => [group.id, group.heading]));
-
-/* The letters of a label a query matched: the substring when there is one,
-   otherwise its letters in order. Null when it matched on something unseen. */
-function matchedLabel(label: string, query: string): JSX.Element | null {
-  const q = query.trim().toLowerCase();
-  if (!q) return null;
-  const lower = label.toLowerCase();
-  const at = lower.indexOf(q);
-  if (at >= 0) return <>{label.slice(0, at)}<mark>{label.slice(at, at + q.length)}</mark>{label.slice(at + q.length)}</>;
-  const hits = new Set<number>();
-  let from = 0;
-  for (const char of q.replace(/\s+/g, "")) {
-    const index = lower.indexOf(char, from);
-    if (index < 0) return null;
-    hits.add(index); from = index + 1;
-  }
-  return <>{[...label].map((char, index) => hits.has(index) ? <mark>{char}</mark> : char)}</>;
-}
 
 const FOCUS_MOVING_COMMAND_IDS = new Set<string>([
   COMMAND_IDS.toggleWorkspacePanel,
@@ -161,7 +145,6 @@ export function CommandMenu(props: {
   onToggleModelScope: (spec: string) => void;
   shortcuts: ShortcutManager;
   onPageChange?: (page: string | null) => void;
-  details?: JSX.Element;
 }) {
   const chatSort = useChatSort();
   const [query, setQuery] = createSignal("");
@@ -489,7 +472,8 @@ export function CommandMenu(props: {
     else if (props.open) document.getElementById(optionId(active()))?.scrollIntoView({ block: "nearest" });
   });
   createEffect(() => {
-    if (selectionMode() && props.open) queueMicrotask(() => listbox?.focus());
+    // The field is shut while choosing a destination, so the list holds the keys.
+    if ((selectionMode() || moveMode()) && props.open) queueMicrotask(() => listbox?.focus());
   });
   createEffect(() => {
     if (editingId() && props.open) queueMicrotask(() => { renameInput?.focus(); renameInput?.select(); });
@@ -869,194 +853,159 @@ export function CommandMenu(props: {
 
   const changeOpen = (open: boolean) => { if (!open) close(); else props.onOpenChange(true); };
 
-  const renderRow = (row: Row) => {
-    if (row.type === "heading") return row.label ? <p class="command-group-label" role="presentation">{row.label}</p> : <span class="command-group-break" role="presentation" />;
-    const selected = () => active() === row.index
-      && (!chatPage() || listFocused() || pointerCursor() || searching() || selectionMode() || moveMode());
-    const commonProps = {
-      id: optionId(row.index),
-      role: chatPage() && !moveMode() ? "treeitem" : "option",
-      "aria-selected": selected(),
-      class: "command-option frost-row",
-      // Keep focus in the input or list so keyboard control survives a click.
-      onMouseDown: (event: MouseEvent) => event.preventDefault(),
-      onMouseMove: () => { setPointerCursor(true); setActive(row.index); },
-      onClick: (event: MouseEvent) => runPointerRow(row, event),
-    } as const;
+  // The rows in their groups: a heading opens a Section; an untitled one is a break between groups.
+  const sections = createMemo(() => {
+    const out: { key: string; label: string; rows: SelectableRow[] }[] = [];
+    for (const row of rows()) {
+      if (row.type === "heading") out.push({ key: row.key, label: row.label, rows: [] });
+      else { if (!out.length) out.push({ key: "top", label: "", rows: [] }); out.at(-1)!.rows.push(row); }
+    }
+    return out.filter((section) => section.rows.length);
+  });
+  const queryText = () => parsedQuery().text;
+  // The cursor is lit only where it acts (see listFocused); the pointer moves it, and a press keeps focus where it is.
+  const lit = (row: SelectableRow) => active() === row.index
+    && (!chatPage() || listFocused() || pointerCursor() || searching() || selectionMode() || moveMode());
+  const rowProps = (row: SelectableRow) => ({
+    id: optionId(row.index),
+    get role() { return chatPage() && !moveMode() ? "treeitem" : "option"; },
+    get "aria-selected"() { return lit(row); },
+    get active() { return lit(row); },
+    onMouseDown: (event: MouseEvent) => event.preventDefault(),
+    onMouseMove: () => { setPointerCursor(true); setActive(row.index); },
+    onClick: (event: MouseEvent) => runPointerRow(row, event),
+  });
+  const placeIcon = (project: Project) => project.slug === "chat" ? <MessageSquareIcon /> : <PlaceGlyph project={project} />;
+
+  const renderRow = (row: SelectableRow) => {
     if (row.type === "model") {
-      if (modelSelectorPage()) return <div {...commonProps} class="command-option frost-row command-model-option" data-highlighted={selected() || undefined} data-scoped={row.scoped || undefined} data-checked={row.model.spec === props.currentModel || undefined}>
-        <span class="command-model-label" data-matching={matchedLabel(row.model.label, parsedQuery().text) ? "" : undefined}>{matchedLabel(row.model.label, parsedQuery().text) || row.model.label}</span><small class="command-model-spec">{row.model.spec}</small>
-      </div>;
-      const Icon = icons.model!;
-      return <div {...commonProps} data-highlighted={selected() || undefined}>
-        <Icon class="command-icon" />
-        <span class="command-copy"><span class="command-label">{row.model.label}</span><small>{row.model.spec}</small></span>
-      </div>;
+      if (modelSelectorPage()) return <Item {...rowProps(row)} checked={row.model.spec === props.currentModel || undefined} meta={row.model.spec}><Match text={row.model.label} query={queryText()} /></Item>;
+      return <Item {...rowProps(row)} icon={<SlidersHorizontalIcon />} meta={row.model.spec}>{row.model.label}</Item>;
     }
-    if (row.type === "destination") {
-      return <div {...commonProps} data-highlighted={selected() || undefined}>
-        <FolderIcon class="command-icon" />
-        <span class="command-copy"><span class="command-label">{row.project.name}</span><small>{row.project.slug === "chat" ? "Chats" : "Folder or workspace"}</small></span>
-      </div>;
-    }
+    if (row.type === "destination") return <Item {...rowProps(row)} icon={placeIcon(row.project)}>{row.project.name}</Item>;
     if (row.type === "folder") {
       const expanded = () => expandedProjects().has(row.project.id);
       const unread = () => row.project.sessions.filter((chat) => chat.unread).length;
-      const live = () => row.project.sessions.filter((chat) => {
-        const activity = chatActivity(chat);
-        return activity && activity !== "idle";
-      }).length;
-      return <div {...commonProps} class="command-option frost-row command-folder-option" role="treeitem" aria-level={1} aria-expanded={row.searchResult ? undefined : expanded()} aria-current={props.context.project?.id === row.project.id ? "page" : undefined} data-highlighted={selected() || undefined}>
-        <Show when={!row.searchResult} fallback={<span class="command-folder-chevron" aria-hidden="true" />}>
-          <button type="button" class="command-folder-toggle" tabIndex={-1} aria-label={`${expanded() ? "Collapse" : "Expand"} ${row.project.name}`} onMouseDown={(event) => event.preventDefault()} onClick={(event) => { event.stopPropagation(); toggleFolder(row.project.id); }}><ChevronRightIcon data-expanded={expanded() || undefined} /></button>
-        </Show>
-        <Show when={isWorkspace(row.project)} fallback={row.project.slug === "chat" ? <MessageSquareIcon class="command-icon" /> : <FolderIcon class="command-icon" />}><WorkspaceGlyph appearance={row.project.workspaceAppearance} /></Show>
-        <span class="command-label" data-matching={matchedLabel(row.project.name, parsedQuery().text) ? "" : undefined}>{matchedLabel(row.project.name, parsedQuery().text) || row.project.name}</span>
-        <small class="command-folder-meta">
-          <Show when={live() || unread()}><span class="command-folder-dot" data-live={live() ? "" : undefined} title={live() ? `${live()} active` : `${unread()} unread`} /></Show>
-          <span class="command-folder-count">{row.count}</span>
-          <Show when={lastActivity(row.project)}>{(stamp) => <span class="command-chat-date">{formatChatDate(stamp())}</span>}</Show>
-        </small>
-        <button type="button" class="command-folder-search" tabIndex={-1} aria-label={`Search in ${row.project.name}`} title={`Search in ${row.project.name}`} onMouseDown={(event) => event.preventDefault()} onClick={(event) => { event.stopPropagation(); enterScope(row.project, true); }}><SearchIcon /></button>
-      </div>;
+      const live = () => row.project.sessions.filter((chat) => { const activity = chatActivity(chat); return activity && activity !== "idle"; }).length;
+      const facts = () => [String(row.count), lastActivity(row.project) ? formatChatDate(lastActivity(row.project)) : ""].filter(Boolean).join(" · ");
+      return <Item {...rowProps(row)} role="treeitem" aria-level={1} aria-expanded={row.searchResult ? undefined : expanded()} aria-current={props.context.project?.id === row.project.id ? "page" : undefined}
+        icon={placeIcon(row.project)} opens onOpens={row.searchResult ? undefined : () => toggleFolder(row.project.id)} opensLabel={`${expanded() ? "Collapse" : "Expand"} ${row.project.name}`}
+        meta={<><Show when={live() || unread()}><StatusDot label={live() ? `${live()} active` : `${unread()} unread`} tone={live() ? "active" : "unread"} /></Show>{facts()}</>}
+        reveal end={<Button variant="ghost" size="icon-xs" tabIndex={-1} aria-label={`Search in ${row.project.name}`} title={`Search in ${row.project.name}`} onMouseDown={(event) => event.preventDefault()} onClick={(event) => { event.stopPropagation(); enterScope(row.project, true); }}><SearchIcon /></Button>}>
+        <Match text={row.project.name} query={queryText()} />
+      </Item>;
     }
-    if (row.type === "browse-all") return <div {...commonProps} class="command-option frost-row command-browse-all" role="treeitem" aria-level={2} data-highlighted={selected() || undefined}>
-      <span class="command-browse-indent" aria-hidden="true" /><ChevronRightIcon class="command-icon" /><span class="command-label">Browse all {row.count} chats</span>
-    </div>;
+    if (row.type === "browse-all") return <Item {...rowProps(row)} role="treeitem" aria-level={2} indent opens>Browse all {row.count} chats</Item>;
     const command = row.command;
     const Icon = icons[command.icon];
     const chatSelected = () => Boolean(command.chat && selectedChatIds().has(command.chat.id));
     const editing = () => command.chat?.id === editingId();
-    return <div {...commonProps} title={command.chat?.title || command.label} aria-level={chatPage() ? row.parentId ? 2 : 1 : undefined} aria-current={command.chat?.id === props.context.chatId ? "page" : undefined} data-highlighted={selected() || undefined} data-danger={command.destructive || undefined} data-checked={command.checked || undefined} data-chat-row={command.entity === "chat" || undefined} data-chat-child={Boolean(row.parentId) || undefined} data-chat-selected={chatSelected() || undefined}>
-      <Show when={selectionMode() && command.entity === "chat"}>
-        <span class="command-select-mark" aria-hidden="true">{chatSelected() ? <CheckIcon /> : null}</span>
+    const meta = () => {
+      if (editing()) return "Enter to save · Escape to cancel";
+      if (!command.chat) return undefined;
+      const activity = chatActivity(command.chat);
+      return [
+        activity && activity !== "idle" ? `${activityLabel(activity)}${props.runtime.stale() ? " (last known)" : ""}` : "",
+        !(chatPage() && chatScope().kind === "project") && command.project?.slug !== "chat" ? command.detail || "" : "",
+        formatChatDate(chatSortStamp(command.chat, chatSort())),
+      ].filter(Boolean).join(" · ");
+    };
+    return <Item {...rowProps(row)} title={command.chat?.title || command.label} aria-level={chatPage() ? row.parentId ? 2 : 1 : undefined} aria-current={command.chat?.id === props.context.chatId ? "page" : undefined}
+      destructive={command.destructive} checked={command.checked || undefined} indent={Boolean(row.parentId)} picked={selectionMode() && command.entity === "chat" ? chatSelected() : undefined}
+      icon={command.chat ? <RuntimeIndicator process={props.runtime.getProcess(command.chat.id)} stale={props.runtime.stale()} unread={command.chat.unread} fallback={<ThreadHarnessMark id={command.chat.harnessId} lively />} /> : Icon ? <Icon /> : undefined}
+      meta={meta()} keys={commandShortcut(command)?.split(/\s+/)} opens={command.kind === "page"}>
+      <Show when={editing()} fallback={<Match text={command.label} query={queryText()} />}>
+        <Input ref={renameInput} value={editingValue()} onInput={(event) => setEditingValue(event.currentTarget.value)} onKeyDown={renameKeydown} onClick={(event) => event.stopPropagation()} aria-label={`Rename ${command.label}`} />
       </Show>
-      <Show when={command.chat} fallback={<Show when={Icon}>{(resolved) => { const C = resolved(); return <C class="command-icon" />; }}</Show>}>
-        {(chat) => <span class="command-chat-status"><RuntimeIndicator process={props.runtime.getProcess(chat().id)} stale={props.runtime.stale()} unread={chat().unread} fallback={<ThreadHarnessMark id={chat().harnessId} lively />} /><Show when={chat().unread && chatActivity(chat()) !== "idle" && chatActivity(chat())}><span class="command-chat-unread" role="status" aria-label="Unread response" /></Show></span>}
-      </Show>
-      <span class="command-copy">
-        <Show when={editing()} fallback={<span class="command-label" data-matching={matchedLabel(command.label, parsedQuery().text) ? "" : undefined}>{matchedLabel(command.label, parsedQuery().text) || command.label}</span>}>
-          <input ref={renameInput} class="command-rename-input" value={editingValue()} onInput={(event) => setEditingValue(event.currentTarget.value)} onKeyDown={renameKeydown} onClick={(event) => event.stopPropagation()} aria-label={`Rename ${command.label}`} />
-        </Show>
-        <Show when={!editing() && command.detail}><small class={command.chat ? "command-chat-meta" : undefined}>
-          <Show when={command.chat && chatActivity(command.chat) && chatActivity(command.chat) !== "idle"}><span class="command-chat-activity" data-attention={["waiting_for_user", "failed"].includes(chatActivity(command.chat!) || "") || undefined}>{activityLabel(chatActivity(command.chat!)!)}{props.runtime.stale() ? " (last known)" : ""}</span><span aria-hidden="true">·</span></Show>
-          <Show when={!(chatPage() && chatScope().kind === "project") && command.project?.slug !== "chat"}><span class="command-chat-project">{command.detail}</span></Show>
-          <Show when={command.chat}><span class="command-chat-date">{formatChatDate(chatSortStamp(command.chat!, chatSort()))}</span></Show>
-        </small></Show>
-        <Show when={editing()}><small>Enter to save · Escape to cancel</small></Show>
-      </span>
-      <Show when={command.kind === "page"}><ChevronRightIcon class="command-chevron" /></Show>
-      <Show when={commandShortcut(command)}>{(shortcut) => <span class="command-shortcut"><For each={shortcut().split(/\s+/)}>{(key) => <Keycap>{key}</Keycap>}</For></span>}</Show>
-    </div>;
+    </Item>;
   };
 
+  // On a phone the keys mean nothing: the hints give way to a bar of the view's actions.
+  const phoneActions = (): OverlayAction[] => {
+    if (!chatPage() || moveMode()) return [];
+    if (selectionMode()) return [
+      { label: `Move ${selectedTargets().length || ""}`.trim(), disabled: !selectedTargets().length, onClick: () => moveSelected() },
+      { label: `Delete ${selectedTargets().length || ""}`.trim(), destructive: true, disabled: !selectedTargets().length, onClick: () => requestDelete() },
+      { label: "Done", onClick: () => exitSelection() },
+    ];
+    const scope = chatScope();
+    return [
+      { label: "Edit", onClick: () => enterSelection() },
+      { label: chatSort() === "latest" ? "Latest" : "Created", onClick: () => saveChatSort(chatSort() === "latest" ? "created" : "latest") },
+      ...(scope.kind === "project" ? [{ label: `Open ${scopeChipName()}`, onClick: () => { close(); requestAnimationFrame(() => props.actions.openProject(scope.project)); } }] : []),
+    ];
+  };
+  const back = () => moveMode() || (page() && !chatPage() && !modelSelectorPage());
+  const label = () => modelSelectorPage() ? "Model selector" : chatPage() ? "Chat search" : "Command palette";
+  const withPreview = () => chatPage() && previewOpen() && !moveMode();
+
   return <>
-    <FrostOverlay
+    <OverlayDialog
       open={props.open}
       onOpenChange={changeOpen}
-      class={`command-dialog${chatPage() ? " command-dialog-chat-search" : ""}${chatPage() && previewOpen() && !moveMode() ? " command-dialog-with-preview" : ""}${modelSelectorPage() ? " command-dialog-model-selector" : ""}`}
-      cardClass="command-shell"
+      label={label()}
+      style={{ "--overlay-width": withPreview() ? "calc(81.25 * var(--u-space))" : chatPage() || modelSelectorPage() ? "calc(56.25 * var(--u-space))" : undefined, "--overlay-height": chatPage() ? "calc(45 * var(--u-space))" : "calc(37.5 * var(--u-space))" }}
       onOpenAutoFocus={(event) => { event.preventDefault(); focusInput(); }}
       onCloseAutoFocus={(event) => { event.preventDefault(); if (returnFocus?.isConnected) returnFocus.focus(); returnFocus = null; }}
-      aside={<Show when={props.details}><aside class="command-detail-pane" aria-label="Search preview">{props.details}</aside></Show>}
     >
-            <KDialog.Title class="sr-only">{modelSelectorPage() ? "Model selector" : chatPage() ? "Chat search" : "Command palette"}</KDialog.Title>
-            <KDialog.Description class="sr-only">{modelSelectorPage() ? "Choose the models available in this project." : chatPage() ? "Find and manage chats." : "Search commands, settings, and models."}</KDialog.Description>
-            <div class="command-input-row">
-              <Show when={moveMode() || (page() && !chatPage() && !modelSelectorPage())}>
-                <Button type="button" variant="ghost" size="icon-sm" class="command-back" aria-label={moveMode() ? "Back to chat results" : "Back to commands"} title="Back" onMouseDown={(event) => event.preventDefault()} onClick={goBack}><ArrowLeftIcon /></Button>
-              </Show>
-              <Show when={chatPage()}>
-                <SearchIcon class="command-input-icon" aria-hidden="true" />
-                <Show when={!moveMode() && chatScope().kind !== "all"}>
-                  <button type="button" class="command-filter-chip" title="Remove scope (Backspace)" onMouseDown={(event) => event.preventDefault()} onClick={() => { backScope(false); focusInput(); }}>in:{scopeChipName()}<span aria-hidden="true">×</span></button>
-                </Show>
-                <Show when={!moveMode() && chatView() !== "all"}>
-                  <button type="button" class="command-filter-chip" title="Remove filter" onMouseDown={(event) => event.preventDefault()} onClick={() => { setChatView("all"); focusInput(); }}>{VIEW_LABELS[chatView()]}<span aria-hidden="true">×</span></button>
-                </Show>
-              </Show>
-              <Show when={!chatPage() && !modelSelectorPage() && !pageMeta()}><span class="command-input-glyph" aria-hidden="true">&gt;</span></Show>
-              <Show when={!chatPage() && pageMeta()}><span class="command-page-prefix">{pageMeta()!.prefix}</span></Show>
-              <input
-                ref={input}
-                class="command-input"
-                role="combobox"
-                aria-expanded="true"
-                aria-controls="command-listbox"
-                aria-autocomplete="list"
-                aria-haspopup={chatPage() ? "tree" : "listbox"}
-                aria-activedescendant={selectable().length ? optionId(active()) : undefined}
-                aria-label={moveMode() ? "Choose destination" : modelSelectorPage() ? "Find models" : chatPage() ? "Search chats" : "Search commands"}
-                placeholder={moveMode() ? "Choose destination…" : chatPage() ? chatScope().kind === "project" ? `Search ${scopeName()} chats…` : "Search chats, projects, workspaces…" : modelSelectorPage() ? "Find models…" : pageMeta()?.placeholder || "Run a command…"}
-                value={moveMode() ? "" : parsedQuery().text}
-                disabled={moveMode()}
-                onInput={(event) => {
-                  let text = event.currentTarget.value;
-                  // A finished is:… token becomes the activity chip.
-                  const view = chatPage() ? /(^|\s)is:(\w+)\s$/i.exec(text) : null;
-                  if (view && VIEW_TOKENS[view[2]!.toLowerCase()]) { setChatView(VIEW_TOKENS[view[2]!.toLowerCase()]!); text = text.slice(0, view.index); event.currentTarget.value = text; }
-                  setQuery(serializeChatQuery(parsedQuery().filters, text));
-                }}
-                onKeyDown={keydown}
-              />
-              <Show when={chatPage() && !moveMode()}>
-                <div class="command-sort-toggle" role="group" aria-label="Chat sort">
-                  <button type="button" aria-pressed={chatSort() === "latest"} onMouseDown={(event) => event.preventDefault()} onClick={() => saveChatSort("latest")}>Latest</button>
-                  <button type="button" aria-pressed={chatSort() === "created"} onMouseDown={(event) => event.preventDefault()} onClick={() => saveChatSort("created")}>Created</button>
-                </div>
-              </Show>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-sm"
-                class="command-close"
-                aria-label={chatPage() ? "Close chat search" : "Close command palette"}
-                title="Close"
-                onMouseDown={(event) => event.preventDefault()}
-                onClick={() => close()}
-              >
-                <XIcon />
-              </Button>
-            </div>
-            <div class="command-body">
-            <div id="command-listbox" ref={listbox} role={chatPage() && !moveMode() ? "tree" : "listbox"} aria-label={modelSelectorPage() ? "Models" : chatPage() ? "Chat browser" : "Commands"} aria-activedescendant={selectable().length ? optionId(active()) : undefined} class="command-list" onFocus={() => setListFocused(true)} onBlur={() => setListFocused(false)} onMouseLeave={() => setPointerCursor(false)} tabIndex={chatPage() || selectionMode() || moveMode() ? 0 : -1} onKeyDown={keydown}>
-              <Show when={!selectable().length}><p class="command-empty">{emptyMessage()}</p></Show>
-              <For each={rows()}>{renderRow}</For>
-            </div>
-            <Show when={chatPage() && previewOpen() && !moveMode()}>
-              <ChatPreview target={activeChat()} folder={rowProject(selectable()[active()])} active={(chat) => { const activity = chatActivity(chat); return Boolean(activity && activity !== "idle"); }} />
-            </Show>
-            </div>
-            {/* On a phone the keys mean nothing: the rail gives way to buttons. */}
-            <Show when={chatPage() && !moveMode()}>
-              <div class="command-phone-bar">
-                <Show when={selectionMode()} fallback={<>
-                  <button type="button" onClick={() => enterSelection()}>Edit</button>
-                  <button type="button" onClick={() => saveChatSort(chatSort() === "latest" ? "created" : "latest")}>{chatSort() === "latest" ? "Latest" : "Created"}</button>
-                  <Show when={chatScope().kind === "project"}>
-                    <button type="button" onClick={() => { const scope = chatScope(); if (scope.kind === "project") { close(); requestAnimationFrame(() => props.actions.openProject(scope.project)); } }}>Open {scopeChipName()}</button>
-                  </Show>
-                </>}>
-                  <button type="button" disabled={!selectedTargets().length} onClick={() => moveSelected()}>Move {selectedTargets().length || ""}</button>
-                  <button type="button" class="command-phone-danger" disabled={!selectedTargets().length} onClick={() => requestDelete()}>Delete {selectedTargets().length || ""}</button>
-                  <button type="button" onClick={() => exitSelection()}>Done</button>
-                </Show>
-              </div>
-            </Show>
-            <CommandHintBar
-              context={hintContext()}
-              mode={modelSelectorPage() ? "model-selector" : hintMode()}
-              pendingSequence={pendingActionSequence()}
-              shortcuts={props.shortcuts}
-              scoped={chatScope().kind !== "all"}
-              selectedCount={selectionMode() ? selectedTargets().length : null}
-              onToggleEdit={toggleSelection}
-              onDeleteSelected={() => requestDelete()}
-              onMoveSelected={() => moveSelected()}
-              previewOpen={previewOpen()}
-              onTogglePreview={togglePreview}
-            />
-    </FrostOverlay>
+      <OverlayBar
+        lead={back() ? <Button variant="ghost" size="icon-sm" aria-label={moveMode() ? "Back to chat results" : "Back to commands"} title="Back" onMouseDown={(event) => event.preventDefault()} onClick={goBack}><ArrowLeftIcon /></Button>
+          : chatPage() ? <SearchIcon /> : modelSelectorPage() ? <SlidersHorizontalIcon /> : <ChevronRightIcon />}
+        chips={<>
+          <Show when={!chatPage() && !modelSelectorPage() && pageMeta()}>{(meta) => <Crumbs label="Where you are" items={[{ label: "Commands", onClick: goBack }, { label: meta().heading, current: true }]} />}</Show>
+          <Show when={chatPage() && !moveMode() && chatScope().kind !== "all"}><OverlayChip onRemove={() => { backScope(false); focusInput(); }}>{`in:${scopeChipName()}`}</OverlayChip></Show>
+          <Show when={chatPage() && !moveMode() && chatView() !== "all"}><OverlayChip onRemove={() => { setChatView("all"); focusInput(); }}>{VIEW_LABELS[chatView()]}</OverlayChip></Show>
+        </>}
+        placeholder={moveMode() ? "Choose destination…" : chatPage() ? chatScope().kind === "project" ? `Search ${scopeName()} chats…` : "Search chats, projects, workspaces…" : modelSelectorPage() ? "Find models…" : pageMeta()?.placeholder || "Run a command…"}
+        value={moveMode() ? "" : parsedQuery().text}
+        onInput={(value) => {
+          // A finished is:… token becomes the activity chip.
+          const view = chatPage() ? /(^|\s)is:(\w+)\s$/i.exec(value) : null;
+          if (view && VIEW_TOKENS[view[2]!.toLowerCase()]) { setChatView(VIEW_TOKENS[view[2]!.toLowerCase()]!); value = value.slice(0, view.index); input.value = value; }
+          setQuery(serializeChatQuery(parsedQuery().filters, value));
+        }}
+        field={{
+          ref: (element: HTMLInputElement) => { input = element; },
+          role: "combobox",
+          "aria-expanded": "true",
+          "aria-controls": "command-listbox",
+          "aria-autocomplete": "list",
+          get "aria-haspopup"() { return chatPage() ? "tree" as const : "listbox" as const; },
+          get "aria-activedescendant"() { return selectable().length ? optionId(active()) : undefined; },
+          get "aria-label"() { return moveMode() ? "Choose destination" : modelSelectorPage() ? "Find models" : chatPage() ? "Search chats" : "Search commands"; },
+          get disabled() { return moveMode(); },
+          onKeyDown: keydown,
+        }}
+        end={<Show when={chatPage() && !moveMode() && !isMobileLayout()}>
+          <span onMouseDown={(event) => event.preventDefault()}><Segmented label="Chat sort" size="sm" value={chatSort()} onChange={saveChatSort} options={[{ value: "latest", label: "Latest" }, { value: "created", label: "Created" }]} /></span>
+        </Show>}
+        onClose={close}
+        closeLabel={chatPage() ? "Close chat search" : "Close command palette"}
+      />
+      <OverlaySplit aside={withPreview() ? <ChatPreview target={activeChat()} folder={rowProject(selectable()[active()])} active={(chat) => { const activity = chatActivity(chat); return Boolean(activity && activity !== "idle"); }} /> : undefined}>
+        <OverlayList managed id="command-listbox" ref={listbox} role={chatPage() && !moveMode() ? "tree" : "listbox"} aria-label={modelSelectorPage() ? "Models" : chatPage() ? "Chat browser" : "Commands"}
+          aria-activedescendant={selectable().length ? optionId(active()) : undefined} tabIndex={chatPage() || selectionMode() || moveMode() ? 0 : -1}
+          onFocus={() => setListFocused(true)} onBlur={() => setListFocused(false)} onMouseLeave={() => setPointerCursor(false)} onKeyDown={keydown}>
+          <Show when={selectable().length} fallback={<OverlayEmpty>{emptyMessage()}</OverlayEmpty>}>
+            <For each={sections()}>{(section) => <Section title={section.label || undefined}><For each={section.rows}>{renderRow}</For></Section>}</For>
+          </Show>
+        </OverlayList>
+      </OverlaySplit>
+      <CommandHintBar
+        context={hintContext()}
+        mode={modelSelectorPage() ? "model-selector" : hintMode()}
+        pendingSequence={pendingActionSequence()}
+        shortcuts={props.shortcuts}
+        scoped={chatScope().kind !== "all"}
+        selectedCount={selectionMode() ? selectedTargets().length : null}
+        onToggleEdit={toggleSelection}
+        onDeleteSelected={() => requestDelete()}
+        onMoveSelected={() => moveSelected()}
+        previewOpen={previewOpen()}
+        onTogglePreview={togglePreview}
+      />
+      <Show when={phoneActions().length}><OverlayActions actions={phoneActions()} /></Show>
+    </OverlayDialog>
     <Dialog alert open={Boolean(pendingDelete())}
       onOpenChange={(open) => { if (!open) { setPendingDelete(null); focusInput(); } }}
       onOpenAutoFocus={(event) => { event.preventDefault(); selectDeleteChoice("cancel"); }}
@@ -1073,20 +1022,20 @@ export function CommandMenu(props: {
       title={`Delete ${pendingDelete()?.length || 0} chats?`}
       description="This permanently deletes the selected session transcripts and attached files."
       actions={<>
-        <DialogButton
+        <Button
           ref={deleteCancelButton}
           variant="ghost" outline
           data-selected={deleteChoice() === "cancel"}
           onFocus={() => setDeleteChoice("cancel")}
           onClick={() => { setPendingDelete(null); focusInput(); }}
-       >Cancel</DialogButton>
-        <DialogButton
+       >Cancel</Button>
+        <Button
           ref={deleteConfirmButton}
           variant="destructive" outline={deleteChoice() !== "confirm"}
           data-selected={deleteChoice() === "confirm"}
           onFocus={() => setDeleteChoice("confirm")}
           onClick={() => void confirmDelete()}
-       >Delete chats</DialogButton>
+       >Delete chats</Button>
       </>} />
   </>;
 }

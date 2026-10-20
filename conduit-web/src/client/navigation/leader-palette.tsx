@@ -5,7 +5,10 @@ import { LEADER_MENU_PAUSE_MS, leaderMenu } from "../shortcuts/leader-menu";
 import type { ShortcutManager } from "../shortcuts/shortcut-manager";
 import { formatShortcutStroke, sameStroke, strokeIdentity } from "../shortcuts/shortcut-normalize";
 import type { PendingShortcutSequence, ShortcutContext } from "../shortcuts/shortcut-types";
-import "./leader-palette.css";
+import { Keycap } from "../../components/ui/controls";
+import { Crumbs, Leader, Spotlight } from "../../components/ui/leader";
+import { OverlayHints, type Hint } from "../../components/ui/overlay";
+import { Item, MenuNote, Section } from "../../components/ui/popover";
 
 const CONTEXT_LABELS: Record<string, string> = {
   application: "Conduit",
@@ -110,7 +113,7 @@ export function LeaderPalette(props: { shortcuts: ShortcutManager }) {
     while (region && region.getAttribute("data-region") !== context) region = region.parentElement?.closest("[data-region]") ?? null;
     if (!region) return null;
     const box = region.getBoundingClientRect();
-    return { top: `${box.top}px`, left: `${box.left}px`, width: `${box.width}px`, height: `${box.height}px`, "border-radius": getComputedStyle(region).borderRadius };
+    return { top: `${box.top}px`, left: `${box.left}px`, width: `${box.width}px`, height: `${box.height}px`, radius: getComputedStyle(region).borderRadius };
   });
   const browsable = () => (shown()?.levels.filter((level) => level.commandIds.length).length ?? 0) > 1;
   const goTo = () => [
@@ -123,44 +126,34 @@ export function LeaderPalette(props: { shortcuts: ShortcutManager }) {
   });
 
   return <Show when={(visible() || leaving()) && shown()}>
-    <div class="leader-menu-scrim" data-leaving={leaving() || undefined} aria-hidden="true">
-      <div class="leader-menu-lit" data-whole={hole() ? undefined : true} style={hole() ?? {}} />
-    </div>
-    <aside
-      class="leader-menu frost-card"
+    <Spotlight fixed lit={hole() ?? undefined} motion={leaving() ? "leaving" : "entering"} />
+    <Leader
+      placement="foot"
       data-shortcut-leader-palette="true"
-      data-leaving={leaving() || undefined}
-      role="dialog"
-      aria-label={`Leader: ${contextLabel(shown()!.levels[shown()!.shown]!.context)}`}
+      label={`Leader: ${contextLabel(shown()!.levels[shown()!.shown]!.context)}`}
+      motion={leaving() ? "leaving" : "entering"}
+      path={<>
+        <Keycap>{formatShortcutStroke(shown()!.firstStroke, props.shortcuts.environment)}</Keycap>
+        <Crumbs label="Where you are" items={[...shown()!.levels.entries()].reverse().map(([index, level]) => ({
+          label: contextLabel(level.context),
+          current: index === shown()!.shown,
+          disabled: !level.commandIds.length,
+          onClick: () => props.shortcuts.showPendingLevel(index),
+        }))} />
+      </>}
+      hints={<OverlayHints
+        start={[
+          ...(browsable() ? [[["←", "→"], "level"] satisfies Hint] : []),
+          ...goTo().map((item): Hint => [[item.keys], item.label]),
+        ]}
+        end={[[["Esc"], "cancel"]]}
+      />}
     >
-      <div class="leader-menu-top">
-        <kbd class="keycap">{formatShortcutStroke(shown()!.firstStroke, props.shortcuts.environment)}</kbd>
-        <nav class="leader-menu-path" aria-label="Where you are">
-          <For each={[...shown()!.levels.entries()].reverse()}>{([index, level], position) => <>
-            <Show when={position() > 0}><span class="leader-menu-separator" aria-hidden="true">›</span></Show>
-            <button
-              type="button"
-              aria-current={index === shown()!.shown ? "true" : undefined}
-              disabled={!level.commandIds.length}
-              onClick={() => props.shortcuts.showPendingLevel(index)}
-            >{contextLabel(level.context)}</button>
-          </>}</For>
-        </nav>
-      </div>
-      <Show when={!rows().length}><p class="leader-menu-empty">No leader keys here yet.</p></Show>
-      <div class="leader-menu-rows" role="list">
-        <For each={rows()}>{(row) =>
-          <button type="button" class="leader-menu-row" role="listitem" onClick={() => props.shortcuts.runPendingCommand(row.commandId)}>
-            <span class="leader-menu-keys"><For each={row.keys}>{(key) => <kbd class="keycap">{key}</kbd>}</For></span>
-            <span class="leader-menu-label">{row.label}</span>
-          </button>
-        }</For>
-      </div>
-      <div class="leader-menu-footer">
-        <Show when={browsable()}><span><kbd class="keycap">←</kbd><kbd class="keycap">→</kbd> level</span></Show>
-        <For each={goTo()}>{(item) => <span><kbd class="keycap">{item.keys}</kbd> {item.label}</span>}</For>
-        <span class="leader-menu-cancel"><kbd class="keycap">Esc</kbd> cancel</span>
-      </div>
-    </aside>
+      <Show when={rows().length} fallback={<MenuNote>No leader keys here yet.</MenuNote>}>
+        <Section><For each={rows()}>{(row) =>
+          <Item keysFirst keys={row.keys} onClick={() => props.shortcuts.runPendingCommand(row.commandId)}>{row.label}</Item>
+        }</For></Section>
+      </Show>
+    </Leader>
   </Show>;
 }
