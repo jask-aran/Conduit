@@ -215,23 +215,39 @@ export const desktopShell = installedClientKind !== "desktop" ? null : {
       const { check, Update } = await import("@tauri-apps/plugin-updater");
       const { getIdentifier } = await import("@tauri-apps/api/app");
       let pending: InstanceType<typeof Update> | null = null;
+      const unanswered: string[] = [];
       if (await getIdentifier() === "com.jaskaran.conduit.desktop.dev") {
-        const { activePath } = await import("./servers.ts");
-        const route = activePath();
-        if (route) {
+        const { activePath, activeServer, pathsOf } = await import("./servers.ts");
+        const { invoke } = await import("@tauri-apps/api/core");
+        // The route in use first, then every other address this server is
+        // known by: whichever reaches it from here is as good as any, and
+        // the one in use can have just gone away.
+        const entry = activeServer();
+        const routes = [...new Set([activePath(), ...(entry ? pathsOf(entry).map((path) => path.origin) : [])])];
+        for (const route of routes) {
+          if (!route) continue;
+          const endpoint = new URL("/desktop-updates/latest.json", route).href;
           try {
-            const { invoke } = await import("@tauri-apps/api/core");
-            const metadata = await invoke<ConstructorParameters<typeof Update>[0] | null>("check_dev_update", {
-              endpoint: new URL("/desktop-updates/latest.json", route).href,
-            });
+            const metadata = await invoke<ConstructorParameters<typeof Update>[0] | null>("check_dev_update", { endpoint });
             if (metadata) pending = new Update(metadata);
-          } catch {
-            // The selected server may not distribute development builds. The
-            // endpoint built into this client is still a valid update source.
+            break;
+          } catch (error) {
+            unanswered.push(`${endpoint} (${error instanceof Error ? error.message : String(error)})`);
           }
         }
       }
-      pending ??= await check();
+      // The selected server may not distribute development builds. The
+      // endpoint built into this client is still a valid update source, but
+      // when it fails too, its error alone names an address the person never
+      // chose -- so say which of theirs were tried.
+      if (!pending) {
+        try {
+          pending = await check();
+        } catch (error) {
+          if (!unanswered.length) throw error;
+          throw new Error(`No update source answered. Tried ${unanswered.join(", ")}; built-in endpoint: ${error instanceof Error ? error.message : String(error)}`);
+        }
+      }
       if (!pending) return { kind: "current" };
       let downloaded = 0;
       let total = 0;
