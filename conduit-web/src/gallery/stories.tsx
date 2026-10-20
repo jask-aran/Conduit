@@ -6,7 +6,6 @@ import { seededModels, seededPlace, seededProfile } from "./seed";
 import { ChatHeader, Conversation } from "../client/chat/chat-screen";
 import { Transcript } from "../client/chat/transcript";
 import { selectedMarkdownRenderer } from "../client/chat/markdown-settings";
-import { createComposerSurfaceSignal } from "../client/chat/composer-surface";
 
 /* The previews: the app's own chat screen over a seeded chat. */
 

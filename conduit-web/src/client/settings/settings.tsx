@@ -1,11 +1,5 @@
-import { createEffect, createSignal, onCleanup } from "solid-js";
+import { createSignal } from "solid-js";
 import { Settings as SettingsCore } from "./settings-core";
-import {
-  COMPOSER_SURFACE_CHANGE_EVENT,
-  saveComposerSurface,
-  selectedComposerSurface,
-  type ComposerSurfaceMode,
-} from "../chat/composer-surface";
 import type { VoiceDictationSettings } from "../chat/voice-dictation-types";
 import { saveUiScale, selectedUiScale, type UiScale } from "../preferences/ui-scale";
 import {
@@ -35,8 +29,7 @@ import "./voice-settings.css";
 
 type CoreProps = Parameters<typeof SettingsCore>[0];
 type SettingsProps = Omit<CoreProps,
-  "composerSurface" | "onComposerSurfaceChange"
-  | "interfaceScale" | "onInterfaceScaleChange"
+  "interfaceScale" | "onInterfaceScaleChange"
   | "transcriptWidth" | "onTranscriptWidthChange"
   | "transcriptWideBlocks" | "onTranscriptWideBlocksChange"
   | "codeBlockCollapse" | "onCodeBlockCollapseChange"
@@ -52,7 +45,6 @@ type SettingsProps = Omit<CoreProps,
 // section. This shell only supplies rebuild-owned presentation preferences; it
 // never swaps Settings trees and performs no Voice lifecycle translation.
 export function Settings(props: SettingsProps) {
-  const [composerSurface, setComposerSurface] = createSignal<ComposerSurfaceMode>(selectedComposerSurface());
   const [interfaceScale, setInterfaceScale] = createSignal<UiScale>(selectedUiScale());
   const [transcriptWidth, setTranscriptWidth] = createSignal<TranscriptWidthMode>(selectedTranscriptWidth());
   const [transcriptWideBlocks, setTranscriptWideBlocks] = createSignal<TranscriptWideBlocksMode>(selectedTranscriptWideBlocks());
@@ -62,21 +54,6 @@ export function Settings(props: SettingsProps) {
   const [panelMotion, setPanelMotion] = createSignal<PanelMotionMode>(selectedPanelMotion());
   const [userMessageCollapse, setUserMessageCollapse] = createSignal<UserMessageCollapseMode>(selectedUserMessageCollapse());
 
-  createEffect(() => {
-    if (!props.open) return;
-    setComposerSurface(selectedComposerSurface());
-  });
-
-  createEffect(() => {
-    if (typeof window === "undefined") return;
-    const syncSurface = () => setComposerSurface(selectedComposerSurface());
-    window.addEventListener(COMPOSER_SURFACE_CHANGE_EVENT, syncSurface);
-    onCleanup(() => window.removeEventListener(COMPOSER_SURFACE_CHANGE_EVENT, syncSurface));
-  });
-
-  const updateComposerSurface = (surface: ComposerSurfaceMode) => {
-    setComposerSurface(saveComposerSurface(surface));
-  };
   const updateInterfaceScale = (scale: UiScale) => setInterfaceScale(saveUiScale(scale));
   // Each save writes localStorage and publishes the change; main.tsx mirrors it
   // to the server and stamps the document root, so the open transcript reflows
@@ -111,8 +88,6 @@ export function Settings(props: SettingsProps) {
 
   return <SettingsCore
       {...props}
-      composerSurface={composerSurface()}
-      onComposerSurfaceChange={updateComposerSurface}
       interfaceScale={interfaceScale()}
       onInterfaceScaleChange={updateInterfaceScale}
       transcriptWidth={transcriptWidth()}

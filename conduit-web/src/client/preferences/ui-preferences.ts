@@ -9,7 +9,6 @@ export interface UiPreferences {
   collapsedProjectIds: string[] | null;
   sidebarCollapsed: boolean | null;
   markdownRenderer: string | null;
-  composerSurface: string | null;
   meteorField: boolean | null;
   transcriptWidth: string | null;
   transcriptWideBlocks: string | null;

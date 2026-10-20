@@ -1,0 +1,51 @@
+/* Header: a pane's top line, drawn by Header (header.tsx). It reserves its own height in the pane's flow and
+   paints over what runs beneath it, fading into it; a tab row's strip may be frost instead (frost). */
+:root { --header-height: calc(var(--control-lg) + 2 * var(--space-md)); }
+.ui-header { position: relative; z-index: 2; display: flex; height: var(--header-height); flex: none; align-items: center; gap: var(--space-md); padding: var(--space-md) var(--space-lg);
+  background: linear-gradient(to bottom, var(--background) 0 50%, transparent 100%); }
+.ui-header[data-frost] { background: color-mix(in oklch, var(--background), transparent 30%); -webkit-backdrop-filter: var(--frost-blur); backdrop-filter: var(--frost-blur); }
+.ui-header-title { display: flex; min-width: 0; flex: 0 1 auto; align-items: center; overflow: hidden; }
+.ui-header-title:has(> nav[aria-label="Tabs"]) { flex: 1 1 auto; align-self: stretch; }
+.ui-header-group { display: flex; flex: none; align-items: center; gap: var(--space-2xs); }
+.ui-header-group[data-lead] { display: none; }
+.ui-header-group[data-actions] { margin-left: auto; }
+.ui-header-group:empty { display: none; }
+
+/* The crumb: the place in caps, white at the strong weight; the title at the row's size. Each truncates. */
+.ui-header-crumb { display: flex; min-width: 0; align-items: baseline; gap: var(--space-sm); font-size: var(--text-row); line-height: var(--leading-row); }
+.ui-header-crumb > * { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ui-header-crumb > strong { font-weight: var(--weight-strong); }
+.ui-header-place { flex: 0 1 auto; max-width: var(--measure-xs); border: 0; background: none; padding: 0; color: var(--foreground);
+  font: var(--weight-strong) var(--text-label)/var(--leading-row) var(--font-label); letter-spacing: .07em; text-transform: uppercase; }
+button.ui-header-place { cursor: pointer; }
+button.ui-header-place:hover { color: var(--muted-foreground); }
+
+/* A control drawn on one layout alone. */
+.ui-header [data-only="phone"] { display: none; }
+
+/* The note: a capsule of frost, its action a smaller one inside it. */
+.ui-header-note { display: inline-flex; height: var(--control-xs); flex: none; align-items: center; gap: var(--space-2xs); border-radius: var(--radius-round);
+  padding: 0 var(--space-2xs) 0 var(--space-md); color: var(--muted-foreground); font-size: var(--text-label); white-space: nowrap; }
+.ui-header-note > button { height: calc(var(--control-xs) - 2 * var(--space-2xs)); border: 0; border-radius: var(--radius-round); background: transparent; padding: 0 var(--space-sm);
+  color: var(--foreground); font: inherit; font-weight: var(--weight-strong); cursor: pointer; }
+.ui-header-note > button:is(:hover, :focus-visible) { background: var(--tint); }
+.ui-header-note > button:disabled { color: var(--muted-foreground); cursor: default; }
+
+@media (--conduit-phone-layout) {
+  /* The pills sit at the overlay inset inside the safe area; the strip's fade gives way so the transcript runs under them. */
+  :root { --header-height: calc(var(--pill-size) + var(--space-md) + var(--space-xs) + var(--safe-area-inset-top, env(safe-area-inset-top, 0px))); }
+  .ui-header { width: 100%; padding: calc(var(--space-md) + var(--safe-area-inset-top, env(safe-area-inset-top, 0px))) var(--space-md) var(--space-xs);
+    background: linear-gradient(to bottom, var(--background) 0 60%, transparent 100%); }
+  .ui-header-title { display: none; }
+  .ui-header [data-only="phone"] { display: inline-grid; }
+  .ui-header [data-only="desktop"] { display: none; }
+  /* The groups are pills (Pill): frost capsules whose buttons are capsules narrower than tall, concentric with them. */
+  .ui-header-group { height: var(--pill-size); gap: var(--pill-gap); padding: 0 var(--hairline); border: var(--hairline) solid var(--frost-stroke); border-radius: var(--radius-round);
+    background: var(--frost-fill); -webkit-backdrop-filter: var(--frost-blur); backdrop-filter: var(--frost-blur); box-shadow: var(--frost-lift-rest), var(--frost-highlight); color: var(--foreground); }
+  .ui-header-group[data-lead]:not(:empty) { display: flex; }
+  .ui-header-group > .ui-button { width: calc(var(--pill-slot) - var(--space-xs)); height: var(--pill-slot-height); border-radius: var(--radius-round); }
+  .ui-header-group > .ui-button svg { width: var(--pill-icon); height: var(--pill-icon); }
+  .ui-header-group > .ui-button:only-child { width: var(--pill-slot); }
+  .ui-header-note { height: var(--control-sm); padding-left: var(--space-lg); font-size: var(--text-caption); }
+  .ui-header-note > button { height: calc(var(--control-sm) - 2 * var(--space-2xs)); }
+}

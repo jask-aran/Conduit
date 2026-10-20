@@ -23,6 +23,7 @@ import { ImageIcon, ActivityIcon, BrainIcon, ChevronRightIcon, GlobeIcon, Messag
 import type { Question } from "../client/api/contracts";
 import { LibraryContext } from "@/components/ui/swap";
 import { InUse, Anatomy, type Part, FormTable, form, px, rounding, edge, fg, bg, Replay, States, Presence, type Mark, type FormRow } from "./specs";
+import { Header, HeaderButton, HeaderCrumb, HeaderNote } from "@/components/ui";
 import { NavPane, NavBrand, NavGroup as GNavGroup, NavRow as GNavRow, NavFolder, NavFolderRow, NavNote, NavSkeleton, NavNotice, NavLinks, NavRail, NavRailSection, RailButton, Segmented as GSegmented, Button as GButton } from "@/components/ui";
 import { DownloadIcon, ExternalLinkIcon, FolderPlusIcon, SearchIcon as GSearchIcon, TerminalIcon as GTerminalIcon } from "lucide-solid";
 import katex from "katex";
@@ -723,6 +724,19 @@ export const libraryFamilies: Family[] = [
       </NavPane></div>)}</div>, true),
     ] },
   ] },
+  { title: "Header", note: "a pane's top line: the name (a place's caps crumb, then the title) or the tab row at the left, what the page is beside it, quiet ghost controls at the right, the pane's swap and close last. It fades into what scrolls under it; a tab row's strip may be frost. On a phone the title gives way and the leading controls and actions float as frost pills -- see the Phone preview, which draws the app's own ChatHeader", groups: [
+    { title: "Forms", layout: "desktop", atoms: [
+      lib("header-forms", "Header · forms", "desktop", "header", "components/ui/header.tsx", () => <FormTable rows={[
+        form("HeaderCrumb", "under a place (a link to it); a place itself", () => <div style={{ display: "grid", gap: "var(--space-md)" }}><HeaderCrumb place="Japan" onPlace={() => {}} title="Planning the Kyoto leg" /><HeaderCrumb title="Japan" /></div>, "<HeaderCrumb place onPlace title>"),
+        form("HeaderNote", "what the page is and the one thing to do about it; working", () => <div class="g-row"><HeaderNote label="Not in Conduit" action={{ label: "Track", onClick: () => {} }} /><HeaderNote label="Not in Conduit" action={{ label: "Track", busy: true, busyLabel: "Tracking…", onClick: () => {} }} /></div>, "<HeaderNote label action>"),
+        form("HeaderButton", "an icon with its label as its name; only one layout's", () => <div class="g-row"><HeaderButton label="Copy Tailscale chat link" icon={<ShareIcon />} /><HeaderButton label="Search chats" icon={<SearchIcon />} /></div>, "<HeaderButton label icon only>"),
+      ]} on={["desktop"]} />, "row"),
+    ] },
+    { title: "Assembled", layout: "desktop", atoms: [
+      lib("header-chat", "Header · a chat", "desktop", "header", "chat/chat-screen.tsx ChatHeader", () => <div style={{ width: "100%", "align-self": "stretch" }}><Header actions={<><HeaderButton label="Copy Tailscale chat link" icon={<ShareIcon />} /><HeaderButton only="phone" label="More chat options" icon={<EllipsisIcon />} /></>}
+        after={<HeaderNote label="Not in Conduit" action={{ label: "Track", onClick: () => {} }} />}><HeaderCrumb place="Codex" onPlace={() => {}} title="Fix the flaky upload test" /></Header></div>, true),
+    ] },
+  ] },
   { title: "Popover", note: "raised frost holding sections, separated by rules; a submenu is another popover", groups: [
     { atoms: [
       lib("anatomy", "Anatomy", "both", "popover", "Menu > Section > Item", () => <Anatomy scene={() => <Menu>
@@ -1008,7 +1022,7 @@ export const libraryFamilies: Family[] = [
       lib("pill-field", "PillField", "phone", "pill", "PillField: text in the capsule", () => <div class="g-fill"><PillField placeholder="Send a message…" /></div>),
     ] },
     { title: "Assembled", layout: "phone", atoms: [
-      lib("pill-header", "ChatHeader · headerPill + HeaderActions", "phone", "pill", "navigation/header-pill.tsx", () => <div class="g-bar-demo"><PillGroup actions={[icon("Sidebar", <PanelLeftIcon />), icon("New chat", <MessageSquarePlusIcon />)]} /><PillGroup actions={[icon("Search", <SearchIcon />), icon("Terminal", <TerminalIcon />), icon("More", <EllipsisIcon />)]} /></div>, true),
+      lib("pill-header", "ChatHeader · the phone's pills", "phone", "pill", "Header (components/ui/header.tsx): its lead and actions groups", () => <div class="g-bar-demo"><PillGroup actions={[icon("Sidebar", <PanelLeftIcon />), icon("New chat", <MessageSquarePlusIcon />)]} /><PillGroup actions={[icon("Search", <SearchIcon />), icon("Terminal", <TerminalIcon />), icon("More", <EllipsisIcon />)]} /></div>, true),
       lib("pill-sidebar", "Sidebar · header", "phone", "pill", "navigation/sidebar.tsx (the phone's drawer has no toggle: a swipe or the backdrop closes it)", () => <div class="g-bar-demo"><Area /></div>, true),
       lib("pill-composer", "Composer · bar layout", "phone", "pill", "chat/composer.tsx (bar)", () => <div class="g-composer-demo"><PillField placeholder="Send a message…" /><div class="g-bar-demo">
         <PillButton {...icon("Message options", <PlusIcon />)} /><PillButton {...icon("Take a photo", <CameraIcon />)} /><PillButton {...icon("Type a message", <KeyboardIcon />)} /><PillButton stretch {...icon("Dictate", <MicIcon />)} /><PillButton {...icon("Send", <ArrowUpIcon />)} />

@@ -13,6 +13,7 @@
  *   frost, orb      the material; the thinking orb's box
  *   popover         Menu > Section > Item, Match
  *   nav             NavGroup > NavRow
+ *   header          Header, HeaderCrumb, HeaderButton, HeaderNote
  *   card, toast     Card; Toast
  *   overlay         Scrim > Overlay (Bar, List, Split, Hints, Rail, Page), Settings, Glance
  *   leader          Leader, Crumbs, Spotlight
@@ -22,7 +23,6 @@
  *   rider           Rider, Line, Chip, Choice, the question card, RiderButton
  *   transcript      Transcript, Turn, Message, Bubble, Answer, Disclosure
  *   code, trace     CodeBlock, CopyButton; Trace, Trail, Step
- *   bridge          the app's own pieces drawn with the library; deleted piece by piece as each graduates
  */
 import "./theme.css";
 import "./foundations.css";
@@ -31,6 +31,7 @@ import "./frost.css";
 import "./orb.css";
 import "./popover.css";
 import "./nav.css";
+import "./header.css";
 import "./card.css";
 import "./identity.css";
 import "./toast.css";
@@ -43,7 +44,6 @@ import "./rider.css";
 import "./transcript.css";
 import "./code.css";
 import "./trace.css";
-import "./bridge.css";
 
 import "./connection.css";
 

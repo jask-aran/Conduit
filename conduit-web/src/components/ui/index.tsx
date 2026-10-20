@@ -11,6 +11,7 @@ export * from "./controls";
 export * from "./frost";
 export * from "./popover";
 export * from "./nav";
+export * from "./header";
 export * from "./card";
 export * from "./toast";
 export * from "./overlay";

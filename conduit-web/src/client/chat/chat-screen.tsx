@@ -1,19 +1,16 @@
 import { createSignal, Show, type JSX } from "solid-js";
 import { EllipsisIcon, MessageSquarePlusIcon, PanelLeftIcon, PanelRightIcon, PencilIcon, RefreshCwIcon, SearchIcon, ShareIcon, TerminalIcon, Trash2Icon } from "lucide-solid";
-import { Button, MenuTrigger } from "@/components/primitives";
-import { Menu, MenuContent, MenuRow, MenuSection } from "@/components/menus";
-import { HeadingSection, MenuNote, Rule, Spinner } from "@/components/ui";
+import { Menu, MenuContent, MenuControl, MenuRow, MenuSection } from "@/components/menus";
+import { Header, HeaderButton, HeaderCrumb, HeadingSection, MenuNote, Rule, Spinner } from "@/components/ui";
 import type { Project, RuntimeIdentity, Template } from "../api/contracts";
 import type { ActiveChatStore } from "../state/active-chat";
-import { SPINNING_ACTIVITY, type ComposerStatus } from "./composer";
 import { ContextBar, ContextBreakdown } from "./context-gauge";
 import { contextUsagePercent } from "./context-metrics";
-import { VoiceWaveform } from "./voice-waveform";
 import { isWorkspace } from "./place-picker";
 import { harnessLabelFor } from "../harness-brand";
 import { isInstalledClient } from "../platform/installed-client.ts";
 import { isMobileLayout } from "../navigation/mobile-layout";
-import { headerPill, HeaderActions, PillShell } from "../navigation/header-pill";
+import { tabFrostOn } from "../preferences/tab-frost";
 /*
  * A chat's screen: its header, and its transcript with the composer over it.
  * Out of main.tsx so the gallery draws the same ones.
@@ -27,8 +24,6 @@ export function ChatHeader(props: {
   runtime?: RuntimeIdentity | null;
   live?: Record<string, unknown> | null;
   chat?: ActiveChatStore;
-  composerStatus?: ComposerStatus | null;
-  connectivity?: "connecting" | "online" | "reconnecting" | "offline";
   panelOpen: boolean;
   mobileSidebarOpen: boolean;
   onToggleMobileSidebar: () => void;
@@ -66,59 +61,26 @@ export function ChatHeader(props: {
   const profileLabel = () => props.profile?.label || props.profile?.id;
   const posture = () => props.profile?.posture || props.profile?.tools?.join(" / ");
   const menuLine = () => [projectLabel(), runtimeLabel(), props.live?.binaryVersion || props.runtime?.binaryVersion ? `v${props.live?.binaryVersion || props.runtime?.binaryVersion}` : null, profileLabel(), posture()].filter(Boolean).join(" · ");
-  const activity = () => props.chat?.activity();
   const sessionId = () => typeof props.live?.sessionId === "string" ? props.live.sessionId : "";
-  const dictationLabel = () => props.composerStatus?.dictationLabel() || "";
-  const dictating = () => Boolean(props.composerStatus?.dictating());
-  const statusLabel = () => {
-    const currentDictation = dictationLabel();
-    if (currentDictation) return currentDictation;
-    const currentActivity = activity();
-    if (currentActivity?.label) return currentActivity.label;
-    if (props.connectivity === "offline") return "Offline";
-    if (props.connectivity === "reconnecting") return "Reconnecting…";
-    if (props.connectivity === "connecting") return "Connecting…";
-    return "Ready";
-  };
-  const recording = () => Boolean(props.composerStatus?.recording());
-  const activityKind = () => activity()?.kind || (props.connectivity === "offline" ? "runtime_failed" : "idle");
-  const statusBusy = () => dictating() || SPINNING_ACTIVITY.has(activityKind()) || ["connecting", "reconnecting"].includes(props.connectivity || "");
-  const statusFailure = () => props.connectivity === "offline" || ["request_failed", "runtime_failed"].includes(activityKind());
-  const statusTone = () => statusFailure() ? "error" : recording() ? "listening" : dictating() ? "active" : statusBusy() ? "active" : "ready";
-  const waveformHistory = () => props.composerStatus?.waveform.history() || [];
-  const waveformLevel = () => props.composerStatus?.waveform.level() || 0;
-  const waveformPeak = () => props.composerStatus?.waveform.peak() || 0;
-  const waveformState = () => props.composerStatus?.recorderMonitorState() || "stopped";
-  const leadingPill = headerPill();
-  return <>
-    <header class="chat-header">
-      <Show when={!props.mobileSidebarOpen}>
-        <PillShell pill={leadingPill} class="mobile-header-leading">
-          <Button variant="ghost" size="icon-sm" class="mobile-sidebar-trigger" data-mobile-open="false" aria-label="Toggle Sidebar" aria-expanded={false} onClick={props.onToggleMobileSidebar}><PanelLeftIcon /></Button>
-          <Button variant="ghost" size="icon-sm" class="mobile-new-chat-trigger" aria-label="New chat" title="New chat" onClick={props.onNewChat}><MessageSquarePlusIcon /></Button>
-        </PillShell>
-      </Show>
-      {/* A project or workspace page is that place, named as the sidebar names it; a
-          chat or the Conduit dashboard sits under its place. */}
-      <Show when={props.tabs} fallback={<nav aria-label="breadcrumb" class="chat-header-title"><Show when={!props.dashboard && !props.alone}><Show when={props.onOpenPlace} fallback={<span class="chat-header-place">{projectLabel()}</span>}><button type="button" class="breadcrumb-link chat-header-place" tabIndex={-1} onClick={() => props.onOpenPlace!(props.project)}>{projectLabel()}</button></Show></Show><strong>{props.title}</strong></nav>}>
-        <nav aria-label="Tabs" class="chat-header-title chat-header-tabs">{props.tabs}</nav>
-      </Show>
-      {props.badge}
-      <Show when={!props.dashboard && props.chat}>
-        <span class="chat-status-line" data-state={statusTone()} role="status" aria-label={`Runtime status: ${statusLabel()}`} aria-live="polite">
-          <Show when={recording()} fallback={<span class="chat-status-label">{statusLabel()}</span>}>
-            <VoiceWaveform class="chat-status-waveform" history={waveformHistory} level={waveformLevel} peak={waveformPeak} state={waveformState()} variant="compact" barDensity={3} ariaLabel="Microphone input level" />
-          </Show>
-        </span>
-      </Show>
-      <HeaderActions>
-        <Button variant="ghost" size="icon-sm" class="search-trigger" tabIndex={-1} aria-label="Search chats" title="Search chats" onClick={props.onOpenSearch}><SearchIcon /></Button>
-        <Button variant="ghost" size="icon-sm" class="palette-trigger" tabIndex={-1} aria-label="Open command palette" title="Command palette" onClick={props.onOpenPalette}><TerminalIcon /></Button>
-        <Show when={!props.appDashboard}>
-          <Button variant="ghost" size="icon-sm" class="chat-header-desktop-action" tabIndex={-1} aria-label={props.dashboard ? `Copy Tailscale ${placeKind()} link` : "Copy Tailscale chat link"} title={props.dashboard ? `Copy Tailscale ${placeKind()} link` : "Copy Tailscale chat link"} onClick={props.onShare}><ShareIcon /></Button>
-        </Show>
-        <Show when={!props.appDashboard}><Menu modal={false}>
-          <MenuTrigger class="chat-header-more" tabIndex={-1} aria-label={props.dashboard ? `More ${placeKind()} options` : "More chat options"} title={props.dashboard ? `More ${placeKind()} options` : "More chat options"}><EllipsisIcon /></MenuTrigger>
+  const crumb = () => <Show when={props.tabs} fallback={<HeaderCrumb place={props.dashboard || props.alone ? undefined : projectLabel()} onPlace={props.onOpenPlace ? () => props.onOpenPlace!(props.project) : undefined} title={props.title} />}>
+    <nav aria-label="Tabs" class="chat-header-title chat-header-tabs">{props.tabs}</nav>
+  </Show>;
+  const moreLabel = () => props.dashboard ? `More ${placeKind()} options` : "More chat options";
+  const shareLabel = () => props.dashboard ? `Copy Tailscale ${placeKind()} link` : "Copy Tailscale chat link";
+  return <Header frost={!!props.tabs && tabFrostOn()}
+    lead={<Show when={!props.mobileSidebarOpen}>
+      <HeaderButton label="Toggle Sidebar" icon={<PanelLeftIcon />} aria-expanded={false} tabIndex={0} onClick={props.onToggleMobileSidebar} />
+      <HeaderButton label="New chat" icon={<MessageSquarePlusIcon />} tabIndex={0} onClick={props.onNewChat} />
+    </Show>}
+    after={props.badge}
+    actions={<>
+      {/* On a desktop search and the palette are the right rail's; a phone's header keeps them, and the ⋯ that holds the rest. */}
+      <HeaderButton only="phone" label="Search chats" icon={<SearchIcon />} onClick={props.onOpenSearch} />
+      <HeaderButton only="phone" label="Open command palette" title="Command palette" icon={<TerminalIcon />} onClick={props.onOpenPalette} />
+      <Show when={!props.appDashboard}>
+        <HeaderButton only="desktop" label={shareLabel()} icon={<ShareIcon />} onClick={props.onShare} />
+        <Menu modal={false}>
+          <MenuControl as={HeaderButton} only="phone" label={moreLabel()} icon={<EllipsisIcon />} data-header-more="" />
           <MenuContent>
             <HeadingSection title={props.title} detail={menuLine()} />
             <Show when={!props.dashboard}>
@@ -155,13 +117,12 @@ export function ChatHeader(props: {
               </Show>
             </MenuSection>
           </MenuContent>
-        </Menu></Show>
-        {props.actions}
-        {/* The pane's own swap and close, at its right edge: they act on the pane. */}
-        {props.tabActions}
-      </HeaderActions>
-    </header>
-  </>;
+        </Menu>
+      </Show>
+      {props.actions}
+      {/* The pane's own swap and close, at its right edge: they act on the pane. */}
+      {props.tabActions}
+    </>}>{crumb()}</Header>;
 }
 
 /** A chat's transcript with its composer over it: a Conduit chat's and an

@@ -34,6 +34,7 @@ import { latestRelease, type PublishedRelease } from "../platform/github-release
 import { api } from "../api/client";
 import { WorkspaceGlyph } from "../project/workspace-appearance";
 import { ChatMenuItems, MoveTo, PlaceMenuItems } from "./item-menus";
+import { PlaceGlyph } from "../chat/place-picker";
 import type { Pty } from "../remotes/terminal-pane";
 import type { RuntimeStore } from "../state/runtime";
 import { focusFirst, isMobileLayout, MOBILE_LAYOUT_QUERY, restoreFocus } from "./mobile-layout";
@@ -475,7 +476,7 @@ export function Sidebar(props: {
     } else if (!open && mobileWasOpen) {
       const previous = mobileReturnFocus;
       mobileReturnFocus = null;
-      queueMicrotask(() => restoreFocus(previous, ["textarea[data-composer-input]", ".mobile-sidebar-trigger"]));
+      queueMicrotask(() => restoreFocus(previous, ["textarea[data-composer-input]", 'button[aria-label="Toggle Sidebar"]']));
     }
     mobileWasOpen = open;
   });
@@ -1107,7 +1108,7 @@ export function Sidebar(props: {
       actions={<DialogButton type="button" variant="ghost" outline onClick={() => setMoving(null)}>Cancel</DialogButton>}>
       <DialogSection>
         <For each={props.projects.filter((item) => item.id !== moving()?.project.id)}>
-          {(target) => <DialogItem icon={<FolderIcon />} onClick={() => { const current = moving(); if (current) void props.onMoveChat(current.chat, current.project, target); setMoving(null); }}>{target.name}</DialogItem>}
+          {(target) => <DialogItem icon={<PlaceGlyph project={target} />} onClick={() => { const current = moving(); if (current) void props.onMoveChat(current.chat, current.project, target); setMoving(null); }}>{target.name}</DialogItem>}
         </For>
         <Show when={!props.projects.some((item) => item.id !== moving()?.project.id)}>
           <CardNote>No other folders to move this chat to.</CardNote>
