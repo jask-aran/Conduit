@@ -1,7 +1,7 @@
 import * as KDialog from "@kobalte/core/dialog";
 import * as KAlertDialog from "@kobalte/core/alert-dialog";
 import { createEffect, Show, type ComponentProps, type JSX } from "solid-js";
-import { createFullscreenPortalMount } from "./primitives";
+import { createFullscreenPortalMount } from "./portal";
 import { Card } from "./ui/card";
 import { Overlay, Scrim } from "./ui/overlay";
 

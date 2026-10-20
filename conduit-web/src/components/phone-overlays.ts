@@ -1,7 +1,7 @@
 import { isMobileLayout } from "../client/navigation/mobile-layout";
 import { installedClientKind } from "../client/platform/installed-client";
 
-// ui-*: the same menus drawn by the library (components/ui/swap.ts).
+// ui-*: the same menus drawn by the library.
 const menus = '[data-slot="menu-content"], [data-slot="menu-sub-content"], [data-slot="context-menu-content"], [data-slot="context-menu-sub-content"], [data-slot="popover-content"], [data-slot^="ui-"]';
 const visibleMenus = () => [...document.querySelectorAll<HTMLElement>(menus)].filter((element) => element.checkVisibility());
 export const phoneLayerOpen = () => visibleMenus().length > 0;
