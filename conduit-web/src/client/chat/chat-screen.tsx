@@ -1,8 +1,8 @@
-import { createSignal, Show, type JSX } from "solid-js";
-import { EllipsisIcon, MessageSquarePlusIcon, PanelLeftIcon, PanelRightIcon, PencilIcon, RefreshCwIcon, SearchIcon, ShareIcon, TerminalIcon, Trash2Icon } from "lucide-solid";
+import { createSignal, For, Show, type JSX } from "solid-js";
+import { MessageSquarePlusIcon, PanelLeftIcon, PanelRightIcon, PencilIcon, RefreshCwIcon, SearchIcon, ShareIcon, TerminalIcon, Trash2Icon } from "lucide-solid";
 import { Menu, MenuContent, MenuControl, MenuRow, MenuSection } from "@/components/menus";
 import { PaneTabRow } from "@/components/ui/pane";
-import { Header, HeaderButton, HeaderCrumb, HeadingSection, MenuNote, Rule, Spinner } from "@/components/ui";
+import { Header, HeaderButton, HeaderCrumb, HeaderPill, Readout, Rule, Spinner } from "@/components/ui";
 import type { Project, RuntimeIdentity, Template } from "../api/contracts";
 import type { ActiveChatStore } from "../state/active-chat";
 import { ContextBar, ContextBreakdown } from "./context-gauge";
@@ -61,64 +61,76 @@ export function ChatHeader(props: {
   const runtimeLabel = () => props.runtime ? harnessLabelFor(props.chat?.backendImplementation() || "conduit_pi") : null;
   const profileLabel = () => props.profile?.label || props.profile?.id;
   const posture = () => props.profile?.posture || props.profile?.tools?.join(" / ");
-  const menuLine = () => [projectLabel(), runtimeLabel(), props.live?.binaryVersion || props.runtime?.binaryVersion ? `v${props.live?.binaryVersion || props.runtime?.binaryVersion}` : null, profileLabel(), posture()].filter(Boolean).join(" · ");
   const sessionId = () => typeof props.live?.sessionId === "string" ? props.live.sessionId : "";
   const crumb = () => <Show when={props.tabs} fallback={<HeaderCrumb place={props.dashboard || props.alone ? undefined : projectLabel()} onPlace={props.onOpenPlace ? () => props.onOpenPlace!(props.project) : undefined} title={props.title} />}>
     <PaneTabRow>{props.tabs}</PaneTabRow>
   </Show>;
   const moreLabel = () => props.dashboard ? `More ${placeKind()} options` : "More chat options";
   const shareLabel = () => props.dashboard ? `Copy Tailscale ${placeKind()} link` : "Copy Tailscale chat link";
+  // What the chat is running on, for its menu's Details: each a line of its own.
+  const details = () => ([["Harness", runtimeLabel()], ["Version", props.live?.binaryVersion || props.runtime?.binaryVersion ? `v${props.live?.binaryVersion || props.runtime?.binaryVersion}` : null],
+    ["Profile", profileLabel()], ["Tools", posture()], ["Session", sessionId()]] as [string, string | null | undefined][]).filter((line): line is [string, string] => Boolean(line[1]));
+  const [detailsOpen, setDetailsOpen] = createSignal(false);
+  const place = () => props.dashboard || props.alone ? undefined : projectLabel();
   return <Header frost={!!props.tabs && tabFrostOn()}
     lead={<Show when={!props.mobileSidebarOpen}>
       <HeaderButton label="Toggle Sidebar" icon={<PanelLeftIcon />} aria-expanded={false} tabIndex={0} onClick={props.onToggleMobileSidebar} />
       <HeaderButton label="New chat" icon={<MessageSquarePlusIcon />} tabIndex={0} onClick={props.onNewChat} />
     </Show>}
-    after={props.badge}
-    actions={<>
-      {/* On a desktop search and the palette are the right rail's; a phone's header keeps them, and the ⋯ that holds the rest. */}
-      <HeaderButton only="phone" label="Search chats" icon={<SearchIcon />} onClick={props.onOpenSearch} />
-      <HeaderButton only="phone" label="Open command palette" title="Command palette" icon={<TerminalIcon />} onClick={props.onOpenPalette} />
-      <Show when={!props.appDashboard}>
-        <HeaderButton only="desktop" label={shareLabel()} icon={<ShareIcon />} onClick={props.onShare} />
-        <Menu modal={false}>
-          <MenuControl as={HeaderButton} only="phone" label={moreLabel()} icon={<EllipsisIcon />} data-header-more="" />
-          <MenuContent>
-            <HeadingSection title={props.title} detail={menuLine()} />
-            <Show when={!props.dashboard}>
-              <Show when={props.chat}>{(chat) => {
-                // Opens in place: a submenu has nowhere to go beside a menu that fills a phone.
-                const [expanded, setExpanded] = createSignal(false);
-                const used = () => contextUsagePercent(chat().contextUsage());
-                return <>
-                  <MenuSection>
-                    <MenuRow closeOnSelect={false} aria-expanded={expanded()} opens meta={used() == null ? "Unavailable" : `${Math.round(used()!)}% used`}
-                      onSelect={() => { if (!expanded()) chat().refreshContext(); setExpanded(!expanded()); }}>Context</MenuRow>
-                    <Show when={!expanded()}><ContextBar chat={chat()} /></Show>
-                  </MenuSection>
-                  <Show when={expanded()}><ContextBreakdown chat={chat()} bare canCompact={chat().capabilities()?.compaction !== false} /></Show>
-                </>;
-              }}</Show>
-              <Show when={sessionId()}><MenuSection title="Session ID"><MenuNote>{sessionId()}</MenuNote></MenuSection></Show>
+    // A phone's name for the page, and the way into its menu (a desktop's title and rail hold what it holds).
+    pill={<Show when={!props.appDashboard} fallback={<HeaderPill label={props.title} />}>
+      <Menu modal={false} placement="bottom" onOpenChange={(open) => { if (!open) setDetailsOpen(false); }}>
+        <MenuControl as={HeaderPill} opens label={props.title} place={place()} aria-label={`${moreLabel()}: ${props.title}`} data-header-more="" />
+        <MenuContent steady>
+          <MenuSection>
+            <MenuRow icon={<ShareIcon />} onSelect={props.onShare}>Share</MenuRow>
+            <Show when={props.onRename}>
+              <MenuRow icon={<PencilIcon />} onSelect={() => props.onRename?.()}>{props.dashboard ? `Rename ${placeKind()}` : "Rename"}</MenuRow>
             </Show>
-            <Rule />
-            <Show when={!props.dashboard && !nativeApp}>
-              <MenuSection>
-                <MenuRow disabled={props.pwaUpdating()} onSelect={props.onUpdatePwa} icon={<Show when={props.pwaUpdating()} fallback={<RefreshCwIcon />}><Spinner /></Show>}>{props.pwaUpdating() ? "Updating app…" : "Update app"}</MenuRow>
-              </MenuSection>
+            <Show when={isMobileLayout()}><MenuRow icon={<PanelRightIcon />} onSelect={props.onTogglePanel}>Workspace panel</MenuRow></Show>
+          </MenuSection>
+          <Show when={!props.dashboard && props.chat}>{(chat) => {
+            // Each opens in place: a submenu has nowhere to go beside a menu that fills a phone.
+            const [expanded, setExpanded] = createSignal(false);
+            const used = () => contextUsagePercent(chat().contextUsage());
+            return <>
               <Rule />
-            </Show>
+              <MenuSection>
+                <MenuRow closeOnSelect={false} aria-expanded={expanded()} opens meta={used() == null ? "Unavailable" : `${Math.round(used()!)}% used`}
+                  onSelect={() => { if (!expanded()) chat().refreshContext(); setExpanded(!expanded()); }}>Context</MenuRow>
+                <Show when={!expanded()}>
+                  <ContextBar chat={chat()} />
+                  {/* Context open is the whole reading (it names the model and session itself), so Details gives way. */}
+                  <Show when={details().length}>
+                    <MenuRow closeOnSelect={false} aria-expanded={detailsOpen()} opens meta={runtimeLabel() ?? undefined} onSelect={() => setDetailsOpen(!detailsOpen())}>Details</MenuRow>
+                    <Show when={detailsOpen()}><For each={details()}>{([label, value]) => <Readout label={label} value={value} />}</For></Show>
+                  </Show>
+                </Show>
+              </MenuSection>
+              <Show when={expanded()}><ContextBreakdown chat={chat()} bare canCompact={chat().capabilities()?.compaction !== false} /></Show>
+            </>;
+          }}</Show>
+          <Show when={(!props.dashboard && !nativeApp) || props.onDelete}>
+            <Rule />
             <MenuSection>
-              <Show when={isMobileLayout()}><MenuRow icon={<PanelRightIcon />} onSelect={props.onTogglePanel}>Workspace panel</MenuRow></Show>
-              <MenuRow icon={<ShareIcon />} onSelect={props.onShare}>Share</MenuRow>
-              <Show when={props.onRename}>
-                <MenuRow icon={<PencilIcon />} onSelect={() => props.onRename?.()}>{props.dashboard ? `Rename ${placeKind()}` : "Rename"}</MenuRow>
+              <Show when={!props.dashboard && !nativeApp}>
+                <MenuRow disabled={props.pwaUpdating()} onSelect={props.onUpdatePwa} icon={<Show when={props.pwaUpdating()} fallback={<RefreshCwIcon />}><Spinner /></Show>}>{props.pwaUpdating() ? "Updating app…" : "Update app"}</MenuRow>
               </Show>
               <Show when={props.onDelete}>
                 <MenuRow destructive icon={<Trash2Icon />} onSelect={() => props.onDelete?.()}>{props.dashboard ? (placeKind() === "workspace" ? "Unlink workspace" : "Delete project") : "Delete"}</MenuRow>
               </Show>
             </MenuSection>
-          </MenuContent>
-        </Menu>
+          </Show>
+        </MenuContent>
+      </Menu>
+    </Show>}
+    after={props.badge}
+    actions={<>
+      {/* On a desktop search and the palette are the right rail's; a phone's header keeps them. */}
+      <HeaderButton only="phone" label="Search chats" icon={<SearchIcon />} onClick={props.onOpenSearch} />
+      <HeaderButton only="phone" label="Open command palette" title="Command palette" icon={<TerminalIcon />} onClick={props.onOpenPalette} />
+      <Show when={!props.appDashboard}>
+        <HeaderButton only="desktop" label={shareLabel()} icon={<ShareIcon />} onClick={props.onShare} />
       </Show>
       {props.actions}
       {/* The pane's own swap and close, at its right edge: they act on the pane. */}
