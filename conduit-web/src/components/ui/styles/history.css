@@ -15,7 +15,7 @@
   padding: var(--space-xs) var(--space-sm) var(--space-md);
   font-size: var(--text-row);
 }
-.ui-history-row { position: relative; display: grid; line-height: var(--history-line-height); grid-template-columns: var(--history-time-width) minmax(0, 1fr); min-height: calc(1.79688 * var(--u-space)); align-items: baseline; column-gap: var(--history-gap); padding: var(--space-2xs) var(--history-row-pad); border-radius: var(--radius-control); color: var(--muted-foreground); }
+.ui-history-row { position: relative; display: grid; line-height: var(--history-line-height); grid-template-columns: var(--history-time-width) minmax(0, 1fr); min-height: var(--control-tool); align-items: baseline; column-gap: var(--history-gap); padding: var(--space-2xs) var(--history-row-pad); border-radius: var(--radius-control); color: var(--muted-foreground); }
 /* Its own column and its own type: a row kind that switches to monospace must
    not resize the stamp, or every entry starts at a different place. */
 .ui-history-time {
@@ -68,15 +68,15 @@
 .ui-history-row small { color: var(--muted-foreground); font-size: var(--text-label); text-transform: capitalize; }
 
 /* Empty chat history keeps its centred icon, heading and explanation. */
-.workspace-chat-view .ui-pane-empty > div { display: grid; max-width: calc(17.5 * var(--u-space)); justify-items: center; gap: calc(.4375 * var(--u-space)); }
-.workspace-chat-view .ui-pane-empty svg { width: calc(1.5 * var(--u-space)); height: calc(1.5 * var(--u-space)); }
+.workspace-chat-view .ui-pane-empty > div { display: grid; max-width: calc(17.5 * var(--u-space)); justify-items: center; gap: var(--space-sm); }
+.workspace-chat-view .ui-pane-empty svg { width: var(--control-xs); height: var(--control-xs); }
 .workspace-chat-view .ui-pane-empty strong { color: var(--foreground); }
 .workspace-chat-view .ui-pane-empty p { margin: 0; line-height: 1.5; }
 
 /* Phone geometry uses the phone density unit (16px). */
 @media (--conduit-phone-layout) {
-  .ui-history { --history-time-width: calc(2.25 * var(--u-space)); --history-row-pad: var(--space-sm); --history-line-height: calc(1.0625 * var(--u-space)); padding: var(--space-xs) var(--space-sm) calc(.4375 * var(--u-space)); font-size: var(--text-row); }
-  .ui-history-row { min-height: calc(1.6875 * var(--u-space)); }
+  .ui-history { --history-time-width: calc(2.25 * var(--u-space)); --history-row-pad: var(--space-sm); --history-line-height: calc(1.0625 * var(--u-space)); padding: var(--space-xs) var(--space-sm) var(--space-sm); font-size: var(--text-row); }
+  .ui-history-row { min-height: var(--control-tool); }
   .ui-history-time, .ui-history-row small { font-size: var(--text-label); }
   .ui-history-branch { --history-row-height: calc(1.6875 * var(--u-space)); }
 }

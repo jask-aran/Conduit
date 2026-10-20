@@ -49,15 +49,15 @@
   .ui-term-lead[data-phone] [data-slot="button"] { width: var(--control); min-width: var(--control); height: var(--control); padding: 0; }
 }
 
-.ui-term-state { position: absolute; inset: 0; z-index: 2; display: grid; place-content: center; justify-items: center; gap: calc(.625 * var(--u-space));
+.ui-term-state { position: absolute; inset: 0; z-index: 2; display: grid; place-content: center; justify-items: center; gap: var(--space-md);
   padding: calc(1.75 * var(--u-space)); background: color-mix(in oklch, var(--background), black 9%); text-align: center; }
 .ui-term-state strong { color: var(--foreground); font-size: var(--text-row); font-weight: var(--weight-strong); }
 .ui-term-state p { max-width: min(calc(32.8125 * var(--u-space)), 100%); margin: 0; color: var(--muted-foreground); font-size: var(--text-caption); line-height: 1.45; }
-.ui-term-state[data-empty] { min-height: 0; flex: 1; gap: calc(.5625 * var(--u-space)); padding: var(--space-4xl); color: var(--muted-foreground); }
+.ui-term-state[data-empty] { min-height: 0; flex: 1; gap: var(--space-md); padding: var(--space-4xl); color: var(--muted-foreground); }
 .ui-term-state[data-empty] > svg { width: var(--control-sm); height: var(--control-sm); color: var(--muted-foreground); opacity: .8; }
 .ui-term-state[data-empty] p { max-width: min(calc(18.125 * var(--u-space)), 100%); line-height: 1.55; }
-.ui-term-error { position: absolute; z-index: 4; right: calc(.625 * var(--u-space)); bottom: calc(.625 * var(--u-space));
-  max-width: min(calc(27.5 * var(--u-space)), calc(100% - var(--space-2xl))); margin: 0; padding: calc(.4375 * var(--u-space)) calc(.5625 * var(--u-space));
+.ui-term-error { position: absolute; z-index: 4; right: var(--space-md); bottom: var(--space-md);
+  max-width: min(calc(27.5 * var(--u-space)), calc(100% - var(--space-2xl))); margin: 0; padding: var(--space-sm) calc(.5625 * var(--u-space));
   border: var(--hairline) solid color-mix(in oklch, var(--destructive), transparent 45%); border-radius: var(--radius-control);
   background: color-mix(in oklch, var(--popover), transparent 4%); box-shadow: 0 var(--space-md) var(--space-3xl) rgb(0 0 0 / 28%);
   color: var(--destructive); font-size: var(--text-caption); line-height: 1.45; }
