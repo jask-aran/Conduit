@@ -1137,12 +1137,12 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
               <Show when={sessions().length > 0} fallback={<MenuNote>No active terminals in {props.projectName || "Chats"}.</MenuNote>}>
                 <For each={sessions()}>{(session) => {
                   const name = () => session.title || "Shell";
-                  return <MenuRow {...{ textValue: name() }} checked={pty()?.id === session.id} detail={sessionMetadata(session)} onSelect={() => void attachSession(session)} reveal end={<>
-                    <Show when={props.onOpenBeside}><TermMenuAction aria-label={`Open ${name()} beside`} onClick={(event) => { event.stopPropagation(); props.onOpenBeside?.(session.id); }}><Columns2Icon /></TermMenuAction></Show>
-                    <TermMenuAction aria-label={`Rename ${name()}`} onClick={(event) => { event.stopPropagation(); requestRename(session); }}><PencilIcon /></TermMenuAction>
-                    <TermMenuAction aria-label={`Detach from ${name()}`} disabled={pty()?.id !== session.id || connectionState() !== "live"} onClick={(event) => { event.stopPropagation(); detachSession(session); }}><UnplugIcon /></TermMenuAction>
-                    <TermMenuAction destructive aria-label={`Destroy ${name()}`} disabled={sessionBusy() === session.id} onClick={(event) => { event.stopPropagation(); void removeSession(session); }}><Show when={sessionBusy() === session.id} fallback={<Trash2Icon />}><Spinner /></Show></TermMenuAction>
-                  </>}>{name()}</MenuRow>;
+                  return <MenuRow {...{ textValue: name() }} checked={pty()?.id === session.id} detail={sessionMetadata(session)} onSelect={() => void attachSession(session)} actions={[
+                    ...(props.onOpenBeside ? [{ label: `Open ${name()} beside`, icon: <Columns2Icon />, onSelect: () => props.onOpenBeside?.(session.id) }] : []),
+                    { label: `Rename ${name()}`, icon: <PencilIcon />, onSelect: () => requestRename(session) },
+                    { label: `Detach from ${name()}`, icon: <UnplugIcon />, disabled: pty()?.id !== session.id || connectionState() !== "live", onSelect: () => detachSession(session) },
+                    { label: `Destroy ${name()}`, icon: <Trash2Icon />, destructive: true, disabled: sessionBusy() === session.id, onSelect: () => void removeSession(session) },
+                  ]}>{name()}</MenuRow>;
                 }}</For>
               </Show>
             </MenuSection>
