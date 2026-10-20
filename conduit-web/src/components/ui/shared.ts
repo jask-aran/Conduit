@@ -8,6 +8,9 @@
  */
 export type Density = "desktop" | "phone";
 
+/** Whether a pointer event is from a pointer that hovers (a mouse, a pen above the screen), not a touch. */
+export const hovers = (event: PointerEvent) => event.pointerType !== "touch";
+
 /** A time token read from CSS, in ms. The build writes times as it likes (240ms becomes .24s), so read the unit. */
 export function cssTime(element: Element, name: string, fallback: number) {
   const value = getComputedStyle(element).getPropertyValue(name).trim();
@@ -19,9 +22,11 @@ export function cssTime(element: Element, name: string, fallback: number) {
 /**
  * The one cursor (DESIGN Interaction): the pointer moves it, as the keyboard
  * does, so only one row of a list is ever washed. A list's container passes
- * this to onPointerOver; a row is a ui-row (data-highlighted) or a ui-choice (data-active).
+ * this to onPointerOver; a row is a ui-row (data-highlighted) or a ui-choice (data-active). Only a pointer that hovers
+ * moves it: a tap is a choice, and a cursor it moved stayed on the row tapped, washed, once the list was left.
  */
 export function moveCursor(event: PointerEvent & { currentTarget: Element }) {
+  if (!hovers(event)) return;
   const row = (event.target as Element).closest(".ui-row, .ui-choice");
   if (!row || !event.currentTarget.contains(row) || row.hasAttribute("data-disabled")) return;
   const attr = row.classList.contains("ui-choice") ? "data-active" : "data-highlighted";

@@ -293,7 +293,7 @@ export function CommandMenu(props: {
       && (scope.kind === "all" || command.project?.id === scope.project.id));
   });
 
-  const rows = createMemo<Row[]>(() => {
+  const builtRows = createMemo<Row[]>(() => {
     if (!props.open) return [];
     const currentPage = page();
     const source = commands();
@@ -428,6 +428,33 @@ export function CommandMenu(props: {
     return out;
   });
 
+  /*
+   * The rows drawn: a rebuild (a folder toggled, a chat's state changing) makes every row anew, and drawing each
+   * again cost a toggle 30-80ms. A row whose content is the same keeps the object drawn for it, so only rows that
+   * changed are drawn again; its place in the list is read from indexOf, which follows each rebuild.
+   */
+  let kept = new Map<string, Row>();
+  const sameRow = (a: Row, b: Row) => {
+    const left = a as Record<string, unknown>, right = b as Record<string, unknown>;
+    const keys = new Set([...Object.keys(left), ...Object.keys(right)]);
+    for (const key of keys) if (key !== "index" && left[key] !== right[key]) return false;
+    return true;
+  };
+  const rows = createMemo<Row[]>(() => {
+    const next = new Map<string, Row>();
+    const out = builtRows().map((row) => {
+      const before = kept.get(row.key);
+      const use = before && sameRow(before, row) ? before : row;
+      // Handlers read a row's place when they run; what is drawn reads it through indexOf.
+      if (use !== row && "index" in row) (use as { index: number }).index = row.index;
+      next.set(row.key, use);
+      return use;
+    });
+    kept = next;
+    return out;
+  });
+  const indexByKey = createMemo(() => new Map(builtRows().flatMap((row) => row.type === "heading" ? [] : [[row.key, row.index] as const])));
+  const indexOf = (row: SelectableRow) => indexByKey().get(row.key) ?? row.index;
   const selectable = createMemo<SelectableRow[]>(() => rows().filter((row): row is SelectableRow => row.type !== "heading"));
   const allChatTargets = createMemo<ChatTarget[]>(() => (props.context.projects || []).flatMap((project) =>
     (project.sessions || []).map((chat) => ({ chat, project }))));
@@ -731,7 +758,7 @@ export function CommandMenu(props: {
       && row.command.chat && row.command.project) {
       event.preventDefault();
       event.stopPropagation();
-      setActive(row.index);
+      setActive(indexOf(row));
       enterSelection({ chat: row.command.chat, project: row.command.project });
       return;
     }
@@ -879,15 +906,15 @@ export function CommandMenu(props: {
   })));
   const queryText = () => parsedQuery().text;
   // The cursor is lit only where it acts (see listFocused); the pointer moves it, and a press keeps focus where it is.
-  const lit = (row: SelectableRow) => active() === row.index
+  const lit = (row: SelectableRow) => active() === indexOf(row)
     && (!chatPage() || listFocused() || pointerCursor() || searching() || selectionMode() || moveMode());
   const rowProps = (row: SelectableRow) => ({
-    id: optionId(row.index),
+    get id() { return optionId(indexOf(row)); },
     get role() { return chatPage() && !moveMode() ? "treeitem" : "option"; },
     get "aria-selected"() { return lit(row); },
     get active() { return lit(row); },
     onMouseDown: (event: MouseEvent) => event.preventDefault(),
-    onMouseMove: () => { setPointerCursor(true); setActive(row.index); },
+    onCursor: () => { setPointerCursor(true); setActive(indexOf(row)); },
     onClick: (event: MouseEvent) => runPointerRow(row, event),
   });
   const placeIcon = (project: Project) => project.slug === "chat" ? <MessageSquareIcon /> : <PlaceGlyph project={project} />;

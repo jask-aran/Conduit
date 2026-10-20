@@ -904,7 +904,7 @@ export const libraryFamilies: Family[] = [
         <Menu><SearchList items={PROJECTS} placeholder="Search projects and workspaces" matches={(project, needle) => project.name.toLowerCase().includes(needle)} isCurrent={(project) => project === PROJECTS[1]}
           onChoose={noop} row={(project) => ({ icon: <PlaceGlyph project={project} />, label: project.name, meta: "Project" })} /></Menu>
       </div>, true),
-      lib("item", "List · items", "both", "section", "Section + Item: icon meta detail keys opens away field · checked (current: bold, no tick) disabled destructive", () => <Menu><Section title="Title" note="note">
+      lib("item", "List · items", "both", "section", "Section + Item: icon meta detail keys opens away field · checked (current: bold, no tick) disabled destructive · onCursor (a list keeping its own cursor; a hovering pointer only, never a tap)", () => <Menu><Section title="Title" note="note">
         <Item>Plain</Item>
         <Item icon={<PaperclipIcon />}>icon</Item>
         <Item meta="xai">meta</Item>
