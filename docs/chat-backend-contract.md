@@ -122,6 +122,15 @@ error is neither — it belongs to the command that failed, not to a turn, and
 numbering one would replay a bad request as a failed turn on the next
 reconnect.
 
+Settling must not re-render. A settled turn keeps its DOM: the same answer
+node, disclosures left as they were, no replayed fade, no layout shift. The
+server compares the record against what its log stated for the turn and
+publishes only where they differ, as targeted ops for those rows, never a
+window that replaces rows; a clean turn sends nothing and reads nothing more
+than the checkpoint does. A divergence is logged server side, so it is a bug
+report rather than a silent heal (`scripts/probes/settle-stability.mjs` is
+the gate).
+
 Dropping paint is safe because `message.close` restates the message in full.
 Who wrote it, with what, when, and what went wrong travel on the close when
 the adapter has them: Pi copies them off the reduced generation; Codex,
