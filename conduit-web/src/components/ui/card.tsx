@@ -1,5 +1,5 @@
-import { Show, type JSX } from "solid-js";
-import { XIcon } from "lucide-solid";
+import { createSignal, Show, type JSX } from "solid-js";
+import { QrCodeIcon, XIcon } from "lucide-solid";
 import { cn } from "@/lib/utils";
 import { Button } from "./controls";
 import { type Density, type Motion, motionOf } from "./shared";
@@ -24,7 +24,14 @@ export const CardBody = (props: { children: JSX.Element }) => <div class="ui-car
 export const CardNote = (props: { children: JSX.Element; error?: boolean }) => <p class="ui-card-note" role={props.error ? "alert" : undefined} data-error={props.error ? "" : undefined}>{props.children}</p>;
 export const CardRead = (props: { children: JSX.Element }) => <code class="ui-card-read">{props.children}</code>;
 export const CardDetails = (props: { children: JSX.Element }) => <dl class="ui-card-details">{props.children}</dl>;
-export const CardQR = (props: { svg: string; expired?: boolean }) => <div class="ui-card-qr" innerHTML={props.svg} data-expired={props.expired ? "" : undefined} aria-label="Pairing QR code" role="img" />;
+/** reveal: on a phone the code waits behind Show QR code -- a phone is likelier the one scanning than the one scanned. */
+export function CardQR(props: { svg: string; expired?: boolean; reveal?: boolean }) {
+  const [shown, setShown] = createSignal(false);
+  return <>
+    <Show when={props.reveal}><Button variant="ghost" outline class="ui-card-qr-reveal" aria-expanded={shown()} onClick={() => setShown(!shown())}><QrCodeIcon />{shown() ? "Hide QR code" : "Show QR code"}</Button></Show>
+    <div class="ui-card-qr" innerHTML={props.svg} data-expired={props.expired ? "" : undefined} data-reveal={props.reveal ? "" : undefined} data-shown={shown() ? "" : undefined} aria-label="Pairing QR code" role="img" />
+  </>;
+}
 /** Under a QR: what it opens, one line. */
 export const CardCaption = (props: { children: string; title?: string }) => <p class="ui-card-caption" title={props.title ?? props.children}>{props.children}</p>;
 export const CardPreview = (props: { children: JSX.Element }) => <div class="ui-card-preview">{props.children}</div>;
