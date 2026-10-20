@@ -63,7 +63,7 @@ function holdFocus(element: HTMLElement, keep: () => boolean) {
   const focus = element.focus.bind(element);
   element.focus = (options?: FocusOptions) => { if (!keep()) focus(options); };
 }
-type Caps = { width?: Measure; height?: Measure };
+type Caps = { width?: Measure; height?: Measure; steady?: boolean };
 type ContentProps = ParentProps<Caps & { "data-settling"?: boolean; keep?: () => boolean; onOpenAutoFocus?: (event: Event) => void; onPointerDownOutside?: (event: Event) => void; onFocusOutside?: (event: FocusOutsideEvent) => void; onCloseAutoFocus?: (event: Event) => void }>;
 type RowProps = Omit<ComponentProps<typeof Item>, "onSelect"> & { onSelect?: () => void; closeOnSelect?: boolean };
 type ChoiceProps = RowProps & { value: string };
