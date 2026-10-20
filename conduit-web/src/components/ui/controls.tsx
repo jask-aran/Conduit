@@ -41,8 +41,13 @@ export function TextArea(props: JSX.TextareaHTMLAttributes<HTMLTextAreaElement>)
 }
 
 /** A field's name over its control: Caption type, --card-pair above it. */
-export function Field(props: { label: JSX.Element; children: JSX.Element }) {
-  return <label class="ui-field"><span class="ui-field-label">{props.label}</span>{props.children}</label>;
+/** A form field: its label over its control. plain: the label names a group of controls (a Segmented), so it is no
+ *  label element (a press on it would pick the first). inline: the label and its control on one line (a Switch). */
+export function Field(props: { label: JSX.Element; plain?: boolean; inline?: boolean; children: JSX.Element }) {
+  const inner = () => <><span class="ui-field-label">{props.label}</span>{props.children}</>;
+  return props.plain
+    ? <div role="group" class="ui-field" data-inline={props.inline ? "" : undefined}>{inner()}</div>
+    : <label class="ui-field" data-inline={props.inline ? "" : undefined}>{inner()}</label>;
 }
 
 export function Input(props: JSX.InputHTMLAttributes<HTMLInputElement>) {

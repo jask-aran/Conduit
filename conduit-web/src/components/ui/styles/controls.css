@@ -17,6 +17,7 @@
 .ui-input, .ui-card .ui-textarea, .ui-setting-wide > .ui-textarea { background: var(--well); }
 .ui-card .ui-textarea, .ui-setting-wide > .ui-textarea, .ui-preview { padding: var(--space-md) var(--space-lg); }
 .ui-field { display: flex; min-width: 0; flex-direction: column; gap: var(--card-pair, var(--space-md)); }
+.ui-field[data-inline] { flex-direction: row; align-items: center; justify-content: space-between; gap: var(--space-lg); }
 .ui-field-label { color: var(--muted-foreground); font-size: var(--text-caption); font-weight: var(--weight-lift); text-box: trim-both cap alphabetic; }
 
 /* Button: a rounded rectangle. Secondary is the surface's well inside its line (on frost, a

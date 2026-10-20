@@ -1,7 +1,9 @@
-/* Terminal chrome and shortcut editor (terminal.tsx). */
-.ui-term-header { display: flex; min-height: var(--control); flex: none; align-items: center; justify-content: space-between; gap: var(--space-md);
-  padding: var(--space-xs) var(--space-sm) var(--space-xs) var(--space-md); border-bottom: var(--hairline) solid var(--border);
-  background: color-mix(in oklch, var(--background), var(--tint) 24%); container-type: inline-size; }
+/* Terminal chrome (terminal.tsx). TermHeader: a terminal's top line, on the ground (the pane's material) over the
+   terminal's darker canvas, so no line divides them. Leading controls, the identity (status, title, context; it
+   truncates), the shortcuts, then the session and focus actions, all quiet ghost controls. What does not fit folds,
+   measured by TermHeader (data-folded): the shortcuts into the ⋯ first, then the actions' labels; nothing squeezes. */
+.ui-term-header { display: flex; min-height: var(--control); flex: none; align-items: center; gap: var(--space-lg);
+  padding: var(--space-xs) var(--space-sm) var(--space-xs) var(--space-md); background: var(--background); }
 .ui-term-header svg { width: var(--icon-sm); height: var(--icon-sm); color: var(--muted-foreground); }
 .ui-term-header strong { font-size: var(--text-row); font-weight: var(--weight-strong); }
 .ui-term-identity { display: flex; min-width: 0; align-items: center; gap: var(--space-md); margin-right: auto; overflow: hidden; }
@@ -18,32 +20,19 @@
 .ui-term-status[data-tone="success"] .ui-term-status-mark { color: var(--live); }
 .ui-term-status[data-tone="warn"] .ui-term-status-mark { color: var(--warn); }
 .ui-term-status[data-tone="danger"] .ui-term-status-mark { color: var(--destructive); }
-.ui-term-divider { width: var(--hairline); height: var(--icon); flex: none; background: var(--tint); }
 
-/* Inline while there is room; one menu when there is not. */
-.ui-term-overflow { display: none; min-width: 0; align-items: center; gap: var(--space-md); }
-.ui-term-shortcuts { display: flex; min-width: 0; align-items: center; max-width: 42%; flex: none; gap: var(--space-2xs); overflow-x: auto; scrollbar-width: none; }
-.ui-term-shortcuts::-webkit-scrollbar { display: none; }
+/* The shortcuts inline while they fit; folded, the ⋯ menu holds them. */
+.ui-term-overflow { display: none; flex: none; align-items: center; }
+.ui-term-shortcuts { display: flex; flex: none; align-items: center; gap: var(--space-2xs); }
+.ui-term-header[data-folded~="shortcuts"] .ui-term-shortcuts { display: none; }
+.ui-term-header[data-folded~="shortcuts"] .ui-term-overflow { display: flex; }
+.ui-term-header[data-folded~="labels"] .ui-term-action-label { display: none; }
+.ui-term-header[data-folded~="labels"] .ui-term-actions [data-slot="button"] { min-width: var(--control-tool); padding-inline: var(--space-xs); }
 .ui-term-shortcuts [data-slot="button"] { min-height: var(--control-tool); height: var(--control-tool); flex: none; padding-inline: var(--space-md); font-size: var(--text-caption); }
 .ui-term-shortcuts > .ui-tool-button { flex: none; }
 .ui-term-actions { display: flex; min-width: 0; flex: none; align-items: center; gap: var(--space-sm); }
 .ui-term-actions [data-slot="button"] { min-height: var(--control-tool); height: var(--control-tool); padding-inline: var(--space-md); font-size: var(--text-caption); }
 .ui-term-actions > .ui-button svg { width: var(--icon-sm); height: var(--icon-sm); color: currentColor; }
-@container (max-width: 35rem) {
-  .ui-term-shortcuts { display: none; }
-  .ui-term-overflow { display: flex; }
-}
-@media (max-width: 28rem) {
-  .ui-term-shortcuts { max-width: 38%; }
-  .ui-term-actions [data-slot="button"] { width: var(--control-tool); padding-inline: 0; }
-  .ui-term-action-label { display: none; }
-}
-@media (--conduit-mobile-layout) {
-  @media (max-width: 35rem) {
-    .ui-term-actions [data-slot="button"] { width: var(--control-tool); padding-inline: 0; }
-    .ui-term-action-label { display: none; }
-  }
-}
 @media (pointer: coarse) {
   .ui-term-lead[data-phone] { display: flex; }
   .ui-term-lead[data-phone] [data-slot="button"] { width: var(--control); min-width: var(--control); height: var(--control); padding: 0; }
@@ -62,58 +51,6 @@
   background: color-mix(in oklch, var(--popover), transparent 4%); box-shadow: 0 var(--space-md) var(--space-3xl) rgb(0 0 0 / 28%);
   color: var(--destructive); font-size: var(--text-caption); line-height: 1.45; }
 
-/* A shortcut open for editing: the row becomes its own small form. */
-.ui-term-shortcut-form { display: grid; gap: var(--space-sm); margin: var(--space-2xs) 0; padding: var(--space-sm); border-radius: var(--radius-control); background: var(--tint); }
-.ui-term-shortcut-form-line { display: flex; min-width: 0; gap: var(--space-sm); }
-.ui-term-shortcut-form input { height: var(--control-tool); min-width: 0; padding: 0 var(--space-md); font-size: var(--text-caption); }
-.ui-term-shortcut-form input:focus { border-color: var(--ring); box-shadow: none; }
-.ui-term-shortcut-form-line > .ui-input:first-child { flex: 1; font-weight: var(--weight-strong); }
-.ui-term-shortcut-target { display: inline-flex; flex: none; padding: var(--space-2xs); border: var(--hairline) solid var(--tint); border-radius: var(--radius-control); }
-.ui-term-shortcut-target button { border: 0; border-radius: var(--radius-inset); background: transparent; padding: 0 var(--space-sm); color: var(--muted-foreground); font-size: var(--text-caption); white-space: nowrap; }
-.ui-term-shortcut-target button[aria-pressed="true"] { background: var(--tint); color: var(--foreground); }
-.ui-term-shortcut-command { display: flex; align-items: center; gap: var(--space-sm); color: var(--muted-foreground); font: var(--text-caption) var(--font-data); }
-.ui-term-shortcut-command input { flex: 1; font: inherit; }
-.ui-term-shortcut-form-actions { display: flex; justify-content: flex-end; gap: var(--space-xs); }
-.ui-term-shortcut-form-actions > [data-on-start] { display: inline-flex; align-items: center; gap: var(--space-xs); margin-right: auto; border: 0; border-radius: var(--radius-control);
-  background: transparent; padding: 0 var(--space-sm) 0 var(--space-xs); color: var(--muted-foreground); font-size: var(--text-caption); }
-@media (hover: hover) { .ui-term-shortcut-form-actions > [data-on-start]:hover { color: var(--foreground); } }
-.ui-term-shortcut-form-actions > [data-on-start][aria-pressed="true"] { background: var(--tint); color: var(--foreground); }
-/* A tick is present or absent in a box that is always there. */
-.ui-term-shortcut-form-actions > [data-on-start] svg { width: var(--icon-sm); height: var(--icon-sm); padding: var(--hairline); border: var(--hairline) solid var(--tint); border-radius: var(--radius-inset); color: transparent; }
-.ui-term-shortcut-form-actions > [data-on-start] svg[data-on="true"] { color: var(--foreground); }
-.ui-term-shortcut-form-actions [data-slot="button"] { min-height: var(--control-tool); height: var(--control-tool); padding-inline: var(--space-md); font-size: var(--text-caption); }
-
-.ui-term-shortcut-row {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2xs);
-  min-height: var(--control);
-  padding: var(--space-2xs);
-  border-radius: var(--radius-control);
-  cursor: default;
-}
-.ui-term-shortcut-row:focus-within { background: var(--tint); }
-@media (hover: hover) { .ui-term-shortcut-row:hover { background: var(--tint); } }
-.ui-term-shortcut-row[data-dragging] { opacity: .45; }
-.ui-term-shortcut-row[data-drop-target] { box-shadow: inset 0 var(--hairline) 0 var(--foreground); }
-.ui-term-shortcut-copy { display: flex; flex: 1; min-width: 0; gap: var(--space-xs); align-items: center; }
-.ui-term-shortcut-copy strong { max-width: 60%; font-size: var(--text-label); }
-.ui-term-shortcut-copy small { flex: 1; min-width: 0; color: var(--muted-foreground); font: var(--text-caption) var(--font-data); }
-.ui-term-shortcut-copy strong, .ui-term-shortcut-copy small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ui-term-shortcut-tag { flex: none; color: var(--muted-foreground); font: var(--text-caption) var(--font-data); }
-.ui-term-shortcut-grip { order: -1; display: inline-flex; align-items: center; justify-content: center; width: var(--control-xs); align-self: stretch; border: 0; padding: 0; background: transparent; color: var(--muted-foreground); cursor: grab; }
-.ui-term-shortcut-grip svg { width: var(--icon-xs); height: var(--icon-xs); }
-
-.ui-term-menu-action[data-destructive]:is(:focus-visible) {
-  background: color-mix(in oklch, var(--destructive), transparent var(--tone-wash));
-  color: var(--destructive);
-}
-
-@media (hover: hover) { .ui-term-menu-action[data-destructive]:is(:hover, :focus-visible) {
-  background: color-mix(in oklch, var(--destructive), transparent var(--tone-wash));
-  color: var(--destructive);
-} }
-
 /* TermKeys: a phone's key bar, a hairline over it, the page's ground, the safe area under it; it scrolls sideways
    without a bar. TermKey: Keycap's face (the tint, mono) at a finger's size; pressed it brightens, armed it is ringed. */
 .ui-term-keys { display: flex; flex: none; gap: var(--space-sm); overflow-x: auto; overscroll-behavior-x: contain; touch-action: pan-x; scrollbar-width: none;
@@ -128,6 +65,5 @@
 .ui-term-key:focus-visible { outline: 0; box-shadow: inset 0 0 0 var(--hairline) var(--foreground); }
 
 @media (--conduit-phone-layout) {
-  .ui-term-header { min-height: var(--control); }
-  .ui-term-lead[data-phone] [data-slot="button"], .ui-term-actions [data-slot="button"] { width: var(--space-4xl); min-width: var(--space-4xl); height: var(--space-4xl); }
+  .ui-term-lead[data-phone] [data-slot="button"], .ui-term-actions [data-slot="button"] { min-width: var(--control); height: var(--control); }
 }
