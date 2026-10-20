@@ -433,12 +433,14 @@ function ServerMenuDemo(props: { phone?: boolean }) {
   const Routes = () => <LiveMenuSection title="Route to Laptop"><LiveRadioGroup value={route()} onChange={setRoute}>
     <LiveRadioItem value="automatic" detail="Tailscale · laptop.ts.net" meta="12 ms">Automatic</LiveRadioItem>
     <LiveRadioItem value="lan" detail="192.168.1.10" meta="3 ms">This network</LiveRadioItem>
+    <LiveRadioItem value="internet" away detail="laptop.example.com">Internet</LiveRadioItem>
+    <LiveRadioItem value="tunnel" away detail="remote.example.com" meta="41 ms">Internet</LiveRadioItem>
     <LiveRadioItem value="unreachable" disabled detail="10.0.0.10">Unavailable</LiveRadioItem>
   </LiveRadioGroup></LiveMenuSection>;
   return <CardBody><LiveMenu>
     <LiveMenu.Trigger as={ServerControl} name="Laptop" detail="Connected · 12 ms" connectivity="online" />
     <LiveMenuContent>
-      <LiveMenuSection title="Servers"><LiveRadioGroup value="laptop"><LiveRadioItem value="laptop" meta="12 ms">Laptop</LiveRadioItem><LiveRadioItem value="offline" disabled>Office</LiveRadioItem></LiveRadioGroup></LiveMenuSection>
+      <LiveMenuSection title="Servers"><LiveRadioGroup value="laptop"><LiveRadioItem value="laptop" meta="12 ms">Laptop</LiveRadioItem><LiveRadioItem value="office" away>Office</LiveRadioItem><LiveRadioItem value="offline" disabled>Studio</LiveRadioItem></LiveRadioGroup></LiveMenuSection>
       <LiveSub phone={props.phone}><LiveSubTrigger detail={route()}>Route</LiveSubTrigger><LiveSubContent><Routes /></LiveSubContent></LiveSub>
       <LiveMenuRow onSelect={() => setAction("Add server")} icon={<PlusIcon />}>Add server</LiveMenuRow><LiveMenuRow onSelect={() => setAction("Sign out")}>Sign out</LiveMenuRow>
     </LiveMenuContent>
@@ -897,13 +899,15 @@ export const libraryFamilies: Family[] = [
         <Menu><SearchList items={PROJECTS} placeholder="Search projects and workspaces" matches={(project, needle) => project.name.toLowerCase().includes(needle)} isCurrent={(project) => project === PROJECTS[1]}
           onChoose={noop} row={(project) => ({ icon: <PlaceGlyph project={project} />, label: project.name, meta: "Project" })} /></Menu>
       </div>, true),
-      lib("item", "List · items", "both", "section", "Section + Item: icon meta detail keys opens field · checked (current: bold, no tick) disabled destructive", () => <Menu><Section title="Title" note="note">
+      lib("item", "List · items", "both", "section", "Section + Item: icon meta detail keys opens away field · checked (current: bold, no tick) disabled destructive", () => <Menu><Section title="Title" note="note">
         <Item>Plain</Item>
         <Item icon={<PaperclipIcon />}>icon</Item>
         <Item meta="xai">meta</Item>
         <Item detail="192.168.1.4">detail</Item>
         <Item icon={<SearchIcon />} keys={["Ctrl", "K"]}>keys</Item>
         <Item opens>opens a submenu</Item>
+        <Item away detail="lan.example.com">away: opens elsewhere</Item>
+        <Item away detail="laptop.ts.net" meta="29 ms">away with meta</Item>
         <Item field meta="Unavailable" opens>Field</Item>
         <Item checked>checked</Item>
         <Item active>highlighted</Item>

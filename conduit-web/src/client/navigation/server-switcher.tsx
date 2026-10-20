@@ -1,5 +1,5 @@
 import { createSignal, For, onCleanup, onMount, Show } from "solid-js";
-import { ExternalLinkIcon, QrCodeIcon, RefreshCwIcon } from "lucide-solid";
+import { QrCodeIcon, RefreshCwIcon } from "lucide-solid";
 import { Menu, MenuContent, MenuSection, MenuRow, MenuRadioGroup, MenuRadioItem, MenuSub, MenuSubContent, MenuSubTrigger } from "@/components/menus";
 import { Rule, MenuNote } from "@/components/ui/popover";
 import { Spinner } from "@/components/ui/controls";
@@ -198,7 +198,7 @@ export function ServerSwitcher(props: {
       <For each={activeServerPaths()}>{(path) =>
         <MenuRadioItem value={path.origin} title={path.origin} detail={shortOrigin(path.origin)}
           disabled={(!canReachOtherOrigins() && path.origin !== location.origin) || unreachable(path.origin)}
-          end={!isInstalledClient() && !isStandaloneBrowser() && path.origin !== location.origin ? <ExternalLinkIcon /> : undefined}
+          away={!isInstalledClient() && !isStandaloneBrowser() && path.origin !== location.origin}
           meta={checking() === path.origin ? "Checking…" : latencyLabel(path.origin)}>{serverPathLabel(path)}</MenuRadioItem>
       }</For>
     </MenuRadioGroup>
@@ -221,7 +221,7 @@ export function ServerSwitcher(props: {
             <For each={servers()}>{(entry) =>
               <MenuRadioItem value={entry.origin} disabled={(!canReachOtherOrigins() && entry.origin !== location.origin)
                 || (entry.origin !== activeOrigin() && pathsOf(entry).every((path) => unreachable(path.origin)))}
-                end={away(entry) ? <ExternalLinkIcon /> : undefined} meta={latencyLabel(entry.origin)}>{entry.name}</MenuRadioItem>
+                away={away(entry)} meta={latencyLabel(entry.origin)}>{entry.name}</MenuRadioItem>
             }</For>
           </MenuRadioGroup>
         </MenuSection><Rule />

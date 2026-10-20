@@ -1,5 +1,5 @@
 import { For, Show, splitProps, type JSX } from "solid-js";
-import { CheckIcon, ChevronRightIcon, SearchIcon } from "lucide-solid";
+import { CheckIcon, ChevronRightIcon, ExternalLinkIcon, SearchIcon } from "lucide-solid";
 import { cn } from "@/lib/utils";
 import { Keycap } from "./controls";
 import { type Density, type Motion, motionOf, moveCursor } from "./shared";
@@ -56,12 +56,14 @@ export function Item(props: JSX.HTMLAttributes<HTMLDivElement> & {
   checked?: boolean; disabled?: boolean; destructive?: boolean; children: JSX.Element;
   /** end: a control at the row's end, after its meta (a remove ×); reveal: shown only on the lit or hovered row, never on a phone. */
   end?: JSX.Element; reveal?: boolean;
+  /** away: choosing it opens somewhere else (another window or origin): the mark sits where a submenu's chevron does. */
+  away?: boolean;
   /** onOpens: the chevron is a press of its own (a folder's: open it in place, where the row's press goes in); aria-expanded turns it. */
   onOpens?: () => void; opensLabel?: string;
   /** indent: a child, under the row it belongs to. picked: in an edit, chosen or not -- a check column, and the wash on each chosen. */
   indent?: boolean; picked?: boolean;
 }) {
-  const [, rest] = splitProps(props, ["icon", "meta", "detail", "keys", "opens", "active", "field", "keysFirst", "checked", "disabled", "destructive", "children", "end", "class", "onOpens", "opensLabel", "indent", "picked", "reveal"]);
+  const [, rest] = splitProps(props, ["icon", "meta", "detail", "keys", "opens", "active", "field", "keysFirst", "checked", "disabled", "destructive", "children", "end", "class", "onOpens", "opensLabel", "indent", "picked", "reveal", "away"]);
   return <div role={props.checked !== undefined ? "menuitemradio" : "menuitem"} class="ui-row" aria-checked={props.checked} data-field={props.field ? "" : undefined}
     data-highlighted={props.active ? "" : undefined} data-checked={props.checked ? "" : undefined} data-disabled={props.disabled ? "" : undefined} data-destructive={props.destructive ? "" : undefined} data-indent={props.indent ? "" : undefined} data-picked={props.picked ? "" : undefined} {...rest}>
     <Show when={props.picked !== undefined}><span class="ui-row-check" aria-hidden="true"><Show when={props.picked}><CheckIcon /></Show></span></Show>
@@ -72,6 +74,7 @@ export function Item(props: JSX.HTMLAttributes<HTMLDivElement> & {
     <Show when={props.opens}><Show when={props.onOpens} fallback={<ChevronRightIcon class="ui-chevron" />}>
       <button type="button" class="ui-chevron" tabIndex={-1} aria-label={props.opensLabel} onMouseDown={(event) => event.preventDefault()} onClick={(event) => { event.stopPropagation(); props.onOpens?.(); }}><ChevronRightIcon /></button>
     </Show></Show>
+    <Show when={props.away && !props.opens}><ExternalLinkIcon class="ui-chevron" data-away="" aria-hidden="true" /></Show>
     <Show when={props.end}><span class="ui-row-end" data-reveal={props.reveal ? "" : undefined}>{props.end}</span></Show>
   </div>;
 }
