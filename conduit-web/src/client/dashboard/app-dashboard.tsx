@@ -1,7 +1,9 @@
 import { isConduitManagedProject } from "../navigation/sidebar-preferences";
 import { createMemo, createSignal, For, onCleanup, onMount, Show, type JSX } from "solid-js";
-import { ClipboardCopyIcon, FolderInputIcon, FolderPlusIcon, MessageSquarePlusIcon, PaletteIcon, PencilIcon, PinIcon, PinOffIcon, Settings2Icon, TerminalIcon, Trash2Icon } from "lucide-solid";
-import { ContextMenu, ContextMenuContent, ContextMenuGroup, ContextMenuItem, ContextMenuSeparator, ContextMenuSub, ContextMenuSubContent, ContextMenuSubTrigger, ContextMenuTrigger } from "@/components/primitives";
+import { FolderPlusIcon, PencilIcon, TerminalIcon, Trash2Icon } from "lucide-solid";
+import { ContextMenu, ContextMenuContent, ContextMenuGroup, ContextMenuItem, ContextMenuSeparator, ContextMenuTrigger } from "@/components/primitives";
+import { ContextMenu as MenuHost, ContextMenuContent as MenuContent, ContextMenuTrigger as MenuTrigger } from "@/components/menus";
+import { ChatMenuFor, PlaceMenuFor, type ItemActions } from "../navigation/item-menus";
 import { api, projectPath } from "../api/client";
 import type { ChatSummary, Project, Template } from "../api/contracts";
 import { activityDetail, runtimeActivity, RuntimeIndicator } from "../navigation/runtime-indicator";
@@ -58,11 +60,8 @@ export function AppDashboard(props: {
   onPrefetchProject: (project: Project) => void;
   onContextAction: (type: string, target: Omit<SidebarCommand, "type" | "nonce">) => void;
   isPinned: (type: "chat" | "project" | "terminal", id: string) => boolean;
-  onNewChat: (project: Project) => void;
-  onOpenWorkspaceIdentity: (project: Project) => void;
-  onOpenWorkspaceSettings: (project: Project) => void;
-  onMoveProjectChats: (source: Project, target: Project) => void;
-  onOpenChatTerminal: (chat: ChatSummary, project: Project) => void;
+  /** What a chat's and a place's menu do. */
+  menus: ItemActions;
   onOpenTerminal: (terminal: Pty) => void;
   onOpenTerminalMaximized: (terminal: Pty) => void;
   onPrefetchTerminal: () => void;
@@ -149,34 +148,15 @@ export function AppDashboard(props: {
     const process = () => props.runtime.getProcess(chat.id);
     const live = () => process()?.active ? activityLabel(runtimeActivity(process()) || "working", activityDetail(process())) : "";
     const where = () => project.slug === "chat" ? "" : project.name;
-    return <ContextMenu><ContextMenuTrigger as={SplitRow} element="button" draggable="true" data-doc-view={`chat:${chat.id}`} onPointerEnter={() => props.onPrefetchChat(chat)} onFocus={() => props.onPrefetchChat(chat)} onClick={() => props.onOpenChat(chat, project)}
+    return <MenuHost><MenuTrigger as={SplitRow} element="button" draggable="true" data-doc-view={`chat:${chat.id}`} onPointerEnter={() => props.onPrefetchChat(chat)} onFocus={() => props.onPrefetchChat(chat)} onClick={() => props.onOpenChat(chat, project)}
         lead={<RuntimeIndicator process={process()} stale={props.runtime.stale()} unread={chat.unread} fallback={<ThreadHarnessMark id={chat.harnessId} lively />} />}
         primary={chat.title || "Untitled chat"}
         context={<>{live() && <span class="app-dashboard-activity">{live()}</span>}{live() && where() ? " · " : ""}{where()}</>}
         trailing={<time dateTime={chat.lastMessageAt || chat.createdAt}>{shortAge(Date.parse(chat.lastMessageAt || chat.createdAt || "") || 0, now())}</time>} />
-      <ContextMenuContent class="w-60 sidebar-context-menu"><ContextMenuGroup>
-        <ContextMenuItem onSelect={() => props.onContextAction("rename-chat", { chat, project })}><PencilIcon />{commandLabel(COMMAND_IDS.renameChat)}</ContextMenuItem>
-        <ContextMenuItem onSelect={() => props.onContextAction("move-chat", { chat, project })}><FolderInputIcon />Move to folder…</ContextMenuItem>
-        <ContextMenuItem onSelect={() => props.onContextAction("copy-chat", { chat })}><ClipboardCopyIcon />{commandLabel(COMMAND_IDS.copyTranscript)}</ContextMenuItem>
-        <ContextMenuItem onSelect={() => props.onOpenChatTerminal(chat, project)}><TerminalIcon />Open terminal</ContextMenuItem>
-        <Show when={isConduitManagedProject(project)}><ContextMenuItem onSelect={() => props.onContextAction("pin-chat", { chat })}><Show when={props.isPinned("chat", chat.id)} fallback={<><PinIcon />Pin to sidebar</>}><PinOffIcon />Unpin</Show></ContextMenuItem></Show>
-      </ContextMenuGroup><ContextMenuSeparator /><ContextMenuItem variant="destructive" onSelect={() => props.onContextAction("delete-chat", { chat, project })}><Trash2Icon />{commandLabel(COMMAND_IDS.deleteChat)}</ContextMenuItem></ContextMenuContent></ContextMenu>;
+      <MenuContent><ChatMenuFor chat={chat} project={project} actions={props.menus} /></MenuContent></MenuHost>;
   };
 
-  const projectMenu = (project: Project) => <ContextMenuContent class="w-56 sidebar-context-menu"><ContextMenuGroup>
-    <ContextMenuItem onSelect={() => props.onNewChat(project)}><MessageSquarePlusIcon />{commandLabel(COMMAND_IDS.newChat)}</ContextMenuItem>
-    <ContextMenuItem onSelect={() => props.onContextAction("rename-folder", { project })}><PencilIcon />Rename</ContextMenuItem>
-    <Show when={isWorkspace(project)}><ContextMenuItem onSelect={() => props.onOpenWorkspaceIdentity(project)}><PaletteIcon />Identity</ContextMenuItem></Show>
-    <ContextMenuItem onSelect={() => props.onOpenWorkspaceSettings(project)}><Settings2Icon />Settings</ContextMenuItem>
-    <ContextMenuSub>
-      <ContextMenuSubTrigger disabled={!project.sessions.length}><FolderInputIcon />Move chats to…</ContextMenuSubTrigger>
-      <ContextMenuSubContent class="w-48 sidebar-context-menu">
-        <For each={props.projects.filter((target) => target.id !== project.id)}>{(target) =>
-          <ContextMenuItem onSelect={() => props.onMoveProjectChats(project, target)}>{target.name}</ContextMenuItem>}
-        </For>
-      </ContextMenuSubContent>
-    </ContextMenuSub>
-  </ContextMenuGroup><ContextMenuSeparator /><ContextMenuItem variant="destructive" onSelect={() => props.onContextAction("delete-project", { project })}><Trash2Icon />{isWorkspace(project) ? "Unlink workspace" : "Delete project"}</ContextMenuItem></ContextMenuContent>;
+  const projectMenu = (project: Project) => <MenuContent><PlaceMenuFor project={project} actions={props.menus} /></MenuContent>;
 
   const openProject = (event: MouseEvent, project: Project) => {
     if (event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) return;
@@ -245,12 +225,12 @@ export function AppDashboard(props: {
     actions={<Show when={shelfOver() || shelfAll()}><button type="button" onClick={() => setShelfAll((value) => !value)}>{shelfAll() ? "Show less" : "Show all"}</button></Show>}>
     <div class="app-folder-shelf" ref={watchShelf} data-all={shelfAll() ? "" : undefined}>
       <For each={folders()}>{(project) =>
-        <ContextMenu><ContextMenuTrigger as="a" class="app-folder" href={projectPath(project)} title={project.workingRoot} onPointerEnter={() => props.onPrefetchProject(project)} onFocus={() => props.onPrefetchProject(project)} onClick={(event: MouseEvent) => openProject(event, project)}>
+        <MenuHost><MenuTrigger as="a" class="app-folder" href={projectPath(project)} title={project.workingRoot} onPointerEnter={() => props.onPrefetchProject(project)} onFocus={() => props.onPrefetchProject(project)} onClick={(event: MouseEvent) => openProject(event, project)}>
           <FolderMark />
           <Show when={folderLive(project)}><span class="app-folder-live" aria-label="Running" /></Show>
           <span class="app-folder-name">{project.name}</span>
           <span class="app-folder-meta">{project.sessions.filter((chat) => chat.status === "active").length} chats{latestActivity(project) ? ` · ${shortAge(latestActivity(project), now())}` : ""}</span>
-        </ContextMenuTrigger>{projectMenu(project)}</ContextMenu>}
+        </MenuTrigger>{projectMenu(project)}</MenuHost>}
       </For>
       <button type="button" class="app-folder app-folder-new" onClick={() => props.onContextAction("new-folder", {})}>
         <FolderPlusIcon />
@@ -262,10 +242,10 @@ export function AppDashboard(props: {
   const workspacesGroup = () => <SplitGroup id="app-dashboard-workspaces" label="Workspaces" count={props.projects.filter(isWorkspace).length} actions={<button type="button" onClick={() => props.onContextAction("new-workspace", {})}>New</button>}>
     <Show when={workspaces().length} fallback={<SplitEmpty>Nothing here yet.</SplitEmpty>}>
       <For each={workspaces()}>{(project) =>
-        <ContextMenu><ContextMenuTrigger as={SplitRow} element="a" href={projectPath(project)} onPointerEnter={() => props.onPrefetchProject(project)} onFocus={() => props.onPrefetchProject(project)} onClick={(event: MouseEvent) => openProject(event, project)}
+        <MenuHost><MenuTrigger as={SplitRow} element="a" href={projectPath(project)} onPointerEnter={() => props.onPrefetchProject(project)} onFocus={() => props.onPrefetchProject(project)} onClick={(event: MouseEvent) => openProject(event, project)}
             lead={<WorkspaceGlyph appearance={project.workspaceAppearance} />} primary={project.name}
             context={<Show when={folderLive(project)} fallback={`${project.sessions.filter((chat) => chat.status === "active").length} chats`}><span class="app-dashboard-activity">Running</span></Show>}
-            trailing={shortAge(latestActivity(project), now())} />{projectMenu(project)}</ContextMenu>}
+            trailing={shortAge(latestActivity(project), now())} />{projectMenu(project)}</MenuHost>}
       </For>
     </Show>
   </SplitGroup>;

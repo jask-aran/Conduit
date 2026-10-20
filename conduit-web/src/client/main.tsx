@@ -9,6 +9,7 @@ import { applyTranscriptFont } from "./preferences/transcript-font";
 applyTranscriptFont();
 import { focusSplitSection, splitSections } from "./dashboard/primitives/split-cursor";
 import { isConduitManagedProject } from "./navigation/sidebar-preferences";
+import type { ItemActions } from "./navigation/item-menus";
 import type { ComputerLocation, ComputerPrefetchPayload } from "./api/contracts";
 import { batch, createEffect, createMemo, createRenderEffect, createSignal, ErrorBoundary, For, lazy, on, onCleanup, onMount, Show, untrack, type JSX } from "solid-js";
 import { Portal, render } from "solid-js/web";
@@ -5096,6 +5097,27 @@ function App() {
       if (maximized) setWorkspaceExpanded(true);
     });
   };
+  // What a chat's and a place's menu do on the dashboards; the sidebar binds the same menus to its own dialogs.
+  const itemMenus: ItemActions = {
+    places: () => catalogue.projects(),
+    renameChat: (chat, project) => runSidebar("rename-chat", { chat, project }),
+    moveChat: (chat, from, to) => void moveChat(chat, from, to),
+    copyChat: (chat) => runSidebar("copy-chat", { chat }),
+    get openBeside() { return isMobileLayout() ? undefined : (chat: ChatSummary, project: Project) => void openChatBeside(chat, project); },
+    openTerminal: async (target, project) => { await openChat(target, project); if (!harnessThread() && catalogue.selectedId() === target.id) await openWorkspaceView("terminal"); },
+    running: (chat) => !!runtime.getProcess(chat.id)?.id,
+    stop: (chat) => void stopChatProcess(chat.id),
+    pinned: isSidebarPinned,
+    togglePin: (type, id) => void toggleSidebarPin(type, id),
+    deleteChat: (chat, project) => runSidebar("delete-chat", { chat, project }),
+    newChat: (project) => void startNewChat(project),
+    openMaximized: openProjectWithMaximizedWorkspace,
+    renamePlace: (project) => runSidebar("rename-folder", { project }),
+    identity: openWorkspaceIdentity,
+    settings: (project) => openSettings("workspaces", project.id),
+    moveChats: (from, to) => void moveProjectChats(from, to),
+    deletePlace: (project) => runSidebar("delete-project", { project }),
+  };
   const AppDashboardPage = (props: { session: ChatSession; place?: ReturnType<typeof chatPlace>; keyboardOwner: () => boolean; onSendDraft: (prompt: string) => Promise<void>; onOpenChat: (target: ChatSummary, project: Project) => void; actions?: JSX.Element; tabActions?: JSX.Element }) => <>
     <ChatHeader title="Conduit Dashboard" panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void startNewChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => {}} onUpdatePwa={() => void runPwaUpdate()} pwaUpdating={pwaUpdating} appDashboard actions={props.actions}  tabActions={props.tabActions} />
     <AppDashboard
@@ -5108,11 +5130,7 @@ function App() {
       onPrefetchProject={prefetchProjectDashboard}
       onContextAction={(type, target) => runSidebar(type, target)}
       isPinned={isSidebarPinned}
-      onNewChat={(project) => void startNewChat(project)}
-      onOpenWorkspaceIdentity={openWorkspaceIdentity}
-      onOpenWorkspaceSettings={(project) => openSettings("workspaces", project.id)}
-      onMoveProjectChats={(source, target) => void moveProjectChats(source, target)}
-      onOpenChatTerminal={async (target, project) => { await openChat(target, project); if (!harnessThread() && catalogue.selectedId() === target.id) await openWorkspaceView("terminal"); }}
+      menus={itemMenus}
       onSearchChats={(scope) => openPalette("chat-search", scope === "unscoped" ? "scope:chats " : "", true)}
       onOpenTerminalView={() => openTerminalRoute()}
       onOpenSettings={() => openSettings()}
@@ -5127,7 +5145,7 @@ function App() {
     <ProjectDashboard project={props.project} runtime={runtime} profiles={profiles()} onOpenHarnessThread={(harnessId, path, id, title) => void openHarnessThread({ harnessId, path, id, title })}
       composer={<PageComposer session={props.session} keyboardOwner={props.keyboardOwner} onSendDraft={props.onSendDraft} />}
       onOpenChat={props.onOpenChat}
-      onOpenChatTerminal={async (target, project) => { await openChat(target, project); if (!harnessThread() && catalogue.selectedId() === target.id) await openWorkspaceView("terminal"); }}
+      menus={itemMenus}
       onPrefetchChat={chat.prefetch}
       onContextAction={(type, target) => runSidebar(type, target)}
       isPinned={isSidebarPinned}
