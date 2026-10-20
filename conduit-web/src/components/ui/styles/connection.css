@@ -29,3 +29,22 @@
 .ui-connection-recovery { display: grid; width: 100%; max-width: var(--measure-xl); gap: var(--space-lg); }
 .ui-connection-recovery h1 { margin: 0; font-size: var(--text-heading); font-weight: var(--weight-strong); line-height: var(--leading-tight); }
 .ui-connection-recovery p { margin: 0; overflow-wrap: anywhere; font-size: var(--text-body); line-height: var(--leading-text); }
+
+/* Signing in: the address's mark sits inside its trailing edge; the status line and the password rise in beneath. */
+.ui-connection-address { position: relative; display: grid; }
+.ui-connection-address > .ui-input { padding-right: calc(var(--control) - var(--space-xs)); }
+.ui-connection-address-mark { position: absolute; top: 0; right: var(--space-md); bottom: 0; display: grid; place-items: center; color: var(--muted-foreground); pointer-events: none; }
+.ui-connection-address-mark svg { width: var(--icon-sm); height: var(--icon-sm); }
+.ui-connection-address[data-state="found"] .ui-connection-address-mark { color: var(--status-success); }
+.ui-connection-status { display: flex; min-width: 0; align-items: center; gap: var(--space-sm); margin: 0; font-size: var(--text-caption); line-height: var(--leading-row); white-space: nowrap;
+  animation: ui-rise var(--duration-gentle) var(--ease-arrive) backwards; --rise: calc(-1 * var(--space-xs)); }
+.ui-connection-status-mark { display: grid; width: var(--icon-sm); height: var(--icon-sm); flex: none; place-items: center; color: var(--muted-foreground); }
+.ui-connection-status-mark > svg { width: var(--icon-sm); height: var(--icon-sm); }
+.ui-connection-status[data-state="found"] .ui-status-dot { background: var(--status-success); }
+.ui-connection-status[data-state="missing"] .ui-connection-status-mark { color: var(--destructive); }
+.ui-connection-status > strong { flex: none; color: var(--foreground); font-weight: var(--weight-lift); }
+.ui-connection-status[data-state="checking"] > strong { color: var(--muted-foreground); font-weight: var(--weight-rest); }
+.ui-connection-status > small { min-width: 0; overflow: hidden; color: var(--muted-foreground); font: var(--weight-light) var(--text-caption)/var(--leading-row) var(--font-data); text-overflow: ellipsis; }
+.ui-connection-password-step { display: grid; gap: var(--space-sm); }
+.ui-connection-password-step[data-reveal] { animation: ui-rise var(--duration-gentle) var(--ease-arrive) backwards; }
+@media (prefers-reduced-motion: reduce) { .ui-connection-status, .ui-connection-password-step[data-reveal] { animation: none; } }

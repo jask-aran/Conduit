@@ -1,7 +1,7 @@
 /// <reference types="vite-plugin-pwa/client" />
-import { ConnectionScreen, ConnectionRecovery, ConnectionForm, ConnectionHeading, ConnectionChoices, ConnectionChoice, ConnectionGroup } from "@/components/ui/connection";
+import { ConnectionScreen, ConnectionRecovery, ConnectionForm, ConnectionHeading, ConnectionChoices, ConnectionChoice, ConnectionGroup, ConnectionAddress, ConnectionStatus, ConnectionPassword, type AddressState } from "@/components/ui/connection";
 import { CardNote as ConnectionNote } from "@/components/ui/card";
-import { Field as ConnectionField, Input as ConnectionInput, Button as ConnectionButton, Spinner as ConnectionSpinner } from "@/components/ui/controls";
+import { Field as ConnectionField, Button as ConnectionButton, Spinner as ConnectionSpinner } from "@/components/ui/controls";
 import { createDecisionScope, DecisionDialogs } from "@/components/decision-dialog";
 import { Dialog } from "@/components/dialog";
 import "./motion-rules";
@@ -18,7 +18,7 @@ import { liveUpdateNow, startLiveUpdate } from "./platform/live-update.ts";
 // The clients that stage a downloaded update and install it on request.
 const updateShell = desktopShell ?? androidShell;
 import {
-  ArrowLeftRightIcon, Columns2Icon, PanelTopIcon, EllipsisIcon, PanelLeftIcon, PanelRightIcon, ServerIcon, QrCodeIcon, MonitorIcon, TriangleAlertIcon, XIcon,
+  ArrowLeftRightIcon, Columns2Icon, PanelTopIcon, EllipsisIcon, PanelLeftIcon, PanelRightIcon, ServerIcon, QrCodeIcon, MonitorIcon, TriangleAlertIcon, XIcon, ExternalLinkIcon,
 } from "lucide-solid";
 import { NotificationToaster, toast } from "@/components/notifications";
 import { DefaultMeteorShower } from "@jask-aran/solid-components/meteor-shower";
@@ -194,7 +194,7 @@ const LOCAL_SERVER_ORIGIN = "http://127.0.0.1:4310";
  * Nothing is remembered until the server has actually answered. A half-added
  * entry that was never signed in to is a row that can only fail.
  */
-export function ServerConnectForm(props: { adding?: boolean; onDone: (origin: string) => void }) {
+export function ServerConnectForm(props: { adding?: boolean; onDone: (origin: string) => void; onOpened?: () => void }) {
   const recordOnly = !isInstalledClient();
   const [address, setAddress] = createSignal(props.adding ? "" : activeOrigin() || "");
   const [verifiedOrigin, setVerifiedOrigin] = createSignal(props.adding ? null : activeOrigin());
@@ -205,6 +205,62 @@ export function ServerConnectForm(props: { adding?: boolean; onDone: (origin: st
   const [error, setError] = createSignal("");
   const [submitting, setSubmitting] = createSignal(false);
   const [scanning, setScanning] = createSignal(false);
+  const [check, setCheck] = createSignal<{ state: AddressState; title: string; detail?: string } | null>(null);
+  const hostOf = (origin: string) => origin.replace(/^https?:\/\//, "");
+
+  /*
+   * An address is looked for as it is typed: a moment after typing stops (or
+   * at once on Enter) the field says it is looking, then what answered. The
+   * look lasts at least a beat, so a fast answer still reads as a search
+   * rather than a flicker.
+   *
+   * The app asks /healthz and learns the server's name. A browser cannot read
+   * another server's reply (Conduit answers cross-origin only for its shells),
+   * so it can only learn that something answered there; what it offers then
+   * is to open it in a tab of its own, where that server signs you in.
+   */
+  let checkRun = 0;
+  let checkTimer: ReturnType<typeof setTimeout> | undefined;
+  onCleanup(() => clearTimeout(checkTimer));
+  const checkAddress = async () => {
+    clearTimeout(checkTimer);
+    const text = address().trim();
+    if (!text) return setCheck(null);
+    let origin: string;
+    try { origin = normalizeServerOrigin(text); }
+    catch (cause) { return setCheck({ state: "missing", title: "Not an address", detail: (cause as Error).message }); }
+    const run = ++checkRun;
+    setError("");
+    setVerifiedOrigin(null);
+    setCheck({ state: "checking", title: `Looking for ${hostOf(origin)}…` });
+    const pause = new Promise((resolve) => setTimeout(resolve, 700));
+    const health = await (recordOnly
+      ? fetch(buildHttpUrl("/healthz", origin), { mode: "no-cors", cache: "no-store" }).then(() => ({ ok: true }) as { ok?: boolean; name?: string; release?: string })
+      : fetch(buildHttpUrl("/healthz", origin), { cache: "no-store" }).then((response) => response.ok ? response.json() as Promise<{ ok?: boolean; name?: string; release?: string }> : null)
+    ).catch(() => null);
+    await pause;
+    if (run !== checkRun) return;
+    if (!health?.ok) return setCheck({ state: "missing", title: "Nothing answered", detail: hostOf(origin) });
+    const release = health.release?.replace(/\.\d{14}\..*$/, "");
+    setCheck({ state: "found", title: health.name || hostOf(origin), detail: [health.name ? hostOf(origin) : "", release].filter(Boolean).join(" · ") || undefined });
+    setVerifiedOrigin(origin);
+  };
+  const typeAddress = (value: string) => {
+    setAddress(value);
+    clearTimeout(checkTimer);
+    checkRun++;
+    setCheck(null);
+    setVerifiedOrigin(null);
+    setError("");
+    if (/[.:]|localhost/.test(value.trim()) && !(!recordOnly && parsePairingLink(value))) checkTimer = setTimeout(() => void checkAddress(), 600);
+  };
+  // A browser's last step: remember the server, then open it beside this one.
+  const openFound = (origin: string) => {
+    addServer(origin);
+    void publishServerDirectory(servers());
+    window.open(origin, "_blank", "noopener");
+    props.onOpened?.();
+  };
 
   const pair = async (link: PairingLink) => {
     setScanning(false);
@@ -235,23 +291,10 @@ export function ServerConnectForm(props: { adding?: boolean; onDone: (origin: st
     // A pasted pairing link pairs; the address it carries is the server.
     const link = !recordOnly && !verifiedOrigin() ? parsePairingLink(address()) : null;
     if (link) return void pair(link);
+    if (!verifiedOrigin()) return void checkAddress();
+    if (recordOnly) return openFound(verifiedOrigin()!);
     setSubmitting(true);
     try {
-      if (recordOnly) {
-        const origin = normalizeServerOrigin(address());
-        addServer(origin);
-        props.onDone(origin);
-        return;
-      }
-      if (!verifiedOrigin()) {
-        const origin = normalizeServerOrigin(address());
-        const response = await fetch(buildHttpUrl("/healthz", origin), { cache: "no-store" });
-        const health = response.ok ? await response.json() as { ok?: boolean } : null;
-        if (!response.ok || !health?.ok) throw new Error(`Server health check failed (${response.status}).`);
-        setAddress(origin);
-        setVerifiedOrigin(origin);
-        return;
-      }
       const origin = verifiedOrigin()!;
       const response = await fetch(buildHttpUrl("/v0/auth/native-login", origin), {
         method: "POST",
@@ -330,6 +373,7 @@ export function ServerConnectForm(props: { adding?: boolean; onDone: (origin: st
     const proved = server.candidates.find((_, index) => proofs[index]?.ok);
     if (proved) {
       setAddress(proved);
+      setCheck({ state: "found", title: server.name, detail: hostOf(proved) });
       return setVerifiedOrigin(proved);
     }
     const proof = proofs.find((item) => item.reason !== "unreachable") ?? { ok: false, reason: "unreachable" as const };
@@ -344,6 +388,7 @@ export function ServerConnectForm(props: { adding?: boolean; onDone: (origin: st
     const origin = localServer();
     if (!origin) return;
     setAddress(origin);
+    setCheck({ state: "found", title: "This computer", detail: hostOf(origin) });
     setVerifiedOrigin(origin);
   };
 
@@ -351,10 +396,9 @@ export function ServerConnectForm(props: { adding?: boolean; onDone: (origin: st
     <Show when={!props.adding}><ConnectionHeading mark={<HarnessMark id="conduit" />}>Connect to your server</ConnectionHeading></Show>
     {/* One line, and in the dialog only when it says something the title
         and the fields do not (DESIGN.md: a dialog is the title and the choice). */}
-    <Show when={verifiedOrigin() || !props.adding}>
-      <ConnectionNote>{verifiedOrigin() ? "Server confirmed. Enter your Conduit password."
-        : recordOnly ? "A browser opens another server in place of this one."
-          : "HTTPS, unless the server is on this machine or this network."}</ConnectionNote>
+    <Show when={!props.adding && !verifiedOrigin()}>
+      <ConnectionNote>{recordOnly ? "A browser opens another server in a tab of its own."
+        : "HTTPS, unless the server is on this machine or this network."}</ConnectionNote>
     </Show>
 
     {/*
@@ -385,24 +429,36 @@ export function ServerConnectForm(props: { adding?: boolean; onDone: (origin: st
     </Show>
     <Show when={scanning()}><QrScanner onLink={(link) => void pair(link)} onClose={() => setScanning(false)} /></Show>
     {/* In the Connect card the column is titled Add server: the field needs no label of its own. */}
-    {(() => { const field = <ConnectionInput id="native-server-address" aria-label="Server address" type="text" inputMode="url" autocomplete="url" autocapitalize="none" spellcheck={false}
-      placeholder={props.adding ? (recordOnly ? "Server address" : "Address or pair link") : recordOnly ? "https://conduit.your-tailnet.ts.net" : "Address, or a link from conduit-server pair"} value={address()} onInput={(event) => setAddress(event.currentTarget.value)}
-      disabled={submitting() || Boolean(verifiedOrigin())} />;
+    {(() => { const field = <ConnectionAddress id="native-server-address" aria-label="Server address" state={check()?.state}
+      placeholder={props.adding ? (recordOnly ? "Server address" : "Address or pair link") : recordOnly ? "https://conduit.your-tailnet.ts.net" : "Address, or a link from conduit-server pair"} value={address()} onInput={(event) => typeAddress(event.currentTarget.value)}
+      disabled={submitting() || (!props.adding && Boolean(verifiedOrigin()))} />;
       return props.adding ? field : <ConnectionField label="Server address">{field}</ConnectionField>; })()}
-    <Show when={verifiedOrigin()}>
-      <ConnectionField label="Password">
-      <ConnectionInput id="native-password" type="password" autocomplete="current-password" value={password()}
-        onInput={(event) => setPassword(event.currentTarget.value)} disabled={submitting()} autofocus /></ConnectionField>
+    {/* What the look found; a server already confirmed (signing in again) is found without one. */}
+    <Show when={check() ?? (verifiedOrigin() ? { state: "found" as const, title: hostOf(verifiedOrigin()!) } : null)} keyed>{(status) =>
+      <ConnectionStatus state={status.state} title={status.title} detail={status.detail} />}</Show>
+    <Show when={verifiedOrigin() && !recordOnly}>
+      <ConnectionPassword reveal={props.adding} value={password()} onInput={(event) => setPassword(event.currentTarget.value)} busy={submitting()} error={error() || null}
+        ref={(element: HTMLInputElement) => queueMicrotask(() => element.focus())} />
     </Show>
-    <Show when={error()}><ConnectionNote error>{error()}</ConnectionNote></Show>
-    <ConnectionButton type="submit" disabled={submitting() || Boolean(verifiedOrigin() && !password())}>
-      {submitting() ? (verifiedOrigin() ? "Signing in…" : "Checking…") : recordOnly ? (props.adding ? "Add" : "Remember server") : verifiedOrigin() ? "Sign in" : "Connect"}
-    </ConnectionButton>
+    <Show when={error() && !(verifiedOrigin() && !recordOnly)}><ConnectionNote error>{error()}</ConnectionNote></Show>
+    <Show when={!verifiedOrigin()}>
+      <ConnectionButton type="submit" disabled={submitting() || !address().trim() || check()?.state === "checking"}>
+        {submitting() ? "Pairing…" : "Connect"}
+      </ConnectionButton>
+      {/* A browser on HTTPS cannot look at a plain-HTTP address on this network, though a tab of its own can open it. */}
+      <Show when={recordOnly && check()?.state === "missing" && /^http:/.test((() => { try { return normalizeServerOrigin(address()); } catch { return ""; } })())}>
+        <ConnectionButton type="button" variant="ghost" onClick={() => openFound(normalizeServerOrigin(address()))}><ExternalLinkIcon />Open anyway</ConnectionButton>
+      </Show>
+    </Show>
+    <Show when={verifiedOrigin() && recordOnly}>
+      <ConnectionButton type="submit"><ExternalLinkIcon />Open in new tab</ConnectionButton>
+    </Show>
     <Show when={verifiedOrigin() && !props.adding}><ConnectionButton type="button" variant="ghost" onClick={() => {
       const previous = activeOrigin();
       void clearNativeBearerToken().finally(() => {
         if (previous) forgetServer(previous);
         setVerifiedOrigin(null);
+        setCheck(null);
         setAddress("");
         setPassword("");
         setError("");
@@ -5228,7 +5284,7 @@ function App() {
       onAddServer={() => setAddingServer(true)}
       onLogout={() => void logout()} />
     <Show when={addingServer()}><ConnectDialog open={addingServer()} onOpenChange={setAddingServer} addServer={
-      <ServerConnectForm adding onDone={(origin) => {
+      <ServerConnectForm adding onOpened={() => setAddingServer(false)} onDone={(origin) => {
         setAddingServer(false);
         // Told to the server being left, before leaving it: otherwise the one
         // that was asked to remember this address is the only one that never

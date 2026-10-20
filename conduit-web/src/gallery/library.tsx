@@ -3,7 +3,7 @@ import { createDecisionDialogs } from "@/components/decision-dialog";
 import { WorkspaceAppearanceEditor } from "../client/project/workspace-appearance-editor";
 import { ComputerExplorer } from "../client/dashboard/computer-dashboard";
 import WorkspaceExcerptView from "../client/workspace/workspace-excerpt-view";
-import { ConnectionScreen, PasswordSignIn, ServerControl, ConnectionRecovery, ConnectionForm, ConnectionChoices, ConnectionChoice, ConnectionGroup, CameraPreview } from "@/components/ui/connection";
+import { ConnectionScreen, PasswordSignIn, ServerControl, ConnectionRecovery, ConnectionForm, ConnectionChoices, ConnectionChoice, ConnectionGroup, ConnectionAddress, ConnectionStatus, ConnectionPassword, type AddressState, CameraPreview } from "@/components/ui/connection";
 import { NotificationToaster, toast } from "@/components/notifications";
 import { Dialog } from "@/components/dialog";
 import { CardColumns, CardColumn, CardCaption, CardActions, CardForm, CardBody, CardNote, CardRead, CardDetails, CardQR, CardPreview, CardAttachments, CardAttachment } from "@/components/ui/card";
@@ -375,19 +375,47 @@ function ExplorerDemo() {
     onCreateFolder={() => setResult("Create folder")} onCloneRepository={() => setResult("Clone repository")} /><CardNote>{result()}</CardNote></CardBody>;
 }
 function ConnectionDemo() {
-  const [verified, setVerified] = createSignal(false);
+  const [address, setAddress] = createSignal("");
+  const [state, setState] = createSignal<AddressState>();
+  const [password, setPassword] = createSignal("");
   const [busy, setBusy] = createSignal(false);
-  const [error, setError] = createSignal(false);
-  return <ConnectionForm onSubmit={(event) => { event.preventDefault(); setVerified(true); }}>
-    <ConnectionChoices><ConnectionChoice icon={<QrCodeIcon />} detail="conduit-server pair" onClick={() => setError(true)}>Scan QR code</ConnectionChoice><ConnectionChoice icon={<MonitorIcon />} detail="localhost:4310" onClick={() => setVerified(true)}>This computer</ConnectionChoice></ConnectionChoices>
-    <ConnectionGroup>On this network<Show when={busy()}><Spinner /></Show></ConnectionGroup>
-    <ConnectionChoices><ConnectionChoice disabled={busy()} icon={<ServerIcon />} detail="laptop.ts.net" onClick={() => setVerified(true)}>Laptop</ConnectionChoice></ConnectionChoices>
-    <Field label="Server address"><Input value="https://laptop.ts.net" disabled={busy() || verified()} /></Field>
-    <Show when={verified()}><Field label="Password"><Input type="password" autocomplete="off" /></Field></Show>
-    <Show when={error()}><CardNote error>Camera unavailable. Paste the pairing link.</CardNote></Show>
-    <Button type="submit" disabled={busy()}>{busy() ? "Checking…" : verified() ? "Sign in" : "Connect"}</Button>
-    <Button variant="ghost" onClick={() => setBusy(!busy())}>Toggle loading</Button>
-    <Button variant="ghost" onClick={() => { setVerified(false); setError(false); }}>Reset example</Button>
+  const [error, setError] = createSignal("");
+  const [signedIn, setSignedIn] = createSignal(false);
+  const [cameraError, setCameraError] = createSignal(false);
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const reset = () => {
+    clearTimeout(timer);
+    setState(undefined); setPassword(""); setBusy(false); setError(""); setSignedIn(false);
+  };
+  const check = () => {
+    reset();
+    if (!address().trim()) return;
+    setState("checking");
+    timer = setTimeout(() => setState(address().includes("laptop") ? "found" : "missing"), 900);
+  };
+  const choose = (value: string) => { reset(); setAddress(value); setState("found"); };
+  onCleanup(() => clearTimeout(timer));
+  return <ConnectionForm onSubmit={(event) => {
+    event.preventDefault();
+    if (busy() || signedIn()) return;
+    if (state() !== "found") { check(); return; }
+    setBusy(true); setError("");
+    timer = setTimeout(() => {
+      setBusy(false);
+      if (password() === "conduit") setSignedIn(true);
+      else setError("Incorrect password.");
+    }, 800);
+  }}>
+    <ConnectionChoices><ConnectionChoice type="button" icon={<QrCodeIcon />} detail="conduit-server pair" onClick={() => setCameraError(true)}>Scan QR code</ConnectionChoice><ConnectionChoice type="button" icon={<MonitorIcon />} detail="localhost:4310" onClick={() => choose("localhost:4310")}>This computer</ConnectionChoice></ConnectionChoices>
+    <ConnectionGroup>On this network</ConnectionGroup>
+    <ConnectionChoices><ConnectionChoice type="button" icon={<ServerIcon />} detail="laptop.ts.net" onClick={() => choose("laptop.ts.net")}>Laptop</ConnectionChoice></ConnectionChoices>
+    <ConnectionAddress placeholder="Address or pair link" aria-label="Server address" value={address()} state={state()} onInput={(event) => {
+      reset(); setAddress(event.currentTarget.value);
+      timer = setTimeout(check, 600);
+    }} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); check(); } }} />
+    <Show when={state()}>{(current) => <ConnectionStatus state={current()} title={current() === "checking" ? `Looking for ${address()}…` : current() === "found" ? "Laptop" : "Nothing answered"} detail={current() === "found" ? "laptop.ts.net · 0.8.1" : current() === "missing" ? address() : undefined} />}</Show>
+    <Show when={state() === "found"}><Show when={!signedIn()} fallback={<ConnectionStatus state="found" title="Signed in" />}><ConnectionPassword reveal busy={busy()} error={error()} value={password()} disabled={busy()} onInput={(event) => setPassword(event.currentTarget.value)} /></Show></Show>
+    <Show when={cameraError()}><CardNote error>Camera unavailable. Paste the pairing link.</CardNote></Show>
   </ConnectionForm>;
 }
 function ServerMenuDemo(props: { phone?: boolean }) {
@@ -410,8 +438,11 @@ function ServerMenuDemo(props: { phone?: boolean }) {
 const CONNECTIONS: FormRow[] = [
   form("browser sign-in", "plain form POST, password-manager autocomplete and autofocus", () => <ConnectionScreen embedded><PasswordSignIn onSubmit={(event) => event.preventDefault()} after="/" /></ConnectionScreen>, "ConnectionScreen > PasswordSignIn", "the same component generates /login without JavaScript"),
   form("incorrect password", "the field identifies and describes the server error", () => <PasswordSignIn onSubmit={(event) => event.preventDefault()} after="/chat/example" error="Incorrect password." />, "PasswordSignIn error", "aria-invalid · aria-describedby · role=alert"),
+  form("address · checking", "the address check is in progress", () => <ConnectionForm onSubmit={(e) => e.preventDefault()}><ConnectionAddress value="laptop.ts.net" state="checking" /><ConnectionStatus state="checking" title="Looking for laptop.ts.net…" /></ConnectionForm>, "ConnectionAddress · ConnectionStatus · ConnectionPassword"),
+  form("address · found, password", "the server answered and asks for a password", () => <ConnectionForm onSubmit={(e) => e.preventDefault()}><ConnectionAddress value="laptop.ts.net" state="found" /><ConnectionStatus state="found" title="Laptop" detail="laptop.ts.net · 0.8.1" /><ConnectionPassword /></ConnectionForm>, "ConnectionAddress · ConnectionStatus · ConnectionPassword"),
+  form("address · nothing answered", "the address check found no server", () => <ConnectionForm onSubmit={(e) => e.preventDefault()}><ConnectionAddress value="office.ts.net" state="missing" /><ConnectionStatus state="missing" title="Nothing answered" detail="office.ts.net" /></ConnectionForm>, "ConnectionAddress · ConnectionStatus · ConnectionPassword"),
   form("rate limited", "the server keeps the redirect and explains the wait", () => <PasswordSignIn onSubmit={(event) => event.preventDefault()} after="/" error="Too many failed attempts. Try again shortly." />, "PasswordSignIn error", "server keeps rate limiting and credential handling"),
-  form("first connection / add server", "local and discovered servers, address, password, loading and errors", () => <ConnectionDemo />, "ConnectionForm · ConnectionChoice · Field · Input · Button", "uses v2 at every stage"),
+  form("first connection / add server", "local and discovered servers, address, password, loading and errors", () => <ConnectionDemo />, "ConnectionForm · ConnectionChoice · ConnectionAddress · ConnectionStatus · ConnectionPassword", "uses v2 at every stage"),
   form("phone route panel", "Back returns to the parent; the opening tap cannot select a route", () => <ServerMenuDemo phone />, "Kobalte Sub > v2 MenuPanel", "same submenu behavior adapter on desktop and phone"),
   form("server selection", "keyboard choice, unavailable rows and a real route submenu", () => <ServerMenuDemo />, "Kobalte > v2 Menu · Section · Item", "no network calls or stored server changes"),
   ...["online", "connecting", "reconnecting", "offline"].map((state) => form(state, "connection state on the server control", () => <ServerControl name="Laptop" detail={state === "offline" ? "Server unavailable" : state === "online" ? "Connected · 12 ms" : state === "reconnecting" ? "Reconnecting" : "Connecting"} connectivity={state} />, "ServerControl > StatusDot · Spinner", "shared status and type tokens")),
@@ -422,7 +453,7 @@ const CARDS: FormRow[] = [
   form("async decisions", "confirm, prompt, queue, cancellation and stale target guard", () => <DecisionDemo />, "createDecisionDialogs > Dialog", "the live app's shared decision queue"),
   form("workspace identity", "mark, icon search, palette and custom colour; Save retains the draft", () => <WorkspaceAppearanceEditor compact onSave={() => {}} />, "WorkspaceAppearanceEditor > IdentityEditor", "v2 controls and tokens"),
   form("folder explorer", "search, sort, tiles/details, hidden files and context menus", () => <ExplorerDemo />, "ComputerExplorer > Browser", "same presentation as the live folder dialog"),
-  form("server connection", "choices, address, password, loading and errors", () => <ConnectionDemo />, "ConnectionForm > Field · Input · Button", "no discovery or connection requests"),
+  form("server connection", "choices, address, password, loading and errors", () => <ConnectionDemo />, "ConnectionForm > ConnectionAddress · ConnectionStatus · ConnectionPassword", "no discovery or connection requests"),
   form("camera preview", "camera display and cancel, without opening a real camera", () => <CameraPreview videoRef={() => {}} message="Point the camera at a pairing code" onClose={() => {}} />, "CameraPreview", "the real scanner's v2 presentation"),
   form("code excerpt", "real read-only code with line numbers and highlighted selection", () => <WorkspaceExcerptView path="example.ts" text={"const total = 42;\nconsole.log(total);"} firstLine={12} startColumn={7} endColumn={13} />, "WorkspaceExcerptView > CodeExcerpt", "CodeMirror uses v2 syntax and size tokens"),
   form("modal", "focus is trapped, Escape or a press on the dim closes; focus returns to the trigger", () => <DialogBehaviorDemo />, "Dialog > Scrim + Card", "Kobalte behavior, v2 surface"),
