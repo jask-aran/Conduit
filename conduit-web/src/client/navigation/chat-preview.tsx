@@ -1,4 +1,6 @@
 import { createResource, createSignal, createEffect, For, onCleanup, Show } from "solid-js";
+import { Glance, GlanceHead, GlancePrompt, GlanceTurn, GlanceAnswer, GlanceEmpty } from "@/components/ui/overlay";
+import { Section, Item } from "@/components/ui/popover";
 import { FolderIcon, MessageSquareIcon } from "lucide-solid";
 import { WorkspaceGlyph } from "../project/workspace-appearance";
 import { api } from "../api/client";
@@ -17,13 +19,13 @@ import { inlineDollarClose } from "../chat/inline-dollar";
  * the search.
  */
 type Target = { chat: ChatSummary; project: Project };
-type Glance = { prompt: string; answer: string; answerMath: string | null; outcome: "Done" | "Interrupted" | "Failed" | null; took: string; work: string };
+type ChatGlance = { prompt: string; answer: string; answerMath: string | null; outcome: "Done" | "Interrupted" | "Failed" | null; took: string; work: string };
 
 const WORK_WORDS: Record<ToolKind, [string, string]> = {
   command: ["command", "commands"], read: ["read", "reads"], edit: ["edit", "edits"],
   search: ["search", "searches"], fetch: ["fetch", "fetches"], script: ["script", "scripts"], other: ["tool", "tools"],
 };
-const cache = new Map<string, Glance>();
+const cache = new Map<string, ChatGlance>();
 
 /* Markdown's marks, dropped for a few quiet lines. */
 const plain = (text = "") => text.replace(/```[\s\S]*?```/g, " ").replace(/[#>*_`~|]+/g, "").replace(/\[([^\]]*)\]\([^)]*\)/g, "$1").replace(/\s+/g, " ").trim();
@@ -92,7 +94,7 @@ function took(from?: string, to?: string) {
   return seconds < 60 ? `${String(seconds).padStart(2, "0")}s` : `${Math.floor(seconds / 60)}m ${String(seconds % 60).padStart(2, "0")}s`;
 }
 
-async function glance(detail: TranscriptDetail): Promise<Glance> {
+async function glance(detail: TranscriptDetail): Promise<ChatGlance> {
   const messages = detail.messages || [];
   const promptAt = messages.findLastIndex((message) => message.role === "user");
   const prompt = messages[promptAt];
@@ -135,18 +137,17 @@ function FolderPreview(props: { project: Project; active: (chat: ChatSummary) =>
     return [`${chats().length} chat${chats().length === 1 ? "" : "s"}`, unread ? `${unread} unread` : "", running ? `${running} running` : ""].filter(Boolean).join(" · ");
   };
   return <>
-    <div class="command-preview-title">
-      <Show when={isWorkspace(props.project)} fallback={loose() ? <MessageSquareIcon class="command-icon" /> : <FolderIcon class="command-icon" />}><WorkspaceGlyph appearance={props.project.workspaceAppearance} /></Show>
-      <span>{loose() ? "Chats" : props.project.name}</span>
-    </div>
-    <div class="command-preview-facts" title={where()}>{where()}</div>
-    <div class="command-preview-facts">{standing()}</div>
-    <Show when={chats().length} fallback={<p class="command-preview-empty">No chats yet</p>}>
-      <div class="command-preview-chats">
-        <For each={chats().slice(0, 6)}>{(chat) => <div class="command-preview-chat">
-          <ThreadHarnessMark id={chat.harnessId} /><span class="command-preview-chat-title">{chat.title || "Untitled chat"}</span><small>{dateOf(stampOf(chat))}</small>
-        </div>}</For>
-      </div>
+    <GlanceHead
+      mark={<Show when={isWorkspace(props.project)} fallback={loose() ? <MessageSquareIcon /> : <FolderIcon />}><WorkspaceGlyph appearance={props.project.workspaceAppearance} /></Show>}
+      title={loose() ? "Chats" : props.project.name}
+      facts={[where(), standing()]}
+    />
+    <Show when={chats().length} fallback={<GlanceEmpty>No chats yet</GlanceEmpty>}>
+      <Section>
+        <For each={chats().slice(0, 6)}>{(chat) => <Item icon={<ThreadHarnessMark id={chat.harnessId} />} meta={dateOf(stampOf(chat))}>
+          {chat.title || "Untitled chat"}
+        </Item>}</For>
+      </Section>
     </Show>
   </>;
 }
@@ -168,31 +169,28 @@ export function ChatPreview(props: { target: Target | null; folder?: Project | n
     return next;
   });
 
-  return <aside class="command-preview" aria-label="Chat preview" aria-live="polite">
-    <Show when={props.target} fallback={<Show when={props.folder} fallback={<p class="command-preview-empty">Nothing highlighted</p>}>{(folder) => <FolderPreview project={folder()} active={props.active || (() => false)} />}</Show>}>
+  return <Glance label={!props.target && props.folder ? "Folder preview" : "Chat preview"}>
+    <Show when={props.target} fallback={<Show when={props.folder} fallback={<GlanceEmpty>Nothing highlighted</GlanceEmpty>}>{(folder) => <FolderPreview project={folder()} active={props.active || (() => false)} />}</Show>}>
       {(target) => <>
-        <div class="command-preview-title"><ThreadHarnessMark id={target().chat.harnessId} /><span>{target().chat.title || "Untitled chat"}</span></div>
-        <div class="command-preview-facts">{[...new Set([
+        <GlanceHead mark={<ThreadHarnessMark id={target().chat.harnessId} />} title={target().chat.title || "Untitled chat"} facts={[`${[...new Set([
           harnessLabelFor(target().chat.harnessId || target().chat.backend?.implementation),
           target().project.slug === "chat" ? "Chats" : target().project.name,
-        ].filter(Boolean))].join(" · ")} · {dateOf(target().chat.lastMessageAt || target().chat.updatedAt)}</div>
+        ].filter(Boolean))].join(" · ")} · ${dateOf(target().chat.lastMessageAt || target().chat.updatedAt)}`]} />
         <Show when={settled()?.chat.id === target().chat.id && !read.loading && !read.error && read()}>
           {(seen) => <>
-            <Show when={seen().prompt}><p class="command-preview-prompt">{seen().prompt}</p></Show>
+            <Show when={seen().prompt}><GlancePrompt>{seen().prompt}</GlancePrompt></Show>
             <Show when={seen().outcome}>
-              <div class="command-preview-turn">
-                <ThinkingOrb state="working" frame={seen().outcome === "Done" ? PLAIN_SPHERE : SPUTTERING_SPHERE} tint={seen().outcome === "Done" ? undefined : "var(--destructive)"} rate={settledOrbRate(seen().outcome !== "Done")} />
-                <span><b>{seen().outcome}</b>{seen().took ? ` · ${seen().took}` : ""}{seen().work ? ` · ${seen().work}` : ""}</span>
-              </div>
+              {(outcome) => <GlanceTurn orb={<ThinkingOrb state="working" frame={seen().outcome === "Done" ? PLAIN_SPHERE : SPUTTERING_SPHERE} tint={seen().outcome === "Done" ? undefined : "var(--destructive)"} rate={settledOrbRate(seen().outcome !== "Done")} />}
+                outcome={outcome()} detail={[seen().took, seen().work].filter(Boolean).join(" · ") || undefined} />}
             </Show>
-            <Show when={seen().answerMath} fallback={<Show when={seen().answer}><p class="command-preview-answer">{seen().answer}</p></Show>}>
-              {(html) => <div class="command-preview-answer command-preview-answer-math" innerHTML={html()} />}
+            <Show when={seen().answerMath} fallback={<Show when={seen().answer}><GlanceAnswer>{seen().answer}</GlanceAnswer></Show>}>
+              {(html) => <GlanceAnswer html={html()} />}
             </Show>
-            <Show when={!seen().prompt}><p class="command-preview-empty">No messages yet</p></Show>
+            <Show when={!seen().prompt}><GlanceEmpty>No messages yet</GlanceEmpty></Show>
           </>}
         </Show>
-        <Show when={read.error && settled()?.chat.id === target().chat.id}><p class="command-preview-empty">Couldn't read this chat</p></Show>
+        <Show when={read.error && settled()?.chat.id === target().chat.id}><GlanceEmpty>Couldn't read this chat</GlanceEmpty></Show>
       </>}
     </Show>
-  </aside>;
+  </Glance>;
 }

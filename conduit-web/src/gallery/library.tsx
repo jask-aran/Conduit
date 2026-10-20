@@ -12,14 +12,14 @@ import { createSignal, createUniqueId, For, Index, onCleanup, onMount, Show, typ
 import { LightbulbIcon, MessageSquareTextIcon, FilePenLineIcon, SquareTerminalIcon, CodeXmlIcon, WrenchIcon } from "lucide-solid";
 import { FileCode2Icon, FileDiffIcon, Undo2Icon, DeleteIcon, ChevronLeftIcon, TextCursorInputIcon } from "lucide-solid";
 import { PanelRightIcon, ClipboardCopyIcon, Columns2Icon, CopyIcon, FolderIcon, FolderInputIcon, LayoutDashboardIcon, MenuIcon, MonitorIcon, PaperclipIcon, PencilIcon, PinIcon, PlusIcon, QrCodeIcon, RefreshCwIcon, SearchIcon, ShareIcon, ShieldCheckIcon, SquarePenIcon, TerminalIcon, Trash2Icon } from "lucide-solid";
-import { type Motion, Welcome, Picker, Rule, MenuNote, Gauge, Meter, Swatch, Readout, SliderValue, Reference, References, Captions, Completion, Spinner, StopGlyph, ANSWER_MARKDOWN, CODE_BLOCK, Disclosure, Transcript, TranscriptRow, Message, Turn, Failure, HarnessPrompt, Changes, LoadingEarlier, TraceHeader, Trail, Step, Answer, CodeBlock, codeBlockHtml, fillCodeBlocks, CopyButton, MessageFoot, StopLine, Orb, settledOrbRate, PLAIN_SPHERE, SPUTTERING_SPHERE, Trace, StepOutput, StepProse, TraceError, ORBITS_TRAILED, PhoneComposer, PHONE_COMPOSER_STATES, type PhonePart, type VoiceMode, Toast, Toaster, SettingRecorder, Field, Leader, Crumbs, Spotlight, OverlayHead, Match, Choices, OverlayBar, OverlayHints, OverlayList, OverlayPage, OverlayRail, OverlaySplit, Glance, GlanceHead, GlancePrompt, GlanceTurn, GlanceAnswer, GlanceEmpty, RiderButton, Overlay, Scrim, SettingGroup, SettingLine, SettingValue, SettingLink, SettingNote, SettingDetails, SettingWide, SettingLoading, Progress, Keycap, NavGroup, NavRow, Segmented, SelectTrigger, Bubble, Button, Card, Chip, Choice, ComposerField, DesktopComposer, Line, TextArea, Rider, RiderActions, RiderTitle, Toolbar, Frost, Input, Item, Menu, PillButton, PillField, PillGroup, PillSwitch, PillWave, HeadingSection, SearchSection, Section, Slider, Switch, Chips, Lines, Read, Preview } from "@/components/ui";
+import { type Motion, Welcome, Picker, Rule, MenuNote, Gauge, Meter, Swatch, Readout, SliderValue, Reference, References, Captions, Completion, Spinner, StopGlyph, ANSWER_MARKDOWN, CODE_BLOCK, Disclosure, Transcript, TranscriptRow, Message, Turn, Failure, HarnessPrompt, Changes, LoadingEarlier, TraceHeader, Trail, Step, Answer, CodeBlock, codeBlockHtml, fillCodeBlocks, CopyButton, MessageFoot, StopLine, Orb, settledOrbRate, PLAIN_SPHERE, SPUTTERING_SPHERE, Trace, StepOutput, StepProse, TraceError, ORBITS_TRAILED, PhoneComposer, PHONE_COMPOSER_STATES, type PhonePart, type VoiceMode, Toast, Toaster, SettingRecorder, Field, Leader, Crumbs, Spotlight, OverlayHead, Match, Choices, OverlayBar, OverlayChip, OverlayEmpty, OverlayActions, OverlayHints, OverlayList, OverlayPage, OverlayRail, OverlaySplit, Glance, GlanceHead, GlancePrompt, GlanceTurn, GlanceAnswer, GlanceEmpty, RiderButton, Overlay, Scrim, SettingGroup, SettingLine, SettingValue, SettingLink, SettingNote, SettingDetails, SettingWide, SettingLoading, Progress, Keycap, NavGroup, NavRow, Segmented, SelectTrigger, Bubble, Button, Card, Chip, Choice, ComposerField, DesktopComposer, Line, TextArea, Rider, RiderActions, RiderTitle, Toolbar, Frost, Input, Item, Menu, PillButton, PillField, PillGroup, PillSwitch, PillWave, HeadingSection, SearchSection, Section, Slider, Switch, Chips, Lines, Read, Preview } from "@/components/ui";
 
 import { HarnessMark } from "../client/harness-brand";
 import { PlaceGlyph } from "../client/chat/place-picker";
 import { MODELS, PROFILES, PROJECTS } from "./seed";
 import { scaleOf, setScale } from "./foundations";
 import { QuestionCard } from "../client/chat/question-card";
-import { ImageIcon, ActivityIcon, BrainIcon, ChevronRightIcon, GlobeIcon, MessageSquareIcon, MicIcon as VoiceIcon, NotebookTextIcon, PanelLeftCloseIcon, ServerIcon } from "lucide-solid";
+import { ArrowLeftIcon, ImageIcon, ActivityIcon, BrainIcon, ChevronRightIcon, GlobeIcon, MessageSquareIcon, MicIcon as VoiceIcon, NotebookTextIcon, PanelLeftCloseIcon, ServerIcon } from "lucide-solid";
 import type { Question } from "../client/api/contracts";
 import { LibraryContext } from "@/components/ui/swap";
 import { InUse, Anatomy, type Part, FormTable, form, px, rounding, edge, fg, bg, Replay, States, Presence, type Mark, type FormRow } from "./specs";
@@ -199,7 +199,18 @@ const glanceFolder = () => <Glance label="Folder preview"><GlanceHead mark={<Fol
   <Section><Item icon={<HarnessMark id="claude" />} meta="9 Oct">Short Sprint Workout Plan</Item><Item icon={<HarnessMark id="opencode" />} meta="26 Sept">Gassho House Stays in Japan</Item><Item icon={<HarnessMark id="opencode" />} meta="25 Sept">Varied dog question formats</Item></Section></Glance>;
 const glanceEmpty = (text: string) => () => <Glance label="Chat preview"><GlanceEmpty>{text}</GlanceEmpty></Glance>;
 const chatPreview = glanceChat;
-const searchHints = () => <OverlayHints start={[[["Ctrl", "E"], "Edit"], [["Alt", "R"], "Rename"], [["Ctrl", "K", "D"], "Delete"]]} end={[[["/"], "Search in"], [["Ctrl", "P"], "Preview"], [["Enter"], "Open"], [["Esc"], "Close"]]} />;
+/* Chat search's tree: a folder open in place (its chevron turns; its search shows under the cursor), its chats in under it, Browse all; picked: an edit's check column. */
+const chatTree = (edit: boolean) => <>
+  <Section title="Recent"><Item role="treeitem" icon={<HarnessMark id="claude" />} meta="9 Oct" picked={edit ? true : undefined} active={edit}>Short Sprint Workout Plan</Item><Item role="treeitem" icon={<HarnessMark id="opencode" />} meta="8 Oct" picked={edit ? false : undefined}>Wispah V3 Lodge</Item></Section>
+  <Section title="Folders">
+    <Item role="treeitem" aria-expanded={true} icon={<FolderIcon />} meta="3 · 25 Sept" opens onOpens={() => {}} opensLabel="Collapse Japan" active={!edit} reveal end={<Button variant="ghost" size="icon-xs" aria-label="Search in Japan"><SearchIcon /></Button>}>Japan</Item>
+    <Item role="treeitem" indent icon={<HarnessMark id="claude" />} meta="9 Oct" picked={edit ? true : undefined}>Gassho House Stays in Japan</Item>
+    <Item role="treeitem" indent icon={<HarnessMark id="opencode" />} meta="26 Sept" picked={edit ? false : undefined}>Gassho Houses for Six</Item>
+    <Item role="treeitem" indent opens>Browse all 3 chats</Item>
+    <Item role="treeitem" aria-expanded={false} icon={<FolderIcon />} meta="0" opens onOpens={() => {}} opensLabel="Expand NHP">NHP</Item>
+  </Section>
+</>;
+const searchHints = () => <OverlayHints start={[[["Ctrl", "E"], "Edit", () => {}], [["Alt", "R"], "Rename"], [["Ctrl", "K", "D"], "Delete"]]} end={[[["/"], "Search in"], [["Ctrl", "P"], "Preview"], [["Enter"], "Open"], [["Esc"], "Close"]]} />;
 const LeaderPath = () => { const [at, setAt] = createSignal(2); const levels = ["Conduit", "Chat", "Composer"];
   return <Crumbs label="Where you are" items={levels.map((label, index) => ({ label, current: index === at(), onClick: () => setAt(index) }))} />; };
 const leaderRows = () => <Section><Item keysFirst keys={["1"]} active>Model</Item><Item keysFirst keys={["2"]}>Thinking level</Item><Item keysFirst keys={["A"]}>Attach files</Item><Item keysFirst keys={["S"]}>Stash prompt</Item><Item keysFirst keys={["V"]}>Toggle voice dictation</Item></Section>;
@@ -885,9 +896,20 @@ export const libraryFamilies: Family[] = [
       lib("overlay-bar", "OverlayBar", "both", "overlay", "OverlayBar lead · input · end · close", () => <div class="g-stack g-overlay-demo">
         <Overlay label="Bar"><OverlayBar lead={glyph()} placeholder="Run a command…" onClose={() => {}} /></Overlay>
         <Overlay label="Bar"><OverlayBar lead={<SearchIcon />} placeholder="Search chats, projects, workspaces…" end={<SortToggle />} onClose={() => {}} /></Overlay>
+        <Overlay label="Bar"><OverlayBar lead={<SearchIcon />} chips={<><OverlayChip onRemove={() => {}}>in:Japan</OverlayChip><OverlayChip onRemove={() => {}}>is:unread</OverlayChip></>} placeholder="Search Japan chats…" end={<SortToggle />} onClose={() => {}} /></Overlay>
+        <Overlay label="Bar"><OverlayBar lead={<Button variant="ghost" size="icon-sm" aria-label="Back"><ArrowLeftIcon /></Button>} chips={<Crumbs label="Where you are" items={[{ label: "Commands" }, { label: "Workspace views", current: true }]} />} placeholder="Search workspace views…" onClose={() => {}} /></Overlay>
+      </div>, true),
+      lib("overlay-tree", "OverlayList · a tree, an edit, nothing", "both", "overlay", "Item opens · onOpens (aria-expanded) · reveal end · indent · picked; OverlayEmpty", () => <div class="g-stack g-overlay-demo">
+        <Overlay label="Tree"><OverlayList managed role="tree">{chatTree(false)}</OverlayList></Overlay>
+        <Overlay label="Edit"><OverlayList managed role="tree">{chatTree(true)}</OverlayList><OverlayHints count="2 selected" start={[[["Ctrl", "E"], "Done", () => {}], [["Ctrl", "K", "D"], "Delete", () => {}], [["Ctrl", "K", "M"], "Move", () => {}]]} /></Overlay>
+        <Overlay label="Empty"><OverlayBar lead={<SearchIcon />} chips={<OverlayChip onRemove={() => {}}>in:NHP</OverlayChip>} placeholder="Search NHP chats…" onClose={() => {}} /><OverlayList><OverlayEmpty>No chats in NHP.</OverlayEmpty></OverlayList></Overlay>
       </div>, true),
       lib("overlay-list", "OverlayList", "both", "overlay", "OverlayList > Section (a group title) > Item: icon · keys · opens · meta", () => <div class="g-overlay-demo"><Overlay label="List">{paletteList()}</Overlay></div>, true),
       lib("overlay-hints", "OverlayHints", "desktop", "overlay", "OverlayHints start · end: keys and what they do", () => <div class="g-stack g-overlay-demo"><Overlay label="Hints">{paletteHints()}</Overlay><Overlay label="Hints">{searchHints()}</Overlay></div>, true),
+      lib("overlay-actions", "OverlayActions", "phone", "overlay", "OverlayActions: on a phone, the hints give way to the view's actions as buttons", () => <div class="g-stack g-overlay-demo">
+        <Overlay label="Actions" density="phone"><OverlayActions actions={[{ label: "Edit", onClick: () => {} }, { label: "Latest", onClick: () => {} }, { label: "Open Japan", onClick: () => {} }]} /></Overlay>
+        <Overlay label="Actions" density="phone"><OverlayActions actions={[{ label: "Move 2", onClick: () => {} }, { label: "Delete 2", destructive: true, onClick: () => {} }, { label: "Done", onClick: () => {} }]} /></Overlay>
+      </div>, true),
       lib("overlay-split", "OverlaySplit", "desktop", "overlay", "OverlaySplit: a List beside an aside", () => <div class="g-overlay-demo"><Overlay label="Split" style={{ "--overlay-width": "100%" }}><OverlaySplit aside={chatPreview()}>{chatRows()}</OverlaySplit></Overlay></div>, true),
       lib("overlay-settings", "SettingGroup · SettingLine · every kind", "both", "overlay", "SettingGroup > SettingLine (a field, or plain: a value, link, buttons, keys) · SettingNote · SettingDetails · SettingWide (TextArea, Progress) · SettingLoading", () => <div class="g-overlay-demo"><Overlay label="Settings" layout="rail" style={{ "--overlay-width": "100%" }}><OverlayPage title="Every kind of line">
         <SettingGroup title="Fields"><SettingLine label="Select"><SelectTrigger value="Compact" bare /></SettingLine><SettingLine label="Input"><Input value="20" /></SettingLine><SettingLine label="Switch"><SwitchDemo /></SettingLine><SettingLine label="Segmented"><Theme /></SettingLine><SettingLine label="With its state" state="paused while hidden"><SelectTrigger value="Adaptive" bare /></SettingLine></SettingGroup>

@@ -25,7 +25,8 @@
 .ui-icon:has(> .harness-mark) { width: var(--icon-sm); height: var(--icon-sm); }
 .ui-row > .ui-label { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* Meta: muted mono beside the title, right-aligned, tabular. */
-.ui-row > :is(small, .ui-meta) { flex: none; margin-left: auto; color: var(--muted-foreground); font: var(--weight-rest) var(--text-caption) var(--font-data); font-variant-numeric: tabular-nums; }
+/* The meta gives way before the label does: a long one (a model's spec) truncates first. */
+.ui-row > :is(small, .ui-meta) { flex: 0 4 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-left: auto; color: var(--muted-foreground); font: var(--weight-rest) var(--text-caption) var(--font-data); font-variant-numeric: tabular-nums; }
 .ui-row > .ui-keys { display: inline-flex; flex: none; gap: var(--space-xs); }
 .ui-row > .ui-chevron { width: var(--icon-sm); height: var(--icon-sm); color: var(--muted-foreground); }
 /* The cursor (DESIGN Interaction): one row at a time, the wash, white, no change of weight.
@@ -70,7 +71,7 @@
 /* A phone variant has no keyboard: shortcut keys are off wherever they sit (after the rows' keys, before the leader's,
    which stay). */
 [data-density="phone"] .ui-keys { display: none; }
-@media (--conduit-phone-layout) { .ui-keys { display: none; } }
+@media (--conduit-phone-layout) { .ui-row > .ui-keys { display: none; } }
 .ui-keys[data-first] { display: inline-flex; min-width: calc(2 * var(--control-xs)); flex: none; gap: var(--space-xs); }
 
 .ui-menu-action > :is(svg, img), .ui-menu-action > :first-child:not(:last-child) { width: var(--icon); height: var(--icon); flex: none; }
@@ -106,6 +107,19 @@
 /* A row that opens in place turns its chevron down while open. */
 .ui-row > .ui-chevron { transition: rotate var(--duration-quick) var(--ease-change); }
 .ui-row[aria-expanded="true"] > .ui-chevron { rotate: 90deg; }
+/* A chevron that is its own press: the glyph's box, the wash under the pointer. */
+button.ui-chevron { display: inline-grid; flex: none; place-items: center; border: 0; border-radius: var(--radius-inset); background: transparent; padding: 0; color: inherit; cursor: pointer; }
+button.ui-chevron > svg { width: 100%; height: 100%; }
+button.ui-chevron:hover { background: var(--tint); color: var(--foreground); }
+/* A child row sits an icon and a gap in, under its parent's label. */
+.ui-row:not([data-highlighted], :hover) > .ui-row-end[data-reveal] { visibility: hidden; }
+@media (--conduit-phone-layout) { .ui-row > .ui-row-end[data-reveal] { display: none; } }
+.ui-row[data-indent] { width: calc(100% - var(--icon) - var(--row-gap)); margin-left: calc(var(--icon) + var(--row-gap)); }
+/* An edit's check column: a box per row, ticked when chosen; chosen rows wear the wash. */
+.ui-row-check { display: inline-grid; width: var(--icon); height: var(--icon); flex: none; place-items: center; border: var(--hairline) solid color-mix(in oklch, var(--foreground), transparent var(--tone-line)); border-radius: var(--radius-inset); }
+.ui-row-check > svg { width: var(--icon-sm); height: var(--icon-sm); stroke-width: 3; }
+.ui-row[data-picked] { background: var(--tint); color: var(--foreground); }
+.ui-row[data-picked] > .ui-row-check { border-color: var(--foreground); background: var(--foreground); color: var(--background); }
 
 /* Text a row is given as its own span (not a label part) runs out in an ellipsis, as a label does. */
-.ui-row > span:not(.ui-icon, .ui-keys, .ui-meta, .ui-row-end) { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ui-row > span:not(.ui-icon, .ui-keys, .ui-meta, .ui-row-end, .ui-row-check) { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

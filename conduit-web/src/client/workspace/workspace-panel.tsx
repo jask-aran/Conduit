@@ -235,7 +235,7 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
   // A key the leader lists must do something here: Source Control only with
   // a repository, the split only while the panel is wide enough to split.
   const workspaceShortcutAvailable = () => !document.querySelector(
-    '.frost-overlay[data-state="open"]',
+    '[role="dialog"][data-state="open"]',
   );
   const selectShortcutTab = (next: PanelTab) => {
     if (inSplit(next)) return focusSplit();
