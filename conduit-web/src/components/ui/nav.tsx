@@ -1,6 +1,7 @@
-import { createEffect, createSignal, For, onCleanup, Show, splitProps, type JSX } from "solid-js";
+import { createEffect, createSignal, For, on, onCleanup, Show, splitProps, type JSX } from "solid-js";
 import { ChevronRightIcon } from "lucide-solid";
 import { Button, Spinner } from "./controls";
+import { haptic } from "./haptics";
 import { Expand } from "./expand";
 
 /*
@@ -16,6 +17,8 @@ import { Expand } from "./expand";
  *  (set once the edge has moved); drawer: a phone's, over the page, open or shut. */
 export function NavPane(props: JSX.HTMLAttributes<HTMLElement> & { collapsed?: boolean; folded?: boolean; instant?: boolean; drawer?: "open" | "shut"; head: JSX.Element; foot?: JSX.Element; listRef?: (element: HTMLDivElement) => void; ref?: (element: HTMLElement) => void }) {
   const [local, rest] = splitProps(props, ["collapsed", "folded", "instant", "drawer", "head", "foot", "listRef", "children", "class"]);
+  // The drawer shutting is an overlay closing: felt after a touch (a swipe, a tap outside it or on a row).
+  createEffect(on(() => local.drawer, (drawer, was) => { if (was === "open" && drawer === "shut") haptic("dismiss"); }, { defer: true }));
   return <aside {...rest} class="ui-nav-pane" data-surface="frame" data-collapsed={local.collapsed ? "" : undefined} data-folded={local.folded ? "" : undefined}
     data-instant={local.instant ? "" : undefined} data-drawer={local.drawer}>
     <div class="ui-nav-pane-body">
