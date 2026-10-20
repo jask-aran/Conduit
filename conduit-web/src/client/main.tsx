@@ -123,7 +123,6 @@ import {
   TRANSCRIPT_WIDE_BLOCKS_STORAGE_KEY,
   TRANSCRIPT_WIDTH_STORAGE_KEY,
 } from "./chat/transcript-appearance";
-import "./project/dashboard.css";
 import "./chat/composer-geometry.css";
 import "./styles.css";
 // The library's styles (components v2): inert until a piece the app draws with it carries its .ui- classes.

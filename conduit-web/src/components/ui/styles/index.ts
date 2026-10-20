@@ -13,6 +13,7 @@
  *   frost, orb      the material; the thinking orb's box
  *   popover         Menu > Section > Item, Match
  *   nav             NavGroup > NavRow
+ *   dashboard       Dashboard, DashHeader, Group (GroupHeading), DashRow, FolderShelf
  *   header          Header, HeaderCrumb, HeaderButton, HeaderNote
  *   card, toast     Card; Toast
  *   overlay         Scrim > Overlay (Bar, List, Split, Hints, Rail, Page), Settings, Glance
@@ -31,6 +32,7 @@ import "./frost.css";
 import "./orb.css";
 import "./popover.css";
 import "./nav.css";
+import "./dashboard.css";
 import "./header.css";
 import "./card.css";
 import "./identity.css";

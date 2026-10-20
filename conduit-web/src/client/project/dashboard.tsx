@@ -1,5 +1,5 @@
 import { Dialog } from "@/components/dialog";
-import { Button as DialogButton, Input as DialogInput, Field as DialogField, Segmented } from "@/components/ui/controls";
+import { Button as DialogButton, Input as DialogInput, Field as DialogField, Segmented, Spinner } from "@/components/ui/controls";
 import { isConduitManagedProject } from "../navigation/sidebar-preferences";
 import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show, type JSX } from "solid-js";
 
@@ -9,20 +9,11 @@ import { activityLabel } from "../../activity.js";
 import { loadOutsideThreads, type OutsideThread } from "../dashboard/outside-threads";
 import { CHAT_PAGE, CompactHeading, DayGroups, FilterBar, FiltersMenu, groupByDay, harnessChoice, ListSearch, profileChoice, profileOf, ShowMore, sortChoice } from "../dashboard/primitives/chat-list";
 import { FileTypeIcon } from "../workspace/file-type-icon";
-import {
-  Button,
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuGroup,
-  ContextMenuItem,
-  ContextMenuSeparator,
-  ContextMenuTrigger,
-  MenuGroup,
-  MenuItem,
-  MenuSeparator,
-  Spinner,
-} from "@/components/primitives";
+import { ContextMenu, ContextMenuContent, ContextMenuGroup, ContextMenuItem, ContextMenuTrigger, MenuSection, MenuRow } from "@/components/menus";
 import { ContextMenu as MenuHost, ContextMenuContent as MenuContent, ContextMenuTrigger as MenuTrigger } from "@/components/menus";
+import { ChangeRow, DashNote, GroupAction, GroupSwitches } from "@/components/ui/dashboard";
+import { Card, CardDetails, CardRead } from "@/components/ui/card";
+import { Section } from "@/components/ui/popover";
 import { ChatMenuFor, type ItemActions } from "../navigation/item-menus";
 import { api } from "../api/client";
 import type { Template, DashboardChat, Project, ProjectDashboardPayload, WorkspaceAppearance, WorkspaceOperation } from "../api/contracts";
@@ -35,7 +26,6 @@ import type { RuntimeStore } from "../state/runtime";
 import { compareChatsBySort, saveChatSort, useChatSort } from "../preferences/chat-sort";
 import { WorkspaceGlyph } from "./workspace-appearance";
 import { WorkspaceAppearanceEditor } from "./workspace-appearance-editor";
-import "./dashboard.css";
 
 type WorkspaceView = "files" | "diff" | "terminal";
 const dashboardCache = new Map<string, { expiresAt: number; promise: Promise<ProjectDashboardPayload> }>();
@@ -334,14 +324,15 @@ export function ProjectDashboard(props: {
   const showOutside = () => isWorkspace() && threadSide() === "outside";
 
   const manageItems = () => <>
-      <MenuGroup>
-        <Show when={isWorkspace()}><MenuItem onSelect={() => setAppearanceOpen(true)}><PaletteIcon />Workspace identity</MenuItem></Show>
-        <MenuItem onSelect={props.onRename}><PencilIcon />Rename</MenuItem>
-        <MenuItem onSelect={() => props.onOpenSettings("workspaces", props.project.id)}><Settings2Icon />{isWorkspace() ? "Workspace settings" : "Project settings"}</MenuItem>
-      </MenuGroup>
-      <MenuSeparator />
-      <MenuItem variant="destructive" onSelect={props.onDelete}><Trash2Icon />{isWorkspace() ? "Unlink workspace" : "Delete project"}</MenuItem>
-      <Show when={isWorkspace()}><MenuItem variant="destructive" onSelect={() => setDestroyOpen(true)}><Trash2Icon />Delete workspace and files</MenuItem></Show>
+      <MenuSection>
+        <Show when={isWorkspace()}><MenuRow onSelect={() => setAppearanceOpen(true)} icon={<PaletteIcon />}>Workspace identity</MenuRow></Show>
+        <MenuRow onSelect={props.onRename} icon={<PencilIcon />}>Rename</MenuRow>
+        <MenuRow onSelect={() => props.onOpenSettings("workspaces", props.project.id)} icon={<Settings2Icon />}>{isWorkspace() ? "Workspace settings" : "Project settings"}</MenuRow>
+      </MenuSection>
+      <MenuSection>
+      <MenuRow destructive onSelect={props.onDelete} icon={<Trash2Icon />}>{isWorkspace() ? "Unlink workspace" : "Delete project"}</MenuRow>
+      <Show when={isWorkspace()}><MenuRow destructive onSelect={() => setDestroyOpen(true)} icon={<Trash2Icon />}>Delete workspace and files</MenuRow></Show>
+      </MenuSection>
   </>;
 
   // Running chats stay in place; their dot and activity say they are live.
@@ -368,7 +359,7 @@ export function ProjectDashboard(props: {
     </Show>
   </Show>;
 
-  const threadsGroup = () => <SplitGroup id="dashboard-threads" order="list" heading={<div class="split-heading-switches">
+  const threadsGroup = () => <SplitGroup id="dashboard-threads" order="list" heading={<GroupSwitches>
       <Segmented arrows label="Chats" value={unreadOnly() ? "unread" : "all"} onChange={(value) => { setUnreadOnly(value === "unread"); setLimit(CHAT_PAGE); }} options={[
         { value: "all", label: "All", count: showOutside() ? filteredOutside().length : activeChatCount() },
         { value: "unread", label: "Unread", count: showOutside() ? 0 : props.project.sessions.filter((chat) => chat.status === "active" && chat.unread).length },
@@ -379,7 +370,7 @@ export function ProjectDashboard(props: {
           { value: "outside", label: "Not in Conduit", count: outsideLoading() ? undefined : outsideThreads().length },
         ]} />
       </Show>
-    </div>} actions={<FilterBar choices={showOutside()
+    </GroupSwitches>} actions={<FilterBar choices={showOutside()
       ? [harnessChoice(outsideHarnesses(), outsideFilter(), (id) => { setOutsideFilter(id); setLimit(CHAT_PAGE); })]
       : [profileChoice(props.profiles, new Set(activeChats().map((chat) => profileOf(props.profiles, chat))), profile(), (id) => { setProfile(id); setLimit(CHAT_PAGE); }), sortChoice(chatSort(), saveChatSort)]}>
       <ListSearch label={`Search chats in ${props.project.name}`} onClick={props.onSearchChats} />
@@ -403,15 +394,15 @@ export function ProjectDashboard(props: {
     <Show when={showOutside()} fallback={chatRows()}>{outsideRows()}</Show>
   </SplitGroup>;
 
-  const terminalsGroup = () => <SplitGroup id="dashboard-terminals" label="Terminals" collapsible count={scopedTerminals().length} busy={terminalsLoading()} actions={<button type="button" onClick={() => props.onOpenView("terminal")}>Open</button>}>
+  const terminalsGroup = () => <SplitGroup id="dashboard-terminals" label="Terminals" collapsible count={scopedTerminals().length} busy={terminalsLoading()} actions={<GroupAction onClick={() => props.onOpenView("terminal")}>Open</GroupAction>}>
     <Show when={scopedTerminals().length} fallback={<SplitEmpty>{terminalsLoading() ? "Loading terminals…" : "No live terminals."}</SplitEmpty>}>
       <For each={scopedTerminals()}>{(terminal) =>
         <ContextMenu><ContextMenuTrigger as={SplitRow} element="button" onPointerEnter={props.onPrefetchTerminal} onFocus={props.onPrefetchTerminal} onClick={() => props.onOpenTerminal(terminal)}
             lead={<TerminalIcon />} primary={terminal.title || "Shell"} context={terminal.currentCommand || "shell"} trailing={terminalActivity(terminal)} />
-          <ContextMenuContent class="w-52 sidebar-context-menu"><ContextMenuGroup>
+          <ContextMenuContent><ContextMenuGroup as={Section}>
             <ContextMenuItem onSelect={() => props.onOpenTerminalMaximized(terminal)}><TerminalIcon />Open maximized</ContextMenuItem>
             <ContextMenuItem onSelect={() => props.onContextAction("rename-terminal", { terminal })}><PencilIcon />Rename</ContextMenuItem>
-          </ContextMenuGroup><ContextMenuSeparator /><ContextMenuItem variant="destructive" onSelect={() => props.onContextAction("delete-terminal", { terminal })}><Trash2Icon />Destroy shell</ContextMenuItem></ContextMenuContent></ContextMenu>}
+          </ContextMenuGroup><ContextMenuGroup as={Section}><ContextMenuItem variant="destructive" onSelect={() => props.onContextAction("delete-terminal", { terminal })}><Trash2Icon />Destroy shell</ContextMenuItem></ContextMenuGroup></ContextMenuContent></ContextMenu>}
       </For>
     </Show>
   </SplitGroup>;
@@ -424,20 +415,12 @@ export function ProjectDashboard(props: {
         const name = file.path.replace(/\/$/, "").split("/").at(-1) ?? file.path;
         const directory = file.path.replace(/\/$/, "").split("/").slice(0, -1).join("/");
         const status = file.status === "??" ? "U" : file.status.trim().charAt(0);
-        return <button type="button" class="split-row split-change-row" title={file.path} onClick={() => props.onOpenView("diff")}>
-          <FileTypeIcon name={name} />
-          <span class="workspace-change-name">{name}</span>
-          <span class="workspace-change-directory">{directory}</span>
-          <Show when={file.added != null} fallback={<small class="workspace-change-counts">—</small>}>
-            <small class="workspace-change-counts"><span class="workspace-git-removed">−{file.removed}</span><span class="workspace-git-added">+{file.added}</span></small>
-          </Show>
-          <code data-status={status}>{status}</code>
-        </button>;
+        return <ChangeRow title={file.path} onClick={() => props.onOpenView("diff")} icon={<FileTypeIcon name={name} />} name={name} directory={directory} added={file.added} removed={file.removed} status={status} />;
       }}</For>
     </Show>
   </SplitGroup>;
 
-  const filesGroup = () => <SplitGroup id="dashboard-files" label="Files" actions={<button type="button" onClick={() => props.onOpenView("files")}>Browse</button>}>
+  const filesGroup = () => <SplitGroup id="dashboard-files" label="Files" actions={<GroupAction onClick={() => props.onOpenView("files")}>Browse</GroupAction>}>
     <Show when={payload()?.recentFiles.length} fallback={<SplitEmpty>{payload() ? "No files yet." : "Loading…"}</SplitEmpty>}>
       <For each={payload()!.recentFiles}>{(file) =>
         <SplitRow element="button" title={file.name} draggable={props.fileView ? "true" : undefined} data-doc-view={props.fileView?.(file.name)} onClick={() => props.onOpenFile ? props.onOpenFile(file.name) : props.onOpenView("files")} lead={<FileTypeIcon name={file.name} />} primary={file.name} trailing={relativeActivity(file.modifiedAt, now())} />}
@@ -446,7 +429,7 @@ export function ProjectDashboard(props: {
   </SplitGroup>;
 
   return <>
-    <SplitDashboard class="workspace-dashboard" page={isWorkspace() ? "Workspace" : "Project"} label={`${props.project.name} dashboard`}
+    <SplitDashboard page={isWorkspace() ? "Workspace" : "Project"} label={`${props.project.name} dashboard`}
       header={<SplitHeader title={props.project.name} kind={kindLabel(props.project)}
         glyph={<Show when={isWorkspace()} fallback={<FolderIcon />}><WorkspaceGlyph appearance={activeAppearance()} /></Show>}
         context={[
@@ -465,15 +448,14 @@ export function ProjectDashboard(props: {
       ]} />}
       notice={cloning() || (error() && !cloning()) ? <>
         <Show when={cloning()}>
-          <section class="clone-progress" aria-live="polite">
-            <div class="clone-progress-heading"><Spinner /><div><strong>{operation()?.state === "cancelling" ? "Cancelling clone" : "Cloning workspace"}</strong><p>Closing this tab does not stop the operation.</p></div></div>
-            <div class="clone-progress-path"><span>Destination</span><code>{props.project.workingRoot}</code></div>
-            <pre aria-label="Clone output preview">{operation()?.diagnostic || "Preparing clone…"}</pre>
-            <Button variant="destructive" size="sm" disabled={cancellingClone()} onClick={() => void cancelClone()}><XIcon />{cancellingClone() ? "Cancelling…" : "Cancel clone"}</Button>
-          </section>
+          <div aria-live="polite"><Card embedded size="wide" title={<><Spinner /> {operation()?.state === "cancelling" ? "Cancelling clone" : "Cloning workspace"}</>} detail="Closing this tab does not stop the operation."
+            actions={<DialogButton variant="destructive" size="sm" disabled={cancellingClone()} onClick={() => void cancelClone()}><XIcon />{cancellingClone() ? "Cancelling…" : "Cancel clone"}</DialogButton>}>
+            <CardDetails><dt>Destination</dt><dd title={props.project.workingRoot}>{props.project.workingRoot}</dd></CardDetails>
+            <CardRead>{operation()?.diagnostic || "Preparing clone…"}</CardRead>
+          </Card></div>
         </Show>
         <Show when={error() && !cloning()}>
-          <div class="project-dashboard-error" role="alert"><strong>{isWorkspace() ? "This workspace" : "This project"} could not be loaded</strong><span>{error()}</span></div>
+          <DashNote error><strong>{isWorkspace() ? "This workspace" : "This project"} could not be loaded</strong><span>{error()}</span></DashNote>
         </Show>
       </> : undefined}
       composer={cloning() ? undefined : props.composer}

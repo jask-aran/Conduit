@@ -1,7 +1,7 @@
 import { isConduitManagedProject } from "../navigation/sidebar-preferences";
 import { createMemo, createSignal, For, onCleanup, onMount, Show, type JSX } from "solid-js";
 import { FolderPlusIcon, PencilIcon, TerminalIcon, Trash2Icon } from "lucide-solid";
-import { ContextMenu, ContextMenuContent, ContextMenuGroup, ContextMenuItem, ContextMenuSeparator, ContextMenuTrigger } from "@/components/primitives";
+import { ContextMenu, ContextMenuContent, ContextMenuGroup, ContextMenuItem, ContextMenuTrigger, MenuSection } from "@/components/menus";
 import { ContextMenu as MenuHost, ContextMenuContent as MenuContent, ContextMenuTrigger as MenuTrigger } from "@/components/menus";
 import { ChatMenuFor, PlaceMenuFor, type ItemActions } from "../navigation/item-menus";
 import { api, projectPath } from "../api/client";
@@ -15,10 +15,10 @@ import type { RuntimeStore } from "../state/runtime";
 import type { SidebarCommand } from "../navigation/sidebar";
 import { COMMAND_IDS, commandLabel } from "../commands/command-registry";
 import { compareChatsBySort, saveChatSort, useChatSort } from "../preferences/chat-sort";
+import { FolderShelf, FolderTile, GroupAction, GroupSwitches } from "@/components/ui/dashboard";
 import { Segmented } from "@/components/ui/controls";
 import { CHAT_PAGE, DayGroups, FilterBar, groupByDay, ListSearch, CompactHeading, FiltersMenu, placeChoice, profileChoice, profileOf, ShowMore, sortChoice } from "./primitives/chat-list";
 import { SplitDashboard, SplitEmpty, SplitGroup, SplitHeader, SplitRow } from "./primitives/split";
-import "./app-dashboard.css";
 
 // The Conduit dashboard is also where New chat lands: the composer, every
 // recent chat under it, and the places work lives on the right -- project
@@ -41,13 +41,6 @@ function shortAge(value: number, currentTime = Date.now()) {
   if (days < 14) return `${days}d`;
   if (days < 60) return `${Math.round(days / 7)}w`;
   return `${Math.round(days / 30)}mo`;
-}
-
-function FolderMark() {
-  return <svg class="app-folder-mark" viewBox="0 0 30 24" aria-hidden="true">
-    <path class="app-folder-back" d="M1 4a2 2 0 0 1 2-2h7l3 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2z" />
-    <path class="app-folder-front" d="M1 8h28v13a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2z" />
-  </svg>;
 }
 
 export function AppDashboard(props: {
@@ -151,7 +144,7 @@ export function AppDashboard(props: {
     return <MenuHost><MenuTrigger as={SplitRow} element="button" draggable="true" data-doc-view={`chat:${chat.id}`} onPointerEnter={() => props.onPrefetchChat(chat)} onFocus={() => props.onPrefetchChat(chat)} onClick={() => props.onOpenChat(chat, project)}
         lead={<RuntimeIndicator process={process()} stale={props.runtime.stale()} unread={chat.unread} fallback={<ThreadHarnessMark id={chat.harnessId} lively />} />}
         primary={chat.title || "Untitled chat"}
-        context={<>{live() && <span class="app-dashboard-activity">{live()}</span>}{live() && where() ? " · " : ""}{where()}</>}
+        context={<>{live()}{live() && where() ? " · " : ""}{where()}</>}
         trailing={<time dateTime={chat.lastMessageAt || chat.createdAt}>{shortAge(Date.parse(chat.lastMessageAt || chat.createdAt || "") || 0, now())}</time>} />
       <MenuContent><ChatMenuFor chat={chat} project={project} actions={props.menus} /></MenuContent></MenuHost>;
   };
@@ -166,7 +159,7 @@ export function AppDashboard(props: {
 
   // Built inside SplitDashboard, so it reads the pane's width.
   const chatsGroup = () => <SplitGroup id="app-dashboard-chats" order="list"
-    heading={<div class="split-heading-switches">
+    heading={<GroupSwitches>
       <Segmented arrows label="Chats" value={unreadOnly() ? "unread" : "all"} onChange={(value) => { setUnreadOnly(value === "unread"); setLimit(CHAT_PAGE); }} options={[
         { value: "all", label: "All", count: allChats().length },
         { value: "unread", label: "Unread", count: unread() },
@@ -175,7 +168,7 @@ export function AppDashboard(props: {
         { value: "conduit", label: "Conduit", count: conduitChats().length },
         { value: "computer", label: "Computer", count: computerChats().length },
       ]} />
-    </div>}
+    </GroupSwitches>}
     actions={<FilterBar choices={[
       placeChoice(computer() ? "Workspace" : "Project", computer() ? "All workspaces" : "All projects", places(), place(), (id) => { setPlace(id); setLimit(CHAT_PAGE); }),
       profileChoice(props.profiles, new Set(allChats().map(({ chat }) => profileOf(props.profiles, chat))), profile(), (id) => { setProfile(id); setLimit(CHAT_PAGE); }),
@@ -221,49 +214,43 @@ export function AppDashboard(props: {
     mutations.observe(shelf, { childList: true });
     onCleanup(() => { cancelAnimationFrame(frame); observer.disconnect(); mutations.disconnect(); });
   };
-  const foldersGroup = () => <SplitGroup id="app-dashboard-projects" label="Projects" count={folders().length} order="first" class="app-dashboard-projects"
-    actions={<Show when={shelfOver() || shelfAll()}><button type="button" onClick={() => setShelfAll((value) => !value)}>{shelfAll() ? "Show less" : "Show all"}</button></Show>}>
-    <div class="app-folder-shelf" ref={watchShelf} data-all={shelfAll() ? "" : undefined}>
+  const foldersGroup = () => <SplitGroup id="app-dashboard-projects" label="Projects" count={folders().length} order="first"
+    actions={<Show when={shelfOver() || shelfAll()}><GroupAction onClick={() => setShelfAll((value) => !value)}>{shelfAll() ? "Show less" : "Show all"}</GroupAction></Show>}>
+    <FolderShelf ref={watchShelf} all={shelfAll()}>
       <For each={folders()}>{(project) =>
-        <MenuHost><MenuTrigger as="a" class="app-folder" href={projectPath(project)} title={project.workingRoot} onPointerEnter={() => props.onPrefetchProject(project)} onFocus={() => props.onPrefetchProject(project)} onClick={(event: MouseEvent) => openProject(event, project)}>
-          <FolderMark />
-          <Show when={folderLive(project)}><span class="app-folder-live" aria-label="Running" /></Show>
-          <span class="app-folder-name">{project.name}</span>
-          <span class="app-folder-meta">{project.sessions.filter((chat) => chat.status === "active").length} chats{latestActivity(project) ? ` · ${shortAge(latestActivity(project), now())}` : ""}</span>
-        </MenuTrigger>{projectMenu(project)}</MenuHost>}
+        <MenuHost><MenuTrigger as={FolderTile} element="a" href={projectPath(project)} title={project.workingRoot} onPointerEnter={() => props.onPrefetchProject(project)} onFocus={() => props.onPrefetchProject(project)} onClick={(event: MouseEvent) => openProject(event, project)}
+          name={project.name} live={folderLive(project)}
+          meta={`${project.sessions.filter((chat) => chat.status === "active").length} chats${latestActivity(project) ? ` · ${shortAge(latestActivity(project), now())}` : ""}`} />{projectMenu(project)}</MenuHost>}
       </For>
-      <button type="button" class="app-folder app-folder-new" onClick={() => props.onContextAction("new-folder", {})}>
-        <FolderPlusIcon />
-        <span class="app-folder-name">New project</span>
-      </button>
-    </div>
+      <FolderTile element="button" icon={<FolderPlusIcon />} name="New project" onClick={() => props.onContextAction("new-folder", {})} />
+    </FolderShelf>
   </SplitGroup>;
 
-  const workspacesGroup = () => <SplitGroup id="app-dashboard-workspaces" label="Workspaces" count={props.projects.filter(isWorkspace).length} actions={<button type="button" onClick={() => props.onContextAction("new-workspace", {})}>New</button>}>
+  const workspacesGroup = () => <SplitGroup id="app-dashboard-workspaces" label="Workspaces" count={props.projects.filter(isWorkspace).length} actions={<GroupAction onClick={() => props.onContextAction("new-workspace", {})}>New</GroupAction>}>
     <Show when={workspaces().length} fallback={<SplitEmpty>Nothing here yet.</SplitEmpty>}>
       <For each={workspaces()}>{(project) =>
         <MenuHost><MenuTrigger as={SplitRow} element="a" href={projectPath(project)} onPointerEnter={() => props.onPrefetchProject(project)} onFocus={() => props.onPrefetchProject(project)} onClick={(event: MouseEvent) => openProject(event, project)}
             lead={<WorkspaceGlyph appearance={project.workspaceAppearance} />} primary={project.name}
-            context={<Show when={folderLive(project)} fallback={`${project.sessions.filter((chat) => chat.status === "active").length} chats`}><span class="app-dashboard-activity">Running</span></Show>}
+            context={<Show when={folderLive(project)} fallback={`${project.sessions.filter((chat) => chat.status === "active").length} chats`}>Running</Show>}
             trailing={shortAge(latestActivity(project), now())} />{projectMenu(project)}</MenuHost>}
       </For>
     </Show>
   </SplitGroup>;
 
-  const terminalsGroup = () => <SplitGroup id="app-dashboard-terminals" label="Terminals" collapsible count={terminals().length} busy={loading()} actions={<button type="button" onClick={props.onOpenTerminalView}>Open</button>}>
+  const terminalsGroup = () => <SplitGroup id="app-dashboard-terminals" label="Terminals" collapsible count={terminals().length} busy={loading()} actions={<GroupAction onClick={props.onOpenTerminalView}>Open</GroupAction>}>
     <Show when={terminals().length} fallback={<SplitEmpty>{loading() ? "Loading terminals…" : "No live terminals."}</SplitEmpty>}>
       <For each={terminals()}>{(terminal) =>
         <ContextMenu><ContextMenuTrigger as={SplitRow} element="button" onPointerEnter={props.onPrefetchTerminal} onFocus={props.onPrefetchTerminal} onClick={() => props.onOpenTerminal(terminal)}
             lead={<TerminalIcon />} primary={terminal.title || "Shell"} context={`${terminal.currentCommand || "shell"} · ${terminalScope(terminal)?.name || "Unscoped"}`} trailing={terminalAge(terminal)} />
-          <ContextMenuContent class="w-52 sidebar-context-menu"><ContextMenuGroup>
+          <ContextMenuContent><ContextMenuGroup>
             <ContextMenuItem onSelect={() => props.onOpenTerminalMaximized(terminal)}><TerminalIcon />Open maximized</ContextMenuItem>
             <ContextMenuItem onSelect={() => props.onContextAction("rename-terminal", { terminal })}><PencilIcon />Rename</ContextMenuItem>
-          </ContextMenuGroup><ContextMenuSeparator /><ContextMenuItem variant="destructive" onSelect={() => props.onContextAction("delete-terminal", { terminal })}><Trash2Icon />Destroy shell</ContextMenuItem></ContextMenuContent></ContextMenu>}
+          </ContextMenuGroup><MenuSection><ContextMenuItem variant="destructive" onSelect={() => props.onContextAction("delete-terminal", { terminal })}><Trash2Icon />Destroy shell</ContextMenuItem></MenuSection></ContextMenuContent></ContextMenu>}
       </For>
     </Show>
   </SplitGroup>;
 
-  return <SplitDashboard class="app-dashboard" page="Dashboard" label="Conduit dashboard"
+  return <SplitDashboard page="Dashboard" label="Conduit dashboard"
     header={<SplitHeader title="Conduit" context={[
       running() ? `${running()} running` : "Nothing running",
       unread() ? `${unread()} unread` : null,

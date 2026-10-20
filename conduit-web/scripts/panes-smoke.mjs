@@ -295,7 +295,7 @@ await scenario("dragging the dock's edge and a pane's edge resizes them in place
 
 await scenario("a project page's files open as the navigator's", async (page, check) => {
   await open(page);
-  const rows = page.locator('.split-row[data-doc-view^="files:"]');
+  const rows = page.locator('.ui-dash-row[data-doc-view^="files:"]');
   await rows.first().waitFor({ timeout: 4000 }).catch(() => {});
   if (!await rows.count()) return `${project.name}'s page lists no files; try --project <name>`;
   const name = await rows.first().getAttribute("title");

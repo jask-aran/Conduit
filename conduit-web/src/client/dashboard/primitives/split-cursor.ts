@@ -21,9 +21,9 @@
  * the cursor where it was (data-held), since focus there is only waiting.
  */
 
-const ROWS = ":is(.split-row:is(button, a), .split-group-more, .app-folder)";
-const CONTROLS = ".split-group-heading :is(button, a[href])";
-const INPUT = ".split-dashboard-composer :is(textarea, [contenteditable='true'])";
+const ROWS = ":is(.ui-dash-row:is(button, a), .ui-dash-more, .ui-folder)";
+const CONTROLS = ".ui-dash-group-head :is(button, a[href])";
+const INPUT = ":is(.ui-dash-composer, [data-dash-dock]) :is(textarea, [contenteditable='true'])";
 
 export type SplitSection = "composer" | "chats" | "projects" | "workspaces" | "terminals" | "changes" | "files" | "folders";
 export type SplitPage = "Dashboard" | "Project" | "Workspace" | "Harness";
@@ -36,7 +36,7 @@ const installed = new Set<(section: SplitSection) => boolean>();
 
 // The page showing, which declares what it is (data-page) and its sections
 // (each group's data-section), so the leader offers only what is there.
-const showing = () => [...document.querySelectorAll<HTMLElement>(".split-dashboard")].find(visible);
+const showing = () => [...document.querySelectorAll<HTMLElement>(".ui-dash")].find(visible);
 
 /** What the showing page is, for the leader's path. */
 export function splitPage() {
@@ -49,7 +49,7 @@ export function splitSections() {
   const sections = new Set<SplitSection>();
   if (!root) return sections;
   if (root.querySelector(INPUT)) sections.add("composer");
-  for (const group of root.querySelectorAll<HTMLElement>(".split-group[data-section]")) if (visible(group)) sections.add(group.dataset.section as SplitSection);
+  for (const group of root.querySelectorAll<HTMLElement>(".ui-dash-group[data-section]")) if (visible(group)) sections.add(group.dataset.section as SplitSection);
   return sections;
 }
 
@@ -63,7 +63,7 @@ export function installSplitCursor(root: HTMLElement): () => void {
   const last = new WeakMap<Element, HTMLElement>();
   let pointerFocus = false;
 
-  const groups = () => [...root.querySelectorAll<HTMLElement>(".split-group")]
+  const groups = () => [...root.querySelectorAll<HTMLElement>(".ui-dash-group")]
     .filter((group) => visible(group) && (rowsIn(group).length || controlsIn(group).length))
     // The chats list reads first, then the right column, top to bottom.
     .sort((a, b) => Number(b.dataset.order === "list") - Number(a.dataset.order === "list"));
@@ -105,7 +105,7 @@ export function installSplitCursor(root: HTMLElement): () => void {
   const go = (section: SplitSection) => {
     if (!root.isConnected || !visible(root)) return false;
     if (section === "composer") return toComposer();
-    const group = root.querySelector<HTMLElement>(`.split-group[data-section="${section}"]`);
+    const group = root.querySelector<HTMLElement>(`.ui-dash-group[data-section="${section}"]`);
     return group ? enter(group) : false;
   };
   installed.add(go);
@@ -120,7 +120,7 @@ export function installSplitCursor(root: HTMLElement): () => void {
     }
     const row = target.matches(ROWS) ? target : null;
     const control = !row && target.matches(CONTROLS) ? target : null;
-    const group = (row ?? control)?.closest<HTMLElement>(".split-group");
+    const group = (row ?? control)?.closest<HTMLElement>(".ui-dash-group");
     if (!group) return;
     const rows = rowsIn(group);
     const controls = controlsIn(group);
@@ -177,7 +177,7 @@ export function installSplitCursor(root: HTMLElement): () => void {
   const focusin = (event: FocusEvent) => {
     const row = event.target instanceof HTMLElement ? event.target : null;
     if (!row?.matches(ROWS)) return;
-    const group = row.closest(".split-group");
+    const group = row.closest(".ui-dash-group");
     if (group) last.set(group, row);
     if (!pointerFocus && row.matches(":focus-visible")) keyboardCursor(true);
   };

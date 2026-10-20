@@ -1,6 +1,7 @@
 import { createSignal, For, Index, onMount, Show, type JSX } from "solid-js";
 import { ChevronDownIcon, EllipsisIcon, LayersIcon, SearchIcon } from "lucide-solid";
-import { Menu, MenuContent, MenuGroup, MenuLabel, MenuRadioGroup, MenuRadioItem, MenuSeparator, MenuTrigger } from "@/components/primitives";
+import { Menu, MenuContent, MenuSection, MenuRadioGroup, MenuRadioItem, MenuControl } from "@/components/menus";
+import { DashDay, GroupAction, GroupCompactHeading } from "@/components/ui/dashboard";
 import { HarnessMark } from "../../harness-brand";
 import { SplitGroupMore, watchFold } from "./split";
 import type { Project } from "../../api/contracts";
@@ -37,7 +38,7 @@ export function groupByDay<T>(rows: T[], at: (row: T) => number, currentTime = D
 
 export function DayGroups<T>(props: { groups: Array<{ label: string; rows: T[] }>; children: (row: T) => JSX.Element }) {
   return <For each={props.groups}>{(group) => <>
-    <div class="split-day">{group.label}</div>
+    <DashDay>{group.label}</DashDay>
     <For each={group.rows}>{props.children}</For>
   </>}</For>;
 }
@@ -65,22 +66,21 @@ export type ListChoice = {
 };
 
 function ChoiceGroup(props: { choice: ListChoice }) {
-  return <MenuGroup>
-    <MenuLabel>{props.choice.label}</MenuLabel>
+  return <MenuSection title={props.choice.label}>
     <MenuRadioGroup value={props.choice.value} onChange={(value: string) => props.choice.onChange(value)}>
-      <For each={props.choice.options}>{(option) => <MenuRadioItem value={option.value} disabled={option.disabled}>
-        {option.icon}{option.label}<Show when={option.detail != null}><small class="split-filter-detail">{option.detail}</small></Show>
+      <For each={props.choice.options}>{(option) => <MenuRadioItem value={option.value} disabled={option.disabled} icon={option.icon} meta={option.detail}>
+        {option.label}
       </MenuRadioItem>}</For>
     </MenuRadioGroup>
-  </MenuGroup>;
+  </MenuSection>;
 }
 
 /** One choice as its own quiet dropdown, naming the option in force. */
 function ChoiceFilter(props: { choice: ListChoice }) {
   const current = () => props.choice.options.find((option) => option.value === props.choice.value) ?? props.choice.options[0];
   return <Menu modal={false}>
-    <MenuTrigger class="split-list-filter" title={props.choice.label}>{current()?.short ?? current()?.label}<ChevronDownIcon /></MenuTrigger>
-    <MenuContent class="w-56"><ChoiceGroup choice={props.choice} /></MenuContent>
+    <MenuControl as={GroupAction} title={props.choice.label}>{current()?.short ?? current()?.label}<ChevronDownIcon /></MenuControl>
+    <MenuContent><ChoiceGroup choice={props.choice} /></MenuContent>
   </Menu>;
 }
 
@@ -106,12 +106,9 @@ export function FilterBar(props: { choices: Array<ListChoice | false | null | un
 export function FiltersMenu(props: { choices: Array<ListChoice | false | null | undefined>; title?: string; trigger?: JSX.Element }) {
   const choices = () => props.choices.filter(Boolean) as ListChoice[];
   return <Menu modal={false}>
-    <MenuTrigger class="split-list-filter" title={props.title ?? "Filters"}>{props.trigger ?? <>Filters<ChevronDownIcon /></>}</MenuTrigger>
-    <MenuContent class="w-64">
-      <For each={choices()}>{(choice, index) => <>
-        <Show when={index() > 0}><MenuSeparator /></Show>
-        <ChoiceGroup choice={choice} />
-      </>}</For>
+    <MenuControl as={GroupAction} title={props.title ?? "Filters"}>{props.trigger ?? <>Filters<ChevronDownIcon /></>}</MenuControl>
+    <MenuContent>
+      <For each={choices()}>{(choice) => <ChoiceGroup choice={choice} />}</For>
     </MenuContent>
   </Menu>;
 }
@@ -124,7 +121,7 @@ export const sortChoice = (sort: "latest" | "created", onSort: (sort: "latest" |
 export const profileChoice = (profiles: ProfileLike[], used: Set<string>, value: string, onChange: (id: string) => void): ListChoice | null => profiles.length ? {
   label: "Profile", value, onChange,
   options: [
-    { value: "", label: "All profiles", icon: <LayersIcon class="size-4" /> },
+    { value: "", label: "All profiles", icon: <LayersIcon /> },
     ...profiles.map((item) => ({ value: item.id, label: item.label, icon: <HarnessMark id={item.implementation || "conduit"} class="size-4" />, disabled: !used.has(item.id) && item.id !== value })),
   ],
 } : null;
@@ -132,24 +129,24 @@ export const profileChoice = (profiles: ProfileLike[], used: Set<string>, value:
 export const placeChoice = (label: string, all: string, places: Array<{ id: string; label: string; project: Project }>, value: string, onChange: (id: string) => void): ListChoice | null => places.length ? {
   label, value, onChange,
   options: [
-    { value: "", label: all, icon: <LayersIcon class="size-4" /> },
-    ...places.map((item) => ({ value: item.id, label: item.label, icon: <span class="size-4 shrink-0 grid place-items-center"><PlaceGlyph project={item.project} /></span> })),
+    { value: "", label: all, icon: <LayersIcon /> },
+    ...places.map((item) => ({ value: item.id, label: item.label, icon: <PlaceGlyph project={item.project} /> })),
   ],
 } : null;
 
 export const harnessChoice = (harnesses: Array<{ id: string; label: string }>, value: string, onChange: (id: string) => void): ListChoice => ({
   label: "Harness", value, onChange,
   options: [
-    { value: "", label: "All harnesses", icon: <LayersIcon class="size-4" /> },
+    { value: "", label: "All harnesses", icon: <LayersIcon /> },
     ...harnesses.map((item) => ({ value: item.id, label: item.label, icon: <HarnessMark id={item.id} class="size-4" /> })),
   ],
 });
 
 /** The chats list's compact heading: the list showing and its count. */
 export function CompactHeading(props: { label: string; count: number; where?: string | false }) {
-  return <h2 class="split-compact-heading">{props.label}<small>{props.count}</small><Show when={props.where}><span>{props.where}</span></Show></h2>;
+  return <GroupCompactHeading label={props.label} count={props.count} where={props.where} />;
 }
 
 export function ListSearch(props: { label: string; onClick: () => void }) {
-  return <button type="button" aria-label={props.label} title={props.label} onClick={props.onClick}><SearchIcon /></button>;
+  return <GroupAction aria-label={props.label} title={props.label} onClick={props.onClick}><SearchIcon /></GroupAction>;
 }
