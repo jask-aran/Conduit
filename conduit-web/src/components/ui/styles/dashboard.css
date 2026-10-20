@@ -5,23 +5,22 @@
 /* Registered, so the app reads them back as lengths when it measures where two columns stop fitting. */
 @property --dash-aside { syntax: "<length>"; inherits: true; initial-value: 0px; }
 @property --dash-gutter { syntax: "<length>"; inherits: true; initial-value: 0px; }
-.ui-dash { --dash-aside: calc(21.875 * var(--u-space)); --dash-gap: calc(2.5 * var(--u-space)); --dash-gutter: calc(1.875 * var(--u-space));
+.ui-dash { --dash-aside: calc(21.875 * var(--u-space)); --dash-min: calc(29.6875 * var(--u-space)); --dash-tile: calc(2 * var(--u-icon)); --dash-glyph: clamp(var(--dash-tile), 3vw, calc(1.325 * var(--dash-tile))); --dash-folder: calc(7.1875 * var(--u-space)); --dash-tile-action: calc(3.75 * var(--u-space)); --dash-gap: calc(2.5 * var(--u-space)); --dash-gutter: calc(1.875 * var(--u-space));
   --dash-max: calc(var(--composer-desktop-reference-width) + var(--dash-gap) + var(--dash-aside));
   position: relative; z-index: 1; display: flex; min-height: 0; flex: 1; flex-direction: column; overflow: auto; scrollbar-width: var(--native-scrollbar-width); }
 /* Centred when there is room; otherwise its left gutter holds and a body at its minimum runs off the right, so nothing drifts sideways. */
-.ui-dash-body { display: grid; width: min(var(--dash-max), calc(100% - 2 * var(--dash-gutter))); min-width: calc(29.6875 * var(--u-space)); min-height: 0; flex: 1;
+.ui-dash-body { display: grid; width: min(var(--dash-max), calc(100% - 2 * var(--dash-gutter))); min-width: var(--dash-min); min-height: 0; flex: 1;
   grid-template-areas: "head head" "notice notice" "main aside"; grid-template-columns: minmax(0, var(--composer-desktop-reference-width)) var(--dash-aside);
-  grid-template-rows: auto auto minmax(calc(21.875 * var(--u-space)), 1fr); column-gap: var(--dash-gap);
+  grid-template-rows: auto auto minmax(var(--dash-aside), 1fr); column-gap: var(--dash-gap);
   margin: 0 0 0 max(var(--dash-gutter), calc((100% - var(--dash-max)) / 2)); padding: var(--space-3xl) 0 var(--space-2xl); }
 
 /* The head is one grid: the mark centred on both lines, the title with the quick actions at the right of its line, the
    status line under both. The title keeps its size and the quick actions fold first; the status line stays one line. */
 .ui-dash-head { display: grid; min-width: 0; grid-area: head; grid-template-columns: auto minmax(0, max-content) minmax(var(--control-lg), 1fr);
   grid-template-areas: "glyph title actions" "glyph status status"; align-items: center; margin: 0 0 var(--space-3xl); }
-.ui-dash-glyph { display: grid; width: clamp(calc(2 * var(--u-icon)), 3vw, calc(2.65 * var(--u-icon))); aspect-ratio: 1; grid-area: glyph; margin-right: var(--space-xl); place-items: center; color: var(--muted-foreground); }
+.ui-dash-glyph { --glyph-text: calc(.55 * var(--dash-glyph)); display: grid; width: var(--dash-glyph); aspect-ratio: 1; grid-area: glyph; margin-right: var(--space-xl); place-items: center; color: var(--muted-foreground); }
 .ui-dash-glyph > :is(svg, img, *) { width: 80%; height: 80%; }
-.ui-dash-glyph > .workspace-glyph[data-mode="monogram"] { font-size: calc(1.1 * var(--u-type)); }
-.ui-dash-title { min-width: 0; grid-area: title; margin: 0; overflow: hidden; font-size: clamp(calc(1.71875 * var(--u-type)), 2.6vw, calc(2.421875 * var(--u-type)));
+.ui-dash-title { min-width: 0; grid-area: title; margin: 0; overflow: hidden; font-size: clamp(var(--text-display), 2.6vw, calc(1.41 * var(--text-display)));
   font-weight: var(--weight-strong); letter-spacing: -.035em; line-height: var(--leading-none); text-overflow: ellipsis; white-space: nowrap; }
 .ui-dash-context { display: flex; min-width: 0; grid-area: status; align-items: baseline; margin: var(--space-md) 0 0; overflow: hidden; color: var(--muted-foreground); font-size: var(--text-caption); }
 .ui-dash-context > span { flex: none; white-space: nowrap; }
@@ -126,13 +125,13 @@
 .ui-dash[data-compact] :is(.ui-dash-row[data-change-row] .ui-counts [data-change], .ui-change-status) { color: var(--muted-foreground); }
 
 /* The folder shelf: project folders as folders, no box, the wash as cursor; two rows until all. */
-.ui-folder-shelf { display: grid; grid-template-columns: repeat(auto-fill, minmax(calc(7.1875 * var(--u-space)), 1fr)); gap: var(--space-2xs); }
+.ui-folder-shelf { display: grid; grid-template-columns: repeat(auto-fill, minmax(var(--dash-folder), 1fr)); gap: var(--space-2xs); }
 .ui-folder-shelf:not([data-all]) { grid-template-rows: repeat(2, auto); grid-auto-rows: 0; row-gap: 0; overflow: hidden; }
 .ui-dash[data-one-column]:not([data-compact]) .ui-folder-shelf { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .ui-folder { position: relative; display: flex; min-width: 0; flex-direction: column; align-items: flex-start; gap: var(--space-xs); border: 0; border-radius: var(--radius-surface); background: transparent;
   padding: var(--space-md) var(--row-inset); color: inherit; text-align: left; text-decoration: none; cursor: pointer; }
 .ui-folder:is(:hover, :focus-visible, [data-expanded], [data-held]) { outline: none; background: var(--sidebar-accent); }
-.ui-folder-mark { width: calc(2.03 * var(--u-icon)); height: var(--control-tool); }
+.ui-folder-mark { width: var(--dash-tile); height: var(--control-tool); }
 .ui-folder-mark [data-part="back"] { fill: color-mix(in oklch, var(--foreground), transparent 80%); }
 .ui-folder-mark [data-part="front"] { fill: color-mix(in oklch, var(--foreground), transparent 70%); transition: fill var(--duration-quick) var(--ease-change); }
 .ui-folder:is(:hover, :focus-visible) .ui-folder-mark [data-part="front"] { fill: color-mix(in oklch, var(--foreground), transparent 55%); }
@@ -162,10 +161,10 @@
 .ui-dash[data-compact] .ui-dash-body { width: 100%; min-width: 0; box-sizing: border-box; margin-inline: 0; overflow-y: auto;
   padding: var(--space-lg) var(--space-lg) calc(6.25 * var(--u-space) + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))); }
 .ui-dash[data-compact] .ui-dash-head { grid-template-columns: auto minmax(0, 1fr); grid-template-areas: "glyph title" "glyph status" "actions actions"; }
-.ui-dash[data-compact] .ui-dash-title { font-size: calc(1.5 * var(--u-type)); }
+.ui-dash[data-compact] .ui-dash-title { font-size: var(--text-heading); }
 .ui-dash[data-compact] .ui-dash-context { flex-wrap: wrap; margin-top: var(--space-xs); line-height: var(--leading-text); }
 .ui-dash[data-compact] .ui-dash-quick { display: grid; flex: none; grid-auto-columns: minmax(0, 1fr); grid-auto-flow: column; gap: var(--space-xs); margin: var(--space-md) calc(-1 * var(--space-md)) 0; }
-.ui-dash[data-compact] .ui-dash-quick-action { height: calc(3.75 * var(--u-space)); flex-direction: column; justify-content: center; gap: var(--space-md); border-radius: var(--radius-surface); font-size: var(--text-caption); }
+.ui-dash[data-compact] .ui-dash-quick-action { height: var(--dash-tile-action); flex-direction: column; justify-content: center; gap: var(--space-md); border-radius: var(--radius-surface); font-size: var(--text-caption); }
 .ui-dash[data-compact] .ui-dash-quick-action > svg { display: block; width: var(--icon-lg); height: var(--icon-lg); color: var(--muted-foreground); }
 .ui-dash[data-compact] .ui-dash-quick-more { display: none; }
 .ui-dash[data-compact] .ui-dash-group-head { padding-left: 0; }

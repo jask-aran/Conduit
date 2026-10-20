@@ -161,7 +161,8 @@ const SIZES: TokenGroup[] = [{ title: "Five sizes, by role", rows: [
   tok("--text-caption", "details, hints and data: a heading's detail, the slider's value, key hints; meta, counts, crumbs", length("--text-caption")),
   tok("--text-row", "every row and control: rows, buttons, inputs, the segmented", length("--text-row")),
   tok("--text-body", "messages, what you type, answers; titles too, at the strong weight", length("--text-body")),
-  tok("--text-heading", "a page's title (settings)", length("--text-heading")),
+  tok("--text-heading", "a page's title (settings), a compact dashboard's", length("--text-heading")),
+  tok("--text-display", "a dashboard's title: the one page-sized title, larger than a heading (it grows with the window to 1.41×)", length("--text-display")),
 ] }];
 const weight = (name: string) => (cell: HTMLElement) => getComputedStyle(cell).getPropertyValue(name).trim();
 const WEIGHTS: TokenGroup[] = [{ title: "Four weights", rows: [
