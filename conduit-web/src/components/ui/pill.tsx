@@ -91,8 +91,10 @@ export function Aura(props: { on?: boolean; level?: number }) {
     let wake = 0;
     const draw = (now: number) => {
       frame = 0;
+      // Out of the document (built but never placed, or taken out) it has no opacity to read: it stops there too, and
+      // its view starts it again if it is placed.
       const style = getComputedStyle(box);
-      if (!seen || (style.opacity === "0" && now > wake)) { last = 0; return; }
+      if (!seen || !box.isConnected || (style.opacity === "0" && now > wake)) { last = 0; return; }
       frame = requestAnimationFrame(draw);
       level = Math.min(1, Math.max(0, parseFloat(style.getPropertyValue("--aura-level")) || 0));
       const dt = last ? Math.min(.1, (now - last) / 1000) : 0; last = now;
