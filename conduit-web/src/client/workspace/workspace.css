@@ -82,7 +82,6 @@
 /* Never a chat region: a file viewer is not in one, and a :has() searching the region below it ran on every word a
    streaming answer added -- over every element of the transcript (a fifth of a frame's style recalc, late in a long
    answer on a phone's CPU). */
-[data-region]:not([data-region="chat"])[data-focus-held]:has(.workspace-file-viewer > .workspace-preview + .workspace-preview)::after { opacity: 0; }
 /* The rule between two sides drags their shares; a double-click evens them. */
 
 .workspace-tree-pane { display: flex; min-width: 0; min-height: 0; flex: 1; flex-direction: column; overflow: hidden; }

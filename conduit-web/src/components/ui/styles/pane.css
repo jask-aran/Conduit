@@ -11,15 +11,15 @@
    between -- and a hairline between runs. Where you are is text alone: the lit title and its place white at the
    current weight, the rest grey; the wash is only the pointer. Titles hold their lit width, so switching moves
    nothing; what does not fit waits in the ⋯ at the row's end. */
-.ui-tabs-row { display: flex; min-width: 0; flex: 1 1 auto; align-self: stretch; align-items: center; overflow: hidden; font-size: calc(0.875 * var(--u-type)); line-height: calc(1.25 * var(--u-space)); }
-.ui-pane-tabs { --tab-gap: calc(0.78125 * var(--u-space)); --tab-place-gap: calc(2.578125 * var(--u-space)); --tab-more: calc(2.1875 * var(--u-space)); --tab-label-gap: calc(0.625 * var(--u-space));
+.ui-tabs-row { display: flex; min-width: 0; flex: 1 1 auto; align-self: stretch; align-items: center; overflow: hidden; font-size: var(--text-row); line-height: var(--space-2xl); }
+.ui-pane-tabs { --tab-gap: var(--space-lg); --tab-place-gap: calc(2.5 * var(--u-space)); --tab-more: calc(var(--control-xs) + var(--space-md)); --tab-label-gap: var(--space-md);
   display: flex; height: 100%; min-width: 0; flex: 1; align-items: center; overflow: hidden; }
 .ui-tab-place { position: relative; display: inline-flex; min-width: 0; flex: 0 1 auto; align-items: baseline; overflow: visible; }
 .ui-tab-place + .ui-tab-place { margin-left: var(--tab-place-gap); }
 .ui-tab-place + .ui-tab-place::before { position: absolute; top: var(--space-2xs); bottom: var(--space-2xs); left: calc(-1 * var(--tab-place-gap) / 2); width: var(--hairline); background: var(--tint); content: ""; }
 /* The place: the crumb's caps (HeaderCrumb), on the titles' baseline. */
-.ui-tab-place-label { flex: 0 1 auto; max-width: calc(9.375 * var(--u-space)); margin-right: calc(0.1875 * var(--u-space)); overflow: hidden; border: 0; background: none; padding: 0;
-  color: color-mix(in oklch, var(--foreground), transparent var(--tone-quiet)); font: var(--weight-strong) var(--text-label)/calc(1.25 * var(--u-space)) var(--font-label);
+.ui-tab-place-label { flex: 0 1 auto; max-width: var(--measure-xs); margin-right: var(--space-2xs); overflow: hidden; border: 0; background: none; padding: 0;
+  color: color-mix(in oklch, var(--foreground), transparent var(--tone-quiet)); font: var(--weight-strong) var(--text-label)/var(--leading-row) var(--font-label);
   letter-spacing: .07em; text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; cursor: pointer; }
 .ui-tab-place-label > span { overflow: hidden; text-overflow: ellipsis; }
 .ui-tab-place-label:hover, .ui-tab-place[data-current] .ui-tab-place-label { color: var(--foreground); }
@@ -30,7 +30,7 @@
 .ui-tab[data-lead]::before { content: none; }
 /* The pointer's wash is solid here, so an unlit tab's × can cover the title's end in it. */
 .ui-tab:hover { background: var(--accent); }
-.ui-tab-open { display: inline-flex; min-width: 0; height: 100%; flex: 1; align-items: center; gap: calc(0.4375 * var(--u-space)); border: 0; background: transparent; padding: 0 calc(0.3125 * var(--u-space));
+.ui-tab-open { display: inline-flex; min-width: 0; height: 100%; flex: 1; align-items: center; gap: var(--space-sm); border: 0; background: transparent; padding: 0 var(--space-xs);
   color: color-mix(in oklch, var(--foreground), transparent var(--tone-quiet)); font: inherit; font-weight: var(--weight-rest); }
 .ui-tab-open > svg, .ui-tab-open > .harness-mark, .ui-tab-open > .workspace-glyph { width: var(--icon-sm); height: var(--icon-sm); flex: none; }
 .ui-tab-title { display: inline-flex; min-width: 0; flex-direction: column; overflow: hidden; }
@@ -42,10 +42,10 @@
 .ui-tab-live { width: var(--space-sm); height: var(--space-sm); flex: none; border-radius: var(--radius-round); background: var(--live); }
 /* The × takes room only on the lit tab; on another it lays over the title's end with the pointer, so unlit tabs
    sit close within their place. */
-.ui-tab-close { display: inline-flex; width: calc(1.25 * var(--u-space)); height: calc(1.25 * var(--u-space)); flex: none; align-items: center; justify-content: center; margin-right: calc(0.15625 * var(--u-space));
+.ui-tab-close { display: inline-flex; width: var(--control-2xs); height: var(--control-2xs); flex: none; align-items: center; justify-content: center; margin-right: var(--space-2xs);
   border: 0; border-radius: var(--radius-inset); background: var(--background); color: var(--muted-foreground); }
 .ui-tab-close > svg { width: var(--icon-sm); height: var(--icon-sm); }
-.ui-tab:not([data-lit]) .ui-tab-close { position: absolute; right: calc(0.15625 * var(--u-space)); opacity: 0; box-shadow: calc(-1 * var(--space-md)) 0 var(--space-sm) var(--background); }
+.ui-tab:not([data-lit]) .ui-tab-close { position: absolute; right: var(--space-2xs); opacity: 0; box-shadow: calc(-1 * var(--space-md)) 0 var(--space-sm) var(--background); }
 .ui-tab:not([data-lit]):hover .ui-tab-close { background: var(--accent); box-shadow: calc(-1 * var(--space-md)) 0 var(--space-sm) var(--accent); opacity: 1; }
 .ui-tab[data-lit] .ui-tab-close { background: transparent; }
 .ui-tab-close:hover { color: var(--foreground); }
@@ -54,17 +54,17 @@
 .ui-tab[data-unsaved]:not(:hover) .ui-tab-close { background: transparent; box-shadow: none; }
 .ui-tab[data-unsaved]:not(:hover) .ui-tab-close > svg { display: none; }
 .ui-tab[data-unsaved]:not(:hover) .ui-tab-close::after { width: var(--space-md); height: var(--space-md); border-radius: var(--radius-round); background: currentColor; content: ""; }
-.ui-pane-tabs > .ui-pane-action { margin-left: calc(0.625 * var(--u-space)); }
+.ui-pane-tabs > .ui-pane-action { margin-left: var(--space-md); }
 
 /* A pane's controls after its title: small, quiet, the wash on the pointer. */
 .ui-pane-actions { display: inline-flex; flex: none; align-items: center; gap: var(--space-2xs); margin-left: var(--space-2xs); }
-.ui-pane-action { display: inline-grid; width: calc(1.5625 * var(--u-space)); height: calc(1.5625 * var(--u-space)); flex: none; place-items: center; border: 0; border-radius: var(--radius-control); background: transparent; color: var(--muted-foreground); }
+.ui-pane-action { display: inline-grid; width: var(--control-xs); height: var(--control-xs); flex: none; place-items: center; border: 0; border-radius: var(--radius-control); background: transparent; color: var(--muted-foreground); }
 .ui-pane-action:is(:hover, :focus-visible, [data-expanded]) { outline: none; background: var(--tint); color: var(--foreground); }
 .ui-pane-action > svg { width: var(--icon); height: var(--icon); }
 
 /* An edge: its hit target centred on the frame's gap, the gutter you drag. */
-.ui-pane-edge { position: absolute; z-index: 5; inset-block: 0; left: calc(-0.625 * var(--u-space)); width: calc(0.625 * var(--u-space)); cursor: col-resize; touch-action: none; }
-.ui-pane-edge[data-dock] { z-index: 40; left: calc(-0.9375 * var(--u-space)); width: calc(1.5 * var(--u-space)); }
+.ui-pane-edge { position: absolute; z-index: 5; inset-block: 0; left: calc(-1 * var(--space-md)); width: var(--space-md); cursor: col-resize; touch-action: none; }
+.ui-pane-edge[data-dock] { z-index: 40; left: calc(-1 * var(--space-xl)); width: var(--control-xs); }
 .ui-pane-edge:focus-visible { outline: none; }
 .ui-pane-edge[data-dock]:focus-visible::after { position: absolute; inset-block: var(--space-xl); left: 50%; width: var(--stroke-thin, 2px); border-radius: var(--radius-round); background: var(--tint); content: ""; translate: -50% 0; }
 
@@ -86,7 +86,7 @@
 
 /* A tool's header: the name strong, the place muted; then its modes; its controls at the right. When the app
    measures it short, the modes drop their words, then the name goes. */
-.ui-tool-head { display: flex; height: var(--header-height); flex: none; align-items: center; gap: var(--space-md); overflow: hidden; padding: var(--space-md) calc(.875 * var(--u-space)); font-size: var(--text-row); line-height: var(--leading-row); }
+.ui-tool-head { display: flex; height: var(--header-height); flex: none; align-items: center; gap: var(--space-md); overflow: hidden; padding: var(--space-md) var(--space-lg); font-size: var(--text-row); line-height: var(--leading-row); }
 .ui-tool-head > strong { flex: none; overflow: hidden; font-weight: var(--weight-strong); text-overflow: ellipsis; white-space: nowrap; }
 .ui-tool-place { min-width: 0; flex: 0 1 auto; overflow: hidden; color: var(--muted-foreground); text-overflow: ellipsis; white-space: nowrap; }
 .ui-tool-head > .ui-seg { flex: none; }
@@ -118,24 +118,24 @@
   padding: var(--space-xs) var(--space-md); color: var(--muted-foreground); font-size: var(--text-caption); }
 
 /* A tool's strips and its tree: the file tree, its filter and actions, a folded tree's rail. */
-.ui-tool-bar { display: flex; min-height: calc(2.1875 * var(--u-space)); flex: none; align-items: center; gap: calc(.1875 * var(--u-space)); overflow: hidden; padding: var(--space-xs) var(--space-sm); border-bottom: var(--hairline) solid var(--border); }
+.ui-tool-bar { display: flex; min-height: var(--control); flex: none; align-items: center; gap: var(--space-2xs); overflow: hidden; padding: var(--space-xs) var(--space-sm); border-bottom: var(--hairline) solid var(--border); }
 .ui-tool-bar[data-edge="top"] { border-top: var(--hairline) solid var(--border); border-bottom: 0; }
 .ui-tool-bar[data-vertical] { min-height: 0; flex-direction: column; padding: var(--space-xs) var(--space-2xs); border: 0; border-right: var(--hairline) solid var(--border); }
-.ui-tool-button { display: inline-grid; width: calc(1.75 * var(--u-space)); height: calc(1.75 * var(--u-space)); flex: none; place-items: center; border: 0; border-radius: var(--radius-control); background: transparent; color: var(--muted-foreground); }
+.ui-tool-button { display: inline-grid; width: var(--control-sm); height: var(--control-sm); flex: none; place-items: center; border: 0; border-radius: var(--radius-control); background: transparent; color: var(--muted-foreground); }
 .ui-tool-button:is(:hover, :focus-visible, [aria-pressed="true"], [data-expanded]) { outline: none; background: var(--tint); color: var(--foreground); }
 .ui-tool-button:disabled { cursor: not-allowed; opacity: var(--opacity-disabled); }
 .ui-tool-button > svg { width: var(--icon-sm); height: var(--icon-sm); }
 .ui-tool-filter { position: relative; display: flex; min-width: 0; flex: 1; align-items: center; }
 .ui-tool-filter > svg { position: absolute; left: var(--space-md); width: var(--icon-sm); height: var(--icon-sm); color: var(--muted-foreground); pointer-events: none; }
-.ui-tool-filter > input { width: 100%; height: calc(1.75 * var(--u-space)); min-width: 0; border: var(--hairline) solid transparent; border-radius: var(--radius-control); outline: 0; background: var(--tint); padding: calc(.1875 * var(--u-space)) var(--space-md) calc(.1875 * var(--u-space)) calc(1.6875 * var(--u-space)); color: var(--foreground); font-size: var(--text-caption); }
+.ui-tool-filter > input { width: 100%; height: var(--control-sm); min-width: 0; border: var(--hairline) solid transparent; border-radius: var(--radius-control); outline: 0; background: var(--tint); padding: var(--space-2xs) var(--space-md) var(--space-2xs) calc(var(--icon-sm) + var(--space-lg)); color: var(--foreground); font-size: var(--text-caption); }
 .ui-tool-filter > input:focus { border-color: var(--ring); }
 .ui-tool-filter > input::placeholder { color: var(--muted-foreground); }
 .ui-tool-notice { display: flex; flex: none; flex-wrap: wrap; align-items: center; gap: var(--space-xs); padding: var(--space-sm) var(--space-md); color: var(--muted-foreground); font-size: var(--text-caption); }
 .ui-tool-notice[data-tone="warn"] { border-bottom: var(--hairline) solid var(--border); color: var(--warn); }
 .ui-tool-notice > button { border: 0; background: transparent; padding: 0; color: var(--foreground); font: inherit; text-decoration: underline; }
 .ui-tool-notice > button:disabled { cursor: wait; opacity: var(--opacity-disabled); }
-.ui-tree { min-height: calc(2.5 * var(--u-space)); flex: 1; overflow: auto; overscroll-behavior: contain; padding: var(--space-sm) calc(.1875 * var(--u-space)); }
-.ui-tree-row { display: flex; width: 100%; min-height: calc(1.75 * var(--u-space)); align-items: center; gap: var(--space-sm); border: 0; border-radius: var(--radius-control); background: transparent; padding: var(--space-xs) var(--space-md) var(--space-xs) calc((.3125 + var(--depth) * .875) * var(--u-space)); color: var(--muted-foreground); font-size: var(--text-row); text-align: left; }
+.ui-tree { min-height: var(--control-lg); flex: 1; overflow: auto; overscroll-behavior: contain; padding: var(--space-sm) var(--space-2xs); }
+.ui-tree-row { display: flex; width: 100%; min-height: var(--control-sm); align-items: center; gap: var(--space-sm); border: 0; border-radius: var(--radius-control); background: transparent; padding: var(--space-xs) var(--space-md) var(--space-xs) calc((.3125 + var(--depth) * .875) * var(--u-space)); color: var(--muted-foreground); font-size: var(--text-row); text-align: left; }
 .ui-tree-row:is(:hover, [data-selected]) { background: var(--tint); color: var(--foreground); }
 .ui-tree-row:focus { outline: 0; }
 .ui-tree-row:focus-visible { outline: var(--hairline) solid var(--ring); outline-offset: calc(-1 * var(--hairline)); }
@@ -144,7 +144,7 @@
 .ui-tree-row[data-open-file="focused"] { font-weight: var(--weight-current); }
 .ui-tree-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ui-tree-name + svg { width: var(--icon-xs); height: var(--icon-xs); margin-left: auto; color: var(--muted-foreground); }
-.ui-tree-row > .ui-tree-chevron { width: var(--icon-sm); height: var(--icon-sm); flex: none; margin-right: calc(-.3125 * var(--u-space)); transition: transform 120ms ease; }
+.ui-tree-row > .ui-tree-chevron { width: var(--icon-sm); height: var(--icon-sm); flex: none; margin-right: calc(-1 * var(--space-xs)); transition: transform 120ms ease; }
 .ui-tree-chevron[data-open] { transform: rotate(90deg); }
 .ui-tool-bar[data-vertical] > [role="toolbar"] { display: flex; flex-direction: column; align-items: center; gap: var(--space-2xs); margin-top: auto; }
 .ui-tool-bar > small { min-width: 0; flex: 1; overflow: hidden; padding-inline: var(--space-xs); color: var(--muted-foreground); font: var(--text-caption) var(--font-data); text-overflow: ellipsis; white-space: nowrap; }
@@ -156,18 +156,18 @@
 
 /* Phone tool controls retain the reference's finger targets and strip spacing. */
 @media (--conduit-phone-layout) {
-  .ui-tool-head { min-height: calc(2.75 * var(--u-space)); padding: var(--space-xs) var(--space-md) var(--space-xs) calc(.875 * var(--u-space)); justify-content: space-between; border-bottom: var(--hairline) solid var(--border); }
-  .ui-tool-head > strong { font-size: calc(.875 * var(--u-space)); }
+  .ui-tool-head { min-height: var(--control-lg); padding: var(--space-xs) var(--space-md) var(--space-xs) var(--space-lg); justify-content: space-between; border-bottom: var(--hairline) solid var(--border); }
+  .ui-tool-head > strong { font-size: var(--text-row); }
   .ui-tool-head > .ui-seg { margin-bottom: var(--space-xs); }
-  .ui-tool-views > [role="toolbar"] { gap: 0; padding: calc(.1875 * var(--u-space)) var(--space-sm); }
+  .ui-tool-views > [role="toolbar"] { gap: 0; padding: var(--space-2xs) var(--space-sm); }
   .ui-tool-view { min-width: var(--space-4xl); min-height: var(--space-4xl); padding-inline: var(--space-md); font-size: var(--text-caption); }
   .ui-tool-view > svg { width: var(--icon); height: var(--icon); }
-  .ui-tool-bar { min-height: calc(2.625 * var(--u-space)); gap: var(--space-xs); padding: calc(.3125 * var(--u-space)) calc(.4375 * var(--u-space)); }
+  .ui-tool-bar { min-height: var(--control-lg); gap: var(--space-xs); padding: var(--space-xs) var(--space-sm); }
   .ui-tool-button { width: var(--space-4xl); height: var(--space-4xl); }
-  .ui-tool-button > svg, .ui-tool-filter > svg { width: calc(.9375 * var(--u-space)); height: calc(.9375 * var(--u-space)); }
-  .ui-tool-filter > svg { left: calc(.625 * var(--u-space)); }
-  .ui-tool-filter > input { height: var(--space-4xl); padding-left: calc(1.875 * var(--u-space)); font-size: calc(.8125 * var(--u-space)); }
+  .ui-tool-button > svg, .ui-tool-filter > svg { width: var(--icon-sm); height: var(--icon-sm); }
+  .ui-tool-filter > svg { left: var(--space-md); }
+  .ui-tool-filter > input { height: var(--space-4xl); padding-left: var(--space-4xl); font-size: var(--text-row); }
   .ui-tool-bar[data-vertical] { gap: var(--space-xs); padding-block: var(--space-sm); }
-  .ui-tree-row { min-height: var(--control); gap: calc(.4375 * var(--u-space)); font-size: calc(.8125 * var(--u-space)); }
-  .ui-tree-row > svg, .ui-tree-row > img, .ui-tree-row > .ui-tree-chevron { width: calc(.9375 * var(--u-space)); height: calc(.9375 * var(--u-space)); }
+  .ui-tree-row { min-height: var(--control); gap: var(--space-sm); font-size: var(--text-row); }
+  .ui-tree-row > svg, .ui-tree-row > img, .ui-tree-row > .ui-tree-chevron { width: var(--icon-sm); height: var(--icon-sm); }
 }
