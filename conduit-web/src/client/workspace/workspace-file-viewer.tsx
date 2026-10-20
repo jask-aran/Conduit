@@ -121,7 +121,7 @@ export default function FileViewer(props: {
     // The name needs room for at least the file's own name, measured from its text.
     const name = header.querySelector<HTMLElement>(".ui-file-name > span");
     // Headed by tabs, every tab is the name: the actions fold before a tab does.
-    const tabs = header.querySelector<HTMLElement>(".ui-tabs[data-need]");
+    const tabs = header.querySelector<HTMLElement>(".ui-pane-tabs[data-need]");
     const nameFits = () => {
       if (!name && tabs) return tabs.clientWidth + 1 >= Number(tabs.dataset.need);
       const text = name?.firstChild;

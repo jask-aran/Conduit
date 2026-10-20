@@ -3913,6 +3913,7 @@ function App() {
       const tabGap = parseFloat(style.getPropertyValue("--tab-gap")) || 0;
       const placeGap = parseFloat(style.getPropertyValue("--tab-place-gap")) || 0;
       const moreWidth = parseFloat(style.getPropertyValue("--tab-more")) || 0;
+      const labelGap = parseFloat(style.getPropertyValue("--tab-label-gap")) || 0;
       for (const element of [...groupElements, ...tabElements]) element.style.display = "";
       for (const element of tabElements) element.removeAttribute("data-lead");
       const runs = groups();
@@ -3934,7 +3935,7 @@ function App() {
       if (all <= room) return setFolded([]);
       // Each tab with the gap and middot before it; each place with its label and the rule before it.
       const width = new Map(tabElements.map((element) => [element.dataset.tab!, natural(element) + tabGap]));
-      const labels = groupElements.map((element, index) => (element.querySelector<HTMLElement>(".ui-tab-place-label")?.getBoundingClientRect().width ?? 0) + tabGap + (index ? placeGap : 0));
+      const labels = groupElements.map((element, index) => (element.querySelector<HTMLElement>(".ui-tab-place-label")?.getBoundingClientRect().width ?? 0) + labelGap + (index ? placeGap : 0));
       // The lit tab and any other showing (a viewer's other side) never fold.
       const lit = options.lit();
       const reserved = (options.keys() ?? []).filter((key) => key === lit || options.shown?.(key));
