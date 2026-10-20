@@ -82,6 +82,10 @@ export function OverlayRail(props: JSX.HTMLAttributes<HTMLElement> & { title: st
     <Show when={local.foot}><div class="ui-overlay-rail-foot">{local.foot}</div></Show></nav>;
 }
 
+/** A rail's foot: facts about this build (About), each a muted label and its value on one line, the value truncating with its whole in the title. */
+export const OverlayFacts = (props: { title: string; children: JSX.Element }) => <section class="ui-overlay-facts" aria-label={props.title}><h3 class="ui-title">{props.title}</h3><dl>{props.children}</dl></section>;
+export const OverlayFact = (props: { label: string; value: string; title?: string }) => <div title={props.title ?? props.value}><dt>{props.label}</dt><dd>{props.value}</dd></div>;
+
 /** The page beside a rail: its title, its save status (Saving, Saved, Not saved: settings save as they change), close, and SettingGroups.
  *  busy: a spinner before the status (Saving); failed: the status in the destructive colour, why in its title, and Retry when onRetry. */
 export function OverlayPage(props: { title: string; status?: string; busy?: boolean; failed?: boolean; why?: string; onRetry?: () => void; onBack?: () => void; onClose?: () => void; children: JSX.Element }) {

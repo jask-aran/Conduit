@@ -39,7 +39,7 @@
 .ui-composer-field > .ui-completion { padding: var(--cmp-field-pad); }
 .ui-pill-field:has(> .ui-completion) { position: relative; }
 .ui-pill-field > .ui-completion { padding: calc((var(--pill-size) - var(--space-2xs) - 1.4em) / 2) var(--pill-field-pad); }
-.ui-toolbar { position: relative; z-index: 2; display: flex; min-height: var(--cmp-bar-min); align-items: center; justify-content: space-between; gap: var(--cmp-bar-gap); padding: var(--cmp-bar-pad); }
+.ui-toolbar { position: relative; z-index: 2; display: flex; font-size: var(--text-row); min-height: var(--cmp-bar-min); align-items: center; justify-content: space-between; gap: var(--cmp-bar-gap); padding: var(--cmp-bar-pad); }
 .ui-toolbar-start, .ui-toolbar-end { display: flex; min-width: 0; align-items: center; gap: var(--cmp-slot-gap); }
 .ui-toolbar-start { flex: 0 1 auto; }
 .ui-toolbar-start > *, .ui-toolbar-end > * { flex-shrink: 0; }

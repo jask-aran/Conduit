@@ -1098,7 +1098,7 @@ export function Settings(props: {
     label="Settings"
     placement="center"
     layout="rail"
-    style={narrow() ? undefined : { "--overlay-width": "calc(70.3125 * var(--u-space))", "--overlay-height": "calc(43.75 * var(--u-space))" }}
+    style={narrow() ? undefined : { "--overlay-width": "calc(70.3125 * var(--u-space))", "--overlay-height": "calc(64 * var(--u-space))" }}
     onEscapeKeyDown={dismissEscape}
     onCloseAutoFocus={(event) => { event.preventDefault(); if (returnFocus?.isConnected) returnFocus.focus(); returnFocus = null; }}
   >

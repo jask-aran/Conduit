@@ -1,5 +1,5 @@
-import { createSignal, For, lazy, onCleanup, onMount, Show } from "solid-js";
-import { ExternalLinkIcon, PlusIcon, QrCodeIcon, RefreshCwIcon } from "lucide-solid";
+import { createSignal, For, onCleanup, onMount, Show } from "solid-js";
+import { ExternalLinkIcon, QrCodeIcon, RefreshCwIcon } from "lucide-solid";
 import { Menu, MenuContent, MenuSection, MenuRow, MenuRadioGroup, MenuRadioItem, MenuSub, MenuSubContent, MenuSubTrigger } from "@/components/menus";
 import { Rule, MenuNote } from "@/components/ui/popover";
 import { Spinner } from "@/components/ui/controls";
@@ -8,7 +8,6 @@ import { isMobileLayout } from "./mobile-layout";
 import { buildHttpUrl } from "../api/transport";
 import { proveServer } from "../platform/server-proof";
 import { latestRelease, type PublishedRelease } from "../platform/github-release";
-const PairDialog = lazy(() => import("./pair-dialog").then((module) => ({ default: module.PairDialog })));
 
 /** Not an address: the row that hands the choice back to the client. */
 const AUTOMATIC = "automatic";
@@ -67,7 +66,6 @@ export function ServerSwitcher(props: {
   const [probing, setProbing] = createSignal(false);
   const [checking, setChecking] = createSignal("");
   const [routeError, setRouteError] = createSignal("");
-  const [pairing, setPairing] = createSignal(false);
   let timer: ReturnType<typeof setInterval> | undefined;
 
   // Every address of every server, not just the one each is filed under: the
@@ -237,8 +235,7 @@ export function ServerSwitcher(props: {
           <Show when={routeError()}><MenuNote error>{routeError()}</MenuNote></Show>
         </MenuSection><Rule />
       </Show>
-      <MenuRow icon={<QrCodeIcon />} onSelect={() => setTimeout(() => setPairing(true), 0)}>Pair a device</MenuRow>
-      <MenuRow icon={<PlusIcon />} onSelect={props.onAddServer}>Add server</MenuRow><Rule />
+      <MenuRow icon={<QrCodeIcon />} onSelect={() => setTimeout(() => props.onAddServer(), 0)}>Connect a device or server</MenuRow><Rule />
       <MenuRow onSelect={props.onOpenSettings}>Manage settings</MenuRow>
       <MenuRow disabled={props.pwaUpdating} onSelect={props.onUpdatePwa} icon={<Show when={props.pwaUpdating} fallback={<RefreshCwIcon />}><Spinner /></Show>}>
         {props.pwaUpdating ? "Checking for updates…" : "Check for updates"}
@@ -250,5 +247,5 @@ export function ServerSwitcher(props: {
       <MenuRow onSelect={props.onLogout}>{servers().length > 1 ? `Sign out of ${serverName()}` : "Sign out"}</MenuRow>
     </MenuContent>
   </Menu>
-  <Show when={pairing()}><PairDialog open={pairing()} onOpenChange={setPairing} /></Show></>;
+  </>;
 }

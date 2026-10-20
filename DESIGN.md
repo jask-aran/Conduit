@@ -88,7 +88,7 @@ Internal confirmations and prompts use `createDecisionScope` from `components/de
 | Building | Use |
 | --- | --- |
 | a palette, search or anything that filters | `OverlayDialog` with `OverlayBar`, `OverlayList`, `OverlayHints` (`placement="center"` for one that does not filter) |
-| a confirm, a one-field prompt, a small piece of content | `Dialog` from `components/dialog.tsx` (`alert` for a destructive choice, `size="wide"` or `"large"` for content, `close`, `actions`); `CardForm`, `CardBody` and `CardActions` for its form |
+| a confirm, a one-field prompt, a small piece of content | `Dialog` from `components/dialog.tsx` (`alert` for a destructive choice, `size="wide"` or `"large"` for content, `size="split"` with `CardColumns`/`CardColumn` for two flows side by side, each one QR wide (Connect), `close`, `actions`); `CardForm`, `CardBody` and `CardActions` for its form |
 | a migrated menu or context menu | `components/menus.tsx` supplies Kobalte behavior around v2 `Menu` and `MenuAction`; older subsystems still use `primitives.tsx` |
 | a pick list anchored to a control | `Popover`/`PopoverContent` in `components/menus.tsx` holding `SearchList` |
 | a card that floats without covering the page | `frost-card` alone |
