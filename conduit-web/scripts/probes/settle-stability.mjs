@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 /**
- * Does a turn hold still as it settles? (docs/plans/transcript-projection-plan.md,
- * Regression coverage.) Each scenario starts a fresh chat on the Test profile --
+ * Does a turn hold still as it settles? Each scenario starts a fresh chat on the Test profile --
  * deterministic, no model call -- streams a turn, tags the answer and its trace
  * while they are live, and asserts once everything has settled that:
  *

@@ -54,9 +54,6 @@ New UI is built from components v2 (`components/ui`) and its tokens alone, so a 
 
 ## Migration
 
-The [subsystem migration tracker](docs/design/v2-migration.md) records scope,
-ownership, completion criteria, evidence and remaining work across the live app.
-
 What each v2 family replaces and where it stands. Update a row in the commit that moves it; remove it once the old code is gone. Until a family is in the app, the old piece in the "Replaces" column is what app code uses.
 
 | v2 family (gallery) | Replaces | In the app |
