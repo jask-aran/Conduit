@@ -6,10 +6,17 @@ import { type Density, type Motion, motionOf, moveCursor } from "./shared";
 
 /** under: a phone's submenu is open as a panel over it, so it dims and takes no taps. */
 /** wide: a readout rather than a list, at a measure of its own (the context breakdown). */
-/** fit: never taller than the room its host gives it (--menu-room); a longer menu scrolls inside. */
-export function Menu(props: JSX.HTMLAttributes<HTMLDivElement> & { density?: Density; motion?: Motion; under?: boolean; wide?: boolean; fit?: boolean }) {
-  const [, rest] = splitProps(props, ["class", "density", "motion", "under", "wide", "fit", "children"]);
-  return <div role="menu" class={cn("ui-frost ui-menu", props.class)} onPointerOver={moveCursor} {...rest} data-wide={props.wide ? "" : undefined} data-fit={props.fit ? "" : undefined} data-density={props.density} data-surface="frost" data-lift="raised" data-under={props.under ? "" : undefined} {...motionOf(props.motion)}>{props.children}</div>;
+/** A measure (Foundations · Space): a popover's width or height cap. */
+export type Measure = "xs" | "sm" | "md" | "lg" | "xl" | "2xl";
+/**
+ * A popover is as wide as its rows and as tall as they are, inside two caps -- a phone's narrower and shorter by
+ * default (--menu-width-cap, --menu-height-cap) -- and the room its host leaves it (--menu-room: the adapter gives
+ * it Kobalte's, inside the safe area); past that it scrolls. width, height: this popover's own caps, in a measure.
+ */
+export function Menu(props: JSX.HTMLAttributes<HTMLDivElement> & { density?: Density; motion?: Motion; under?: boolean; wide?: boolean; width?: Measure; height?: Measure }) {
+  const [, rest] = splitProps(props, ["class", "density", "motion", "under", "wide", "width", "height", "children", "style"]);
+  const caps = () => ({ ...(props.width ? { "--menu-width": `var(--measure-${props.width})` } : {}), ...(props.height ? { "--menu-height": `var(--measure-${props.height})` } : {}), ...(typeof props.style === "object" ? props.style : {}) });
+  return <div role="menu" class={cn("ui-frost ui-menu", props.class)} onPointerOver={moveCursor} {...rest} style={caps()} data-wide={props.wide ? "" : undefined} data-density={props.density} data-surface="frost" data-lift="raised" data-under={props.under ? "" : undefined} {...motionOf(props.motion)}>{props.children}</div>;
 }
 
 /** A menu's section: a list of items (the default) or a slider, with an optional title and a note beside it.
@@ -87,5 +94,5 @@ export const MenuParent = (props: JSX.HTMLAttributes<HTMLDivElement> & { under: 
   const [local, rest] = splitProps(props, ["under"]);
   return <div {...rest} class="ui-menu-parent" data-under={local.under ? "" : undefined} />;
 };
-export const MenuPanel = (props: JSX.HTMLAttributes<HTMLDivElement>) => <Menu {...props} class="ui-menu-panel" />;
+export const MenuPanel = (props: JSX.HTMLAttributes<HTMLDivElement> & { width?: Measure; height?: Measure }) => <Menu {...props} class="ui-menu-panel" />;
 export const MenuNote = (props: { children: JSX.Element; error?: boolean }) => <p class="ui-menu-note" role={props.error ? "alert" : undefined} data-error={props.error ? "" : undefined}>{props.children}</p>;
