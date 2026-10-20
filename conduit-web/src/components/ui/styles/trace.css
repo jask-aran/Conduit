@@ -20,7 +20,8 @@
 .ui-step-item { gap: 0; }
 .ui-step { display: flex; width: calc(100% + var(--space-sm)); min-width: 0; min-height: var(--control-xs); align-items: center; gap: var(--row-gap); margin-left: calc(-1 * var(--space-sm)); border: 0; border-radius: var(--radius-control); background: transparent; padding: 0 var(--space-sm); color: inherit; font: inherit; text-align: left; }
 button.ui-step { cursor: pointer; }
-button.ui-step:is(:hover, :focus-visible) { background: var(--tint); }
+button.ui-step:is(:focus-visible) { background: var(--tint); }
+@media (hover: hover) { button.ui-step:is(:hover, :focus-visible) { background: var(--tint); } }
 /* A step arriving in an open trail rises a little; its height arrives at once, so nothing above moves. */
 .ui-trace-fold[data-entering] { animation: ui-fade-in var(--duration-gentle) var(--ease-arrive) var(--entered, 0s) backwards; }
 .ui-step-item[data-entering] { --rise: var(--space-xs); animation: ui-rise var(--duration-gentle) var(--ease-arrive) backwards; }
@@ -37,7 +38,8 @@ button.ui-step:is(:hover, :focus-visible) { background: var(--tint); }
 .ui-step-item[data-state="failed"] > .ui-step .ui-step-icon { color: var(--destructive); }
 /* The chevron is there when it is wanted: on the cursor, or open. */
 .ui-step > .ui-disclosure-chevron { margin-left: 0; opacity: 0; }
-.ui-step:is(:hover, :focus-visible, [aria-expanded="true"]) > .ui-disclosure-chevron { opacity: 1; }
+.ui-step:is(:focus-visible, [aria-expanded="true"]) > .ui-disclosure-chevron { opacity: 1; }
+@media (hover: hover) { .ui-step:is(:hover, :focus-visible, [aria-expanded="true"]) > .ui-disclosure-chevron { opacity: 1; } }
 .ui-step-body { padding-left: calc(var(--icon-sm) + var(--row-gap)); }
 .ui-step-item[data-open="true"] > .ui-step-body { padding-block: var(--space-2xs) var(--space-sm); }
 .ui-step-output { max-height: var(--measure-md); margin: 0; overflow: auto; border: var(--hairline) solid var(--tint); border-radius: var(--radius-control); padding: var(--space-sm) var(--space-lg); white-space: pre-wrap; font: var(--text-caption)/var(--leading-code) var(--font-code); }

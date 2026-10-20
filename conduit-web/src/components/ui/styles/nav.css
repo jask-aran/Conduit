@@ -8,7 +8,6 @@
   /* The pane open and folded to its rail, and the top line every pane header centres on. */
   --nav-width: calc(18.125 * var(--u-space)); --nav-rail-width: calc(3.25 * var(--u-space));
   --nav-line: var(--control); --nav-brand: calc(2.625 * var(--u-space)); --nav-wordmark: calc(1.171875 * var(--u-type));
-  --duration-fold: 240ms;
 }
 
 /* The pane. Its width moves with the panel's motion (--panel-motion-*); data-instant skips it. */
@@ -52,43 +51,51 @@
 .ui-nav-toggle { display: grid; width: var(--control-xs); height: var(--control-xs); flex: none; margin-right: calc((var(--icon) - var(--control-xs)) / 2); place-items: center; border: 0; border-radius: var(--radius-inset); background: transparent; color: var(--muted-foreground); cursor: pointer; }
 .ui-nav-toggle svg { width: var(--icon); height: var(--icon); transition: rotate var(--duration-quick) var(--ease-change); }
 .ui-nav-toggle[aria-expanded="true"] svg { rotate: 90deg; }
-.ui-nav-toggle:hover { color: var(--sidebar-accent-foreground); }
+@media (hover: hover) { .ui-nav-toggle:hover { color: var(--sidebar-accent-foreground); } }
 
 /* The cursor: the wash and white. Held: the window is away and the cursor waits where it was. */
-.ui-nav-row:is(:hover, :focus-visible, :active, [data-focus-shown], [data-held], [data-held-within], [data-selected]),
-.ui-rail-button:is(:hover, :focus-visible, :active, [data-held]) { background: var(--sidebar-accent); color: var(--sidebar-accent-foreground); }
+/* A row whose menu is open (Kobalte's data-expanded on its trigger) keeps the wash until the menu closes: on a phone,
+   where nothing hovers, that is the only mark of what a long press opened. */
+.ui-nav-row:is(:focus-visible, :active, [data-focus-shown], [data-held], [data-held-within], [data-selected], [data-expanded]), .ui-rail-button:is(:focus-visible, :active, [data-held]) { background: var(--sidebar-accent); color: var(--sidebar-accent-foreground); }
+@media (hover: hover) { .ui-nav-row:is(:hover, :focus-visible, :active, [data-focus-shown], [data-held], [data-held-within], [data-selected]), .ui-rail-button:is(:hover, :focus-visible, :active, [data-held]) { background: var(--sidebar-accent); color: var(--sidebar-accent-foreground); } }
 .ui-nav-row:is([aria-current="page"], [data-within]), .ui-rail-button[aria-current="page"] { color: var(--sidebar-accent-foreground); font-weight: var(--weight-current); }
 .ui-nav-row[data-open] { color: var(--sidebar-accent-foreground); }
-.ui-nav-row:is(:hover, :focus-visible, :active, [data-focus-shown], [data-held], [data-held-within], [aria-current="page"], [data-within]) .ui-nav-icon { color: var(--sidebar-accent-foreground); }
+.ui-nav-row:is(:focus-visible, :active, [data-focus-shown], [data-held], [data-held-within], [aria-current="page"], [data-within]) .ui-nav-icon { color: var(--sidebar-accent-foreground); }
+@media (hover: hover) { .ui-nav-row:is(:hover, :focus-visible, :active, [data-focus-shown], [data-held], [data-held-within], [aria-current="page"], [data-within]) .ui-nav-icon { color: var(--sidebar-accent-foreground); } }
 :is(.ui-nav-row:is([aria-current="page"], [data-within]), .ui-rail-button[aria-current="page"]) svg.lucide { stroke-width: 3; }
 /* While the keyboard moves the cursor, a row under a still pointer rests until the pointer moves: only the cursor
    is washed. An override, not pointer-events: Chromium keeps :hover on an element that stops taking the pointer. */
-.ui-nav-pane[data-keyboard-cursor] :is(.ui-nav-row, .ui-rail-button):hover:not(:focus-visible, [data-focus-shown], [data-selected], [data-held], [data-held-within]) { background: transparent; }
-.ui-nav-pane[data-keyboard-cursor] .ui-nav-row:hover:not(:focus-visible, [data-focus-shown], [data-held-within], [aria-current="page"], [data-within], [data-open]) { color: color-mix(in oklch, var(--foreground), transparent var(--tone-rest)); }
-.ui-nav-pane[data-keyboard-cursor] .ui-nav-row:hover:not(:focus-visible, [data-focus-shown], [data-held-within], [aria-current="page"], [data-within]) .ui-nav-icon { color: var(--muted-foreground); }
+@media (hover: hover) { .ui-nav-pane[data-keyboard-cursor] :is(.ui-nav-row, .ui-rail-button):hover:not(:focus-visible, [data-focus-shown], [data-selected], [data-held], [data-held-within]) { background: transparent; } }
+@media (hover: hover) { .ui-nav-pane[data-keyboard-cursor] .ui-nav-row:hover:not(:focus-visible, [data-focus-shown], [data-held-within], [aria-current="page"], [data-within], [data-open]) { color: color-mix(in oklch, var(--foreground), transparent var(--tone-rest)); } }
+@media (hover: hover) { .ui-nav-pane[data-keyboard-cursor] .ui-nav-row:hover:not(:focus-visible, [data-focus-shown], [data-held-within], [aria-current="page"], [data-within]) .ui-nav-icon { color: var(--muted-foreground); } }
 
-.ui-nav-pane[data-keyboard-cursor] .ui-seg button:hover:not(:focus-visible, [data-held], [aria-checked="true"]) { background: transparent; color: var(--muted-foreground); }
+@media (hover: hover) { .ui-nav-pane[data-keyboard-cursor] .ui-seg button:hover:not(:focus-visible, [data-held], [aria-checked="true"]) { background: transparent; color: var(--muted-foreground); } }
 
 /* A harness's mark rests greyed with its row and shows its own colours on the cursor or the current row (ThreadHarnessMark lively). */
 .ui-nav-icon:has(> .harness-mark) { width: var(--icon-sm); }
 .ui-nav-row > .ui-nav-icon > .harness-mark { width: var(--icon-sm); height: calc(0.75 * var(--icon-sm)); opacity: var(--opacity-rest); transition: opacity var(--duration-quick) var(--ease-change); }
-.ui-nav-row:is(:hover, :focus-visible, [aria-current="page"]) > .ui-nav-icon > .harness-mark { opacity: 1; }
+.ui-nav-row:is(:focus-visible, [aria-current="page"]) > .ui-nav-icon > .harness-mark { opacity: 1; }
+@media (hover: hover) { .ui-nav-row:is(:hover, :focus-visible, [aria-current="page"]) > .ui-nav-icon > .harness-mark { opacity: 1; } }
 :is(.ui-nav-icon, .ui-rail-button) > .harness-mark-tinted { background-color: var(--sidebar-foreground); }
 .ui-nav-icon > .thread-harness-mark { width: var(--icon); height: var(--icon); }
 .thread-harness-mark[data-lively] { position: relative; transition: color var(--duration-quick) var(--ease-change), opacity var(--duration-quick) var(--ease-change); }
 .thread-harness-mark[data-lively] .harness-mark { transition: background-color var(--duration-quick) var(--ease-change), opacity var(--duration-quick) var(--ease-change); }
 .thread-harness-mark .harness-mark-artwork { position: absolute; inset: 0; opacity: 0; }
-.ui-nav-row:is(:hover, :focus-visible, [aria-current="page"], [data-held], [data-held-within]) .thread-harness-mark[data-lively] { color: var(--foreground); opacity: 1; }
-.ui-nav-row:is(:hover, :focus-visible, [aria-current="page"]) .thread-harness-mark[data-lively] .harness-mark-tinted { background-color: var(--harness-brand, currentColor); }
-.ui-nav-row:is(:hover, :focus-visible, [aria-current="page"]) .thread-harness-mark[data-artwork] .harness-mark-tinted { opacity: 0; }
-.ui-nav-row:is(:hover, :focus-visible, [aria-current="page"]) .thread-harness-mark[data-artwork] .harness-mark-artwork { opacity: 1; }
-.ui-nav-pane[data-keyboard-cursor] .ui-nav-row:hover:not(:focus-visible, [aria-current="page"]) .thread-harness-mark[data-lively] { color: var(--muted-foreground); opacity: var(--opacity-rest); }
-.ui-nav-pane[data-keyboard-cursor] .ui-nav-row:hover:not(:focus-visible, [aria-current="page"]) .thread-harness-mark[data-lively] .harness-mark-tinted { background-color: currentColor; opacity: 1; }
-.ui-nav-pane[data-keyboard-cursor] .ui-nav-row:hover:not(:focus-visible, [aria-current="page"]) .thread-harness-mark[data-artwork] .harness-mark-artwork { opacity: 0; }
+.ui-nav-row:is(:focus-visible, [aria-current="page"], [data-held], [data-held-within]) .thread-harness-mark[data-lively] { color: var(--foreground); opacity: 1; }
+@media (hover: hover) { .ui-nav-row:is(:hover, :focus-visible, [aria-current="page"], [data-held], [data-held-within]) .thread-harness-mark[data-lively] { color: var(--foreground); opacity: 1; } }
+.ui-nav-row:is(:focus-visible, [aria-current="page"]) .thread-harness-mark[data-lively] .harness-mark-tinted { background-color: var(--harness-brand, currentColor); }
+@media (hover: hover) { .ui-nav-row:is(:hover, :focus-visible, [aria-current="page"]) .thread-harness-mark[data-lively] .harness-mark-tinted { background-color: var(--harness-brand, currentColor); } }
+.ui-nav-row:is(:focus-visible, [aria-current="page"]) .thread-harness-mark[data-artwork] .harness-mark-tinted { opacity: 0; }
+@media (hover: hover) { .ui-nav-row:is(:hover, :focus-visible, [aria-current="page"]) .thread-harness-mark[data-artwork] .harness-mark-tinted { opacity: 0; } }
+.ui-nav-row:is(:focus-visible, [aria-current="page"]) .thread-harness-mark[data-artwork] .harness-mark-artwork { opacity: 1; }
+@media (hover: hover) { .ui-nav-row:is(:hover, :focus-visible, [aria-current="page"]) .thread-harness-mark[data-artwork] .harness-mark-artwork { opacity: 1; } }
+@media (hover: hover) { .ui-nav-pane[data-keyboard-cursor] .ui-nav-row:hover:not(:focus-visible, [aria-current="page"]) .thread-harness-mark[data-lively] { color: var(--muted-foreground); opacity: var(--opacity-rest); } }
+@media (hover: hover) { .ui-nav-pane[data-keyboard-cursor] .ui-nav-row:hover:not(:focus-visible, [aria-current="page"]) .thread-harness-mark[data-lively] .harness-mark-tinted { background-color: currentColor; opacity: 1; } }
+@media (hover: hover) { .ui-nav-pane[data-keyboard-cursor] .ui-nav-row:hover:not(:focus-visible, [aria-current="page"]) .thread-harness-mark[data-artwork] .harness-mark-artwork { opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .thread-harness-mark[data-lively], .thread-harness-mark[data-lively] .harness-mark, .ui-nav-toggle svg { transition: none; } }
 
 /* A folder's rows are clipped by the sliding box, and each frame's layout stays inside this folder. */
-.ui-nav-folder-body { overflow: hidden; contain: layout paint; overflow-anchor: none; }
+.ui-nav-folder-body { contain: layout paint; }
 
 .ui-nav-note { padding: var(--space-2xs) var(--space-md) var(--space-xs); color: var(--muted-foreground); font-size: var(--text-caption); }
 /* Static: nothing here is worth an animation. */
@@ -114,7 +121,8 @@
 .ui-nav-links { display: flex; align-items: center; gap: var(--space-xs); padding: var(--space-xs) var(--space-md); color: var(--muted-foreground); font-size: var(--text-row); }
 .ui-nav-links > span { flex: 1; }
 .ui-nav-links > a { display: grid; width: var(--control); height: var(--control); place-items: center; border-radius: var(--radius-control); color: inherit; }
-.ui-nav-links > a:is(:hover, :focus-visible) { background: var(--sidebar-accent); color: var(--sidebar-accent-foreground); }
+.ui-nav-links > a:is(:focus-visible) { background: var(--sidebar-accent); color: var(--sidebar-accent-foreground); }
+@media (hover: hover) { .ui-nav-links > a:is(:hover, :focus-visible) { background: var(--sidebar-accent); color: var(--sidebar-accent-foreground); } }
 .ui-nav-links svg { width: var(--icon-lg); height: var(--icon-lg); }
 
 /* Folded to the rail: the head stacks (its switch too), the brand, the list's rows and the links go, and the rail's

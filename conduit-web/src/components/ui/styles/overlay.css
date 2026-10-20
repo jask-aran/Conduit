@@ -19,7 +19,8 @@
 .ui-overlay-chip { display: inline-flex; height: var(--control-xs); flex: none; align-items: center; gap: var(--space-2xs); border: 0; border-radius: var(--radius-inset); background: var(--tint); padding: 0 var(--space-xs) 0 var(--space-sm);
   color: var(--foreground); font: var(--weight-rest) var(--text-caption)/var(--leading-none) var(--font-data); white-space: nowrap; cursor: pointer; }
 .ui-overlay-chip > svg { width: var(--icon-xs); height: var(--icon-xs); color: var(--muted-foreground); }
-.ui-overlay-chip:is(:hover, :focus-visible) > svg { color: var(--foreground); }
+.ui-overlay-chip:is(:focus-visible) > svg { color: var(--foreground); }
+@media (hover: hover) { .ui-overlay-chip:is(:hover, :focus-visible) > svg { color: var(--foreground); } }
 /* Its rows: a popover's Items at the overlay's scale, full colour; its group titles plain, not ruled. */
 /* Its rows are the shared row (Type · Scale, Space). */
 .ui-overlay-list {
@@ -36,7 +37,8 @@
 /* A hint that is also its action's button: the hint as drawn, its label white, the wash under the pointer. */
 .ui-overlay-hints button { display: inline-flex; align-items: center; gap: var(--space-xs); margin: calc(-1 * var(--space-2xs)) calc(-1 * var(--space-xs)); border: 0; border-radius: var(--radius-control); background: transparent;
   padding: var(--space-2xs) var(--space-xs); color: var(--foreground); font: inherit; white-space: nowrap; cursor: pointer; }
-.ui-overlay-hints button:is(:hover, :focus-visible) { outline: none; background: var(--tint); }
+.ui-overlay-hints button:is(:focus-visible) { outline: none; background: var(--tint); }
+@media (hover: hover) { .ui-overlay-hints button:is(:hover, :focus-visible) { outline: none; background: var(--tint); } }
 .ui-overlay-hints > b { color: var(--foreground); font-weight: var(--weight-strong); white-space: nowrap; }
 .ui-overlay-empty { margin: 0; padding: var(--space-2xl) var(--space-lg); color: var(--muted-foreground); font-size: var(--text-row); text-align: center; }
 /* The phone's bar of actions, in the hints' place: a desktop has the hints. */
@@ -48,7 +50,8 @@
 .ui-overlay-title:focus { outline: none; }
 .ui-overlay-rail .ui-nav-group + .ui-nav-group { margin-top: var(--space-md); }
 /* The current section is white and bold with no fill; the wash is only the cursor. */
-.ui-overlay .ui-nav-row:is(:hover, :focus-visible) { background: var(--tint); }
+.ui-overlay .ui-nav-row:is(:focus-visible) { background: var(--tint); }
+@media (hover: hover) { .ui-overlay .ui-nav-row:is(:hover, :focus-visible) { background: var(--tint); } }
 /* An overlay (the leader, a palette) rises in and drops back. */
 .ui-overlay[data-entering] { animation: ui-rise var(--duration-gentle) var(--ease-arrive) backwards; }
 .ui-overlay[data-leaving] { animation: ui-drop var(--duration-quick) var(--ease-leave) forwards; pointer-events: none; }
@@ -69,7 +72,8 @@
 /* A line too narrow for its name and its control (a phone, a line of several) wraps the control under the name, at its own width: neither squeezes. */
 .ui-setting-line { display: flex; min-height: var(--line-min); flex-wrap: wrap; align-items: center; gap: var(--space-2xs) var(--space-xl); border-radius: var(--radius-control); padding: var(--space-2xs) var(--space-sm) var(--space-2xs) var(--space-md); font-size: var(--text-row); }
 /* Focus anywhere in a row is the row's wash. */
-.ui-setting-line:is(:hover, :focus-within) { background: var(--tint); }
+.ui-setting-line:is(:focus-within) { background: var(--tint); }
+@media (hover: hover) { .ui-setting-line:is(:hover, :focus-within) { background: var(--tint); } }
 /* The recorder: a second line as tall as a setting line, inset under its label, a dashed --tint line round it. */
 .ui-setting-recorder { display: flex; min-height: var(--line-min); align-items: center; gap: var(--space-md); border: var(--hairline) dashed var(--tint); border-radius: var(--radius-control); padding: var(--space-2xs) var(--space-sm) var(--space-2xs) var(--space-md); font-size: var(--text-row); }
 .ui-recorder-dot { width: var(--icon-dot); height: var(--icon-dot); flex: none; border-radius: var(--radius-round); background: var(--destructive); animation: ui-recorder-pulse var(--duration-pulse) ease-in-out infinite; }
@@ -80,7 +84,7 @@
 .ui-recorder-hints { display: inline-flex; align-items: center; gap: var(--space-xs); margin-left: auto; color: var(--muted-foreground); font-size: var(--text-caption); }
 .ui-recorder-hints > .ui-keycap + * { margin-left: 0; }
 .ui-recorder-hints > button { display: inline-flex; align-items: center; gap: var(--space-xs); border: 0; background: none; padding: 0; color: inherit; font: inherit; cursor: pointer; }
-.ui-recorder-hints > button:hover { color: var(--foreground); }
+@media (hover: hover) { .ui-recorder-hints > button:hover { color: var(--foreground); } }
 .ui-recorder-hints > button + .ui-keycap { margin-left: var(--space-md); }
 .ui-live-note { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .ui-recorder-hints > .ui-keycap:not(:first-child) { margin-left: var(--space-md); }
@@ -96,13 +100,15 @@
 .ui-setting-value { min-width: 0; overflow: hidden; color: var(--muted-foreground); text-overflow: ellipsis; white-space: nowrap; }
 .ui-setting-value[data-mono] { font: var(--weight-rest) var(--text-caption) var(--font-data); }
 .ui-setting-link { white-space: nowrap; border-radius: var(--radius-control); padding: var(--space-2xs) var(--space-md); color: var(--muted-foreground); text-decoration: none; }
-.ui-setting-link:is(:hover, :focus-visible) { outline: none; color: var(--foreground); }
+.ui-setting-link:is(:focus-visible) { outline: none; color: var(--foreground); }
+@media (hover: hover) { .ui-setting-link:is(:hover, :focus-visible) { outline: none; color: var(--foreground); } }
 .ui-setting-note { margin: 0; padding: 0 var(--space-md) var(--space-md); color: var(--muted-foreground); font-size: var(--text-caption); }
 .ui-setting-note[data-tone="error"] { color: var(--destructive); }
 .ui-setting-details { padding: 0 var(--space-md) var(--space-md); color: var(--muted-foreground); font-size: var(--text-caption); line-height: var(--leading-text); }
 .ui-setting-details > summary { width: fit-content; list-style: none; cursor: pointer; }
 .ui-setting-details > summary::-webkit-details-marker { display: none; }
-.ui-setting-details > summary:is(:hover, :focus-visible) { outline: none; color: var(--foreground); }
+.ui-setting-details > summary:is(:focus-visible) { outline: none; color: var(--foreground); }
+@media (hover: hover) { .ui-setting-details > summary:is(:hover, :focus-visible) { outline: none; color: var(--foreground); } }
 .ui-setting-details :is(ol, p) { margin: var(--space-xs) 0 0; }
 .ui-setting-details ol { padding-left: var(--space-xl); }
 .ui-setting-details code { font: var(--text-caption) var(--font-data); }

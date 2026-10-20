@@ -4,6 +4,7 @@ import { Crumbs } from "@/components/ui/leader";
 import { StatusDot } from "@/components/ui/nav";
 import { OverlayActions, OverlayBar, OverlayChip, OverlayEmpty, OverlayList, OverlaySplit, type OverlayAction } from "@/components/ui/overlay";
 import { Item, Match, Section } from "@/components/ui/popover";
+import { Expand } from "@/components/ui/expand";
 import { createEffect, createMemo, createSignal, For, onCleanup, Show } from "solid-js";
 import type { JSX } from "solid-js";
 import {
@@ -862,6 +863,20 @@ export function CommandMenu(props: {
     }
     return out.filter((section) => section.rows.length);
   });
+  /*
+   * The sections drawn: each a run of blocks, a row and (a folder's) the rows under it. Drawn by key, so what a
+   * toggle rebuilds keeps its place -- a folder's Expand above all, which slides its chats open and shut.
+   */
+  type Block = { key: string; row: SelectableRow; children: SelectableRow[] };
+  const sectionsByKey = createMemo(() => new Map(sections().map((section) => {
+    const blocks: Block[] = [];
+    for (const row of section.rows) {
+      const folder = blocks.at(-1);
+      const under = folder?.row.type === "folder" && ((row.type === "command" && row.parentId === folder.row.project.id) || (row.type === "browse-all" && row.project.id === folder.row.project.id));
+      if (under) folder!.children.push(row); else blocks.push({ key: row.key, row, children: [] });
+    }
+    return [section.key, { label: section.label, blocks }] as const;
+  })));
   const queryText = () => parsedQuery().text;
   // The cursor is lit only where it acts (see listFocused); the pointer moves it, and a press keeps focus where it is.
   const lit = (row: SelectableRow) => active() === row.index
@@ -987,7 +1002,19 @@ export function CommandMenu(props: {
           aria-activedescendant={selectable().length ? optionId(active()) : undefined} tabIndex={chatPage() || selectionMode() || moveMode() ? 0 : -1}
           onFocus={() => setListFocused(true)} onBlur={() => setListFocused(false)} onMouseLeave={() => setPointerCursor(false)} onKeyDown={keydown}>
           <Show when={selectable().length} fallback={<OverlayEmpty>{emptyMessage()}</OverlayEmpty>}>
-            <For each={sections()}>{(section) => <Section title={section.label || undefined}><For each={section.rows}>{renderRow}</For></Section>}</For>
+            <For each={sections().map((section) => section.key)}>{(key) => {
+              const section = () => sectionsByKey().get(key);
+              return <Show when={section()}><Section title={section()!.label || undefined}>
+                <For each={section()!.blocks.map((block) => block.key)}>{(blockKey) => {
+                  const block = () => section()?.blocks.find((item) => item.key === blockKey);
+                  return <>
+                    <Show when={block()?.row} keyed>{renderRow}</Show>
+                    {/* A folder's chats open under it (Expand), and shut the same way. */}
+                    <Show when={block()?.row.type === "folder"}><Expand open={Boolean(block()?.children.length)}><For each={block()?.children ?? []}>{renderRow}</For></Expand></Show>
+                  </>;
+                }}</For>
+              </Section></Show>;
+            }}</For>
           </Show>
         </OverlayList>
       </OverlaySplit>

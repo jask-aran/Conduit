@@ -1,7 +1,7 @@
 import { createSignal, For, onCleanup, onMount, Show, type JSX } from "solid-js";
 import { ArrowUpIcon, CameraIcon, CopyIcon, FolderIcon, MicIcon, MonitorIcon, PaperclipIcon, PlusIcon, SettingsIcon, ShareIcon, Trash2Icon } from "lucide-solid";
 
-import { Aura, Orb, settledOrbRate, PLAIN_SPHERE, SPUTTERING_SPHERE, ORBITS_TRAILED, type ModeFrame, type OrbState, Slider, Segmented, Spinner, StatusDot, Preview, Bubble, Button, Frost, HeadingSection, Input, Item, Keycap, Menu, NavRow, Overlay, OverlayBar, PillButton, PillField, PillGroup, Section, SelectTrigger, TextArea, Toolbar } from "@/components/ui";
+import { Expand, Aura, Orb, settledOrbRate, PLAIN_SPHERE, SPUTTERING_SPHERE, ORBITS_TRAILED, type ModeFrame, type OrbState, Slider, Segmented, Spinner, StatusDot, Preview, Bubble, Button, Frost, HeadingSection, Input, Item, Keycap, Menu, NavRow, Overlay, OverlayBar, PillButton, PillField, PillGroup, Section, SelectTrigger, TextArea, Toolbar } from "@/components/ui";
 import { px, InUse, style, bg, fg, edge, rounding, tall, icon, FormTable, form, type Mark, type FormRow } from "./specs";
 import { resolvePreset } from "thinking-orbs/engine";
 import { lib, Levels, SegmentedCount, SegmentedIcons, SegmentedText, SwitchDemo, type Family } from "./library";
@@ -258,6 +258,9 @@ const MOTION: TokenGroup[] = [
     tok("--duration-quick", "leaving, folding away; a change in place", colour("--duration-quick"), run("var(--duration-quick)", "var(--ease-leave)")),
     tok("--duration-gentle", "arriving, opening, settling into place", colour("--duration-gentle"), run("var(--duration-gentle)", "var(--ease-arrive)")),
   ] },
+  { title: "Expand: the fold, both ways on one curve", rows: [
+    tok("--duration-fold", "what opens in place under its row: a folder's chats, a search folder's", colour("--duration-fold"), run("var(--duration-fold)", "var(--ease-fold)")),
+  ] },
   { title: "Effects keep their own time", rows: [
     tok("--duration-follow", "a level following a voice (the aura)", colour("--duration-follow"), run("var(--duration-follow)", "linear")),
     tok("--duration-flash", "a copy's wash fading", colour("--duration-flash"), run("var(--duration-flash)", "ease-out")),
@@ -325,6 +328,15 @@ const KEYCAPS: FormRow[] = [
   form("editable", "Settings · Shortcuts: pressed to record another, × clears it", () => <Keycap label="Ctrl K" onClick={() => {}} onRemove={() => {}}>Ctrl K</Keycap>, "<Keycap onClick onRemove>", "1.5625 units tall · --text-caption · --foreground · × --muted-foreground behind a --tint line · each part --tint washed"),
   form("pressable", "pressed to record another, not cleared here", () => <Keycap label="Ctrl Shift K" onClick={() => {}}>Ctrl Shift K</Keycap>, "<Keycap onClick>", "as editable, without the ×"),
 ];
+// A folder's row and its rows, toggled: the sidebar's NavFolder and chat search's folders slide the same way.
+function ExpandDemo() {
+  const [open, setOpen] = createSignal(true);
+  return <div class="g-expand" data-surface="frame">
+    <Button variant="secondary" size="sm" aria-expanded={open()} onClick={() => setOpen(!open())}>{open() ? "Shut" : "Open"} Japan</Button>
+    <Expand open={open()}><For each={["Gassho house stays", "Six people, two nights", "Getting to Shirakawa-go"]}>{(title) => <p class="g-expand-row">{title}</p>}</For></Expand>
+    <p class="g-expand-row g-expand-after">The next folder</p>
+  </div>;
+}
 function SmallSegmented() { const [value, setValue] = createSignal("recent"); return <Segmented size="sm" label="Sort" value={value()} onChange={setValue} options={[{ value: "recent", label: "Recent" }, { value: "relevant", label: "Relevant" }]} />; }
 
 /** A typeface in the library: a specimen, the weights shipped, where it comes from. */
@@ -517,6 +529,8 @@ export const foundationFamilies: Family[] = [
   ] },
   { title: "Motion", rail: "Foundations", note: "motion explains a change of place (DESIGN Motion): quick out, gentle in; a change in place is quick and plain. Only transform and opacity, but for a fold the reader opens. The foundation is these tokens and four shapes (a fade in or out, a rise, a drop back the way it came); each piece owns its moves, shown on its own page under Motion. Reduced motion keeps the end state", groups: [{ title: "Tokens", note: "a dot runs each curve, and each duration at its curve", layout: "desktop", atoms: [
     lib("motion-tokens", "Motion", "both", "motion", "foundations.css :root --ease-* · --duration-*", () => <TokenTable groups={MOTION} density={false} />, "row"),
+  ] }, { title: "Expand", note: "what opens in place under the row that owns it slides on its measured height, open and shut, over --duration-fold on --ease-fold; only its height moves. Shut, nothing is in the document. When the caller drops the rows at once (chat search rebuilds its list), the shut slides over a still of them", atoms: [
+    lib("motion-expand", "Expand", "both", "motion", "components/ui/expand.tsx", () => <ExpandDemo />, "row"),
   ] }, { title: "The page", note: "no piece's own: the page's regions fade on the tokens, and the composer never moves. The first open fades in everything but the composer; a route (a dashboard's send opening its chat) fades the reading out quick, then the new one in gentle. The app's motion-rules.ts takes these at the port", layout: "desktop", atoms: [
     lib("motion-page", "The page", "desktop", "motion", "ui-fade-in · ui-fade-out on the page's regions", () => <PageMoves />, "row"),
   ] }, { title: "Aura", note: "a field of colour behind a surface, made of numbers: each blob comes in from a direction in its hue, circles near that edge on its own period and breathes as it turns, so at rest the colours trade places; a level (0-1, the voice's) brightens them all and grows some while shrinking others. The mic's pill is filled with one while listening", layout: "desktop", atoms: [

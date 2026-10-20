@@ -8,6 +8,14 @@
  */
 export type Density = "desktop" | "phone";
 
+/** A time token read from CSS, in ms. The build writes times as it likes (240ms becomes .24s), so read the unit. */
+export function cssTime(element: Element, name: string, fallback: number) {
+  const value = getComputedStyle(element).getPropertyValue(name).trim();
+  const amount = parseFloat(value);
+  if (!Number.isFinite(amount)) return fallback;
+  return value.endsWith("ms") ? amount : value.endsWith("s") ? amount * 1000 : amount;
+}
+
 /**
  * The one cursor (DESIGN Interaction): the pointer moves it, as the keyboard
  * does, so only one row of a list is ever washed. A list's container passes
