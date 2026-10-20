@@ -30,7 +30,7 @@
 .ui-change-list { min-height: 0; overflow: auto; padding: var(--space-2xs) var(--space-sm) var(--space-sm); }
 .ui-change-item { display: flex; min-width: 0; align-items: center; border-radius: var(--radius-control); }
 .ui-change-item:is(:hover, :focus-within) { background: var(--tint); }
-.ui-change-item > .ui-dash-row { min-width: 0; min-height: calc(1.8125 * var(--u-space)); flex: 1; gap: var(--space-md); border-radius: 0; background: transparent; padding: var(--space-xs) var(--space-sm); font-size: var(--text-caption); }
+.ui-change-item > .ui-dash-row { min-width: 0; min-height: var(--control-sm); flex: 1; gap: var(--space-md); border-radius: 0; background: transparent; padding: var(--space-xs) var(--space-sm); font-size: var(--text-caption); }
 .ui-change-item > .ui-tool-button { opacity: 0; }
 .ui-change-item:is(:hover, :focus-within) > .ui-tool-button { opacity: 1; }
 .ui-change-empty { display: grid; min-height: calc(5 * var(--u-space)); flex: 1; place-items: center; color: var(--muted-foreground); font-size: var(--text-caption); }
