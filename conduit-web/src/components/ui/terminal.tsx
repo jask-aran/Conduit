@@ -1,5 +1,6 @@
 import { Show, splitProps, type JSX } from "solid-js";
 import { Button, Spinner } from "./controls";
+import { haptic } from "./haptics";
 
 /** A terminal's header: leading controls, identity, shortcuts, overflow, then divided actions. */
 export function TermHeader(props: Omit<JSX.HTMLAttributes<HTMLElement>, "class"> & { actions?: JSX.Element }) {
@@ -80,3 +81,18 @@ export function TermMenuAction(props: Omit<JSX.ButtonHTMLAttributes<HTMLButtonEl
   const [local, rest] = splitProps(props, ["destructive"]);
   return <Button variant="ghost" size="icon-xs" {...rest} class="ui-term-menu-action" data-destructive={local.destructive ? "" : undefined} />;
 }
+
+/** TermKeys: a phone's key bar under the terminal, the keys its keyboard lacks in one row that scrolls sideways. A tap
+ *  on it never takes the focus from the terminal (so the keyboard stays up). */
+export function TermKeys(props: Omit<JSX.HTMLAttributes<HTMLDivElement>, "class" | "onMouseDown">) {
+  return <div role="toolbar" data-mobile-swipe-ignore="" {...props} class="ui-term-keys" onMouseDown={(event) => event.preventDefault()} />;
+}
+
+/** TermKey: one key, Keycap's face at a finger's size; felt as it is pressed. armed: a modifier waiting for the next
+ *  key (aria-pressed), ringed until it is used. */
+export function TermKey(props: Omit<JSX.ButtonHTMLAttributes<HTMLButtonElement>, "class" | "onClick"> & { armed?: boolean; onClick: () => void }) {
+  const [local, rest] = splitProps(props, ["armed", "onClick"]);
+  return <button type="button" {...rest} class="ui-term-key" aria-pressed={local.armed === undefined ? undefined : local.armed}
+    onClick={() => { haptic("press"); local.onClick(); }} />;
+}
+

@@ -1,4 +1,4 @@
-import { TermHeader, TermStatus, TermIdentity, TermContext, TermShortcuts, TermShortcut, TermLead, TermOverflow, TermActions, TermActionLabel, TermState, TermError, ShortcutForm, ShortcutFormLine, ShortcutTarget, ShortcutCommand, ShortcutFormActions } from "@/components/ui/terminal";
+import { TermKeys, TermKey, TermHeader, TermStatus, TermIdentity, TermContext, TermShortcuts, TermShortcut, TermLead, TermOverflow, TermActions, TermActionLabel, TermState, TermError, ShortcutForm, ShortcutFormLine, ShortcutTarget, ShortcutCommand, ShortcutFormActions } from "@/components/ui/terminal";
 import { Button as TermButton, Input as TermInput } from "@/components/ui/controls";
 import { ToolButton } from "@/components/ui/pane";
 import { Dialog } from "@/components/dialog";
@@ -1261,27 +1261,24 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
       <Show when={error() && !recovery()}><TermError role="alert">{error()}</TermError></Show>
     </div>
     <Show when={coarseInput() && mobileKeysVisible()}>
-      <div class="terminal-mobile-keys" role="toolbar" aria-label="Terminal keys" data-mobile-swipe-ignore
-        onMouseDown={(event) => event.preventDefault()}>
-        <button type="button" onClick={() => inputTerminal("\x1b")}>Esc</button>
-        <button type="button" onClick={() => inputTerminal("\t")}>Tab</button>
-        <button type="button" class="terminal-mobile-modifier" data-active={controlArmed() ? "true" : "false"}
-          aria-pressed={controlArmed()} onClick={() => toggleMobileModifier("control")}>Ctrl</button>
-        <button type="button" class="terminal-mobile-modifier" data-active={altArmed() ? "true" : "false"}
-          aria-pressed={altArmed()} onClick={() => toggleMobileModifier("alt")}>Alt</button>
-        <button type="button" aria-label="Left arrow" onClick={() => inputArrow("D")}>←</button>
-        <button type="button" aria-label="Down arrow" onClick={() => inputArrow("B")}>↓</button>
-        <button type="button" aria-label="Up arrow" onClick={() => inputArrow("A")}>↑</button>
-        <button type="button" aria-label="Right arrow" onClick={() => inputArrow("C")}>→</button>
-        <button type="button" aria-label="Control C" onClick={() => { clearMobileModifiers(); inputTerminal("\x03", false); }}>^C</button>
-        <button type="button" onClick={() => inputTerminal("/")}>/</button>
-        <button type="button" onClick={() => inputTerminal("-")}>-</button>
-        <button type="button" onClick={() => inputTerminal("|")}>|</button>
-        <button type="button" onClick={() => inputTerminal("~")}>~</button>
-        <button type="button" aria-label="Decrease terminal font size" onClick={() => changeMobileFontSize(-1)}>A−</button>
-        <button type="button" aria-label="Increase terminal font size" onClick={() => changeMobileFontSize(1)}>A+</button>
-        <button type="button" onClick={() => void pasteFromClipboard()}>Paste</button>
-      </div>
+      <TermKeys aria-label="Terminal keys">
+        <TermKey onClick={() => inputTerminal("\x1b")}>Esc</TermKey>
+        <TermKey onClick={() => inputTerminal("\t")}>Tab</TermKey>
+        <TermKey armed={controlArmed()} onClick={() => toggleMobileModifier("control")}>Ctrl</TermKey>
+        <TermKey armed={altArmed()} onClick={() => toggleMobileModifier("alt")}>Alt</TermKey>
+        <TermKey aria-label="Left arrow" onClick={() => inputArrow("D")}>←</TermKey>
+        <TermKey aria-label="Down arrow" onClick={() => inputArrow("B")}>↓</TermKey>
+        <TermKey aria-label="Up arrow" onClick={() => inputArrow("A")}>↑</TermKey>
+        <TermKey aria-label="Right arrow" onClick={() => inputArrow("C")}>→</TermKey>
+        <TermKey aria-label="Control C" onClick={() => { clearMobileModifiers(); inputTerminal("\x03", false); }}>^C</TermKey>
+        <TermKey onClick={() => inputTerminal("/")}>/</TermKey>
+        <TermKey onClick={() => inputTerminal("-")}>-</TermKey>
+        <TermKey onClick={() => inputTerminal("|")}>|</TermKey>
+        <TermKey onClick={() => inputTerminal("~")}>~</TermKey>
+        <TermKey aria-label="Decrease terminal font size" onClick={() => changeMobileFontSize(-1)}>A−</TermKey>
+        <TermKey aria-label="Increase terminal font size" onClick={() => changeMobileFontSize(1)}>A+</TermKey>
+        <TermKey onClick={() => void pasteFromClipboard()}>Paste</TermKey>
+      </TermKeys>
     </Show>
   </section>
   </>;
