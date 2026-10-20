@@ -1,8 +1,10 @@
 /* Menu: a raised container; rows sit concentric inside it. */
 .ui-menu { outline: none; display: flex; min-width: var(--measure-xs); flex-direction: column; border-radius: var(--radius-surface); padding: var(--frost-inset); }
-/* A popover rises in and drops back. */
-.ui-menu[data-entering] { animation: ui-rise var(--duration-gentle) var(--ease-arrive) backwards; }
-.ui-menu[data-leaving] { animation: ui-drop var(--duration-quick) var(--ease-leave) forwards; pointer-events: none; }
+/* A popover rises in and drops back: data-entering/leaving where the app drives it, data-expanded/closed where Kobalte
+   does (it keeps a closing menu mounted until its animation ends). */
+.ui-menu:is([data-entering], [data-expanded]) { animation: ui-rise var(--duration-gentle) var(--ease-arrive) backwards; }
+.ui-menu:is([data-leaving], [data-closed]) { animation: ui-drop var(--duration-quick) var(--ease-leave) forwards; pointer-events: none; }
+@media (prefers-reduced-motion: reduce) { .ui-menu:is([data-entering], [data-expanded], [data-leaving], [data-closed]) { animation: none; } }
 /* Under a phone's submenu panel it dims where it stands, at once (a dim is a state, not a move), and takes no taps. */
 .ui-menu { transition: filter var(--duration-quick) var(--ease-change); }
 .ui-menu[data-under] { filter: var(--dim-under); pointer-events: none; }
