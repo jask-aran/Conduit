@@ -54,13 +54,14 @@
 @media (hover: hover) { .ui-nav-toggle:hover { color: var(--sidebar-accent-foreground); } }
 
 /* The cursor: the wash and white. Held: the window is away and the cursor waits where it was. */
-/* A row whose menu is open (Kobalte's data-expanded on its trigger) keeps the wash until the menu closes: on a phone,
-   where nothing hovers, that is the only mark of what a long press opened. */
-.ui-nav-row:is(:focus-visible, :active, [data-focus-shown], [data-held], [data-held-within], [data-selected], [data-expanded]), .ui-rail-button:is(:focus-visible, :active, [data-held]) { background: var(--sidebar-accent); color: var(--sidebar-accent-foreground); }
-@media (hover: hover) { .ui-nav-row:is(:hover, :focus-visible, :active, [data-focus-shown], [data-held], [data-held-within], [data-selected]), .ui-rail-button:is(:hover, :focus-visible, :active, [data-held]) { background: var(--sidebar-accent); color: var(--sidebar-accent-foreground); } }
+/* On a phone a row is never washed by a touch: a tap goes somewhere (the current row says where), and a long press
+   opens the row's menu, which says what it is for. Pressed, and while its menu is open (Kobalte's data-expanded on
+   its trigger), a row is washed only where a pointer hovers. */
+.ui-nav-row:is(:focus-visible, [data-focus-shown], [data-held], [data-held-within], [data-selected]), .ui-rail-button:is(:focus-visible, [data-held]) { background: var(--sidebar-accent); color: var(--sidebar-accent-foreground); }
+@media (hover: hover) { .ui-nav-row:is(:hover, :focus-visible, :active, [data-focus-shown], [data-held], [data-held-within], [data-selected], [data-expanded]), .ui-rail-button:is(:hover, :focus-visible, :active, [data-held]) { background: var(--sidebar-accent); color: var(--sidebar-accent-foreground); } }
 .ui-nav-row:is([aria-current="page"], [data-within]), .ui-rail-button[aria-current="page"] { color: var(--sidebar-accent-foreground); font-weight: var(--weight-current); }
 .ui-nav-row[data-open] { color: var(--sidebar-accent-foreground); }
-.ui-nav-row:is(:focus-visible, :active, [data-focus-shown], [data-held], [data-held-within], [aria-current="page"], [data-within]) .ui-nav-icon { color: var(--sidebar-accent-foreground); }
+.ui-nav-row:is(:focus-visible, [data-focus-shown], [data-held], [data-held-within], [aria-current="page"], [data-within]) .ui-nav-icon { color: var(--sidebar-accent-foreground); }
 @media (hover: hover) { .ui-nav-row:is(:hover, :focus-visible, :active, [data-focus-shown], [data-held], [data-held-within], [aria-current="page"], [data-within]) .ui-nav-icon { color: var(--sidebar-accent-foreground); } }
 :is(.ui-nav-row:is([aria-current="page"], [data-within]), .ui-rail-button[aria-current="page"]) svg.lucide { stroke-width: 3; }
 /* While the keyboard moves the cursor, a row under a still pointer rests until the pointer moves: only the cursor
