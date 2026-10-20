@@ -22,21 +22,23 @@
   color: color-mix(in oklch, var(--foreground), transparent var(--tone-quiet)); font: var(--weight-strong) var(--text-label)/var(--leading-row) var(--font-label);
   letter-spacing: .07em; text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; cursor: pointer; }
 .ui-tab-place-label > span { overflow: hidden; text-overflow: ellipsis; }
-.ui-tab-place-label:hover, .ui-tab-place[data-current] .ui-tab-place-label { color: var(--foreground); }
+.ui-tab-place[data-current] .ui-tab-place-label { color: var(--foreground); }
+@media (hover: hover) { .ui-tab-place-label:hover { color: var(--foreground); } }
 
 .ui-tab { position: relative; display: inline-flex; min-width: 0; max-width: var(--tab-max); height: var(--control-sm); flex: 0 1 auto; align-items: center; overflow: visible; border-radius: var(--radius-control); }
 .ui-tab + .ui-tab { margin-left: var(--tab-gap); }
 .ui-tab + .ui-tab::before { position: absolute; left: calc(-1 * var(--tab-gap) * .72); color: color-mix(in oklch, var(--foreground), transparent var(--tone-line)); content: "·"; pointer-events: none; }
 .ui-tab[data-lead]::before { content: none; }
 /* The pointer's wash is solid here, so an unlit tab's × can cover the title's end in it. */
-.ui-tab:hover { background: var(--accent); }
+@media (hover: hover) { .ui-tab:hover { background: var(--accent); } }
 .ui-tab-open { display: inline-flex; min-width: 0; height: 100%; flex: 1; align-items: center; gap: var(--space-sm); border: 0; background: transparent; padding: 0 var(--space-xs);
   color: color-mix(in oklch, var(--foreground), transparent var(--tone-quiet)); font: inherit; font-weight: var(--weight-rest); }
 .ui-tab-open > svg, .ui-tab-open > .harness-mark, .ui-tab-open > .workspace-glyph { width: var(--icon-sm); height: var(--icon-sm); flex: none; }
 .ui-tab-title { display: inline-flex; min-width: 0; flex-direction: column; overflow: hidden; }
 .ui-tab-title > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ui-tab-title::after { height: 0; overflow: hidden; visibility: hidden; font-weight: var(--weight-current); white-space: nowrap; content: attr(data-text); }
-.ui-tab:hover .ui-tab-open, .ui-tab[data-shown] .ui-tab-open { color: var(--foreground); }
+.ui-tab[data-shown] .ui-tab-open { color: var(--foreground); }
+@media (hover: hover) { .ui-tab:hover .ui-tab-open { color: var(--foreground); } }
 .ui-tab[data-lit] .ui-tab-open { color: var(--foreground); font-weight: var(--weight-current); }
 .ui-tab[data-none] .ui-tab-open { color: var(--muted-foreground); font-weight: var(--weight-rest); }
 .ui-tab-live { width: var(--space-sm); height: var(--space-sm); flex: none; border-radius: var(--radius-round); background: var(--live); }
@@ -46,9 +48,9 @@
   border: 0; border-radius: var(--radius-inset); background: var(--background); color: var(--muted-foreground); }
 .ui-tab-close > svg { width: var(--icon-sm); height: var(--icon-sm); }
 .ui-tab:not([data-lit]) .ui-tab-close { position: absolute; right: var(--space-2xs); opacity: 0; box-shadow: calc(-1 * var(--space-md)) 0 var(--space-sm) var(--background); }
-.ui-tab:not([data-lit]):hover .ui-tab-close { background: var(--accent); box-shadow: calc(-1 * var(--space-md)) 0 var(--space-sm) var(--accent); opacity: 1; }
+@media (hover: hover) { .ui-tab:not([data-lit]):hover .ui-tab-close { background: var(--accent); box-shadow: calc(-1 * var(--space-md)) 0 var(--space-sm) var(--accent); opacity: 1; } }
 .ui-tab[data-lit] .ui-tab-close { background: transparent; }
-.ui-tab-close:hover { color: var(--foreground); }
+@media (hover: hover) { .ui-tab-close:hover { color: var(--foreground); } }
 /* Unsaved: a dot where the × sits, the × on the pointer. */
 .ui-tab[data-unsaved] .ui-tab-close { color: var(--foreground); opacity: 1; }
 .ui-tab[data-unsaved]:not(:hover) .ui-tab-close { background: transparent; box-shadow: none; }
@@ -59,7 +61,8 @@
 /* A pane's controls after its title: small, quiet, the wash on the pointer. */
 .ui-pane-actions { display: inline-flex; flex: none; align-items: center; gap: var(--space-2xs); margin-left: var(--space-2xs); }
 .ui-pane-action { display: inline-grid; width: var(--control-xs); height: var(--control-xs); flex: none; place-items: center; border: 0; border-radius: var(--radius-control); background: transparent; color: var(--muted-foreground); }
-.ui-pane-action:is(:hover, :focus-visible, [data-expanded]) { outline: none; background: var(--tint); color: var(--foreground); }
+.ui-pane-action:is(:focus-visible, [data-expanded]) { outline: none; background: var(--tint); color: var(--foreground); }
+@media (hover: hover) { .ui-pane-action:is(:hover, :focus-visible, [data-expanded]) { outline: none; background: var(--tint); color: var(--foreground); } }
 .ui-pane-action > svg { width: var(--icon); height: var(--icon); }
 
 /* An edge: its hit target centred on the frame's gap, the gutter you drag. */
@@ -104,7 +107,8 @@
 .ui-tool-view > svg { width: var(--icon); height: var(--icon); }
 .ui-tool-view > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ui-tool-views[data-icons-only] .ui-tool-view > span { display: none; }
-.ui-tool-view:is([aria-selected="true"], :hover, :focus-visible) { outline: none; background: var(--tint); color: var(--foreground); }
+.ui-tool-view:is([aria-selected="true"], :focus-visible) { outline: none; background: var(--tint); color: var(--foreground); }
+@media (hover: hover) { .ui-tool-view:is([aria-selected="true"], :hover, :focus-visible) { outline: none; background: var(--tint); color: var(--foreground); } }
 .ui-tool-view:disabled { cursor: not-allowed; opacity: var(--opacity-disabled); }
 @media (--conduit-phone-layout) {
   .ui-tool-views { display: flex; }
@@ -122,7 +126,8 @@
 .ui-tool-bar[data-edge="top"] { border-top: var(--hairline) solid var(--border); border-bottom: 0; }
 .ui-tool-bar[data-vertical] { min-height: 0; flex-direction: column; padding: var(--space-xs) var(--space-2xs); border: 0; border-right: var(--hairline) solid var(--border); }
 .ui-tool-button { display: inline-grid; width: var(--control-tool); height: var(--control-tool); flex: none; place-items: center; border: 0; border-radius: var(--radius-control); background: transparent; color: var(--muted-foreground); }
-.ui-tool-button:is(:hover, :focus-visible, [aria-pressed="true"], [data-expanded]) { outline: none; background: var(--tint); color: var(--foreground); }
+.ui-tool-button:is(:focus-visible, [aria-pressed="true"], [data-expanded]) { outline: none; background: var(--tint); color: var(--foreground); }
+@media (hover: hover) { .ui-tool-button:is(:hover, :focus-visible, [aria-pressed="true"], [data-expanded]) { outline: none; background: var(--tint); color: var(--foreground); } }
 .ui-tool-button:disabled { cursor: not-allowed; opacity: var(--opacity-disabled); }
 .ui-tool-button > svg { width: var(--icon-sm); height: var(--icon-sm); }
 .ui-tool-filter { position: relative; display: flex; min-width: 0; flex: 1; align-items: center; }
@@ -136,7 +141,8 @@
 .ui-tool-notice > button:disabled { cursor: wait; opacity: var(--opacity-disabled); }
 .ui-tree { min-height: var(--control-lg); flex: 1; overflow: auto; overscroll-behavior: contain; padding: var(--space-sm) var(--space-2xs); }
 .ui-tree-row { display: flex; width: 100%; min-height: var(--control-tool); align-items: center; gap: var(--space-sm); border: 0; border-radius: var(--radius-control); background: transparent; padding: var(--space-xs) var(--space-md) var(--space-xs) calc((.3125 + var(--depth) * .875) * var(--u-space)); color: var(--muted-foreground); font-size: var(--text-row); text-align: left; }
-.ui-tree-row:is(:hover, [data-selected]) { background: var(--tint); color: var(--foreground); }
+.ui-tree-row:is([data-selected]) { background: var(--tint); color: var(--foreground); }
+@media (hover: hover) { .ui-tree-row:is(:hover, [data-selected]) { background: var(--tint); color: var(--foreground); } }
 .ui-tree-row:focus { outline: 0; }
 .ui-tree-row:focus-visible { outline: var(--hairline) solid var(--ring); outline-offset: calc(-1 * var(--hairline)); }
 .ui-tree-row > svg, .ui-tree-row > img { width: var(--icon-sm); height: var(--icon-sm); flex: none; }

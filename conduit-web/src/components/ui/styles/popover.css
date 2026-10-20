@@ -112,7 +112,7 @@
 /* A chevron that is its own press: the glyph's box, the wash under the pointer. */
 button.ui-chevron { display: inline-grid; flex: none; place-items: center; border: 0; border-radius: var(--radius-inset); background: transparent; padding: 0; color: inherit; cursor: pointer; }
 button.ui-chevron > svg { width: 100%; height: 100%; }
-button.ui-chevron:hover { background: var(--tint); color: var(--foreground); }
+@media (hover: hover) { button.ui-chevron:hover { background: var(--tint); color: var(--foreground); } }
 /* A child row sits an icon and a gap in, under its parent's label. */
 .ui-row:not([data-highlighted], :hover) > .ui-row-end[data-reveal] { visibility: hidden; }
 @media (--conduit-phone-layout) { .ui-row > .ui-row-end[data-reveal] { display: none; } }

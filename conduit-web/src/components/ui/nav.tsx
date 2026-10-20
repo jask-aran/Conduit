@@ -1,6 +1,7 @@
 import { createEffect, createSignal, For, onCleanup, Show, splitProps, type JSX } from "solid-js";
 import { ChevronRightIcon } from "lucide-solid";
 import { Button, Spinner } from "./controls";
+import { Expand } from "./expand";
 
 /*
  * Nav: the sidebar's pieces, on the frame (DESIGN Interaction, List row). Rows rest grey; the cursor (pointer,
@@ -87,45 +88,11 @@ export function NavFolderRow(props: JSX.HTMLAttributes<HTMLDivElement> & { icon:
   </div>;
 }
 
-const FOLDER_EASE = "cubic-bezier(0.32, 0.72, 0, 1)";
-/**
- * A folder: its row, then its rows, which slide open and shut on a measured height (once, on this folder alone:
- * a grid track resolved per frame for the whole list stuttered on a phone). Shut, nothing stays in the document;
- * the rows stay mounted only for the length of the slide. The duration is --duration-fold.
- */
+/** A folder: its row, then its rows, which slide open and shut (Expand). Shut, nothing stays in the document. */
 export function NavFolder(props: { open: boolean; row: JSX.Element; children: JSX.Element }) {
-  const [shown, setShown] = createSignal(props.open);
-  let body: HTMLDivElement | undefined;
-  let motion: Animation | undefined;
-  // The state the rows are already in, and the only reason to animate: one toggle writes the open state more
-  // than once (the click, then the preference coming back), and acting on each run cancelled the slide begun.
-  let was = props.open;
-  createEffect(() => {
-    const wanted = props.open;
-    if (was === wanted) return;
-    was = wanted;
-    if (wanted) setShown(true);
-    if (matchMedia("(prefers-reduced-motion: reduce)").matches) { if (!wanted) setShown(false); return; }
-    // A frame late on purpose: the rows must be in the document at their natural height first.
-    requestAnimationFrame(() => {
-      const node = body;
-      if (!node || props.open !== wanted) { if (!props.open) setShown(false); return; }
-      motion?.cancel();
-      const full = `${node.scrollHeight}px`;
-      const duration = parseFloat(getComputedStyle(node).getPropertyValue("--duration-fold")) || 240;
-      motion = node.animate(wanted ? [{ height: "0px" }, { height: full }] : [{ height: full }, { height: "0px" }], { duration, easing: FOLDER_EASE, fill: "both" });
-      motion.onfinish = () => {
-        // Dropping the fill hands the height back to the rows, so one added while open is not cut to a stale number.
-        motion?.cancel();
-        motion = undefined;
-        if (!props.open) setShown(false);
-      };
-    });
-  });
-  onCleanup(() => motion?.cancel());
   return <div class="ui-nav-folder-block">
     {props.row}
-    <Show when={shown()}><div class="ui-nav-folder-body" ref={body}>{props.children}</div></Show>
+    <Expand open={props.open} class="ui-nav-folder-body">{props.children}</Expand>
   </div>;
 }
 

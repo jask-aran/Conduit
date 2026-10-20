@@ -37,6 +37,8 @@
   --layer-notification: 110;
   --duration-quick: 150ms;   /* leaving, folding away; a change in place */
   --duration-gentle: 250ms;  /* arriving, opening, settling into place */
+  /* Expand: what opens in place under its row slides on its measured height, both ways, on the one curve. */
+  --duration-fold: 240ms; --ease-fold: cubic-bezier(.32, .72, 0, 1);
   /* Effects keep their own time: a level following a voice, a copy's wash fading, a spinner's turn (three
      times slower when motion is reduced), a recording's pulse, something live breathing. */
   --duration-follow: 120ms; --duration-flash: 700ms; --duration-spin: 800ms; --duration-pulse: 1.2s; --duration-breathe: 1.6s;
@@ -199,3 +201,5 @@
 
 /* Tabular figures wherever numbers tick or line up. */
 :is(.ui-keycap, .ui-choice-key, .ui-hints, .ui-overlay-hints, .ui-chip-copy small, .ui-seg small, .ui-slider-value) { font-variant-numeric: tabular-nums; }
+/* Expand: what opens and shuts in place under its row; only its height moves (expand.tsx). */
+.ui-expand { overflow: hidden; overflow-anchor: none; }

@@ -7,7 +7,8 @@
 .ui-keycap[data-editable] > button { display: inline-flex; height: 100%; align-items: center; border: 0; background: transparent; padding: 0 var(--space-sm); color: inherit; font: inherit; cursor: pointer; }
 .ui-keycap[data-editable] > .ui-keycap-remove { width: var(--control-2xs); justify-content: center; border-left: var(--hairline) solid var(--tint); padding: 0; color: var(--muted-foreground); }
 .ui-keycap-remove svg { width: var(--icon-xs); height: var(--icon-xs); }
-.ui-keycap[data-editable] > button:is(:hover, :focus-visible) { outline: 0; background: var(--tint); color: var(--foreground); }
+.ui-keycap[data-editable] > button:is(:focus-visible) { outline: 0; background: var(--tint); color: var(--foreground); }
+@media (hover: hover) { .ui-keycap[data-editable] > button:is(:hover, :focus-visible) { outline: 0; background: var(--tint); color: var(--foreground); } }
 
 /* The box: what holds a value is a --tint line at the control corner -- an input, a text area in a
    card or a setting, the code preview, a chip, a segmented track. What you type into fills with the
@@ -29,19 +30,25 @@
 .ui-button[data-variant="primary"]:focus-visible { background: var(--primary); filter: brightness(var(--darken)); }
 .ui-button:disabled { opacity: var(--opacity-disabled); pointer-events: none; }
 .ui-button[data-variant="primary"] { background: var(--foreground); color: var(--background); }
-.ui-button[data-variant="primary"]:is(:hover, :focus-visible) { filter: brightness(var(--darken)); }
+.ui-button[data-variant="primary"]:is(:focus-visible) { filter: brightness(var(--darken)); }
+@media (hover: hover) { .ui-button[data-variant="primary"]:is(:hover, :focus-visible) { filter: brightness(var(--darken)); } }
 .ui-button[data-variant="secondary"] { border-color: var(--tint); background: var(--well); color: var(--foreground); }
-.ui-button[data-variant="secondary"]:is(:hover, :focus-visible) { background: var(--tint); }
+.ui-button[data-variant="secondary"]:is(:focus-visible) { background: var(--tint); }
+@media (hover: hover) { .ui-button[data-variant="secondary"]:is(:hover, :focus-visible) { background: var(--tint); } }
 .ui-button[data-variant="ghost"] { background: transparent; color: var(--foreground); }
-.ui-button[data-variant="ghost"]:is(:hover, :focus-visible) { background: var(--tint); }
+.ui-button[data-variant="ghost"]:is(:focus-visible) { background: var(--tint); }
+@media (hover: hover) { .ui-button[data-variant="ghost"]:is(:hover, :focus-visible) { background: var(--tint); } }
 .ui-button[data-variant="destructive"] { background: var(--destructive); color: var(--foreground); }
-.ui-button[data-variant="destructive"]:is(:hover, :focus-visible) { filter: brightness(var(--brighten)); }
+.ui-button[data-variant="destructive"]:is(:focus-visible) { filter: brightness(var(--brighten)); }
+@media (hover: hover) { .ui-button[data-variant="destructive"]:is(:hover, :focus-visible) { filter: brightness(var(--brighten)); } }
 .ui-button[data-outline] { background: transparent; }
-.ui-button[data-outline]:is(:hover, :focus-visible) { background: var(--tint); filter: none; }
+.ui-button[data-outline]:is(:focus-visible) { background: var(--tint); filter: none; }
+@media (hover: hover) { .ui-button[data-outline]:is(:hover, :focus-visible) { background: var(--tint); filter: none; } }
 .ui-button[data-variant="primary"][data-outline] { border-color: var(--foreground); color: var(--foreground); }
 .ui-button[data-variant="ghost"][data-outline] { border-color: var(--tint); }
 .ui-button[data-variant="destructive"][data-outline] { border-color: var(--destructive); color: var(--destructive); }
-.ui-button[data-variant="destructive"][data-outline]:is(:hover, :focus-visible) { background: color-mix(in oklch, var(--destructive), transparent var(--tone-wash)); }
+.ui-button[data-variant="destructive"][data-outline]:is(:focus-visible) { background: color-mix(in oklch, var(--destructive), transparent var(--tone-wash)); }
+@media (hover: hover) { .ui-button[data-variant="destructive"][data-outline]:is(:hover, :focus-visible) { background: color-mix(in oklch, var(--destructive), transparent var(--tone-wash)); } }
 :where(.ui-button[data-size="sm"]) { height: var(--control-sm); padding: 0 var(--space-lg); font-size: var(--text-row); }
 :where(.ui-button[data-size="lg"]) { height: var(--control-lg); padding: 0 var(--space-2xl); font-size: var(--text-body); }
 :where(.ui-button[data-size="icon"]) { width: var(--control); padding: 0; }
@@ -54,11 +61,13 @@
    select is just its value and a chevron. Field, below the Card, names one. */
 .ui-input { display: flex; width: 100%; height: var(--control); align-items: center; gap: var(--space-md); padding: 0 var(--space-lg); color: var(--foreground); font-size: var(--text-row); text-align: left; outline: none; transition: border-color var(--duration-quick) var(--ease-change); }
 .ui-input::placeholder { color: var(--muted-foreground); }
-.ui-input:is(:hover, :focus, [aria-expanded="true"]) { border-color: color-mix(in oklch, var(--foreground), transparent var(--tone-line)); }
+.ui-input:is(:focus, [aria-expanded="true"]) { border-color: color-mix(in oklch, var(--foreground), transparent var(--tone-line)); }
+@media (hover: hover) { .ui-input:is(:hover, :focus, [aria-expanded="true"]) { border-color: color-mix(in oklch, var(--foreground), transparent var(--tone-line)); } }
 .ui-input > span { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ui-input > svg { width: var(--icon); height: var(--icon); flex: none; color: var(--muted-foreground); }
 .ui-input[data-bare] { width: auto; height: auto; border: 0; background: transparent; padding: var(--space-xs) 0; color: var(--muted-foreground); }
-.ui-input[data-bare]:is(:hover, :focus-visible) { color: var(--foreground); }
+.ui-input[data-bare]:is(:focus-visible) { color: var(--foreground); }
+@media (hover: hover) { .ui-input[data-bare]:is(:hover, :focus-visible) { color: var(--foreground); } }
 
 /* Segmented choice: a hairline track and a sliding thumb (the app's
    settings and dashboard filters): the surface's tint for both. The
@@ -72,21 +81,25 @@
 .ui-seg button { position: relative; display: inline-flex; min-width: 0; min-height: calc(var(--control-sm) - 2 * var(--seg-pad)); align-items: center; justify-content: center; gap: var(--space-sm); border: 0; border-radius: var(--seg-inner); background: transparent; padding: 0 var(--space-lg); color: var(--muted-foreground); font-size: var(--text-row); font-weight: var(--weight-lift); cursor: pointer; }
 .ui-seg button svg { width: var(--icon-lg); height: var(--icon-lg); }
 .ui-seg button small { color: var(--muted-foreground); font: var(--weight-rest) var(--text-caption) var(--font-data); }
-.ui-seg button:is(:hover, :focus-visible, [data-held], [aria-checked="true"]) { color: var(--foreground); }
+.ui-seg button:is(:focus-visible, [data-held], [aria-checked="true"]) { color: var(--foreground); }
+@media (hover: hover) { .ui-seg button:is(:hover, :focus-visible, [data-held], [aria-checked="true"]) { color: var(--foreground); } }
 .ui-seg[data-icons] button { width: var(--control); padding: 0; }
 .ui-seg[data-pill] { height: var(--pill-size); gap: var(--pill-gap); border-color: var(--frost-stroke); border-radius: var(--radius-round); background: var(--frost-fill); padding: var(--hairline); }
 .ui-seg[data-pill] .ui-seg-thumb { top: var(--hairline); bottom: var(--hairline); width: var(--pill-slot); left: calc(var(--hairline) + (var(--pill-slot) + var(--pill-gap)) * var(--segment)); border-radius: var(--radius-round); background: var(--tint); }
 .ui-seg[data-pill] button { width: var(--pill-slot); min-height: var(--pill-slot-height); border-radius: var(--radius-round); padding: 0; }
 .ui-seg[data-pill] button svg { width: var(--pill-icon); height: var(--pill-icon); }
 /* On the frame (the sidebar) controls take the sidebar's own ink. */
-[data-surface="frame"] :is(.ui-pill > button, .ui-seg button:is([aria-checked="true"], :hover, :focus-visible, [data-held])) { color: var(--sidebar-accent-foreground); }
+[data-surface="frame"] :is(.ui-pill > button, .ui-seg button:is([aria-checked="true"], :focus-visible, [data-held])) { color: var(--sidebar-accent-foreground); }
+@media (hover: hover) { [data-surface="frame"] :is(.ui-pill > button, .ui-seg button:is([aria-checked="true"], :hover, :focus-visible, [data-held])) { color: var(--sidebar-accent-foreground); } }
 [data-surface="frame"] .ui-seg .ui-seg-thumb { background: var(--sidebar-accent); }
 @media (prefers-reduced-motion: reduce) { .ui-seg-thumb { transition: none; } }
 .ui-seg[aria-disabled] { opacity: var(--opacity-disabled); pointer-events: none; }
 /* The cursor on the chosen segment (already washed) brightens that wash a step: a second tint over the thumb's. */
-.ui-seg button[aria-checked="true"]:is(:hover, :focus-visible, [data-held]) { background: var(--tint); }
+.ui-seg button[aria-checked="true"]:is(:focus-visible, [data-held]) { background: var(--tint); }
+@media (hover: hover) { .ui-seg button[aria-checked="true"]:is(:hover, :focus-visible, [data-held]) { background: var(--tint); } }
 /* The cursor on an unchosen segment is the wash (DESIGN Interaction); held: the window is away and it waits there. */
-.ui-seg button:not([aria-checked="true"]):is(:hover, :focus-visible, [data-held]) { background: var(--tint); }
+.ui-seg button:not([aria-checked="true"]):is(:focus-visible, [data-held]) { background: var(--tint); }
+@media (hover: hover) { .ui-seg button:not([aria-checked="true"]):is(:hover, :focus-visible, [data-held]) { background: var(--tint); } }
 /* A small segmented choice, for a bar's end (chat search's sort). */
 /* Only its size changes: the same hairline, thumb and type as the Segmented it scales. */
 .ui-seg[data-size="sm"] button { min-height: calc(var(--control-xs) - 2 * var(--seg-pad)); padding: var(--space-2xs) var(--space-md); font-size: var(--text-caption); }
@@ -97,7 +110,8 @@
 .ui-slider[data-disabled] { opacity: var(--opacity-disabled); }
 .ui-slider-head { display: flex; align-items: center; justify-content: space-between; gap: var(--row-gap); }
 .ui-slider-value { display: inline-flex; align-items: center; gap: var(--space-xs); border: 0; border-radius: var(--radius-control); background: transparent; padding: var(--space-xs) var(--space-xs) var(--space-xs) var(--space-sm); color: color-mix(in oklch, var(--foreground), transparent var(--tone-quiet)); font-size: var(--text-caption); font-weight: var(--weight-rest); }
-.ui-slider-value[data-opens]:is(:hover, :focus-visible) { background: var(--tint); color: var(--foreground); }
+.ui-slider-value[data-opens]:is(:focus-visible) { background: var(--tint); color: var(--foreground); }
+@media (hover: hover) { .ui-slider-value[data-opens]:is(:hover, :focus-visible) { background: var(--tint); color: var(--foreground); } }
 .ui-slider-value svg { width: var(--icon-xs); height: var(--icon-xs); color: var(--muted-foreground); }
 .ui-slider-input { --thumb: var(--control-2xs); --track: var(--track-size); width: 100%; height: var(--thumb); margin: 0; appearance: none; -webkit-appearance: none; background: transparent; cursor: pointer; touch-action: pan-y; }
 .ui-slider-input:focus-visible { outline: 0; }

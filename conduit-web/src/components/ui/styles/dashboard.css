@@ -27,16 +27,19 @@
 .ui-dash-context > span:not(:last-child)::after { margin-inline: var(--space-md); opacity: .6; content: "·"; }
 .ui-dash-context code { color: color-mix(in oklch, var(--foreground), transparent var(--tone-rest)); font: var(--weight-light) var(--text-caption)/var(--leading-row) var(--font-data); }
 .ui-dash-context button { border: 0; border-radius: var(--radius-inset); background: transparent; padding: 0; color: inherit; font: inherit; cursor: pointer; }
-.ui-dash-context button:is(:hover, :focus-visible) code { color: var(--foreground); }
+.ui-dash-context button:is(:focus-visible) code { color: var(--foreground); }
+@media (hover: hover) { .ui-dash-context button:is(:hover, :focus-visible) code { color: var(--foreground); } }
 .ui-dash-context button:focus-visible { outline: none; background: var(--tint); }
 
 .ui-dash-quick { position: relative; display: flex; min-width: var(--control-sm); flex: 1 1 0; grid-area: actions; justify-content: flex-end; margin: 0 calc(-1 * var(--space-md)) 0 var(--space-2xl); }
 .ui-dash-quick-action { display: inline-flex; height: var(--control-sm); align-items: center; gap: var(--space-md); border: 0; border-radius: var(--radius-control); background: transparent;
   padding: 0 var(--space-md); color: color-mix(in oklch, var(--foreground), transparent var(--tone-rest)); font-size: var(--text-row); white-space: nowrap; }
-.ui-dash-quick-action:is(:hover, :focus-visible) { outline: none; background: var(--sidebar-accent); color: var(--foreground); }
+.ui-dash-quick-action:is(:focus-visible) { outline: none; background: var(--sidebar-accent); color: var(--foreground); }
+@media (hover: hover) { .ui-dash-quick-action:is(:hover, :focus-visible) { outline: none; background: var(--sidebar-accent); color: var(--foreground); } }
 .ui-dash-quick-action > svg { display: none; }
 .ui-dash-icon { display: inline-grid; width: var(--control-sm); height: var(--control-sm); flex: none; place-items: center; border: 0; border-radius: var(--radius-control); background: transparent; color: var(--muted-foreground); }
-.ui-dash-icon:is(:hover, :focus-visible, [data-expanded]) { outline: none; background: var(--sidebar-accent); color: var(--foreground); }
+.ui-dash-icon:is(:focus-visible, [data-expanded]) { outline: none; background: var(--sidebar-accent); color: var(--foreground); }
+@media (hover: hover) { .ui-dash-icon:is(:hover, :focus-visible, [data-expanded]) { outline: none; background: var(--sidebar-accent); color: var(--foreground); } }
 .ui-dash-icon > svg { width: var(--icon); height: var(--icon); }
 /* Folding (the app's watchFold): a folded item stays laid out, hidden, so its width is known when room comes back. */
 :is(.ui-dash-group-actions, .ui-dash-quick) > :is([data-fold], [data-fold-more]) { display: inline-flex; }
@@ -73,10 +76,12 @@
   padding: var(--space-2xs) var(--space-xs) var(--space-2xs) var(--space-2xs); color: inherit; font: inherit; }
 .ui-group-toggle > svg { width: var(--icon-sm); height: var(--icon-sm); transition: rotate var(--duration-quick) var(--ease-change); }
 .ui-group-toggle[aria-expanded="true"] > svg { rotate: 90deg; }
-.ui-group-toggle:is(:hover, :focus-visible, [data-held]) { outline: none; background: var(--tint); color: var(--foreground); }
+.ui-group-toggle:is(:focus-visible, [data-held]) { outline: none; background: var(--tint); color: var(--foreground); }
+@media (hover: hover) { .ui-group-toggle:is(:hover, :focus-visible, [data-held]) { outline: none; background: var(--tint); color: var(--foreground); } }
 .ui-group-action { display: inline-flex; height: var(--control-xs); align-items: center; gap: var(--space-2xs); border: 0; border-radius: var(--radius-control); background: transparent;
   padding: 0 var(--space-md); color: var(--muted-foreground); font-size: var(--text-caption); }
-.ui-group-action:is(:hover, :focus-visible, [data-expanded], [data-held]) { outline: none; background: var(--sidebar-accent); color: var(--foreground); }
+.ui-group-action:is(:focus-visible, [data-expanded], [data-held]) { outline: none; background: var(--sidebar-accent); color: var(--foreground); }
+@media (hover: hover) { .ui-group-action:is(:hover, :focus-visible, [data-expanded], [data-held]) { outline: none; background: var(--sidebar-accent); color: var(--foreground); } }
 .ui-group-action > svg { width: var(--icon-sm); height: var(--icon-sm); }
 .ui-group-action small { margin-left: auto; padding-left: var(--space-lg); color: var(--muted-foreground); font: var(--weight-rest) var(--text-caption)/var(--leading-row) var(--font-data); }
 .ui-dash-group-actions > .ui-counts { padding-inline: var(--space-md); font-size: var(--text-caption); }
@@ -85,7 +90,8 @@
 /* A page has room for a taller row than the sidebar: two units at least, the sidebar's where that is taller (a phone). */
 .ui-dash-row { display: flex; width: 100%; min-width: 0; min-height: max(var(--row-min), calc(2.03125 * var(--u-space))); flex: none; align-items: center; gap: var(--row-gap); border: 0; border-radius: var(--radius-control);
   background: transparent; padding: var(--space-2xs) var(--row-inset); color: color-mix(in oklch, var(--foreground), transparent var(--tone-rest)); font-size: var(--row-text); text-align: left; text-decoration: none; }
-.ui-dash-row:is(button, a):is(:hover, :focus-visible, :active, [data-expanded], [data-held]), .ui-dash-row:is([data-current], [aria-current="true"], [aria-current="page"]) { outline: none; background: var(--sidebar-accent); color: var(--foreground); }
+.ui-dash-row:is(button, a):is(:focus-visible, :active, [data-expanded], [data-held]), .ui-dash-row:is([data-current], [aria-current="true"], [aria-current="page"]) { outline: none; background: var(--sidebar-accent); color: var(--foreground); }
+@media (hover: hover) { .ui-dash-row:is(button, a):is(:hover, :focus-visible, :active, [data-expanded], [data-held]) { outline: none; background: var(--sidebar-accent); color: var(--foreground); } }
 .ui-dash-row:disabled { cursor: default; opacity: var(--opacity-disabled); }
 .ui-dash-row-lead { display: grid; width: var(--icon); height: var(--icon); flex: none; place-items: center; color: var(--muted-foreground); }
 .ui-dash-row-lead > :is(svg, img) { width: var(--icon-sm); height: var(--icon-sm); }
@@ -94,15 +100,20 @@
 .ui-dash-row-context code { font: var(--weight-light) var(--text-caption)/var(--leading-row) var(--font-data); }
 .ui-dash-row-trailing { flex: none; color: var(--muted-foreground); font: var(--weight-light) var(--text-caption)/var(--leading-row) var(--font-data); font-variant-numeric: tabular-nums; }
 /* A chat's harness mark in a row: greyed with its row, its own colours on the cursor (as a nav row's). */
-.ui-dash-row:is(:hover, :focus-visible, [data-held]) .thread-harness-mark[data-lively] { color: var(--foreground); opacity: 1; }
-.ui-dash-row:is(:hover, :focus-visible) .thread-harness-mark[data-lively] .harness-mark-tinted { background-color: var(--harness-brand, currentColor); }
-.ui-dash-row:is(:hover, :focus-visible) .thread-harness-mark[data-artwork] .harness-mark-tinted { opacity: 0; }
-.ui-dash-row:is(:hover, :focus-visible) .thread-harness-mark[data-artwork] .harness-mark-artwork { opacity: 1; }
+.ui-dash-row:is(:focus-visible, [data-held]) .thread-harness-mark[data-lively] { color: var(--foreground); opacity: 1; }
+@media (hover: hover) { .ui-dash-row:is(:hover, :focus-visible, [data-held]) .thread-harness-mark[data-lively] { color: var(--foreground); opacity: 1; } }
+.ui-dash-row:is(:focus-visible) .thread-harness-mark[data-lively] .harness-mark-tinted { background-color: var(--harness-brand, currentColor); }
+@media (hover: hover) { .ui-dash-row:is(:hover, :focus-visible) .thread-harness-mark[data-lively] .harness-mark-tinted { background-color: var(--harness-brand, currentColor); } }
+.ui-dash-row:is(:focus-visible) .thread-harness-mark[data-artwork] .harness-mark-tinted { opacity: 0; }
+@media (hover: hover) { .ui-dash-row:is(:hover, :focus-visible) .thread-harness-mark[data-artwork] .harness-mark-tinted { opacity: 0; } }
+.ui-dash-row:is(:focus-visible) .thread-harness-mark[data-artwork] .harness-mark-artwork { opacity: 1; }
+@media (hover: hover) { .ui-dash-row:is(:hover, :focus-visible) .thread-harness-mark[data-artwork] .harness-mark-artwork { opacity: 1; } }
 .ui-dash-day { padding: var(--space-md) var(--row-inset) var(--space-2xs); color: var(--muted-foreground); font-size: var(--text-caption); }
 .ui-dash-group-rows > .ui-dash-day:first-child { padding-top: 0; }
 .ui-dash-more { display: flex; width: 100%; min-height: var(--control-sm); align-items: center; border: 0; border-radius: var(--radius-control); background: transparent;
   padding: var(--space-xs) var(--row-inset) var(--space-xs) calc(var(--row-inset) + var(--icon) + var(--row-gap)); color: color-mix(in oklch, var(--foreground), transparent 52%); font-size: var(--text-caption); text-align: left; }
-.ui-dash-more:is(:hover, :focus-visible, [data-held]) { outline: none; background: var(--sidebar-accent); color: var(--foreground); }
+.ui-dash-more:is(:focus-visible, [data-held]) { outline: none; background: var(--sidebar-accent); color: var(--foreground); }
+@media (hover: hover) { .ui-dash-more:is(:hover, :focus-visible, [data-held]) { outline: none; background: var(--sidebar-accent); color: var(--foreground); } }
 .ui-dash-more small { margin-left: var(--space-sm); color: var(--muted-foreground); font: var(--weight-light) var(--text-caption)/var(--leading-row) var(--font-data); }
 .ui-dash-empty { display: flex; align-items: center; gap: var(--space-md); padding: var(--space-md) var(--row-inset); color: var(--muted-foreground); font-size: var(--text-caption); }
 .ui-dash-note { margin: 0; padding: var(--space-md) var(--row-inset); color: var(--muted-foreground); font-size: var(--text-caption); }
@@ -130,11 +141,13 @@
 .ui-dash[data-one-column]:not([data-compact]) .ui-folder-shelf { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .ui-folder { position: relative; display: flex; min-width: 0; flex-direction: column; align-items: flex-start; gap: var(--space-xs); border: 0; border-radius: var(--radius-surface); background: transparent;
   padding: var(--space-md) var(--row-inset); color: inherit; text-align: left; text-decoration: none; cursor: pointer; }
-.ui-folder:is(:hover, :focus-visible, [data-expanded], [data-held]) { outline: none; background: var(--sidebar-accent); }
+.ui-folder:is(:focus-visible, [data-expanded], [data-held]) { outline: none; background: var(--sidebar-accent); }
+@media (hover: hover) { .ui-folder:is(:hover, :focus-visible, [data-expanded], [data-held]) { outline: none; background: var(--sidebar-accent); } }
 .ui-folder-mark { width: var(--dash-tile); height: var(--control-tool); }
 .ui-folder-mark [data-part="back"] { fill: color-mix(in oklch, var(--foreground), transparent 80%); }
 .ui-folder-mark [data-part="front"] { fill: color-mix(in oklch, var(--foreground), transparent 70%); transition: fill var(--duration-quick) var(--ease-change); }
-.ui-folder:is(:hover, :focus-visible) .ui-folder-mark [data-part="front"] { fill: color-mix(in oklch, var(--foreground), transparent 55%); }
+.ui-folder:is(:focus-visible) .ui-folder-mark [data-part="front"] { fill: color-mix(in oklch, var(--foreground), transparent 55%); }
+@media (hover: hover) { .ui-folder:is(:hover, :focus-visible) .ui-folder-mark [data-part="front"] { fill: color-mix(in oklch, var(--foreground), transparent 55%); } }
 .ui-folder > :not(.ui-folder-mark, .ui-folder-live, span) { width: var(--control-tool); height: var(--control-tool); margin: 0 var(--space-2xs); color: var(--muted-foreground); }
 .ui-folder-live { position: absolute; top: calc(var(--space-md) + var(--space-2xs)); left: calc(var(--row-inset) + 1.75 * var(--u-icon)); width: var(--icon-dot); height: var(--icon-dot); border-radius: var(--radius-round); background: var(--live); }
 .ui-folder-name { max-width: 100%; overflow: hidden; color: var(--foreground); font-size: var(--row-text); text-overflow: ellipsis; white-space: nowrap; }
@@ -142,7 +155,7 @@
 .ui-folder-meta { max-width: 100%; overflow: hidden; color: var(--muted-foreground); font: var(--weight-light) var(--text-caption)/var(--leading-row) var(--font-data); text-overflow: ellipsis; white-space: nowrap; }
 
 /* The keyboard's cursor (the app's): a row left under a still pointer draws at rest until the pointer moves. */
-.ui-dash[data-keyboard-cursor] :is(.ui-dash-row, .ui-dash-more, .ui-folder):hover:not(:focus-visible, [data-expanded], [data-held]) { background: transparent; }
+@media (hover: hover) { .ui-dash[data-keyboard-cursor] :is(.ui-dash-row, .ui-dash-more, .ui-folder):hover:not(:focus-visible, [data-expanded], [data-held]) { background: transparent; } }
 
 /* One column: everything in one flow, ordered. */
 .ui-dash[data-one-column] .ui-dash-body { display: flex; width: calc(100% - 2 * var(--dash-gutter)); flex-direction: column; }

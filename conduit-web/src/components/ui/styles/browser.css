@@ -8,7 +8,7 @@
 .ui-browser-place[data-active="true"] { font-weight: var(--weight-current); color: var(--foreground); }
 .ui-browser-place > :first-child { width: var(--icon); height: var(--icon); flex: none; }
 .ui-browser-divider { position: relative; cursor: col-resize; touch-action: none; border-inline-start: var(--hairline) solid var(--tint); }
-.ui-browser-divider:hover { border-color: var(--ring); }
+@media (hover: hover) { .ui-browser-divider:hover { border-color: var(--ring); } }
 .ui-browser-main { position: relative; display: flex; min-width: 0; min-height: 0; flex-direction: column; overflow: hidden; }
 .ui-browser-toolbar, .ui-browser-actions { display: flex; min-width: 0; align-items: center; flex-wrap: wrap; gap: var(--space-xs); padding: var(--space-sm); border-bottom: var(--hairline) solid var(--tint); }
 .ui-browser-toolbar > .ui-button { width: var(--control); padding-inline: 0; flex: none; }

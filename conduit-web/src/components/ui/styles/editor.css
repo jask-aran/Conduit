@@ -49,7 +49,8 @@
 .ui-diff-rail { display: flex; justify-content: center; border-right: var(--hairline) solid var(--border); padding-top: var(--space-xs); }
 .ui-split-edge { position: relative; z-index: 5; grid-column: 2; grid-row: 1; cursor: col-resize; touch-action: none; }
 .ui-split-edge::after { content: ""; position: absolute; inset-block: 0; left: 50%; width: var(--hairline); background: var(--border); transition: background var(--duration-quick); }
-.ui-split-edge:is(:hover, :focus-visible, :active, [data-resizing])::after { background: var(--ring); }
+.ui-split-edge:is(:focus-visible, :active, [data-resizing])::after { background: var(--ring); }
+@media (hover: hover) { .ui-split-edge:is(:hover, :focus-visible, :active, [data-resizing])::after { background: var(--ring); } }
 .ui-code-host .cm-scroller::-webkit-scrollbar { width: var(--space-md); height: var(--space-md); }
 .ui-code-host .cm-scroller::-webkit-scrollbar-track, .ui-code-host .cm-scroller::-webkit-scrollbar-corner { background: transparent; }
 .ui-code-host .cm-scroller::-webkit-scrollbar-thumb { border: var(--space-2xs) solid transparent; border-radius: var(--radius-round); background: color-mix(in oklch, var(--foreground), transparent 72%); background-clip: padding-box; }

@@ -31,19 +31,22 @@
   opacity: .85;
 }
 .ui-history-branch { position: relative; opacity: .62; }
-.ui-history-branch:hover { opacity: .86; }
+@media (hover: hover) { .ui-history-branch:hover { opacity: .86; }
+}
 /* Rail and tick meet at one x, a tick's width left of the child text, so the
    elbow stays short and connected whatever the indent step is. */
 .ui-history-branch-rail { position: absolute; top: 0; bottom: calc(var(--history-row-height, var(--control-tool)) / 2); left: calc(var(--history-gutter) + var(--history-depth, 1) * var(--history-step) - var(--history-tick)); width: var(--hairline); background: var(--muted-foreground); opacity: .55; }
 .ui-history-tick { position: absolute; top: calc(var(--space-2xs) + var(--history-line-height) / 2); left: calc(var(--history-gutter) + var(--history-depth, 1) * var(--history-step) - var(--history-tick)); width: var(--history-tick); height: var(--hairline); background: var(--muted-foreground); opacity: .55; }
-.ui-history-row:hover { background: var(--tint); }
+@media (hover: hover) { .ui-history-row:hover { background: var(--tint); }
+}
 /* A folded run of tool calls is a control, not a line of text: it opens just
    that run, and the button in the header stays the blunt all-or-nothing one. */
 .ui-history-run { width: 100%; border: 0; background: none; font: inherit; text-align: left; cursor: pointer; }
 .ui-history-run .ui-history-text { display: flex; align-items: center; gap: var(--space-xs); }
 .ui-history-chevron { width: var(--space-lg); height: var(--space-lg); flex: none; opacity: .7; transition: transform 0.15s ease; }
 .ui-history-chevron[data-open] { transform: rotate(180deg); }
-.ui-history-run:hover .ui-history-chevron { opacity: 1; }
+@media (hover: hover) { .ui-history-run:hover .ui-history-chevron { opacity: 1; }
+}
 .ui-history-row[data-kind="user"], .ui-history-row[data-kind="assistant"] { color: var(--foreground); }
 .ui-history-row[data-kind="user"] strong { color: color-mix(in oklch, var(--primary), white 18%); }
 .ui-history-row[data-kind="assistant"] strong { color: var(--live); }

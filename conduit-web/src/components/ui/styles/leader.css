@@ -6,7 +6,8 @@
 .ui-crumbs { display: flex; min-width: 0; flex: 1; align-items: center; justify-content: flex-start; gap: var(--space-2xs); overflow: hidden; }
 /* A crumb is a section label you can press (its type is .ui-title's): the wash on hover, the current place white at the current weight. */
 .ui-crumbs > button { flex: none; border: 0; border-radius: var(--radius-control); background: transparent; padding: var(--space-2xs) var(--space-sm); cursor: pointer; }
-.ui-crumbs > button:is(:hover, :focus-visible):not(:disabled) { background: var(--tint); color: var(--foreground); }
+.ui-crumbs > button:is(:focus-visible):not(:disabled) { background: var(--tint); color: var(--foreground); }
+@media (hover: hover) { .ui-crumbs > button:is(:hover, :focus-visible):not(:disabled) { background: var(--tint); color: var(--foreground); } }
 .ui-crumbs > button[aria-current="true"] { color: var(--foreground); font-weight: var(--weight-current); }
 .ui-crumbs > button:disabled { opacity: var(--opacity-muted); cursor: default; }
 .ui-crumbs-sep { color: var(--muted-foreground); font-size: var(--text-label); opacity: var(--opacity-muted); }

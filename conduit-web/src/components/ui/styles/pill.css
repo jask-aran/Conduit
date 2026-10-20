@@ -18,7 +18,8 @@
 .ui-pill[data-solo] > button { width: 100%; height: 100%; }
 /* One icon size in every pill, alone or grouped, each in a 40px circle: as far from the sides as from the top. */
 .ui-pill > button svg, .ui-pill[data-surface] > :is(button, [data-slot="button"]) svg { width: var(--pill-icon); height: var(--pill-icon); }
-.ui-pill > button:is(:hover, :focus-visible) { background: var(--tint); }
+.ui-pill > button:is(:focus-visible) { background: var(--tint); }
+@media (hover: hover) { .ui-pill > button:is(:hover, :focus-visible) { background: var(--tint); } }
 .ui-pill[data-stretch] { width: auto; flex: 1 1 auto; }
 .ui-pill[data-stretch] > button { width: 100%; }
 /* A circle that comes and goes in its row folds to nothing, its gap and its 1px border each side with it (the border stays drawn, so it never pops;

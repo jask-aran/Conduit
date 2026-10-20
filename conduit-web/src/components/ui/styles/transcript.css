@@ -5,7 +5,8 @@
    there is more). Show more under it, the foot's caption. */
 .ui-bubble-text[data-folded] { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: var(--bubble-fold); mask-image: linear-gradient(to bottom, #000 calc(100% - 0.5lh), transparent); }
 .ui-bubble-more { display: block; margin-top: var(--space-xs); border: 0; background: transparent; padding: 0; color: var(--muted-foreground); font: var(--weight-rest) var(--text-caption) var(--font-sans); cursor: pointer; }
-.ui-bubble-more:is(:hover, :focus-visible) { color: var(--foreground); }
+.ui-bubble-more:is(:focus-visible) { color: var(--foreground); }
+@media (hover: hover) { .ui-bubble-more:is(:hover, :focus-visible) { color: var(--foreground); } }
 /* Transcript (DESIGN Transcript), at the transcript's scale. The reading column is the composer's width;
    messages a step and a half apart; a turn's parts half a unit. */
 .ui-transcript { display: flex; width: min(100%, var(--transcript-width, var(--composer-width, var(--reading-width)))); flex-direction: column; gap: var(--space-3xl); margin-inline: auto; }
@@ -26,7 +27,8 @@
 /* A turn's changes: the counts in the data face, added in --status-success and removed in --destructive (data, kept
    on the glyphs); a ghost control's wash on hover. */
 .ui-changes { display: inline-flex; height: var(--control-xs); align-items: center; gap: var(--space-xs); border: 0; border-radius: var(--radius-control); background: transparent; padding: 0 var(--space-xs); font: var(--text-caption) var(--font-data); font-variant-numeric: tabular-nums; cursor: pointer; }
-.ui-changes:is(:hover, :focus-visible) { background: var(--tint); }
+.ui-changes:is(:focus-visible) { background: var(--tint); }
+@media (hover: hover) { .ui-changes:is(:hover, :focus-visible) { background: var(--tint); } }
 .ui-changes [data-change="added"] { color: var(--status-success); }
 .ui-changes [data-change="removed"] { color: var(--destructive); }
 .ui-turn { display: grid; min-width: 0; gap: var(--space-md); }
@@ -63,11 +65,13 @@
 .ui-answer blockquote { border-left: var(--hairline) solid var(--tint); padding-left: var(--space-lg); color: var(--muted-foreground); }
 .ui-answer :not(pre, .ui-code-line) > code { border-radius: var(--radius-inset); background: var(--tint); padding: 0 var(--space-xs); font: 0.9em var(--font-code); }
 .ui-answer :is(a, .ui-answer-link) { color: inherit; text-decoration: underline; text-decoration-color: color-mix(in oklch, currentColor, transparent var(--tone-faint)); text-underline-offset: var(--space-2xs); }
-.ui-answer :is(a, .ui-answer-link):is(:hover, :focus-visible) { outline: 0; text-decoration-color: currentColor; }
+.ui-answer :is(a, .ui-answer-link):is(:focus-visible) { outline: 0; text-decoration-color: currentColor; }
+@media (hover: hover) { .ui-answer :is(a, .ui-answer-link):is(:hover, :focus-visible) { outline: 0; text-decoration-color: currentColor; } }
 .ui-answer-link { border: 0; background: none; padding: 0; font: inherit; cursor: pointer; }
 /* A citation: a chip carrying the host, the whole URL on its title; a run of them after one claim is one cluster. */
 .ui-answer [data-citation] { display: inline-flex; max-width: 14em; align-items: baseline; overflow: hidden; border: var(--hairline) solid var(--tint); border-radius: var(--radius-round); padding: 0 var(--space-xs); color: var(--muted-foreground); font-size: var(--text-caption); line-height: var(--leading-row); text-decoration: none; text-overflow: ellipsis; vertical-align: baseline; white-space: nowrap; }
-.ui-answer [data-citation]:is(:hover, :focus-visible) { background: var(--tint); color: var(--foreground); }
+.ui-answer [data-citation]:is(:focus-visible) { background: var(--tint); color: var(--foreground); }
+@media (hover: hover) { .ui-answer [data-citation]:is(:hover, :focus-visible) { background: var(--tint); color: var(--foreground); } }
 .ui-answer [data-citation] + [data-citation] { margin-left: var(--space-2xs); }
 .ui-answer hr { border: 0; border-top: var(--hairline) solid var(--tint); }
 .ui-answer table { display: block; max-width: 100%; overflow-x: auto; border-collapse: collapse; font-size: var(--text-row); }
@@ -102,7 +106,8 @@
 .ui-disclosure-header:not(:disabled) { cursor: pointer; }
 .ui-disclosure-chevron { width: var(--icon-sm); height: var(--icon-sm); flex: none; margin-left: auto; transition: rotate var(--duration-quick) var(--ease-change); }
 [aria-expanded="true"] > .ui-disclosure-chevron { rotate: 180deg; }
-:is(.ui-disclosure-header, .ui-trace):is(:hover, :focus-visible) > .ui-disclosure-chevron { color: var(--foreground); }
+:is(.ui-disclosure-header, .ui-trace):is(:focus-visible) > .ui-disclosure-chevron { color: var(--foreground); }
+@media (hover: hover) { :is(.ui-disclosure-header, .ui-trace):is(:hover, :focus-visible) > .ui-disclosure-chevron { color: var(--foreground); } }
 @media (prefers-reduced-motion: reduce) { .ui-disclosure-chevron { transition: none; } }
 /* Its body unfolds in height (gentle) and folds away quickly: it stays drawn, at no height when closed. */
 .ui-disclosure-body { min-width: 0; height: auto; overflow: clip; interpolate-size: allow-keywords; --move: var(--duration-gentle); --move-ease: var(--ease-arrive); --hide-delay: 0s;

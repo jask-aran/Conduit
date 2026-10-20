@@ -413,3 +413,8 @@ html, body { background: var(--frame, #08090a); color: var(--foreground); }
 .g-file-code { margin: 0; padding: var(--space-md) 0; color: var(--foreground); font: var(--text-caption)/1.6 var(--font-data); white-space: pre; }
 .g-file-code i { display: inline-block; width: var(--space-4xl); padding-right: var(--space-md); color: var(--muted-foreground); font-style: normal; text-align: right; }
 .g-file-none { color: var(--muted-foreground); font-size: var(--text-row); font-weight: var(--weight-rest); }
+/* Motion · Expand: a folder's rows under a toggle, and what follows them moving with the slide. */
+.g-expand { display: grid; width: min(100%, 320px); gap: 0; padding: 12px; border-radius: 10px; }
+.g-expand > .ui-button { justify-self: start; margin-bottom: 6px; }
+.g-expand-row { margin: 0; padding: 6px 10px 6px 28px; color: var(--foreground); font-size: var(--text-row); }
+.g-expand-after { padding-left: 10px; color: var(--muted-foreground); }
