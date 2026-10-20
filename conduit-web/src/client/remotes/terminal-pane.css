@@ -39,45 +39,6 @@
   visibility: hidden;
 }
 
-@media (pointer: coarse) {
-
-  .terminal-mobile-keys {
-    display: flex;
-    flex: none;
-    gap: 6px;
-    overflow-x: auto;
-    overscroll-behavior-x: contain;
-    padding: 6px 8px calc(6px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)));
-    border-top: 1px solid var(--border);
-    background: color-mix(in oklch, var(--background), black 6%);
-    scrollbar-width: none;
-    touch-action: pan-x;
-  }
-
-  .terminal-mobile-keys::-webkit-scrollbar {
-    display: none;
-  }
-
-  .terminal-mobile-keys button {
-    min-width: 44px;
-    height: 38px;
-    flex: none;
-    border: 1px solid var(--border);
-    border-radius: 7px;
-    background: var(--accent);
-    color: var(--foreground);
-    font: 12px ui-monospace, SFMono-Regular, Consolas, monospace;
-    -webkit-tap-highlight-color: transparent;
-  }
-
-  .terminal-mobile-keys button:active,
-  .terminal-mobile-keys .terminal-mobile-modifier[data-active="true"] {
-    border-color: var(--ring);
-    background: color-mix(in oklch, var(--foreground), transparent 86%);
-    color: var(--foreground);
-  }
-}
-
 /* Mobile retains v0.5.2 density. */
 @media (--conduit-mobile-layout) {
 .terminal-pane-body {

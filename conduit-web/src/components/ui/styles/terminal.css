@@ -114,6 +114,19 @@
   color: var(--destructive);
 } }
 
+/* TermKeys: a phone's key bar, a hairline over it, the page's ground, the safe area under it; it scrolls sideways
+   without a bar. TermKey: Keycap's face (the tint, mono) at a finger's size; pressed it brightens, armed it is ringed. */
+.ui-term-keys { display: flex; flex: none; gap: var(--space-sm); overflow-x: auto; overscroll-behavior-x: contain; touch-action: pan-x; scrollbar-width: none;
+  padding: var(--space-sm) var(--space-md) calc(var(--space-sm) + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)));
+  border-top: var(--hairline) solid var(--border); background: var(--background); }
+.ui-term-keys::-webkit-scrollbar { display: none; }
+.ui-term-key { display: inline-grid; min-width: var(--row-min); height: var(--control-lg); flex: none; place-items: center; padding: 0 var(--space-sm); border: 0;
+  border-radius: var(--radius-control); background: var(--tint); color: var(--foreground); font: var(--weight-rest) var(--text-caption)/1 var(--font-label);
+  -webkit-tap-highlight-color: transparent; }
+.ui-term-key:active { filter: brightness(var(--brighten)); }
+.ui-term-key[aria-pressed="true"] { box-shadow: inset 0 0 0 var(--stroke) var(--foreground); }
+.ui-term-key:focus-visible { outline: 0; box-shadow: inset 0 0 0 var(--hairline) var(--foreground); }
+
 @media (--conduit-phone-layout) {
   .ui-term-header { min-height: var(--control); }
   .ui-term-lead[data-phone] [data-slot="button"], .ui-term-actions [data-slot="button"] { width: var(--space-4xl); min-width: var(--space-4xl); height: var(--space-4xl); }
