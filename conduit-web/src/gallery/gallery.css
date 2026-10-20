@@ -405,3 +405,7 @@ html, body { background: var(--frame, #08090a); color: var(--foreground); }
 .g-inuse-scene > .g-anatomy { padding-block: 20px; }
 /* Something RiderButtons ride over: they float centred at its foot. */
 .g-ride { position: relative; width: 100%; height: calc(2.5 * var(--control-lg)); border: var(--hairline) dashed var(--tint); border-radius: var(--radius-surface); }
+/* Nav: its pieces on the frame, and a pane at its own height. */
+.g-nav-frame { display: flex; width: var(--nav-width); flex-direction: column; background: var(--frame); color: var(--sidebar-foreground); padding: var(--space-sm) var(--space-md); }
+.g-nav-stage { position: relative; height: 420px; background: var(--frame); }
+.g-nav-stage > .ui-nav-pane { height: 100%; }

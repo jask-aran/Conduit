@@ -1,24 +1,146 @@
-/* Nav list: the sidebar's rows on the ground, not in a popover. A group has
-   a label; a row an icon, its label, an optional toggle at its end, and an
-   indent when it sits under another row (a chat under its project). Sizes
-   are the app's sidebar, per density. */
+/* Nav: the sidebar on the frame (DESIGN Interaction, List row). A pane of a head, a list and a foot; a list of
+   groups under labels, rows, folders that open, and the narrow rail's buttons. Rows rest grey; the cursor (hover,
+   keyboard focus, a press, a held focus, a selection) is the wash and white; current is white at the current
+   weight with a heavier stroke and no fill, and so is the folder holding it (within); open beside is white at
+   the resting weight. The sizes are the density's tokens. */
+@font-face { font-family: "Conduit Wordmark"; src: url("../../../client/assets/fonts/druk-wide-web-super.woff2") format("woff2"); font-style: normal; font-weight: 400; font-display: swap; }
+:root, [data-density] {
+  /* The pane open and folded to its rail, and the top line every pane header centres on. */
+  --nav-width: calc(18.125 * var(--u-space)); --nav-rail-width: calc(3.25 * var(--u-space));
+  --nav-line: calc(2.25 * var(--u-space)); --nav-brand: calc(2.625 * var(--u-space)); --nav-wordmark: calc(1.171875 * var(--u-type));
+  --duration-fold: 240ms;
+}
+
+/* The pane. Its width moves with the panel's motion (--panel-motion-*); data-instant skips it. */
+.ui-nav-pane { position: relative; z-index: 20; width: var(--nav-width); flex: none; contain: layout; overflow: hidden; transition: width var(--panel-motion-duration) var(--panel-motion-easing); }
+.ui-nav-pane[data-collapsed] { width: var(--nav-rail-width); }
+.ui-nav-pane[data-instant] { transition: none; }
+.ui-nav-pane-body { position: absolute; inset: 0 auto 0 0; display: flex; width: var(--nav-width); flex-direction: column; overflow: hidden; background: var(--sidebar); color: var(--sidebar-foreground); }
+.ui-nav-pane[data-folded] .ui-nav-pane-body { width: var(--nav-rail-width); }
+@media (prefers-reduced-motion: reduce) { .ui-nav-pane { transition-duration: 0.01ms; } }
+
+/* The head: centred on the top line, so its icons sit level with a pane header's and the wordmark on its baseline. */
+.ui-nav-head { display: flex; align-items: center; gap: var(--space-2xs); padding: calc(var(--nav-line) - var(--nav-brand) / 2) var(--space-md) var(--space-2xs); }
+.ui-nav-head > .ui-seg { order: 2; flex: none; }
+.ui-nav-brand { display: flex; order: 1; min-width: 0; height: var(--nav-brand); flex: 1; align-items: center; border: 0; border-radius: var(--radius-control); background: transparent; padding: 0 var(--space-xs); color: inherit; }
+.ui-nav-brand > span { font: var(--weight-rest) var(--nav-wordmark)/1 var(--font-wordmark); letter-spacing: 0; }
+
+/* The list: scrolled on the compositor (below 1.5x a transparent scroller is not, and each frame laid the page out
+   into layers again). Scroll anchoring is off while a folder slides: every frame of the slide looked like a reason
+   to move the scroll, and the rows above jumped. */
+.ui-nav-list { min-height: 0; flex: 1; overflow-y: auto; padding: var(--space-sm) var(--space-md); scrollbar-color: var(--native-scrollbar-color); scrollbar-width: var(--native-scrollbar-width); will-change: scroll-position; overflow-anchor: none; }
+.ui-nav-foot { padding: var(--space-md); border-top: var(--hairline) solid var(--sidebar-border); }
+
 .ui-nav-group { display: flex; flex-direction: column; gap: var(--hairline); }
-.ui-nav-group:not(:has(> .ui-nav-label)) { gap: 0; }
+.ui-nav-list > .ui-nav-group { margin-top: var(--space-lg); }
 .ui-nav-label { align-self: flex-start; padding: var(--nav-label-pad); }
-.ui-nav-row { display: flex; width: 100%; min-width: 0; min-height: var(--row-min); align-items: center; gap: var(--row-gap); border: 0; border-radius: var(--radius-control); background: transparent; padding: var(--row-pad); color: color-mix(in oklch, var(--foreground), transparent var(--tone-rest)); font-size: var(--text-row); line-height: var(--leading-text); text-align: left; }
+
+/* A row. A folder's row is a row holding its link and its chevron. */
+.ui-nav-row { display: flex; width: 100%; min-width: 0; min-height: var(--row-min); align-items: center; gap: var(--row-gap); border: 0; border-radius: var(--radius-control); background: transparent; padding: var(--space-2xs) var(--row-inset); color: color-mix(in oklch, var(--foreground), transparent var(--tone-rest)); font-size: var(--text-row); line-height: var(--leading-text); text-align: left; }
 .ui-nav-row[data-indent] { padding-left: var(--nav-indent); }
-.ui-nav-row > .ui-nav-icon { display: inline-grid; width: var(--icon); height: var(--icon); flex: none; place-items: center; color: var(--muted-foreground); }
-.ui-nav-row > .ui-nav-icon > * { width: 100%; height: 100%; }
+.ui-nav-icon { display: inline-grid; width: var(--icon); height: var(--icon); flex: none; place-items: center; color: var(--muted-foreground); }
+.ui-nav-icon > * { width: 100%; height: 100%; }
+.ui-nav-text { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ui-nav-text[data-stacked] { display: flex; flex-direction: column; line-height: 1.2; }
+.ui-nav-text[data-stacked] > * { overflow: hidden; text-overflow: ellipsis; }
+.ui-nav-text > small { color: var(--muted-foreground); font-size: var(--text-caption); }
+.ui-nav-meta { flex: none; color: var(--muted-foreground); font-size: var(--text-label); }
+.ui-nav-end { display: grid; width: var(--control-xs); height: var(--control-xs); flex: none; margin-right: calc((var(--icon) - var(--control-xs)) / 2); place-items: center; color: color-mix(in oklch, var(--foreground), transparent var(--tone-quiet)); }
+.ui-nav-end > svg { width: var(--icon-sm); height: var(--icon-sm); }
+.ui-nav-row[data-quiet] { font-size: var(--text-caption); color: color-mix(in oklch, var(--foreground), transparent var(--tone-quiet)); }
+.ui-nav-link { display: flex; min-width: 0; flex: 1; align-items: center; gap: var(--row-gap); border: 0; background: transparent; padding: 0; color: inherit; font: inherit; text-align: left; }
+.ui-nav-toggle { display: grid; width: var(--control-xs); height: var(--control-xs); flex: none; margin-right: calc((var(--icon) - var(--control-xs)) / 2); place-items: center; border: 0; border-radius: var(--radius-inset); background: transparent; color: var(--muted-foreground); cursor: pointer; }
+.ui-nav-toggle svg { width: var(--icon); height: var(--icon); transition: rotate var(--duration-quick) var(--ease-change); }
+.ui-nav-toggle[aria-expanded="true"] svg { rotate: 90deg; }
+.ui-nav-toggle:hover { color: var(--sidebar-accent-foreground); }
+
+/* The cursor: the wash and white. Held: the window is away and the cursor waits where it was. */
+.ui-nav-row:is(:hover, :focus-visible, :active, [data-focus-shown], [data-held], [data-held-within], [data-selected]),
+.ui-rail-button:is(:hover, :focus-visible, :active, [data-held]) { background: var(--sidebar-accent); color: var(--sidebar-accent-foreground); }
+.ui-nav-row:is([aria-current="page"], [data-within]), .ui-rail-button[aria-current="page"] { color: var(--sidebar-accent-foreground); font-weight: var(--weight-current); }
+.ui-nav-row[data-open] { color: var(--sidebar-accent-foreground); }
+.ui-nav-row:is(:hover, :focus-visible, :active, [data-focus-shown], [data-held], [data-held-within], [aria-current="page"], [data-within]) .ui-nav-icon { color: var(--sidebar-accent-foreground); }
+:is(.ui-nav-row:is([aria-current="page"], [data-within]), .ui-rail-button[aria-current="page"]) svg.lucide { stroke-width: 3; }
+/* While the keyboard moves the cursor, a row under a still pointer rests until the pointer moves: only the cursor
+   is washed. An override, not pointer-events: Chromium keeps :hover on an element that stops taking the pointer. */
+.ui-nav-pane[data-keyboard-cursor] :is(.ui-nav-row, .ui-rail-button):hover:not(:focus-visible, [data-focus-shown], [data-selected], [data-held], [data-held-within]) { background: transparent; }
+.ui-nav-pane[data-keyboard-cursor] .ui-nav-row:hover:not(:focus-visible, [data-focus-shown], [data-held-within], [aria-current="page"], [data-within], [data-open]) { color: color-mix(in oklch, var(--foreground), transparent var(--tone-rest)); }
+.ui-nav-pane[data-keyboard-cursor] .ui-nav-row:hover:not(:focus-visible, [data-focus-shown], [data-held-within], [aria-current="page"], [data-within]) .ui-nav-icon { color: var(--muted-foreground); }
+
+.ui-nav-pane[data-keyboard-cursor] .ui-seg button:hover:not(:focus-visible, [data-held], [aria-checked="true"]) { background: transparent; color: var(--muted-foreground); }
+
+/* A harness's mark rests greyed with its row and shows its own colours on the cursor or the current row (ThreadHarnessMark lively). */
 .ui-nav-icon:has(> .harness-mark) { width: var(--icon-sm); }
 .ui-nav-row > .ui-nav-icon > .harness-mark { width: var(--icon-sm); height: calc(0.75 * var(--icon-sm)); opacity: var(--opacity-rest); transition: opacity var(--duration-quick) var(--ease-change); }
 .ui-nav-row:is(:hover, :focus-visible, [aria-current="page"]) > .ui-nav-icon > .harness-mark { opacity: 1; }
-.ui-nav-row > span:not(.ui-nav-icon, .ui-nav-toggle) { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ui-nav-row:is(:hover, :focus-visible), .ui-nav-row[aria-current="page"] { color: var(--foreground); }
-.ui-nav-row:is(:hover, :focus-visible) { background: var(--sidebar-accent); }
-.ui-nav-row[aria-current="page"] { font-weight: var(--weight-current); }
-.ui-nav-row:is(:hover, :focus-visible, [aria-current="page"]) > .ui-nav-icon { color: var(--foreground); }
-.ui-nav-toggle { margin-right: calc((var(--icon) - var(--control-xs)) / 2); display: grid; width: var(--control-xs); height: var(--control-xs); flex: none; place-items: center; border-radius: var(--radius-control); color: var(--muted-foreground); }
-.ui-nav-toggle svg { width: var(--icon); height: var(--icon); }
+:is(.ui-nav-icon, .ui-rail-button) > .harness-mark-tinted { background-color: var(--sidebar-foreground); }
+.ui-nav-icon > .thread-harness-mark { width: var(--icon); height: var(--icon); }
+.thread-harness-mark[data-lively] { position: relative; transition: color var(--duration-quick) var(--ease-change), opacity var(--duration-quick) var(--ease-change); }
+.thread-harness-mark[data-lively] .harness-mark { transition: background-color var(--duration-quick) var(--ease-change), opacity var(--duration-quick) var(--ease-change); }
+.thread-harness-mark .harness-mark-artwork { position: absolute; inset: 0; opacity: 0; }
+.ui-nav-row:is(:hover, :focus-visible, [aria-current="page"], [data-held], [data-held-within]) .thread-harness-mark[data-lively] { color: var(--foreground); opacity: 1; }
+.ui-nav-row:is(:hover, :focus-visible, [aria-current="page"]) .thread-harness-mark[data-lively] .harness-mark-tinted { background-color: var(--harness-brand, currentColor); }
+.ui-nav-row:is(:hover, :focus-visible, [aria-current="page"]) .thread-harness-mark[data-artwork] .harness-mark-tinted { opacity: 0; }
+.ui-nav-row:is(:hover, :focus-visible, [aria-current="page"]) .thread-harness-mark[data-artwork] .harness-mark-artwork { opacity: 1; }
+.ui-nav-pane[data-keyboard-cursor] .ui-nav-row:hover:not(:focus-visible, [aria-current="page"]) .thread-harness-mark[data-lively] { color: var(--muted-foreground); opacity: var(--opacity-rest); }
+.ui-nav-pane[data-keyboard-cursor] .ui-nav-row:hover:not(:focus-visible, [aria-current="page"]) .thread-harness-mark[data-lively] .harness-mark-tinted { background-color: currentColor; opacity: 1; }
+.ui-nav-pane[data-keyboard-cursor] .ui-nav-row:hover:not(:focus-visible, [aria-current="page"]) .thread-harness-mark[data-artwork] .harness-mark-artwork { opacity: 0; }
+@media (prefers-reduced-motion: reduce) { .thread-harness-mark[data-lively], .thread-harness-mark[data-lively] .harness-mark, .ui-nav-toggle svg { transition: none; } }
+
+/* A folder's rows are clipped by the sliding box, and each frame's layout stays inside this folder. */
+.ui-nav-folder-body { overflow: hidden; contain: layout paint; overflow-anchor: none; }
+
+.ui-nav-note { padding: var(--space-2xs) var(--space-md) var(--space-xs); color: var(--muted-foreground); font-size: var(--text-caption); }
+/* Static: nothing here is worth an animation. */
+.ui-nav-skeleton { display: flex; flex-direction: column; gap: var(--space-md); padding: var(--space-xs) var(--space-md) var(--space-sm); }
+.ui-nav-skeleton > span { height: var(--space-lg); border-radius: var(--radius-inset); background: var(--muted); }
+.ui-nav-skeleton > span:nth-child(2n) { width: 72%; }
+.ui-nav-skeleton > span:nth-child(3n) { width: 58%; }
+
+/* The rail: shown only while the pane is folded, when the list's other rows are away. */
+.ui-nav-rail { display: none; flex-direction: column; align-items: center; padding: var(--space-md) 0 var(--space-xs); }
+.ui-nav-rail-section { display: flex; flex-direction: column; gap: var(--space-2xs); }
+.ui-rail-button { position: relative; display: grid; width: var(--control); height: var(--control); flex: none; place-items: center; border: 0; border-radius: var(--radius-control); background: transparent; color: color-mix(in oklch, var(--foreground), transparent var(--tone-strong)); }
+.ui-rail-button svg, .ui-rail-button > :is(.harness-mark, .workspace-glyph) { width: var(--icon-lg); height: var(--icon-lg); }
+.ui-rail-button[data-live]::after { position: absolute; right: var(--space-xs); bottom: var(--space-xs); width: var(--space-sm); height: var(--space-sm); border: var(--stroke-thin) solid var(--frame); border-radius: var(--radius-round); background: var(--live); content: ""; }
+
+/* What the app is doing about itself, above the server: hairline and near-monochrome; ready waits on a person. */
+.ui-nav-notice { display: flex; align-items: center; gap: var(--row-gap); margin-bottom: var(--space-xs); border: var(--hairline) solid var(--border); border-radius: var(--radius-control); padding: var(--space-xs) var(--space-md); color: var(--muted-foreground); font-size: var(--text-row); }
+.ui-nav-notice > :is(svg, .ui-spinner) { width: var(--icon); height: var(--icon); flex: none; }
+.ui-nav-notice > span { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ui-nav-notice[data-ready] { border-color: color-mix(in oklch, var(--foreground), transparent var(--tone-line)); color: var(--foreground); }
+.ui-nav-links { display: flex; align-items: center; gap: var(--space-xs); padding: var(--space-xs) var(--space-md); color: var(--muted-foreground); font-size: var(--text-row); }
+.ui-nav-links > span { flex: 1; }
+.ui-nav-links > a { display: grid; width: var(--control); height: var(--control); place-items: center; border-radius: var(--radius-control); color: inherit; }
+.ui-nav-links > a:is(:hover, :focus-visible) { background: var(--sidebar-accent); color: var(--sidebar-accent-foreground); }
+.ui-nav-links svg { width: var(--icon-lg); height: var(--icon-lg); }
+
+/* Folded to the rail: the head stacks (its switch too), the brand, the list's rows and the links go, and the rail's
+   buttons fade in once the edge has moved. */
+@keyframes ui-nav-rail-in { from { opacity: 0; } to { opacity: 1; } }
+.ui-nav-pane[data-folded] .ui-nav-head { flex-direction: column; align-items: center; gap: var(--space-lg); padding-inline: 0; }
+.ui-nav-pane[data-folded] .ui-nav-head > .ui-button { margin-top: var(--space-xs); }
+.ui-nav-pane[data-folded] :is(.ui-nav-brand, .ui-nav-links) { display: none; }
+.ui-nav-pane[data-folded] .ui-nav-list { display: flex; flex-direction: column; align-items: center; }
+.ui-nav-pane[data-folded] .ui-nav-list > :not(.ui-nav-rail) { display: none; }
+.ui-nav-pane[data-folded] .ui-nav-rail { display: flex; }
+.ui-nav-pane[data-folded] :is(.ui-nav-rail, .ui-nav-head > .ui-seg) { animation: ui-nav-rail-in 180ms var(--ease-arrive) both; }
+.ui-nav-pane[data-folded] .ui-nav-head > .ui-seg { grid-template-columns: none; grid-template-rows: repeat(var(--segments), minmax(0, 1fr)); }
+.ui-nav-pane[data-folded] .ui-nav-head > .ui-seg .ui-seg-thumb { inset: calc(var(--seg-pad) + (100% - 2 * var(--seg-pad)) / var(--segments) * var(--segment)) var(--seg-pad) auto; width: auto; height: calc((100% - 2 * var(--seg-pad)) / var(--segments)); transition: top var(--duration-gentle) var(--ease-arrive); }
+@media (prefers-reduced-motion: reduce) { .ui-nav-pane[data-folded] :is(.ui-nav-rail, .ui-nav-head > .ui-seg) { animation: none; } }
+
+/* A phone's: a drawer over the page, the whole width, the head in pills on the top line (the server between the
+   wordmark and the switch, its text giving way first), and no foot. */
+.ui-nav-pane[data-drawer] { position: fixed; inset-block: 0; left: 0; z-index: 55; width: 100vw; background: var(--frame); transform: translateX(-102%); transition: transform var(--panel-motion-duration) var(--panel-motion-easing); }
+.ui-nav-pane[data-drawer="open"] { transform: translateX(0); }
+.ui-nav-pane[data-drawer] .ui-nav-pane-body { width: 100%; height: var(--app-height, 100dvh); padding-top: var(--safe-area-inset-top, env(safe-area-inset-top, 0px)); padding-bottom: var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)); background: var(--frame); overscroll-behavior: contain; }
+.ui-nav-pane[data-drawer] .ui-nav-list { overscroll-behavior: contain; padding-bottom: var(--space-lg); }
+.ui-nav-pane[data-drawer] .ui-nav-head { min-height: calc(var(--pill-size) + var(--space-md) + var(--space-xs)); justify-content: space-between; padding: var(--space-md) var(--space-md) var(--space-xs); }
+.ui-nav-pane[data-drawer] .ui-nav-brand { flex: none; height: var(--pill-slot); padding: 0 var(--space-md); }
+.ui-nav-pane[data-drawer] .ui-nav-brand > span { transform: translateY(0.16em); }
+.ui-nav-pane[data-drawer] .ui-nav-head > :not(.ui-nav-brand, .ui-seg) { display: flex; order: 1; min-width: 0; flex: 1; flex-direction: column; justify-content: center; }
+.ui-nav-pane[data-drawer] .ui-nav-notice { margin: 0; border: 0; padding: 0 var(--space-md); font-size: var(--text-caption); }
+
 /* StatusDot: a row's live state in an --icon slot, a dot in its tone (or a Spinner while it works). */
 .ui-status { display: inline-grid; width: var(--icon); height: var(--icon); flex: none; place-items: center; color: var(--muted-foreground); }
 .ui-status > .ui-spinner { width: var(--icon-sm); height: var(--icon-sm); }

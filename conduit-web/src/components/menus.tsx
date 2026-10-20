@@ -8,7 +8,10 @@ import { Menu as Surface, MenuAction, Item, Section, MenuPanel, MenuParent, Menu
 import { Button, SliderValue } from "./ui/controls";
 import { PillButton } from "./ui/pill";
 export const Menu = KMenu;
-export const ContextMenu = (props: ParentProps) => <KContextMenu modal={false} fitViewport overflowPadding={8} placement="right-start">{props.children}</KContextMenu>;
+/** A row's right-click (or long-press, Menu, Shift+F10) menu. Its rows, sections, choices and submenus are the
+ *  Menu's own (MenuRow, MenuSection, MenuRadioItem, MenuSub), which work in either. */
+export const ContextMenu = (props: ParentProps<{ placement?: "right-start" | "bottom-start"; onOpenChange?: (open: boolean) => void }>) =>
+  <KContextMenu modal={false} fitViewport overflowPadding={8} placement={props.placement ?? "right-start"} onOpenChange={props.onOpenChange}>{props.children}</KContextMenu>;
 export const ContextMenuTrigger = KContextMenu.Trigger;
 export const MenuGroup = KMenu.Group;
 export const ContextMenuGroup = KContextMenu.Group;
@@ -38,7 +41,7 @@ export function MenuContent(props: ContentProps) {
 }
 export function ContextMenuContent(props: ParentProps) {
   const mount = createFullscreenPortalMount();
-  return <KContextMenu.Portal mount={mount()}><KContextMenu.Content as={Surface} data-slot="ui-context-menu-content">{props.children}</KContextMenu.Content></KContextMenu.Portal>;
+  return <KContextMenu.Portal mount={mount()}><KContextMenu.Content as={Surface} data-slot="ui-context-menu-content" fit style={{ "--menu-room": "var(--kb-popper-content-available-height)" }}><MenuBody>{props.children}</MenuBody></KContextMenu.Content></KContextMenu.Portal>;
 }
 type ItemProps = ParentProps<{ disabled?: boolean; variant?: "destructive"; onSelect?: () => void }>;
 export const MenuItem = (props: ItemProps) => <KMenu.Item as={MenuAction} disabled={props.disabled} onSelect={props.onSelect} data-destructive={props.variant === "destructive" ? "" : undefined}>{props.children}</KMenu.Item>;

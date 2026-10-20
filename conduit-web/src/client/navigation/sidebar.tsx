@@ -2,16 +2,13 @@ import { Dialog } from "@/components/dialog";
 import { Section as DialogSection, Item as DialogItem } from "@/components/ui/popover";
 import { CardActions, CardForm, CardBody, CardRead, CardNote } from "@/components/ui/card";
 import { Button as DialogButton, Input as DialogInput, Field as DialogField } from "@/components/ui/controls";
-import { useLibrary } from "@/components/ui/swap";
-import { PillSwitch } from "@/components/ui";
-import { headerPill, PillShell } from "./header-pill";
+import { Button, NavBrand, NavFolder, NavFolderRow, NavGroup, NavLinks, NavNote, NavNotice, NavPane, NavRail, NavRailSection, NavRow, NavSkeleton, PillSwitch, RailButton, Segmented, StatusDot } from "@/components/ui";
+import { ContextMenu, ContextMenuContent, ContextMenuTrigger, MenuRadioGroup, MenuRadioItem, MenuRow, MenuSection, MenuSub, MenuSubContent, MenuSubTrigger } from "@/components/menus";
 import { isConduitManagedProject } from "./sidebar-preferences";
 import { ServerSwitcher } from "./server-switcher";
-import { createComposerSurfaceSignal } from "../chat/composer-surface";
-import { batch, createEffect, createMemo, createSignal, For, lazy, onCleanup, onMount, Show } from "solid-js";
+import { batch, createEffect, createMemo, createSignal, For, lazy, onCleanup, onMount, Show, type JSX } from "solid-js";
 
 import {
-  ChevronRightIcon,
   ClipboardCopyIcon,
   CheckIcon,
   DownloadIcon,
@@ -30,7 +27,6 @@ import {
   PencilIcon,
   PinIcon,
   PinOffIcon,
-  PlusIcon,
   SearchIcon,
   Settings2Icon,
   SquareIcon,
@@ -39,28 +35,6 @@ import {
   LoaderCircleIcon,
   XIcon,
 } from "lucide-solid";
-import {
-  Button,
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuGroup,
-  ContextMenuItem,
-  ContextMenuRadioGroup,
-  ContextMenuRadioItem,
-  ContextMenuSeparator,
-  ContextMenuSub,
-  ContextMenuSubContent,
-  ContextMenuSubTrigger,
-  ContextMenuTrigger,
-  Field,
-  FieldGroup,
-  FieldLabel,
-  Input,
-  Spinner,
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/primitives";
 import type { ChatSummary, ComputerLocation, HarnessSummary, Project, RuntimeProcess, WorkspacePolicy, WorkspaceSuggestion } from "../api/contracts";
 import type { UpdateState } from "../main";
 import { androidShell, installedClientKind } from "../platform/installed-client";
@@ -77,7 +51,6 @@ import { publishUiPreference, UI_PREFERENCE_CHANGE_EVENT } from "../preferences/
 import { COMMAND_IDS, commandLabel } from "../commands/command-registry";
 import { HarnessMark, ThreadHarnessMark, harnessStatusLabel } from "../harness-brand";
 import { installSidebarCursor } from "./sidebar-cursor";
-import "./sidebar.css";
 
 const ComputerExplorer = lazy(() => import("../dashboard/computer-dashboard").then((module) => ({ default: module.ComputerExplorer })));
 
@@ -102,8 +75,6 @@ type DeleteTarget = { type: "chat"; chat: ChatSummary; project: Project }
   | { type: "terminal"; terminal: Pty }
   | { type: "chats"; targets: ChatTarget[] };
 const COLLAPSED_PROJECTS_KEY = "conduit.sidebar.collapsed-projects";
-/** How long a folder takes to open or close; matches the CSS transition. */
-const SIDEBAR_FOLDER_MS = 240;
 
 /**
  * What the app is doing about its own version.
@@ -123,15 +94,8 @@ function UpdateNotice(props: { state?: UpdateState; onTake?: () => void }) {
     return current.kind === "working" ? current.label : "";
   };
   return <Show when={state().kind !== "idle"}>
-    <div class="sidebar-update" data-kind={state().kind} role="status">
-      <Show when={state().kind === "checking" || state().kind === "working"} fallback={
-        state().kind === "ready" ? <DownloadIcon /> : <CheckIcon />
-      }><Spinner class="size-3" /></Show>
-      <span>{words()}</span>
-      <Show when={state().kind === "ready"}>
-        <button type="button" onClick={() => props.onTake?.()}>{androidShell ? "Install" : "Restart"}</button>
-      </Show>
-    </div>
+    <NavNotice ready={state().kind === "ready"} busy={state().kind === "checking" || state().kind === "working"} icon={state().kind === "ready" ? <DownloadIcon /> : <CheckIcon />}
+      action={state().kind === "ready" ? { label: androidShell ? "Install" : "Restart", onClick: () => props.onTake?.() } : undefined}>{words()}</NavNotice>
   </Show>;
 }
 
@@ -139,18 +103,13 @@ function InstallerDownloads() {
   const [release, setRelease] = createSignal<PublishedRelease | null>(null);
   const releasesPage = "https://github.com/jask-aran/Conduit/releases/latest";
   onMount(() => { void latestRelease().then(setRelease).catch(() => setRelease(null)); });
-  return <div class="sidebar-downloads">
-    <span>Download</span>
-    <a href={release()?.windowsUrl || releasesPage} target="_blank" rel="noopener noreferrer" aria-label="Download for Windows" title="Download for Windows">
-      <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3 3h8v8H3zm10 0h8v8h-8zM3 13h8v8H3zm10 0h8v8h-8z" /></svg>
-    </a>
-    <a href={release()?.apkUrl || releasesPage} target="_blank" rel="noopener noreferrer" aria-label="Download for Android" title="Download for Android">
-      <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-        <path d="m7.2 6-1.8-3 .9-.5 1.9 3.1a9 9 0 0 1 7.6 0l1.9-3.1.9.5-1.8 3A9 9 0 0 1 21 13H3a9 9 0 0 1 4.2-7ZM3 14h18v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z" />
-        <path d="M7.5 9h.01m8.99 0h.01" stroke="var(--background)" stroke-width="2" stroke-linecap="round" />
-      </svg>
-    </a>
-  </div>;
+  return <NavLinks label="Download" links={[
+    { href: release()?.windowsUrl || releasesPage, label: "Download for Windows", icon: <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3 3h8v8H3zm10 0h8v8h-8zM3 13h8v8H3zm10 0h8v8h-8z" /></svg> },
+    { href: release()?.apkUrl || releasesPage, label: "Download for Android", icon: <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <path d="m7.2 6-1.8-3 .9-.5 1.9 3.1a9 9 0 0 1 7.6 0l1.9-3.1.9.5-1.8 3A9 9 0 0 1 21 13H3a9 9 0 0 1 4.2-7ZM3 14h18v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z" />
+      <path d="M7.5 9h.01m8.99 0h.01" stroke="var(--background)" stroke-width="2" stroke-linecap="round" />
+    </svg> },
+  ]} />;
 }
 
 function SidebarChatTitle(props: { title: string; animate: boolean }) {
@@ -177,17 +136,6 @@ function storedCollapsedProjects(): Set<string> {
   } catch {
     return new Set<string>();
   }
-}
-
-/**
- * Rows that are not there yet. Quiet bars rather than the word "Loading":
- * the sidebar is a list, so the honest placeholder for a list is the shape of
- * one, and it says nothing that turns out to be untrue.
- */
-function SidebarSkeleton(props: { rows: number }) {
-  return <div class="sidebar-skeleton" role="status" aria-label="Loading">
-    <For each={Array.from({ length: props.rows })}>{() => <span />}</For>
-  </div>;
 }
 
 export function Sidebar(props: {
@@ -258,7 +206,9 @@ export function Sidebar(props: {
 }) {
   const [collapsed, setCollapsed] = createSignal(localStorage.getItem("conduit.sidebar") === "collapsed");
   const [visualCollapsed, setVisualCollapsed] = createSignal(collapsed());
-  const [shellWidth, setShellWidth] = createSignal(collapsed() ? 41.6 : 232);
+  // The edge moves at once (reduced motion, a preference from elsewhere) instead of with the panel's motion.
+  const [instant, setInstant] = createSignal(false);
+  const paneWidth = () => sidebarRoot?.getBoundingClientRect().width ?? 0;
   const [collapsedProjectIds, setCollapsedProjectIds] = createSignal(storedCollapsedProjects());
   const [selectedChatIds, setSelectedChatIds] = createSignal<Set<string>>(new Set());
   const [terminals, setTerminals] = createSignal<Pty[]>([]);
@@ -268,7 +218,6 @@ export function Sidebar(props: {
   const [area, setArea] = createSignal<SidebarArea>(props.computer || props.terminal ? "computer" : "conduit");
   let sidebarRoot: HTMLElement | undefined;
   let sidebarList: HTMLDivElement | undefined;
-  let sidebarSurface: HTMLDivElement | undefined;
   let sidebarMotionId = 0;
   let sidebarEdgeMotionId: number | null = null;
   let sidebarEdgeRaf = 0;
@@ -284,8 +233,8 @@ export function Sidebar(props: {
     const id = sidebarEdgeMotionId;
     sidebarEdgeMotionId = null;
     finishSidebarMotion = null;
-    sidebarRoot?.removeAttribute("data-edge-instant");
-    if (id != null) dispatchPanelGeometryMotion({ phase: "end", id, source: "sidebar", size: shellWidth() });
+    setInstant(false);
+    if (id != null) dispatchPanelGeometryMotion({ phase: "end", id, source: "sidebar", size: paneWidth() });
   };
   const publishSidebarPreference = (value: boolean) => {
     localStorage.setItem("conduit.sidebar", value ? "collapsed" : "expanded");
@@ -298,34 +247,27 @@ export function Sidebar(props: {
   };
   const toggleSidebar = () => {
     const nextCollapsed = !collapsed();
-    const startWidth = sidebarRoot?.getBoundingClientRect().width ?? shellWidth();
-    const targetWidth = nextCollapsed ? 41.6 : 232;
+    const startWidth = paneWidth();
     cancelSidebarEdgeMotion();
     publishSidebarPreference(nextCollapsed);
     if (isMobileLayout()) {
       batch(() => {
         setCollapsed(nextCollapsed);
         setVisualCollapsed(nextCollapsed);
-        setShellWidth(targetWidth);
       });
       return;
     }
     if (!sidebarRoot || matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      sidebarRoot?.setAttribute("data-edge-instant", "true");
       batch(() => {
+        setInstant(true);
         setCollapsed(nextCollapsed);
         setVisualCollapsed(nextCollapsed);
-        setShellWidth(targetWidth);
       });
-      requestAnimationFrame(() => sidebarRoot?.removeAttribute("data-edge-instant"));
+      requestAnimationFrame(() => setInstant(false));
       return;
     }
     const id = ++sidebarMotionId;
     sidebarEdgeMotionId = id;
-    batch(() => {
-      setCollapsed(nextCollapsed);
-      if (!nextCollapsed) setVisualCollapsed(false);
-    });
     // Keep the v0.4.7 sidebar contract: the real shell follows its CSS width
     // transition, while the transcript motion shell tracks that edge once per
     // display frame. This keeps the composer in the same geometry path.
@@ -335,7 +277,10 @@ export function Sidebar(props: {
       source: "sidebar",
       size: startWidth,
     });
-    setShellWidth(targetWidth);
+    batch(() => {
+      setCollapsed(nextCollapsed);
+      if (!nextCollapsed) setVisualCollapsed(false);
+    });
     const sampleEdge = () => {
       if (!sidebarRoot || sidebarMotionId !== id || sidebarEdgeMotionId !== id) return;
       dispatchPanelGeometryMotion({
@@ -349,7 +294,7 @@ export function Sidebar(props: {
     finishSidebarMotion = () => {
       if (sidebarEdgeMotionId !== id) return;
       if (sidebarEdgeRaf) cancelAnimationFrame(sidebarEdgeRaf);
-      const finalWidth = sidebarRoot?.getBoundingClientRect().width ?? targetWidth;
+      const finalWidth = paneWidth();
       dispatchPanelGeometryMotion({ phase: "change", id, source: "sidebar", size: finalWidth });
       sidebarEdgeRaf = 0;
       sidebarEdgeMotionId = null;
@@ -371,7 +316,6 @@ export function Sidebar(props: {
         localStorage.setItem("conduit.sidebar", detail.value ? "collapsed" : "expanded");
         setCollapsed(detail.value);
         setVisualCollapsed(detail.value);
-        setShellWidth(detail.value ? 41.6 : 232);
       } else if (detail?.key === "collapsedProjectIds" && Array.isArray(detail.value)) {
         setCollapsedProjectIds(new Set(detail.value.filter((item): item is string => typeof item === "string")));
       }
@@ -380,8 +324,6 @@ export function Sidebar(props: {
     onCleanup(() => window.removeEventListener(UI_PREFERENCE_CHANGE_EVENT, syncPreferences));
   });
   const [phoneLayout, setPhoneLayout] = createSignal(isMobileLayout());
-  const headerSurface = createComposerSurfaceSignal();
-  const triggerPill = headerPill(1);
   onMount(() => {
     const media = typeof matchMedia === "function" ? matchMedia(MOBILE_LAYOUT_QUERY) : null;
     if (!media) return;
@@ -650,12 +592,8 @@ export function Sidebar(props: {
   const holdsCurrentChat = (project: Project) => shownId() != null && project.sessions.some((chat) => chat.id === shownId());
   const railProjectIsActive = (project: Project) => !props.routeCovered && (project.id === props.projectId || project.sessions.some((chat) => chat.id === props.selectedId));
   const railProjectIsLive = (project: Project) => project.sessions.some((chat) => Boolean(processFor(chat)));
-  const RailAction = (railProps: { label: string; onClick: () => void; current?: boolean; live?: boolean; children: unknown }) => <Tooltip>
-    <TooltipTrigger as="button" type="button" class="sidebar-rail-action" data-sidebar="rail-action" aria-label={railProps.label} aria-current={railProps.current ? "page" : undefined} data-live={railProps.live ? "true" : undefined} onClick={railProps.onClick}>
-      {railProps.children as never}
-    </TooltipTrigger>
-    <TooltipContent>{railProps.label}</TooltipContent>
-  </Tooltip>;
+  const RailAction = (railProps: { label: string; onClick: () => void; current?: boolean; live?: boolean; children: JSX.Element }) =>
+    <RailButton aria-label={railProps.label} title={railProps.label} current={railProps.current} live={railProps.live} onClick={railProps.onClick}>{railProps.children}</RailButton>;
 
   const openNewDialog = (kind: "folder" | "workspace") => {
     if (kind === "workspace") props.onWorkspaceSuggestionsNeeded();
@@ -845,23 +783,29 @@ export function Sidebar(props: {
     return guard;
   };
 
-  const ChatMenu = (menuProps: { chat: ChatSummary; project: Project }) => {
+  const menuPlacement = () => phoneLayout() ? "bottom-start" as const : "right-start" as const;
+  const guardOpen = (guard: { suppressClick: boolean }) => (open: boolean) => { if (open) guard.suppressClick = true; else setTimeout(() => { guard.suppressClick = false; }); };
+
+  const ChatMenu = (menuProps: { chat: ChatSummary; project: Project; indent?: boolean }) => {
     const guard = guardFor(menuProps.chat);
     const selected = () => selectedChatIds().has(menuProps.chat.id);
     const title = chatTitle(menuProps.chat);
     const previousTitle = renderedChatTitles.get(menuProps.chat.id);
     const animateTitle = previousTitle !== undefined && previousTitle !== title && Boolean(menuProps.chat.title);
     renderedChatTitles.set(menuProps.chat.id, title);
-    return <ContextMenu placement={phoneLayout() ? "bottom-start" : "right-start"} onOpenChange={(open) => { if (open) guard.suppressClick = true; else setTimeout(() => { guard.suppressClick = false; }); }}>
+    return <ContextMenu placement={menuPlacement()} onOpenChange={guardOpen(guard)}>
     <ContextMenuTrigger
-      as="button"
-      class="sidebar-row sidebar-chat"
+      as={NavRow}
+      indent={menuProps.indent}
+      icon={<Show when={props.navigatingId === menuProps.chat.id} fallback={<RuntimeIndicator process={processFor(menuProps.chat)} stale={props.runtime.stale()} unread={menuProps.chat.unread} fallback={<ThreadHarnessMark id={menuProps.chat.harnessId} lively />} />}>
+        <StatusDot label="Opening chat" spinning />
+      </Show>}
+      current={(props.focusedId || shownId()) === menuProps.chat.id}
+      open={props.openIds?.includes(menuProps.chat.id)}
+      selected={selected()}
       data-chat-id={menuProps.chat.id}
       draggable="true" data-doc-view={`chat:${menuProps.chat.id}`}
-      aria-current={(props.focusedId || shownId()) === menuProps.chat.id ? "page" : undefined}
-      data-open={props.openIds?.includes(menuProps.chat.id) ? "true" : undefined}
       aria-label={`${chatTitle(menuProps.chat)}, ${menuProps.chat.harnessId || "conduit"} harness${menuProps.chat.unread ? ", unread" : ""}${selected() ? ", selected" : ""}`}
-      data-selected={selected() ? "true" : undefined}
       onPointerEnter={() => props.onPrefetchChat(menuProps.chat)}
       onFocus={() => props.onPrefetchChat(menuProps.chat)}
       onContextMenu={() => { if (!selected()) clearSelection(); }}
@@ -884,53 +828,47 @@ export function Sidebar(props: {
         void props.onOpenChat(menuProps.chat, menuProps.project).then(enterPane);
       }}
     >
-      <Show when={props.navigatingId === menuProps.chat.id} fallback={<RuntimeIndicator process={processFor(menuProps.chat)} stale={props.runtime.stale()} unread={menuProps.chat.unread} fallback={<ThreadHarnessMark id={menuProps.chat.harnessId} lively />} />}>
-        <span class="runtime-indicator runtime-indicator-muted" role="status" aria-label="Opening chat"><Spinner class="size-3" /></span>
-      </Show>
       <SidebarChatTitle title={title} animate={animateTitle} />
     </ContextMenuTrigger>
-    <ContextMenuContent class="w-60 sidebar-context-menu">
+    <ContextMenuContent>
       <Show when={selected()} fallback={<>
-        <ContextMenuGroup>
-          <ContextMenuItem onSelect={() => requestRenameChat(menuProps.chat, menuProps.project)}><PencilIcon />{commandLabel(COMMAND_IDS.renameChat)}</ContextMenuItem>
-          <ContextMenuSub>
-            <ContextMenuSubTrigger><FolderInputIcon />Move to folder…</ContextMenuSubTrigger>
-            <ContextMenuSubContent class="w-48 sidebar-context-menu">
-              <ContextMenuRadioGroup value={menuProps.project.id} onChange={(id) => { const target = props.projects.find((item) => item.id === id); if (target) void props.onMoveChat(menuProps.chat, menuProps.project, target); }}>
-                <For each={props.projects}>{(target) => <ContextMenuRadioItem value={target.id}>{target.name}</ContextMenuRadioItem>}</For>
-              </ContextMenuRadioGroup>
-            </ContextMenuSubContent>
-          </ContextMenuSub>
-          <ContextMenuItem onSelect={() => void props.onCopyTranscript(menuProps.chat)}><ClipboardCopyIcon />{commandLabel(COMMAND_IDS.copyTranscript)}</ContextMenuItem>
-          <Show when={props.onOpenChatBeside}><ContextMenuItem onSelect={() => props.onOpenChatBeside?.(menuProps.chat, menuProps.project)}><Columns2Icon />Open beside</ContextMenuItem></Show>
-          <ContextMenuItem onSelect={() => props.onOpenTerminal(menuProps.chat, menuProps.project)}><TerminalIcon />Open terminal</ContextMenuItem>
-          <Show when={processFor(menuProps.chat)?.id}><ContextMenuItem onSelect={() => void props.onStopProcess(menuProps.chat)}><SquareIcon />Stop process</ContextMenuItem></Show>
-          <Show when={isConduitManagedProject(menuProps.project)}><ContextMenuItem onSelect={() => void togglePin("chat", menuProps.chat.id)}>
-            <Show when={isPinned("chat", menuProps.chat.id)} fallback={<><PinIcon />Pin to sidebar</>}><PinOffIcon />Unpin</Show>
-          </ContextMenuItem></Show>
-        </ContextMenuGroup>
-        <ContextMenuSeparator />
-        <ContextMenuGroup>
-          <ContextMenuItem variant="destructive" onSelect={() => setDeleting({ type: "chat", ...menuProps })}><Trash2Icon />{commandLabel(COMMAND_IDS.deleteChat)}</ContextMenuItem>
-        </ContextMenuGroup>
+        <MenuSection>
+          <MenuRow icon={<PencilIcon />} onSelect={() => requestRenameChat(menuProps.chat, menuProps.project)}>{commandLabel(COMMAND_IDS.renameChat)}</MenuRow>
+          <MenuSub phone={phoneLayout()}>
+            <MenuSubTrigger icon={<FolderInputIcon />}>Move to folder…</MenuSubTrigger>
+            <MenuSubContent><MenuSection title="Move to">
+              <MenuRadioGroup value={menuProps.project.id} onChange={(id) => { const target = props.projects.find((item) => item.id === id); if (target) void props.onMoveChat(menuProps.chat, menuProps.project, target); }}>
+                <For each={props.projects}>{(target) => <MenuRadioItem value={target.id}>{target.name}</MenuRadioItem>}</For>
+              </MenuRadioGroup>
+            </MenuSection></MenuSubContent>
+          </MenuSub>
+          <MenuRow icon={<ClipboardCopyIcon />} onSelect={() => void props.onCopyTranscript(menuProps.chat)}>{commandLabel(COMMAND_IDS.copyTranscript)}</MenuRow>
+          <Show when={props.onOpenChatBeside}><MenuRow icon={<Columns2Icon />} onSelect={() => props.onOpenChatBeside?.(menuProps.chat, menuProps.project)}>Open beside</MenuRow></Show>
+          <MenuRow icon={<TerminalIcon />} onSelect={() => props.onOpenTerminal(menuProps.chat, menuProps.project)}>Open terminal</MenuRow>
+          <Show when={processFor(menuProps.chat)?.id}><MenuRow icon={<SquareIcon />} onSelect={() => void props.onStopProcess(menuProps.chat)}>Stop process</MenuRow></Show>
+          <Show when={isConduitManagedProject(menuProps.project)}>
+            <MenuRow icon={isPinned("chat", menuProps.chat.id) ? <PinOffIcon /> : <PinIcon />} onSelect={() => void togglePin("chat", menuProps.chat.id)}>{isPinned("chat", menuProps.chat.id) ? "Unpin" : "Pin to sidebar"}</MenuRow>
+          </Show>
+        </MenuSection>
+        <MenuSection>
+          <MenuRow destructive icon={<Trash2Icon />} onSelect={() => setDeleting({ type: "chat", chat: menuProps.chat, project: menuProps.project })}>{commandLabel(COMMAND_IDS.deleteChat)}</MenuRow>
+        </MenuSection>
       </>}>
-        <ContextMenuGroup>
-          <ContextMenuItem disabled><MessageSquareIcon />{selectedTargets().length} chats selected</ContextMenuItem>
-          <ContextMenuSub>
-            <ContextMenuSubTrigger><FolderInputIcon />Move to folder…</ContextMenuSubTrigger>
-            <ContextMenuSubContent class="w-48 sidebar-context-menu">
+        <MenuSection title={`${selectedTargets().length} chats selected`}>
+          <MenuSub phone={phoneLayout()}>
+            <MenuSubTrigger icon={<FolderInputIcon />}>Move to folder…</MenuSubTrigger>
+            <MenuSubContent><MenuSection title="Move to">
               <For each={props.projects}>{(target) =>
-                <ContextMenuItem disabled={selectedTargets().every((item) => item.project.id === target.id)} onSelect={() => void moveSelectedChats(target)}>{target.name}</ContextMenuItem>}
+                <MenuRow disabled={selectedTargets().every((item) => item.project.id === target.id)} onSelect={() => void moveSelectedChats(target)}>{target.name}</MenuRow>}
               </For>
-            </ContextMenuSubContent>
-          </ContextMenuSub>
-          <ContextMenuItem onSelect={() => void props.onCopyChatLinks(selectedTargets())}><ClipboardCopyIcon />Copy links</ContextMenuItem>
-          <ContextMenuItem onSelect={clearSelection}><XIcon />Clear selection</ContextMenuItem>
-        </ContextMenuGroup>
-        <ContextMenuSeparator />
-        <ContextMenuGroup>
-          <ContextMenuItem variant="destructive" onSelect={() => setDeleting({ type: "chats", targets: selectedTargets() })}><Trash2Icon />Delete {selectedTargets().length} chats</ContextMenuItem>
-        </ContextMenuGroup>
+            </MenuSection></MenuSubContent>
+          </MenuSub>
+          <MenuRow icon={<ClipboardCopyIcon />} onSelect={() => void props.onCopyChatLinks(selectedTargets())}>Copy links</MenuRow>
+          <MenuRow icon={<XIcon />} onSelect={clearSelection}>Clear selection</MenuRow>
+        </MenuSection>
+        <MenuSection>
+          <MenuRow destructive icon={<Trash2Icon />} onSelect={() => setDeleting({ type: "chats", targets: selectedTargets() })}>Delete {selectedTargets().length} chats</MenuRow>
+        </MenuSection>
       </Show>
     </ContextMenuContent>
   </ContextMenu>;
@@ -938,129 +876,58 @@ export function Sidebar(props: {
 
   const ProjectBlock = (blockProps: { project: Project; workspace?: boolean }) => {
     const open = () => !collapsedProjectIds().has(blockProps.project.id);
-    /*
-     * A folder's chats slide rather than appear.
-     *
-     * Animated by the Web Animations API on a measured height rather than by
-     * a CSS transition on a grid track. Interpolating `grid-template-rows`
-     * makes the style engine resolve the track on every frame, on the main
-     * thread, for the whole list -- which is exactly the work a phone has no
-     * spare budget for, and it showed as a stutter rather than a slide.
-     * Measuring once and animating a plain height keeps the per-frame cost to
-     * laying out this one folder.
-     *
-     * Closed folders keep nothing in the document. A sidebar can hold a lot of
-     * chats across a lot of folders, and paying for all of them so the few
-     * that are open can animate would be the wrong trade -- so the rows stay
-     * mounted for the length of the collapse and no longer.
-     */
-    const [shown, setShown] = createSignal(open());
-    let body: HTMLDivElement | undefined;
-    let motion: Animation | undefined;
-    /*
-     * The state the rows are already in, and the only reason to animate.
-     *
-     * Every folder reads the one set of collapsed ids, and one toggle writes
-     * that set more than once -- from the click, and again from the preference
-     * that comes back -- so this effect runs several times per toggle, for
-     * every folder. Acting on each run cancelled the animation the previous
-     * run had just started, which made an opening folder snap most of the way
-     * and unmounted a closing one before it had moved at all.
-     *
-     * Comparing against what the DOM already shows makes every one of those
-     * re-runs a no-op, and leaves exactly one that has something to do.
-     */
-    let was = open();
-    createEffect(() => {
-      const wanted = open();
-      if (was === wanted) return;
-      was = wanted;
-      if (wanted) setShown(true);
-      if (matchMedia("(prefers-reduced-motion: reduce)").matches) { if (!wanted) setShown(false); return; }
-      // A frame late on purpose: the rows have to be in the document, at their
-      // natural height, before there is a height to animate from or to.
-      requestAnimationFrame(() => {
-        const node = body;
-        if (!node || open() !== wanted) { if (!open()) setShown(false); return; }
-        motion?.cancel();
-        const full = `${node.scrollHeight}px`;
-        motion = node.animate(
-          wanted ? [{ height: "0px" }, { height: full }] : [{ height: full }, { height: "0px" }],
-          { duration: SIDEBAR_FOLDER_MS, easing: "cubic-bezier(0.32, 0.72, 0, 1)", fill: "both" },
-        );
-        motion.onfinish = () => {
-          // Dropping the fill hands the height back to the content, so a chat
-          // added while the folder is open does not have to fit a number
-          // measured before it existed.
-          motion?.cancel();
-          motion = undefined;
-          if (!open()) setShown(false);
-        };
-      });
-    });
-    onCleanup(() => motion?.cancel());
     const guard = guardFor(blockProps.project);
     const isWorkspace = () => blockProps.project.origin === "linked" || blockProps.project.origin === "created" || blockProps.project.origin === "cloned" || blockProps.project.kind === "workspace";
     const cloning = () => blockProps.project.state === "cloning";
     const deleteLabel = () => blockProps.project.deletesFilesOnRemove === false ? "Unlink workspace"
       : isWorkspace() ? "Delete workspace"
         : `Delete ${blockProps.workspace ? "workspace" : "folder"}`;
-    return <div class="sidebar-project-block">
-      <ContextMenu placement={phoneLayout() ? "bottom-start" : "right-start"} onOpenChange={(openMenu) => { if (openMenu) guard.suppressClick = true; else setTimeout(() => { guard.suppressClick = false; }); }}>
-        <ContextMenuTrigger as="div" class="sidebar-row sidebar-project" data-open={open()} aria-current={onProjectPage(blockProps.project) ? "page" : undefined} data-holds-current={holdsCurrentChat(blockProps.project) || undefined}>
-          <button class="sidebar-project-link" draggable="true" data-doc-view={`page:project:${blockProps.project.id}`} onClick={() => {
+    // A folder's chats slide rather than appear (NavFolder); a closed folder keeps nothing in the document.
+    return <NavFolder open={open()} row={<ContextMenu placement={menuPlacement()} onOpenChange={guardOpen(guard)}>
+        <ContextMenuTrigger as={NavFolderRow} open={open()} current={onProjectPage(blockProps.project)} within={holdsCurrentChat(blockProps.project)}
+          icon={<Show when={isWorkspace()} fallback={<FolderIcon />}><WorkspaceGlyph appearance={blockProps.project.workspaceAppearance} /></Show>}
+          mark={<ProjectActivityIndicator sessions={blockProps.project.sessions} />}
+          meta={cloning() ? "Cloning…" : undefined}
+          link={{ draggable: "true", "data-doc-view": `page:project:${blockProps.project.id}`, onClick: () => {
             if (guard.suppressClick) { guard.suppressClick = false; return; }
             closeMobile();
             void props.onOpenProject(blockProps.project).then(enterPane);
-          }}>
-            <Show when={isWorkspace()} fallback={<FolderIcon />}><WorkspaceGlyph appearance={blockProps.project.workspaceAppearance} /></Show>
-            <ProjectActivityIndicator sessions={blockProps.project.sessions} />
-            <span>{blockProps.project.name}</span>
-            <Show when={cloning()}><span class="workspace-cloning-badge"><LoaderCircleIcon />Cloning</span></Show>
-          </button>
-          <button class="sidebar-project-toggle" tabIndex={-1} aria-label={`${open() ? "Collapse" : "Expand"} chat list`} title={`${open() ? "Collapse" : "Expand"} ${blockProps.project.name}`} aria-expanded={open()} onClick={(event) => {
+          } }}
+          toggle={{ "aria-label": `${open() ? "Collapse" : "Expand"} chat list`, title: `${open() ? "Collapse" : "Expand"} ${blockProps.project.name}`, onClick: (event: MouseEvent) => {
             event.stopPropagation();
             toggleProject(blockProps.project.id);
-          }}>
-            <ChevronRightIcon class="sidebar-chevron" />
-          </button>
-        </ContextMenuTrigger>
-        <ContextMenuContent class="w-60 sidebar-context-menu">
+          } }}>{blockProps.project.name}</ContextMenuTrigger>
+        <ContextMenuContent>
           <Show when={cloning()} fallback={<>
-            <ContextMenuGroup>
-              <ContextMenuItem onSelect={() => startNewChat(blockProps.project)}><MessageSquarePlusIcon />{commandLabel(COMMAND_IDS.newChat)}</ContextMenuItem>
-              <Show when={isWorkspace()}><ContextMenuItem onSelect={() => { closeMobile(); props.onOpenProjectMaximized(blockProps.project); }}><Maximize2Icon />Open maximized Workspace</ContextMenuItem></Show>
-              <ContextMenuItem onSelect={() => requestRenameProject(blockProps.project)}><PencilIcon />Rename {blockProps.workspace ? "workspace" : "folder"}</ContextMenuItem>
-              <Show when={isConduitManagedProject(blockProps.project)}><ContextMenuItem onSelect={() => void togglePin("project", blockProps.project.id)}>
-                <Show when={isPinned("project", blockProps.project.id)} fallback={<><PinIcon />Pin to sidebar</>}><PinOffIcon />Unpin</Show>
-              </ContextMenuItem></Show>
-              <Show when={blockProps.workspace}><ContextMenuItem onSelect={() => { closeMobile(); props.onOpenWorkspaceIdentity(blockProps.project); }}><PaletteIcon />Identity</ContextMenuItem></Show>
-              <Show when={blockProps.workspace}><ContextMenuItem onSelect={() => props.onOpenSettings("workspaces", blockProps.project.id)}><Settings2Icon />Workspace settings</ContextMenuItem></Show>
-              <ContextMenuSub>
-                <ContextMenuSubTrigger disabled={!blockProps.project.sessions.length}><FolderInputIcon />Move chats to…</ContextMenuSubTrigger>
-                <ContextMenuSubContent class="w-48 sidebar-context-menu">
+            <MenuSection>
+              <MenuRow icon={<MessageSquarePlusIcon />} onSelect={() => startNewChat(blockProps.project)}>{commandLabel(COMMAND_IDS.newChat)}</MenuRow>
+              <Show when={isWorkspace()}><MenuRow icon={<Maximize2Icon />} onSelect={() => { closeMobile(); props.onOpenProjectMaximized(blockProps.project); }}>Open maximized Workspace</MenuRow></Show>
+              <MenuRow icon={<PencilIcon />} onSelect={() => requestRenameProject(blockProps.project)}>Rename {blockProps.workspace ? "workspace" : "folder"}</MenuRow>
+              <Show when={isConduitManagedProject(blockProps.project)}>
+                <MenuRow icon={isPinned("project", blockProps.project.id) ? <PinOffIcon /> : <PinIcon />} onSelect={() => void togglePin("project", blockProps.project.id)}>{isPinned("project", blockProps.project.id) ? "Unpin" : "Pin to sidebar"}</MenuRow>
+              </Show>
+              <Show when={blockProps.workspace}><MenuRow icon={<PaletteIcon />} onSelect={() => { closeMobile(); props.onOpenWorkspaceIdentity(blockProps.project); }}>Identity</MenuRow></Show>
+              <Show when={blockProps.workspace}><MenuRow icon={<Settings2Icon />} onSelect={() => props.onOpenSettings("workspaces", blockProps.project.id)}>Workspace settings</MenuRow></Show>
+              <MenuSub phone={phoneLayout()}>
+                <MenuSubTrigger icon={<FolderInputIcon />} disabled={!blockProps.project.sessions.length}>Move chats to…</MenuSubTrigger>
+                <MenuSubContent><MenuSection title="Move to">
                   <For each={props.projects.filter((item) => item.id !== blockProps.project.id)}>
-                    {(target) => <ContextMenuItem onSelect={() => void props.onMoveProjectChats(blockProps.project, target)}>{target.name}</ContextMenuItem>}
+                    {(target) => <MenuRow onSelect={() => void props.onMoveProjectChats(blockProps.project, target)}>{target.name}</MenuRow>}
                   </For>
-                </ContextMenuSubContent>
-              </ContextMenuSub>
-            </ContextMenuGroup>
-            <ContextMenuSeparator />
-            <ContextMenuGroup>
-              <ContextMenuItem variant="destructive" onSelect={() => setDeleting({ type: "project", project: blockProps.project })}><Trash2Icon />{deleteLabel()}</ContextMenuItem>
-            </ContextMenuGroup>
+                </MenuSection></MenuSubContent>
+              </MenuSub>
+            </MenuSection>
+            <MenuSection>
+              <MenuRow destructive icon={<Trash2Icon />} onSelect={() => setDeleting({ type: "project", project: blockProps.project })}>{deleteLabel()}</MenuRow>
+            </MenuSection>
           </>}>
-            <ContextMenuGroup><ContextMenuItem disabled><LoaderCircleIcon />Clone in progress</ContextMenuItem></ContextMenuGroup>
+            <MenuSection><MenuRow disabled icon={<LoaderCircleIcon />}>Clone in progress</MenuRow></MenuSection>
           </Show>
         </ContextMenuContent>
-      </ContextMenu>
-      <Show when={shown()}>
-        <div class="sidebar-project-body" ref={body}>
-          <For each={sortChats(blockProps.project.sessions, chatSort())}>{(chat) => <ChatMenu chat={chat} project={blockProps.project} />}</For>
-          <Show when={!blockProps.project.sessions.length}><div class="sidebar-empty">No chats</div></Show>
-        </div>
-      </Show>
-    </div>;
+      </ContextMenu>}>
+      <For each={sortChats(blockProps.project.sessions, chatSort())}>{(chat) => <ChatMenu chat={chat} project={blockProps.project} indent />}</For>
+      <Show when={!blockProps.project.sessions.length}><NavNote>No chats</NavNote></Show>
+    </NavFolder>;
   };
 
   const PinnedRow = (rowProps: { item: PinnedItem }) => {
@@ -1077,45 +944,36 @@ export function Sidebar(props: {
     const current = () => item.type === "chat" ? shownId() === item.chat.id
       : item.type === "project" ? onProjectPage(item.project)
         : false;
-    return <ContextMenu placement={phoneLayout() ? "bottom-start" : "right-start"}>
-      <ContextMenuTrigger as="button" type="button" class="sidebar-row sidebar-pinned" aria-current={current() ? "page" : undefined} data-holds-current={item.type === "project" && holdsCurrentChat(item.project) || undefined} onClick={open}>
-        <Show when={item.type === "chat" ? item : false}>{(pinned) =>
-          <RuntimeIndicator process={processFor(pinned().chat)} stale={props.runtime.stale()} unread={pinned().chat.unread} fallback={<ThreadHarnessMark id={pinned().chat.harnessId} lively />} />}</Show>
-        <Show when={item.type === "project"}>
-          <Show when={item.type === "project" && workspaces().some((project) => project.id === item.project.id)} fallback={<FolderIcon />}>
-            <WorkspaceGlyph appearance={item.type === "project" ? item.project.workspaceAppearance : undefined} />
+    const workspace = () => item.type === "project" && workspaces().some((project) => project.id === item.project.id);
+    const icon = () => item.type === "chat"
+      ? <RuntimeIndicator process={processFor(item.chat)} stale={props.runtime.stale()} unread={item.chat.unread} fallback={<ThreadHarnessMark id={item.chat.harnessId} lively />} />
+      : item.type === "project" ? (workspace() ? <WorkspaceGlyph appearance={item.project.workspaceAppearance} /> : <FolderIcon />)
+        : <TerminalIcon />;
+    return <ContextMenu placement={menuPlacement()}>
+      <ContextMenuTrigger as={NavRow} icon={icon()} current={current()} within={item.type === "project" && holdsCurrentChat(item.project)} onClick={open}>{label()}</ContextMenuTrigger>
+      <ContextMenuContent>
+        <MenuSection>
+          <Show when={workspace()}>
+            <MenuRow icon={<Maximize2Icon />} onSelect={() => {
+              if (item.type !== "project") return;
+              closeMobile();
+              props.onOpenProjectMaximized(item.project);
+            }}>Open maximized Workspace</MenuRow>
           </Show>
-        </Show>
-        <Show when={item.type === "terminal"}><TerminalIcon /></Show>
-        <span>{label()}</span>
-      </ContextMenuTrigger>
-      <ContextMenuContent class="w-48 sidebar-context-menu">
-        <Show when={item.type === "project" && workspaces().some((project) => project.id === item.project.id)}>
-          <ContextMenuItem onSelect={() => {
-            if (item.type !== "project") return;
-            closeMobile();
-            props.onOpenProjectMaximized(item.project);
-          }}><Maximize2Icon />Open maximized Workspace</ContextMenuItem>
-        </Show>
-        <ContextMenuItem onSelect={() => void togglePin(item.type, item.type === "chat" ? item.chat.id : item.type === "project" ? item.project.id : item.terminal.id)}>
-          <PinOffIcon />Unpin
-        </ContextMenuItem>
+          <MenuRow icon={<PinOffIcon />} onSelect={() => void togglePin(item.type, item.type === "chat" ? item.chat.id : item.type === "project" ? item.project.id : item.terminal.id)}>Unpin</MenuRow>
+        </MenuSection>
       </ContextMenuContent>
     </ContextMenu>;
   };
 
-  const TerminalRow = (rowProps: { terminal: Pty }) => <button type="button" class="sidebar-row sidebar-terminal" onClick={() => {
+  const TerminalRow = (rowProps: { terminal: Pty }) => <NavRow icon={<StatusDot label="Running" tone="success" />}
+    detail={<>{terminalScope(rowProps.terminal)} · {rowProps.terminal.currentCommand || "shell"} · {terminalActivity(rowProps.terminal)}</>}
+    onClick={() => {
       closeMobile();
       props.onOpenPty(rowProps.terminal);
-    }}>
-      <span class="sidebar-terminal-status" aria-hidden="true" />
-      <span class="sidebar-terminal-copy">
-        <strong>{rowProps.terminal.title || "Shell"}</strong>
-        <small>{terminalScope(rowProps.terminal)} · {rowProps.terminal.currentCommand || "shell"} · {terminalActivity(rowProps.terminal)}</small>
-      </span>
-    </button>;
+    }}>{rowProps.terminal.title || "Shell"}</NavRow>;
 
-  const Group = (groupProps: { label: string; projects: Project[]; chatRoot?: Project; workspace?: boolean; emptyLabel?: string; onAdd?: () => void; addLabel?: string }) => {
+  const Group = (groupProps: { label: string; projects: Project[]; chatRoot?: Project; workspace?: boolean; emptyLabel?: string }) => {
     const allChats = () => sortChats(groupProps.chatRoot?.sessions.filter((chat) => chat.status !== "draft" || chat.id !== props.selectedId || chat.pinned || Boolean(props.runtime.getProcess(chat.id))) || [], chatSort());
     const visibleChats = () => {
       const chats = allChats();
@@ -1126,36 +984,21 @@ export function Sidebar(props: {
       return [...first.slice(0, Math.max(0, props.chatLimit - 1)), selected];
     };
     const moreChats = () => Math.max(0, allChats().length - visibleChats().length);
-    return <section class="sidebar-group">
-      <div class="sidebar-group-header">
-        <div data-sidebar="group-label">{groupProps.label}</div>
-        <Show when={groupProps.onAdd}>
-          <button class="sidebar-group-action" aria-label={groupProps.addLabel} title={groupProps.addLabel} onClick={groupProps.onAdd}>
-            {groupProps.label === "Chats" ? <PlusIcon /> : <FolderPlusIcon />}
-          </button>
-        </Show>
-      </div>
+    return <NavGroup label={groupProps.label}>
       <Show when={groupProps.chatRoot}>
         <For each={visibleChats()}>{(chat) => <ChatMenu chat={chat} project={groupProps.chatRoot!} />}</For>
         <Show when={moreChats() > 0}>
-          <button type="button" class="sidebar-view-more" onClick={() => props.onOpenPalette("chat-search", "scope:chats ")}>
-            <SearchIcon /><span>View all chats</span><small>{moreChats()} more</small>
-          </button>
+          <NavRow quiet icon={<SearchIcon />} meta={`${moreChats()} more`} onClick={() => props.onOpenPalette("chat-search", "scope:chats ")}>View all chats</NavRow>
         </Show>
         <Show when={!allChats().length}>
-          <Show when={props.catalogueLoaded} fallback={<SidebarSkeleton rows={4} />}><div class="sidebar-empty">No chats</div></Show>
+          <Show when={props.catalogueLoaded} fallback={<NavSkeleton rows={4} />}><NavNote>No chats</NavNote></Show>
         </Show>
       </Show>
       <For each={groupProps.projects}>{(project) => <ProjectBlock project={project} workspace={groupProps.workspace} />}</For>
       <Show when={!groupProps.chatRoot && !groupProps.projects.length && groupProps.emptyLabel}>
-        <Show when={props.catalogueLoaded} fallback={<SidebarSkeleton rows={2} />}><div class="sidebar-empty">{groupProps.emptyLabel}</div></Show>
+        <Show when={props.catalogueLoaded} fallback={<NavSkeleton rows={2} />}><NavNote>{groupProps.emptyLabel}</NavNote></Show>
       </Show>
-    </section>;
-  };
-
-  const onSidebarTrigger = () => {
-    if (isMobileLayout()) closeMobile();
-    else toggleSidebar();
+    </NavGroup>;
   };
 
   const serverSwitcher = () => <ServerSwitcher compact={!phoneLayout() && visualCollapsed()} connectivity={props.connectivity} pwaUpdating={props.pwaUpdating}
@@ -1165,144 +1008,121 @@ export function Sidebar(props: {
     onAddServer={() => { closeMobile(); props.onAddServer?.(); }}
     onLogout={() => props.onLogout?.()} />;
 
+  const areas = [{ value: "conduit" as const, label: "Conduit", icon: <LayoutDashboardIcon /> }, { value: "computer" as const, label: "Computer", icon: <MonitorIcon /> }];
   return <>
     <Show when={props.mobileOpen}>
       <button type="button" class="mobile-panel-backdrop" data-mobile-backdrop="sidebar" data-for="sidebar" aria-label="Dismiss sidebar" onClick={closeMobile} />
     </Show>
-    <aside ref={sidebarRoot} data-slot="sidebar" data-region="sidebar" data-state={phoneLayout() ? "expanded" : collapsed() ? "collapsed" : "expanded"} data-visual-state={phoneLayout() ? "expanded" : visualCollapsed() ? "collapsed" : "expanded"} data-mobile-open={props.mobileOpen} class="conduit-sidebar" style={{ width: phoneLayout() ? undefined : `${shellWidth()}px` }} aria-hidden={phoneLayout() && !props.mobileOpen ? true : undefined} inert={phoneLayout() && !props.mobileOpen ? true : undefined} onTransitionEnd={(event) => { if (event.target === sidebarRoot && event.propertyName === "width") finishSidebarMotion?.(); }} onTransitionCancel={(event) => { if (event.target === sidebarRoot && event.propertyName === "width") finishSidebarMotion?.(); }}>
-      <div ref={sidebarSurface} data-slot="sidebar-container" class="sidebar-container">
-        <div data-sidebar="header">
-          {/* Library previews: no toggle in the phone's open sidebar; a swipe or the backdrop closes it. */}
-          <Show when={!(useLibrary() && phoneLayout())}><PillShell pill={triggerPill} class="sidebar-header-pill">
-          <Button variant="ghost" size="icon-sm" data-sidebar="trigger" aria-label="Toggle Sidebar" aria-expanded={isMobileLayout() ? props.mobileOpen : !collapsed()} onClick={onSidebarTrigger}><PanelLeftIcon /></Button>
-          </PillShell></Show>
-          <button data-sidebar="brand" aria-label="Conduit" onClick={() => { setArea("conduit"); closeMobile(); props.onOpenDashboard(); enterPane(); }}><span>Conduit</span></button>
-          <Show when={phoneLayout()}>
-            <div class="sidebar-header-server">
-              {serverSwitcher()}
-              <UpdateNotice state={props.updateState} onTake={props.onTakeUpdate} />
-            </div>
-          </Show>
-          {/* Library previews: the library's PillSwitch, the same choice (components/ui/swap.ts). */}
-          <Show when={useLibrary() && phoneLayout()} fallback={
-            <div class={`sidebar-area-toggle ${phoneLayout() ? "composer-surface-material" : ""}`} data-composer-surface={phoneLayout() ? headerSurface() : undefined} data-area={area()} role="group" aria-label="Sidebar section">
-            <button type="button" aria-label="Conduit" title="Conduit" aria-pressed={area() === "conduit"} onClick={() => setArea("conduit")}><LayoutDashboardIcon /></button>
-            <button type="button" aria-label="Computer" title="Computer" aria-pressed={area() === "computer"} onClick={() => setArea("computer")}><MonitorIcon /></button>
-          </div>}>
-            <div style={{ order: 2, flex: "none" }}><PillSwitch label="Sidebar section" value={area()} onChange={setArea}
-              options={[{ value: "conduit", label: "Conduit", icon: <LayoutDashboardIcon /> }, { value: "computer", label: "Computer", icon: <MonitorIcon /> }]} /></div>
-          </Show>
-        </div>
-        <div ref={sidebarList} data-sidebar="content" class="sidebar-content">
-          <div data-sidebar="rail-actions" class="sidebar-rail-actions" aria-label="Quick navigation">
-            <Show when={area() === "computer"}>
-            <RailAction label="Computer" current={props.computer && !props.selectedHarness} onClick={() => { setArea("computer"); closeMobile(); props.onOpenComputer(); enterPane(); }}><MonitorIcon /></RailAction>
-            <RailAction label="New workspace" onClick={() => openNewDialog("workspace")}><FolderPlusIcon /></RailAction>
-            <RailAction label="Terminal View" current={props.terminal} onClick={() => { setArea("computer"); closeMobile(); props.onOpenTerminalView(); }}><TerminalIcon /></RailAction>
-            <For each={harnesses()}>{(harness) => <RailAction label={`${harness.label} · ${harnessStatusLabel(harness.status)}`} current={props.selectedHarness === harness.id} onClick={() => { setArea("computer"); closeMobile(); props.onOpenHarness(harness.id); enterPane(); }}><HarnessMark id={harness.id} class="sidebar-harness-mark" artwork /></RailAction>}</For>
-            <Show when={railWorkspaces().length}>
-              <div data-sidebar="rail-section" data-sidebar-section="workspaces" class="sidebar-rail-section">
-                <For each={railWorkspaces()}>{(project) => <RailAction
-                  label={project.name}
-                  current={railProjectIsActive(project)}
-                  live={railProjectIsLive(project)}
-                  onClick={() => { setArea("computer"); closeMobile(); void props.onOpenProject(project).then(enterPane); }}
-                ><WorkspaceGlyph appearance={project.workspaceAppearance} /></RailAction>}</For>
-              </div>
-            </Show>
-            </Show>
-            <Show when={area() === "conduit"}>
-            <RailAction label="Conduit Dashboard" current={props.dashboard} onClick={() => { setArea("conduit"); closeMobile(); props.onOpenDashboard(); enterPane(); }}><LayoutDashboardIcon /></RailAction>
-            <RailAction label="New project" onClick={() => openNewDialog("folder")}><FolderPlusIcon /></RailAction>
-            <Show when={railFolders().length}>
-              <div data-sidebar="rail-section" data-sidebar-section="projects" class="sidebar-rail-section">
-                <For each={railFolders()}>{(project) => <RailAction
-                  label={`Project: ${project.name}`}
-                  current={railProjectIsActive(project)}
-                  live={railProjectIsLive(project)}
-                  onClick={() => { setArea("conduit"); closeMobile(); void props.onOpenProject(project).then(enterPane); }}
-                ><FolderIcon /></RailAction>}</For>
-              </div>
-            </Show>
-            <div data-sidebar="rail-section" data-sidebar-section="chats" class="sidebar-rail-section">
-              <For each={railChats()}>{(item) => <RailAction
-                label={`Chat: ${chatTitle(item.chat)}`}
-                current={shownId() === item.chat.id}
-                live={Boolean(processFor(item.chat))}
-                onClick={() => { setArea("conduit"); closeMobile(); void props.onOpenChat(item.chat, item.project).then(enterPane); }}
-              ><MessageSquareIcon /></RailAction>}</For>
-            </div>
-            </Show>
+    <NavPane ref={(element) => { sidebarRoot = element; }} listRef={(element) => { sidebarList = element; }} data-region="sidebar"
+      data-state={phoneLayout() ? "expanded" : collapsed() ? "collapsed" : "expanded"}
+      collapsed={!phoneLayout() && collapsed()} folded={!phoneLayout() && visualCollapsed()} instant={instant()} drawer={phoneLayout() ? (props.mobileOpen ? "open" : "shut") : undefined}
+      aria-hidden={phoneLayout() && !props.mobileOpen ? true : undefined} inert={phoneLayout() && !props.mobileOpen ? true : undefined}
+      onTransitionEnd={(event) => { if (event.target === sidebarRoot && event.propertyName === "width") finishSidebarMotion?.(); }}
+      onTransitionCancel={(event) => { if (event.target === sidebarRoot && event.propertyName === "width") finishSidebarMotion?.(); }}
+      head={<>
+        {/* A phone's open sidebar has no toggle: a swipe or the backdrop closes it. */}
+        <Show when={!phoneLayout()}><Button variant="ghost" size="icon-sm" aria-label="Toggle Sidebar" aria-expanded={!collapsed()} onClick={toggleSidebar}><PanelLeftIcon /></Button></Show>
+        <NavBrand name="Conduit" aria-label="Conduit" onClick={() => { setArea("conduit"); closeMobile(); props.onOpenDashboard(); enterPane(); }} />
+        <Show when={phoneLayout()}>
+          <div>
+            {serverSwitcher()}
+            <UpdateNotice state={props.updateState} onTake={props.onTakeUpdate} />
           </div>
-          <Show when={area() === "computer"}>
-            <button type="button" class="sidebar-row sidebar-dashboard" draggable="true" data-doc-view="page:computer" aria-current={props.computer && !props.selectedHarness ? "page" : undefined} onClick={() => { closeMobile(); props.onOpenComputer(); enterPane(); }}><MonitorIcon /><span>Files</span></button>
-            <button type="button" class="sidebar-row sidebar-dashboard" onClick={() => openNewDialog("workspace")}><FolderPlusIcon /><span>New workspace</span></button>
-            <button type="button" class="sidebar-row sidebar-dashboard" aria-current={props.terminal ? "page" : undefined} onClick={() => { closeMobile(); props.onOpenTerminalView(); }}><TerminalIcon /><span>Terminal View</span><span class="sidebar-action-slot"><ExternalLinkIcon class="sidebar-route-indicator" /></span></button>
-            {/* Each harness's page, a row as the ones above are, its mark in its own
-                colours; a dot only when it is not ready to use. */}
-            <For each={harnesses()}>{(harness) =>
-              <button type="button" class="sidebar-row sidebar-dashboard" draggable="true" data-doc-view={`page:harness:${encodeURIComponent(harness.id)}`} aria-current={props.selectedHarness === harness.id ? "page" : undefined} title={`${harness.label} · ${harnessStatusLabel(harness.status)}`} onClick={() => { closeMobile(); props.onOpenHarness(harness.id); enterPane(); }}>
-                <HarnessMark id={harness.id} class="sidebar-harness-mark" artwork /><span>{harness.label}</span>
-                <Show when={harness.status && harness.status !== "ready"}><span class="sidebar-action-slot"><i class="sidebar-harness-status" data-status={harness.status} role="img" aria-label={harnessStatusLabel(harness.status)} /></span></Show>
-              </button>
-            }</For>
-            <Group label="Workspaces" projects={workspaces()} workspace emptyLabel="No workspaces" />
-            <section class="sidebar-group">
-              <div class="sidebar-group-header"><div data-sidebar="group-label">Terminals</div></div>
-              <For each={terminals()}>{(terminal) => <TerminalRow terminal={terminal} />}</For>
-              <Show when={!terminals().length}><div class="sidebar-empty">No live terminals</div></Show>
-            </section>
-          </Show>
-          <Show when={area() === "conduit"}>
-            <button type="button" class="sidebar-row sidebar-dashboard" draggable="true" data-doc-view="page:dashboard" aria-current={props.dashboard ? "page" : undefined} onClick={() => { closeMobile(); props.onOpenDashboard(); enterPane(); }}>
-              <LayoutDashboardIcon />
-              <span>Conduit Dashboard</span>
-            </button>
-            {/* A phone's way to a new chat; on desktop it starts on the dashboard. */}
-            <button type="button" class="sidebar-row sidebar-new-chat" aria-current={onNewChatPage() ? "page" : undefined} onClick={() => startNewChat()}>
-              <MessageSquarePlusIcon />
-              <span>New chat</span>
-            </button>
-            <button type="button" class="sidebar-row sidebar-dashboard" onClick={() => openNewDialog("folder")}>
-              <FolderPlusIcon />
-              <span>New project</span>
-            </button>
-            <Show when={pinnedItems().length}>
-              <section class="sidebar-group">
-                <div class="sidebar-group-header"><div data-sidebar="group-label">Pinned</div></div>
-                <For each={pinnedItems()}>{(item) => <PinnedRow item={item} />}</For>
-              </section>
-            </Show>
-            <Group label="Projects" projects={folders()} emptyLabel="No projects" />
-            <Group label="Chats" projects={[]} chatRoot={chats()} />
-          </Show>
-        </div>
-        {/* A phone has no footer: the server sits in the header, so the list runs to the bottom. */}
-        <Show when={!phoneLayout()}>
-        <div data-sidebar="footer">
-          {/*
-            * Above the server row rather than inside the menu, because the menu
-            * is shut whenever this matters. A build waiting to be taken can
-            * wait for minutes, and an install runs while somebody is looking
-            * elsewhere -- so it gets a place rather than a notification.
-            *
-            * Settings opens with no section named, which on a phone is the list
-            * of sections. Naming "models" here made that list unreachable and
-            * landed every client on the same tab.
-            *
-            * Checking for an update does not close the drawer, unlike every
-            * other item in that menu. It reports itself in this row, and
-            * closing the sidebar on the way out put the row behind the thread
-            * -- so the one thing the person asked to watch was the one thing
-            * they could not see.
-            */}
-          <UpdateNotice state={props.updateState} onTake={props.onTakeUpdate} />
-          <Show when={installedClientKind === "browser"}><InstallerDownloads /></Show>
-          {serverSwitcher()}
-        </div>
         </Show>
-      </div>
-    </aside>
+        <Show when={phoneLayout()} fallback={<Segmented icons label="Sidebar section" value={area()} onChange={setArea} options={areas} />}>
+          <PillSwitch label="Sidebar section" value={area()} onChange={setArea} options={areas} />
+        </Show>
+      </>}
+      foot={phoneLayout() ? undefined : <>
+        {/*
+          * Above the server row rather than inside the menu, because the menu
+          * is shut whenever this matters. A build waiting to be taken can
+          * wait for minutes, and an install runs while somebody is looking
+          * elsewhere -- so it gets a place rather than a notification.
+          *
+          * Settings opens with no section named, which on a phone is the list
+          * of sections. Naming "models" here made that list unreachable and
+          * landed every client on the same tab.
+          *
+          * Checking for an update does not close the drawer, unlike every
+          * other item in that menu. It reports itself in this row, and
+          * closing the sidebar on the way out put the row behind the thread
+          * -- so the one thing the person asked to watch was the one thing
+          * they could not see.
+          */}
+        <UpdateNotice state={props.updateState} onTake={props.onTakeUpdate} />
+        <Show when={installedClientKind === "browser"}><InstallerDownloads /></Show>
+        {serverSwitcher()}
+      </>}>
+      <NavRail label="Quick navigation">
+        <Show when={area() === "computer"}>
+          <RailAction label="Computer" current={props.computer && !props.selectedHarness} onClick={() => { setArea("computer"); closeMobile(); props.onOpenComputer(); enterPane(); }}><MonitorIcon /></RailAction>
+          <RailAction label="New workspace" onClick={() => openNewDialog("workspace")}><FolderPlusIcon /></RailAction>
+          <RailAction label="Terminal View" current={props.terminal} onClick={() => { setArea("computer"); closeMobile(); props.onOpenTerminalView(); }}><TerminalIcon /></RailAction>
+          <For each={harnesses()}>{(harness) => <RailAction label={`${harness.label} · ${harnessStatusLabel(harness.status)}`} current={props.selectedHarness === harness.id} onClick={() => { setArea("computer"); closeMobile(); props.onOpenHarness(harness.id); enterPane(); }}><HarnessMark id={harness.id} artwork /></RailAction>}</For>
+          <Show when={railWorkspaces().length}>
+            <NavRailSection>
+              <For each={railWorkspaces()}>{(project) => <RailAction
+                label={project.name}
+                current={railProjectIsActive(project)}
+                live={railProjectIsLive(project)}
+                onClick={() => { setArea("computer"); closeMobile(); void props.onOpenProject(project).then(enterPane); }}
+              ><WorkspaceGlyph appearance={project.workspaceAppearance} /></RailAction>}</For>
+            </NavRailSection>
+          </Show>
+        </Show>
+        <Show when={area() === "conduit"}>
+          <RailAction label="Conduit Dashboard" current={props.dashboard} onClick={() => { setArea("conduit"); closeMobile(); props.onOpenDashboard(); enterPane(); }}><LayoutDashboardIcon /></RailAction>
+          <RailAction label="New project" onClick={() => openNewDialog("folder")}><FolderPlusIcon /></RailAction>
+          <Show when={railFolders().length}>
+            <NavRailSection>
+              <For each={railFolders()}>{(project) => <RailAction
+                label={`Project: ${project.name}`}
+                current={railProjectIsActive(project)}
+                live={railProjectIsLive(project)}
+                onClick={() => { setArea("conduit"); closeMobile(); void props.onOpenProject(project).then(enterPane); }}
+              ><FolderIcon /></RailAction>}</For>
+            </NavRailSection>
+          </Show>
+          <NavRailSection>
+            <For each={railChats()}>{(item) => <RailAction
+              label={`Chat: ${chatTitle(item.chat)}`}
+              current={shownId() === item.chat.id}
+              live={Boolean(processFor(item.chat))}
+              onClick={() => { setArea("conduit"); closeMobile(); void props.onOpenChat(item.chat, item.project).then(enterPane); }}
+            ><MessageSquareIcon /></RailAction>}</For>
+          </NavRailSection>
+        </Show>
+      </NavRail>
+      <Show when={area() === "computer"}>
+        <NavRow icon={<MonitorIcon />} draggable="true" data-doc-view="page:computer" current={props.computer && !props.selectedHarness} onClick={() => { closeMobile(); props.onOpenComputer(); enterPane(); }}>Files</NavRow>
+        <NavRow icon={<FolderPlusIcon />} onClick={() => openNewDialog("workspace")}>New workspace</NavRow>
+        <NavRow icon={<TerminalIcon />} end={<ExternalLinkIcon />} current={props.terminal} onClick={() => { closeMobile(); props.onOpenTerminalView(); }}>Terminal View</NavRow>
+        {/* Each harness's page, a row as the ones above are, its mark in its own
+            colours; a dot only when it is not ready to use. */}
+        <For each={harnesses()}>{(harness) =>
+          <NavRow icon={<HarnessMark id={harness.id} artwork />} draggable="true" data-doc-view={`page:harness:${encodeURIComponent(harness.id)}`} current={props.selectedHarness === harness.id}
+            title={`${harness.label} · ${harnessStatusLabel(harness.status)}`} onClick={() => { closeMobile(); props.onOpenHarness(harness.id); enterPane(); }}
+            end={harness.status && harness.status !== "ready" ? <StatusDot label={harnessStatusLabel(harness.status)} tone={harness.status === "authentication_required" ? "warn" : "muted"} /> : undefined}>{harness.label}</NavRow>
+        }</For>
+        <Group label="Workspaces" projects={workspaces()} workspace emptyLabel="No workspaces" />
+        <NavGroup label="Terminals">
+          <For each={terminals()}>{(terminal) => <TerminalRow terminal={terminal} />}</For>
+          <Show when={!terminals().length}><NavNote>No live terminals</NavNote></Show>
+        </NavGroup>
+      </Show>
+      <Show when={area() === "conduit"}>
+        <NavRow icon={<LayoutDashboardIcon />} draggable="true" data-doc-view="page:dashboard" current={props.dashboard} onClick={() => { closeMobile(); props.onOpenDashboard(); enterPane(); }}>Conduit Dashboard</NavRow>
+        {/* A phone's way to a new chat; on desktop a loose chat starts on the Conduit dashboard and a place's on its page. */}
+        <Show when={phoneLayout()}><NavRow icon={<MessageSquarePlusIcon />} current={onNewChatPage()} onClick={() => startNewChat()}>New chat</NavRow></Show>
+        <NavRow icon={<FolderPlusIcon />} onClick={() => openNewDialog("folder")}>New project</NavRow>
+        <Show when={pinnedItems().length}>
+          <NavGroup label="Pinned"><For each={pinnedItems()}>{(item) => <PinnedRow item={item} />}</For></NavGroup>
+        </Show>
+        <Group label="Projects" projects={folders()} emptyLabel="No projects" />
+        <Group label="Chats" projects={[]} chatRoot={chats()} />
+      </Show>
+    </NavPane>
 
     <Dialog open={Boolean(newKind())} title={newKind() === "workspace" ? (workspaceStep() === "explore" ? "Add workspace" : mode() === "created" ? "Create workspace folder" : mode() === "cloned" ? "Clone repository" : "Workspace details") : "New folder"}
       description={newKind() === "workspace" && workspaceStep() === "details" ? `Selected location: ${path()}` : newKind() === "folder" ? "Create a separate managed working directory and chat scope." : undefined}

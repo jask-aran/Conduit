@@ -1954,8 +1954,8 @@ function App() {
       const shown = (element: Element) => element.getClientRects().length > 0;
       const row = [
         ...sidebar.querySelectorAll('[aria-current="page"]'),
-        ...sidebar.querySelectorAll("[data-holds-current]"),
-        ...sidebar.querySelectorAll(".sidebar-row, .sidebar-rail-action"),
+        ...sidebar.querySelectorAll("[data-within]"),
+        ...sidebar.querySelectorAll(".ui-nav-row, .ui-rail-button"),
       ].find(shown);
       const target = row && (row.matches("button, a") ? row : row.querySelector("button, a"));
       (target as HTMLElement | null | undefined)?.focus({ preventScroll: false });

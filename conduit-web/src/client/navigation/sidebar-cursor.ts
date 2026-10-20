@@ -23,9 +23,9 @@
 
 // The rows the cursor stops on. A project is its link: the chevron beside it
 // is what → and ← press.
-const STOPS = ".sidebar-rail-action, .sidebar-row:not(.sidebar-project), .sidebar-project-link, .sidebar-view-more";
+const STOPS = ".ui-rail-button, .ui-nav-row:not(.ui-nav-folder), .ui-nav-link";
 // The Conduit / Computer switch in the header, above the rows.
-const SWITCH = ".sidebar-area-toggle button";
+const SWITCH = ".ui-nav-head .ui-seg button";
 
 type SidebarCursorOptions = {
   root: HTMLElement;
@@ -47,7 +47,7 @@ export function installSidebarCursor(options: SidebarCursorOptions): () => void 
   let pointerFocus = false;
 
   const stops = () => [...list.querySelectorAll<HTMLElement>(STOPS)].filter(visible);
-  const toggleOf = (link: Element) => link.closest(".sidebar-project")?.querySelector<HTMLButtonElement>(".sidebar-project-toggle") ?? null;
+  const toggleOf = (link: Element) => link.closest(".ui-nav-folder")?.querySelector<HTMLButtonElement>(".ui-nav-toggle") ?? null;
   const expanded = (link: Element) => toggleOf(link)?.getAttribute("aria-expanded") === "true";
 
   const keyboardCursor = (on: boolean) => {
@@ -101,30 +101,30 @@ export function installSidebarCursor(options: SidebarCursorOptions): () => void 
       }
       move(next);
     };
-    const body = current.closest(".sidebar-project-body");
-    const link = current.matches(".sidebar-project-link") ? current : null;
+    const body = current.closest(".ui-nav-folder-body");
+    const link = current.matches(".ui-nav-link") ? current : null;
     switch (event.key) {
       case "ArrowDown": step(1); break;
       case "ArrowUp":
-        if (index === 0 && !event.shiftKey) move(root.querySelector<HTMLElement>(`${SWITCH}[aria-pressed="true"]`) ?? undefined);
+        if (index === 0 && !event.shiftKey) move(root.querySelector<HTMLElement>(`${SWITCH}[aria-checked="true"]`) ?? undefined);
         else step(-1);
         break;
       case "Home": anchor = null; move(all[0]); break;
       case "End": anchor = null; move(all[all.length - 1]); break;
       case "ArrowRight":
         if (link && !expanded(link)) toggleOf(link)?.click();
-        else if (link) move([...(link.closest(".sidebar-project-block")?.querySelectorAll<HTMLElement>(`.sidebar-project-body :is(${STOPS})`) ?? [])].find(visible));
+        else if (link) move([...(link.closest(".ui-nav-folder-block")?.querySelectorAll<HTMLElement>(`.ui-nav-folder-body :is(${STOPS})`) ?? [])].find(visible));
         else return;
         break;
       case "ArrowLeft":
-        if (body) move(body.closest(".sidebar-project-block")?.querySelector<HTMLElement>(".sidebar-project-link") ?? undefined);
+        if (body) move(body.closest(".ui-nav-folder-block")?.querySelector<HTMLElement>(".ui-nav-link") ?? undefined);
         else if (link && expanded(link)) toggleOf(link)?.click();
         else return;
         break;
       case "Escape":
         // A selection is cleared first, by the sidebar's own Esc.
         if (options.hasSelection()) return;
-        if (body) move(body.closest(".sidebar-project-block")?.querySelector<HTMLElement>(".sidebar-project-link") ?? undefined);
+        if (body) move(body.closest(".ui-nav-folder-block")?.querySelector<HTMLElement>(".ui-nav-link") ?? undefined);
         else options.onLeave();
         break;
       case "ContextMenu":
@@ -158,7 +158,7 @@ export function installSidebarCursor(options: SidebarCursorOptions): () => void 
   };
 
   // The row holding the held stop is marked too, for the stylesheet, in place
-  // of `.sidebar-row:has([data-held])` (see preferences/focus-shown.ts).
+  // of `.ui-nav-row:has([data-held])` (see preferences/focus-shown.ts).
   const release = () => {
     root.querySelector("[data-held]")?.removeAttribute("data-held");
     root.querySelector("[data-held-within]")?.removeAttribute("data-held-within");
@@ -167,7 +167,7 @@ export function installSidebarCursor(options: SidebarCursorOptions): () => void 
     const focused = document.activeElement;
     if (!(focused instanceof HTMLElement) || !root.contains(focused) || !focused.matches(`${STOPS}, ${SWITCH}`)) return;
     focused.setAttribute("data-held", "");
-    const row = focused.parentElement?.closest(".sidebar-row");
+    const row = focused.parentElement?.closest(".ui-nav-row");
     if (row) row.setAttribute("data-held-within", "");
   };
 

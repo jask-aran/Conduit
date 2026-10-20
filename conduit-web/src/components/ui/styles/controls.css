@@ -72,18 +72,20 @@
 .ui-seg button { position: relative; display: inline-flex; min-width: 0; min-height: calc(var(--control-sm) - 2 * var(--seg-pad)); align-items: center; justify-content: center; gap: var(--space-sm); border: 0; border-radius: var(--seg-inner); background: transparent; padding: 0 var(--space-lg); color: var(--muted-foreground); font-size: var(--text-row); font-weight: var(--weight-lift); cursor: pointer; }
 .ui-seg button svg { width: var(--icon-lg); height: var(--icon-lg); }
 .ui-seg button small { color: var(--muted-foreground); font: var(--weight-rest) var(--text-caption) var(--font-data); }
-.ui-seg button:is(:hover, :focus-visible, [aria-checked="true"]) { color: var(--foreground); }
+.ui-seg button:is(:hover, :focus-visible, [data-held], [aria-checked="true"]) { color: var(--foreground); }
 .ui-seg[data-icons] button { width: var(--control); padding: 0; }
 .ui-seg[data-pill] { height: var(--pill-size); gap: var(--pill-gap); border-color: var(--frost-stroke); border-radius: var(--radius-round); background: var(--frost-fill); padding: var(--hairline); }
 .ui-seg[data-pill] .ui-seg-thumb { top: var(--hairline); bottom: var(--hairline); width: var(--pill-slot); left: calc(var(--hairline) + (var(--pill-slot) + var(--pill-gap)) * var(--segment)); border-radius: var(--radius-round); background: var(--tint); }
 .ui-seg[data-pill] button { width: var(--pill-slot); min-height: var(--pill-slot-height); border-radius: var(--radius-round); padding: 0; }
 .ui-seg[data-pill] button svg { width: var(--pill-icon); height: var(--pill-icon); }
 /* On the frame (the sidebar) controls take the sidebar's own ink. */
-[data-surface="frame"] :is(.ui-pill > button, .ui-seg[data-pill] button[aria-checked="true"]) { color: var(--sidebar-accent-foreground); }
-[data-surface="frame"] .ui-seg[data-pill] .ui-seg-thumb { background: var(--sidebar-accent); }
+[data-surface="frame"] :is(.ui-pill > button, .ui-seg button:is([aria-checked="true"], :hover, :focus-visible, [data-held])) { color: var(--sidebar-accent-foreground); }
+[data-surface="frame"] .ui-seg .ui-seg-thumb { background: var(--sidebar-accent); }
 @media (prefers-reduced-motion: reduce) { .ui-seg-thumb { transition: none; } }
 /* The cursor on the chosen segment (already washed) brightens that wash a step: a second tint over the thumb's. */
-.ui-seg button[aria-checked="true"]:is(:hover, :focus-visible) { background: var(--tint); }
+.ui-seg button[aria-checked="true"]:is(:hover, :focus-visible, [data-held]) { background: var(--tint); }
+/* The cursor on an unchosen segment is the wash (DESIGN Interaction); held: the window is away and it waits there. */
+.ui-seg button:not([aria-checked="true"]):is(:hover, :focus-visible, [data-held]) { background: var(--tint); }
 /* A small segmented choice, for a bar's end (chat search's sort). */
 /* Only its size changes: the same hairline, thumb and type as the Segmented it scales. */
 .ui-seg[data-size="sm"] button { min-height: calc(var(--control-xs) - 2 * var(--seg-pad)); padding: var(--space-2xs) var(--space-md); font-size: var(--text-caption); }

@@ -224,3 +224,9 @@
 /* Folding rows (watchFold): a folded item stays laid out, hidden. */
 :is(.split-group-actions, .split-quick-actions) > :is([data-fold], [data-fold-more]) { display: inline-flex; }
 :is(.split-group-actions, .split-quick-actions) > [data-folded] { position: absolute; top: 0; right: 0; visibility: hidden; pointer-events: none; }
+
+/* A chat's harness mark in a split row: greyed with its row, its own colours on the cursor (as a nav row's). */
+.split-row:is(:hover, :focus-visible, [data-held]) .thread-harness-mark[data-lively] { color: var(--foreground); opacity: 1; }
+.split-row:is(:hover, :focus-visible) .thread-harness-mark[data-lively] .harness-mark-tinted { background-color: var(--harness-brand, currentColor); }
+.split-row:is(:hover, :focus-visible) .thread-harness-mark[data-artwork] .harness-mark-tinted { opacity: 0; }
+.split-row:is(:hover, :focus-visible) .thread-harness-mark[data-artwork] .harness-mark-artwork { opacity: 1; }
