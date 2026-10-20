@@ -323,7 +323,7 @@ html, body { background: var(--frame, #08090a); color: var(--foreground); }
 .g-form-code { width: fit-content; margin-top: 4px; border-radius: 4px; background: var(--border); padding: 1px 5px; color: var(--foreground); font: 10.5px/1.4 ui-monospace, monospace; }
 .g-form-tokens { font: 10.5px/1.45 ui-monospace, monospace !important; }
 .g-forms .g-scale-head, .g-forms .g-scale-row { grid-template-columns: 300px repeat(2, minmax(0, 1fr)); }
-.g-form-density { display: grid; min-width: 0; grid-template-columns: minmax(0, 1fr); place-items: center; padding: 8px; font-size: 13px; }
+.g-form-density { display: grid; min-width: 0; grid-template-columns: minmax(0, 1fr); place-items: center; overflow-x: auto; padding: 8px; font-size: 13px; }
 .g-card-scene { display: grid; width: 500px; max-width: 100%; justify-items: center; }
 .g-inuse-col[data-density="phone"] .g-card-scene { width: 380px; }
 /* Spacing drawn over an In use scene: a container's padding (edge) and the gaps between its parts, each with its size. */
@@ -409,3 +409,7 @@ html, body { background: var(--frame, #08090a); color: var(--foreground); }
 .g-nav-frame { display: flex; width: var(--nav-width); flex-direction: column; background: var(--frame); color: var(--sidebar-foreground); padding: var(--space-sm) var(--space-md); }
 .g-nav-stage { position: relative; height: 420px; background: var(--frame); }
 .g-nav-stage > .ui-nav-pane { height: 100%; }
+/* Files family: a code sample with its line numbers, and an empty side's quiet title. */
+.g-file-code { margin: 0; padding: var(--space-md) 0; color: var(--foreground); font: var(--text-caption)/1.6 var(--font-data); white-space: pre; }
+.g-file-code i { display: inline-block; width: var(--space-4xl); padding-right: var(--space-md); color: var(--muted-foreground); font-style: normal; text-align: right; }
+.g-file-none { color: var(--muted-foreground); font-size: var(--text-row); font-weight: var(--weight-rest); }

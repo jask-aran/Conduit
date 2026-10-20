@@ -122,9 +122,10 @@ const On = (props: { where: Column; children: JSX.Element }) => props.where === 
   : props.where === "frost" ? <Frost class="g-surface g-form-surface">{props.children}</Frost>
   : <div class="g-surface g-form-surface" data-surface={props.where}>{props.children}</div>;
 /** widths: every column's, the form's first (a phone column a phone wide, for what fills its width).
- *  stacked: each form's name over its samples, which then take the row's whole width. */
+ *  stacked: each form's name over its samples, which then take the row's whole width (for a wide piece). */
 export function FormTable(props: { rows: FormRow[]; on: Column[]; widths?: string[]; stacked?: boolean }) {
-  const columns = { "grid-template-columns": props.widths?.join(" ") ?? `300px repeat(${props.on.length}, minmax(0, 1fr))` };
+  // Stacked, the name has its own line, so the samples share the whole row.
+  const columns = { "grid-template-columns": props.widths?.join(" ") ?? (props.stacked ? `repeat(${props.on.length}, minmax(0, 1fr))` : `300px repeat(${props.on.length}, minmax(0, 1fr))`) };
   return <div class="g-scale g-forms">
     <div class="g-scale-head" style={columns}>{!props.stacked && <span>Form</span>}<For each={props.on}>{(where) => <span>{where[0]!.toUpperCase() + where.slice(1)}</span>}</For></div>
     <For each={props.rows}>{(row) => <div class="g-scale-row" style={columns} data-stacked={props.stacked ? "" : undefined}>
