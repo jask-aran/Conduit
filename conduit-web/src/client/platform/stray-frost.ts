@@ -20,7 +20,9 @@ export function watchStrayFrost() {
     const motion = element.getAnimations({ subtree: false }).map((a) => (a as CSSAnimation).animationName ?? (a as CSSTransition).transitionProperty ?? "script").join(",");
     return `${new Date().toLocaleTimeString()} · ${Math.round(r.left)},${Math.round(r.top)} ${Math.round(r.width)}×${Math.round(r.height)} of ${innerWidth}×${innerHeight} · op ${style.opacity} · tf ${style.transform} · ${motion || "still"}\n${chain.join("\n  < ")}`;
   };
-  setInterval(() => {
+  // In idle time: reading boxes lays the page out, which mid-move cost a frame.
+  const idle = (run: () => void) => "requestIdleCallback" in window ? requestIdleCallback(run, { timeout: 2000 }) : setTimeout(run, 0);
+  setInterval(() => idle(() => {
     const row = document.querySelector(".ui-phone-row");
     if (!row || document.hidden) return;
     const floor = row.getBoundingClientRect().bottom - 2;
@@ -36,5 +38,5 @@ export function watchStrayFrost() {
       note.textContent = `Stray frost (tap to close)\n${describe(element)}\n\n${note.textContent?.replace(/^Stray frost \(tap to close\)\n/, "") ?? ""}`;
       console.warn("[stray-frost]", describe(element), element);
     }
-  }, 500);
+  }), 500);
 }
