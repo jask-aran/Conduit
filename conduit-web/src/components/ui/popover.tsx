@@ -46,6 +46,17 @@ export function HeadingSection(props: { title: string; detail?: JSX.Element; chi
   </div>;
 }
 
+/** RowGroup: a row and its actions side by side, each an item of its own, so the arrow keys reach every one and
+ *  Enter runs it. The actions are icons at the row's end, shown on the hovered row or the one holding the cursor
+ *  (always where nothing hovers). */
+export const RowGroup = (props: { actions: JSX.Element; children: JSX.Element }) =>
+  <div class="ui-row-group">{props.children}<span class="ui-row-actions">{props.actions}</span></div>;
+/** RowAction: one action in a RowGroup, an icon named by its label; destructive, it washes red. */
+export function RowAction(props: JSX.HTMLAttributes<HTMLDivElement> & { label: string; icon: JSX.Element; destructive?: boolean }) {
+  const [local, rest] = splitProps(props, ["label", "icon", "destructive", "children"]);
+  return <div role="menuitem" {...rest} class="ui-row-action" aria-label={local.label} title={local.label} data-destructive={local.destructive ? "" : undefined}>{local.icon}</div>;
+}
+
 /** An item in a list section. Icon, meta, keys and opens are its parts; checked, disabled and destructive its states. */
 export function Item(props: JSX.HTMLAttributes<HTMLDivElement> & {
   icon?: JSX.Element; meta?: JSX.Element; detail?: JSX.Element; keys?: string[]; opens?: boolean; active?: boolean;

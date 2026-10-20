@@ -2,7 +2,7 @@ import { DropdownMenu as KMenu } from "@kobalte/core/dropdown-menu";
 import { Popover as KPopover } from "@kobalte/core/popover";
 import { ContextMenu as KContextMenu } from "@kobalte/core/context-menu";
 import type { FocusOutsideEvent } from "@kobalte/core";
-import { createContext, createEffect, Show, type ValidComponent, createMemo, createSignal, createUniqueId, For, on, onCleanup, onMount, splitProps, useContext, type ComponentProps, type JSX, type ParentProps } from "solid-js";
+import { createContext, createEffect, Index, Show, type ValidComponent, createMemo, createSignal, createUniqueId, For, on, onCleanup, onMount, splitProps, useContext, type ComponentProps, type JSX, type ParentProps } from "solid-js";
 import { haptic } from "./ui/haptics";
 import { createFullscreenPortalMount } from "./portal";
 
@@ -15,7 +15,7 @@ import { createFullscreenPortalMount } from "./portal";
 const [rowMenusAttached, setRowMenusAttached] = createSignal(false);
 export const attachRowMenus = () => setRowMenusAttached(true);
 import { Dynamic } from "solid-js/web";
-import { Menu as Surface, type Measure, MenuAction, Item, Section, MenuPanel, MenuParent, MenuNote, SearchSection } from "./ui/popover";
+import { Menu as Surface, type Measure, MenuAction, Item, RowAction, RowGroup, Section, MenuPanel, MenuParent, MenuNote, SearchSection } from "./ui/popover";
 import { Button, SelectTrigger, SliderValue } from "./ui/controls";
 import { PillButton } from "./ui/pill";
 /** The room a popover keeps from the window's edges: a gutter, and the system bars an edge-to-edge window draws
@@ -104,7 +104,18 @@ export function MenuSubContent(props: ParentProps<Caps>) {
     style={{ "--menu-room": "var(--kb-popper-content-available-height)" }}><MenuBody>{props.children}</MenuBody></KMenu.SubContent></KMenu.Portal>;
 }
 export const MenuSection = (props: ParentProps<{ title?: string; note?: JSX.Element }>) => <KMenu.Group as={Section} title={props.title} note={props.note}>{props.children}</KMenu.Group>;
-export const MenuRow = (props: RowProps) => <KMenu.Item as={Item} {...props} />;
+/** actions: the row's own actions beside it, each a menu item (RowGroup): Down reaches them in turn after the row, and
+ *  choosing one runs it and closes the menu as the row does. A getter keeps one live (disabled while busy). */
+export type MenuRowAction = { label: string; icon: JSX.Element; onSelect: () => void; disabled?: boolean; destructive?: boolean };
+export const MenuRow = (props: RowProps & { actions?: MenuRowAction[] }) => {
+  const [local, rest] = splitProps(props, ["actions"]);
+  return <Show when={local.actions?.length} fallback={<KMenu.Item as={Item} {...rest} />}>
+    <RowGroup actions={<Index each={local.actions}>{(action) =>
+      <KMenu.Item as={RowAction} label={action().label} icon={action().icon} textValue={action().label} disabled={action().disabled} destructive={action().destructive} onSelect={() => action().onSelect()} />}</Index>}>
+      <KMenu.Item as={Item} {...rest} />
+    </RowGroup>
+  </Show>;
+};
 
 /** Kobalte owns focus, selection and navigation in both layouts. Phone only changes placement and Back. */
 const MenuLayerContext = createContext<(child: (() => void) | undefined) => void>();

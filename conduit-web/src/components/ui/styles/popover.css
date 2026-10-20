@@ -54,6 +54,18 @@
 .ui-row[data-disabled] > small { text-decoration: none; }
 .ui-row[data-destructive], .ui-row[data-destructive] > .ui-icon { color: var(--destructive); }
 .ui-row[data-destructive][data-highlighted] { background: color-mix(in oklch, var(--destructive), transparent var(--tone-wash)); }
+/* RowGroup: the row fills; its actions are --control-sm squares after it, each with the row's cursor wash when it holds
+   the cursor. Where a pointer hovers they show on the hovered row or the one the cursor is in. */
+.ui-row-group { display: flex; width: 100%; min-width: 0; align-items: center; gap: var(--space-2xs); }
+.ui-row-group > .ui-row { min-width: 0; flex: 1; }
+.ui-row-actions { display: inline-flex; flex: none; gap: var(--space-2xs); }
+.ui-row-action { display: grid; width: var(--control-sm); height: var(--control-sm); flex: none; place-items: center; border-radius: var(--radius-control); color: var(--muted-foreground); cursor: pointer; }
+.ui-row-action > svg { width: var(--icon-sm); height: var(--icon-sm); }
+.ui-row-action[data-highlighted] { background: var(--tint); color: var(--foreground); }
+.ui-row-action[data-destructive] { color: var(--destructive); }
+.ui-row-action[data-destructive][data-highlighted] { background: color-mix(in oklch, var(--destructive), transparent var(--tone-wash)); }
+.ui-row-action[data-disabled] { opacity: var(--opacity-disabled); pointer-events: none; }
+@media (hover: hover) { .ui-row-group:not(:hover, :focus-within) > .ui-row-actions { visibility: hidden; } }
 
 .ui-row > .ui-row-end { display: inline-flex; flex: none; margin-left: auto; margin-right: calc((var(--u-icon) - var(--control-sm)) / 2); }
 
