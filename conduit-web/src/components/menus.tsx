@@ -2,8 +2,9 @@ import { DropdownMenu as KMenu } from "@kobalte/core/dropdown-menu";
 import { Popover as KPopover } from "@kobalte/core/popover";
 import { ContextMenu as KContextMenu } from "@kobalte/core/context-menu";
 import type { FocusOutsideEvent } from "@kobalte/core";
-import { createContext, createEffect, createMemo, createSignal, createUniqueId, For, on, onCleanup, onMount, splitProps, useContext, type ComponentProps, type JSX, type ParentProps } from "solid-js";
-import { createFullscreenPortalMount } from "./primitives";
+import { createContext, createEffect, Show, type ValidComponent, createMemo, createSignal, createUniqueId, For, on, onCleanup, onMount, splitProps, useContext, type ComponentProps, type JSX, type ParentProps } from "solid-js";
+import { createFullscreenPortalMount, rowMenusAttached } from "./primitives";
+import { Dynamic } from "solid-js/web";
 import { Menu as Surface, type Measure, MenuAction, Item, Section, MenuPanel, MenuParent, MenuNote, SearchSection } from "./ui/popover";
 import { Button, SelectTrigger, SliderValue } from "./ui/controls";
 import { PillButton } from "./ui/pill";
@@ -22,8 +23,18 @@ export const Menu = Object.assign((props: ComponentProps<typeof KMenu>) => <KMen
 /** A row's right-click (or long-press, Menu, Shift+F10) menu. Its rows, sections, choices and submenus are the
  *  Menu's own (MenuRow, MenuSection, MenuRadioItem, MenuSub), which work in either. */
 export const ContextMenu = (props: ParentProps<{ placement?: "right-start" | "bottom-start"; onOpenChange?: (open: boolean) => void }>) =>
-  <KContextMenu modal={false} fitViewport overflowPadding={edgePadding()} placement={props.placement ?? "right-start"} onOpenChange={props.onOpenChange}>{props.children}</KContextMenu>;
-export const ContextMenuTrigger = KContextMenu.Trigger;
+  <Show when={rowMenusAttached()} fallback={<RowMenuDeferred.Provider value={true}>{props.children}</RowMenuDeferred.Provider>}>
+    <KContextMenu modal={false} fitViewport overflowPadding={edgePadding()} placement={props.placement ?? "right-start"} onOpenChange={props.onOpenChange}>{props.children}</KContextMenu>
+  </Show>;
+/* Until the first open has been shown (attachRowMenus), a row draws as the element it wraps and has no menu:
+   building every row's menu machinery was a tenth of a second of a phone's first open. */
+const RowMenuDeferred = createContext(false);
+// Typed as Kobalte's own trigger, so each row's props are checked as before.
+export const ContextMenuTrigger = ((props: Record<string, unknown>) => {
+  if (!useContext(RowMenuDeferred)) return <KContextMenu.Trigger {...props} />;
+  const [local, rest] = splitProps(props, ["as"]);
+  return <Dynamic component={(local.as as ValidComponent | undefined) || "div"} {...rest} />;
+}) as typeof KContextMenu.Trigger;
 export const MenuGroup = KMenu.Group;
 export const ContextMenuGroup = KContextMenu.Group;
 /** A menu opened by the caller's own control (`as`: a HeaderButton). */
@@ -54,6 +65,7 @@ export function MenuContent(props: ContentProps) {
     ref={(element: HTMLElement) => { if (local.keep) holdFocus(element, local.keep); }} {...rest}><MenuBody>{props.children}</MenuBody></KMenu.Content></KMenu.Portal>;
 }
 export function ContextMenuContent(props: ParentProps<Caps>) {
+  if (useContext(RowMenuDeferred)) return null;
   const mount = createFullscreenPortalMount();
   return <KContextMenu.Portal mount={mount()}><KContextMenu.Content as={Surface} data-slot="ui-context-menu-content" width={props.width} height={props.height} style={{ "--menu-room": "var(--kb-popper-content-available-height)" }}><MenuBody>{props.children}</MenuBody></KContextMenu.Content></KContextMenu.Portal>;
 }

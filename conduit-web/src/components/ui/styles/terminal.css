@@ -1,0 +1,84 @@
+/* Terminal chrome and shortcut editor (terminal.tsx). */
+.ui-term-header { display: flex; min-height: var(--control); flex: none; align-items: center; justify-content: space-between; gap: var(--space-md);
+  padding: var(--space-xs) var(--space-sm) var(--space-xs) var(--space-md); border-bottom: var(--hairline) solid var(--tint);
+  background: color-mix(in oklch, var(--background), var(--tint) 24%); container-type: inline-size; }
+.ui-term-header svg { width: var(--icon-sm); height: var(--icon-sm); color: var(--muted-foreground); }
+.ui-term-header strong { font-size: var(--text-row); font-weight: var(--weight-strong); }
+.ui-term-identity { display: flex; min-width: 0; align-items: center; gap: var(--space-md); margin-right: auto; overflow: hidden; }
+.ui-term-identity > strong, .ui-term-context { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ui-term-context { color: var(--muted-foreground); font: var(--text-label) var(--font-data); }
+.ui-term-lead { display: flex; min-width: 0; align-items: center; gap: var(--space-md); flex: none; margin-right: var(--space-sm); }
+.ui-term-lead[data-phone] { display: none; }
+.ui-term-lead [data-slot="button"] { width: var(--control-sm); min-width: var(--control-sm); height: var(--control-sm); padding: 0; }
+.ui-term-status { display: inline-flex; flex: none; align-items: center; gap: var(--space-xs); color: var(--muted-foreground); font-size: var(--text-caption); white-space: nowrap; }
+.ui-term-status[data-tone="danger"] { color: var(--destructive); }
+.ui-term-status[data-tone="warn"] { color: var(--warn); }
+.ui-term-status-mark { display: grid; width: var(--icon); height: var(--icon); flex: none; place-items: center; color: var(--muted-foreground); }
+.ui-term-status-mark > i { width: var(--icon-dot); height: var(--icon-dot); border-radius: var(--radius-round); background: currentColor; }
+.ui-term-status[data-tone="success"] .ui-term-status-mark { color: var(--live); }
+.ui-term-status[data-tone="warn"] .ui-term-status-mark { color: var(--warn); }
+.ui-term-status[data-tone="danger"] .ui-term-status-mark { color: var(--destructive); }
+.ui-term-divider { width: var(--hairline); height: var(--icon); flex: none; background: var(--tint); }
+
+/* Inline while there is room; one menu when there is not. */
+.ui-term-overflow { display: none; min-width: 0; align-items: center; gap: var(--space-md); }
+.ui-term-shortcuts { display: flex; min-width: 0; align-items: center; max-width: 42%; flex: none; gap: var(--space-2xs); overflow-x: auto; scrollbar-width: none; }
+.ui-term-shortcuts::-webkit-scrollbar { display: none; }
+.ui-term-shortcuts [data-slot="button"] { min-height: var(--control-sm); height: var(--control-sm); flex: none; padding-inline: var(--space-md); font-size: var(--text-caption); }
+.ui-term-shortcuts > .ui-tool-button { flex: none; }
+.ui-term-actions { display: flex; min-width: 0; flex: none; align-items: center; gap: var(--space-sm); }
+.ui-term-actions [data-slot="button"] { min-height: var(--control-sm); height: var(--control-sm); padding-inline: var(--space-md); font-size: var(--text-caption); }
+.ui-term-actions > .ui-button svg { width: var(--icon-sm); height: var(--icon-sm); color: currentColor; }
+@container (max-width: 35rem) {
+  .ui-term-shortcuts { display: none; }
+  .ui-term-overflow { display: flex; }
+}
+@media (max-width: 28rem) {
+  .ui-term-shortcuts { max-width: 38%; }
+  .ui-term-actions [data-slot="button"] { width: var(--control-sm); padding-inline: 0; }
+  .ui-term-action-label { display: none; }
+}
+@media (--conduit-mobile-layout) {
+  @media (max-width: 35rem) {
+    .ui-term-actions [data-slot="button"] { width: var(--control-sm); padding-inline: 0; }
+    .ui-term-action-label { display: none; }
+  }
+}
+@media (pointer: coarse) {
+  .ui-term-lead[data-phone] { display: flex; }
+  .ui-term-lead[data-phone] [data-slot="button"] { width: var(--control); min-width: var(--control); height: var(--control); padding: 0; }
+}
+
+.ui-term-state { position: absolute; inset: 0; z-index: 2; display: grid; place-content: center; justify-items: center; gap: calc(.625 * var(--u-space));
+  padding: calc(1.75 * var(--u-space)); background: color-mix(in oklch, var(--background), black 9%); text-align: center; }
+.ui-term-state strong { color: var(--foreground); font-size: var(--text-row); font-weight: var(--weight-strong); }
+.ui-term-state p { max-width: min(calc(32.8125 * var(--u-space)), 100%); margin: 0; color: var(--muted-foreground); font-size: var(--text-caption); line-height: 1.45; }
+.ui-term-state[data-empty] { min-height: 0; flex: 1; gap: calc(.5625 * var(--u-space)); padding: var(--space-4xl); color: var(--muted-foreground); }
+.ui-term-state[data-empty] > svg { width: var(--control-sm); height: var(--control-sm); color: var(--muted-foreground); opacity: .8; }
+.ui-term-state[data-empty] p { max-width: min(calc(18.125 * var(--u-space)), 100%); line-height: 1.55; }
+.ui-term-error { position: absolute; z-index: 4; right: calc(.625 * var(--u-space)); bottom: calc(.625 * var(--u-space));
+  max-width: min(calc(27.5 * var(--u-space)), calc(100% - var(--space-2xl))); margin: 0; padding: calc(.4375 * var(--u-space)) calc(.5625 * var(--u-space));
+  border: var(--hairline) solid color-mix(in oklch, var(--destructive), transparent 45%); border-radius: var(--radius-control);
+  background: color-mix(in oklch, var(--popover), transparent 4%); box-shadow: 0 var(--space-md) var(--space-3xl) rgb(0 0 0 / 28%);
+  color: var(--destructive); font-size: var(--text-caption); line-height: 1.45; }
+
+/* A shortcut open for editing: the row becomes its own small form. */
+.ui-term-shortcut-form { display: grid; gap: var(--space-sm); margin: var(--space-2xs) 0; padding: var(--space-sm); border-radius: var(--radius-control); background: var(--tint); }
+.ui-term-shortcut-form-line { display: flex; min-width: 0; gap: var(--space-sm); }
+.ui-term-shortcut-form input { height: var(--control-sm); min-width: 0; padding: 0 var(--space-md); font-size: var(--text-caption); }
+.ui-term-shortcut-form input:focus { border-color: var(--ring); box-shadow: none; }
+.ui-term-shortcut-form-line > .ui-input:first-child { flex: 1; font-weight: var(--weight-strong); }
+.ui-term-shortcut-target { display: inline-flex; flex: none; padding: var(--space-2xs); border: var(--hairline) solid var(--tint); border-radius: var(--radius-control); }
+.ui-term-shortcut-target button { border: 0; border-radius: var(--radius-inset); background: transparent; padding: 0 var(--space-sm); color: var(--muted-foreground); font-size: var(--text-caption); white-space: nowrap; }
+.ui-term-shortcut-target button[aria-pressed="true"] { background: var(--tint); color: var(--foreground); }
+.ui-term-shortcut-command { display: flex; align-items: center; gap: var(--space-sm); color: var(--muted-foreground); font: var(--text-caption) var(--font-data); }
+.ui-term-shortcut-command input { flex: 1; font: inherit; }
+.ui-term-shortcut-form-actions { display: flex; justify-content: flex-end; gap: var(--space-xs); }
+.ui-term-shortcut-form-actions > [data-on-start] { display: inline-flex; align-items: center; gap: var(--space-xs); margin-right: auto; border: 0; border-radius: var(--radius-control);
+  background: transparent; padding: 0 var(--space-sm) 0 var(--space-xs); color: var(--muted-foreground); font-size: var(--text-caption); }
+.ui-term-shortcut-form-actions > [data-on-start]:hover { color: var(--foreground); }
+.ui-term-shortcut-form-actions > [data-on-start][aria-pressed="true"] { background: var(--tint); color: var(--foreground); }
+/* A tick is present or absent in a box that is always there. */
+.ui-term-shortcut-form-actions > [data-on-start] svg { width: var(--icon-sm); height: var(--icon-sm); padding: var(--hairline); border: var(--hairline) solid var(--tint); border-radius: var(--radius-inset); color: transparent; }
+.ui-term-shortcut-form-actions > [data-on-start] svg[data-on="true"] { color: var(--foreground); }
+.ui-term-shortcut-form-actions [data-slot="button"] { min-height: var(--control-sm); height: var(--control-sm); padding-inline: var(--space-md); font-size: var(--text-caption); }

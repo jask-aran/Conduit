@@ -1,5 +1,5 @@
 import { For, Show, splitProps, type JSX } from "solid-js";
-import { XIcon } from "lucide-solid";
+import { ChevronRightIcon, SearchIcon, XIcon } from "lucide-solid";
 
 /*
  * Panes (DESIGN Panes and windows): a pane's tab row, the controls after it, the edge you drag, the wash a drop
@@ -108,3 +108,39 @@ export function ToolView(props: JSX.ButtonHTMLAttributes<HTMLButtonElement> & { 
 export const PaneEmpty = (props: { children: JSX.Element }) => <div class="ui-pane-empty">{props.children}</div>;
 /** Loading, at the corner of what it loads into: a frost capsule with a spinner. */
 export const PaneLoading = (props: { children: JSX.Element }) => <div class="ui-frost ui-pane-loading" data-surface="frost" role="status">{props.children}</div>;
+
+/** A strip of a tool's controls (the file tree's filter, its actions; a folded tree's rail): small icon buttons on a
+ *  hairline. edge: which side the hairline is on. vertical: a rail. */
+export function ToolBar(props: JSX.HTMLAttributes<HTMLDivElement> & { ref?: (element: HTMLDivElement) => void; edge?: "top" | "bottom"; vertical?: boolean }) {
+  const [local, rest] = splitProps(props, ["edge", "vertical"]);
+  return <div {...rest} class="ui-tool-bar" data-edge={local.edge ?? "bottom"} data-vertical={local.vertical ? "" : undefined} />;
+}
+/** An icon button in a ToolBar; a menu's trigger takes it with `as`. */
+export function ToolButton(props: JSX.ButtonHTMLAttributes<HTMLButtonElement> & { label?: string }) {
+  const [local, rest] = splitProps(props, ["label", "children"]);
+  return <button type="button" aria-label={local.label} title={local.label} {...rest} class="ui-tool-button">{local.children}</button>;
+}
+/** A filter field in a ToolBar: the search mark, then the field. */
+export function ToolFilter(props: JSX.InputHTMLAttributes<HTMLInputElement> & { ref?: (element: HTMLInputElement) => void }) {
+  return <label class="ui-tool-filter"><SearchIcon /><input type="search" {...props} /></label>;
+}
+/** A line about the tool's state (stale, truncated, grouped): muted, or warn; an action at its end in words. */
+export function ToolNotice(props: { tone?: "warn"; live?: boolean; action?: { label: string; disabled?: boolean; onClick: () => void }; children?: JSX.Element }) {
+  return <div class="ui-tool-notice" data-tone={props.tone} role={props.live ? "status" : undefined} aria-live={props.live ? "polite" : undefined}>
+    {props.children}
+    <Show when={props.action}>{(action) => <button type="button" disabled={action().disabled} onClick={() => action().onClick()}>{action().label}</button>}</Show>
+  </div>;
+}
+
+/** A row of a tree: indented by depth, a chevron for a folder (open turns it; none for a file keeps its place), its
+ *  mark, its name, and a mark at the end (kept visible). selected: open in the viewer; data-open-file is the app's
+ *  (open in a pane: the name strong; "focused" stronger). A context menu's trigger takes it with `as`. */
+export function TreeRow(props: JSX.ButtonHTMLAttributes<HTMLButtonElement> & { depth?: number; folder?: boolean; open?: boolean; icon: JSX.Element; name: string; end?: JSX.Element; selected?: boolean; "data-open-file"?: string }) {
+  const [local, rest] = splitProps(props, ["depth", "folder", "open", "icon", "name", "end", "selected", "style"]);
+  return <button type="button" {...rest} class="ui-tree-row" data-selected={local.selected ? "" : undefined} style={{ "--depth": local.depth ?? 0 }}>
+    <Show when={local.folder} fallback={<span class="ui-tree-chevron" />}><ChevronRightIcon class="ui-tree-chevron" data-open={local.open ? "" : undefined} /></Show>
+    {local.icon}<span class="ui-tree-name">{local.name}</span>{local.end}
+  </button>;
+}
+/** A tree: the scrolling list its rows sit in. */
+export const Tree = (props: JSX.HTMLAttributes<HTMLElement> & { ref?: (element: HTMLElement) => void }) => <nav role="tree" {...props} class="ui-tree" />;

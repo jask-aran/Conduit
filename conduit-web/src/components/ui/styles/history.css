@@ -1,0 +1,82 @@
+/* Chat history (history.tsx): timestamp columns, tool runs and side branches. */
+.ui-history {
+  --history-time-width: calc(2.5 * var(--u-space));
+  --history-gap: calc(0.625 * var(--u-space));
+  --history-row-pad: var(--space-sm);
+  --history-step: calc(1.71875 * var(--u-space));
+  --history-tick: calc(0.625 * var(--u-space));
+  --history-line-height: calc(1.17188 * var(--u-space));
+  /* Where the text column begins, measured from a row's left edge. Tree rails
+     and ticks hang off this, so the timestamp gutter is never crossed. */
+  --history-gutter: calc(var(--history-time-width) + var(--history-gap) + var(--history-row-pad));
+  min-height: 0;
+  flex: 1;
+  overflow: hidden auto;
+  padding: var(--space-xs) var(--space-sm) var(--space-md);
+  font-size: var(--text-row);
+}
+.ui-history-row { position: relative; display: grid; line-height: var(--history-line-height); grid-template-columns: var(--history-time-width) minmax(0, 1fr); min-height: calc(1.79688 * var(--u-space)); align-items: baseline; column-gap: var(--history-gap); padding: var(--space-2xs) var(--history-row-pad); border-radius: var(--radius-control); color: var(--muted-foreground); }
+/* Its own column and its own type: a row kind that switches to monospace must
+   not resize the stamp, or every entry starts at a different place. */
+.ui-history-time {
+  grid-column: 1;
+  color: var(--muted-foreground);
+  font-family: var(--font-data);
+  font-size: var(--text-caption);
+  font-variant-numeric: tabular-nums;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-align: right;
+  text-transform: none;
+  opacity: .85;
+}
+.ui-history-branch { position: relative; opacity: .62; }
+.ui-history-branch:hover { opacity: .86; }
+/* Rail and tick meet at one x, a tick's width left of the child text, so the
+   elbow stays short and connected whatever the indent step is. */
+.ui-history-branch-rail { position: absolute; top: 0; bottom: calc(var(--history-row-height, calc(1.79688 * var(--u-space))) / 2); left: calc(var(--history-gutter) + var(--history-depth, 1) * var(--history-step) - var(--history-tick)); width: var(--hairline); background: var(--muted-foreground); opacity: .55; }
+.ui-history-tick { position: absolute; top: calc(var(--space-2xs) + var(--history-line-height) / 2); left: calc(var(--history-gutter) + var(--history-depth, 1) * var(--history-step) - var(--history-tick)); width: var(--history-tick); height: var(--hairline); background: var(--muted-foreground); opacity: .55; }
+.ui-history-row:hover { background: var(--tint); }
+/* A folded run of tool calls is a control, not a line of text: it opens just
+   that run, and the button in the header stays the blunt all-or-nothing one. */
+.ui-history-run { width: 100%; border: 0; background: none; font: inherit; text-align: left; cursor: pointer; }
+.ui-history-run .ui-history-text { display: flex; align-items: center; gap: var(--space-xs); }
+.ui-history-chevron { width: var(--space-lg); height: var(--space-lg); flex: none; opacity: .7; transition: transform 0.15s ease; }
+.ui-history-chevron[data-open] { transform: rotate(180deg); }
+.ui-history-run:hover .ui-history-chevron { opacity: 1; }
+.ui-history-row[data-kind="user"], .ui-history-row[data-kind="assistant"] { color: var(--foreground); }
+.ui-history-row[data-kind="user"] strong { color: color-mix(in oklch, var(--primary), white 18%); }
+.ui-history-row[data-kind="assistant"] strong { color: var(--live); }
+/* A step the harness keeps in its tree but leaves out of every later request:
+   an answer it was interrupted writing. Struck through and dimmed, so the
+   history reads as the conversation the agent actually has. */
+.ui-history-row[data-discarded] .ui-history-text { text-decoration: line-through; opacity: 0.55; }
+.ui-history-row strong { font-weight: 650; }
+.ui-history-row[data-kind="user"] code { color: color-mix(in oklch, var(--primary), white 18%); }
+.ui-history-row[data-kind="assistant"] code { color: var(--live); }
+.ui-history-row[data-kind="tool"] { color: color-mix(in oklch, var(--muted-foreground), transparent 8%); font-family: var(--font-data); }
+.ui-history-row[data-kind="summary"] { color: var(--warn); }
+.ui-history-row[data-collapsed] .ui-history-text { font-style: italic; opacity: .85; }
+.ui-history-row[data-active] code { opacity: 1; }
+.ui-history-row[data-leaf] { background: var(--tint); }
+.ui-history-row code { overflow: hidden; color: var(--muted-foreground); font-weight: 700; white-space: pre; opacity: .7; }
+/* The span is the grid's second column, so it can be clipped on its own. */
+.ui-history-text { grid-column: 2; padding-left: calc(var(--history-depth, 0) * var(--history-step)); display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ui-history[data-wrap] .ui-history-row { align-items: start; }
+.ui-history[data-wrap] .ui-history-text { overflow: visible; text-overflow: clip; white-space: pre-wrap; overflow-wrap: anywhere; }
+.ui-history[data-wrap] .ui-history-row code { white-space: pre-wrap; overflow-wrap: anywhere; }
+.ui-history-row small { color: var(--muted-foreground); font-size: var(--text-label); text-transform: capitalize; }
+
+/* Empty chat history keeps its centred icon, heading and explanation. */
+.workspace-chat-view .ui-pane-empty > div { display: grid; max-width: calc(17.5 * var(--u-space)); justify-items: center; gap: calc(.4375 * var(--u-space)); }
+.workspace-chat-view .ui-pane-empty svg { width: calc(1.5 * var(--u-space)); height: calc(1.5 * var(--u-space)); }
+.workspace-chat-view .ui-pane-empty strong { color: var(--foreground); }
+.workspace-chat-view .ui-pane-empty p { margin: 0; line-height: 1.5; }
+
+/* Phone geometry uses the phone density unit (16px). */
+@media (--conduit-phone-layout) {
+  .ui-history { --history-time-width: calc(2.25 * var(--u-space)); --history-row-pad: var(--space-sm); --history-line-height: calc(1.0625 * var(--u-space)); padding: var(--space-xs) var(--space-sm) calc(.4375 * var(--u-space)); font-size: var(--text-row); }
+  .ui-history-row { min-height: calc(1.6875 * var(--u-space)); }
+  .ui-history-time, .ui-history-row small { font-size: var(--text-label); }
+  .ui-history-branch { --history-row-height: calc(1.6875 * var(--u-space)); }
+}

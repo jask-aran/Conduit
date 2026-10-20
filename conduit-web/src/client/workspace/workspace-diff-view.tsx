@@ -1,3 +1,4 @@
+import { PaneEmpty } from "@/components/ui/pane";
 import { createSignal, lazy, onCleanup, Show, Suspense, type JSX } from "solid-js";
 import { PanelLeftOpenIcon, PencilIcon } from "lucide-solid";
 import type { ComparisonPayload, ComparisonViewState } from "./workspace-comparison";
@@ -96,8 +97,8 @@ export function WorkspaceDiffView(props: WorkspaceDiffViewProps) {
       }} />
     </Show>
     <div class="workspace-review-comparison">
-      <Show when={props.comparison} fallback={<div class="workspace-panel-empty">{props.loading ? "Loading changes…" : props.files.length ? "Select a changed file." : props.error || props.empty}</div>}>
-        {(comparison) => <Suspense fallback={<div class="workspace-panel-empty">Loading comparison…</div>}>
+      <Show when={props.comparison} fallback={<PaneEmpty>{props.loading ? "Loading changes…" : props.files.length ? "Select a changed file." : props.error || props.empty}</PaneEmpty>}>
+        {(comparison) => <Suspense fallback={<PaneEmpty>Loading comparison…</PaneEmpty>}>
           <WorkspaceComparison
             comparison={comparison()}
             sourceKey={props.sourceKey}

@@ -1,3 +1,6 @@
+import { TermHeader, TermStatus, TermIdentity, TermContext, TermShortcuts, TermShortcut, TermLead, TermOverflow, TermActions, TermActionLabel, TermState, TermError, ShortcutForm, ShortcutFormLine, ShortcutTarget, ShortcutCommand, ShortcutFormActions } from "@/components/ui/terminal";
+import { Button as TermButton, Input as TermInput } from "@/components/ui/controls";
+import { ToolButton } from "@/components/ui/pane";
 import { Dialog } from "@/components/dialog";
 import { CardActions, CardForm } from "@/components/ui/card";
 import { Button as DialogButton, Input as DialogInput, Field as DialogField } from "@/components/ui/controls";
@@ -6,8 +9,6 @@ import { ArrowLeftIcon, CheckIcon, ChevronDownIcon, Columns2Icon, EllipsisIcon, 
 import { toast } from "@/components/notifications";
 
 import {
-  Button,
-  Input,
   Menu,
   MenuContent,
   MenuGroup,
@@ -894,7 +895,7 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
   // Mirrors the sidebar footer indicator so both terminal surfaces say the same
   // thing about the server the pane depends on.
   const serverState = () => props.connectivity?.();
-  const shortcutForm = () => <form class="terminal-shortcut-form"
+  const shortcutForm = () => <ShortcutForm
     onSubmit={(event) => { event.preventDefault(); void commitShortcut(); }}
     onKeyDown={(event) => {
       // Escape backs out of the edit, not out of the whole popover.
@@ -903,32 +904,32 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
       event.stopPropagation();
       setEditingShortcut(null);
     }}>
-    <div class="terminal-shortcut-form-line">
-      <Input class="terminal-shortcut-name" aria-label="Shortcut name" placeholder="Name" maxlength={32}
+    <ShortcutFormLine>
+      <TermInput aria-label="Shortcut name" placeholder="Name" maxlength={32}
         ref={(element) => queueMicrotask(() => element.focus())}
         value={editingShortcut()?.label || ""} onInput={(event) => updateEditingShortcut({ label: event.currentTarget.value })} />
-      <div class="terminal-shortcut-target" role="group" aria-label="Run in">
-        <button type="button" aria-pressed={editingShortcut()?.target !== "new"} onClick={() => updateEditingShortcut({ target: "current" })}>This shell</button>
-        <button type="button" aria-pressed={editingShortcut()?.target === "new"} onClick={() => updateEditingShortcut({ target: "new" })}>New shell</button>
-      </div>
-    </div>
-    <label class="terminal-shortcut-command">
+      <ShortcutTarget role="group" aria-label="Run in">
+        <TermButton variant="ghost" size="sm" type="button" aria-pressed={editingShortcut()?.target !== "new"} onClick={() => updateEditingShortcut({ target: "current" })}>This shell</TermButton>
+        <TermButton variant="ghost" size="sm" type="button" aria-pressed={editingShortcut()?.target === "new"} onClick={() => updateEditingShortcut({ target: "new" })}>New shell</TermButton>
+      </ShortcutTarget>
+    </ShortcutFormLine>
+    <ShortcutCommand>
       <span aria-hidden="true">$</span>
-      <Input aria-label="Command" placeholder="command" maxlength={2048}
+      <TermInput aria-label="Command" placeholder="command" maxlength={2048}
         value={editingShortcut()?.command || ""} onInput={(event) => updateEditingShortcut({ command: event.currentTarget.value })} />
-    </label>
-    <div class="terminal-shortcut-form-actions">
-      <button type="button" class="terminal-shortcut-onstart" aria-pressed={editingShortcut()?.onStart === true}
+    </ShortcutCommand>
+    <ShortcutFormActions>
+      <TermButton variant="ghost" size="sm" type="button" data-on-start="" aria-pressed={editingShortcut()?.onStart === true}
         title="Also run it in the shell /terminal opens on its own: when you arrive with none live, or after a restart"
         onClick={() => updateEditingShortcut({ onStart: editingShortcut()?.onStart !== true })}>
         <CheckIcon data-on={editingShortcut()?.onStart === true ? "true" : undefined} />Run on start
-      </button>
-      <Button type="button" variant="ghost" size="sm" onClick={() => setEditingShortcut(null)}>Cancel</Button>
-      <Button type="submit" size="sm" disabled={shortcutSaving() || !editingShortcut()?.label.trim() || !editingShortcut()?.command.trim()}>
+      </TermButton>
+      <TermButton type="button" variant="ghost" size="sm" onClick={() => setEditingShortcut(null)}>Cancel</TermButton>
+      <TermButton type="submit" size="sm" disabled={shortcutSaving() || !editingShortcut()?.label.trim() || !editingShortcut()?.command.trim()}>
         {shortcutSaving() ? "Saving…" : "Done"}
-      </Button>
-    </div>
-  </form>;
+      </TermButton>
+    </ShortcutFormActions>
+  </ShortcutForm>;
 
   /*
    * One indicator for the server and the terminal together. Healthy says
@@ -1136,73 +1137,7 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
       </PopoverContent>
     </Popover>
     <section ref={pane} class="terminal-pane" aria-label="Terminal pane" data-terminal-focused={terminalFocused() ? "true" : "false"} onKeyDown={scopeTerminalKeyboard}>
-    <header class="terminal-pane-header">
-      <Show when={coarseInput()}>
-        <div class="terminal-pane-mobile-actions">
-          <Button variant="ghost" size="icon-sm" aria-label={mobileKeysVisible() ? "Hide terminal keys" : "Show terminal keys"}
-            title={mobileKeysVisible() ? "Hide terminal keys" : "Show terminal keys"} aria-pressed={mobileKeysVisible()} onClick={toggleMobileKeys}>
-            <KeyboardIcon />
-          </Button>
-        </div>
-      </Show>
-      <Show when={props.standaloneControls}>
-        <div class="terminal-pane-route-actions">
-          <Button variant="ghost" size="icon-sm" aria-label="Open Conduit" title="Open Conduit" onClick={() => props.standaloneControls!.onOpenConduit()}><ArrowLeftIcon /></Button>
-          <Button variant="ghost" size="icon-sm" aria-label={fullscreen() ? "Exit fullscreen" : "Enter fullscreen and capture browser keys"} title={fullscreen() ? "Exit fullscreen" : "Enter fullscreen and capture browser keys"} aria-pressed={fullscreen()} onClick={() => void toggleFullscreen()}>
-            <Show when={fullscreen()} fallback={<Maximize2Icon />}><Minimize2Icon /></Show>
-          </Button>
-        </div>
-      </Show>
-      <div class="terminal-pane-identity">
-        <div class="terminal-status" role="status" data-tone={headerStatus().tone} title={headerStatus().title} aria-label={headerStatus().title}>
-          <div class={`runtime-indicator runtime-indicator-${headerStatus().tone === "busy" ? "muted" : headerStatus().tone}`} aria-hidden="true">
-            <Show when={headerStatus().tone === "busy"} fallback={<i class="runtime-indicator-dot" />}><Spinner class="size-3" /></Show>
-          </div>
-          <Show when={headerStatus().label}><small>{headerStatus().label}</small></Show>
-        </div>
-        <Show when={pty()?.title}><strong>{pty()!.title}</strong></Show>
-        <span class="terminal-header-context">{[props.projectName || "Chats", pty()?.currentCommand].filter(Boolean).join(" · ")}</span>
-        {props.headerActions}
-      </div>
-      <div class="terminal-shortcuts" aria-label="Terminal shortcuts">
-        <For each={shortcuts()}>{(shortcut) =>
-          <Button type="button" variant="ghost" size="sm" title={`${shortcut.target === "new" ? "New terminal" : "Current terminal"}: ${shortcut.command}`}
-            disabled={starting() || (shortcut.target === "current" && !writable())} onClick={() => runShortcut(shortcut)}>
-            {shortcut.label}
-          </Button>
-        }</For>
-        <Button ref={shortcutGear} type="button" variant="ghost" size="icon-sm" aria-label="Edit terminal shortcuts" title="Edit terminal shortcuts" aria-expanded={shortcutEditorOpen()}
-          onClick={() => shortcutEditorOpen() ? setShortcutEditorOpen(false) : openShortcutEditor()}>
-          <Settings2Icon />
-        </Button>
-      </div>
-      {/* The same shortcuts, for a pane too narrow to lay them out inline. */}
-      <div class="terminal-shortcuts-overflow">
-        <Menu>
-          <MenuTrigger ref={shortcutOverflow} class="terminal-sessions-trigger" aria-label="Terminal shortcuts" title="Terminal shortcuts"><EllipsisIcon /></MenuTrigger>
-          <MenuContent class="terminal-menu" onCloseAutoFocus={(event) => {
-            // Handing focus back to the trigger would count as a click outside
-            // the editor that is about to open, and close it again.
-            if (!openEditorAfterMenu) return;
-            event.preventDefault();
-            openEditorAfterMenu = false;
-            openShortcutEditor();
-          }}>
-            <MenuGroup>
-              <MenuLabel class="terminal-menu-label">Shortcuts</MenuLabel>
-              <For each={shortcuts()}>{(shortcut) =>
-                <MenuItem class="terminal-menu-row" disabled={starting() || (shortcut.target === "current" && !writable())} onSelect={() => runShortcut(shortcut)}>
-                  <span class="terminal-menu-copy"><strong>{shortcut.label}</strong><small>$ {shortcut.command}</small></span>
-                </MenuItem>
-              }</For>
-            </MenuGroup>
-            <MenuSeparator />
-            <MenuItem class="terminal-menu-footer" onSelect={() => { openEditorAfterMenu = true; }}><Settings2Icon /><span>Edit shortcuts…</span></MenuItem>
-          </MenuContent>
-        </Menu>
-      </div>
-      <span class="terminal-header-divider" aria-hidden="true" />
-      <div class="terminal-pane-actions">
+    <TermHeader actions={<TermActions>
         <Menu onOpenChange={(open) => { if (open) void refreshSessions().catch((cause) => setError((cause as Error).message)); }}>
           <MenuTrigger class="terminal-sessions-trigger" aria-label="Active terminal sessions" title="Active terminal sessions">
             <TerminalIcon /><span>{sessions().length}</span><ChevronDownIcon />
@@ -1246,22 +1181,80 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
           </MenuContent>
         </Menu>
         <Show when={pty()?.status === "running"}>
-          <Button
+          <TermButton
             type="button"
             variant="ghost"
             size="sm"
-            class="terminal-focus-action"
             aria-label={terminalFocused() ? "Terminal focused" : "Focus terminal"}
             aria-pressed={terminalFocused()}
             title="Focus terminal to capture keyboard shortcuts"
             disabled={!writable() || connectionState() !== "live"}
             onClick={focusActiveTerminal}
           >
-            <FocusIcon /><span class="terminal-action-label">{terminalFocused() ? "Focused" : "Focus"}</span>
-          </Button>
+            <FocusIcon /><TermActionLabel>{terminalFocused() ? "Focused" : "Focus"}</TermActionLabel>
+          </TermButton>
         </Show>
-      </div>
-    </header>
+      </TermActions>}>
+      <Show when={coarseInput()}>
+        <TermLead phone>
+          <TermButton variant="ghost" size="icon-sm" aria-label={mobileKeysVisible() ? "Hide terminal keys" : "Show terminal keys"}
+            title={mobileKeysVisible() ? "Hide terminal keys" : "Show terminal keys"} aria-pressed={mobileKeysVisible()} onClick={toggleMobileKeys}>
+            <KeyboardIcon />
+          </TermButton>
+        </TermLead>
+      </Show>
+      <Show when={props.standaloneControls}>
+        <TermLead>
+          <TermButton variant="ghost" size="icon-sm" aria-label="Open Conduit" title="Open Conduit" onClick={() => props.standaloneControls!.onOpenConduit()}><ArrowLeftIcon /></TermButton>
+          <TermButton variant="ghost" size="icon-sm" aria-label={fullscreen() ? "Exit fullscreen" : "Enter fullscreen and capture browser keys"} title={fullscreen() ? "Exit fullscreen" : "Enter fullscreen and capture browser keys"} aria-pressed={fullscreen()} onClick={() => void toggleFullscreen()}>
+            <Show when={fullscreen()} fallback={<Maximize2Icon />}><Minimize2Icon /></Show>
+          </TermButton>
+        </TermLead>
+      </Show>
+      <TermIdentity>
+        <TermStatus tone={headerStatus().tone} busy={headerStatus().tone === "busy"} label={headerStatus().label} title={headerStatus().title} aria-label={headerStatus().title} />
+        <Show when={pty()?.title}><strong>{pty()!.title}</strong></Show>
+        <TermContext>{[props.projectName || "Chats", pty()?.currentCommand].filter(Boolean).join(" · ")}</TermContext>
+        {props.headerActions}
+      </TermIdentity>
+      <TermShortcuts aria-label="Terminal shortcuts">
+        <For each={shortcuts()}>{(shortcut) =>
+          <TermShortcut type="button" title={`${shortcut.target === "new" ? "New terminal" : "Current terminal"}: ${shortcut.command}`}
+            disabled={starting() || (shortcut.target === "current" && !writable())} onClick={() => runShortcut(shortcut)}>
+            {shortcut.label}
+          </TermShortcut>
+        }</For>
+        <ToolButton ref={shortcutGear} type="button" aria-label="Edit terminal shortcuts" title="Edit terminal shortcuts" aria-expanded={shortcutEditorOpen()}
+          onClick={() => shortcutEditorOpen() ? setShortcutEditorOpen(false) : openShortcutEditor()}>
+          <Settings2Icon />
+        </ToolButton>
+      </TermShortcuts>
+      {/* The same shortcuts, for a pane too narrow to lay them out inline. */}
+      <TermOverflow>
+        <Menu>
+          <MenuTrigger ref={shortcutOverflow} class="terminal-sessions-trigger" aria-label="Terminal shortcuts" title="Terminal shortcuts"><EllipsisIcon /></MenuTrigger>
+          <MenuContent class="terminal-menu" onCloseAutoFocus={(event) => {
+            // Handing focus back to the trigger would count as a click outside
+            // the editor that is about to open, and close it again.
+            if (!openEditorAfterMenu) return;
+            event.preventDefault();
+            openEditorAfterMenu = false;
+            openShortcutEditor();
+          }}>
+            <MenuGroup>
+              <MenuLabel class="terminal-menu-label">Shortcuts</MenuLabel>
+              <For each={shortcuts()}>{(shortcut) =>
+                <MenuItem class="terminal-menu-row" disabled={starting() || (shortcut.target === "current" && !writable())} onSelect={() => runShortcut(shortcut)}>
+                  <span class="terminal-menu-copy"><strong>{shortcut.label}</strong><small>$ {shortcut.command}</small></span>
+                </MenuItem>
+              }</For>
+            </MenuGroup>
+            <MenuSeparator />
+            <MenuItem class="terminal-menu-footer" onSelect={() => { openEditorAfterMenu = true; }}><Settings2Icon /><span>Edit shortcuts…</span></MenuItem>
+          </MenuContent>
+        </Menu>
+      </TermOverflow>
+    </TermHeader>
     <div class="terminal-pane-body">
       <div
         ref={host}
@@ -1274,29 +1267,29 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
         onFocusOut={handleTerminalFocusOut}
       />
       <Show when={!pty() && looked()}>
-        <div class="terminal-pane-empty">
+        <TermState empty>
           <TerminalIcon />
           <strong>Start or reattach a terminal</strong>
           <p>Terminal processes stay resident in this Workspace when the browser or pane detaches. Use the sessions menu to reattach or cull them.</p>
-          <Button disabled={starting()} onClick={() => void start()}>{starting() ? <Spinner /> : "Start terminal"}</Button>
-        </div>
+          <TermButton disabled={starting()} onClick={() => void start()}>{starting() ? <Spinner /> : "Start terminal"}</TermButton>
+        </TermState>
       </Show>
       <Show when={recovery()}>
-        {(view) => <div class="terminal-pane-state" role="status" aria-live="polite">
+        {(view) => <TermState role="status" aria-live="polite">
           <strong>{view().title}</strong>
           <p>{view().message}</p>
           <Show when={view().action === "retry"}>
-            <Button onClick={() => void retryConnection()}>Retry</Button>
+            <TermButton onClick={() => void retryConnection()}>Retry</TermButton>
           </Show>
           <Show when={view().action === "takeover"}>
-            <Button onClick={() => void takeControl()}>Take control</Button>
+            <TermButton onClick={() => void takeControl()}>Take control</TermButton>
           </Show>
           <Show when={view().action === "restart"}>
-            <Button onClick={() => void restart()}>Start new terminal</Button>
+            <TermButton onClick={() => void restart()}>Start new terminal</TermButton>
           </Show>
-        </div>}
+        </TermState>}
       </Show>
-      <Show when={error() && !recovery()}><p class="terminal-pane-error" role="alert">{error()}</p></Show>
+      <Show when={error() && !recovery()}><TermError role="alert">{error()}</TermError></Show>
     </div>
     <Show when={coarseInput() && mobileKeysVisible()}>
       <div class="terminal-mobile-keys" role="toolbar" aria-label="Terminal keys" data-mobile-swipe-ignore

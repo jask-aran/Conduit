@@ -137,6 +137,7 @@ export function PopoverContent(props: ParentProps<{ class?: string; "aria-label"
  * could right-click or long-press it.
  */
 const [rowMenusAttached, setRowMenusAttached] = createSignal(false);
+export { rowMenusAttached };
 const RowMenuDeferred = createContext(false);
 export const attachRowMenus = () => setRowMenusAttached(true);
 
