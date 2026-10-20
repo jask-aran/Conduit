@@ -23,6 +23,8 @@ import { ImageIcon, ActivityIcon, BrainIcon, ChevronRightIcon, GlobeIcon, Messag
 import type { Question } from "../client/api/contracts";
 import { LibraryContext } from "@/components/ui/swap";
 import { InUse, Anatomy, type Part, FormTable, form, px, rounding, edge, fg, bg, Replay, States, Presence, type Mark, type FormRow } from "./specs";
+import { NavPane, NavBrand, NavGroup as GNavGroup, NavRow as GNavRow, NavFolder, NavFolderRow, NavNote, NavSkeleton, NavNotice, NavLinks, NavRail, NavRailSection, RailButton, Segmented as GSegmented, Button as GButton } from "@/components/ui";
+import { DownloadIcon, ExternalLinkIcon, FolderPlusIcon, SearchIcon as GSearchIcon, TerminalIcon as GTerminalIcon } from "lucide-solid";
 import katex from "katex";
 
 /*
@@ -699,6 +701,28 @@ export const libraryFamilies: Family[] = [
     lib("frost", "Frost", "both", "material", "Frost", () => <div class="g-material"><Busy><Frost lift="raised" class="g-swatch" /></Busy><FrostTokens names={FROST_CSS} /></div>, true),
     lib("frost-core", "Core", "both", "material", "Frost core · Overlay core (off for now)", () => <div class="g-material"><Busy><Frost lift="raised" core class="g-swatch" /></Busy><FrostTokens names={["--frost-core-ground", ...FROST_CSS]} /></div>, true),
   ] }] },
+  { title: "Nav", note: "the sidebar on the frame: a NavPane (head, list, foot) of NavGroups, NavRows and NavFolders, and the rail it folds to. Rows rest grey; the cursor is the wash and white; current is white at the current weight with no fill, and so is the folder holding it. The keys are the app's (navigation/sidebar-cursor.ts)", groups: [
+    { title: "Forms", note: "each piece and state at each density", layout: "desktop", atoms: [
+      lib("nav-forms", "Nav · forms", "both", "nav", "components/ui/nav.tsx", () => <FormTable rows={[
+        form("NavRow", "rest, current, within (holds current), open beside, selected", () => <div data-surface="frame" class="g-nav-frame"><GNavRow icon={<MessageSquareIcon />}>Rest</GNavRow><GNavRow icon={<MessageSquareIcon />} current>Current</GNavRow><GNavRow icon={<FolderIcon />} within>Within</GNavRow><GNavRow icon={<MessageSquareIcon />} open>Open beside</GNavRow><GNavRow icon={<MessageSquareIcon />} selected>Selected</GNavRow></div>, "<NavRow current | within | open | selected>"),
+        form("NavRow · indent, detail, meta, end, quiet", "a chat in its folder, a terminal, View all, a link out", () => <div data-surface="frame" class="g-nav-frame"><GNavRow indent icon={<MessageSquareIcon />}>In a folder</GNavRow><GNavRow icon={<GTerminalIcon />} detail="Japan · zsh · Active now">Shell</GNavRow><GNavRow quiet icon={<GSearchIcon />} meta="7 more">View all chats</GNavRow><GNavRow icon={<GTerminalIcon />} end={<ExternalLinkIcon />}>Terminal View</GNavRow></div>, "<NavRow indent detail meta end quiet>"),
+        form("NavFolder", "its row (link and chevron, out of the tab order) and its rows, which slide", () => <div data-surface="frame" class="g-nav-frame"><States states={["Open", "Shut"] as const}>{(state) => <NavFolder open={state() === "Open"} row={<NavFolderRow icon={<FolderIcon />} open={state() === "Open"} link={{}} toggle={{ "aria-label": "Toggle" }}>Japan</NavFolderRow>}><GNavRow indent icon={<MessageSquareIcon />}>Plan the trip</GNavRow><GNavRow indent icon={<MessageSquareIcon />}>Gassho houses</GNavRow></NavFolder>}</States></div>, "<NavFolder open row={<NavFolderRow …>}>", "--duration-fold"),
+        form("NavNote · NavSkeleton", "nothing here; not arrived yet", () => <div data-surface="frame" class="g-nav-frame"><NavNote>No chats</NavNote><NavSkeleton rows={3} /></div>, "<NavNote> · <NavSkeleton rows>"),
+        form("NavNotice · NavLinks", "the foot: an update working, one waiting on a person; the installers", () => <div data-surface="frame" class="g-nav-frame"><NavNotice busy>Checking for updates…</NavNotice><NavNotice ready icon={<DownloadIcon />} action={{ label: "Restart", onClick: () => {} }}>New version ready</NavNotice><NavLinks label="Download" links={[{ href: "#", label: "Windows", icon: <MonitorIcon /> }]} /></div>, "<NavNotice busy | ready action> · <NavLinks>"),
+        form("RailButton", "rest, current, live (something works there)", () => <div data-surface="frame" class="g-nav-frame g-row"><RailButton aria-label="Dashboard"><LayoutDashboardIcon /></RailButton><RailButton aria-label="Japan" current><FolderIcon /></RailButton><RailButton aria-label="Chat" live><MessageSquareIcon /></RailButton></div>, "<RailButton current live>"),
+      ]} on={["desktop", "phone"]} />, "row"),
+    ] },
+    { title: "Assembled", note: "a NavPane open, folded to its rail, and a phone's drawer", layout: "desktop", atoms: [
+      lib("nav-pane", "NavPane · open and folded", "desktop", "nav", "navigation/sidebar.tsx", () => <div class="g-row g-top">{[false, true].map((folded) => <div class="g-nav-stage"><NavPane collapsed={folded} folded={folded}
+        head={<><GButton variant="ghost" size="icon-sm" aria-label="Toggle Sidebar"><PanelLeftIcon /></GButton><NavBrand name="Conduit" /><GSegmented icons label="Sidebar section" value="conduit" onChange={() => {}} options={[{ value: "conduit", label: "Conduit", icon: <LayoutDashboardIcon /> }, { value: "computer", label: "Computer", icon: <MonitorIcon /> }]} /></>}
+        foot={<NavNotice icon={<CheckIcon />}>Conduit is up to date</NavNotice>}>
+        <NavRail label="Quick navigation"><RailButton aria-label="Dashboard" current><LayoutDashboardIcon /></RailButton><RailButton aria-label="New project"><FolderPlusIcon /></RailButton><NavRailSection><RailButton aria-label="Japan" live><FolderIcon /></RailButton></NavRailSection></NavRail>
+        <GNavRow icon={<LayoutDashboardIcon />} current>Conduit Dashboard</GNavRow><GNavRow icon={<FolderPlusIcon />}>New project</GNavRow>
+        <GNavGroup label="Projects"><NavFolder open row={<NavFolderRow icon={<FolderIcon />} open within link={{}} toggle={{ "aria-label": "Collapse" }}>Japan</NavFolderRow>}><GNavRow indent icon={<MessageSquareIcon />}>Plan the trip</GNavRow></NavFolder></GNavGroup>
+        <GNavGroup label="Chats"><GNavRow icon={<MessageSquareIcon />}>Fix the build</GNavRow><GNavRow quiet icon={<GSearchIcon />} meta="7 more">View all chats</GNavRow></GNavGroup>
+      </NavPane></div>)}</div>, true),
+    ] },
+  ] },
   { title: "Popover", note: "raised frost holding sections, separated by rules; a submenu is another popover", groups: [
     { atoms: [
       lib("anatomy", "Anatomy", "both", "popover", "Menu > Section > Item", () => <Anatomy scene={() => <Menu>
@@ -985,7 +1009,7 @@ export const libraryFamilies: Family[] = [
     ] },
     { title: "Assembled", layout: "phone", atoms: [
       lib("pill-header", "ChatHeader · headerPill + HeaderActions", "phone", "pill", "navigation/header-pill.tsx", () => <div class="g-bar-demo"><PillGroup actions={[icon("Sidebar", <PanelLeftIcon />), icon("New chat", <MessageSquarePlusIcon />)]} /><PillGroup actions={[icon("Search", <SearchIcon />), icon("Terminal", <TerminalIcon />), icon("More", <EllipsisIcon />)]} /></div>, true),
-      lib("pill-sidebar", "Sidebar · header (PillShell)", "phone", "pill", "navigation/sidebar.tsx", () => <div class="g-bar-demo"><PillButton {...icon("Sidebar", <PanelLeftIcon />)} /><Area /></div>, true),
+      lib("pill-sidebar", "Sidebar · header", "phone", "pill", "navigation/sidebar.tsx (the phone's drawer has no toggle: a swipe or the backdrop closes it)", () => <div class="g-bar-demo"><Area /></div>, true),
       lib("pill-composer", "Composer · bar layout", "phone", "pill", "chat/composer.tsx (bar)", () => <div class="g-composer-demo"><PillField placeholder="Send a message…" /><div class="g-bar-demo">
         <PillButton {...icon("Message options", <PlusIcon />)} /><PillButton {...icon("Take a photo", <CameraIcon />)} /><PillButton {...icon("Type a message", <KeyboardIcon />)} /><PillButton stretch {...icon("Dictate", <MicIcon />)} /><PillButton {...icon("Send", <ArrowUpIcon />)} />
       </div></div>, true),

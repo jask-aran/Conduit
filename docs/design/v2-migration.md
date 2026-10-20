@@ -15,7 +15,7 @@ control does not make its subsystem complete.
 | ID | Subsystem | Full scope | Status and evidence | Ownership |
 | --- | --- | --- | --- | --- |
 | V2-01 | Settings | Settings overlay, section navigation, all settings pages, fields, switches, selectors, shortcut recording, save and error states. | Partial. Switches use v2 (`e43ebf72`). Reset confirmation uses the shared v2 decision queue; the rest of Settings remains to migrate. | Unassigned |
-| V2-02 | Sidebar and navigation | Expanded sidebar, collapsed rail, project and chat rows, server switcher, header controls, status indicators, context menus. | Open. Shared dialogs used here already use v2, and the chat header's menu content too (V2-08); the header buttons, navigation and its menus still need their own cutover. | Unassigned |
+| V2-02 | Sidebar and navigation | Expanded sidebar, collapsed rail, project and chat rows, server switcher, header controls, status indicators, context menus. | Partial. The sidebar is cut over: `NavPane` and the Nav pieces (`components/ui/nav.tsx`), `Segmented`/`PillSwitch` for its sections, `StatusDot` for every `RuntimeIndicator`, and its right-click menus through the adapter's `ContextMenu` (now with sections, radio choices and submenus, the phone's panels included). `sidebar.css` is gone. Remaining: the chat header's pills (`header-pill.tsx`, `PillShell`) and the outside-thread chip, which still wear the composer-surface material (the setting retires with them, coordinating with V2-01), and the Move chat dialog, kept for the palette's Move command until the dashboards' menus (V2-04) move onto the adapter. See V2-02 evidence below. | Claude |
 | V2-03 | Search and commands | Chat search, command palette, leader palette, results, keyboard hints, empty and loading states. | Open. The shared delete confirmation uses v2; the palettes and their controls remain. | Unassigned |
 | V2-04 | Dashboards | Conduit, project, workspace, harness, and Computer screens; headings, lists, actions, menus, and empty states. | Open. Computer explorer and workspace identity editor now render v2; the other dashboard presentations remain. Coordinate dashboard composers with Claude. | Unassigned; composer changes require coordination |
 | V2-05 | Panes and workspace tools | Pane headers, tabs, resize and drag controls, dock, Files, file viewer, Source Control, Chat review, and Terminal controls. | Open. Confirmations, file prompts and the embedded code excerpt now use v2; pane controls and the editable file viewer remain. | Unassigned |
@@ -173,3 +173,42 @@ JS 328419 B gzip, initial CSS 56526 B gzip, largest lazy JS 122467 B gzip.
 
 Hardware sign-in, secure token storage, discovery, camera scanning and native
 Android Back were not exercised. Their domain logic was retained.
+
+## V2-02 sidebar cutover
+
+`navigation/sidebar.tsx` renders `NavPane` (head, list, foot), `NavGroup`,
+`NavRow`, `NavFolder`/`NavFolderRow` (the measured-height slide moved into the
+piece, `--duration-fold`), `NavRail`/`RailButton`, `NavNote`, `NavSkeleton`,
+`NavNotice` and `NavLinks`. The pane's widths, the folded rail and the phone's
+drawer are library state (`collapsed`, `folded`, `instant`, `drawer`); the app
+keeps the edge's panel-motion sampling. The section switch is `Segmented` on
+desktop (stacked when folded) and `PillSwitch` on a phone, whose open drawer has
+no toggle (the library preview's decision). `RuntimeIndicator` draws
+`StatusDot`, so dashboards and chat search change with it. Rail buttons say
+their names in a `title` rather than the classic tooltip. The chat, folder and
+pinned menus use `ContextMenu` with `MenuSection`, `MenuRow`, `MenuSub` and
+radio items; the selection menu and Move to folder are submenus there.
+`sidebar-cursor.ts`, `focus-shown.ts` and the go-to (`main.tsx`) select the
+library's classes (`.ui-nav-row`, `.ui-nav-link`, `.ui-nav-toggle`,
+`.ui-nav-folder-*`, `.ui-rail-button`, the switch's `[aria-checked]`). The
+workspace glyph's base rules, the chat header's leading controls and the
+dashboards' `.sidebar-context-menu` rules moved to `styles.css`; split rows
+keep their harness-mark rules in `split.css`.
+
+Executed: typecheck and the production build passed. A headless keyboard
+transcript (desktop 1280×900) was recorded before the change and replayed
+after it: go-to, ↑/↓, Home/End, ↑ to the switch and ←/→/↓ on it, → open and
+step into a folder, Esc and ← out and shut, Shift+↓ selection and Esc, Shift+F10
+menu rows and focus return, pointer-moves-cursor, the still pointer's resting
+row, the held cursor on blur, Esc to the main pane, Enter into a chat, and the
+folded rail's ↓/↑. Every focus step, stop count, selection count and menu row
+matched. The differences were the switch's look (the library's tint and lift
+weight in place of the old brighter wash) and a row's rest ink (`--foreground`
+at the rest tone for `--sidebar-foreground`). Sidebar preferences were restored
+by the probe. Headless shots compared the desktop sidebar, its rail and the
+phone drawer (412×860, touch) with the old ones; the chat menu and its Move to
+folder submenu opened on desktop (keyboard) and phone (tap, the shared phone
+panel), and Escape returned focus to the row. The gallery's new Nav family
+(Forms at both densities, the pane open and folded) was screenshotted. Not
+exercised: drag to a pane, long-press on a real phone, the reduced-motion
+path, the Computer area's harness rows with a harness not ready.

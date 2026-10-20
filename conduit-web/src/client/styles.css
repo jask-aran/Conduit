@@ -1538,6 +1538,27 @@ svg.lucide { stroke-width: 2.4; }
 }
 
 .harness-mark { display: block; flex: none; object-fit: contain; }
+/* A workspace's own glyph (project/workspace-appearance.tsx): an icon or a monogram, sized by its slot. */
+.workspace-glyph { display: inline-grid; flex: none; place-items: center; font-size: calc(0.5625 * var(--u-type)); font-weight: 750; letter-spacing: -.04em; line-height: 1; }
+.workspace-glyph[data-mode="monogram"] { font-size: calc(0.5 * var(--u-type)); }
+.workspace-glyph svg { width: 100%; height: 100%; }
+/* The chat header's leading controls are a phone's (on desktop the sidebar's head holds the toggle). */
+.chat-header .mobile-header-leading { display: none; }
+@media (--conduit-phone-layout) {
+  .chat-header .mobile-header-leading { display: flex; flex: none; }
+  .chat-header :is(.mobile-sidebar-trigger, .mobile-new-chat-trigger) { display: inline-flex; flex: none; }
+}
+/* The dashboards' right-click menus (V2-04 moves them onto the adapter, as the sidebar's are). */
+.sidebar-context-menu [role="menuitem"], .sidebar-context-menu [role="menuitemradio"] { font-size: 12px; }
+.sidebar-context-menu svg { width: 14.4px; height: 14.4px; }
+.sidebar-context-menu .menu-chevron { width: 12px; height: 12px; }
+@media (--conduit-phone-layout) {
+  .sidebar-context-menu { width: 11rem; max-height: min(70dvh, calc(var(--app-height, 100dvh) - 24px)); }
+  [data-slot="context-menu-sub-content"].sidebar-context-menu { width: 7rem; }
+  .sidebar-context-menu [role="menuitem"], .sidebar-context-menu [role="menuitemradio"] { min-height: 44px; font-size: 15px; }
+  .sidebar-context-menu svg { width: 18px; height: 18px; }
+  .sidebar-context-menu .menu-chevron { width: 15px; height: 15px; }
+}
 .thread-harness-mark { display: inline-grid; width: 12px; height: 12px; flex: none; place-items: center; color: var(--muted-foreground); opacity: .78; }
 .thread-harness-mark .harness-mark { width: 100%; height: 100%; }
 .harness-mark-tinted {

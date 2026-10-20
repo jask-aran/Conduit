@@ -1,7 +1,6 @@
 import { Show, type JSX } from "solid-js";
 import { activityLabel } from "../../activity.js";
-import { Spinner, Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives";
-import { cn } from "@/lib/utils";
+import { StatusDot, type StatusTone } from "@/components/ui";
 import type { ChatSummary, RuntimeProcess } from "../api/contracts";
 
 type Activity = string;
@@ -24,7 +23,7 @@ export const activityDetail = (process: RuntimeProcess | null | undefined): stri
   return value && typeof value === "object" ? value.label || null : null;
 };
 
-const TONES: Record<string, string> = {
+const TONES: Record<string, StatusTone> = {
   starting: "muted",
   idle: "success",
   working: "active",
@@ -37,37 +36,26 @@ const TONES: Record<string, string> = {
 
 const SPINNING = new Set(["starting", "stopping", "working", "compacting"]);
 
-/** Compact accessible process/activity indicator for sidebar rows, matching main. */
-export function RuntimeIndicator(props: { process?: RuntimeProcess | null; stale?: boolean; unread?: boolean; class?: string; fallback?: JSX.Element }) {
+/** A chat's process and activity as a StatusDot, for its row. */
+export function RuntimeIndicator(props: { process?: RuntimeProcess | null; stale?: boolean; unread?: boolean; fallback?: JSX.Element }) {
   const visible = () => Boolean(visibleRuntimeActivity(props.process));
   const activity = () => runtimeActivity(props.process) || "idle";
   const label = () => activityLabel(activity(), activityDetail(props.process));
-  const tone = () => TONES[activity()] || "muted";
   // Live and unread are independent facts, so the slot goes to whichever is
   // still happening. A process that is working, starting or waiting on the
   // user owns it; an idle one does not, because a warm process outlives every
   // turn and would hide the answer it just finished. Idle and read falls back
   // to the resident pill.
   const busy = () => visible() && activity() !== "idle";
-  return <Show when={!busy() && props.unread} fallback={<Show when={visible()} fallback={props.fallback}><Tooltip>
-      <TooltipTrigger as="span"
-        class={cn("runtime-indicator", `runtime-indicator-${tone()}`, props.stale && "runtime-indicator-stale", props.class)}
-        role="status"
-        aria-label={props.stale ? `${label()} (may be stale)` : label()}
-      >
-        {SPINNING.has(activity())
-          ? <Spinner class="size-3" />
-          : <span class="runtime-indicator-dot" aria-hidden="true" />}
-      </TooltipTrigger>
-      <TooltipContent>{props.stale ? `${label()} · reconnecting` : label()}</TooltipContent>
-    </Tooltip></Show>}>
-    <span class={cn("runtime-indicator runtime-indicator-unread", props.class)} role="status" aria-label="Unread response"><span class="runtime-indicator-dot" aria-hidden="true" /></span>
+  return <Show when={!busy() && props.unread} fallback={<Show when={visible()} fallback={props.fallback}>
+      <StatusDot label={props.stale ? `${label()} (may be stale)` : label()} title={props.stale ? `${label()} · reconnecting` : label()}
+        tone={TONES[activity()] || "muted"} spinning={SPINNING.has(activity())} stale={props.stale} />
+    </Show>}>
+    <StatusDot label="Unread response" tone="unread" />
   </Show>;
 }
 
 /** A collapsed parent only signals child responses that need attention. */
 export function ProjectActivityIndicator(props: { sessions: ChatSummary[] }) {
-  return <Show when={props.sessions.some((session) => session.unread)}>
-    <span class="runtime-indicator runtime-indicator-unread" role="status" aria-label="Contains unread responses"><span class="runtime-indicator-dot" aria-hidden="true" /></span>
-  </Show>;
+  return <Show when={props.sessions.some((session) => session.unread)}><StatusDot label="Contains unread responses" tone="unread" /></Show>;
 }
