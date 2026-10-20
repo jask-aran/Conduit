@@ -27,5 +27,5 @@ export function SidebarScreen() {
   };
   // Every handler not named does nothing; async ones resolve.
   const props = new Proxy(named, { get: (target, key: string) => key in target ? (target as never)[key] : key.startsWith("on") ? (key.match(/^on(Add|Rename|Move|Delete|Copy|New|Open(Chat|Project)$|Stop|Toggle)/) ? later : noop) : undefined });
-  return <div class="g-sidebar-screen"><Sidebar {...(props as never)} /></div>;
+  return <div class="g-sidebar-screen"><Sidebar {...(props as unknown as Parameters<typeof Sidebar>[0])} /></div>;
 }

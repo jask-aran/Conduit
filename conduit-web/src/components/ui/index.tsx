@@ -7,12 +7,22 @@ export { ChevronDownIcon } from "lucide-solid";
 export { Orb, settledOrbRate, type ModeFrame, type ModeOpts, type OrbState } from "./orb";
 export { PLAIN_SPHERE, SPUTTERING_SPHERE, ORBITS_TRAILED } from "./orb-frames";
 export { moveCursor, type Density, type Motion } from "./shared";
+// In the stylesheets' cascade order (styles/index.ts), so a family reads the same in code, CSS and the gallery.
 export * from "./controls";
 export * from "./frost";
 export * from "./popover";
 export * from "./nav";
+export * from "./dashboard";
+export * from "./pane";
+export * from "./source";
+export * from "./history";
+export * from "./terminal";
+export * from "./file";
+export * from "./viewer";
+export * from "./editor";
 export * from "./header";
 export * from "./card";
+export * from "./identity";
 export * from "./toast";
 export * from "./overlay";
 export * from "./leader";
@@ -23,18 +33,5 @@ export * from "./rider";
 export * from "./transcript";
 export * from "./code";
 export * from "./trace";
-
-export * from "./identity";
-
 export * from "./connection";
-
 export * from "./browser";
-
-export * from "./dashboard";
-export * from "./pane";
-export * from "./source";
-export * from "./history";
-export * from "./terminal";
-export * from "./file";
-export * from "./viewer";
-export * from "./editor";

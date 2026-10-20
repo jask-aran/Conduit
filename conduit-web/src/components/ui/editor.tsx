@@ -22,7 +22,6 @@ export const SearchActions = (props: JSX.HTMLAttributes<HTMLDivElement>) => <div
 /** A comment form placed at the end of a code selection. */
 export const AnnotationPopup = (props: JSX.HTMLAttributes<HTMLDivElement>) => <div {...props} class="ui-annotation" />;
 /** A comment's note, shown above its marked code. */
-export const ReviewTooltip = (props: JSX.HTMLAttributes<HTMLDivElement>) => <div {...props} class="ui-review-tooltip" />;
 /** The tooltip class for CodeMirror's plain DOM tooltip content. */
 export const reviewTooltipClass = "ui-review-tooltip";
 /** The mark class for CodeMirror's comment decorations. */

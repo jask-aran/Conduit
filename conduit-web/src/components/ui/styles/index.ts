@@ -12,9 +12,15 @@
  *   controls        Button, Input, TextArea, Field, Keycap, Segmented, Slider, Progress, Spinner
  *   frost, orb      the material; the thinking orb's box
  *   popover         Menu > Section > Item, Match
- *   nav             NavGroup > NavRow
- *   pane            Tabs > TabPlace > Tab, PaneAction, PaneEdge, DropWash, DragPill, ToolRail, ToolHeader
- *   dashboard       Dashboard, DashHeader, Group (GroupHeading), DashRow, FolderShelf
+ *   nav             NavPane > NavGroup > NavRow, NavFolder, RailButton
+ *   dashboard       Dashboard, DashHeader, Group (GroupHeading), DashRow, ChangeRow, FolderShelf
+ *   pane            PaneTabRow > TabPlace > PaneTab, PaneAction, PaneEdge, DropWash, DragPill, ToolRail, ToolHeader,
+ *                   ToolBar, ToolButton, ToolFilter, ToolNotice, Tree > TreeRow
+ *   source          ToolLine, CommitBox, ChangeLedger > ChangeSection > ChangeList > ChangeItem, CommitList, PatchLines
+ *   history         HistoryList > HistoryRow, HistoryBranch
+ *   terminal        TermHeader and its parts, TermState, ShortcutForm, TermShortcutRow
+ *   file, viewer    FileView > FileHead, FileBody, StatusBar; FileViewer's sides; FileImage, FileMedia, FileCard
+ *   editor          CodeSurface > CodeHost, SearchBar, AnnotationPopup, Comparison, DiffShell
  *   header          Header, HeaderCrumb, HeaderButton, HeaderNote
  *   card, toast     Card; Toast
  *   overlay         Scrim > Overlay (Bar, List, Split, Hints, Rail, Page), Settings, Glance
@@ -25,6 +31,9 @@
  *   rider           Rider, Line, Chip, Choice, the question card, RiderButton
  *   transcript      Transcript, Turn, Message, Bubble, Answer, Disclosure
  *   code, trace     CodeBlock, CopyButton; Trace, Trail, Step
+ *   identity        the account and server marks
+ *   connection      sign-in, first connection, server selection
+ *   browser         the computer's file browser
  */
 import "./theme.css";
 import "./foundations.css";

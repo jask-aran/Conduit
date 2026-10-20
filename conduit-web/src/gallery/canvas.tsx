@@ -6,7 +6,6 @@ import "./gallery.css";
 import "@/components/ui/styles";
 import { ChatScreen } from "./stories";
 import { NavGroup, NavRow, Frost } from "@/components/ui";
-import { LibraryContext } from "@/components/ui/swap";
 import { SidebarScreen } from "./sidebar-story";
 
 // The gallery is all library: its rules that the app keeps to library pieces (no focus ring) hold on the whole page.
@@ -69,9 +68,9 @@ function Canvas() {
     { key: "live", render: () => <iframe class="g-phone" title="Phone live" src={`http://127.0.0.1:${location.port}/gallery.html?frame=live&chat=${encodeURIComponent(liveChat ?? "")}`} onLoad={tuneFrame} /> },
     { key: "sidebar", render: () => <iframe class="g-phone" title="Phone sidebar" src="gallery.html?frame=sidebar" onLoad={tuneFrame} /> },
     { key: "desktop", render: () => <div ref={desktop} class="g-desktop-screen" onKeyDown={(event) => { if (event.key === "Escape") setOverlay(null); }}>
-      <LibraryContext.Provider value={true}><ChatScreen /></LibraryContext.Provider>
+      <ChatScreen />
       <Show when={overlay()} keyed>{(view) => <div class="g-desktop-overlay" onPointerDown={(event) => { if ((event.target as Element).classList.contains("ui-scrim")) setOverlay(null); }}>
-        <LibraryContext.Provider value={true}>{overlayViews[view]({ close: () => setOverlay(null), class: "g-preview-scrim", ...(view === "leader" ? litComposer() : {}) })}</LibraryContext.Provider>
+        {overlayViews[view]({ close: () => setOverlay(null), class: "g-preview-scrim", ...(view === "leader" ? litComposer() : {}) })}
       </div>}</Show>
     </div> },
   ];
@@ -202,9 +201,9 @@ export function mount(frame: string | null) {
   applyFaces(document);
   applyScale(document);
   // The phone screens, drawn with components v2, in a frame with a phone's root size and media rules.
-  if (frame === "sidebar") { document.body.classList.add("g-solo-body"); render(() => <LibraryContext.Provider value={true}><SidebarScreen /></LibraryContext.Provider>, root); }
-  else if (frame === "live") { document.body.classList.add("g-solo-body"); const chat = new URLSearchParams(location.search).get("chat") ?? ""; void import("./live-chat").then(({ LiveChatScreen }) => render(() => <LibraryContext.Provider value={true}><LiveChatScreen chatId={chat} /></LibraryContext.Provider>, root)); }
-  else if (frame) { document.body.classList.add("g-solo-body"); render(() => <LibraryContext.Provider value={true}><ChatScreen /><PhoneOverlay /></LibraryContext.Provider>, root); }
+  if (frame === "sidebar") { document.body.classList.add("g-solo-body"); render(() => <SidebarScreen />, root); }
+  else if (frame === "live") { document.body.classList.add("g-solo-body"); const chat = new URLSearchParams(location.search).get("chat") ?? ""; void import("./live-chat").then(({ LiveChatScreen }) => render(() => <LiveChatScreen chatId={chat} />, root)); }
+  else if (frame) { document.body.classList.add("g-solo-body"); render(() => <><ChatScreen /><PhoneOverlay /></>, root); }
   else {
     render(() => <Canvas />, root);
     // The chat screens scroll themselves to their latest message as they

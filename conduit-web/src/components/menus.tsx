@@ -3,8 +3,16 @@ import { Popover as KPopover } from "@kobalte/core/popover";
 import { ContextMenu as KContextMenu } from "@kobalte/core/context-menu";
 import type { FocusOutsideEvent } from "@kobalte/core";
 import { createContext, createEffect, Show, type ValidComponent, createMemo, createSignal, createUniqueId, For, on, onCleanup, onMount, splitProps, useContext, type ComponentProps, type JSX, type ParentProps } from "solid-js";
-import { attachRowMenus, createFullscreenPortalMount, rowMenusAttached } from "./primitives";
-export { attachRowMenus };
+import { createFullscreenPortalMount } from "./portal";
+
+/*
+ * Row menus wait for the first open to have been shown. Every chat, folder and project row carries a context menu, and
+ * building the menu machinery for each one was a tenth of a second of a phone's first open. Until `attachRowMenus()` the
+ * rows draw as the elements they wrap and their menus are absent; then each row is redrawn with its menu, well before
+ * anyone could right-click or long-press it.
+ */
+const [rowMenusAttached, setRowMenusAttached] = createSignal(false);
+export const attachRowMenus = () => setRowMenusAttached(true);
 import { Dynamic } from "solid-js/web";
 import { Menu as Surface, type Measure, MenuAction, Item, Section, MenuPanel, MenuParent, MenuNote, SearchSection } from "./ui/popover";
 import { Button, SelectTrigger, SliderValue } from "./ui/controls";
