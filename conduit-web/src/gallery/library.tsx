@@ -231,19 +231,19 @@ const titleOf = (id: SettingsSection) => SETTINGS.flatMap((group) => group.secti
 function Theme() { const [value, setValue] = createSignal("dark"); return <Segmented size="sm" label="Theme" value={value()} onChange={setValue} options={[{ value: "dark", label: "Dark" }, { value: "light", label: "Light" }, { value: "system", label: "System" }]} />; }
 const reset = () => <Button variant="ghost" size="icon-sm" aria-label="Reset to default"><RefreshCwIcon /></Button>;
 const keys = (...names: string[]) => <span class="g-keys">{names.map((name) => <Keycap>{name}</Keycap>)}</span>;
-const SETTING_PAGES: Record<SettingsSection, { status?: string; failed?: boolean; body: () => JSX.Element }> = {
+const SETTING_PAGES: Record<SettingsSection, { status?: string; busy?: boolean; failed?: boolean; why?: string; body: () => JSX.Element }> = {
   appearance: { status: "Saved", body: () => <>
     <SettingGroup title="Interface"><SettingLine label="Theme"><Theme /></SettingLine><SettingLine label="Interface size"><ScaleSetting token="--scale-ui" /></SettingLine><SettingLine label="Sidebar chats"><Input value="20" /></SettingLine><SettingLine label="Tab row"><SwitchDemo /></SettingLine><SettingLine label="Streaming" state="paused while hidden"><SelectTrigger value="Adaptive" bare /></SettingLine></SettingGroup>
     <SettingGroup title="Reading"><SettingLine label="Text size"><ScaleSetting token="--scale-transcript" /></SettingLine><SettingLine label="Transcript width"><SelectTrigger value="Compact" bare /></SettingLine><SettingLine label="Wide blocks"><SelectTrigger value="Off" bare /></SettingLine><SettingLine label="Terminal font"><SelectTrigger value="Meslo" bare /></SettingLine></SettingGroup>
   </> },
   shortcuts: { status: "Saved", body: () => <Shortcuts /> },
-  models: { status: "Not saved", failed: true, body: () => <>
+  models: { status: "Not saved", failed: true, why: "The server answered 502.", body: () => <>
     <SettingGroup title="Accounts"><SettingLine label="OpenAI" plain><SettingValue>Signed in</SettingValue><Button variant="ghost" size="sm">Sign out</Button></SettingLine><SettingLine label="Anthropic" plain><SettingLink href="#">Open sign-in</SettingLink></SettingLine>
       <SettingLine label="OpenRouter key"><Input value="sk-or-••••••••3f2a" /></SettingLine><SettingNote tone="error">That key was turned down (401). Check it has credit.</SettingNote>
       <SettingDetails summary="Where to find them"><ol><li>Open openrouter.ai/keys</li><li>Create a key, then paste it here</li></ol><p>Keys stay on this server, in <code>~/.conduit/data</code>.</p></SettingDetails></SettingGroup>
     <SettingGroup title="Providers"><SettingLine label="Gemini" plain><SettingLink href="#">Docs</SettingLink></SettingLine><SettingLine label="Default model"><SelectTrigger value="GPT-6 Luna" bare /></SettingLine></SettingGroup>
   </> },
-  prompts: { status: "Saved", body: () => <SettingGroup title="System prompt"><SettingLine label="Assistant" state="edited" plain>{reset()}</SettingLine>
+  prompts: { status: "Saving", busy: true, body: () => <SettingGroup title="System prompt"><SettingLine label="Assistant" state="edited" plain>{reset()}</SettingLine>
     <SettingWide><TextArea value={"You are Conduit's assistant. Answer briefly, then offer to go further.\nPrefer the user's own words for things."} /></SettingWide></SettingGroup> },
   runtime: { body: () => <>
     <SettingGroup title="Processes"><SettingLine label="Running" plain><SettingValue mono>3 of 8</SettingValue></SettingLine><SettingLine label="Idle timeout"><SelectTrigger value="10 minutes" bare /></SettingLine></SettingGroup>
@@ -286,7 +286,7 @@ function Shortcuts() {
       <Show when={bound()[command]!.length} fallback={<SettingValue>Not assigned</SettingValue>}>
         <For each={bound()[command]}>{(chord) => <Keycap label={`${command}: ${chord}`} onClick={() => {}} onRemove={() => clear(command, chord)}>{chord}</Keycap>}</For>
       </Show>{add(command)}</SettingLine>
-      <Show when={recording() === command}><SettingRecorder keys={heard()} onSave={() => { setBound((all) => ({ ...all, [command]: [...all[command]!, heard().join(" ")] })); setRecording(null); }} /></Show></>}</For></SettingGroup>
+      <Show when={recording() === command}><SettingRecorder keys={heard()} onCancel={() => setRecording(null)} onSave={() => { setBound((all) => ({ ...all, [command]: [...all[command]!, heard().join(" ")] })); setRecording(null); }} /></Show></>}</For></SettingGroup>
   </>;
 }
 
@@ -301,11 +301,11 @@ function ScaleSetting(props: { token: "--scale-ui" | "--scale-transcript" }) {
 /** Settings: on a desktop the rail beside the page; on a phone one at a time, the page with Back to the rail. */
 function Settings(props: { close: () => void; phone?: boolean; start?: SettingsSection | null }) {
   const [section, setSection] = createSignal<SettingsSection | null>(props.start === undefined ? (props.phone ? null : "appearance") : props.start);
-  const rail = () => <OverlayRail title="Settings" foot={<span>Interface 0.8.1-dev</span>}>
+  const rail = () => <OverlayRail title="Settings" foot={<><span>Interface 0.8.1-dev</span><span>Running as Browser tab</span><span>Server 0.8.0</span></>} onClose={props.phone ? props.close : undefined}>
     <For each={SETTINGS}>{(group) => <NavGroup label={group.label}><For each={group.sections}>{([id, label, glyph]) =>
       <NavRow icon={glyph()} current={!props.phone && section() === id} onClick={() => setSection(id)}>{label}</NavRow>}</For></NavGroup>}</For>
   </OverlayRail>;
-  const page = (id: SettingsSection) => { const view = SETTING_PAGES[id]; return <OverlayPage title={titleOf(id)} status={view.status} failed={view.failed} onBack={props.phone ? () => setSection(null) : undefined} onClose={props.close}>{view.body()}</OverlayPage>; };
+  const page = (id: SettingsSection) => { const view = SETTING_PAGES[id]; return <OverlayPage title={titleOf(id)} status={view.status} busy={view.busy} failed={view.failed} why={view.why} onRetry={view.failed ? () => {} : undefined} onBack={props.phone ? () => setSection(null) : undefined} onClose={props.close}>{view.body()}</OverlayPage>; };
   return <Overlay label="Settings" layout="rail" style={props.phone ? undefined : { "--overlay-width": "calc(70.3125 * var(--u-space))", "--overlay-height": "560px" }}>
     <Show when={!props.phone || section() === null}>{rail()}</Show>
     <Show when={section()} keyed>{(id) => page(id)}</Show>

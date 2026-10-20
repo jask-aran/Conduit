@@ -1,5 +1,5 @@
 /* A keycap is small inside a row, so its corner is a share of the control radius (~4px on desktop), and its text the label size. */
-.ui-keycap { display: inline-grid; min-width: var(--control-2xs); height: var(--control-2xs); place-items: center; border-radius: var(--radius-inset); background: var(--tint); padding: 0 var(--space-xs); color: var(--muted-foreground); font: var(--weight-lift) var(--text-label)/var(--leading-none) var(--font-label); }
+.ui-keycap { display: inline-grid; white-space: nowrap; min-width: var(--control-2xs); height: var(--control-2xs); place-items: center; border-radius: var(--radius-inset); background: var(--tint); padding: 0 var(--space-xs); color: var(--muted-foreground); font: var(--weight-lift) var(--text-label)/var(--leading-none) var(--font-label); }
 .ui-row[data-highlighted] .ui-keycap { color: var(--foreground); }
 /* A keycap that can be pressed (to record another) and cleared: taller, for a pointer and a finger, the
    chord and a × each a button, a second tint under the one the cursor is on. */
@@ -82,6 +82,7 @@
 [data-surface="frame"] :is(.ui-pill > button, .ui-seg button:is([aria-checked="true"], :hover, :focus-visible, [data-held])) { color: var(--sidebar-accent-foreground); }
 [data-surface="frame"] .ui-seg .ui-seg-thumb { background: var(--sidebar-accent); }
 @media (prefers-reduced-motion: reduce) { .ui-seg-thumb { transition: none; } }
+.ui-seg[aria-disabled] { opacity: var(--opacity-disabled); pointer-events: none; }
 /* The cursor on the chosen segment (already washed) brightens that wash a step: a second tint over the thumb's. */
 .ui-seg button[aria-checked="true"]:is(:hover, :focus-visible, [data-held]) { background: var(--tint); }
 /* The cursor on an unchosen segment is the wash (DESIGN Interaction); held: the window is away and it waits there. */

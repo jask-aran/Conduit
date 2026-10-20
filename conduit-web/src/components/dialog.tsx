@@ -70,6 +70,7 @@ export function OverlayDialog(props: {
   onOpenChange: (open: boolean) => void;
   label: string;
   placement?: "top" | "center";
+  layout?: "stack" | "rail";
   style?: JSX.CSSProperties;
   onOpenAutoFocus?: (event: Event) => void;
   onCloseAutoFocus?: (event: Event) => void;
@@ -82,7 +83,7 @@ export function OverlayDialog(props: {
       <KDialog.Content as={Scrim} dialog placement={props.placement ?? "top"} aria-label={props.label} data-state={props.open ? "open" : "closed"}
         onOpenAutoFocus={props.onOpenAutoFocus} onCloseAutoFocus={props.onCloseAutoFocus} onEscapeKeyDown={props.onEscapeKeyDown}
         onPointerDown={(event: PointerEvent) => { if (event.target === event.currentTarget) props.onOpenChange(false); }}>
-        <Overlay embedded label={props.label} style={props.style} motion={props.open ? "entering" : "leaving"}>{props.children}</Overlay>
+        <Overlay embedded label={props.label} layout={props.layout} style={props.style} motion={props.open ? "entering" : "leaving"}>{props.children}</Overlay>
       </KDialog.Content>
     </KDialog.Portal>
   </KDialog.Root>;

@@ -73,33 +73,48 @@ export const OverlayActions = (props: { actions: OverlayAction[] }) => <div clas
   <For each={props.actions}>{(action) => <Button variant={action.destructive ? "destructive" : "ghost"} outline disabled={action.disabled} onClick={() => action.onClick()}>{action.label}</Button>}</For>
 </div>;
 
-/** A rail of sections down the side: a title, NavGroups, and a foot. */
-export function OverlayRail(props: { title: string; foot?: JSX.Element; children: JSX.Element }) {
-  return <nav class="ui-overlay-rail"><h2 class="ui-overlay-title">{props.title}</h2>{props.children}
-    <Show when={props.foot}><div class="ui-overlay-rail-foot">{props.foot}</div></Show></nav>;
+/** A rail of sections down the side: a title, NavGroups, and a foot. onClose: when it is a screen of its own (a phone's), its close.
+ *  The rest goes on the nav: a behaviour's roles and keys (Settings' tablist). */
+export function OverlayRail(props: JSX.HTMLAttributes<HTMLElement> & { title: string; foot?: JSX.Element; onClose?: () => void }) {
+  const [local, rest] = splitProps(props, ["title", "foot", "onClose", "children"]);
+  return <nav {...rest} class="ui-overlay-rail"><div class="ui-overlay-page-head"><h2 class="ui-overlay-title">{local.title}</h2>
+    <Show when={local.onClose}><Button variant="ghost" size="icon-sm" aria-label="Close" onClick={() => local.onClose?.()}><XIcon /></Button></Show></div>{local.children}
+    <Show when={local.foot}><div class="ui-overlay-rail-foot">{local.foot}</div></Show></nav>;
 }
 
-/** The page beside a rail: its title, its save status (Saving, Saved, Not saved: settings save as they change), close, and SettingGroups. */
-export function OverlayPage(props: { title: string; status?: string; failed?: boolean; onBack?: () => void; onClose?: () => void; children: JSX.Element }) {
+/** The page beside a rail: its title, its save status (Saving, Saved, Not saved: settings save as they change), close, and SettingGroups.
+ *  busy: a spinner before the status (Saving); failed: the status in the destructive colour, why in its title, and Retry when onRetry. */
+export function OverlayPage(props: { title: string; status?: string; busy?: boolean; failed?: boolean; why?: string; onRetry?: () => void; onBack?: () => void; onClose?: () => void; children: JSX.Element }) {
   return <main class="ui-overlay-page">
-    <div class="ui-overlay-page-head"><Show when={props.onBack}><Button variant="ghost" size="icon-sm" aria-label="All settings" onClick={() => props.onBack?.()}><ChevronLeftIcon /></Button></Show><h2 class="ui-overlay-title">{props.title}</h2>
-      <Show when={props.status}><span class="ui-overlay-status" data-failed={props.failed ? "" : undefined}>{props.status}</span></Show>
+    <div class="ui-overlay-page-head"><Show when={props.onBack}><Button variant="ghost" size="icon-sm" aria-label="All settings" onClick={() => props.onBack?.()}><ChevronLeftIcon /></Button></Show><h2 class="ui-overlay-title" tabIndex={-1}>{props.title}</h2>
+      <Show when={props.status}><span class="ui-overlay-status" role="status" data-failed={props.failed ? "" : undefined} title={props.why}><Show when={props.busy}><Spinner /></Show>{props.status}
+        <Show when={props.failed && props.onRetry}><Button variant="ghost" size="sm" onClick={() => props.onRetry?.()}>Retry</Button></Show></span></Show>
       <Show when={props.onClose}><Button variant="ghost" size="icon-sm" aria-label="Close" onClick={() => props.onClose?.()}><XIcon /></Button></Show></div>
     {props.children}
   </main>;
 }
 
 /** Recording a shortcut: a second line under the setting, the same height, in place of a panel. A red dot and
- *  "Press a shortcut" until keys arrive, then the chord as one keycap, as the list shows it; the keys that steer it, and Save once there is something to save. */
-export const SettingRecorder = (props: { keys?: string[]; onSave?: () => void; onCancel?: () => void }) =>
-  <div class="ui-setting-recorder" role="status" aria-live="polite">
+ *  "Press a shortcut" until keys arrive, then the chord as one keycap, as the list shows it; the keys that steer it, and Save once there is something to save.
+ *  A behaviour hears the keys: onKeyDown makes the line the focusable capture (role application, named by label); onCancel makes the Esc hint its button.
+ *  Keys pressed on the line's own buttons are theirs, not the capture's. */
+export function SettingRecorder(props: { keys?: string[]; label?: string; ref?: (element: HTMLDivElement) => void; onKeyDown?: (event: KeyboardEvent) => void; onSave?: () => void; onCancel?: () => void; saveDisabled?: boolean }) {
+  const capture = () => Boolean(props.onKeyDown);
+  return <div ref={props.ref} class="ui-setting-recorder" role={capture() ? "application" : "status"} aria-live={capture() ? undefined : "polite"} aria-label={props.label} tabIndex={capture() ? 0 : undefined}
+    onKeyDown={(event) => { if (event.target === event.currentTarget) props.onKeyDown?.(event); }}>
     <span class="ui-recorder-dot" aria-hidden="true" />
     <Show when={props.keys?.length} fallback={<span class="ui-recorder-prompt">Press a shortcut</span>}>
       <Keycap class="ui-recorder-keys">{props.keys!.join(" ")}</Keycap>
     </Show>
-    <span class="ui-recorder-hints"><Keycap>Esc</Keycap>cancel<Keycap>Backspace</Keycap>clear</span>
-    <Button size="sm" outline disabled={!props.keys?.length} onClick={() => props.onSave?.()}>Save</Button>
+    <span class="ui-recorder-hints">
+      <Show when={props.onCancel} fallback={<><Keycap>Esc</Keycap>cancel</>}><button type="button" tabIndex={-1} onMouseDown={(event) => event.preventDefault()} onClick={() => props.onCancel?.()}><Keycap>Esc</Keycap>cancel</button></Show>
+      <Keycap>Backspace</Keycap>clear</span>
+    <Button size="sm" outline disabled={!props.keys?.length || props.saveDisabled} onClick={() => props.onSave?.()}>Save</Button>
   </div>;
+}
+
+/** Said to a screen reader, not shown: what an action did (a shortcut saved, cleared). */
+export const LiveNote = (props: { children: JSX.Element }) => <p class="ui-live-note" aria-live="polite">{props.children}</p>;
 
 /** A titled group of SettingLines; groups after the first are ruled off. */
 export const SettingGroup = (props: { title: string; children: JSX.Element }) =>
@@ -107,9 +122,9 @@ export const SettingGroup = (props: { title: string; children: JSX.Element }) =>
 
 /** A setting: its name (state that matters muted after it), then its control in the one control column.
  *  plain: what it holds is buttons, a value or a link, not one field, so the line is not that field's label. */
-export const SettingLine = (props: { label: string; state?: string; plain?: boolean; children: JSX.Element }) => {
+export const SettingLine = (props: { label: JSX.Element; state?: JSX.Element; plain?: boolean; title?: string; children?: JSX.Element }) => {
   const inner = () => <><span>{props.label}<Show when={props.state}><small>{props.state}</small></Show></span><span class="ui-setting-control">{props.children}</span></>;
-  return props.plain ? <div class="ui-setting-line">{inner()}</div> : <label class="ui-setting-line">{inner()}</label>;
+  return props.plain ? <div class="ui-setting-line" title={props.title}>{inner()}</div> : <label class="ui-setting-line" title={props.title}>{inner()}</label>;
 };
 /** A setting's value that is read, not set; mono for ids, addresses and versions. */
 export const SettingValue = (props: { mono?: boolean; children: JSX.Element }) => <span class="ui-setting-value" data-mono={props.mono ? "" : undefined}>{props.children}</span>;

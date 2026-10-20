@@ -11,7 +11,7 @@ import { ComparisonSourceControls } from "./workspace-comparison-source";
 import { WorkspaceDiffView } from "./workspace-diff-view";
 import { createWorkspaceReview, diffScopes, type DiffScope } from "./workspace-review-source";
 import type { DiffPayload, GitAction, GitActionResult, GitChangedFile, GitCommit, GitCommitDetail, GitRef, SourceControlMode, WorkspaceSettings } from "./workspace-types";
-import { Segmented } from "../settings/settings-controls";
+import { Segmented } from "@/components/ui/controls";
 import "./workspace.css";
 
 const sourceControlScopes = diffScopes.filter((scope) => scope.value === "head" || scope.value === "changes" || scope.value === "staged");
@@ -241,7 +241,7 @@ export type SourceControl = ReturnType<typeof createSourceControl>;
 
 /** Source Control's modes, a segmented switch in the header of whatever holds the view. */
 export function SourceControlModes(props: { control: SourceControl }) {
-  return <Segmented label="Source Control" value={props.control.mode()} onChange={props.control.selectMode} options={[
+  return <Segmented arrows label="Source Control" value={props.control.mode()} onChange={props.control.selectMode} options={[
     { value: "changes", label: "Changes", icon: <CheckIcon />, title: "Changes" },
     { value: "review", label: "Review", icon: <GitCompareArrowsIcon />, title: "Review" },
     { value: "graph", label: "Graph", icon: <GitCommitHorizontalIcon />, title: "Graph" },

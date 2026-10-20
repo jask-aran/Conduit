@@ -322,81 +322,16 @@ svg.lucide { stroke-width: 2.4; }
 .chat-main-empty .composer-stack { position: absolute; inset-inline: 0; top: 50%; z-index: 2; width: min(563.2px, calc(100% - 38.4px)); margin-inline: auto; padding: 0; transform: translateY(43.2px); background: transparent; }
 .chat-bootstrap { display: grid; min-height: 100%; place-items: center; color: var(--muted-foreground); font-size: 11.2px; }
 
-.frost-overlay { position: fixed; inset: 0; z-index: 80; display: grid; width: 100vw; height: 100dvh; place-items: center; padding: 12.8px; opacity: 1; visibility: visible; transition: opacity 150ms ease, visibility 0s; }
-.frost-overlay[data-state="closed"] { opacity: 0; visibility: hidden; pointer-events: none; transition-delay: 0s, 220ms; }
-.settings-content select, .workspace-settings-card [role="combobox"] { width: 100%; min-height: 28.8px; border: 0.8px solid var(--border); border-radius: 5.6px; background: var(--background); padding: 5.6px 7.2px; color: inherit; text-align: left; }
-.workspace-path-preview small { color: var(--muted-foreground); font-size: 9.6px; line-height: 1.35; }
-.workspace-path-preview { display: grid; gap: 3.2px; border-left: 1px solid var(--primary); background: var(--muted); padding: 7.2px 8px; }
-.workspace-path-preview strong { overflow-wrap: anywhere; font: 9.6px/1.35 ui-monospace, monospace; }
-.workspace-preview-error { margin: 0; color: var(--destructive); font-size: 10.4px; }
 
-.settings-shell { display: flex; width: min(720px, calc(100vw - 25.6px)); height: min(576px, calc(100dvh - 25.6px)); overflow: hidden; border-radius: 10.4px; }
-.settings-rail { display: flex; width: 147.2px; flex: none; flex-direction: column; gap: 2.4px; padding: 12.8px 6.4px; border-right: 1px solid var(--border); }
-.settings-rail nav { display: flex; flex-direction: column; gap: 2.4px; }
-.settings-rail h2 { margin: 0 6.4px 9.6px; font-size: 15.2px; }
-.settings-rail button { min-height: 28.8px; border: 0; border-radius: 5.6px; background: transparent; color: inherit; padding: 5.6px 8px; text-align: left; }
-.settings-rail button[aria-selected="true"] { background: var(--accent); }
-.settings-content { min-width: 0; flex: 1; overflow-y: auto; padding: 14.4px 17.6px; }
-.settings-content > header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
-.settings-content > header h2 { margin: 0; font-size: 17.6px; }
-.settings-error, .settings-loading { display: flex; align-items: center; justify-content: space-between; gap: 8px; border: 0.8px solid var(--border); border-radius: var(--radius-md); padding: 8px; }
-.settings-error { border-color: color-mix(in srgb, var(--destructive) 45%, var(--border)); color: var(--destructive); }
-.settings-inline-error { margin: 0; color: var(--destructive); font-size: 10.4px; }
-.voice-settings { display: grid; gap: 12.8px; }
-.voice-input-test { display: grid; gap: 8px; padding: 9.6px; border: 0.8px solid var(--border); border-radius: var(--radius); background: var(--card); }
-.voice-input-result { display: grid; gap: 1.6px; border-left: 1px solid var(--border); background: var(--muted); padding: 6.4px 8px; }
-.voice-input-result[data-signal="missing"] { border-left-color: var(--destructive); }
-.voice-input-result small { color: var(--muted-foreground); }
-.voice-input-live-state { border-left: 1px solid var(--border); background: var(--muted); padding: 6.4px 8px; color: var(--foreground); font-size: 10.4px; }
-.voice-input-playback { display: grid; gap: 6.4px; border-left: 1px solid var(--border); background: var(--muted); padding: 6.4px 8px; color: var(--muted-foreground); font-size: 10.4px; }
-.voice-input-playback-error { margin: 0; border-left: 1px solid var(--muted-foreground); background: var(--muted); padding: 6.4px 8px; color: var(--muted-foreground); font-size: 10.4px; }
-.voice-card { display: grid; gap: 10.4px; padding: 11.2px; border: 0.8px solid var(--border); border-radius: var(--radius); background: var(--card); }
-.voice-card h3, .voice-card p { margin: 0; }
-.voice-card p, .voice-notice { color: var(--muted-foreground); line-height: 1.45; }
-.voice-model-grid { display: grid; gap: 6.4px; }
-.voice-model-option { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: start; gap: 8px; border: 0.8px solid var(--border); border-radius: var(--radius); padding: 8.8px; cursor: pointer; }
-.voice-model-option[data-current="true"] { border-color: var(--border); background: var(--accent); }
-.voice-model-option input { margin-top: 2.4px; accent-color: var(--primary); }
-.voice-model-option span { display: grid; gap: 1.6px; }
-.voice-model-option small { color: var(--muted-foreground); }
-.voice-model-option em { color: var(--muted-foreground); font-size: 8.8px; font-style: normal; text-transform: capitalize; }
-.voice-model-option em[data-state="running"] { color: var(--foreground); }
-.voice-notice { border-left: 1px solid var(--border); background: var(--muted); padding: 7.2px 8px; font-size: 10.4px; }
-.voice-actions { display: flex; flex-wrap: wrap; gap: 6.4px; align-items: center; }
-.voice-settings-footer { display: flex; align-items: center; gap: 8px; border-top: 1px solid var(--border); padding-top: 11.2px; }
-.voice-save-success { color: var(--foreground); font-size: 10.4px; }
-.voice-model-status { display: flex; align-items: center; justify-content: space-between; gap: 9.6px; }
-.voice-model-status span { color: var(--muted-foreground); font-size: 9.6px; text-transform: capitalize; }
-.voice-progress { display: grid; gap: 4px; }
-.voice-progress progress { width: 100%; accent-color: var(--primary); }
-.voice-progress small { overflow: hidden; color: var(--muted-foreground); text-overflow: ellipsis; white-space: nowrap; }
-.voice-test-success { margin: 0; color: var(--live, oklch(0.62 0.17 145)); font-size: 10.4px; }
-.installations { display: grid; gap: 8px; margin-top: 14.4px; }
-.installations article, .workspace-settings-card { padding: 11.2px; border: 0.8px solid var(--border); border-radius: var(--radius); }
-.installations h3, .workspace-settings-card h3 { margin: 0; }
-.installations p, .workspace-settings-card p { margin: 4px 0; color: var(--muted-foreground); }
-.search-settings { display: grid; gap: 12.8px; }
-.settings-content, .attachment-tray, .workspace-tree, .workspace-preview pre, .workspace-changes, .workspace-diff-content { scrollbar-color: var(--native-scrollbar-color); scrollbar-width: var(--native-scrollbar-width); }
-.settings-content::-webkit-scrollbar, .attachment-tray::-webkit-scrollbar, .workspace-tree::-webkit-scrollbar, .workspace-preview pre::-webkit-scrollbar, .workspace-changes::-webkit-scrollbar, .workspace-diff-content::-webkit-scrollbar { width: 5.6px; height: 5.6px; }
-.settings-content::-webkit-scrollbar-thumb, .attachment-tray::-webkit-scrollbar-thumb, .workspace-tree::-webkit-scrollbar-thumb, .workspace-preview pre::-webkit-scrollbar-thumb, .workspace-changes::-webkit-scrollbar-thumb, .workspace-diff-content::-webkit-scrollbar-thumb { border: 1.6px solid transparent; border-radius: 999px; background: color-mix(in oklch, var(--foreground), transparent 72%); background-clip: padding-box; }
-.palette-move-list { display: flex; flex-direction: column; gap: 1.6px; max-height: 256px; overflow-y: auto; margin-top: 9.6px; }
-.palette-move-option { width: 100%; justify-content: flex-start; gap: 8px; }
+.attachment-tray, .workspace-tree, .workspace-preview pre, .workspace-changes, .workspace-diff-content { scrollbar-color: var(--native-scrollbar-color); scrollbar-width: var(--native-scrollbar-width); }
+.attachment-tray::-webkit-scrollbar, .workspace-tree::-webkit-scrollbar, .workspace-preview pre::-webkit-scrollbar, .workspace-changes::-webkit-scrollbar, .workspace-diff-content::-webkit-scrollbar { width: 5.6px; height: 5.6px; }
+.attachment-tray::-webkit-scrollbar-thumb, .workspace-tree::-webkit-scrollbar-thumb, .workspace-preview pre::-webkit-scrollbar-thumb, .workspace-changes::-webkit-scrollbar-thumb, .workspace-diff-content::-webkit-scrollbar-thumb { border: 1.6px solid transparent; border-radius: 999px; background: color-mix(in oklch, var(--foreground), transparent 72%); background-clip: padding-box; }
 
-/* The old solid surface. Palettes, Settings and menus have moved to frost
-   (the frost blocks at the end of this file); dialogs still use it. */
-.settings-shell {
-  background: var(--popover);
-  border: 1px solid var(--border);
-  box-shadow: 0 19.2px 56px rgb(0 0 0 / 45%);
-}
 .workspace-warning,
-.attachment-card,
-.installations article,
-.workspace-settings-card {
+.attachment-card {
   background: var(--card);
   border-color: var(--border);
 }
-.workspace-settings-card[data-current="true"] { background: var(--accent); }
 /* The primary action reads as a bright glass key: top specular line + lift. */
 [data-slot="button"][data-variant="default"] {
   box-shadow: inset 0 0.8px 0 0 oklch(1 0 0 / 45%), 0 6.4px 16px -10px rgb(0 0 0 / 55%);
@@ -474,16 +409,9 @@ svg.lucide { stroke-width: 2.4; }
     padding: calc(3.2px + var(--safe-area-inset-top, env(safe-area-inset-top, 0px))) 8px 3.2px;
   }
   .chat-header-actions { justify-content: flex-end; }
-  .settings-shell { height: calc(100dvh - 19.2px); }
 }
 
 
-@media (max-width: 416px) {
-  .settings-rail { width: 60.8px; padding-inline: 4px; }
-  .settings-rail h2 { display: none; }
-  .settings-rail button { overflow: hidden; padding-inline: 4px; font-size: 8.8px; text-overflow: ellipsis; }
-  .settings-content { padding: 11.2px; }
-}
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; }
@@ -633,93 +561,16 @@ svg.lucide { stroke-width: 2.4; }
 .chat-main-live-opening :is(.ui-toolbar, .ui-composer-stack > :not(.ui-desktop-composer)) { visibility: hidden; }
 .chat-bootstrap { display: grid; min-height: 100%; place-items: center; color: var(--muted-foreground); font-size: 14px; }
 
-.frost-overlay { position: fixed; inset: 0; z-index: 80; display: grid; width: 100vw; height: 100dvh; place-items: center; padding: 16px; background: rgb(0 0 0 / 55%); opacity: 1; visibility: visible; transition: opacity 150ms ease, visibility 0s; }
-.frost-overlay[data-state="closed"] { opacity: 0; visibility: hidden; pointer-events: none; transition-delay: 0s, 220ms; }
-.settings-content select, .workspace-settings-card [role="combobox"] { width: 100%; min-height: 36px; border: 1px solid var(--border); border-radius: 7px; background: var(--background); padding: 7px 9px; color: inherit; text-align: left; }
-.workspace-path-preview small { color: var(--muted-foreground); font-size: 12px; line-height: 1.35; }
-.workspace-path-preview { display: grid; gap: 4px; border-left: 2px solid var(--primary); background: var(--muted); padding: 9px 10px; }
-.workspace-path-preview strong { overflow-wrap: anywhere; font: 12px/1.35 ui-monospace, monospace; }
-.workspace-preview-error { margin: 0; color: var(--destructive); font-size: 13px; }
 
-.settings-shell { display: flex; width: min(1180px, calc(100vw - 24px)); height: min(840px, calc(100dvh - 24px)); overflow: hidden; border-radius: 13px; }
-.settings-rail { display: flex; width: 188px; flex: none; flex-direction: column; gap: 0; padding: 14px 9px; border-right: 1px solid var(--border); }
-.settings-rail nav { display: flex; flex-direction: column; gap: 10px; }
-.settings-rail h2 { margin: 0 8px 12px; font-size: 17px; }
-.settings-nav-group { display: flex; flex: none; flex-direction: column; align-items: stretch; gap: 1px; margin: 0; padding: 0; }
-.settings-nav-group > h3 { display: block; margin: 0; padding: 0 8px 2px; color: var(--muted-foreground); font-size: 9px; font-weight: 650; letter-spacing: .08em; text-transform: uppercase; }
-.settings-nav-item { display: block; width: 100%; }
-.settings-rail .settings-nav-item > button { display: block; width: 100%; min-height: 29px; border: 0; border-radius: 6px; background: transparent; color: inherit; padding: 5px 8px; font-size: 12px; line-height: 1.25; text-align: left; }
-.settings-rail button[aria-selected="true"] { background: var(--accent); }
-.settings-content { min-width: 0; flex: 1; overflow-y: auto; padding: 16px 22px 24px; font-size: 12px; }
-.settings-content > header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
-.settings-content > header h2 { margin: 0; font-size: 18px; }
-.settings-content > header [data-slot="button"] { min-height: 26px; }
-.settings-content [data-slot="field-group"] { gap: 12px; }
-.settings-content [data-slot="field"] { gap: 5px; }
-.settings-content [data-slot="field-label"] { font-size: 12px; }
-.settings-content input, .settings-content select { min-height: 31px; height: 31px; padding: 5px 8px; font-size: 12px; }
-.settings-content [data-slot="button"] { min-height: 30px; height: auto; padding-block: 5px; font-size: 12px; }
-.settings-content small { font-size: 11px; line-height: 1.35; }
-.settings-error, .settings-loading { display: flex; align-items: center; justify-content: space-between; gap: 10px; border: 1px solid var(--border); border-radius: var(--radius-md); padding: 10px; }
-.settings-error { border-color: color-mix(in srgb, var(--destructive) 45%, var(--border)); color: var(--destructive); }
-.settings-inline-error { margin: 0; color: var(--destructive); font-size: 13px; }
-.voice-settings { display: grid; gap: 16px; }
-.voice-input-test { display: grid; gap: 10px; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); }
-.voice-input-result { display: grid; gap: 2px; border-left: 2px solid var(--border); background: var(--muted); padding: 8px 10px; }
-.voice-input-result[data-signal="missing"] { border-left-color: var(--destructive); }
-.voice-input-result small { color: var(--muted-foreground); }
-.voice-input-live-state { border-left: 2px solid var(--border); background: var(--muted); padding: 8px 10px; color: var(--foreground); font-size: 13px; }
-.voice-input-playback { display: grid; gap: 8px; border-left: 2px solid var(--border); background: var(--muted); padding: 8px 10px; color: var(--muted-foreground); font-size: 13px; }
-.voice-input-playback-error { margin: 0; border-left: 2px solid var(--muted-foreground); background: var(--muted); padding: 8px 10px; color: var(--muted-foreground); font-size: 13px; }
-.voice-card { display: grid; gap: 13px; padding: 14px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); }
-.voice-card h3, .voice-card p { margin: 0; }
-.voice-card p, .voice-notice { color: var(--muted-foreground); line-height: 1.45; }
-.voice-model-grid { display: grid; gap: 8px; }
-.voice-model-option { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: start; gap: 10px; border: 1px solid var(--border); border-radius: var(--radius); padding: 11px; cursor: pointer; }
-.voice-model-option[data-current="true"] { border-color: var(--border); background: var(--accent); }
-.voice-model-option input { margin-top: 3px; accent-color: var(--primary); }
-.voice-model-option span { display: grid; gap: 2px; }
-.voice-model-option small { color: var(--muted-foreground); }
-.voice-model-option em { color: var(--muted-foreground); font-size: 11px; font-style: normal; text-transform: capitalize; }
-.voice-model-option em[data-state="running"] { color: var(--foreground); }
-.voice-notice { border-left: 2px solid var(--border); background: var(--muted); padding: 9px 10px; font-size: 13px; }
-.voice-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-.voice-settings-footer { display: flex; align-items: center; gap: 10px; border-top: 1px solid var(--border); padding-top: 14px; }
-.voice-save-success { color: var(--foreground); font-size: 13px; }
-.voice-model-status { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.voice-model-status span { color: var(--muted-foreground); font-size: 12px; text-transform: capitalize; }
-.voice-progress { display: grid; gap: 5px; }
-.voice-progress progress { width: 100%; accent-color: var(--primary); }
-.voice-progress small { overflow: hidden; color: var(--muted-foreground); text-overflow: ellipsis; white-space: nowrap; }
-.voice-test-success { margin: 0; color: var(--live, oklch(0.62 0.17 145)); font-size: 13px; }
-.installations { display: grid; gap: 8px; margin-top: 14px; }
-.installations article, .workspace-settings-card { padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius); }
-.installations article { min-height: 0; }
-.installations h3, .workspace-settings-card h3 { margin: 0; }
-.installations p, .workspace-settings-card p { margin: 5px 0; color: var(--muted-foreground); }
-.search-settings { display: grid; gap: 16px; }
-.settings-content, .attachment-tray, .workspace-tree, .workspace-preview pre, .workspace-changes, .workspace-diff-content { scrollbar-color: var(--native-scrollbar-color); scrollbar-width: var(--native-scrollbar-width); }
-.settings-content::-webkit-scrollbar, .attachment-tray::-webkit-scrollbar, .workspace-tree::-webkit-scrollbar, .workspace-preview pre::-webkit-scrollbar, .workspace-changes::-webkit-scrollbar, .workspace-diff-content::-webkit-scrollbar { width: 7px; height: 7px; }
-.settings-content::-webkit-scrollbar-thumb, .attachment-tray::-webkit-scrollbar-thumb, .workspace-tree::-webkit-scrollbar-thumb, .workspace-preview pre::-webkit-scrollbar-thumb, .workspace-changes::-webkit-scrollbar-thumb, .workspace-diff-content::-webkit-scrollbar-thumb { border: 2px solid transparent; border-radius: 999px; background: color-mix(in oklch, var(--foreground), transparent 72%); background-clip: padding-box; }
-.palette-move-list { display: flex; flex-direction: column; gap: 2px; max-height: 320px; overflow-y: auto; margin-top: 12px; }
-.palette-move-option { width: 100%; justify-content: flex-start; gap: 10px; }
+.attachment-tray, .workspace-tree, .workspace-preview pre, .workspace-changes, .workspace-diff-content { scrollbar-color: var(--native-scrollbar-color); scrollbar-width: var(--native-scrollbar-width); }
+.attachment-tray::-webkit-scrollbar, .workspace-tree::-webkit-scrollbar, .workspace-preview pre::-webkit-scrollbar, .workspace-changes::-webkit-scrollbar, .workspace-diff-content::-webkit-scrollbar { width: 7px; height: 7px; }
+.attachment-tray::-webkit-scrollbar-thumb, .workspace-tree::-webkit-scrollbar-thumb, .workspace-preview pre::-webkit-scrollbar-thumb, .workspace-changes::-webkit-scrollbar-thumb, .workspace-diff-content::-webkit-scrollbar-thumb { border: 2px solid transparent; border-radius: 999px; background: color-mix(in oklch, var(--foreground), transparent 72%); background-clip: padding-box; }
 
-/* Overlays, dialogs, and cards share the menu's solid dark surface. The
-   glass treatment is reserved for the composer (and the drop overlay's
-   native blur); everywhere else translucent grey read as flat, not glassy. */
-.settings-shell {
-  background: var(--popover);
-  border: 1px solid var(--border);
-  box-shadow: 0 24px 70px rgb(0 0 0 / 45%);
-}
 .workspace-warning,
-.attachment-card,
-.installations article,
-.workspace-settings-card {
+.attachment-card {
   background: var(--card);
   border-color: var(--border);
 }
-.workspace-settings-card[data-current="true"] { background: var(--accent); }
 /* The primary action reads as a bright glass key: top specular line + lift. */
 [data-slot="button"][data-variant="default"] {
   box-shadow: inset 0 1px 0 0 oklch(1 0 0 / 45%), 0 8px 20px -10px rgb(0 0 0 / 55%);
@@ -818,20 +669,9 @@ svg.lucide { stroke-width: 2.4; }
   }
   .chat-header-title { display: none; }
   .chat-header-actions { margin-left: auto; justify-content: flex-end; }
-  /* The server switcher's rows take the chat menu's touch size; their
-     secondary text (latency, route kind) steps down so the names lead. */
-  /* Outranks the menus' rule that sizes every span in a row to the row. */
-  .settings-shell { width: calc(100vw - 24px); height: calc(100dvh - 24px); }
-  .settings-rail { width: 132px; }
 }
 
 
-@media (max-width: 520px) {
-  .settings-rail { width: 76px; padding-inline: 5px; }
-  .settings-rail h2 { display: none; }
-  .settings-rail button { overflow: hidden; padding-inline: 5px; font-size: 11px; text-overflow: ellipsis; }
-  .settings-content { padding: 14px; }
-}
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; }
@@ -852,220 +692,6 @@ svg.lucide { stroke-width: 2.4; }
    so it wraps and is not shouted like a group heading. */
 /* The routes sit under the name they belong to, indented so the hierarchy is
    in the layout rather than in a heading. */
-
-/* Settings is a full control surface. Keep this final layer outside the
-   density and mobile rebuild blocks so its desktop geometry is authoritative. */
-.settings-dialog { padding: 8px; }
-.settings-dialog .settings-shell {
-  width: min(1120px, calc(100vw - 24px));
-  height: min(820px, calc(100dvh - 24px));
-  border-color: color-mix(in oklch, var(--border), white 4%);
-  border-radius: 16px;
-  background: color-mix(in oklch, var(--popover), var(--background) 18%);
-}
-.settings-dialog .settings-rail {
-  width: 190px;
-  padding: 16px 10px;
-  background: color-mix(in oklch, var(--card), var(--background) 30%);
-}
-.settings-dialog .settings-rail h2 { margin: 0 9px 18px; font-size: 18px; letter-spacing: -.02em; }
-.settings-dialog .settings-rail-close, .settings-dialog .settings-nav-chevron, .settings-dialog .settings-back { display: none; }
-.settings-dialog .settings-rail nav { display: flex; flex-direction: column; gap: 12px; }
-.settings-dialog .settings-nav-group { display: flex; width: 100%; flex-direction: column; gap: 3px; }
-.settings-dialog .settings-nav-group > h3 { margin: 0; padding: 0 10px 4px; color: var(--muted-foreground); font-size: 9px; letter-spacing: .1em; }
-.settings-dialog .settings-nav-item { display: block; width: 100%; }
-.settings-dialog .settings-nav-item > button {
-  display: flex;
-  width: 100%;
-  min-height: 34px;
-  align-items: center;
-  gap: 10px;
-  padding: 6px 9px;
-  border: 1px solid transparent;
-  border-radius: 9px;
-  font-size: 12px;
-}
-.settings-dialog .settings-nav-item > button svg { width: 16px; height: 16px; flex: none; color: var(--muted-foreground); }
-.settings-dialog .settings-nav-item > button[aria-selected="true"] {
-  border-color: transparent;
-}
-.settings-dialog .settings-nav-item > button[aria-selected="true"] svg { color: var(--muted-foreground); }
-.settings-dialog .settings-content { padding: 18px 24px 24px; font-size: 12px; }
-.settings-dialog .settings-content > header { margin-bottom: 11px; }
-.settings-dialog .settings-content > header > div { display: grid; gap: 3px; }
-.settings-dialog .settings-content > header h2 { margin: 0; }
-.settings-dialog .settings-content > header p { margin: 0 0 14px; color: var(--muted-foreground); font-size: 12px; }
-.settings-dialog .settings-content[data-section="prompts"] { display: flex; overflow: hidden; flex-direction: column; }
-/* Settings content follows the dashboard tile pattern: hairline groups of
-   stacked rows. No multi-column card grids as chrome. */
-/* The name of a setting is the thing being read, so it is foreground -- muted
-   left it dimmer than the value beside it, which is the wrong way round. */
-/* A build is an identifier, not prose: mono, and allowed to wrap rather than
-   be clipped, since a tag and a commit together outrun the value column. */
-.settings-dialog .settings-content [data-slot="field-group"],
-.settings-dialog .installations,
-.settings-dialog .settings-content [data-slot="field-group"] { gap: 10px; }
-.settings-dialog .settings-content input,
-.settings-dialog .settings-content select { min-height: 34px; height: 34px; font-size: 12px; }
-
-/*
- * Weight, so the page has a foreground and a background.
- *
- * Everything sat on one fill at one colour: tile and pane were the same shade,
- * a setting's name and the sentence explaining it were the same grey, and the
- * only separation anywhere was a hairline. Flat in the literal sense -- there
- * was nothing for the eye to sort by, so every screen read as a single field
- * of text at one distance.
- *
- * Tiles take the card fill and sit on the pane rather than in it. A name is
- * foreground; its help is muted and smaller. A tile's heading is heavier than
- * the names beneath it. None of this is decoration: it is the order of the
- * page, said in the only three things that can say it.
- */
-.settings-dialog .settings-content [data-slot="field"] > label {
-  color: var(--foreground); font-size: 12.5px; font-weight: 550; letter-spacing: -.005em;
-}
-/* The header of a section carries the page, so it is display weight, not a
-   heading the tiles beneath it have to compete with. */
-
-/*
- * Black pane, grey cards.
- *
- * The shell took the same fill as the tiles on it, so the page was grey on
- * grey and a tile was distinguishable only by its hairline. The pane drops to
- * the frame colour -- the ground the rest of the app already sits on -- and
- * the cards keep theirs, so the separation is a difference in lightness rather
- * than a line somebody has to notice.
- */
-.settings-dialog {
-  /* Near black rather than the frame's grey: with the pane one step off the
-     cards, the whole panel read as one grey surface with hairlines drawn on
-     it. Local to Settings, because the rest of the app is layered against a
-     transcript rather than against tiles. */
-  --settings-ground: oklch(0.098 0.004 264);
-}
-.settings-dialog .settings-shell { background: var(--settings-ground); }
-.settings-dialog .settings-rail { background: var(--settings-ground); }
-.settings-dialog .settings-content > header { background: var(--settings-ground); }
-
-/*
- * A setting is one line.
- *
- * Name on the left, control on the right, and nothing in between -- which is
- * what Appearance already did and what made it the one section that read
- * well. The stacked form was only needed because each row carried a sentence
- * explaining itself; without those, the rows fit.
- */
-.settings-dialog .settings-content [data-slot="field"] {
-  min-height: 44px;
-}
-
-/*
- * One type scale, with steps big enough to be steps.
- *
- * A tile's heading and the name of a setting inside it were half a pixel and
- * half a weight apart, so the heading did not read as one; the two kinds of
- * tile heading were set separately and drifted; and the small print under a
- * summary was 9px while the same help elsewhere was 11px. Four sizes, each
- * clearly apart from the next, used everywhere:
- *
- *   section title 19 · tile heading 14 · name 12.5 · help 11
- */
-.settings-dialog .settings-content > header h2 { font-size: 19px; font-weight: 600; letter-spacing: -.025em; }
-/*
- * The close and the back control are the same kind of thing and are drawn the
- * same size. The close was the character "x" at the button's text size, beside
- * a chevron drawn as an icon -- two different weights doing the same job.
- */
-.settings-dialog .settings-close svg,
-.settings-dialog .settings-rail-close svg,
-.settings-dialog .settings-back svg { width: 18px; height: 18px; color: var(--muted-foreground); }
-.settings-dialog .settings-close:hover svg,
-.settings-dialog .settings-rail-close:hover svg,
-.settings-dialog .settings-back:hover svg { color: var(--foreground); }
-
-/*
- * Tiles are separate things and sit apart. Sections put theirs straight into
- * the content flow with nothing between them, so a group of settings and the
- * accounts below it read as one run of rows with a stray hairline in it.
- */
-/*
- * A setting is a row, not a stack.
- *
- * Every field was a label with its control on the next line at full width, so
- * a select holding the word "Assistant" ran the whole pane and the eye had to
- * travel the width of the dialog to get from one setting to the next. Reading
- * down a column of names and a column of values is the thing this page is for,
- * and it is what the tiled lists elsewhere already do.
- *
- * The control column is bounded rather than proportional: these are short
- * values -- a profile, a model, a number -- and a control sized to the pane
- * says the value is longer than it is.
- */
-.settings-dialog .settings-content [data-slot="field"] {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(170px, 260px);
-  align-items: center;
-  gap: 2px 18px;
-}
-.settings-dialog .settings-content [data-slot="field"] > label { grid-column: 1; align-self: center; }
-/* Help belongs under the name it explains, not under the control it precedes. */
-.settings-dialog .settings-content [data-slot="field"] > small { grid-column: 1; grid-row: 2; margin: 0; color: var(--muted-foreground); font-size: 11px; line-height: 1.4; }
-.settings-dialog .settings-content [data-slot="field"] > :not(label):not(small) { grid-column: 2; grid-row: 1 / span 2; justify-self: stretch; }
-/* The model trigger is a menu button rather than a control, so it sized to
-   its text and floated at the end of a column its neighbours filled. */
-.settings-dialog .settings-content [data-slot="field"] .model-trigger { width: 100%; justify-content: space-between; }
-/* Anything that needs the width keeps it (a key, a path, a prompt): mark its
-   field data-wide. Not :has(> textarea) -- a :has() there taxed every DOM
-   change in the app, settings closed or not. */
-.settings-dialog .settings-content [data-slot="field"][data-wide] { grid-template-columns: minmax(0, 1fr); }
-.settings-dialog .settings-content [data-slot="field"][data-wide] > :not(label):not(small) { grid-column: 1; grid-row: auto; }
-
-/*
- * The tile's name reads as a heading over its rows rather than as the first of
- * them: it had the weight of the labels beneath it and sat at the same indent,
- * so nothing said which was the container.
- */
-/* Rows inside one tile are separated by the hairline, as tiled lists are. */
-/* A server is a row of the tile like any other, so it is inset like one. */
-
-/*
- * Selected is a wash, not an outline. The bright box was the leftover
- * treatment DESIGN.md names, and it read as focus on something the pointer was
- * nowhere near.
- */
-.settings-dialog .settings-nav-item > button[aria-selected="true"] {
-  border: 0; outline: 0; box-shadow: none; background: var(--accent); color: var(--accent-foreground);
-}
-.settings-dialog .settings-nav-item > button:focus-visible { outline: 1px solid var(--ring); outline-offset: -1px; }
-
-/*
- * A group of settings is a tile wherever it appears.
- *
- * Runtime's rows sat directly on the pane with no hairline around them while
- * the same kind of rows in Models sat inside one, so two pages built from the
- * same parts did not look related. The container is what says "these belong
- * together", and it should not depend on which section happened to use which
- * wrapper.
- */
-/* An action belongs to the rows above it, on a line of its own beneath them. */
-
-/*
- * Setup instructions are help, not content.
- *
- * The ChatGPT steps were body copy at body weight, open by default, and ran
- * the width of the pane -- so the longest thing on the page was a procedure
- * followed once, sitting above the settings somebody actually came for. They
- * now read as the aside they are, and the panel opens closed: it says whether
- * it is connected on the summary row, which is the part worth seeing daily.
- */
-
-/* The close sits in the dialog's corner, level with the title it closes. */
-.settings-dialog .settings-content > header { align-items: start; }
-.settings-dialog .settings-content > header > [data-slot="button"]:last-child { margin: -4px -8px 0 0; }
-.settings-dialog .installations > [data-slot="button"] { grid-column: 1 / -1; justify-self: start; }
-.settings-dialog .voice-backend-disclosure { margin-top: 0; }
-.settings-dialog .voice-backend-disclosure > .voice-card { border: 0; border-top: 1px solid var(--border); border-radius: 0; }
 
 /* Native fallback for touch, forced colours, and browsers without popovers. */
 :where(.dark) ::-webkit-scrollbar { width: 8px !important; height: 8px !important; }
@@ -1111,100 +737,6 @@ svg.lucide { stroke-width: 2.4; }
     box-shadow: inset 0 0 0 1px var(--frost-stroke, #ffffff4d);
   }
   .overlay-scrollbar[data-touch] .overlay-scrollbar-thumb { opacity: 1; }
-}
-
-@media (max-width: 760px) {
-  /*
-   * Settings on a phone is two screens, not a rail beside a pane: the list of
-   * sections, then the one that was opened. A strip narrow enough to leave
-   * room for content is a strip too narrow for the words, and a column of
-   * unlabelled icons is the same list with the part that said what it meant
-   * taken out.
-   */
-  /*
-   * Full bleed. A phone has no room to spend on a margin proving this is a
-   * dialog: the inset and the rounded corner cost the width that the rows
-   * inside were short of, and nothing is behind it to see anyway.
-   */
-  .settings-dialog { padding: 0; }
-  .settings-dialog .settings-shell { width: 100vw; height: 100dvh; border: 0; border-radius: 0; box-shadow: none; }
-
-  /*
-   * A row goes back to being a stack, because there is no width for two
-   * columns. The desktop rule squeezed the name into whatever was left beside
-   * a 170px control, which wrapped the help text one word to a line and ran
-   * the control over the label.
-   */
-  /* Two columns still, and a note under the name keeps the row on one line:
-     a row that stacked whenever it carried a status line made neighbouring
-     rows in the same tile read as different kinds of thing. Only a control
-     that genuinely needs the width takes it -- see below. */
-  .settings-dialog .settings-content [data-slot="field"] { grid-template-columns: minmax(0, 1fr) minmax(112px, 46%); gap: 0 12px; }
-  .settings-dialog .settings-content [data-slot="field"][data-stack] { grid-template-columns: minmax(0, 1fr); }
-  /* Where a row does stack, the help reads before the control it explains. */
-  .settings-dialog .settings-content [data-slot="field"][data-stack] > :not(label):not(small) { grid-column: 1; grid-row: 3; margin-top: 7px; justify-self: stretch; }
-  .settings-dialog .settings-rail { width: 100%; padding: 10px 12px 12px; border-right: 0; overflow-y: auto; }
-  .settings-dialog .settings-rail-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 4px 14px; }
-  /* Undoes the old icon-rail breakpoints, which hid the title because there
-     was no room for it beside a pane. There is room: this is the pane. */
-  .settings-dialog .settings-rail h2 { display: block; margin: 0; font-size: 19px; }
-  .settings-dialog .settings-nav-group > h3 { padding-bottom: 6px; }
-  .settings-dialog .settings-nav-item > button {
-    min-height: 44px; gap: 12px; border-radius: var(--radius-md); padding: 8px 10px; font-size: 13px;
-  }
-  .settings-dialog .settings-nav-item > button svg { width: 18px; height: 18px; }
-  .settings-dialog .settings-rail-close { display: inline-flex; }
-  .settings-dialog .settings-rail-close:focus:not(:focus-visible) { outline: 0; box-shadow: none; }
-  .settings-dialog .settings-back { display: inline-flex; }
-  .settings-dialog .settings-nav-chevron { display: block; margin-left: auto; opacity: .55; }
-  /*
-   * Selection is a desktop idea: on a phone the list is left behind rather
-   * than kept alongside what it opened, so a washed row would only mark where
-   * somebody had already been.
-   */
-  .settings-dialog .settings-nav-item > button[aria-selected="true"] { background: transparent; }
-
-  /* Tiles need air around them, and each other, or the page is one grey slab. */
-  .settings-dialog .settings-content { padding: 0 12px 24px; }
-  /*
-   * An intro paragraph is the first thing in the flow after a sticky header,
-   * and its top margin was collapsing through it -- so the first line of Voice
-   * and Web search was drawn underneath the header and clipped. Nothing here
-   * needs a top margin: the header already provides the gap.
-   */
-  .settings-dialog .settings-content > *:not(header) { margin-top: 0; }
-  /* Each section wraps its own content, so the paragraph that clipped is a
-     grandchild rather than a child -- named by where it sits, not by depth. */
-  .settings-dialog .settings-content > *:not(header) > :first-child { margin-top: 0; }
-  .settings-dialog .voice-settings-intro,
-  .settings-dialog .search-settings > p,
-  .settings-dialog .voice-settings > p {
-    margin: 0 0 12px; color: var(--muted-foreground); font-size: 11px; line-height: 1.5;
-  }
-  /*
-   * Loose fields belong in a tile like every other group. Voice and Web search
-   * put theirs straight on the pane, so the same controls looked unrelated to
-   * the ones a section away.
-   */
-
-  /*
-   * A server is a small stack on a phone, not four controls on one line. The
-   * name, the address it answers on, and what to do about it each want the
-   * width, and sharing it between them left a name box too narrow to read a
-   * name in and an address truncated to nothing.
-   */
-  /* No room for three columns beside an address, so the reach follows it. */
-
-  /* The back chevron is a control, not a target: it was drawing its own box. */
-  .settings-dialog .settings-back { flex: none; border: 0; background: transparent; margin-left: -4px; }
-  /* Full-bleed by its own padding rather than by a negative margin: the pull
-     up left the first paragraph of a section drawn underneath it. */
-  .settings-dialog .settings-content > header { display: flex; top: 0; z-index: 1; align-items: flex-start; gap: 8px; margin: 0 -12px 14px; border-bottom: 1px solid var(--border); background: var(--settings-ground); padding: 12px 12px 12px; }
-  .settings-dialog .settings-content > header > div { flex: 1; min-width: 0; }
-  .settings-dialog .settings-content > header h2 { font-size: 18px; }
-  .settings-dialog .settings-content > header p { margin: 2px 0 0; }
-  .settings-shell[data-view="index"] > .settings-content,
-  .settings-shell[data-view="detail"] > .settings-rail { display: none; }
 }
 
 .harness-mark { display: block; flex: none; object-fit: contain; }
@@ -1293,33 +825,8 @@ svg.lucide { stroke-width: 2.4; }
   [data-region]::after { display: none; }
 }
 
-/* A settings section's save state (settings/save-status.tsx), beside the
-   close button: muted, and only the failure in the danger colour. */
-.settings-save-status { display: inline-flex; min-width: 72px; margin-left: auto; margin-right: 8px; align-items: center; justify-content: flex-end; gap: 6px; color: var(--muted-foreground); font-size: 11px; }
-.settings-save-status [data-slot="spinner"], .settings-save-status svg { width: 11px; height: 11px; }
-.settings-save-status[data-kind="saved"] > span { animation: ui-arrive 200ms ease-out both; }
-.settings-save-status[data-kind="failed"] { color: var(--destructive); }
-.settings-save-status button { border: 0; border-radius: 6px; background: var(--accent); padding: 2px 8px; color: var(--foreground); font: inherit; cursor: pointer; }
-.settings-save-status button:hover, .settings-save-status button:focus-visible { outline: none; background: color-mix(in oklch, var(--accent), var(--foreground) 10%); }
-.settings-dialog .settings-content [data-slot="field"] > small.settings-inline-error { color: var(--destructive); }
-@media (max-width: 760px) {
-  /* The phone header centres its title between back and close; the status
-     sits beside close without taking a place in that row. */
-  .settings-dialog .settings-content > header { position: sticky; }
-  .settings-dialog .settings-save-status { position: absolute; top: 12px; right: 48px; min-width: 0; height: 32px; margin: 0; }
-}
 
 
-@media (--conduit-mobile-layout) {
-  /*
-   * Every overlay on a phone ends where the keyboard begins, as the composer
-   * does: --app-height is the visible height, set on each frame of the
-   * keyboard's travel (mobile-layout.ts). A full-screen 100dvh left the
-   * keyboard over the bottom of search, the palette and every form.
-   */
-  .frost-overlay { height: var(--app-height, 100dvh); }
-  .settings-dialog .settings-shell { height: var(--app-height, 100dvh); }
-}
 
 
 /* The frost overlay (DESIGN.md, Surfaces; components/frost.tsx): anything that
@@ -1335,42 +842,8 @@ svg.lucide { stroke-width: 2.4; }
   /* A full-screen overlay on a phone has nothing dimmed around it, so its frost gets a darker core. */
   --frost-core: linear-gradient(#ffffff2b, #ffffff2b), oklch(0.19 0.005 264 / 72%);
 }
-.frost-overlay { align-items: start; padding-top: clamp(40px, 10vh, 92px); background: rgb(0 0 0 / 42%); }
-.frost-card {
-  border: 1px solid var(--frost-stroke, #ffffff4d);
-  border-radius: 14px;
-  background: var(--frost-fill, #ffffff2b);
-  backdrop-filter: var(--frost-blur);
-  box-shadow: var(--frost-shadow);
-}
-.frost-overlay .frost-card { animation: frost-arrive 220ms cubic-bezier(.2, .8, .2, 1) both; }
 @keyframes frost-arrive { from { opacity: 0; transform: translateY(8px); } }
-@media (--conduit-mobile-layout) {
-  /* The bubble sits inside the status and navigation bars, not under them:
-     the shell's insets (Android's env() reads 0 in its WebView), then the
-     bubble's own small margin. */
-  .frost-overlay { align-items: stretch; padding: var(--phone-overlay-padding); }
-  .frost-overlay .frost-card { width: 100%; height: 100%; max-height: none; background: var(--frost-core); }
-}
-@media (prefers-reduced-motion: reduce) { .frost-overlay .frost-card { animation: none; } }
-.keycap { display: inline-grid; min-width: 16px; height: 16px; place-items: center; border: 1px solid oklch(1 0 0 / 16%); border-radius: 4px; background: oklch(0 0 0 / 12%); padding: 0 4px; color: var(--muted-foreground); font: 550 9px/1 ui-monospace, SFMono-Regular, Menlo, monospace; }
 
-/* Settings is a frost overlay (DESIGN.md, Surfaces): the card is the frost,
-   the near-black ground it had as a pane is gone, and on a phone it is the
-   full-screen bubble. Centred rather than pinned, since it does not filter
-   and shrink. Its rows keep the settings-list rules. */
-.settings-dialog.frost-overlay { align-items: center; padding: 16px; }
-/* As wide as the rail plus the settings list's 640px column, no wider. */
-.settings-dialog .frost-card.settings-shell { width: min(900px, calc(100vw - 32px)); }
-.settings-dialog .frost-card.settings-shell { border: 1px solid #ffffff4d; border-radius: 14px; background: #ffffff2b; box-shadow: var(--frost-shadow); }
-.settings-dialog .settings-shell .settings-rail { border-right-color: oklch(1 0 0 / 10%); background: transparent; }
-.settings-dialog .settings-shell .settings-content > header { background: transparent; }
-@media (--conduit-mobile-layout) {
-  .settings-dialog.frost-overlay { align-items: stretch; padding: var(--phone-overlay-padding); }
-  .settings-dialog .frost-card.settings-shell { width: 100%; height: 100%; background: var(--frost-core); }
-  .settings-dialog .settings-shell .settings-content > header { border-bottom-color: oklch(1 0 0 / 10%); background: oklch(0.24 0.005 264 / 70%); backdrop-filter: var(--frost-blur); padding-top: 12px; }
-  .settings-dialog .settings-shell .settings-rail { padding-top: 10px; }
-}
 
 /* Dropdown menus, context menus and popovers are overlays, so they are frost
    (DESIGN.md, Surfaces): the composer's material at the menu's own radius,
@@ -1417,15 +890,6 @@ svg.lucide { stroke-width: 2.4; }
 :is([data-slot*="menu"]:not([data-slot^="ui-"]) [role^="menuitem"], .menu-row) :is(span, strong):not(.composer-menu-shortcut) { font-size: inherit; }
 @media (--conduit-mobile-layout) { :is([data-slot*="menu"]:not([data-slot^="ui-"]) [role^="menuitem"], .menu-row) { font-size: 0.875rem; } }
 
-/* Centered legacy overlays, including Settings, migrate with their subsystem. */
-.frost-overlay[data-placement="center"] { align-items: center; padding: 16px; }
-@media (--conduit-mobile-layout) {
-  .frost-overlay[data-placement="center"] { padding: calc(16px + var(--safe-area-inset-top, env(safe-area-inset-top, 0px))) 16px calc(16px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))); }
-}
-/* On frost an outline button is its hairline alone, not a black slab, and an
-   input a faint hairline that brightens on focus. */
-.frost-card [data-slot="button"][data-variant="outline"] { border-color: oklch(1 0 0 / 16%); background: transparent; }
-.frost-card [data-slot="button"][data-variant="outline"]:is(:hover, :focus-visible, [data-selected="true"]) { background: oklch(1 0 0 / 10%); }
 
 /* Keyboard focus on a button is the wash (quiet buttons) or a slight lift
    (filled ones), never a ring (DESIGN.md, Interaction). */

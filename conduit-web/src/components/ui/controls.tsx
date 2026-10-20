@@ -49,18 +49,29 @@ export function Input(props: JSX.InputHTMLAttributes<HTMLInputElement>) {
   return <input {...rest} class={cn("ui-input", local.class)} />;
 }
 
-/** A select's trigger: a field with a chevron, or bare (its value and a chevron, as in a settings row). */
-export function SelectTrigger(props: { value: string; bare?: boolean; onClick?: () => void }) {
-  return <button type="button" class="ui-input" data-bare={props.bare ? "" : undefined} onClick={props.onClick}><span>{props.value}</span><ChevronDownIcon /></button>;
+/** A select's trigger: a field with a chevron, or bare (its value and a chevron, as in a settings row). A menu's behaviour opens it (Select in components/menus.tsx). */
+export function SelectTrigger(props: Omit<JSX.ButtonHTMLAttributes<HTMLButtonElement>, "value"> & { value: string; bare?: boolean }) {
+  const [local, rest] = splitProps(props, ["value", "bare", "class"]);
+  return <button type="button" {...rest} class={cn("ui-input", local.class)} data-bare={local.bare ? "" : undefined}><span>{local.value}</span><ChevronDownIcon /></button>;
 }
 
-export function Segmented<T extends string>(props: { label: string; value: T; options: ReadonlyArray<{ value: T; label: string; icon?: JSX.Element; count?: number }>; onChange: (value: T) => void; size?: "sm"; pill?: boolean; icons?: boolean }) {
+/** A few choices side by side, one current. arrows: one Tab stop, the arrows moving the choice (a form's radio group, Settings);
+ *  without it what holds the group steers its keys (the sidebar's cursor). */
+export function Segmented<T extends string>(props: { label: string; value: T; options: ReadonlyArray<{ value: T; label: string; icon?: JSX.Element; count?: number; title?: string }>; onChange: (value: T) => void; size?: "sm"; pill?: boolean; icons?: boolean; arrows?: boolean; disabled?: boolean; id?: string }) {
   const index = () => Math.max(0, props.options.findIndex((option) => option.value === props.value));
-  return <div role="radiogroup" aria-label={props.label} class={props.pill ? "ui-seg ui-frost" : "ui-seg"} data-pill={props.pill ? "" : undefined} data-icons={props.icons || props.pill ? "" : undefined} data-size={props.size}
-    style={{ "--segments": props.options.length, "--segment": index() }}>
+  const move = (event: KeyboardEvent & { currentTarget: HTMLDivElement }) => {
+    const step = ["ArrowRight", "ArrowDown"].includes(event.key) ? 1 : ["ArrowLeft", "ArrowUp"].includes(event.key) ? -1 : 0;
+    if (!props.arrows || !step || props.disabled) return;
+    event.preventDefault();
+    props.onChange(props.options[(index() + step + props.options.length) % props.options.length]!.value);
+    const group = event.currentTarget;
+    queueMicrotask(() => group.querySelector<HTMLElement>('[aria-checked="true"]')?.focus());
+  };
+  return <div id={props.id} role="radiogroup" aria-label={props.label} aria-disabled={props.disabled || undefined} class={props.pill ? "ui-seg ui-frost" : "ui-seg"} data-pill={props.pill ? "" : undefined} data-icons={props.icons || props.pill ? "" : undefined} data-size={props.size}
+    style={{ "--segments": props.options.length, "--segment": index() }} onKeyDown={move}>
     <span class="ui-seg-thumb" aria-hidden="true" />
-    <For each={props.options}>{(option) => <button type="button" role="radio" aria-checked={option.value === props.value} aria-label={props.icons || props.pill ? option.label : undefined} title={props.icons || props.pill ? option.label : undefined}
-      onClick={() => props.onChange(option.value)}>{option.icon}{props.icons || props.pill ? null : <span>{option.label}</span>}{option.count !== undefined && <small>{option.count}</small>}</button>}</For>
+    <For each={props.options}>{(option) => <button type="button" role="radio" aria-checked={option.value === props.value} tabIndex={props.arrows && option.value !== props.value ? -1 : undefined} disabled={props.disabled} aria-label={props.icons || props.pill ? option.label : undefined} title={option.title ?? (props.icons || props.pill ? option.label : undefined)}
+      onClick={() => option.value !== props.value && props.onChange(option.value)}>{option.icon}{props.icons || props.pill ? null : <span>{option.label}</span>}{option.count !== undefined && <small>{option.count}</small>}</button>}</For>
   </div>;
 }
 

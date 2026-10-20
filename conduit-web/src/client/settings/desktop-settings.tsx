@@ -1,5 +1,6 @@
 import { createSignal, onMount, Show } from "solid-js";
-import { Switch } from "./settings-controls";
+import { Switch } from "@/components/ui/controls";
+import { SettingGroup, SettingLine, SettingLoading, SettingNote } from "@/components/ui/overlay";
 import { desktopShell, type DesktopShellSettings } from "../platform/installed-client.ts";
 
 /**
@@ -28,13 +29,12 @@ export function DesktopSettingsTile() {
   };
 
   const row = (id: string, label: string, value: boolean, disabled: boolean, change: (on: boolean) => Partial<DesktopShellSettings>) =>
-    <label class="settings-line" for={id}><span>{label}</span>
+    <SettingLine label={label}>
       <Switch id={id} label={label} disabled={disabled} checked={value} onChange={(on) => update(change(on))} />
-    </label>;
+    </SettingLine>;
 
-  return <section class="settings-group" aria-label="Desktop">
-    <h3>Desktop</h3>
-    <Show when={settings()} fallback={<div class="settings-line"><span>Reading the shell's settings…</span></div>}>
+  return <SettingGroup title="Desktop">
+    <Show when={settings()} fallback={<SettingLoading>Reading the shell's settings…</SettingLoading>}>
       {(current) => <>
         {row("desktop-tray", "Keep running in tray", current().keepRunningInTray, false,
           (on) => ({ keepRunningInTray: on }))}
@@ -43,8 +43,8 @@ export function DesktopSettingsTile() {
         {/* Starting hidden is only a question for a launch nobody asked for. */}
         {row("desktop-start-hidden", "Start hidden", current().startHidden, !current().launchAtLogin,
           (on) => ({ startHidden: on }))}
-        <Show when={error()}><p class="settings-line-note" role="alert">{error()}</p></Show>
+        <Show when={error()}><SettingNote tone="error">{error()}</SettingNote></Show>
       </>}
     </Show>
-  </section>;
+  </SettingGroup>;
 }

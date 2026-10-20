@@ -1,12 +1,11 @@
 import { Dialog } from "@/components/dialog";
-import { Button as DialogButton, Input as DialogInput, Field as DialogField } from "@/components/ui/controls";
+import { Button as DialogButton, Input as DialogInput, Field as DialogField, Segmented } from "@/components/ui/controls";
 import { isConduitManagedProject } from "../navigation/sidebar-preferences";
 import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show, type JSX } from "solid-js";
 
 import { FolderIcon, FolderOpenIcon, PaletteIcon, PencilIcon, Settings2Icon, TerminalIcon, Trash2Icon, XIcon } from "lucide-solid";
 import { ThreadHarnessMark } from "../harness-brand";
 import { activityLabel } from "../../activity.js";
-import { Segmented } from "../settings/settings-controls";
 import { loadOutsideThreads, type OutsideThread } from "../dashboard/outside-threads";
 import { CHAT_PAGE, CompactHeading, DayGroups, FilterBar, FiltersMenu, groupByDay, harnessChoice, ListSearch, profileChoice, profileOf, ShowMore, sortChoice } from "../dashboard/primitives/chat-list";
 import { FileTypeIcon } from "../workspace/file-type-icon";
@@ -370,14 +369,14 @@ export function ProjectDashboard(props: {
   </Show>;
 
   const threadsGroup = () => <SplitGroup id="dashboard-threads" order="list" heading={<div class="split-heading-switches">
-      <Segmented label="Chats" value={unreadOnly() ? "unread" : "all"} onChange={(value) => { setUnreadOnly(value === "unread"); setLimit(CHAT_PAGE); }} options={[
-        { value: "all", label: "All", detail: <small>{showOutside() ? filteredOutside().length : activeChatCount()}</small> },
-        { value: "unread", label: "Unread", detail: <small>{showOutside() ? 0 : props.project.sessions.filter((chat) => chat.status === "active" && chat.unread).length}</small> },
+      <Segmented arrows label="Chats" value={unreadOnly() ? "unread" : "all"} onChange={(value) => { setUnreadOnly(value === "unread"); setLimit(CHAT_PAGE); }} options={[
+        { value: "all", label: "All", count: showOutside() ? filteredOutside().length : activeChatCount() },
+        { value: "unread", label: "Unread", count: showOutside() ? 0 : props.project.sessions.filter((chat) => chat.status === "active" && chat.unread).length },
       ]} />
       <Show when={isWorkspace()}>
-        <Segmented label="Threads" value={threadSide()} onChange={(value) => { saveThreadSide(value as ThreadSide); setLimit(CHAT_PAGE); }} options={[
-          { value: "chats", label: "Conduit chats", detail: <small>{activeChatCount()}</small> },
-          { value: "outside", label: "Not in Conduit", detail: <Show when={!outsideLoading()}><small>{outsideThreads().length}</small></Show> },
+        <Segmented arrows label="Threads" value={threadSide()} onChange={(value) => { saveThreadSide(value as ThreadSide); setLimit(CHAT_PAGE); }} options={[
+          { value: "chats", label: "Conduit chats", count: activeChatCount() },
+          { value: "outside", label: "Not in Conduit", count: outsideLoading() ? undefined : outsideThreads().length },
         ]} />
       </Show>
     </div>} actions={<FilterBar choices={showOutside()

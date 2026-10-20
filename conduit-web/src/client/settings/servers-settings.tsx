@@ -3,8 +3,9 @@ import { buildHttpUrl } from "../api/transport";
 import { connectionId } from "../state/runtime.ts";
 import { api } from "../api/client.ts";
 import { Trash2Icon } from "lucide-solid";
-import { Button, Input } from "@/components/primitives";
-import { Switch } from "./settings-controls";
+import { Button, Input, Switch } from "@/components/ui/controls";
+import { StatusDot } from "@/components/ui/nav";
+import { SettingGroup, SettingLine, SettingNote, SettingValue } from "@/components/ui/overlay";
 import { clearNativeBearerToken } from "../api/native-auth-client.ts";
 import { isInstalledClient, isStandaloneBrowser } from "../platform/installed-client.ts";
 import { saveServerDirectory } from "../platform/server-directory.ts";
@@ -145,69 +146,55 @@ export function ServersSettingsTile() {
   };
   const switchTo = (origin: string) => switchToServer(origin, isInstalledClient());
 
-  return <div class="settings-list">
-    <For each={[...servers()].sort((a, b) => Number(isActive(b)) - Number(isActive(a)))}>{(entry) => <section class="settings-group server-block" aria-label={entry.name} data-active={isActive(entry) || undefined}>
-      {/* One server per block; the hairline between blocks is the only one. */}
-      <header class="server-block-head">
-        <span class={`runtime-indicator runtime-indicator-${tone(entry)}`} aria-hidden="true"><span class="runtime-indicator-dot" /></span>
-        <h3>{entry.name}</h3>
-        <span class="server-block-status">{status(entry)}</span>
-      </header>
-      <Show when={serverHealth(entry)}>{(answer) =>
-        <p class="server-block-meta">{shortBuild(answer().release)}{answer().startedAt ? ` · ${uptime(answer().startedAt)}` : ""}</p>}</Show>
-
-      <Show when={isActive(entry)} fallback={
-        <div class="settings-line" title="A server is renamed from a client connected to it."><span>Name</span><span class="settings-line-value">{entry.name}</span></div>}>
-        <label class="settings-line" title="The server's name, for every client and on the network."><span>Name</span>
-          <Input aria-label={`Name of ${entry.name}`} value={entry.name}
-            onChange={(event) => void rename(entry.origin, event.currentTarget.value)} /></label>
-        <Show when={renameError()}><p class="settings-line-note">{renameError()}</p></Show>
-      </Show>
-      <div class="settings-line"><span>Share with other clients</span>
-        <Switch label={`Share ${entry.name} with other clients`} checked={entry.shared} onChange={(shared) => void share(entry.origin, shared)} /></div>
-      <Show when={entry.id}>
-        <div class="settings-line" title={`The server's identity key, which vouches for its TLS certificate.${entry.publicKey ? `\n${entry.publicKey}` : ""}`}><span>Identity</span>
-          <span class="settings-line-value"><span><code>{entry.id?.slice(0, 8)}</code>{entry.tls ? " · TLS verified" : ""}</span></span></div>
-      </Show>
-
-      {/*
-        * Listed even when there is only one, because one address is still the
-        * answer to "how does this client reach it". Chosen in the server
-        * switcher, which proves the identity before it changes route.
-        */}
-      <h4>Routes</h4>
-      <For each={pathsOf(entry)}>{(path) => <div class="settings-line" data-current={inUse(entry, path) || undefined} data-unreachable={(path.origin in health() && !health()[path.origin]) || undefined}>
-        <span>{serverPathLabel(path)}<em class="settings-route-address">{path.origin.replace(/^https?:\/\//, "")}</em></span>
-        <span class="settings-line-value">{routeValue(entry, path)}</span>
-      </div>}</For>
-
-      {/* Live connections, so only the server this client is on can say. */}
-      <Show when={isActive(entry) && connected().length}>
-        <h4>Connected · {connected().length}</h4>
-        <For each={connected()}>{(client) => <div class="settings-line" data-current={(client.id && client.id === connectionId()) || undefined}>
-          <span>{kindLabel(client.kind)}<em>{client.id && client.id === connectionId() ? "This client" : ""}</em></span>
-          <span class="settings-line-value">{shortBuild(client.build)} · {since(client.connectedAt)}</span>
-        </div>}</For>
-      </Show>
-
-      {/* The one in use withholds only the button that would break it. */}
-      <Show when={!isActive(entry)}>
-        <div class="server-block-actions">
+  return <>
+    <For each={[...servers()].sort((a, b) => Number(isActive(b)) - Number(isActive(a)))}>{(entry) => <SettingGroup title={entry.name}>
+      <SettingLine label={status(entry)} plain>
+        <StatusDot label={status(entry)} tone={tone(entry)} />
+        <Show when={!isActive(entry)}>
           <Button variant="ghost" size="sm" onClick={() => switchTo(entry.origin)}>Switch to</Button>
           <Button variant="ghost" size="sm" aria-label={`Forget ${entry.name}`} onClick={() => void forget(entry.origin)}>
             <Trash2Icon /> Forget
           </Button>
-        </div>
+        </Show>
+      </SettingLine>
+      <Show when={serverHealth(entry)}>{(answer) =>
+        <SettingNote>{shortBuild(answer().release)}{answer().startedAt ? ` · ${uptime(answer().startedAt)}` : ""}</SettingNote>}</Show>
+
+      <Show when={isActive(entry)} fallback={
+        <SettingLine label="Name" title="A server is renamed from a client connected to it." plain><SettingValue>{entry.name}</SettingValue></SettingLine>}>
+        <SettingLine label="Name" title="The server's name, for every client and on the network.">
+          <Input aria-label={`Name of ${entry.name}`} value={entry.name}
+            onChange={(event) => void rename(entry.origin, event.currentTarget.value)} /></SettingLine>
+        <Show when={renameError()}><SettingNote>{renameError()}</SettingNote></Show>
       </Show>
-    </section>}</For>
-    <Show when={!servers().length}><p class="settings-line-note" data-tone="quiet">No servers yet.</p></Show>
+      <SettingLine label="Share with other clients">
+        <Switch label={`Share ${entry.name} with other clients`} checked={entry.shared} onChange={(shared) => void share(entry.origin, shared)} /></SettingLine>
+      <Show when={entry.id}>
+        <SettingLine label="Identity" title={`The server's identity key, which vouches for its TLS certificate.${entry.publicKey ? `\n${entry.publicKey}` : ""}`} plain>
+          <SettingValue mono>{entry.id?.slice(0, 8)}{entry.tls ? " · TLS verified" : ""}</SettingValue></SettingLine>
+      </Show>
+
+      {/* Its routes, listed even when there is only one: how this client reaches it. Chosen in the server switcher, which proves the identity first. */}
+      <For each={pathsOf(entry)}>{(path) => <SettingLine label={serverPathLabel(path)} state={path.origin.replace(/^https?:\/\//, "")} plain>
+        <SettingValue>{routeValue(entry, path)}</SettingValue>
+      </SettingLine>}</For>
+
+      {/* Live connections, so only the server this client is on can say. */}
+      <Show when={isActive(entry) && connected().length}>
+        <SettingLine label="Connected" plain><SettingValue>{connected().length}</SettingValue></SettingLine>
+        <For each={connected()}>{(client) => <SettingLine label={kindLabel(client.kind)} state={client.id && client.id === connectionId() ? "This client" : ""} plain>
+          <SettingValue>{shortBuild(client.build)} · {since(client.connectedAt)}</SettingValue>
+        </SettingLine>}</For>
+      </Show>
+    </SettingGroup>}</For>
+    <Show when={!servers().length}><SettingNote tone="quiet">No servers yet.</SettingNote></Show>
     {/*
       * A standalone window is one origin and cannot be sent to another, so the
       * addresses above are shown to it as facts rather than as choices. Said
       * once, here, rather than beside every row it applies to.
       */}
     <Show when={isStandaloneBrowser() && servers().length > 0}>
-      <p class="settings-line-note" data-tone="quiet">Installed to the home screen, so this app stays on the address it was installed from. Open another in a browser to use it.</p>
+      <SettingNote tone="quiet">Installed to the home screen, so this app stays on the address it was installed from. Open another in a browser to use it.</SettingNote>
     </Show>
-  </div>;
+  </>;
 }

@@ -2,10 +2,10 @@ import {
   createEffect, createMemo, createSignal, For, onCleanup, Show,
 } from "solid-js";
 import {
-  AlertTriangleIcon, PlusIcon, RotateCcwIcon, SearchIcon, XIcon,
+  PlusIcon, RotateCcwIcon,
 } from "lucide-solid";
-import { Button, Input } from "@/components/primitives";
-import { Select } from "./settings-controls";
+import { Button, Input, Keycap, LiveNote, SettingGroup, SettingLine, SettingNote, SettingRecorder, SettingValue } from "@/components/ui";
+import { Select } from "@/components/menus";
 import { desktopShell } from "../platform/installed-client";
 import { shortcutConflicts } from "../shortcuts/shortcut-conflicts";
 import { shortcutEnvironmentLabel } from "../shortcuts/shortcut-environment";
@@ -17,7 +17,6 @@ import type {
   ShortcutBinding, ShortcutCommandDefinition, ShortcutConflict, ShortcutStroke,
 } from "../shortcuts/shortcut-types";
 import { LEADER_MENU_OPTIONS, leaderMenu, saveLeaderMenu, type LeaderMenuMode } from "../shortcuts/leader-menu";
-import "./shortcuts-settings.css";
 
 const GROUP_LABELS: Record<string, string> = {
   commands: "Application",
@@ -139,13 +138,25 @@ export function ShortcutsSettings(props: { manager: ShortcutManager }) {
     onCleanup(release);
   });
 
+  // Closing the recorder hands focus back to what opened it, or the line's + once that keycap is gone,
+  // so Esc and Tab carry on from the line rather than from the page's top.
+  let opener: HTMLElement | null = null;
+  const refocus = (commandId: string) => {
+    const label = props.manager.commands.find((command) => command.id === commandId)?.label;
+    const target = opener?.isConnected ? opener : document.querySelector<HTMLElement>(`[aria-label="Add a shortcut for ${CSS.escape(label || "")}"]`);
+    opener = null;
+    target?.focus();
+  };
   const beginRecording = (commandId: string, bindingIndex: number | null) => {
+    opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     setRecording({ commandId, bindingIndex });
     setCaptured([]);
     setStatus("Press one shortcut. Press a second shortcut to create a sequence.");
   };
   const cancelRecording = () => {
+    const target = recording();
     setRecording(null);
+    if (target) refocus(target.commandId);
     setCaptured([]);
     setStatus("Shortcut change canceled.");
   };
@@ -188,6 +199,7 @@ export function ShortcutsSettings(props: { manager: ShortcutManager }) {
     else bindings[target.bindingIndex] = binding;
     props.manager.setOverride(target.commandId, bindings);
     setRecording(null);
+    refocus(target.commandId);
     setCaptured([]);
     setStatus("Shortcut saved.");
   };
@@ -221,32 +233,21 @@ export function ShortcutsSettings(props: { manager: ShortcutManager }) {
     return `${conflict.owner} may use this shortcut for ${conflict.action} before Conduit receives it.`;
   };
 
-  return <div class="settings-list shortcuts-settings" aria-label="Shortcuts">
-    <section class="settings-group" aria-label="Keyboard">
-      <h3>Keyboard</h3>
-      <div class="settings-line"><span>Keys for<em>{shortcutEnvironmentLabel(props.manager.environment)}</em></span>
-        <Button variant="ghost" size="sm" onClick={resetAll} disabled={!hasOverrides()}><RotateCcwIcon /> Reset all</Button></div>
-      <label class="settings-line" for="leader-menu"><span>Leader menu<Show when={props.manager.leader}>{(stroke) => <em><kbd>{formatShortcutStroke(stroke(), props.manager.environment)}</kbd></em>}</Show></span>
+  return <>
+    <SettingGroup title="Keyboard">
+      <SettingLine plain label="Keys for" state={shortcutEnvironmentLabel(props.manager.environment)}>
+        <Button variant="ghost" size="sm" onClick={resetAll} disabled={!hasOverrides()}><RotateCcwIcon /> Reset all</Button></SettingLine>
+      <SettingLine label="Leader menu" state={<Show when={props.manager.leader}>{(stroke) => <Keycap>{formatShortcutStroke(stroke(), props.manager.environment)}</Keycap>}</Show>}>
         <Select id="leader-menu" aria-label="When the leader menu shows" value={leaderMenu()} onChange={(event) => saveLeaderMenu(event.currentTarget.value as LeaderMenuMode)}>
           <For each={LEADER_MENU_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
         </Select>
-      </label>
-      <label class="shortcuts-search">
-        <SearchIcon />
-        <Input
-          type="search"
-          aria-label="Search shortcuts"
-          placeholder="Search commands, contexts, or keys…"
-          value={query()}
-          onInput={(event) => setQuery(event.currentTarget.value)}
-        />
-      </label>
-    </section>
+      </SettingLine>
+      <Input type="search" aria-label="Search shortcuts" placeholder="Search commands, contexts, or keys…" value={query()} onInput={(event) => setQuery(event.currentTarget.value)} />
+    </SettingGroup>
 
-    <p class="sr-only" aria-live="polite">{status()}</p>
-    <Show when={groups().length} fallback={<p class="shortcuts-empty">No shortcuts match “{query()}”.</p>}>
-      <For each={groups()}>{([group, items]) => <section class="settings-group" aria-label={GROUP_LABELS[group] || contextLabel(group)}>
-        <h3>{GROUP_LABELS[group] || contextLabel(group)}</h3>
+    <LiveNote>{status()}</LiveNote>
+    <Show when={groups().length} fallback={<SettingNote tone="quiet">No shortcuts match “{query()}”.</SettingNote>}>
+      <For each={groups()}>{([group, items]) => <SettingGroup title={GROUP_LABELS[group] || contextLabel(group)}>
         <For each={items}>{(command) => {
           const bindings = () => {
             revision();
@@ -255,68 +256,27 @@ export function ShortcutsSettings(props: { manager: ShortcutManager }) {
           const isRecording = () => recording()?.commandId === command.id;
           // Where it applies is a description, so it is the row's title.
           return <>
-            <div class="settings-line shortcut-command" data-recording={isRecording() || undefined} title={command.contexts.map(contextLabel).join(" · ")}>
-              <span>{command.label}<Show when={overridden(command.id)}><em>custom</em></Show></span>
-              <div class="settings-line-control shortcut-bindings">
-                <Show when={bindings().length} fallback={<span class="shortcut-unassigned">Not assigned</span>}>
-                  <For each={bindings()}>{(binding, index) => <span class="shortcut-binding">
-                    <button
-                      type="button"
-                      class="shortcut-keycap"
-                      aria-label={`Replace ${formatShortcutBinding(binding, props.manager.environment)} for ${command.label}`}
-                      onClick={() => beginRecording(command.id, index())}
-                    >
-                      {formatShortcutBinding(binding, props.manager.environment)}
-                    </button>
-                    <button
-                      type="button"
-                      class="shortcut-clear"
-                      aria-label={`Clear ${formatShortcutBinding(binding, props.manager.environment)} from ${command.label}`}
-                      title="Clear shortcut"
-                      onClick={() => clearBinding(command, index())}
-                    ><XIcon /></button>
-                  </span>}</For>
-                </Show>
-                <Button variant="ghost" size="icon-sm" aria-label={`Add a shortcut for ${command.label}`} title="Add a shortcut" onClick={() => beginRecording(command.id, null)}><PlusIcon /></Button>
-                <Show when={overridden(command.id)}>
-                  <Button variant="ghost" size="icon-sm" aria-label={`Reset ${command.label} to its defaults`} title="Reset to default" onClick={() => resetCommand(command)}><RotateCcwIcon /></Button>
-                </Show>
-              </div>
-            </div>
+            <SettingLine plain label={command.label} state={overridden(command.id) ? "custom" : undefined} title={command.contexts.map(contextLabel).join(" · ")}>
+              <Show when={bindings().length} fallback={<SettingValue>Not assigned</SettingValue>}>
+                <For each={bindings()}>{(binding, index) => <Keycap label={`${formatShortcutBinding(binding, props.manager.environment)} for ${command.label}`}
+                  onClick={() => beginRecording(command.id, index())} onRemove={() => clearBinding(command, index())}>{formatShortcutBinding(binding, props.manager.environment)}</Keycap>}</For>
+              </Show>
+              <Button variant="ghost" size="icon-sm" aria-label={`Add a shortcut for ${command.label}`} title="Add a shortcut" onClick={() => beginRecording(command.id, null)}><PlusIcon /></Button>
+              <Show when={overridden(command.id)}>
+                <Button variant="ghost" size="icon-sm" aria-label={`Reset ${command.label} to its defaults`} title="Reset to default" onClick={() => resetCommand(command)}><RotateCcwIcon /></Button>
+              </Show>
+            </SettingLine>
 
             <Show when={isRecording()}>
-              <div class="shortcut-recorder-panel">
-                <div
-                  ref={recorder}
-                  class="shortcut-recorder-capture"
-                  role="application"
-                  tabIndex={0}
-                  aria-label={`Record shortcut for ${command.label}`}
-                  onKeyDown={recordKey}
-                >
-                  <span class="shortcut-recorder-dot" aria-hidden="true" />
-                  <Show when={candidate()} fallback={<span>Press a shortcut</span>}>
-                    {(binding) => <kbd>{formatShortcutBinding(binding(), props.manager.environment)}</kbd>}
-                  </Show>
-                </div>
-                <p class="shortcut-recorder-help">Press up to two shortcuts. Backspace clears. Escape or Tab cancels.</p>
-                <Show when={duplicateBinding()}>
-                  <p class="shortcut-conflict" data-severity="error" role="alert"><AlertTriangleIcon />This command already has that shortcut.</p>
-                </Show>
-                <For each={conflicts()}>{(conflict) =>
-                  <p class="shortcut-conflict" data-severity={conflict.severity} role={conflict.severity === "error" ? "alert" : undefined}>
-                    <AlertTriangleIcon />{conflictMessage(conflict)}
-                  </p>
-                }</For>
-                <div class="shortcut-recorder-actions">
-                  <Button variant="ghost" size="sm" onClick={cancelRecording}>Cancel</Button>
-                  <Button size="sm" disabled={!candidate() || saveBlocked()} onClick={saveRecording}>Save shortcut</Button>
-                </div>
-              </div>
+              <SettingRecorder ref={(element) => { recorder = element; }} label={`Record shortcut for ${command.label}`} onKeyDown={recordKey}
+                keys={candidate() ? [formatShortcutBinding(candidate()!, props.manager.environment)] : undefined}
+                saveDisabled={saveBlocked()} onSave={saveRecording} onCancel={cancelRecording} />
+              <Show when={duplicateBinding()}><SettingNote tone="error">This command already has that shortcut.</SettingNote></Show>
+              <For each={conflicts()}>{(conflict) => <SettingNote tone={conflict.severity === "error" ? "error" : "quiet"}>{conflictMessage(conflict)}</SettingNote>}</For>
             </Show>
           </>;
         }}</For>
-      </section>}</For>
+      </SettingGroup>}</For>
     </Show>
-  </div>;
+  </>;
 }

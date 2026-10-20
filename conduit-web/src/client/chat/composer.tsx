@@ -706,7 +706,7 @@ export function Composer(props: {
       historyDraft = "";
     });
     const voiceKeyDown = (event: KeyboardEvent) => {
-      if (event.defaultPrevented || document.querySelector('.settings-dialog[data-state="open"]')) return;
+      if (event.defaultPrevented || document.querySelector('[role="dialog"][aria-label="Settings"][data-state="open"]')) return;
       if (props.keyboardOwner && !props.keyboardOwner()) return;
       if (!matchesShortcut(event, props.voiceSettings.shortcut)) return;
       event.preventDefault();

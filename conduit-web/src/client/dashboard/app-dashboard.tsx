@@ -15,7 +15,7 @@ import type { RuntimeStore } from "../state/runtime";
 import type { SidebarCommand } from "../navigation/sidebar";
 import { COMMAND_IDS, commandLabel } from "../commands/command-registry";
 import { compareChatsBySort, saveChatSort, useChatSort } from "../preferences/chat-sort";
-import { Segmented } from "../settings/settings-controls";
+import { Segmented } from "@/components/ui/controls";
 import { CHAT_PAGE, DayGroups, FilterBar, groupByDay, ListSearch, CompactHeading, FiltersMenu, placeChoice, profileChoice, profileOf, ShowMore, sortChoice } from "./primitives/chat-list";
 import { SplitDashboard, SplitEmpty, SplitGroup, SplitHeader, SplitRow } from "./primitives/split";
 import "./app-dashboard.css";
@@ -167,13 +167,13 @@ export function AppDashboard(props: {
   // Built inside SplitDashboard, so it reads the pane's width.
   const chatsGroup = () => <SplitGroup id="app-dashboard-chats" order="list"
     heading={<div class="split-heading-switches">
-      <Segmented label="Chats" value={unreadOnly() ? "unread" : "all"} onChange={(value) => { setUnreadOnly(value === "unread"); setLimit(CHAT_PAGE); }} options={[
-        { value: "all", label: "All", detail: <small>{allChats().length}</small> },
-        { value: "unread", label: "Unread", detail: <small>{unread()}</small> },
+      <Segmented arrows label="Chats" value={unreadOnly() ? "unread" : "all"} onChange={(value) => { setUnreadOnly(value === "unread"); setLimit(CHAT_PAGE); }} options={[
+        { value: "all", label: "All", count: allChats().length },
+        { value: "unread", label: "Unread", count: unread() },
       ]} />
-      <Segmented label="Where" value={side()} onChange={(value) => chooseSide(value as "conduit" | "computer")} options={[
-        { value: "conduit", label: "Conduit", detail: <small>{conduitChats().length}</small> },
-        { value: "computer", label: "Computer", detail: <small>{computerChats().length}</small> },
+      <Segmented arrows label="Where" value={side()} onChange={(value) => chooseSide(value as "conduit" | "computer")} options={[
+        { value: "conduit", label: "Conduit", count: conduitChats().length },
+        { value: "computer", label: "Computer", count: computerChats().length },
       ]} />
     </div>}
     actions={<FilterBar choices={[

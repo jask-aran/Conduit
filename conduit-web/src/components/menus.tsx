@@ -2,10 +2,10 @@ import { DropdownMenu as KMenu } from "@kobalte/core/dropdown-menu";
 import { Popover as KPopover } from "@kobalte/core/popover";
 import { ContextMenu as KContextMenu } from "@kobalte/core/context-menu";
 import type { FocusOutsideEvent } from "@kobalte/core";
-import { createContext, createEffect, createMemo, createSignal, createUniqueId, For, on, onCleanup, splitProps, useContext, type ComponentProps, type JSX, type ParentProps } from "solid-js";
+import { createContext, createEffect, createMemo, createSignal, createUniqueId, For, on, onCleanup, onMount, splitProps, useContext, type ComponentProps, type JSX, type ParentProps } from "solid-js";
 import { createFullscreenPortalMount } from "./primitives";
 import { Menu as Surface, type Measure, MenuAction, Item, Section, MenuPanel, MenuParent, MenuNote, SearchSection } from "./ui/popover";
-import { Button, SliderValue } from "./ui/controls";
+import { Button, SelectTrigger, SliderValue } from "./ui/controls";
 import { PillButton } from "./ui/pill";
 /** The room a popover keeps from the window's edges: a gutter, and the system bars an edge-to-edge window draws
  *  under (the safe area), so a menu never runs under a phone's navigation bar. */
@@ -195,5 +195,48 @@ export function SearchList<T>(props: {
           icon={row.icon} meta={row.meta} title={row.title} onPointerMove={() => setActive(index())} onClick={() => props.onChoose(item)}>{row.label}</Item>;
       }}</For>
     </Section>
+  </>;
+}
+
+/**
+ * A select drawn by the library: SelectTrigger opening a Menu of its choices. The native select stays
+ * the value's owner -- its options, value, ref and change event work as a form's do -- but is hidden;
+ * its id, name and title go to the trigger, so a label's `for` reaches what can be pressed.
+ */
+export function Select(props: JSX.SelectHTMLAttributes<HTMLSelectElement> & { bare?: boolean }) {
+  const [local, rest] = splitProps(props, ["ref", "id", "title", "disabled", "children", "aria-label", "bare"]);
+  let select!: HTMLSelectElement;
+  const [value, setValue] = createSignal("");
+  const [label, setLabel] = createSignal("");
+  const [options, setOptions] = createSignal<Array<{ value: string; label: string; disabled: boolean }>>([]);
+  const read = () => {
+    setValue(select.value);
+    setLabel(select.selectedOptions[0]?.textContent || "");
+    setOptions(Array.from(select.options, (option) => ({ value: option.value, label: option.textContent || "", disabled: option.disabled })));
+  };
+  onMount(() => {
+    read();
+    const observer = new MutationObserver(read);
+    observer.observe(select, { childList: true, subtree: true, characterData: true, attributes: true });
+    onCleanup(() => observer.disconnect());
+  });
+  // A value set from code (a reactive value prop) lands after the options; read it once it has.
+  createEffect(on(() => rest.value, () => queueMicrotask(read), { defer: true }));
+  const choose = (next: string) => {
+    if (next === select.value) return;
+    select.value = next;
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+    read();
+  };
+  return <>
+    <Menu modal={false} placement="bottom-end" gutter={4} onOpenChange={(open) => open && read()}>
+      <KMenu.Trigger as={SelectTrigger} id={local.id} title={local.title} disabled={local.disabled} aria-label={local["aria-label"]} value={label()} bare={local.bare ?? true} />
+      <MenuContent>
+        <KMenu.RadioGroup value={value()} onChange={choose}>
+          <For each={options()}>{(option) => <MenuRadioItem value={option.value} disabled={option.disabled}>{option.label}</MenuRadioItem>}</For>
+        </KMenu.RadioGroup>
+      </MenuContent>
+    </Menu>
+    <select {...rest} hidden disabled={local.disabled} ref={(element) => { select = element; (local.ref as ((element: HTMLSelectElement) => void) | undefined)?.(element); }}>{local.children}</select>
   </>;
 }
