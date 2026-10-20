@@ -1,3 +1,4 @@
+import { AnnotationPopup, AnnotationButton, AnnotationInput, reviewTooltipClass, reviewCommentClass, annotationHostSelector } from "@/components/ui/editor";
 import type { Extension, Text } from "@codemirror/state";
 import { Decoration, EditorView, hoverTooltip } from "@codemirror/view";
 import { createEffect, createSignal, Show } from "solid-js";
@@ -69,7 +70,7 @@ export function commentHighlightsExtension(items: readonly CommentHighlight[], l
   return [
     EditorView.decorations.of((view) => Decoration.set(items.flatMap((item) => {
       const range = locate(view, item);
-      return range ? [Decoration.mark({ class: "cm-review-comment" }).range(range.from, range.to)] : [];
+      return range ? [Decoration.mark({ class: reviewCommentClass }).range(range.from, range.to)] : [];
     }).sort((left, right) => left.from - right.from))),
     hoverTooltip((view, position) => {
       const item = items.find((candidate) => {
@@ -82,7 +83,7 @@ export function commentHighlightsExtension(items: readonly CommentHighlight[], l
         above: true,
         create: () => {
           const dom = document.createElement("div");
-          dom.className = "workspace-review-comment-tooltip";
+          dom.className = reviewTooltipClass;
           dom.textContent = item.note || "Referenced without a note";
           return { dom };
         },
@@ -115,7 +116,7 @@ export function annotationExtension(options: {
     if (!reading) return options.onSelect(null);
     // Columns pin the comment to the characters the reader chose; the excerpt
     // still carries the whole lines so the span has context around it.
-    const host = view.dom.closest(".workspace-comparison-content, .workspace-editor-content")?.getBoundingClientRect();
+    const host = view.dom.closest(annotationHostSelector)?.getBoundingClientRect();
     const left = reading.left - (host?.left ?? 0);
     options.onSelect({
       ...reading.span,
@@ -168,14 +169,14 @@ export function WorkspaceAnnotationPopup(props: {
       document.querySelector<HTMLTextAreaElement>("textarea[data-composer-input]:not([disabled])")?.focus({ preventScroll: true });
     });
   };
-  return <div class="workspace-annotation" style={{ left: `${props.selection.left}px`, top: `${props.selection.top}px` }}>
-    <Show when={open()} fallback={<button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => setOpen(true)}>Comment</button>}>
-      <textarea ref={noteInput} aria-label={`Comment on lines ${props.selection.from}-${props.selection.to}`} rows={2} maxlength={2000} value={note()} onInput={(event) => setNote(event.currentTarget.value)} onKeyDown={(event) => {
+  return <AnnotationPopup style={{ left: `${props.selection.left}px`, top: `${props.selection.top}px` }}>
+    <Show when={open()} fallback={<AnnotationButton type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => setOpen(true)}>Comment</AnnotationButton>}>
+      <AnnotationInput ref={noteInput} aria-label={`Comment on lines ${props.selection.from}-${props.selection.to}`} rows={2} maxlength={2000} value={note()} onInput={(event) => setNote(event.currentTarget.value)} onKeyDown={(event) => {
         if (event.key === "Escape") { event.preventDefault(); setOpen(false); }
         if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); add(); }
       }} />
-      <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={add}>Add</button>
+      <AnnotationButton type="button" onMouseDown={(event) => event.preventDefault()} onClick={add}>Add</AnnotationButton>
       <Show when={error()}><small role="alert">{error()}</small></Show>
     </Show>
-  </div>;
+  </AnnotationPopup>;
 }

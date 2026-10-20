@@ -147,3 +147,8 @@
 .ui-tree-chevron[data-open] { transform: rotate(90deg); }
 .ui-tool-bar[data-vertical] > [role="toolbar"] { display: flex; flex-direction: column; align-items: center; gap: var(--space-2xs); margin-top: auto; }
 .ui-tool-bar > small { min-width: 0; flex: 1; overflow: hidden; padding-inline: var(--space-xs); color: var(--muted-foreground); font: var(--text-caption) var(--font-data); text-overflow: ellipsis; white-space: nowrap; }
+/* An empty tool with a mark, a title and a line under it. */
+.ui-pane-empty > div { display: grid; max-width: calc(17.5 * var(--u-space)); justify-items: center; gap: var(--space-sm); }
+.ui-pane-empty svg { width: var(--icon-lg); height: var(--icon-lg); }
+.ui-pane-empty strong { color: var(--foreground); }
+.ui-pane-empty p { margin: 0; line-height: 1.5; }

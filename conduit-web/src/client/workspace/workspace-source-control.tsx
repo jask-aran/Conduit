@@ -1,7 +1,8 @@
 import { createDecisionScope } from "@/components/decision-dialog";
 import { createEffect, createMemo, createSignal, For, on, Show, type Accessor } from "solid-js";
 import { CheckIcon, CirclePlusIcon, CopyIcon, DownloadIcon, EyeIcon, FileDiffIcon, GitBranchIcon, GitCommitHorizontalIcon, GitCompareArrowsIcon, RefreshCwIcon, SendIcon, Undo2Icon } from "lucide-solid";
-import { ContextMenu, ContextMenuContent, ContextMenuGroup, ContextMenuItem, ContextMenuTrigger, Spinner } from "@/components/primitives";
+import { ContextMenu, ContextMenuContent, ContextMenuTrigger, MenuRow, MenuSection } from "@/components/menus";
+import { Spinner } from "@/components/ui/controls";
 import { api } from "../api/client";
 import type { ReviewNavigationRequest } from "../chat/review-navigation";
 import { FileTypeIcon, FolderTypeIcon } from "./file-type-icon";
@@ -43,10 +44,10 @@ function CommitHistory(props: { commits: GitCommit[]; refs: GitRef[]; branch?: s
             refs={props.refs.filter((ref) => ref.hash === commit.hash).map((ref) => ({ label: ref.kind === "local" && ref.name === props.branch ? `HEAD · ${ref.name}` : ref.name, current: ref.kind === "local" && ref.name === props.branch, kind: ref.kind }))}
             author={commit.author} hash={commit.shortHash}
             title={`Copy ${commit.hash} · ${commit.author} · ${new Date(commit.authoredAt).toLocaleString()}`} onClick={() => props.onCopy(commit.hash)} />
-          <ContextMenuContent shortcutScope="workspace-panel" class="w-48 workspace-file-menu"><ContextMenuGroup>
-            <ContextMenuItem onSelect={() => props.onInspect(commit)}><EyeIcon />Inspect commit</ContextMenuItem>
-            <ContextMenuItem onSelect={() => props.onCopy(commit.hash)}><CopyIcon />Copy commit ID</ContextMenuItem>
-          </ContextMenuGroup></ContextMenuContent>
+          <ContextMenuContent><MenuSection>
+            <MenuRow onSelect={() => props.onInspect(commit)} icon={<EyeIcon />}>Inspect commit</MenuRow>
+            <MenuRow onSelect={() => props.onCopy(commit.hash)} icon={<CopyIcon />}>Copy commit ID</MenuRow>
+          </MenuSection></ContextMenuContent>
         </ContextMenu>
       }</For>
     </CommitList>

@@ -1,4 +1,6 @@
-import { WorkbenchButton, WorkbenchStatus } from "./workspace-workbench";
+import { PaneEmpty } from "@/components/ui/pane";
+import { FileButton, FileHead, FileTools, FileName, StatusBar, StatusText } from "@/components/ui/file";
+import { CodeHost, Comparison, ComparisonContent, ComparisonCounts } from "@/components/ui/editor";
 import { MergeView, getChunks } from "@codemirror/merge";
 import { inlineLineNumbers, inlineRowsOf, setInlineRows, workspaceInlineDiff, workspaceMergeView } from "./workspace-diff-setup";
 import { buildInlineDiff, inlineDocLine, inlineRowNumber, unchangedRuns, type InlineDiff } from "./workspace-inline-diff";
@@ -14,7 +16,6 @@ import { workspaceLanguageForFilename } from "./workspace-languages";
 import { FileTypeIcon } from "./file-type-icon";
 import { annotationExtension, annotationSpan, commentHighlightsExtension, commentRange, selectionEnd, WorkspaceAnnotationPopup, type AnnotationReading, type AnnotationSelection, type AnnotationSpan, type CommentHighlight } from "./workspace-annotate";
 import type { ReviewNavigationRequest } from "../chat/review-navigation";
-import "./workspace-comparison.css";
 
 const DIFF_CONFIG = { scanLimit: 500, timeout: 40 };
 
@@ -288,29 +289,29 @@ export default function WorkspaceComparison(props: { comparison: ComparisonPaylo
     });
   });
 
-  return <section class="workspace-comparison">
-    <header class="workspace-preview-header">
-      <Show when={props.headerTabs} fallback={<div class="workspace-preview-file" title={props.comparison.path}><FileTypeIcon name={props.comparison.path} /><span>{props.comparison.path}</span></div>}>{props.headerTabs}</Show>
+  return <Comparison>
+    <FileHead>
+      <Show when={props.headerTabs} fallback={<FileName path={props.comparison.path} icon={<FileTypeIcon name={props.comparison.path} />} />}>{props.headerTabs}</Show>
       {props.headerAction}
       <Show when={props.comparison.kind === "text"}>
-        <div class="workspace-editor-header-tools">
-          <WorkbenchButton aria-label="Find in comparison" title="Find in comparison (Ctrl+F)" onClick={() => { if (activeView) openSearchPanel(activeView); }}><SearchIcon /></WorkbenchButton>
-          <WorkbenchButton aria-label={wrap() ? "Disable line wrapping" : "Enable line wrapping"} aria-pressed={wrap()} title={wrap() ? "Disable line wrapping" : "Enable line wrapping"} onClick={() => setWrap(!wrap())}><WrapTextIcon /></WorkbenchButton>
-          <WorkbenchButton aria-label={layout() === "split" ? "Show unified diff" : "Show side-by-side diff"} aria-pressed={layout() === "split"} title={layout() === "split" ? "Show unified diff" : "Show side-by-side diff"} onClick={() => setLayout(layout() === "split" ? "unified" : "split")}><Columns2Icon /></WorkbenchButton>
-        </div>
+        <FileTools>
+          <FileButton aria-label="Find in comparison" title="Find in comparison (Ctrl+F)" onClick={() => { if (activeView) openSearchPanel(activeView); }}><SearchIcon /></FileButton>
+          <FileButton aria-label={wrap() ? "Disable line wrapping" : "Enable line wrapping"} aria-pressed={wrap()} title={wrap() ? "Disable line wrapping" : "Enable line wrapping"} onClick={() => setWrap(!wrap())}><WrapTextIcon /></FileButton>
+          <FileButton aria-label={layout() === "split" ? "Show unified diff" : "Show side-by-side diff"} aria-pressed={layout() === "split"} title={layout() === "split" ? "Show unified diff" : "Show side-by-side diff"} onClick={() => setLayout(layout() === "split" ? "unified" : "split")}><Columns2Icon /></FileButton>
+        </FileTools>
       </Show>
       {props.headerEnd}
-    </header>
-    <Show when={props.comparison.kind === "text"} fallback={<div class="workspace-panel-empty">{props.comparison.kind === "unavailable" ? props.comparison.message : ""}</div>}>
-      <div class="workspace-comparison-content" data-layout={layout()}>
-        <div ref={host} class="workspace-comparison-editor workspace-code-editor" />
+    </FileHead>
+    <Show when={props.comparison.kind === "text"} fallback={<PaneEmpty>{props.comparison.kind === "unavailable" ? props.comparison.message : ""}</PaneEmpty>}>
+      <ComparisonContent data-layout={layout()}>
+        <CodeHost ref={(element) => { host = element; }} comparison />
         <Show when={annotation()}>{(selection) => <WorkspaceAnnotationPopup selection={selection()} onAdd={(note) => props.onAnnotate?.(selection(), note) ?? false} onDismiss={() => selectAnnotation(null)} />}</Show>
-      </div>
-      <WorkbenchStatus commands={props.comparisonSource}>
-        <span class="workspace-comparison-counts" title={summary().precise ? "Changed lines" : "Approximate changed lines"}><span>−{summary().removed}</span><span>+{summary().added}</span></span>
-        <WorkbenchButton aria-label="Go to line" title="Go to line (Alt+G)" onClick={() => { if (activeView) gotoLine(activeView); }}>{position()}</WorkbenchButton>
-        <span class="workspace-editor-metadata">{languageName()} · Read-only</span>
-      </WorkbenchStatus>
+      </ComparisonContent>
+      <StatusBar commands={props.comparisonSource}>
+        <ComparisonCounts title={summary().precise ? "Changed lines" : "Approximate changed lines"}><span>−{summary().removed}</span><span>+{summary().added}</span></ComparisonCounts>
+        <FileButton wide aria-label="Go to line" title="Go to line (Alt+G)" onClick={() => { if (activeView) gotoLine(activeView); }}>{position()}</FileButton>
+        <StatusText>{languageName()} · Read-only</StatusText>
+      </StatusBar>
     </Show>
-  </section>;
+  </Comparison>;
 }

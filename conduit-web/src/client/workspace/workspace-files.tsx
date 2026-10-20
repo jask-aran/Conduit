@@ -2,7 +2,9 @@ import { createDecisionScope } from "@/components/decision-dialog";
 import { batch, createMemo, createSignal, For, onCleanup, Show, type Accessor, type JSX } from "solid-js";
 import { ChevronRightIcon, ChevronsUpIcon, Columns2Icon, CopyIcon, DownloadIcon, EllipsisIcon, EyeIcon, EyeOffIcon, FilePlusIcon, FolderIcon, FolderPlusIcon, FolderUpIcon, MoveIcon, PanelLeftCloseIcon, PanelLeftOpenIcon, PencilIcon, PinIcon, PinOffIcon, RefreshCwIcon, SearchIcon, Trash2Icon, UploadIcon } from "lucide-solid";
 import { toast } from "@/components/notifications";
-import { ContextMenu, ContextMenuContent, ContextMenuGroup, ContextMenuItem, ContextMenuSeparator, ContextMenuTrigger, Menu, MenuContent, MenuItem, MenuTrigger, Spinner } from "@/components/primitives";
+import { ContextMenu, ContextMenuContent, ContextMenuTrigger, Menu, MenuContent, MenuControl, MenuRow, MenuSection } from "@/components/menus";
+import { Rule } from "@/components/ui/popover";
+import { Spinner } from "@/components/ui/controls";
 import { api, asList } from "../api/client";
 import { authorizedFetch } from "../api/native-auth-client";
 import { httpUrl } from "../api/transport";
@@ -815,41 +817,41 @@ export function FilesView(props: {
             onDblClick={() => { if (entry.type === "directory") props.onBrowseDirectory?.(entry.path); }}
             onClick={(event) => entry.type === "directory" ? void c.toggleDirectory(entry.path) : entry.type === "file" ? (event.altKey && props.onOpenBeside ? props.onOpenBeside(entry.path) : c.openFile(entry.path)) : undefined}
           />
-          <ContextMenuContent shortcutScope="workspace-panel" class="w-48 workspace-file-menu">
-            <ContextMenuGroup>
+          <ContextMenuContent>
+            <MenuSection>
               <Show when={entry.type === "file"}>
-                <ContextMenuItem onSelect={() => c.openFile(entry.path)}><FileTypeIcon name={entry.name} />Open preview</ContextMenuItem>
-                <Show when={props.onOpenBeside}><ContextMenuItem onSelect={() => props.onOpenBeside?.(entry.path)}><Columns2Icon />Open beside</ContextMenuItem></Show>
-                <ContextMenuItem onSelect={() => c.editFile(entry.path)}><PencilIcon />Edit</ContextMenuItem>
-                <ContextMenuItem onSelect={() => void c.downloadPath(entry.path)}><DownloadIcon />Download</ContextMenuItem>
+                <MenuRow onSelect={() => c.openFile(entry.path)} icon={<FileTypeIcon name={entry.name} />}>Open preview</MenuRow>
+                <Show when={props.onOpenBeside}><MenuRow onSelect={() => props.onOpenBeside?.(entry.path)} icon={<Columns2Icon />}>Open beside</MenuRow></Show>
+                <MenuRow onSelect={() => c.editFile(entry.path)} icon={<PencilIcon />}>Edit</MenuRow>
+                <MenuRow onSelect={() => void c.downloadPath(entry.path)} icon={<DownloadIcon />}>Download</MenuRow>
 
-                <ContextMenuItem disabled={c.uploading()} onSelect={() => c.chooseUpload({ kind: "replacement", path: entry.path })}><UploadIcon />Replace with upload…</ContextMenuItem>
+                <MenuRow disabled={c.uploading()} onSelect={() => c.chooseUpload({ kind: "replacement", path: entry.path })} icon={<UploadIcon />}>Replace with upload…</MenuRow>
               </Show>
               <Show when={entry.type === "directory"}>
-                <Show when={props.onBrowseDirectory}><ContextMenuItem onSelect={() => props.onBrowseDirectory?.(entry.path)}><FolderIcon />Open folder</ContextMenuItem></Show>
-                <ContextMenuItem disabled={c.uploading()} onSelect={() => void c.createFile(entry.path)}><FilePlusIcon />New file…</ContextMenuItem>
-                <ContextMenuItem disabled={c.uploading()} onSelect={() => void c.createDirectory(entry.path)}><FolderPlusIcon />New folder…</ContextMenuItem>
-                <ContextMenuItem onSelect={() => c.chooseUpload({ kind: "directory", path: entry.path })}><UploadIcon />Upload files here</ContextMenuItem>
+                <Show when={props.onBrowseDirectory}><MenuRow onSelect={() => props.onBrowseDirectory?.(entry.path)} icon={<FolderIcon />}>Open folder</MenuRow></Show>
+                <MenuRow disabled={c.uploading()} onSelect={() => void c.createFile(entry.path)} icon={<FilePlusIcon />}>New file…</MenuRow>
+                <MenuRow disabled={c.uploading()} onSelect={() => void c.createDirectory(entry.path)} icon={<FolderPlusIcon />}>New folder…</MenuRow>
+                <MenuRow onSelect={() => c.chooseUpload({ kind: "directory", path: entry.path })} icon={<UploadIcon />}>Upload files here</MenuRow>
               </Show>
               <Show when={entry.type === "file" || entry.type === "directory"}>
-                <ContextMenuItem disabled={c.uploading()} onSelect={() => c.renameEntry(entry)}><PencilIcon />Rename…</ContextMenuItem>
-                <ContextMenuItem disabled={c.uploading()} onSelect={() => c.moveEntryToFolder(entry)}><MoveIcon />Move…</ContextMenuItem>
+                <MenuRow disabled={c.uploading()} onSelect={() => c.renameEntry(entry)} icon={<PencilIcon />}>Rename…</MenuRow>
+                <MenuRow disabled={c.uploading()} onSelect={() => c.moveEntryToFolder(entry)} icon={<MoveIcon />}>Move…</MenuRow>
               </Show>
-              <ContextMenuItem onSelect={() => copyText(entry.path)}><CopyIcon />Copy path</ContextMenuItem>
-            </ContextMenuGroup>
+              <MenuRow onSelect={() => copyText(entry.path)} icon={<CopyIcon />}>Copy path</MenuRow>
+            </MenuSection>
             <Show when={entry.name.startsWith(".") || c.keptVisible().has(entry.path)}>
-              <ContextMenuSeparator />
-              <ContextMenuItem onSelect={() => c.toggleKeptVisible(entry.path)}>
-                <Show when={c.keptVisible().has(entry.path)} fallback={<><PinIcon />Keep visible</>}><PinOffIcon />Stop keeping visible</Show>
-              </ContextMenuItem>
+              <Rule />
+              <MenuRow onSelect={() => c.toggleKeptVisible(entry.path)} icon={<Show when={c.keptVisible().has(entry.path)} fallback={<PinIcon />}><PinOffIcon /></Show>}>
+                {c.keptVisible().has(entry.path) ? "Stop keeping visible" : "Keep visible"}
+              </MenuRow>
             </Show>
             <Show when={entry.type === "file"}>
-              <ContextMenuSeparator />
-              <ContextMenuItem variant="destructive" disabled={c.uploading()} onSelect={() => void c.deleteFile(entry.path)}><Trash2Icon />Delete file</ContextMenuItem>
+              <Rule />
+              <MenuRow destructive disabled={c.uploading()} onSelect={() => void c.deleteFile(entry.path)} icon={<Trash2Icon />}>Delete file</MenuRow>
             </Show>
             <Show when={entry.type === "directory"}>
-              <ContextMenuSeparator />
-              <ContextMenuItem variant="destructive" disabled={c.uploading()} onSelect={() => void c.deleteDirectory(entry.path)}><Trash2Icon />Delete folder</ContextMenuItem>
+              <Rule />
+              <MenuRow destructive disabled={c.uploading()} onSelect={() => void c.deleteDirectory(entry.path)} icon={<Trash2Icon />}>Delete folder</MenuRow>
             </Show>
           </ContextMenuContent>
         </ContextMenu>
@@ -929,10 +931,10 @@ export function FilesView(props: {
             <For each={treeActions}>{(action, index) => <Show when={index() < visibleTreeActions()}>{treeActionButton(action)}</Show>}</For>
             <Show when={visibleTreeActions() < treeActions.length}>
               <Menu>
-                <MenuTrigger as={ToolButton} label="More file actions"><EllipsisIcon /></MenuTrigger>
+                <MenuControl as={ToolButton} label="More file actions"><EllipsisIcon /></MenuControl>
                 <MenuContent>
                   <For each={treeActions.slice(visibleTreeActions())}>{(action) =>
-                    <MenuItem disabled={action.disabled?.()} onSelect={action.run}>{action.icon()}{action.label()}</MenuItem>
+                    <MenuRow icon={action.icon()} disabled={action.disabled?.()} onSelect={action.run}>{action.label()}</MenuRow>
                   }</For>
                 </MenuContent>
               </Menu>

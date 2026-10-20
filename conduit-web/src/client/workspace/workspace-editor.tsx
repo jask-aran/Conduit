@@ -1,4 +1,5 @@
-import { WorkbenchButton, WorkbenchStatus } from "./workspace-workbench";
+import { FileButton, FileHead, FileTools, StatusBar, StatusText, StatusPicker } from "@/components/ui/file";
+import { CodeSurface, CodeContent, CodeHost } from "@/components/ui/editor";
 import { annotationExtension, commentHighlightsExtension, commentRange, WorkspaceAnnotationPopup, type AnnotationSelection, type CommentHighlight } from "./workspace-annotate";
 import { autocompletion, closeBrackets, closeBracketsKeymap, completionKeymap } from "@codemirror/autocomplete";
 import { history, historyKeymap, indentWithTab, redo, redoDepth, undo, undoDepth } from "@codemirror/commands";
@@ -10,7 +11,7 @@ import { dropCursor, EditorView, highlightActiveLine, highlightActiveLineGutter,
 import { workspaceReadOnlySetup } from "./workspace-editor-base";
 import { ChevronDownIcon, EyeIcon, PencilIcon, Redo2Icon, SearchIcon, Undo2Icon, WrapTextIcon } from "lucide-solid";
 import { createEffect, createSignal, For, onCleanup, onMount, Show, type JSX } from "solid-js";
-import { Menu, MenuContent, MenuGroup, MenuRadioGroup, MenuRadioItem, MenuTrigger } from "@/components/primitives";
+import { Menu, MenuContent, MenuSection, MenuRadioGroup, MenuRadioItem, MenuControl } from "@/components/menus";
 import { csvLanguage, isCsvFile } from "./csv-language";
 import { workspaceLanguageForFilename, workspaceLanguageForName, workspaceLanguages } from "./workspace-languages";
 import type { ReviewNavigationRequest } from "../chat/review-navigation";
@@ -360,34 +361,34 @@ export default function WorkspaceEditor(props: {
     });
   });
 
-  return <div class="workspace-code-surface" data-editable={editable()}>
-    <header class="workspace-preview-header">
+  return <CodeSurface editable={editable()}>
+    <FileHead>
       {props.header}
-      <div class="workspace-editor-header-tools">
-        <WorkbenchButton data-fold="2" aria-label="Find or replace" title="Find or replace (Ctrl+F)" onClick={() => runCommand(openSearchPanel)}><SearchIcon /></WorkbenchButton>
-        <WorkbenchButton class="workspace-editor-wrap" aria-label={props.wrap ? "Disable line wrapping" : "Enable line wrapping"} aria-pressed={props.wrap} title={props.wrap ? "Disable line wrapping" : "Enable line wrapping"} onClick={props.onToggleWrap}><WrapTextIcon /></WorkbenchButton>
-      </div>
-    </header>
-    <div class="workspace-editor-content">
-      <div ref={host} class="workspace-code-editor" data-markdown={isVisualMarkdownFile(props.path)} data-wrap={props.wrap} />
+      <FileTools>
+        <FileButton data-fold="2" aria-label="Find or replace" title="Find or replace (Ctrl+F)" onClick={() => runCommand(openSearchPanel)}><SearchIcon /></FileButton>
+        <FileButton inMenu aria-label={props.wrap ? "Disable line wrapping" : "Enable line wrapping"} aria-pressed={props.wrap} title={props.wrap ? "Disable line wrapping" : "Enable line wrapping"} onClick={props.onToggleWrap}><WrapTextIcon /></FileButton>
+      </FileTools>
+    </FileHead>
+    <CodeContent>
+      <CodeHost ref={(element) => { host = element; }} data-markdown={isVisualMarkdownFile(props.path)} data-wrap={props.wrap} />
       <Show when={annotation()}>{(selection) => <WorkspaceAnnotationPopup selection={selection()} onAdd={(note) => props.onAnnotate?.(selection(), note) ?? false} onDismiss={() => setAnnotation(null)} />}</Show>
-    </div>
-    <WorkbenchStatus commands={<>
+    </CodeContent>
+    <StatusBar commands={<>
       <Show when={props.onToggleEditing}>
-        <WorkbenchButton class="workspace-editor-mode" aria-label={editable() ? "Preview file" : "Edit file"} title={editable() ? "Switch to preview" : "Edit working file"} disabled={!editable() && !props.canEdit} onClick={props.onToggleEditing}>
-          <Show when={editable()} fallback={<PencilIcon />}><EyeIcon /></Show><span>{editable() ? "Preview" : "Edit"}</span>
-        </WorkbenchButton>
+        <StatusPicker strong icon={editable() ? <EyeIcon /> : <PencilIcon />} aria-label={editable() ? "Preview file" : "Edit file"} title={editable() ? "Switch to preview" : "Edit working file"} disabled={!editable() && !props.canEdit} onClick={props.onToggleEditing}>
+          {editable() ? "Preview" : "Edit"}
+        </StatusPicker>
       </Show>
       <Show when={editable()}>
-        <WorkbenchButton aria-label="Undo" title="Undo" disabled={!canUndo()} onClick={() => runEditCommand(undo)}><Undo2Icon /></WorkbenchButton>
-        <WorkbenchButton aria-label="Redo" title="Redo" disabled={!canRedo()} onClick={() => runEditCommand(redo)}><Redo2Icon /></WorkbenchButton>
+        <FileButton aria-label="Undo" title="Undo" disabled={!canUndo()} onClick={() => runEditCommand(undo)}><Undo2Icon /></FileButton>
+        <FileButton aria-label="Redo" title="Redo" disabled={!canRedo()} onClick={() => runEditCommand(redo)}><Redo2Icon /></FileButton>
       </Show>
       <Menu>
-        <MenuTrigger class="workspace-editor-picker" aria-label={`Indentation ${indentationLabel(indentation())}`} title="Indentation">
-          <span>{indentationLabel(indentation())}</span><ChevronDownIcon />
-        </MenuTrigger>
-        <MenuContent class="workspace-editor-picker-menu">
-          <MenuGroup>
+        <MenuControl as={StatusPicker} icon={<ChevronDownIcon />} aria-label={`Indentation ${indentationLabel(indentation())}`} title="Indentation">
+          {indentationLabel(indentation())}
+        </MenuControl>
+        <MenuContent>
+          <MenuSection>
             <MenuRadioGroup value={indentation()} onChange={(value) => {
               if (!isIndentation(value)) return;
               setIndentation(value);
@@ -396,29 +397,29 @@ export default function WorkspaceEditor(props: {
             }}>
               <For each={indentationOptions}>{(option) => <MenuRadioItem value={option.value}>{option.label}</MenuRadioItem>}</For>
             </MenuRadioGroup>
-          </MenuGroup>
+          </MenuSection>
         </MenuContent>
       </Menu>
       <Menu>
-        <MenuTrigger class="workspace-editor-picker" aria-label={`Language mode ${selectedLanguage()}`} title="Language mode">
-          <span>{selectedLanguage()}</span><ChevronDownIcon />
-        </MenuTrigger>
-        <MenuContent class="workspace-editor-picker-menu workspace-editor-language-menu">
-          <MenuGroup>
+        <MenuControl as={StatusPicker} icon={<ChevronDownIcon />} aria-label={`Language mode ${selectedLanguage()}`} title="Language mode">
+          {selectedLanguage()}
+        </MenuControl>
+        <MenuContent height="lg">
+          <MenuSection>
             <MenuRadioGroup value={selectedLanguage()} onChange={(value) => void installLanguage(value).catch(() => undefined)}>
               <MenuRadioItem value="Plain Text">Plain Text</MenuRadioItem>
               <MenuRadioItem value="Markdown">Markdown</MenuRadioItem>
               <MenuRadioItem value="CSV">CSV</MenuRadioItem>
               <For each={workspaceLanguages}>{(language) => <MenuRadioItem value={language.name}>{language.name}</MenuRadioItem>}</For>
             </MenuRadioGroup>
-          </MenuGroup>
+          </MenuSection>
         </MenuContent>
       </Menu>
     </>}>
-      <span class="workspace-editor-metadata" title={props.statusTitle ?? props.statusText}>{props.statusText}</span>
-      <WorkbenchButton type="button" ref={positionLabel} aria-label="Go to line" title="Go to line (Alt+G)" onClick={() => runCommand(gotoLine)}>Ln 1, Col 1</WorkbenchButton>
-    </WorkbenchStatus>
-  </div>;
+      <StatusText><span title={props.statusTitle ?? props.statusText}>{props.statusText}</span></StatusText>
+      <FileButton wide type="button" ref={positionLabel} aria-label="Go to line" title="Go to line (Alt+G)" onClick={() => runCommand(gotoLine)}>Ln 1, Col 1</FileButton>
+    </StatusBar>
+  </CodeSurface>;
 }
 
 export interface WorkspaceEditorHandle {

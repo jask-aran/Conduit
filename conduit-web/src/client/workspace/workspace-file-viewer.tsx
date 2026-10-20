@@ -1,7 +1,10 @@
 import { createDecisionScope } from "@/components/decision-dialog";
 import { createEffect, createResource, createSignal, Index, lazy, onCleanup, Show, Suspense, type JSX } from "solid-js";
 import { ArrowLeftRightIcon, Columns2Icon, FileDiffIcon, FileTextIcon, GitCompareArrowsIcon, XIcon } from "lucide-solid";
-import { MenuItem } from "@/components/primitives";
+import { MenuRow } from "@/components/menus";
+import { FileViewer as Viewer, FileButton } from "@/components/ui/file";
+import { FileDivider, FileSwap, FileScope, FileChanges } from "@/components/ui/viewer";
+import { PaneEmpty } from "@/components/ui/pane";
 import type { ReviewNavigationRequest } from "../chat/review-navigation";
 import { toast } from "@/components/notifications";
 import { api } from "../api/client";
@@ -10,7 +13,6 @@ import type { ComparisonPayload } from "./workspace-comparison";
 import WorkspaceFileSlot, { type FileSlotHandle, type FileSummary } from "./workspace-file-slot";
 import { reportError } from "./workspace-shared";
 import type { DiffPayload, GitChangedFile } from "./workspace-types";
-import { WorkbenchButton } from "./workspace-workbench";
 
 const WorkspaceComparison = lazy(() => import("./workspace-comparison"));
 const POLL_INTERVAL_MS = 1_500;
@@ -114,10 +116,10 @@ export default function FileViewer(props: {
   // has, then gathers the rest into its overflow menu, before the file's name
   // goes -- measured, not a width.
   let root: HTMLDivElement | undefined;
-  const fitHeaders = () => root?.querySelectorAll<HTMLElement>(".workspace-preview-header").forEach((header) => {
+  const fitHeaders = () => root?.querySelectorAll<HTMLElement>(".ui-file-head").forEach((header) => {
     header.removeAttribute("data-compact");
     // The name needs room for at least the file's own name, measured from its text.
-    const name = header.querySelector<HTMLElement>(".workspace-preview-file span");
+    const name = header.querySelector<HTMLElement>(".ui-file-name > span");
     // Headed by tabs, every tab is the name: the actions fold before a tab does.
     const tabs = header.querySelector<HTMLElement>(".ui-tabs[data-need]");
     const nameFits = () => {
@@ -177,8 +179,8 @@ export default function FileViewer(props: {
     divider.addEventListener("pointercancel", end);
     event.preventDefault();
   };
-  const splitButton = () => <Show when={props.entries.length === 1 && !props.splitEmpty}><WorkbenchButton type="button" class="workspace-preview-action" data-fold="1" aria-label="Open this file again beside" title="Split" onClick={() => props.onSplit()}><Columns2Icon /></WorkbenchButton></Show>;
-  return <div ref={(element) => { root = element; resized.observe(element); changed.observe(element, { childList: true, subtree: true, attributes: true, attributeFilter: ["data-need"] }); }} class="workspace-files workspace-file-viewer" data-count={sides()} style={sides() > 1 ? { "--side-a": String(props.emptyFirst ? 1 - share() : share()), "--side-b": String(props.emptyFirst ? share() : 1 - share()) } : undefined}>
+  const splitButton = () => <Show when={props.entries.length === 1 && !props.splitEmpty}><FileButton type="button" data-fold="1" aria-label="Open this file again beside" title="Split" onClick={() => props.onSplit()}><Columns2Icon /></FileButton></Show>;
+  return <Viewer ref={(element) => { root = element; resized.observe(element); changed.observe(element, { childList: true, subtree: true, attributes: true, attributeFilter: ["data-need"] }); }} data-count={sides()} style={sides() > 1 ? { "--side-a": String(props.emptyFirst ? 1 - share() : share()), "--side-b": String(props.emptyFirst ? share() : 1 - share()) } : undefined}>
     <Index each={props.entries}>{(entry, index) =>
       <Show when={entry().mode} fallback={
         <WorkspaceFileSlot
@@ -197,7 +199,7 @@ export default function FileViewer(props: {
           headerTabs={props.tabs?.(index)}
           headerEnd={index === props.entries.length - 1 && !(props.splitEmpty && !props.emptyFirst) ? props.paneActions?.() : undefined}
           headerMenuItems={(folded) => <>
-            <Show when={props.entries.length === 1 && !props.splitEmpty && folded("1")}><MenuItem onSelect={() => props.onSplit()}><Columns2Icon />Open again beside</MenuItem></Show>
+            <Show when={props.entries.length === 1 && !props.splitEmpty && folded("1")}><MenuRow icon={<Columns2Icon />} onSelect={() => props.onSplit()}>Open again beside</MenuRow></Show>
             {props.sideMenu?.(index)}
           </>}
           reveal={props.reveal && props.reveal.entry.projectId === entry().projectId && props.reveal.entry.path === entry().path ? props.reveal.request : null}
@@ -217,9 +219,9 @@ export default function FileViewer(props: {
       }</Show>
     }</Index>
     {props.emptySide}
-    <Show when={props.entries.length === 2 && props.onSwapSides}><button type="button" class="file-viewer-swap" tabIndex={-1} aria-label="Swap the sides" title="Swap the sides" style={{ left: `${share() * 100}%` }} onClick={() => props.onSwapSides?.()}><ArrowLeftRightIcon /></button></Show>
-    <Show when={sides() > 1}><div class="file-viewer-divider" role="separator" aria-orientation="vertical" aria-label="Resize the sides" style={{ left: `${share() * 100}%` }} onPointerDown={dragDivider} onDblClick={() => props.onShare?.(0.5)} /></Show>
-  </div>;
+    <Show when={props.entries.length === 2 && props.onSwapSides}><FileSwap type="button" tabIndex={-1} aria-label="Swap the sides" title="Swap the sides" style={{ left: `${share() * 100}%` }} onClick={() => props.onSwapSides?.()}><ArrowLeftRightIcon /></FileSwap></Show>
+    <Show when={sides() > 1}><FileDivider role="separator" aria-orientation="vertical" aria-label="Resize the sides" style={{ left: `${share() * 100}%` }} onPointerDown={dragDivider} onDblClick={() => props.onShare?.(0.5)} /></Show>
+  </Viewer>;
 }
 
 /** A file's unstaged or staged changes, drawn by the review's comparison (6d-3). */
@@ -242,17 +244,17 @@ function ChangesEntry(props: {
   props.ref({ path: () => props.entry.path, hasUnsavedChanges: () => false, reload: async () => { await refetch(); }, edit: () => props.onSetMode(undefined), save: async () => {}, discardChanges: () => {} });
   const other = () => props.mode === "changes" ? (hasStaged(props.status) ? "staged" as const : null) : (hasUnstaged(props.status) ? "changes" as const : null);
   const actions = <>
-    <WorkbenchButton type="button" class="workspace-preview-action" aria-label="Show the file" title="Show the file" onClick={() => props.onSetMode(undefined)}><FileTextIcon /></WorkbenchButton>
-    <Show when={other()}>{(next) => <WorkbenchButton type="button" class="workspace-preview-action" aria-label={next() === "staged" ? "Review staged changes" : "Review unstaged changes"} title={next() === "staged" ? "Review staged changes" : "Review unstaged changes"} onClick={() => props.onSetMode(next())}>{next() === "staged" ? <GitCompareArrowsIcon /> : <FileDiffIcon />}</WorkbenchButton>}</Show>
+    <FileButton type="button" aria-label="Show the file" title="Show the file" onClick={() => props.onSetMode(undefined)}><FileTextIcon /></FileButton>
+    <Show when={other()}>{(next) => <FileButton type="button" aria-label={next() === "staged" ? "Review staged changes" : "Review unstaged changes"} title={next() === "staged" ? "Review staged changes" : "Review unstaged changes"} onClick={() => props.onSetMode(next())}>{next() === "staged" ? <GitCompareArrowsIcon /> : <FileDiffIcon />}</FileButton>}</Show>
     {props.split}
-    <Show when={!props.tabs}><WorkbenchButton type="button" class="workspace-preview-action workspace-preview-close" aria-label="Close file" title="Close file" onClick={() => props.onClose()}><XIcon /></WorkbenchButton></Show>
+    <Show when={!props.tabs}><FileButton type="button" close aria-label="Close file" title="Close file" onClick={() => props.onClose()}><XIcon /></FileButton></Show>
   </>;
-  return <section class="workspace-preview workspace-changes-entry" tabIndex={-1} data-focused={props.focused} aria-label={`${props.entry.path} ${props.mode === "staged" ? "staged changes" : "changes"}`} onFocusIn={() => props.onFocus()} onPointerDown={() => props.onFocus()}>
+  return <FileChanges tabIndex={-1} focused={props.focused} aria-label={`${props.entry.path} ${props.mode === "staged" ? "staged changes" : "changes"}`} onFocusIn={() => props.onFocus()} onPointerDown={() => props.onFocus()}>
     <Suspense>
-      <Show when={comparison()} fallback={<div class="workspace-panel-empty">{comparison.loading ? "Loading changes…" : "No changes to show."}</div>}>{(payload) =>
+      <Show when={comparison()} fallback={<PaneEmpty>{comparison.loading ? "Loading changes…" : "No changes to show."}</PaneEmpty>}>{(payload) =>
         <WorkspaceComparison comparison={payload()} sourceKey={`${props.entry.projectId}:${props.entry.path}:${props.mode}`} viewState={{ layout: "unified", wrap: false, top: 0, left: 0, position: 0 }}
-          headerAction={<><span class="workspace-changes-scope">{props.mode === "staged" ? "Staged" : "Changes"}</span>{actions}</>} headerTabs={props.tabs} headerEnd={props.end} />
+          headerAction={<><FileScope>{props.mode === "staged" ? "Staged" : "Changes"}</FileScope>{actions}</>} headerTabs={props.tabs} headerEnd={props.end} />
       }</Show>
     </Suspense>
-  </section>;
+  </FileChanges>;
 }

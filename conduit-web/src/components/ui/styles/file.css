@@ -1,0 +1,61 @@
+/* A file's header and status bar: see components/ui/file.tsx. */
+.ui-file { position: relative; display: flex; min-width: 0; min-height: 0; flex: 1; flex-direction: column; overflow: hidden; }
+.ui-file:focus { outline: none; }
+
+.ui-file-head { position: relative; display: flex; min-height: calc(2.25 * var(--u-space)); flex: none; flex-wrap: nowrap; align-items: center; gap: var(--space-md); padding: var(--space-xs) var(--space-sm) var(--space-xs) var(--space-lg); border-bottom: var(--hairline) solid var(--border); background: color-mix(in oklch, var(--background), var(--tint) 24%); font-size: var(--text-caption); }
+.ui-file[data-focused] > .ui-file-head { background: color-mix(in oklch, var(--background), var(--tint) 48%); }
+.ui-file-head > .ui-tabs-row { flex: 1 1 auto; min-width: 0; }
+.ui-file-name { display: flex; min-width: 0; flex: 1; align-items: center; gap: var(--space-sm); }
+.ui-file-name > svg, .ui-file-name > img { width: var(--icon-sm); height: var(--icon-sm); flex: none; }
+.ui-file-name > span { overflow: hidden; color: var(--foreground); font-size: var(--text-caption); text-overflow: ellipsis; white-space: nowrap; }
+.ui-file-head small { flex: none; color: var(--muted-foreground); font-size: var(--text-label); white-space: nowrap; }
+.ui-file-git { flex: none; color: var(--workspace-git-modified, #d19a66); font: var(--text-caption) var(--font-data); }
+.ui-file-git:is([data-status="U"], [data-status="A"]) { color: var(--workspace-git-added, #98c379); }
+.ui-file-git[data-status="D"] { color: var(--destructive); }
+.ui-file-dirty { width: var(--space-sm); height: var(--space-sm); flex: none; border-radius: var(--radius-round); background: var(--warn); box-shadow: 0 0 0 var(--space-2xs) color-mix(in oklch, var(--warn), transparent 84%); opacity: 0; transform: scale(.7); transition: opacity 120ms ease, transform 160ms ease; }
+.ui-file-dirty[data-dirty] { opacity: .9; transform: scale(1); }
+
+/* The controls keep one order whatever the markup: save, actions, tools, the ⋯, close, the pane's own. */
+.ui-file-head > .ui-file-button { order: 2; }
+.ui-file-actions, .ui-file-tools { display: flex; flex: none; align-items: center; gap: var(--space-2xs); }
+.ui-file-actions { order: 4; }
+.ui-file-tools { order: 5; }
+.ui-file-suffix { display: contents; }
+.ui-file-head > .ui-file-button[data-more] { order: 9; }
+.ui-file-head > .ui-file-button[data-close] { order: 10; }
+.ui-file-head > .ui-pane-actions { order: 11; }
+
+.ui-file-button { display: inline-flex; min-width: var(--control-xs); height: var(--control-xs); flex: none; align-items: center; justify-content: center; gap: var(--space-xs); border: 0; border-radius: var(--radius-control); background: transparent; padding: 0; color: var(--muted-foreground); font: inherit; }
+.ui-file-button[data-wide] { padding-inline: var(--space-sm); }
+.ui-file-button:is(:hover, :focus-visible, [aria-pressed="true"], [data-expanded]) { outline: none; background: var(--tint); color: var(--foreground); }
+.ui-file-button:focus-visible { box-shadow: inset 0 0 0 var(--hairline) var(--ring); }
+.ui-file-button:disabled { cursor: not-allowed; opacity: var(--opacity-disabled); }
+.ui-file-button > svg { width: var(--icon-sm); height: var(--icon-sm); flex: none; }
+
+/* Fitting: the ⋯ appears once actions fold; "tight" drops the actions to it, "bare" the tools too. */
+.ui-file-head .ui-file-button[data-more] { display: none; }
+.ui-file-head [data-folded] { display: none; }
+.ui-file-head:is([data-compact="tight"], [data-compact="bare"]) :is(.ui-file-actions, .ui-file-suffix) { display: none; }
+.ui-file-head:is([data-compact="tight"], [data-compact="bare"]) .ui-file-button[data-more] { display: inline-flex; }
+.ui-file-head[data-compact="bare"] .ui-file-tools { display: none; }
+/* In a pane's viewer the ⋯ is always there, and what it holds is not repeated beside it. */
+.ui-file-viewer .ui-file-head .ui-file-button[data-more] { display: inline-flex; }
+.ui-file-viewer .ui-file-head .ui-file-button[data-in-menu] { display: none; }
+
+.ui-file-viewer { position: relative; display: flex; min-height: 0; flex: 1; flex-direction: row; }
+.ui-file-viewer > .ui-file { flex: var(--side-a, 1) 1 0; }
+.ui-file-viewer > .ui-file + .ui-file { flex-grow: var(--side-b, 1); border-left: var(--hairline) solid var(--border); }
+
+.ui-status-bar { display: flex; min-height: calc(2.25 * var(--u-space)); flex: none; align-items: center; gap: var(--space-2xs); overflow: hidden; border-top: var(--hairline) solid var(--border); background: color-mix(in oklch, var(--background), black 3%); padding: var(--space-xs) var(--space-sm); color: var(--muted-foreground); font-size: var(--text-caption); }
+.ui-status-group { display: flex; min-width: 0; height: var(--control-xs); flex: none; align-items: center; gap: var(--space-2xs); overflow-x: auto; scrollbar-width: none; }
+.ui-status-group::-webkit-scrollbar { display: none; }
+.ui-status-group[data-details] { flex: 1; justify-content: flex-end; }
+.ui-status-text { flex: none; padding-inline: var(--space-sm); white-space: nowrap; }
+.ui-status-bar .ui-file-button { padding-inline: var(--space-sm); }
+.ui-status-picker { display: flex; max-width: calc(7.5 * var(--u-space)); height: var(--control-xs); flex: none; align-items: center; gap: var(--space-xs); border: 0; border-radius: var(--radius-control); background: transparent; padding-inline: var(--space-sm); color: var(--muted-foreground); font: inherit; white-space: nowrap; }
+.ui-status-picker > span { overflow: hidden; text-overflow: ellipsis; }
+.ui-status-picker > svg { width: var(--icon-xs); height: var(--icon-xs); flex: none; }
+.ui-status-picker:is(:hover:not(:disabled), :focus-visible, [data-expanded]) { outline: none; background: var(--tint); color: var(--foreground); }
+.ui-status-picker[data-strong] { color: var(--foreground); font-weight: var(--weight-strong); }
+.ui-status-picker:disabled { cursor: default; }
+.ui-status-picker[data-strong]:disabled { color: var(--muted-foreground); }

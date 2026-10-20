@@ -1,9 +1,10 @@
+import { FileButton } from "@/components/ui/file";
+import { DiffShell, DiffRail, DiffBody, SplitEdge } from "@/components/ui/editor";
 import { PaneEmpty } from "@/components/ui/pane";
 import { createSignal, lazy, onCleanup, Show, Suspense, type JSX } from "solid-js";
 import { PanelLeftOpenIcon, PencilIcon } from "lucide-solid";
 import type { ComparisonPayload, ComparisonViewState } from "./workspace-comparison";
 import { WorkspaceReviewNavigator, type WorkspaceReviewFile } from "./workspace-review";
-import { WorkbenchButton } from "./workspace-workbench";
 import { readSetting, WORKSPACE_PANEL_GLOBAL_SCOPE, writeSetting } from "./workspace-panel-storage";
 import { addReviewComment, reviewComments } from "../chat/review-comments";
 import type { AnnotationSelection } from "./workspace-annotate";
@@ -63,13 +64,16 @@ export function WorkspaceDiffView(props: WorkspaceDiffViewProps) {
       note,
     });
   };
+  const [resizing, setResizing] = createSignal(false);
   let stopResize: (() => void) | undefined;
   const startResize = (event: PointerEvent) => {
     event.preventDefault();
+    setResizing(true);
     const startX = event.clientX;
     const startWidth = navigatorWidth();
     const move = (moveEvent: PointerEvent) => saveNavigatorWidth(startWidth + moveEvent.clientX - startX);
     stopResize = () => {
+      setResizing(false);
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", stopResize!);
       window.removeEventListener("pointercancel", stopResize!);
@@ -81,8 +85,8 @@ export function WorkspaceDiffView(props: WorkspaceDiffViewProps) {
     window.addEventListener("pointercancel", stopResize, { once: true });
   };
   onCleanup(() => stopResize?.());
-  return <div class="workspace-diff-shell" data-navigator-collapsed={navigatorCollapsed()} style={{ "--workspace-diff-navigator-width": `${navigatorWidth()}px` }}>
-    <Show when={!navigatorCollapsed()} fallback={<div class="workspace-diff-navigator-rail"><WorkbenchButton type="button" aria-label="Show changed files" title="Show changed files" onClick={() => setCollapsed(false)}><PanelLeftOpenIcon /></WorkbenchButton></div>}>
+  return <DiffShell collapsed={navigatorCollapsed()} width={navigatorWidth()}>
+    <Show when={!navigatorCollapsed()} fallback={<DiffRail><FileButton type="button" aria-label="Show changed files" title="Show changed files" onClick={() => setCollapsed(false)}><PanelLeftOpenIcon /></FileButton></DiffRail>}>
       <WorkspaceReviewNavigator
       title={props.title}
       files={props.files}
@@ -91,19 +95,19 @@ export function WorkspaceDiffView(props: WorkspaceDiffViewProps) {
       onSelect={props.onSelect}
       onCollapse={() => setCollapsed(true)}
       />
-      <div class="workspace-diff-navigator-resize" role="separator" aria-label="Resize changed files" aria-orientation="vertical" aria-valuemin={MIN_NAVIGATOR_WIDTH} aria-valuemax={MAX_NAVIGATOR_WIDTH} aria-valuenow={navigatorWidth()} tabIndex={0} onPointerDown={startResize} onKeyDown={(event) => {
+      <SplitEdge resizing={resizing()} role="separator" aria-label="Resize changed files" aria-orientation="vertical" aria-valuemin={MIN_NAVIGATOR_WIDTH} aria-valuemax={MAX_NAVIGATOR_WIDTH} aria-valuenow={navigatorWidth()} tabIndex={0} onPointerDown={startResize} onKeyDown={(event) => {
         if (event.key === "ArrowLeft") saveNavigatorWidth(navigatorWidth() - 8);
         else if (event.key === "ArrowRight") saveNavigatorWidth(navigatorWidth() + 8);
       }} />
     </Show>
-    <div class="workspace-review-comparison">
+    <DiffBody>
       <Show when={props.comparison} fallback={<PaneEmpty>{props.loading ? "Loading changes…" : props.files.length ? "Select a changed file." : props.error || props.empty}</PaneEmpty>}>
         {(comparison) => <Suspense fallback={<PaneEmpty>Loading comparison…</PaneEmpty>}>
           <WorkspaceComparison
             comparison={comparison()}
             sourceKey={props.sourceKey}
             viewState={props.viewState}
-            headerAction={<WorkbenchButton type="button" aria-label="Open working file" title="Open working file" onClick={() => props.onOpenWorkingFile(comparison().path)}><PencilIcon /></WorkbenchButton>}
+            headerAction={<FileButton type="button" aria-label="Open working file" title="Open working file" onClick={() => props.onOpenWorkingFile(comparison().path)}><PencilIcon /></FileButton>}
             comparisonSource={props.comparisonSource}
             commentHighlights={reviewComments(props.annotationChatId ?? "")
               .filter((comment) => comment.path === comparison().path && comment.scope === comparison().scope)
@@ -115,6 +119,6 @@ export function WorkspaceDiffView(props: WorkspaceDiffViewProps) {
           />
         </Suspense>}
       </Show>
-    </div>
-  </div>;
+    </DiffBody>
+  </DiffShell>;
 }
