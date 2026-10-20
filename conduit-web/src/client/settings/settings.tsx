@@ -25,7 +25,6 @@ import {
   type TranscriptWidthMode,
 } from "../chat/transcript-appearance";
 import type { CodeBlockCollapseMode } from "../chat/code-block";
-import "./voice-settings.css";
 
 type CoreProps = Parameters<typeof SettingsCore>[0];
 type SettingsProps = Omit<CoreProps,

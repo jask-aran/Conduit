@@ -9,7 +9,7 @@ import { WorkspaceDiffView } from "./workspace-diff-view";
 import { createWorkspaceReview, diffScopes, type DiffScope } from "./workspace-review-source";
 import { WorkbenchButton } from "./workspace-workbench";
 import type { ChatMode, GitChangedFile, HistoryNode, HistoryTree, WorkspaceSettings } from "./workspace-types";
-import { Segmented } from "../settings/settings-controls";
+import { Segmented } from "@/components/ui/controls";
 import "./workspace.css";
 
 const chatScopes = diffScopes.filter((scope) => scope.value === "chat" || scope.value === "turn");
@@ -330,7 +330,7 @@ export function ChatModes(props: { control: ChatReview; historyAvailable: boolea
     if (next === "history") { props.control.selectMode("history"); void props.control.loadHistory(); }
     else props.control.showAgentChanges();
   };
-  return <Segmented label="Chat review" value={props.control.mode()} onChange={choose} options={[
+  return <Segmented arrows label="Chat review" value={props.control.mode()} onChange={choose} options={[
     ...(props.historyAvailable ? [{ value: "history" as const, label: "History", icon: <HistoryIcon />, title: "History" }] : []),
     { value: "changes" as const, label: "Agent changes", icon: <FileDiffIcon />, title: "Agent changes" },
   ]} />;

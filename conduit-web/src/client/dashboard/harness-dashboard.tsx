@@ -10,7 +10,7 @@ import { HarnessMark, harnessStatusLabel, ThreadHarnessMark } from "../harness-b
 import { isConduitManagedProject } from "../navigation/sidebar-preferences";
 import { activityDetail, runtimeActivity, RuntimeIndicator } from "../navigation/runtime-indicator";
 import { activityLabel } from "../../activity.js";
-import { Segmented } from "../settings/settings-controls";
+import { Segmented } from "@/components/ui/controls";
 import { WorkspaceGlyph } from "../project/workspace-appearance";
 import { notifyModelFallback } from "../state/model-settings";
 import type { RuntimeStore } from "../state/runtime";
@@ -297,9 +297,9 @@ export function HarnessDashboard(props: {
   </Show>;
   const threadsGroup = () => <SplitGroup id="harness-threads" order="list" busy={loading()}
     heading={<div class="split-heading-switches"><Show when={discovers()} fallback={<h2 id="harness-threads">Chats<small>{kept().length}</small></h2>}>
-      <Segmented label="Threads" value={side()} onChange={chooseSide} options={[
-        { value: "conduit", label: "In Conduit", detail: <small>{kept().length}</small> },
-        { value: "outside", label: "Not in Conduit", detail: <Show when={!loading()}><small>{outside().length}</small></Show> },
+      <Segmented arrows label="Threads" value={side()} onChange={chooseSide} options={[
+        { value: "conduit", label: "In Conduit", count: kept().length },
+        { value: "outside", label: "Not in Conduit", count: loading() ? undefined : outside().length },
       ]} />
     </Show></div>}
     actions={<FilterBar choices={[sortChoice(chatSort(), saveChatSort)]}>{search()}</FilterBar>}

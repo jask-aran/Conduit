@@ -43,19 +43,16 @@ export function AboutSettingsFooter() {
     || (isStandaloneBrowser() ? "Installed to the home screen" : "Browser tab");
 
   const row = (label: string, value: string, detail?: string) =>
-    <div title={detail ? `${value} · ${detail}` : value}><dt>{label}</dt><dd>{value}</dd></div>;
+    <span title={detail ? `${value} · ${detail}` : value}>{label} {value}</span>;
 
-  return <footer class="settings-rail-about" aria-label="About">
-    <h3>About</h3>
-    <dl>
-      {row("Interface", buildLabel(clientBuild), formatBuiltAt(clientBuild.builtAt))}
-      {row("Running as", runningAs())}
-      <Show when={installedClientKind !== "browser"}>
-        {row(SHELL_LABELS[installedClientKind] || "App shell", shell() || "Not reported")}
-      </Show>
-      <Show when={server() !== "pending"} fallback={row("Server", "Asking…")}>
-        {row("Server", (server() as ServerBuild | null)?.release || "Unreachable")}
-      </Show>
-    </dl>
-  </footer>;
+  return <>
+    {row("Interface", buildLabel(clientBuild), formatBuiltAt(clientBuild.builtAt))}
+    {row("Running as", runningAs())}
+    <Show when={installedClientKind !== "browser"}>
+      {row(SHELL_LABELS[installedClientKind] || "App shell", shell() || "Not reported")}
+    </Show>
+    <Show when={server() !== "pending"} fallback={row("Server", "Asking…")}>
+      {row("Server", (server() as ServerBuild | null)?.release || "Unreachable")}
+    </Show>
+  </>;
 }

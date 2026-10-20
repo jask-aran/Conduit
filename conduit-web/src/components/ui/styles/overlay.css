@@ -43,7 +43,8 @@
 .ui-overlay-title { margin: 0; font-size: var(--text-heading); font-weight: var(--weight-strong); line-height: var(--leading-text); letter-spacing: -0.02em; }
 /* The rail beside a page: the sidebar's NavGroups, washed as a popover's rows are. */
 .ui-overlay-rail { display: flex; width: var(--measure-sm); flex: none; flex-direction: column; gap: var(--space-xs); overflow: auto; border-right: var(--hairline) solid var(--tint); padding: var(--space-2xl) var(--space-lg); }
-.ui-overlay-rail > .ui-overlay-title { margin-bottom: var(--space-md); padding-left: var(--space-md); }
+.ui-overlay-rail > .ui-overlay-page-head { margin-bottom: var(--space-md); }
+.ui-overlay-title:focus { outline: none; }
 .ui-overlay-rail .ui-nav-group + .ui-nav-group { margin-top: var(--space-md); }
 /* The current section is white and bold with no fill; the wash is only the cursor. */
 .ui-overlay .ui-nav-row:is(:hover, :focus-visible) { background: var(--tint); }
@@ -51,7 +52,8 @@
 .ui-overlay[data-entering] { animation: ui-rise var(--duration-gentle) var(--ease-arrive) backwards; }
 .ui-overlay[data-leaving] { animation: ui-drop var(--duration-quick) var(--ease-leave) forwards; pointer-events: none; }
 .ui-overlay .ui-nav-row[aria-current="page"]:not(:hover) { background: transparent; }
-.ui-overlay-rail-foot { margin-top: auto; color: var(--muted-foreground); font-size: var(--text-row); }
+.ui-overlay-rail-foot { display: flex; flex-direction: column; gap: var(--space-2xs); margin-top: auto; padding-left: var(--space-md); color: var(--muted-foreground); font-size: var(--text-row); }
+.ui-overlay-rail-foot > * { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ui-overlay-page { display: flex; min-width: 0; flex: 1; flex-direction: column; overflow: auto; padding: var(--space-2xl) var(--space-4xl) var(--space-4xl); }
 .ui-overlay-page-head { display: flex; align-items: center; gap: var(--space-lg); margin-bottom: var(--space-lg); padding-left: var(--space-md); }
 .ui-setting-group { display: flex; flex-direction: column; gap: var(--hairline); }
@@ -59,7 +61,8 @@
 /* At least a row's height: a finger's on a phone, as every row is there. */
 /* A settings line's height, at least a row's (a finger's on a phone): the setting line and the recorder under it. */
 :root, [data-density] { --line-min: max(var(--control), var(--row-min)); }
-.ui-setting-line { display: flex; min-height: var(--line-min); align-items: center; gap: var(--space-xl); border-radius: var(--radius-control); padding: var(--space-2xs) var(--space-sm) var(--space-2xs) var(--space-md); font-size: var(--text-row); }
+/* A line too narrow for its name and its control (a phone, a line of several) wraps the control under the name, at its own width: neither squeezes. */
+.ui-setting-line { display: flex; min-height: var(--line-min); flex-wrap: wrap; align-items: center; gap: var(--space-2xs) var(--space-xl); border-radius: var(--radius-control); padding: var(--space-2xs) var(--space-sm) var(--space-2xs) var(--space-md); font-size: var(--text-row); }
 /* Focus anywhere in a row is the row's wash. */
 .ui-setting-line:is(:hover, :focus-within) { background: var(--tint); }
 /* The recorder: a second line as tall as a setting line, inset under its label, a dashed --tint line round it. */
@@ -71,18 +74,23 @@
 .ui-keycap.ui-recorder-keys { color: var(--foreground); }
 .ui-recorder-hints { display: inline-flex; align-items: center; gap: var(--space-xs); margin-left: auto; color: var(--muted-foreground); font-size: var(--text-caption); }
 .ui-recorder-hints > .ui-keycap + * { margin-left: 0; }
+.ui-recorder-hints > button { display: inline-flex; align-items: center; gap: var(--space-xs); border: 0; background: none; padding: 0; color: inherit; font: inherit; cursor: pointer; }
+.ui-recorder-hints > button:hover { color: var(--foreground); }
+.ui-recorder-hints > button + .ui-keycap { margin-left: var(--space-md); }
+.ui-live-note { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .ui-recorder-hints > .ui-keycap:not(:first-child) { margin-left: var(--space-md); }
-.ui-setting-line > span:first-child { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ui-setting-line > span:first-child { max-width: 100%; flex: 1 0 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ui-setting-line > span:first-child > small { margin-left: var(--space-md); color: var(--muted-foreground); font-size: inherit; }
 /* Every row's control sits in one column of one width, so they line up. */
-.ui-setting-control { display: inline-flex; width: var(--setting-control-width, var(--measure-md)); max-width: 50%; flex: none; align-items: center; justify-content: flex-end; gap: var(--space-xs); }
-.ui-setting-control > .ui-input:not([data-bare]) { width: 100%; }
-.ui-setting-control > .ui-seg { width: 100%; }
+.ui-setting-control { display: inline-flex; min-width: 0; max-width: 100%; flex: 0 1 auto; margin-left: auto; align-items: center; justify-content: flex-end; gap: var(--space-xs); }
+/* A field takes the control column's width (a select, a switch, a button is its own size), so on a phone a field drops under its name and the rest stay beside theirs. */
+.ui-setting-control > :is(input.ui-input, .ui-seg) { width: var(--setting-control-width, var(--measure-md)); min-width: 0; max-width: 100%; flex: 0 1 auto; }
+.ui-setting-control > .ui-seg { min-width: max-content; }
 /* What a line holds besides a field: a value read, not set; a link out; a note or details under
    it; something at the page's width; waiting. All in the row's voice, muted, on the surface's tint. */
 .ui-setting-value { min-width: 0; overflow: hidden; color: var(--muted-foreground); text-overflow: ellipsis; white-space: nowrap; }
 .ui-setting-value[data-mono] { font: var(--weight-rest) var(--text-caption) var(--font-data); }
-.ui-setting-link { border-radius: var(--radius-control); padding: var(--space-2xs) var(--space-md); color: var(--muted-foreground); text-decoration: none; }
+.ui-setting-link { white-space: nowrap; border-radius: var(--radius-control); padding: var(--space-2xs) var(--space-md); color: var(--muted-foreground); text-decoration: none; }
 .ui-setting-link:is(:hover, :focus-visible) { outline: none; color: var(--foreground); }
 .ui-setting-note { margin: 0; padding: 0 var(--space-md) var(--space-md); color: var(--muted-foreground); font-size: var(--text-caption); }
 .ui-setting-note[data-tone="error"] { color: var(--destructive); }
@@ -97,8 +105,9 @@
 .ui-setting-wide > .ui-textarea { min-height: calc(4 * var(--control-xs)); font-size: var(--text-row); line-height: var(--leading-text); }
 .ui-setting-wide > .ui-textarea:focus { border-color: color-mix(in oklch, var(--foreground), transparent var(--tone-line)); }
 .ui-setting-loading { display: flex; align-items: center; gap: var(--row-gap); padding: var(--space-md); color: var(--muted-foreground); font-size: var(--text-row); }
-.ui-overlay-page-head > .ui-overlay-title { flex: 1; }
-.ui-overlay-status { color: var(--muted-foreground); font-size: var(--text-row); }
+/* The title gives way (an ellipsis) before the status or the close does: neither wraps. */
+.ui-overlay-page-head > .ui-overlay-title { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ui-overlay-status { display: inline-flex; flex: none; white-space: nowrap; align-items: center; gap: var(--space-sm); color: var(--muted-foreground); font-size: var(--text-row); }
 .ui-overlay-status[data-failed] { color: var(--destructive); }
 /* On a phone an overlay is full screen, nothing round it dimmed: one column, the split's aside
    and the hints gone, settings' rail a screen of its own. */
@@ -107,6 +116,11 @@
 [data-density="phone"] .ui-overlay-split { grid-template-columns: minmax(0, 1fr); }
 [data-density="phone"] .ui-overlay-aside { display: none; }
 [data-density="phone"] .ui-overlay-rail { width: 100%; border-right: 0; }
+/* A phone's settings run nearly edge to edge, the fields a narrower column, so a name and its control share a line on any reasonable phone; wrapping is only the fallback. */
+[data-density="phone"] :is(.ui-overlay-rail, .ui-overlay-page) { padding: var(--space-lg) var(--space-md); }
+[data-density="phone"] .ui-setting-line { column-gap: var(--space-lg); }
+[data-density="phone"] .ui-setting-control { --setting-control-width: var(--measure-xs); min-width: min-content; flex: 1 1 0; }
+[data-density="phone"] .ui-setting-control > input.ui-input { width: 0; min-width: calc(var(--measure-xs) / 3); flex: 0 1 var(--measure-xs); }
 [data-density="phone"] .ui-overlay-hints { display: none; }
 [data-density="phone"] .ui-overlay-actions { display: flex; flex: none; gap: var(--space-md); border-top: var(--hairline) solid var(--tint); padding: var(--space-md); }
 [data-density="phone"] .ui-overlay-actions > .ui-button { min-height: var(--control-lg); flex: 1; }
@@ -117,6 +131,10 @@
   .ui-scrim .ui-overlay-split { grid-template-columns: minmax(0, 1fr); }
   .ui-scrim :is(.ui-overlay-aside, .ui-overlay-hints) { display: none; }
   .ui-scrim .ui-overlay-rail { width: 100%; border-right: 0; }
+  .ui-scrim :is(.ui-overlay-rail, .ui-overlay-page) { padding: var(--space-lg) var(--space-md); }
+  .ui-scrim .ui-setting-line { column-gap: var(--space-lg); }
+  .ui-scrim .ui-setting-control { --setting-control-width: var(--measure-xs); min-width: min-content; flex: 1 1 0; }
+  .ui-scrim .ui-setting-control > input.ui-input { width: 0; min-width: calc(var(--measure-xs) / 3); flex: 0 1 var(--measure-xs); }
   .ui-scrim .ui-overlay-actions { display: flex; flex: none; gap: var(--space-md); border-top: var(--hairline) solid var(--tint); padding: var(--space-md); }
   .ui-scrim .ui-overlay-actions > .ui-button { min-height: var(--control-lg); flex: 1; }
 }

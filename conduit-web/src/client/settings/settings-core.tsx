@@ -1,13 +1,11 @@
 import { createDecisionScope } from "@/components/decision-dialog";
 import { createEffect, createMemo, createSignal, For, lazy, on, onCleanup, onMount, Show } from "solid-js";
-import * as KDialog from "@kobalte/core/dialog";
 import { ActivityIcon, BotIcon, ChevronLeftIcon, ChevronRightIcon, FileTextIcon, XIcon, KeyboardIcon, Mic2Icon, MonitorIcon, SearchIcon } from "lucide-solid";
 import { CableIcon, CloudIcon, CpuIcon, HandIcon, MicOffIcon, PlayIcon, RefreshCwIcon, RepeatIcon, RotateCcwIcon, SquareIcon } from "lucide-solid";
 import { AboutSettingsFooter } from "./about-settings";
 import { ServersSettingsTile } from "./servers-settings";
 import { DesktopSettingsTile } from "./desktop-settings";
 import { toast } from "@/components/notifications";
-import { Button, Field, FieldLabel, Input, Spinner } from "@/components/primitives";
 import { api } from "../api/client";
 import { MARKDOWN_RENDERER_OPTIONS, type MarkdownRendererId } from "../chat/markdown-settings";
 import { formatMicrophoneError, hasAudioSignal, rematchInputDevice, isUnavailableAudioInputError, listAudioInputDevices, MAX_AUDIO_INPUT_TEST_DURATION_MS, revokeAudioInputRecording, startAudioInputTest as beginAudioInputTest, type AudioInputDevice, type AudioInputTestResult, type AudioInputTestSession, } from "../chat/voice-audio";
@@ -41,10 +39,12 @@ import {
 } from "../chat/transcript-appearance";
 import type { CodeBlockCollapseMode } from "../chat/code-block";
 import { ShortcutsSettings } from "./shortcuts-settings";
-import { Segmented, Select, Switch } from "./settings-controls";
+import { Button, Input, TextArea, Spinner, Segmented, Switch } from "@/components/ui/controls";
+import { Select } from "@/components/menus";
 import { combineSaveStates, createAutosave, type SaveState } from "./autosave";
-import { SaveStatus } from "./save-status";
-import { FrostOverlay } from "@/components/frost";
+import { OverlayDialog } from "@/components/dialog";
+import { NavGroup, NavRow, OverlayPage, OverlayRail, SettingGroup, SettingLine, SettingValue, SettingLink, SettingNote, SettingDetails, SettingWide, SettingLoading } from "@/components/ui";
+import { isMobileLayout } from "../navigation/mobile-layout";
 import { uiPreferenceSaves } from "../preferences/ui-preferences";
 
 const sectionGroups = [
@@ -242,20 +242,6 @@ export function Settings(props: {
   const [transcriptFontChoice, setTranscriptFontChoice] = createSignal(transcriptFont());
   const [terminalFontChoice, setTerminalFontChoice] = createSignal(terminalFont());
   const [fadeMs, setFadeMs] = createSignal(streamFadeMs());
-  // On a phone, a field holding a text input or model picker stacks its
-  // control under the label. Marked here rather than with
-  // `[data-slot="field"]:has(> input[type="text"])`: a :has() on an attribute
-  // or tag re-checked ancestors on every DOM change in the app, open or not.
-  const STACKED = ':scope > input:is([type="text"], [type="url"], [type="password"], [type="search"]), .model-trigger';
-  const markStackedFields = (content: HTMLElement) => {
-    const mark = () => {
-      for (const field of content.querySelectorAll('[data-slot="field"]')) field.toggleAttribute("data-stack", Boolean(field.querySelector(STACKED)));
-    };
-    const observer = new MutationObserver(mark);
-    observer.observe(content, { childList: true, subtree: true });
-    queueMicrotask(mark);
-    onCleanup(() => observer.disconnect());
-  };
   /*
    * On a phone, Settings is two screens rather than a rail beside a pane.
    *
@@ -265,15 +251,17 @@ export function Settings(props: {
    * so they take turns: the list, then the section, with a way back.
    */
   const [browsingSections, setBrowsingSections] = createSignal(true);
-  const [narrow, setNarrow] = createSignal(false);
-  if (typeof window !== "undefined" && window.matchMedia) {
-    const query = window.matchMedia("(max-width: 760px)");
-    const sync = () => setNarrow(query.matches);
-    sync();
-    query.addEventListener("change", sync);
-    onCleanup(() => query.removeEventListener("change", sync));
-  }
-  const openSection = (id: Section) => { setSection(id); setBrowsingSections(false); };
+  const narrow = isMobileLayout;
+  // On a phone the rail and a section take turns, so focus follows: into the section's title, and back to its row.
+  const openSection = (id: Section) => {
+    setSection(id);
+    setBrowsingSections(false);
+    if (narrow()) queueMicrotask(() => document.querySelector<HTMLElement>('[role="dialog"][aria-label="Settings"] main h2')?.focus());
+  };
+  const backToSections = () => {
+    setBrowsingSections(true);
+    queueMicrotask(() => document.querySelector<HTMLElement>('[role="dialog"][aria-label="Settings"] [role="tab"][aria-selected="true"]')?.focus());
+  };
   /** The list is a screen of its own only when there is no room for both. */
   const showingIndex = () => narrow() && browsingSections();
   const [runtime, setRuntime] = createSignal<RuntimeSettings | null>(null);
@@ -417,7 +405,7 @@ export function Settings(props: {
   const dismissEscape = (event: KeyboardEvent) => {
     if (event.key !== "Escape") return;
     const target = event.target instanceof Element ? event.target : null;
-    if (target && !target.closest(".settings-dialog")) return;
+    if (target && !target.closest('[role="dialog"][aria-label="Settings"]')) return;
     if (props.shortcuts.isContextActive("shortcut-recorder")) {
       event.preventDefault();
       return;
@@ -436,7 +424,8 @@ export function Settings(props: {
     const index = event.key === "Home" ? 0
       : event.key === "End" ? tabs.length - 1
         : (current + (event.key === "ArrowDown" ? 1 : -1) + tabs.length) % tabs.length;
-    tabs[index]?.click();
+    // Beside its page the rail switches sections as it moves; as a phone's screen of its own it is a list to choose from.
+    if (!narrow()) tabs[index]?.click();
     tabs[index]?.focus();
   };
 
@@ -1097,189 +1086,172 @@ export function Settings(props: {
     return entry ? { state: combineSaveStates(entry.saves.map((save) => save.state())), retry: () => entry.saves.forEach((save) => save.retry()) } : null;
   };
 
-  return <FrostOverlay
+  const close = () => props.onOpenChange(false);
+  const status = () => {
+    const kind = saveState()?.state.kind;
+    return kind === "saving" ? { status: "Saving", busy: true } : kind === "saved" ? { status: "Saved" }
+      : kind === "failed" ? { status: "Not saved", failed: true, why: (saveState()!.state as { message: string }).message, onRetry: saveState()!.retry } : {};
+  };
+  return <OverlayDialog
     open={props.open}
     onOpenChange={props.onOpenChange}
-    class="settings-dialog"
-    cardClass="settings-shell"
-    cardAttrs={{ "data-view": showingIndex() ? "index" : "detail" }}
+    label="Settings"
+    placement="center"
+    layout="rail"
+    style={narrow() ? undefined : { "--overlay-width": "calc(70.3125 * var(--u-space))", "--overlay-height": "calc(43.75 * var(--u-space))" }}
     onEscapeKeyDown={dismissEscape}
     onCloseAutoFocus={(event) => { event.preventDefault(); if (returnFocus?.isConnected) returnFocus.focus(); returnFocus = null; }}
   >
-        <div class="settings-rail">
-          <div class="settings-rail-header">
-            <KDialog.Title>Settings</KDialog.Title>
-            <Button variant="ghost" size="icon-sm" class="settings-rail-close" aria-label="Close" onClick={() => props.onOpenChange(false)}><XIcon aria-hidden="true" /></Button>
-          </div>
-          <nav data-slot="tabs-list" role="tablist" aria-label="Settings sections" aria-orientation="vertical">
-            <For each={sectionGroups}>{(group) => <section role="presentation" class="settings-nav-group">
-              <h3 role="presentation">{group.label}</h3>
-              <For each={group.sections}>{(item) => <div role="presentation" class="settings-nav-item"><button role="tab" tabIndex={section() === item.id ? 0 : -1} aria-selected={section() === item.id} onClick={() => openSection(item.id)} onKeyDown={navigateSettingsTabs}><item.icon aria-hidden="true" /><span>{item.label}</span><ChevronRightIcon class="settings-nav-chevron" aria-hidden="true" /></button></div>}</For>
-            </section>}</For>
-          </nav>
-          <AboutSettingsFooter />
-        </div>
-        <main ref={markStackedFields} class="settings-content" data-section={section()}>
-          <header>
-            <Show when={narrow()}>
-              <Button variant="ghost" size="icon-sm" class="settings-back" aria-label="All settings" onClick={() => setBrowsingSections(true)}><ChevronLeftIcon aria-hidden="true" /></Button>
-            </Show>
-            <h2>{label(section())}</h2>
-            <SaveStatus status={saveState()} />
-            <Button variant="ghost" size="icon-sm" class="settings-close" aria-label="Close" onClick={() => props.onOpenChange(false)}><XIcon aria-hidden="true" /></Button>
-          </header>
+    <Show when={!narrow() || showingIndex()}>
+      <OverlayRail title="Settings" role="tablist" aria-label="Settings sections" aria-orientation="vertical" foot={<AboutSettingsFooter />} onClose={narrow() ? close : undefined}>
+        <For each={sectionGroups}>{(group) => <NavGroup label={group.label}>
+          <For each={group.sections}>{(item) => <NavRow role="tab" tabIndex={section() === item.id ? 0 : -1} aria-selected={section() === item.id} current={!narrow() && section() === item.id}
+            icon={<item.icon />} end={narrow() ? <ChevronRightIcon /> : undefined} onClick={() => openSection(item.id)} onKeyDown={navigateSettingsTabs}>{item.label}</NavRow>}</For>
+        </NavGroup>}</For>
+      </OverlayRail>
+    </Show>
+    <Show when={!showingIndex()}>
+      <OverlayPage title={label(section())} {...status()} onBack={narrow() ? backToSections : undefined} onClose={close}>
           <Show when={section() === "prompts"}>
-            <Show when={promptStatus() === "ready"} fallback={<Show when={promptStatus() === "error"} fallback={<div class="settings-loading"><Spinner /><span>Loading prompts…</span></div>}><div class="settings-error" role="alert">{promptError()}</div></Show>}>
-              <div class="settings-list settings-prompts">
-                <section class="settings-group" aria-label="System prompt">
-                  <h3>System prompt</h3>
-                  <label class="settings-line" for="prompt-selector" title="Changes apply when the next runtime or naming request starts."><span>Prompt<em>{prompts().find((item) => item.id === promptId())?.modified ? "modified" : "default"}</em></span>
-                    <span class="settings-line-control">
-                      <Select id="prompt-selector" value={promptId()} onChange={(event) => choosePrompt(event.currentTarget.value)}>
+            <Show when={promptStatus() === "ready"} fallback={<Show when={promptStatus() === "error"} fallback={<SettingLoading>Loading prompts…</SettingLoading>}><SettingNote tone="error">{promptError()}</SettingNote></Show>}>
+              <>
+                <SettingGroup title="System prompt">
+                  <SettingLine plain label="Prompt" state={<>{prompts().find((item) => item.id === promptId())?.modified ? "modified" : "default"}</>} title="Changes apply when the next runtime or naming request starts.">
+                      <Select id="prompt-selector" aria-label="Prompt" value={promptId()} onChange={(event) => choosePrompt(event.currentTarget.value)}>
                         <For each={prompts()}>{(prompt) => <option value={prompt.id} selected={prompt.id === promptId()}>{prompt.label}{prompt.kind === "service" ? " · service" : ""}</option>}</For>
                       </Select>
                       <Button variant="ghost" size="icon-sm" aria-label="Reset to default" title="Reset to default" disabled={promptSaving() || (!prompts().find((item) => item.id === promptId())?.modified && promptDraft() === promptBaseline())} onClick={() => void resetPrompt()}><RotateCcwIcon /></Button>
-                    </span>
-                  </label>
-                  <Show when={!promptDraft().trim()}><p class="settings-line-note" role="alert">A prompt cannot be empty; it is not saved until it has text.</p></Show>
-                  <Show when={promptError() || promptStatus() === "error"}><p class="settings-line-note" role="alert">{promptError()}</p></Show>
-                  <textarea class="settings-prompt-text" aria-label="System prompt" spellcheck={false} value={promptDraft()} onInput={(event) => editPrompt(event.currentTarget.value)} />
-                </section>
-              </div>
+                  </SettingLine>
+                  <Show when={!promptDraft().trim()}><SettingNote tone="error">A prompt cannot be empty; it is not saved until it has text.</SettingNote></Show>
+                  <Show when={promptError() || promptStatus() === "error"}><SettingNote tone="error">{promptError()}</SettingNote></Show>
+                  <SettingWide><TextArea aria-label="System prompt" spellcheck={false} value={promptDraft()} onInput={(event) => editPrompt(event.currentTarget.value)} /></SettingWide>
+                </SettingGroup>
+              </>
             </Show>
           </Show>
           <Show when={section() === "ui"}>
-            <div class="settings-list">
-              <section class="settings-group" aria-label="Interface">
-                <h3>Interface</h3>
-                  <label class="settings-line" for="interface-scale"><span>Scale</span>
+            <>
+              <SettingGroup title="Interface">
+                  <SettingLine label="Scale">
                     <Select id="interface-scale" aria-label="Interface scale" value={props.interfaceScale} onChange={(event) => props.onInterfaceScaleChange(parseUiScale(event.currentTarget.value))}>
                       <For each={UI_SCALE_OPTIONS}>{(scale) => <option value={scale}>{Math.round(scale * 100)}%</option>}</For>
                     </Select>
-                  </label>
-                  <label class="settings-line" for="transcript-font"><span>Transcript font</span>
+                  </SettingLine>
+                  <SettingLine label="Transcript font">
                     <Select id="transcript-font" aria-label="Transcript font" value={transcriptFontChoice()} onChange={(event) => setTranscriptFontChoice(saveTranscriptFont(event.currentTarget.value as TranscriptFont))}>
                       <For each={TRANSCRIPT_FONT_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
                     </Select>
-                  </label>
-                  <label class="settings-line" for="terminal-font"><span>Terminal font</span>
+                  </SettingLine>
+                  <SettingLine label="Terminal font">
                     <Select id="terminal-font" aria-label="Terminal font" value={terminalFontChoice()} onChange={(event) => setTerminalFontChoice(saveTerminalFont(event.currentTarget.value as TerminalFont))}>
                       <For each={TERMINAL_FONT_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
                     </Select>
-                  </label>
-                  <label class="settings-line" for="sidebar-chat-limit"><span>Sidebar chats</span>
+                  </SettingLine>
+                  <SettingLine label="Sidebar chats">
                     <Input id="sidebar-chat-limit" type="number" min={MIN_SIDEBAR_CHAT_LIMIT} max={MAX_SIDEBAR_CHAT_LIMIT} step="1" value={props.sidebarChatLimit} onChange={(event) => props.onSidebarChatLimitChange(Number(event.currentTarget.value))} onBlur={(event) => props.onSidebarChatLimitChange(Number(event.currentTarget.value))} />
-                  </label>
-                  <label class="settings-line" for="tab-frost"><span>Tab row</span>
+                  </SettingLine>
+                  <SettingLine label="Tab row">
                     <Switch id="tab-frost" label="Frosted tab row" checked={frosted()} onChange={(on) => setFrosted(saveTabFrost(on))} />
-                  </label>
-                  <label class="settings-line" for="markdown-renderer"><span>Markdown</span>
+                  </SettingLine>
+                  <SettingLine label="Markdown">
                     <Select id="markdown-renderer" aria-label="Markdown renderer" title={MARKDOWN_RENDERER_OPTIONS.find((option) => option.value === props.markdownRenderer)?.description} value={props.markdownRenderer} onChange={(event) => props.onMarkdownRendererChange(event.currentTarget.value as MarkdownRendererId)}>
                       <For each={MARKDOWN_RENDERER_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
                     </Select>
-                  </label>
+                  </SettingLine>
                   <Show when={props.markdownRenderer === "incremark"}>
-                    <label class="settings-line" for="stream-fade"><span>Word fade</span>
+                    <SettingLine label="Word fade">
                       <Select id="stream-fade" aria-label="Word fade time" value={fadeMs()} onChange={(event) => setFadeMs(saveStreamFade(Number(event.currentTarget.value)))}>
                         <For each={STREAM_FADE_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
                       </Select>
-                    </label>
-                    <label class="settings-line" for="stream-math-fade"><span>Fade formulas in when complete</span>
+                    </SettingLine>
+                    <SettingLine label="Fade formulas in when complete">
                       <Switch id="stream-math-fade" label="Fade formulas in when complete" checked={streamMathFade()} onChange={saveStreamMathFade} />
-                    </label>
+                    </SettingLine>
                   </Show>
-                  <label class="settings-line" for="meteor-field"><span>Meteor field</span>
+                  <SettingLine label="Meteor field">
                     <Switch id="meteor-field" label="Ambient meteor field" checked={props.meteorField} onChange={props.onMeteorFieldChange} />
-                  </label>
-              </section>
+                  </SettingLine>
+              </SettingGroup>
               <DesktopSettingsTile />
-              <section class="settings-group" aria-label="Reading">
-                <h3>Reading</h3>
-                  <label class="settings-line" for="transcript-width"><span>Transcript width</span>
+              <SettingGroup title="Reading">
+                  <SettingLine label="Transcript width">
                     <Select id="transcript-width" aria-label="Transcript width" value={props.transcriptWidth} onChange={(event) => props.onTranscriptWidthChange(event.currentTarget.value as TranscriptWidthMode)}>
                       <For each={TRANSCRIPT_WIDTH_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
                     </Select>
-                  </label>
-                  <label class="settings-line" for="transcript-wide-blocks"><span>Wide blocks</span>
+                  </SettingLine>
+                  <SettingLine label="Wide blocks">
                     <Select id="transcript-wide-blocks" aria-label="Wide blocks" value={props.transcriptWideBlocks} onChange={(event) => props.onTranscriptWideBlocksChange(event.currentTarget.value as TranscriptWideBlocksMode)}>
                       <For each={TRANSCRIPT_WIDE_BLOCKS_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
                     </Select>
-                  </label>
-                  <label class="settings-line" for="code-block-width"><span>Code width</span>
+                  </SettingLine>
+                  <SettingLine label="Code width">
                     <Select id="code-block-width" aria-label="Code block width" value={props.codeBlockWidth} onChange={(event) => props.onCodeBlockWidthChange(event.currentTarget.value as CodeBlockWidthMode)}>
                       <For each={CODE_BLOCK_WIDTH_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
                     </Select>
-                  </label>
-                  <label class="settings-line" for="panel-motion"><span>Panel drag</span>
+                  </SettingLine>
+                  <SettingLine label="Panel drag">
                     <Select id="panel-motion" aria-label="Panel drag" title={PANEL_MOTION_OPTIONS.find((option) => option.value === props.panelMotion)?.label} value={props.panelMotion} onChange={(event) => props.onPanelMotionChange(event.currentTarget.value as PanelMotionMode)}>
                       <For each={PANEL_MOTION_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
                     </Select>
-                  </label>
-              </section>
-              <section class="settings-group" aria-label="Collapse">
-                <h3>Collapse</h3>
-                  <label class="settings-line" for="code-block-collapse"><span>Code blocks</span>
+                  </SettingLine>
+              </SettingGroup>
+              <SettingGroup title="Collapse">
+                  <SettingLine label="Code blocks">
                     <Select id="code-block-collapse" aria-label="Collapse code blocks" value={props.codeBlockCollapse} onChange={(event) => props.onCodeBlockCollapseChange(event.currentTarget.value as CodeBlockCollapseMode)}>
                       <For each={CODE_BLOCK_COLLAPSE_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
                     </Select>
-                  </label>
-                  <label class="settings-line" for="code-block-collapse-lines"><span>Fold over</span>
+                  </SettingLine>
+                  <SettingLine label="Fold over">
                     <Select id="code-block-collapse-lines" aria-label="Collapse code blocks over" disabled={props.codeBlockCollapse === "off"} value={props.codeBlockCollapseLines} onChange={(event) => props.onCodeBlockCollapseLinesChange(Number(event.currentTarget.value))}>
                       <For each={CODE_BLOCK_COLLAPSE_LINE_CHOICES}>{(lines) => <option value={lines}>{lines} lines</option>}</For>
                     </Select>
-                  </label>
-                  <label class="settings-line" for="user-message-collapse"><span>Your messages</span>
+                  </SettingLine>
+                  <SettingLine label="Your messages">
                     <Select id="user-message-collapse" aria-label="Collapse your messages" value={props.userMessageCollapse} onChange={(event) => props.onUserMessageCollapseChange(event.currentTarget.value as UserMessageCollapseMode)}>
                       <For each={USER_MESSAGE_COLLAPSE_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
                     </Select>
-                  </label>
-              </section>
-              <section class="settings-group" aria-label="Graphics">
-                <h3>Graphics</h3>
-                <div class="settings-line" title="For smooth animations, backdrop blur and high-refresh-rate rendering, turn on “Use graphics acceleration when available” in your browser settings, then relaunch the browser."><span>Hardware acceleration</span><span class="settings-line-value">Turn on in browser</span></div>
-              </section>
-            </div>
+                  </SettingLine>
+              </SettingGroup>
+              <SettingGroup title="Graphics">
+                <SettingLine plain label="Hardware acceleration" title="For smooth animations, backdrop blur and high-refresh-rate rendering, turn on “Use graphics acceleration when available” in your browser settings, then relaunch the browser."><SettingValue>Turn on in browser</SettingValue></SettingLine>
+              </SettingGroup>
+            </>
           </Show>
           <Show when={section() === "servers"}><ServersSettingsTile /></Show>
           <Show when={section() === "shortcuts"}><ShortcutsSettings manager={props.shortcuts} /></Show>
           <Show when={section() === "runtime"}>
-            <div class="settings-list">
-              <Show when={runtimeStatus() === "ready" && runtime()} fallback={<Show when={runtimeStatus() === "error"} fallback={<div class="settings-loading"><Spinner /><span>Loading runtime settings…</span></div>}><div role="alert" class="settings-error"><span>{runtimeError() || "Runtime settings could not be loaded."}</span><Button variant="outline" size="sm" onClick={() => void loadRuntime()}>Retry</Button></div></Show>}>
-                <section class="settings-group" aria-label="Agent processes">
-                  <h3>Agent processes</h3>
-                  <label class="settings-line" for="warm-processes"><span>Warm processes<Show when={runtimeFieldError(runtimeDraft(), "live")} fallback={<em>{runtime()!.liveCount || 0} live</em>}>{(message) => <em data-tone="error">{message()}</em>}</Show></span><Input id="warm-processes" type="number" inputMode="numeric" value={runtimeDraft().live} aria-invalid={Boolean(runtimeFieldError(runtimeDraft(), "live")) || undefined} onInput={(event) => editRuntime("live", event.currentTarget.value)} /></label>
-                  <label class="settings-line" for="generations"><span>Concurrent generations<Show when={runtimeFieldError(runtimeDraft(), "generating")} fallback={<em>{runtime()!.generatingCount || 0} generating</em>}>{(message) => <em data-tone="error">{message()}</em>}</Show></span><Input id="generations" type="number" inputMode="numeric" value={runtimeDraft().generating} aria-invalid={Boolean(runtimeFieldError(runtimeDraft(), "generating")) || undefined} onInput={(event) => editRuntime("generating", event.currentTarget.value)} /></label>
-                  <label class="settings-line" for="idle-ttl"><span>Idle timeout (s)<Show when={runtimeFieldError(runtimeDraft(), "ttl")} fallback={null}>{(message) => <em data-tone="error">{message()}</em>}</Show></span><Input id="idle-ttl" type="number" inputMode="numeric" value={runtimeDraft().ttl} aria-invalid={Boolean(runtimeFieldError(runtimeDraft(), "ttl")) || undefined} onInput={(event) => editRuntime("ttl", event.currentTarget.value)} /></label>
-                </section>
+            <>
+              <Show when={runtimeStatus() === "ready" && runtime()} fallback={<Show when={runtimeStatus() === "error"} fallback={<SettingLoading>Loading runtime settings…</SettingLoading>}><SettingNote tone="error"><span>{runtimeError() || "Runtime settings could not be loaded."}</span><Button variant="secondary" size="sm" onClick={() => void loadRuntime()}>Retry</Button></SettingNote></Show>}>
+                <SettingGroup title="Agent processes">
+                  <SettingLine label="Warm processes" state={<><Show when={runtimeFieldError(runtimeDraft(), "live")} fallback={<>{runtime()!.liveCount || 0} live</>}>{(message) => message()}</Show></>}><Input id="warm-processes" type="number" inputMode="numeric" value={runtimeDraft().live} aria-invalid={Boolean(runtimeFieldError(runtimeDraft(), "live")) || undefined} onInput={(event) => editRuntime("live", event.currentTarget.value)} /></SettingLine>
+                  <SettingLine label="Concurrent generations" state={<><Show when={runtimeFieldError(runtimeDraft(), "generating")} fallback={<>{runtime()!.generatingCount || 0} generating</>}>{(message) => message()}</Show></>}><Input id="generations" type="number" inputMode="numeric" value={runtimeDraft().generating} aria-invalid={Boolean(runtimeFieldError(runtimeDraft(), "generating")) || undefined} onInput={(event) => editRuntime("generating", event.currentTarget.value)} /></SettingLine>
+                  <SettingLine label="Idle timeout (s)" state={<><Show when={runtimeFieldError(runtimeDraft(), "ttl")} fallback={null}>{(message) => message()}</Show></>}><Input id="idle-ttl" type="number" inputMode="numeric" value={runtimeDraft().ttl} aria-invalid={Boolean(runtimeFieldError(runtimeDraft(), "ttl")) || undefined} onInput={(event) => editRuntime("ttl", event.currentTarget.value)} /></SettingLine>
+                </SettingGroup>
               </Show>
-              <section class="settings-group" aria-label="Pi">
-                <h3>Pi</h3>
-                <Show when={!props.installationsLoading} fallback={<div class="settings-line"><span>Checking…</span></div>}>
-                  <For each={props.installations}>{(item) => <div class="settings-line"><span>{item.label}</span><span class="settings-line-value" data-mono title={item.available ? undefined : item.reason || (item as Installation & { error?: string }).error || undefined}>{item.available ? item.version ? `Pi ${item.version}` : "Available" : "Unavailable"}</span></div>}</For>
+              <SettingGroup title="Pi">
+                <Show when={!props.installationsLoading} fallback={<SettingLine plain label="Checking…"></SettingLine>}>
+                  <For each={props.installations}>{(item) => <SettingLine plain label={item.label} title={item.available ? undefined : item.reason || (item as Installation & { error?: string }).error || undefined}><SettingValue mono>{item.available ? item.version ? `Pi ${item.version}` : "Available" : "Unavailable"}</SettingValue></SettingLine>}</For>
                 </Show>
-              </section>
-            </div>
+              </SettingGroup>
+            </>
           </Show>
           <Show when={section() === "workspaces"}>
-            <Show when={!props.templatesLoading && !props.installationsLoading} fallback={<div class="settings-loading"><Spinner /><span>Loading workspace settings…</span></div>}><Show when={workspaceProjects().find((workspace) => workspace.id === workspaceId())} fallback={<p>This workspace is not available.</p>}>{(workspace) => <div class="workspace-settings-card" data-current="true"><h3>{workspace().name}</h3><p>{workspace().workingRoot}</p><p>Override: {workspaceDefaultLabel(workspace()).startsWith("Inherit") ? "None" : workspaceDefaultLabel(workspace())}</p>
-              <Field><FieldLabel for={`workspace-default-profile-${workspace().id}`}>Default profile</FieldLabel><Select id={`workspace-default-profile-${workspace().id}`} aria-label={`${workspace().name} default profile`} value={workspace().defaultTemplateId || ""} onChange={(event) => void saveWorkspace(workspace(), event.currentTarget.value || null)}>
+            <Show when={!props.templatesLoading && !props.installationsLoading} fallback={<SettingLoading>Loading workspace settings…</SettingLoading>}><Show when={workspaceProjects().find((workspace) => workspace.id === workspaceId())} fallback={<SettingNote>This workspace is not available.</SettingNote>}>{(workspace) => <SettingGroup title={workspace().name}><SettingNote>{workspace().workingRoot}</SettingNote><SettingNote>Override: {workspaceDefaultLabel(workspace()).startsWith("Inherit") ? "None" : workspaceDefaultLabel(workspace())}</SettingNote><SettingLine label="Default profile"><Select id={`workspace-default-profile-${workspace().id}`} aria-label={`${workspace().name} default profile`} value={workspace().defaultTemplateId || ""} onChange={(event) => void saveWorkspace(workspace(), event.currentTarget.value || null)}>
                 <option value="">Inherit global ({props.templates.find((item) => item.id === props.defaultTemplateId)?.label || "General"})</option>
                 <For each={props.templates.filter((item) => item.defaultable !== false)}>{(item) => <option value={item.id}>{item.label}</option>}</For>
-              </Select></Field>
-            </div>}</Show></Show>
+              </Select></SettingLine></SettingGroup>}</Show></Show>
           </Show>
           <Show when={section() === "voice"}>
-            <Show when={voiceStatus() === "ready" && voiceServerSettings()} fallback={<Show when={voiceStatus() === "error"} fallback={<div class="settings-loading"><Spinner /><span>Loading voice settings…</span></div>}><div role="alert" class="settings-error"><span>{voiceError() || "Voice settings could not be loaded."}</span><Button variant="outline" size="sm" onClick={() => void loadVoiceSettings()}>Retry</Button></div></Show>}>
-              <div class="settings-list">
-                <section class="settings-group" aria-label="Transcription">
-                  <h3>Transcription</h3>
-                  <div class="settings-line" data-stack><span>Source</span>
-                    <Segmented label="Transcription source" value={voiceServerSettings()!.mode} disabled={voiceBusy()} onChange={(mode) => updateVoiceServer({ mode })} options={[
+            <Show when={voiceStatus() === "ready" && voiceServerSettings()} fallback={<Show when={voiceStatus() === "error"} fallback={<SettingLoading>Loading voice settings…</SettingLoading>}><SettingNote tone="error"><span>{voiceError() || "Voice settings could not be loaded."}</span><Button variant="secondary" size="sm" onClick={() => void loadVoiceSettings()}>Retry</Button></SettingNote></Show>}>
+              <>
+                <SettingGroup title="Transcription">
+                  <SettingLine plain label="Source">
+                    <Segmented arrows label="Transcription source" value={voiceServerSettings()!.mode} disabled={voiceBusy()} onChange={(mode) => updateVoiceServer({ mode })} options={[
                       { value: "off", label: "Off", icon: <MicOffIcon /> },
                       { value: "local", label: "Local", icon: <CpuIcon />, title: "This machine" },
                       { value: "remote", label: "Cloud", icon: <CloudIcon /> },
                     ]} />
-                  </div>
+                  </SettingLine>
                   <Show when={voiceServerSettings()!.mode === "local" && voiceCatalogue()}>{(catalogue) => <VoiceLocalCatalogue
                     catalogue={catalogue()}
                     selection={selectedVoiceSelection()}
@@ -1304,52 +1276,48 @@ export function Settings(props: {
                     onUninstall={() => void uninstallVoiceModel(selectedVoiceInstallModelId())}
                   />}</Show>
                   <Show when={voiceServerSettings()!.mode === "remote"}>
-                    <label class="settings-line" for="voice-provider"><span>Provider</span><Select id="voice-provider" disabled={voiceBusy()} value={voiceServerSettings()!.provider} onChange={(event) => {
+                    <SettingLine label="Provider"><Select id="voice-provider" disabled={voiceBusy()} value={voiceServerSettings()!.provider} onChange={(event) => {
                       const provider = voiceServerSettings()!.providers.find((candidate) => candidate.id === event.currentTarget.value)!;
                       setVoiceSecret("");
                       editVoiceServer((current) => ({ ...current, provider: provider.id, adapter: provider.adapter, endpoint: provider.endpoint, model: provider.models[0]?.id || "", auth: { ...current.auth, type: provider.id === "custom" ? current.auth.type : "bearer", configured: Boolean(provider.configured), source: provider.configured ? "stored" : null, removable: Boolean(provider.configured) } }));
-                    }}><For each={voiceServerSettings()!.providers}>{(provider) => <option value={provider.id}>{provider.label}</option>}</For></Select></label>
+                    }}><For each={voiceServerSettings()!.providers}>{(provider) => <option value={provider.id}>{provider.label}</option>}</For></Select></SettingLine>
                     <Show when={selectedVoiceProvider()?.models.length}>
-                      <label class="settings-line" for="voice-cloud-model"><span>Model</span><Select id="voice-cloud-model" disabled={voiceBusy()} title={selectedVoiceProvider()!.models.find((model) => model.id === voiceServerSettings()!.model)?.description} value={voiceServerSettings()!.model} onChange={(event) => {
+                      <SettingLine label="Model" title={selectedVoiceProvider()!.models.find((model) => model.id === voiceServerSettings()!.model)?.description}><Select id="voice-cloud-model" disabled={voiceBusy()} title={selectedVoiceProvider()!.models.find((model) => model.id === voiceServerSettings()!.model)?.description} value={voiceServerSettings()!.model} onChange={(event) => {
                         const model = selectedVoiceProvider()!.models.find((candidate) => candidate.id === event.currentTarget.value);
                         updateVoiceServer({ model: event.currentTarget.value, ...(model?.adapter ? { adapter: model.adapter } : {}) });
-                      }}><For each={selectedVoiceProvider()!.models}>{(model) => <option value={model.id}>{model.label}</option>}</For></Select></label>
+                      }}><For each={selectedVoiceProvider()!.models}>{(model) => <option value={model.id}>{model.label}</option>}</For></Select></SettingLine>
                     </Show>
                     <Show when={voiceServerSettings()!.provider === "custom"}>
-                      <label class="settings-line" for="voice-adapter"><span>Protocol</span><Select id="voice-adapter" disabled={voiceBusy()} title={selectedVoiceAdapter()?.description} value={voiceServerSettings()!.adapter} onChange={(event) => updateVoiceServer({ adapter: event.currentTarget.value })}><For each={voiceServerSettings()!.adapters}>{(adapter) => <option value={adapter.id}>{adapter.label}</option>}</For></Select></label>
-                      <label class="settings-line" for="voice-endpoint"><span>Endpoint<Show when={voiceEndpointError(voiceServerSettings()!)}>{(message) => <em data-tone="error">{message()}</em>}</Show></span><Input id="voice-endpoint" type="url" disabled={voiceBusy()} value={voiceServerSettings()!.endpoint} placeholder="https://…" onInput={(event) => updateVoiceServer({ endpoint: event.currentTarget.value }, "pause")} /></label>
-                      <label class="settings-line" for="voice-custom-model"><span>Model parameter</span><Input id="voice-custom-model" value={voiceServerSettings()!.model} placeholder="Optional" onInput={(event) => updateVoiceServer({ model: event.currentTarget.value }, "pause")} /></label>
-                      <div class="settings-line"><span>Authentication</span>
-                        <Segmented label="Authentication" value={voiceServerSettings()!.auth.type} disabled={voiceBusy()} onChange={(type) => editVoiceServer((current) => ({ ...current, auth: { ...current.auth, type } }))} options={[
+                      <SettingLine label="Protocol" title={selectedVoiceAdapter()?.description}><Select id="voice-adapter" disabled={voiceBusy()} title={selectedVoiceAdapter()?.description} value={voiceServerSettings()!.adapter} onChange={(event) => updateVoiceServer({ adapter: event.currentTarget.value })}><For each={voiceServerSettings()!.adapters}>{(adapter) => <option value={adapter.id}>{adapter.label}</option>}</For></Select></SettingLine>
+                      <SettingLine label="Endpoint" state={<><Show when={voiceEndpointError(voiceServerSettings()!)}>{(message) => message()}</Show></>}><Input id="voice-endpoint" type="url" disabled={voiceBusy()} value={voiceServerSettings()!.endpoint} placeholder="https://…" onInput={(event) => updateVoiceServer({ endpoint: event.currentTarget.value }, "pause")} /></SettingLine>
+                      <SettingLine label="Model parameter"><Input id="voice-custom-model" value={voiceServerSettings()!.model} placeholder="Optional" onInput={(event) => updateVoiceServer({ model: event.currentTarget.value }, "pause")} /></SettingLine>
+                      <SettingLine plain label="Authentication">
+                        <Segmented arrows label="Authentication" value={voiceServerSettings()!.auth.type} disabled={voiceBusy()} onChange={(type) => editVoiceServer((current) => ({ ...current, auth: { ...current.auth, type } }))} options={[
                           { value: "none", label: "None" },
                           { value: "bearer", label: "Bearer" },
                           { value: "header", label: "Header" },
                         ]} />
-                      </div>
+                      </SettingLine>
                       <Show when={voiceServerSettings()!.auth.type === "header"}>
-                        <label class="settings-line" for="voice-auth-header"><span>Header name</span><Input id="voice-auth-header" disabled={voiceBusy()} value={voiceServerSettings()!.auth.headerName} onInput={(event) => editVoiceServer((current) => ({ ...current, auth: { ...current.auth, headerName: event.currentTarget.value } }), "pause")} /></label>
+                        <SettingLine label="Header name"><Input id="voice-auth-header" disabled={voiceBusy()} value={voiceServerSettings()!.auth.headerName} onInput={(event) => editVoiceServer((current) => ({ ...current, auth: { ...current.auth, headerName: event.currentTarget.value } }), "pause")} /></SettingLine>
                       </Show>
                     </Show>
                     <Show when={voiceServerSettings()!.provider !== "custom" || voiceServerSettings()!.auth.type !== "none"}>
-                      <div class="settings-line" data-stack><label for="voice-secret">{selectedVoiceProvider()?.authLabel || "Key"}<em>{voiceServerSettings()!.auth.configured ? "stored" : "not set"}</em></label>
-                        <div class="settings-line-control">
-                          <Input id="voice-secret" type="password" autocomplete="new-password" data-1p-ignore data-lpignore="true" data-bwignore disabled={voiceBusy()} value={voiceSecret()} onInput={(event) => setVoiceSecret(event.currentTarget.value)} onKeyDown={(event) => { if (event.key === "Enter") void saveVoiceSecret(); }} placeholder={voiceServerSettings()!.auth.configured ? "Replace" : "Paste key"} />
+                      <SettingLine plain label={selectedVoiceProvider()?.authLabel || "Key"} state={<>{voiceServerSettings()!.auth.configured ? "stored" : "not set"}</>}>
+                          <Input id="voice-secret" aria-label={selectedVoiceProvider()?.authLabel || "Key"} type="password" autocomplete="new-password" data-1p-ignore data-lpignore="true" data-bwignore disabled={voiceBusy()} value={voiceSecret()} onInput={(event) => setVoiceSecret(event.currentTarget.value)} onKeyDown={(event) => { if (event.key === "Enter") void saveVoiceSecret(); }} placeholder={voiceServerSettings()!.auth.configured ? "Replace" : "Paste key"} />
                           <Show when={voiceSecret().trim()}><Button size="sm" disabled={voiceBusy()} onClick={() => void saveVoiceSecret()}>Save</Button></Show>
                           <Show when={!voiceSecret().trim() && voiceServerSettings()!.auth.removable}><Button variant="ghost" size="sm" disabled={voiceBusy()} onClick={() => void removeVoiceCredential()}>Remove</Button></Show>
-                        </div>
-                      </div>
+                      </SettingLine>
                     </Show>
-                    <div class="settings-line"><span>Connection<em data-tone={voiceTestResult() ? "ok" : undefined}>{voiceTestResult() || (cloudTiming().label === "Live" ? "live" : "after you stop")}</em></span>
+                    <SettingLine plain label="Connection" state={<>{voiceTestResult() || (cloudTiming().label === "Live" ? "live" : "after you stop")}</>}>
                       <Button variant="ghost" size="sm" disabled={voiceBusy()} onClick={() => void testVoiceServer()}>{voiceBusy() ? <Spinner /> : null}Test</Button>
-                    </div>
+                    </SettingLine>
                   </Show>
-                </section>
+                </SettingGroup>
 
-                <section class="settings-group" aria-label="Input">
-                  <h3>Input</h3>
-                  <label class="settings-line" data-stack="mic" for="voice-input-device"><span>Microphone</span>
-                    <div class="settings-line-control">
-                      <Select ref={voiceInputSelect} id="voice-input-device" disabled={audioInputBusy()} value={voiceDraft().inputDeviceId} onChange={(event) => { const deviceId = event.currentTarget.value; updateVoiceDraft({ inputDeviceId: deviceId, inputDeviceLabel: audioInputDevices().find((device) => device.deviceId === deviceId)?.label || "" }); }}>
+                <SettingGroup title="Input">
+                  <SettingLine plain label="Microphone">
+                      <Select ref={voiceInputSelect} id="voice-input-device" aria-label="Microphone" disabled={audioInputBusy()} value={voiceDraft().inputDeviceId} onChange={(event) => { const deviceId = event.currentTarget.value; updateVoiceDraft({ inputDeviceId: deviceId, inputDeviceLabel: audioInputDevices().find((device) => device.deviceId === deviceId)?.label || "" }); }}>
                         <option value="">System default</option>
                         <Show when={voiceDraft().inputDeviceId && !audioInputDevices().some((device) => device.deviceId === voiceDraft().inputDeviceId)}><option value={voiceDraft().inputDeviceId}>Unavailable microphone</option></Show>
                         <For each={audioInputDevices()}>{(device) => <option value={device.deviceId}>{device.label}</option>}</For>
@@ -1357,80 +1325,70 @@ export function Settings(props: {
                       <Button variant="ghost" size="icon-sm" aria-label="Refresh microphones" title="Refresh microphones" disabled={audioInputBusy() || audioInputStatus() === "loading"} onClick={() => void loadAudioInputs()}><RefreshCwIcon /></Button>
                       <Show when={audioInputTest()?.recording && !audioInputBusy()}><Button variant="ghost" size="icon-sm" aria-label={audioInputPlayback() ? "Stop playback" : "Play test recording"} title={audioInputPlayback() ? "Stop playback" : "Play test recording"} onClick={() => audioInputPlayback() ? stopAudioInputPlayback() : void playAudioInputTest()}>{audioInputPlayback() ? <SquareIcon /> : <PlayIcon />}</Button></Show>
                       <Button variant="ghost" size="sm" disabled={audioInputStatus() === "loading"} onClick={() => audioInputBusy() ? stopAudioInputTest() : void testAudioInput()}>{audioInputBusy() ? "Stop" : "Test"}</Button>
-                    </div>
-                  </label>
+                  </SettingLine>
                   <Show when={audioInputBusy() || audioInputTest()}>
                     {/* The composer's own waveform, so a test looks like dictation will. */}
-                    <div class="settings-line" data-stack><span>{audioInputBusy() ? (audioInputSignalDetected() ? "Signal" : "Listening…") : audioInputTest()!.signalDetected ? "Signal" : "No signal"}<em data-tone={audioInputTest() && !audioInputBusy() && !audioInputTest()!.signalDetected ? "error" : undefined}>level {Math.round(audioInputWaveform.level() * 100)}% · peak {Math.round(audioInputWaveform.peak() * 100)}%</em></span>
-                      <VoiceWaveform class="composer-actions-waveform settings-recorder-monitor" history={audioInputWaveform.history} level={audioInputWaveform.level} peak={audioInputWaveform.peak} state={audioInputBusy() ? "listening" : "stopped"} variant="compact" barDensity={3} ariaLabel="Microphone input level" />
-                    </div>
+                    <SettingLine plain label={audioInputBusy() ? (audioInputSignalDetected() ? "Signal" : "Listening…") : audioInputTest()!.signalDetected ? "Signal" : "No signal"} state={<>level {Math.round(audioInputWaveform.level() * 100)}% · peak {Math.round(audioInputWaveform.peak() * 100)}%</>}></SettingLine><SettingWide><VoiceWaveform history={audioInputWaveform.history} level={audioInputWaveform.level} peak={audioInputWaveform.peak} state={audioInputBusy() ? "listening" : "stopped"} variant="compact" barDensity={3} ariaLabel="Microphone input level" /></SettingWide>
                   </Show>
-                  <Show when={audioInputError() || audioInputTest()?.recordingError || (audioInputStatus() === "error" && "Microphone list could not be loaded.")}>{(message) => <p role="alert" class="settings-line-note">{message()}</p>}</Show>
-                  <div class="settings-line"><span>Capture</span>
-                    <Segmented label="Capture profile" value={voiceDraft().captureProfile} disabled={audioInputBusy()} onChange={(captureProfile) => updateVoiceDraft({ captureProfile })} options={[
+                  <Show when={audioInputError() || audioInputTest()?.recordingError || (audioInputStatus() === "error" && "Microphone list could not be loaded.")}>{(message) => <SettingNote tone="error">{message()}</SettingNote>}</Show>
+                  <SettingLine plain label="Capture">
+                    <Segmented arrows label="Capture profile" value={voiceDraft().captureProfile} disabled={audioInputBusy()} onChange={(captureProfile) => updateVoiceDraft({ captureProfile })} options={[
                       { value: "raw", label: "Raw" },
                       { value: "processed", label: "Processed" },
                     ]} />
-                  </div>
-                  <label class="settings-line" for="dictation-shortcut"><span>Shortcut</span><Input id="dictation-shortcut" class="settings-keycap-input" title="Focus and press a shortcut" value={voiceDraft().shortcut} readOnly onKeyDown={(event) => {
+                  </SettingLine>
+                  <SettingLine label="Shortcut" title="Focus and press a shortcut"><Input id="dictation-shortcut" title="Focus and press a shortcut" value={voiceDraft().shortcut} readOnly onKeyDown={(event) => {
                     // Tab and Esc still leave the field; every other key is recorded.
                     if (event.key === "Tab" || event.key === "Escape") return;
                     event.preventDefault();
                     event.stopPropagation();
                     const shortcut = shortcutFromKeyboardEvent(event);
                     if (shortcut) updateVoiceDraft({ shortcut });
-                  }} /></label>
-                  <div class="settings-line"><span>Activation</span>
-                    <Segmented label="Activation" value={voiceDraft().activation} onChange={(activation) => updateVoiceDraft({ activation })} options={[
+                  }} /></SettingLine>
+                  <SettingLine plain label="Activation">
+                    <Segmented arrows label="Activation" value={voiceDraft().activation} onChange={(activation) => updateVoiceDraft({ activation })} options={[
                       { value: "push_to_talk", label: "Hold", icon: <HandIcon /> },
                       { value: "toggle", label: "Toggle", icon: <RepeatIcon /> },
                     ]} />
-                  </div>
-                  <div class="settings-line"><span>Send when done</span><Switch label="Send when done" checked={voiceDraft().autoSend} onChange={(autoSend) => updateVoiceDraft({ autoSend })} /></div>
-                  <div class="settings-line"><span>Keep mic warm<Show when={warmMicrophoneActive()}><em>live</em></Show></span>
-                    <div class="settings-line-control">
+                  </SettingLine>
+                  <SettingLine label="Send when done"><Switch label="Send when done" checked={voiceDraft().autoSend} onChange={(autoSend) => updateVoiceDraft({ autoSend })} /></SettingLine>
+                  <SettingLine plain label="Keep mic warm" state={<><Show when={warmMicrophoneActive()}>live</Show></>}>
                       <Show when={warmMicrophoneActive()}><Button variant="ghost" size="sm" onClick={stopWarmMicrophone}>Release</Button></Show>
                       <Switch label="Keep mic warm" checked={voiceDraft().warmMicrophone} onChange={(warmMicrophone) => updateVoiceDraft({ warmMicrophone })} />
-                    </div>
-                  </div>
-                </section>
+                  </SettingLine>
+                </SettingGroup>
 
-                <Show when={voiceError()}><p role="alert" class="settings-inline-error">{voiceError()}</p></Show>
-              </div>
+                <Show when={voiceError()}><SettingNote tone="error">{voiceError()}</SettingNote></Show>
+              </>
             </Show>
           </Show>
           <Show when={section() === "search"}>
-            <Show when={searchStatus() === "ready" && searchSettings()} fallback={<Show when={searchStatus() === "error"} fallback={<div class="settings-loading"><Spinner /><span>Loading search settings…</span></div>}><div role="alert" class="settings-error"><span>{searchError() || "Search settings could not be loaded."}</span><Button variant="outline" size="sm" onClick={() => void loadSearchSettings()}>Retry</Button></div></Show>}>
-              <div class="settings-list">
-                <section class="settings-group" aria-label="Brave Search">
-                  <h3>Brave Search</h3>
-                  <div class="settings-line"><label for="brave-search-api-key">API key<em>{brave()?.source === "environment" ? "from the server environment" : brave()?.stored ? "stored" : "not set"}</em></label>
-                    <div class="settings-line-control">
-                      <Input id="brave-search-api-key" type="password" autocomplete="new-password" data-1p-ignore data-lpignore="true" data-bwignore value={searchKey()} onInput={(event) => setSearchKey(event.currentTarget.value)} placeholder={brave()?.configured ? "Replace" : "BSA_…"} onKeyDown={(event) => { if (event.key === "Enter") void saveSearchKey(); }} />
+            <Show when={searchStatus() === "ready" && searchSettings()} fallback={<Show when={searchStatus() === "error"} fallback={<SettingLoading>Loading search settings…</SettingLoading>}><SettingNote tone="error"><span>{searchError() || "Search settings could not be loaded."}</span><Button variant="secondary" size="sm" onClick={() => void loadSearchSettings()}>Retry</Button></SettingNote></Show>}>
+              <>
+                <SettingGroup title="Brave Search">
+                  <SettingLine plain label="API key" state={<>{brave()?.source === "environment" ? "from the server environment" : brave()?.stored ? "stored" : "not set"}</>}>
+                      <Input id="brave-search-api-key" aria-label="API key" type="password" autocomplete="new-password" data-1p-ignore data-lpignore="true" data-bwignore value={searchKey()} onInput={(event) => setSearchKey(event.currentTarget.value)} placeholder={brave()?.configured ? "Replace" : "BSA_…"} onKeyDown={(event) => { if (event.key === "Enter") void saveSearchKey(); }} />
                       <Show when={searchKey().trim()}><Button size="sm" disabled={searchSaving()} onClick={() => void saveSearchKey()}>{searchSaving() ? <Spinner /> : null}Save</Button></Show>
                       <Show when={!searchKey().trim() && brave()?.removable}><Button variant="ghost" size="sm" disabled={searchSaving()} onClick={() => void removeSearchKey()}>Remove</Button></Show>
-                    </div>
-                  </div>
-                  <Show when={searchError()}><p role="alert" class="settings-line-note">{searchError()}</p></Show>
-                </section>
+                  </SettingLine>
+                  <Show when={searchError()}><SettingNote tone="error">{searchError()}</SettingNote></Show>
+                </SettingGroup>
                 <Show when={searchSettings()!.providers.some((provider) => !provider.enabled)}>
-                  <section class="settings-group" aria-label="Coming later">
-                    <h3>Coming later</h3>
+                  <SettingGroup title="Coming later">
                     <For each={searchSettings()!.providers.filter((provider) => !provider.enabled)}>{(provider) =>
-                      <div class="settings-line" title={provider.description}><span>{provider.label}</span><a class="settings-line-link" href={provider.docsUrl} target="_blank" rel="noreferrer">Docs</a></div>
+                      <SettingLine plain label={provider.label} title={provider.description}><SettingLink href={provider.docsUrl}>Docs</SettingLink></SettingLine>
                     }</For>
-                  </section>
+                  </SettingGroup>
                 </Show>
-              </div>
+              </>
             </Show>
           </Show>
-          <Show when={section() === "models"}><div class="settings-list">
-            <section class="settings-group" aria-label="Defaults">
-              <h3>Defaults</h3>
-              <Show when={!props.templatesLoading} fallback={<div class="settings-line"><span>Default profile<em>loading…</em></span><span /></div>}>
-                <label class="settings-line" for="default-profile"><span>Default profile</span><Select id="default-profile" value={props.defaultTemplateId} onChange={(event) => defaultProfileAutosave.edit(event.currentTarget.value, "now")}><For each={props.templates.filter((item) => item.defaultable !== false)}>{(item) => <option value={item.id}>{item.label}</option>}</For></Select></label>
+          <Show when={section() === "models"}><>
+            <SettingGroup title="Defaults">
+              <Show when={!props.templatesLoading} fallback={<SettingLine plain label="Default profile" state={<>loading…</>}><span /></SettingLine>}>
+                <SettingLine label="Default profile"><Select id="default-profile" value={props.defaultTemplateId} onChange={(event) => defaultProfileAutosave.edit(event.currentTarget.value, "now")}><For each={props.templates.filter((item) => item.defaultable !== false)}>{(item) => <option value={item.id}>{item.label}</option>}</For></Select></SettingLine>
               </Show>
-              <div class="settings-line"><span>Session naming</span>
+              <SettingLine plain label="Session naming">
                 <ModelSelector
                 models={namingModels()}
                 model={sessionNameModel()}
@@ -1440,63 +1398,56 @@ export function Settings(props: {
                 onThinkingLevelChange={(level) => void saveSessionNaming(sessionNameModel(), level)}
                 onManageModels={props.onOpenModelSelector}
               />
-              </div>
-              <div class="settings-line"><span>Models<em>{props.models.enabledModels().length} enabled</em></span><Button variant="ghost" size="sm" onClick={props.onOpenModelSelector}>Manage</Button></div>
-            </section>
-            <section class="settings-group" aria-label="ChatGPT Web">
-              <h3>ChatGPT Web</h3>
-              <div class="settings-line" title={chatGptStatus() ? `Transport: curl_cffi ${chatGptStatus()!.curlCffiVersion}, ${chatGptStatus()!.impersonate}. Stored cookie names: ${chatGptStatus()!.cookieNames.join(", ") || "none"}.` : undefined}><label for="chatgpt-web-cookie">Cookies<em>{chatGptStatus()?.auth === "configured" ? "connected" : "not connected"}</em></label>
-                <div class="settings-line-control">
-                  <Input id="chatgpt-web-cookie" type="password" autocomplete="off" data-1p-ignore data-lpignore="true" data-bwignore value={chatGptCookie()} onInput={(event) => setChatGptCookie(event.currentTarget.value)} placeholder={chatGptStatus()?.auth === "configured" ? "Replace" : "Paste the Cookie header"} onKeyDown={(event) => { if (event.key === "Enter" && chatGptCookie().trim()) void saveChatGptCookie(); }} />
+              </SettingLine>
+              <SettingLine plain label="Models" state={<>{props.models.enabledModels().length} enabled</>}><Button variant="ghost" size="sm" onClick={props.onOpenModelSelector}>Manage</Button></SettingLine>
+            </SettingGroup>
+            <SettingGroup title="ChatGPT Web">
+              <SettingLine plain label="Cookies" state={<>{chatGptStatus()?.auth === "configured" ? "connected" : "not connected"}</>} title={chatGptStatus() ? `Transport: curl_cffi ${chatGptStatus()!.curlCffiVersion}, ${chatGptStatus()!.impersonate}. Stored cookie names: ${chatGptStatus()!.cookieNames.join(", ") || "none"}.` : undefined}>
+                  <Input id="chatgpt-web-cookie" aria-label="Cookies" type="password" autocomplete="off" data-1p-ignore data-lpignore="true" data-bwignore value={chatGptCookie()} onInput={(event) => setChatGptCookie(event.currentTarget.value)} placeholder={chatGptStatus()?.auth === "configured" ? "Replace" : "Paste the Cookie header"} onKeyDown={(event) => { if (event.key === "Enter" && chatGptCookie().trim()) void saveChatGptCookie(); }} />
                   <Show when={chatGptCookie().trim()}><Button size="sm" disabled={chatGptBusy()} onClick={() => void saveChatGptCookie()}>{chatGptBusy() ? <Spinner /> : null}Save</Button></Show>
                   <Show when={!chatGptCookie().trim() && chatGptStatus()?.auth === "configured"}><Button variant="ghost" size="sm" disabled={chatGptBusy()} onClick={() => void removeChatGptCookie()}>Remove</Button></Show>
-                </div>
-              </div>
-              <details class="settings-line-details"><summary>Where to find them</summary>
+              </SettingLine>
+              <SettingDetails summary="Where to find them">
                 <ol>
-                  <li>Sign in at <a href="https://chatgpt.com" target="_blank" rel="noreferrer">chatgpt.com</a>.</li>
+                  <li>Sign in at <SettingLink href="https://chatgpt.com">chatgpt.com</SettingLink>.</li>
                   <li>Open browser developer tools, select Network, then reload ChatGPT.</li>
                   <li>Select a request to <code>chatgpt.com</code>. In Request Headers, copy the complete <code>Cookie</code> value.</li>
                   <li>Paste it above. It must include <code>__Secure-next-auth.session-token</code>, whole or split into numbered parts such as <code>.0</code> and <code>.1</code>.</li>
                 </ol>
-                <p>Conduit stores it on this server and never returns its values. Treat it like a password: do not paste it into a chat, issue, or log.</p>
-              </details>
-              <Show when={chatGptError()}><p role="alert" class="settings-line-note">{chatGptError()}</p></Show>
-            </section>
-            <section class="settings-group" aria-label="Provider accounts">
-              <h3>Provider accounts</h3>
-              <Show when={authUnavailable()}><p role="alert" class="settings-line-note">Set a Conduit password with <code>node scripts/conduit-auth.mjs set-password</code>, then sign in to manage Pi credentials here.</p></Show>
-              <Show when={authError() && !authUnavailable()}><p role="alert" class="settings-line-note">{authError()}</p></Show>
+                <SettingNote>Conduit stores it on this server and never returns its values. Treat it like a password: do not paste it into a chat, issue, or log.</SettingNote>
+              </SettingDetails>
+              <Show when={chatGptError()}><SettingNote tone="error">{chatGptError()}</SettingNote></Show>
+            </SettingGroup>
+            <SettingGroup title="Provider accounts">
+              <Show when={authUnavailable()}><SettingNote tone="error">Set a Conduit password with <code>node scripts/conduit-auth.mjs set-password</code>, then sign in to manage Pi credentials here.</SettingNote></Show>
+              <Show when={authError() && !authUnavailable()}><SettingNote tone="error">{authError()}</SettingNote></Show>
               <Show when={!authUnavailable() && authLoading() && !authProviders().length} fallback={<Show when={!authUnavailable()}>
-                <label class="settings-line" for="pi-auth-provider" title="Credentials are stored only in Conduit's pinned Pi runtime."><span>Provider</span><Select id="pi-auth-provider" aria-label="Pi authentication provider" value={authProviderId()} onChange={(event) => setAuthProviderId(event.currentTarget.value)}><For each={authProviders()}>{(provider) => <option value={provider.id}>{provider.label}</option>}</For></Select></label>
+                <SettingLine label="Provider" title="Credentials are stored only in Conduit's pinned Pi runtime."><Select id="pi-auth-provider" aria-label="Pi authentication provider" value={authProviderId()} onChange={(event) => setAuthProviderId(event.currentTarget.value)}><For each={authProviders()}>{(provider) => <option value={provider.id}>{provider.label}</option>}</For></Select></SettingLine>
                 <Show when={authProviders().find((provider) => provider.id === authProviderId())?.oauth}>
-                  <div class="settings-line"><span>Sign in</span><Button variant="ghost" size="sm" disabled={authLoading() || Boolean(authAttempt()?.active)} onClick={() => void startOAuth()}>{authLoading() ? <Spinner /> : null}Sign in with browser</Button></div>
+                  <SettingLine plain label="Sign in"><Button variant="ghost" size="sm" disabled={authLoading() || Boolean(authAttempt()?.active)} onClick={() => void startOAuth()}>{authLoading() ? <Spinner /> : null}Sign in with browser</Button></SettingLine>
                 </Show>
-                <div class="settings-line"><label for="pi-api-key">API key</label>
-                  <div class="settings-line-control">
-                    <Input id="pi-api-key" type="password" autocomplete="new-password" data-1p-ignore data-lpignore="true" data-bwignore value={apiKey()} onInput={(event) => setApiKey(event.currentTarget.value)} placeholder="Stored in Conduit Pi only" onKeyDown={(event) => { if (event.key === "Enter" && apiKey()) void saveApiKey(); }} />
+                <SettingLine plain label="API key">
+                    <Input id="pi-api-key" aria-label="API key" type="password" autocomplete="new-password" data-1p-ignore data-lpignore="true" data-bwignore value={apiKey()} onInput={(event) => setApiKey(event.currentTarget.value)} placeholder="Stored in Conduit Pi only" onKeyDown={(event) => { if (event.key === "Enter" && apiKey()) void saveApiKey(); }} />
                     <Show when={apiKey()}><Button size="sm" disabled={authLoading()} onClick={() => void saveApiKey()}>{authLoading() ? <Spinner /> : null}Save</Button></Show>
-                  </div>
-                </div>
+                </SettingLine>
                 <Show when={authAttempt()?.owned}>
-                  <div class="settings-line"><span>{authAttempt()!.providerLabel}<em>{authAttempt()!.message}</em></span>
-                    <div class="settings-line-control">
-                      <Show when={authAttempt()!.authUrl}><a class="settings-line-link" href={authAttempt()!.authUrl!} target="_blank" rel="noreferrer">Open sign-in</a></Show>
+                  <SettingLine plain label={authAttempt()!.providerLabel} state={<>{authAttempt()!.message}</>}>
+                      <Show when={authAttempt()!.authUrl}><SettingLink href={authAttempt()!.authUrl!}>Open sign-in</SettingLink></Show>
                       <Show when={authAttempt()!.active}><Button variant="ghost" size="sm" onClick={() => void cancelOAuth()}>Cancel</Button></Show>
-                    </div>
-                  </div>
-                  <Show when={authAttempt()!.authUrl && authAttempt()!.instructions}><p class="settings-line-note" data-tone="quiet">{authAttempt()!.instructions}</p></Show>
-                  <Show when={authAttempt()!.deviceCode}><div class="settings-line"><span>Code<em><code>{authAttempt()!.deviceCode!.userCode}</code></em></span><a class="settings-line-link" href={authAttempt()!.deviceCode!.verificationUri} target="_blank" rel="noreferrer">Open verification page</a></div></Show>
-                  <Show when={authAttempt()!.prompt?.type === "select"}><div class="settings-line"><span>{authAttempt()!.prompt!.message}</span><div class="settings-line-control" data-wrap><For each={authAttempt()!.prompt!.options || []}>{(option) => <Button variant="ghost" size="sm" disabled={authLoading()} onClick={() => void answerAuthPrompt(option.id)}>{option.label}</Button>}</For></div></div></Show>
-                  <Show when={authAttempt()!.prompt && authAttempt()!.prompt!.type !== "select"}><div class="settings-line"><label for="pi-auth-response">{authAttempt()!.prompt!.message}</label><div class="settings-line-control"><Input id="pi-auth-response" type="text" autocomplete="off" value={authResponse()} onInput={(event) => setAuthResponse(event.currentTarget.value)} placeholder={authAttempt()!.prompt!.placeholder || ""} onKeyDown={(event) => { if (event.key === "Enter") void answerAuthPrompt(authResponse()); }} /><Button size="sm" disabled={authLoading() || !authResponse().trim()} onClick={() => void answerAuthPrompt(authResponse())}>Continue</Button></div></div></Show>
-                  <Show when={authAttempt()!.error}><p role="alert" class="settings-line-note">{authAttempt()!.error}</p></Show>
+                  </SettingLine>
+                  <Show when={authAttempt()!.authUrl && authAttempt()!.instructions}><SettingNote tone="quiet">{authAttempt()!.instructions}</SettingNote></Show>
+                  <Show when={authAttempt()!.deviceCode}><SettingLine plain label="Code" state={<><code>{authAttempt()!.deviceCode!.userCode}</code></>}><SettingLink href={authAttempt()!.deviceCode!.verificationUri}>Open verification page</SettingLink></SettingLine></Show>
+                  <Show when={authAttempt()!.prompt?.type === "select"}><SettingLine plain label={authAttempt()!.prompt!.message}><For each={authAttempt()!.prompt!.options || []}>{(option) => <Button variant="ghost" size="sm" disabled={authLoading()} onClick={() => void answerAuthPrompt(option.id)}>{option.label}</Button>}</For></SettingLine></Show>
+                  <Show when={authAttempt()!.prompt && authAttempt()!.prompt!.type !== "select"}><SettingLine plain label={authAttempt()!.prompt!.message}><Input id="pi-auth-response" aria-label={authAttempt()!.prompt!.message} type="text" autocomplete="off" value={authResponse()} onInput={(event) => setAuthResponse(event.currentTarget.value)} placeholder={authAttempt()!.prompt!.placeholder || ""} onKeyDown={(event) => { if (event.key === "Enter") void answerAuthPrompt(authResponse()); }} /><Button size="sm" disabled={authLoading() || !authResponse().trim()} onClick={() => void answerAuthPrompt(authResponse())}>Continue</Button></SettingLine></Show>
+                  <Show when={authAttempt()!.error}><SettingNote tone="error">{authAttempt()!.error}</SettingNote></Show>
                 </Show>
-                <For each={authProviders().filter((provider) => provider.auth.configured)}>{(provider) => <div class="settings-line"><span title={provider.auth.source === "stored" ? "Credential stored in Conduit Pi" : provider.auth.source === "environment" ? "Credential available from the server environment" : "Credential managed by Pi configuration"}>{provider.label}<em>{provider.auth.source === "stored" ? "stored" : provider.auth.source === "environment" ? "environment" : "Pi config"}</em></span>
+                <For each={authProviders().filter((provider) => provider.auth.configured)}>{(provider) => <SettingLine plain label={provider.label} state={<>{provider.auth.source === "stored" ? "stored" : provider.auth.source === "environment" ? "environment" : "Pi config"}</>} title={provider.auth.source === "stored" ? "Credential stored in Conduit Pi" : provider.auth.source === "environment" ? "Credential available from the server environment" : "Credential managed by Pi configuration"}>
                   <Show when={provider.auth.removable} fallback={<span />}><Button variant="ghost" size="sm" disabled={authLoading()} onClick={() => void removePiAuth(provider.id)}>Remove</Button></Show>
-                </div>}</For>
-              </Show>}><div class="settings-line"><span>Provider<em>loading…</em></span><span /></div></Show>
-            </section>
-          </div></Show>
-        </main>
-  </FrostOverlay>;
+                </SettingLine>}</For>
+              </Show>}><SettingLine plain label="Provider" state={<>loading…</>}><span /></SettingLine></Show>
+            </SettingGroup>
+          </></Show>
+      </OverlayPage>
+    </Show>
+  </OverlayDialog>;
 }
