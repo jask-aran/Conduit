@@ -106,14 +106,19 @@
 :root, [data-density="desktop"] {
   --u-base: 12.8px; --row-min-floor: 0px; --row-min-units: 1.875; --row-text-units: 0.8125;
   --frost-inset: var(--space-xs); --nav-label-pad: var(--space-xs) var(--space-md);
+  /* A section label: Paper Mono capitals at desktop, where the type around it is small and tight. */
+  --label-face: var(--font-label); --label-weight: var(--weight-rest); --label-case: uppercase; --label-tracking: .07em; --label-size: var(--text-label);
 }
 [data-density="phone"] {
   --u-base: var(--u-phone); --row-min-floor: 44px; --row-min-units: 2.75; --row-text-units: 0.90625;
   --frost-inset: var(--space-sm); --nav-label-pad: var(--space-sm) var(--space-md);
+  /* On a phone mono capitals read as a different, smaller voice beside rows at finger size: the label is the UI face, strong, in sentence case. */
+  --label-face: var(--font-sans); --label-weight: var(--weight-strong); --label-case: none; --label-tracking: 0; --label-size: var(--text-caption);
 }
 @media (--conduit-phone-layout) { :root {
   --u-base: var(--u-phone); --row-min-floor: 44px; --row-min-units: 2.75; --row-text-units: 0.90625;
   --frost-inset: var(--space-sm); --nav-label-pad: var(--space-sm) var(--space-md);
+  --label-face: var(--font-sans); --label-weight: var(--weight-strong); --label-case: none; --label-tracking: 0; --label-size: var(--text-caption);
 } }
 /* What you read takes the transcript's scale: the units below are worked out again inside it. There a row's
    text (a trace, a trail, a table) is a step under the body on both densities, not a finger list's. */
@@ -189,7 +194,7 @@
    piece can forget it; keyboard focus is the wash, which each piece draws on :focus-visible as on :hover. */
 :root[data-library] :is(:focus, :focus-visible), :where([class*="ui-"], [class*="ui-"] *):is(:focus, :focus-visible) { outline: none !important; --tw-ring-shadow: 0 0 #0000 !important; --tw-ring-offset-shadow: 0 0 #0000 !important; }
 /* The section label, one for every section: popovers, cards, riders, the sidebar. Muted caps in the label face. */
-.ui-title, .ui-title-text, .ui-nav-label, .ui-crumbs > button { color: var(--muted-foreground); font: var(--weight-rest) var(--text-label)/var(--leading-text) var(--font-label); letter-spacing: .07em; text-transform: uppercase; }
+.ui-title, .ui-title-text, .ui-nav-label, .ui-crumbs > button { color: var(--muted-foreground); font: var(--label-weight) var(--label-size)/var(--leading-text) var(--label-face); letter-spacing: var(--label-tracking); text-transform: var(--label-case); }
 
 /* Tabular figures wherever numbers tick or line up. */
 :is(.ui-keycap, .ui-choice-key, .ui-hints, .ui-overlay-hints, .ui-chip-copy small, .ui-seg small, .ui-slider-value) { font-variant-numeric: tabular-nums; }
