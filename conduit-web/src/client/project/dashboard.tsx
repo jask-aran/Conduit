@@ -11,7 +11,7 @@ import { CHAT_PAGE, CompactHeading, DayGroups, FilterBar, FiltersMenu, groupByDa
 import { FileTypeIcon } from "../workspace/file-type-icon";
 import { ContextMenu, ContextMenuContent, ContextMenuGroup, ContextMenuItem, ContextMenuTrigger, MenuSection, MenuRow } from "@/components/menus";
 import { ContextMenu as MenuHost, ContextMenuContent as MenuContent, ContextMenuTrigger as MenuTrigger } from "@/components/menus";
-import { ChangeRow, DashNote, GroupAction, GroupSwitches } from "@/components/ui/dashboard";
+import { ChangeRow, DashNote, DashPath, GroupAction, GroupSwitches } from "@/components/ui/dashboard";
 import { Card, CardDetails, CardRead } from "@/components/ui/card";
 import { Section } from "@/components/ui/popover";
 import { ChatMenuFor, type ItemActions } from "../navigation/item-menus";
@@ -433,7 +433,7 @@ export function ProjectDashboard(props: {
       header={<SplitHeader title={props.project.name} kind={kindLabel(props.project)}
         glyph={<Show when={isWorkspace()} fallback={<FolderIcon />}><WorkspaceGlyph appearance={activeAppearance()} /></Show>}
         context={[
-          <button type="button" title="Copy working path" onClick={() => void copyPath()}><code>{copied() ? "Copied" : workingRoot() || "Working path unavailable"}</code></button>,
+          <DashPath path={workingRoot()} copied={copied()} onCopy={() => void copyPath()} />,
           git() && <>{git()!.branch}{git()!.upstream ? ` → ${git()!.upstream}` : ""}</>,
           git() && (git()!.ahead || git()!.behind) ? [git()!.ahead && `${git()!.ahead} ahead`, git()!.behind && `${git()!.behind} behind`].filter(Boolean).join(", ") : null,
           !isWorkspace() && payload()?.stats.lastActivityAt && `last active ${relativeActivity(payload()?.stats.lastActivityAt, now()).toLowerCase()}`,

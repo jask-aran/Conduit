@@ -37,7 +37,7 @@ import { Header, HeaderButton, HeaderCrumb, HeaderNote } from "@/components/ui";
 import { NavPane, NavBrand, NavGroup as GNavGroup, NavRow as GNavRow, NavFolder, NavFolderRow, NavNote, NavSkeleton, NavNotice, NavLinks, NavRail, NavRailSection, RailButton, Segmented as GSegmented, Button as GButton } from "@/components/ui";
 import { DownloadIcon, ExternalLinkIcon, FolderPlusIcon, SearchIcon as GSearchIcon, TerminalIcon as GTerminalIcon } from "lucide-solid";
 import katex from "katex";
-import { Dashboard, DashHeader, QuickActions, QuickAction, QuickMore, DashIconButton, GroupHeading, GroupToggle, GroupSwitches, Group, GroupAction, DashDay, DashMore, DashRow, ChangeRow, Counts, DashEmpty, DashNote, FolderShelf, FolderTile } from "@/components/ui/dashboard";
+import { Dashboard, DashHeader, QuickActions, QuickAction, QuickMore, DashIconButton, GroupHeading, GroupToggle, GroupSwitches, Group, GroupAction, DashDay, DashMore, DashRow, ChangeRow, Counts, DashEmpty, DashNote, DashPath, FolderShelf, FolderTile } from "@/components/ui/dashboard";
 
 /*
  * The unified library, as a tree: Frost is the material; Popover, Card, Pill
@@ -781,7 +781,7 @@ export const libraryFamilies: Family[] = [
   { title: "Dashboard", note: "a place's page: a header, quick actions and composer, with chats beside projects and workspaces", groups: [
     { title: "Forms", note: "each piece and state at each density", layout: "desktop", atoms: [
       lib("dash-forms", "Dashboard · forms", "both", "dashboard", "components/ui/dashboard.tsx", () => <FormTable rows={[
-        form("GroupHeading · the two section roles", "the strong one for dashboards and big lists; the quiet one for menus, Settings and the sidebar (a phone's quiet label takes the strong one's voice)", () => <div class="g-row g-top"><GroupHeading count={4}>Projects</GroupHeading><GNavGroup label="Projects"><GNavRow icon={<FolderIcon />}>Japan</GNavRow></GNavGroup></div>, "<GroupHeading count> · <NavGroup label>"),
+        form("GroupHeading · the two section roles", "the strong one for dashboards and big lists; the quiet one for menus, Settings and the sidebar (Paper Mono capitals on both layouts, at each one's unit)", () => <div class="g-row g-top"><GroupHeading count={4}>Projects</GroupHeading><GNavGroup label="Projects"><GNavRow icon={<FolderIcon />}>Japan</GNavRow></GNavGroup></div>, "<GroupHeading count> · <NavGroup label>"),
         form("GroupToggle", "open and shut", () => <States states={["Open", "Shut"] as const}>{(state) => <GroupToggle open={state() === "Open"} count={4} onClick={() => {}}>Projects</GroupToggle>}</States>, "<GroupToggle open count onClick>"),
         form("Group", "switches and actions above chats, with a day and more below", () => <Group id="g-chats" labelled section="chats" heading={<GroupSwitches><span id="g-chats"><Segmented label="Show" value="all" onChange={() => {}} options={[{ value: "all", label: "All", count: 3 }, { value: "unread", label: "Unread", count: 0 }]} /></span></GroupSwitches>} actions={<GroupAction>Filters</GroupAction>}>
           <DashDay>Today</DashDay>
@@ -791,6 +791,7 @@ export const libraryFamilies: Family[] = [
           <DashMore count={12} onClick={() => {}}>Show more</DashMore>
         </Group>, "<Group labelled section heading actions> · <DashDay> · <DashRow> · <DashMore count>"),
         form("DashRow · ChangeRow · Counts", "modified and added files with line counts", () => <div><ChangeRow icon={<FileCode2Icon />} name="dashboard.tsx" directory="components/ui" added={24} removed={8} status="M" /><ChangeRow icon={<FileTextIcon />} name="notes.md" directory="docs" added={12} removed={0} status="A" /><Counts added={36} removed={8} /></div>, "<ChangeRow icon name directory added removed status> · <Counts added removed>"),
+        form("DashPath", "a place's working path in its header's context: a tap copies it, and it says Copied for a moment", () => <States states={["Rest", "Copied"] as const}>{(state) => <DashPath path="~/Conduit" copied={state() === "Copied"} onCopy={() => {}} />}</States>, "<DashPath path copied onCopy />", "--font-data --text-caption · brightens on hover or focus"),
         form("DashEmpty · DashNote", "an empty list, a note and an error", () => <div><DashEmpty>No chats</DashEmpty><DashNote>Choose a project to start.</DashNote><DashNote error>Could not load projects.</DashNote></div>, "<DashEmpty> · <DashNote error>"),
         form("FolderShelf · FolderTile", "four projects, one live, and a new project action", () => <FolderShelf all><FolderTile name="Conduit" meta="3 chats" live /><FolderTile name="Japan" meta="2 chats" /><FolderTile name="Website" meta="1 chat" /><FolderTile name="Notes" meta="No chats" /><FolderTile name="New project" icon={<FolderPlusIcon />} /></FolderShelf>, "<FolderShelf all> · <FolderTile name meta live icon>"),
       ]} on={["desktop", "phone"]} />, "row"),
