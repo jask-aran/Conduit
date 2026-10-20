@@ -25,6 +25,8 @@ export const CardNote = (props: { children: JSX.Element; error?: boolean }) => <
 export const CardRead = (props: { children: JSX.Element }) => <code class="ui-card-read">{props.children}</code>;
 export const CardDetails = (props: { children: JSX.Element }) => <dl class="ui-card-details">{props.children}</dl>;
 export const CardQR = (props: { svg: string; expired?: boolean }) => <div class="ui-card-qr" innerHTML={props.svg} data-expired={props.expired ? "" : undefined} aria-label="Pairing QR code" role="img" />;
+/** Under a QR: what it opens, one line. */
+export const CardCaption = (props: { children: string; title?: string }) => <p class="ui-card-caption" title={props.title ?? props.children}>{props.children}</p>;
 export const CardPreview = (props: { children: JSX.Element }) => <div class="ui-card-preview">{props.children}</div>;
 export const CardAttachments = (props: { children: JSX.Element }) => <ul class="ui-card-attachments">{props.children}</ul>;
 export function CardAttachment(props: { name: string; detail: string; image?: JSX.Element; icon: JSX.Element; failed?: boolean; onRemove: () => void }) {

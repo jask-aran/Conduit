@@ -12,7 +12,7 @@
 :root {
   /* Four weights: rest; lift, a touch heavier, for text over frost (it reads thinner there)
      and small controls; strong, for headings, buttons and values; current, where you are. */
-  --weight-rest: 400; --weight-lift: 500; --weight-strong: 600; --weight-current: 660;
+  --weight-light: 300; --weight-rest: 400; --weight-lift: 500; --weight-strong: 600; --weight-current: 660;
   --font-label: "Paper Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
   --font-data: "Paper Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
   --font-code: "Paper Mono", ui-monospace, SFMono-Regular, Consolas, monospace;

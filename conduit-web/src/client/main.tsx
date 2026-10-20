@@ -351,7 +351,7 @@ export function ServerConnectForm(props: { adding?: boolean; onDone: (origin: st
     <Show when={!props.adding}><ConnectionHeading mark={<HarnessMark id="conduit" />}>Connect to your server</ConnectionHeading></Show>
     {/* One line, and in the dialog only when it says something the title
         and the fields do not (DESIGN.md: a dialog is the title and the choice). */}
-    <Show when={verifiedOrigin() || recordOnly || !props.adding}>
+    <Show when={verifiedOrigin() || !props.adding}>
       <ConnectionNote>{verifiedOrigin() ? "Server confirmed. Enter your Conduit password."
         : recordOnly ? "A browser opens another server in place of this one."
           : "HTTPS, unless the server is on this machine or this network."}</ConnectionNote>
@@ -374,7 +374,7 @@ export function ServerConnectForm(props: { adding?: boolean; onDone: (origin: st
       </ConnectionChoices>
     </Show>
     <Show when={!verifiedOrigin()}>
-      <Show when={canDiscoverServers()} fallback={<ConnectionNote>Finding servers on this network needs the Conduit app.</ConnectionNote>}>
+      <Show when={canDiscoverServers()} fallback={props.adding ? null : <ConnectionNote>Finding servers on this network needs the Conduit app.</ConnectionNote>}>
         <ConnectionGroup>On this network<Show when={searching()}><ConnectionSpinner /></Show></ConnectionGroup>
         <Show when={found().length} fallback={<Show when={!searching()}><ConnectionNote>Nothing here yet.</ConnectionNote></Show>}>
           <ConnectionChoices>
@@ -384,10 +384,11 @@ export function ServerConnectForm(props: { adding?: boolean; onDone: (origin: st
       </Show>
     </Show>
     <Show when={scanning()}><QrScanner onLink={(link) => void pair(link)} onClose={() => setScanning(false)} /></Show>
-    <ConnectionField label="Server address">
-    <ConnectionInput id="native-server-address" type="text" inputMode="url" autocomplete="url" autocapitalize="none" spellcheck={false}
-      placeholder={recordOnly ? "https://conduit.your-tailnet.ts.net" : "Address, or a link from conduit-server pair"} value={address()} onInput={(event) => setAddress(event.currentTarget.value)}
-      disabled={submitting() || Boolean(verifiedOrigin())} /></ConnectionField>
+    {/* In the Connect card the column is titled Add server: the field needs no label of its own. */}
+    {(() => { const field = <ConnectionInput id="native-server-address" aria-label="Server address" type="text" inputMode="url" autocomplete="url" autocapitalize="none" spellcheck={false}
+      placeholder={props.adding ? (recordOnly ? "Server address" : "Address or pair link") : recordOnly ? "https://conduit.your-tailnet.ts.net" : "Address, or a link from conduit-server pair"} value={address()} onInput={(event) => setAddress(event.currentTarget.value)}
+      disabled={submitting() || Boolean(verifiedOrigin())} />;
+      return props.adding ? field : <ConnectionField label="Server address">{field}</ConnectionField>; })()}
     <Show when={verifiedOrigin()}>
       <ConnectionField label="Password">
       <ConnectionInput id="native-password" type="password" autocomplete="current-password" value={password()}
@@ -395,7 +396,7 @@ export function ServerConnectForm(props: { adding?: boolean; onDone: (origin: st
     </Show>
     <Show when={error()}><ConnectionNote error>{error()}</ConnectionNote></Show>
     <ConnectionButton type="submit" disabled={submitting() || Boolean(verifiedOrigin() && !password())}>
-      {submitting() ? (verifiedOrigin() ? "Signing in…" : "Checking…") : recordOnly ? "Remember server" : verifiedOrigin() ? "Sign in" : "Connect"}
+      {submitting() ? (verifiedOrigin() ? "Signing in…" : "Checking…") : recordOnly ? (props.adding ? "Add" : "Remember server") : verifiedOrigin() ? "Sign in" : "Connect"}
     </ConnectionButton>
     <Show when={verifiedOrigin() && !props.adding}><ConnectionButton type="button" variant="ghost" onClick={() => {
       const previous = activeOrigin();

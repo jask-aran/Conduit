@@ -57,9 +57,11 @@
 .ui-card-read { display: block; max-height: var(--measure-xs); overflow: auto; padding: var(--space-md); border-radius: var(--radius-inset); background: var(--tint); font: var(--weight-rest) var(--text-caption)/var(--leading-text) var(--font-data); white-space: pre-wrap; overflow-wrap: anywhere; }
 .ui-card-details { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--space-sm) var(--space-lg); font-size: var(--text-caption); }
 .ui-card-details dt { color: var(--muted-foreground); }
-.ui-card-details dd { margin: 0; overflow-wrap: anywhere; text-align: right; font-family: var(--font-data); }
+.ui-card-details dd { margin: 0; overflow-wrap: anywhere; text-align: right; font-family: var(--font-data); font-weight: var(--weight-light); }
 .ui-card-qr { width: min(100%, var(--measure-sm)); aspect-ratio: 1; align-self: center; overflow: hidden; border-radius: var(--radius-control); background: var(--primary); transition: opacity var(--duration-quick) var(--ease-change); }
 .ui-card-qr svg { display: block; width: 100%; height: 100%; }
+/* What a QR opens, under it: one line of data, light, truncating with its whole in the title. */
+.ui-card-caption { margin: 0; overflow: hidden; color: var(--muted-foreground); font: var(--weight-light) var(--text-caption)/var(--leading-row) var(--font-data); text-align: center; text-overflow: ellipsis; white-space: nowrap; }
 .ui-card-qr[data-expired] { opacity: var(--opacity-disabled); }
 .ui-card-preview { max-height: var(--measure-lg); overflow: auto; }
 .ui-card .ui-textarea { width: 100%; max-height: var(--measure-md); resize: vertical; border: var(--hairline) solid var(--tint); border-radius: var(--radius-control); padding: var(--space-md); }

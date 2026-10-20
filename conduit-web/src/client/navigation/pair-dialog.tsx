@@ -1,5 +1,5 @@
 import { Dialog } from "@/components/dialog";
-import { CardActions, CardQR, CardNote, CardDetails, CardColumns, CardColumn } from "@/components/ui/card";
+import { CardActions, CardCaption, CardQR, CardNote, CardDetails, CardColumns, CardColumn } from "@/components/ui/card";
 import { Button as DialogButton } from "@/components/ui/controls";
 import { createEffect, createSignal, on, onCleanup, Show, type JSX } from "solid-js";
 
@@ -26,7 +26,6 @@ export function ConnectDialog(props: { open: boolean; onOpenChange: (open: boole
   const [expiresAt, setExpiresAt] = createSignal(0);
   const [now, setNow] = createSignal(Date.now());
   const [error, setError] = createSignal("");
-  const [version, setVersion] = createSignal("");
   const route = () => {
     const entry = activeServer();
     const best = entry ? [...pathsOf(entry)].sort((a, b) => reach(b) - reach(a))[0] : undefined;
@@ -61,7 +60,6 @@ export function ConnectDialog(props: { open: boolean; onOpenChange: (open: boole
   createEffect(on(() => props.open, (open) => {
     if (!open) return;
     void fresh();
-    void fetch(httpUrl("/healthz"), { cache: "no-store" }).then((r) => r.json()).then((h: { release?: string }) => setVersion(h.release || "")).catch(() => {});
   }));
   const tick = setInterval(() => setNow(Date.now()), 1000);
   onCleanup(() => clearInterval(tick));
@@ -73,15 +71,13 @@ export function ConnectDialog(props: { open: boolean; onOpenChange: (open: boole
       <CardColumn title="Pair a device">
     <Show when={route()} fallback={<CardNote>Only this machine reaches {activeServer()?.name || "this server"}. Run <code>conduit-server connect</code> on it to add your network, Tailscale or a tunnel, then pair from here.</CardNote>}>
       <CardQR svg={svg()} expired={expired()} />
+      <CardCaption title={route()!.origin}>{shortOrigin(route()!.origin)}</CardCaption>
       <Show when={error()}><CardNote error>{error()}</CardNote></Show>
-      <CardNote>Scan with a phone's camera, or with <strong>Scan QR code</strong> in the Conduit app. It works once.</CardNote>
+      {/* The route in the words the menus use; the app takes the nearest
+          route that proves it is this server. */}
       <CardDetails>
-        <dt>Server</dt><dd>{activeServer()?.name}</dd>
-        {/* The address a camera opens, in the route words the menus use. The
-            app takes the nearest route that proves it is this server. */}
-        <dt>Opens on</dt><dd title={`${serverPathLabel(route()!)} · ${shortOrigin(route()!.origin)}`}>{serverPathLabel(route()!)} · {shortOrigin(route()!.origin)}</dd>
-        <Show when={version()}><dt>Version</dt><dd title={version()}>{version().replace(/\.\d{14}\./, " · ")}</dd></Show>
-        <dt>Code</dt><dd>{expired() ? "Expired" : svg() ? `Expires in ${Math.floor(left() / 60)}:${String(left() % 60).padStart(2, "0")}` : "…"}</dd>
+        <dt>Opens on</dt><dd>{serverPathLabel(route()!)}</dd>
+        <dt>Code</dt><dd>{expired() ? "Expired" : svg() ? `Single use · ${Math.floor(left() / 60)}:${String(left() % 60).padStart(2, "0")}` : "…"}</dd>
       </CardDetails>
       <CardActions>
         <DialogButton variant="ghost" size="sm" onClick={() => void navigator.clipboard.writeText(link())} disabled={!link() || expired()}>Copy link</DialogButton>
