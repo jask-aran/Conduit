@@ -194,6 +194,12 @@ capped (a phone's at `--measure-sm` wide and `--measure-lg` tall by default;
 for a menu's own), scrolls past its caps, and keeps a gutter plus the safe area
 from the window's edges (`edgePadding`), so it never runs under a phone's
 navigation bar; `Menu fit` is gone.
+A chat's and a place's menu are one piece wherever their rows are
+(`navigation/item-menus.tsx`: `ChatMenuItems`, `PlaceMenuItems`, and `MoveTo`
+for every Move list): the sidebar binds them to its own dialogs, the app and
+project dashboards to one `ItemActions` from `main.tsx`, so the dashboards'
+chat and project menus are v2 and match the sidebar's (Move to folder is a
+submenu there too). Their terminal menus are still classic (V2-04).
 `sidebar-cursor.ts`, `focus-shown.ts` and the go-to (`main.tsx`) select the
 library's classes (`.ui-nav-row`, `.ui-nav-link`, `.ui-nav-toggle`,
 `.ui-nav-folder-*`, `.ui-rail-button`, the switch's `[aria-checked]`). The

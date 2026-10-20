@@ -3,19 +3,7 @@ import { Button as DialogButton, Input as DialogInput, Field as DialogField } fr
 import { isConduitManagedProject } from "../navigation/sidebar-preferences";
 import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show, type JSX } from "solid-js";
 
-import {
-  CopyIcon,
-  FolderIcon,
-  FolderOpenIcon,
-  PaletteIcon,
-  PencilIcon,
-  PinIcon,
-  PinOffIcon,
-  Settings2Icon,
-  TerminalIcon,
-  Trash2Icon,
-  XIcon,
-} from "lucide-solid";
+import { FolderIcon, FolderOpenIcon, PaletteIcon, PencilIcon, Settings2Icon, TerminalIcon, Trash2Icon, XIcon } from "lucide-solid";
 import { ThreadHarnessMark } from "../harness-brand";
 import { activityLabel } from "../../activity.js";
 import { Segmented } from "../settings/settings-controls";
@@ -35,6 +23,8 @@ import {
   MenuSeparator,
   Spinner,
 } from "@/components/primitives";
+import { ContextMenu as MenuHost, ContextMenuContent as MenuContent, ContextMenuTrigger as MenuTrigger } from "@/components/menus";
+import { ChatMenuFor, type ItemActions } from "../navigation/item-menus";
 import { api } from "../api/client";
 import type { Template, DashboardChat, Project, ProjectDashboardPayload, WorkspaceAppearance, WorkspaceOperation } from "../api/contracts";
 import { activityDetail, runtimeActivity, RuntimeIndicator } from "../navigation/runtime-indicator";
@@ -100,7 +90,8 @@ export function ProjectDashboard(props: {
   composer: JSX.Element;
   runtime: RuntimeStore;
   onOpenChat: (chat: DashboardChat, project: Project) => Promise<void>;
-  onOpenChatTerminal: (chat: DashboardChat, project: Project) => void;
+  /** What a chat's menu does. */
+  menus: ItemActions;
   onPrefetchChat: (chat: DashboardChat) => void;
   onContextAction: (type: string, target: Omit<SidebarCommand, "type" | "nonce">) => void;
   isPinned: (type: "chat" | "project" | "terminal", id: string) => boolean;
@@ -359,18 +350,12 @@ export function ProjectDashboard(props: {
     <DayGroups groups={chatGroups()}>{(item) => {
       const process = () => props.runtime.getProcess(item.id);
       const live = () => process()?.active ? activityLabel(runtimeActivity(process()) || "working", activityDetail(process())) : "";
-      return <ContextMenu><ContextMenuTrigger as={SplitRow} element="button" draggable="true" data-doc-view={`chat:${item.id}`} onPointerEnter={() => props.onPrefetchChat(item)} onFocus={() => props.onPrefetchChat(item)} onClick={() => void props.onOpenChat(item, props.project)}
+      return <MenuHost><MenuTrigger as={SplitRow} element="button" draggable="true" data-doc-view={`chat:${item.id}`} onPointerEnter={() => props.onPrefetchChat(item)} onFocus={() => props.onPrefetchChat(item)} onClick={() => void props.onOpenChat(item, props.project)}
           lead={<RuntimeIndicator process={process()} stale={props.runtime.stale()} unread={item.unread} fallback={<ThreadHarnessMark id={item.harnessId} lively />} />}
           primary={item.title || "Untitled chat"}
           context={live()}
           trailing={<time dateTime={item.lastMessageAt || item.createdAt}>{relativeActivity(item.lastMessageAt || item.createdAt, now())}</time>} />
-        <ContextMenuContent class="w-60 sidebar-context-menu"><ContextMenuGroup>
-          <ContextMenuItem onSelect={() => props.onContextAction("rename-chat", { chat: item, project: props.project })}><PencilIcon />{commandLabel(COMMAND_IDS.renameChat)}</ContextMenuItem>
-          <ContextMenuItem onSelect={() => props.onContextAction("move-chat", { chat: item, project: props.project })}><FolderOpenIcon />Move to folder…</ContextMenuItem>
-          <ContextMenuItem onSelect={() => props.onContextAction("copy-chat", { chat: item })}><CopyIcon />{commandLabel(COMMAND_IDS.copyTranscript)}</ContextMenuItem>
-          <ContextMenuItem onSelect={() => props.onOpenChatTerminal(item, props.project)}><TerminalIcon />Open terminal</ContextMenuItem>
-          <Show when={isConduitManagedProject(props.project)}><ContextMenuItem onSelect={() => props.onContextAction("pin-chat", { chat: item })}><Show when={props.isPinned("chat", item.id)} fallback={<><PinIcon />Pin to sidebar</>}><PinOffIcon />Unpin</Show></ContextMenuItem></Show>
-        </ContextMenuGroup><ContextMenuSeparator /><ContextMenuItem variant="destructive" onSelect={() => props.onContextAction("delete-chat", { chat: item, project: props.project })}><Trash2Icon />{commandLabel(COMMAND_IDS.deleteChat)}</ContextMenuItem></ContextMenuContent></ContextMenu>;
+        <MenuContent><ChatMenuFor chat={item} project={props.project} actions={props.menus} /></MenuContent></MenuHost>;
     }}</DayGroups>
   </Show>;
 

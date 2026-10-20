@@ -3,7 +3,7 @@ import { Section as DialogSection, Item as DialogItem } from "@/components/ui/po
 import { CardActions, CardForm, CardBody, CardRead, CardNote } from "@/components/ui/card";
 import { Button as DialogButton, Input as DialogInput, Field as DialogField } from "@/components/ui/controls";
 import { Button, NavBrand, NavFolder, NavFolderRow, NavGroup, NavLinks, NavNote, NavNotice, NavPane, NavRail, NavRailSection, NavRow, NavSkeleton, PillSwitch, RailButton, Segmented, StatusDot } from "@/components/ui";
-import { ContextMenu, ContextMenuContent, ContextMenuTrigger, MenuRadioGroup, MenuRadioItem, MenuRow, MenuSection, MenuSub, MenuSubContent, MenuSubTrigger } from "@/components/menus";
+import { ContextMenu, ContextMenuContent, ContextMenuTrigger, MenuRow, MenuSection } from "@/components/menus";
 import { isConduitManagedProject } from "./sidebar-preferences";
 import { ServerSwitcher } from "./server-switcher";
 import { batch, createEffect, createMemo, createSignal, For, lazy, onCleanup, onMount, Show, type JSX } from "solid-js";
@@ -14,25 +14,17 @@ import {
   DownloadIcon,
   ExternalLinkIcon,
   FolderIcon,
-  FolderInputIcon,
   FolderPlusIcon,
   LayoutDashboardIcon,
   MonitorIcon,
   MessageSquareIcon,
   MessageSquarePlusIcon,
-  Columns2Icon,
   Maximize2Icon,
   PanelLeftIcon,
-  PaletteIcon,
-  PencilIcon,
-  PinIcon,
   PinOffIcon,
   SearchIcon,
-  Settings2Icon,
-  SquareIcon,
   TerminalIcon,
   Trash2Icon,
-  LoaderCircleIcon,
   XIcon,
 } from "lucide-solid";
 import type { ChatSummary, ComputerLocation, HarnessSummary, Project, RuntimeProcess, WorkspacePolicy, WorkspaceSuggestion } from "../api/contracts";
@@ -41,7 +33,7 @@ import { androidShell, installedClientKind } from "../platform/installed-client"
 import { latestRelease, type PublishedRelease } from "../platform/github-release";
 import { api } from "../api/client";
 import { WorkspaceGlyph } from "../project/workspace-appearance";
-import { PlaceGlyph } from "../chat/place-picker";
+import { ChatMenuItems, MoveTo, PlaceMenuItems } from "./item-menus";
 import type { Pty } from "../remotes/terminal-pane";
 import type { RuntimeStore } from "../state/runtime";
 import { focusFirst, isMobileLayout, MOBILE_LAYOUT_QUERY, restoreFocus } from "./mobile-layout";
@@ -832,38 +824,17 @@ export function Sidebar(props: {
       <SidebarChatTitle title={title} animate={animateTitle} />
     </ContextMenuTrigger>
     <ContextMenuContent>
-      <Show when={selected()} fallback={<>
-        <MenuSection>
-          <MenuRow icon={<PencilIcon />} onSelect={() => requestRenameChat(menuProps.chat, menuProps.project)}>{commandLabel(COMMAND_IDS.renameChat)}</MenuRow>
-          <MenuSub phone={phoneLayout()}>
-            <MenuSubTrigger icon={<FolderInputIcon />}>Move to folder…</MenuSubTrigger>
-            <MenuSubContent><MenuSection title="Move to">
-              <MenuRadioGroup value={menuProps.project.id} onChange={(id) => { const target = props.projects.find((item) => item.id === id); if (target) void props.onMoveChat(menuProps.chat, menuProps.project, target); }}>
-                <For each={props.projects}>{(target) => <MenuRadioItem value={target.id} icon={<PlaceGlyph project={target} />}>{target.name}</MenuRadioItem>}</For>
-              </MenuRadioGroup>
-            </MenuSection></MenuSubContent>
-          </MenuSub>
-          <MenuRow icon={<ClipboardCopyIcon />} onSelect={() => void props.onCopyTranscript(menuProps.chat)}>{commandLabel(COMMAND_IDS.copyTranscript)}</MenuRow>
-          <Show when={props.onOpenChatBeside}><MenuRow icon={<Columns2Icon />} onSelect={() => props.onOpenChatBeside?.(menuProps.chat, menuProps.project)}>Open beside</MenuRow></Show>
-          <MenuRow icon={<TerminalIcon />} onSelect={() => props.onOpenTerminal(menuProps.chat, menuProps.project)}>Open terminal</MenuRow>
-          <Show when={processFor(menuProps.chat)?.id}><MenuRow icon={<SquareIcon />} onSelect={() => void props.onStopProcess(menuProps.chat)}>Stop process</MenuRow></Show>
-          <Show when={isConduitManagedProject(menuProps.project)}>
-            <MenuRow icon={isPinned("chat", menuProps.chat.id) ? <PinOffIcon /> : <PinIcon />} onSelect={() => void togglePin("chat", menuProps.chat.id)}>{isPinned("chat", menuProps.chat.id) ? "Unpin" : "Pin to sidebar"}</MenuRow>
-          </Show>
-        </MenuSection>
-        <MenuSection>
-          <MenuRow destructive icon={<Trash2Icon />} onSelect={() => setDeleting({ type: "chat", chat: menuProps.chat, project: menuProps.project })}>{commandLabel(COMMAND_IDS.deleteChat)}</MenuRow>
-        </MenuSection>
-      </>}>
+      <Show when={selected()} fallback={<ChatMenuItems project={menuProps.project} places={props.projects}
+        onRename={() => requestRenameChat(menuProps.chat, menuProps.project)}
+        onMove={(target) => void props.onMoveChat(menuProps.chat, menuProps.project, target)}
+        onCopy={() => void props.onCopyTranscript(menuProps.chat)}
+        onOpenBeside={props.onOpenChatBeside ? () => props.onOpenChatBeside?.(menuProps.chat, menuProps.project) : undefined}
+        onOpenTerminal={() => props.onOpenTerminal(menuProps.chat, menuProps.project)}
+        onStop={processFor(menuProps.chat)?.id ? () => void props.onStopProcess(menuProps.chat) : undefined}
+        pin={isConduitManagedProject(menuProps.project) ? { pinned: isPinned("chat", menuProps.chat.id), onToggle: () => void togglePin("chat", menuProps.chat.id) } : undefined}
+        onDelete={() => setDeleting({ type: "chat", chat: menuProps.chat, project: menuProps.project })} />}>
         <MenuSection title={`${selectedTargets().length} chats selected`}>
-          <MenuSub phone={phoneLayout()}>
-            <MenuSubTrigger icon={<FolderInputIcon />}>Move to folder…</MenuSubTrigger>
-            <MenuSubContent><MenuSection title="Move to">
-              <For each={props.projects}>{(target) =>
-                <MenuRow icon={<PlaceGlyph project={target} />} disabled={selectedTargets().every((item) => item.project.id === target.id)} onSelect={() => void moveSelectedChats(target)}>{target.name}</MenuRow>}
-              </For>
-            </MenuSection></MenuSubContent>
-          </MenuSub>
+          <MoveTo label="Move to folder…" places={props.projects} held={(target) => selectedTargets().every((item) => item.project.id === target.id)} onMove={(target) => void moveSelectedChats(target)} />
           <MenuRow icon={<ClipboardCopyIcon />} onSelect={() => void props.onCopyChatLinks(selectedTargets())}>Copy links</MenuRow>
           <MenuRow icon={<XIcon />} onSelect={clearSelection}>Clear selection</MenuRow>
         </MenuSection>
@@ -880,9 +851,6 @@ export function Sidebar(props: {
     const guard = guardFor(blockProps.project);
     const isWorkspace = () => blockProps.project.origin === "linked" || blockProps.project.origin === "created" || blockProps.project.origin === "cloned" || blockProps.project.kind === "workspace";
     const cloning = () => blockProps.project.state === "cloning";
-    const deleteLabel = () => blockProps.project.deletesFilesOnRemove === false ? "Unlink workspace"
-      : isWorkspace() ? "Delete workspace"
-        : `Delete ${blockProps.workspace ? "workspace" : "folder"}`;
     // A folder's chats slide rather than appear (NavFolder); a closed folder keeps nothing in the document.
     return <NavFolder open={open()} row={<ContextMenu placement={menuPlacement()} onOpenChange={guardOpen(guard)}>
         <ContextMenuTrigger as={NavFolderRow} open={open()} current={onProjectPage(blockProps.project)} within={holdsCurrentChat(blockProps.project)}
@@ -899,31 +867,15 @@ export function Sidebar(props: {
             toggleProject(blockProps.project.id);
           } }}>{blockProps.project.name}</ContextMenuTrigger>
         <ContextMenuContent>
-          <Show when={cloning()} fallback={<>
-            <MenuSection>
-              <MenuRow icon={<MessageSquarePlusIcon />} onSelect={() => startNewChat(blockProps.project)}>{commandLabel(COMMAND_IDS.newChat)}</MenuRow>
-              <Show when={isWorkspace()}><MenuRow icon={<Maximize2Icon />} onSelect={() => { closeMobile(); props.onOpenProjectMaximized(blockProps.project); }}>Open maximized Workspace</MenuRow></Show>
-              <MenuRow icon={<PencilIcon />} onSelect={() => requestRenameProject(blockProps.project)}>Rename {blockProps.workspace ? "workspace" : "folder"}</MenuRow>
-              <Show when={isConduitManagedProject(blockProps.project)}>
-                <MenuRow icon={isPinned("project", blockProps.project.id) ? <PinOffIcon /> : <PinIcon />} onSelect={() => void togglePin("project", blockProps.project.id)}>{isPinned("project", blockProps.project.id) ? "Unpin" : "Pin to sidebar"}</MenuRow>
-              </Show>
-              <Show when={blockProps.workspace}><MenuRow icon={<PaletteIcon />} onSelect={() => { closeMobile(); props.onOpenWorkspaceIdentity(blockProps.project); }}>Identity</MenuRow></Show>
-              <Show when={blockProps.workspace}><MenuRow icon={<Settings2Icon />} onSelect={() => props.onOpenSettings("workspaces", blockProps.project.id)}>Workspace settings</MenuRow></Show>
-              <MenuSub phone={phoneLayout()}>
-                <MenuSubTrigger icon={<FolderInputIcon />} disabled={!blockProps.project.sessions.length}>Move chats to…</MenuSubTrigger>
-                <MenuSubContent><MenuSection title="Move to">
-                  <For each={props.projects.filter((item) => item.id !== blockProps.project.id)}>
-                    {(target) => <MenuRow icon={<PlaceGlyph project={target} />} onSelect={() => void props.onMoveProjectChats(blockProps.project, target)}>{target.name}</MenuRow>}
-                  </For>
-                </MenuSection></MenuSubContent>
-              </MenuSub>
-            </MenuSection>
-            <MenuSection>
-              <MenuRow destructive icon={<Trash2Icon />} onSelect={() => setDeleting({ type: "project", project: blockProps.project })}>{deleteLabel()}</MenuRow>
-            </MenuSection>
-          </>}>
-            <MenuSection><MenuRow disabled icon={<LoaderCircleIcon />}>Clone in progress</MenuRow></MenuSection>
-          </Show>
+          <PlaceMenuItems project={blockProps.project} places={props.projects}
+            onNewChat={() => startNewChat(blockProps.project)}
+            onOpenMaximized={() => { closeMobile(); props.onOpenProjectMaximized(blockProps.project); }}
+            onRename={() => requestRenameProject(blockProps.project)}
+            pin={isConduitManagedProject(blockProps.project) ? { pinned: isPinned("project", blockProps.project.id), onToggle: () => void togglePin("project", blockProps.project.id) } : undefined}
+            onIdentity={() => { closeMobile(); props.onOpenWorkspaceIdentity(blockProps.project); }}
+            onSettings={() => props.onOpenSettings("workspaces", blockProps.project.id)}
+            onMoveChats={(target) => void props.onMoveProjectChats(blockProps.project, target)}
+            onDelete={() => setDeleting({ type: "project", project: blockProps.project })} />
         </ContextMenuContent>
       </ContextMenu>}>
       <For each={sortChats(blockProps.project.sessions, chatSort())}>{(chat) => <ChatMenu chat={chat} project={blockProps.project} indent />}</For>
