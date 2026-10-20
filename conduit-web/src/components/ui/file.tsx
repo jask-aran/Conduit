@@ -4,8 +4,8 @@ import { EllipsisIcon } from "lucide-solid";
 /*
  * A file in a pane or the dock (DESIGN Panes and windows): its header -- the name (or the pane's tabs), its git
  * letter and unsaved dot, its actions and tools, the ⋯ they fold into -- and the status bar at its foot. The app
- * measures a header (fitting): it sets data-compact ("tight", "bare") and data-folded on the actions that do not
- * fit, lowest data-fold first. Behaviour is the app's: these draw.
+ * measures a header (fitting) and sets data-folded on the actions that do not fit, lowest data-fold first.
+ * Behaviour is the app's: these draw.
  */
 
 /** A file's column: header, body, status bar. focused: it holds the keyboard (its header lifts). */

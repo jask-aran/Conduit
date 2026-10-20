@@ -32,12 +32,9 @@
 .ui-file-button:disabled { cursor: not-allowed; opacity: var(--opacity-disabled); }
 .ui-file-button > svg { width: var(--icon-sm); height: var(--icon-sm); flex: none; }
 
-/* Fitting: the ⋯ appears once actions fold; "tight" drops the actions to it, "bare" the tools too. */
+/* Fitting hides what folded (data-folded); the ⋯ that holds it is the pane viewer's (below). */
 .ui-file-head .ui-file-button[data-more] { display: none; }
 .ui-file-head [data-folded] { display: none; }
-.ui-file-head:is([data-compact="tight"], [data-compact="bare"]) :is(.ui-file-actions, .ui-file-suffix) { display: none; }
-.ui-file-head:is([data-compact="tight"], [data-compact="bare"]) .ui-file-button[data-more] { display: inline-flex; }
-.ui-file-head[data-compact="bare"] .ui-file-tools { display: none; }
 /* In a pane's viewer the ⋯ is always there, and what it holds is not repeated beside it. */
 .ui-file-viewer .ui-file-head .ui-file-button[data-more] { display: inline-flex; }
 .ui-file-viewer .ui-file-head .ui-file-button[data-in-menu] { display: none; }
@@ -59,3 +56,10 @@
 .ui-status-picker[data-strong] { color: var(--foreground); font-weight: var(--weight-strong); }
 .ui-status-picker:disabled { cursor: default; }
 .ui-status-picker[data-strong]:disabled { color: var(--muted-foreground); }
+
+/* A phone's controls are touch targets. */
+@media (--conduit-phone-layout) {
+  .ui-file-head { min-height: calc(2.5 * var(--u-space)); }
+  .ui-file-head .ui-file-button, .ui-status-bar .ui-file-button, .ui-status-picker { min-width: var(--control-sm); height: var(--control-sm); }
+  .ui-file-button > svg { width: var(--icon); height: var(--icon); }
+}
