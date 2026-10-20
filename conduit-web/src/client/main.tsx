@@ -182,6 +182,7 @@ const prefetchWorkspaceTerminal = () => void import("./workspace/workspace-panel
 // The desktop client is often installed on the machine the server runs on, and
 // that address is one nobody should have to type. It is offered only when the
 // probe answers as Conduit, so the button never points at nothing.
+const ConnectDialog = lazy(() => import("./navigation/pair-dialog").then((module) => ({ default: module.ConnectDialog })));
 const LOCAL_SERVER_ORIGIN = "http://127.0.0.1:4310";
 
 /**
@@ -193,7 +194,7 @@ const LOCAL_SERVER_ORIGIN = "http://127.0.0.1:4310";
  * Nothing is remembered until the server has actually answered. A half-added
  * entry that was never signed in to is a row that can only fail.
  */
-function ServerConnectForm(props: { adding?: boolean; onDone: (origin: string) => void }) {
+export function ServerConnectForm(props: { adding?: boolean; onDone: (origin: string) => void }) {
   const recordOnly = !isInstalledClient();
   const [address, setAddress] = createSignal(props.adding ? "" : activeOrigin() || "");
   const [verifiedOrigin, setVerifiedOrigin] = createSignal(props.adding ? null : activeOrigin());
@@ -5225,7 +5226,7 @@ function App() {
       updateState={updateState()} onTakeUpdate={() => void takePwaUpdate(true)}
       onAddServer={() => setAddingServer(true)}
       onLogout={() => void logout()} />
-    <Dialog open={addingServer()} title="Add server" close size="wide" onOpenChange={setAddingServer} >
+    <Show when={addingServer()}><ConnectDialog open={addingServer()} onOpenChange={setAddingServer} addServer={
       <ServerConnectForm adding onDone={(origin) => {
         setAddingServer(false);
         // Told to the server being left, before leaving it: otherwise the one
@@ -5233,7 +5234,7 @@ function App() {
         // hears about it.
         void publishServerDirectory(servers()).finally(() => switchToServer(origin, isInstalledClient()));
       }} />
-    </Dialog>
+    } /></Show>
     <div class="workspace-layout" ref={(element) => { const observer = new ResizeObserver(() => setLayoutWidth(element.clientWidth)); observer.observe(element); onCleanup(() => observer.disconnect()); }}>
     <main data-slot="sidebar-inset" data-region={paneAOverride() ? "workspace-panel" : routeKind() === "chat" || harnessThread() ? "chat" : routeKind() === "terminal" ? "terminal" : "dashboard"} tabIndex={-1} onPointerDown={focusChatSurface} onKeyDown={paneKeydown} class={`chat-main${routeKind() === "chat" && emptyLayout() ? " chat-main-empty" : ""}${routeKind() === "chat" && emptyChat() && !emptyLayout() ? " chat-main-sending" : ""}${routeKind() === "chat" && withheldLiveChat() ? " chat-main-live-opening" : ""}${workspaceExpanded() ? " workspace-expanded" : ""}`} style={{ ...(splitShown() ? { flex: `${paneWeights()[0]} 1 0`, "min-width": paneMotion()?.slot === "main" ? "0px" : `${paneMinWidth("main")}px` } : {}), ...(paneMotion()?.slot === "main" ? { opacity: 0 } : {}), ...(paneMotion()?.slot === "main" && paneMotion()!.collapsed ? { "margin-left": "0px", "margin-right": "0px" } : {}) }} {...mainDropHandlers}>
       <Show when={splitDropActive()}><div class="main-split-drop" aria-hidden="true" /></Show>

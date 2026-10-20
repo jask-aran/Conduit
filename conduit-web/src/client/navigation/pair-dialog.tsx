@@ -1,7 +1,7 @@
 import { Dialog } from "@/components/dialog";
-import { CardActions, CardQR, CardNote, CardDetails } from "@/components/ui/card";
+import { CardActions, CardQR, CardNote, CardDetails, CardColumns, CardColumn } from "@/components/ui/card";
 import { Button as DialogButton } from "@/components/ui/controls";
-import { createEffect, createSignal, on, onCleanup, Show } from "solid-js";
+import { createEffect, createSignal, on, onCleanup, Show, type JSX } from "solid-js";
 
 import { authorizedFetch } from "../api/native-auth-client";
 import { httpUrl } from "../api/transport";
@@ -20,7 +20,7 @@ import { pairingFragment } from "../platform/pairing";
  */
 const reach = (path: ServerPath) => path.scope === "loopback" ? 0 : path.scope === "private" ? 1 : 2;
 
-export function PairDialog(props: { open: boolean; onOpenChange: (open: boolean) => void }) {
+export function ConnectDialog(props: { open: boolean; onOpenChange: (open: boolean) => void; addServer: JSX.Element }) {
   const [svg, setSvg] = createSignal("");
   const [link, setLink] = createSignal("");
   const [expiresAt, setExpiresAt] = createSignal(0);
@@ -68,17 +68,19 @@ export function PairDialog(props: { open: boolean; onOpenChange: (open: boolean)
   const left = () => Math.max(0, Math.round((expiresAt() - now()) / 1000));
   const expired = () => Boolean(svg()) && left() === 0;
 
-  return <Dialog open={props.open} onOpenChange={props.onOpenChange} title="Pair a device" close size="wide" >
+  return <Dialog open={props.open} onOpenChange={props.onOpenChange} title="Connect" close size="split" >
+    <CardColumns>
+      <CardColumn title="Pair a device">
     <Show when={route()} fallback={<CardNote>Only this machine reaches {activeServer()?.name || "this server"}. Run <code>conduit-server connect</code> on it to add your network, Tailscale or a tunnel, then pair from here.</CardNote>}>
       <CardQR svg={svg()} expired={expired()} />
       <Show when={error()}><CardNote error>{error()}</CardNote></Show>
-      <CardNote>Scan with a phone's camera, or with <strong>Add server → Scan QR code</strong> in the Conduit app. It works once.</CardNote>
+      <CardNote>Scan with a phone's camera, or with <strong>Scan QR code</strong> in the Conduit app. It works once.</CardNote>
       <CardDetails>
         <dt>Server</dt><dd>{activeServer()?.name}</dd>
         {/* The address a camera opens, in the route words the menus use. The
             app takes the nearest route that proves it is this server. */}
-        <dt>Opens on</dt><dd>{serverPathLabel(route()!)} · {shortOrigin(route()!.origin)}</dd>
-        <Show when={version()}><dt>Version</dt><dd>{version().replace(/\.\d{14}\./, " · ")}</dd></Show>
+        <dt>Opens on</dt><dd title={`${serverPathLabel(route()!)} · ${shortOrigin(route()!.origin)}`}>{serverPathLabel(route()!)} · {shortOrigin(route()!.origin)}</dd>
+        <Show when={version()}><dt>Version</dt><dd title={version()}>{version().replace(/\.\d{14}\./, " · ")}</dd></Show>
         <dt>Code</dt><dd>{expired() ? "Expired" : svg() ? `Expires in ${Math.floor(left() / 60)}:${String(left() % 60).padStart(2, "0")}` : "…"}</dd>
       </CardDetails>
       <CardActions>
@@ -86,5 +88,8 @@ export function PairDialog(props: { open: boolean; onOpenChange: (open: boolean)
         <DialogButton variant="ghost" outline size="sm" onClick={() => void fresh()}>New code</DialogButton>
       </CardActions>
     </Show>
+      </CardColumn>
+      <CardColumn title="Add server">{props.addServer}</CardColumn>
+    </CardColumns>
   </Dialog>;
 }

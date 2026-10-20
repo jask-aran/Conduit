@@ -1,4 +1,5 @@
 import { createSignal, onMount, Show } from "solid-js";
+import { OverlayFact, OverlayFacts } from "@/components/ui/overlay";
 import { httpUrl } from "../api/transport.js";
 import { authorizedFetch } from "../api/native-auth-client.ts";
 import {
@@ -43,9 +44,9 @@ export function AboutSettingsFooter() {
     || (isStandaloneBrowser() ? "Installed to the home screen" : "Browser tab");
 
   const row = (label: string, value: string, detail?: string) =>
-    <span title={detail ? `${value} · ${detail}` : value}>{label} {value}</span>;
+    <OverlayFact label={label} value={value} title={detail ? `${value} · ${detail}` : value} />;
 
-  return <>
+  return <OverlayFacts title="About">
     {row("Interface", buildLabel(clientBuild), formatBuiltAt(clientBuild.builtAt))}
     {row("Running as", runningAs())}
     <Show when={installedClientKind !== "browser"}>
@@ -54,5 +55,5 @@ export function AboutSettingsFooter() {
     <Show when={server() !== "pending"} fallback={row("Server", "Asking…")}>
       {row("Server", (server() as ServerBuild | null)?.release || "Unreachable")}
     </Show>
-  </>;
+  </OverlayFacts>;
 }

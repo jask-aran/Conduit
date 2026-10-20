@@ -36,6 +36,16 @@
 
 /* Shared dialog parts: content supplies state and handlers, never surface CSS. */
 .ui-card { min-height: 0; max-height: 100%; overflow-y: auto; color: var(--foreground); font-size: var(--text-row); }
+/* Split: two flows side by side, each one QR wide (--measure-sm), a rule between; they stack (auto-fit) when the card cannot hold both, the rule then above the second. */
+.ui-card[data-size="split"] { width: min(100%, calc(2 * var(--measure-sm) + 2 * var(--card-edge) + 2 * var(--space-2xl) + 4 * var(--hairline))); }
+.ui-card-columns { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--measure-sm)), 1fr)); gap: var(--card-gap) calc(2 * var(--space-2xl)); }
+.ui-card-column { display: flex; min-width: 0; flex-direction: column; gap: var(--card-pair); }
+.ui-card-column + .ui-card-column { position: relative; }
+.ui-card-column + .ui-card-column::before { position: absolute; top: 0; bottom: 0; left: calc(-1 * var(--space-2xl)); border-left: var(--hairline) solid var(--tint); content: ""; }
+.ui-card-column > .ui-card-qr { width: 100%; }
+/* One QR wide, a detail keeps to its line: the value truncates, its whole in its title. */
+.ui-card-column .ui-card-details dd { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ui-card-column > h4 { margin: 0 0 var(--space-2xs); color: var(--muted-foreground); font: var(--weight-rest) var(--text-label)/var(--leading-text) var(--font-label); letter-spacing: .07em; text-transform: uppercase; }
 .ui-card[data-size="large"] { width: min(100%, var(--measure-dialog-large)); }
 .ui-card-description { position: absolute; width: var(--hairline); height: var(--hairline); overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .ui-card-form, .ui-card-body { display: flex; min-width: 0; flex-direction: column; gap: var(--card-gap); }
