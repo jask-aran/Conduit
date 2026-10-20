@@ -7,7 +7,7 @@
 :root, [data-density] {
   /* The pane open and folded to its rail, and the top line every pane header centres on. */
   --nav-width: calc(18.125 * var(--u-space)); --nav-rail-width: calc(3.25 * var(--u-space));
-  --nav-line: calc(2.25 * var(--u-space)); --nav-brand: calc(2.625 * var(--u-space)); --nav-wordmark: calc(1.171875 * var(--u-type));
+  --nav-line: var(--control); --nav-brand: calc(2.625 * var(--u-space)); --nav-wordmark: calc(1.171875 * var(--u-type));
   --duration-fold: 240ms;
 }
 

@@ -55,7 +55,7 @@
 .ui-status-group[data-details] { flex: 1; justify-content: flex-end; }
 .ui-status-text { flex: none; padding-inline: var(--space-sm); white-space: nowrap; }
 .ui-status-bar .ui-file-button { padding-inline: var(--space-sm); }
-.ui-status-picker { display: flex; max-width: calc(7.5 * var(--u-space)); height: var(--control-xs); flex: none; align-items: center; gap: var(--space-xs); border: 0; border-radius: var(--radius-control); background: transparent; padding-inline: var(--space-sm); color: var(--muted-foreground); font: inherit; white-space: nowrap; }
+.ui-status-picker { display: flex; --status-picker-max: calc(7.5 * var(--u-space)); max-width: var(--status-picker-max); height: var(--control-xs); flex: none; align-items: center; gap: var(--space-xs); border: 0; border-radius: var(--radius-control); background: transparent; padding-inline: var(--space-sm); color: var(--muted-foreground); font: inherit; white-space: nowrap; }
 .ui-status-picker > span { overflow: hidden; text-overflow: ellipsis; }
 .ui-status-picker > svg { width: var(--icon-xs); height: var(--icon-xs); flex: none; }
 .ui-status-picker:is(:hover:not(:disabled), :focus-visible, [data-expanded]) { outline: none; background: var(--tint); color: var(--foreground); }

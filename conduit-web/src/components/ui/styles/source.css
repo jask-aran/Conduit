@@ -1,5 +1,5 @@
 /* Source control: see components/ui/source.tsx. */
-.ui-tool-line { display: flex; min-height: calc(3 * var(--u-space)); flex: none; align-items: center; justify-content: space-between; gap: var(--space-sm); padding: var(--space-xs) var(--space-sm) var(--space-xs) var(--space-md); border-bottom: var(--hairline) solid var(--border); font-size: var(--text-row); }
+.ui-tool-line { display: flex; min-height: calc(var(--control-lg) + var(--space-md)); flex: none; align-items: center; justify-content: space-between; gap: var(--space-sm); padding: var(--space-xs) var(--space-sm) var(--space-xs) var(--space-md); border-bottom: var(--hairline) solid var(--border); font-size: var(--text-row); }
 .ui-tool-line-main, .ui-tool-line-end { display: flex; min-width: 0; align-items: center; gap: var(--space-sm); }
 .ui-tool-line-end { flex: none; gap: var(--space-2xs); color: var(--muted-foreground); font: var(--text-caption) var(--font-data); white-space: nowrap; }
 .ui-tool-line-main > svg { width: var(--icon-sm); height: var(--icon-sm); flex: none; color: var(--muted-foreground); }
@@ -8,7 +8,7 @@
 .ui-tool-line-main > small { color: var(--muted-foreground); font-size: var(--text-caption); }
 
 .ui-commit-box { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-sm); padding: var(--space-md); border-bottom: var(--hairline) solid var(--border); }
-.ui-commit-box > textarea { min-width: 0; min-height: var(--control); max-height: calc(7.5 * var(--u-space)); resize: none; overflow-y: auto; border: var(--hairline) solid var(--input); border-radius: var(--radius-control); outline: 0; background: var(--tint); padding: var(--space-sm) var(--space-md); color: var(--foreground); font: var(--text-row)/1.4 var(--font-sans); }
+.ui-commit-box > textarea { min-width: 0; min-height: var(--control); max-height: calc(4lh + 2 * var(--space-sm)); resize: none; overflow-y: auto; border: var(--hairline) solid var(--input); border-radius: var(--radius-control); outline: 0; background: var(--tint); padding: var(--space-sm) var(--space-md); color: var(--foreground); font: var(--text-row)/1.4 var(--font-sans); }
 .ui-commit-box > textarea:focus { border-color: var(--ring); }
 .ui-commit-box > textarea::placeholder { color: var(--muted-foreground); }
 .ui-commit-box > button { align-self: start; height: auto; min-height: var(--control); }
@@ -16,7 +16,7 @@
 
 .ui-change-ledger { display: flex; min-height: 0; flex: 1; flex-direction: column; overflow: hidden; container-type: inline-size; }
 .ui-change-ledger > div { display: flex; min-height: 0; flex: 1; flex-direction: column; }
-.ui-change-section { display: flex; min-height: calc(5.625 * var(--u-space)); flex: 1; flex-direction: column; border-bottom: var(--hairline) solid var(--border); }
+.ui-change-section { display: flex; min-height: calc(3 * var(--row-min)); flex: 1; flex-direction: column; border-bottom: var(--hairline) solid var(--border); }
 .ui-change-section:first-child { max-height: 38%; }
 .ui-change-section:not([data-open]) { min-height: 0; flex: none; }
 .ui-change-section > header { display: flex; min-height: var(--control); flex: none; align-items: center; justify-content: space-between; gap: var(--space-sm); padding: var(--space-2xs) var(--space-sm) var(--space-2xs) var(--space-md); }
@@ -33,7 +33,7 @@
 .ui-change-item > .ui-dash-row { min-width: 0; min-height: var(--control-sm); flex: 1; gap: var(--space-md); border-radius: 0; background: transparent; padding: var(--space-xs) var(--space-sm); font-size: var(--text-caption); }
 .ui-change-item > .ui-tool-button { opacity: 0; }
 .ui-change-item:is(:hover, :focus-within) > .ui-tool-button { opacity: 1; }
-.ui-change-empty { display: grid; min-height: calc(5 * var(--u-space)); flex: 1; place-items: center; color: var(--muted-foreground); font-size: var(--text-caption); }
+.ui-change-empty { display: grid; min-height: calc(2.5 * var(--row-min)); flex: 1; place-items: center; color: var(--muted-foreground); font-size: var(--text-caption); }
 
 .ui-commit-list { min-height: 0; flex: 1; overflow: auto; padding: var(--space-2xs) var(--space-sm) var(--space-sm); }
 .ui-commit { display: grid; width: 100%; min-width: 0; min-height: var(--control-sm); grid-template-columns: minmax(var(--space-xl), auto) minmax(0, 1fr) auto auto; align-items: center; gap: var(--space-md); border: 0; border-radius: var(--radius-control); background: transparent; padding: var(--space-2xs) var(--space-sm); color: var(--foreground); font-size: var(--text-row); text-align: left; }
@@ -44,7 +44,7 @@
 .ui-commit-subject { display: flex; min-width: 0; align-items: center; gap: var(--space-sm); }
 .ui-commit-subject > span:first-child { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ui-commit-refs { display: flex; min-width: 0; flex: none; gap: var(--space-xs); }
-.ui-commit-refs > code { max-width: calc(8.75 * var(--u-space)); overflow: hidden; border: var(--hairline) solid var(--border); border-radius: var(--radius-inset); padding: 0 var(--space-xs); color: var(--muted-foreground); font: var(--text-label) var(--font-data); text-overflow: ellipsis; white-space: nowrap; }
+.ui-commit-refs > code { max-width: var(--measure-xs); overflow: hidden; border: var(--hairline) solid var(--border); border-radius: var(--radius-inset); padding: 0 var(--space-xs); color: var(--muted-foreground); font: var(--text-label) var(--font-data); text-overflow: ellipsis; white-space: nowrap; }
 .ui-commit-refs > code[data-current] { background: var(--tint); color: var(--foreground); }
 
 .ui-patch { min-height: 0; flex: 1; margin: 0; overflow: auto; padding: var(--space-lg) 0; font: var(--text-caption)/1.55 var(--font-data); tab-size: 2; white-space: pre; }

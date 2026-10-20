@@ -12,7 +12,7 @@
    current weight, the rest grey; the wash is only the pointer. Titles hold their lit width, so switching moves
    nothing; what does not fit waits in the ⋯ at the row's end. */
 .ui-tabs-row { display: flex; min-width: 0; flex: 1 1 auto; align-self: stretch; align-items: center; overflow: hidden; font-size: var(--text-row); line-height: var(--space-2xl); }
-.ui-pane-tabs { --tab-gap: var(--space-lg); --tab-place-gap: calc(2.5 * var(--u-space)); --tab-more: calc(var(--control-xs) + var(--space-md)); --tab-label-gap: var(--space-md);
+.ui-pane-tabs { --tab-gap: var(--space-lg); --tab-place-gap: calc(2.5 * var(--u-space)); --tab-max: calc(17.1875 * var(--u-space)); --tab-more: calc(var(--control-xs) + var(--space-md)); --tab-label-gap: var(--space-md);
   display: flex; height: 100%; min-width: 0; flex: 1; align-items: center; overflow: hidden; }
 .ui-tab-place { position: relative; display: inline-flex; min-width: 0; flex: 0 1 auto; align-items: baseline; overflow: visible; }
 .ui-tab-place + .ui-tab-place { margin-left: var(--tab-place-gap); }
@@ -24,7 +24,7 @@
 .ui-tab-place-label > span { overflow: hidden; text-overflow: ellipsis; }
 .ui-tab-place-label:hover, .ui-tab-place[data-current] .ui-tab-place-label { color: var(--foreground); }
 
-.ui-tab { position: relative; display: inline-flex; min-width: 0; max-width: calc(17.1875 * var(--u-space)); height: var(--control-sm); flex: 0 1 auto; align-items: center; overflow: visible; border-radius: var(--radius-control); }
+.ui-tab { position: relative; display: inline-flex; min-width: 0; max-width: var(--tab-max); height: var(--control-sm); flex: 0 1 auto; align-items: center; overflow: visible; border-radius: var(--radius-control); }
 .ui-tab + .ui-tab { margin-left: var(--tab-gap); }
 .ui-tab + .ui-tab::before { position: absolute; left: calc(-1 * var(--tab-gap) * .72); color: color-mix(in oklch, var(--foreground), transparent var(--tone-line)); content: "·"; pointer-events: none; }
 .ui-tab[data-lead]::before { content: none; }
@@ -113,7 +113,7 @@
   .ui-tool-head [data-only="desktop"] { display: none; }
 }
 
-.ui-pane-empty { display: grid; min-height: calc(7.5 * var(--u-space)); flex: 1; place-items: center; padding: var(--space-xl); color: var(--muted-foreground); font-size: var(--text-caption); text-align: center; }
+.ui-pane-empty { display: grid; min-height: calc(4 * var(--row-min)); flex: 1; place-items: center; padding: var(--space-xl); color: var(--muted-foreground); font-size: var(--text-caption); text-align: center; }
 .ui-pane-loading { position: absolute; inset: auto var(--space-lg) var(--space-lg) auto; display: flex; align-items: center; gap: var(--space-sm); border-radius: var(--radius-round);
   padding: var(--space-xs) var(--space-md); color: var(--muted-foreground); font-size: var(--text-caption); }
 
@@ -149,7 +149,7 @@
 .ui-tool-bar[data-vertical] > [role="toolbar"] { display: flex; flex-direction: column; align-items: center; gap: var(--space-2xs); margin-top: auto; }
 .ui-tool-bar > small { min-width: 0; flex: 1; overflow: hidden; padding-inline: var(--space-xs); color: var(--muted-foreground); font: var(--text-caption) var(--font-data); text-overflow: ellipsis; white-space: nowrap; }
 /* An empty tool with a mark, a title and a line under it. */
-.ui-pane-empty > div { display: grid; max-width: calc(17.5 * var(--u-space)); justify-items: center; gap: var(--space-sm); }
+.ui-pane-empty > div { display: grid; max-width: var(--measure-md); justify-items: center; gap: var(--space-sm); }
 .ui-pane-empty svg { width: var(--icon-lg); height: var(--icon-lg); }
 .ui-pane-empty strong { color: var(--foreground); }
 .ui-pane-empty p { margin: 0; line-height: 1.5; }

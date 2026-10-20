@@ -34,7 +34,7 @@
 .ui-history-branch:hover { opacity: .86; }
 /* Rail and tick meet at one x, a tick's width left of the child text, so the
    elbow stays short and connected whatever the indent step is. */
-.ui-history-branch-rail { position: absolute; top: 0; bottom: calc(var(--history-row-height, calc(1.79688 * var(--u-space))) / 2); left: calc(var(--history-gutter) + var(--history-depth, 1) * var(--history-step) - var(--history-tick)); width: var(--hairline); background: var(--muted-foreground); opacity: .55; }
+.ui-history-branch-rail { position: absolute; top: 0; bottom: calc(var(--history-row-height, var(--control-tool)) / 2); left: calc(var(--history-gutter) + var(--history-depth, 1) * var(--history-step) - var(--history-tick)); width: var(--hairline); background: var(--muted-foreground); opacity: .55; }
 .ui-history-tick { position: absolute; top: calc(var(--space-2xs) + var(--history-line-height) / 2); left: calc(var(--history-gutter) + var(--history-depth, 1) * var(--history-step) - var(--history-tick)); width: var(--history-tick); height: var(--hairline); background: var(--muted-foreground); opacity: .55; }
 .ui-history-row:hover { background: var(--tint); }
 /* A folded run of tool calls is a control, not a line of text: it opens just
@@ -68,15 +68,11 @@
 .ui-history-row small { color: var(--muted-foreground); font-size: var(--text-label); text-transform: capitalize; }
 
 /* Empty chat history keeps its centred icon, heading and explanation. */
-.workspace-chat-view .ui-pane-empty > div { display: grid; max-width: calc(17.5 * var(--u-space)); justify-items: center; gap: var(--space-sm); }
-.workspace-chat-view .ui-pane-empty svg { width: var(--control-xs); height: var(--control-xs); }
-.workspace-chat-view .ui-pane-empty strong { color: var(--foreground); }
-.workspace-chat-view .ui-pane-empty p { margin: 0; line-height: 1.5; }
 
 /* Phone geometry uses the phone density unit (16px). */
 @media (--conduit-phone-layout) {
   .ui-history { --history-time-width: calc(2.25 * var(--u-space)); --history-row-pad: var(--space-sm); --history-line-height: calc(1.0625 * var(--u-space)); padding: var(--space-xs) var(--space-sm) var(--space-sm); font-size: var(--text-row); }
   .ui-history-row { min-height: var(--control-tool); }
   .ui-history-time, .ui-history-row small { font-size: var(--text-label); }
-  .ui-history-branch { --history-row-height: calc(1.6875 * var(--u-space)); }
+  .ui-history-branch { --history-row-height: var(--control-tool); }
 }

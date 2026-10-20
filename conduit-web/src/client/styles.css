@@ -635,7 +635,8 @@ svg.lucide { stroke-width: 2.4; }
 .harness-mark { display: block; flex: none; object-fit: contain; }
 /* A workspace's own glyph (project/workspace-appearance.tsx): an icon or a monogram, sized by its slot. */
 .workspace-glyph { display: inline-grid; flex: none; place-items: center; font-size: calc(0.5625 * var(--u-type)); font-weight: 750; letter-spacing: -.04em; line-height: 1; }
-.workspace-glyph[data-mode="monogram"] { font-size: calc(0.5 * var(--u-type)); }
+/* A slot can size the monogram to itself (--glyph-text: the dashboard's glyph tile). */
+.workspace-glyph[data-mode="monogram"] { font-size: var(--glyph-text, calc(0.5 * var(--u-type))); }
 .workspace-glyph svg { width: 100%; height: 100%; }
 /* The dashboards' right-click menus (V2-04 moves them onto the adapter, as the sidebar's are). */
 .sidebar-context-menu [role="menuitem"], .sidebar-context-menu [role="menuitemradio"] { font-size: 12px; }
