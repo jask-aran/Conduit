@@ -1,5 +1,6 @@
 import { createSignal, For, mergeProps, onCleanup, onMount, Show, type JSX } from "solid-js";
 import { cn } from "@/lib/utils";
+import { haptic, type Haptic } from "./haptics";
 import { Segmented, TextArea } from "./controls";
 
 /*
@@ -23,10 +24,13 @@ const pillSlot = (item: PillAction, onPick?: (label: string) => void, attrs?: Pi
  * listens (Stop and send). aura: the mic -- listening, its pill fills with an Aura under its icon; stretched, it
  * shrinks to a short pill at the row's end. open: its menu is open, so it stays lit while its row dims (PhoneComposer under).
  */
-export function PillButton(props: PillAction & { stretch?: boolean; folded?: boolean; voice?: boolean; aura?: boolean; open?: boolean; onPick?: (label: string) => void; button?: PillAttrs }) {
+/** haptic: a press that acts at once (the mic, Send, Stop) is felt on a phone (see haptics.ts). */
+export function PillButton(props: PillAction & { stretch?: boolean; folded?: boolean; voice?: boolean; aura?: boolean; open?: boolean; haptic?: Haptic; onPick?: (label: string) => void; button?: PillAttrs }) {
   const mic = !!props.aura;
   // The caller's attributes stay live on the one button (merged lazily, so a change never rebuilds it).
-  const attrs = mergeProps(() => ({ tabIndex: props.folded ? -1 : undefined }), () => props.button ?? {}) as PillAttrs;
+  const attrs = mergeProps(() => ({ tabIndex: props.folded ? -1 : undefined }), () => props.button ?? {}, () => props.haptic ? {
+    onClick: (event: MouseEvent) => { haptic(props.haptic!); const click = props.button?.onClick; if (typeof click === "function") (click as (event: MouseEvent) => void)(event); },
+  } : {}) as PillAttrs;
   const pill = <div class="ui-frost ui-pill" data-solo="" data-stretch={props.stretch ? "" : undefined} data-folded={props.folded ? "" : undefined} data-voice={props.voice || mic ? "" : undefined} data-open={props.open ? "" : undefined}
     aria-hidden={props.folded ? "true" : undefined}>{mic
       ? pillSlot({ get label() { return props.label; }, icon: <><Aura />{props.icon}</> }, props.onPick, attrs)

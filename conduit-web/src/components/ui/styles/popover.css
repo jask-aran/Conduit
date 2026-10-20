@@ -34,6 +34,8 @@
 /* The cursor (DESIGN Interaction): one row at a time, the wash, white, no change of weight.
    The pointer moves it (moveCursor), as the keyboard does; hover alone never washes a second row. */
 .ui-row:is([data-highlighted], [data-expanded]) { background: var(--tint); color: var(--foreground); }
+/* On a touch screen the row under the finger is washed while it is pressed: what lifting it will choose. */
+@media (hover: none) { .ui-row:not([data-disabled]):active { background: var(--tint); color: var(--foreground); } }
 .ui-row[data-checked], [data-surface="frost"] .ui-row[data-checked] { color: var(--foreground); font-weight: var(--weight-current); }
 /* Over frost the row reads a touch heavier and brighter (text over frost reads thinner). */
 /* The row role, one for every row (list, menu, palette, settings, the sidebar): over frost a touch heavier and brighter, since text there reads thinner. */

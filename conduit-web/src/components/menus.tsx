@@ -3,6 +3,7 @@ import { Popover as KPopover } from "@kobalte/core/popover";
 import { ContextMenu as KContextMenu } from "@kobalte/core/context-menu";
 import type { FocusOutsideEvent } from "@kobalte/core";
 import { createContext, createEffect, Show, type ValidComponent, createMemo, createSignal, createUniqueId, For, on, onCleanup, onMount, splitProps, useContext, type ComponentProps, type JSX, type ParentProps } from "solid-js";
+import { haptic } from "./ui/haptics";
 import { createFullscreenPortalMount } from "./portal";
 
 /*
@@ -33,7 +34,7 @@ export const Menu = Object.assign((props: ComponentProps<typeof KMenu>) => <KMen
  *  Menu's own (MenuRow, MenuSection, MenuRadioItem, MenuSub), which work in either. */
 export const ContextMenu = (props: ParentProps<{ placement?: "right-start" | "bottom-start"; onOpenChange?: (open: boolean) => void }>) =>
   <Show when={rowMenusAttached()} fallback={<RowMenuDeferred.Provider value={true}>{props.children}</RowMenuDeferred.Provider>}>
-    <KContextMenu modal={false} fitViewport overflowPadding={edgePadding()} placement={props.placement ?? "right-start"} onOpenChange={props.onOpenChange}>{props.children}</KContextMenu>
+    <KContextMenu modal={false} fitViewport overflowPadding={edgePadding()} placement={props.placement ?? "right-start"} onOpenChange={(open) => { if (open) haptic("hold"); props.onOpenChange?.(open); }}>{props.children}</KContextMenu>
   </Show>;
 /* Until the first open has been shown (attachRowMenus), a row draws as the element it wraps and has no menu:
    building every row's menu machinery was a tenth of a second of a phone's first open. */

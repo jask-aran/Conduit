@@ -1,5 +1,6 @@
 import { createEffect, createSignal, createUniqueId, For, Show, splitProps, type JSX } from "solid-js";
 import { ChevronDownIcon, ChevronRightIcon, SquareIcon, XIcon } from "lucide-solid";
+import { haptic } from "./haptics";
 import { cn } from "@/lib/utils";
 
 /** A key or a chord. onClick: it can be pressed (to record another); onRemove: a × beside it clears it (Settings · Shortcuts). */
@@ -71,7 +72,7 @@ export function Segmented<T extends string>(props: { label: string; value: T; op
     style={{ "--segments": props.options.length, "--segment": index() }} onKeyDown={move}>
     <span class="ui-seg-thumb" aria-hidden="true" />
     <For each={props.options}>{(option) => <button type="button" role="radio" aria-checked={option.value === props.value} tabIndex={props.arrows && option.value !== props.value ? -1 : undefined} disabled={props.disabled} aria-label={props.icons || props.pill ? option.label : undefined} title={option.title ?? (props.icons || props.pill ? option.label : undefined)}
-      onClick={() => option.value !== props.value && props.onChange(option.value)}>{option.icon}{props.icons || props.pill ? null : <span>{option.label}</span>}{option.count !== undefined && <small>{option.count}</small>}</button>}</For>
+      onClick={() => { if (option.value === props.value) return; haptic("select"); props.onChange(option.value); }}>{option.icon}{props.icons || props.pill ? null : <span>{option.label}</span>}{option.count !== undefined && <small>{option.count}</small>}</button>}</For>
   </div>;
 }
 
