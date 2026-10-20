@@ -4,14 +4,25 @@ import { ContextMenu as KContextMenu } from "@kobalte/core/context-menu";
 import type { FocusOutsideEvent } from "@kobalte/core";
 import { createContext, createEffect, createMemo, createSignal, createUniqueId, For, on, onCleanup, splitProps, useContext, type ComponentProps, type JSX, type ParentProps } from "solid-js";
 import { createFullscreenPortalMount } from "./primitives";
-import { Menu as Surface, MenuAction, Item, Section, MenuPanel, MenuParent, MenuNote, SearchSection } from "./ui/popover";
+import { Menu as Surface, type Measure, MenuAction, Item, Section, MenuPanel, MenuParent, MenuNote, SearchSection } from "./ui/popover";
 import { Button, SliderValue } from "./ui/controls";
 import { PillButton } from "./ui/pill";
-export const Menu = KMenu;
+/** The room a popover keeps from the window's edges: a gutter, and the system bars an edge-to-edge window draws
+ *  under (the safe area), so a menu never runs under a phone's navigation bar. */
+export function edgePadding() {
+  const probe = document.createElement("div");
+  probe.style.cssText = "position:fixed;visibility:hidden;pointer-events:none;padding:var(--safe-area-inset-top, env(safe-area-inset-top, 0px)) 0 var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))";
+  document.body.append(probe);
+  const style = getComputedStyle(probe);
+  const inset = Math.max(parseFloat(style.paddingTop) || 0, parseFloat(style.paddingBottom) || 0);
+  probe.remove();
+  return 8 + inset;
+}
+export const Menu = Object.assign((props: ComponentProps<typeof KMenu>) => <KMenu overflowPadding={edgePadding()} {...props} />, KMenu);
 /** A row's right-click (or long-press, Menu, Shift+F10) menu. Its rows, sections, choices and submenus are the
  *  Menu's own (MenuRow, MenuSection, MenuRadioItem, MenuSub), which work in either. */
 export const ContextMenu = (props: ParentProps<{ placement?: "right-start" | "bottom-start"; onOpenChange?: (open: boolean) => void }>) =>
-  <KContextMenu modal={false} fitViewport overflowPadding={8} placement={props.placement ?? "right-start"} onOpenChange={props.onOpenChange}>{props.children}</KContextMenu>;
+  <KContextMenu modal={false} fitViewport overflowPadding={edgePadding()} placement={props.placement ?? "right-start"} onOpenChange={props.onOpenChange}>{props.children}</KContextMenu>;
 export const ContextMenuTrigger = KContextMenu.Trigger;
 export const MenuGroup = KMenu.Group;
 export const ContextMenuGroup = KContextMenu.Group;
@@ -29,19 +40,20 @@ function holdFocus(element: HTMLElement, keep: () => boolean) {
   const focus = element.focus.bind(element);
   element.focus = (options?: FocusOptions) => { if (!keep()) focus(options); };
 }
-type ContentProps = ParentProps<{ "data-settling"?: boolean; keep?: () => boolean; onOpenAutoFocus?: (event: Event) => void; onPointerDownOutside?: (event: Event) => void; onFocusOutside?: (event: FocusOutsideEvent) => void; onCloseAutoFocus?: (event: Event) => void }>;
+type Caps = { width?: Measure; height?: Measure };
+type ContentProps = ParentProps<Caps & { "data-settling"?: boolean; keep?: () => boolean; onOpenAutoFocus?: (event: Event) => void; onPointerDownOutside?: (event: Event) => void; onFocusOutside?: (event: FocusOutsideEvent) => void; onCloseAutoFocus?: (event: Event) => void }>;
 type RowProps = Omit<ComponentProps<typeof Item>, "onSelect"> & { onSelect?: () => void; closeOnSelect?: boolean };
 type ChoiceProps = RowProps & { value: string };
 /** keep: while true, opening leaves focus where it is (MenuPillTrigger's typing). */
 export function MenuContent(props: ContentProps) {
   const mount = createFullscreenPortalMount();
   const [local, rest] = splitProps(props, ["keep"]);
-  return <KMenu.Portal mount={mount()}><KMenu.Content as={Surface} data-slot="ui-menu-content" fit style={{ "--menu-room": "var(--kb-popper-content-available-height)" }}
+  return <KMenu.Portal mount={mount()}><KMenu.Content as={Surface} data-slot="ui-menu-content" style={{ "--menu-room": "var(--kb-popper-content-available-height)" }}
     ref={(element: HTMLElement) => { if (local.keep) holdFocus(element, local.keep); }} {...rest}><MenuBody>{props.children}</MenuBody></KMenu.Content></KMenu.Portal>;
 }
-export function ContextMenuContent(props: ParentProps) {
+export function ContextMenuContent(props: ParentProps<Caps>) {
   const mount = createFullscreenPortalMount();
-  return <KContextMenu.Portal mount={mount()}><KContextMenu.Content as={Surface} data-slot="ui-context-menu-content" fit style={{ "--menu-room": "var(--kb-popper-content-available-height)" }}><MenuBody>{props.children}</MenuBody></KContextMenu.Content></KContextMenu.Portal>;
+  return <KContextMenu.Portal mount={mount()}><KContextMenu.Content as={Surface} data-slot="ui-context-menu-content" width={props.width} height={props.height} style={{ "--menu-room": "var(--kb-popper-content-available-height)" }}><MenuBody>{props.children}</MenuBody></KContextMenu.Content></KContextMenu.Portal>;
 }
 type ItemProps = ParentProps<{ disabled?: boolean; variant?: "destructive"; onSelect?: () => void }>;
 export const MenuItem = (props: ItemProps) => <KMenu.Item as={MenuAction} disabled={props.disabled} onSelect={props.onSelect} data-destructive={props.variant === "destructive" ? "" : undefined}>{props.children}</KMenu.Item>;
@@ -61,10 +73,11 @@ export const MenuSubValue = (props: ParentProps<{ disabled?: boolean }>) => {
 };
 /** Back to the parent from inside a submenu: a choice there that leaves the parent open (the next pick is often beside it). */
 export const useMenuBack = () => useContext(SubmenuContext)?.close ?? (() => {});
-export function MenuSubContent(props: ParentProps) {
+export function MenuSubContent(props: ParentProps<Caps>) {
   const mount = createFullscreenPortalMount();
   const submenu = useContext(SubmenuContext);
-  return <KMenu.Portal mount={mount()}><KMenu.SubContent as={submenu?.phone() ? MenuPanel : Surface} ref={submenu?.setContent} data-slot="ui-menu-sub-content"><MenuBody>{props.children}</MenuBody></KMenu.SubContent></KMenu.Portal>;
+  return <KMenu.Portal mount={mount()}><KMenu.SubContent as={submenu?.phone() ? MenuPanel : Surface} ref={submenu?.setContent} data-slot="ui-menu-sub-content" width={props.width} height={props.height}
+    style={{ "--menu-room": "var(--kb-popper-content-available-height)" }}><MenuBody>{props.children}</MenuBody></KMenu.SubContent></KMenu.Portal>;
 }
 export const MenuSection = (props: ParentProps<{ title?: string; note?: JSX.Element }>) => <KMenu.Group as={Section} title={props.title} note={props.note}>{props.children}</KMenu.Group>;
 export const MenuRow = (props: RowProps) => <KMenu.Item as={Item} {...props} />;
@@ -124,7 +137,7 @@ export function MenuSub(props: ParentProps<{ phone?: boolean }>) {
     const size = panel.getBoundingClientRect();
     return { x: Math.max(inset, Math.min(box.left + offset, innerWidth - size.width - inset)), y: box.bottom - size.height, width: 0, height: 0 };
   };
-  return <SubmenuContext.Provider value={{ phone: () => !!props.phone, close, setTrigger, setContent }}><KMenu.Sub open={open()} onOpenChange={setOpen} getAnchorRect={anchorRect} fitViewport>{props.children}</KMenu.Sub></SubmenuContext.Provider>;
+  return <SubmenuContext.Provider value={{ phone: () => !!props.phone, close, setTrigger, setContent }}><KMenu.Sub open={open()} onOpenChange={setOpen} getAnchorRect={anchorRect} fitViewport overflowPadding={edgePadding()}>{props.children}</KMenu.Sub></SubmenuContext.Provider>;
 }
 
 /** Something edited in place over the page: the menu's surface without a menu's keys, which would take the typing. */

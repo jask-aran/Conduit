@@ -41,6 +41,7 @@ import { androidShell, installedClientKind } from "../platform/installed-client"
 import { latestRelease, type PublishedRelease } from "../platform/github-release";
 import { api } from "../api/client";
 import { WorkspaceGlyph } from "../project/workspace-appearance";
+import { PlaceGlyph } from "../chat/place-picker";
 import type { Pty } from "../remotes/terminal-pane";
 import type { RuntimeStore } from "../state/runtime";
 import { focusFirst, isMobileLayout, MOBILE_LAYOUT_QUERY, restoreFocus } from "./mobile-layout";
@@ -838,7 +839,7 @@ export function Sidebar(props: {
             <MenuSubTrigger icon={<FolderInputIcon />}>Move to folder…</MenuSubTrigger>
             <MenuSubContent><MenuSection title="Move to">
               <MenuRadioGroup value={menuProps.project.id} onChange={(id) => { const target = props.projects.find((item) => item.id === id); if (target) void props.onMoveChat(menuProps.chat, menuProps.project, target); }}>
-                <For each={props.projects}>{(target) => <MenuRadioItem value={target.id}>{target.name}</MenuRadioItem>}</For>
+                <For each={props.projects}>{(target) => <MenuRadioItem value={target.id} icon={<PlaceGlyph project={target} />}>{target.name}</MenuRadioItem>}</For>
               </MenuRadioGroup>
             </MenuSection></MenuSubContent>
           </MenuSub>
@@ -859,7 +860,7 @@ export function Sidebar(props: {
             <MenuSubTrigger icon={<FolderInputIcon />}>Move to folder…</MenuSubTrigger>
             <MenuSubContent><MenuSection title="Move to">
               <For each={props.projects}>{(target) =>
-                <MenuRow disabled={selectedTargets().every((item) => item.project.id === target.id)} onSelect={() => void moveSelectedChats(target)}>{target.name}</MenuRow>}
+                <MenuRow icon={<PlaceGlyph project={target} />} disabled={selectedTargets().every((item) => item.project.id === target.id)} onSelect={() => void moveSelectedChats(target)}>{target.name}</MenuRow>}
               </For>
             </MenuSection></MenuSubContent>
           </MenuSub>
@@ -912,7 +913,7 @@ export function Sidebar(props: {
                 <MenuSubTrigger icon={<FolderInputIcon />} disabled={!blockProps.project.sessions.length}>Move chats to…</MenuSubTrigger>
                 <MenuSubContent><MenuSection title="Move to">
                   <For each={props.projects.filter((item) => item.id !== blockProps.project.id)}>
-                    {(target) => <MenuRow onSelect={() => void props.onMoveProjectChats(blockProps.project, target)}>{target.name}</MenuRow>}
+                    {(target) => <MenuRow icon={<PlaceGlyph project={target} />} onSelect={() => void props.onMoveProjectChats(blockProps.project, target)}>{target.name}</MenuRow>}
                   </For>
                 </MenuSection></MenuSubContent>
               </MenuSub>

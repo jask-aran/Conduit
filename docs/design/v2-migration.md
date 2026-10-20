@@ -188,6 +188,12 @@ no toggle (the library preview's decision). `RuntimeIndicator` draws
 their names in a `title` rather than the classic tooltip. The chat, folder and
 pinned menus use `ContextMenu` with `MenuSection`, `MenuRow`, `MenuSub` and
 radio items; the selection menu and Move to folder are submenus there.
+The Move lists carry each place's glyph (`PlaceGlyph`). Every v2 popover is
+capped (a phone's at `--measure-sm` wide and `--measure-lg` tall by default;
+`Menu width`/`height`, and the adapter's `ContextMenuContent`/`MenuSubContent`,
+for a menu's own), scrolls past its caps, and keeps a gutter plus the safe area
+from the window's edges (`edgePadding`), so it never runs under a phone's
+navigation bar; `Menu fit` is gone.
 `sidebar-cursor.ts`, `focus-shown.ts` and the go-to (`main.tsx`) select the
 library's classes (`.ui-nav-row`, `.ui-nav-link`, `.ui-nav-toggle`,
 `.ui-nav-folder-*`, `.ui-rail-button`, the switch's `[aria-checked]`). The
