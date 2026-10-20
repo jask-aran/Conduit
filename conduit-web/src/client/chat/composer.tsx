@@ -1,4 +1,4 @@
-import { Button as LibraryButton, Captions, Completion, ComposerField, DesktopComposer, PhoneComposer, Picker, PillButton, PillField, PillWave, Rider, Spinner, StopGlyph, Toolbar } from "@/components/ui";
+import { Button as LibraryButton, Captions, Completion, ComposerField, DesktopComposer, PhoneComposer, Picker, PillButton, PillField, PillWave, Rider, Spinner, StopGlyph, TextArea, Toolbar } from "@/components/ui";
 import { latestAway, scrollToLatest } from "./latest-away";
 import { createEffect, createMemo, createSignal, For, lazy, on, onCleanup, onMount, Show, type JSX } from "solid-js";
 import { ArrowDownIcon, ArrowUpIcon, CameraIcon, ChevronLeftIcon, ChevronRightIcon, DeleteIcon, KeyboardIcon, MicIcon, TextCursorInputIcon, Undo2Icon, ShieldCheckIcon, TriangleAlertIcon } from "lucide-solid";
@@ -753,7 +753,7 @@ export function Composer(props: {
   });
 
   const field = () => <>
-    <textarea ref={input} rows={1} class="ui-textarea" data-composer-input="" aria-label="Message the agent" data-held={dictationSelectionOwned() && dictatedRange() ? "" : undefined} placeholder={!props.serverOnline ? "Server unavailable" : !props.chat.loadedId() ? "New chat" : interactive() ? placeholder() : "Reconnecting..."} value={props.chat.draft()} disabled={!props.serverOnline || !interactive()} onInput={(event) => change(event.currentTarget.value)} onPaste={paste} onSelect={selectionChanged} onKeyDown={keydown} inputMode={voiceFirst() && !keyboardWanted() ? "none" : undefined} onFocus={() => setInputFocused(true)} onBlur={() => { setInputFocused(false); if (!refocusing) setKeyboardWanted(false); }} />
+    <TextArea ref={input} rows={1} data-composer-input="" aria-label="Message the agent" data-held={dictationSelectionOwned() && dictatedRange() ? "" : undefined} placeholder={!props.serverOnline ? "Server unavailable" : !props.chat.loadedId() ? "New chat" : interactive() ? placeholder() : "Reconnecting..."} value={props.chat.draft()} disabled={!props.serverOnline || !interactive()} onInput={(event) => change(event.currentTarget.value)} onPaste={paste} onSelect={selectionChanged} onKeyDown={keydown} inputMode={voiceFirst() && !keyboardWanted() ? "none" : undefined} onFocus={() => setInputFocused(true)} onBlur={() => { setInputFocused(false); if (!refocusing) setKeyboardWanted(false); }} />
     <Show when={slashOpen() && slashCommand()}>{(item) => <Completion typed={props.chat.draft()} rest={item().command.slice(props.chat.draft().length)} detail={item().description} />}</Show>
   </>;
   const riders = () => <>
