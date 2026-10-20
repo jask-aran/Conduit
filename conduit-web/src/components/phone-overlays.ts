@@ -1,14 +1,14 @@
 import { isMobileLayout } from "../client/navigation/mobile-layout";
 import { installedClientKind } from "../client/platform/installed-client";
 
-// ui-*: the same menus drawn by the library.
-const menus = '[data-slot="menu-content"], [data-slot="menu-sub-content"], [data-slot="context-menu-content"], [data-slot="context-menu-sub-content"], [data-slot="popover-content"], [data-slot^="ui-"]';
+// Every menu, submenu and popover is drawn by the library (its slots are ui-*).
+const menus = '[data-slot^="ui-"]';
 // A menu playing its leave (data-closed) is already gone: the next touch is for what is under it.
 const gone = (element: HTMLElement) => !element.isConnected || element.hasAttribute("data-closed") || !element.checkVisibility();
 const visibleMenus = () => [...document.querySelectorAll<HTMLElement>(menus)].filter((element) => !gone(element));
 export const phoneLayerOpen = () => visibleMenus().length > 0;
 const escape = () => {
-  const child = visibleMenus().findLast((element) => element.matches('[data-slot="menu-sub-content"], [data-slot="ui-menu-sub-content"], [data-slot="ui-context-menu-sub-content"], [data-slot="context-menu-sub-content"]') && element.getAttribute("role") === "menu");
+  const child = visibleMenus().findLast((element) => element.matches('[data-slot="ui-menu-sub-content"], [data-slot="ui-context-menu-sub-content"]') && element.getAttribute("role") === "menu");
   if (child) {
     child.dispatchEvent(new KeyboardEvent("keydown", { key: getComputedStyle(child).direction === "rtl" ? "ArrowRight" : "ArrowLeft", bubbles: true, cancelable: true }));
     if (gone(child)) return true;
