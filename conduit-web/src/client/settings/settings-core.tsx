@@ -1,10 +1,11 @@
 import { createDecisionScope } from "@/components/decision-dialog";
 import { createEffect, createMemo, createSignal, For, lazy, on, onCleanup, onMount, Show } from "solid-js";
 import { ActivityIcon, BotIcon, ChevronLeftIcon, ChevronRightIcon, FileTextIcon, XIcon, KeyboardIcon, Mic2Icon, MonitorIcon, SearchIcon } from "lucide-solid";
-import { CableIcon, CloudIcon, CpuIcon, HandIcon, MicOffIcon, PlayIcon, RefreshCwIcon, RepeatIcon, RotateCcwIcon, SquareIcon } from "lucide-solid";
+import { CableIcon, CloudIcon, CpuIcon, LaptopIcon, HandIcon, MicOffIcon, PlayIcon, RefreshCwIcon, RepeatIcon, RotateCcwIcon, SquareIcon } from "lucide-solid";
 import { AboutSettingsFooter } from "./about-settings";
 import { ServersSettingsTile } from "./servers-settings";
 import { DesktopSettingsTile } from "./desktop-settings";
+import { DevicesSettingsTile } from "./devices-settings";
 import { toast } from "@/components/notifications";
 import { api } from "../api/client";
 import { MARKDOWN_RENDERER_OPTIONS, type MarkdownRendererId } from "../chat/markdown-settings";
@@ -50,7 +51,7 @@ import { uiPreferenceSaves } from "../preferences/ui-preferences";
 const sectionGroups = [
   { label: "Personal", sections: [{ id: "ui", label: "Appearance", icon: MonitorIcon }, { id: "shortcuts", label: "Shortcuts", icon: KeyboardIcon }] },
   { label: "AI", sections: [{ id: "models", label: "Models & accounts", icon: BotIcon }, { id: "prompts", label: "Prompts", icon: FileTextIcon }] },
-  { label: "System", sections: [{ id: "runtime", label: "Runtime", icon: ActivityIcon }, { id: "servers", label: "Servers", icon: CableIcon }] },
+  { label: "System", sections: [{ id: "runtime", label: "Runtime", icon: ActivityIcon }, { id: "servers", label: "Servers", icon: CableIcon }, { id: "devices", label: "Devices", icon: LaptopIcon }] },
   { label: "Services", sections: [{ id: "voice", label: "Voice", icon: Mic2Icon }, { id: "search", label: "Web search", icon: SearchIcon }] },
 ] as const;
 type VisibleSection = typeof sectionGroups[number]["sections"][number]["id"];
@@ -62,6 +63,7 @@ const sectionLabels: Record<Section, string> = {
   prompts: "Prompts",
   runtime: "Runtime",
   servers: "Servers",
+  devices: "Devices",
   workspaces: "Workspace profile",
   voice: "Voice",
   search: "Web search",
@@ -234,6 +236,8 @@ export function Settings(props: {
   sidebarChatLimit: number;
   onSidebarChatLimitChange: (limit: number) => void;
   onOpenModelSelector: () => void;
+  /** Adds a folder a paired device shares as a workspace (Devices). */
+  onAddWorkspace: (input: { mode: "node"; nodeId: string; path: string }) => Promise<boolean>;
   shortcuts: ShortcutManager;
 }) {
   const { confirm: confirmDialog } = createDecisionScope(() => props.open ? promptId() : null);
@@ -1218,6 +1222,7 @@ export function Settings(props: {
             </>
           </Show>
           <Show when={section() === "servers"}><ServersSettingsTile /></Show>
+          <Show when={section() === "devices"}><DevicesSettingsTile onAddWorkspace={props.onAddWorkspace} /></Show>
           <Show when={section() === "shortcuts"}><ShortcutsSettings manager={props.shortcuts} /></Show>
           <Show when={section() === "runtime"}>
             <>

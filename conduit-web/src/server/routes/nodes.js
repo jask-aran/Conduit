@@ -5,6 +5,8 @@
  * node role on it; main keeps only the key's hash. The list says which
  * devices are connected and what each shares.
  */
+import { currentMagicDnsOrigin } from "../../tailscale-share.js";
+
 export function registerNodeRoutes(app, { nodeHub, config }) {
   app.get("/v0/nodes", async (_request, response, next) => {
     try { response.json({ nodes: await nodeHub.list() }); } catch (error) { next(error); }
@@ -13,8 +15,10 @@ export function registerNodeRoutes(app, { nodeHub, config }) {
   app.post("/v0/nodes", async (request, response, next) => {
     try {
       const { node, key } = await nodeHub.pair(request.body?.name);
-      const main = String(request.body?.mainUrl || `http://127.0.0.1:${config.port}`);
-      response.status(201).json({ node, key, command: `conduit-node pair ${main} ${key}` });
+      // Devices reach main over the tailnet (decision 4): its MagicDNS name when
+      // Tailscale serves it, else this machine, for a node on the same one.
+      const main = String(request.body?.mainUrl || await currentMagicDnsOrigin().catch(() => null) || `http://127.0.0.1:${config.port}`);
+      response.status(201).json({ node, key, mainUrl: main, command: `conduit-node pair ${main} ${key}` });
     } catch (error) { next(error); }
   });
 
