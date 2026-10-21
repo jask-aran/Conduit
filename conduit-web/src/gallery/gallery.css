@@ -15,7 +15,7 @@ html, body { background: var(--frame, #08090a); color: var(--foreground); }
 .g-bar button, .g-toggle button { border: 1px solid var(--border); border-radius: 6px; background: transparent; padding: 3px 9px; color: var(--foreground); font-size: 12px; }
 :is(.g-bar, .g-toggle) button[aria-pressed="true"] { background: var(--border); }
 /* Pinned to the window's corner so it is on screen wherever the gallery is scrolled. */
-.g-speed { position: fixed; left: 12px; bottom: 12px; z-index: 1000; display: flex; align-items: center; gap: 4px; border: 1px solid var(--border); border-radius: 8px; background: var(--frame); padding: 6px 8px; font-size: 12px; box-shadow: 0 4px 16px rgb(0 0 0 / .4); }
+.g-speed { margin-left: auto; display: flex; align-items: center; gap: 4px; font-size: 12px; }
 .g-speed > span { color: var(--muted-foreground); margin-right: 4px; }
 .g-tune { display: block; width: calc(100% - 32px); height: 160px; margin: 8px 16px; border: 1px solid var(--border); border-radius: 6px; background: transparent; padding: 8px; color: var(--foreground); font: 11px ui-monospace, monospace; }
 /* One grid of equal cells on charcoal, each piece centred in its cell. */
@@ -457,3 +457,13 @@ html, body { background: var(--frame, #08090a); color: var(--foreground); }
 .g-api td:first-child code { color: var(--foreground); font-weight: 600; }
 .g-api td code { font-size: 12px; overflow-wrap: anywhere; }
 .g-used-in { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; font-size: 12px; }
+.g-api h4 .g-api-adapter { padding: 1px 6px; border: 1px solid var(--border); border-radius: 999px; }
+/* The page template (page.tsx PageView). */
+.g-page-summary { max-width: 72ch; margin: 4px 16px 0; color: var(--muted-foreground); font-size: 14px; line-height: 1.5; }
+.g-page-toc { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 14px 16px 0; font-size: 12px; }
+.g-page-toc > span { color: var(--muted-foreground); }
+.g-page-toc a { color: var(--foreground); text-decoration: none; }
+.g-page-toc a:hover { text-decoration: underline; }
+.g-preview { display: grid; }
+.g-preview > .g-surface { display: grid; min-height: 160px; place-items: center; padding: 32px; border-radius: 10px; }
+.g-rows .g-dash { align-self: center; justify-self: center; color: var(--muted-foreground); }

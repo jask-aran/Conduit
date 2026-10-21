@@ -43,6 +43,14 @@ export const codeBlockFamily: Family = { title: "CodeBlock", note: "a fenced blo
 <CodeBlock lang="tsx" code="const ready = true;" />`,
   api: ["CodeBlock", "CopyButton"],
   groups: [
+    { title: "Examples", layout: "desktop", atoms: [
+      lib("code-block-examples", "CodeBlock · examples", "both", "transcript", "CodeBlock · CopyButton", () => <FormTable on={["desktop", "phone"]} stacked rows={reading([
+        form("No language", "Plain output without a language label", () => <CodeBlock code="Workspace ready: /work/conduit" />, '<CodeBlock code="Workspace ready: /work/conduit" />'),
+        form("Long line", "A workspace path scrolls inside the answer", () => <Transcript><Turn><Answer><CodeBlock lang="sh" code="git diff -- src/client/chat/context-gauge.tsx src/client/chat/mobile-composer-options.tsx src/client/settings/settings-core.tsx" /></Answer></Turn></Transcript>, "<Answer><CodeBlock lang code /></Answer>"),
+        form("Always open", "Explicitly open without a fold control", () => <CodeBlock lang="ts" code={SNIPPET} open streaming={false} />, "<CodeBlock open streaming={false} />"),
+        form("Copy Markdown", "Standalone copy control in the message foot", () => { const [copied, copy] = useCopied(); return <Transcript><Turn><Answer><p>The workspace is ready in /work/conduit.</p></Answer><MessageFoot time="22:16"><CopyButton label="Copy Markdown" copied={copied()} onCopy={copy} /></MessageFoot></Turn></Transcript>; }, '<MessageFoot><CopyButton label="Copy Markdown" copied onCopy /></MessageFoot>'),
+      ])} />, "row"),
+    ] },
     { title: "In use", note: "in an answer, measured; Copy it, open and fold it", layout: "desktop", atoms: [
       lib("code-inuse", "CodeBlock in use", "both", "transcript", "Answer > CodeBlock · MessageFoot > CopyButton", () => <InUse scene={codeScene} marks={CODE_MARKS} spacing={[".ui-answer"]} />, "row"),
     ] },

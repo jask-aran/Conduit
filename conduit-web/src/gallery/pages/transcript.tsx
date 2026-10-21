@@ -77,7 +77,7 @@ export const transcriptFamily: Family = { title: "Transcript", note: "what is re
     <MessageFoot time="22:19"><Button variant="ghost" size="icon-xs" aria-label="Copy" onClick={copyAnswer}><Icons.Copy /></Button></MessageFoot>
   </Turn></TranscriptRow>
 </Transcript>`,
-  api: ["Transcript", "TranscriptRow", "LoadingEarlier", "Message", "Turn", "Trace", "TraceHeader", "Orb", "Trail", "Step", "Answer", "CodeBlock", "MessageFoot", "Button", "Changes", "StopLine", "Failure", "HarnessPrompt", "Welcome", "Disclosure"],
+  api: ["Transcript", "TranscriptRow", "LoadingEarlier", "Message", "Turn", "Trace", "TraceHeader", "Orb", "Trail", "Step", "Answer", "CodeBlock", "MessageFoot", "Button", "Changes", "StopLine", "Failure", "HarnessPrompt", "Welcome", "Disclosure", "Bubble"],
   groups: [
     { title: "In use", note: "a turn, measured: green the gaps (a turn's parts half a unit apart, blocks three quarters)", layout: "desktop", atoms: [
       lib("transcript-inuse", "Turn in use", "both", "transcript", "Turn > TraceHeader · Answer · MessageFoot", () => <InUse scene={turnScene} marks={TURN_MARKS} spacing={[".ui-turn", ".ui-answer"]} />, "row"),

@@ -1,10 +1,11 @@
 import { HarnessMark } from "@/components/ui";
 import { FileTypeIcon } from "@/components/ui/file-marks";
 import { Icons } from "@/components/ui";
-import { Browser, BrowserLayout, BrowserSidebar, BrowserHeading, BrowserPlaces, BrowserMain, BrowserToolbar, BrowserActions, BrowserSearch, BrowserCount, BrowserSummary, BrowserSpacer, BrowserColumns, BrowserMark, BrowserEmpty, BrowserLoading, BrowserError, BrowserDivider, BrowserGrid, BrowserEntry, BrowserPlace, BrowserAddress, Select } from "@/components/ui/browser";
+import { Browser, BrowserLayout, BrowserSidebar, BrowserHeading, BrowserPlaces, BrowserMain, BrowserToolbar, BrowserActions, BrowserSearch, BrowserCount, BrowserSummary, BrowserSpacer, BrowserColumns, BrowserMark, BrowserEmpty, BrowserLoading, BrowserError, BrowserDivider, BrowserGrid, BrowserEntry, BrowserPlace, BrowserAddress } from "@/components/ui/browser";
 import { Button, Input } from "@/components/ui/controls";
 import { createEffect, createMemo, createSignal, For, onCleanup, Show } from "solid-js";
 import { Grid2X2Icon, ListIcon, UnlinkIcon } from "lucide-solid";
+import { Select } from "@/components/menus";
 import { ContextMenu, ContextMenuContent, ContextMenuGroup, ContextMenuItem, ContextMenuTrigger, Menu, MenuContent, MenuGroup, MenuItem, MenuTrigger } from "@/components/menus";
 import { api } from "../api/client";
 import type { ComputerLocation, HarnessSummary, Project } from "../api/contracts";

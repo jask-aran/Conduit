@@ -15,10 +15,13 @@ function sourceFiles(directory) {
 export function buildGalleryApi(root) {
   const src = path.resolve(root, "src");
   const ui = path.join(src, "components/ui");
+  // The library, then the behaviour adapters beside it (components/*.tsx: Menu, Select, Dialog… wrapping the
+  // library's pieces); an adapter named as a library piece is keyed "components/<file>#<Name>".
+  const adapters = path.join(src, "components");
+  const files = [ui, adapters].flatMap((directory) => fs.readdirSync(directory).sort()
+    .filter((entry) => /\.tsx?$/.test(entry) && entry !== "index.tsx").map((entry) => path.join(directory, entry)));
   const components = {};
-  for (const entry of fs.readdirSync(ui).sort()) {
-    if (!/\.tsx?$/.test(entry) || entry === "index.tsx") continue;
-    const filename = path.join(ui, entry);
+  for (const filename of files) {
     const source = fs.readFileSync(filename, "utf8");
     const body = parseSource(source).program.body;
     const text = (node) => source.slice(node.start, node.end).replace(/\s+/g, " ").trim();
@@ -42,6 +45,11 @@ export function buildGalleryApi(root) {
           if (named.extends?.length) result.extends = named.extends.map(text).join(" & ");
           return result;
         }
+      }
+      // ParentProps<T> (solid-js): T's props and children.
+      if (annotation.type === "TSTypeReference" && annotation.typeName.type === "Identifier" && annotation.typeName.name === "ParentProps" && annotation.typeParameters?.params.length === 1) {
+        const result = extract(annotation.typeParameters.params[0], resolve);
+        return { ...result, props: [...result.props, { name: "children", type: "JSX.Element", optional: true, doc: "" }] };
       }
       if (annotation.type === "TSIntersectionType") {
         const props = [];
@@ -72,7 +80,9 @@ export function buildGalleryApi(root) {
         : declaration?.type === "VariableDeclaration" && declaration.kind === "const" ? declaration.declarations : [];
       for (const candidate of candidates) {
         const name = candidate.id?.name;
-        const fn = candidate.type === "FunctionDeclaration" ? candidate : candidate.init;
+        const init = candidate.type === "FunctionDeclaration" ? candidate : candidate.init;
+        // Object.assign(component, { parts }): the component is the first argument.
+        const fn = init?.type === "CallExpression" && init.callee.type === "MemberExpression" && init.callee.object.name === "Object" && init.callee.property.name === "assign" ? init.arguments[0] : init;
         if (!name || !/^[A-Z]/.test(name) || !["FunctionDeclaration", "ArrowFunctionExpression", "FunctionExpression"].includes(fn?.type)) continue;
         const parameter = fn.params[0]?.type === "AssignmentPattern" ? fn.params[0].left : fn.params[0];
         const file = slash(path.relative(src, filename));
@@ -96,11 +106,12 @@ export function buildGalleryApi(root) {
         : specifier.startsWith(".") ? path.resolve(path.dirname(filename), specifier) : null;
       if (!target) continue;
       const base = target.replace(/\.[cm]?[jt]sx?$/, "").replace(/[/\\]index$/, "");
-      if (base !== ui && !base.startsWith(`${ui}${path.sep}`)) continue;
+      if (!base.startsWith(`${adapters}${path.sep}`)) continue;
       for (const imported of statement.specifiers) {
         if (imported.type !== "ImportSpecifier") continue;
         for (const component of byName.get(imported.imported.name ?? imported.imported.value) ?? []) {
-          if (base !== ui && base !== path.join(src, component.file).replace(/\.tsx?$/, "")) continue;
+          const own = path.join(src, component.file).replace(/\.tsx?$/, "");
+          if (base !== own && !(base === ui && own.startsWith(`${ui}${path.sep}`))) continue;
           const file = slash(path.relative(src, filename));
           if (!component.usedIn.includes(file)) component.usedIn.push(file);
         }

@@ -57,7 +57,7 @@ import { HarnessMark } from "@/components/ui";
     <ConnectionPassword value={password()} onInput={(event) => setPassword(event.currentTarget.value)} />
   </ConnectionForm>
 </ConnectionScreen>`,
-  api: ["ConnectionScreen", "ConnectionHeading", "HarnessMark", "PasswordSignIn", "ConnectionForm", "ConnectionChoices", "ConnectionChoice", "ConnectionGroup", "ConnectionAddress", "ConnectionStatus", "ConnectionPassword", "ConnectionRecovery", "ServerControl", "StatusDot", "Spinner", "Input", "Button", "CardBody", "CardNote", "Menu", "Section", "Item", "MenuPanel", "MenuParent"],
+  api: ["ConnectionScreen", "ConnectionHeading", "HarnessMark", "PasswordSignIn", "ConnectionForm", "ConnectionChoices", "ConnectionChoice", "ConnectionGroup", "ConnectionAddress", "ConnectionStatus", "ConnectionPassword", "ConnectionRecovery", "ServerControl", "StatusDot", "Spinner", "Input", "Button", "CardBody", "CardNote", "Menu", "Section", "Item", "MenuPanel", "MenuParent", "CameraPreview"],
   groups: [
     { title: "Heading", note: "ConnectionHeading: the mark and the screen's title at the top of the first connection", atoms: [
       lib("connection-heading", "ConnectionHeading", "both", "connection", "components/ui/connection.tsx · client/main.tsx", () => <FormTable rows={[

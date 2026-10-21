@@ -117,7 +117,7 @@ export type Where = "frame" | "ground" | "frost";
 export type Column = Where | "desktop" | "phone";
 /** code: how to write it; tokens: what it reads, so a form can be named and tuned. */
 export interface FormRow { name: string; use: string; code?: string; tokens?: string; sample: () => JSX.Element }
-const On = (props: { where: Column; children: JSX.Element }) => props.where === "desktop" || props.where === "phone"
+export const On = (props: { where: Column; children: JSX.Element }) => props.where === "desktop" || props.where === "phone"
   ? <div class="g-form-density" data-density={props.where}>{props.children}</div>
   : props.where === "frost" ? <Frost class="g-surface g-form-surface">{props.children}</Frost>
   : <div class="g-surface g-form-surface" data-surface={props.where}>{props.children}</div>;

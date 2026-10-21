@@ -17,6 +17,13 @@ export const readingFamily: Family = { title: "Reading", note: "what a gauge mea
 </Reading>`,
   api: ["Reading", "ReadingTotal", "ReadingParts", "ReadingPart", "ReadingStats", "ReadingStat", "ReadingFoot"],
   groups: [
+    { title: "Examples", layout: "desktop", atoms: [
+      lib("reading-examples", "Reading · examples", "both", "popover", "Menu > Reading", () => <FormTable on={["desktop", "phone"]} stacked rows={[
+        form("Unavailable", "Label only; no totals or reset detail", () => <Menu><Reading><ReadingTotal label="Context unavailable" /><ReadingParts label="Context breakdown"><ReadingPart hollow label="Waiting for the first response" /></ReadingParts><ReadingStats title="Plan · Plus"><ReadingStat label="Weekly" value="Unavailable" /></ReadingStats><ReadingFoot>Start a turn to measure context.</ReadingFoot></Reading></Menu>, "<ReadingTotal label /> · <ReadingPart label /> · <ReadingStat label value /> · <ReadingFoot>"),
+        form("Long tool name", "Nested names in a narrow context menu", () => <Menu width="sm"><Reading><ReadingParts label="What fills the window"><ReadingPart sub label="mcp__codemode__read_workspace_configuration_and_project_instructions" value="12k · 6.0%" /></ReadingParts></Reading></Menu>, '<Menu width="sm"><Reading><ReadingPart sub label value /></Reading></Menu>'),
+        form("Compaction unavailable", "Disabled action while context is loading", () => <Menu><Reading><ReadingFoot action={<Button variant="ghost" outline size="sm" disabled><Icons.Compact />Compact now</Button>}>Context is still loading</ReadingFoot></Reading></Menu>, "<ReadingFoot action={<Button disabled />}>"),
+      ]} />, "row"),
+    ] },
     { atoms: [
       lib("reading-forms", "Reading · parts", "both", "popover", "components/ui/reading.tsx", () => <FormTable rows={[
         form("ReadingTotal", "what is used of what there is, and a figure at the end", () => <div style={{ width: "100%", "max-width": "calc(20 * var(--u-space))" }}><Reading><ReadingTotal label="84k of 200k tokens" value="$0.42" /></Reading></div>, "<ReadingTotal label value />"),

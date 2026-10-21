@@ -167,7 +167,7 @@ import { Icons } from "@/components/ui";
   </SearchBar>
   <CodeContent><CodeHost ref={mountEditor} /></CodeContent>
 </CodeSurface>`,
-  api: ["CodeSurface", "SearchBar", "SearchField", "SearchActions", "FileButton", "CodeContent", "CodeHost", "AnnotationPopup", "AnnotationInput", "AnnotationButton", "DiffShell", "SplitEdge", "DiffRail", "DiffBody", "PaneEmpty", "Comparison", "FileHead", "FileName", "FileScope", "FileTools", "ComparisonContent", "StatusBar", "ComparisonSource", "StatusPicker", "TurnNavigation", "StatusText", "ComparisonCounts"],
+  api: ["CodeSurface", "SearchBar", "SearchField", "SearchActions", "FileButton", "CodeContent", "CodeHost", "AnnotationPopup", "AnnotationInput", "AnnotationButton", "DiffShell", "SplitEdge", "DiffRail", "DiffBody", "PaneEmpty", "Comparison", "FileHead", "FileName", "FileScope", "FileTools", "ComparisonContent", "StatusBar", "ComparisonSource", "StatusPicker", "TurnNavigation", "StatusText", "ComparisonCounts", "CodeExcerpt"],
   groups: [
     { title: "Surface", layout: "desktop", atoms: [
       lib("editor-surface", "CodeSurface · SearchBar · AnnotationPopup", "both", "editor", "components/ui/editor.tsx", () => <FormTable rows={[

@@ -518,7 +518,7 @@ export const foundationFamilies: Family[] = [
     lib("colour-opacity", "Emphasis", "both", "colour", "foundations.css --opacity-*", () => <TokenTable groups={OPACITY} density={false} />),
   ] }] },
   ...paletteFamilies,
-  { title: "Icons", rail: "Foundations", note: "one glyph per concept (components/ui/icons.tsx, imported as Icons), at the type unit so an icon sits with the text beside it; and the library's own marks: harnesses, file types, a workspace's or place's glyph", groups: [
+  { title: "Icons", rail: "Foundations", api: ["HarnessMark", "ThreadHarnessMark", "Glyph", "FileTypeIcon", "FolderTypeIcon"], note: "one glyph per concept (components/ui/icons.tsx, imported as Icons), at the type unit so an icon sits with the text beside it; and the library's own marks: harnesses, file types, a workspace's or place's glyph", groups: [
     { title: "In use", note: "Lucide at the type unit, so an icon is sized with the text beside it; muted at rest, its stroke a tenth of its size, an eighth when current (DESIGN.md Icons)", layout: "desktop", atoms: [
       lib("icon-inuse", "Icons in use", "both", "icon", "svg.lucide · --u-icon · --pill-icon", () => <InUse scene={iconScene} marks={ICON_MARKS} />, "row"),
     ] },

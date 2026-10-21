@@ -14,8 +14,8 @@ document.documentElement.setAttribute("data-library", "");
 import { applyFaces, applyScale, foundationFamilies } from "./foundations";
 import { libraryFamilies } from "./library";
 import { overlayViews, type OverlayView } from "./pages/overlay";
-import { type Atom } from "./model";
-import { PageApi, PageUsage, PageUsedIn } from "./page";
+import { type Atom, type Family, type Page } from "./model";
+import { PageApi, PageUsage, PageUsedIn, PageView } from "./page";
 
 /*
  * Components v2 (components/ui) on the left, by family: the base piece, its
@@ -96,7 +96,8 @@ function Canvas() {
   const openOnPhone = (view: OverlayView | null) => { setPhoneOverlay(view); phoneFrame()?.contentWindow?.postMessage({ galleryOverlay: view }, location.origin); };
   addEventListener("message", (event) => { if (event.origin === location.origin && event.data?.galleryOverlayClosed) setPhoneOverlay(null); });
   // One page at a time, picked from the rail: the foundations, then each component, then the blocks composed from them.
-  const families = [...foundationFamilies, ...libraryFamilies];
+  // Pages drawn to the template (PageView), and the families not yet moved onto it.
+  const families: (Family | Page)[] = [...foundationFamilies, ...libraryFamilies];
   const stored = (() => { try { return localStorage.getItem("gallery:family"); } catch { return null; } })();
   const [current, setCurrent] = createSignal(families.find((family) => family.title === stored)?.title ?? libraryFamilies[0]!.title);
   let left!: HTMLElement;
@@ -159,7 +160,7 @@ function Canvas() {
       </div>
       <Show when={tuning()}><textarea class="g-tune" spellcheck={false} value={tune()} onInput={(event) => update(event.currentTarget.value)}
         placeholder={".ui-frost {\n  backdrop-filter: blur(30px);\n}"} /></Show>
-      <For each={shown()}>{(family) => <section class="g-family">
+      <For each={shown()}>{(entry) => "groups" in entry ? (() => { const family = entry; return <section class="g-family">
         <h2 class="g-family-title">{family.title} <small>{family.note}</small></h2>
         <Show when={family.stage}><div class="g-stage">
           <div class="g-toggle" role="group" aria-label="Surface">
@@ -175,7 +176,7 @@ function Canvas() {
           <div class="g-grid g-dense"><For each={group.atoms}>{(atom) => <Piece atom={atom} fixed={group.staged ? staged(atom) : group.layout} surface={group.staged === true ? surface() : undefined} />}</For></div>
         </>}</For>
         <Show when={family.api?.length}><PageApi names={family.api!} /><PageUsedIn names={family.api!} /></Show>
-      </section>}</For>
+      </section>; })() : <PageView page={entry} />}</For>
     </section>
     <aside class="g-right">
       <div class="g-toggles">

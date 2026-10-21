@@ -1,7 +1,9 @@
 import { HarnessMark } from "@/components/ui";
 import { Icons } from "@/components/ui";
 import { SearchList } from "@/components/menus";
+import { Show } from "solid-js";
 import { createSignal, For } from "solid-js";
+import { Match, Meta, MenuNote, MenuAction, MenuParent, MenuPanel, Button } from "@/components/ui";
 import { RowGroup, RowAction, Rule, Meter, Readout, SliderValue, Item, Menu, HeadingSection, SearchSection, Section, Slider } from "@/components/ui";
 import { PlaceGlyph } from "../../client/chat/place-picker";
 import { MODELS, PROFILES, PROJECTS } from "../seed";
@@ -30,8 +32,42 @@ import { Icons } from "@/components/ui";
     <Item icon={<Icons.Copy />}>Copy link</Item>
   </Section>
 </Menu>`,
-  api: ["Menu", "Section", "SearchSection", "HeadingSection", "RowGroup", "Item", "RowAction", "Match", "Readout", "Rule", "Meta", "MenuNote", "MenuAction", "MenuParent", "MenuPanel"],
+  api: ["Menu", "Section", "SearchSection", "HeadingSection", "RowGroup", "Item", "RowAction", "Match", "Readout", "Rule", "Meta", "MenuNote", "MenuAction", "MenuParent", "MenuPanel", "components/menus.tsx#Menu", "MenuTrigger", "MenuPillTrigger", "MenuContent", "MenuSection", "MenuRow", "MenuItem", "MenuRadioItem", "MenuSub", "MenuSubTrigger", "MenuSubValue", "MenuSubContent", "ContextMenu", "ContextMenuContent", "ContextMenuItem", "Popover", "PopoverContent", "SearchList"],
   groups: [
+    { title: "Examples", layout: "desktop", atoms: [
+      lib("popover-examples", "Menu · examples", "both", "popover", "Menu and its parts", () => <FormTable on={["desktop", "phone"]} stacked rows={[
+        ...(["xs", "sm", "lg", "xl", "2xl"] as const).map((measure) => form(`Cap · ${measure}`, "Width and height caps with a scrolling section", () => <Menu width={measure} height={measure}><Section title="Workspaces" kind="list" scroll><For each={PROJECTS}>{(project) => <Item icon={<Icons.Folder />}>{project.name}</Item>}</For></Section></Menu>, `<Menu width="${measure}" height="${measure}"><Section scroll /></Menu>`)),
+        ...(["xs", "md", "lg", "xl", "2xl"] as const).map((measure) => form(`Panel cap · ${measure}`, "Submenu width and height caps", () => <MenuPanel width={measure} height={measure}><Section title="Projects"><For each={PROJECTS}>{(project) => <Item icon={<Icons.Folder />}>{project.name}</Item>}</For></Section></MenuPanel>, `<MenuPanel width="${measure}" height="${measure}" />`)),
+        form("Wide readout", "Legacy wide surface with long session details", () => <Menu wide><HeadingSection title="Review microphone input and workspace configuration" /><Readout label="Session" value="019a3f2c-7b1e-7c40-9d2e-5f8a1b6c3e70" /><Readout label="Waiting for usage" /></Menu>, "<Menu wide><HeadingSection title /><Readout label value /></Menu>"),
+        form("Search and match", "Controlled query; matching and unmatched labels", () => {
+          const [query, setQuery] = createSignal("con");
+          return <Menu><SearchSection placeholder="Search workspaces…" value={query()} onInput={setQuery} field={{ "aria-label": "Search gallery workspaces" }} /><Section><Item><Match text="Conduit" query={query()} /></Item><Item><Match text="Japan" query={query()} /></Item></Section></Menu>;
+        }, "<SearchSection value onInput field /> · <Match text query />"),
+        form("Folder tree", "Independent chevron; nested row; data detail", () => {
+          const [open, setOpen] = createSignal(false), [selected, setSelected] = createSignal(false);
+          return <Menu><Section><Item icon={<Icons.Folder />} opens opensLabel="Expand Conduit folder" aria-expanded={open()} onOpens={() => setOpen(!open())} onClick={() => setSelected(!selected())} picked={selected()} detailData detail="/work/conduit">Conduit</Item><Show when={open()}><Item indent picked={false}>Microphone input review</Item></Show></Section></Menu>;
+        }, "<Item opens onOpens opensLabel picked detailData /> · <Item indent />"),
+        form("Leading keys", "Leader key before the action label", () => <Menu><Section><Item keysFirst keys={["W"]}>Open workspace</Item></Section></Menu>, '<Item keysFirst keys={["W"]}>'),
+        form("Reveal end action", "End control appears on hover or cursor", () => {
+          const [removed, setRemoved] = createSignal(false);
+          return <Menu><Section><Show when={!removed()} fallback={<MenuNote>No recent workspaces.</MenuNote>}><Item reveal end={<Button variant="ghost" size="icon-xs" aria-label="Remove Japan from recent workspaces" onClick={() => setRemoved(true)}><Icons.Close /></Button>}>Japan</Item></Show></Section></Menu>;
+        }, "<Item reveal end={<Button onClick />} />"),
+        form("Cursor and fixed end", "Pointer cursor with an always visible end control", () => {
+          const [cursor, setCursor] = createSignal(false), [copied, setCopied] = createSignal(false);
+          return <Menu><Section><Item active={cursor()} onCursor={() => setCursor(true)} end={<Button variant="ghost" size="icon-xs" aria-label="Copy workspace path" onClick={() => setCopied(true)}><Icons.Copy /></Button>}>{copied() ? "Workspace path copied" : "Conduit"}</Item><Item onCursor={() => setCursor(false)}>Japan</Item></Section></Menu>;
+        }, "<Item active onCursor end={<Button onClick />} />"),
+        form("Notices", "Neutral hint and an error in their menu", () => <Menu><MenuNote>No active terminals in Japan.</MenuNote><MenuNote error>Could not connect to Desktop-Dev.</MenuNote></Menu>, "<MenuNote /> · <MenuNote error />"),
+        form("Action shell", "Adapter content with a separate metadata slot", () => {
+          const [copied, setCopied] = createSignal(false);
+          return <Menu><MenuAction role="menuitem" tabIndex={0} onClick={() => setCopied(true)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setCopied(true); } }}>{copied() ? "Link copied" : "Copy workspace link"}<Meta>Japan</Meta></MenuAction></Menu>;
+        }, '<MenuAction role="menuitem"><Meta /></MenuAction>'),
+        form("Panel and parent", "Dimmed parent while the submenu is open", () => {
+          const [open, setOpen] = createSignal(false);
+          return <><Button variant="ghost" outline size="sm" onClick={() => setOpen(!open())}>{open() ? "Back to servers" : "Open routes"}</Button><MenuParent under={open()}><Menu><Section><Item opens onClick={() => setOpen(true)}>Route</Item></Section></Menu></MenuParent><Show when={open()}><MenuPanel width="sm" height="sm"><Section><Item checked>Automatic</Item><Item checked={false} onClick={() => setOpen(false)}>Local network</Item></Section></MenuPanel></Show></>;
+        }, '<MenuParent under /><MenuPanel width="sm" height="sm" />'),
+        form("Removing", "The third shared motion state", () => <Replay leaves={["removing"]}>{(motion) => <Menu motion={motion()}><Section><Item>Workspace files updated</Item></Section></Menu>}</Replay>, '<Menu motion="removing" />'),
+      ]} />, "row"),
+    ] },
     { atoms: [
       lib("anatomy", "Anatomy", "both", "popover", "Menu > Section > Item", () => <Anatomy scene={() => <Menu>
         <HeadingSection title="lorem_ipsum.txt" detail="Edited 2 minutes ago" />
