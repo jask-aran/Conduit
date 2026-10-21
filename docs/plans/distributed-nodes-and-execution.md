@@ -54,10 +54,14 @@ environments.
 4. **Tailnet for nodes.** Nodes reach main only over Tailscale, authenticated
    by tailnet identity plus a pairing key. The public tunnel stays for UI
    clients reaching main.
-5. **Remote environments are Pi-only.** A pi-durable conversation's `env` is
-   built from its workspace: the local node is the zero-network path, a remote
-   node routes read/edit/search/shell to that device. Third-party harnesses do
-   not get remote workspaces (no mirrors, no MCP bridge) until missed.
+5. **Harnesses run where they are installed** (revised 2026-10-21). A
+   pi-durable conversation's `env` is built from its thread's device: main's
+   own machine is the zero-network path, another device's calls go over the
+   node protocol. Third-party harnesses (Codex, Claude Code, …) are
+   properties of the devices that have them installed: a device offers its
+   harnesses, Conduit drives them there, in that device's folders, and can
+   drive harnesses on several devices at once towards one outcome. Main's own
+   harnesses work as today. No mirrors or MCP bridges.
 6. **Workspaces declared by nodes.** A node mounts and declares folders to
    main; existing workspaces are simply main's local node and are unaffected.
 7. **Grants: per root + typed capabilities.** The device owner grants
@@ -120,6 +124,24 @@ environments.
 18. **Remote shell survives disconnects.** The node keeps the process and
     buffered output; on reconnect the tool reattaches by action id. If the
     node itself restarted, the call is reported interrupted.
+20. **The server acts, any client controls.** Clients (phone, browser,
+    desktop UI) are interchangeable controls of the server; devices lend the
+    server what they have (folders, shell, harnesses, capabilities). A device
+    can be both, but the phone never drives the desktop: it drives the server,
+    which acts on the desktop.
+21. **A thread is owned by a device.** A thread belongs to the device it
+    started on; its tool calls and capabilities default there, and it knows
+    that origin durably (a record beside the conversation, not agent
+    context). A persistent assistant instead picks a device per call. A
+    thread whose device is unreachable may be allowed to go on elsewhere
+    (fallback, to be designed) without forgetting where it belongs.
+22. **Main's machine is a device**, trusted by default: one path for every
+    file, shell and Conduit feature (browser, Git, terminals) through an
+    environment on `{device, path}`, main's own with full grants on its
+    workspaces unless narrowed.
+23. **Grants are the approval.** Within a device's shared roots and grants,
+    calls run without per-call approval; the chat shows every call.
+
 19. **Android is push-wakeable.** Main sends an FCM push to wake the Android
     node for a capability call (Firebase messaging in the app, key on main);
     otherwise the thread waits per decision 8.
