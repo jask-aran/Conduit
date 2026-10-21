@@ -1,7 +1,7 @@
 import { Icons } from "@/components/ui";
 import { Dialog } from "@/components/dialog";
 import { Button as DialogButton } from "@/components/ui/controls";
-import { CardAttachments, CardAttachment } from "@/components/ui/card";
+import { Attachments, Attachment } from "@/components/ui/card";
 import { createEffect, createMemo, createSignal, For, lazy, on, onCleanup, onMount, Show, Suspense } from "solid-js";
 
 
@@ -48,17 +48,17 @@ function AttachmentsDialog(props: {
     description={sizeLabel(total())}
     actions={<><DialogButton variant="ghost" size="sm" onClick={removeAll}>Remove all</DialogButton>
             <DialogButton size="sm" onClick={() => props.onOpenChange(false)}>Done</DialogButton></>}>
-    <CardAttachments>
+    <Attachments>
             <For each={props.items.map((item) => item.id)}>{(id) => {
               const item = createMemo<UploadAttachment | undefined>((last) => props.items.find((candidate) => candidate.id === id) ?? last);
               const source = () => item() && previewOf(item()!, props.chatId);
-              return <Show when={item()}>{(current) => <CardAttachment name={current().name}
+              return <Show when={item()}>{(current) => <Attachment name={current().name}
                 detail={current().status === "error" ? current().error || "Upload failed" : [sizeLabel(current().size), current().type].filter(Boolean).join(" · ")}
                 failed={current().status === "error"} icon={<FileMark name={current().name} />}
                 image={source() ? <AttachmentImage src={source()!} /> : undefined}
                 onRemove={() => void props.onRemove(current())} />}</Show>;
             }}</For>
-          </CardAttachments>
+          </Attachments>
   </Dialog>;
 }
 

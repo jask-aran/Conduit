@@ -115,13 +115,6 @@ svg.lucide { stroke-width: 2.4; }
 /* Menus: one solid dark surface everywhere; icons sized inside items. */
 .composer-stack { position: relative; z-index: 2; display: flex; width: 100%; flex: none; flex-direction: column; gap: var(--space-md); padding: var(--space-xl) var(--space-4xl) var(--space-3xl); background: var(--background); }
 
-.attachment-tray { display: flex; width: min(var(--composer-desktop-reference-width), 100%); max-height: min(var(--measure-md), 40dvh); flex-direction: column; gap: var(--space-md); margin: 0 auto var(--space-md); overflow-y: auto; }
-.attachment-card { display: flex; width: min(var(--measure-lg), 100%); align-items: center; gap: var(--space-md); padding: var(--space-sm); border: var(--hairline) solid var(--border); border-radius: var(--radius-control); }
-.attachment-media { display: grid; width: var(--control-lg); height: var(--control-lg); flex: none; place-items: center; overflow: hidden; border-radius: var(--radius-control); background: var(--muted); }
-.attachment-media img { width: 100%; height: 100%; object-fit: cover; }
-.attachment-copy { display: flex; min-width: 0; flex: 1; flex-direction: column; }
-.attachment-copy strong, .attachment-copy small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.attachment-copy small { color: var(--muted-foreground); }
 /* The commented lines, whole, with the part the comment covers picked out. */
 .chat-drop-overlay { position: absolute; inset: 0; z-index: 40; display: grid; place-items: center; pointer-events: none; background: color-mix(in oklch, var(--background), transparent 22%); backdrop-filter: blur(9.6px); }
 .chat-drop-overlay > div { padding: var(--space-xl) var(--space-2xl); border: var(--hairline) solid var(--border); border-radius: var(--radius-surface); background: var(--card); box-shadow: var(--lift-raised); }
@@ -137,13 +130,11 @@ svg.lucide { stroke-width: 2.4; }
 .chat-main-empty .composer-stack { position: absolute; inset-inline: 0; top: 50%; z-index: 2; width: min(var(--reading-width), calc(100% - var(--page-gutter))); margin-inline: auto; padding: 0; transform: translateY(var(--header-height)); background: transparent; }
 .chat-bootstrap { display: grid; min-height: 100%; place-items: center; color: var(--muted-foreground); font-size: var(--text-row); }
 
+.ui-tree, .ui-change-list, .ui-patch { scrollbar-color: var(--native-scrollbar-color); scrollbar-width: var(--native-scrollbar-width); }
+.ui-tree::-webkit-scrollbar, .ui-change-list::-webkit-scrollbar, .ui-patch::-webkit-scrollbar { width: var(--space-sm); height: var(--space-sm); }
+.ui-tree::-webkit-scrollbar-thumb, .ui-change-list::-webkit-scrollbar-thumb, .ui-patch::-webkit-scrollbar-thumb { border: var(--stroke) solid transparent; border-radius: var(--radius-round); background: color-mix(in oklch, var(--foreground), transparent 72%); background-clip: padding-box; }
 
-.attachment-tray, .ui-tree, .ui-change-list, .ui-patch { scrollbar-color: var(--native-scrollbar-color); scrollbar-width: var(--native-scrollbar-width); }
-.attachment-tray::-webkit-scrollbar, .ui-tree::-webkit-scrollbar, .ui-change-list::-webkit-scrollbar, .ui-patch::-webkit-scrollbar { width: var(--space-sm); height: var(--space-sm); }
-.attachment-tray::-webkit-scrollbar-thumb, .ui-tree::-webkit-scrollbar-thumb, .ui-change-list::-webkit-scrollbar-thumb, .ui-patch::-webkit-scrollbar-thumb { border: var(--stroke) solid transparent; border-radius: var(--radius-round); background: color-mix(in oklch, var(--foreground), transparent 72%); background-clip: padding-box; }
-
-.workspace-warning,
-.attachment-card {
+.workspace-warning {
   background: var(--card);
   border-color: var(--border);
 }

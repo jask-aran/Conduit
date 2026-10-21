@@ -48,7 +48,7 @@
 .ui-diff-shell[data-collapsed] > .ui-diff-body { grid-column: 2; }
 .ui-diff-rail { display: flex; justify-content: center; border-right: var(--hairline) solid var(--border); padding-top: var(--space-xs); }
 .ui-split-edge { position: relative; z-index: 5; grid-column: 2; grid-row: 1; cursor: col-resize; touch-action: none; }
-.ui-split-edge::after { content: ""; position: absolute; inset-block: 0; left: 50%; width: var(--hairline); background: var(--border); transition: background var(--duration-quick); }
+.ui-split-edge::after { content: ""; position: absolute; inset-block: 0; left: 50%; translate: -50% 0; width: var(--hairline); background: var(--border); transition: background var(--duration-quick) var(--ease-change); }
 .ui-split-edge:is(:focus-visible, :active, [data-resizing])::after { background: var(--ring); }
 @media (hover: hover) { .ui-split-edge:is(:hover, :focus-visible, :active, [data-resizing])::after { background: var(--ring); } }
 .ui-code-host .cm-scroller::-webkit-scrollbar { width: var(--space-md); height: var(--space-md); }
