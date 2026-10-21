@@ -4,7 +4,7 @@ import { SearchList } from "@/components/menus";
 import { Show } from "solid-js";
 import { createSignal, For } from "solid-js";
 import { Match, Meta, MenuNote, MenuAction, MenuParent, MenuPanel, Button } from "@/components/ui";
-import { RowGroup, RowAction, Rule, Meter, Readout, SliderValue, Item, Menu, HeadingSection, SearchSection, Section, Slider } from "@/components/ui";
+import { RowGroup, RowAction, Rule, Meter, Readout, SliderValue, Item, Menu, SearchSection, Section, Slider } from "@/components/ui";
 import { PlaceGlyph } from "../../client/chat/place-picker";
 import { MODELS, PROFILES, PROJECTS } from "../seed";
 import { Replay, Presence } from "../specs";
@@ -21,13 +21,11 @@ export function ModelList(props: { keys?: string[]; title?: string }) {
 }
 export const Profiles = () => <Section title="Profile"><For each={PROFILES}>{(profile, index) => <Item checked={index() === 0} icon={<HarnessMark id={profile.implementation || "conduit"} />} meta={profile.implementation}>{profile.label}</Item>}</For></Section>;
 export const Projects = () => <Section title="Project"><Item icon={<Icons.Folder />}>No folder</Item><For each={PROJECTS.slice(2, 7)}>{(project) => <Item icon={<PlaceGlyph project={project} />}>{project.name}</Item>}</For></Section>;
-export const ChatTitle = () => <HeadingSection title="Lorem ipsum file" detail="Chats · Assistant"><Item field meta="Unavailable" opens>Context</Item></HeadingSection>;
 
 export const popoverPage: Page = {
   title: "Menu",
   summary: "Raised frost holding sections, separated by rules; a submenu is another popover.",
   preview: () => <Menu>
-        <HeadingSection title="lorem_ipsum.txt" detail="Edited 2 minutes ago" />
         <SearchSection placeholder="Search models…" />
         <Section title="Attach"><Item icon={<Icons.Attach />}>File</Item><Item meta="xai">Model</Item><Item opens>More</Item></Section>
         <Section kind="slider"><Levels label="Reasoning" /></Section>
@@ -42,12 +40,10 @@ import { Icons } from "@/components/ui";
   </Section>
 </Menu>`,
   anatomy: { scene: () => <Menu>
-        <HeadingSection title="lorem_ipsum.txt" detail="Edited 2 minutes ago" />
         <SearchSection placeholder="Search models…" />
         <Section title="Attach"><Item icon={<Icons.Attach />}>File</Item><Item meta="xai">Model</Item><Item opens>More</Item></Section>
         <Section kind="slider"><Levels label="Reasoning" /></Section>
       </Menu>, parts: [
-    { selector: ".ui-heading", name: "Heading section", does: "what the popover is about: a title and a line under it", from: "HeadingSection" },
     { selector: ".ui-search-section", name: "Search section", does: "a field filtering the list after it", from: "SearchSection" },
     { selector: '.ui-section[data-kind="list"] > .ui-title', name: "List section", does: "a titled group of Items", from: "Section" },
     { selector: '.ui-section[data-kind="list"] > .ui-row:nth-child(2)', name: "Item", does: "one choice; icon, meta, keys and opens are its parts", from: "Item · icon" },
@@ -60,7 +56,7 @@ import { Icons } from "@/components/ui";
     row("Popover · a row's actions", "RowGroup · RowAction (MenuRow actions): a row and its actions side by side, each a menu item, so Down reaches every one and Enter runs it; shown on the hovered row or the one holding the cursor (always on a phone). Here the second session holds the cursor on Rename", () => <Menu><Section title="Active terminals · Japan"><RowGroup actions={<><RowAction label="Open zsh beside" icon={<Icons.Split />} /><RowAction label="Rename zsh" icon={<Icons.Edit />} /><RowAction label="Destroy zsh" icon={<Icons.Delete />} destructive /></>}><Item checked detail="Japan · 2m">zsh</Item></RowGroup><RowGroup actions={<><RowAction label="Open build beside" icon={<Icons.Split />} /><RowAction label="Rename build" icon={<Icons.Edit />} data-highlighted="" /><RowAction label="Destroy build" icon={<Icons.Delete />} destructive /></>}><Item detail="Japan · npm run build">build</Item></RowGroup></Section><Rule /><Item icon={<Icons.Add />}>New terminal</Item></Menu>, { surfaces: ["ground"], phone: true }),
     ...(["xs", "sm", "lg", "xl", "2xl"] as const).map((measure) => row(`Cap · ${measure}`, "Width and height caps with a scrolling section", () => <Menu width={measure} height={measure}><Section title="Workspaces" kind="list" scroll><For each={PROJECTS}>{(project) => <Item icon={<Icons.Folder />}>{project.name}</Item>}</For></Section></Menu>, { surfaces: ["ground"], phone: true, code: `<Menu width="${measure}" height="${measure}"><Section scroll /></Menu>` })),
     ...(["xs", "md", "lg", "xl", "2xl"] as const).map((measure) => row(`Panel cap · ${measure}`, "Submenu width and height caps", () => <MenuPanel width={measure} height={measure}><Section title="Projects"><For each={PROJECTS}>{(project) => <Item icon={<Icons.Folder />}>{project.name}</Item>}</For></Section></MenuPanel>, { surfaces: ["ground"], phone: true, code: `<MenuPanel width="${measure}" height="${measure}" />` })),
-    row("Wide readout", "Legacy wide surface with long session details", () => <Menu wide><HeadingSection title="Review microphone input and workspace configuration" /><Readout label="Session" value="019a3f2c-7b1e-7c40-9d2e-5f8a1b6c3e70" /><Readout label="Waiting for usage" /></Menu>, { surfaces: ["ground"], phone: true, code: "<Menu wide><HeadingSection title /><Readout label value /></Menu>" }),
+    row("Wide readout", "Legacy wide surface with long session details", () => <Menu wide><Section title="Review microphone input and workspace configuration" /><Readout label="Session" value="019a3f2c-7b1e-7c40-9d2e-5f8a1b6c3e70" /><Readout label="Waiting for usage" /></Menu>, { surfaces: ["ground"], phone: true, code: "<Menu wide><Section title /><Readout label value /></Menu>" }),
     row("Search and match", "Controlled query; matching and unmatched labels", () => {
           const [query, setQuery] = createSignal("con");
           return <Menu><SearchSection placeholder="Search workspaces…" value={query()} onInput={setQuery} field={{ "aria-label": "Search gallery workspaces" }} /><Section><Item><Match text="Conduit" query={query()} /></Item><Item><Match text="Japan" query={query()} /></Item></Section></Menu>;
@@ -87,7 +83,6 @@ import { Icons } from "@/components/ui";
           const [open, setOpen] = createSignal(false);
           return <><Button variant="ghost" outline size="sm" onClick={() => setOpen(!open())}>{open() ? "Back to servers" : "Open routes"}</Button><MenuParent under={open()}><Menu><Section><Item opens onClick={() => setOpen(true)}>Route</Item></Section></Menu></MenuParent><Show when={open()}><MenuPanel width="sm" height="sm"><Section><Item checked>Automatic</Item><Item checked={false} onClick={() => setOpen(false)}>Local network</Item></Section></MenuPanel></Show></>;
         }, { surfaces: ["ground"], phone: true, code: '<MenuParent under /><MenuPanel width="sm" height="sm" />' }),
-    row("Heading", "HeadingSection + Item field", () => <Menu><ChatTitle /></Menu>, { surfaces: ["ground"] }),
     row("Search", "SearchSection: heads a pick list (SearchList, live: type, arrows, Enter; the list scrolls in its own height). A menu over a long list starts with a Search all… row that opens the palette instead", () => <div class="g-row g-top">
         <Menu><SearchSection placeholder="Search all models…" keys={["⌘", "⇧", "X"]} /></Menu>
         <Menu><SearchList items={PROJECTS} placeholder="Search projects and workspaces" matches={(project, needle) => project.name.toLowerCase().includes(needle)} isCurrent={(project) => project === PROJECTS[1]}
@@ -116,34 +111,34 @@ import { Icons } from "@/components/ui";
         <Menu><Section title="Servers"><Item checked>Desktop-Dev</Item><Item checked={false}>Laptop</Item></Section><Section><Item opens active>Route</Item><Item>Manage settings</Item></Section></Menu>
         <Menu><Section><Item checked>Automatic</Item><Item checked={false}>Local network</Item><Item checked={false}>Internet</Item></Section></Menu>
       </div>, { surfaces: ["ground"] }),
-    row("ModelSelector", "chat/model-selector.tsx", () => <Menu class="g-w18"><ModelList keys={["⌘", "⇧", "X"]} /><Section kind="slider"><Levels /></Section></Menu>, { surfaces: ["ground"] }),
+    row("ModelSelector", "chat/model-selector.tsx", () => <Menu class="g-w18"><ModelList keys={["⌘", "⇧", "X"]} /><Section kind="slider"><Levels /></Section></Menu>, { source: "chat/model-selector.tsx", surfaces: ["ground"] }),
     row("ComposerPlusMenu", "chat/composer-plus-menu.tsx", () => <Menu class="g-w18">
       <Section><Item meta="Muse Spark 1.3" opens>Model</Item><Item icon={<HarnessMark id="conduit" />} meta="Assistant" opens>Profile</Item><Item icon={<Icons.Permissions />} meta="Default" opens>Permissions</Item></Section>
       <Section><Item icon={<PlaceGlyph project={null} />} meta="None" opens>Project</Item></Section>
       <Section><Item icon={<Icons.Attach />}>Attach files</Item></Section>
-    </Menu>, { surfaces: ["ground"] }),
-    row("ContextGauge › breakdown", "chat/context-gauge.tsx · the composer's gauge: a Reading in a Menu width lg that unfolds (a part with parts of its own opens under itself, the menu growing with it). Tools open here", () => <Menu width="lg" unfolds><ContextReadingDemo open /></Menu>, { surfaces: ["ground"] }),
-    row("ComposerPlusMenu › Profile", "chat/composer-plus-menu.tsx", () => <Menu class="g-w18"><Profiles /></Menu>, { surfaces: ["ground"] }),
+    </Menu>, { source: "chat/composer-plus-menu.tsx", surfaces: ["ground"] }),
+    row("ContextGauge › breakdown", "chat/context-gauge.tsx · the composer's gauge: a Reading in a Menu width lg that unfolds (a part with parts of its own opens under itself, the menu growing with it). Tools open here", () => <Menu width="lg" unfolds><ContextReadingDemo open /></Menu>, { source: "chat/context-gauge.tsx · the composer's gauge: a Reading in a Menu width lg that unfolds (a part with parts of its own opens under itself, the menu growing with it). Tools open here", surfaces: ["ground"] }),
+    row("ComposerPlusMenu › Profile", "chat/composer-plus-menu.tsx", () => <Menu class="g-w18"><Profiles /></Menu>, { source: "chat/composer-plus-menu.tsx", surfaces: ["ground"] }),
     row("Sidebar › ChatMenu", "navigation/sidebar.tsx", () => <div class="g-row g-top g-submenu">
       <Menu class="g-w18"><Section><Item icon={<Icons.Edit />}>Rename</Item><Item icon={<Icons.MoveToFolder />} opens active>Move to folder…</Item><Item icon={<Icons.Copy />}>Copy transcript</Item><Item icon={<Icons.Split />}>Open beside</Item><Item icon={<Icons.Terminal />}>Open terminal</Item><Item icon={<Icons.Pin />}>Pin to sidebar</Item></Section><Section><Item icon={<Icons.Delete />} destructive>Delete chat</Item></Section></Menu>
       <Menu><Section><For each={PROJECTS.slice(2, 6)}>{(project, index) => <Item checked={index() === 0}>{project.name}</Item>}</For></Section></Menu>
-    </div>, { surfaces: ["ground"] }),
+    </div>, { source: "navigation/sidebar.tsx", surfaces: ["ground"] }),
     row("ServerSwitcher", "navigation/server-switcher.tsx", () => <div class="g-row g-top g-submenu">
       <Menu class="g-w18"><Section title="Servers"><Item checked meta="12 ms">Desktop-Dev</Item><Item checked={false} meta="48 ms">Laptop</Item></Section><Section><Item meta="LAN · 192.168.1.4" opens active>Route</Item></Section><Section><Item icon={<Icons.QrCode />}>Pair a device</Item><Item icon={<Icons.Add />}>Add server</Item></Section></Menu>
       <Menu><Section><Item checked>Automatic</Item><Item checked={false}>Local network</Item><Item checked={false}>Internet</Item></Section></Menu>
-    </div>, { surfaces: ["ground"] }),
+    </div>, { source: "navigation/server-switcher.tsx", surfaces: ["ground"] }),
     row("MobileComposerOptions", "chat/mobile-composer-options.tsx", () => <Menu class="g-w16">
       <Section title="Profile"><Item icon={<HarnessMark id="conduit" />} opens>Assistant</Item></Section>
       <Section title="Model"><Item opens>Meta: Muse Spark 1.3 Contributor</Item></Section>
       <Section kind="slider"><Levels label="Effort" /></Section>
       <Section><Item icon={<Icons.Attach />}>Attach files</Item></Section>
       <Section title="Project"><Item icon={<PlaceGlyph project={null} />} opens>Add to a project folder</Item></Section>
-    </Menu>, { surfaces: ["ground"], phone: "only" }),
-    row("MobileComposerOptions › models", "chat/mobile-composer-options.tsx", () => <Menu class="g-w16"><ModelList title="Model" /></Menu>, { surfaces: ["ground"], phone: "only" }),
-    row("MobileComposerOptions › profiles", "chat/mobile-composer-options.tsx", () => <Menu class="g-w16"><Profiles /></Menu>, { surfaces: ["ground"], phone: "only" }),
-    row("MobileComposerOptions › effort", "chat/mobile-composer-options.tsx", () => <Menu class="g-w12"><Section title="Effort"><For each={thinking}>{(level) => <Item checked={level.value === "medium"}>{level.label}</Item>}</For></Section></Menu>, { surfaces: ["ground"], phone: "only" }),
-    row("MobileComposerOptions › places", "chat/mobile-composer-options.tsx", () => <Menu class="g-w16"><Projects /></Menu>, { surfaces: ["ground"], phone: "only" }),
-    row("ChatHeader › menu", "chat/chat-screen.tsx · opened from the title pill (HeaderPill). unfolds: as wide as its cap, and as tall as what is open up to the room it has, so Context and Details grow their sections in place (Expand, the menu's edge running with the rows) rather than scrolling; a section inside a section draws no rule. The actions first, Delete chat last among them; Context with its meter, then Details in a section of its own (the thread's harness, version, profile, tools and session, folded to the harness), each opening in place. Context and Details open here", () => <Menu width="md" unfolds><Section><Item icon={<Icons.Share />}>Share</Item><Item icon={<Icons.Edit />}>Rename</Item><Item icon={<Icons.Workspace />}>Workspace panel</Item><Item icon={<Icons.Delete />} destructive>Delete chat</Item></Section><Rule /><Section><Item field meta="42% used" opens aria-expanded="true">Context</Item><Meter parts={[{ value: 60, colour: "oklch(0.72 0.15 300)" }, { value: 16, colour: "oklch(0.7 0.02 260)" }, { value: 12, colour: "oklch(0.74 0.12 230)" }, { value: 112, colour: "transparent" }]} mark={{ at: 85, label: "compacts at 85%", quiet: true }} /><ContextReadingDemo bare /></Section><Section><Item field meta="Conduit Pi" opens aria-expanded="true">Details</Item><Readout label="Harness" value="Conduit Pi" /><Readout label="Version" value="v1.3.0" /><Readout label="Profile" value="Coding" /><Readout label="Tools" value="codemode: read / edit / shell / web search" /><Readout label="Session" value="019a3f2c-7b1e-7c40-9d2e-5f8a1b6c3e70" /></Section></Menu>, { surfaces: ["ground"], phone: "only" })
+    </Menu>, { source: "chat/mobile-composer-options.tsx", surfaces: ["ground"], phone: "only" }),
+    row("MobileComposerOptions › models", "chat/mobile-composer-options.tsx", () => <Menu class="g-w16"><ModelList title="Model" /></Menu>, { source: "chat/mobile-composer-options.tsx", surfaces: ["ground"], phone: "only" }),
+    row("MobileComposerOptions › profiles", "chat/mobile-composer-options.tsx", () => <Menu class="g-w16"><Profiles /></Menu>, { source: "chat/mobile-composer-options.tsx", surfaces: ["ground"], phone: "only" }),
+    row("MobileComposerOptions › effort", "chat/mobile-composer-options.tsx", () => <Menu class="g-w12"><Section title="Effort"><For each={thinking}>{(level) => <Item checked={level.value === "medium"}>{level.label}</Item>}</For></Section></Menu>, { source: "chat/mobile-composer-options.tsx", surfaces: ["ground"], phone: "only" }),
+    row("MobileComposerOptions › places", "chat/mobile-composer-options.tsx", () => <Menu class="g-w16"><Projects /></Menu>, { source: "chat/mobile-composer-options.tsx", surfaces: ["ground"], phone: "only" }),
+    row("ChatHeader › menu", "chat/chat-screen.tsx · opened from the title pill (HeaderPill). unfolds: as wide as its cap, and as tall as what is open up to the room it has, so Context and Details grow their sections in place (Expand, the menu's edge running with the rows) rather than scrolling; a section inside a section draws no rule. The actions first, Delete chat last among them; Context with its meter, then Details in a section of its own (the thread's harness, version, profile, tools and session, folded to the harness), each opening in place. Context and Details open here", () => <Menu width="md" unfolds><Section><Item icon={<Icons.Share />}>Share</Item><Item icon={<Icons.Edit />}>Rename</Item><Item icon={<Icons.Workspace />}>Workspace panel</Item><Item icon={<Icons.Delete />} destructive>Delete chat</Item></Section><Rule /><Section><Item field meta="42% used" opens aria-expanded="true">Context</Item><Meter parts={[{ value: 60, colour: "oklch(0.72 0.15 300)" }, { value: 16, colour: "oklch(0.7 0.02 260)" }, { value: 12, colour: "oklch(0.74 0.12 230)" }, { value: 112, colour: "transparent" }]} mark={{ at: 85, label: "compacts at 85%", quiet: true }} /><ContextReadingDemo bare /></Section><Section><Item field meta="Conduit Pi" opens aria-expanded="true">Details</Item><Readout label="Harness" value="Conduit Pi" /><Readout label="Version" value="v1.3.0" /><Readout label="Profile" value="Coding" /><Readout label="Tools" value="codemode: read / edit / shell / web search" /><Readout label="Session" value="019a3f2c-7b1e-7c40-9d2e-5f8a1b6c3e70" /></Section></Menu>, { source: "chat/chat-screen.tsx · opened from the title pill (HeaderPill). unfolds: as wide as its cap, and as tall as what is open up to the room it has, so Context and Details grow their sections in place (Expand, the menu's edge running with the rows) rather than scrolling; a section inside a section draws no rule. The actions first, Delete chat last among them; Context with its meter, then Details in a section of its own (the thread's harness, version, profile, tools and session, folded to the harness), each opening in place. Context and Details open here", surfaces: ["ground"], phone: "only" })
   ],
   motion: [
     row("Removing", "The third shared motion state", () => <Replay leaves={["removing"]}>{(motion) => <Menu motion={motion()}><Section><Item>Workspace files updated</Item></Section></Menu>}</Replay>, { surfaces: ["ground"], phone: true, code: '<Menu motion="removing" />' }),
@@ -161,5 +156,5 @@ import { Icons } from "@/components/ui";
     token("--menu-room", "available height"),
     token("--radius-surface", "surface corner")
   ] }],
-  api: ["Menu", "Section", "SearchSection", "HeadingSection", "RowGroup", "Item", "RowAction", "Match", "Readout", "Rule", "Meta", "MenuNote", "MenuAction", "MenuParent", "MenuPanel", "components/menus.tsx#Menu", "MenuTrigger", "MenuPillTrigger", "MenuContent", "MenuSection", "MenuRow", "MenuItem", "MenuRadioItem", "MenuSub", "MenuSubTrigger", "MenuSubValue", "MenuSubContent", "ContextMenu", "ContextMenuContent", "ContextMenuItem", "Popover", "PopoverContent", "SearchList"]
+  api: ["Menu", "Section", "SearchSection", "RowGroup", "Item", "RowAction", "Match", "Readout", "Rule", "Meta", "MenuNote", "MenuAction", "MenuParent", "MenuPanel", "components/menus.tsx#Menu", "MenuTrigger", "MenuPillTrigger", "MenuContent", "MenuSection", "MenuRow", "MenuItem", "MenuRadioItem", "MenuSub", "MenuSubTrigger", "MenuSubValue", "MenuSubContent", "ContextMenu", "ContextMenuContent", "ContextMenuItem", "Popover", "PopoverContent", "SearchList"]
 };

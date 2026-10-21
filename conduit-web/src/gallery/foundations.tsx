@@ -1,7 +1,7 @@
 import { createSignal, For, onCleanup, onMount, Show, type JSX } from "solid-js";
 import { ArrowUpIcon, CameraIcon, FolderIcon, MicIcon, MonitorIcon, PaperclipIcon, PlusIcon, SettingsIcon, Trash2Icon } from "lucide-solid";
 
-import { ServerControl, Reading, ReadingStats, ReadingStat, HeaderPill, Expand, Aura, Slider, Segmented, Preview, Bubble, Button, Frost, HeadingSection, Item, Keycap, Menu, NavRow, Overlay, OverlayBar, PillButton, PillField, PillGroup, Section, Toolbar } from "@/components/ui";
+import { Card, Rider, ServerControl, Reading, ReadingStats, ReadingStat, HeaderPill, Expand, Aura, Slider, Segmented, Preview, Bubble, Button, Frost, Item, Keycap, Menu, NavRow, Overlay, OverlayBar, PillButton, PillField, PillGroup, Section, Toolbar } from "@/components/ui";
 import { px, style, bg, fg, edge, rounding, tall, icon } from "./specs";
 
 import { Glyph, HarnessMark, IDENTITY_COLOURS, Icons, MARKS, ThreadHarnessMark } from "@/components/ui";
@@ -318,7 +318,7 @@ function AuraDemo() {
   const timer = setInterval(() => { if (!voice()) return; t += 1; setLevel(Math.max(0, Math.min(1, (Math.sin(t / 3) * .5 + .5) * (Math.sin(t / 11) * .4 + .6) * (.5 + Math.random() * .5)))); }, 70);
   onCleanup(() => clearInterval(timer));
   return <div class="g-aura">
-    <div class="g-aura-row"><div class="ui-frost ui-pill g-aura-wide"><Aura on level={level()} strength={Number(strength())} /></div><div class="ui-frost ui-pill g-aura-short"><Aura on level={level()} strength={Number(strength())} /></div><div class="ui-frost g-aura-round"><Aura on level={level()} strength={Number(strength())} /></div></div>
+    <div class="g-aura-row"><Rider layout="wave" label="Listening" class="g-aura-wide"><Aura on level={level()} strength={Number(strength())} /></Rider><Frost class="g-aura-short"><Aura on level={level()} strength={Number(strength())} /></Frost><Frost class="g-aura-round"><Aura on level={level()} strength={Number(strength())} /></Frost></div>
     <div class="g-aura-row"><Button variant="secondary" size="sm" onClick={() => setVoice(!voice())}>{voice() ? "Stop the voice" : "Speak"}</Button><Slider label="Level" options={LEVELS} value={(Math.round(level() * 10) / 10).toFixed(1)} onChange={(v) => { setVoice(false); setLevel(Number(v)); }} /><Slider label="Strength" options={LEVELS} value={strength()} onChange={setStrength} /><code>--aura-level {level().toFixed(2)}</code></div>
   </div>;
 }
@@ -454,8 +454,8 @@ export const TYPE_ROLES: TypeRole[] = [
   { name: "Field", tokens: "Section label · its value --text-caption · --font-sans · quiet", rule: "a section's title that unfolds or slides: the name in the label's voice, its value quiet beside it", where: "the chat menu's CONTEXT and DETAILS rows", selector: ".ui-row[data-field] > small", sample: () => onFrost(<Section><Item field meta="8% used" opens>Context</Item></Section>) },
   { name: "Pill title", tokens: "--text-caption · --weight-strong · text, two lines", rule: "a phone's header pill naming the page", where: "the phone header's chat title pill", sig: { size: "caption", weight: "strong", face: "sans" }, selector: ".ui-header-pill > strong", sample: () => <span>a phone's alone: see the Phone canvas<HeaderPill label="Researching Gassho Houses in Japan" /></span> },
   { name: "Keycap", tokens: "--text-label · --weight-lift · --font-label", rule: "a key, on the surface's tint", where: "shortcuts in the command palette, menus and the leader", sig: { size: "label", weight: "lift", face: "mono" }, selector: ".ui-keycap", sample: () => onFrost(<Section><Item keys={["Ctrl", "K"]}>Row</Item></Section>) },
-  { name: "Heading", tokens: "--text-body · --weight-strong · text", rule: "a popover's or card's title", where: "a popover's, card's or dialog's title", sig: { size: "body", weight: "strong", face: "sans" }, selector: ".ui-heading-title", sample: () => onFrost(<HeadingSection title="A heading" />) },
-  { name: "Caption", tokens: "--text-caption · --weight-rest · muted", rule: "a heading's or card's detail, hints, empty copy", where: "a heading's detail, a row's description (a profile's blurb), hints, empty copy, a Field's value", sig: { size: "caption", weight: "rest", face: "sans" }, selector: ".ui-heading-detail", sample: () => onFrost(<HeadingSection title="A heading" detail="Its detail, muted" />) },
+  { name: "Heading", tokens: "--text-body · --weight-strong · text", rule: "a card's title", where: "a popover's, card's or dialog's title", sig: { size: "body", weight: "strong", face: "sans" }, selector: ".ui-heading-title", sample: () => <Card embedded title="A heading" /> },
+  { name: "Caption", tokens: "--text-caption · --weight-rest · muted", rule: "a heading's or card's detail, hints, empty copy", where: "a heading's detail, a row's description (a profile's blurb), hints, empty copy, a Field's value", sig: { size: "caption", weight: "rest", face: "sans" }, selector: ".ui-heading-detail", sample: () => <Card embedded title="A heading" detail="Its detail, muted" /> },
   { name: "Body", tokens: "--text-body · --weight-rest", rule: "messages and what you type: the type unit", where: "messages, the composer, what you type", sig: { size: "body", weight: "rest", face: "sans" }, selector: ".ui-bubble", sample: () => <Bubble>A message</Bubble> },
 ];
 /** What a role computes to, in words: size/leading · weight · face, and its colour as the text colour, a share of it, or muted. */
@@ -672,7 +672,7 @@ export const hapticsPage: Page = {
 export const auraPage: Page = {
   title: "Aura", rail: "Foundations",
   summary: "A field of colour behind a surface, made of numbers: each blob comes in from a direction in its hue, circles near that edge on its own period and breathes as it turns, so at rest the colours trade places; a level (0-1, the voice's) brightens them all and grows some while shrinking others. The mic's pill is filled with one while listening.",
-  preview: () => <div class="ui-frost ui-pill g-aura-wide"><Aura on level={0.45} /></div>,
+  preview: () => <Rider layout="wave" label="Listening" class="g-aura-wide"><Aura on level={0.45} /></Rider>,
   usage: `import { Aura } from "@/components/ui";
 
 <Aura on={listening()} level={level()} strength={0.6} />`,

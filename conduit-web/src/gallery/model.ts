@@ -7,8 +7,9 @@ import { type JSX } from "solid-js";
 /** A row of Examples or Motion: name and note down the side; render drawn once per column. surfaces: the surfaces it
  *  sits on (ground and frost by default; frame first for what also sits on the sidebar's; a piece that is its own
  *  surface, like a card or the composer, takes ground alone). phone: drawn again at the phone's density, for a piece
- *  that differs there ("only": a phone-only piece, drawn there alone). code: how to write this form, if not obvious. */
-export interface Row { name: string; note: string; render: () => JSX.Element; surfaces?: ("frame" | "ground" | "frost")[]; phone?: boolean | "only"; code?: string }
+ *  that differs there ("only": a phone-only piece, drawn there alone). code: how to write this form, if not obvious.
+ *  source: where the app draws it (file and component), for a form taken from the app. */
+export interface Row { name: string; note: string; render: () => JSX.Element; source?: string; surfaces?: ("frame" | "ground" | "frost")[]; phone?: boolean | "only"; code?: string }
 export const row = (name: string, note: string, render: Row["render"], more: Omit<Row, "name" | "note" | "render"> = {}): Row => ({ name, note, render, ...more });
 
 /** A numbered part of an Anatomy: what the selector picks out, what it does, and what it is made of (a fixed text,
@@ -25,11 +26,14 @@ export interface Token { name: string; use: string; read: (cell: HTMLElement) =>
  * values differ by density shows Desktop and Phone columns). api: the exported
  * components whose props are listed (generated), its own first; Used in follows from them.
  */
+/** A numbered scene: its parts named on it. title: which scene, where a page has several. phone: drawn again at the
+ *  phone's density beside the desktop's. spacing: containers whose padding and gaps are drawn over it, with sizes. */
+export interface Anatomy { title?: string; scene: () => JSX.Element; parts: Part[]; phone?: boolean; spacing?: string[] }
 export interface Page {
   title: string; summary: string; rail?: "Foundations" | "Blocks";
   preview?: () => JSX.Element;
   usage?: string;
-  anatomy?: { scene: () => JSX.Element; parts: Part[] };
+  anatomy?: Anatomy | Anatomy[];
   examples?: Row[];
   motion?: Row[];
   tokens?: { title: string; tokens: Token[]; density?: boolean }[];

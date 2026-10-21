@@ -41,14 +41,6 @@ export function SearchSection(props: { placeholder: string; value?: string; keys
   </div>;
 }
 
-/** A heading section: what the popover is about -- a title and a line under it (the chat menu's top). */
-export function HeadingSection(props: { title: string; detail?: JSX.Element; children?: JSX.Element }) {
-  return <div class="ui-section ui-heading" data-kind="heading">
-    <div class="ui-heading-title">{props.title}</div><Show when={props.detail}><div class="ui-heading-detail">{props.detail}</div></Show>
-    {props.children}
-  </div>;
-}
-
 /** RowGroup: a row and its actions side by side, each an item of its own, so the arrow keys reach every one and
  *  Enter runs it. The actions are icons at the row's end, shown on the hovered row or the one holding the cursor
  *  (always where nothing hovers). */

@@ -244,7 +244,7 @@ html, body { background: var(--frame, #08090a); color: var(--foreground); }
 .g-aura { display: grid; gap: var(--space-xl); }
 .g-aura-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-xl); }
 .g-aura-row > :is(.g-aura-wide, .g-aura-short, .g-aura-round) { position: relative; isolation: isolate; }
-.g-aura-wide { width: 320px; } .g-aura-short { width: calc(1.5 * var(--pill-size)); }
+.g-aura-wide { width: 320px; } .g-aura-short { width: calc(1.5 * var(--pill-size)); height: var(--pill-size); border-radius: var(--radius-round); }
 .g-aura-round { width: 160px; height: 160px; border-radius: var(--radius-round); }
 .g-aura-row .ui-slider, .g-aura-row [role="slider"] { width: 220px; }
 .g-orb-how { max-width: 72ch; margin: 0; padding-left: 1.2em; font-size: 13px; line-height: 1.55; color: var(--muted-foreground); }
@@ -317,21 +317,29 @@ html, body { background: var(--frame, #08090a); color: var(--foreground); }
 .g-page-toc a { color: var(--foreground); text-decoration: none; }
 .g-page-toc a:hover { text-decoration: underline; }
 .g-preview { display: grid; }
+.g-preview > .g-surface { overflow-x: auto; }
 .g-preview > .g-surface { display: grid; min-height: 160px; place-items: center; padding: 32px; border-radius: 10px; }
-.g-rows .g-dash { align-self: center; justify-self: center; color: var(--muted-foreground); }
 /* A row whose render is a catalogue (Icons): named items in a grid. */
 .g-icon-grid { display: grid; width: 100%; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px 14px; }
 .g-icon-grid > figure { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 8px; margin: 0; }
 .g-icon-grid figcaption { display: grid; min-width: 0; }
 .g-icon-grid code { overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
 .g-icon-grid small { overflow: hidden; color: var(--muted-foreground); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
-/* The Examples and Motion table: the name beside its renders, or above them where the table is too narrow for both. */
-.g-rows { container-type: inline-size; }
-.g-rows > .g-scale-head, .g-rows > .g-scale-row { grid-template-columns: 260px repeat(var(--g-columns), minmax(0, 1fr)); }
-@container (max-width: 760px) {
-  .g-rows > .g-scale-head, .g-rows > .g-scale-row { grid-template-columns: repeat(var(--g-columns), minmax(0, 1fr)); }
+/* Examples and Motion (page.tsx Rows): a row's name, then its cells, each its content's width, wrapping when the row
+   runs out of room; a form wider than the whole row scrolls in its cell. */
+.g-rows { display: grid; }
+.g-row-item { display: grid; gap: 10px; border-bottom: 1px solid var(--border); padding: 14px 4px; }
+.g-row-cells { display: flex; flex-wrap: wrap; gap: 12px; }
+.g-row-cell { display: grid; min-width: 0; max-width: 100%; flex: 1 0 auto; grid-template-rows: auto 1fr; gap: 4px; margin: 0; }
+.g-row-cell > figcaption { color: var(--muted-foreground); font-size: 11px; font-weight: 600; }
+.g-row-cell > :is(.g-form-surface, .g-form-density) { display: grid; place-items: center; overflow-x: auto; }
   .g-rows > .g-scale-head > span:first-child { display: none; }
   .g-rows > .g-scale-row > .g-scale-name { grid-column: 1 / -1; }
 }
 .g-canvas[data-app="hidden"] > .g-right { display: none; }
 .g-depth-chip { display: grid; width: 140px; height: 90px; place-items: center; color: var(--muted-foreground); font-size: 12px; }
+.g-anatomy-title { margin: var(--space-lg) 0 var(--space-sm); color: var(--muted-foreground); font-size: 12px; font-weight: 500; }
+.g-row-source { color: var(--muted-foreground); font-size: 11px; }
+.g-row-source code { font-size: 11px; }
+/* A page-sized scene in an anatomy: the scene shrinks to its content, so a fluid page needs a width of its own. */
+.g-anatomy > .g-page { width: 560px; }

@@ -72,23 +72,22 @@ function Heading(props: { page: Page; section: Section; note?: string }) {
   return <h3 class="g-heading" id={anchor(props.page, props.section)}>{props.section}{props.note && <small> {props.note}</small>}</h3>;
 }
 
-/** Examples and Motion: one table. Name and note down the side; across, Ground and Frost at the desktop's density
- *  (and Frame first where a row also sits on the sidebar's), and Phone where any row differs on a phone. A cell the row does not sit on shows a dash. */
+/** Examples and Motion: one list of rows. Each row: its name, note and code, then its form on each surface it sits
+ *  on (Frame, Ground, Frost at the desktop's density; Phone where it differs there), each cell labelled. A cell keeps
+ *  its content's width and the cells wrap under one another when the row runs out of room, so nothing squeezes. */
 function Rows(props: { rows: Row[] }) {
-  const surfaces = (row: Row): ("frame" | "ground" | "frost")[] => row.surfaces ?? ["ground", "frost"];
-  const columns = () => [
-    ...(["frame", "ground", "frost"] as const).filter((where) => props.rows.some((row) => row.phone !== "only" && surfaces(row).includes(where))),
-    ...(props.rows.some((row) => row.phone) ? ["phone" as const] : []),
+  const columns = (row: Row): ("frame" | "ground" | "frost" | "phone")[] => [
+    ...(row.phone === "only" ? [] : row.surfaces ?? ["ground", "frost"] as const),
+    ...(row.phone ? ["phone" as const] : []),
   ];
-  const grid = () => ({ "--g-columns": String(columns().length) });
+  const label = (column: string) => column[0]!.toUpperCase() + column.slice(1);
   const cell = (row: Row, column: "frame" | "ground" | "frost" | "phone"): JSX.Element => column === "phone"
-    ? row.phone ? <div class="g-form-density" data-density="phone"><On where={surfaces(row)[0]!}>{row.render()}</On></div> : <span class="g-dash">—</span>
-    : row.phone !== "only" && surfaces(row).includes(column) ? <On where={column}>{row.render()}</On> : <span class="g-dash">—</span>;
-  return <div class="g-scale g-forms g-rows" data-density="desktop">
-    <div class="g-scale-head" style={grid()}><span /><For each={columns()}>{(column) => <span>{column[0]!.toUpperCase() + column.slice(1)}</span>}</For></div>
-    <For each={props.rows}>{(row) => <div class="g-scale-row" style={grid()}>
-      <div class="g-scale-name"><strong>{row.name}</strong><small>{row.note}</small>{row.code && <code class="g-form-code">{row.code}</code>}</div>
-      <For each={columns()}>{(column) => cell(row, column)}</For>
+    ? <div class="g-form-density" data-density="phone"><On where={(row.surfaces ?? ["ground"])[0]!}>{row.render()}</On></div>
+    : <On where={column}>{row.render()}</On>;
+  return <div class="g-rows" data-density="desktop">
+    <For each={props.rows}>{(row) => <div class="g-row-item">
+      <div class="g-scale-name"><strong>{row.name}</strong><small>{row.note}</small>{row.code && <code class="g-form-code">{row.code}</code>}{row.source && <small class="g-row-source">in the app: <code>{row.source}</code></small>}</div>
+      <div class="g-row-cells"><For each={columns(row)}>{(column) => <figure class="g-row-cell"><figcaption>{label(column)}</figcaption>{cell(row, column)}</figure>}</For></div>
     </div>}</For>
   </div>;
 }
@@ -117,9 +116,12 @@ export function PageView(props: { page: Page }) {
     <Show when={page().usage}>{(code) => <PageUsage code={code()} id={anchor(page(), "Usage")} />}</Show>
     <Show when={page().anatomy}>{(anatomy) => <section class="g-page-section">
       <Heading page={page()} section="Anatomy" note="numbered on the page; what each part does and is made of" />
-      <InUse density={false} scene={() => <div class="g-anatomy">{anatomy().scene()}</div>}
-        marks={anatomy().parts.map((part) => ({ selector: part.selector, side: part.side, label: `${part.name}: ${part.does}`,
-          read: (el: HTMLElement) => typeof part.from === "function" ? part.from(el) : part.from ?? "" }))} />
+      <For each={[anatomy()].flat()}>{(scene) => <>
+        <Show when={scene.title}><h4 class="g-anatomy-title">{scene.title}</h4></Show>
+        <InUse density={Boolean(scene.phone)} spacing={scene.spacing} scene={() => <div class="g-anatomy">{scene.scene()}</div>}
+          marks={scene.parts.map((part) => ({ selector: part.selector, side: part.side, label: `${part.name}: ${part.does}`,
+            read: (el: HTMLElement) => typeof part.from === "function" ? part.from(el) : part.from ?? "" }))} />
+      </>}</For>
     </section>}</Show>
     <Show when={has("Examples")}><section class="g-page-section"><Heading page={page()} section="Examples" note="every variant, size and state" /><Rows rows={page().examples!} /></section></Show>
     <Show when={has("Motion")}><section class="g-page-section"><Heading page={page()} section="Motion" note="replay a move from its row" /><Rows rows={page().motion!} /></section></Show>

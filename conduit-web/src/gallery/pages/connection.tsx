@@ -65,7 +65,7 @@ import { HarnessMark } from "@/components/ui";
     {selector: ".ui-connection-password",name: "Password",does: "accepts the password and submits the form",from: "ConnectionPassword"},
   ] },
   examples: [
-    row("ConnectionHeading", "Conduit's mark, then what the screen asks", () => <ConnectionHeading mark={<HarnessMark id="conduit" />}>Connect to your server</ConnectionHeading>, { phone: true, code: "<ConnectionHeading mark>title</ConnectionHeading>" }),
+    row("ConnectionHeading", "Conduit's mark, then what the screen asks", () => <ConnectionHeading mark={<HarnessMark id="conduit" />}>Connect to your server</ConnectionHeading>, { source: "components/ui/connection.tsx · client/main.tsx", phone: true, code: "<ConnectionHeading mark>title</ConnectionHeading>" }),
     ...CONNECTIONS,
   ],
   tokens: [{ title: "Its surface", tokens: [
