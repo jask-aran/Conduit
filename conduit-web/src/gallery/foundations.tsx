@@ -208,7 +208,7 @@ function ScaleSlider(props: { token: ScaleToken }) {
   return <span class="g-scale-slider">
     <input type="range" min="0.75" max="1.5" step="0.025" aria-label={props.token} value={scaleOf(props.token)} onInput={(event) => setScale(props.token, Number(event.currentTarget.value))} />
     <code>{scaleOf(props.token).toFixed(3)}×</code>
-    <button type="button" disabled={scales()[props.token] == null} onClick={() => setScale(props.token, null)}>Reset</button>
+    <button type="button" title="Back to foundations.css" aria-label={`Reset ${props.token}`} disabled={scales()[props.token] == null} onClick={() => setScale(props.token, null)}>↺</button>
   </span>;
 }
 function ScaleControl() {
@@ -534,7 +534,7 @@ export const foundationFamilies: Family[] = [
   ] }, { title: "Tokens", layout: "desktop", atoms: [
     lib("colour-tokens", "Colours", "both", "colour", "styles.css :root · foundations.css :root", () => <TokenTable groups={COLOURS} density={false} />, "row"),
   ] }] },
-  { title: "Space", rail: "Foundations", note: "everything from a few numbers: the density's unit (12.8px desktop, 16px phone) times the UI scale, or the transcript scale for what you read. Every gap, padding and margin is one of nine steps; every control one of four heights; rows keep their measured height and text, in the unit (a phone's never below 40px). Move the scales and every page follows", groups: [{ title: "Scale", note: "the coefficients, remembered and applied to the whole gallery, its phone frames too: try any page at another setting", layout: "desktop", atoms: [
+  { title: "Space", rail: "Foundations", note: "everything from a few numbers: the density's unit (12.8px desktop, 16px phone) times the user's Interface size times the region's own size (chrome, sidebar, frost, composer, transcript), per density. Every gap, padding and margin is one of nine steps; every control one of four heights; rows keep their measured height and text, in the unit (a phone's never below 40px). Move the scales and every page follows", groups: [{ title: "Scale", note: "the coefficients, remembered and applied to the whole gallery, its phone frames too: try any page at another setting", layout: "desktop", atoms: [
     lib("space-scale", "Scale", "both", "space", "foundations.css :root --ui-scale · --scale-<region>-<density>", () => <ScaleControl />, "row"),
   ] }, { title: "In use", note: "one popover, measured: what each number shapes. Everything is in the unit, so the phone's is the desktop's at 1.25x; rows take more, for a finger", layout: "desktop", atoms: [
     lib("space-inuse", "Space in use", "both", "space", "Menu · Section · Item", () => <InUse scene={spaceScene} marks={SPACE_MARKS} />, "row"),
