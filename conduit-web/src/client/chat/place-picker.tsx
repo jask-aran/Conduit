@@ -9,9 +9,9 @@ import { WorkspaceGlyph } from "../project/workspace-appearance";
 export type PlaceOptions = { projects: Project[]; current?: Project | null; disabled?: boolean; onChoose: (project: Project) => void };
 
 /** A place's own mark when it has one -- a workspace's identity today, any
- *  place's later -- else the chat mark. */
+ *  place's later -- else a folder; with no place at all, the chat mark. */
 export function PlaceGlyph(props: { project?: Project | null }) {
-  return <Show when={props.project?.workspaceAppearance || (props.project && isWorkspace(props.project))} fallback={<HarnessMark id="conduit" />}>
+  return <Show when={props.project?.workspaceAppearance || (props.project && isWorkspace(props.project))} fallback={props.project ? <Icons.Folder /> : <HarnessMark id="conduit" />}>
     <WorkspaceGlyph appearance={props.project!.workspaceAppearance} />
   </Show>;
 }

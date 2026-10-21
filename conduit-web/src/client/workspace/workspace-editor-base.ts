@@ -30,8 +30,9 @@ export const editorTheme = EditorView.theme({
   ".cm-activeLine, .cm-activeLineGutter": {
     backgroundColor: "color-mix(in oklch, var(--accent), transparent 55%)",
   },
+  // CodeMirror's own dark selection is more specific than a theme's (.ͼ1.ͼ3.cm-focused > … .cm-selectionBackground).
   ".cm-selectionBackground, &.cm-focused .cm-selectionBackground, ::selection": {
-    backgroundColor: "color-mix(in oklch, var(--foreground), transparent 78%)",
+    backgroundColor: "color-mix(in oklch, var(--foreground), transparent 78%) !important",
   },
   "&.cm-focused": { outline: "none" },
   ".cm-cursor": { borderLeftColor: "var(--foreground)" },
