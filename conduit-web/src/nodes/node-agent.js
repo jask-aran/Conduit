@@ -6,6 +6,7 @@ import { BACKGROUND_CONTEXT, withAbortSignal } from "@earendil-works/chord/conte
 import { err, FileError, ExecutionError } from "@earendil-works/pi-durable/env";
 import { NodeExecutionEnv } from "@earendil-works/pi-durable/env/node";
 import { encode, decode, HANDLE_METHODS, METHOD_GRANTS, NODE_PROTOCOL_VERSION, rootFor } from "./protocol.js";
+import { NodeProcesses } from "./node-processes.js";
 
 const RETRY_MS = [1000, 2000, 5000, 10000, 30000];
 
@@ -32,6 +33,8 @@ const RETRY_MS = [1000, 2000, 5000, 10000, 30000];
 export function startNodeAgent({ mainUrl, key, name, roots: shared, shellEnv = process.env, log = console }) {
   const roots = shared.map(view);
   const envs = new Map();
+  // Processes outlive any one socket (decision 18): they are the device's.
+  const processes = new NodeProcesses({ shellEnv });
   let socket = null;
   let attempt = 0;
   let stopped = false;
@@ -51,6 +54,8 @@ export function startNodeAgent({ mainUrl, key, name, roots: shared, shellEnv = p
     // Handle ids are never reused, on this socket or the next: a reader main
     // still holds from before a reconnect names nothing rather than a stranger.
     const handles = new Map();
+    // The processes main follows on this socket: process id -> detach.
+    const following = new Map();
     const send = (message) => { if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(message)); };
 
     ws.on("open", () => {
@@ -80,6 +85,8 @@ export function startNodeAgent({ mainUrl, key, name, roots: shared, shellEnv = p
       }
     });
     ws.on("close", () => {
+      for (const detach of following.values()) detach();
+      following.clear();
       for (const controller of calls.values()) controller.abort();
       for (const handle of handles.values()) void handle.close?.(BACKGROUND_CONTEXT);
       handles.clear();
@@ -96,8 +103,44 @@ export function startNodeAgent({ mainUrl, key, name, roots: shared, shellEnv = p
       return { $handle: id, ...(object.mode ? { mode: object.mode } : {}) };
     }
 
+    /*
+     * Processes, for the shell grant: spawn needs it on the directory it runs
+     * in; the rest act on a process by the id spawn returned. Output goes out
+     * as `proc` messages, not as a call's events, because following outlives
+     * the call that started it.
+     */
+    function runProcess(method, args) {
+      try {
+        if (method === "spawn") {
+          const spec = args[0] || {};
+          const home = typeof spec.cwd === "string" ? realish(spec.cwd) : null;
+          if (!home || !rootFor(roots, home, "shell")) return refuse("exec", spec.cwd);
+          return { ok: true, value: processes.spawn({ ...spec, cwd: home }) };
+        }
+        const [procId, ...rest] = args;
+        if (method === "attach") {
+          following.get(procId)?.();
+          const attached = processes.attach(procId, Number(rest[0]) || 0, (event) => send({ type: "proc", proc: procId,
+            ...(event.kind === "data" ? { kind: "data", stream: event.stream, offset: event.offset, data: event.bytes.toString("base64") } : event) }));
+          following.set(procId, attached.detach);
+          const { detach, ...view } = attached;
+          return { ok: true, value: view };
+        }
+        if (method === "detach") { following.get(procId)?.(); following.delete(procId); return { ok: true, value: null }; }
+        if (method === "write") { processes.write(procId, rest[0] instanceof Uint8Array ? Buffer.from(rest[0]) : Buffer.from(String(rest[0] ?? ""))); return { ok: true, value: null }; }
+        if (method === "closeInput") { processes.closeInput(procId); return { ok: true, value: null }; }
+        if (method === "resize") { processes.resize(procId, Number(rest[0]) || 80, Number(rest[1]) || 24); return { ok: true, value: null }; }
+        if (method === "kill") { processes.kill(procId, rest[0]); return { ok: true, value: null }; }
+        if (method === "list") return { ok: true, value: processes.list() };
+        return err(new FileError("not_supported", `${method} is not served by this node`));
+      } catch (error) {
+        return err(new ExecutionError("unknown", error.message));
+      }
+    }
+
     async function run({ id, target, method, args = [], cwd }, context) {
       const decoded = decode(args, { FileError, ExecutionError });
+      if (target === "proc") return runProcess(method, decoded);
       if (target !== "env") {
         const handle = handles.get(target);
         if (!handle || !HANDLE_METHODS.includes(method)) return err(new FileError("invalid", `No open handle ${target}`));
@@ -134,6 +177,7 @@ export function startNodeAgent({ mainUrl, key, name, roots: shared, shellEnv = p
   return {
     stop() {
       stopped = true;
+      processes.stopAll();
       clearTimeout(timer);
       socket?.close();
     },
