@@ -7,6 +7,7 @@ import "@/components/ui/styles";
 import { ChatScreen } from "./stories";
 import { NavGroup, NavRow, Frost } from "@/components/ui";
 import { SidebarScreen } from "./sidebar-story";
+import { TypeLens } from "./type-lens";
 
 // The gallery is all library: its rules that the app keeps to library pieces (no focus ring) hold on the whole page.
 document.documentElement.setAttribute("data-library", "");
@@ -100,6 +101,8 @@ function Canvas() {
   const shown = () => families.filter((family) => family.title === current());
   // A staged page (Controls) draws its staged groups once, on one surface at one density, picked at its top and remembered.
   const remembered = <T extends string>(key: string, values: T[]) => { try { const value = localStorage.getItem(key) as T; return values.includes(value) ? value : values[0]!; } catch { return values[0]!; } };
+  const [lens, setLens] = createSignal(remembered("gallery:type-lens", ["false", "true"]) === "true");
+  const toggleLens = () => { const value = !lens(); setLens(value); try { localStorage.setItem("gallery:type-lens", String(value)); } catch { /* private window */ } };
   const [surface, setSurface] = createSignal(remembered<Surface>("gallery:stage-surface", ["ground", "frost"]));
   const [stageDensity, setStageDensity] = createSignal(remembered<Density>("gallery:stage-density", ["desktop", "phone"]));
   const stage = <T extends string>(set: (value: T) => void, key: string) => (value: T) => { set(value); try { localStorage.setItem(key, value); } catch { /* private window */ } };
@@ -130,6 +133,7 @@ function Canvas() {
     onCleanup(() => cancelAnimationFrame(frame));
   });
   return <div class="g-canvas" data-preview={preview()}>
+    <TypeLens on={lens()} frames={frames} />
     {/* The rail is drawn as the sidebar is, with the library's NavGroups and NavRows, at the desktop's density. */}
     <nav class="g-rail" aria-label="Families" data-density="desktop">
       <div class="g-rail-head"><strong>Gallery</strong><small>components v2</small></div>
@@ -140,6 +144,7 @@ function Canvas() {
     <section class="g-left" ref={left}>
       <div class="g-bar">
         <button type="button" aria-pressed={tuning()} onClick={() => setTuning(!tuning())}>Tune CSS</button>
+        <button type="button" aria-pressed={lens()} onClick={toggleLens}>Type lens</button>
         <Show when={tuning()}><button type="button" onClick={() => void navigator.clipboard.writeText(tune())}>Copy</button></Show>
         <div class="g-toggle g-speed" role="group" aria-label="Animation speed"><span>Speed</span>
           <For each={SPEEDS}>{(rate) => <button type="button" aria-pressed={speed() === rate} onClick={() => setSpeed(rate)}>{rate}×</button>}</For>

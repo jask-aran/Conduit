@@ -418,3 +418,13 @@ html, body { background: var(--frame, #08090a); color: var(--foreground); }
 .g-expand > .ui-button { justify-self: start; margin-bottom: 6px; }
 .g-expand-row { margin: 0; padding: 6px 10px 6px 28px; color: var(--foreground); font-size: var(--text-row); }
 .g-expand-after { padding-left: 10px; color: var(--muted-foreground); }
+
+/* Type lens: inspection controls stay separate from library type. */
+.g-lens-layer { position: fixed; inset: 0; pointer-events: none; z-index: 2147483647; }
+.g-lens-legend { position: fixed; left: 12px; bottom: 60px; z-index: 2147483647; width: min(420px, calc(100vw - 24px)); max-height: 45vh; overflow: auto; box-sizing: border-box; border: 1px solid var(--border); border-radius: 8px; background: var(--frame); padding: 10px; color: var(--foreground); font: 12px/1.4 system-ui; box-shadow: 0 4px 16px rgb(0 0 0 / .4); }
+.g-lens-legend p { margin: 0 0 8px; }
+.g-lens-roles { display: flex; flex-wrap: wrap; gap: 4px; }
+.g-lens-roles button { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--border); border-radius: 6px; background: transparent; padding: 3px 9px; color: var(--foreground); font: 12px/1.4 system-ui; cursor: pointer; }
+.g-lens-roles button[aria-pressed="true"] { background: var(--accent); border-color: var(--foreground); }
+.g-lens-swatch { width: 8px; height: 8px; flex: none; border-radius: 2px; }
+.g-lens-count { color: var(--muted-foreground); font-variant-numeric: tabular-nums; }
