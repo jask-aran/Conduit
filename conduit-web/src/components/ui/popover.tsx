@@ -62,7 +62,8 @@ export function RowAction(props: JSX.HTMLAttributes<HTMLDivElement> & { label: s
 /** An item in a list section. Icon, meta, keys and opens are its parts; checked, disabled and destructive its states. */
 export function Item(props: JSX.HTMLAttributes<HTMLDivElement> & {
   icon?: JSX.Element; meta?: JSX.Element; detail?: JSX.Element; keys?: string[]; opens?: boolean; active?: boolean;
-  /** field: the label is a field name (title type) and meta its value, as in "CONTEXT  Unavailable ›". */
+  /** field: the row is its section's title -- the name in the label's voice, meta its value in the text's, as in "CONTEXT  8% used ›"
+   *  (the row that unfolds a reading under it, like the plus menu's EFFORT). */
   field?: boolean;
   /** keysFirst: the keycaps lead the row (the leader menu, where the key is what you read first). */
   keysFirst?: boolean;

@@ -101,7 +101,7 @@ export function ChatHeader(props: {
             return <>
               <Rule />
               <MenuSection>
-                <MenuRow closeOnSelect={false} aria-expanded={expanded()} opens meta={used() == null ? "Unavailable" : `${Math.round(used()!)}% used`}
+                <MenuRow field closeOnSelect={false} aria-expanded={expanded()} opens meta={used() == null ? "Unavailable" : `${Math.round(used()!)}% used`}
                   onSelect={() => setExpanded(!expanded())}>Context</MenuRow>
                 <ContextBar chat={chat()} />
                 <Expand open={expanded()}><ContextBreakdown chat={chat()} bare canCompact={chat().capabilities()?.compaction !== false} /></Expand>
@@ -109,7 +109,7 @@ export function ChatHeader(props: {
               {/* The thread's own particulars, a section of their own: shut, the harness; open, each on a line. */}
               <Show when={details().length}>
                 <MenuSection>
-                  <MenuRow closeOnSelect={false} aria-expanded={detailsOpen()} opens meta={runtimeLabel() ?? undefined} onSelect={() => setDetailsOpen(!detailsOpen())}>Details</MenuRow>
+                  <MenuRow field closeOnSelect={false} aria-expanded={detailsOpen()} opens meta={runtimeLabel() ?? undefined} onSelect={() => setDetailsOpen(!detailsOpen())}>Details</MenuRow>
                   <Expand open={detailsOpen()}><For each={details()}>{([label, value]) => <Readout label={label} value={value} />}</For></Expand>
                 </MenuSection>
               </Show>
