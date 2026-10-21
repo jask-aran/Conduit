@@ -193,6 +193,11 @@ export function registerChatRoutes(app, {
       await lifecycle.withProjects([project.id], async () => {
         await projects.validate(project);
         const selectedProfile = request.body?.profileId ? profileFor(request.body.profileId) : null;
+        // Only the Conduit runtime works in a device's folder (plan decision 5).
+        if (project.nodeId && selectedProfile?.agent.implementation !== "conduit-runtime") {
+          return response.status(409).json({ error: "workspace_needs_conduit_runtime",
+            message: "Chats in a device's folder run on the Conduit runtime" });
+        }
         if (selectedProfile) {
           const profileId = request.body.profileId;
           if (selectedProfile.disabled || !backends.adapters.has(selectedProfile.agent.implementation)) {

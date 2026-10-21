@@ -1,5 +1,6 @@
 import os from "node:os";
 import { applyArtifactMessageIds } from "../../message-ids.js";
+import { sharedRoot } from "../../nodes/protocol.js";
 import { readWorkspaceComparison } from "../../workspace-comparison.js";
 import { computerContext, findComputerGitRoot, resolveComputerContext } from "../../computer-context.js";
 import path from "node:path";
@@ -79,6 +80,7 @@ function normalizeWorkspaceAppearance(requested) {
 
 export function registerProjectRoutes(app, {
   messageIds,
+  nodeHub,
   backends,
   buildProjectDashboard,
   config,
@@ -238,6 +240,18 @@ export function registerProjectRoutes(app, {
           path: request.body.path,
           defaultTemplateId: resolveProjectDefaultTemplateId(config, request.body?.defaultTemplateId, null),
         });
+        return response.status(201).json(created);
+      }
+      if (mode === "node") {
+        // A folder on a paired device: it has to be inside a folder the device shares.
+        const nodeId = String(request.body?.nodeId || "");
+        const remotePath = String(request.body?.path || "").trim();
+        const device = nodeHub && await nodeHub.get(nodeId);
+        if (!device) return response.status(404).json({ error: "node_not_found" });
+        if (!remotePath) return response.status(400).json({ error: "workspace_path_required" });
+        if (!sharedRoot(device.roots, remotePath)) return response.status(400).json({ error: "path_not_shared", message: `${device.name} does not share ${remotePath}` });
+        const created = await projects.createOnNode({ name: name || undefined, nodeId, path: remotePath,
+          defaultTemplateId: resolveProjectDefaultTemplateId(config, request.body?.defaultTemplateId, null) });
         return response.status(201).json(created);
       }
       if (mode === "create" || mode === "created") {

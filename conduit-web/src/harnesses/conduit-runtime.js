@@ -23,7 +23,7 @@ export const manifest = {
   builtIn: true,
   probe: () => READY(),
   build: (config) => new DurableAdapter({
-    runtime: new DurableRuntime({ dataRoot: config.dataRoot, piAgentDir: config.piAgentDir }),
+    runtime: new DurableRuntime({ dataRoot: config.dataRoot, piAgentDir: config.piAgentDir, nodeHub: config.nodeHub }),
     logs: config.logs,
   }),
 };

@@ -505,6 +505,8 @@ export interface RetryState {
   maxAttempts?: number;
   delayMs?: number;
   errorMessage?: string | null;
+  /** A device the turn's next step runs on, offline; the turn goes on when it is back. */
+  waitingFor?: string;
 }
 
 export interface HostUiRequest {

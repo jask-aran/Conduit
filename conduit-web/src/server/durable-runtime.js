@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { loadPiExtensionTools } from "./pi-extension-bridge.js";
+import { RemoteExecutionEnv } from "../nodes/remote-env.js";
 import { awaitWithContext, BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import { Type } from "@earendil-works/pi-ai";
 import { createRegistry, defineDoc, defineExtension, defineTool, Harness, section } from "@earendil-works/pi-durable";
@@ -103,11 +104,22 @@ export const ConduitIds = defineDoc({
   initial: () => ({ messages: {} }),
 });
 
+/** Which paired device a conversation's tools run on: `null` is this server. */
+export const ConduitWorkspace = defineDoc({
+  kind: "conduit.workspace",
+  version: 1,
+  scope: "conversation",
+  history: "latest",
+  fork: "current",
+  initial: () => ({ nodeId: null }),
+});
+
 /** A prompt as Conduit placed it: the model sees `content`, the transcript keeps the browser's id. */
 export const USER_ENTRY = "conduit.user";
 
 export class DurableRuntime {
-  constructor({ dataRoot, piAgentDir }) {
+  constructor({ dataRoot, piAgentDir, nodeHub = null }) {
+    this.nodeHub = nodeHub;
     this.file = path.join(dataRoot, "runtime", "conduit-runtime.sqlite");
     this.piAgentDir = piAgentDir;
     this.context = BACKGROUND_CONTEXT;
@@ -118,6 +130,16 @@ export class DurableRuntime {
     // holding it, registered while that chat is live.
     this.askers = new Map();
     this.askerWaits = new Map();
+  }
+
+  /** Tell the chat holding a conversation that its next step waits for an offline device. */
+  emitWaiting(conversationId, device) {
+    this.waiters?.get(conversationId)?.(device);
+  }
+
+  waitFor(conversationId, onWait) {
+    (this.waiters ||= new Map()).set(conversationId, onWait);
+    return () => { if (this.waiters.get(conversationId) === onWait) this.waiters.delete(conversationId); };
   }
 
   answerFor(conversationId, asker) {
@@ -156,8 +178,15 @@ export class DurableRuntime {
         models: this.models,
         registry,
         // Each call's files and processes are the conversation's working
-        // directory: the project the chat belongs to.
-        env: ({ cwd }) => new NodeExecutionEnv({ cwd: cwd || process.cwd(), shellEnv }),
+        // directory: the project the chat belongs to, on whichever device holds it.
+        env: async ({ conversationId, cwd, read }, context) => {
+          const nodeId = (await read.snapshot(ConduitWorkspace, conversationId, context))?.nodeId;
+          if (nodeId && this.nodeHub) {
+            return new RemoteExecutionEnv({ hub: this.nodeHub, nodeId, cwd,
+              onWait: (device) => this.emitWaiting(conversationId, device) });
+          }
+          return new NodeExecutionEnv({ cwd: cwd || process.cwd(), shellEnv });
+        },
         settings: {
           // A partial is committed, and so drawn, this often. The default 100ms
           // reads as a stutter; a frame at 30Hz is as often as is worth a write.
