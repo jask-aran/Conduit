@@ -28,7 +28,7 @@ import { ConduitIds, ConduitWorkspace, USER_ENTRY } from "./server/durable-runti
  * the conversation's `conduit.ids` document once the entry commits.
  */
 export const DURABLE_CAPABILITIES = Object.freeze({
-  history: "linear",
+  history: "tree",
   // Both are a fork of the conversation just before a prompt; the chat moves
   // to the fork and the old branch stays in the store.
   fork: true,
@@ -351,14 +351,23 @@ export class DurableAdapter extends EventEmitter {
     const record = this.get(id);
     if (!record) throw failure("No Conduit runtime session", "backend_unavailable", 404);
     if (record.active) throw failure("Stop the running turn before editing history", "generation_limit", 409);
-    const entries = await this.entries(record.conversation);
-    const index = entries.findIndex((entry) => entry.kind === USER_ENTRY && entry.data?.messageId === nodeId);
+    const harness = this.runtime.harness;
+    const branches = await this.branchesOf(record.conversationId);
+    // The prompt is on the chat's branch, or on one it left (picked in the history tree).
+    let base = null;
+    let entries = [];
+    let index = -1;
+    for (const conversationId of [record.conversationId, ...[...branches].reverse()]) {
+      base = conversationId === record.conversationId ? record.conversation : await harness.conversation(conversationId, this.context);
+      entries = base ? await this.entries(base) : [];
+      index = entries.findIndex((entry) => entry.kind === USER_ENTRY && entry.data?.messageId === nodeId);
+      if (index >= 0) break;
+    }
     if (index < 0) throw failure("No such prompt in this chat", "entry_not_found", 404);
     const source = entries[index];
-    const harness = this.runtime.harness;
-    const agent = await record.conversation.agent(this.context);
+    const agent = await base.agent(this.context);
     const fork = index > 0
-      ? await record.conversation.fork(entries[index - 1].id, { ownership: { kind: "ownerless" } }, this.context)
+      ? await base.fork(entries[index - 1].id, { ownership: { kind: "ownerless" } }, this.context)
       : await harness.createConversation({ ownership: { kind: "ownerless" }, agent: {
         ...(agent.model ? { model: agent.model } : {}),
         ...(agent.thinkingLevel ? { thinkingLevel: agent.thinkingLevel } : {}),
@@ -367,6 +376,12 @@ export class DurableAdapter extends EventEmitter {
     // A fork copies the workspace with its other documents; a new conversation is told it.
     await this.remember(fork, record.chatId, index > 0 ? undefined
       : (await harness.snapshot(ConduitWorkspace, record.conversationId, this.context)) || null);
+    await fork.commit(async (tx) => {
+      const ids = await tx.doc(ConduitIds, fork.id);
+      // A fresh conversation does not carry the documents a fork copies.
+      if (index === 0) ids.messages = { ...((await harness.snapshot(ConduitIds, base.id, this.context))?.messages || {}) };
+      ids.branches = [...branches.filter((branch) => branch !== record.conversationId), record.conversationId];
+    }, this.context);
     await this.follow(record, fork);
     const text = source.data?.text || textOf(source.model?.[0]?.content);
     return { opaqueSession: String(fork.id), text, sourceMessage: { id: nodeId, text } };
@@ -921,20 +936,44 @@ export class DurableAdapter extends EventEmitter {
     return { messages: messages.filter((message) => !message.streaming), tools, page: { before: null } };
   }
 
+  /** The conversations a chat was on before the one given (its edits' forks), oldest first. */
+  async branchesOf(conversationId) {
+    const harness = await this.runtime.open();
+    return ((await harness.snapshot(ConduitIds, conversationId, this.context))?.branches || []).filter(Number.isInteger);
+  }
+
+  /**
+   * The chat's history as a tree: its conversation and every branch it left,
+   * merged by message id. Branches share what came before their fork, so a
+   * message seen in several is one node, and each branch's messages chain from
+   * it. The leaf is the chat's own last message.
+   */
   async readHistory(options) {
-    const { messages } = await this.readTranscript(options);
-    let child = null;
+    const record = options.liveSessionId ? this.get(options.liveSessionId) : null;
+    const current = record?.conversationId ?? Number(options.opaqueSession);
+    const branches = Number.isInteger(current) ? await this.branchesOf(current) : [];
+    const nodes = new Map();
+    const roots = [];
     let leafId = null;
-    for (const message of [...messages].reverse()) {
-      const node = { entry: { id: message.id, parentId: null, timestamp: message.timestamp || null, type: "message",
-        display: `${message.role}: ${String(message.content || "").replace(/\s+/g, " ").trim().slice(0, 240)}`,
-        kind: message.role, hidden: false, forkable: message.role === "user", regeneratable: message.role === "user" },
-      children: child ? [child] : [] };
-      if (child) child.entry.parentId = node.entry.id;
-      else leafId = node.entry.id;
-      child = node;
+    for (const conversationId of [...branches, current]) {
+      const { messages } = conversationId === current
+        ? await this.readTranscript(options) : await this.readTranscript({ opaqueSession: conversationId });
+      let parent = null;
+      for (const message of messages) {
+        let node = nodes.get(message.id);
+        if (!node) {
+          node = { entry: { id: message.id, parentId: parent?.entry.id || null, timestamp: message.timestamp || null, type: "message",
+            display: `${message.role}: ${String(message.content || "").replace(/\s+/g, " ").trim().slice(0, 240)}`,
+            kind: message.role, hidden: false, forkable: message.role === "user", regeneratable: message.role === "user" },
+          children: [] };
+          nodes.set(message.id, node);
+          (parent ? parent.children : roots).push(node);
+        }
+        parent = node;
+      }
+      if (conversationId === current) leafId = parent?.entry.id || null;
     }
-    return { mode: "linear", leafId, tree: child ? [child] : [] };
+    return { mode: branches.length ? "tree" : "linear", leafId, tree: roots };
   }
 
   replay(id) {

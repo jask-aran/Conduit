@@ -102,7 +102,10 @@ export const ConduitIds = defineDoc({
   scope: "conversation",
   history: "latest",
   fork: "current",
-  initial: () => ({ messages: {} }),
+  // `branches`: the conversations this chat was on before its edits forked it,
+  // oldest first. Branches share the entries before their fork, so the chat's
+  // history tree is drawn by merging their transcripts.
+  initial: () => ({ messages: {}, branches: [] }),
 });
 
 /** Which paired device a conversation's tools run on: `null` is this server. */
