@@ -1,7 +1,9 @@
 import fs from "node:fs";
 import path from "node:path";
-import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
-import { createRegistry, defineDoc, defineExtension, Harness, section } from "@earendil-works/pi-durable";
+import { awaitWithContext, BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
+import { Type } from "@earendil-works/pi-ai";
+import { createRegistry, defineDoc, defineExtension, defineTool, Harness, section } from "@earendil-works/pi-durable";
+import { answerTo, isDismissal, questionRequest } from "../harnesses/questions.js";
 import { NodeExecutionEnv } from "@earendil-works/pi-durable/env/node";
 import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node";
 import { CodingTools } from "@earendil-works/pi-durable/tools";
@@ -10,9 +12,54 @@ import { buildManagedToolEnvironment } from "../../../scripts/pi-runtime.mjs";
 
 const SYSTEM_PROMPT = fs.readFileSync(new URL("../../../templates/conduit-runtime/SYSTEM.md", import.meta.url), "utf8");
 
+const MAX_QUESTIONS = 4;
+
+/**
+ * Ask the person, through Conduit's question card.
+ *
+ * Asking again is harmless, so a restart while the card is up asks again
+ * rather than reporting the call interrupted. The card goes to whichever
+ * chat holds the conversation; one not attached yet is waited for.
+ */
+const askUser = (runtime) => defineTool({
+  name: "ask_user",
+  description: "Ask the user one or more questions and wait for their answers. Offer short options where you can; "
+    + "they may also type their own answer. Use it when you need a decision or information only they have.",
+  parameters: Type.Object({
+    title: Type.Optional(Type.String({ description: "A few words saying what this is about" })),
+    questions: Type.Array(Type.Object({
+      question: Type.String(),
+      header: Type.Optional(Type.String({ description: "A short label for the question" })),
+      options: Type.Optional(Type.Array(Type.Object({ label: Type.String(), description: Type.Optional(Type.String()) }))),
+      multiSelect: Type.Optional(Type.Boolean()),
+    }), { minItems: 1, maxItems: MAX_QUESTIONS }),
+  }),
+  replay: "safe",
+  execute: async (args, api, context) => {
+    const request = questionRequest({
+      id: `ask-${api.callId}`, title: args.title || "A question for you",
+      questions: args.questions.map((item, index) => ({
+        id: `q${index + 1}`, header: item.header || "", prompt: item.question, multiSelect: Boolean(item.multiSelect),
+        options: (item.options || []).map((option, at) => ({ id: `o${at + 1}`, label: option.label, description: option.description || "" })),
+        // Something of their own can always be said.
+        freeform: { placeholder: "Your answer", multiline: false, numeric: false },
+      })),
+    });
+    const response = await runtime.ask(api.conversationId, request, context);
+    if (isDismissal(response)) return { output: [{ type: "text", text: "The user dismissed the question without answering." }] };
+    const lines = request.questions.map((question) => {
+      const answer = answerTo(response, question);
+      const said = [...answer.options.map((option) => option.label), answer.freeform].filter(Boolean).join("; ") || "(no answer)";
+      return `${question.prompt}\n→ ${said}${answer.note ? ` (note: ${answer.note})` : ""}`;
+    });
+    return { output: [{ type: "text", text: lines.join("\n\n") }] };
+  },
+});
+
 /** What Conduit tells every runtime conversation, ahead of the tools' own sections. */
-const Conduit = defineExtension({
+const Conduit = (runtime) => defineExtension({
   name: "conduit",
+  tools: [askUser(runtime)],
   sections: [
     section("preamble", () => SYSTEM_PROMPT, { tag: false }),
     // The working directory the tools resolve against: the chat's project.
@@ -56,6 +103,26 @@ export class DurableRuntime {
     this.harness = null;
     this.models = null;
     this.opening = null;
+    // Who answers a conversation's questions: the adapter record of the chat
+    // holding it, registered while that chat is live.
+    this.askers = new Map();
+    this.askerWaits = new Map();
+  }
+
+  answerFor(conversationId, asker) {
+    this.askers.set(conversationId, asker);
+    for (const wake of this.askerWaits.get(conversationId) || []) wake();
+    this.askerWaits.delete(conversationId);
+    return () => { if (this.askers.get(conversationId) === asker) this.askers.delete(conversationId); };
+  }
+
+  async ask(conversationId, request, context) {
+    while (!this.askers.has(conversationId)) {
+      await awaitWithContext(new Promise((resolve) => {
+        this.askerWaits.set(conversationId, [...(this.askerWaits.get(conversationId) || []), resolve]);
+      }), context);
+    }
+    return awaitWithContext(this.askers.get(conversationId)(request), context);
   }
 
   exists() { return fs.existsSync(this.file); }
@@ -69,7 +136,7 @@ export class DurableRuntime {
         authPath: agent("auth.json"), modelsPath: agent("models.json"), modelsStorePath: agent("models-store.json"),
       });
       const registry = createRegistry();
-      registry.install(Conduit);
+      registry.install(Conduit(this));
       registry.install(CodingTools);
       // Bash finds Conduit's managed Python first, as it does for Conduit Pi.
       const shellEnv = buildManagedToolEnvironment(process.env);
