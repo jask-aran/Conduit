@@ -1,17 +1,33 @@
-# Distributed Nodes, Remote Workspaces, and Durable Execution
+# Distributed Conduit
 
-Status, on branch `distributed-nodes`: milestone 1 built (the
-`conduit-runtime` profile: pi-durable chats with restart resume, forks, queue,
-questions, attachments, web research and usage). Milestone 3 built:
-`scripts/conduit-node.mjs` is the node role, Settings › Devices pairs and
-shows devices, a shared folder becomes a workspace whose runtime chats run on
-the device and wait while it is offline. Node track (a) and the terminal half
-of (b) built: Conduit's files, editing, Git and dashboard act on a device
-workspace through one inspector over a host (main's disk or the device), and
-its terminals are shells the device keeps across disconnects. Not yet: device
-harnesses (the rest of b), the ownership record (c), Windows (d); the agent's
-own bash calls still end when a connection drops; nothing watches a device's
-folder (it is polled). Milestones 2, 4 and 5 not started.
+Nodes, remote workspaces, and durable execution: one server acts on every
+device, and any client controls it. Its agent is the **Conduit durable
+agent** (below, under Names).
+
+Status, on branch `distributed-nodes` (head on the VPS, 2026-10-21):
+milestone 1 built (the Conduit durable agent, profile `conduit-runtime`:
+restart resume, forks, queue, questions, attachments, web research, usage).
+Milestone 3 built: `scripts/conduit-node.mjs` is the node role, Settings ›
+Devices pairs and shows devices, a shared folder becomes a workspace whose
+chats run on the device and wait while it is offline. Node track (a), (b)
+and (d) built: files, editing, Git, dashboard and terminals act on a device
+through one host; Claude Code, Codex, fx (ACP) and OpenCode run on devices
+through their existing adapters (remote spawn); secrets are kept back;
+writes and commands carry receipts across reconnects; a node can pair with
+several servers; the Windows desktop app runs the node as a companion; a
+server can take devices through its public tunnel by opt-in. Not yet: the
+ownership record (c), the phone gate on real hardware, folder watching (a
+device's folder is polled). Milestones 2, 4 and 5 not started.
+
+## Names
+
+- **Distributed Conduit**: this roadmap.
+- **Conduit durable agent** (2026-10-21, the user's term): the instance of
+  pi-durable customised to be the core of Conduit. It replaces "Conduit Pi"
+  as the name for Conduit's own agent. It powers the Assistant profile, any
+  other first-party profile, and the persistent agent (milestone 2). Code
+  still says `conduit-runtime` / `durable-adapter`, and "Conduit Pi" in
+  older text means the classic Pi this replaces (milestone 5).
 
 ## Vision
 
