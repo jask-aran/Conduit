@@ -1,6 +1,5 @@
 import { Show, type Component } from "solid-js";
 import { Dynamic } from "solid-js/web";
-import * as Icons from "./icons";
 
 /**
  * Product marks for the coding harnesses, served from `public/brand/`.

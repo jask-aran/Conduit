@@ -245,7 +245,7 @@
 /* Never a ring (DESIGN Interaction): no outline or focus ring from the browser or any component, in any
    colour, on a library piece or anything in one (and the whole gallery, :root[data-library]). The one rule, so no
    piece can forget it; keyboard focus is the wash, which each piece draws on :focus-visible as on :hover. */
-:root[data-library] :is(:focus, :focus-visible), :where([class*="ui-"], [class*="ui-"] *):is(:focus, :focus-visible) { outline: none !important; --tw-ring-shadow: 0 0 #0000 !important; --tw-ring-offset-shadow: 0 0 #0000 !important; }
+:root[data-library] :is(:focus, :focus-visible), :where([class*="ui-"], [class*="ui-"] *):is(:focus, :focus-visible) { outline: none !important; }
 /* The section label, one for every section: popovers, cards, riders, the sidebar. Muted caps in the label face. */
 .ui-title, .ui-title-text, .ui-nav-label, .ui-crumbs > button { color: var(--muted-foreground); font: var(--label-weight) var(--label-size)/var(--leading-text) var(--label-face); letter-spacing: var(--label-tracking); text-transform: var(--label-case); }
 
