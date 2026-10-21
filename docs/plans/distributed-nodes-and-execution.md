@@ -61,7 +61,11 @@ environments.
    properties of the devices that have them installed: a device offers its
    harnesses, Conduit drives them there, in that device's folders, and can
    drive harnesses on several devices at once towards one outcome. Main's own
-   harnesses work as today. No mirrors or MCP bridges.
+   harnesses work as today. No mirrors or MCP bridges. Mechanism: **remote
+   spawn** -- the node starts the harness process and relays its stdio (or
+   local port) over its socket, and main's existing adapters run unchanged
+   against it; the node stays thin and there is one adapter per harness.
+   Terminals use the same spawn.
 6. **Workspaces declared by nodes.** A node mounts and declares folders to
    main; existing workspaces are simply main's local node and are unaffected.
 7. **Grants: per root + typed capabilities.** The device owner grants
@@ -132,12 +136,15 @@ environments.
     server what they have (folders, shell, harnesses, capabilities). A device
     can be both, but the phone never drives the desktop: it drives the server,
     which acts on the desktop.
-21. **A thread is owned by a device.** A thread belongs to the device it
-    started on; its tool calls and capabilities default there, and it knows
-    that origin durably (a record beside the conversation, not agent
+21. **A thread is owned by a device.** A thread belongs to its workspace's
+    device, whoever typed (a chat in a desktop folder is the desktop's, even
+    from the phone); a chat outside any workspace belongs to the device it
+    was started on. Its tool calls and capabilities default there, and it
+    knows that owner durably (a record beside the conversation, not agent
     context). A persistent assistant instead picks a device per call. A
-    thread whose device is unreachable may be allowed to go on elsewhere
-    (fallback, to be designed) without forgetting where it belongs.
+    thread whose device is unreachable waits ("Waiting for Laptop") and any
+    client can choose to continue without it: the model is told the device is
+    unavailable and may use another; the thread keeps its owner.
 22. **Main's machine is a device**, trusted by default: one path for every
     file, shell and Conduit feature (browser, Git, terminals) through an
     environment on `{device, path}`, main's own with full grants on its
@@ -164,6 +171,15 @@ environments.
 4. **Typed device capabilities**, starting with notify/clipboard, then
    Android screen share.
 5. **Cut over** default Pi to pi-durable; freeze old Pi.
+
+Node track after milestone 3, in order (agreed 2026-10-21):
+a. **Main as a device** (decision 22): workspace files, Git and the
+   dashboard act on `{device, path}` through an environment; main is the
+   local device. Device workspaces stop being read-only special cases.
+b. **Remote spawn** on the node protocol: processes with stdio/PTY relay,
+   then terminals on devices and third-party harnesses on devices.
+c. **Thread ownership record** and the continue-without control.
+d. Windows node and the phone gate on real hardware.
 
 ## Open questions
 
