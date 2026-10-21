@@ -12,6 +12,7 @@
  *   controls        Button, Input, TextArea, Field, Keycap, Segmented, Slider, Progress, Spinner
  *   frost, orb      the material; the thinking orb's box
  *   popover         Menu > Section > Item, Match
+ *   reading         Reading: a gauge's totals, parts, figures and foot
  *   nav             NavPane > NavGroup > NavRow, NavFolder, RailButton
  *   dashboard       Dashboard, DashHeader, Group (GroupHeading), DashRow, ChangeRow, FolderShelf
  *   pane            PaneTabRow > TabPlace > PaneTab, PaneAction, PaneEdge, DropWash, DragPill, ToolRail, ToolHeader,
@@ -41,6 +42,7 @@ import "./controls.css";
 import "./frost.css";
 import "./orb.css";
 import "./popover.css";
+import "./reading.css";
 import "./nav.css";
 import "./dashboard.css";
 import "./pane.css";

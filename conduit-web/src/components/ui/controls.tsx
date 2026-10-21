@@ -98,11 +98,12 @@ export function Gauge(props: { value: number; tone?: "idle" | "normal" | "warnin
 /** fill: the whole of its host (a colour choice) rather than a dot beside a label. */
 export const Swatch = (props: { colour?: string; hollow?: boolean; fill?: boolean }) => <i class="ui-swatch" data-hollow={props.hollow ? "" : undefined} data-fill={props.fill ? "" : undefined} style={{ background: props.hollow ? undefined : props.colour }} aria-hidden="true" />;
 
-/** A whole as one bar of its parts, each in its colour and grown by its value; mark: a rule where something happens, named under it. */
-export function Meter(props: { parts: { value: number; colour: string }[]; mark?: { at: number; label: string } }) {
-  return <div class="ui-meter" data-marked={props.mark ? "" : undefined}>
+/** A whole as one bar of its parts, each in its colour and grown by its value; mark: a rule where something happens,
+ *  named under it -- or, quiet, its rule alone, named by what reads it (a Reading's totals) and its title. */
+export function Meter(props: { parts: { value: number; colour: string }[]; mark?: { at: number; label: string; quiet?: boolean } }) {
+  return <div class="ui-meter" data-marked={props.mark && !props.mark.quiet ? "" : undefined} title={props.mark?.quiet ? props.mark.label : undefined}>
     <div class="ui-meter-bar" aria-hidden="true"><For each={props.parts}>{(part) => <span style={{ "flex-grow": part.value, background: part.colour }} />}</For></div>
-    <Show when={props.mark}>{(mark) => <><i class="ui-meter-mark" style={{ left: `${mark().at}%` }} /><small class="ui-meter-label" style={{ left: `${mark().at}%` }}>{mark().label}</small></>}</Show>
+    <Show when={props.mark}>{(mark) => <><i class="ui-meter-mark" style={{ left: `${mark().at}%` }} /><Show when={!mark().quiet}><small class="ui-meter-label" style={{ left: `${mark().at}%` }}>{mark().label}</small></Show></>}</Show>
   </div>;
 }
 

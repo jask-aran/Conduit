@@ -63,7 +63,7 @@ function holdFocus(element: HTMLElement, keep: () => boolean) {
   const focus = element.focus.bind(element);
   element.focus = (options?: FocusOptions) => { if (!keep()) focus(options); };
 }
-type Caps = { width?: Measure; height?: Measure; steady?: boolean };
+type Caps = { width?: Measure; height?: Measure; unfolds?: boolean };
 type ContentProps = ParentProps<Caps & { "data-settling"?: boolean; keep?: () => boolean; onOpenAutoFocus?: (event: Event) => void; onPointerDownOutside?: (event: Event) => void; onFocusOutside?: (event: FocusOutsideEvent) => void; onCloseAutoFocus?: (event: Event) => void }>;
 type RowProps = Omit<ComponentProps<typeof Item>, "onSelect"> & { onSelect?: () => void; closeOnSelect?: boolean };
 type ChoiceProps = RowProps & { value: string };
@@ -180,7 +180,7 @@ export function Popover(props: ParentProps<{ open?: boolean; onOpenChange?: (ope
   return <KPopover open={props.open} onOpenChange={(open) => { if (!open) haptic("dismiss"); props.onOpenChange?.(open); }} anchorRef={props.anchorRef} placement={props.placement || "bottom-end"} gutter={4} fitViewport overflowPadding={8}>{props.children}</KPopover>;
 }
 export const PopoverTrigger = KPopover.Trigger;
-export function PopoverContent(props: ParentProps<{ "aria-label"?: string; wide?: boolean; onPointerDownOutside?: (event: Event & { target: EventTarget | null }) => void; onOpenAutoFocus?: (event: Event) => void; onCloseAutoFocus?: (event: Event) => void }>) {
+export function PopoverContent(props: ParentProps<Caps & { "aria-label"?: string; wide?: boolean; onPointerDownOutside?: (event: Event & { target: EventTarget | null }) => void; onOpenAutoFocus?: (event: Event) => void; onCloseAutoFocus?: (event: Event) => void }>) {
   const mount = createFullscreenPortalMount();
   return <KPopover.Portal mount={mount()}><KPopover.Content as={Surface} data-slot="ui-popover-content" {...props} /></KPopover.Portal>;
 }
