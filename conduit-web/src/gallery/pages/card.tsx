@@ -74,7 +74,7 @@ export const cardPage: Page = {
   <CardDetails><dt>Destination</dt><dd>/work/conduit</dd></CardDetails>
   <CardRead>Preparing clone…</CardRead>
 </Card>`,
-  anatomy: { scene: cardScene, parts: [
+  anatomy: { phone: true, spacing: [".ui-card", ".ui-card-actions"], scene: cardScene, parts: [
     { selector: ".ui-card", name: "--card-edge", does: "padding all round, every box meets it (1.25 units)", from: (el) => px(getComputedStyle(el).paddingTop) },
     { selector: ".ui-card > h3", name: "title", does: "the Heading role (--text-body · --weight-strong)", from: typeOf },
     { selector: ".ui-card > p", name: "detail", does: "the Caption role (--text-caption · muted), --card-pair under the title", from: (el) => `${typeOf(el)} · ${px(`${el.getBoundingClientRect().top - el.previousElementSibling!.getBoundingClientRect().bottom}px`)} under` },

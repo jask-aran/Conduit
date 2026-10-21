@@ -39,7 +39,7 @@ export const toastPage: Page = {
 <Toaster>
   <Toast kind="success">Renamed chat to Trip notes</Toast>
 </Toaster>`,
-  anatomy: { scene: toastScene, parts: [
+  anatomy: { phone: true, spacing: [".ui-toast"], scene: toastScene, parts: [
     { selector: ".ui-toast", name: "Raised frost", does: "--radius-surface; at most 25 units wide (a phone: its width)", from: (el) => `${rounding(el)} · ${px(`${el.getBoundingClientRect().width}px`)} wide` },
     { selector: ".ui-toast-icon", name: "its kind", does: "a glyph in the state's colour, on the first line", from: (el) => fg(el) },
     { selector: ".ui-toast-text", name: "the sentence", does: "the Row role, wrapping under its own start", from: (el) => typeOf(el) },
