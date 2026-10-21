@@ -12,7 +12,7 @@ import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite
 import { CodingTools } from "@earendil-works/pi-durable/tools";
 import { createCodemodeExtension } from "@earendil-works/pi-durable/codemode";
 import { CodemodeSandbox } from "@earendil-works/pi-codemode";
-import { ModelRuntime } from "@earendil-works/pi-coding-agent";
+import { ModelRuntime, resolveModelScopeWithDiagnostics } from "@earendil-works/pi-coding-agent";
 import { buildManagedToolEnvironment } from "../../../scripts/pi-runtime.mjs";
 
 // What the web tools are for and how to use them; a template that asks for
@@ -295,16 +295,23 @@ export class DurableRuntime {
     };
   }
 
-  /** The models the Conduit Pi agent offers: its enabled list when it has one, else every model with credentials. */
+  /**
+   * The models offered, scoped as classic Pi scoped them: the agent's enabled
+   * list when it has one, else the templates' own `models`, else every model
+   * with credentials. Patterns resolve as Pi resolves them (globs included).
+   */
   async availableModels() {
     await this.open();
     const available = await this.models.getAvailable();
-    let enabled = null;
+    let patterns = null;
     try {
       const settings = JSON.parse(fs.readFileSync(path.join(this.piAgentDir, "settings.json"), "utf8"));
-      if (Array.isArray(settings.enabledModels) && settings.enabledModels.length) enabled = new Set(settings.enabledModels);
+      if (Array.isArray(settings.enabledModels)) patterns = settings.enabledModels;
     } catch {}
-    return enabled ? available.filter((model) => enabled.has(`${model.provider}/${model.id}`)) : available;
+    patterns ??= [...new Set(this.templates.flatMap((template) => template.models || []))];
+    if (!patterns.length) return available;
+    const { scopedModels } = await resolveModelScopeWithDiagnostics(patterns, this.models);
+    return scopedModels.map(({ model }) => model);
   }
 
   async defaultModel() {
