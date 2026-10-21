@@ -11,6 +11,9 @@ import { cssTime } from "./shared";
  * at once (a list rebuilt from what is open), the slide runs over a still of them, taken before they went (inert,
  * out of the accessibility tree, without ids). A height resolved per frame repainted everything under it (it missed
  * a 120 Hz phone's frames), and a grid track per frame for a whole list stuttered.
+ * In a scroller as tall as its content (a menu, data-fits), the scroller's own edge runs with the rows: its height
+ * moves between the two it has, open and shut, on the same timing -- laid out per frame, but only that small box,
+ * out of the page's flow. Without it the menu's edge jumped at the move's start and the rows slid in after it.
  */
 export function Expand(props: { open: boolean; class?: string; children: JSX.Element }) {
   const [shown, setShown] = createSignal(props.open);
@@ -52,6 +55,14 @@ export function Expand(props: { open: boolean; class?: string; children: JSX.Ele
       target = to;
       motions = [node.animate([{ clipPath: clip(showing) }, { clipPath: clip(to) }], timing),
         ...following(node).map((next) => next.animate([{ transform: shift(showing) }, { transform: shift(to) }], timing))];
+      const edge = scrollerOf(node);
+      if (edge?.dataset.fits !== undefined) {
+        // The rows are in, whole: open, it is as tall as it is now; shut, it loses what of them it shows, inside its caps.
+        const open = edge.getBoundingClientRect().height;
+        const shut = open - (edge.clientHeight - Math.min(edge.scrollHeight - height, edge.clientHeight));
+        const at = (shows: number) => `${shut + (open - shut) * shows}px`;
+        if (open - shut > 0.5) motions.push(edge.animate([{ height: at(showing) }, { height: at(to) }], timing));
+      }
       // Ending, every move is let go in the same task as the rows are dropped, so the page is laid out once, as it ends.
       motions[0]!.onfinish = () => { for (const motion of motions) motion.cancel(); motions = []; showing = to; still?.remove(); still = undefined; done(); };
     };
@@ -86,5 +97,9 @@ function following(node: HTMLElement) {
     for (let next = at.nextElementSibling; next; next = next.nextElementSibling) if (next instanceof HTMLElement && !next.classList.contains("ui-expand")) out.push(next);
   }
   return out;
+}
+function scrollerOf(node: HTMLElement) {
+  for (let at = node.parentElement; at; at = at.parentElement) if (scrolls(at)) return at === document.body ? null : at;
+  return null;
 }
 const scrolls = (element: HTMLElement) => element === document.body || /auto|scroll/.test(getComputedStyle(element).overflowY);

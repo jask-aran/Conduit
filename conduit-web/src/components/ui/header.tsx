@@ -1,5 +1,4 @@
 import { Show, splitProps, type JSX } from "solid-js";
-import { ChevronDownIcon } from "lucide-solid";
 import { Button } from "./controls";
 
 /*
@@ -36,16 +35,14 @@ export function HeaderCrumb(props: { place?: string; onPlace?: () => void; title
   </nav>;
 }
 
-/** A phone's name for the page: its title over its place (in the label's voice), a frost pill between the header's
- *  groups. With opens, a press opens the page's menu (MenuControl as={HeaderPill} opens), and a chevron says so. */
-export function HeaderPill(props: JSX.ButtonHTMLAttributes<HTMLButtonElement> & { label: string; place?: string; opens?: boolean }) {
-  const [local, rest] = splitProps(props, ["label", "place", "opens"]);
-  const inner = () => <>
-    <strong>{local.label}</strong><Show when={local.place}><span>{local.place}</span></Show>
-    <Show when={local.opens}><ChevronDownIcon aria-hidden="true" /></Show>
-  </>;
+/** A phone's name for the page: its place's mark (a folder, a workspace's glyph, Conduit's for a chat in no folder)
+ *  and its title, wrapping to two lines, a frost pill between the header's groups. opens: a press opens the page's
+ *  menu (MenuControl as={HeaderPill} opens); the pill says so by being pressable, with no chevron to take its room. */
+export function HeaderPill(props: JSX.ButtonHTMLAttributes<HTMLButtonElement> & { label: string; icon?: JSX.Element; opens?: boolean }) {
+  const [local, rest] = splitProps(props, ["label", "icon", "opens"]);
+  const inner = () => <><Show when={local.icon}><span class="ui-header-pill-icon" aria-hidden="true">{local.icon}</span></Show><strong>{local.label}</strong></>;
   return <Show when={local.opens} fallback={<div class="ui-header-pill" data-surface="frost">{inner()}</div>}>
-    <button type="button" tabIndex={-1} {...rest} class="ui-header-pill" data-surface="frost" data-opens="">{inner()}</button>
+    <button type="button" tabIndex={-1} {...rest} class="ui-header-pill" data-surface="frost">{inner()}</button>
   </Show>;
 }
 
