@@ -48,30 +48,32 @@ export function decode(value, { FileError, ExecutionError, handle = null } = {})
  * Which grant a method needs, and which of its arguments are paths.
  *
  * Checked on the node, against the roots its owner shared: main asks, the
- * device decides. A method that is not listed is not served.
+ * device decides. A method that is not listed is not served. `contents`
+ * marks a method that reads or writes what a file holds, not just its name:
+ * those are refused on files the root keeps back (src/nodes/secrets.js).
  */
 export const METHOD_GRANTS = Object.freeze({
   absolutePath: { grant: "read", paths: [] },
   joinPath: { grant: "read", paths: [] },
   canonicalPath: { grant: "read", paths: [0] },
-  readTextFile: { grant: "read", paths: [0] },
-  openTextLineReader: { grant: "read", paths: [0] },
-  readTextLines: { grant: "read", paths: [0] },
-  readBinaryFile: { grant: "read", paths: [0] },
-  openBinaryReader: { grant: "read", paths: [0] },
+  readTextFile: { grant: "read", paths: [0], contents: true },
+  openTextLineReader: { grant: "read", paths: [0], contents: true },
+  readTextLines: { grant: "read", paths: [0], contents: true },
+  readBinaryFile: { grant: "read", paths: [0], contents: true },
+  openBinaryReader: { grant: "read", paths: [0], contents: true },
   fileInfo: { grant: "read", paths: [0] },
   listDir: { grant: "read", paths: [0] },
   listFiles: { grant: "read", paths: [0] },
   openDirReader: { grant: "read", paths: [0] },
   exists: { grant: "read", paths: [0] },
   watch: { grant: "read", paths: [] },
-  writeFile: { grant: "write", paths: [0] },
-  appendFile: { grant: "write", paths: [0] },
-  truncateFile: { grant: "write", paths: [0] },
-  flushFile: { grant: "write", paths: [0] },
-  renameFile: { grant: "write", paths: [0, 1] },
-  createDir: { grant: "write", paths: [0] },
-  remove: { grant: "write", paths: [0] },
+  writeFile: { grant: "write", paths: [0], contents: true },
+  appendFile: { grant: "write", paths: [0], contents: true },
+  truncateFile: { grant: "write", paths: [0], contents: true },
+  flushFile: { grant: "write", paths: [0], contents: true },
+  renameFile: { grant: "write", paths: [0, 1], contents: true },
+  createDir: { grant: "write", paths: [0], contents: true },
+  remove: { grant: "write", paths: [0], contents: true },
   // Not served: temporary files go to the device's own temp directory, outside
   // every shared root. A command's own spill files are the device's business.
   exec: { grant: "shell", paths: [] },

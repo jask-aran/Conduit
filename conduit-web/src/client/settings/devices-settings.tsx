@@ -6,7 +6,7 @@ import { Select } from "@/components/menus";
 import { StatusDot } from "@/components/ui/nav";
 import { LiveNote, SettingGroup, SettingLine, SettingNote, SettingValue } from "@/components/ui/overlay";
 
-type SharedRoot = { id: string; label: string; read: boolean; write: boolean; shell: boolean };
+type SharedRoot = { id: string; label: string; read: boolean; write: boolean; shell: boolean; allow?: string[] };
 type Node = { id: string; deviceId: string; name: string; platform: string | null; online: boolean; roots: SharedRoot[]; lastSeenAt: string | null };
 type Device = { id: string; name: string; nodes: Node[] };
 
@@ -62,7 +62,9 @@ export function DevicesSettingsTile(props: { onAddWorkspace: (input: { mode: "no
     try { await api(`/v0/nodes/${node.id}`, { method: "DELETE" }); refresh(); }
     catch (cause) { setError(cause instanceof Error ? cause.message : "The environment was not unpaired."); }
   };
-  const grants = (root: SharedRoot) => ["Read", root.write && "write", root.shell && "commands (full user access)"].filter(Boolean).join(", ");
+  // Secrets are kept back by default (src/nodes/secrets.js); only a root's exceptions are worth saying.
+  const grants = (root: SharedRoot) => ["Read", root.write && "write", root.shell && "commands (full user access)"].filter(Boolean).join(", ")
+    + (root.allow?.length ? ` · shares ${root.allow.join(", ")}` : "");
   const seen = (node: Node) => node.online ? "Connected" : node.lastSeenAt ? `Offline · last seen ${new Date(node.lastSeenAt).toLocaleString()}` : "Not connected yet";
 
   return <>

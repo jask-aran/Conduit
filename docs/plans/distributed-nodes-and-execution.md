@@ -328,7 +328,9 @@ per root; nothing excluded; respect .gitignore (surprises when an agent needs
 a generated file). Chosen: a default deny-list (`.env*`, keys, `.ssh/`,
 credential stores) that the node refuses to read through browsing,
 attachments and agent file tools unless a root allows it. Shell is unaffected
--- it has the user's full access by decision.
+-- it has the user's full access by decision. Built: `src/nodes/secrets.js`; names
+still list, contents are refused for reads and writes; `conduit-node share
+--allow/--deny` edits a root's list.
 
 ### 2026-10-21: from the security review of the node path
 

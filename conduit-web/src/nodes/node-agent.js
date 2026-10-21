@@ -7,6 +7,7 @@ import { err, FileError, ExecutionError } from "@earendil-works/pi-durable/env";
 import { NodeExecutionEnv } from "@earendil-works/pi-durable/env/node";
 import { encode, decode, HANDLE_METHODS, METHOD_GRANTS, NODE_PROTOCOL_VERSION, rootFor } from "./protocol.js";
 import { NodeProcesses } from "./node-processes.js";
+import { keptBack, rootDeny } from "./secrets.js";
 
 const RETRY_MS = [1000, 2000, 5000, 10000, 30000];
 
@@ -76,7 +77,7 @@ export function startNodeAgent({ mainUrl, key, name, roots: shared, shellEnv = p
       attempt = 0;
       // Roots go by id; the path is for people to read, main never sends it back.
       send({ type: "hello", version: NODE_PROTOCOL_VERSION, name, platform: process.platform,
-        roots: roots.map(({ id, path: label, read, write, shell }) => ({ id, label, read, write, shell })) });
+        roots: roots.map(({ id, path: label, read, write, shell, allow }) => ({ id, label, read, write, shell, allow })) });
       log.info?.(`[conduit-node] connected to ${mainUrl}`);
     });
     ws.on("message", async (raw) => {
@@ -171,7 +172,11 @@ export function startNodeAgent({ mainUrl, key, name, roots: shared, shellEnv = p
       if (!home) return refuse(method, "that folder");
       for (const at of rule.paths) {
         if (typeof decoded[at] !== "string") continue;
-        if (!allowed(realish(path.resolve(home, decoded[at])), rule.grant)) return refuse(method, decoded[at]);
+        const target = realish(path.resolve(home, decoded[at]));
+        if (!allowed(target, rule.grant)) return refuse(method, decoded[at]);
+        if (rule.contents && keptBack(rootFor(roots, target, rule.grant), target)) {
+          return err(new FileError("permission_denied", `${decoded[at]} is kept private on this device`, decoded[at]));
+        }
       }
       if (method === "exec" && !allowed(realish(path.resolve(home, decoded[1]?.cwd || ".")), "shell")) return refuse(method, decoded[1]?.cwd || "that folder");
       if (method === "watch" && decoded[0].some((item) => !allowed(realish(path.resolve(home, item.path)), "read"))) return refuse(method, "a watched path");
@@ -200,7 +205,8 @@ export function startNodeAgent({ mainUrl, key, name, roots: shared, shellEnv = p
   };
 }
 
-const view = (root) => ({ id: root.id, path: realish(root.path) || path.resolve(root.path), read: Boolean(root.read), write: Boolean(root.write), shell: Boolean(root.shell) });
+const view = (root) => ({ id: root.id, path: realish(root.path) || path.resolve(root.path), read: Boolean(root.read), write: Boolean(root.write), shell: Boolean(root.shell),
+  allow: root.allow || [], secrets: rootDeny(root) });
 
 /**
  * A path with its symlinks resolved, as far as it exists: a link inside a
