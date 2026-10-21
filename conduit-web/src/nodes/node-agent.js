@@ -10,7 +10,7 @@ import { NodeProcesses } from "./node-processes.js";
 import { keptBack, rootDeny } from "./secrets.js";
 import { Receipts } from "./receipts.js";
 import net from "node:net";
-import { claudeSession, codexRollout, findHarnesses, tunnelTarget } from "./node-harnesses.js";
+import { claudeSession, codexRollout, findHarnesses, opencodeService, tunnelTarget } from "./node-harnesses.js";
 
 const RETRY_MS = [1000, 2000, 5000, 10000, 30000];
 
@@ -223,6 +223,7 @@ export function startNodeAgent({ mainUrl, key, name, roots: shared, shellEnv = p
       if (target === "harness") {
         if (method === "claudeSession" && harnesses["claude-code"]) return { ok: true, value: await claudeSession(decoded[0]) };
         if (method === "codexRollout" && harnesses.codex) return { ok: true, value: await codexRollout(decoded[0]) };
+        if (method === "opencodeService" && harnesses.opencode) return { ok: true, value: await opencodeService() };
         return err(new FileError("not_supported", `${method} is not served by this node`));
       }
       if (target !== "env") {

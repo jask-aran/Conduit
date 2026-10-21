@@ -1,3 +1,4 @@
+import http from "node:http";
 import { Duplex } from "node:stream";
 import { BACKGROUND_CONTEXT, withAbortSignal } from "@earendil-works/chord/context";
 import { ExecutionError, FileError } from "@earendil-works/pi-durable/env";
@@ -57,4 +58,28 @@ export function tunnelTo(hub, nodeId, endpoint) {
   })();
   opened.catch((cause) => stream.destroy(cause));
   return stream;
+}
+
+/**
+ * `fetch` to a loopback HTTP service on a device, through a tunnel: what an
+ * adapter needs of a Response -- `ok`, `status`, `text()`, `json()`, and
+ * `body` to read a stream from.
+ */
+export function fetchOnDevice(hub, nodeId, url, { method = "GET", headers = {}, body, signal } = {}) {
+  const target = new URL(url);
+  return new Promise((resolve, reject) => {
+    const request = http.request({
+      method, path: `${target.pathname}${target.search}`, headers: { ...headers, host: target.host },
+      createConnection: () => tunnelTo(hub, nodeId, { port: Number(target.port) || 80 }),
+    }, (response) => {
+      const read = async () => { const chunks = []; for await (const chunk of response) chunks.push(chunk); return Buffer.concat(chunks).toString("utf8"); };
+      resolve({ ok: response.statusCode >= 200 && response.statusCode < 300, status: response.statusCode,
+        body: response, text: read, json: async () => JSON.parse(await read()) });
+    });
+    const abort = () => request.destroy(Object.assign(new Error("aborted"), { name: "AbortError" }));
+    if (signal?.aborted) return abort();
+    signal?.addEventListener("abort", abort, { once: true });
+    request.once("error", (cause) => reject(Object.assign(new TypeError("fetch failed"), { cause })));
+    request.end(body);
+  });
 }

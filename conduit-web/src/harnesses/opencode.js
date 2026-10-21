@@ -17,5 +17,5 @@ export const manifest = {
   drive: true,
   profile: true,
   probe: (config) => commandProbe(config.opencodeCommand)(),
-  build: (config) => new OpenCodeAdapter({ command: config.opencodeCommand, logs: config.logs }),
+  build: (config) => new OpenCodeAdapter({ command: config.opencodeCommand, logs: config.logs, nodeHub: config.nodeHub }),
 };
