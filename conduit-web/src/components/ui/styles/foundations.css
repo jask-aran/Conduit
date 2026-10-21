@@ -240,7 +240,7 @@
 }
 
 /* What a surface gives the controls on it. --tint, one value for its washes and its lines (the
-   ground's is the app's --border, which --accent matches); --well, the fill under an input or an
+   ground's is the app's --border); --well, the fill under an input or an
    outline button: a step darker than the ground, nothing over frost, which is its own fill. */
 :root, [data-surface="ground"] { --tint: var(--border); --well: color-mix(in oklch, var(--background), black 25%); }
 [data-surface="frost"] { --tint: var(--frost-tint); --well: transparent; }

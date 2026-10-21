@@ -1,4 +1,4 @@
-import { IDENTITY_COLOURS } from "@/components/ui/palettes";
+import { IDENTITY_COLOURS, identityHue } from "@/components/ui/palettes";
 import { Glyph } from "@/components/ui";
 import {
   ActivityIcon,
@@ -47,7 +47,7 @@ import type { WorkspaceAppearance } from "../api/contracts";
 export const DEFAULT_WORKSPACE_APPEARANCE: WorkspaceAppearance = {
   mode: "icon",
   value: "boxes",
-  color: "mauve",
+  color: "violet",
 };
 
 export const WORKSPACE_ICON_OPTIONS = [
@@ -94,6 +94,7 @@ export const WORKSPACE_ICON_OPTIONS = [
 ] as const;
 
 export const WORKSPACE_COLOR_OPTIONS = IDENTITY_COLOURS;
+const DEFAULT_COLOUR = IDENTITY_COLOURS.find((option) => option.id === "violet")!;
 
 const HEX_COLOR = /^#[0-9a-f]{6}$/i;
 
@@ -105,8 +106,9 @@ export function workspaceIconOption(value?: string) {
 
 export function workspaceColorOption(value?: string) {
   const normalized = String(value || "").trim().toLowerCase();
-  return WORKSPACE_COLOR_OPTIONS.find((option) => option.id === normalized)
-    || (HEX_COLOR.test(normalized) ? { id: normalized, label: normalized, hex: normalized } : WORKSPACE_COLOR_OPTIONS[3]);
+  const hue = identityHue(normalized);
+  return WORKSPACE_COLOR_OPTIONS.find((option) => option.id === hue)
+    || (HEX_COLOR.test(normalized) ? { id: normalized, label: normalized, colour: normalized } : DEFAULT_COLOUR);
 }
 
 export function normalizeWorkspaceAppearance(value?: WorkspaceAppearance | null): WorkspaceAppearance {
@@ -123,5 +125,5 @@ export function WorkspaceGlyph(props: { appearance?: WorkspaceAppearance | null;
   const color = () => workspaceColorOption(appearance().color);
   const icon = () => workspaceIconOption(appearance().value);
   return <Glyph icon={icon().component} monogram={appearance().mode === "monogram" ? appearance().value : undefined}
-    colour={color().hex} class={props.class} value={appearance().value} />;
+    colour={color().colour} class={props.class} value={appearance().value} />;
 }

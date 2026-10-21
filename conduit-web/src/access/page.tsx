@@ -1,5 +1,6 @@
 import { renderToString } from "solid-js/web";
 import { ConnectionScreen, PasswordSignIn } from "../components/ui/connection";
+import "../components/ui/styles/palettes.css";
 import "../components/ui/styles/theme.css";
 import "../components/ui/styles/foundations.css";
 import "../components/ui/styles/controls.css";

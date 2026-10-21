@@ -104,11 +104,11 @@ export function IconsFoundation() {
       () => <div class="g-row"><HarnessMark id={id} />{mark.artwork && <HarnessMark id={id} artwork />}<NavRow icon={<ThreadHarnessMark id={id} lively />}>{id}</NavRow></div>))} />
     <h2>Glyphs</h2>
     <p>A glyph is a workspace's or place's own mark, chosen in its appearance.</p>
-    <FormTable on={["ground"]} rows={IDENTITY_COLOURS.slice(3, 6).flatMap(({ id, label, hex }) =>
+    <FormTable on={["ground"]} rows={IDENTITY_COLOURS.slice(3, 6).flatMap(({ id, label, colour }) =>
       ["var(--icon)", "var(--icon-lg)"].map((size) => form(`${id} · ${size}`, `${label} · icon and monogram`,
         () => <div class="g-row">
-          <span style={{ display: "grid", width: size, height: size }}><Glyph icon={Icons.Boxes} colour={hex} /></span>
-          <span style={{ display: "grid", width: size, height: size, "--glyph-text": `calc(.55 * ${size})` }}><Glyph monogram="AB" colour={hex} /></span>
+          <span style={{ display: "grid", width: size, height: size }}><Glyph icon={Icons.Boxes} colour={colour} /></span>
+          <span style={{ display: "grid", width: size, height: size, "--glyph-text": `calc(.55 * ${size})` }}><Glyph monogram="AB" colour={colour} /></span>
         </div>)))} />
     <h2>File types</h2>
     <p>File names select material icons; folders show their closed and open forms.</p>

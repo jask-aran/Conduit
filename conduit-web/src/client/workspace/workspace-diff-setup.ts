@@ -32,7 +32,7 @@ export const workspaceDiffTheme = EditorView.theme({
     font: "var(--text-label) var(--font-sans)",
     cursor: "pointer",
   },
-  ".cm-collapsedLines:hover": { background: "var(--accent)", color: "var(--foreground)" },
+  ".cm-collapsedLines:hover": { background: "var(--border)", color: "var(--foreground)" },
   ".cm-deletedLine, .cm-deletedLine del": { textDecoration: "none" },
   ".cm-diff-removed": { background: "color-mix(in srgb, var(--destructive) 14%, transparent)" },
   ".cm-diff-added": { background: "color-mix(in srgb, var(--change-added) 14%, transparent)" },

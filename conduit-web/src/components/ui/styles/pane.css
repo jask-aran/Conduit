@@ -30,7 +30,7 @@
 .ui-tab + .ui-tab::before { position: absolute; left: calc(-1 * var(--tab-gap) * .72); color: color-mix(in oklch, var(--foreground), transparent var(--tone-line)); content: "·"; pointer-events: none; }
 .ui-tab[data-lead]::before { content: none; }
 /* The pointer's wash is solid here, so an unlit tab's × can cover the title's end in it. */
-@media (hover: hover) { .ui-tab:hover { background: var(--accent); } }
+@media (hover: hover) { .ui-tab:hover { background: var(--border); } }
 .ui-tab-open { display: inline-flex; min-width: 0; height: 100%; flex: 1; align-items: center; gap: var(--space-sm); border: 0; background: transparent; padding: 0 var(--space-xs);
   color: color-mix(in oklch, var(--foreground), transparent var(--tone-quiet)); font: inherit; font-weight: var(--weight-rest); }
 .ui-tab-open > svg, .ui-tab-open > .ui-harness-mark, .ui-tab-open > .ui-glyph { width: var(--icon-sm); height: var(--icon-sm); flex: none; }
@@ -48,7 +48,7 @@
   border: 0; border-radius: var(--radius-inset); background: var(--background); color: var(--muted-foreground); }
 .ui-tab-close > svg { width: var(--icon-sm); height: var(--icon-sm); }
 .ui-tab:not([data-lit]) .ui-tab-close { position: absolute; right: var(--space-2xs); opacity: 0; box-shadow: calc(-1 * var(--space-md)) 0 var(--space-sm) var(--background); }
-@media (hover: hover) { .ui-tab:not([data-lit]):hover .ui-tab-close { background: var(--accent); box-shadow: calc(-1 * var(--space-md)) 0 var(--space-sm) var(--accent); opacity: 1; } }
+@media (hover: hover) { .ui-tab:not([data-lit]):hover .ui-tab-close { background: var(--border); box-shadow: calc(-1 * var(--space-md)) 0 var(--space-sm) var(--border); opacity: 1; } }
 .ui-tab[data-lit] .ui-tab-close { background: transparent; }
 @media (hover: hover) { .ui-tab-close:hover { color: var(--foreground); } }
 /* Unsaved: a dot where the × sits, the × on the pointer. */

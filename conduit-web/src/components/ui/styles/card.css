@@ -87,7 +87,7 @@
 .ui-attachments[data-form="tray"] { width: min(var(--reading-width), 100%); max-height: min(var(--measure-md), 40dvh); margin: 0 auto var(--space-md); overflow-y: auto;
   scrollbar-color: var(--native-scrollbar-color); scrollbar-width: var(--native-scrollbar-width); }
 .ui-attachments[data-form="tray"] > .ui-attachment { width: min(var(--measure-lg), 100%); padding: var(--space-sm); border: var(--hairline) solid var(--border); border-radius: var(--radius-control); background: var(--card); }
-.ui-attachments[data-form="tray"] .ui-attachment-media, .ui-attachments[data-form="tray"] .ui-attachment-media[data-image] { width: var(--control-lg); height: var(--control-lg); background: var(--muted); }
+.ui-attachments[data-form="tray"] .ui-attachment-media, .ui-attachments[data-form="tray"] .ui-attachment-media[data-image] { width: var(--control-lg); height: var(--control-lg); background: var(--border); }
 .ui-attachments[data-form="tray"] .ui-attachment-media img { width: 100%; height: 100%; max-height: none; object-fit: cover; }
 .ui-attachments[data-form="tray"] .ui-attachment-copy { gap: 0; }
 .ui-attachments[data-form="tray"] .ui-attachment-copy :is(strong, small) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

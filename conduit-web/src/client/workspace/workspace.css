@@ -98,7 +98,7 @@
 .workspace-diff > .workspace-patch { max-height: none; flex: 1; border: 0; }
 .workspace-patch.workspace-review { flex-direction: row; }
 .workspace-patch.workspace-review[data-full="true"] { max-height: none; flex: 1; }
-.workspace-review-files { display: flex; min-width: 0; min-height: 0; flex-direction: column; background: color-mix(in oklch, var(--background), var(--accent) 9%); }
+.workspace-review-files { display: flex; min-width: 0; min-height: 0; flex-direction: column; background: color-mix(in oklch, var(--background), var(--border) 9%); }
 .workspace-terminal-slot { display: flex; min-width: 0; min-height: 0; overflow: hidden; }
 /* 19.2px hit target centered on the gap between chat-main and the panel edge. */
 .workspace-detail-resizing { cursor: row-resize; user-select: none; }

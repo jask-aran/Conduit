@@ -51,9 +51,11 @@ const WORKSPACE_APPEARANCE_ICON_IDS = new Set([
   "puzzle", "rocket", "route", "server-cog", "shield-check", "sparkles",
   "star", "terminal", "workflow", "zap",
 ]);
+// Identity hues (components/ui/palettes.ts IDENTITY_HUES), and the Catppuccin names saved before hues.
 const WORKSPACE_APPEARANCE_COLOR_IDS = new Set([
-  "rosewater", "flamingo", "pink", "mauve", "red", "peach", "yellow",
-  "green", "teal", "sky", "sapphire", "blue", "lavender",
+  "rose", "coral", "pink", "violet", "red", "orange", "yellow",
+  "green", "teal", "cyan", "azure", "blue", "indigo",
+  "rosewater", "flamingo", "mauve", "peach", "sky", "sapphire", "lavender",
 ]);
 const WORKSPACE_APPEARANCE_HEX_COLOR = /^#[0-9a-f]{6}$/i;
 
