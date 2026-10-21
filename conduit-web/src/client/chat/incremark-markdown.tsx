@@ -1,3 +1,4 @@
+import { COPY_FEEDBACK_MS } from "@/components/ui/motion";
 import { CodeBlock } from "@/components/ui/code";
 import { ANSWER_MARKDOWN } from "@/components/ui/shared";
 import { createComputed, createEffect, createMemo, createSelector, createRenderEffect, createSignal, For, Index, onCleanup, onMount, Show, untrack } from "solid-js";
@@ -778,7 +779,7 @@ function CodeCard(props: { text: () => string; language: () => string | undefine
     if (!navigator.clipboard) return;
     try { await navigator.clipboard.writeText(props.text()); } catch { return; }
     setCopied(true);
-    window.setTimeout(() => setCopied(false), 1200);
+    window.setTimeout(() => setCopied(false), COPY_FEEDBACK_MS);
   };
   // The lines are morphed by the renderer rather than rewritten from outside, so a later render cannot wipe the
   // highlighting, and so a growing block keeps its finished lines: rewritten, every line of a long fence was built

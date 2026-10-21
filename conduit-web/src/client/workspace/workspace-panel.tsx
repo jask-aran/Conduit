@@ -2,7 +2,8 @@ import { Icons } from "@/components/ui";
 import { createDecisionScope } from "@/components/decision-dialog";
 import { batch, createEffect, createSignal, For, on, onCleanup, onMount, Show, type Accessor } from "solid-js";
 import { Portal } from "solid-js/web";
-import { minMainPaneWidth, unitPx } from "../layout-geometry";
+import { minMainPaneWidth } from "../layout-geometry";
+import { unitPx } from "@/components/ui/layout";
 
 import { Spinner } from "@/components/ui/controls";
 import { HeaderButton } from "@/components/ui/header";
@@ -25,7 +26,7 @@ import { ChatModes, ChatView, createChatReview } from "./workspace-chat-view";
 import { TerminalView } from "./workspace-terminal-view";
 import { createWorkspacePoll } from "./workspace-poll";
 import type { DirectoryListing, FileSlotId, PanelTab, SplitView, WorkspaceSettings } from "./workspace-types";
-import { readToolDrag, TOOL_DRAG_TYPE, WORKSPACE_TOOL_LABELS } from "./workspace-rail";
+import { readToolDrag, TOOL_DRAG_TYPE, WORKSPACE_TOOL_ICONS, WORKSPACE_TOOL_LABELS } from "./workspace-rail";
 import type { FileEntry } from "./file-documents";
 
 /*
@@ -194,10 +195,7 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
       if (next === "terminal") setTerminalFocusRequest((request) => request + 1);
     });
   };
-  const tabIcon = (candidate: PanelTab) => candidate === "files" ? <Icons.Folder />
-    : candidate === "diff" ? <Icons.GitCompareArrows />
-    : candidate === "chat" ? <Icons.Chat />
-    : <Icons.Terminal />;
+  const tabIcon = (candidate: PanelTab) => { const Icon = WORKSPACE_TOOL_ICONS[candidate]; return <Icon />; };
   // A phone has no rail, so its header keeps a strip of the views.
   const [viewIconsOnly, setViewIconsOnly] = createSignal(false);
   const tabStrip = () => (

@@ -178,6 +178,26 @@ const WEIGHTS: TokenGroup[] = [{ title: "Four weights", rows: [
   tok("--weight-strong", "headings and titles, buttons, values", weight("--weight-strong"), () => <span style={{ "font-weight": "var(--weight-strong)" }}>Strong</span>),
   tok("--weight-current", "where you are; a match lit while typing", weight("--weight-current"), () => <span style={{ "font-weight": "var(--weight-current)" }}>Current</span>),
 ] }];
+/** Two lines of text at a leading step, so its spacing shows. */
+const lines = (name: string) => () => <span style={{ display: "block", "line-height": `var(${name})`, "max-width": "var(--measure-2xs)" }}>Two lines of text at this leading</span>;
+const LEADING: TokenGroup[] = [{ title: "Six leading steps", rows: [
+  tok("--leading-none", "one line set solid: a display title, a glyph", value("--leading-none"), lines("--leading-none")),
+  tok("--leading-tight", "a heading; a row's name over its detail", value("--leading-tight"), lines("--leading-tight")),
+  tok("--leading-row", "rows and controls; short notes in a state", value("--leading-row"), lines("--leading-row")),
+  tok("--leading-text", "running text that is not a message: notes, captions, a pane's empty state", value("--leading-text"), lines("--leading-text")),
+  tok("--leading-code", "code and the terminal", value("--leading-code"), lines("--leading-code")),
+  tok("--leading-reading", "a message, read at length", value("--leading-reading"), lines("--leading-reading")),
+] }, { title: "Tracking", rows: [
+  tok("--label-tracking", "the section label's letter spacing, uppercase (a theme can change the label's face, case and tracking)", value("--label-tracking"), () => <span style={{ "letter-spacing": "var(--label-tracking)", "text-transform": "uppercase", "font-size": "var(--text-label)" }}>Section</span>),
+] }];
+/** Text at an emphasis step. */
+const faded = (name: string) => () => <span style={{ opacity: `var(${name})` }}>Text</span>;
+const OPACITY: TokenGroup[] = [{ title: "Four steps down from full", rows: [
+  tok("--opacity-rest", "a part quieter than its row at rest: a chevron, a detail, a mark", value("--opacity-rest"), faded("--opacity-rest")),
+  tok("--opacity-muted", "quieter again: a branch not taken, a struck-out step, a separator", value("--opacity-muted"), faded("--opacity-muted")),
+  tok("--opacity-disabled", "what cannot be used now", value("--opacity-disabled"), faded("--opacity-disabled")),
+  tok("--opacity-faint", "barely there: a pulse at its low point", value("--opacity-faint"), faded("--opacity-faint")),
+] }];
 const COLOURS: TokenGroup[] = [
   { title: "Grounds", rows: [tok("--frame", "the frame: the sidebar, behind the panes", colour("--frame"), swatch("--frame")), tok("--background", "a pane", colour("--background"), swatch("--background"))] },
   { title: "Text", rows: [tok("--foreground", "text, and the current item", colour("--foreground"), swatch("--foreground")), tok("--muted-foreground", "muted: labels, meta, captions, icons at rest", colour("--muted-foreground"), swatch("--muted-foreground"))] },
@@ -383,6 +403,9 @@ const MOTION: TokenGroup[] = [
   ] },
   { title: "Expand: the fold, both ways on one curve", rows: [
     tok("--duration-fold", "what opens in place under its row: a folder's chats, a search folder's", colour("--duration-fold"), run("var(--duration-fold)", "var(--ease-fold)")),
+  ] },
+  { title: "Travel: something large going further", rows: [
+    tok("--duration-travel", "the composer docking after a first send; a split opening beside the chat", colour("--duration-travel"), run("var(--duration-travel)", "var(--ease-arrive)")),
   ] },
   { title: "Effects keep their own time", rows: [
     tok("--duration-follow", "a level following a voice (the aura)", colour("--duration-follow"), run("var(--duration-follow)", "linear")),
@@ -611,9 +634,10 @@ export const foundationFamilies: Family[] = [
     { title: "Scale", note: "each role once, as DESIGN.md names it: drawn by the library at both densities, and what it computes to. Rest is grey, current white at 660 with no fill; text over frost is a touch heavier and brighter", layout: "desktop", atoms: [
       lib("type-scale", "Roles", "both", "type", "DESIGN.md Typography · foundations.css", () => <Scale />, "row"),
     ] },
-    { title: "Sizes and weights", note: "the tokens Scale's roles are made of: every size and weight in the library is one of these", layout: "desktop", atoms: [
+    { title: "Sizes, weights and leading", note: "the tokens Scale's roles are made of: every size, weight and line height in the library is one of these", layout: "desktop", atoms: [
       lib("type-sizes", "Sizes", "both", "type", "foundations.css --text-*", () => <TokenTable groups={SIZES} />, true),
       lib("type-weights", "Weights", "both", "type", "foundations.css --weight-*", () => <TokenTable groups={WEIGHTS} density={false} />),
+      lib("type-leading", "Leading and tracking", "both", "type", "foundations.css --leading-* · --label-tracking", () => <TokenTable groups={LEADING} density={false} />),
     ] },
     { title: "Shipped", note: "the faces Conduit ships, so it looks the same on every system", layout: "desktop", atoms: [
       lib("font-geist", "Geist Variable", "both", "font", "@fontsource-variable/geist", () => <Face family={GEIST} weights={[400, 450, 500, 560, 600, 660, 700]} source="@fontsource-variable/geist · OFL" />),
@@ -633,6 +657,7 @@ export const foundationFamilies: Family[] = [
     lib("colour-inuse", "Colour in use", "both", "colour", "Menu · Section · Item · Button", () => <InUse scene={colourScene} marks={COLOUR_MARKS} density={false} />, "row"),
   ] }, { title: "Tokens", layout: "desktop", atoms: [
     lib("colour-tokens", "Colours", "both", "colour", "styles.css :root · foundations.css :root", () => <TokenTable groups={COLOURS} density={false} />, "row"),
+    lib("colour-opacity", "Emphasis", "both", "colour", "foundations.css --opacity-*", () => <TokenTable groups={OPACITY} density={false} />),
   ] }] },
   { title: "Icons", rail: "Foundations", note: "one glyph per concept (components/ui/icons.tsx, imported as Icons), at the type unit so an icon sits with the text beside it; and the library's own marks: harnesses, file types, a workspace's or place's glyph", groups: [
     { title: "In use", note: "Lucide at the type unit, so an icon is sized with the text beside it; muted at rest, its stroke a tenth of its size, an eighth when current (DESIGN.md Icons)", layout: "desktop", atoms: [

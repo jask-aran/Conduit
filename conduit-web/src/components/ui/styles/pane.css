@@ -20,7 +20,7 @@
 /* The place: the crumb's caps (HeaderCrumb), on the titles' baseline. */
 .ui-tab-place-label { flex: 0 1 auto; max-width: var(--measure-xs); margin-right: var(--space-2xs); overflow: hidden; border: 0; background: none; padding: 0;
   color: color-mix(in oklch, var(--foreground), transparent var(--tone-quiet)); font: var(--weight-strong) var(--text-label)/var(--leading-row) var(--font-label);
-  letter-spacing: .07em; text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; cursor: pointer; }
+  letter-spacing: var(--label-tracking); text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; cursor: pointer; }
 .ui-tab-place-label > span { overflow: hidden; text-overflow: ellipsis; }
 .ui-tab-place[data-current] .ui-tab-place-label { color: var(--foreground); }
 @media (hover: hover) { .ui-tab-place-label:hover { color: var(--foreground); } }
@@ -150,7 +150,7 @@
 .ui-tree-row[data-open-file="focused"] { font-weight: var(--weight-current); }
 .ui-tree-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ui-tree-name + svg { width: var(--icon-xs); height: var(--icon-xs); margin-left: auto; color: var(--muted-foreground); }
-.ui-tree-row > .ui-tree-chevron { width: var(--icon-sm); height: var(--icon-sm); flex: none; margin-right: calc(-1 * var(--space-xs)); transition: transform 120ms ease; }
+.ui-tree-row > .ui-tree-chevron { width: var(--icon-sm); height: var(--icon-sm); flex: none; margin-right: calc(-1 * var(--space-xs)); transition: transform var(--duration-quick) var(--ease-change); }
 .ui-tree-chevron[data-open] { transform: rotate(90deg); }
 .ui-tool-bar[data-vertical] > [role="toolbar"] { display: flex; flex-direction: column; align-items: center; gap: var(--space-2xs); margin-top: auto; }
 .ui-tool-bar > small { min-width: 0; flex: 1; overflow: hidden; padding-inline: var(--space-xs); color: var(--muted-foreground); font: var(--text-caption) var(--font-data); text-overflow: ellipsis; white-space: nowrap; }
@@ -158,7 +158,7 @@
 .ui-pane-empty > div { display: grid; max-width: var(--measure-md); justify-items: center; gap: var(--space-sm); }
 .ui-pane-empty svg { width: var(--icon-lg); height: var(--icon-lg); }
 .ui-pane-empty strong { color: var(--foreground); }
-.ui-pane-empty p { margin: 0; line-height: 1.5; }
+.ui-pane-empty p { margin: 0; line-height: var(--leading-text); }
 
 /* Phone tool controls retain the reference's finger targets and strip spacing. */
 @media (--conduit-phone-layout) {

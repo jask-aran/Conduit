@@ -3,7 +3,7 @@
 @layer reset {
   *, ::before, ::after, ::backdrop, ::file-selector-button { box-sizing: border-box; margin: 0; padding: 0; border: 0 solid; }
   * { border-color: var(--border); outline-color: color-mix(in oklab, var(--ring) 50%, transparent); }
-  html, :host { line-height: 1.5; -webkit-text-size-adjust: 100%; tab-size: 4; font-family: var(--font-sans); font-feature-settings: normal; font-variation-settings: normal; -webkit-tap-highlight-color: transparent; font-size: calc(16px * var(--ui-scale, 1)); }
+  html, :host { line-height: var(--leading-text); -webkit-text-size-adjust: 100%; tab-size: 4; font-family: var(--font-sans); font-feature-settings: normal; font-variation-settings: normal; -webkit-tap-highlight-color: transparent; font-size: calc(16px * var(--ui-scale, 1)); }
   body { line-height: inherit; background-color: var(--background); color: var(--foreground); }
   hr { height: 0; color: inherit; border-top-width: 1px; }
   abbr:where([title]) { text-decoration: underline dotted; }

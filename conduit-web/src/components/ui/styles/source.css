@@ -12,7 +12,7 @@
 .ui-commit-box > textarea:focus { border-color: var(--ring); }
 .ui-commit-box > textarea::placeholder { color: var(--muted-foreground); }
 .ui-commit-box > button { align-self: start; height: auto; min-height: var(--control); }
-.ui-commit-box > button > small { font: var(--text-label) var(--font-data); opacity: .7; }
+.ui-commit-box > button > small { font: var(--text-label) var(--font-data); opacity: var(--opacity-rest); }
 
 .ui-change-ledger { display: flex; min-height: 0; flex: 1; flex-direction: column; overflow: hidden; container-type: inline-size; }
 .ui-change-ledger > div { display: flex; min-height: 0; flex: 1; flex-direction: column; }

@@ -6,11 +6,11 @@ import path from "node:path";
 import { buildStamp } from "./src/build-info.js";
 import { buildMaterialIconManifest } from "./scripts/material-icon-manifest.mjs";
 import { solidComponentsViteOptions } from "./scripts/solid-components-mode.mjs";
-import { MIN_MAIN_PANE_UNITS, MOBILE_LAYOUT_BREAKPOINT_PX, NON_PHONE_LAYOUT_QUERY, PHONE_LAYOUT_QUERY } from "./src/client/layout-geometry.ts";
+import { MOBILE_LAYOUT_BREAKPOINT_PX, NON_PHONE_LAYOUT_QUERY, PHONE_LAYOUT_QUERY } from "./src/components/ui/layout.ts";
+import { MIN_MAIN_PANE_UNITS } from "./src/client/layout-geometry.ts";
 
 function sharedGeometryCssPlugin() {
   const replacements = [
-    ["@media (--conduit-mobile-layout)", `@media (max-width: ${MOBILE_LAYOUT_BREAKPOINT_PX}px)`],
     ["@media (--conduit-phone-layout)", `@media ${PHONE_LAYOUT_QUERY}`],
     ["@media (--conduit-wide-layout)", `@media ${NON_PHONE_LAYOUT_QUERY}`],
     ["@container chat-main (--conduit-wide-chat)", `@container chat-main (min-width: ${MOBILE_LAYOUT_BREAKPOINT_PX}px)`],

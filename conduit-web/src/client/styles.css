@@ -269,18 +269,18 @@ svg.lucide { stroke-width: 2.4; }
 .overlay-scrollbar[data-touch] .overlay-scrollbar-thumb { opacity: 0.55; }
 .overlay-scrollbar-thumb {
   position: absolute; border-radius: var(--radius-round);
-  background: var(--muted-foreground); opacity: 0.8;
-  box-shadow: 0 0 0 1px color-mix(in oklch, var(--background), transparent 30%);
+  background: var(--muted-foreground); opacity: var(--opacity-rest);
+  box-shadow: 0 0 0 var(--hairline) color-mix(in oklch, var(--background), transparent 30%);
 }
 .overlay-scrollbar[data-axis="y"] .overlay-scrollbar-thumb { left: var(--space-2xs); top: 0; }
 .overlay-scrollbar[data-axis="x"] .overlay-scrollbar-thumb { left: 0; top: var(--space-2xs); }
 .overlay-scrollbar-thumb:hover, .overlay-scrollbar-thumb:active { opacity: 1; }
 @media (--conduit-phone-layout) {
   .overlay-scrollbar-thumb {
-    background: var(--frost-fill, #ffffff2b);
+    background: var(--frost-fill);
     backdrop-filter: var(--frost-blur);
     -webkit-backdrop-filter: var(--frost-blur);
-    box-shadow: inset 0 0 0 1px var(--frost-stroke, #ffffff4d);
+    box-shadow: inset 0 0 0 var(--hairline) var(--frost-stroke);
   }
   .overlay-scrollbar[data-touch] .overlay-scrollbar-thumb { opacity: 1; }
 }
@@ -349,20 +349,6 @@ svg.lucide { stroke-width: 2.4; }
 
 
 
-/* The frost overlay (DESIGN.md, Surfaces; components/frost.tsx): anything that
-   opens on top of the app. The page dims, the card is pinned near the top in
-   the composer's frost and rises in; on a phone it is a full-screen bubble
-   whose frost gets a darker core, since nothing around it is dimmed. Rows
-   take the one cursor wash and show where you are by weight; keys are
-   keycaps; the foot is a rail on the same frost. Last in the file so it wins
-   over the older per-density shells. */
-:root {
-  --frost-blur: blur(24px);
-  --frost-shadow: 0 24px 70px rgb(0 0 0 / 38%), inset 0 1px 0 rgb(255 255 255 / 50%), inset 0 -1px 0 rgb(255 255 255 / 10%);
-  /* A full-screen overlay on a phone has nothing dimmed around it, so its frost gets a darker core. */
-  --frost-core: linear-gradient(#ffffff2b, #ffffff2b), oklch(0.19 0.005 264 / 72%);
-}
-@keyframes frost-arrive { from { opacity: 0; transform: translateY(8px); } }
 
 
 /* Keyboard focus on a button is the wash (quiet buttons) or a slight lift

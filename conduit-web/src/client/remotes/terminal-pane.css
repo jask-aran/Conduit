@@ -5,14 +5,14 @@
   min-height: 0;
   flex: 1;
   overflow: hidden;
-  background: var(--conduit-terminal-background, #121315);
+  background: var(--conduit-terminal-background, var(--ansi-background));
 }
 
 .terminal-pane-body .terminal-canvas {
   width: 100%;
   height: 100%;
   flex: 1;
-  background: var(--conduit-terminal-background, #121315);
+  background: var(--conduit-terminal-background, var(--ansi-background));
 }
 
 .terminal-pane-body .terminal-canvas .xterm {
@@ -31,8 +31,8 @@
 }
 
 .terminal-pane[data-terminal-focused="true"] .terminal-canvas[data-active="true"] {
-  outline: 1px solid color-mix(in oklch, var(--ring), transparent 55%);
-  outline-offset: -1px;
+  outline: var(--hairline) solid color-mix(in oklch, var(--ring), transparent 55%);
+  outline-offset: calc(-1 * var(--hairline));
 }
 
 .terminal-canvas[data-active="false"] {

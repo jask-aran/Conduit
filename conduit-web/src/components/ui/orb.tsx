@@ -1,3 +1,4 @@
+import { reducedMotion } from "./motion";
 import { createEffect, createMemo, createSignal, on, onCleanup, onMount } from "solid-js";
 import { MODE_FRAMES, paintFrame, resolvePreset, type ModeFrame, type ModeOpts, type OrbState } from "thinking-orbs/engine";
 
@@ -98,7 +99,7 @@ export const settledOrbRate = (unfinished: boolean) => unfinished ? 30 : 15;
 export function Orb(props: { state: OrbState; opts?: ModeOpts; frame?: ModeFrame; paused?: boolean; tint?: string; class?: string; rate?: number }) {
   let front!: HTMLCanvasElement;
   let back!: HTMLCanvasElement;
-  const reduced = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const reduced = reducedMotion();
   const playing = () => !props.paused && !reduced;
 
   // What is shown, and what it is fading from while a crossfade runs.
