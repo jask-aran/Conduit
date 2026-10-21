@@ -21,6 +21,7 @@ import {
 import {
   findDeletableSession,
   stopProjectProcesses,
+  moveDurableChat,
 } from "../../session-operations.js";
 
 function resolveProjectDefaultTemplateId(config, requested, fallback = null) {
@@ -502,6 +503,40 @@ export function registerProjectRoutes(app, {
         relativePath: request.body?.path,
         message: request.body?.message,
       }));
+    } catch (error) { next(error); }
+  });
+
+  // Every Conduit chat of one place moves to another; chats of other harnesses
+  // stay (their history is the harness's, tied to the folder) and are listed.
+  app.post("/v0/projects/:id/move-sessions", async (request, response, next) => {
+    try {
+      const source = await projects.get(request.params.id);
+      const target = await projects.get(request.body?.projectId || "");
+      if (!source || !target) return response.status(404).json({ error: "project_not_found" });
+      await lifecycle.withProjects([source.id, target.id], async () => {
+        await projects.validate(source);
+        await projects.validate(target);
+        if (source.id === target.id) throw Object.assign(new Error("Project target is unchanged"), { code: "project_target_unchanged", status: 409 });
+        const moved = [];
+        const kept = [];
+        for (const { id } of registry.listProject(source.id, { includeHidden: true })) {
+          const item = await lifecycle.run(id, async () => {
+            const chat = registry.metadata(id);
+            if (!chat || chat.projectId !== source.id) return null;
+            lifecycle.assertAvailable(chat.id, source.id);
+            lifecycle.assertAvailable(chat.id, target.id);
+            try {
+              return { sourceId: chat.id, session: chatView(await moveDurableChat({ chat, source, target, backends, registry })) };
+            } catch (error) {
+              if (error.code !== "chat_move_not_supported") throw error;
+              kept.push({ id: chat.id, reason: error.message });
+              return null;
+            }
+          });
+          if (item) moved.push(item);
+        }
+        response.json({ moved, kept });
+      });
     } catch (error) { next(error); }
   });
 

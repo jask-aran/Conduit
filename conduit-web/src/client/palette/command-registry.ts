@@ -57,6 +57,7 @@ export interface PaletteActions {
   copyTranscript: () => void;
   rename: () => void;
   autoName: () => void;
+  move: () => void;
   renameFolder: () => void;
   stop: () => void;
   stopProcess: () => void;
@@ -75,6 +76,7 @@ export interface PaletteActions {
   openChat: (session: ChatSummary, project: Project) => void | Promise<void>;
   openProject: (project: Project) => void | Promise<void>;
   renameChat: (chat: ChatSummary, project: Project, name: string) => Promise<boolean>;
+  moveChats: (targets: Array<{ chat: ChatSummary; project: Project }>, destination: Project) => Promise<string[]>;
   copyChatLinks: (targets: Array<{ chat: ChatSummary; project: Project }>) => Promise<boolean>;
   deleteChats: (targets: Array<{ chat: ChatSummary; project: Project }>) => Promise<string[]>;
   chooseModel: (spec: string) => void;
@@ -135,7 +137,7 @@ export const PALETTE_GROUPS: PaletteGroup[] = [
    the chat in front of you first, then where to go, what to make, how the
    window is laid out, and the app itself. */
 const INTENT_GROUPS: Record<string, string> = {
-  [COMMAND_IDS.renameChat]: "chat", [COMMAND_IDS.autoNameChat]: "chat",
+  [COMMAND_IDS.renameChat]: "chat", [COMMAND_IDS.autoNameChat]: "chat", [COMMAND_IDS.moveChat]: "chat",
   [COMMAND_IDS.stopResponse]: "chat", [COMMAND_IDS.stopProcess]: "chat", [COMMAND_IDS.regenerateResponse]: "chat",
   [COMMAND_IDS.compactContext]: "chat", [COMMAND_IDS.copyResponse]: "chat",
   [COMMAND_IDS.copyTranscript]: "chat", [COMMAND_IDS.attachFiles]: "chat", [COMMAND_IDS.stashPrompt]: "chat",
@@ -231,6 +233,7 @@ const paletteCommandRuntime: Record<string, PaletteCommandRuntime> = {
     isAvailable: hasChat,
     run: (actions) => actions.autoName(),
   },
+  [COMMAND_IDS.moveChat]: { isAvailable: hasChat, run: (actions) => actions.move() },
   [COMMAND_IDS.renameFolder]: { isAvailable: isNamedFolder, run: (actions) => actions.renameFolder() },
   [COMMAND_IDS.stopResponse]: { isAvailable: (context) => context.streaming, run: (actions) => actions.stop() },
   [COMMAND_IDS.stopProcess]: { isAvailable: (context) => context.liveProcess, run: (actions) => actions.stopProcess() },

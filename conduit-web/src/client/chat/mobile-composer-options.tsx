@@ -11,6 +11,7 @@ import type { ComposerPermissions } from "./composer-permissions";
 import type { ServiceLevelSettings } from "../state/service-level-settings";
 
 import { contextUsagePercent } from "./context-metrics";
+import { isWorkspace, PlaceGlyph, type PlaceOptions } from "./place-picker";
 import { PermissionChoices, ProfileChoices, ServiceChoices } from "./composer-plus-menu";
 
 const thinkingLabel = (value: string) => value ? value[0]!.toUpperCase() + value.slice(1) : "Off";
@@ -30,6 +31,7 @@ export function MobileComposerOptions(props: {
     onOpenSettings: (section: string) => void;
     onOpenModelSelector?: () => void;
     onOpenAttachments: () => void;
+    place?: PlaceOptions;
   };
 }) {
   const composer = props.composer;
@@ -76,6 +78,7 @@ export function MobileComposerOptions(props: {
     onCleanup(() => window.removeEventListener("pointerdown", keepKeyboard, true));
   });
 
+  const placed = () => composer.place?.current && composer.place.current.slug !== "chat" ? composer.place.current : null;
   return <Menu modal={false} placement="top-start" open={open()} onOpenChange={(value) => { if (value) typingAtOpen = composerTextarea(); setOpen(value); }}>
       <MenuPillTrigger label="Message options" icon={<Icons.Add />} open={open()} disabled={!composer.serverOnline} keep={() => typingAtOpen !== null} ref={(element) => { root = element; }} />
       <MenuContent keep={() => typingAtOpen !== null} onOpenAutoFocus={preserveFocus} onCloseAutoFocus={(event) => { event.preventDefault(); restoreTyping(); }} onFocusOutside={preserveFocus}>
@@ -116,6 +119,12 @@ export function MobileComposerOptions(props: {
         <MenuSection>
           <MenuRow icon={<Icons.Attach />} disabled={!composer.serverOnline} onSelect={composer.onOpenAttachments}>Attach files</MenuRow>
         </MenuSection>
+        <Show when={composer.place}>{(place) => <MenuSection title="Project">
+          <MenuSub phone>
+            <MenuSubTrigger disabled={place().disabled} icon={<PlaceGlyph project={placed()} />} aria-label={placed() ? `Project ${placed()!.name}` : "Add to a project folder"}>{placed()?.name || "Add to a project folder"}</MenuSubTrigger>
+            <MenuSubContent><PlaceChoices place={place()} /></MenuSubContent>
+          </MenuSub>
+        </MenuSection>}</Show>
       </MenuContent>
     </Menu>;
 }
@@ -138,6 +147,23 @@ function EffortChoices(props: { composer: Options; levels: string[] }) {
   const back = useMenuBack();
   return <MenuSection title="Effort"><MenuRadioGroup value={props.composer.models.effort()} onChange={(value) => { void props.composer.models.chooseEffort(value); back(); }}>
     <For each={props.levels}>{(level) => <MenuRadioItem value={level} closeOnSelect={false}>{thinkingLabel(level)}</MenuRadioItem>}</For>
+  </MenuRadioGroup></MenuSection>;
+}
+
+/** Projects before workspaces, and "No folder" first when the chat is in one. */
+function PlaceChoices(props: { place: PlaceOptions }) {
+  const root = () => props.place.projects.find((project) => project.slug === "chat");
+  const places = () => props.place.projects.filter((project) => project.slug !== "chat" && project.state !== "cloning")
+    .sort((left, right) => Number(isWorkspace(left)) - Number(isWorkspace(right)) || left.name.localeCompare(right.name));
+  const choose = (id: string) => {
+    const project = props.place.projects.find((item) => item.id === id);
+    if (project && id !== props.place.current?.id) props.place.onChoose(project);
+  };
+  return <MenuSection title="Project"><MenuRadioGroup value={props.place.current?.id || ""} onChange={choose}>
+    <Show when={props.place.current && props.place.current.slug !== "chat" && root()}>
+      <MenuRadioItem value={root()!.id} icon={<Icons.Folder />}>No folder</MenuRadioItem>
+    </Show>
+    <For each={places()}>{(project) => <MenuRadioItem value={project.id} icon={<PlaceGlyph project={project} />}>{project.name}</MenuRadioItem>}</For>
   </MenuRadioGroup></MenuSection>;
 }
 

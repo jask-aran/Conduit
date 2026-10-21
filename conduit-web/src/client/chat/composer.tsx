@@ -34,7 +34,7 @@ import { HostUiRequests } from "./host-ui-card";
 
 export const SPINNING_ACTIVITY = new Set(["starting", "reconnecting", "thinking", "responding", "using_tool", "retrying", "compacting", "stopping", "waiting_for_model"]);
 
-import { FolderPicker, type FolderOptions } from "./place-picker";
+import { FolderPicker, type FolderOptions, type PlaceOptions } from "./place-picker";
 import { COMPOSER_FOLDS, foldsFor, type ComposerFold } from "./composer-folds";
 import { createLeaving, riderMotion } from "./composer-cards";
 import { ComposerPlusMenu, PermissionChoices, ProfileChoices, ServiceChoices } from "./composer-plus-menu";
@@ -82,6 +82,8 @@ export function Composer(props: {
   onSendDraft?: (text: string) => Promise<void>;
   /** Sending starts the chat (through `onSendDraft`), so there is none to wait for. */
   launches?: boolean;
+  /** The folder button beside attach: where this chat lives. */
+  place?: PlaceOptions;
   /** A harness thread's folder, in the place button's slot. */
   folder?: FolderOptions;
   supports?: (capability: BooleanCapability) => boolean;
@@ -762,7 +764,7 @@ export function Composer(props: {
     <Toolbar ref={toolbarRef}
       start={<>
         <ComposerPlusMenu folded={folded()} chat={props.chat} models={props.models} permissions={props.permissions} serviceLevels={props.serviceLevels}
-          profiles={props.profiles} activeProfile={props.activeProfile} disabled={!props.serverOnline || !interactive()} modelSwitch={supports("modelSwitch")}
+          profiles={props.profiles} activeProfile={props.activeProfile} place={props.place} disabled={!props.serverOnline || !interactive()} modelSwitch={supports("modelSwitch")}
           onChooseProfile={props.onChooseProfile} onOpenModelSelector={props.onOpenModelSelector} modelSelectorShortcut={props.modelSelectorShortcut}
           onAttach={props.attachmentsSupported !== false ? attach : undefined} />
         <Show when={props.folder}>{(folder) => <FolderPicker {...folder()} />}</Show>

@@ -12,6 +12,7 @@ import type { ComposerPermissions } from "./composer-permissions";
 import type { ComposerFold } from "./composer-folds";
 import { contextUsagePercent } from "./context-metrics";
 import { ModelMenuItems } from "./model-selector";
+import { PlaceGlyph, PlaceList, type PlaceOptions } from "./place-picker";
 
 
 /**
@@ -28,6 +29,7 @@ export function ComposerPlusMenu(props: {
   serviceLevels?: ServiceLevelSettings;
   profiles: Template[];
   activeProfile?: Template | null;
+  place?: PlaceOptions;
   disabled: boolean;
   modelSwitch: boolean;
   onChooseProfile: (id: string) => void;
@@ -40,6 +42,7 @@ export function ComposerPlusMenu(props: {
   const permission = () => props.permissions?.profiles().find((profile) => profile.id === props.permissions?.selected());
   const service = () => props.serviceLevels?.levels().find((level) => level.id === props.serviceLevels?.selected());
   const context = () => contextUsagePercent(props.chat.contextUsage());
+  const placed = () => props.place?.current && props.place.current.slug !== "chat" ? props.place.current : null;
   const anyFolded = () => props.folded.size > 0;
   const [open, setOpen] = createSignal(false);
 
@@ -74,9 +77,22 @@ export function ComposerPlusMenu(props: {
           <MenuSubContent><ServiceChoices levels={props.serviceLevels!} /></MenuSubContent>
         </MenuSub>
       </Show>
+      <Show when={props.place}>
+        <Show when={anyFolded()}><Rule /></Show>
+        <MenuSub>
+          <MenuSubTrigger disabled={props.place!.disabled} icon={<PlaceGlyph project={placed()} />} meta={placed()?.name || "None"}>Project</MenuSubTrigger>
+          <MenuSubContent>
+            {/* The folder button's own list. Keys stay with its search, not the menu's typeahead. */}
+            <div ref={(element) => requestAnimationFrame(() => element.querySelector("input")?.focus())}
+              onKeyDown={(event) => { if (event.key !== "Escape") event.stopPropagation(); }}>
+              <PlaceList {...props.place!} onDone={() => setOpen(false)} />
+            </div>
+          </MenuSubContent>
+        </MenuSub>
+      </Show>
       <Show when={has("context") && context() != null}><MenuNote>{Math.round(context()!)}% of context used</MenuNote></Show>
       <Show when={props.onAttach}>
-        <Show when={anyFolded()}><Rule /></Show>
+        <Show when={anyFolded() || props.place}><Rule /></Show>
         <MenuRow icon={<Icons.Attach />} onSelect={() => props.onAttach?.()}>Attach files</MenuRow>
       </Show>
     </MenuContent>

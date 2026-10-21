@@ -65,6 +65,7 @@ export const COMMAND_IDS = {
   copyTranscript: "copy-transcript",
   renameChat: "rename",
   autoNameChat: "rename-from-context",
+  moveChat: "move",
   renameFolder: "rename-folder",
   stopResponse: "stop",
   stopProcess: "stop-process",
@@ -83,7 +84,9 @@ export const COMMAND_IDS = {
   newChatGlobally: "desktop.new-chat",
   toggleChatEdit: "chat-search.toggle-edit",
   renameHighlightedChat: "chat-search.rename-highlighted",
+  moveHighlightedChat: "chat-search.move-highlighted",
   deleteHighlightedChat: "chat-search.delete-highlighted",
+  moveSelectedChats: "chat-search.move-selected",
   deleteSelectedChats: "chat-search.delete-selected",
 } as const;
 
@@ -118,7 +121,7 @@ export const commandRegistry: ShortcutCommandDefinition[] = [
     keywords: ["search", "find", "chat", "conversation", "folder", "workspace"],
     contexts: [
       "application", "palette.root", "palette.page", "chat-search.browse",
-      "chat-search.edit", "chat-search.rename",
+      "chat-search.edit", "chat-search.move", "chat-search.rename",
     ],
     defaultBindings: [binding(stroke("KeyK", "K", ["primary", "shift"]))],
     palette: true,
@@ -608,6 +611,16 @@ export const commandRegistry: ShortcutCommandDefinition[] = [
     palette: true,
   }),
   command({
+    id: COMMAND_IDS.moveChat,
+    label: "Move chat",
+    description: "Move this chat to another folder",
+    group: "commands",
+    icon: "move",
+    keywords: ["folder", "project"],
+    contexts: ["palette.root"],
+    palette: true,
+  }),
+  command({
     id: COMMAND_IDS.renameFolder,
     label: "Rename folder",
     description: "Change the current folder's display name",
@@ -765,6 +778,18 @@ export const commandRegistry: ShortcutCommandDefinition[] = [
     ],
   }),
   command({
+    id: COMMAND_IDS.moveHighlightedChat,
+    label: "Move highlighted chat",
+    description: "Move the highlighted chat to another folder",
+    group: "chat-management",
+    icon: "move",
+    keywords: ["move", "folder", "highlighted"],
+    contexts: ["chat-search.browse"],
+    defaultBindings: [
+      binding(stroke("KeyK", "K", ["primary"]), stroke("KeyM", "M")),
+    ],
+  }),
+  command({
     id: COMMAND_IDS.deleteHighlightedChat,
     label: "Delete highlighted chat",
     description: "Delete the highlighted chat after confirmation",
@@ -776,6 +801,16 @@ export const commandRegistry: ShortcutCommandDefinition[] = [
       binding(stroke("KeyK", "K", ["primary"]), stroke("KeyD", "D")),
     ],
     destructive: true,
+  }),
+  command({
+    id: COMMAND_IDS.moveSelectedChats,
+    label: "Move selected chats",
+    description: "Move all selected chats to another folder",
+    group: "chat-management",
+    icon: "move",
+    keywords: ["move", "bulk", "selected"],
+    contexts: ["chat-search.edit"],
+    defaultBindings: [binding(stroke("KeyM", "M"))],
   }),
   command({
     id: COMMAND_IDS.deleteSelectedChats,

@@ -9,6 +9,7 @@ import {
 } from "../../session-store.js";
 import {
   findDeletableSession,
+  moveDurableChat,
   sessionDirectoryForChat,
   sessionDirectoryRootForChat,
   stopSessionProcesses,
@@ -168,6 +169,31 @@ export function registerSessionRoutes(app, {
       });
       response.json(chatView(registry.metadata(context.chat.id)));
     } catch (error) { next(error); }
+  });
+
+  app.post("/v0/sessions/:id/move", async (request, response, next) => {
+    try {
+      if (!isChatId(request.params.id)) return response.status(404).json({ error: "chat_not_found" });
+      const moved = await lifecycle.run(request.params.id, async () => {
+        const context = await findChatContext(request.params.id);
+        if (!context) return null;
+        const target = (await projects.list()).find((item) => item.id === request.body?.projectId || item.slug === request.body?.projectId);
+        if (!target) throw Object.assign(new Error("Project not found"), { code: "project_not_found", status: 404 });
+        return lifecycle.withProjects([context.project.id, target.id], async () => {
+          const current = await findChatContext(request.params.id);
+          if (!current) return null;
+          await projects.validate(target);
+          lifecycle.assertAvailable(current.chat.id, current.project.id);
+          lifecycle.assertAvailable(current.chat.id, target.id);
+          return moveDurableChat({ chat: current.chat, source: current.project, target, backends, registry });
+        });
+      });
+      if (!moved) return response.status(404).json({ error: "chat_not_found" });
+      response.json(chatView(moved));
+    } catch (error) {
+      if (error.status) return response.status(error.status).json({ error: error.code, message: error.message });
+      next(error);
+    }
   });
 
   app.post("/v0/sessions/:id/duplicate", (_request, response) => {
