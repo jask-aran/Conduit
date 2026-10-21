@@ -99,6 +99,7 @@ export function deriveFineActivity({
   if (generation === "stopping" || coarse === "stopping") return { kind: "stopping", label: "Stopping" };
   if (coarse === "waiting_for_user") return { kind: "waiting_for_user", label: "Waiting for your confirmation" };
   if (coarse === "compacting") return { kind: "compacting", label: "Compacting context" };
+  if (retry?.waitingFor) return { kind: "waiting_for_device", label: `Waiting for ${retry.waitingFor}` };
   if (coarse === "retrying" || retry) {
     const attempt = retry?.attempt;
     const delay = retry?.delayMs;

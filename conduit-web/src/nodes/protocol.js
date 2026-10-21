@@ -89,3 +89,21 @@ const inside = (root, target) => {
 export function rootFor(roots, absolute, grant) {
   return roots.find((root) => root[grant] && inside(path.resolve(root.path), absolute)) || null;
 }
+
+/**
+ * The root a device's path falls in, judged on main, which may not share the
+ * device's path syntax: separators are compared as `/`, and a drive-letter
+ * path without regard to case. The device checks again with its own rules.
+ */
+export function sharedRoot(roots = [], target = "") {
+  const plain = (value) => {
+    const slashed = String(value).replace(/\\/g, "/").replace(/\/+$/, "");
+    return /^[a-z]:/i.test(slashed) ? slashed.toLowerCase() : slashed;
+  };
+  const wanted = plain(target);
+  if (wanted.split("/").includes("..")) return null;
+  return roots.find((root) => {
+    const base = plain(root.path);
+    return wanted === base || wanted.startsWith(`${base}/`);
+  }) || null;
+}

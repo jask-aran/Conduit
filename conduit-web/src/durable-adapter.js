@@ -9,7 +9,7 @@ import { applyTranscriptOps } from "./transcript-fold.js";
 import { reduceActiveGeneration, snapshotActiveGeneration } from "./active-generation.js";
 import { unsupported } from "./harnesses/unsupported.js";
 import { usageFromRequests } from "./cache-stats.js";
-import { ConduitIds, USER_ENTRY } from "./server/durable-runtime.js";
+import { ConduitIds, ConduitWorkspace, USER_ENTRY } from "./server/durable-runtime.js";
 
 /**
  * Chats on Conduit's own runtime (pi-durable, see `server/durable-runtime.js`).
@@ -206,8 +206,12 @@ export class DurableAdapter extends EventEmitter {
   }
 
   /** Which chat a conversation belongs to, kept beside it so a restart can find its way back. */
-  async remember(conversation, chatId) {
-    await conversation.commit(async (tx) => { (await tx.doc(ConduitIds, conversation.id)).chatId = chatId; }, this.context);
+  async remember(conversation, chatId, nodeId) {
+    await conversation.commit(async (tx) => {
+      (await tx.doc(ConduitIds, conversation.id)).chatId = chatId;
+      // The device whose folder this conversation works in; none is this server.
+      if (nodeId !== undefined) (await tx.doc(ConduitWorkspace, conversation.id)).nodeId = nodeId;
+    }, this.context);
   }
 
   async launch(context, { model = "", thinkingLevel = "", forceModel = false } = {}) {
@@ -236,7 +240,7 @@ export class DurableAdapter extends EventEmitter {
       ...(options.thinkingLevel || fallback?.thinkingLevel ? { thinkingLevel: options.thinkingLevel || fallback.thinkingLevel } : {}),
       ...(options.project?.workingRoot ? { cwd: options.project.workingRoot } : {}),
     } }, this.context);
-    await this.remember(conversation, options.chatId);
+    await this.remember(conversation, options.chatId, options.project?.nodeId || null);
     return this.start(conversation, options);
   }
 
@@ -271,7 +275,7 @@ export class DurableAdapter extends EventEmitter {
       // follow-up waits for the next one.
       modes: new Map(),
     });
-    record.scope.defer(() => { record.stream?.stop(); record.unasked?.(); });
+    record.scope.defer(() => { record.stream?.stop(); record.unasked?.(); record.unwaited?.(); });
     await this.follow(record, conversation);
     return record;
   }
@@ -287,6 +291,8 @@ export class DurableAdapter extends EventEmitter {
     await this.readAgent(record);
     record.unasked?.();
     record.unasked = this.runtime.answerFor(conversation.id, (request) => this.askUser(record, request));
+    record.unwaited?.();
+    record.unwaited = this.runtime.waitFor(conversation.id, (device) => this.waitingForDevice(record, device));
     const stream = await watchEvents(this.runtime.harness, conversation.id, this.context);
     record.stream = stream;
     // A run the last process left going is still going; this is where it is picked up.
@@ -338,7 +344,9 @@ export class DurableAdapter extends EventEmitter {
         ...(agent.thinkingLevel ? { thinkingLevel: agent.thinkingLevel } : {}),
         ...(agent.cwd ? { cwd: agent.cwd } : {}),
       } }, this.context);
-    await this.remember(fork, record.chatId);
+    // A fork copies the workspace with its other documents; a new conversation is told it.
+    await this.remember(fork, record.chatId, index > 0 ? undefined
+      : (await harness.snapshot(ConduitWorkspace, record.conversationId, this.context))?.nodeId || null);
     await this.follow(record, fork);
     const text = source.data?.text || textOf(source.model?.[0]?.content);
     return { opaqueSession: String(fork.id), text, sourceMessage: { id: nodeId, text } };
@@ -485,11 +493,11 @@ export class DurableAdapter extends EventEmitter {
           ...(event.error ? { error: event.error } : {}) });
         break;
       case "auto_retry_start":
-        this.publish(record, { type: "retry", generationId: record.generation?.id || null, phase: "start",
-          attempt: event.attempt, delayMs: Math.max(0, event.at - Date.now()), errorMessage: event.errorMessage });
+        this.publish(record, { type: "retry", generationId: record.generation?.id || null, active: true,
+          retry: { attempt: event.attempt, delayMs: Math.max(0, event.at - Date.now()), errorMessage: event.errorMessage || null } });
         break;
       case "auto_retry_end":
-        this.publish(record, { type: "retry", generationId: record.generation?.id || null, phase: "end", attempt: event.attempt });
+        this.publish(record, { type: "retry", generationId: record.generation?.id || null, active: false });
         break;
       case "run_end": this.finish(record); break;
       case "submission": this.submissionChanged(record, event.record); break;
@@ -635,6 +643,21 @@ export class DurableAdapter extends EventEmitter {
       phase: stopped ? "stopped" : "settled", status: "idle", activity: "idle", detail: null });
     void this.publishUsage(record);
     this.emit("settled", { record, completed: outcome === "complete" });
+  }
+
+  /**
+   * The turn's next step runs on a device that is offline (plan decision 8):
+   * the chat says which, as a retry with nothing to count, until it is back.
+   */
+  waitingForDevice(record, device) {
+    if (record.waitingFor === device.id) return;
+    record.waitingFor = device.id;
+    record.waitingForName = device.name;
+    this.publish(record, { type: "retry", generationId: record.generation?.id || null, active: true, retry: { waitingFor: device.name } });
+    this.runtime.nodeHub?.once(`online:${device.id}`, () => {
+      record.waitingFor = null;
+      this.publish(record, { type: "retry", generationId: record.generation?.id || null, active: false });
+    });
   }
 
   /** Put a question card up and wait for the answer (see the runtime's ask_user tool). */
@@ -873,6 +896,7 @@ export class DurableAdapter extends EventEmitter {
 
   view(record) {
     return { ...this.sessions.view(record), hostUiRequests: [...(record?.hostUiRequests || [])], queue: this.queueView(record || { queue: [] }),
+      ...(record?.waitingFor ? { retry: { waitingFor: record.waitingForName } } : {}),
       contextUsage: this.contextUsage(record), sessionStats: record?.history?.sessionStats || null,
       cacheStats: record?.history?.cacheStats || null };
   }

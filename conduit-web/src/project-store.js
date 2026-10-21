@@ -8,7 +8,7 @@ import { ensureConduitRoot } from "./owned-paths.js";
 import { terminate } from "./server/effect-process.js";
 
 const SLUG = /^[a-z0-9](?:[a-z0-9-]{0,46}[a-z0-9])?$/;
-const ORIGINS = new Set(["managed", "linked", "created", "cloned"]);
+const ORIGINS = new Set(["managed", "linked", "created", "cloned", "node"]);
 export const CLONE_COMMAND_TIMEOUT_MS = 120_000;
 export const CLONE_COMMAND_MAX_OUTPUT_BYTES = 64 * 1024;
 
@@ -191,6 +191,8 @@ export class ProjectStore {
   }
 
   workingRoot(project) {
+    // A device's path is kept as that device wrote it, separators and all.
+    if (project?.nodeId) return project.externalPath;
     if (project?.externalPath) return path.resolve(project.externalPath);
     return this.managedPath(project.slug);
   }
@@ -212,6 +214,9 @@ export class ProjectStore {
       kind: project.kind || "project",
       origin: project.origin || (project.externalPath ? "linked" : "managed"),
       externalPath: project.externalPath || null,
+      // A folder another device shares: its path is that device's, and only
+      // the Conduit runtime works in it, through the device.
+      nodeId: project.nodeId || null,
       cloneUrl: project.cloneUrl || null,
       state: project.state === "cloning" ? "cloning" : "ready",
       cloneOperationId: project.cloneOperationId || null,
@@ -317,6 +322,34 @@ export class ProjectStore {
       };
       catalog.projects.push(project);
       await ensureConduitRoot({ workingRoot: externalPath, externalPath, origin: "linked" });
+      await this.writeCatalog(this.catalogFile, catalog);
+      return this.projectView(project);
+    });
+  }
+
+  /** A workspace in a folder a paired device shares; the caller has checked the device shares it. */
+  async createOnNode({ name, nodeId, path: remotePath, defaultTemplateId = null }) {
+    return this.runExclusive(async () => {
+      const catalog = await this.readCatalog();
+      if (catalog.projects.some((item) => item.nodeId === nodeId && item.externalPath === remotePath)) {
+        const error = new Error("That folder is already a workspace");
+        error.code = "workspace_already_linked";
+        throw error;
+      }
+      const base = name || remotePath.split(/[\\/]/).filter(Boolean).pop() || "device";
+      const project = {
+        id: `project_${crypto.randomUUID()}`,
+        slug: await this.uniqueSlug(base),
+        name: String(base).trim(),
+        kind: "workspace",
+        origin: "node",
+        nodeId,
+        externalPath: remotePath,
+        cloneUrl: null,
+        defaultTemplateId: defaultTemplateId || null,
+        createdAt: new Date().toISOString(),
+      };
+      catalog.projects.push(project);
       await this.writeCatalog(this.catalogFile, catalog);
       return this.projectView(project);
     });
@@ -825,6 +858,8 @@ export class ProjectStore {
     if (project?.state === "cloning") {
       throw cloneError("workspace_cloning", "This Workspace is still cloning");
     }
+    // A device's folder is the device's to check, when a call reaches it.
+    if (project?.nodeId) return project;
     const expected = this.workingRoot(project);
     let stat;
     try { stat = await fs.lstat(expected); }

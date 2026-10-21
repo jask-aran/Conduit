@@ -69,6 +69,8 @@ import { createHarnessModelCatalogue } from "./harnesses/model-catalogue.js";
 import { rememberedModel } from "./profile-model-memory.js";
 import { registerLiveSessionRoutes } from "./server/routes/live-sessions.js";
 import { registerProjectRoutes } from "./server/routes/projects.js";
+import { registerNodeRoutes } from "./server/routes/nodes.js";
+import { NodeHub } from "./nodes/node-hub.js";
 import { registerSessionRoutes } from "./server/routes/sessions.js";
 import { registerSearchRoutes } from "./server/routes/search.js";
 import { registerVoiceRoutes } from "./server/routes/voice.js";
@@ -193,6 +195,8 @@ const manager = new PiManager({
   template: config.piTemplate,
   idleProcessTtlMs: runtimeSettings.get().idleProcessTtlMs,
 });
+// Devices paired with this server, whose shared folders the Conduit runtime can work in.
+const nodeHub = lifetime.own("nodes", new NodeHub({ dataRoot: config.dataRoot }), (owned) => owned.shutdown());
 // Everything a harness manifest needs to probe and build itself. Backends are
 // no longer named here: they come from MANIFESTS, and detection runs in
 // parallel so four three-second timeouts cost three seconds, not twelve.
@@ -214,6 +218,7 @@ const harnessConfig = {
   testStreamDataDir: path.join(config.dataRoot, "test-stream"),
   dataRoot: config.dataRoot,
   piAgentDir: config.piAgentDir,
+  nodeHub,
 };
 const backends = lifetime.own("agents", ChatBackendRegistry.fromManifests(MANIFESTS, await detect(MANIFESTS, harnessConfig), harnessConfig), async (owned) => {
   const stopped = await owned.shutdown();
@@ -691,7 +696,9 @@ registerVoiceRoutes(app, { voiceSettings, voiceRuntime, voiceModel });
 registerPtyRoutes(app, { projects, terminals });
 registerTerminalPasteRoutes(app, { terminalPastes });
 
+registerNodeRoutes(app, { nodeHub, config });
 registerProjectRoutes(app, {
+  nodeHub,
   messageIds,
   backends,
   buildProjectDashboard,
@@ -964,6 +971,8 @@ const handleUpgrade = async (request, socket, head) => {
   const match = pathname.match(/^\/v0\/live-sessions\/([a-f0-9-]{24,36})\/stream$/);
   const ptyMatch = pathname.match(/^\/v0\/ptys\/([a-f0-9-]{36})\/attach$/);
   const dictationMatch = pathname === "/v0/dictation/stream";
+  // A device dialling in proves itself with its pairing key, not a browser session.
+  if (pathname === "/v0/nodes/connect") return nodeHub.handleUpgrade(request, socket, head);
   if ((!match || !backends.get(match[1])) && (!ptyMatch || !terminals.get(ptyMatch[1])) && !dictationMatch) return socket.destroy();
   try {
     if (authStore.hasPassword()) {
