@@ -2,6 +2,9 @@ import { children, createEffect, createSignal, Show, splitProps, type JSX } from
 import { ChevronDownIcon } from "lucide-solid";
 import { cn } from "@/lib/utils";
 import { Button } from "./controls";
+import { Aura, PillWave } from "./pill";
+import { Rider } from "./rider";
+import type { Motion } from "./shared";
 
 /*
  * DesktopComposer: resting frost holding a Field above a Toolbar, desktop only
@@ -11,11 +14,16 @@ import { Button } from "./controls";
  */
 /** takeover: a card Rider (the question) that takes the composer's place: the composer drops out of the pane but
  *  keeps its room, and the card rises into the slot. */
-export function DesktopComposer(props: { riders?: JSX.Element; takeover?: JSX.Element; class?: string; children: JSX.Element }) {
+export function DesktopComposer(props: { riders?: JSX.Element; takeover?: JSX.Element; listening?: boolean; level?: number; class?: string; children: JSX.Element }) {
   const takeover = children(() => props.takeover);
   return <div class="ui-composer-slot ui-composer-width" data-taken={takeover() ? "" : undefined}>
-    <div class="ui-composer-stack">{props.riders}<div class={cn("ui-frost ui-desktop-composer", props.class)} data-surface="frost" data-lift="rest">{props.children}</div></div>{takeover()}</div>;
+    <div class="ui-composer-stack">{props.riders}<div class={cn("ui-frost ui-desktop-composer", props.class)} data-surface="frost" data-lift="rest">
+      <Aura on={props.listening} level={props.level} />{props.children}</div></div>{takeover()}</div>;
 }
+/** The voice while dictating, riding just over the composer: a PillWave across a wave Rider. The words go into the
+ *  field as they come. levels: the waveform's history (0-1); gain: how much it is lifted. */
+export const VoiceRider = (props: { levels: number[]; gain?: number; motion?: Motion }) =>
+  <Rider label="Listening" layout="wave" motion={props.motion}><PillWave levels={props.levels} gain={props.gain} /></Rider>;
 /** The composer's field slot: where its TextArea (or the app's, with its behaviour) sits, padded by the composer. */
 /** A toolbar picker: a small ghost button showing what is picked -- a mark, the value, a quieter second value -- and a chevron.
  *  Muted as a setting; subject: what the message goes to (the model), at full weight. */
@@ -34,10 +42,9 @@ export const Completion = (props: { typed: string; rest: string; detail?: string
 /** A row of controls: start (leading) and end (trailing) groups. primary: the end's one slot (Send, or Stop while
  *  the agent works), each action scaling in where the last was; aside: what steps in beside it (Stop, when a draft
  *  is typed during a turn) -- it folds as a Pill does: its room opens, then it fades in; going, it fades, then gives
- *  the room back (it keeps what it last held while it goes), so its neighbours move rather than jump. status: what
- *  the composer is doing, muted at the end's start and cut short to its room: a line (after a Spinner or an icon),
- *  or the voice as a PillWave while dictating. Controls never squeeze; the app folds what does not fit. */
-export function Toolbar(props: { start?: JSX.Element; end?: JSX.Element; aside?: JSX.Element; primary?: JSX.Element; status?: JSX.Element; class?: string; ref?: (element: HTMLDivElement) => void }) {
+ *  the room back (it keeps what it last held while it goes), so its neighbours move rather than jump. Controls never
+ *  squeeze; the app folds what does not fit. */
+export function Toolbar(props: { start?: JSX.Element; end?: JSX.Element; aside?: JSX.Element; primary?: JSX.Element; class?: string; ref?: (element: HTMLDivElement) => void }) {
   const aside = children(() => props.aside);
   const [held, setHeld] = createSignal<JSX.Element>();
   createEffect(() => { const now = aside(); if (now) setHeld(() => now); });
@@ -45,7 +52,7 @@ export function Toolbar(props: { start?: JSX.Element; end?: JSX.Element; aside?:
   return <div ref={props.ref} class={cn("ui-toolbar", props.class)}
     onPointerDown={(event) => { const control = (event.target as Element).closest("button"); if (control) control.dataset.pointerOpened = ""; }}
     onKeyDown={(event) => { if (["Enter", " ", "ArrowDown", "ArrowUp"].includes(event.key)) delete (event.target as HTMLElement).dataset?.pointerOpened; }}><div class="ui-toolbar-start">{props.start}</div><div class="ui-toolbar-end">
-    <span class="ui-toolbar-status" role="status" aria-live="polite">{props.status}</span>{props.end}
+    {props.end}
     <span ref={(el) => createEffect(() => { el.inert = !aside(); })} class="ui-toolbar-aside" data-folded={aside() ? undefined : ""} aria-hidden={aside() ? undefined : "true"}><span>{held()}</span></span>
     <Show when={props.primary !== undefined}><span class="ui-toolbar-primary">{props.primary}</span></Show></div></div>;
 }

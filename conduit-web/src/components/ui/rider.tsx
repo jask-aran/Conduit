@@ -9,7 +9,7 @@ import { type Motion, motionOf, moveCursor } from "./shared";
  * body, actions), a strip (chips, actions) or a card (the question, which takes
  * the keyboard: the app passes its ref, tabIndex and keys).
  */
-export function Rider(props: JSX.HTMLAttributes<HTMLDivElement> & { label?: string; layout?: "row" | "strip" | "card"; motion?: Motion; children: JSX.Element }) {
+export function Rider(props: JSX.HTMLAttributes<HTMLDivElement> & { label?: string; layout?: "row" | "strip" | "card" | "wave"; motion?: Motion; children: JSX.Element }) {
   const [local, rest] = splitProps(props, ["label", "layout", "motion", "class", "children"]);
   return <div role="group" {...rest} class={cn("ui-frost ui-rider", local.class)} data-surface="frost" data-lift="rest" data-layout={local.layout ?? "row"} aria-label={local.label} {...motionOf(local.motion)}>{local.children}</div>;
 }
