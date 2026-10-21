@@ -8,6 +8,7 @@ import { messageClose, messageOpen, toolClose, toolKind, toolOpen, toolSubject, 
 import { applyTranscriptOps } from "./transcript-fold.js";
 import { reduceActiveGeneration, snapshotActiveGeneration } from "./active-generation.js";
 import { unsupported } from "./harnesses/unsupported.js";
+import { usageFromRequests } from "./cache-stats.js";
 import { ConduitIds, USER_ENTRY } from "./server/durable-runtime.js";
 
 /**
@@ -57,6 +58,8 @@ const subjectOf = (name, args = {}) => toolSubject(
       : name === "fetch_content" ? args.urls || args.url
         : name === "source_check" ? args.claim || args.query
           : args.path);
+// pi-durable's default: past contextWindow minus this, the next request waits for a compaction.
+const COMPACTION_RESERVE = 16384;
 const STOP_REASONS = new Set(["stop", "toolUse", "length", "error", "aborted"]);
 
 /** What the transcript keeps about an attachment. */
@@ -289,6 +292,7 @@ export class DurableAdapter extends EventEmitter {
     // A run the last process left going is still going; this is where it is picked up.
     if (stream.snapshot.run) await this.resumeTurn(record, stream.snapshot);
     record.usage = stream.snapshot.usage;
+    void this.publishUsage(record);
     stream.start(async (events) => {
       // A stream left behind by a fork says nothing more about this chat.
       if (record.stream !== stream) return;
@@ -469,7 +473,6 @@ export class DurableAdapter extends EventEmitter {
       case "inbox_update": this.publishQueue(record, event.items); break;
       case "usage_changed":
         record.usage = event.usage;
-        this.publishUsage(record);
         break;
       case "agent_changed":
         await this.readAgent(record);
@@ -630,7 +633,7 @@ export class DurableAdapter extends EventEmitter {
     Object.assign(record.generation, { closed: true, settled: true });
     this.publish(record, { type: "status", generationId: turn.generationId, seq: ++record.generationSeq,
       phase: stopped ? "stopped" : "settled", status: "idle", activity: "idle", detail: null });
-    this.publishUsage(record);
+    void this.publishUsage(record);
     this.emit("settled", { record, completed: outcome === "complete" });
   }
 
@@ -777,26 +780,44 @@ export class DurableAdapter extends EventEmitter {
     return { compacted: outcome?.status === "completed" };
   }
 
-  contextUsage(record) {
-    const models = record?.usage?.models || {};
-    const latest = record?.model ? models[record.model] : null;
-    // What the next request will carry is roughly what the last one did: input, cache and its answer.
-    const tokens = record?.lastContextTokens || (latest ? 0 : 0);
-    const contextWindow = record?.contextWindow || 0;
-    return { tokens, contextWindow, percentUsed: contextWindow ? Math.round((tokens / contextWindow) * 100) : 0,
-      ...(latest ? { cost: latest.cost?.total || 0 } : {}) };
+  contextUsage(record) { return record?.history?.contextUsage || null; }
+
+  /**
+   * What the conversation has spent and how full its context is, read from
+   * its entries as Conduit reads a Pi session's: every request's usage, with a
+   * compaction resetting the cache prefix.
+   */
+  async contextFromHistory({ conversation = null, opaqueSession = null } = {}) {
+    const harness = await this.runtime.open();
+    const held = conversation || await harness.conversation(Number(opaqueSession), this.context);
+    if (!held) return null;
+    const requests = [];
+    let model = null;
+    let cost = 0;
+    for (const entry of await this.entries(held)) {
+      if (entry.kind === "pi.compaction") { requests.push(null); continue; }
+      const message = entry.kind === "pi.assistant" ? entry.model?.[0] : null;
+      if (!message?.usage) continue;
+      if (message.provider && message.model) model = { provider: message.provider, id: message.model };
+      cost += Number(message.usage.cost?.total) || 0;
+      requests.push({ input: message.usage.input || 0, output: message.usage.output || 0,
+        cacheRead: message.usage.cacheRead || 0, cacheWrite: message.usage.cacheWrite || 0 });
+    }
+    const contextWindow = model ? this.runtime.models.getModel(model.provider, model.id)?.contextWindow || null : null;
+    const compactAt = contextWindow && contextWindow > COMPACTION_RESERVE ? contextWindow - COMPACTION_RESERVE : null;
+    return usageFromRequests(requests, { model: model ? `${model.provider}/${model.id}` : null, contextWindow, cost, compactAt });
   }
 
-  publishUsage(record) {
-    const message = record.turn?.last;
-    if (message?.usage) record.lastContextTokens = (message.usage.input || 0) + (message.usage.cacheRead || 0) + (message.usage.output || 0);
-    this.publish(record, { type: "usage", generationId: record.generation?.id || null, contextUsage: this.contextUsage(record) });
+  async publishUsage(record) {
+    record.history = await this.contextFromHistory({ conversation: record.conversation }).catch(() => record.history);
+    if (!record.history) return;
+    this.publish(record, { type: "usage", generationId: record.generation?.id || null, ...record.history });
   }
 
   async refreshContext(id) {
     const record = this.get(id);
     if (!record) return null;
-    this.publishUsage(record);
+    await this.publishUsage(record);
     return this.contextUsage(record);
   }
 
@@ -852,7 +873,8 @@ export class DurableAdapter extends EventEmitter {
 
   view(record) {
     return { ...this.sessions.view(record), hostUiRequests: [...(record?.hostUiRequests || [])], queue: this.queueView(record || { queue: [] }),
-      contextUsage: this.contextUsage(record) };
+      contextUsage: this.contextUsage(record), sessionStats: record?.history?.sessionStats || null,
+      cacheStats: record?.history?.cacheStats || null };
   }
 
   getCapabilities() { return DURABLE_CAPABILITIES; }
