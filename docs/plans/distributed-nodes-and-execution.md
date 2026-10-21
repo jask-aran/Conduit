@@ -124,6 +124,9 @@ environments.
 18. **Remote shell survives disconnects.** The node keeps the process and
     buffered output; on reconnect the tool reattaches by action id. If the
     node itself restarted, the call is reported interrupted.
+19. **Android is push-wakeable.** Main sends an FCM push to wake the Android
+    node for a capability call (Firebase messaging in the app, key on main);
+    otherwise the thread waits per decision 8.
 20. **The server acts, any client controls.** Clients (phone, browser,
     desktop UI) are interchangeable controls of the server; devices lend the
     server what they have (folders, shell, harnesses, capabilities). A device
@@ -141,10 +144,6 @@ environments.
     workspaces unless narrowed.
 23. **Grants are the approval.** Within a device's shared roots and grants,
     calls run without per-call approval; the chat shows every call.
-
-19. **Android is push-wakeable.** Main sends an FCM push to wake the Android
-    node for a capability call (Firebase messaging in the app, key on main);
-    otherwise the thread waits per decision 8.
 
 ## Milestones
 
