@@ -296,6 +296,28 @@ starts elsewhere.
    basics (model switch, approvals/questions, attachments, stop, history
    edits); compaction runs on a long chat without blocking the turn.
 2. **Persistent assistant** on the same runtime (compaction, reset, subagents).
+   *Backend built 2026-10-22; the product (how it is listed, opened, named,
+   what it remembers, what starts it) is still to be designed.* The pieces,
+   each usable without the others:
+   - **Roaming conversations** (decision 21): `POST /v0/chats` with
+     `roaming: true` makes a chat with no home device. Its tools are
+     `device-tools` (src/server/device-tools.js): `devices` lists every
+     device with its shared folders; read/write/edit/bash take `device` and
+     `folder` per call, waiting while a device is offline, with
+     continue-without as in owned threads.
+   - **Subagents** (decision 10, thread subagent; src/server/subagents.js):
+     a `subagent` tool runs a task in a child conversation owned by the call
+     (pi-durable's pattern: stop and restart reach the child; no nested
+     delegation or question card). Offered to roaming chats and templates
+     listing `subagent`. `GET /v0/chats/:id/subagents[/:conversationId]`
+     lists children and reads one's transcript.
+   - **Bounded context**: pi-durable's automatic compaction (already on),
+     `POST /v0/chats/:id/reset {handoff?}`, and a `handoff` tool for roaming
+     chats that restarts the agent's context from its own note. The
+     transcript always keeps everything.
+   Not built: worker threads on other harnesses (decision 10's second shape),
+   background subagents that outlive the turn, a persistent agent record or
+   listing, scheduled or event-driven turns.
 3. **Node role + one remote device.** Node mode in the install, tailnet
    pairing, root grants, remote read/edit/search/shell `env`, device status
    in the UI, offline wait.

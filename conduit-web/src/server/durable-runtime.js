@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { loadPiExtensionTools } from "./pi-extension-bridge.js";
 import { RemoteExecutionEnv } from "../nodes/remote-env.js";
 import { DeviceTools, deviceEnv } from "./device-tools.js";
-import { Subagents } from "./subagents.js";
+import { Handoff, Subagents } from "./subagents.js";
 import { awaitWithContext, BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import { Type } from "@earendil-works/pi-ai";
 import { createRegistry, defineDoc, defineExtension, defineTool, Harness, section } from "@earendil-works/pi-durable";
@@ -213,6 +213,7 @@ export class DurableRuntime {
       install(CodingTools);
       install(DeviceTools(this));
       install(Subagents(this));
+      install(Handoff);
       const web = await this.webTools();
       if (web) install(web);
       install(createCodemodeExtension({ sandbox: new CodemodeSandbox() }));
@@ -300,8 +301,8 @@ export class DurableRuntime {
     // Delegation comes with the persistent shape (decision 9), or a template that lists `subagent`.
     const delegates = roaming || template.tools.includes("subagent");
     const extensions = ["conduit", roaming ? "device-tools" : "coding-tools", ...template.extensions.map(named).filter(Boolean),
-      ...(delegates ? ["subagents"] : [])].map((name) => this.extensions.get(name)).filter(Boolean);
-    const wanted = new Set([...ALWAYS, ...template.tools, ...(roaming ? ["devices"] : []), ...(delegates ? ["subagent"] : [])]);
+      ...(delegates ? ["subagents"] : []), ...(roaming ? ["handoff"] : [])].map((name) => this.extensions.get(name)).filter(Boolean);
+    const wanted = new Set([...ALWAYS, ...template.tools, ...(roaming ? ["devices", "handoff"] : []), ...(delegates ? ["subagent"] : [])]);
     // Codemode's own helpers (`pi.codemode.*`) come with it: its scripts call them.
     const tools = extensions.flatMap((extension) => extension.tools || [])
       .filter((tool) => wanted.has(tool.name) || (wanted.has("codemode") && tool.name.startsWith("pi.codemode.")));
