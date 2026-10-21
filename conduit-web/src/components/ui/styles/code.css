@@ -10,7 +10,7 @@
 /* Folded: the lines past the fold are cut, the last of them fading; the foot opens it. */
 /* Opening unfolds (arrive); folding goes back quicker (leave). A block still being written folds at once on the line
    that passes the fold: eased, its height would run a line or two past the fold and come back, pulling the page down. */
-.ui-code[data-folded] > pre { height: calc(var(--code-fold) * 1.6em + 2 * var(--space-md)); --move: var(--duration-quick); --move-ease: var(--ease-leave); mask-image: linear-gradient(to bottom, #000 calc(100% - 2.4em), transparent); }
+.ui-code[data-folded] > pre { height: calc(var(--code-fold) * 1.6em + 2 * var(--space-md)); --move: var(--duration-quick); --move-ease: var(--ease-leave); --fade-length: 2.4em; }
 .ui-code[data-streaming] > pre { transition: none; }
 .ui-code-more { display: block; width: 100%; height: var(--control-sm); border: 0; border-top: var(--hairline) solid var(--tint); background: transparent; color: var(--muted-foreground); font: var(--text-caption) var(--font-sans); cursor: pointer; }
 .ui-code-more:is(:focus-visible) { background: var(--tint); color: var(--foreground); }

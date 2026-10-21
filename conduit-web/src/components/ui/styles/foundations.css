@@ -29,11 +29,21 @@
   --ease-arrive: cubic-bezier(.2, .8, .2, 1);
   --ease-leave: cubic-bezier(.4, 0, 1, 1);
   --ease-change: ease;
+  /* The page's stack, bottom to top. A piece's own stacking (1, 2, -1 inside it) stays local and is not a layer.
+     The sidebar's pane over what slides under its edge; the dock over the panes when it floats, and its edge with it. */
+  --layer-nav: 20;
+  --layer-dock: 40;
   /* A phone's drawers over the page: the sidebar's, then the workspace panel's over it; each one's Backdrop just under it. */
   --layer-drawer: 55;
+  /* A dragged tab's drop wash over the panes it can land on. */
+  --layer-drop: 60;
   --layer-panel: 70;
+  /* The region cue: the page dimmed round the region a key moved focus to. */
+  --layer-cue: 73;
   /* The leader's dim, its card one above: over the page, under a dialog. */
   --layer-leader: 74;
+  /* The pill a dragged tab or row travels as, over everything it crosses. */
+  --layer-drag: 80;
   --layer-dialog: 100;
   /* A popover (menu, submenu, picker) over everything it opens from: the app's chrome (the sidebar, a pane header) and a dialog. */
   --layer-popover: 105;
@@ -197,8 +207,14 @@
   --frost-fill: #ffffff2b;
   --frost-blur: blur(24px);
   --frost-highlight: inset 0 1px 0 rgb(255 255 255 / 50%), inset 0 -1px 0 rgb(255 255 255 / 10%);
-  --frost-lift-rest: 0 8px 32px rgb(0 0 0 / 10%);
-  --frost-lift-raised: 0 24px 70px rgb(0 0 0 / 38%);
+  /* Elevation: how far a surface stands off the page. Rest: a surface laid over what it belongs to (a tooltip,
+     a docked card); raised: one over everything round it (a floating dock, a popover); side: a pane slid over its
+     neighbour from the left. Frost takes rest and raised as its lifts. */
+  --lift-rest: 0 8px 32px rgb(0 0 0 / 10%);
+  --lift-raised: 0 24px 70px rgb(0 0 0 / 38%);
+  --lift-side: 12px 0 28px rgb(0 0 0 / 20%);
+  --frost-lift-rest: var(--lift-rest);
+  --frost-lift-raised: var(--lift-raised);
   --status-success: oklch(0.62 0.17 145); --status-warn: oklch(0.75 0.15 75); --status-unread: oklch(0.68 0.17 250); /* a row's live state */
   /* Syntax roles read the selected code palette. */
   --syntax-keyword: var(--code-purple); --syntax-string: var(--code-green); --syntax-number: var(--code-orange);
@@ -211,6 +227,8 @@
   --frost-tint: oklch(1 0 0 / 10%);
   /* The dim over what is behind: a desktop overlay (the scrim), the leader's lit composer (the spotlight), the phone's open sidebar. */
   --dim: rgb(0 0 0 / 42%);
+  /* A faint dim: the page round the region a key moved focus to (the region cue), which reads without hiding it. */
+  --dim-faint: rgb(0 0 0 / 18%);
   /* Under: a piece under something opened from beside it (a submenu, a pill's menu) dims where it stands -- one dim
      for Pill and Menu, a change in place, quick. */
   --dim-under: saturate(.6) opacity(.38);

@@ -10,16 +10,16 @@
   --workbench-font-size: var(--text-label);
   --workbench-divider: var(--border);
 }
-.workspace-panel { position: relative; display: flex; width: 0; height: calc(100dvh - var(--space-xl)); margin: var(--space-md) 0 var(--space-md) 0; flex: none; overflow: visible; pointer-events: none; border-radius: var(--radius-surface); transition: width 220ms var(--panel-motion-easing), margin-right 220ms var(--panel-motion-easing); }
+.workspace-panel { position: relative; display: flex; width: 0; height: calc(100dvh - var(--space-xl)); margin: var(--space-md) 0 var(--space-md) 0; flex: none; overflow: visible; pointer-events: none; border-radius: var(--radius-surface); transition: width 220ms var(--ease-change), margin-right 220ms var(--ease-change); }
 .workspace-panel.workspace-panel-open { pointer-events: auto; background: var(--background); }
 .workspace-panel[data-edge-instant="true"] { transition: none !important; }
 /* The gap to the rail snaps with the layer (the surface's 8px over the panes
    stands in for it), so the dock never drifts; only its room eases. */
-.workspace-panel[data-layer-switch] { z-index: 40; transition: width 220ms var(--panel-motion-easing); }
+.workspace-panel[data-layer-switch] { z-index: var(--layer-dock); transition: width 220ms var(--ease-change); }
 .workspace-panel[data-layer-switch] .workspace-panel-surface { left: auto; width: var(--workspace-shell-width); transition: none; }
 /* Over the panes: the dock takes no room in the row and floats above it. */
-.workspace-panel.workspace-panel-overlay { z-index: 40; width: 0 !important; margin-right: 0 !important; background: transparent; }
-.workspace-panel-overlay .workspace-panel-surface { right: var(--space-md); left: auto; width: var(--workspace-shell-width); box-shadow: 0 18px 48px oklch(0 0 0 / 45%), 0 0 0 1px var(--border); }
+.workspace-panel.workspace-panel-overlay { z-index: var(--layer-dock); width: 0 !important; margin-right: 0 !important; background: transparent; }
+.workspace-panel-overlay .workspace-panel-surface { right: var(--space-md); left: auto; width: var(--workspace-shell-width); box-shadow: var(--lift-raised), 0 0 0 var(--hairline) var(--border); }
 .workspace-panel-overlay .ui-pane-edge[data-dock] { left: calc(-1 * var(--workspace-shell-width) - var(--space-md) - var(--control-xs) / 2); }
 /* Surface keeps settled panel width, right-anchored inside the shell. */
 .workspace-panel-surface { position: absolute; inset: 0; display: flex; min-width: 0; height: 100%; contain: layout paint; container-name: workspace-surface; container-type: inline-size; flex: none; flex-direction: column; overflow: hidden; border-radius: var(--radius-surface); background: var(--background); }
@@ -39,7 +39,7 @@
   .workspace-layout { min-width: calc(var(--conduit-min-main-pane) + var(--space-lg)); }
   #root { overflow: auto hidden; }
 }
-.workspace-panel-surface { right: 0; left: auto; width: 100%; transition: width 260ms var(--panel-motion-easing); }
+.workspace-panel-surface { right: 0; left: auto; width: 100%; transition: width 260ms var(--ease-change); }
 .workspace-panel-expanded .workspace-panel-surface { width: calc(100cqw - var(--space-md)); }
 .workspace-panel-expanded .ui-pane-edge[data-dock] { display: none; }
 /* The rail stands in for the tabs on a desktop; a phone keeps them. */
@@ -85,7 +85,7 @@
 .workspace-files[data-wide="false"] { display: grid; grid-template-columns: var(--control-lg) minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
 .workspace-files[data-wide="false"] > .ui-file { grid-column: 2; grid-row: 1; height: auto !important; }
 .workspace-files[data-wide="false"][data-navigator-open="true"] > .ui-file { grid-column: 1 / -1; }
-.workspace-files[data-wide="false"] > .workspace-tree-pane { grid-column: 1 / -1; grid-row: 1 / -1; z-index: 8; width: min(85%, var(--measure-lg)); background: var(--background); border-right: var(--hairline) solid var(--border); box-shadow: 12px 0 28px rgb(0 0 0 / 20%); }
+.workspace-files[data-wide="false"] > .workspace-tree-pane { grid-column: 1 / -1; grid-row: 1 / -1; z-index: 8; width: min(85%, var(--measure-lg)); background: var(--background); border-right: var(--hairline) solid var(--border); box-shadow: var(--lift-side); }
 .workspace-files[data-wide="false"][data-navigator-open="false"] > .workspace-tree-pane { display: none; }
  .workspace-diff { display: flex; min-height: 0; flex: 1; flex-direction: column; overflow: hidden; }
 .workspace-files > .ui-file { flex: none; }
@@ -144,7 +144,7 @@
 /* Mobile retains v0.5.2 density. */
 @media (--conduit-phone-layout) {
 /* Workspace panel geometry, file views, and artifact surfaces. */
-.workspace-panel { position: relative; display: flex; width: 0; flex: none; overflow: visible; pointer-events: none; transition: width 220ms var(--panel-motion-easing), margin-right 220ms var(--panel-motion-easing); }
+.workspace-panel { position: relative; display: flex; width: 0; flex: none; overflow: visible; pointer-events: none; transition: width 220ms var(--ease-change), margin-right 220ms var(--ease-change); }
 .workspace-panel.workspace-panel-open { pointer-events: auto; background: var(--background); }
 .workspace-panel[data-edge-instant="true"] { transition: none !important; }
 /* Surface keeps settled panel width, right-anchored inside the shell. */
@@ -168,7 +168,7 @@
     height: 100dvh;
     margin: 0;
     transform: translateX(100%);
-    transition: transform var(--panel-motion-duration) var(--panel-motion-easing);
+    transition: transform var(--duration-quick) var(--ease-change);
   }
   .workspace-panel.workspace-panel-open { margin: 0; transform: translateX(0); }
   .workspace-panel-surface { width: 100%; border: 0; border-radius: 0; overscroll-behavior: contain; opacity: 1; transform: none; }
