@@ -300,6 +300,36 @@ the window closed, starts at login (a setting in Devices), and is paired
 independently of which server the UI points at. Android serves while open,
 then by push wake.
 
+### 2026-10-21: third round, on what October left open
+
+**What is a Task?** October proposed a server Task domain (queued,
+waiting_for_node, waiting_for_approval, …) beside chats. Weighed: pi-durable's
+tasks, projected; a Conduit task layer above every harness (uniform, but a
+second durable engine); defer. Chosen: pi-durable's, projected -- no Conduit
+task engine (decision 1); a task is a runtime conversation or subagent with
+its pi-durable state, shown across chats; third-party harness work appears
+as worker threads (decision 14).
+
+**How far do we go on knowing whether a cut-off action happened?** October
+required action ids, receipts and reconciliation, and no blind retries.
+Weighed against reporting "cut off" and letting the model decide (what
+exists). Chosen: receipts for writes and commands -- every mutating call
+carries an action id, the node records its outcome, and after a reconnect
+main asks what happened; writes become exactly-once, commands report their
+exit or "unknown" truthfully.
+
+**Can a device pair with more than one server?** Weighed: independently,
+each pairing with its own key, roots and grants (October's model); one
+server per device. Chosen: independently; switching the server a UI shows
+never moves a device's pairing.
+
+**Which files never leave a device?** Weighed: a default deny-list, editable
+per root; nothing excluded; respect .gitignore (surprises when an agent needs
+a generated file). Chosen: a default deny-list (`.env*`, keys, `.ssh/`,
+credential stores) that the node refuses to read through browsing,
+attachments and agent file tools unless a root allows it. Shell is unaffected
+-- it has the user's full access by decision.
+
 ### 2026-10-21: from the security review of the node path
 
 *(Its first finding restates October's "narrow shell cwd alone is not a
