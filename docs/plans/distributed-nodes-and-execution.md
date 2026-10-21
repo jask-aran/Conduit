@@ -173,6 +173,111 @@ environments.
     workspaces unless narrowed.
 23. **Grants are the approval.** Within a device's shared roots and grants,
     calls run without per-call approval; the chat shows every call.
+24. **The device is the unit; client, node and head are roles on it.** A
+    device runs a client, a node (the daemon), or both; most run both, and a
+    web client or a device whose owner declines runs only the client. Devices
+    and clients are the same thing seen from two sides. One device is the
+    head (the brain: chats, agent state, model calls). The head is a role,
+    not a kind of machine: a headless VPS today, possibly a headed desktop
+    that is also a client and a node. Nothing may assume the head is
+    headless or that it is the only device with a screen.
+
+## Architecture
+
+As built on `distributed-nodes`, and where it is going (agreed 2026-10-21).
+Nothing changes for anyone until a device shares a folder that becomes a
+workspace; from then a chat there must feel exactly like a chat anywhere
+else. That is the test every piece below is held to.
+
+### Topology
+
+```
+  DEVICE (any)                       DEVICE holding the HEAD role          DEVICE (any)
+ ┌──────────────────────┐           ┌──────────────────────────────┐      ┌──────────────────────┐
+ │ client  (optional)   │ HTTP+WS   │ Conduit runtime              │      │ client  (optional)   │
+ │ node    (optional)   │──────────▶│  routes, live sessions,      │◀─────│ node    (optional)   │
+ │  most devices: both  │◀──────────│  adapters, node hub          │      │                      │
+ │  web client: client  │  node WS  │ Conduit durable agent        │      │ phone, laptop,       │
+ │  only                │ (device   │ state: data root             │      │ desktop, browser...  │
+ └──────────────────────┘  dials    │ client? node? (it may be a   │      └──────────────────────┘
+                           out)     │  headed desktop: both local) │
+                                    └──────────────────────────────┘
+```
+
+- Control: a client on any device drives the head. Action: the head acts on
+  a device through that device's node. The phone never drives the laptop
+  directly: it drives the head, which acts on the laptop (decision 20).
+- The head is a device too (decision 22): its own folders are a local node,
+  reached in process rather than over a socket.
+- A node dials the head, best route first (the address the pairing client
+  used when a device can dial it, the tailnet name, a public tunnel when the
+  head allows devices through it), so no device opens a port.
+
+### Data
+
+```
+HEAD (data root)                                       DEVICE (node.json, per pairing)
+projects { id, name, kind, workingRoot (label only),  { name, pairings: [{ mainUrl, routes[], key,
+           nodeId, place { root: r_…, path },             nodeId, roots: [{ id: r_…, path, read,
+           chatRoot (head-owned chat files) }              write, shell, allow[], deny[] }] }] }
+nodes.json { devices { id, name },                      device paths never leave the device;
+             nodes { id, deviceId, keyHash, platform,   the head knows roots by id only
+                     roots[], harnesses[] },
+             pendingKills[] }
+chats { id, projectId, backend, opaqueSession, ... }    one record wherever the work runs
+```
+
+A **place** `{root, path}` is the only address the head sends a device, so
+Windows paths and every other OS's rules stay on the device.
+
+### The three seams
+
+```
+            a chat turn / a file view / a terminal          <- one body of code above
+                 |               |                |
+              HOST             ENV            PROCESSES
+          files, Git,     agent tools:     spawn, exec, tunnel,
+          tree, search    read/edit/bash   PTY (harness CLIs,
+          (inspector)                      terminals)
+                 |               |                |
+   local:   localHost       local env       child_process / pty
+   device:  deviceHost      RemoteExecEnv   spawnOnDevice / tunnelTo / remote PTY
+                 \_______________|________________/
+                         node protocol: action ids + receipts, boot id,
+                         seq/resume, offline wait
+```
+
+The inspector, the durable agent's tools, and every harness adapter's
+translation into Conduit's internal representation exist once. A Claude
+Code chat on a device is the same Claude Code adapter; only its process
+starts elsewhere.
+
+### Where a device workspace still differs (to remove)
+
+| Where | Difference | Cause |
+|---|---|---|
+| chats.js (profile default) | forced to pi-durable | Pi 1.3.0 runs on the head only (ends at milestone 5) |
+| projects.js turn-artifact | no turn checkpoints, so no Chat review of a turn | checkpoints snapshot the head's disk |
+| sessions.js move | chat moves into/out of a device workspace refused | no ownership record yet |
+| dashboard menu | no "delete workspace and files" | safety rule, kept |
+| live-session-launcher, chats.js | "harness not on this device" | right outcome, written as a device check |
+| file watching | a device folder is polled | no watch call in the protocol |
+| adapters | `nodeId` threaded through each one | remote spawn added per adapter |
+
+### Making it general
+
+1. **Every workspace has a place.** The head registers itself in the hub as
+   an always-online local device; `nodeId` is never absent; call sites stop
+   asking `project.nodeId ? device : local`.
+2. **Refusals become capabilities.** `capabilities(place)` → harnesses,
+   checkpoints, watch, git, delete. A device with Claude Code and a head
+   without it become the same question, and the UI shows what is offered.
+3. **Close the real gaps:** checkpoints through the host (snapshotted on
+   whichever device holds the folder), a watch call on the node, chat moves
+   once ownership is recorded.
+4. **Adapters take a `processes(place)` handle at launch** and never learn
+   that devices exist.
+5. Pi 1.3.0 is not generalised: milestone 5 retires it as the default.
 
 ## Milestones
 
@@ -200,7 +305,10 @@ a. **Main as a device** (decision 22): workspace files, Git and the
    local device. Device workspaces stop being read-only special cases.
 b. **Remote spawn** on the node protocol: processes with stdio/PTY relay,
    then terminals on devices and third-party harnesses on devices.
-c. **Thread ownership record** and the continue-without control.
+c. **Thread ownership record** and the continue-without control, together
+   with steps 1, 2 and 4 under Architecture › Making it general (they touch
+   the same records: every workspace gets a place, refusals become
+   capabilities, adapters take a processes handle).
 d. Windows node and the phone gate on real hardware.
 
 ## Open questions
@@ -401,3 +509,14 @@ is a decision as much as a patch:
   files browse read-only through the device.
 - **Handles are never reused** across reconnects, and waiting for a device
   listens before it looks, so a reconnect is never missed.
+
+### 2026-10-21: devices, roles and the head
+
+The architecture sketch drew clients and devices as separate boxes and the
+server as a headless brain. Corrected by the user: a device and a client are
+the same thing; client and node (daemon) are properties of a device, most
+devices run both, a web client or a declining owner runs only the client.
+The head is usually the VPS but a headed desktop may hold it, so nothing may
+assume a headless head. → decision 24, the Architecture section. The user
+accepted the rest of the sketch (seams, the differences table, making it
+general) to be folded in here; steps 1, 2 and 4 join node track (c).
