@@ -26,5 +26,5 @@ export const manifest = {
   drive: true,
   profile: true,
   probe: (config) => commandProbe(config.codexCommand)(),
-  build: (config) => new CodexAppServerAdapter({ command: config.codexCommand, logs: config.logs }),
+  build: (config) => new CodexAppServerAdapter({ command: config.codexCommand, logs: config.logs, nodeHub: config.nodeHub }),
 };

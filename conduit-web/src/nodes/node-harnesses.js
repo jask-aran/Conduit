@@ -12,7 +12,7 @@ import path from "node:path";
  * offers its harnesses only when it shares a folder with the shell grant, and
  * starts one only in such a folder.
  */
-const COMMANDS = { "claude-code": "claude" };
+const COMMANDS = { "claude-code": "claude", codex: "codex", fx: "fx", opencode: "opencode" };
 
 function onPath(command) {
   // On Windows only an .exe: a .cmd shim needs a shell to run, and argv through cmd.exe is not argv.
@@ -28,6 +28,28 @@ function onPath(command) {
 
 export function findHarnesses() {
   return Object.fromEntries(Object.entries(COMMANDS).map(([id, command]) => [id, onPath(command)]).filter(([, found]) => found));
+}
+
+/**
+ * Where a tunnel may lead on this device: a harness's own socket, by name, or
+ * a loopback port. Only with the shell grant somewhere -- a command could
+ * reach either anyway.
+ */
+export function tunnelTarget(endpoint) {
+  if (endpoint?.harness === "codex") {
+    return { path: path.join(process.env.CODEX_HOME || path.join(os.homedir(), ".codex"), "app-server-control", "app-server-control.sock") };
+  }
+  const port = Number(endpoint?.port);
+  if (Number.isInteger(port) && port > 0 && port < 65536) return { host: "127.0.0.1", port };
+  return null;
+}
+
+/** A Codex thread's rollout file on this device, by its id; null if there is none. */
+export async function codexRollout(threadId) {
+  if (!SESSION_ID.test(String(threadId))) return null;
+  const root = path.join(process.env.CODEX_HOME || path.join(os.homedir(), ".codex"), "sessions");
+  const name = (await fs.promises.readdir(root, { recursive: true }).catch(() => [])).find((file) => file.endsWith(`${threadId}.jsonl`));
+  return name ? fs.promises.readFile(path.join(root, name), "utf8").catch(() => null) : null;
 }
 
 const SESSION_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

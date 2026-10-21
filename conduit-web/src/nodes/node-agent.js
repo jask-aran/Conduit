@@ -9,7 +9,8 @@ import { encode, decode, HANDLE_METHODS, METHOD_GRANTS, NODE_PROTOCOL_VERSION, r
 import { NodeProcesses } from "./node-processes.js";
 import { keptBack, rootDeny } from "./secrets.js";
 import { Receipts } from "./receipts.js";
-import { claudeSession, findHarnesses } from "./node-harnesses.js";
+import net from "node:net";
+import { claudeSession, codexRollout, findHarnesses, tunnelTarget } from "./node-harnesses.js";
 
 const RETRY_MS = [1000, 2000, 5000, 10000, 30000];
 
@@ -77,6 +78,8 @@ export function startNodeAgent({ mainUrl, key, name, roots: shared, shellEnv = p
     const handles = new Map();
     // The processes main follows on this socket: process id -> detach.
     const following = new Map();
+    // Byte streams main opened to endpoints here (remote-tunnel.js): tunnel id -> socket.
+    const tunnels = new Map();
     const send = (message) => { if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(message)); };
 
     ws.on("open", () => {
@@ -91,6 +94,12 @@ export function startNodeAgent({ mainUrl, key, name, roots: shared, shellEnv = p
       let message;
       try { message = JSON.parse(String(raw)); } catch { return; }
       if (message.type === "abort") return message.action ? receipts.abort(message.action) : calls.get(message.id)?.abort();
+      if (message.type === "tunnel") {
+        const tunnel = tunnels.get(message.tunnel);
+        if (message.data) tunnel?.write(Buffer.from(message.data, "base64"));
+        if (message.end) tunnel?.end();
+        return;
+      }
       if (message.type === "refused") { log.error?.(`[conduit-node] main refused this node: ${message.reason}`); stopped = true; return ws.close(); }
       if (message.type !== "call") return;
       if (typeof message.action === "string" && message.target === "env") {
@@ -126,6 +135,8 @@ export function startNodeAgent({ mainUrl, key, name, roots: shared, shellEnv = p
     ws.on("close", () => {
       for (const detach of following.values()) detach();
       following.clear();
+      for (const tunnel of tunnels.values()) tunnel.destroy();
+      tunnels.clear();
       // An action keeps running for main to ask after again; any other call stops.
       for (const call of calls.values()) (call.drop || call.abort).call(call);
       for (const handle of handles.values()) void handle.close?.(BACKGROUND_CONTEXT);
@@ -185,12 +196,33 @@ export function startNodeAgent({ mainUrl, key, name, roots: shared, shellEnv = p
       }
     }
 
+    /** A byte stream to an endpoint here, for a harness's own clients; the shell grant is required. */
+    function openTunnel(id, endpoint) {
+      const target = roots.some((root) => root.shell) && typeof id === "string" && !tunnels.has(id) ? tunnelTarget(endpoint) : null;
+      if (!target) return err(new FileError("permission_denied", "That endpoint is not open to Conduit on this device"));
+      return new Promise((resolve) => {
+        const connection = net.connect(target);
+        connection.once("connect", () => {
+          tunnels.set(id, connection);
+          connection.on("data", (chunk) => send({ type: "tunnel", tunnel: id, data: chunk.toString("base64") }));
+          connection.on("close", () => { if (tunnels.delete(id)) send({ type: "tunnel", tunnel: id, end: true }); });
+          connection.on("error", () => {});
+          resolve({ ok: true, value: { id } });
+        });
+        connection.once("error", (cause) => {
+          if (!tunnels.has(id)) resolve({ ok: true, value: { error: { code: cause.code || "ECONNREFUSED", message: cause.message } } });
+        });
+      });
+    }
+
     async function run({ target, method, args = [], cwd }, context, emit) {
       const decoded = decode(args, { FileError, ExecutionError });
       if (target === "proc") return runProcess(method, decoded);
       // What a harness saved here, for the sessions main runs on it.
+      if (target === "tunnel" && method === "open") return openTunnel(decoded[0], decoded[1]);
       if (target === "harness") {
         if (method === "claudeSession" && harnesses["claude-code"]) return { ok: true, value: await claudeSession(decoded[0]) };
+        if (method === "codexRollout" && harnesses.codex) return { ok: true, value: await codexRollout(decoded[0]) };
         return err(new FileError("not_supported", `${method} is not served by this node`));
       }
       if (target !== "env") {
