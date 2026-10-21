@@ -12,7 +12,8 @@ import path from "node:path";
  * offers its harnesses only when it shares a folder with the shell grant, and
  * starts one only in such a folder.
  */
-const COMMANDS = { "claude-code": "claude", codex: "codex", fx: "fx", opencode: "opencode" };
+// The names to look for, first found wins: the adapter speaks OpenCode 2, which installs as opencode2.
+const COMMANDS = { "claude-code": ["claude"], codex: ["codex"], fx: ["fx"], opencode: ["opencode2", "opencode"] };
 
 function onPath(command) {
   // On Windows only an .exe: a .cmd shim needs a shell to run, and argv through cmd.exe is not argv.
@@ -27,7 +28,8 @@ function onPath(command) {
 }
 
 export function findHarnesses() {
-  return Object.fromEntries(Object.entries(COMMANDS).map(([id, command]) => [id, onPath(command)]).filter(([, found]) => found));
+  return Object.fromEntries(Object.entries(COMMANDS)
+    .map(([id, names]) => [id, names.map(onPath).find(Boolean)]).filter(([, found]) => found));
 }
 
 /**
@@ -62,4 +64,21 @@ export async function claudeSession(sessionId) {
     try { return await fs.promises.readFile(path.join(root, dir, `${sessionId}.jsonl`), "utf8"); } catch { /* not this project */ }
   }
   return null;
+}
+
+/**
+ * Where OpenCode's background service listens on this device, and its
+ * password, as OpenCode's own state and config files say; `{}` if no live
+ * service is recorded. Main asks `opencode service status` for the rest.
+ */
+export async function opencodeService() {
+  const file = async (variable, fallback) => {
+    const root = process.env[variable] || path.join(os.homedir(), fallback);
+    try { return JSON.parse(await fs.promises.readFile(path.join(root, "opencode", "service.json"), "utf8")); } catch { return {}; }
+  };
+  const alive = (pid) => { try { process.kill(pid, 0); return true; } catch (cause) { return cause.code === "EPERM"; } };
+  const state = await file("XDG_STATE_HOME", ".local/state");
+  const url = /^http:\/\/127\.0\.0\.1:\d+$/.test(state.url || "") && Number.isInteger(state.pid) && alive(state.pid) ? state.url : "";
+  const password = process.env.OPENCODE_SERVER_PASSWORD || state.password || (await file("XDG_CONFIG_HOME", ".config")).password || "";
+  return { url, password };
 }
