@@ -501,7 +501,9 @@ export class ChatBackendRegistry {
   async stop(id) {
     const record = this.get(id);
     if (!record) return false;
-    await this.adapterForRecord(record).close(id);
+    // An adapter whose turns outlive their process (the durable agent's) ends the turn as well.
+    const adapter = this.adapterForRecord(record);
+    await (adapter.stopProcess ? adapter.stopProcess(id) : adapter.close(id));
     return true;
   }
 }

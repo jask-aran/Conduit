@@ -955,7 +955,17 @@ export class DurableAdapter extends EventEmitter {
   rawRecords() { return this.sessions.rawRecords(); }
   list() { return this.sessions.list(); }
   track(id, chatId) { return this.sessions.reassign(id, chatId); }
-  stop(id) { void this.close(id); return Boolean(this.get(id)); }
+  /**
+   * Stop a chat's process. A turn here outlives its session -- it is durable,
+   * and would come back after a restart -- so stopping the process stops the
+   * turn too, as ending another harness's process does.
+   */
+  async stopProcess(id) {
+    if (this.get(id)?.active) await this.cancel(id).catch(() => {});
+    await this.close(id);
+  }
+
+  stop(id) { void this.stopProcess(id); return Boolean(this.get(id)); }
   async shutdownResources() { await this.runtime.close(); }
 }
 
