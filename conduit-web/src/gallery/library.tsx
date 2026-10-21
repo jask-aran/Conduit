@@ -260,8 +260,8 @@ const reset = () => <Button variant="ghost" size="icon-sm" aria-label="Reset to 
 const keys = (...names: string[]) => <span class="g-keys">{names.map((name) => <Keycap>{name}</Keycap>)}</span>;
 const SETTING_PAGES: Record<SettingsSection, { status?: string; busy?: boolean; failed?: boolean; why?: string; body: () => JSX.Element }> = {
   appearance: { status: "Saved", body: () => <>
-    <SettingGroup title="Interface"><SettingLine label="Theme"><Theme /></SettingLine><SettingLine label="Interface size"><ScaleSetting token="--scale-ui" /></SettingLine><SettingLine label="Sidebar chats"><Input value="20" /></SettingLine><SettingLine label="Tab row"><SwitchDemo /></SettingLine><SettingLine label="Streaming" state="paused while hidden"><SelectTrigger value="Adaptive" bare /></SettingLine></SettingGroup>
-    <SettingGroup title="Reading"><SettingLine label="Text size"><ScaleSetting token="--scale-transcript" /></SettingLine><SettingLine label="Transcript width"><SelectTrigger value="Compact" bare /></SettingLine><SettingLine label="Wide blocks"><SelectTrigger value="Off" bare /></SettingLine><SettingLine label="Terminal font"><SelectTrigger value="Meslo" bare /></SettingLine></SettingGroup>
+    <SettingGroup title="Interface"><SettingLine label="Theme"><Theme /></SettingLine><SettingLine label="Interface size"><ScaleSetting /></SettingLine><SettingLine label="Sidebar chats"><Input value="20" /></SettingLine><SettingLine label="Tab row"><SwitchDemo /></SettingLine><SettingLine label="Streaming" state="paused while hidden"><SelectTrigger value="Adaptive" bare /></SettingLine></SettingGroup>
+    <SettingGroup title="Reading"><SettingLine label="Transcript width"><SelectTrigger value="Compact" bare /></SettingLine><SettingLine label="Wide blocks"><SelectTrigger value="Off" bare /></SettingLine><SettingLine label="Terminal font"><SelectTrigger value="Meslo" bare /></SettingLine></SettingGroup>
   </> },
   shortcuts: { status: "Saved", body: () => <Shortcuts /> },
   models: { status: "Not saved", failed: true, why: "The server answered 502.", body: () => <>
@@ -317,12 +317,12 @@ function Shortcuts() {
   </>;
 }
 
-/** A scale as a setting: the app's Appearance sets the two coefficients; here they move the whole gallery. */
-const SCALE_STEPS = [["0.875", "88%"], ["1", "100%"], ["1.125", "113%"], ["1.25", "125%"]] as const;
-function ScaleSetting(props: { token: "--scale-ui" | "--scale-transcript" }) {
+/** The Interface size as a setting: the app's Appearance sets it; here it moves the whole gallery. */
+const SCALE_STEPS = [["0.9", "90%"], ["1", "100%"], ["1.1", "110%"], ["1.25", "125%"]] as const;
+function ScaleSetting() {
   const options = SCALE_STEPS.map(([value, label]) => ({ value, label }));
-  const value = () => SCALE_STEPS.find(([step]) => Number(step) === scaleOf(props.token))?.[0] ?? "1";
-  return <Segmented size="sm" label={props.token === "--scale-ui" ? "Interface size" : "Text size"} value={value()} options={options} onChange={(next) => setScale(props.token, Number(next))} />;
+  const value = () => SCALE_STEPS.find(([step]) => Number(step) === scaleOf("--ui-scale"))?.[0] ?? "1";
+  return <Segmented size="sm" label="Interface size" value={value()} options={options} onChange={(next) => setScale("--ui-scale", Number(next) === 1 ? null : Number(next))} />;
 }
 
 /** Settings: on a desktop the rail beside the page; on a phone one at a time, the page with Back to the rail. */
@@ -1284,7 +1284,7 @@ export const libraryFamilies: Family[] = [
       ])} on={["desktop", "phone"]} widths={["200px", "minmax(0, 1fr)", "minmax(0, 1fr)"]} />, "row"),
     ] },
   ] },
-  { title: "Transcript", rail: "Transcript", note: "what is read, at the transcript's scale (Space · Scale, Settings · Text size); a row's text there (a trace, a trail) is a step under the body on both densities: the user's Message (a Bubble and its foot) and a Turn (its trace header, the answer, the answer's foot). The answer is Markdown with no bubble in the Body role, one gap between blocks; the trail sits a step under it", groups: [
+  { title: "Transcript", rail: "Transcript", note: "what is read, at the transcript's size (Space · Scale); a row's text there (a trace, a trail) is a step under the body on both densities: the user's Message (a Bubble and its foot) and a Turn (its trace header, the answer, the answer's foot). The answer is Markdown with no bubble in the Body role, one gap between blocks; the trail sits a step under it", groups: [
     { title: "In use", note: "a turn, measured: green the gaps (a turn's parts half a unit apart, blocks three quarters)", layout: "desktop", atoms: [
       lib("transcript-inuse", "Turn in use", "both", "transcript", "Turn > TraceHeader · Answer · MessageFoot", () => <InUse scene={turnScene} marks={TURN_MARKS} spacing={[".ui-turn", ".ui-answer"]} />, "row"),
     ] },

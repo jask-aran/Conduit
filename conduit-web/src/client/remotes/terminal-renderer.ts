@@ -1,6 +1,7 @@
 import terminalFontUrl from "../assets/MesloLGSNerdFontMono-Regular.ttf";
 import { terminalFontFamily } from "../preferences/terminal-font";
 import { isMobileLayout } from "../navigation/mobile-layout";
+import { selectedUiScale } from "../preferences/ui-scale";
 import "./terminal-pane.css";
 
 export type TerminalRenderer = {
@@ -115,6 +116,8 @@ function terminalFontSize() {
   const fallback = isMobileLayout() ? 13 : 10.4;
   return Math.max(8, Math.min(24, Number(localStorage.getItem("conduit:terminal-font-size")) || fallback));
 }
+// The terminal's size is drawn in pixels, under the stylesheet: the Interface size multiplies it as it does the units.
+const scaled = (fontSize: number) => fontSize * selectedUiScale();
 
 function observeHostSize(host: HTMLElement, fit: TerminalFit) {
   let frame: number | undefined;
@@ -280,7 +283,7 @@ async function createXtermRenderer(host: HTMLElement, options: TerminalRendererO
     import("@xterm/xterm/css/xterm.css"),
   ]);
   const terminal = new Terminal({
-    fontSize: terminalFontSize(),
+    fontSize: scaled(terminalFontSize()),
     fontFamily: terminalFontFamily(),
     cursorBlink: false,
     altClickMovesCursor: false,
@@ -323,6 +326,8 @@ async function createXtermRenderer(host: HTMLElement, options: TerminalRendererO
   }
   const stopClipboardShortcuts = installClipboardShortcuts(host, terminal, options);
   const stopObservingHost = observeHostSize(host, fit);
+  const rescale = () => { terminal.options.fontSize = scaled(terminalFontSize()); applyFit(fit); };
+  addEventListener("conduit:ui-scale", rescale);
   return {
     id: "xterm",
     cols: () => terminal.cols,
@@ -332,11 +337,11 @@ async function createXtermRenderer(host: HTMLElement, options: TerminalRendererO
     focus: () => terminal.focus(),
     // While panes ease, the host observer fits when they settle (observeHostSize).
     fit: () => { if (!document.body.classList.contains("panes-settling")) applyFit(fit); },
-    setFontSize: (fontSize) => { terminal.options.fontSize = fontSize; applyFit(fit); },
+    setFontSize: (fontSize) => { terminal.options.fontSize = scaled(fontSize); applyFit(fit); },
     repaint: () => repaintTerminal(terminal),
     resize: (cols, rows) => resizeTerminal(terminal, cols, rows),
     onData: (listener) => { const subscription = terminal.onData(listener); return () => subscription.dispose(); },
     onResize: (listener) => { const subscription = terminal.onResize(listener); return () => subscription.dispose(); },
-    dispose: () => { host.removeEventListener("mousedown", selectWithMouse, { capture: true }); document.removeEventListener("mouseup", copyMouseSelection); stopClipboardShortcuts(); stopObservingHost(); contextLoss.dispose(); webgl.dispose(); clipboard.dispose(); fit.dispose?.(); terminal.dispose(); },
+    dispose: () => { removeEventListener("conduit:ui-scale", rescale); host.removeEventListener("mousedown", selectWithMouse, { capture: true }); document.removeEventListener("mouseup", copyMouseSelection); stopClipboardShortcuts(); stopObservingHost(); contextLoss.dispose(); webgl.dispose(); clipboard.dispose(); fit.dispose?.(); terminal.dispose(); },
   };
 }

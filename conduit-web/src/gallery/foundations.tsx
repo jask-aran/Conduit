@@ -179,31 +179,51 @@ const COLOURS: TokenGroup[] = [
   { title: "State", rows: [tok("--destructive", "a destructive action", colour("--destructive"), swatch("--destructive")), tok("--live", "a runtime dot: live", colour("--live"), swatch("--live")), tok("--warn", "a runtime dot: warning", colour("--warn"), swatch("--warn"))] },
 ];
 /*
- * The scale: the coefficients, set on every document (the gallery's, each phone frame's at its own
- * mount) and remembered, so the whole gallery can be checked at any setting.
+ * The scale: the user's Interface size and each region's own size per density (foundations.css, Scale), set on every
+ * document (the gallery's, each phone frame's at its own mount) and remembered, so the whole gallery can be checked at
+ * any setting and the regions tuned against each other. Copy gives the line foundations.css keeps.
  */
-const SCALES = [["--scale-ui", "UI scale", "everything"], ["--scale-transcript", "Transcript scale", "what you read"]] as const;
-const storedScale = (token: string) => { try { return Number(localStorage.getItem(`gallery:${token}`)) || 1; } catch { return 1; } };
+const REGIONS = [["chrome", "Chrome", "headers, panes, files, the dashboard: everything not below"], ["sidebar", "Sidebar", "the sidebar, its rail and its head"],
+  ["frost", "Frost", "what floats: menus, popovers, overlays (settings, the palette), cards, toasts"], ["composer", "Composer", "the composer, its riders; the phone's composer row"],
+  ["transcript", "Transcript", "what you read: messages, the answer, its traces"]] as const;
+const DENSITIES = ["desktop", "phone"] as const;
+type ScaleToken = "--ui-scale" | `--scale-${(typeof REGIONS)[number][0]}-${(typeof DENSITIES)[number]}`;
+const SCALES: ScaleToken[] = ["--ui-scale", ...REGIONS.flatMap(([region]) => DENSITIES.map((density) => `--scale-${region}-${density}` as const))];
+// A region's size unless one is picked here: foundations.css's own.
+const shipped = (token: ScaleToken) => token === "--ui-scale" ? 1 : Number(getComputedStyle(document.documentElement).getPropertyValue(token).trim()) || 1;
+const storedScale = (token: ScaleToken) => { try { const value = localStorage.getItem(`gallery:${token}`); return value === null ? null : Number(value) || null; } catch { return null; } };
 export function applyScale(doc: Document) {
-  for (const [token] of SCALES) { const value = storedScale(token); if (value === 1) doc.documentElement.style.removeProperty(token); else doc.documentElement.style.setProperty(token, String(value)); }
+  for (const token of SCALES) { const value = storedScale(token); if (value === null) doc.documentElement.style.removeProperty(token); else doc.documentElement.style.setProperty(token, String(value)); }
 }
 /** The scales as one signal, shared by the Space page's sliders and the gallery's Settings (Appearance). */
-const [scales, setScales] = createSignal<number[]>(SCALES.map(([token]) => storedScale(token)));
-export const scaleOf = (token: (typeof SCALES)[number][0]) => scales()[SCALES.findIndex(([name]) => name === token)]!;
-export function setScale(token: (typeof SCALES)[number][0], value: number) {
-  const index = SCALES.findIndex(([name]) => name === token);
-  try { localStorage.setItem(`gallery:${token}`, String(value)); } catch { /* private window */ }
-  setScales((all) => all.map((old, at) => at === index ? value : old));
+const [scales, setScales] = createSignal<Record<string, number | null>>(Object.fromEntries(SCALES.map((token) => [token, storedScale(token)])));
+export const scaleOf = (token: ScaleToken) => scales()[token] ?? shipped(token);
+export function setScale(token: ScaleToken, value: number | null) {
+  try { if (value === null) localStorage.removeItem(`gallery:${token}`); else localStorage.setItem(`gallery:${token}`, String(value)); } catch { /* private window */ }
+  setScales((all) => ({ ...all, [token]: value }));
   for (const doc of [document, ...Array.from(document.querySelectorAll("iframe"), (frame) => frame.contentDocument)]) if (doc) applyScale(doc);
   dispatchEvent(new Event("gallery:tune"));
 }
+function ScaleSlider(props: { token: ScaleToken }) {
+  return <span class="g-scale-slider">
+    <input type="range" min="0.75" max="1.5" step="0.025" aria-label={props.token} value={scaleOf(props.token)} onInput={(event) => setScale(props.token, Number(event.currentTarget.value))} />
+    <code>{scaleOf(props.token).toFixed(3)}×</code>
+    <button type="button" disabled={scales()[props.token] == null} onClick={() => setScale(props.token, null)}>Reset</button>
+  </span>;
+}
 function ScaleControl() {
-  return <div class="g-scale-control"><For each={[...SCALES]}>{([token, label, use]) => <label>
-    <span><strong>{label}</strong><small>{use}</small></span>
-    <input type="range" min="0.75" max="1.5" step="0.05" value={scaleOf(token)} onInput={(event) => setScale(token, Number(event.currentTarget.value))} />
-    <code>{scaleOf(token).toFixed(2)}×</code>
-    <button type="button" disabled={scaleOf(token) === 1} onClick={() => setScale(token, 1)}>Reset</button>
-  </label>}</For></div>;
+  const line = () => `:root {\n  ${DENSITIES.map((density) => REGIONS.map(([region]) => `--scale-${region}-${density}: ${+scaleOf(`--scale-${region}-${density}`).toFixed(3)};`).join(" ")).join("\n  ")}\n}`;
+  return <div class="g-scale-control">
+    <label><span><strong>Interface size</strong><small>the user's one setting (Settings · Interface): every region at once</small></span><ScaleSlider token="--ui-scale" /></label>
+    <div class="g-scale-regions">
+      <span /><strong>Desktop</strong><strong>Phone</strong>
+      <For each={[...REGIONS]}>{([region, label, use]) => <>
+        <span><strong>{label}</strong><small>{use}</small></span>
+        <For each={[...DENSITIES]}>{(density) => <ScaleSlider token={`--scale-${region}-${density}`} />}</For>
+      </>}</For>
+    </div>
+    <p><button type="button" onClick={() => void navigator.clipboard.writeText(line())}>Copy region sizes</button> <small>the :root line for foundations.css, from the sizes picked here</small></p>
+  </div>;
 }
 const number = (name: string) => (cell: HTMLElement) => `${Number(getComputedStyle(cell).getPropertyValue(name).trim() || 1)}×`;
 const STEPS = ["2xs", "xs", "sm", "md", "lg", "xl", "2xl", "3xl", "4xl"];
@@ -515,7 +535,7 @@ export const foundationFamilies: Family[] = [
     lib("colour-tokens", "Colours", "both", "colour", "styles.css :root · foundations.css :root", () => <TokenTable groups={COLOURS} density={false} />, "row"),
   ] }] },
   { title: "Space", rail: "Foundations", note: "everything from a few numbers: the density's unit (12.8px desktop, 16px phone) times the UI scale, or the transcript scale for what you read. Every gap, padding and margin is one of nine steps; every control one of four heights; rows keep their measured height and text, in the unit (a phone's never below 40px). Move the scales and every page follows", groups: [{ title: "Scale", note: "the coefficients, remembered and applied to the whole gallery, its phone frames too: try any page at another setting", layout: "desktop", atoms: [
-    lib("space-scale", "Scale", "both", "space", "foundations.css :root --scale-ui · --scale-transcript", () => <ScaleControl />, "row"),
+    lib("space-scale", "Scale", "both", "space", "foundations.css :root --ui-scale · --scale-<region>-<density>", () => <ScaleControl />, "row"),
   ] }, { title: "In use", note: "one popover, measured: what each number shapes. Everything is in the unit, so the phone's is the desktop's at 1.25x; rows take more, for a finger", layout: "desktop", atoms: [
     lib("space-inuse", "Space in use", "both", "space", "Menu · Section · Item", () => <InUse scene={spaceScene} marks={SPACE_MARKS} />, "row"),
   ] }, { title: "Tokens", note: "for reference", layout: "desktop", atoms: [

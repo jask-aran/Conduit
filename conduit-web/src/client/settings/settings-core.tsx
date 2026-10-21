@@ -1132,8 +1132,8 @@ export function Settings(props: {
           <Show when={section() === "ui"}>
             <>
               <SettingGroup title="Interface">
-                  <SettingLine label="Scale">
-                    <Select id="interface-scale" aria-label="Interface scale" value={props.interfaceScale} onChange={(event) => props.onInterfaceScaleChange(parseUiScale(event.currentTarget.value))}>
+                  <SettingLine label="Interface size">
+                    <Select id="interface-scale" aria-label="Interface size" value={props.interfaceScale} onChange={(event) => props.onInterfaceScaleChange(parseUiScale(event.currentTarget.value))}>
                       <For each={UI_SCALE_OPTIONS}>{(scale) => <option value={scale}>{Math.round(scale * 100)}%</option>}</For>
                     </Select>
                   </SettingLine>

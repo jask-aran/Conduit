@@ -338,7 +338,11 @@ html, body { background: var(--frame, #08090a); color: var(--foreground); }
 .g-stack-name :is(small, code) { margin: 0; }
 /* Space · Scale: a slider per coefficient. */
 .g-scale-control { display: grid; width: min(100%, 640px); gap: 12px; }
-.g-scale-control label { display: grid; grid-template-columns: 200px minmax(0, 1fr) 56px auto; align-items: center; gap: 16px; }
+.g-scale-control { width: min(100%, 900px); }
+.g-scale-control label { display: grid; grid-template-columns: 200px minmax(0, 1fr); align-items: center; gap: 16px; }
+.g-scale-slider { display: grid; grid-template-columns: minmax(0, 1fr) 56px auto; align-items: center; gap: 8px; }
+.g-scale-regions { display: grid; grid-template-columns: 200px repeat(2, minmax(0, 1fr)); align-items: center; gap: 10px 16px; }
+.g-scale-regions > span:not(.g-scale-slider) { display: grid; }
 .g-scale-control label > span { display: grid; }
 .g-scale-control small { color: var(--muted-foreground); }
 .g-scale-control button { border: 1px solid var(--border); border-radius: 6px; background: transparent; padding: 4px 10px; color: inherit; }
