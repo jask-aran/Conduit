@@ -7,6 +7,7 @@ import { projectEnvironment } from "./project-environment.js";
 import { StringDecoder } from "node:string_decoder";
 import { promisify } from "node:util";
 import nodePty from "node-pty";
+import { RemoteProcess } from "./nodes/remote-process.js";
 import { removeUnresponsiveSocket, terminalSocketName } from "../../scripts/terminal-lifecycle.mjs";
 
 const execFileAsync = promisify(execFileCallback);
@@ -123,6 +124,9 @@ export class PtyManager extends EventEmitter {
     this.tmuxPath = tmuxPath;
     this.terminalTeardown = terminalTeardown;
     this.run = run;
+    // Set by the server once paired devices exist: terminals in a device's
+    // folder are shells the device keeps (nodes/node-processes.js), not tmux here.
+    this.nodeHub = null;
     this.records = new Map();
     this.metadata = new Map();
     // One disposable tmux client may own a terminal at a time. Different
@@ -202,7 +206,7 @@ export class PtyManager extends EventEmitter {
       else {
         active = await this.listTmuxMetadata();
         const known = new Set([...this.records.values()]
-          .filter((item) => item.status === "running")
+          .filter((item) => item.status === "running" && !item.nodeId)
           .map((item) => item.tmuxSession || terminalSessionName(item.id)));
         for (const name of active.keys()) {
           if (known.has(name)) continue;
@@ -215,7 +219,8 @@ export class PtyManager extends EventEmitter {
     }
 
     for (const item of this.records.values()) {
-      if (item.status !== "running") continue;
+      // A device's shell outlives this server; whether it still runs is asked on attach.
+      if (item.status !== "running" || item.nodeId) continue;
       const metadata = active.get(item.tmuxSession || terminalSessionName(item.id));
       if (metadata) {
         this.metadata.set(item.id, metadata);
@@ -253,12 +258,12 @@ export class PtyManager extends EventEmitter {
   }
 
   async activeSessionMetadata() {
-    if (![...this.records.values()].some((item) => item.status === "running")) return new Map();
+    if (![...this.records.values()].some((item) => item.status === "running" && !item.nodeId)) return new Map();
     return this.listTmuxMetadata();
   }
 
   async reconcile() {
-    const running = [...this.records.values()].filter((item) => item.status === "running");
+    const running = [...this.records.values()].filter((item) => item.status === "running" && !item.nodeId);
     if (!running.length || this.stopping) return this.list();
     // A missing dedicated server legitimately means every tracked session is
     // gone. Other tmux failures are operational errors and must not silently
@@ -296,6 +301,7 @@ export class PtyManager extends EventEmitter {
     const template = TEMPLATES[templateId];
     if (!template) throw failure("pty_template_not_allowed", "That terminal template is not available");
     if (!project?.id) throw failure("pty_project_required", "A terminal must belong to a project");
+    if (project.nodeId) return this.createOnDevice({ project, cwd, templateId, title: requestedTitle, cols, rows });
     if (!cwd || !path.isAbsolute(cwd)) throw failure("pty_cwd_required", "Terminal working directory is unavailable");
     let cwdStat;
     try { cwdStat = await fs.stat(cwd); }
@@ -351,6 +357,7 @@ export class PtyManager extends EventEmitter {
     if (!record) throw failure("pty_not_found", "Terminal was not found");
     if (record.status !== "running") throw failure("pty_not_running", "Terminal is not running");
     if (this.attachments.has(id)) throw failure("pty_in_use", "Terminal is attached in another Conduit client");
+    if (record.nodeId) return this.attachOnDevice(record, { cols, rows });
 
     // Reserve before any asynchronous tmux work. This closes the attach/attach
     // race without introducing a global streaming lease.
@@ -454,7 +461,7 @@ export class PtyManager extends EventEmitter {
     if (!record) throw failure("pty_not_found", "Terminal was not found");
     const next = String(title || "").trim();
     if (!next || next.length > 80) throw failure("pty_title_invalid", "Terminal title must be between 1 and 80 characters");
-    if (record.status === "running") {
+    if (record.status === "running" && !record.nodeId) {
       await this.ensureTmux();
       await this.invokeTmux(["rename-window", "-t", `${record.tmuxSession || terminalSessionName(id)}:0`, next]);
     }
@@ -473,6 +480,87 @@ export class PtyManager extends EventEmitter {
     } catch (error) {
       if (error?.code !== "pty_tmux_unavailable" && error?.code !== "pty_tmux_version") throw error;
     }
+  }
+
+  /** A shell on a device: started there, kept there across disconnects and restarts of this server. */
+  async createOnDevice({ project, cwd, templateId, title: requestedTitle, cols, rows }) {
+    if (!this.nodeHub) throw failure("pty_cwd_unavailable", "Devices are not available on this server");
+    const customTitle = requestedTitle == null ? "" : String(requestedTitle).trim();
+    if (requestedTitle != null && (!customTitle || customTitle.length > 80)) {
+      throw failure("pty_title_invalid", "Terminal title must be between 1 and 80 characters");
+    }
+    if ([...this.records.values()].filter((item) => item.status === "running").length >= this.maxSessions) {
+      throw failure("pty_capacity_reached", "The terminal session limit has been reached");
+    }
+    const shell = await RemoteProcess.spawn(this.nodeHub, project.nodeId, {
+      shell: true, cwd, pty: { cols: boundedDimension(cols, 80), rows: boundedDimension(rows, 24) } });
+    // Nothing follows it until a client attaches; the device keeps its output.
+    shell.detach();
+    const id = crypto.randomUUID();
+    const now = new Date().toISOString();
+    const record = {
+      id, projectId: project.id, templateId, cwd, status: "running",
+      title: customTitle || nextTerminalTitle([...this.records.values()], project.id, TEMPLATES[templateId]?.title || "Shell"),
+      createdAt: now, updatedAt: now, exitCode: null, signal: null,
+      nodeId: project.nodeId, procId: shell.procId,
+    };
+    this.records.set(id, record);
+    this.metadata.set(id, { currentCommand: null, lastActivityAt: now, paneDead: false });
+    await this.persist();
+    this.emit("created", view(record, this.metadata.get(id)));
+    return view(record, this.metadata.get(id));
+  }
+
+  async attachOnDevice(record, { cols, rows }) {
+    const lease = { state: "attaching", handle: null, cancelled: false };
+    this.attachments.set(record.id, lease);
+    let shell;
+    try {
+      // From the device's first buffered byte: the screen is repainted as tmux would.
+      shell = await RemoteProcess.reattach(this.nodeHub, record.nodeId, record.procId);
+    } catch (error) {
+      this.attachments.delete(record.id);
+      if (/No such shell/.test(error.message)) {
+        await this.deviceExited(record, { exitCode: null, signal: "device_process_gone" });
+        throw failure("pty_not_running", "Terminal is no longer running");
+      }
+      throw failure("pty_not_running", error.message);
+    }
+    lease.state = "attached";
+    lease.handle = { kill: () => shell.detach() };
+    shell.resize(boundedDimension(cols, 80), boundedDimension(rows, 24));
+    const release = () => { if (this.attachments.get(record.id) === lease) this.attachments.delete(record.id); };
+    shell.onExit((event) => { release(); void this.deviceExited(record, event); });
+    return {
+      onData: (listener) => { const subscription = shell.onData((text) => listener(text)); return () => subscription.dispose(); },
+      onExit: (listener) => { const subscription = shell.onExit(listener); return () => subscription.dispose(); },
+      write: (bytes) => {
+        const value = Buffer.isBuffer(bytes) ? bytes : Buffer.from(bytes);
+        if (value.length > PTY_MAX_INPUT_BYTES) throw failure("pty_input_too_large", `Terminal input exceeds ${PTY_MAX_INPUT_BYTES} bytes`);
+        shell.write(value);
+      },
+      resize: (nextCols, nextRows) => shell.resize(boundedDimension(nextCols, 80), boundedDimension(nextRows, 24)),
+      // The browser left: stop following; the shell goes on on the device.
+      kill: () => { release(); shell.detach(); },
+    };
+  }
+
+  async deviceExited(record, { exitCode = null, signal = null } = {}) {
+    if (record.status !== "running") return;
+    record.status = "exited";
+    record.exitCode = exitCode;
+    record.signal = signal;
+    record.updatedAt = new Date().toISOString();
+    this.metadata.delete(record.id);
+    await this.persist();
+    this.emit("exit", view(record));
+  }
+
+  killOnDevice(record) {
+    if (!this.nodeHub?.live.get(record.nodeId)?.ready) return;
+    const shell = new RemoteProcess(this.nodeHub, record.nodeId, { id: record.procId });
+    shell.kill();
+    this.nodeHub.unfollow(shell);
   }
 
   killAttachment(id) {
@@ -497,7 +585,8 @@ export class PtyManager extends EventEmitter {
     const removalLease = { state: "destroying", handle: null, cancelled: true };
     this.attachments.set(id, removalLease);
     try {
-      if (record.status === "running") await this.killTmuxSession(record);
+      if (record.status === "running" && record.nodeId) this.killOnDevice(record);
+      else if (record.status === "running") await this.killTmuxSession(record);
       this.records.delete(id);
       this.metadata.delete(id);
       await this.persist();

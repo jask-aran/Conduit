@@ -197,6 +197,7 @@ const manager = new PiManager({
 });
 // Devices paired with this server, whose shared folders the Conduit runtime can work in.
 const nodeHub = lifetime.own("nodes", new NodeHub({ dataRoot: config.dataRoot }), (owned) => owned.shutdown());
+terminals.nodeHub = nodeHub;
 // Everything a harness manifest needs to probe and build itself. Backends are
 // no longer named here: they come from MANIFESTS, and detection runs in
 // parallel so four three-second timeouts cost three seconds, not twelve.

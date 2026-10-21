@@ -1335,6 +1335,9 @@ function App() {
     await chat.initialize({ ...created, templateId: created.templateId || profileId || undefined }, project);
   };
 
+  // A device's folder only has the Conduit runtime (plan decision 5), whatever
+  // the workspace or Conduit default says.
+  const projectProfile = (project: Project) => project.nodeId ? "conduit-runtime" : project.defaultTemplateId || defaultTemplateId() || "assistant";
   const createChat = async (target?: Project, launch: { templateId?: string; runtimeKind?: string } = {}, options: { reportFailure?: boolean } = {}) => {
     const reportFailure = options.reportFailure !== false;
     if (!(await leaveHarnessThread())) return null;
@@ -1343,7 +1346,7 @@ function App() {
     const requestEpoch = ++newChatRequestEpoch;
     const replacedDraftId = currentDraftId();
     const fromDashboard = routeKind() === "project" || routeKind() === "dashboard" || routeKind() === "computer";
-    const profileId = launch.templateId || project.defaultTemplateId || defaultTemplateId() || "assistant";
+    const profileId = launch.templateId || projectProfile(project);
     discardDraftImmediately(replacedDraftId);
     chat.reset(profileId);
     attachments.clear({ discard: false });
@@ -1411,7 +1414,7 @@ function App() {
       ? selectedProject()
       : catalogue.projects().find((item) => item.slug === "chat") || catalogue.projects()[0];
     if (!project || project.state === "cloning") return;
-    const templateId = project.defaultTemplateId || defaultTemplateId() || "assistant";
+    const templateId = projectProfile(project);
     const expectedRoute = route;
     const expectedProjectId = project.id;
     let scopeChanged = false;
@@ -2097,7 +2100,7 @@ function App() {
       }
       await refresh();
       if (["link", "linked", "create", "created", "node"].includes(input.mode)) await openProject(created);
-      else await createChat(created, { templateId: created.defaultTemplateId || defaultTemplateId() || "assistant" });
+      else await createChat(created, { templateId: projectProfile(created) });
       return true;
     } catch (error) { showError(error); return false; }
   };
