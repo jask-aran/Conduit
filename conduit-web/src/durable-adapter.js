@@ -965,6 +965,30 @@ export class DurableAdapter extends EventEmitter {
   }
 
   /**
+   * A chat moved to another project or workspace: its conversation, and every
+   * branch it left (an edit there forks from it), now work in the target's
+   * folder, on the target's device. Nothing in the store moves; the record and
+   * the agent's working directory change. A roaming chat stays roaming. The
+   * chat's live session is closed first by the caller and reopens in place.
+   */
+  async relocate({ opaqueSession, project }) {
+    const current = Number(opaqueSession);
+    if (!Number.isInteger(current)) return;
+    const harness = await this.runtime.open();
+    const nodeId = remoteNode(project);
+    for (const conversationId of [...await this.branchesOf(current), current]) {
+      const conversation = await harness.conversation(conversationId, this.context);
+      if (!conversation) continue;
+      await conversation.commit(async (tx) => {
+        const workspace = await tx.doc(ConduitWorkspace, conversationId);
+        Object.assign(workspace, nodeId ? { nodeId, place: project.place, roaming: false }
+          : { nodeId: null, place: null, roaming: Boolean(workspace.roaming) });
+      }, this.context);
+      if (project.workingRoot) await conversation.configure({ cwd: project.workingRoot }, this.context);
+    }
+  }
+
+  /**
    * Start the chat's context again (pi-durable's reset): the model sees
    * nothing before it, or only `handoff` when given; the transcript keeps
    * everything. While a turn runs it waits for the next boundary.

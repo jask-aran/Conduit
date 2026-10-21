@@ -23,6 +23,7 @@ export const SHORTCUT_CONTEXT_PRIORITY = [
   "shortcut-recorder",
   "confirmation",
   "chat-search.rename",
+  "chat-search.move",
   "chat-search.edit",
   "chat-search.browse",
   "model-selector",

@@ -2,6 +2,7 @@ import { harnessMarkLabelFor } from "../harness-brand";
 import { HarnessMark, ThreadHarnessMark } from "@/components/ui";
 import { Icons } from "@/components/ui";
 import { Dialog } from "@/components/dialog";
+import { Section as DialogSection, Item as DialogItem } from "@/components/ui/popover";
 import { CardActions, CardForm, CardBody, CardRead, CardNote } from "@/components/ui/card";
 import { Button as DialogButton, Input as DialogInput, Field as DialogField } from "@/components/ui/controls";
 import { Backdrop, Button, NavBrand, NavLead, NavFolder, NavFolderRow, NavGroup, NavNote, NavNotice, NavPane, NavRail, NavRailSection, NavRow, NavSkeleton, PillSwitch, RailButton, Segmented, StatusDot } from "@/components/ui";
@@ -16,7 +17,8 @@ import type { UpdateState } from "../main";
 import { androidShell, installedClientKind } from "../platform/installed-client";
 import { api } from "../api/client";
 import { WorkspaceGlyph } from "../project/workspace-appearance";
-import { ChatMenuItems, PlaceMenuItems } from "./item-menus";
+import { ChatMenuItems, MoveTo, PlaceMenuItems } from "./item-menus";
+import { PlaceGlyph } from "../chat/place-picker";
 import type { Pty } from "../remotes/terminal-pane";
 import type { RuntimeStore } from "../state/runtime";
 import { focusFirst, isMobileLayout, MOBILE_LAYOUT_QUERY, restoreFocus } from "./mobile-layout";
@@ -130,6 +132,9 @@ export function Sidebar(props: {
   onAddProject: (input: ProjectInput) => Promise<boolean>;
   onRenameChat: (chat: ChatSummary, project: Project, name: string) => Promise<boolean>;
   onRenameProject: (project: Project, name: string) => Promise<boolean>;
+  onMoveChat: (chat: ChatSummary, source: Project, target: Project) => Promise<void>;
+  onMoveChats: (targets: ChatTarget[], destination: Project) => Promise<string[]>;
+  onMoveProjectChats: (source: Project, target: Project) => Promise<void>;
   onCopyTranscript: (chat: ChatSummary) => Promise<void>;
   onCopyChatLinks: (targets: ChatTarget[]) => Promise<boolean>;
   onDeleteChat: (chat: ChatSummary, project: Project) => Promise<void>;
@@ -359,6 +364,7 @@ export function Sidebar(props: {
   const [rename, setRename] = createSignal<{ type: "chat"; chat: ChatSummary; project: Project } | { type: "project"; project: Project } | { type: "terminal"; terminal: Pty } | null>(null);
   const [renameValue, setRenameValue] = createSignal("");
   const [deleting, setDeleting] = createSignal<DeleteTarget | null>(null);
+  const [moving, setMoving] = createSignal<{ chat: ChatSummary; project: Project } | null>(null);
   let appliedDefaultWorkspacePath = "";
   let handledCommandNonce: number | null = null;
 
@@ -390,6 +396,11 @@ export function Sidebar(props: {
       const project = command.project || currentProject();
       const chat = command.chat || currentChat(project);
       if (project && chat) requestRenameChat(chat, project);
+    }
+    if (command.type === "move-chat") {
+      const project = command.project || currentProject();
+      const chat = command.chat || currentChat(project);
+      if (project && chat) setMoving({ chat, project });
     }
     if (command.type === "rename-folder") { const project = command.project || currentProject(); if (project && project.slug !== "chat") requestRenameProject(project); }
     if (command.type === "delete-project") { const project = command.project || currentProject(); if (project && project.slug !== "chat") setDeleting({ type: "project", project }); }
@@ -702,6 +713,12 @@ export function Sidebar(props: {
     return target?.type === "chats" ? `Delete ${target.targets.length} chats` : "Delete";
   };
 
+  const moveSelectedChats = async (destination: Project) => {
+    const targets = selectedTargets();
+    if (!targets.length) return;
+    applyBulkFailures(await props.onMoveChats(targets, destination));
+  };
+
   /**
    * Long-press opens the menu then synthesizes a click; swallow that click.
    *
@@ -771,8 +788,9 @@ export function Sidebar(props: {
       <SidebarChatTitle title={title} animate={animateTitle} />
     </ContextMenuTrigger>
     <ContextMenuContent>
-      <Show when={selected()} fallback={<ChatMenuItems project={menuProps.project}
+      <Show when={selected()} fallback={<ChatMenuItems project={menuProps.project} places={props.projects}
         onRename={() => requestRenameChat(menuProps.chat, menuProps.project)}
+        onMove={(target) => void props.onMoveChat(menuProps.chat, menuProps.project, target)}
         onCopy={() => void props.onCopyTranscript(menuProps.chat)}
         onOpenBeside={props.onOpenChatBeside ? () => props.onOpenChatBeside?.(menuProps.chat, menuProps.project) : undefined}
         onOpenTerminal={() => props.onOpenTerminal(menuProps.chat, menuProps.project)}
@@ -780,6 +798,7 @@ export function Sidebar(props: {
         pin={isConduitManagedProject(menuProps.project) ? { pinned: isPinned("chat", menuProps.chat.id), onToggle: () => void togglePin("chat", menuProps.chat.id) } : undefined}
         onDelete={() => setDeleting({ type: "chat", chat: menuProps.chat, project: menuProps.project })} />}>
         <MenuSection title={`${selectedTargets().length} chats selected`}>
+          <MoveTo label="Move to folder…" places={props.projects} held={(target) => selectedTargets().every((item) => item.project.id === target.id)} onMove={(target) => void moveSelectedChats(target)} />
           <MenuRow icon={<Icons.Copy />} onSelect={() => void props.onCopyChatLinks(selectedTargets())}>Copy links</MenuRow>
           <MenuRow icon={<Icons.Close />} onSelect={clearSelection}>Clear selection</MenuRow>
         </MenuSection>
@@ -812,13 +831,14 @@ export function Sidebar(props: {
             toggleProject(blockProps.project.id);
           } }}>{blockProps.project.name}</ContextMenuTrigger>
         <ContextMenuContent>
-          <PlaceMenuItems project={blockProps.project}
+          <PlaceMenuItems project={blockProps.project} places={props.projects}
             onNewChat={() => startNewChat(blockProps.project)}
             onOpenMaximized={() => { closeMobile(); props.onOpenProjectMaximized(blockProps.project); }}
             onRename={() => requestRenameProject(blockProps.project)}
             pin={isConduitManagedProject(blockProps.project) ? { pinned: isPinned("project", blockProps.project.id), onToggle: () => void togglePin("project", blockProps.project.id) } : undefined}
             onIdentity={() => { closeMobile(); props.onOpenWorkspaceIdentity(blockProps.project); }}
             onSettings={() => props.onOpenSettings("workspaces", blockProps.project.id)}
+            onMoveChats={(target) => void props.onMoveProjectChats(blockProps.project, target)}
             onDelete={() => setDeleting({ type: "project", project: blockProps.project })} />
         </ContextMenuContent>
       </ContextMenu>}>
@@ -1047,5 +1067,16 @@ export function Sidebar(props: {
     <Dialog alert open={Boolean(deleting())} title={deleteCopy().title} description={deleteCopy().description} onOpenChange={(open) => { if (!open) setDeleting(null); }}
       actions={<><DialogButton variant="ghost" outline onClick={() => setDeleting(null)}>Cancel</DialogButton><DialogButton variant="destructive" onClick={() => void confirmDelete()}>{deleteButtonLabel()}</DialogButton></>} />
 
+    <Dialog open={Boolean(moving())} title="Move chat" description="Choose the working folder for this chat and its attachments." onOpenChange={(open) => { if (!open) setMoving(null); }}
+      actions={<DialogButton type="button" variant="ghost" outline onClick={() => setMoving(null)}>Cancel</DialogButton>}>
+      <DialogSection>
+        <For each={props.projects.filter((item) => item.id !== moving()?.project.id)}>
+          {(target) => <DialogItem icon={<PlaceGlyph project={target} />} onClick={() => { const current = moving(); if (current) void props.onMoveChat(current.chat, current.project, target); setMoving(null); }}>{target.name}</DialogItem>}
+        </For>
+        <Show when={!props.projects.some((item) => item.id !== moving()?.project.id)}>
+          <CardNote>No other folders to move this chat to.</CardNote>
+        </Show>
+      </DialogSection>
+    </Dialog>
   </>;
 }

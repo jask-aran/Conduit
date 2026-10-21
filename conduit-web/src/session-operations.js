@@ -27,3 +27,31 @@ export async function findDeletableSession(registry, projectList, chat) {
     throw error;
   }
 }
+
+/**
+ * Move a Conduit durable agent chat to another project or workspace: a record
+ * and metadata change, not a file move of its history. Its folder (logs,
+ * attachments) follows it, its conversations work in the target from now on,
+ * and its owner becomes the target's device. Chats of other harnesses keep
+ * their history in the harness, tied to a folder, so they do not move.
+ */
+export async function moveDurableChat({ chat, source, target, backends, registry }) {
+  if (chat.backend?.implementation !== "conduit-runtime") {
+    throw Object.assign(new Error("Only Conduit chats can move; this one's history lives in its harness, tied to its folder."),
+      { code: "chat_move_not_supported", status: 409 });
+  }
+  if (chat.projectId === target.id) throw Object.assign(new Error("The chat is already there"), { code: "session_project_unchanged", status: 409 });
+  // Roaming chats belong to no device; one moved onto a device's workspace is owned by it.
+  if (chat.backend?.roaming && !target.local) {
+    throw Object.assign(new Error("A chat that works on any device stays on this server's folders."), { code: "chat_move_not_supported", status: 409 });
+  }
+  await stopSessionProcesses(backends, chat);
+  await registry.move(chat.id, source, target);
+  try {
+    await backends.adapters.get("conduit-runtime").relocate({ opaqueSession: chat.backend?.opaqueSession, project: target });
+  } catch (error) {
+    await registry.move(chat.id, target, source).catch(() => {});
+    throw error;
+  }
+  return registry.metadata(chat.id);
+}
