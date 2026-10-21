@@ -119,7 +119,8 @@ export function ContextBreakdown(props: { chat: ActiveChatStore; bare?: boolean;
   const [opened, setOpened] = createSignal<string | null>(null);
   return <div>
     <Section title={props.bare ? undefined : "Context"} note={props.bare ? undefined : reported() == null ? "Unavailable" : `${Math.round(reported()!)}% used`}>
-      <ContextBar chat={props.chat} />
+      {/* Bare, it opens under the Context row's own bar. */}
+      <Show when={!props.bare}><ContextBar chat={props.chat} /></Show>
       <Show when={contextTokens(usage()) != null}>
         <Readout label={`${compactTokens(contextTokens(usage())!)}${window() ? ` of ${compactTokens(window()!)}` : ""} tokens`} value={cost() ? `$${cost().toFixed(2)}` : undefined} />
       </Show>
