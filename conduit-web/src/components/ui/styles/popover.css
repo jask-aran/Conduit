@@ -89,6 +89,8 @@
 /* An item's detail: a second line under its label (a route's address). */
 .ui-row > .ui-label[data-stacked] { display: flex; flex-direction: column; }
 .ui-label > .ui-detail { overflow: hidden; color: var(--muted-foreground); font: var(--weight-rest) var(--text-caption)/var(--leading-tight) inherit; font-family: inherit; text-overflow: ellipsis; white-space: nowrap; }
+/* Data: a second line that is a value reads in the data face, as a row's meta does. */
+.ui-label > .ui-detail[data-data] { font-family: var(--font-data); }
 /* An app row's own icon, placed straight in the row (not in an icon slot), is sized as one. */
 .ui-row > :is(svg, .workspace-glyph, img):not(.ui-chevron) { width: var(--icon); height: var(--icon); flex: none; }
 .ui-row > .harness-mark { width: var(--icon-sm); height: var(--icon-sm); flex: none; }

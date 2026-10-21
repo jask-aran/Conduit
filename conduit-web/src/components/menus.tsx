@@ -22,12 +22,15 @@ import { PillButton } from "./ui/pill";
  *  under (the safe area), so a menu never runs under a phone's navigation bar. */
 export function edgePadding() {
   const probe = document.createElement("div");
-  probe.style.cssText = "position:fixed;visibility:hidden;pointer-events:none;padding:var(--safe-area-inset-top, env(safe-area-inset-top, 0px)) 0 var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))";
+  probe.style.cssText = "position:fixed;visibility:hidden;pointer-events:none;padding:var(--safe-area-inset-top, env(safe-area-inset-top, 0px)) var(--safe-area-inset-right, env(safe-area-inset-right, 0px)) var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)) var(--safe-area-inset-left, env(safe-area-inset-left, 0px))";
   document.body.append(probe);
   const style = getComputedStyle(probe);
-  const inset = Math.max(parseFloat(style.paddingTop) || 0, parseFloat(style.paddingBottom) || 0);
+  const side = (inset: string) => 8 + (parseFloat(inset) || 0);
+  const padding = { top: side(style.paddingTop), right: side(style.paddingRight), bottom: side(style.paddingBottom), left: side(style.paddingLeft) };
   probe.remove();
-  return 8 + inset;
+  // Each edge its own: one number for all four pushed a menu off a phone's left edge by its status bar's height.
+  // Kobalte passes it to floating-ui, which takes a side each, though Kobalte's type says a number.
+  return padding as unknown as number;
 }
 export const Menu = Object.assign((props: ComponentProps<typeof KMenu>) => <KMenu overflowPadding={edgePadding()} {...props} onOpenChange={(open) => { if (!open) haptic("dismiss"); props.onOpenChange?.(open); }} />, KMenu);
 /** A row's right-click (or long-press, Menu, Shift+F10) menu. Its rows, sections, choices and submenus are the

@@ -879,7 +879,7 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
     <MenuSection title="Shortcuts">
       <Show when={shortcuts().length > 0} fallback={<MenuNote>No shortcuts yet. Add a command you run often.</MenuNote>}>
         <For each={shortcuts()}>{(shortcut, index) =>
-          <MenuRow {...{ textValue: shortcut.label }} detail={`$ ${shortcut.command}`}
+          <MenuRow {...{ textValue: shortcut.label }} detailData detail={`$ ${shortcut.command}`}
             meta={`${shortcut.target === "new" ? "new" : "this"}${shortcut.onStart ? " · start" : ""}`}
             onSelect={() => setEditingShortcut({ ...shortcut })}
             actions={[{ label: `Remove ${shortcut.label}`, icon: <Trash2Icon />, destructive: true, disabled: shortcutSaving(), onSelect: () => removeShortcut(shortcut.id) }]}
@@ -1097,7 +1097,7 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
               <Show when={sessions().length > 0} fallback={<MenuNote>No active terminals in {props.projectName || "Chats"}.</MenuNote>}>
                 <For each={sessions()}>{(session) => {
                   const name = () => session.title || "Shell";
-                  return <MenuRow {...{ textValue: name() }} checked={pty()?.id === session.id} detail={sessionMetadata(session)} onSelect={() => void attachSession(session)} actions={[
+                  return <MenuRow {...{ textValue: name() }} checked={pty()?.id === session.id} detailData detail={sessionMetadata(session)} onSelect={() => void attachSession(session)} actions={[
                     ...(props.onOpenBeside ? [{ label: `Open ${name()} beside`, icon: <Columns2Icon />, onSelect: () => props.onOpenBeside?.(session.id) }] : []),
                     { label: `Rename ${name()}`, icon: <PencilIcon />, onSelect: () => requestRename(session) },
                     { label: `Detach from ${name()}`, icon: <UnplugIcon />, disabled: pty()?.id !== session.id || connectionState() !== "live", onSelect: () => detachSession(session) },
@@ -1168,7 +1168,7 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
           <MenuContent>
             <MenuSection title="Shortcuts">
               <For each={shortcuts()}>{(shortcut) =>
-                <MenuRow {...{ textValue: shortcut.label }} detail={`$ ${shortcut.command}`} disabled={starting() || (shortcut.target === "current" && !writable())} onSelect={() => runShortcut(shortcut)}>{shortcut.label}</MenuRow>
+                <MenuRow {...{ textValue: shortcut.label }} detailData detail={`$ ${shortcut.command}`} disabled={starting() || (shortcut.target === "current" && !writable())} onSelect={() => runShortcut(shortcut)}>{shortcut.label}</MenuRow>
               }</For>
             </MenuSection>
             <Rule />
