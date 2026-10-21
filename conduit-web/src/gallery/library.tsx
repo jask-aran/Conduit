@@ -5,7 +5,7 @@ import { ToolLine, CommitBox, ChangeLedger, ChangeSection, ChangeList, ChangeIte
 import { HistoryList, HistoryRow, HistoryBranch } from "@/components/ui/history";
 import { filesFamilies } from "./files";
 import { TermKeys, TermKey } from "@/components/ui/terminal";
-import { ChevronDownIcon, FocusIcon } from "lucide-solid";
+import { ChevronDownIcon, FocusIcon, LogOutIcon } from "lucide-solid";
 import { TermHeader, TermLead, TermIdentity, TermStatus, TermContext, TermShortcuts, TermShortcut, TermOverflow, TermActions, TermActionLabel, TermState, TermError } from "@/components/ui/terminal";
 import { Button as TermButton } from "@/components/ui/controls";
 import { SettingsIcon } from "lucide-solid";
@@ -452,15 +452,16 @@ function ServerMenuDemo(props: { phone?: boolean }) {
     <LiveRadioItem value="automatic" detail="Tailscale · laptop.ts.net" meta="12 ms">Automatic</LiveRadioItem>
     <LiveRadioItem value="lan" detail="192.168.1.10" meta="3 ms">This network</LiveRadioItem>
     <LiveRadioItem value="internet" away detail="laptop.example.com">Internet</LiveRadioItem>
-    <LiveRadioItem value="tunnel" away detail="remote.example.com" meta="41 ms">Internet</LiveRadioItem>
-    <LiveRadioItem value="unreachable" disabled detail="10.0.0.10">Unavailable</LiveRadioItem>
+    <LiveRadioItem value="tunnel" away detailData detail="remote.example.com" meta="41 ms">Internet</LiveRadioItem>
+    <LiveRadioItem value="unreachable" disabled detailData detail="10.0.0.10">Unavailable</LiveRadioItem>
   </LiveRadioGroup></LiveMenuSection>;
   return <CardBody><LiveMenu>
     <LiveMenu.Trigger as={ServerControl} name="Laptop" detail="Connected · 12 ms" connectivity="online" />
     <LiveMenuContent>
-      <LiveMenuSection title="Servers"><LiveRadioGroup value="laptop"><LiveRadioItem value="laptop" meta="12 ms">Laptop</LiveRadioItem><LiveRadioItem value="office" away>Office</LiveRadioItem><LiveRadioItem value="offline" disabled>Studio</LiveRadioItem></LiveRadioGroup></LiveMenuSection>
-      <LiveSub phone={props.phone}><LiveSubTrigger detail={route()}>Route</LiveSubTrigger><LiveSubContent><Routes /></LiveSubContent></LiveSub>
-      <LiveMenuRow onSelect={() => setAction("Add server")} icon={<PlusIcon />}>Add server</LiveMenuRow><LiveMenuRow onSelect={() => setAction("Sign out")}>Sign out</LiveMenuRow>
+      <LiveMenuSection title="Servers"><LiveRadioGroup value="laptop"><LiveRadioItem value="laptop" meta="12 ms">Laptop</LiveRadioItem><LiveRadioItem value="office" away>Office</LiveRadioItem><LiveRadioItem value="offline" disabled>Studio</LiveRadioItem></LiveRadioGroup>
+      <LiveSub phone={props.phone}><LiveSubTrigger detailData detail={route()}>Route</LiveSubTrigger><LiveSubContent><Routes /></LiveSubContent></LiveSub></LiveMenuSection>
+      <LiveMenuSection title="App"><LiveMenuRow onSelect={() => setAction("Check for updates")} icon={<RefreshCwIcon />}>Check for updates</LiveMenuRow></LiveMenuSection>
+      <LiveMenuSection title="Account"><LiveMenuRow onSelect={() => setAction("Connect a device or server")} icon={<QrCodeIcon />}>Connect a device or server</LiveMenuRow><LiveMenuRow onSelect={() => setAction("Manage settings")} icon={<SettingsIcon />}>Manage settings</LiveMenuRow><LiveMenuRow destructive onSelect={() => setAction("Sign out")} icon={<LogOutIcon />}>Sign out</LiveMenuRow></LiveMenuSection>
     </LiveMenuContent>
   </LiveMenu><CardNote>{action()}</CardNote></CardBody>;
 }
