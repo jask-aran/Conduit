@@ -83,7 +83,8 @@ export function ChatHeader(props: {
     </Show>}
     // A phone's name for the page, and the way into its menu (a desktop's title and rail hold what it holds).
     pill={<Show when={!props.appDashboard} fallback={<HeaderPill label={props.title} icon={<HarnessMark id="conduit" />} />}>
-      <Menu modal={false} placement="bottom" onOpenChange={(open) => { if (!open) setDetailsOpen(false); }}>
+      {/* Opening, the context is read afresh, so Context shows its reading before it is unfolded. */}
+      <Menu modal={false} placement="bottom" onOpenChange={(open) => { if (open) props.chat?.refreshContext(); else setDetailsOpen(false); }}>
         <MenuControl as={HeaderPill} opens label={props.title} icon={placeMark()} aria-label={`${moreLabel()}: ${props.title}`} data-header-more="" />
         <MenuContent width="md" unfolds>
           <MenuSection>
@@ -101,7 +102,7 @@ export function ChatHeader(props: {
               <Rule />
               <MenuSection>
                 <MenuRow closeOnSelect={false} aria-expanded={expanded()} opens meta={used() == null ? "Unavailable" : `${Math.round(used()!)}% used`}
-                  onSelect={() => { if (!expanded()) chat().refreshContext(); setExpanded(!expanded()); }}>Context</MenuRow>
+                  onSelect={() => setExpanded(!expanded())}>Context</MenuRow>
                 <ContextBar chat={chat()} />
                 <Expand open={expanded()}><ContextBreakdown chat={chat()} bare canCompact={chat().capabilities()?.compaction !== false} /></Expand>
               </MenuSection>

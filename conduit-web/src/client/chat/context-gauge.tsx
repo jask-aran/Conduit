@@ -1,4 +1,4 @@
-import { Button, Gauge, Item, Meter, Reading, ReadingFoot, ReadingPart, ReadingParts, ReadingStat, ReadingStats, ReadingTotal, Section } from "@/components/ui";
+import { Button, Gauge, Meter, Reading, ReadingFoot, ReadingPart, ReadingParts, ReadingStat, ReadingStats, ReadingTotal } from "@/components/ui";
 import { ShrinkIcon } from "lucide-solid";
 import { Popover, PopoverContent } from "@/components/menus";
 import { createEffect, createMemo, createSignal, For, on, Show } from "solid-js";
@@ -122,23 +122,18 @@ export function ContextBreakdown(props: { chat: ActiveChatStore; bare?: boolean;
     onKeyDown: (event: KeyboardEvent) => { if (!disabled && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); run(); } } });
   const [opened, setOpened] = createSignal<string | null>(null);
   const threshold = () => compactShare(usage());
-  // The figures beside the parts: the cache, then each of the plan's windows.
-  const stats = () => {
-    const out: { label: string; value: string; detail?: string }[] = [];
-    if (uncached()) out.push({ label: "Cache", value: "—", detail: "no reads yet" });
-    else if (cache() != null) out.push({ label: "Cache", value: `${Math.round(cache()!)}%`, detail: eligible() != null ? `${Math.round(eligible()! * 100)}% reusable` : "of input" });
-    else if (eligible() != null) out.push({ label: "Cache", value: `${Math.round(eligible()! * 100)}%`, detail: "reused" });
-    for (const window of plan()?.windows ?? []) out.push({ label: window.label, value: `${Math.round(window.usedPercent)}%`, detail: window.resetsAt ? `resets ${resetText(window.resetsAt)}` : undefined });
-    return out;
-  };
-  const foot = () => [model(), plan()?.name].filter(Boolean).join(" · ");
+  // The cache is the session's: one line. Unread, it has no figure, so no line.
+  const cacheLine = () => uncached() ? null
+    : cache() != null ? { label: eligible() != null ? `Cache hits · ${Math.round(eligible()! * 100)}% of what could be reused` : "Cache hits, of input", value: `${Math.round(cache()!)}%` }
+    : eligible() != null ? { label: "Cache, of what could be reused", value: `${Math.round(eligible()! * 100)}%` } : null;
+  const foot = () => model();
   return <Reading>
     <Show when={!props.bare}>
       <ReadingTotal label={<strong>Context</strong>} value={reported() == null ? "Unavailable" : `${Math.round(reported()!)}% used`} />
       <ContextBar chat={props.chat} />
     </Show>
     <Show when={contextTokens(usage()) != null}>
-      <ReadingTotal label={`${compactTokens(contextTokens(usage())!)}${window() ? ` of ${compactTokens(window()!)}` : ""}${threshold() != null ? ` · compacts at ${Math.round(threshold()!)}%` : ""}`}
+      <ReadingTotal label={`${compactTokens(contextTokens(usage())!)}${window() ? ` of ${compactTokens(window()!)}` : ""} tokens`}
         value={cost() ? `$${cost().toFixed(2)}` : undefined} />
     </Show>
     <Show when={categories().length || usage()?.breakdown === "loadable"}>
@@ -159,16 +154,22 @@ export function ContextBreakdown(props: { chat: ActiveChatStore; bare?: boolean;
         }}</For>
       </ReadingParts>
     </Show>
-    <Show when={stats().length}>
-      <ReadingStats label="Cache and plan"><For each={stats()}>{(stat) => <ReadingStat label={stat.label} value={stat.value} detail={stat.detail} />}</For></ReadingStats>
-    </Show>
-    <Section>
-      <Item {...act(() => void props.chat.compact(), !props.canCompact || busy())} icon={<ShrinkIcon />} disabled={!props.canCompact || busy()}
-        title={props.canCompact ? "Summarise the conversation so far to free the window" : "This harness cannot be asked to compact"}
-        meta={compactions() ? `${compactions()} so far` : props.canCompact ? undefined : "not supported"}>{props.chat.compacting() ? "Compacting…" : "Compact now"}</Item>
-    </Section>
-    <Show when={foot() || sessionId()}>
+    <Show when={cacheLine()}>{(line) => <ReadingTotal label={line().label} value={line().value} />}</Show>
+    {/* Compaction: where it happens and how often it has, and the one thing to do about it. */}
+    <ReadingFoot action={<Button variant="ghost" outline size="sm" disabled={!props.canCompact || busy()} onClick={() => void props.chat.compact()}
+      title={props.canCompact ? "Summarise the conversation so far to free the window" : "This harness cannot be asked to compact"}>
+      <ShrinkIcon />{props.chat.compacting() ? "Compacting…" : "Compact now"}</Button>}>
+      {[threshold() != null ? `Compacts at ${Math.round(threshold()!)}%` : null, compactions() ? `${compactions()} so far` : null, props.canCompact ? null : "not supported here"].filter(Boolean).join(" · ")}
+    </ReadingFoot>
+    {/* The gauge has no Details beside it: the model and session are named here. */}
+    <Show when={!props.bare && (foot() || sessionId())}>
       <ReadingFoot action={<Show when={sessionId()}><Button variant="ghost" size="sm" title={`Copy session ID ${sessionId()}`} onClick={copySession}>{copied() ? "Copied" : `${sessionId().slice(0, 6)}…${sessionId().slice(-4)}`}</Button></Show>}>{foot()}</ReadingFoot>
+    </Show>
+    {/* The plan's windows are the account's, not the session's: last, under their own name. */}
+    <Show when={plan()}>{(current) =>
+      <ReadingStats title={`Plan${current().name ? ` · ${current().name}` : ""}`}>
+        <For each={current().windows}>{(window) => <ReadingStat label={window.label} value={`${Math.round(window.usedPercent)}%`} detail={window.resetsAt ? `resets ${resetText(window.resetsAt)}` : undefined} />}</For>
+      </ReadingStats>}
     </Show>
   </Reading>;
 }
