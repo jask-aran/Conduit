@@ -14,61 +14,6 @@ export async function waitFor(check, message, { attempts = 160, delayMs = 25 } =
   throw new Error(message);
 }
 
-async function readJsonLines(file) {
-  try {
-    return (await fs.readFile(file, "utf8"))
-      .trim()
-      .split("\n")
-      .filter(Boolean)
-      .map((line) => JSON.parse(line));
-  } catch (error) {
-    if (error.code === "ENOENT") return [];
-    throw error;
-  }
-}
-
-async function writeFakePi(root) {
-  const conduitPi = path.join(root, "conduit-pi");
-  await fs.writeFile(conduitPi, `#!/usr/bin/env node
-if (process.argv.includes("--version")) { console.log("0.84.1"); process.exit(0); }
-if (process.argv.includes("--help")) { console.log("--mode --session --append-system-prompt --skill --approve --no-approve"); process.exit(0); }
-const fs = require("node:fs");
-const readline = require("node:readline");
-const commandLog = process.env.TEST_PI_COMMAND_LOG;
-const eventLog = process.env.TEST_PI_EVENT_LOG;
-const input = readline.createInterface({ input: process.stdin });
-let eventOffset = 0;
-input.on("line", (line) => {
-  const command = JSON.parse(line);
-  fs.appendFileSync(commandLog, JSON.stringify({ pid: process.pid, command }) + "\\n");
-  // Pi answers transcript reads itself, and the prompt path waits on one before
-  // it sends anything. Tests drive the interesting exchanges through the event
-  // log; answering this one here keeps them from stalling behind it.
-  if (command.id && command.type === "get_entries") {
-    process.stdout.write(JSON.stringify({
-      id: command.id, type: "response", command: "get_entries", success: true, data: { entries: [], leafId: null },
-    }) + "\\n");
-  }
-});
-function flushEvents() {
-  let lines = [];
-  try { lines = fs.readFileSync(eventLog, "utf8").split("\\n").filter(Boolean); }
-  catch (error) { if (error.code !== "ENOENT") throw error; }
-  while (eventOffset < lines.length) {
-    const row = JSON.parse(lines[eventOffset]);
-    eventOffset += 1;
-    if (row.pid && row.pid !== process.pid) continue;
-    process.stdout.write(JSON.stringify(row.event) + "\\n");
-  }
-  setTimeout(flushEvents, 5);
-}
-
-flushEvents();
-`);
-  await fs.chmod(conduitPi, 0o755);
-  return { conduitPi };
-}
-
 async function writeFakeCodex(root, wsModulePath) {
   const command = path.join(root, "codex");
   await fs.writeFile(command, `#!/usr/bin/env node
@@ -232,15 +177,9 @@ function deferredEvent(events, predicate, timeoutMs) {
   });
 }
 
-/**
- * A black-box Conduit fixture: production server process, public HTTP/WS/SSE
- * contracts, and only the Pi executable replaced by a controllable RPC peer.
- */
+/** A black-box Conduit fixture with the Codex executable replaced by a controllable app-server. */
 export async function startConduitHarness({ env = {} } = {}) {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-harness-"));
-  const commandLog = path.join(root, "pi-commands.jsonl");
-  const eventLog = path.join(root, "pi-events.jsonl");
-  const { conduitPi } = await writeFakePi(root);
   const codexCommand = await writeFakeCodex(root, createRequire(import.meta.url).resolve("ws"));
   const child = spawn(process.execPath, ["src/server.js"], {
     cwd: path.resolve(import.meta.dirname, "../.."),
@@ -270,11 +209,8 @@ export async function startConduitHarness({ env = {} } = {}) {
       CONDUIT_VOICE_MODEL_ROOT: path.join(root, "voice-models"),
       CONDUIT_VOICE_RECORDINGS_ROOT: path.join(root, "voice-recordings"),
       CONDUIT_PI_AGENT_DIR: path.join(root, "pi"),
-      CONDUIT_PI_COMMAND: conduitPi,
       CONDUIT_CODEX_COMMAND: codexCommand,
       CONDUIT_WORKSPACE_ALLOWLIST: root,
-      TEST_PI_COMMAND_LOG: commandLog,
-      TEST_PI_EVENT_LOG: eventLog,
       ...env,
     },
   });
@@ -316,36 +252,11 @@ export async function startConduitHarness({ env = {} } = {}) {
       throw error;
     }
   };
-  const pi = {
-    commands: () => readJsonLines(commandLog),
-    async waitForCommand(type, { after = 0 } = {}) {
-      let found = null;
-      await waitFor(async () => {
-        const commands = await readJsonLines(commandLog);
-        found = commands.slice(after).find((row) => row.command.type === type) || null;
-        return Boolean(found);
-      }, `Pi did not receive ${type}`);
-      return found;
-    },
-    async emit(event, { pid = null } = {}) {
-      await fs.appendFile(eventLog, `${JSON.stringify({ pid, event })}\n`);
-    },
-    async reply(command, data, { success = true } = {}) {
-      await pi.emit({
-        id: command.command.id,
-        type: "response",
-        command: command.command.type,
-        success,
-        ...(success ? { data } : { error: String(data || "Pi RPC request failed") }),
-      }, { pid: command.pid });
-    },
-  };
   const streams = new Set();
   return {
     root,
     origin,
     request,
-    pi,
     async createProject(name) {
       const response = await request("/v0/projects", { method: "POST", body: JSON.stringify({ name }) });
       if (!response.ok) throw new Error(`Could not create project: ${response.status} ${await response.text()}`);

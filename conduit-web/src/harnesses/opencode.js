@@ -12,7 +12,6 @@ export const manifest = {
   discovery: "machine",
   warm: "process",
   nameGeneration: "backend",
-  suppliesMessageIds: true,
   restartDrain: false,
   drive: true,
   profile: true,

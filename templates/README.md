@@ -1,104 +1,72 @@
-# Conduit Pi templates
+# Conduit agent profiles
 
-Each child directory is a versioned Conduit launch preset (a **profile** in the
-web UI). `template.json` selects the system prompt, tools, model scope,
-extensions, skills, and prompt templates passed explicitly to Pi.
+Each child directory contains a versioned profile for the Conduit durable agent.
+`template.json` selects the system prompt, tools, model scope, extensions, skills,
+and prompt templates. The server loads these files with
+`scripts/pi-runtime.mjs` and applies the selected profile to the pi-durable
+conversation. It does not start a classic Pi process.
 
 Shipped profiles:
 
 | id | Label | Role |
-|----|--------|------|
-| `assistant` | Assistant | Workspace files, code-mode shell, and model-agnostic web research |
-| `coding` | Coding | Full tools + git/web/develop skills for real folders, plus Pi's `codemode` (the code mode test bed) |
-| `runtime` | Runtime | Special one-off admin chat for templates and Pi package management |
+|----|-------|------|
+| `assistant` | Assistant | Workspace tools and model-agnostic web research |
+| `coding` | Coding | Workspace tools, development skills and pi-durable codemode |
+| `runtime` | Runtime | Special chat for Conduit runtime management |
 
-`templates/chat-naming/SYSTEM.md` is the default prompt for the separate chat-title service. It is editable in Settings but is not a selectable profile.
+`templates/chat-naming/SYSTEM.md` is the prompt for the separate chat-title
+service. Settings can edit it, but it is not a selectable profile.
 
-## Discovery and durable identity
+## Discovery and identity
 
-Conduit discovers every `templates/*/template.json` at server start. Settings →
-Profiles chooses the default for new chats (`data/preferences.json`). Each chat
-stores `templateId` and `templateVersion` in `data/sessions.json`. Missing
-identity is stamped with the app (or project) default the next time the runtime
-touches the chat. Resume reloads the template by id from disk.
+Conduit discovers each `templates/*/template.json` at server start. Settings →
+Profiles selects the default for new chats (`data/preferences.json`). Each chat
+stores `templateId` and `templateVersion` in `data/sessions.json`. On open, the
+server loads the current template and configures the durable conversation.
 
-Assistant and Coding are ordinary selectable profiles; chats saved under the
-retired Code Mode profile open as Coding. Runtime is special: it
-cannot be an app or project default and does not appear in ordinary profile
-switching. Settings → Profiles shows its details separately and provides
-**Open runtime chat**; each activation creates a fresh management chat.
+Assistant and Coding are selectable profiles. Runtime is special: it cannot be
+a global or workspace default and does not appear in ordinary profile
+switching. Settings → Profiles provides **Open runtime chat**, which creates a
+new management chat.
+
+The server converts classic Pi chats at startup. It reads the active JSONL
+branch, writes it to a durable conversation, and replaces the stored session
+path. The JSONL parser remains for this one-time conversion and legacy cleanup;
+new turns use the durable conversation store.
 
 ## Workspaces
 
-Projects may be:
+Projects may be managed folders, linked folders, or cloned repositories. These
+are catalog origins; they do not select a different agent. Each workspace may
+inherit the global profile or set its own default.
 
-- **managed** — directory under `data/chat/files/<slug>`
-- **linked** — allow-listed absolute path already on the machine (unregister does not delete files)
-- **cloned** — `gh repo clone` when available for GitHub sources, otherwise
-  `git clone`, into a user-selected allow-listed absolute path
-
-These are catalog origins, not separate agent products. The interface presents
-linked and cloned roots uniformly as non-owning Workspaces; a clone is
-functionally a checkout followed by Workspace registration, and unregistering
-does not delete either working tree.
-
-Creating a Workspace chat immediately opens a draft with the app default profile,
-unless Settings → Workspaces assigns that Workspace an explicit override.
-Host Pi is also available as a synthetic override while detected; failure clears
-that override back to global inheritance.
-The composer uses one profile selector. Ordinary profiles launch the bundled
-Isolated Pi with the private `data/pi` home, with the selected profile's derived
-choice uses the host executable/home/resources plus the additive resources under
-`templates/conduit-workspace/`. Host Pi does not load an ordinary tracked
-profile, and its mandatory bridge remains hidden from profile selection. The
-choice is mutable until the first prompt starts Pi and immutable afterward; any
-required Host project trust decision is requested on first send.
-
-Allow-list roots come from `CONDUIT_WORKSPACE_ALLOWLIST` (default: home,
-repository root, and the managed files root). Browser-supplied paths never become
-Pi `cwd` until the server resolves and allow-lists them.
+The durable agent uses the selected workspace as its working directory. For a
+folder on a paired device, file and shell calls run through that device's node.
+The browser remains connected to the head server.
 
 ## Manifest fields
 
 Paths resolve relative to the template directory:
 
 - `id`, `version` — required identity
-- `label`, `description`, `posture` — UI metadata
+- `label`, `description`, `posture` — profile details
 - `systemPrompt` — defaults to `SYSTEM.md`
-- `tools` — Pi `--tools` allowlist
-- `models` — fallback when Pi has no saved `enabledModels`
-- `extensions`, `skills`, `promptTemplates` — explicit resource paths
+- `tools` — tools available to the profile
+- `models` — model scope when `data/pi/settings.json` has no enabled-model list
+- `extensions`, `skills`, `promptTemplates` — profile resources
 
-Templates launch with `--no-approve` and ambient resources disabled. Treat tool
-lists and resources as trusted executable configuration.
+The Assistant and Coding profiles load the `pi-web-access` extension. Coding
+also uses pi-durable's codemode extension. Skills appear as `/skill:<name>`
+commands and are included in the profile instructions.
 
-The Assistant and Coding profiles explicitly load the pinned `pi-web-access`
-extension. Their file tools and shell are Pi-native tools, guided by the active-working-
-directory instruction in `SYSTEM.md`; this profile does not provide an
-OS-level workspace sandbox. Conduit resolves a model profile for each
-web-search-enabled process: OpenAI and Codex models use OpenAI search followed
-by Brave, and other models use Brave. The derived routing file lives under
-`data/pi/`; Pi credentials, model state, and session files stay
-in the canonical `data/pi` directory. Conduit sets the extension workflow to
-`none` so research does not open Pi's curator UI.
-
-Assistant, Coding, and Host Pi sessions receive the `bin` directory from the
-shared uv environment under `working-files/.venv` at the front of `PATH`.
-Agents use the normal `python` command in the session working directory.
-Conduit builds the environment during `conduit-server setup` (or `start-conduit.sh
-setup` in a checkout). It is shared by all Workspaces and does not create files
-inside them. Setup installs pinned uv and its managed Python under
-`~/.conduit/data/toolchains/`; neither tool must exist on the host.
+Provider credentials and model settings stay under the configured agent
+settings directory, normally `data/pi`. Web-search routing may use a derived
+model file there. Shell tools prepend `working-files/.venv/bin` (or `Scripts` on
+Windows) to `PATH`; this is done by `buildManagedToolEnvironment`. The
+environment is shared by workspaces and does not write inside them.
 
 ## Managing plugins and skills
 
-Use a **Runtime** profile chat (Settings → Profiles → Open runtime chat) or the
-terminal with `PI_CODING_AGENT_DIR=data/pi`:
-
-```bash
-pi install npm:some-package
-```
-
-Then add the installed entry file or skill directory to the relevant
-`template.json`. There is no database-backed marketplace; the repository remains
-the source of truth.
+Add an extension entry file or skill directory to the relevant `template.json`.
+Keep these profile resources in the repository. There is no database-backed
+marketplace.

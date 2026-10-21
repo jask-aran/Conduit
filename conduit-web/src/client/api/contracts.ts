@@ -238,9 +238,8 @@ export interface Attachment {
 /**
  * A block of a message the server has stated, in Conduit's spelling.
  *
- * Not the live generation's block, which is still modelled in Pi's -- `type`,
- * `toolCall`, `arguments` -- and converted into it as the delta channel
- * arrives. A stated transcript is read as stated.
+ * Not the live generation's block, which is converted from the active backend
+ * as the delta channel arrives. A stated transcript is read as stated.
  */
 export interface ContentBlock {
   kind: string;
@@ -262,7 +261,7 @@ export interface Message {
   generationId?: string | null;
   role: "user" | "assistant" | "system" | "tool";
   content?: string;
-  /** Raw Pi content blocks (text / thinking / toolCall) — source of persisted reasoning. */
+  /** Raw provider content blocks (text / thinking / toolCall) — source of persisted reasoning. */
   blocks?: ContentBlock[];
   stopReason?: string;
   errorMessage?: string | null;
@@ -350,11 +349,10 @@ export interface ToolItem {
   kind?: ToolKind;
   /** What it acted on, in one line, as the adapter states it. */
   subject?: string;
-  /** The tools a script step called, in order (Pi's codemode). */
+  /** The tools a script step called, in order. */
   calls?: ToolCallStep[];
   input?: unknown;
   output?: unknown;
-  outputDeferred?: boolean;
   outputSize?: number;
   isError?: boolean;
   cancelled?: boolean;
@@ -393,7 +391,7 @@ export interface ModelState {
   models: ModelOption[];
   model: string;
   thinkingLevel: string;
-  /** Conduit-owned per-chat preference; Pi itself keeps only one active level. */
+  /** Conduit-owned per-chat preference. */
   modelThinkingLevels?: Record<string, string>;
   defaultModel?: string;
   defaultThinkingLevel?: string;
@@ -421,14 +419,6 @@ export interface Template {
   /** The harness this profile elects. Capabilities are declared there, not here. */
   implementation?: string;
   drive?: boolean;
-}
-
-export interface Installation {
-  id: string;
-  label: string;
-  version?: string;
-  available: boolean;
-  reason?: string;
 }
 
 export type ProcessState = "absent" | "starting" | "ready" | "failed";
@@ -602,7 +592,6 @@ export interface LiveRecord {
   cacheStats?: CacheStats | null;
   binaryVersion?: string;
   trustPosture?: string;
-  sessionFile?: string;
   modelRecovery?: {
     from: string;
     to: string;

@@ -12,7 +12,7 @@ import { ModelRegistry } from "@earendil-works/pi-coding-agent";
  * arguments and a context. This hands the extension an API that keeps only
  * `registerTool` and `exec`, and runs each tool it registered as a pi-durable
  * tool with a headless context: no UI, the conversation's working directory
- * and model, and the Conduit Pi agent's model registry for anything the tool
+ * and model, and the Conduit durable agent's model registry for anything the tool
  * asks a model itself.
  *
  * `replaySafe` names the tools that may simply run again after a restart

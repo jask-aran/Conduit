@@ -21,7 +21,7 @@ import { saveTabFrost, tabFrost } from "../preferences/tab-frost";
 import { saveTranscriptFont, TRANSCRIPT_FONT_OPTIONS, transcriptFont, type TranscriptFont } from "../preferences/transcript-font";
 import { saveTerminalFont, TERMINAL_FONT_OPTIONS, terminalFont, type TerminalFont } from "../preferences/terminal-font";
 import { saveStreamFade, saveStreamMathFade, STREAM_FADE_OPTIONS, streamFadeMs, streamMathFade } from "../preferences/stream-fade";
-import type { Installation, Project, Template, VoiceExecutionCatalogueView, VoiceExecutionProfile, VoiceLocalSelection, VoiceServerSettings } from "../api/contracts";
+import type { Project, Template, VoiceExecutionCatalogueView, VoiceExecutionProfile, VoiceLocalSelection, VoiceServerSettings } from "../api/contracts";
 import type { ModelSettings } from "../state/model-settings";
 import { MAX_SIDEBAR_CHAT_LIMIT, MIN_SIDEBAR_CHAT_LIMIT } from "../navigation/sidebar-preferences";
 import type { ShortcutManager } from "../shortcuts/shortcut-manager";
@@ -74,7 +74,6 @@ const label = (section: Section) => sectionLabels[section];
 interface RuntimeSettings {
   maxLiveProcesses: number;
   maxGeneratingProcesses: number;
-  idleProcessTtlMs: number;
   liveCount?: number;
   generatingCount?: number;
 }
@@ -167,12 +166,11 @@ const sameVoiceSelection = (left: VoiceLocalSelection | null | undefined, right:
   && left.segmentation === right.segmentation);
 // The runtime fields as typed, checked against the ranges the server keeps
 // them in (runtime-settings.js), which it would otherwise clamp to silently.
-type RuntimeDraft = { live: string; generating: string; ttl: string };
-const RUNTIME_LIMITS = { live: [1, 32], generating: [1, 8], ttl: [30, 3600] } as const;
+type RuntimeDraft = { live: string; generating: string };
+const RUNTIME_LIMITS = { live: [1, 32], generating: [1, 8] } as const;
 const runtimeDraftOf = (settings: RuntimeSettings): RuntimeDraft => ({
   live: String(settings.maxLiveProcesses),
   generating: String(settings.maxGeneratingProcesses),
-  ttl: String(Math.round(settings.idleProcessTtlMs / 1000)),
 });
 const runtimeFieldError = (draft: RuntimeDraft, field: keyof RuntimeDraft) => {
   const [min, max] = RUNTIME_LIMITS[field];
@@ -208,9 +206,6 @@ export function Settings(props: {
   templatesLoading: boolean;
   defaultTemplateId: string;
   projects: Project[];
-  installations: Installation[];
-  installationsLoading: boolean;
-  onInstallationsChange: (items: Installation[]) => void;
   onDefaultTemplateChange: (id: string) => Promise<unknown>;
   onWorkspaceDefaultChange: (id: string, templateId: string | null) => Promise<Project>;
   markdownRenderer: MarkdownRendererId;
@@ -271,7 +266,7 @@ export function Settings(props: {
   /** The list is a screen of its own only when there is no room for both. */
   const showingIndex = () => narrow() && browsingSections();
   const [runtime, setRuntime] = createSignal<RuntimeSettings | null>(null);
-  const [runtimeDraft, setRuntimeDraft] = createSignal<RuntimeDraft>({ live: "", generating: "", ttl: "" });
+  const [runtimeDraft, setRuntimeDraft] = createSignal<RuntimeDraft>({ live: "", generating: "" });
   const [runtimeStatus, setRuntimeStatus] = createSignal<"idle" | "loading" | "ready" | "error">("idle");
   const [runtimeError, setRuntimeError] = createSignal("");
   const runtimeAutosave = createAutosave<RuntimeSettings>({
@@ -1062,8 +1057,8 @@ export function Settings(props: {
   const editRuntime = (field: keyof RuntimeDraft, text: string) => {
     const draft = { ...runtimeDraft(), [field]: text };
     setRuntimeDraft(draft);
-    if ((["live", "generating", "ttl"] as const).some((key) => runtimeFieldError(draft, key))) return runtimeAutosave.hold();
-    runtimeAutosave.edit({ maxLiveProcesses: Number(draft.live), maxGeneratingProcesses: Number(draft.generating), idleProcessTtlMs: Number(draft.ttl) * 1000 });
+    if ((["live", "generating"] as const).some((key) => runtimeFieldError(draft, key))) return runtimeAutosave.hold();
+    runtimeAutosave.edit({ maxLiveProcesses: Number(draft.live), maxGeneratingProcesses: Number(draft.generating) });
   };
   // Each section saved as it is edited, and how its header says so. Leaving
   // the section or closing Settings sends what is waiting rather than
@@ -1232,18 +1227,12 @@ export function Settings(props: {
                 <SettingGroup title="Agent processes">
                   <SettingLine label="Warm processes" state={<><Show when={runtimeFieldError(runtimeDraft(), "live")} fallback={<>{runtime()!.liveCount || 0} live</>}>{(message) => message()}</Show></>}><Input id="warm-processes" type="number" inputMode="numeric" value={runtimeDraft().live} aria-invalid={Boolean(runtimeFieldError(runtimeDraft(), "live")) || undefined} onInput={(event) => editRuntime("live", event.currentTarget.value)} /></SettingLine>
                   <SettingLine label="Concurrent generations" state={<><Show when={runtimeFieldError(runtimeDraft(), "generating")} fallback={<>{runtime()!.generatingCount || 0} generating</>}>{(message) => message()}</Show></>}><Input id="generations" type="number" inputMode="numeric" value={runtimeDraft().generating} aria-invalid={Boolean(runtimeFieldError(runtimeDraft(), "generating")) || undefined} onInput={(event) => editRuntime("generating", event.currentTarget.value)} /></SettingLine>
-                  <SettingLine label="Idle timeout (s)" state={<><Show when={runtimeFieldError(runtimeDraft(), "ttl")} fallback={null}>{(message) => message()}</Show></>}><Input id="idle-ttl" type="number" inputMode="numeric" value={runtimeDraft().ttl} aria-invalid={Boolean(runtimeFieldError(runtimeDraft(), "ttl")) || undefined} onInput={(event) => editRuntime("ttl", event.currentTarget.value)} /></SettingLine>
                 </SettingGroup>
               </Show>
-              <SettingGroup title="Pi">
-                <Show when={!props.installationsLoading} fallback={<SettingLine plain label="Checking…"></SettingLine>}>
-                  <For each={props.installations}>{(item) => <SettingLine plain label={item.label} title={item.available ? undefined : item.reason || (item as Installation & { error?: string }).error || undefined}><SettingValue mono>{item.available ? item.version ? `Pi ${item.version}` : "Available" : "Unavailable"}</SettingValue></SettingLine>}</For>
-                </Show>
-              </SettingGroup>
             </>
           </Show>
           <Show when={section() === "workspaces"}>
-            <Show when={!props.templatesLoading && !props.installationsLoading} fallback={<SettingLoading>Loading workspace settings…</SettingLoading>}><Show when={workspaceProjects().find((workspace) => workspace.id === workspaceId())} fallback={<SettingNote>This workspace is not available.</SettingNote>}>{(workspace) => <SettingGroup title={workspace().name}><SettingNote>{workspace().workingRoot}</SettingNote><SettingNote>Override: {workspaceDefaultLabel(workspace()).startsWith("Inherit") ? "None" : workspaceDefaultLabel(workspace())}</SettingNote><SettingLine label="Default profile"><Select id={`workspace-default-profile-${workspace().id}`} aria-label={`${workspace().name} default profile`} value={workspace().defaultTemplateId || ""} onChange={(event) => void saveWorkspace(workspace(), event.currentTarget.value || null)}>
+            <Show when={!props.templatesLoading} fallback={<SettingLoading>Loading workspace settings…</SettingLoading>}><Show when={workspaceProjects().find((workspace) => workspace.id === workspaceId())} fallback={<SettingNote>This workspace is not available.</SettingNote>}>{(workspace) => <SettingGroup title={workspace().name}><SettingNote>{workspace().workingRoot}</SettingNote><SettingNote>Override: {workspaceDefaultLabel(workspace()).startsWith("Inherit") ? "None" : workspaceDefaultLabel(workspace())}</SettingNote><SettingLine label="Default profile"><Select id={`workspace-default-profile-${workspace().id}`} aria-label={`${workspace().name} default profile`} value={workspace().defaultTemplateId || ""} onChange={(event) => void saveWorkspace(workspace(), event.currentTarget.value || null)}>
                 <option value="">Inherit global ({props.templates.find((item) => item.id === props.defaultTemplateId)?.label || "General"})</option>
                 <For each={props.templates.filter((item) => item.defaultable !== false)}>{(item) => <option value={item.id}>{item.label}</option>}</For>
               </Select></SettingLine></SettingGroup>}</Show></Show>
@@ -1426,15 +1415,15 @@ export function Settings(props: {
               <Show when={chatGptError()}><SettingNote tone="error">{chatGptError()}</SettingNote></Show>
             </SettingGroup>
             <SettingGroup title="Provider accounts">
-              <Show when={authUnavailable()}><SettingNote tone="error">Set a Conduit password with <code>node scripts/conduit-auth.mjs set-password</code>, then sign in to manage Pi credentials here.</SettingNote></Show>
+              <Show when={authUnavailable()}><SettingNote tone="error">Set a Conduit password with <code>node scripts/conduit-auth.mjs set-password</code>, then sign in to manage agent credentials here.</SettingNote></Show>
               <Show when={authError() && !authUnavailable()}><SettingNote tone="error">{authError()}</SettingNote></Show>
               <Show when={!authUnavailable() && authLoading() && !authProviders().length} fallback={<Show when={!authUnavailable()}>
-                <SettingLine label="Provider" title="Credentials are stored only in Conduit's pinned Pi runtime."><Select id="pi-auth-provider" aria-label="Pi authentication provider" value={authProviderId()} onChange={(event) => setAuthProviderId(event.currentTarget.value)}><For each={authProviders()}>{(provider) => <option value={provider.id}>{provider.label}</option>}</For></Select></SettingLine>
+                <SettingLine label="Provider" title="Credentials are stored only in Conduit durable agent."><Select id="pi-auth-provider" aria-label="Model provider" value={authProviderId()} onChange={(event) => setAuthProviderId(event.currentTarget.value)}><For each={authProviders()}>{(provider) => <option value={provider.id}>{provider.label}</option>}</For></Select></SettingLine>
                 <Show when={authProviders().find((provider) => provider.id === authProviderId())?.oauth}>
                   <SettingLine plain label="Sign in"><Button variant="ghost" size="sm" disabled={authLoading() || Boolean(authAttempt()?.active)} onClick={() => void startOAuth()}>{authLoading() ? <Spinner /> : null}Sign in with browser</Button></SettingLine>
                 </Show>
                 <SettingLine plain label="API key">
-                    <Input id="pi-api-key" aria-label="API key" type="password" autocomplete="new-password" data-1p-ignore data-lpignore="true" data-bwignore value={apiKey()} onInput={(event) => setApiKey(event.currentTarget.value)} placeholder="Stored in Conduit Pi only" onKeyDown={(event) => { if (event.key === "Enter" && apiKey()) void saveApiKey(); }} />
+                    <Input id="pi-api-key" aria-label="API key" type="password" autocomplete="new-password" data-1p-ignore data-lpignore="true" data-bwignore value={apiKey()} onInput={(event) => setApiKey(event.currentTarget.value)} placeholder="Stored in the Conduit durable agent" onKeyDown={(event) => { if (event.key === "Enter" && apiKey()) void saveApiKey(); }} />
                     <Show when={apiKey()}><Button size="sm" disabled={authLoading()} onClick={() => void saveApiKey()}>{authLoading() ? <Spinner /> : null}Save</Button></Show>
                 </SettingLine>
                 <Show when={authAttempt()?.owned}>
@@ -1448,7 +1437,7 @@ export function Settings(props: {
                   <Show when={authAttempt()!.prompt && authAttempt()!.prompt!.type !== "select"}><SettingLine plain label={authAttempt()!.prompt!.message}><Input id="pi-auth-response" aria-label={authAttempt()!.prompt!.message} type="text" autocomplete="off" value={authResponse()} onInput={(event) => setAuthResponse(event.currentTarget.value)} placeholder={authAttempt()!.prompt!.placeholder || ""} onKeyDown={(event) => { if (event.key === "Enter") void answerAuthPrompt(authResponse()); }} /><Button size="sm" disabled={authLoading() || !authResponse().trim()} onClick={() => void answerAuthPrompt(authResponse())}>Continue</Button></SettingLine></Show>
                   <Show when={authAttempt()!.error}><SettingNote tone="error">{authAttempt()!.error}</SettingNote></Show>
                 </Show>
-                <For each={authProviders().filter((provider) => provider.auth.configured)}>{(provider) => <SettingLine plain label={provider.label} state={<>{provider.auth.source === "stored" ? "stored" : provider.auth.source === "environment" ? "environment" : "Pi config"}</>} title={provider.auth.source === "stored" ? "Credential stored in Conduit Pi" : provider.auth.source === "environment" ? "Credential available from the server environment" : "Credential managed by Pi configuration"}>
+                <For each={authProviders().filter((provider) => provider.auth.configured)}>{(provider) => <SettingLine plain label={provider.label} state={<>{provider.auth.source === "stored" ? "stored" : provider.auth.source === "environment" ? "environment" : "Agent settings"}</>} title={provider.auth.source === "stored" ? "Credential stored for the Conduit durable agent" : provider.auth.source === "environment" ? "Credential available from the server environment" : "Credential managed by the agent settings"}>
                   <Show when={provider.auth.removable} fallback={<span />}><Button variant="ghost" size="sm" disabled={authLoading()} onClick={() => void removePiAuth(provider.id)}>Remove</Button></Show>
                 </SettingLine>}</For>
               </Show>}><SettingLine plain label="Provider" state={<>loading…</>}><span /></SettingLine></Show>

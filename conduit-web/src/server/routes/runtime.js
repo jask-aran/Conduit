@@ -97,7 +97,6 @@ export function registerRuntimeRoutes(app, {
   app.get("/v0/capabilities", (_request, response) => response.json({
     runtime: "pi-rpc", create: true, resume: true, projects: true,
     sessionManagement: true, chatIdentity: "conduit", attachments: "raw-http",
-    partialContinue: config.enablePartialContinue,
     stream: "websocket", processOwner: "conduit-server", sessionAuthority: "pi-jsonl",
     globalRuntime: "sse",
     templates: true,

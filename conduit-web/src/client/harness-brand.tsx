@@ -6,7 +6,6 @@ export function harnessStatusLabel(status: HarnessSummary["status"]): string {
 
 const HARNESS_LABELS: Record<string, string> = {
   conduit: "Conduit",
-  pi: "Pi",
   codex: "Codex",
   "chatgpt-web": "ChatGPT Web",
   "claude-code": "Claude Code",
@@ -22,7 +21,7 @@ const HARNESS_LABELS: Record<string, string> = {
  * built-in one.
  */
 const IMPLEMENTATION_LABELS: Record<string, string> = {
-  conduit_pi: "Conduit Pi",
+  "conduit-runtime": "Conduit durable agent",
   codex: "Codex",
   "chatgpt-web": "ChatGPT Web",
   "claude-code": "Claude Code",

@@ -1,13 +1,12 @@
 import { implementationsOf, MANIFESTS } from "./harnesses/index.js";
 export { conduitPiSessionFile, opaqueSessionFor } from "./backend-session.js";
 
-// Harness-backed profiles come from the manifests; Pi profiles come from the
-// template catalogue, which is why the built-in Pi manifest is not one of these.
+// Harness-backed profiles come from manifests; Conduit profiles come from
+// the template catalogue.
 const PROFILE_MANIFESTS = MANIFESTS.filter((manifest) => manifest.profile);
 
 export function harnessIdForImplementation(implementation, installationId = "") {
-  // Conduit's own chats, on the durable agent or (before it) classic Pi.
-  if (implementation === "conduit_pi" || implementation === "conduit-runtime") return "conduit";
+  if (implementation === "conduit-runtime") return "conduit";
   return implementation || "conduit";
 }
 
@@ -20,7 +19,7 @@ export function templateBackend(template) {
     protocol: "native_api", implementation: "conduit-runtime", installationId: "conduit-runtime", opaqueSession: null };
 }
 
-// Pi identity metadata only. Runtime dispatch still belongs to PiManager.
+// Legacy identity used only while the startup converter reads classic sessions.
 export function piBackendFor(chat) {
   return {
     profileId: chat.templateId || chat.runtime?.profileId || null,

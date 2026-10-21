@@ -1,43 +1,30 @@
 import path from "node:path";
 import { conduitPiSessionFile } from "../../backend-session.js";
-import { usageFromRequests } from "../../cache-stats.js";
-import { piPlanUsage } from "../../plan-usage.js";
 import { chatView, isChatId } from "../../chat-store.js";
-import { applyMessageIds, entryMessageRows } from "../../message-ids.js";
 import { applyTranscriptOps } from "../../transcript-fold.js";
 import {
-  projectSessionEntries,
   removeSessionFamily,
   sessionFamilyFiles,
-  toolsFromEntries,
-  transcriptFromEntries,
   transcriptFromMessages,
 } from "../../session-store.js";
 import {
   findDeletableSession,
-  moveRegisteredChat,
   sessionDirectoryForChat,
   sessionDirectoryRootForChat,
-  stopSessionFamilyProcesses,
   stopSessionProcesses,
 } from "../../session-operations.js";
 
 export function registerSessionRoutes(app, {
-  messageIds,
   attachments,
   backends,
   chatLogs,
   config,
   drafts,
   findChatContext,
-  findRegisteredSession,
   lifecycle,
   sessionNames,
   projects,
-  readSessionPage,
   registry,
-  piModelWindow,
-  piCompactReserve,
 }) {
   /**
    * What the server believes this chat holds, not only what the harness wrote.
@@ -69,10 +56,6 @@ export function registerSessionRoutes(app, {
   };
 
   async function transcriptFor(context) {
-    if (context.chat.backend?.implementation === "conduit_pi") {
-      const session = await findRegisteredSession(context.chat.id);
-      if (session) return transcriptFromEntries(session.entries).trim();
-    }
     const projection = await backends.forChat(context.chat).readTranscript({
       chatId: context.chat.id,
       opaqueSession: context.chat.backend?.opaqueSession,
@@ -92,26 +75,6 @@ export function registerSessionRoutes(app, {
       const live = backends.getByChatId?.(context.chat.id);
       if (live?.contextUsage?.tokens != null) {
         return response.json({ contextUsage: live.contextUsage, sessionStats: live.sessionStats || null, cacheStats: live.cacheStats || live.cache?.stats || null });
-      }
-      if (context.chat.backend?.implementation === "conduit_pi") {
-        const session = await findRegisteredSession(context.chat.id);
-        const requests = [];
-        let model = null;
-        let cost = 0;
-        for (const entry of session?.entries || []) {
-          if (entry.type === "compaction" || entry.type === "branch_summary") { requests.push(null); continue; }
-          const message = entry.type === "message" && entry.message?.role === "assistant" ? entry.message : null;
-          if (!message?.usage) continue;
-          if (message.provider && message.model) model = `${message.provider}/${message.model}`;
-          cost += Number(message.usage.cost?.total) || 0;
-          requests.push({ input: message.usage.input || 0, output: message.usage.output || 0,
-            cacheRead: message.usage.cacheRead || 0, cacheWrite: message.usage.cacheWrite || 0 });
-        }
-        const contextWindow = model ? await piModelWindow?.(model, context.project.workingRoot).catch(() => null) : null;
-        const reserve = piCompactReserve?.();
-        const compactAt = reserve && contextWindow > reserve ? contextWindow - reserve : null;
-        const plan = model ? await piPlanUsage(config.piAgentDir, model).catch(() => null) : null;
-        return response.json(usageFromRequests(requests, { model, contextWindow, cost, compactAt, plan }) || {});
       }
       const adapter = backends.forChat(context.chat);
       const usage = await adapter.contextFromHistory?.({ chatId: context.chat.id,
@@ -139,61 +102,17 @@ export function registerSessionRoutes(app, {
     try {
       const context = await findChatContext(request.params.id);
       if (!context) return response.status(404).json({ error: "chat_not_found" });
-      if (context.chat.backend?.implementation !== "conduit_pi") {
-        // Backends without a Pi session file keep their own history; any adapter
-        // that can hand one over serves the transcript here.
-        const adapter = backends.forChat(context.chat);
-        const projection = await adapter.readTranscript({
-          chatId: context.chat.id,
-          opaqueSession: context.chat.backend?.opaqueSession,
-          project: context.project,
-          before: request.query.before,
-        });
-        projection.messages = await attachments.decorateMessages(context.project, context.chat.id, projection.messages);
-        // Where the rest of the history starts is the adapter's to say, the same
-        // as the transcript itself. This used to answer `null` for every backend
-        // but Pi, which told the browser a long thread was all of it.
-        return response.json({ ...chatView(context.chat), turnOpen: turnOpen(context.chat.id),
-          ...upToDate(context, projection, projection.page, request.query.before), attachments: [],
-          page: projection.page || { before: null } });
-      }
-      const sessionFile = conduitPiSessionFile(context.chat);
-      if (!sessionFile) return response.json({
-        ...chatView(context.chat), messages: [], tools: [], attachments: [], page: { before: null },
+      const adapter = backends.forChat(context.chat);
+      const projection = await adapter.readTranscript({
+        chatId: context.chat.id,
+        opaqueSession: context.chat.backend?.opaqueSession,
+        project: context.project,
+        before: request.query.before,
       });
-      let session;
-      try {
-        session = await readSessionPage(sessionFile, context.project, { before: request.query.before });
-      } catch (error) {
-        if (error.code === "ENOENT") return response.json({
-          ...chatView(context.chat), messages: [], tools: [], attachments: [], page: { before: null },
-        });
-        throw error;
-      }
-      const projection = projectSessionEntries(session.entries);
-      // A chat opened while its turn runs holds entries Pi has written since
-      // the turn last checkpointed, and their names are only tied to them at
-      // the checkpoint. Read unbound, the prompt came back as `pi:<entryId>`
-      // beside the name the chat's log gives it, and the turn drew twice --
-      // once finished under the one, once running under the other.
-      if (!request.query.before) {
-        await messageIds.bind(context.project, context.chat, entryMessageRows(session.entries));
-      }
-      projection.messages = applyMessageIds(
-        await attachments.decorateMessages(context.project, context.chat.id, projection.messages,
-          { fromStart: !session.page?.before }),
-        await messageIds.resolver(context.project, context.chat));
-      const current = upToDate(context, projection, session.page, request.query.before);
-      response.json({
-        ...chatView(context.chat),
-        turnOpen: turnOpen(context.chat.id),
-        model: session.model,
-        thinkingLevel: session.thinkingLevel,
-        messages: current.messages,
-        tools: current.tools,
-        ...(current.log ? { log: current.log } : {}),
-        page: session.page,
-      });
+      projection.messages = await attachments.decorateMessages(context.project, context.chat.id, projection.messages);
+      response.json({ ...chatView(context.chat), turnOpen: turnOpen(context.chat.id),
+        ...upToDate(context, projection, projection.page, request.query.before), attachments: [],
+        page: projection.page || { before: null } });
     } catch (error) { next(error); }
   });
 
@@ -214,16 +133,6 @@ export function registerSessionRoutes(app, {
       const upTo = typeof request.body?.upTo === "string" ? request.body.upTo : null;
       await registry.markRead(context.chat.id, upTo);
       response.json(chatView(registry.metadata(context.chat.id)));
-    } catch (error) { next(error); }
-  });
-
-  app.get("/v0/sessions/:id/tools/:toolId", async (request, response, next) => {
-    try {
-      const session = await findRegisteredSession(request.params.id);
-      if (!session) return response.status(404).json({ error: "session_not_found" });
-      const tool = toolsFromEntries(session.entries).find((item) => item.toolCallId === request.params.toolId);
-      if (!tool) return response.status(404).json({ error: "tool_not_found" });
-      response.json({ toolCallId: tool.toolCallId, output: tool.output ?? null });
     } catch (error) { next(error); }
   });
 
@@ -265,40 +174,6 @@ export function registerSessionRoutes(app, {
     response.status(409).json({ error: "chat_duplication_deferred", message: "Chat duplication is unavailable while attachment ownership is unsettled." });
   });
 
-  app.post("/v0/sessions/:id/move", async (request, response, next) => {
-    try {
-      if (!isChatId(request.params.id)) return response.status(404).json({ error: "chat_not_found" });
-      const moved = await lifecycle.run(request.params.id, async () => {
-        const context = await findChatContext(request.params.id);
-        if (!context) return null;
-        const projectList = await projects.list();
-        const target = projectList.find((item) => item.id === request.body?.projectId || item.slug === request.body?.projectId);
-        if (!target) return { error: "project_not_found", status: 404 };
-        return lifecycle.withProjects([context.project.id, target.id], async () => {
-          const current = await findChatContext(request.params.id);
-          if (!current) return null;
-          if (current.chat.backend?.protocol !== "pi_rpc") return { error: "chat_move_not_supported", status: 409, message: "Agent-managed chats cannot move between working roots." };
-          if (current.chat.projectId === target.id) return { error: "session_project_unchanged", status: 409 };
-          // A chat moves only to a place that runs its harness (src/place.js).
-          const can = await backends.capabilities?.(target);
-          if (can && !can.harnesses.includes(current.chat.backend?.implementation || "conduit_pi")) {
-            return { error: "chat_move_not_supported", status: 409, message: `This chat's harness does not run on ${can.device.name}.` };
-          }
-          await projects.validate(target);
-          const session = await registry.find(await projects.list(), current.chat.id);
-          await stopSessionProcesses(backends, current.chat);
-          lifecycle.assertAvailable(current.chat.id, current.project.id);
-          lifecycle.assertAvailable(current.chat.id, target.id);
-          await moveRegisteredChat({ chat: current.chat, source: current.project, target, session, registry });
-          return { chat: chatView(registry.metadata(current.chat.id)) };
-        });
-      });
-      if (!moved) return response.status(404).json({ error: "chat_not_found" });
-      if (moved.error) return response.status(moved.status).json({ error: moved.error, message: moved.message });
-      response.json(moved.chat);
-    } catch (error) { next(error); }
-  });
-
   app.delete("/v0/sessions/:id", async (request, response, next) => {
     try {
       if (!isChatId(request.params.id)) return response.status(404).json({ error: "chat_not_found" });
@@ -322,7 +197,7 @@ export function registerSessionRoutes(app, {
             foreign = true;
             console.warn("Chat deleted; its transcript is outside this installation and was left in place", { chatId: context.chat.id, file: session.file });
           }
-          await stopSessionFamilyProcesses(backends, context.chat, family);
+          await stopSessionProcesses(backends, context.chat);
           if (session && !foreign) await removeSessionFamily(session.file, context.project, sessionOptions);
           const familyFiles = new Set(family.map((file) => path.resolve(file)));
           const relatedChats = registry.listProject(context.project.id, { includeHidden: true })

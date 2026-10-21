@@ -2,9 +2,7 @@
  * Coarse process activity for global runtime indicators.
  * Precedence: failed > stopping > waiting_for_user > compacting > retrying > working > starting > idle
  *
- * Everything here reads a record's flags, never a harness's events. Pi's own
- * reduction onto those flags lives in `pi-activity.js`, where only Pi imports
- * it; the other three harnesses set the same flags through their adapters.
+ * Every harness maps its own events onto these shared record flags.
  */
 
 export const COARSE_ACTIVITIES = [
@@ -52,9 +50,9 @@ export function deriveCoarseActivity(record) {
   if (record.retrying) return "retrying";
   if (isTurnInFlight(record)) return "working";
   // A harness that reports readiness separately is still starting while it is
-  // alive but cannot answer -- Pi restoring a large session, for one. It ranks
-  // below real work, which is proof enough that the harness is answering, and
-  // harnesses that do not report readiness are unaffected.
+  // alive but cannot answer yet. It ranks below real work, which is proof
+  // enough that the harness is answering, and harnesses without readiness
+  // reporting are unaffected.
   if (record.spoke === false || record.ready === false) return "starting";
   return "idle";
 }
@@ -62,10 +60,8 @@ export function deriveCoarseActivity(record) {
 /**
  * What the indicator says a session is doing.
  *
- * These named Pi outright -- "Pi working", "Pi failed" -- on every chat,
- * including the three harnesses that are not Pi. The record the indicator is
- * given does not carry a harness name, so the labels say what is true of all
- * four instead of naming the wrong one.
+ * Labels describe the shared record without naming a backend. The record does
+ * not carry a harness name, so the same words apply to every chat.
  */
 export function activityLabel(activity, detail = null) {
   const base = {

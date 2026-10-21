@@ -91,22 +91,7 @@ test("stored session mappings reject headerless JSONL", async () => {
   await fs.rm(root, { recursive: true, force: true });
 });
 
-test("obsolete Host Pi rows with missing files are discarded", async () => {
-  const { root, project, registryFile } = await fixture();
-  const missingFile = path.join(root, "host-pi", "missing.jsonl");
-  await fs.writeFile(registryFile, `${JSON.stringify({ version: 3, chats: [{
-    id: "chat-native-missing", projectId: project.id, status: "active", title: "Native",
-    runtime: { kind: "native_pi", installationId: "host-pi", binaryVersion: "0.80.10" },
-    piSessionId: "native-missing", piSessionFile: missingFile,
-    createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
-  }] })}\n`);
-  const store = new ChatStore(registryFile);
-  await store.initialize([project]);
-  assert.equal(store.metadata("chat-native-missing"), null);
-  await fs.rm(root, { recursive: true, force: true });
-});
-
-test("creates invisible drafts before Pi and reveals them after a completed attachment", async () => {
+test("creates invisible drafts and reveals them after a completed attachment", async () => {
   const { root, project, registryFile } = await fixture();
   const store = new ChatStore(registryFile);
   await store.initialize([project]);
@@ -114,18 +99,17 @@ test("creates invisible drafts before Pi and reveals them after a completed atta
   assert.equal(chat.status, "draft");
   assert.equal(chat.templateId, "workspace");
   assert.equal(chat.templateVersion, "1");
-  assert.equal("piSessionId" in chat, false);
-  assert.equal(chat.runtime.profileId, "workspace");
+  assert.equal(chat.backend.implementation, "conduit-runtime");
   await store.update(chat.id, { templateId: "chat", templateVersion: "3" });
-  assert.equal(store.metadata(chat.id).runtime.profileId, "chat");
-  assert.equal(store.metadata(chat.id).runtime.profileVersion, "3");
+  assert.equal(store.metadata(chat.id).templateId, "chat");
+  assert.equal(store.metadata(chat.id).templateVersion, "3");
   assert.deepEqual(store.listProject(project.id), []);
 
   const bare = await store.create(project);
   assert.equal(bare.templateId, null);
-  await store.ensureTemplate(bare.id, { templateId: "chat", templateVersion: "2" });
+  await store.update(bare.id, { templateId: "chat", templateVersion: "2" });
   assert.equal(store.metadata(bare.id).templateId, "chat");
-  await store.ensureTemplate(bare.id, { templateId: "workspace", templateVersion: "9" });
+  await store.update(bare.id, { templateId: "workspace", templateVersion: "9" });
   assert.equal(store.metadata(bare.id).templateId, "chat");
 
   const attachment = path.join(chatDirectory(project, chat.id), "attachments", `${crypto.randomUUID()}--note.txt`);

@@ -104,8 +104,8 @@ function TurnChanges(props: { artifact: TurnArtifactSummary; chatId: string }) {
 /* A message's time leads its foot, muted -- not a line of its own above it. */
 const clock = (timestamp?: string | null) => timestamp ? new Date(timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : undefined;
 
-/** An answer's foot: its time, how it ended if it did not finish, then Continue, Copy, Regenerate and its changes. */
-function AnswerFoot(props: { message: Message; precedingUserId?: string; chat: TranscriptSource; supports: (capability: BooleanCapability) => boolean; partialContinue: boolean; artifact?: TurnArtifactSummary; traced?: boolean; reveal?: boolean; copied: boolean; onCopy: () => void }) {
+/** An answer's foot: its time, how it ended if it did not finish, then Copy, Regenerate and its changes. */
+function AnswerFoot(props: { message: Message; precedingUserId?: string; chat: TranscriptSource; supports: (capability: BooleanCapability) => boolean; artifact?: TurnArtifactSummary; traced?: boolean; reveal?: boolean; copied: boolean; onCopy: () => void }) {
   /* A stopped turn says "Interrupted" once, on its first row. A trace above
      says it for the turn; a discarded or unwritten answer says it on its stop
      row; a kept answer with nothing above it says it here. */
@@ -117,12 +117,7 @@ function AnswerFoot(props: { message: Message; precedingUserId?: string; chat: T
   /* Nothing to copy from an answer that was never written, or one the agent
      was not given back. */
   const copyable = () => !props.message.discarded && Boolean(props.message.content || props.message.errorMessage);
-  /* Continue carries on the latest turn, so it is offered only there, and only
-     when the agent kept what it had written. */
-  const continuable = () => props.partialContinue && Boolean(props.message.stopped) && !props.message.discarded
-    && Boolean(props.message.content) && !props.chat.streaming() && props.chat.messages().at(-1)?.id === props.message.id;
   return <MessageFoot motion={props.reveal ? "entering" : undefined} time={clock(props.message.timestamp)} dateTime={props.message.timestamp || undefined} title={props.message.timestamp ? fullDateTime(props.message.timestamp) : undefined} status={status()}>
-    <Show when={continuable()}><LibraryButton variant="ghost" size="sm" onClick={() => void props.chat.continueResponse()}><Icons.Play />Continue</LibraryButton></Show>
     <Show when={copyable()}><CopyButton copied={props.copied} label="Copy Markdown" onCopy={props.onCopy} /></Show>
     <Show when={props.supports("regenerate") && props.precedingUserId}><LibraryButton variant="ghost" size="icon-xs" aria-label="Regenerate response" onClick={() => void props.chat.regenerate(props.precedingUserId!)}><Icons.Refresh /></LibraryButton></Show>
     <Show when={props.artifact}>{(entry) => <TurnChanges artifact={entry()} chatId={props.chat.loadedId()!} />}</Show>
@@ -133,7 +128,7 @@ function AnswerFoot(props: { message: Message; precedingUserId?: string; chat: T
    caret there once the draft has been swapped in. */
 const focusComposerSoon = () => requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>("textarea[data-composer-input]:not([disabled])")?.focus({ preventScroll: true }));
 
-export function Transcript(props: { chat: TranscriptSource; supports: (capability: BooleanCapability) => boolean; partialContinue: boolean; markdownRenderer: MarkdownRendererId; profileLabel?: string; projectId?: string }) {
+export function Transcript(props: { chat: TranscriptSource; supports: (capability: BooleanCapability) => boolean; markdownRenderer: MarkdownRendererId; profileLabel?: string; projectId?: string }) {
   let transcriptRoot!: HTMLDivElement;
   let motionShell!: HTMLDivElement;
   let viewport!: HTMLDivElement;
@@ -1024,7 +1019,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
             const chatId = () => props.chat.loadedId();
             const artifact = () => item.answerless && item.precedingUserId ? artifactSummaries().get(item.precedingUserId) : undefined;
             const arrive = arrivalOf(lastArrivedId);
-            return <TranscriptRow ref={traceRow} data-slot="message-scroller-item"><Turn><TurnTrace since={arrive} trace={item.value} writing={item.answerless === false} sessionId={chatId()} renderer={markdownRenderer()} profileLabel={props.profileLabel} initialOpen={itemExpanded(chatId(), item.key)} onOpenChange={(open) => setItemExpanded(chatId(), item.key, open)} toolOpen={(id) => itemExpanded(chatId(), `tool:${id}`)} onToolOpenChange={(id, open) => setItemExpanded(chatId(), `tool:${id}`, open)} onRendered={() => settleAfterMarkdown(traceRow)} />
+            return <TranscriptRow ref={traceRow} data-slot="message-scroller-item"><Turn><TurnTrace since={arrive} trace={item.value} writing={item.answerless === false} renderer={markdownRenderer()} profileLabel={props.profileLabel} initialOpen={itemExpanded(chatId(), item.key)} onOpenChange={(open) => setItemExpanded(chatId(), item.key, open)} toolOpen={(id) => itemExpanded(chatId(), `tool:${id}`)} onToolOpenChange={(id, open) => setItemExpanded(chatId(), `tool:${id}`, open)} onRendered={() => settleAfterMarkdown(traceRow)} />
               {/* A turn that ended without an answer -- stopped under a tool, or
                   one that only ran commands -- still offers to try again. */}
               <Show when={item.answerless && !item.value.active}>
@@ -1098,7 +1093,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
                   facts={[message().model && `Model: ${message().model}`, message().provider && `Provider: ${message().provider}`, props.profileLabel && `Profile: ${props.profileLabel}`].filter(Boolean) as string[]} />
               </Show>
               {/* Held empty while it streams, so the foot arriving moves nothing. */}
-              <Show when={actionsShown()} fallback={<MessageFoot />}><AnswerFoot message={message()} precedingUserId={precedingUserId()} chat={props.chat} supports={props.supports} partialContinue={props.partialContinue} artifact={artifact()} traced={item.traced} reveal={streamed()} copied={copied()} onCopy={() => void copy()} /></Show>
+              <Show when={actionsShown()} fallback={<MessageFoot />}><AnswerFoot message={message()} precedingUserId={precedingUserId()} chat={props.chat} supports={props.supports} artifact={artifact()} traced={item.traced} reveal={streamed()} copied={copied()} onCopy={() => void copy()} /></Show>
             </Turn>}>
               <UserMessage message={message()} text={review().text} editing={props.chat.editingEntryId() === message().id}
                 editable={!message().pending && props.supports("fork")} since={arrive} onEdit={() => { props.chat.edit(message()); focusComposerSoon(); }}

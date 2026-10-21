@@ -17,7 +17,6 @@ function launchError(code, message, status = 400) {
  */
 export const SPAWNING_INTENTS = new Set([
   "prompt",
-  "continue",
   "compact",
   "regenerate",
   "steer",
@@ -116,7 +115,7 @@ export function createLiveSessionLauncher({
     // names here. Every way a chat gets a harness -- created, switched,
     // adopted, a run -- launches here.
     const can = await backends.capabilities?.(context.project);
-    if (can && !can.harnesses.includes(context.chat.backend?.implementation || "conduit_pi")) {
+    if (can && !can.harnesses.includes(context.chat.backend?.implementation || "conduit-runtime")) {
       throw launchError("harness_not_here", `This chat's harness is not available on ${can.device.name}`, 409);
     }
     if (requestedProject && ![context.project.id, context.project.slug].includes(requestedProject)) {
@@ -124,8 +123,8 @@ export function createLiveSessionLauncher({
     }
     const resident = backends.getByChatId(context.chat.id);
     if (resident) {
-      // A warm draft was started on whatever model its first page had; one
-      // taken by another page with another choice is moved to it.
+      // A draft may have a live session from an earlier launch. Apply the
+      // model selected by this request before using that session.
       if (context.chat.status === "draft") {
         const view = backends.view(resident);
         if (model && view.model !== model) await adapter.setModel?.(resident.id, model);

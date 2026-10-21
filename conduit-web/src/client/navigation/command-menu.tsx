@@ -44,7 +44,6 @@ const icons: Record<string, (props: { class?: string }) => JSX.Element> = {
   model: SlidersHorizontalIcon,
   profile: Icons.Profile,
   rename: Icons.Edit,
-  move: Icons.MoveToFolder,
   stop: Icons.Stop,
   regenerate: Icons.Refresh,
   continue: Icons.Play,
@@ -81,7 +80,6 @@ type Row =
   | { type: "heading"; key: string; label: string }
   | { type: "command"; key: string; index: number; command: PaletteCommand; parentId?: string }
   | { type: "model"; key: string; index: number; model: ModelOption; scoped?: boolean }
-  | { type: "destination"; key: string; index: number; project: Project }
   | { type: "folder"; key: string; index: number; project: Project; count: number; searchResult?: boolean }
   | { type: "browse-all"; key: string; index: number; project: Project; count: number };
 
@@ -92,7 +90,6 @@ type ChatSearchMode =
   | { kind: "browse" }
   | { kind: "select" }
   | { kind: "rename"; id: string }
-  | { kind: "move"; returnTo: "browse" | "select" }
   | { kind: "confirmDelete"; targets: ChatTarget[]; returnTo: "browse" | "select" };
 
 function groupModels(models: ModelOption[]): { provider: string; items: ModelOption[] }[] {
@@ -166,17 +163,11 @@ export function CommandMenu(props: {
   const [pointerCursor, setPointerCursor] = createSignal(false);
   const selectionMode = () => {
     const mode = chatMode();
-    return mode.kind === "select" || ((mode.kind === "move" || mode.kind === "confirmDelete") && mode.returnTo === "select");
+    return mode.kind === "select" || (mode.kind === "confirmDelete" && mode.returnTo === "select");
   };
-  const moveMode = () => chatMode().kind === "move";
   const editingId = () => { const mode = chatMode(); return mode.kind === "rename" ? mode.id : null; };
   const pendingDelete = () => { const mode = chatMode(); return mode.kind === "confirmDelete" ? mode.targets : null; };
   const setSelectionMode = (active: boolean) => setChatMode({ kind: active ? "select" : "browse" });
-  const setMoveMode = (active: boolean) => {
-    const mode = chatMode();
-    setChatMode(active ? { kind: "move", returnTo: selectionMode() ? "select" : "browse" }
-      : { kind: mode.kind === "move" ? mode.returnTo : "browse" });
-  };
   const setEditingId = (id: string | null) => setChatMode(id ? { kind: "rename", id } : { kind: "browse" });
   const setPendingDelete = (targets: ChatTarget[] | null) => {
     const mode = chatMode();
@@ -232,7 +223,6 @@ export function CommandMenu(props: {
   });
   const hintMode = createMemo<CommandHintMode>(() => {
     if (editingId()) return "rename";
-    if (moveMode()) return "move";
     if (selectionMode()) return "edit";
     if (pendingActionSequence()) return "action-prefix";
     return "browse";
@@ -243,7 +233,6 @@ export function CommandMenu(props: {
     setPage(null);
     setSelectionMode(false);
     setSelectedChatIds(new Set<string>());
-    setMoveMode(false);
     setEditingId(null);
     setEditingValue("");
     setPendingDelete(null);
@@ -264,7 +253,6 @@ export function CommandMenu(props: {
       setQuery(initialQuery);
       setSelectionMode(false);
       setSelectedChatIds(new Set<string>());
-      setMoveMode(false);
       setEditingId(null);
       setPendingDelete(null);
       setChatView("all");
@@ -298,14 +286,6 @@ export function CommandMenu(props: {
     const out: Row[] = [];
     let index = 0;
     const push = (row: Row) => out.push(row);
-
-    if (moveMode()) {
-      push({ type: "heading", key: "move-heading", label: "Move selected chats to" });
-      for (const project of props.context.projects || []) {
-        push({ type: "destination", key: `destination:${project.id}`, index: index++, project });
-      }
-      return out;
-    }
 
     if (modelSelectorPage()) {
       const models = searching()
@@ -485,7 +465,7 @@ export function CommandMenu(props: {
     if (active() >= count) setActive(count ? count - 1 : 0);
   });
   createEffect(() => {
-    void query(); void page(); void moveMode();
+    void query(); void page();
     setActive(0);
     const target = focusAfterQuery;
     focusAfterQuery = "input";
@@ -498,8 +478,7 @@ export function CommandMenu(props: {
     else if (props.open) document.getElementById(optionId(active()))?.scrollIntoView({ block: "nearest" });
   });
   createEffect(() => {
-    // The field is shut while choosing a destination, so the list holds the keys.
-    if ((selectionMode() || moveMode()) && props.open) queueMicrotask(() => listbox?.focus());
+    if (selectionMode() && props.open) queueMicrotask(() => listbox?.focus());
   });
   createEffect(() => {
     if (editingId() && props.open) queueMicrotask(() => { renameInput?.focus(); renameInput?.select(); });
@@ -512,11 +491,6 @@ export function CommandMenu(props: {
     requestAnimationFrame(() => command.run(props.actions));
   };
   const goBack = () => {
-    if (moveMode()) {
-      setMoveMode(false);
-      if (!selectionMode()) setSelectedChatIds(new Set<string>());
-      return;
-    }
     if (chatPage() && chatScope().kind === "project") { backScope(); return; }
     setPage(null); setQuery(""); setSelectionMode(false); setSelectedChatIds(new Set<string>()); directMode = false;
   };
@@ -579,7 +553,7 @@ export function CommandMenu(props: {
     setSelectionMode(true);
   };
   const startRename = () => {
-    if (selectionMode() || moveMode()) return;
+    if (selectionMode()) return;
     const target = highlightedChat();
     if (!target) return;
     setEditingId(target.chat.id);
@@ -614,27 +588,9 @@ export function CommandMenu(props: {
     setSelectedChatIds(new Set(failed));
     if (!failed.length) { setSelectionMode(false); close(); }
   };
-  const chooseDestination = async (project: Project) => {
-    const targets = selectedTargets();
-    if (!targets.length) return;
-    const failed = await props.actions.moveChats(targets, project);
-    setSelectedChatIds(new Set(failed));
-    if (!failed.length) { setSelectionMode(false); setMoveMode(false); close(); }
-  };
-  const moveSelected = (targets = selectedTargets()) => {
-    if (!targets.length) return;
-    setMoveMode(true);
-  };
-  const moveHighlighted = () => {
-    const target = highlightedChat();
-    if (!target) return;
-    setSelectedChatIds(new Set([target.chat.id]));
-    moveSelected([target]);
-  };
   const exitSelection = () => {
     setSelectionMode(false);
     setSelectedChatIds(new Set<string>());
-    if (moveMode()) setMoveMode(false);
     focusInput();
   };
   const toggleSelection = () => {
@@ -645,7 +601,6 @@ export function CommandMenu(props: {
   const openPalettePage = (nextPage: string, direct = false) => {
     setPage(nextPage);
     setQuery("");
-    setMoveMode(false);
     setSelectionMode(false);
     setSelectedChatIds(new Set<string>());
     directMode = direct;
@@ -680,13 +635,10 @@ export function CommandMenu(props: {
     props.shortcuts.registerHandler(COMMAND_IDS.toggleChatEdit, "chat-search.browse", toggleSelection),
     props.shortcuts.registerHandler(COMMAND_IDS.searchChats, "chat-search.browse", close),
     props.shortcuts.registerHandler(COMMAND_IDS.renameHighlightedChat, "chat-search.browse", startRename),
-    props.shortcuts.registerHandler(COMMAND_IDS.moveHighlightedChat, "chat-search.browse", moveHighlighted),
     props.shortcuts.registerHandler(COMMAND_IDS.deleteHighlightedChat, "chat-search.browse", requestActiveDelete),
     props.shortcuts.registerHandler(COMMAND_IDS.toggleChatEdit, "chat-search.edit", toggleSelection),
     props.shortcuts.registerHandler(COMMAND_IDS.searchChats, "chat-search.edit", close),
-    props.shortcuts.registerHandler(COMMAND_IDS.moveSelectedChats, "chat-search.edit", moveSelected),
     props.shortcuts.registerHandler(COMMAND_IDS.deleteSelectedChats, "chat-search.edit", requestDelete),
-    props.shortcuts.registerHandler(COMMAND_IDS.searchChats, "chat-search.move", close),
     props.shortcuts.registerHandler(COMMAND_IDS.searchChats, "chat-search.rename", close),
   ];
   onCleanup(() => releaseShortcutHandlers.forEach((release) => release()));
@@ -700,9 +652,6 @@ export function CommandMenu(props: {
       exclusive = true;
     } else if (editingId()) {
       context = "chat-search.rename";
-      exclusive = true;
-    } else if (moveMode()) {
-      context = "chat-search.move";
       exclusive = true;
     } else if (chatPage()) {
       context = selectionMode() ? "chat-search.edit" : "chat-search.browse";
@@ -726,7 +675,6 @@ export function CommandMenu(props: {
       close(); requestAnimationFrame(() => props.onChooseModel(row.model.spec));
       return;
     }
-    if (row.type === "destination") { void chooseDestination(row.project); return; }
     if (row.type === "browse-all") { enterScope(row.project); return; }
     if (row.type === "folder") {
       if (selectionMode()) { toggleFolder(row.project.id); return; }
@@ -736,7 +684,7 @@ export function CommandMenu(props: {
     const command = row.command;
     if (selectionMode() && command.entity === "chat" && command.chat) { toggleChatSelection(command.chat.id); return; }
     if (command.kind === "page" && command.page) {
-      setPage(canonicalPage(command.page)); setQuery(""); setMoveMode(false); setSelectionMode(false); setSelectedChatIds(new Set<string>()); directMode = false; return;
+      setPage(canonicalPage(command.page)); setQuery(""); setSelectionMode(false); setSelectedChatIds(new Set<string>()); directMode = false; return;
     }
     runCommand(command);
   };
@@ -751,7 +699,7 @@ export function CommandMenu(props: {
   };
 
   const runPointerRow = (row: SelectableRow, event: MouseEvent) => {
-    if (row.type === "command" && chatPage() && !selectionMode() && !moveMode() && !editingId()
+    if (row.type === "command" && chatPage() && !selectionMode() && !editingId()
       && (event.ctrlKey || event.metaKey) && row.command.entity === "chat"
       && row.command.chat && row.command.project) {
       event.preventDefault();
@@ -791,7 +739,7 @@ export function CommandMenu(props: {
       if (key === "c") { event.preventDefault(); copySelected(); return; }
       if (key === "/") { event.preventDefault(); input?.focus(); return; }
     }
-    if (chatPage() && inList && !moveMode()) {
+    if (chatPage() && inList) {
       const row = selectable()[active()];
       if (event.key === "/" && !event.ctrlKey && !event.metaKey && !event.altKey) {
         event.preventDefault();
@@ -838,7 +786,7 @@ export function CommandMenu(props: {
       return;
     }
     if (chatPage() && (event.ctrlKey || event.metaKey) && !event.altKey && key === "p") { event.preventDefault(); togglePreview(); return; }
-    if (event.key === "Enter" && chatPage() && (event.ctrlKey || event.metaKey) && !selectionMode() && !moveMode()) { event.preventDefault(); openRowProject(selectable()[active()]); return; }
+    if (event.key === "Enter" && chatPage() && (event.ctrlKey || event.metaKey) && !selectionMode()) { event.preventDefault(); openRowProject(selectable()[active()]); return; }
     // Nothing is lit from a fresh search field, so Enter there goes to the list
     // rather than opening a row the reader cannot see chosen.
     if (event.key === "Enter" && chatPage() && !inList && !searching() && !pointerCursor()) { event.preventDefault(); listbox?.focus(); return; }
@@ -846,7 +794,6 @@ export function CommandMenu(props: {
     if (event.key === "Escape") {
       event.preventDefault(); event.stopPropagation();
       if (editingId()) { setEditingId(null); return; }
-      if (moveMode()) { goBack(); return; }
       if (selectionMode()) { exitSelection(); return; }
       if (chatPage()) {
         if (parsedQuery().text) { setQuery(serializeChatQuery(parsedQuery().filters, "")); focusInput(); }
@@ -905,10 +852,10 @@ export function CommandMenu(props: {
   const queryText = () => parsedQuery().text;
   // The cursor is lit only where it acts (see listFocused); the pointer moves it, and a press keeps focus where it is.
   const lit = (row: SelectableRow) => active() === indexOf(row)
-    && (!chatPage() || listFocused() || pointerCursor() || searching() || selectionMode() || moveMode());
+    && (!chatPage() || listFocused() || pointerCursor() || searching() || selectionMode());
   const rowProps = (row: SelectableRow) => ({
     get id() { return optionId(indexOf(row)); },
-    get role() { return chatPage() && !moveMode() ? "treeitem" : "option"; },
+    get role() { return chatPage() ? "treeitem" : "option"; },
     get "aria-selected"() { return lit(row); },
     get active() { return lit(row); },
     onMouseDown: (event: MouseEvent) => event.preventDefault(),
@@ -922,7 +869,6 @@ export function CommandMenu(props: {
       if (modelSelectorPage()) return <Item {...rowProps(row)} checked={row.model.spec === props.currentModel || undefined} meta={row.model.spec}><Match text={row.model.label} query={queryText()} /></Item>;
       return <Item {...rowProps(row)} icon={<SlidersHorizontalIcon />} meta={row.model.spec}>{row.model.label}</Item>;
     }
-    if (row.type === "destination") return <Item {...rowProps(row)} icon={placeIcon(row.project)}>{row.project.name}</Item>;
     if (row.type === "folder") {
       const expanded = () => expandedProjects().has(row.project.id);
       const unread = () => row.project.sessions.filter((chat) => chat.unread).length;
@@ -962,9 +908,8 @@ export function CommandMenu(props: {
 
   // On a phone the keys mean nothing: the hints give way to a bar of the view's actions.
   const phoneActions = (): OverlayAction[] => {
-    if (!chatPage() || moveMode()) return [];
+    if (!chatPage()) return [];
     if (selectionMode()) return [
-      { label: `Move ${selectedTargets().length || ""}`.trim(), disabled: !selectedTargets().length, onClick: () => moveSelected() },
       { label: `Delete ${selectedTargets().length || ""}`.trim(), destructive: true, disabled: !selectedTargets().length, onClick: () => requestDelete() },
       { label: "Done", onClick: () => exitSelection() },
     ];
@@ -975,9 +920,9 @@ export function CommandMenu(props: {
       ...(scope.kind === "project" ? [{ label: `Open ${scopeChipName()}`, onClick: () => { close(); requestAnimationFrame(() => props.actions.openProject(scope.project)); } }] : []),
     ];
   };
-  const back = () => moveMode() || (page() && !chatPage() && !modelSelectorPage());
+  const back = () => page() && !chatPage() && !modelSelectorPage();
   const label = () => modelSelectorPage() ? "Model selector" : chatPage() ? "Chat search" : "Command palette";
-  const withPreview = () => chatPage() && previewOpen() && !moveMode();
+  const withPreview = () => chatPage() && previewOpen();
 
   return <>
     <OverlayDialog
@@ -989,15 +934,15 @@ export function CommandMenu(props: {
       onCloseAutoFocus={(event) => { event.preventDefault(); if (returnFocus?.isConnected) returnFocus.focus(); returnFocus = null; }}
     >
       <OverlayBar
-        lead={back() ? <Button variant="ghost" size="icon-sm" aria-label={moveMode() ? "Back to chat results" : "Back to commands"} title="Back" onMouseDown={(event) => event.preventDefault()} onClick={goBack}><Icons.Back /></Button>
+        lead={back() ? <Button variant="ghost" size="icon-sm" aria-label="Back to commands" title="Back" onMouseDown={(event) => event.preventDefault()} onClick={goBack}><Icons.Back /></Button>
           : chatPage() ? <Icons.Search /> : modelSelectorPage() ? <SlidersHorizontalIcon /> : <Icons.ChevronRight />}
         chips={<>
           <Show when={!chatPage() && !modelSelectorPage() && pageMeta()}>{(meta) => <Crumbs label="Where you are" items={[{ label: "Commands", onClick: goBack }, { label: meta().heading, current: true }]} />}</Show>
-          <Show when={chatPage() && !moveMode() && chatScope().kind !== "all"}><OverlayChip onRemove={() => { backScope(false); focusInput(); }}>{`in:${scopeChipName()}`}</OverlayChip></Show>
-          <Show when={chatPage() && !moveMode() && chatView() !== "all"}><OverlayChip onRemove={() => { setChatView("all"); focusInput(); }}>{VIEW_LABELS[chatView()]}</OverlayChip></Show>
+          <Show when={chatPage() && chatScope().kind !== "all"}><OverlayChip onRemove={() => { backScope(false); focusInput(); }}>{`in:${scopeChipName()}`}</OverlayChip></Show>
+          <Show when={chatPage() && chatView() !== "all"}><OverlayChip onRemove={() => { setChatView("all"); focusInput(); }}>{VIEW_LABELS[chatView()]}</OverlayChip></Show>
         </>}
-        placeholder={moveMode() ? "Choose destination…" : chatPage() ? chatScope().kind === "project" ? `Search ${scopeName()} chats…` : "Search chats, projects, workspaces…" : modelSelectorPage() ? "Find models…" : pageMeta()?.placeholder || "Run a command…"}
-        value={moveMode() ? "" : parsedQuery().text}
+        placeholder={chatPage() ? chatScope().kind === "project" ? `Search ${scopeName()} chats…` : "Search chats, projects, workspaces…" : modelSelectorPage() ? "Find models…" : pageMeta()?.placeholder || "Run a command…"}
+        value={parsedQuery().text}
         onInput={(value) => {
           // A finished is:… token becomes the activity chip.
           const view = chatPage() ? /(^|\s)is:(\w+)\s$/i.exec(value) : null;
@@ -1012,19 +957,19 @@ export function CommandMenu(props: {
           "aria-autocomplete": "list",
           get "aria-haspopup"() { return chatPage() ? "tree" as const : "listbox" as const; },
           get "aria-activedescendant"() { return selectable().length ? optionId(active()) : undefined; },
-          get "aria-label"() { return moveMode() ? "Choose destination" : modelSelectorPage() ? "Find models" : chatPage() ? "Search chats" : "Search commands"; },
-          get disabled() { return moveMode(); },
+          get "aria-label"() { return modelSelectorPage() ? "Find models" : chatPage() ? "Search chats" : "Search commands"; },
+          get disabled() { return false; },
           onKeyDown: keydown,
         }}
-        end={<Show when={chatPage() && !moveMode() && !isMobileLayout()}>
+        end={<Show when={chatPage() && !isMobileLayout()}>
           <span onMouseDown={(event) => event.preventDefault()}><Segmented label="Chat sort" size="sm" value={chatSort()} onChange={saveChatSort} options={[{ value: "latest", label: "Latest" }, { value: "created", label: "Created" }]} /></span>
         </Show>}
         onClose={close}
         closeLabel={chatPage() ? "Close chat search" : "Close command palette"}
       />
       <OverlaySplit aside={withPreview() ? <ChatPreview target={activeChat()} folder={rowProject(selectable()[active()])} active={(chat) => { const activity = chatActivity(chat); return Boolean(activity && activity !== "idle"); }} /> : undefined}>
-        <OverlayList managed id="command-listbox" ref={listbox} role={chatPage() && !moveMode() ? "tree" : "listbox"} aria-label={modelSelectorPage() ? "Models" : chatPage() ? "Chat browser" : "Commands"}
-          aria-activedescendant={selectable().length ? optionId(active()) : undefined} tabIndex={chatPage() || selectionMode() || moveMode() ? 0 : -1}
+        <OverlayList managed id="command-listbox" ref={listbox} role={chatPage() ? "tree" : "listbox"} aria-label={modelSelectorPage() ? "Models" : chatPage() ? "Chat browser" : "Commands"}
+          aria-activedescendant={selectable().length ? optionId(active()) : undefined} tabIndex={chatPage() || selectionMode() ? 0 : -1}
           onFocus={() => setListFocused(true)} onBlur={() => setListFocused(false)} onMouseLeave={() => setPointerCursor(false)} onKeyDown={keydown}>
           <Show when={selectable().length} fallback={<OverlayEmpty>{emptyMessage()}</OverlayEmpty>}>
             <For each={sections().map((section) => section.key)}>{(key) => {
@@ -1052,7 +997,6 @@ export function CommandMenu(props: {
         selectedCount={selectionMode() ? selectedTargets().length : null}
         onToggleEdit={toggleSelection}
         onDeleteSelected={() => requestDelete()}
-        onMoveSelected={() => moveSelected()}
         previewOpen={previewOpen()}
         onTogglePreview={togglePreview}
       />

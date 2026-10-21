@@ -48,9 +48,8 @@ function historyToolRun(node: HistoryNode): HistoryNode[] {
   let current = node;
   for (;;) {
     let next: HistoryNode | undefined = current.children.length === 1 ? current.children[0] : undefined;
-    // Pi threads hidden assistant and system entries between visible tool
-    // calls. They are never drawn, so walk straight through them: a run the
-    // reader sees as consecutive has to be one run here too.
+    // Hidden assistant and system entries can sit between visible tool calls.
+    // Walk through them so a run that looks consecutive stays one run here.
     while (next?.entry.hidden && next.children.length === 1) next = next.children[0];
     if (!next || next.entry.hidden || next.entry.kind !== "tool") break;
     run.push(next);

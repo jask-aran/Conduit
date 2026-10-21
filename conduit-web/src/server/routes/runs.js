@@ -57,7 +57,7 @@ export function registerRunRoutes(app, {
       const run = { ...(hostUiTimeoutMs > 0 ? { hostUiTimeoutMs } : {}),
         // Off unless asked: a run is named only with { autoName: true }.
         ...(request.body?.autoName === true ? { autoName: true } : {}) };
-      // Any profile a chat can be made with: a harness's own, or a Conduit Pi one.
+      // Any profile a chat can use: a harness profile or a Conduit template.
       const harness = profileId && agentProfiles(config.piTemplates, { available: new Set(backends.local || backends.adapters.keys()) })
         .find((profile) => profile.id === profileId && profile.management === "agent");
       let chat;

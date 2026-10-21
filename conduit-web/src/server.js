@@ -15,10 +15,7 @@ import { loadConfig, resolveTemplate } from "./config.js";
 import { TerminalPasteStore } from "./terminal-paste-store.js";
 import { PiModelCatalog, resolveThinkingLevel } from "./pi-model-catalog.js";
 import { ProjectStore } from "./project-store.js";
-import { pageSessionEntries, projectSessionEntries, readSessionMetadata, readSessionPage } from "./session-store.js";
 import { ChatLogs } from "./server/chat-log.js";
-import { MessageIds, applyArtifactMessageIds, applyMessageIds, entryMessageRows } from "./message-ids.js";
-import { PiManager, piCompactionReserve } from "./pi-manager.js";
 import { manifestForImplementation } from "./harnesses/index.js";
 import { ChatStore, chatView, isChatId } from "./chat-store.js";
 import { resolveComputerContext } from "./computer-context.js";
@@ -34,7 +31,6 @@ import { SessionNameService } from "./session-name-service.js";
 import { normalizeTemplateId, templatePublicView } from "../../scripts/pi-runtime.mjs";
 import { formatWorkspacePath, isPathInside, listDirectorySuggestions } from "./workspace-paths.js";
 import fs from "node:fs/promises";
-import { resolvePiLaunch } from "./pi-launch.js";
 import { AuthStore } from "./auth-store.js";
 import { PiAuthBroker } from "./pi-auth-broker.js";
 import { ChatLifecycle } from "./chat-lifecycle.js";
@@ -65,7 +61,6 @@ import { registerRuntimeRoutes } from "./server/routes/runtime.js";
 import { registerChatRoutes } from "./server/routes/chats.js";
 import { registerRunRoutes } from "./server/routes/runs.js";
 import { createHostUi } from "./server/host-ui.js";
-import { createWarmDrafts } from "./server/warm-drafts.js";
 import { registerHarnessRoutes } from "./server/routes/harnesses.js";
 import { createHarnessModelCatalogue } from "./harnesses/model-catalogue.js";
 import { rememberedModel } from "./profile-model-memory.js";
@@ -80,11 +75,10 @@ import { SearchSettingsStore } from "./search-settings.js";
 import { VoiceSettingsStore } from "./voice-settings.js";
 import { VOICE_EXECUTION_CATALOG } from "./server/voice-execution-catalog.js";
 import { PromptStore } from "./prompt-store.js";
-import { ChatBackendRegistry, serializePiV0 } from "./pi-rpc-adapter.js";
+import { ChatBackendRegistry } from "./chat-backend-registry.js";
 import { MANIFESTS } from "./harnesses/index.js";
 import { detect } from "./harnesses/probe.js";
 import { TurnCheckpointStore } from "./turn-checkpoint-store.js";
-import { conduitPiSessionFile } from "./backend-session.js";
 import { ServerConcurrency } from "./server/effect-concurrency.js";
 import { ServerLifetime } from "./server/server-lifetime.js";
 import { createClientBundle } from "./server/client-bundle.js";
@@ -113,12 +107,10 @@ const serverIdentity = await new ServerIdentity(config.identityFile, { port: con
 // The head's own device and node (decision 24), known before anything reads a project.
 const head = headIds(serverIdentity.id);
 projects.headNodeId = head.nodeId;
-const pinnedInstallation = config.installations.get("conduit-pinned");
 const registry = new ChatStore(config.sessionRegistryFile, {
   defaultRuntime: {
     kind: "conduit_profile",
-    installationId: pinnedInstallation.id,
-    binaryVersion: pinnedInstallation.version,
+    installationId: "conduit-runtime",
     profileId: config.piTemplate.id,
     profileVersion: config.piTemplate.version,
   },
@@ -192,14 +184,6 @@ if (startupViolation) {
 // harness process, and the command handlers above it.
 const chatLogs = new ChatLogs();
 const concurrency = new ServerConcurrency();
-const manager = new PiManager({
-  serializeEvent: serializePiV0,
-  logs: chatLogs,
-  command: config.piCommand,
-  agentDir: config.piAgentDir,
-  template: config.piTemplate,
-  idleProcessTtlMs: runtimeSettings.get().idleProcessTtlMs,
-});
 // Devices paired with this server, whose shared folders the Conduit runtime can work in.
 // Devices dial over the tailnet (decision 4). A server whose owner lets them
 // in through its public address as well (CONDUIT_NODES_PUBLIC=1, e.g. behind a
@@ -211,10 +195,6 @@ terminals.nodeHub = nodeHub;
 // no longer named here: they come from MANIFESTS, and detection runs in
 // parallel so four three-second timeouts cost three seconds, not twelve.
 const harnessConfig = {
-  manager,
-  // The same per-chat order the Pi manager stamps into, so a harness that
-  // states its transcript numbers its events in the chat's sequence rather
-  // than one of its own.
   logs: chatLogs,
   codexCommand: process.env.CONDUIT_CODEX_COMMAND || "codex",
   claudeCommand: process.env.CONDUIT_CLAUDE_COMMAND || "claude",
@@ -235,26 +215,14 @@ const harnessConfig = {
 };
 const backends = lifetime.own("agents", ChatBackendRegistry.fromManifests(MANIFESTS, await detect(MANIFESTS, harnessConfig), harnessConfig), async (owned) => {
   const stopped = await owned.shutdown();
-  for (const [name, key] of [["Pi", "conduit_pi"], ["Codex", "codex"]]) {
-    const count = stopped.get(owned.adapters.get(key)) || 0;
-    console.log(`Conduit stopped ${count} ${name} process${count === 1 ? "" : "es"}`);
-  }
+  const count = stopped.get(owned.adapters.get("codex")) || 0;
+  console.log(`Conduit stopped ${count} Codex process${count === 1 ? "" : "es"}`);
 }, { timeoutMs: 30_000 });
 const chatgptWeb = backends.adapters.get("chatgpt-web") || null;
 const requireChatgptWeb = () => {
   if (!chatgptWeb) throw Object.assign(new Error("ChatGPT Web is not installed"), { code: "backend_unavailable", status: 409 });
   return chatgptWeb;
 };
-async function recycleIdleIsolatedPiProcesses() {
-  const candidates = manager.liveRecords().filter((record) => record.runtime?.kind === "conduit_profile"
-    && manager.isReclaimable(record));
-  for (const record of candidates) {
-    if (manager.isReclaimable(record)) await manager.stopAndWait(record.id);
-  }
-  return { restartedIdleProcesses: candidates.length };
-}
-// Conduit's message identity for Pi, which has none to give until it writes.
-const messageIds = new MessageIds();
 const runtimeHub = lifetime.own("runtime hub", new RuntimeHub({ listViews: () => backends.list() }), (owned) => owned.close());
 // The snapshot hides records that are stopped or on their way out; so must
 // every incremental update, or a teardown emit re-advertises a process the
@@ -265,9 +233,7 @@ const publishProcessChange = (view, record, reason) => {
   if (processIsLive(record)) runtimeHub.publishProcess(view, reason || "update");
   else runtimeHub.publishProcessRemoved(view.id, view.chatId);
 };
-manager.on("process_changed", ({ record, reason }) => {
-  publishProcessChange(backends.view(record), record, reason);
-});// What a workspace's place can do -- which harnesses, checkpoints, Git -- on
+// What a workspace's place can do -- which harnesses, checkpoints, Git -- on
 // the head or a device alike (src/place.js); every refusal asks this.
 backends.capabilities = (project) => capabilitiesOf(project, { hub: nodeHub, backends, serverName: serverIdentity.name });
 // The head is a device like the others (decision 24): its node holds the
@@ -280,9 +246,6 @@ nodeHub.adoptHead({ ...head, name: () => serverIdentity.name,
 // classic Pi are converted once, before anything can open them.
 await convertClassicChats({ registry, projects, backends, config });
 
-manager.on("process_removed", ({ id, chatId }) => {
-  runtimeHub.publishProcessRemoved(id, chatId);
-});
 terminals.on("created", (record) => runtimeHub.publishTerminal(record, "created"));
 terminals.on("updated", (record) => runtimeHub.publishTerminal(record, "updated"));
 terminals.on("exit", (record) => runtimeHub.publishTerminal(record, "exit"));
@@ -299,7 +262,6 @@ const sessionNameTasks = new Map();
 const piAuth = new PiAuthBroker({
   modelRuntime: modelCatalog.modelRuntime,
   authFile: modelCatalog.authFile,
-  onCredentialsChanged: recycleIdleIsolatedPiProcesses,
 });
 const modelCatalogs = new Map([[`isolated:${config.piTemplate.id}`, modelCatalog]]);
 const lifecycle = new ChatLifecycle({ concurrency });
@@ -318,7 +280,6 @@ function defaultTemplate() {
 const harnessModels = createHarnessModelCatalogue();
 
 function catalogFor(runtime, template) {
-  const installation = config.installations.get(runtime.installationId);
   const key = `isolated:${template?.id || config.piTemplate.id}`;
   if (!modelCatalogs.has(key)) {
     modelCatalogs.set(key, new PiModelCatalog({ agentDir: config.piAgentDir, modelPatterns: template?.models || config.piTemplate.models }));
@@ -374,18 +335,6 @@ async function chatModelView(context) {
   let thinkingLevel = context.chat.modelThinkingLevels?.[model] || catalogView.defaultThinkingLevel;
   let source = context.chat.backend?.model ? "chat_preference" : "runtime_default";
   let chatOwnsModel = Boolean(context.chat.backend?.model);
-  const sessionFile = conduitPiSessionFile(context.chat);
-  if (sessionFile) {
-    try {
-      const persisted = await readSessionMetadata(sessionFile, context.project);
-      if (!chatOwnsModel) {
-        chatOwnsModel = Boolean(persisted.model);
-        model = persisted.model || model;
-        thinkingLevel = persisted.thinkingLevel || thinkingLevel;
-        source = "jsonl";
-      }
-    } catch (error) { if (error.code !== "ENOENT") throw error; }
-  }
   // A profile remembers the last model chosen on it, so picking one in the
   // Assistant does not have to be picked again in the next Assistant chat. A
   // chat that already ran on a model of its own keeps it: this only fills in
@@ -452,30 +401,6 @@ async function chatModelView(context) {
   };
 }
 
-async function installationViews() {
-  const project = await projects.get("chat");
-  return Promise.all(config.installations.publicList().map(async (installation) => {
-    if (!installation.available || !project) return { ...installation, models: null };
-    const runtime = { kind: "conduit_profile", installationId: installation.id };
-    const catalog = catalogFor(runtime, config.piTemplate);
-    try {
-      await projects.validate(project);
-      const view = await catalog.list(project.workingRoot);
-      return {
-        ...installation,
-        models: {
-          access: "managed",
-          enabledModels: view.models.map((model) => model.spec),
-          defaultModel: view.defaultModel,
-          warnings: view.warnings,
-        },
-      };
-    } catch (error) {
-      return { ...installation, models: { access: "unavailable", enabledModels: [], defaultModel: null, warnings: [{ type: "warning", message: error.message }] } };
-    }
-  }));
-}
-
 function templateForId(templateId) {
   return resolveTemplate(config, templateId) || defaultTemplate();
 }
@@ -487,26 +412,13 @@ function templateForChat(chat, project = null) {
 }
 
 function runtimeFor({ runtimeKind = "conduit_profile", template }) {
-  if (runtimeKind !== "conduit_profile") throw Object.assign(new Error("Unknown Pi runtime"), { code: "unknown_runtime_kind", status: 400 });
-  const installation = config.installations.get("conduit-pinned");
+  if (runtimeKind !== "conduit_profile") throw Object.assign(new Error("Unknown Conduit runtime"), { code: "unknown_runtime_kind", status: 400 });
   return {
     kind: "conduit_profile",
-    installationId: installation.id,
-    binaryVersion: installation.version,
+    installationId: "conduit-runtime",
     profileId: template.id,
     profileVersion: template.version,
   };
-}
-
-async function ensureChatTemplate(chat, project = null) {
-  if (!chat) return null;
-  if (chat.backend?.protocol !== "pi_rpc") return chat;
-  if (chat.templateId) return chat;
-  const template = templateForChat(chat, project);
-  return registry.ensureTemplate(chat.id, {
-    templateId: template.id,
-    templateVersion: template.version,
-  });
 }
 
 // The LAN name exists to be a secure context: plain http to it goes to https
@@ -574,10 +486,6 @@ app.get("/client-bundle/:build.zip", async (request, response, next) => {
 const requireAuth = prepareAuthMiddleware(authStore);
 app.use(requireAuth);
 
-async function findRegisteredSession(id) {
-  return registry.find(await projects.list(), id);
-}
-
 async function findChatContext(chatId) {
   if (!isChatId(chatId)) return null;
   let chat = registry.metadata(chatId);
@@ -587,7 +495,6 @@ async function findChatContext(chatId) {
   const project = await projects.get(chat.projectId) || await resolveComputerContext(chat.projectId).catch(() => null);
   if (!project) return null;
   if (!chat.projectId.startsWith("computer:")) await projects.validate(project);
-  chat = await ensureChatTemplate(chat, project) || chat;
   return { chat, project };
 }
 
@@ -608,62 +515,7 @@ app.delete("/v0/chatgpt-web/credential", async (_request, response, next) => {
 
 registerAuthRoutes(app, { authStore, socketTickets, clientDist: dist });
 
-const pendingCheckpoints = new Set();
 let shuttingDown = false;
-manager.on("event", ({ record, event }) => {
-  const chat = record.chatId ? registry.metadata(record.chatId) : null;
-  const terminal = event.type === "agent_settled"
-    || event.type === "generation_stopped"
-    || (event.type === "agent_end" && !event.willRetry);
-  const generation = record.activeGeneration;
-  const checkpointId = generation ? `${record.id}:${generation.id}` : null;
-  if (!terminal || !chat || !record.sessionFile || !checkpointId || pendingCheckpoints.has(checkpointId) || record.active) return;
-  const checkpoint = { id: generation.id, seq: generation.lastSeq };
-  pendingCheckpoints.add(checkpointId);
-  setTimeout(() => {
-    // The decoration below needs the project too, so it outlives the lookup.
-    let project = null;
-    projects.get(record.projectId)
-      .then((found) => {
-        project = found;
-        return project && registry.syncFile(record.chatId, record.sessionFile, project, { waitForFileMs: 2000 });
-      })
-      .then(async (session) => {
-        if (!session) return null;
-        await sessionNameTasks.get(record.chatId)?.catch(() => {});
-        if (await registry.fallbackTitle(record.chatId, session.title)) {
-          await sessionNames.recordFallback({ chatId: record.chatId, name: session.title });
-        }
-        const artifacts = await turnCheckpoints.timeline(record.chatId, project.workingRoot, record.sessionFile)
-          .catch((error) => { console.error("Could not compute turn artifacts", error); return null; });
-        // The entries this turn wrote are now on disk, so the ids claimed for
-        // its prompts can finally be tied to them.
-        await messageIds.bind(project, registry.metadata(record.chatId), entryMessageRows(session.entries));
-        const idFor = await messageIds.resolver(project, registry.metadata(record.chatId));
-        record.lastCheckpoint = {
-          type: "session_checkpoint",
-          generationId: checkpoint.id,
-          chat: chatView(registry.metadata(record.chatId)),
-          artifacts: applyArtifactMessageIds(artifacts, idFor),
-        };
-        const latest = projectSessionEntries(pageSessionEntries(session.entries, { turnLimit: 1 }).entries);
-        latest.messages = applyMessageIds(
-          await attachments.decorateMessages(project, record.chatId, latest.messages, { fromStart: false }), idFor);
-        // The record and what was stated should agree; when they do, the browser
-        // is told nothing and the settled turn stays exactly as drawn.
-        const { ops, differences } = chatLogs.get(record.chatId).reconcile(latest.messages);
-        if (differences.length) {
-          console.warn("Transcript diverged from the record at settle", record.chatId, JSON.stringify(differences));
-          for (const op of ops) manager.publish(record, { ...op, generationId: checkpoint.id });
-        }
-        manager.publish(record, record.lastCheckpoint);
-        runtimeHub.publish({ type: "chat_changed", chat: record.lastCheckpoint.chat, at: new Date().toISOString() });
-        return session;
-      })
-      .catch((error) => console.error("Could not checkpoint the session registry", error))
-      .finally(() => pendingCheckpoints.delete(checkpointId));
-  }, 50).unref();
-});
 function checkpointNativeAdapter(adapter, record, completed = true) {
   const completedAt = new Date().toISOString();
   // A cancelled or failed turn is activity, so it moves the sort key -- but it
@@ -687,8 +539,7 @@ async function applyBackendName(adapter, record, name) {
     chatId: chat.id, title: chat.title });
   runtimeHub.publish({ type: "chat_changed", chat: chatView(chat), at: new Date().toISOString() });
 }
-// Every native adapter checkpoints the same way. PiRpcAdapter is not an event
-// emitter and simply has no `on`, so this covers the backends that need it.
+// Every adapter checkpoints through its own settled event when it exposes one.
 for (const adapter of backends.instances()) {
   adapter.on?.("settled", ({ record, completed }) => {
     // An ephemeral record -- a probe -- has no chat to checkpoint.
@@ -722,12 +573,10 @@ registerRuntimeRoutes(app, {
 
 registerPiAuthRoutes(app, {
   piAuth,
-  installationViews,
 });
 
 registerSearchRoutes(app, {
   searchSettings,
-  onSettingsChanged: recycleIdleIsolatedPiProcesses,
 });
 registerVoiceRoutes(app, { voiceSettings, voiceRuntime, voiceModel });
 
@@ -737,16 +586,13 @@ registerTerminalPasteRoutes(app, { terminalPastes });
 registerNodeRoutes(app, { nodeHub, config });
 registerProjectRoutes(app, {
   nodeHub,
-  messageIds,
   backends,
   buildProjectDashboard,
   config,
   listWorkspaceDirectory,
-  manager,
   modelCatalog,
   preferences,
   projects,
-  readSessionPage,
   readWorkspaceCommit,
   readWorkspaceDiff,
   readWorkspaceFile,
@@ -759,7 +605,6 @@ registerProjectRoutes(app, {
   turnCheckpoints,
 });
 const launchLiveSession = registerLiveSessionRoutes(app, {
-  messageIds,
   attachments,
   backends,
   catalogFor,
@@ -767,7 +612,6 @@ const launchLiveSession = registerLiveSessionRoutes(app, {
   concurrency,
   findChatContext,
   lifecycle,
-  manager,
   preferences,
   registry,
   runtimeFor,
@@ -777,8 +621,6 @@ const launchLiveSession = registerLiveSessionRoutes(app, {
 registerChatRoutes(app, {
   backends,
   nodeHub,
-  composerDraft: (chatId) => drafts.draft(chatId),
-  warmDrafts: createWarmDrafts({ backends, registry, projects }),
   catalogFor,
   chatModelView,
   lifecycle,
@@ -805,20 +647,15 @@ registerRunRoutes(app, {
   stopGeneration: (...args) => liveSessionStream.stopGeneration(...args),
 });
 registerSessionRoutes(app, {
-  piCompactReserve: () => piCompactionReserve(config.piAgentDir),
-  piModelWindow: async (spec, cwd) => (await catalogFor({}, config.piTemplate).list(cwd)).models.find((model) => model.spec === spec)?.contextWindow || null,
   attachments,
   backends,
   chatLogs,
   config,
   drafts,
   findChatContext,
-  findRegisteredSession,
   lifecycle,
-  messageIds,
   sessionNames,
   projects,
-  readSessionPage,
   registry,
 });
 // The service worker decides which build everything else comes from, so a
@@ -965,9 +802,7 @@ const liveSessionStream = createLiveSessionStream({
   config,
   turnCheckpoints,
   findChatContext,
-  findRegisteredSession,
   chatModelView,
-  messageIds,
   chatLogs,
   lifecycle,
   async autoNameSession(record, context, message) {

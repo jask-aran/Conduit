@@ -5,8 +5,8 @@ import { computerContext, resolveComputerContext } from "../../computer-context.
 import { groupThreadsByFolder, trackedByThread } from "../../harness-threads.js";
 import { MANIFESTS } from "../../harnesses/index.js";
 
-// Pi is built in rather than a harness the dashboard offers, so it is the one
-// manifest this surface excludes.
+// The Conduit durable agent is built in rather than a detected harness, so it
+// is omitted from this catalogue route.
 const HARNESS_MANIFESTS = MANIFESTS.filter((manifest) => !manifest.builtIn);
 const SUPPORTED = new Set(HARNESS_MANIFESTS.map((manifest) => manifest.id));
 

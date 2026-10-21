@@ -132,7 +132,7 @@ export function createModelSettings(
     // means: the catalogue and the remembered selection belong to the profile,
     // not to the chat. Watching the harness instead missed every switch between
     // profiles that share one - Assistant to Coding kept whichever model was
-    // last picked anywhere on Pi, because nothing below here was asked again.
+    // last picked in another profile, because nothing below was asked again.
     const changedProfile = Boolean(profile) && activeProfile() !== profile;
     activeProjectId = projectId;
     activeChatId = chatId;
@@ -140,7 +140,7 @@ export function createModelSettings(
     // A model belongs to the profile, not to the chat, so a profile change
     // drops the old selection whether or not the chat changed with it. Keeping
     // it meant the next launch asked for a model the new profile has never
-    // heard of -- a Codex spec sent to a Pi chat -- and the launch was refused
+    // heard of -- a Codex spec sent to an Assistant chat -- and the launch was refused
     // outright. Anything genuinely still true is put back by the selection
     // below or the catalogue fetch behind it.
     if (changedProfile) {

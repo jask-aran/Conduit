@@ -6,8 +6,6 @@ import { Popover, PopoverContent, PopoverTrigger, SearchList } from "@/component
 import type { Project } from "../api/contracts";
 import { WorkspaceGlyph } from "../project/workspace-appearance";
 
-export type PlaceOptions = { projects: Project[]; current?: Project | null; disabled?: boolean; onChoose: (project: Project) => void };
-
 /** A place's own mark when it has one -- a workspace's identity today, any
  *  place's later -- else a folder; with no place at all, the chat mark. */
 export function PlaceGlyph(props: { project?: Project | null }) {
@@ -17,30 +15,6 @@ export function PlaceGlyph(props: { project?: Project | null }) {
 }
 
 export const isWorkspace = (project: Project) => project.kind === "workspace" || ["linked", "created", "cloned"].includes(project.origin || "");
-
-/**
- * The searchable list of places: the desktop +'s Project submenu.
- */
-export function PlaceList(props: PlaceOptions & { onDone?: () => void }) {
-  const root = createMemo(() => props.projects.find((project) => project.slug === "chat"));
-  const placed = () => props.current && props.current.slug !== "chat" ? props.current : null;
-  // Projects before workspaces, and "No folder" first when the chat is in one.
-  const places = createMemo(() => [
-    ...(placed() && root() ? [root()!] : []),
-    ...props.projects
-      .filter((project) => project.slug !== "chat" && project.state !== "cloning")
-      .sort((left, right) => Number(isWorkspace(left)) - Number(isWorkspace(right)) || left.name.localeCompare(right.name)),
-  ]);
-  const choose = (project: Project) => {
-    props.onDone?.();
-    if (project.id !== props.current?.id) props.onChoose(project);
-  };
-  return <SearchList items={places()} placeholder="Search projects and workspaces" onChoose={choose}
-    matches={(project, needle) => project.slug !== "chat" && project.name.toLowerCase().includes(needle)}
-    isCurrent={(project) => project.id === props.current?.id}
-    row={(project) => project.slug === "chat" ? { icon: <Icons.Folder />, label: "No folder" }
-      : { icon: <PlaceGlyph project={project} />, label: project.name, meta: isWorkspace(project) ? "Workspace" : "Project" }} />;
-}
 
 export type FolderOptions = { folders: Array<{ path: string; label: string }>; current: string; onChoose: (path: string) => void; onBrowse: () => void };
 

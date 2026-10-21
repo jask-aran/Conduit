@@ -42,7 +42,7 @@ import { publishServerDirectory } from "./platform/server-directory";
 import { canScanQr, parsePairingLink, QrScanner, redeemPairing, type PairingLink } from "./platform/pairing";
 import { authorizedFetch, clearNativeBearerToken, nativeBearerToken, NATIVE_AUTH_REQUIRED_EVENT, saveNativeBearerToken } from "./api/native-auth-client";
 import { resolveCapability } from "./chat-capabilities";
-import type { ChatSummary, DashboardChat, HarnessManifestView, Installation, Project, Template, TranscriptDetail, WorkspaceAppearance, WorkspacePolicy, WorkspaceSuggestion, WorkspaceSuggestionsPayload } from "./api/contracts";
+import type { ChatSummary, DashboardChat, HarnessManifestView, Project, Template, TranscriptDetail, WorkspaceAppearance, WorkspacePolicy, WorkspaceSuggestion, WorkspaceSuggestionsPayload } from "./api/contracts";
 import { createErrorDiagnostic, formatRuntimeDiagnosticPrompt, type ErrorDiagnostic, type ErrorDiagnosticContext } from "./error-diagnostics";
 import { Composer } from "./chat/composer";
 import { AppDashboard } from "./dashboard/app-dashboard";
@@ -563,8 +563,6 @@ function App() {
   // is what declares what it can do.
   const [harnessCapabilities, setHarnessCapabilities] = createSignal<Record<string, HarnessManifestView>>({});
   const [templatesLoading, setTemplatesLoading] = createSignal(true);
-  const [installations, setInstallations] = createSignal<Installation[]>([]);
-  const [installationsLoading, setInstallationsLoading] = createSignal(true);
   const [workspaceSuggestions, setWorkspaceSuggestions] = createSignal<WorkspaceSuggestion[]>([]);
   const [workspacePolicy, setWorkspacePolicy] = createSignal<WorkspacePolicy | null>(null);
   const [defaultTemplateId, setDefaultTemplateId] = createSignal("assistant");
@@ -588,7 +586,6 @@ function App() {
       if (moved) updateVoiceSettings({ ...voiceSettings(), inputDeviceId: moved });
     }).catch(() => {});
   });
-  const [partialContinue, setPartialContinue] = createSignal(true);
   const [maxAttachmentBytes, setMaxAttachmentBytes] = createSignal(DEFAULT_MAX_ATTACHMENT_BYTES);
   const [markdownRenderer, setMarkdownRenderer] = createSignal<MarkdownRendererId>(selectedMarkdownRenderer());
   const [meteorField, setMeteorField] = createSignal(selectedMeteorField());
@@ -1319,8 +1316,8 @@ function App() {
   // just reading on another profile. Seeding the launch from it then asks the
   // new profile for a model it has never heard of and the launch is refused,
   // so the selection only travels when it is this profile's to give.
-  // The server keeps an untouched draft warm when its page lets go of it, and
-  // may hand that same chat back here: it is ours again, to discard again.
+  // Ask the server to start the new chat early. If the page lets it go, normal
+  // draft cleanup still applies.
   const createProfileChat = (project: Project, profileId: string, chosen = models) => api<ChatSummary>("/v0/chats", {
     method: "POST",
     body: JSON.stringify({
@@ -2123,60 +2120,6 @@ function App() {
   const renameProject = async (target: Project, name: string) => {
     try { await api(`/v0/projects/${target.id}`, { method: "PATCH", body: JSON.stringify({ name }) }); await refresh(); return true; }
     catch (error) { showError(error); return false; }
-  };
-  const moveChat = async (target: ChatSummary, _source: Project, destination: Project) => {
-    try { await api(`/v0/sessions/${target.id}/move`, { method: "POST", body: JSON.stringify({ projectId: destination.id }) }); await refresh(); }
-    catch (error) { showError(error); }
-  };
-  const moveChats = async (targets: Array<{ chat: ChatSummary; project: Project }>, destination: Project) => {
-    const candidates = targets.filter((target) => target.project.id !== destination.id);
-    const results = await Promise.all(candidates.map(async (target) => {
-      try {
-        await api(`/v0/sessions/${target.chat.id}/move`, { method: "POST", body: JSON.stringify({ projectId: destination.id }) });
-        return null;
-      } catch (error) {
-        return { id: target.chat.id, error };
-      }
-    }));
-    const failures = results.filter((result): result is { id: string; error: unknown } => Boolean(result));
-    await refresh();
-    if (failures.length) {
-      const first = failures[0]!.error;
-      // Each distinct reason once, so one cause is not read as every failure's.
-      const reasons = [...new Set(failures.map(({ error }) => error instanceof Error ? error.message : String(error || "Request failed")))];
-      const detail = reasons.length > 3 ? `${reasons.slice(0, 3).join("; ")}; and ${reasons.length - 3} more` : reasons.join("; ");
-      showError(Object.assign(new Error(`${failures.length} of ${targets.length} chats could not be moved: ${detail}`), {
-        code: "bulk_move_failed",
-        apiRequest: (first as { apiRequest?: unknown })?.apiRequest,
-      }));
-    }
-    return failures.map((failure) => failure.id);
-  };
-  // The composer's folder button: the open chat, draft or not, moves to the
-  // chosen place and stays open there.
-  const chatOwner = () => catalogue.projects().find((project) => project.sessions.some((session) => session.id === chat.loadedId()));
-  // Either pane's chat. Pane B's store is re-entered in its new place, as
-  // pane A's catalogue selection follows it.
-  const placeChat = async (destination: Project, target: ChatSession = session) => {
-    const id = target.chat.loadedId();
-    if (!id) return;
-    try {
-      await api(`/v0/sessions/${id}/move`, { method: "POST", body: JSON.stringify({ projectId: destination.id }) });
-      await refresh();
-      const pane = paneSlots.find((item) => item.session === target);
-      if (pane) {
-        const moved = pane.session.selected();
-        if (moved) await pane.session.open(moved.chat, moved.project);
-      } else if (routeKind() === "chat") catalogue.selectProject(destination);
-    } catch (error) { showError(error); }
-  };
-  const chatPlace = (target: ChatSession = session) => {
-    const id = target.chat.loadedId();
-    return { projects: catalogue.projects(), current: target === session ? chatOwner() : catalogue.projects().find((project) => project.sessions.some((item) => item.id === id)), disabled: !id || runtime.connectivity() !== "online", onChoose: (project: Project) => void placeChat(project, target) };
-  };
-  const moveProjectChats = async (source: Project, destination: Project) => {
-    try { await api(`/v0/projects/${source.id}/move-sessions`, { method: "POST", body: JSON.stringify({ projectId: destination.id }) }); await refresh(); }
-    catch (error) { showError(error); }
   };
   const copyTranscript = async (target: ChatSummary) => {
     try { const response = await authorizedFetch(transcriptUrl(target.id)); if (!response.ok) throw new Error("Could not load the transcript"); await navigator.clipboard.writeText(await response.text()); }
@@ -3268,7 +3211,7 @@ function App() {
   }
   const sendFromPanePage = async (pane: PaneSlot, prompt: string) => {
     const side = pane.session;
-    const project = chatPlace(side).current || untrack(() => slotPageProject(pane.index));
+    const project = side.selected()?.project || untrack(() => slotPageProject(pane.index));
     const id = side.chat.loadedId();
     if (!project || !id) return;
     catalogue.setProjects((current) => current.map((item) => item.id === project.id
@@ -4116,7 +4059,7 @@ function App() {
             <Show when={page() === "dashboard"} fallback={<Show when={slotPageProject(slot)}>{(project) =>
               <ProjectPage session={side} project={project()} target={{ project: project() }} keyboardOwner={owns} onSendDraft={(prompt) => sendFromPanePage(pane, prompt)} onOpenChat={openChatFromPage} tabActions={paneTabActions(slot)} />
             }</Show>}>
-              <AppDashboardPage session={side} place={chatPlace(side)} keyboardOwner={owns} onSendDraft={(prompt) => sendFromPanePage(pane, prompt)} onOpenChat={(target, project) => void openChatFromPage(target, project)} tabActions={paneTabActions(slot)} />
+              <AppDashboardPage session={side} keyboardOwner={owns} onSendDraft={(prompt) => sendFromPanePage(pane, prompt)} onOpenChat={(target, project) => void openChatFromPage(target, project)} tabActions={paneTabActions(slot)} />
             </Show>
           </div>
         </Show>
@@ -4128,7 +4071,7 @@ function App() {
                 stays (and keeps focus), its transcript withheld while a live
                 chat opens rather than showing an empty chat's welcome. */}
             <Show when={side.chat.loadedId()} fallback={<div class="chat-bootstrap" role="status">Loading chat…</div>}>
-            <ChatSurface session={side} project={side.selected()?.project} {...paneTabRow(slot)} keyboardOwner={owns} place={chatPlace(side)} modelSelector onShare={() => void shareChat(side.selectedId())}
+            <ChatSurface session={side} project={side.selected()?.project} {...paneTabRow(slot)} keyboardOwner={owns} modelSelector onShare={() => void shareChat(side.selectedId())}
               onRename={() => runSidebar("rename-chat", side.selected() ?? {})} onDelete={() => runSidebar("delete-chat", side.selected() ?? {})}
               notice={workspaceNotice(side.selected()?.project, side.selectedId())}
               tabActions={paneTabActions(slot)} />
@@ -4554,7 +4497,6 @@ function App() {
     effort: focusedModels().effort(),
     thinkingLevels: thinkingLevels(),
     canRegenerate: focusedSession().capability("regenerate") && Boolean(lastUserEntryId()) && !focusedChat().streaming() && !focusedChat().stopping(),
-    canContinue: partialContinue() && Boolean(lastAssistant()?.stopped) && !focusedChat().streaming(),
     canCompact: focusedSession().capability("compaction") && !focusedChat().streaming() && !focusedChat().compacting() && focusedChat().messages().length > 0,
     canCopy: Boolean(lastAssistant()?.content),
     chatSort: chatSort(),
@@ -4616,12 +4558,10 @@ function App() {
     copyTranscript: () => { const id = focusedChatId(); if (id) void copyTranscript({ id } as ChatSummary); },
     rename: () => runSidebar("rename-chat", focusedTarget()),
     autoName: () => void autoNameChat(),
-    move: () => runSidebar("move-chat", focusedTarget()),
     renameFolder: () => runSidebar("rename-folder"),
     stop: () => focusedChat().stop(),
     stopProcess: () => void stopChatProcess(focusedChatId()),
     regenerate: () => { const id = lastUserEntryId(); if (id) void focusedChat().regenerate(id); },
-    continue: () => void focusedChat().continueResponse(),
     compact: () => void focusedChat().compact(),
     copy: () => { const content = lastAssistant()?.content; if (content) void navigator.clipboard.writeText(content); },
     retryConnection: () => runtime.retry(),
@@ -4638,7 +4578,6 @@ function App() {
     openChat: (session, project) => { setMobileSidebarOpen(false); void openChatHere(session, project); },
     openProject: (project) => { setMobileSidebarOpen(false); void openProjectHere(project); },
     renameChat,
-    moveChats,
     copyChatLinks,
     deleteChats,
     chooseModel: (spec) => void focusedModels().chooseModel(spec),
@@ -5032,18 +4971,12 @@ function App() {
             disabled: profile.disabled, implementation: profile.agent?.implementation, drive: profile.drive })));
       })
       .catch(() => { setExternalProfiles([]); setHarnessCapabilities({}); });
-    void apiWhenServed<{ partialContinue?: boolean; maxAttachmentBytes?: number }>("/v0/capabilities")
+    void apiWhenServed<{ maxAttachmentBytes?: number }>("/v0/capabilities")
       .then((payload) => {
-        setPartialContinue(payload.partialContinue !== false);
         const maxBytes = payload.maxAttachmentBytes;
         if (typeof maxBytes === "number" && Number.isSafeInteger(maxBytes) && maxBytes > 0) setMaxAttachmentBytes(maxBytes);
       })
-      .catch(() => setPartialContinue(true));
-    void apiWhenServed<{ installations: Installation[] }>("/v0/pi-installations")
-      .then((payload) => setInstallations(asList<Installation>(payload.installations)))
-      .catch(() => setInstallations([]))
-      .finally(() => setInstallationsLoading(false));
-
+      .catch(() => {});
     void (async () => {
       const [cataloguePayload, selectedChat] = await Promise.all([
         catalogueRequest,
@@ -5137,11 +5070,10 @@ function App() {
    * composer is the page's unsent chat, and sending makes it that pane's chat
    * (docs/design/panes-and-rail.md, stage 5d).
    */
-  const PageComposer = (props: { session: ChatSession; place?: ReturnType<typeof chatPlace>; keyboardOwner: () => boolean; onSendDraft: (prompt: string) => Promise<void> }) => {
+  const PageComposer = (props: { session: ChatSession; keyboardOwner: () => boolean; onSendDraft: (prompt: string) => Promise<void> }) => {
     const current = props.session;
     return <Composer
       chat={current.chat}
-      place={props.place}
       supports={current.capability}
       attachments={current.attachments}
       attachmentsSupported={current.capability("attachments", true)}
@@ -5179,9 +5111,7 @@ function App() {
   };
   // What a chat's and a place's menu do on the dashboards; the sidebar binds the same menus to its own dialogs.
   const itemMenus: ItemActions = {
-    places: () => catalogue.projects(),
     renameChat: (chat, project) => runSidebar("rename-chat", { chat, project }),
-    moveChat: (chat, from, to) => void moveChat(chat, from, to),
     copyChat: (chat) => runSidebar("copy-chat", { chat }),
     get openBeside() { return isMobileLayout() ? undefined : (chat: ChatSummary, project: Project) => void openChatBeside(chat, project); },
     openTerminal: async (target, project) => { await openChat(target, project); if (!harnessThread() && catalogue.selectedId() === target.id) await openWorkspaceView("terminal"); },
@@ -5195,14 +5125,13 @@ function App() {
     renamePlace: (project) => runSidebar("rename-folder", { project }),
     identity: openWorkspaceIdentity,
     settings: (project) => openSettings("workspaces", project.id),
-    moveChats: (from, to) => void moveProjectChats(from, to),
     deletePlace: (project) => runSidebar("delete-project", { project }),
   };
-  const AppDashboardPage = (props: { session: ChatSession; place?: ReturnType<typeof chatPlace>; keyboardOwner: () => boolean; onSendDraft: (prompt: string) => Promise<void>; onOpenChat: (target: ChatSummary, project: Project) => void; actions?: JSX.Element; tabActions?: JSX.Element }) => <>
+  const AppDashboardPage = (props: { session: ChatSession; keyboardOwner: () => boolean; onSendDraft: (prompt: string) => Promise<void>; onOpenChat: (target: ChatSummary, project: Project) => void; actions?: JSX.Element; tabActions?: JSX.Element }) => <>
     <ChatHeader title="Conduit Dashboard" panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void startNewChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => {}} appDashboard actions={props.actions}  tabActions={props.tabActions} />
     <AppDashboard
       projects={catalogue.projects()}
-      composer={<PageComposer session={props.session} place={props.place} keyboardOwner={props.keyboardOwner} onSendDraft={props.onSendDraft} />}
+      composer={<PageComposer session={props.session} keyboardOwner={props.keyboardOwner} onSendDraft={props.onSendDraft} />}
       runtime={runtime}
       onOpenChat={props.onOpenChat}
       onPrefetchChat={chat.prefetch}
@@ -5252,7 +5181,6 @@ function App() {
     tabActions?: JSX.Element;
     tabs?: JSX.Element;
     notice?: JSX.Element;
-    place?: ReturnType<typeof chatPlace>;
     modelSelector?: boolean;
     stackRef?: (element: HTMLDivElement) => void;
   }) => {
@@ -5262,8 +5190,8 @@ function App() {
       <ChatHeader project={props.project} onOpenPlace={openPlace} title={surfaceChat.title() || (surfaceChat.status() === "active" ? "Untitled chat" : "New chat")} profile={current.activeProfile()} runtime={surfaceChat.runtimeIdentity()} live={surfaceChat.live() as unknown as Record<string, unknown>} chat={surfaceChat} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void startNewChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={props.onShare} onRename={props.onRename} onDelete={props.onDelete} actions={props.actions} tabActions={props.tabActions} tabs={props.tabs} />
       {props.notice}
       <Conversation chat={surfaceChat} busy={surfaceChat.presentation().kind === "opening_live"} stackRef={props.stackRef}
-        transcript={<Transcript chat={surfaceChat} supports={current.capability} partialContinue={partialContinue()} markdownRenderer={markdownRenderer()} profileLabel={current.activeProfile()?.label || current.activeProfile()?.id || surfaceChat.templateId() || undefined} projectId={props.project?.id} />}
-        composer={<Composer chat={surfaceChat} place={props.place} supports={current.capability} attachments={current.attachments} attachmentsSupported={current.capability("attachments", true)} models={current.models} permissions={current.capability("permissionModes") ? current.permissions : undefined} serviceLevels={current.manifest()?.serviceLevels?.length ? current.serviceLevels : undefined} profiles={profiles()} activeProfile={current.activeProfile()} onOpenModelSelector={props.modelSelector ? openModelSelector : undefined} modelSelectorShortcut={props.modelSelector ? shortcutManager.formatEffectiveBinding(COMMAND_IDS.openModelSelector) : undefined} serverOnline={serverReachable()} voiceSettings={voiceSettings()} keyboardOwner={props.keyboardOwner} onChooseProfile={(id) => void current.switchProfile(id).catch(showError)} onOpenSettings={openSettings} onOpenAttachments={current.openAttachments} onStatusChange={current.setComposerStatus} />} />
+        transcript={<Transcript chat={surfaceChat} supports={current.capability} markdownRenderer={markdownRenderer()} profileLabel={current.activeProfile()?.label || current.activeProfile()?.id || surfaceChat.templateId() || undefined} projectId={props.project?.id} />}
+        composer={<Composer chat={surfaceChat} supports={current.capability} attachments={current.attachments} attachmentsSupported={current.capability("attachments", true)} models={current.models} permissions={current.capability("permissionModes") ? current.permissions : undefined} serviceLevels={current.manifest()?.serviceLevels?.length ? current.serviceLevels : undefined} profiles={profiles()} activeProfile={current.activeProfile()} onOpenModelSelector={props.modelSelector ? openModelSelector : undefined} modelSelectorShortcut={props.modelSelector ? shortcutManager.formatEffectiveBinding(COMMAND_IDS.openModelSelector) : undefined} serverOnline={serverReachable()} voiceSettings={voiceSettings()} keyboardOwner={props.keyboardOwner} onChooseProfile={(id) => void current.switchProfile(id).catch(showError)} onOpenSettings={openSettings} onOpenAttachments={current.openAttachments} onStatusChange={current.setComposerStatus} />} />
     </>;
   };
 
@@ -5282,7 +5210,7 @@ function App() {
       onWorkspaceSuggestionsNeeded={() => void loadWorkspaceSuggestions()}
       onNewChat={async (project) => { await startNewChat(project); }} onPrefetchChat={chat.prefetch} onOpenChat={openChatHere} onFocusMainPane={focusMainPane} onEnterMainPane={() => { if (!isMobileLayout() && !document.activeElement?.closest(".main-split") && keyboardPaneSlot() === null) enterMainPane(); }} onOpenProject={async (project) => { if (altActivation()) await openPageBeside(`project:${project.id}`); else await openProjectHere(project); }} onAddProject={addProject} onRenameChat={renameChat} onRenameProject={renameProject}
       onOpenProjectMaximized={openProjectWithMaximizedWorkspace}
-      onMoveChat={moveChat} onMoveChats={moveChats} onMoveProjectChats={moveProjectChats} onCopyTranscript={copyTranscript} onCopyChatLinks={copyChatLinks}
+      onCopyTranscript={copyTranscript} onCopyChatLinks={copyChatLinks}
       onDeleteChat={deleteChat} onDeleteChats={deleteChats} onDeleteProject={deleteProject}
       onStopProcess={(target) => stopChatProcess(target.id)}
       onOpenTerminal={async (target, project) => { await openChat(target, project); if (!harnessThread() && catalogue.selectedId() === target.id) await openWorkspaceView("terminal"); }}
@@ -5336,10 +5264,12 @@ function App() {
           </div>
         </Show>
         <Show when={routeKind() === "dashboard"}>
-          <AppDashboardPage session={session} place={chatPlace()} tabActions={paneTabActions("main")} keyboardOwner={() => !sideHasKeyboard()} onOpenChat={(target, project) => void openChatFromPage(target, project)}
+          <AppDashboardPage session={session} tabActions={paneTabActions("main")} keyboardOwner={() => !sideHasKeyboard()} onOpenChat={(target, project) => void openChatFromPage(target, project)}
             onSendDraft={async (prompt) => {
-              const project = chatOwner() || catalogue.projects().find((item) => item.slug === "chat");
-              const id = chat.loadedId();
+              const chatId = chat.loadedId();
+              const project = catalogue.projects().find((item) => item.sessions.some((session) => session.id === chatId))
+                || catalogue.projects().find((item) => item.slug === "chat");
+              const id = chatId;
               if (!project || !id) return;
               // Sending is what ends a draft -- the server flips the status
               // on the prompt itself -- so the row goes in active. Listing it
@@ -5389,7 +5319,7 @@ function App() {
               {/* The same conversation a chat page has; only moving it to another
                   place is missing, since the thread's folder is where it ran. */}
               <Conversation chat={chat} busy={openingLiveChat()} stackRef={(element) => { chatComposerStack = element; }}
-                transcript={<Transcript chat={chat} supports={chatCapability} partialContinue={partialContinue()} markdownRenderer={markdownRenderer()} profileLabel={label()} projectId={catalogue.projectId()} />}
+                transcript={<Transcript chat={chat} supports={chatCapability} markdownRenderer={markdownRenderer()} profileLabel={label()} projectId={catalogue.projectId()} />}
                 composer={<Composer chat={chat} supports={chatCapability} attachments={attachments} attachmentsSupported={chatCapability("attachments", true)} models={models} permissions={chatCapability("permissionModes") ? permissions : undefined} serviceLevels={chatManifest()?.serviceLevels?.length ? serviceLevels : undefined} profiles={profiles()} activeProfile={activeProfile()} onOpenModelSelector={openModelSelector} modelSelectorShortcut={shortcutManager.formatEffectiveBinding(COMMAND_IDS.openModelSelector)} serverOnline={serverReachable()} voiceSettings={voiceSettings()} onChooseProfile={() => {}} onOpenSettings={openSettings} onOpenAttachments={session.openAttachments} onStatusChange={setComposerStatus} />} />
             </>;
           }}</Show>
@@ -5397,7 +5327,7 @@ function App() {
         <Show when={routeKind() !== "dashboard" && routeKind() !== "computer"}>
         <Show when={routeKind() === "project" && selectedProject()} fallback={<>
           <Show when={dropActive()}><div class="chat-drop-overlay"><div>Drop files to attach</div></div></Show>
-          <ChatSurface session={session} project={selectedProject()} tabActions={paneTabActions("main")} {...paneTabRow("main")} keyboardOwner={() => !sideHasKeyboard()} place={chatPlace()} modelSelector stackRef={(element) => { chatComposerStack = element; }}
+          <ChatSurface session={session} project={selectedProject()} tabActions={paneTabActions("main")} {...paneTabRow("main")} keyboardOwner={() => !sideHasKeyboard()} modelSelector stackRef={(element) => { chatComposerStack = element; }}
             onShare={() => void shareChat()} onRename={() => runSidebar("rename-chat")} onDelete={() => runSidebar("delete-chat")}
             notice={workspaceNotice(selectedProject(), catalogue.selectedId())} />
         </>}>
@@ -5444,7 +5374,7 @@ function App() {
       context={paletteContext()} runtime={runtime} actions={paletteActions} onChooseModel={(spec) => void focusedModels().chooseModel(spec)} currentModel={focusedModels().model()} scopeModels={focusedModels().allModels()} enabledModelSpecs={focusedModels().enabledModels()} onToggleModelScope={(spec) => { const models = focusedModels(); const enabled = models.enabledModels(); void models.saveScope(enabled.includes(spec) ? enabled.filter((item) => item !== spec) : [...enabled, spec]); }} shortcuts={shortcutManager} />
     <LeaderPalette shortcuts={shortcutManager} />
     <Show when={settingsLoaded()}>
-      <Settings open={settingsOpen()} initialSection={settingsSection()} sectionWasNamed={settingsNamedSection()} initialWorkspaceId={settingsWorkspaceId()} onOpenChange={setSettingsOpen} models={models} templates={templates()} templatesLoading={templatesLoading()} defaultTemplateId={defaultTemplateId()} projects={catalogue.projects()} installations={installations()} installationsLoading={installationsLoading()} onInstallationsChange={setInstallations} onDefaultTemplateChange={saveDefaultTemplate} onWorkspaceDefaultChange={saveWorkspaceDefault} markdownRenderer={markdownRenderer()} onMarkdownRendererChange={switchMarkdownRenderer} meteorField={meteorField()} onMeteorFieldChange={switchMeteorField} voiceSettings={voiceSettings()} onVoiceSettingsSave={updateVoiceSettings} sidebarChatLimit={sidebarChatLimit()} onSidebarChatLimitChange={switchSidebarChatLimit} onOpenModelSelector={openModelSelector} onAddWorkspace={addProject} shortcuts={shortcutManager} />
+      <Settings open={settingsOpen()} initialSection={settingsSection()} sectionWasNamed={settingsNamedSection()} initialWorkspaceId={settingsWorkspaceId()} onOpenChange={setSettingsOpen} models={models} templates={templates()} templatesLoading={templatesLoading()} defaultTemplateId={defaultTemplateId()} projects={catalogue.projects()} onDefaultTemplateChange={saveDefaultTemplate} onWorkspaceDefaultChange={saveWorkspaceDefault} markdownRenderer={markdownRenderer()} onMarkdownRendererChange={switchMarkdownRenderer} meteorField={meteorField()} onMeteorFieldChange={switchMeteorField} voiceSettings={voiceSettings()} onVoiceSettingsSave={updateVoiceSettings} sidebarChatLimit={sidebarChatLimit()} onSidebarChatLimitChange={switchSidebarChatLimit} onOpenModelSelector={openModelSelector} onAddWorkspace={addProject} shortcuts={shortcutManager} />
     </Show>
   </>;
 }
