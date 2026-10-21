@@ -14,6 +14,9 @@ import { messageClose, messageDrop, messageOpen, toolClose, toolKind, toolOpen, 
 import { countCacheRequest, planWindowLabel, usageFromRequests } from "./cache-stats.js";
 import { codexPlanUsage, declarePlan } from "./plan-usage.js";
 import { unsupported } from "./harnesses/unsupported.js";
+import { BACKGROUND_CONTEXT, withAbortSignal } from "@earendil-works/chord/context";
+import { execOnDevice, opaqueSessionOf, requireHarnessOn } from "./nodes/remote-spawn.js";
+import { tunnelTo } from "./nodes/remote-tunnel.js";
 
 export const CODEX_CAPABILITIES = Object.freeze({
   history: "linear", fork: true, regenerate: true,
@@ -150,10 +153,12 @@ export class CodexAppServerAdapter extends EventEmitter {
 
   constructor({ command = "codex", socketPath = path.join(process.env.CODEX_HOME || path.join(os.homedir(), ".codex"),
     "app-server-control", "app-server-control.sock"), requestTimeoutMs = 15_000, discoveryIdleMs = 60_000,
-    logs = null } = {}) {
+    logs = null, nodeHub = null } = {}) {
     super();
     this.command = command;
     this.socketPath = socketPath;
+    // Paired devices: a chat in a device's workspace runs on that device's Codex daemon.
+    this.nodeHub = nodeHub;
     this.requestTimeoutMs = requestTimeoutMs;
     this.discoveryIdleMs = discoveryIdleMs;
     this.discoveryId = null;
@@ -174,7 +179,14 @@ export class CodexAppServerAdapter extends EventEmitter {
     Object.assign(this, unsupportedMethods);
   }
 
-  startDaemon() {
+  opaqueSessionOf(record) { return opaqueSessionOf(record); }
+
+  startDaemon(record = null) {
+    // A device starts its own daemon; several chats may ask at once, which Codex settles.
+    if (record?.nodeId) {
+      return execOnDevice(this.nodeHub, record.nodeId, { harness: "codex", args: ["app-server", "daemon", "start"], place: record.place })
+        .catch((cause) => { throw error(String(cause.stderr || cause.message).trim()); });
+    }
     if (!this.daemonStart) {
       this.daemonStart = new Promise((resolve, reject) => {
         execFile(this.command, ["app-server", "daemon", "start"], (cause, _stdout, stderr) => {
@@ -202,7 +214,7 @@ export class CodexAppServerAdapter extends EventEmitter {
     const live = context.chat.backend.opaqueSession
       ? await this.restore(context.chat.backend.opaqueSession, options) : await this.create(options);
     return { live, mapping: {
-      backend: { ...context.chat.backend, model: selectedModel, opaqueSession: live.sessionId },
+      backend: { ...context.chat.backend, model: selectedModel, opaqueSession: this.opaqueSessionOf(live) },
       ...(selectedThinkingLevel ? { modelThinkingLevels: {
         ...(context.chat.modelThinkingLevels || {}), [selectedModel]: selectedThinkingLevel,
       } } : {}),
@@ -210,7 +222,7 @@ export class CodexAppServerAdapter extends EventEmitter {
   }
 
   async create({ chatId, project, model = "", thinkingLevel = "", permissionMode = "", permissionProfile = "", approvalPolicy = "", approvalsReviewer = "", serviceLevel = "", sandbox = null }) {
-    const record = await this.start({ chatId, projectId: project.id, cwd: project.workingRoot });
+    const record = await this.start({ chatId, projectId: project.id, cwd: project.workingRoot, nodeId: project.nodeId, place: project.place });
     try {
       const result = await this.request(record, "thread/start", {
         cwd: project.workingRoot,
@@ -241,7 +253,7 @@ export class CodexAppServerAdapter extends EventEmitter {
   }
 
   async restore(opaqueSession, { chatId, project, model = "", thinkingLevel = "", permissionMode = "", permissionProfile = "", approvalPolicy = "", approvalsReviewer = "", serviceLevel = "", sandbox = null }) {
-    const record = await this.start({ chatId, projectId: project.id, cwd: project.workingRoot });
+    const record = await this.start({ chatId, projectId: project.id, cwd: project.workingRoot, nodeId: project.nodeId, place: project.place });
     const threadId = typeof opaqueSession === "string" ? opaqueSession : opaqueSession?.threadId;
     if (!threadId) throw error("Codex thread identity is missing");
     try {
@@ -513,10 +525,19 @@ export class CodexAppServerAdapter extends EventEmitter {
   async contextFromHistory({ opaqueSession }) {
     const threadId = typeof opaqueSession === "string" ? opaqueSession : opaqueSession?.threadId;
     if (!threadId) return null;
-    const root = path.join(process.env.CODEX_HOME || path.join(os.homedir(), ".codex"), "sessions");
-    const name = (await fs.promises.readdir(root, { recursive: true }).catch(() => []))
-      .find((file) => file.endsWith(`${threadId}.jsonl`));
-    const text = name ? await fs.promises.readFile(path.join(root, name), "utf8").catch(() => null) : null;
+    let text = null;
+    if (opaqueSession?.nodeId) {
+      // A device's rollout is read there.
+      if (!this.nodeHub?.live.get(opaqueSession.nodeId)?.ready) return null;
+      const result = await this.nodeHub.call(opaqueSession.nodeId, { target: "harness", method: "codexRollout", args: [threadId], cwd: null },
+        withAbortSignal(AbortSignal.timeout(20_000), BACKGROUND_CONTEXT)).catch(() => null);
+      text = result?.ok ? result.value : null;
+    } else {
+      const root = path.join(process.env.CODEX_HOME || path.join(os.homedir(), ".codex"), "sessions");
+      const name = (await fs.promises.readdir(root, { recursive: true }).catch(() => []))
+        .find((file) => file.endsWith(`${threadId}.jsonl`));
+      text = name ? await fs.promises.readFile(path.join(root, name), "utf8").catch(() => null) : null;
+    }
     if (!text) return null;
     const requests = [];
     let window = null;
@@ -546,7 +567,20 @@ export class CodexAppServerAdapter extends EventEmitter {
     const threadId = live?.sessionId
       || (typeof opaqueSession === "string" ? opaqueSession : opaqueSession?.threadId);
     if (!threadId) return { messages: [], tools: [], page: { before: null } };
-    const transport = live || await this.discovery(project?.workingRoot);
+    // A device's thread is read from its own daemon, over a connection made for the read.
+    const device = !live && opaqueSession?.nodeId && project?.place
+      ? await this.start({ chatId: `read-${crypto.randomUUID()}`, cwd: project.workingRoot, nodeId: opaqueSession.nodeId, place: project.place })
+      : null;
+    if (device) device.ephemeral = true;
+    const transport = live || device || await this.discovery(project?.workingRoot);
+    try {
+      return await this.readThread(transport, threadId, { turnLimit, before });
+    } finally {
+      if (device) await this.close(device.id).catch(() => {});
+    }
+  }
+
+  async readThread(transport, threadId, { turnLimit, before }) {
     const result = await this.request(transport, "thread/read", { threadId, includeTurns: true });
     const allTurns = result?.thread?.turns || [];
     const turns = Number.isSafeInteger(turnLimit) && turnLimit > 0 ? allTurns.slice(-turnLimit) : allTurns;
@@ -593,11 +627,12 @@ export class CodexAppServerAdapter extends EventEmitter {
     return "";
   }
 
-  async start({ chatId, projectId, cwd }) {
+  async start({ chatId, projectId, cwd, nodeId = null, place = null }) {
     const existing = this.getByChatId(chatId);
     if (existing) return existing;
+    if (nodeId) requireHarnessOn(this.nodeHub, nodeId, "codex", "Codex");
     const record = {
-      id: crypto.randomUUID(), chatId, projectId, cwd, status: "starting", activity: "starting",
+      id: crypto.randomUUID(), chatId, projectId, cwd, nodeId, place, status: "starting", activity: "starting",
       active: false, stopping: false, sessionId: null, model: "", thinkingLevel: "", generation: null,
       clients: new Set(), events: [], pending: new Map(), approvals: new Map(),
       steering: [], followUp: [],
@@ -626,7 +661,8 @@ export class CodexAppServerAdapter extends EventEmitter {
       for (let attempt = 0; attempt < 2; attempt += 1) {
         record.socket = new WebSocket("ws://localhost/rpc", {
           perMessageDeflate: false,
-          createConnection: () => net.connect(this.socketPath),
+          // On a device, its daemon's socket, through the node.
+          createConnection: () => (record.nodeId ? tunnelTo(this.nodeHub, record.nodeId, { harness: "codex" }) : net.connect(this.socketPath)),
         });
         try {
           await new Promise((resolve, reject) => {
@@ -637,7 +673,7 @@ export class CodexAppServerAdapter extends EventEmitter {
         } catch (cause) {
           record.socket.terminate();
           if (attempt || !["ECONNREFUSED", "ENOENT"].includes(cause.code)) throw cause;
-          await this.startDaemon();
+          await this.startDaemon(record);
         }
       }
       record.socket.on("message", (data) => this.receive(record, String(data)));
@@ -943,7 +979,7 @@ export class CodexAppServerAdapter extends EventEmitter {
       this.refreshPlan(record);
       if (record.compactions == null) {
         record.compactions = 0;
-        void this.contextFromHistory({ opaqueSession: record.sessionId }).then((history) => {
+        void this.contextFromHistory({ opaqueSession: this.opaqueSessionOf(record) }).then((history) => {
           record.compactions += history?.contextUsage.compactions || 0;
         }).catch(() => {});
       }
@@ -1418,7 +1454,7 @@ export class CodexAppServerAdapter extends EventEmitter {
     return {
       text,
       sessionId: record.sessionId,
-      opaqueSession: record.sessionId,
+      opaqueSession: this.opaqueSessionOf(record),
       sourceMessage: { id: entryId, text },
     };
   }

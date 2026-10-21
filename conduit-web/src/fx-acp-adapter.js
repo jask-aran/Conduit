@@ -9,6 +9,7 @@ import { SessionRecords } from "./harnesses/session-records.js";
 import { messageClose, messageOpen, toolClose, toolKind, toolOpen, toolSubject, turnSettle } from "./harnesses/transcript-ops.js";
 import { unsupported } from "./harnesses/unsupported.js";
 import { terminate } from "./server/effect-process.js";
+import { harnessProcesses, opaqueSessionOf, requireHarnessOn } from "./nodes/remote-spawn.js";
 import { within } from "./server/effect-concurrency.js";
 
 const execFile = promisify(execFileCallback);
@@ -85,8 +86,9 @@ const readTurnIds = async (file) => {
 };
 
 class AcpClient {
-  constructor(command, cwd, onNotification, onRequest, onExit = () => {}) {
-    this.child = spawn(command, ["acp"], { cwd, stdio: ["pipe", "pipe", "pipe"] });
+  /** `start` is Node's spawn, or a device's (src/nodes/remote-spawn.js). */
+  constructor(command, cwd, onNotification, onRequest, onExit = () => {}, start = spawn) {
+    this.child = start(command, ["acp"], { cwd, stdio: ["pipe", "pipe", "pipe"] });
     this.pending = new Map();
     this.nextId = 1;
     this.buffer = "";
@@ -160,9 +162,11 @@ class AcpClient {
 }
 
 export class FxAcpAdapter extends EventEmitter {
-  constructor({ command = "fx", logs = null } = {}) {
+  constructor({ command = "fx", logs = null, nodeHub = null } = {}) {
     super();
     this.command = command;
+    // Paired devices: a chat in a device's workspace runs that device's fx.
+    this.nodeHub = nodeHub;
     this.sessions = new SessionRecords({
       capabilities: FX_CAPABILITIES,
       backend: { protocol: "acp", implementation: "fx", installationId: "host-fx" },
@@ -174,9 +178,14 @@ export class FxAcpAdapter extends EventEmitter {
     Object.assign(this, unsupported(FX_CAPABILITIES, { label: "fx" }));
   }
 
+  /** fx's own processes for a chat: here, or on its device (`{ nodeId, place }`). */
+  processes(on) {
+    return on?.nodeId ? harnessProcesses({ hub: this.nodeHub, nodeId: on.nodeId, place: on.place, harness: "fx" }) : null;
+  }
+
   async run(args, options = {}) {
     try {
-      const { stdout } = await execFile(this.command, args, {
+      const { stdout } = await (this.processes(options.on)?.execFile || execFile)(this.command, args, {
         cwd: options.cwd, maxBuffer: 32 * 1024 * 1024, encoding: "utf8", timeout: options.timeout || 0,
       });
       return stdout;
@@ -203,18 +212,22 @@ export class FxAcpAdapter extends EventEmitter {
     const live = context.chat.backend.opaqueSession
       ? await this.restore(context.chat.backend.opaqueSession, options) : await this.create(options);
     return { live, mapping: {
-      backend: { ...context.chat.backend, model: live.model || selectedModel, opaqueSession: live.sessionId },
+      backend: { ...context.chat.backend, model: live.model || selectedModel, opaqueSession: this.opaqueSessionOf(live) },
       ...(live.thinkingLevel ? { modelThinkingLevels: {
         ...(context.chat.modelThinkingLevels || {}), [live.model || selectedModel]: live.thinkingLevel,
       } } : {}),
     }, modelRecovery: null };
   }
 
+  opaqueSessionOf(record) { return opaqueSessionOf(record); }
+
   async start({ chatId, project }) {
     const existing = this.getByChatId(chatId);
     if (existing) return existing;
+    if (project?.nodeId) requireHarnessOn(this.nodeHub, project.nodeId, "fx", "fx");
     const record = this.sessions.add({
       id: crypto.randomUUID(), chatId, projectId: project?.id || null,
+      nodeId: project?.nodeId || null, place: project?.place || null,
       cwd: project?.workingRoot, sessionId: null, status: "starting", ready: false,
       activity: "starting", active: false, stopping: false, model: "", thinkingLevel: "",
       permissionMode: "", generation: null, generationSeq: 0, clients: new Set(), events: [],
@@ -224,7 +237,7 @@ export class FxAcpAdapter extends EventEmitter {
     record.client = new AcpClient(this.command, record.cwd,
       (message) => this.notification(record, message),
       (message) => this.requestFromAgent(record, message),
-      (cause) => this.processExited(record, cause));
+      (cause) => this.processExited(record, cause), this.processes(record)?.spawn);
     record.turnIdsFile = await turnIdsFile(project, chatId);
     try {
       await record.client.request("initialize", {
@@ -432,7 +445,7 @@ export class FxAcpAdapter extends EventEmitter {
     record.tools.clear();
     // How long the saved history was before this turn, so a stopped turn can
     // tell whether fx saved it.
-    record.historyBefore = this.json(["session", "--id", record.sessionId, "--json"], { timeout: SESSION_READ_MS })
+    record.historyBefore = this.json(["session", "--id", record.sessionId, "--json"], { timeout: SESSION_READ_MS, on: record })
       .then((data) => data.history?.length ?? null, () => null);
     this.publish(record, messageOpen({ id: userMessageId, role: "user", generationId,
       content: record.promptText, timestamp: new Date().toISOString() }));
@@ -453,7 +466,7 @@ export class FxAcpAdapter extends EventEmitter {
     let error = null;
     let saved = null;
     try {
-      const data = await this.json(["session", "--id", record.sessionId, "--json"], { timeout: SESSION_READ_MS });
+      const data = await this.json(["session", "--id", record.sessionId, "--json"], { timeout: SESSION_READ_MS, on: record });
       if (!record.active) return;
       const history = data.history || [];
       const before = await record.historyBefore;
@@ -663,7 +676,9 @@ export class FxAcpAdapter extends EventEmitter {
     const record = liveSessionId ? this.get(liveSessionId) : null;
     const sessionId = record?.sessionId || (typeof opaqueSession === "string" ? opaqueSession : opaqueSession?.threadId);
     if (!sessionId) return { messages: [], tools: [], page: { before: null } };
-    const [data, turnIds] = await Promise.all([this.json(["session", "--id", sessionId, "--json"]),
+    // A device's session is read on the device, in its workspace.
+    const on = record || (opaqueSession?.nodeId ? { nodeId: opaqueSession.nodeId, place: project?.place } : null);
+    const [data, turnIds] = await Promise.all([this.json(["session", "--id", sessionId, "--json"], { on }),
       turnIdsFile(project, chatId).then((file) => readTurnIds(record?.turnIdsFile || file))]);
     return { ...FxAcpAdapter.transcript(data, turnIds), page: { before: null } };
   }

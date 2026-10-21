@@ -17,5 +17,5 @@ export const manifest = {
   drive: true,
   profile: true,
   probe: (config) => commandProbe(config.fxCommand)(),
-  build: (config) => new FxAcpAdapter({ command: config.fxCommand, logs: config.logs }),
+  build: (config) => new FxAcpAdapter({ command: config.fxCommand, logs: config.logs, nodeHub: config.nodeHub }),
 };

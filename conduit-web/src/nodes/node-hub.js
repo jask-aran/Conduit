@@ -37,6 +37,8 @@ export class NodeHub extends EventEmitter {
     // Device processes main follows, by `${nodeId} ${procId}`: they outlive a
     // socket, so a reconnect resumes each from the last byte it had.
     this.following = new Map();
+    // Byte streams to endpoints on devices (remote-tunnel.js), by `${nodeId} ${tunnelId}`.
+    this.tunnels = new Map();
     this.wss = new WebSocketServer({ noServer: true, maxPayload: 64 * 1024 * 1024 });
   }
 
@@ -173,6 +175,7 @@ export class NodeHub extends EventEmitter {
         return;
       }
       if (message.type === "proc") return this.following.get(`${record.id} ${message.proc}`)?.deliver(message);
+      if (message.type === "tunnel") return this.tunnels.get(`${record.id} ${message.tunnel}`)?.deliver(message);
       if (message.type === "event" && node.watchers.has(message.id)) return node.watchers.get(message.id).onEvent(message);
       const pending = node.calls.get(message.id);
       if (!pending) return;
@@ -184,6 +187,7 @@ export class NodeHub extends EventEmitter {
       else pending.reject(new Error(message.message || "The device could not run the call"));
     });
     ws.on("close", () => {
+      for (const [key, tunnel] of this.tunnels) if (key.startsWith(`${record.id} `) && tunnel.nodeSocket === ws) tunnel.drop();
       for (const pending of node.calls.values()) pending.reject(Object.assign(new Error(`${record.name} disconnected during the call`), { interrupted: true }));
       node.calls.clear();
       if (this.live.get(record.id) === node) {

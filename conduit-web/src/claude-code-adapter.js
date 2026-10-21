@@ -14,7 +14,7 @@ import { claudePlanUsage, declarePlan } from "./plan-usage.js";
 import { unsupported } from "./harnesses/unsupported.js";
 import { within } from "./server/effect-concurrency.js";
 import { BACKGROUND_CONTEXT, withAbortSignal } from "@earendil-works/chord/context";
-import { harnessLaunch, spawnOnDevice } from "./nodes/remote-spawn.js";
+import { harnessLaunch, opaqueSessionOf, requireHarnessOn, spawnOnDevice } from "./nodes/remote-spawn.js";
 
 // Claude Code's tools, by what they do.
 const CLAUDE_TOOL_KINDS = Object.freeze({
@@ -395,8 +395,7 @@ export class ClaudeCodeAdapter extends EventEmitter {
     Object.assign(this, unsupported(CLAUDE_CODE_CAPABILITIES, { label: "Claude Code" }));
   }
 
-  /** What the chat keeps of a session: its id, and for a session on a device, which device -- it is found there. */
-  opaqueSessionOf(record) { return record.nodeId ? { threadId: record.sessionId, nodeId: record.nodeId } : record.sessionId; }
+  opaqueSessionOf(record) { return opaqueSessionOf(record); }
 
   /** What Claude Code's settings say for a folder: model, effort, the mode a session starts in. */
   settingsFor(cwd) {
@@ -432,9 +431,7 @@ export class ClaudeCodeAdapter extends EventEmitter {
   async start({ chatId, project, model = "", thinkingLevel = "", permissionMode = "", sessionId, resume = false }) {
     const existing = this.getByChatId(chatId);
     if (existing) return existing;
-    if (project?.nodeId && !this.nodeHub?.live.get(project.nodeId)?.harnesses?.includes("claude-code")) {
-      throw failure("Claude Code is not available on that device: it is offline, or Claude Code is not installed there", "harness_unavailable_on_device", 409);
-    }
+    if (project?.nodeId) requireHarnessOn(this.nodeHub, project.nodeId, "claude-code", "Claude Code");
     const record = this.sessions.add({
       id: crypto.randomUUID(), chatId, projectId: project?.id || null,
       nodeId: project?.nodeId || null, place: project?.place || null,
