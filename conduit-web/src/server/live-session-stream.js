@@ -448,12 +448,16 @@ export function createLiveSessionStream({
       // and this is the name that entry binds to -- so the message the browser
       // drew and the message the transcript records are one thing, rather than
       // two that have to be matched up afterwards.
-      const queuedMessageId = await messageIds.claim(prepared.context.project, prepared.context.chat,
-        "user", offeredMessageId(command.messageId));
+      // A harness that names its own messages is handed the browser's name, as
+      // a prompt is, so the queued row and the entry it becomes are one message.
+      const owned = messageIds.owns(prepared.context.chat);
+      const queuedMessageId = owned
+        ? await messageIds.claim(prepared.context.project, prepared.context.chat, "user", offeredMessageId(command.messageId))
+        : offeredMessageId(command.messageId);
       // A turn Pi starts for itself, off its own queue, still writes messages
       // that need names. It cannot reach the ledger, so it is given the one way
       // in that it needs.
-      if (queuedMessageId) {
+      if (owned && queuedMessageId) {
         record.claimAnswer = (after) => messageIds.claimNow(prepared.context.chat, "assistant", after || queuedMessageId);
       }
       const accepted = await adapter.queue(record.id, command.type, prepared.prompt,

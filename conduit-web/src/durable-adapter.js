@@ -63,6 +63,9 @@ function blocksOf(message) {
   });
 }
 
+/** pi-durable writes a stopped call's result as an error; the reader's stop makes it cancelled. */
+const abortedResult = (entry) => (entry?.data?.diagnostics || []).some((item) => item?.code === "aborted");
+
 const stopReasonOf = (message) => (STOP_REASONS.has(message?.stopReason) ? message.stopReason : "stop");
 
 function assistantClose(message, messageId, generationId = null) {
@@ -116,7 +119,8 @@ export function entriesToOps(entries, ids = {}) {
     } else if (entry.kind === "pi.tool-result") {
       const result = entry.model?.[0];
       if (!result || !calls.has(result.toolCallId)) continue;
-      ops.push(toolClose({ toolCallId: result.toolCallId, output: textOf(result.content), isError: Boolean(result.isError),
+      const cancelled = abortedResult(entry);
+      ops.push(toolClose({ toolCallId: result.toolCallId, output: textOf(result.content), isError: Boolean(result.isError) && !cancelled, cancelled,
         completedAt: result.timestamp ? new Date(result.timestamp).toISOString() : undefined }));
     }
   }
@@ -224,6 +228,9 @@ export class DurableAdapter extends EventEmitter {
       // Prompt text by message id, for the queue strip, and prompts placed
       // before the run that answers them has said it started.
       texts: new Map(), unopened: new Map(), closedEntries: new Set(),
+      // How each queued prompt was sent: a steer joins the running turn, a
+      // follow-up waits for the next one.
+      modes: new Map(),
     });
     record.scope.defer(() => record.stream?.stop());
     await this.follow(record, conversation);
@@ -371,6 +378,7 @@ export class DurableAdapter extends EventEmitter {
     }, this.context);
     record.prompts.set(submission.id, messageId);
     record.texts.set(messageId, text);
+    if (whenBusy) record.modes.set(messageId, whenBusy);
     return submission;
   }
 
@@ -449,8 +457,9 @@ export class DurableAdapter extends EventEmitter {
       const turn = record.turn;
       const messageId = entry.data?.messageId;
       if (!messageId || turn?.opened?.has(messageId)) return;
-      // Placed before its run started: the run opens it (see run_start).
-      if (!turn || !turn.inputs.length) { record.unopened.set(messageId, entry.data); return; }
+      // Placed before its run started, or a follow-up placed as the run ends:
+      // the run that answers it opens it (see run_start).
+      if (!turn || !turn.inputs.length || record.modes.get(messageId) === "followUp") { record.unopened.set(messageId, entry.data); return; }
       turn.opened ||= new Set();
       turn.opened.add(messageId);
       this.closeAnswer(record);
@@ -545,7 +554,7 @@ export class DurableAdapter extends EventEmitter {
     const tool = turn?.tools.get(event.toolCallId) || (turn && result && !event.parentToolCallId ? { opened: true, output: "" } : null);
     if (!tool?.opened) return;
     const output = result ? textOf(result.content) : tool.output || "";
-    const cancelled = record.stopping && !result;
+    const cancelled = (record.stopping && !result) || abortedResult(event.entry);
     const isError = !cancelled && (result ? Boolean(result.isError) : true);
     tool.opened = false;
     this.publish(record, { type: "tool_activity", phase: "end", generationId: turn.generationId, seq: ++record.generationSeq,
