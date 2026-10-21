@@ -517,6 +517,19 @@ if (desktopUpdateDir) {
     setHeaders: (response) => response.setHeader("Cache-Control", "no-store"),
   }));
 }
+// The installers this server hands out itself, newest of each: a server that
+// publishes its own builds (a dev head and its client) offers those rather
+// than the public release. Empty when it publishes none.
+app.get("/v0/downloads", async (_request, response) => {
+  const newest = async (suffix) => {
+    if (!desktopUpdateDir) return null;
+    const names = (await fs.readdir(desktopUpdateDir).catch(() => [])).filter((name) => name.endsWith(suffix));
+    const dated = await Promise.all(names.map(async (name) => ({ name, at: (await fs.stat(path.join(desktopUpdateDir, name))).mtimeMs })));
+    const found = dated.sort((left, right) => right.at - left.at)[0];
+    return found ? `/desktop-updates/${encodeURIComponent(found.name)}` : null;
+  };
+  response.set("Cache-Control", "no-store").json({ windowsUrl: await newest("-setup.exe"), apkUrl: await newest(".apk") });
+});
 
 // The interface as one download, for an installed client's live update. Ahead
 // of authentication like the compiled client it is made of, which is already

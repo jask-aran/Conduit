@@ -7,7 +7,7 @@ import { ServerControl } from "@/components/ui/connection";
 import { isMobileLayout } from "./mobile-layout";
 import { buildHttpUrl } from "../api/transport";
 import { proveServer } from "../platform/server-proof";
-import { latestRelease, type PublishedRelease } from "../platform/github-release";
+import { installerDownloads, type PublishedRelease } from "../platform/github-release";
 
 /** Not an address: the row that hands the choice back to the client. */
 const AUTOMATIC = "automatic";
@@ -58,9 +58,9 @@ export function ServerSwitcher(props: {
   /** The installers, for a phone's browser: its sidebar has no footer to hold them. */
   downloads?: boolean;
 }) {
-  const [release, setRelease] = createSignal<PublishedRelease | null>(null);
+  const [release, setRelease] = createSignal<Pick<PublishedRelease, "windowsUrl" | "apkUrl"> | null>(null);
   const releasesPage = "https://github.com/jask-aran/Conduit/releases/latest";
-  onMount(() => { if (props.downloads) void latestRelease().then(setRelease).catch(() => setRelease(null)); });
+  onMount(() => { if (props.downloads) void installerDownloads().then(setRelease).catch(() => setRelease(null)); });
   const download = (url?: string | null) => window.open(url || releasesPage, "_blank", "noopener,noreferrer");
   const [latency, setLatency] = createSignal<Record<string, number | null>>({});
   const [probing, setProbing] = createSignal(false);

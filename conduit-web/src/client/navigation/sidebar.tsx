@@ -30,7 +30,7 @@ import {
 import type { ChatSummary, ComputerLocation, HarnessSummary, Project, RuntimeProcess, WorkspacePolicy, WorkspaceSuggestion } from "../api/contracts";
 import type { UpdateState } from "../main";
 import { androidShell, installedClientKind } from "../platform/installed-client";
-import { latestRelease, type PublishedRelease } from "../platform/github-release";
+import { installerDownloads, type PublishedRelease } from "../platform/github-release";
 import { api } from "../api/client";
 import { WorkspaceGlyph } from "../project/workspace-appearance";
 import { ChatMenuItems, MoveTo, PlaceMenuItems } from "./item-menus";
@@ -94,9 +94,9 @@ function UpdateNotice(props: { state?: UpdateState; onTake?: () => void }) {
 }
 
 function InstallerDownloads() {
-  const [release, setRelease] = createSignal<PublishedRelease | null>(null);
+  const [release, setRelease] = createSignal<Pick<PublishedRelease, "windowsUrl" | "apkUrl"> | null>(null);
   const releasesPage = "https://github.com/jask-aran/Conduit/releases/latest";
-  onMount(() => { void latestRelease().then(setRelease).catch(() => setRelease(null)); });
+  onMount(() => { void installerDownloads().then(setRelease).catch(() => setRelease(null)); });
   return <NavLinks label="Download" links={[
     { href: release()?.windowsUrl || releasesPage, label: "Download for Windows", icon: <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3 3h8v8H3zm10 0h8v8h-8zM3 13h8v8H3zm10 0h8v8h-8z" /></svg> },
     { href: release()?.apkUrl || releasesPage, label: "Download for Android", icon: <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
