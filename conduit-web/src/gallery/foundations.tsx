@@ -243,15 +243,15 @@ const SPACE: TokenGroup[] = [
 const run = (duration: string, easing: string) => () => <div class="g-run"><span style={{ "animation-duration": duration, "animation-timing-function": easing }} /></div>;
 /** The page's moves, on a sketch of it: sidebar, reading, and the composer that stays put. */
 const LEVELS = Array.from({ length: 11 }, (_, i) => ({ value: (i / 10).toFixed(1), label: (i / 10).toFixed(1) }));
-/* Aura: the field on a pill-shaped and a round surface, its level moved by hand or by a voice. */
+/* Aura: the field on a pill-shaped and a round surface, its level moved by hand or by a voice, its strength by hand. */
 function AuraDemo() {
-  const [level, setLevel] = createSignal(0), [voice, setVoice] = createSignal(false);
+  const [level, setLevel] = createSignal(0), [voice, setVoice] = createSignal(false), [strength, setStrength] = createSignal("1.0");
   let t = 0;
   const timer = setInterval(() => { if (!voice()) return; t += 1; setLevel(Math.max(0, Math.min(1, (Math.sin(t / 3) * .5 + .5) * (Math.sin(t / 11) * .4 + .6) * (.5 + Math.random() * .5)))); }, 70);
   onCleanup(() => clearInterval(timer));
   return <div class="g-aura">
-    <div class="g-aura-row"><div class="ui-frost ui-pill g-aura-wide"><Aura on level={level()} /></div><div class="ui-frost ui-pill g-aura-short"><Aura on level={level()} /></div><div class="ui-frost g-aura-round"><Aura on level={level()} /></div></div>
-    <div class="g-aura-row"><Button variant="secondary" size="sm" onClick={() => setVoice(!voice())}>{voice() ? "Stop the voice" : "Speak"}</Button><Slider label="Level" options={LEVELS} value={(Math.round(level() * 10) / 10).toFixed(1)} onChange={(v) => { setVoice(false); setLevel(Number(v)); }} /><code>--aura-level {level().toFixed(2)}</code></div>
+    <div class="g-aura-row"><div class="ui-frost ui-pill g-aura-wide"><Aura on level={level()} strength={Number(strength())} /></div><div class="ui-frost ui-pill g-aura-short"><Aura on level={level()} strength={Number(strength())} /></div><div class="ui-frost g-aura-round"><Aura on level={level()} strength={Number(strength())} /></div></div>
+    <div class="g-aura-row"><Button variant="secondary" size="sm" onClick={() => setVoice(!voice())}>{voice() ? "Stop the voice" : "Speak"}</Button><Slider label="Level" options={LEVELS} value={(Math.round(level() * 10) / 10).toFixed(1)} onChange={(v) => { setVoice(false); setLevel(Number(v)); }} /><Slider label="Strength" options={LEVELS} value={strength()} onChange={setStrength} /><code>--aura-level {level().toFixed(2)}</code></div>
   </div>;
 }
 
