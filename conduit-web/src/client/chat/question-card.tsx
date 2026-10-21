@@ -1,6 +1,7 @@
+import { Icons } from "@/components/ui";
 import { createMemo, createSignal, For, onMount, Show } from "solid-js";
 import { createStore } from "solid-js/store";
-import { XIcon } from "lucide-solid";
+
 import { Button, Choice, ChoiceInput, Choices, ChoicesPage, Hints, Input, Preview, Prompt, Rider, RiderFoot, RiderTop, RiderTitle, Summary, Tab, Tabs, TextArea } from "@/components/ui";
 import type { HostUiRequest, Question, QuestionAnswer } from "../api/contracts";
 
@@ -136,7 +137,7 @@ export function QuestionCard(props: { request: HostUiRequest; dismissLabel?: str
           <Show when={review()}><Tab selected={!current()} onClick={() => go(questions().length)}>Submit</Tab></Show>
         </Tabs>
       </Show>
-      <Button variant="ghost" size="icon-sm" tabIndex={-1} aria-label={props.dismissLabel === "deny" ? "Deny" : "Dismiss"} onClick={dismiss}><XIcon /></Button>
+      <Button variant="ghost" size="icon-sm" tabIndex={-1} aria-label={props.dismissLabel === "deny" ? "Deny" : "Dismiss"} onClick={dismiss}><Icons.Close /></Button>
     </RiderTop>
 
     <Show when={current()} keyed fallback={<Summary rows={questions().map((question, index) => ({ label: question.header || question.prompt,

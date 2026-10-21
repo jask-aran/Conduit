@@ -15,7 +15,8 @@ export const codeExcerptSetup = (numbers: Parameters<typeof lineNumbers>[0] = {}
     { tag: [tags.typeName, tags.className], color: "var(--syntax-type)" },
     { tag: tags.function(tags.variableName), color: "var(--syntax-title)" },
     { tag: [tags.variableName, tags.propertyName], color: "var(--syntax-variable)" },
-    { tag: [tags.comment, tags.meta], color: "var(--syntax-meta)" },
+    { tag: tags.comment, color: "var(--syntax-comment)" },
+    { tag: tags.meta, color: "var(--syntax-meta)" },
   ]), { fallback: true }),
   Prec.high(EditorView.theme({
     "&": { color: "var(--foreground)", backgroundColor: "transparent" },

@@ -1,6 +1,7 @@
+import { Icons } from "@/components/ui";
 import { createSignal, For, onCleanup, onMount, Show } from "solid-js";
 import { isInstalledClient } from "../platform/installed-client.ts";
-import { FileIcon, ImageIcon } from "lucide-solid";
+
 import type { Attachment } from "../api/contracts";
 import type { UploadAttachment } from "../state/attachments";
 import { attachmentUrl } from "../api/transport";
@@ -37,7 +38,7 @@ export function AttachmentCards(props: {
         const image = item.type?.startsWith("image/");
         const source = upload.objectUrl || (image && props.chatId ? attachmentUrl(props.chatId, item.id, "?preview=1") : null);
         return <div data-slot="attachment" data-size="default" class="attachment-card">
-          <span data-slot="attachment-media" class="attachment-media"><Show when={source} fallback={image ? <ImageIcon /> : <FileIcon />}>
+          <span data-slot="attachment-media" class="attachment-media"><Show when={source} fallback={image ? <Icons.Image /> : <Icons.File />}>
             <AttachmentImage src={source!} />
           </Show></span>
           <span class="attachment-copy"><strong>{item.name}</strong><small>{sizeLabel(item.size)}</small></span>

@@ -1,6 +1,7 @@
+import { Icons } from "@/components/ui";
 import { createMemo, createSignal, Index, Show, type Component } from "solid-js";
 import { Dynamic } from "solid-js/web";
-import { CodeXmlIcon, FilePenLineIcon, FileTextIcon, GlobeIcon, SearchIcon, SquareTerminalIcon, WrenchIcon } from "lucide-solid";
+
 import type { ToolItem, ToolKind } from "../api/contracts";
 import { httpUrl } from "../api/transport";
 import { authorizedFetch } from "../api/native-auth-client";
@@ -24,8 +25,8 @@ function stringify(value: unknown) {
 /* A step of the trail names its kind with an icon and a verb -- present while
    it runs, past once it has -- and what it acted on in mono beside it. */
 export const KIND_ICONS: Record<ToolKind, Component<{ class?: string }>> = {
-  command: SquareTerminalIcon, read: FileTextIcon, edit: FilePenLineIcon,
-  search: SearchIcon, fetch: GlobeIcon, script: CodeXmlIcon, other: WrenchIcon,
+  command: Icons.Shell, read: Icons.FileText, edit: Icons.WriteFile,
+  search: Icons.Search, fetch: Icons.Fetch, script: Icons.Code, other: Icons.Tool,
 };
 export const VERBS: Record<ToolKind, [string, string]> = {
   command: ["Running", "Ran"], read: ["Reading", "Read"], edit: ["Editing", "Edited"],

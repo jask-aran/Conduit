@@ -1,5 +1,6 @@
+import { Icons } from "@/components/ui";
 import { createEffect, createMemo, createSignal, Index, Match, onCleanup, Suspense, Switch } from "solid-js";
-import { LightbulbIcon, MessageSquareTextIcon } from "lucide-solid";
+
 import type { Message, ToolItem, ToolKind } from "../api/contracts";
 import type { TraceSegment, TurnTraceData } from "../turn-rows";
 import { KIND_ICONS, stepDuration, ToolStep, VERBS } from "./tool-card";
@@ -299,7 +300,7 @@ function TrailLine(props: RowProps & { item: TrailItem; arriving?: boolean }) {
   return <Switch>
     <Match when={props.item.type === "text" && props.item}>{(item) => {
       const segment = () => item().segment, fold = useFold(() => segment().id, props);
-      return <Step icon={segment().kind === "thinking" ? <LightbulbIcon /> : <MessageSquareTextIcon />} summary={inline(props, summaryOf(segment().text))} discarded={segment().discarded} motion={motion()} opens open={fold.open()} onToggle={fold.toggle}>
+      return <Step icon={segment().kind === "thinking" ? <Icons.Thinking /> : <Icons.Message />} summary={inline(props, summaryOf(segment().text))} discarded={segment().discarded} motion={motion()} opens open={fold.open()} onToggle={fold.toggle}>
         <StepProse><Suspense fallback={<div class="markdown-skeleton" />}><ChatMarkdown streaming={Boolean(segment().live)} renderer={props.renderer} onRendered={props.onRendered}>{segment().text}</ChatMarkdown></Suspense></StepProse>
       </Step>;
     }}</Match>
@@ -308,7 +309,7 @@ function TrailLine(props: RowProps & { item: TrailItem; arriving?: boolean }) {
       message={item().message.errorMessage || "The model request failed."} />}</Match>
     <Match when={props.item.type === "tool" && props.item}>{(item) => { const fold = useFold(() => item().tool.toolCallId, props);
       return <ToolStep tool={item().tool} settled={props.settled} sessionId={props.sessionId} open={fold.open()} onToggle={fold.toggle} motion={motion()} />; }}</Match>
-    <Match when={props.item.type === "hidden"}><Step note icon={<LightbulbIcon />} summary="Reasoning not shared by the provider" motion={motion()} /></Match>
+    <Match when={props.item.type === "hidden"}><Step note icon={<Icons.Thinking />} summary="Reasoning not shared by the provider" motion={motion()} /></Match>
     <Match when={props.item.type === "group" && props.item}>{(item) => {
       const tools = () => (item() as Extract<TrailItem, { type: "group" }>).tools, kind = () => (item() as Extract<TrailItem, { type: "group" }>).kind;
       const fold = useFold(() => `group:${tools()[0]!.toolCallId}`, props);

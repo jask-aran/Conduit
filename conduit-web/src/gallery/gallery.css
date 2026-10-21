@@ -36,7 +36,7 @@ html, body { background: var(--frame, #08090a); color: var(--foreground); }
 .g-swatch { width: 160px; height: 110px; border-radius: 17.6px; }
 .g-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .g-card-demo { display: flex; width: 280px; flex-direction: column; gap: 14px; padding: 16px; }
-.g-panel-inline { display: inline-block; min-width: 10rem; border-radius: var(--radius-lg); padding: 4px; color: var(--popover-foreground); }
+.g-panel-inline { display: inline-block; min-width: 10rem; border-radius: var(--radius-surface); padding: 4px; color: var(--popover-foreground); }
 .g-search { width: 270px; }
 .g-parts { display: block; width: 412px; height: 1000px; margin: 0 16px 24px; border: 1px solid var(--border); border-radius: 18px; background: var(--background); }
 /* The preview. */

@@ -1,6 +1,7 @@
+import { Icons } from "@/components/ui";
 import { createDecisionScope } from "@/components/decision-dialog";
 import { createEffect, createResource, createSignal, Index, lazy, onCleanup, Show, Suspense, type JSX } from "solid-js";
-import { ArrowLeftRightIcon, Columns2Icon, FileDiffIcon, FileTextIcon, GitCompareArrowsIcon, XIcon } from "lucide-solid";
+
 import { MenuRow } from "@/components/menus";
 import { FileViewer as Viewer, FileButton } from "@/components/ui/file";
 import { FileDivider, FileSwap, FileScope, FileChanges } from "@/components/ui/viewer";
@@ -179,7 +180,7 @@ export default function FileViewer(props: {
     divider.addEventListener("pointercancel", end);
     event.preventDefault();
   };
-  const splitButton = () => <Show when={props.entries.length === 1 && !props.splitEmpty}><FileButton type="button" data-fold="1" aria-label="Open this file again beside" title="Split" onClick={() => props.onSplit()}><Columns2Icon /></FileButton></Show>;
+  const splitButton = () => <Show when={props.entries.length === 1 && !props.splitEmpty}><FileButton type="button" data-fold="1" aria-label="Open this file again beside" title="Split" onClick={() => props.onSplit()}><Icons.Split /></FileButton></Show>;
   return <Viewer ref={(element) => { root = element; resized.observe(element); changed.observe(element, { childList: true, subtree: true, attributes: true, attributeFilter: ["data-need"] }); }} data-count={sides()} style={sides() > 1 ? { "--side-a": String(props.emptyFirst ? 1 - share() : share()), "--side-b": String(props.emptyFirst ? share() : 1 - share()) } : undefined}>
     <Index each={props.entries}>{(entry, index) =>
       <Show when={entry().mode} fallback={
@@ -199,7 +200,7 @@ export default function FileViewer(props: {
           headerTabs={props.tabs?.(index)}
           headerEnd={index === props.entries.length - 1 && !(props.splitEmpty && !props.emptyFirst) ? props.paneActions?.() : undefined}
           headerMenuItems={(folded) => <>
-            <Show when={props.entries.length === 1 && !props.splitEmpty && folded("1")}><MenuRow icon={<Columns2Icon />} onSelect={() => props.onSplit()}>Open again beside</MenuRow></Show>
+            <Show when={props.entries.length === 1 && !props.splitEmpty && folded("1")}><MenuRow icon={<Icons.Split />} onSelect={() => props.onSplit()}>Open again beside</MenuRow></Show>
             {props.sideMenu?.(index)}
           </>}
           reveal={props.reveal && props.reveal.entry.projectId === entry().projectId && props.reveal.entry.path === entry().path ? props.reveal.request : null}
@@ -219,7 +220,7 @@ export default function FileViewer(props: {
       }</Show>
     }</Index>
     {props.emptySide}
-    <Show when={props.entries.length === 2 && props.onSwapSides}><FileSwap type="button" tabIndex={-1} aria-label="Swap the sides" title="Swap the sides" style={{ left: `${share() * 100}%` }} onClick={() => props.onSwapSides?.()}><ArrowLeftRightIcon /></FileSwap></Show>
+    <Show when={props.entries.length === 2 && props.onSwapSides}><FileSwap type="button" tabIndex={-1} aria-label="Swap the sides" title="Swap the sides" style={{ left: `${share() * 100}%` }} onClick={() => props.onSwapSides?.()}><Icons.Swap /></FileSwap></Show>
     <Show when={sides() > 1}><FileDivider role="separator" aria-orientation="vertical" aria-label="Resize the sides" style={{ left: `${share() * 100}%` }} onPointerDown={dragDivider} onDblClick={() => props.onShare?.(0.5)} /></Show>
   </Viewer>;
 }
@@ -244,10 +245,10 @@ function ChangesEntry(props: {
   props.ref({ path: () => props.entry.path, hasUnsavedChanges: () => false, reload: async () => { await refetch(); }, edit: () => props.onSetMode(undefined), save: async () => {}, discardChanges: () => {} });
   const other = () => props.mode === "changes" ? (hasStaged(props.status) ? "staged" as const : null) : (hasUnstaged(props.status) ? "changes" as const : null);
   const actions = <>
-    <FileButton type="button" aria-label="Show the file" title="Show the file" onClick={() => props.onSetMode(undefined)}><FileTextIcon /></FileButton>
-    <Show when={other()}>{(next) => <FileButton type="button" aria-label={next() === "staged" ? "Review staged changes" : "Review unstaged changes"} title={next() === "staged" ? "Review staged changes" : "Review unstaged changes"} onClick={() => props.onSetMode(next())}>{next() === "staged" ? <GitCompareArrowsIcon /> : <FileDiffIcon />}</FileButton>}</Show>
+    <FileButton type="button" aria-label="Show the file" title="Show the file" onClick={() => props.onSetMode(undefined)}><Icons.FileText /></FileButton>
+    <Show when={other()}>{(next) => <FileButton type="button" aria-label={next() === "staged" ? "Review staged changes" : "Review unstaged changes"} title={next() === "staged" ? "Review staged changes" : "Review unstaged changes"} onClick={() => props.onSetMode(next())}>{next() === "staged" ? <Icons.GitCompareArrows /> : <Icons.FileDiff />}</FileButton>}</Show>
     {props.split}
-    <Show when={!props.tabs}><FileButton type="button" close aria-label="Close file" title="Close file" onClick={() => props.onClose()}><XIcon /></FileButton></Show>
+    <Show when={!props.tabs}><FileButton type="button" close aria-label="Close file" title="Close file" onClick={() => props.onClose()}><Icons.Close /></FileButton></Show>
   </>;
   return <FileChanges tabIndex={-1} focused={props.focused} aria-label={`${props.entry.path} ${props.mode === "staged" ? "staged changes" : "changes"}`} onFocusIn={() => props.onFocus()} onPointerDown={() => props.onFocus()}>
     <Suspense>

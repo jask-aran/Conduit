@@ -1,7 +1,9 @@
+import { HarnessMark } from "@/components/ui";
+import { Icons } from "@/components/ui";
 import { Button as LibraryButton, Captions, Completion, ComposerField, DesktopComposer, PhoneComposer, Picker, PillButton, PillField, PillWave, Rider, Spinner, StopGlyph, TextArea, Toolbar, VoiceRider } from "@/components/ui";
 import { latestAway, scrollToLatest } from "./latest-away";
 import { createEffect, createMemo, createSignal, For, lazy, on, onCleanup, onMount, Show, type JSX } from "solid-js";
-import { ArrowDownIcon, ArrowUpIcon, CameraIcon, ChevronLeftIcon, ChevronRightIcon, DeleteIcon, KeyboardIcon, MicIcon, TextCursorInputIcon, Undo2Icon, ShieldCheckIcon } from "lucide-solid";
+
 import { Menu, MenuContent } from "@/components/menus";
 import type { BooleanCapability, Template } from "../api/contracts";
 import type { ActiveChatStore } from "../state/active-chat";
@@ -23,7 +25,7 @@ import { toast } from "@/components/notifications";
 import { audioTransferLost, beginDictatedRange, matchesShortcut, releasesShortcut, replaceDictatedRange, shouldAutoSend, shouldReportNoSignal } from "./voice-dictation";
 import { createVoiceWaveformController, MAX_RESPONSIVE_BAR_COUNT, type VoiceWaveformController } from "./voice-waveform";
 import { ModelSelector } from "./model-selector";
-import { HarnessMark } from "../harness-brand";
+
 import { parseReviewComments, removeReviewComment, reviewComments, updateReviewComment } from "./review-comments";
 import { ReviewCommentCards } from "./review-comment-cards";
 import "./performance-composer.css";
@@ -47,11 +49,11 @@ export interface ComposerStatus {
 }
 
 const EDIT_ACTIONS = [
-  { key: "undo", label: "Undo", icon: () => <Undo2Icon /> },
-  { key: "delete", label: "Delete word or selection", icon: () => <DeleteIcon /> },
-  { key: "left", label: "Previous word", icon: () => <ChevronLeftIcon /> },
-  { key: "right", label: "Next word", icon: () => <ChevronRightIcon /> },
-  { key: "end", label: "End of draft", icon: () => <TextCursorInputIcon /> },
+  { key: "undo", label: "Undo", icon: () => <Icons.Undo /> },
+  { key: "delete", label: "Delete word or selection", icon: () => <Icons.Backspace /> },
+  { key: "left", label: "Previous word", icon: () => <Icons.ChevronLeft /> },
+  { key: "right", label: "Next word", icon: () => <Icons.ChevronRight /> },
+  { key: "end", label: "End of draft", icon: () => <Icons.InsertText /> },
 ] as const;
 
 export function Composer(props: {
@@ -774,18 +776,18 @@ export function Composer(props: {
           <ModelSelector models={props.models.models()} model={props.models.model()} thinkingLevel={props.models.effort()} notice={props.models.notice()} loading={props.modelsLoading} disabled={!props.serverOnline || !interactive() || !supports("modelSwitch")} onModelChange={(value) => void props.models.chooseModel(value)} onThinkingLevelChange={(value) => void props.models.chooseEffort(value)} onSearchModels={props.onOpenModelSelector} searchShortcut={props.modelSelectorShortcut} />
         </div></Show>
         <Show when={(props.permissions?.profiles().length || props.serviceLevels?.levels().length) && shows("permissions")}><div data-composer-fold="permissions"><Menu>
-          <Menu.Trigger as={Picker} icon={<ShieldCheckIcon />} value={props.permissions?.profiles().find((profile) => profile.id === props.permissions?.selected())?.label || "Settings"} aria-label="Session settings" disabled={!props.serverOnline || !interactive()} />
+          <Menu.Trigger as={Picker} icon={<Icons.Permissions />} value={props.permissions?.profiles().find((profile) => profile.id === props.permissions?.selected())?.label || "Settings"} aria-label="Session settings" disabled={!props.serverOnline || !interactive()} />
           <MenuContent>
             <Show when={props.permissions?.profiles().length}><PermissionChoices permissions={props.permissions!} /></Show>
             <Show when={props.serviceLevels?.levels().length}><ServiceChoices levels={props.serviceLevels!} /></Show>
           </MenuContent>
         </Menu></div></Show>
       </>}
-      end={<LibraryButton variant="ghost" size="icon-sm" data-state={dictationState()} aria-label={["starting", "listening"].includes(dictationState()) ? "Stop voice dictation" : "Start voice dictation"} aria-pressed={dictating()} title={`Voice dictation (${props.voiceSettings.shortcut})`} disabled={!props.serverOnline || !interactive()} onPointerDown={captureDictationLaunch} onClick={toggleDictation}><Show when={["starting", "finishing", "waiting", "transcribing"].includes(dictationState())} fallback={<MicIcon />}><Spinner /></Show></LibraryButton>}
+      end={<LibraryButton variant="ghost" size="icon-sm" data-state={dictationState()} aria-label={["starting", "listening"].includes(dictationState()) ? "Stop voice dictation" : "Start voice dictation"} aria-pressed={dictating()} title={`Voice dictation (${props.voiceSettings.shortcut})`} disabled={!props.serverOnline || !interactive()} onPointerDown={captureDictationLaunch} onClick={toggleDictation}><Show when={["starting", "finishing", "waiting", "transcribing"].includes(dictationState())} fallback={<Icons.Microphone />}><Spinner /></Show></LibraryButton>}
       // One primary slot, so nothing beside it moves: Stop while the agent works; once a draft is typed, Send again
       // (which queues the message for the agent), and Stop steps in beside it.
       aside={<Show when={stoppable() && newDraft()}>{stopButton()}</Show>}
-      primary={<Show when={stoppable() && !newDraft()} fallback={<LibraryButton variant="ghost" size="icon-sm" aria-label={busy() ? "Send to the agent" : "Send message"} title={busy() ? "Send — the agent takes it when the current step finishes" : undefined} disabled={!canSend()} onClick={() => sendMessage()}><ArrowUpIcon /></LibraryButton>}>{stopButton()}</Show>} />
+      primary={<Show when={stoppable() && !newDraft()} fallback={<LibraryButton variant="ghost" size="icon-sm" aria-label={busy() ? "Send to the agent" : "Send message"} title={busy() ? "Send — the agent takes it when the current step finishes" : undefined} disabled={!canSend()} onClick={() => sendMessage()}><Icons.Send /></LibraryButton>}>{stopButton()}</Show>} />
   </DesktopComposer>;
   const phone = () => <PhoneComposer mode={phoneMode() ?? "idle"} layout="bar" under={optionsOpen()} editing={editing()} level={Math.min(1, dictationWaveform.level() * 2.5)} onTrack={toggleDictation}
     riders={<>{question()}{riders()}</>}
@@ -797,16 +799,16 @@ export function Composer(props: {
     <Show when={props.attachmentsSupported !== false}>
       {/* Tap: the camera, through the platform's own capture. Hold: the same picker as Attach files. */}
       <input ref={cameraInput} type="file" accept="image/*" capture="environment" hidden onChange={(event) => { const files = Array.from(event.currentTarget.files || []); event.currentTarget.value = ""; if (files.length) props.attachments.addFiles(files); }} />
-      <PillButton label="Take a photo" icon={<CameraIcon />} button={{ title: "Take a photo (hold to choose files)", disabled: !props.serverOnline || !interactive(), onPointerDown: cameraPointerDown, onPointerUp: cameraPointerUp, onPointerLeave: cameraPointerCancel, onPointerCancel: cameraPointerCancel, onContextMenu: (event) => event.preventDefault() }} />
+      <PillButton label="Take a photo" icon={<Icons.Camera />} button={{ title: "Take a photo (hold to choose files)", disabled: !props.serverOnline || !interactive(), onPointerDown: cameraPointerDown, onPointerUp: cameraPointerUp, onPointerLeave: cameraPointerCancel, onPointerCancel: cameraPointerCancel, onContextMenu: (event) => event.preventDefault() }} />
     </Show>
-    <PillButton label={keyboardWanted() ? "Close the keyboard" : "Type a message"} icon={<KeyboardIcon />} button={{ disabled: !props.serverOnline || !interactive(), onPointerDown: (event) => event.preventDefault(), onClick: toggleKeyboard }} />
-    <PillButton folded={!latestAway()} label="Scroll to latest" icon={<ArrowDownIcon />} button={{ onPointerDown: (event) => event.preventDefault(), onClick: scrollToLatest }} />
-    <PillButton stretch aura haptic="press" label={["starting", "listening"].includes(dictationState()) ? "Stop voice dictation" : "Start voice dictation"} icon={<MicIcon />} button={{ "data-state": dictationState(), "aria-pressed": dictating(), title: `Voice dictation (${props.voiceSettings.shortcut})`, disabled: !props.serverOnline || !interactive(), onPointerDown: captureDictationLaunch, onClick: toggleDictation }} />
+    <PillButton label={keyboardWanted() ? "Close the keyboard" : "Type a message"} icon={<Icons.Keyboard />} button={{ disabled: !props.serverOnline || !interactive(), onPointerDown: (event) => event.preventDefault(), onClick: toggleKeyboard }} />
+    <PillButton folded={!latestAway()} label="Scroll to latest" icon={<Icons.ArrowDown />} button={{ onPointerDown: (event) => event.preventDefault(), onClick: scrollToLatest }} />
+    <PillButton stretch aura haptic="press" label={["starting", "listening"].includes(dictationState()) ? "Stop voice dictation" : "Start voice dictation"} icon={<Icons.Microphone />} button={{ "data-state": dictationState(), "aria-pressed": dictating(), title: `Voice dictation (${props.voiceSettings.shortcut})`, disabled: !props.serverOnline || !interactive(), onPointerDown: captureDictationLaunch, onClick: toggleDictation }} />
     <PillButton haptic="press" folded={phoneMode() === "listening" || !(stoppable() && newDraft())} label="Stop response" icon={<Show when={props.chat.stopping()} fallback={<StopGlyph />}><Spinner /></Show>} button={{ onClick: props.chat.stop }} />
     {/* One slot, one arrow: Stop and send while listening, Send with a draft, Stop while the agent works; folded with none. */}
     <PillButton voice haptic="press" folded={phoneMode() !== "listening" && !hasPayload() && !stoppable()}
       label={phoneMode() === "listening" ? "Stop and send" : stoppable() && !newDraft() ? "Stop response" : busy() ? "Send to the agent" : "Send message"}
-      icon={<Show when={phoneMode() !== "listening" && stoppable() && !newDraft()} fallback={<ArrowUpIcon />}><Show when={props.chat.stopping()} fallback={<StopGlyph />}><Spinner /></Show></Show>}
+      icon={<Show when={phoneMode() !== "listening" && stoppable() && !newDraft()} fallback={<Icons.Send />}><Show when={props.chat.stopping()} fallback={<StopGlyph />}><Spinner /></Show></Show>}
       button={{ disabled: phoneMode() !== "listening" && !(stoppable() && !newDraft()) && !canSend(), onPointerDown: (event) => { if (phoneMode() === "listening") event.preventDefault(); },
         onClick: () => phoneMode() === "listening" ? stopAndSend() : stoppable() && !newDraft() ? props.chat.stop() : sendMessage() }} />
   </PhoneComposer>;

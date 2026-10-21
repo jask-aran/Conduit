@@ -1,5 +1,6 @@
+import * as Icons from "./icons";
 import { For, Show, splitProps, type JSX } from "solid-js";
-import { CheckIcon, ChevronRightIcon, ExternalLinkIcon, SearchIcon } from "lucide-solid";
+
 import { cn } from "@/lib/utils";
 import { Keycap } from "./controls";
 import { type Density, type Motion, hovers, motionOf, moveCursor } from "./shared";
@@ -35,7 +36,7 @@ export function Section(props: JSX.HTMLAttributes<HTMLDivElement> & { note?: JSX
  *  field: what a behaviour adds to the input (combobox state, keys, focus). */
 export function SearchSection(props: { placeholder: string; value?: string; keys?: string[]; onInput?: (value: string) => void; field?: JSX.InputHTMLAttributes<HTMLInputElement> }) {
   return <div role="search" class="ui-section ui-search-section" data-kind="search">
-    <SearchIcon /><input {...props.field} class="ui-search" placeholder={props.placeholder} value={props.value ?? ""} onInput={(event) => props.onInput?.(event.currentTarget.value)} />
+    <Icons.Search /><input {...props.field} class="ui-search" placeholder={props.placeholder} value={props.value ?? ""} onInput={(event) => props.onInput?.(event.currentTarget.value)} />
     <Show when={props.keys}><Keys keys={props.keys!} /></Show>
   </div>;
 }
@@ -85,15 +86,15 @@ export function Item(props: JSX.HTMLAttributes<HTMLDivElement> & {
   const [, rest] = splitProps(props, ["icon", "meta", "detail", "detailData", "keys", "opens", "active", "field", "keysFirst", "checked", "disabled", "destructive", "children", "end", "class", "onOpens", "opensLabel", "indent", "picked", "reveal", "away", "onCursor"]);
   return <div role={props.checked !== undefined ? "menuitemradio" : "menuitem"} class="ui-row" aria-checked={props.checked} data-field={props.field ? "" : undefined}
     data-highlighted={props.active ? "" : undefined} data-checked={props.checked ? "" : undefined} data-disabled={props.disabled ? "" : undefined} data-destructive={props.destructive ? "" : undefined} data-indent={props.indent ? "" : undefined} data-picked={props.picked ? "" : undefined} onPointerMove={props.onCursor ? (event: PointerEvent) => { if (hovers(event)) props.onCursor!(); } : undefined} {...rest}>
-    <Show when={props.picked !== undefined}><span class="ui-row-check" aria-hidden="true"><Show when={props.picked}><CheckIcon /></Show></span></Show>
+    <Show when={props.picked !== undefined}><span class="ui-row-check" aria-hidden="true"><Show when={props.picked}><Icons.Check /></Show></span></Show>
     <Show when={props.keysFirst && props.keys}><Keys keys={props.keys!} first /></Show>
     <Show when={props.icon}><span class="ui-icon">{props.icon}</span></Show><span class="ui-label" data-stacked={props.detail ? "" : undefined}><Show when={props.detail} fallback={props.children}><span>{props.children}</span><small class="ui-detail" data-data={props.detailData ? "" : undefined}>{props.detail}</small></Show></span>
     <Show when={props.meta}><small>{props.meta}</small></Show>
     <Show when={!props.keysFirst && props.keys}><Keys keys={props.keys!} /></Show>
-    <Show when={props.opens}><Show when={props.onOpens} fallback={<ChevronRightIcon class="ui-chevron" />}>
-      <button type="button" class="ui-chevron" tabIndex={-1} aria-label={props.opensLabel} onMouseDown={(event) => event.preventDefault()} onClick={(event) => { event.stopPropagation(); props.onOpens?.(); }}><ChevronRightIcon /></button>
+    <Show when={props.opens}><Show when={props.onOpens} fallback={<Icons.ChevronRight class="ui-chevron" />}>
+      <button type="button" class="ui-chevron" tabIndex={-1} aria-label={props.opensLabel} onMouseDown={(event) => event.preventDefault()} onClick={(event) => { event.stopPropagation(); props.onOpens?.(); }}><Icons.ChevronRight /></button>
     </Show></Show>
-    <Show when={props.away && !props.opens}><ExternalLinkIcon class="ui-chevron" data-away="" aria-hidden="true" /></Show>
+    <Show when={props.away && !props.opens}><Icons.ExternalLink class="ui-chevron" data-away="" aria-hidden="true" /></Show>
     <Show when={props.end}><span class="ui-row-end" data-reveal={props.reveal ? "" : undefined}>{props.end}</span></Show>
   </div>;
 }

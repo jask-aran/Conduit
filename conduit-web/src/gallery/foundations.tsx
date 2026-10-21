@@ -1,3 +1,4 @@
+import { IDENTITY_COLOURS } from "@/components/ui/palettes";
 import { createSignal, For, onCleanup, onMount, Show, type JSX } from "solid-js";
 import { ArrowUpIcon, CameraIcon, CopyIcon, FolderIcon, MicIcon, MonitorIcon, PaperclipIcon, PlusIcon, SettingsIcon, ShareIcon, Trash2Icon } from "lucide-solid";
 
@@ -177,6 +178,73 @@ const COLOURS: TokenGroup[] = [
   { title: "Tints", rows: [tok("--tint", "a surface's lines and washes, which its controls read: the app's --border (and --accent, the same value) on the ground, --frost-tint over frost", colour("--tint"), swatch("--tint")), tok("--well", "a surface's well, under an input or an outline button: a step darker than the ground, nothing over frost", colour("--well"), swatch("--well")), tok("--frost-tint", "frost's lines and washes: rules, the cursor", colour("--frost-tint"), swatch("--frost-tint")), tok("--frost-stroke", "frost's edge", colour("--frost-stroke"), swatch("--frost-stroke"))] },
   { title: "Frost", rows: [tok("--frost-fill", "the material's fill (Frost has its blur, highlight and lifts)", colour("--frost-fill"), swatch("--frost-fill")), tok("--frost-core-ground", "core: a solid backing for busy content", colour("--frost-core-ground"), swatch("--frost-core-ground")), tok("--dim", "over what is behind: a desktop overlay (Scrim), the leader's lit composer (Spotlight), the phone's open sidebar; not behind a phone overlay, which fills the screen", colour("--dim"), swatch("--dim"))] },
   { title: "State", rows: [tok("--destructive", "a destructive action", colour("--destructive"), swatch("--destructive")), tok("--live", "a runtime dot: live", colour("--live"), swatch("--live")), tok("--warn", "a runtime dot: warning", colour("--warn"), swatch("--warn"))] },
+  { title: "Code (One Dark)", rows: [
+    tok("--code-foreground", "content and punctuation", colour("--code-foreground"), swatch("--code-foreground")),
+    tok("--code-comment", "comments and quotes", colour("--code-comment"), swatch("--code-comment")),
+    tok("--code-red", "variables, properties, tags and deleted text", colour("--code-red"), swatch("--code-red")),
+    tok("--code-orange", "constants, attributes, numbers and metadata", colour("--code-orange"), swatch("--code-orange")),
+    tok("--code-yellow", "types, classes, namespaces and changed text", colour("--code-yellow"), swatch("--code-yellow")),
+    tok("--code-green", "strings, regular expressions and inserted text", colour("--code-green"), swatch("--code-green")),
+    tok("--code-cyan", "escapes, operators and links", colour("--code-cyan"), swatch("--code-cyan")),
+    tok("--code-blue", "function names and headings", colour("--code-blue"), swatch("--code-blue")),
+    tok("--code-purple", "keywords and modifiers", colour("--code-purple"), swatch("--code-purple")),
+    tok("--code-invalid", "invalid text background", colour("--code-invalid"), swatch("--code-invalid")),
+    tok("--code-invalid-foreground", "invalid text foreground", colour("--code-invalid-foreground"), swatch("--code-invalid-foreground")),
+  ] },
+  { title: "Syntax roles", rows: [
+    tok("--syntax-keyword", "keyword: --code-purple", colour("--syntax-keyword"), swatch("--syntax-keyword")),
+    tok("--syntax-string", "string: --code-green", colour("--syntax-string"), swatch("--syntax-string")),
+    tok("--syntax-number", "number: --code-orange", colour("--syntax-number"), swatch("--syntax-number")),
+    tok("--syntax-title", "title: --code-blue", colour("--syntax-title"), swatch("--syntax-title")),
+    tok("--syntax-variable", "variable: --code-red", colour("--syntax-variable"), swatch("--syntax-variable")),
+    tok("--syntax-type", "type: --code-yellow", colour("--syntax-type"), swatch("--syntax-type")),
+    tok("--syntax-meta", "meta: --code-orange", colour("--syntax-meta"), swatch("--syntax-meta")),
+    tok("--syntax-comment", "comment: --code-comment", colour("--syntax-comment"), swatch("--syntax-comment")),
+  ] },
+  { title: "Terminal (ANSI)", rows: [
+    tok("--ansi-background", "terminal background", colour("--ansi-background"), swatch("--ansi-background")),
+    tok("--ansi-foreground", "terminal foreground", colour("--ansi-foreground"), swatch("--ansi-foreground")),
+    tok("--ansi-cursor", "terminal cursor", colour("--ansi-cursor"), swatch("--ansi-cursor")),
+    tok("--ansi-cursor-accent", "terminal cursor accent", colour("--ansi-cursor-accent"), swatch("--ansi-cursor-accent")),
+    tok("--ansi-selection", "terminal selection", colour("--ansi-selection"), swatch("--ansi-selection")),
+    tok("--ansi-selection-foreground", "terminal selection foreground", colour("--ansi-selection-foreground"), swatch("--ansi-selection-foreground")),
+    tok("--ansi-black", "terminal black", colour("--ansi-black"), swatch("--ansi-black")),
+    tok("--ansi-red", "terminal red", colour("--ansi-red"), swatch("--ansi-red")),
+    tok("--ansi-green", "terminal green", colour("--ansi-green"), swatch("--ansi-green")),
+    tok("--ansi-yellow", "terminal yellow", colour("--ansi-yellow"), swatch("--ansi-yellow")),
+    tok("--ansi-blue", "terminal blue", colour("--ansi-blue"), swatch("--ansi-blue")),
+    tok("--ansi-magenta", "terminal magenta", colour("--ansi-magenta"), swatch("--ansi-magenta")),
+    tok("--ansi-cyan", "terminal cyan", colour("--ansi-cyan"), swatch("--ansi-cyan")),
+    tok("--ansi-white", "terminal white", colour("--ansi-white"), swatch("--ansi-white")),
+    tok("--ansi-bright-black", "terminal bright black", colour("--ansi-bright-black"), swatch("--ansi-bright-black")),
+    tok("--ansi-bright-red", "terminal bright red", colour("--ansi-bright-red"), swatch("--ansi-bright-red")),
+    tok("--ansi-bright-green", "terminal bright green", colour("--ansi-bright-green"), swatch("--ansi-bright-green")),
+    tok("--ansi-bright-yellow", "terminal bright yellow", colour("--ansi-bright-yellow"), swatch("--ansi-bright-yellow")),
+    tok("--ansi-bright-blue", "terminal bright blue", colour("--ansi-bright-blue"), swatch("--ansi-bright-blue")),
+    tok("--ansi-bright-magenta", "terminal bright magenta", colour("--ansi-bright-magenta"), swatch("--ansi-bright-magenta")),
+    tok("--ansi-bright-cyan", "terminal bright cyan", colour("--ansi-bright-cyan"), swatch("--ansi-bright-cyan")),
+    tok("--ansi-bright-white", "terminal bright white", colour("--ansi-bright-white"), swatch("--ansi-bright-white")),
+  ] },
+  { title: "Change", rows: [
+    tok("--change-added", "added content", colour("--change-added"), swatch("--change-added")),
+    tok("--change-modified", "modified content", colour("--change-modified"), swatch("--change-modified")),
+    tok("--change-removed", "removed content", colour("--change-removed"), swatch("--change-removed")),
+  ] },
+  { title: "Category", rows: [
+    tok("--category-1", "messages and what is used (the context gauge)", colour("--category-1"), swatch("--category-1")),
+    tok("--category-2", "the system prompt", colour("--category-2"), swatch("--category-2")),
+    tok("--category-3", "tools", colour("--category-3"), swatch("--category-3")),
+    tok("--category-4", "instructions", colour("--category-4"), swatch("--category-4")),
+    tok("--category-5", "other content", colour("--category-5"), swatch("--category-5")),
+    tok("--category-6", "a spare, for what has no colour of its own", colour("--category-6"), swatch("--category-6")),
+    tok("--category-7", "a spare", colour("--category-7"), swatch("--category-7")),
+    tok("--category-8", "a spare", colour("--category-8"), swatch("--category-8")),
+    tok("--category-9", "a spare", colour("--category-9"), swatch("--category-9")),
+  ] },
+  { title: "Identity", rows: IDENTITY_COLOURS.map(({ id, label, hex }) => tok(id, label, () => hex, () => <i class="g-swatch-chip" style={{ background: hex }} />)) },
+  { title: "Brand", rows: [
+    tok("--brand-claude-code", "Claude Code brand", colour("--brand-claude-code"), swatch("--brand-claude-code")),
+  ] },
 ];
 /*
  * The scale: the user's Interface size and each region's own size per density (foundations.css, Scale), set on every

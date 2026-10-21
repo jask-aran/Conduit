@@ -1,5 +1,6 @@
+import * as Icons from "./icons";
 import { createSignal, Show, type JSX } from "solid-js";
-import { QrCodeIcon, XIcon } from "lucide-solid";
+
 import { cn } from "@/lib/utils";
 import { Button } from "./controls";
 import { type Density, type Motion, motionOf } from "./shared";
@@ -9,7 +10,7 @@ export function Card(props: { title: JSX.Element; detail?: JSX.Element; descript
   return <div role={props.embedded ? undefined : "dialog"} aria-label={!props.embedded && typeof props.title === "string" ? props.title : undefined} class={cn("ui-frost ui-card", props.class)} data-density={props.density} data-size={props.size} data-close={props.close ? "" : undefined} data-surface="frost" data-lift="raised" {...motionOf(props.motion)}>
     <h3>{props.title}</h3><Show when={props.detail}><p>{props.detail}</p></Show>
     <Show when={props.description}><span class="ui-card-description">{props.description}</span></Show>
-    <Show when={props.close}><Button variant="ghost" size="icon-sm" class="ui-card-close" aria-label={props.closeLabel ?? "Close"} disabled={props.closeDisabled} onClick={() => typeof props.close === "function" && props.close()}><XIcon /></Button></Show>
+    <Show when={props.close}><Button variant="ghost" size="icon-sm" class="ui-card-close" aria-label={props.closeLabel ?? "Close"} disabled={props.closeDisabled} onClick={() => typeof props.close === "function" && props.close()}><Icons.Close /></Button></Show>
     {props.children}
     <Show when={props.actions}><CardActions>{props.actions}</CardActions></Show>
   </div>;
@@ -28,7 +29,7 @@ export const CardDetails = (props: { children: JSX.Element }) => <dl class="ui-c
 export function CardQR(props: { svg: string; expired?: boolean; reveal?: boolean }) {
   const [shown, setShown] = createSignal(false);
   return <>
-    <Show when={props.reveal}><Button variant="ghost" outline class="ui-card-qr-reveal" aria-expanded={shown()} onClick={() => setShown(!shown())}><QrCodeIcon />{shown() ? "Hide QR code" : "Show QR code"}</Button></Show>
+    <Show when={props.reveal}><Button variant="ghost" outline class="ui-card-qr-reveal" aria-expanded={shown()} onClick={() => setShown(!shown())}><Icons.QrCode />{shown() ? "Hide QR code" : "Show QR code"}</Button></Show>
     <div class="ui-card-qr" innerHTML={props.svg} data-expired={props.expired ? "" : undefined} data-reveal={props.reveal ? "" : undefined} data-shown={shown() ? "" : undefined} aria-label="Pairing QR code" role="img" />
   </>;
 }
@@ -40,6 +41,6 @@ export function CardAttachment(props: { name: string; detail: string; image?: JS
   return <li class="ui-card-attachment" data-error={props.failed ? "" : undefined}>
     <span class="ui-card-attachment-media" data-image={props.image ? "" : undefined}>{props.image ?? props.icon}</span>
     <span class="ui-card-attachment-copy"><strong>{props.name}</strong><small>{props.detail}</small></span>
-    <Button variant="ghost" size="icon-sm" aria-label={`Remove ${props.name}`} onClick={props.onRemove}><XIcon /></Button>
+    <Button variant="ghost" size="icon-sm" aria-label={`Remove ${props.name}`} onClick={props.onRemove}><Icons.Close /></Button>
   </li>;
 }

@@ -1,5 +1,6 @@
+import * as Icons from "./icons";
 import { Show, createUniqueId, splitProps, type JSX } from "solid-js";
-import { ArrowRightIcon, CheckIcon, CircleAlertIcon } from "lucide-solid";
+import { CircleAlertIcon } from "lucide-solid";
 import { StatusDot } from "./nav";
 import { Button, Input, Spinner } from "./controls";
 
@@ -31,7 +32,7 @@ export function ConnectionAddress(props: JSX.InputHTMLAttributes<HTMLInputElemen
   const [local, rest] = splitProps(props, ["state"]);
   return <div class="ui-connection-address" data-state={local.state}>
     <Input {...rest} type="text" inputMode="url" autocomplete="url" autocapitalize="none" spellcheck={false} aria-invalid={local.state === "missing" ? "true" : undefined} />
-    <span class="ui-connection-address-mark" aria-hidden="true"><Show when={local.state === "found"}><CheckIcon /></Show></span>
+    <span class="ui-connection-address-mark" aria-hidden="true"><Show when={local.state === "found"}><Icons.Check /></Show></span>
   </div>;
 }
 
@@ -50,7 +51,7 @@ export function ConnectionPassword(props: JSX.InputHTMLAttributes<HTMLInputEleme
   return <div class="ui-connection-password-step" data-reveal={local.reveal ? "" : undefined}>
     <div class="ui-connection-password">
       <Input {...rest} id={id} type="password" autocomplete="current-password" aria-label="Password" placeholder="Password" aria-invalid={local.error ? "true" : undefined} aria-describedby={local.error ? `${id}-error` : undefined} />
-      <Button type="submit" variant="ghost" size="icon" aria-label="Sign in" title="Sign in" disabled={local.busy || rest.disabled}><Show when={local.busy} fallback={<ArrowRightIcon />}><Spinner /></Show></Button>
+      <Button type="submit" variant="ghost" size="icon" aria-label="Sign in" title="Sign in" disabled={local.busy || rest.disabled}><Show when={local.busy} fallback={<Icons.Proceed />}><Spinner /></Show></Button>
     </div>
     <Show when={local.error}><p id={`${id}-error`} class="ui-connection-error" role="alert">{local.error}</p></Show>
   </div>;

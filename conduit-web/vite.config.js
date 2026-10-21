@@ -1,7 +1,6 @@
 import { accessPagePlugin } from "./scripts/access-page-plugin.mjs";
 import { defineConfig } from "vite";
 import solid from "vite-plugin-solid";
-import tailwindcss from "@tailwindcss/vite";
 import { VitePWA } from "vite-plugin-pwa";
 import path from "node:path";
 import { buildStamp } from "./src/build-info.js";
@@ -59,7 +58,6 @@ export default defineConfig(({ mode }) => {
       sharedGeometryCssPlugin(),
       materialIconManifestPlugin(),
       solid({ ssr: access }),
-      tailwindcss(),
       !gallery && !access && accessPagePlugin(import.meta.filename),
       // Production-only installability: the client owns SW registration so
       // updates can reload the current page. Dev keeps HMR free of a worker.

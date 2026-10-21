@@ -1,5 +1,6 @@
+import { Icons } from "@/components/ui";
 import { createMemo, For, Show } from "solid-js";
-import { SearchIcon } from "lucide-solid";
+
 import { MenuNote, Picker, Section, Slider, Spinner } from "@/components/ui";
 import { Menu, MenuContent, MenuRadioGroup, MenuRadioItem, MenuRow, MenuSection, MenuSub, MenuSubContent, MenuSubValue } from "@/components/menus";
 import type { ModelOption } from "../api/contracts";
@@ -26,7 +27,7 @@ export function ModelMenuItems(props: ModelMenuProps) {
   const levels = createMemo(() => selected()?.thinkingLevels?.length ? selected()!.thinkingLevels! : ["off"]);
   return <>
     <Show when={props.onSearchModels}>
-      <MenuSection><MenuRow icon={<SearchIcon />} keys={props.searchShortcut?.split(/\s+/)} onSelect={() => props.onSearchModels?.()}>Search all models…</MenuRow></MenuSection>
+      <MenuSection><MenuRow icon={<Icons.Search />} keys={props.searchShortcut?.split(/\s+/)} onSelect={() => props.onSearchModels?.()}>Search all models…</MenuRow></MenuSection>
     </Show>
     <Show when={!props.onSearchModels && props.notice}><MenuNote>{props.notice}</MenuNote></Show>
     <MenuSection><MenuRadioGroup value={props.model} onChange={props.onModelChange}>
