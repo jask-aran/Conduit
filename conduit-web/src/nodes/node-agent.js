@@ -40,6 +40,20 @@ export function startNodeAgent({ mainUrl, key, name, roots: shared, shellEnv = p
   let stopped = false;
   let timer = null;
 
+  /*
+   * Where a call runs: a root by id and a path inside it, `{ root, path }`.
+   * Main names places, never paths on this device; a root that is not shared
+   * (or a path leaving it) is nowhere.
+   */
+  const placeOf = (place) => {
+    const root = place && typeof place === "object" ? roots.find((item) => item.id === place.root) : null;
+    if (!root) return null;
+    const segments = String(place.path || "").split(/[\\/]/).filter((part) => part && part !== ".");
+    if (segments.includes("..")) return null;
+    const home = realish(path.join(root.path, ...segments));
+    return home && rootFor([root], home, "read") ? home : null;
+  };
+
   const envFor = (cwd) => {
     if (!envs.has(cwd)) envs.set(cwd, new NodeExecutionEnv({ cwd, shellEnv }));
     return envs.get(cwd);
@@ -60,7 +74,9 @@ export function startNodeAgent({ mainUrl, key, name, roots: shared, shellEnv = p
 
     ws.on("open", () => {
       attempt = 0;
-      send({ type: "hello", version: NODE_PROTOCOL_VERSION, name, platform: process.platform, roots });
+      // Roots go by id; the path is for people to read, main never sends it back.
+      send({ type: "hello", version: NODE_PROTOCOL_VERSION, name, platform: process.platform,
+        roots: roots.map(({ id, path: label, read, write, shell }) => ({ id, label, read, write, shell })) });
       log.info?.(`[conduit-node] connected to ${mainUrl}`);
     });
     ws.on("message", async (raw) => {
@@ -113,8 +129,8 @@ export function startNodeAgent({ mainUrl, key, name, roots: shared, shellEnv = p
       try {
         if (method === "spawn") {
           const spec = args[0] || {};
-          const home = typeof spec.cwd === "string" ? realish(spec.cwd) : null;
-          if (!home || !rootFor(roots, home, "shell")) return refuse("exec", spec.cwd);
+          const home = placeOf(spec.cwd);
+          if (!home || !rootFor(roots, home, "shell")) return refuse("exec", "that folder");
           return { ok: true, value: processes.spawn({ ...spec, cwd: home }) };
         }
         const [procId, ...rest] = args;
@@ -150,14 +166,14 @@ export function startNodeAgent({ mainUrl, key, name, roots: shared, shellEnv = p
       }
       const rule = METHOD_GRANTS[method];
       if (!rule) return err(new FileError("not_supported", `${method} is not served by this node`));
-      const home = typeof cwd === "string" ? realish(cwd) : null;
+      const home = placeOf(cwd);
       const allowed = (target, grant) => Boolean(target && rootFor(roots, target, grant));
-      if (!home || !["read", "write", "shell"].some((grant) => allowed(home, grant))) return refuse(method, cwd);
+      if (!home) return refuse(method, "that folder");
       for (const at of rule.paths) {
         if (typeof decoded[at] !== "string") continue;
         if (!allowed(realish(path.resolve(home, decoded[at])), rule.grant)) return refuse(method, decoded[at]);
       }
-      if (method === "exec" && !allowed(realish(path.resolve(home, decoded[1]?.cwd || ".")), "shell")) return refuse(method, decoded[1]?.cwd || cwd);
+      if (method === "exec" && !allowed(realish(path.resolve(home, decoded[1]?.cwd || ".")), "shell")) return refuse(method, decoded[1]?.cwd || "that folder");
       if (method === "watch" && decoded[0].some((item) => !allowed(realish(path.resolve(home, item.path)), "read"))) return refuse(method, "a watched path");
       const env = envFor(home);
       if (method === "exec") {
@@ -184,7 +200,7 @@ export function startNodeAgent({ mainUrl, key, name, roots: shared, shellEnv = p
   };
 }
 
-const view = (root) => ({ path: realish(root.path) || path.resolve(root.path), read: Boolean(root.read), write: Boolean(root.write), shell: Boolean(root.shell) });
+const view = (root) => ({ id: root.id, path: realish(root.path) || path.resolve(root.path), read: Boolean(root.read), write: Boolean(root.write), shell: Boolean(root.shell) });
 
 /**
  * A path with its symlinks resolved, as far as it exists: a link inside a

@@ -1,6 +1,5 @@
 import os from "node:os";
 import { applyArtifactMessageIds } from "../../message-ids.js";
-import { sharedRoot } from "../../nodes/protocol.js";
 import { deviceHost } from "../../workspace-host.js";
 import { readWorkspaceComparison } from "../../workspace-comparison.js";
 import { computerContext, findComputerGitRoot, resolveComputerContext } from "../../computer-context.js";
@@ -125,7 +124,7 @@ export function registerProjectRoutes(app, {
   // Where the inspector works for a project: this server's path, or the
   // device's folder through its environment (plan decision 22).
   const rootOf = (project) => project.nodeId
-    ? deviceHost({ hub: nodeHub, nodeId: project.nodeId, root: project.workingRoot })
+    ? deviceHost({ hub: nodeHub, nodeId: project.nodeId, place: project.place, label: project.workingRoot })
     : project.workingRoot;
   const readComputerLocation = async (project) => {
     const [gitRoot, listing] = await Promise.all([
@@ -250,14 +249,16 @@ export function registerProjectRoutes(app, {
         return response.status(201).json(created);
       }
       if (mode === "node") {
-        // A folder on a paired device: it has to be inside a folder the device shares.
+        // A folder a paired node shares: a root by id, and optionally a folder inside it.
         const nodeId = String(request.body?.nodeId || "");
-        const remotePath = String(request.body?.path || "").trim();
-        const device = nodeHub && await nodeHub.get(nodeId);
-        if (!device) return response.status(404).json({ error: "node_not_found" });
-        if (!remotePath) return response.status(400).json({ error: "workspace_path_required" });
-        if (!sharedRoot(device.roots, remotePath)) return response.status(400).json({ error: "path_not_shared", message: `${device.name} does not share ${remotePath}` });
-        const created = await projects.createOnNode({ name: name || undefined, nodeId, path: remotePath,
+        if (!nodeHub || !await nodeHub.get(nodeId)) return response.status(404).json({ error: "node_not_found" });
+        const root = await nodeHub.root(nodeId, String(request.body?.rootId || ""));
+        if (!root) return response.status(400).json({ error: "root_not_shared", message: "That folder is not shared by the device" });
+        const subpath = String(request.body?.path || "").replace(/\\/g, "/").split("/").filter((part) => part && part !== ".");
+        if (subpath.includes("..")) return response.status(400).json({ error: "invalid_workspace_path" });
+        const separator = root.label.includes("\\") && !root.label.includes("/") ? "\\" : "/";
+        const created = await projects.createOnNode({ name: name || undefined, nodeId, rootId: root.id, subpath: subpath.join("/"),
+          label: [root.label.replace(/[\\/]+$/, ""), ...subpath].join(separator),
           defaultTemplateId: resolveProjectDefaultTemplateId(config, request.body?.defaultTemplateId, null) });
         return response.status(201).json(created);
       }

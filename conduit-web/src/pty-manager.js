@@ -493,7 +493,7 @@ export class PtyManager extends EventEmitter {
       throw failure("pty_capacity_reached", "The terminal session limit has been reached");
     }
     const shell = await RemoteProcess.spawn(this.nodeHub, project.nodeId, {
-      shell: true, cwd, pty: { cols: boundedDimension(cols, 80), rows: boundedDimension(rows, 24) } });
+      shell: true, cwd: project.place, pty: { cols: boundedDimension(cols, 80), rows: boundedDimension(rows, 24) } });
     // Nothing follows it until a client attaches; the device keeps its output.
     shell.detach();
     const id = crypto.randomUUID();

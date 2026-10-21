@@ -111,7 +111,8 @@ export const ConduitWorkspace = defineDoc({
   scope: "conversation",
   history: "latest",
   fork: "current",
-  initial: () => ({ nodeId: null }),
+  // `place` is `{ root, path }` on that node: a shared root by id, never a path.
+  initial: () => ({ nodeId: null, place: null }),
 });
 
 /** A prompt as Conduit placed it: the model sees `content`, the transcript keeps the browser's id. */
@@ -180,9 +181,11 @@ export class DurableRuntime {
         // Each call's files and processes are the conversation's working
         // directory: the project the chat belongs to, on whichever device holds it.
         env: async ({ conversationId, cwd, read }, context) => {
-          const nodeId = (await read.snapshot(ConduitWorkspace, conversationId, context))?.nodeId;
-          if (nodeId && this.nodeHub) {
-            return new RemoteExecutionEnv({ hub: this.nodeHub, nodeId, cwd,
+          const { nodeId, place } = (await read.snapshot(ConduitWorkspace, conversationId, context)) || {};
+          // A conversation on a node never falls back to this machine's disk.
+          if (nodeId && (!place || !this.nodeHub)) throw new Error("This conversation's device folder is not known; open it from its workspace again");
+          if (nodeId) {
+            return new RemoteExecutionEnv({ hub: this.nodeHub, nodeId, place, cwd,
               onWait: (device) => this.emitWaiting(conversationId, device) });
           }
           return new NodeExecutionEnv({ cwd: cwd || process.cwd(), shellEnv });

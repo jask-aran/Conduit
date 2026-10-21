@@ -2088,7 +2088,7 @@ function App() {
     migrateWorkspacePanelStorage(workspacePanelScopes(projects));
     return projects;
   };
-  const addProject = async (input: { mode: string; name?: string; path?: string; nodeId?: string; directoryName?: string; cloneUrl?: string; cloneParentPath?: string; cloneDirectoryName?: string }) => {
+  const addProject = async (input: { mode: string; name?: string; path?: string; nodeId?: string; rootId?: string; directoryName?: string; cloneUrl?: string; cloneParentPath?: string; cloneDirectoryName?: string }) => {
     try {
       const result = await api<Project | { project: Project; operation: { id: string; state: string } }>("/v0/projects", { method: "POST", body: JSON.stringify(input) });
       const created = "project" in result ? result.project : result;

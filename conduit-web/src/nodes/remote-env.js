@@ -16,9 +16,15 @@ const RETRY_ON_RECONNECT = new Set(Object.entries(METHOD_GRANTS)
  * so, since whether it ran is unknown.
  */
 export class RemoteExecutionEnv {
-  constructor({ hub, nodeId, cwd, onWait }) {
+  /**
+   * `place` is where calls run, `{ root, path }`: a root the device shares,
+   * by id, and a path inside it. `cwd` is only how that place reads to people
+   * and the model (the device's own path); nothing is sent by it.
+   */
+  constructor({ hub, nodeId, place, cwd, onWait }) {
     this.hub = hub;
     this.nodeId = nodeId;
+    this.place = place;
     this.cwd = cwd;
     this.id = `conduit-node:${nodeId}`;
     this.onWait = onWait;
@@ -31,7 +37,7 @@ export class RemoteExecutionEnv {
   async call(target, method, args, context, onEvent) {
     for (;;) {
       try {
-        const value = await this.hub.call(this.nodeId, { target, method, args: encode(args), cwd: this.cwd }, context,
+        const value = await this.hub.call(this.nodeId, { target, method, args: encode(args), cwd: this.place }, context,
           { onEvent, onWait: this.onWait });
         return decode(value, { FileError, ExecutionError, handle: (ref) => this.handle(ref) });
       } catch (error) {

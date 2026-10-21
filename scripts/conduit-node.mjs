@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -25,7 +26,14 @@ function printHelp() {
 Settings live in ${file} (CONDUIT_NODE_HOME moves them).`);
 }
 
-const read = () => { try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return { roots: [] }; } };
+// Each shared folder has an id main knows it by; the path stays on this device.
+const rootId = () => `r_${crypto.randomBytes(9).toString("base64url")}`;
+const read = () => {
+  let settings;
+  try { settings = JSON.parse(fs.readFileSync(file, "utf8")); } catch { return { roots: [] }; }
+  settings.roots = (settings.roots || []).map((root) => (root.id ? root : { id: rootId(), ...root }));
+  return settings;
+};
 const write = (settings) => {
   fs.mkdirSync(home, { recursive: true, mode: 0o700 });
   fs.writeFileSync(file, `${JSON.stringify(settings, null, 2)}\n`, { mode: 0o600 });
@@ -42,8 +50,11 @@ if (command === "pair") {
 } else if (command === "share") {
   const target = args.find((item) => !item.startsWith("--"));
   if (!target || !fs.statSync(target, { throwIfNoEntry: false })?.isDirectory()) { console.error("Share an existing folder."); process.exit(2); }
-  const root = { path: path.resolve(target), read: true, write: args.includes("--write"), shell: args.includes("--shell") };
-  write({ ...settings, roots: [...(settings.roots || []).filter((item) => item.path !== root.path), root] });
+  const resolved = path.resolve(target);
+  // Sharing a folder again changes its grants, not its id: workspaces on it keep working.
+  const root = { id: settings.roots.find((item) => item.path === resolved)?.id || rootId(), path: resolved,
+    read: true, write: args.includes("--write"), shell: args.includes("--shell") };
+  write({ ...settings, roots: [...settings.roots.filter((item) => item.path !== root.path), root] });
   if (root.shell) console.warn(`--shell: commands start in ${root.path} but run as ${os.userInfo().username}, with everything that user can reach.`);
   console.log(`Sharing ${root.path}: ${["read", root.write && "write", root.shell && "shell"].filter(Boolean).join(", ")}. Restart \`conduit-node run\` to offer it.`);
 } else if (command === "unshare") {
@@ -53,6 +64,7 @@ if (command === "pair") {
 } else if (command === "status") {
   console.log(JSON.stringify({ mainUrl: settings.mainUrl || null, name: settings.name || null, paired: Boolean(settings.key), roots: settings.roots || [] }, null, 2));
 } else if (command === "run") {
+  write(settings);
   if (!settings.mainUrl || !settings.key) { console.error("Not paired: run `conduit-node pair <main-url> <key>` first."); process.exit(2); }
   if (!settings.roots?.length) console.warn("Nothing is shared yet; main will see this device with no folders.");
   const agent = startNodeAgent({ mainUrl: settings.mainUrl, key: settings.key, name: settings.name || os.hostname(),

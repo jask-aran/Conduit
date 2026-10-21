@@ -28,7 +28,11 @@ export class NodeHub extends EventEmitter {
     super();
     this.file = path.join(dataRoot, "nodes.json");
     this.allowRemote = allowRemote;
+    // Nodes (one per paired environment, each with its own key) and the
+    // devices that group them: a desktop's Windows host and its WSL distro
+    // are two nodes on one device.
     this.records = null;
+    this.devices = null;
     this.live = new Map();
     // Device processes main follows, by `${nodeId} ${procId}`: they outlive a
     // socket, so a reconnect resumes each from the last byte it had.
@@ -38,28 +42,52 @@ export class NodeHub extends EventEmitter {
 
   async load() {
     if (this.records) return this.records;
-    try { this.records = JSON.parse(await fs.readFile(this.file, "utf8")).nodes || []; }
-    catch (error) { if (error.code !== "ENOENT") throw error; this.records = []; }
+    let stored = {};
+    try { stored = JSON.parse(await fs.readFile(this.file, "utf8")); }
+    catch (error) { if (error.code !== "ENOENT") throw error; }
+    this.records = stored.nodes || [];
+    this.devices = stored.devices || [];
+    // Version 1 had no devices: each node becomes the only node of a device of its name.
+    for (const record of this.records) {
+      if (record.deviceId) continue;
+      const device = { id: `device_${crypto.randomUUID()}`, name: record.name, createdAt: record.createdAt };
+      this.devices.push(device);
+      record.deviceId = device.id;
+    }
     return this.records;
   }
 
   async save() {
-    await fs.writeFile(this.file, `${JSON.stringify({ version: 1, nodes: this.records }, null, 2)}\n`, { mode: 0o600 });
+    await fs.writeFile(this.file, `${JSON.stringify({ version: 2, devices: this.devices, nodes: this.records }, null, 2)}\n`, { mode: 0o600 });
   }
 
-  async pair(name) {
+  /** Pair a node on a device: an existing one by id, else a new one by name. */
+  async pair({ name, deviceId = null, deviceName = null } = {}) {
     await this.load();
+    let device = deviceId && this.devices.find((item) => item.id === deviceId);
+    if (deviceId && !device) throw Object.assign(new Error("No such device"), { status: 404, code: "device_not_found" });
+    if (!device) {
+      device = { id: `device_${crypto.randomUUID()}`, name: String(deviceName || name || "Device").trim().slice(0, 80) || "Device",
+        createdAt: new Date().toISOString() };
+      this.devices.push(device);
+    }
     const key = `cnk_${crypto.randomBytes(32).toString("base64url")}`;
-    const record = { id: `node_${crypto.randomUUID()}`, name: String(name || "Device").trim().slice(0, 80) || "Device",
+    const record = { id: `node_${crypto.randomUUID()}`, deviceId: device.id,
+      name: String(name || device.name).trim().slice(0, 80) || device.name,
       keyHash: hash(key), createdAt: new Date().toISOString(), lastSeenAt: null, roots: [], platform: null };
     this.records.push(record);
     await this.save();
-    return { node: this.view(record), key };
+    return { node: this.view(record), device: this.deviceView(device), key };
   }
 
   async forget(id) {
     await this.load();
+    const gone = this.records.find((record) => record.id === id);
     this.records = this.records.filter((record) => record.id !== id);
+    // A device with no nodes left is gone with its last one.
+    if (gone && !this.records.some((record) => record.deviceId === gone.deviceId)) {
+      this.devices = this.devices.filter((device) => device.id !== gone.deviceId);
+    }
     await this.save();
     this.live.get(id)?.socket.close(4001, "unpaired");
     // A call waiting for this device will not see it again.
@@ -69,11 +97,24 @@ export class NodeHub extends EventEmitter {
 
   view(record) {
     const live = this.live.get(record.id);
-    return { id: record.id, name: record.name, platform: live?.platform || record.platform || null,
+    return { id: record.id, deviceId: record.deviceId, name: record.name, platform: live?.platform || record.platform || null,
       online: Boolean(live), roots: live?.roots || record.roots || [], lastSeenAt: live ? new Date().toISOString() : record.lastSeenAt };
   }
 
+  deviceView(device) {
+    return { id: device.id, name: device.name,
+      nodes: this.records.filter((record) => record.deviceId === device.id).map((record) => this.view(record)) };
+  }
+
   async list() { return (await this.load()).map((record) => this.view(record)); }
+
+  async listDevices() { await this.load(); return this.devices.map((device) => this.deviceView(device)); }
+
+  /** A root a node shares, by id, as it last said: `{ id, label, read, write, shell }`. */
+  async root(nodeId, rootId) {
+    const record = await this.get(nodeId);
+    return (this.live.get(nodeId)?.roots || record?.roots || []).find((root) => root.id === rootId) || null;
+  }
 
   async get(id) { return (await this.load()).find((record) => record.id === id) || null; }
 
@@ -116,10 +157,16 @@ export class NodeHub extends EventEmitter {
         this.live.set(record.id, node);
         Object.assign(record, { roots: node.roots, platform: node.platform, lastSeenAt: new Date().toISOString() });
         if (message.name && record.name === "Device") record.name = String(message.name).slice(0, 80);
+        // Roots without ids are from a node older than root ids: it is not addressable.
+        node.roots = node.roots.filter((root) => typeof root?.id === "string");
+        record.roots = node.roots;
         void this.save();
         this.emit("changed");
         this.emit(`online:${record.id}`);
-        for (const follower of this.following.values()) if (follower.nodeId === record.id) void follower.resume();
+        // A follower whose process the device no longer has (it restarted) ends; never this server.
+        for (const follower of this.following.values()) {
+          if (follower.nodeId === record.id) void follower.resume().catch((error) => follower.lost(error));
+        }
         return;
       }
       if (message.type === "proc") return this.following.get(`${record.id} ${message.proc}`)?.deliver(message);

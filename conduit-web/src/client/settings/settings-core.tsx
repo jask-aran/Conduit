@@ -237,7 +237,7 @@ export function Settings(props: {
   onSidebarChatLimitChange: (limit: number) => void;
   onOpenModelSelector: () => void;
   /** Adds a folder a paired device shares as a workspace (Devices). */
-  onAddWorkspace: (input: { mode: "node"; nodeId: string; path: string }) => Promise<boolean>;
+  onAddWorkspace: (input: { mode: "node"; nodeId: string; rootId: string }) => Promise<boolean>;
   shortcuts: ShortcutManager;
 }) {
   const { confirm: confirmDialog } = createDecisionScope(() => props.open ? promptId() : null);
