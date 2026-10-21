@@ -75,27 +75,27 @@
 @media (hover: hover) { .ui-nav-pane[data-keyboard-cursor] .ui-seg button:hover:not(:focus-visible, [data-held], [aria-checked="true"]) { background: transparent; color: var(--muted-foreground); } }
 
 /* A harness's mark rests greyed with its row and shows its own colours on the cursor or the current row (ThreadHarnessMark lively). */
-.ui-nav-icon:has(> .harness-mark) { width: var(--icon-sm); }
-.ui-nav-row > .ui-nav-icon > .harness-mark { width: var(--icon-sm); height: calc(0.75 * var(--icon-sm)); opacity: var(--opacity-rest); transition: opacity var(--duration-quick) var(--ease-change); }
-.ui-nav-row:is(:focus-visible, [aria-current="page"]) > .ui-nav-icon > .harness-mark { opacity: 1; }
-@media (hover: hover) { .ui-nav-row:is(:hover, :focus-visible, [aria-current="page"]) > .ui-nav-icon > .harness-mark { opacity: 1; } }
-:is(.ui-nav-icon, .ui-rail-button) > .harness-mark-tinted { background-color: var(--sidebar-foreground); }
-.ui-nav-icon > .thread-harness-mark { width: var(--icon); height: var(--icon); }
-.thread-harness-mark[data-lively] { position: relative; transition: color var(--duration-quick) var(--ease-change), opacity var(--duration-quick) var(--ease-change); }
-.thread-harness-mark[data-lively] .harness-mark { transition: background-color var(--duration-quick) var(--ease-change), opacity var(--duration-quick) var(--ease-change); }
-.thread-harness-mark .harness-mark-artwork { position: absolute; inset: 0; opacity: 0; }
-.ui-nav-row:is(:focus-visible, [aria-current="page"], [data-held], [data-held-within]) .thread-harness-mark[data-lively] { color: var(--foreground); opacity: 1; }
-@media (hover: hover) { .ui-nav-row:is(:hover, :focus-visible, [aria-current="page"], [data-held], [data-held-within]) .thread-harness-mark[data-lively] { color: var(--foreground); opacity: 1; } }
-.ui-nav-row:is(:focus-visible, [aria-current="page"]) .thread-harness-mark[data-lively] .harness-mark-tinted { background-color: var(--harness-brand, currentColor); }
-@media (hover: hover) { .ui-nav-row:is(:hover, :focus-visible, [aria-current="page"]) .thread-harness-mark[data-lively] .harness-mark-tinted { background-color: var(--harness-brand, currentColor); } }
-.ui-nav-row:is(:focus-visible, [aria-current="page"]) .thread-harness-mark[data-artwork] .harness-mark-tinted { opacity: 0; }
-@media (hover: hover) { .ui-nav-row:is(:hover, :focus-visible, [aria-current="page"]) .thread-harness-mark[data-artwork] .harness-mark-tinted { opacity: 0; } }
-.ui-nav-row:is(:focus-visible, [aria-current="page"]) .thread-harness-mark[data-artwork] .harness-mark-artwork { opacity: 1; }
-@media (hover: hover) { .ui-nav-row:is(:hover, :focus-visible, [aria-current="page"]) .thread-harness-mark[data-artwork] .harness-mark-artwork { opacity: 1; } }
-@media (hover: hover) { .ui-nav-pane[data-keyboard-cursor] .ui-nav-row:hover:not(:focus-visible, [aria-current="page"]) .thread-harness-mark[data-lively] { color: var(--muted-foreground); opacity: var(--opacity-rest); } }
-@media (hover: hover) { .ui-nav-pane[data-keyboard-cursor] .ui-nav-row:hover:not(:focus-visible, [aria-current="page"]) .thread-harness-mark[data-lively] .harness-mark-tinted { background-color: currentColor; opacity: 1; } }
-@media (hover: hover) { .ui-nav-pane[data-keyboard-cursor] .ui-nav-row:hover:not(:focus-visible, [aria-current="page"]) .thread-harness-mark[data-artwork] .harness-mark-artwork { opacity: 0; } }
-@media (prefers-reduced-motion: reduce) { .thread-harness-mark[data-lively], .thread-harness-mark[data-lively] .harness-mark, .ui-nav-toggle svg { transition: none; } }
+.ui-nav-icon:has(> .ui-harness-mark) { width: var(--icon-sm); }
+.ui-nav-row > .ui-nav-icon > .ui-harness-mark { width: var(--icon-sm); height: calc(0.75 * var(--icon-sm)); opacity: var(--opacity-rest); transition: opacity var(--duration-quick) var(--ease-change); }
+.ui-nav-row:is(:focus-visible, [aria-current="page"]) > .ui-nav-icon > .ui-harness-mark { opacity: 1; }
+@media (hover: hover) { .ui-nav-row:is(:hover, :focus-visible, [aria-current="page"]) > .ui-nav-icon > .ui-harness-mark { opacity: 1; } }
+:is(.ui-nav-icon, .ui-rail-button) > .ui-harness-mark-tinted { background-color: var(--sidebar-foreground); }
+.ui-nav-icon > .ui-thread-harness-mark { width: var(--icon); height: var(--icon); }
+.ui-thread-harness-mark[data-lively] { position: relative; transition: color var(--duration-quick) var(--ease-change), opacity var(--duration-quick) var(--ease-change); }
+.ui-thread-harness-mark[data-lively] .ui-harness-mark { transition: background-color var(--duration-quick) var(--ease-change), opacity var(--duration-quick) var(--ease-change); }
+.ui-thread-harness-mark .ui-harness-mark-artwork { position: absolute; inset: 0; opacity: 0; }
+.ui-nav-row:is(:focus-visible, [aria-current="page"], [data-held], [data-held-within]) .ui-thread-harness-mark[data-lively] { color: var(--foreground); opacity: 1; }
+@media (hover: hover) { .ui-nav-row:is(:hover, :focus-visible, [aria-current="page"], [data-held], [data-held-within]) .ui-thread-harness-mark[data-lively] { color: var(--foreground); opacity: 1; } }
+.ui-nav-row:is(:focus-visible, [aria-current="page"]) .ui-thread-harness-mark[data-lively] .ui-harness-mark-tinted { background-color: var(--harness-brand, currentColor); }
+@media (hover: hover) { .ui-nav-row:is(:hover, :focus-visible, [aria-current="page"]) .ui-thread-harness-mark[data-lively] .ui-harness-mark-tinted { background-color: var(--harness-brand, currentColor); } }
+.ui-nav-row:is(:focus-visible, [aria-current="page"]) .ui-thread-harness-mark[data-artwork] .ui-harness-mark-tinted { opacity: 0; }
+@media (hover: hover) { .ui-nav-row:is(:hover, :focus-visible, [aria-current="page"]) .ui-thread-harness-mark[data-artwork] .ui-harness-mark-tinted { opacity: 0; } }
+.ui-nav-row:is(:focus-visible, [aria-current="page"]) .ui-thread-harness-mark[data-artwork] .ui-harness-mark-artwork { opacity: 1; }
+@media (hover: hover) { .ui-nav-row:is(:hover, :focus-visible, [aria-current="page"]) .ui-thread-harness-mark[data-artwork] .ui-harness-mark-artwork { opacity: 1; } }
+@media (hover: hover) { .ui-nav-pane[data-keyboard-cursor] .ui-nav-row:hover:not(:focus-visible, [aria-current="page"]) .ui-thread-harness-mark[data-lively] { color: var(--muted-foreground); opacity: var(--opacity-rest); } }
+@media (hover: hover) { .ui-nav-pane[data-keyboard-cursor] .ui-nav-row:hover:not(:focus-visible, [aria-current="page"]) .ui-thread-harness-mark[data-lively] .ui-harness-mark-tinted { background-color: currentColor; opacity: 1; } }
+@media (hover: hover) { .ui-nav-pane[data-keyboard-cursor] .ui-nav-row:hover:not(:focus-visible, [aria-current="page"]) .ui-thread-harness-mark[data-artwork] .ui-harness-mark-artwork { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .ui-thread-harness-mark[data-lively], .ui-thread-harness-mark[data-lively] .ui-harness-mark, .ui-nav-toggle svg { transition: none; } }
 
 /* A folder's rows are clipped by the sliding box, and each frame's layout stays inside this folder. */
 .ui-nav-folder-body { contain: layout paint; }
@@ -111,7 +111,7 @@
 .ui-nav-rail { display: none; flex-direction: column; align-items: center; padding: var(--space-md) 0 var(--space-xs); }
 .ui-nav-rail-section { display: flex; flex-direction: column; gap: var(--space-2xs); }
 .ui-rail-button { position: relative; display: grid; width: var(--control); height: var(--control); flex: none; place-items: center; border: 0; border-radius: var(--radius-control); background: transparent; color: color-mix(in oklch, var(--foreground), transparent var(--tone-strong)); }
-.ui-rail-button svg, .ui-rail-button > :is(.harness-mark, .workspace-glyph) { width: var(--icon-lg); height: var(--icon-lg); }
+.ui-rail-button svg, .ui-rail-button > :is(.ui-harness-mark, .workspace-glyph) { width: var(--icon-lg); height: var(--icon-lg); }
 .ui-rail-button:disabled { cursor: not-allowed; opacity: var(--opacity-disabled); }
 .ui-rail-button:is([data-open], [aria-pressed="true"]) { color: var(--sidebar-accent-foreground); }
 .ui-rail-button[data-live]::after { position: absolute; right: var(--space-xs); bottom: var(--space-xs); width: var(--space-sm); height: var(--space-sm); border: var(--stroke-thin) solid var(--frame); border-radius: var(--radius-round); background: var(--live); content: ""; }
@@ -157,7 +157,7 @@
 .ui-status > .ui-spinner { width: var(--icon-sm); height: var(--icon-sm); }
 .ui-status-dot { width: var(--icon-dot); height: var(--icon-dot); border-radius: var(--radius-round); background: currentColor; }
 .ui-status[data-tone="success"] { color: var(--status-success); }
-.ui-status[data-tone="active"] { color: var(--accent-cool); }
+.ui-status[data-tone="active"] { color: var(--muted-foreground); }
 .ui-status[data-tone="warn"] { color: var(--status-warn); }
 .ui-status[data-tone="danger"] { color: var(--destructive); }
 .ui-status[data-tone="unread"] { color: var(--status-unread); }

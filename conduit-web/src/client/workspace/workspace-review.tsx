@@ -1,9 +1,11 @@
+import { FileTypeIcon } from "@/components/ui/file-marks";
+import { Icons } from "@/components/ui";
 import { ChangeRow } from "@/components/ui/dashboard";
 import { ChangeList, ChangeEmpty } from "@/components/ui/source";
 import { ToolBar, ToolButton } from "@/components/ui/pane";
-import { PanelLeftCloseIcon } from "lucide-solid";
+
 import { For, Show } from "solid-js";
-import { FileTypeIcon } from "./file-type-icon";
+
 
 export interface WorkspaceReviewFile {
   path: string;
@@ -13,7 +15,7 @@ export interface WorkspaceReviewFile {
 
 export function WorkspaceReviewNavigator(props: { title: string; files: WorkspaceReviewFile[]; selectedPath: string | null; empty?: string; onSelect: (path: string) => void; onCollapse?: () => void }) {
   return <nav class="workspace-review-files" aria-label={props.title}>
-      <ToolBar><Show when={props.onCollapse}><ToolButton aria-label="Hide changed files" title="Hide changed files" onClick={props.onCollapse}><PanelLeftCloseIcon /></ToolButton></Show><strong>{props.title}</strong></ToolBar>
+      <ToolBar><Show when={props.onCollapse}><ToolButton aria-label="Hide changed files" title="Hide changed files" onClick={props.onCollapse}><Icons.CollapseFiles /></ToolButton></Show><strong>{props.title}</strong></ToolBar>
       <Show when={props.files.length} fallback={<ChangeEmpty>{props.empty ?? "No changed files."}</ChangeEmpty>}><ChangeList><For each={props.files}>{(file) => {
         const name = () => file.path.split("/").at(-1) ?? file.path;
         const directory = () => file.path.split("/").slice(0, -1).join("/");

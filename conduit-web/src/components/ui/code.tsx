@@ -1,5 +1,6 @@
+import * as Icons from "./icons";
 import { createRoot, For, Show, type JSX } from "solid-js";
-import { CheckIcon, ChevronDownIcon, CopyIcon } from "lucide-solid";
+
 import { Button } from "./controls";
 import { CODE_BLOCK } from "./shared";
 export { CODE_BLOCK } from "./shared";
@@ -11,7 +12,7 @@ export { CODE_BLOCK } from "./shared";
  */
 export function CopyButton(props: { copied?: boolean; label?: string; onCopy?: () => void }) {
   return <Button variant="ghost" size="icon-xs" class="ui-copy" data-copied={props.copied ? "" : undefined} aria-label={props.copied ? "Copied" : props.label ?? "Copy"} onClick={() => props.onCopy?.()}>
-    <CopyIcon class="ui-copy-idle" /><CheckIcon class="ui-copy-done" />
+    <Icons.Copy class="ui-copy-idle" /><Icons.Check class="ui-copy-done" />
   </Button>;
 }
 const moreLabel = (hidden: number) => `Show ${hidden} more ${hidden === 1 ? "line" : "lines"}`;
@@ -35,7 +36,7 @@ export function CodeBlock(props: { lang?: string; code?: string; lines?: number;
     style={{ "--code-digits": String(count()).length, ...(folds() ? { "--code-fold": props.fold } : {}) }}>
     <figcaption><span class="ui-code-lang">{props.lang ?? "text"}</span>
       <CopyButton copied={props.copied} label="Copy code" onCopy={props.onCopy} />
-      <Show when={folds()}><Button variant="ghost" size="icon-xs" class="ui-code-toggle" aria-label={folded() ? "Expand code" : "Collapse code"} aria-expanded={!folded()} onClick={() => props.onToggle?.()}><ChevronDownIcon class="ui-disclosure-chevron" /></Button></Show>
+      <Show when={folds()}><Button variant="ghost" size="icon-xs" class="ui-code-toggle" aria-label={folded() ? "Expand code" : "Collapse code"} aria-expanded={!folded()} onClick={() => props.onToggle?.()}><Icons.ChevronDown class="ui-disclosure-chevron" /></Button></Show>
     </figcaption>
     <pre><Show when={props.code === undefined} fallback={<code><For each={text()}>{(line) => <span class={CODE_BLOCK.line}>{line || " "}</span>}</For></code>}>{props.children}</Show></pre>
     <Show when={folds()}><button type="button" class="ui-code-more" onClick={() => props.onToggle?.()}>{folded() ? moreLabel(count() - props.fold!) : "Show less"}</button></Show>
@@ -64,7 +65,7 @@ export function codeBlockHtml(props: { lang?: string; code: string; lines: numbe
 let icons: { copy: Node; check: Node; chevron: Node } | undefined;
 /** Put the icons into the controls of every codeBlockHtml block under root that has none yet. */
 export function fillCodeBlocks(root: ParentNode) {
-  icons ??= createRoot((dispose) => { const made = { copy: <CopyIcon class="ui-copy-idle" /> as Node, check: <CheckIcon class="ui-copy-done" /> as Node, chevron: <ChevronDownIcon class="ui-disclosure-chevron" /> as Node }; dispose(); return made; });
+  icons ??= createRoot((dispose) => { const made = { copy: <Icons.Copy class="ui-copy-idle" /> as Node, check: <Icons.Check class="ui-copy-done" /> as Node, chevron: <Icons.ChevronDown class="ui-disclosure-chevron" /> as Node }; dispose(); return made; });
   for (const button of root.querySelectorAll(".ui-code > figcaption > .ui-copy:empty")) button.append(icons.copy.cloneNode(true), icons.check.cloneNode(true));
   for (const button of root.querySelectorAll(".ui-code > figcaption > .ui-code-toggle:empty")) button.append(icons.chevron.cloneNode(true));
 }

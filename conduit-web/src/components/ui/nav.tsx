@@ -1,5 +1,6 @@
+import * as Icons from "./icons";
 import { createEffect, createSignal, For, on, onCleanup, Show, splitProps, type JSX } from "solid-js";
-import { ChevronRightIcon } from "lucide-solid";
+
 import { Button, Spinner } from "./controls";
 import { haptic } from "./haptics";
 import { Expand } from "./expand";
@@ -87,7 +88,7 @@ export function NavFolderRow(props: JSX.HTMLAttributes<HTMLDivElement> & { icon:
   const [local, rest] = splitProps(props, ["icon", "mark", "meta", "open", "current", "within", "link", "toggle", "children", "class"]);
   return <div {...rest} class="ui-nav-row ui-nav-folder" data-folder-open={local.open ? "" : undefined} {...rowData(local)}>
     <button type="button" {...local.link} class="ui-nav-link"><span class="ui-nav-icon">{local.icon}</span>{local.mark}<span class="ui-nav-text">{local.children}</span><Show when={local.meta}><small class="ui-nav-meta">{local.meta}</small></Show></button>
-    <button type="button" tabIndex={-1} aria-expanded={local.open} {...local.toggle} class="ui-nav-toggle"><ChevronRightIcon /></button>
+    <button type="button" tabIndex={-1} aria-expanded={local.open} {...local.toggle} class="ui-nav-toggle"><Icons.ChevronRight /></button>
   </div>;
 }
 

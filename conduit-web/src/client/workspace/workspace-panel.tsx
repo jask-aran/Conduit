@@ -1,8 +1,9 @@
+import { Icons } from "@/components/ui";
 import { createDecisionScope } from "@/components/decision-dialog";
 import { batch, createEffect, createSignal, For, on, onCleanup, onMount, Show, type Accessor } from "solid-js";
 import { Portal } from "solid-js/web";
 import { minMainPaneWidth, unitPx } from "../layout-geometry";
-import { Columns2Icon, FolderIcon, GitCompareArrowsIcon, Maximize2Icon, MessageSquareIcon, Minimize2Icon, PanelRightIcon, TerminalIcon, XIcon } from "lucide-solid";
+
 import { Spinner } from "@/components/ui/controls";
 import { HeaderButton } from "@/components/ui/header";
 import { Backdrop } from "@/components/ui/overlay";
@@ -193,10 +194,10 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
       if (next === "terminal") setTerminalFocusRequest((request) => request + 1);
     });
   };
-  const tabIcon = (candidate: PanelTab) => candidate === "files" ? <FolderIcon />
-    : candidate === "diff" ? <GitCompareArrowsIcon />
-    : candidate === "chat" ? <MessageSquareIcon />
-    : <TerminalIcon />;
+  const tabIcon = (candidate: PanelTab) => candidate === "files" ? <Icons.Folder />
+    : candidate === "diff" ? <Icons.GitCompareArrows />
+    : candidate === "chat" ? <Icons.Chat />
+    : <Icons.Terminal />;
   // A phone has no rail, so its header keeps a strip of the views.
   const [viewIconsOnly, setViewIconsOnly] = createSignal(false);
   const tabStrip = () => (
@@ -594,12 +595,12 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
       </>}
       views={where === "dock" ? tabStrip() : undefined}
       actions={<Show when={where === "dock"} fallback={<>
-          <HeaderButton label="Move to dock" aria-label={`Move ${viewLabel(tool())} to the dock`} icon={<PanelRightIcon />} onClick={() => props.onMoveToDock?.(tool())} />
-          <HeaderButton label={`Close ${viewLabel(tool())}`} icon={<XIcon />} onClick={() => closeSplitView(tool())} />
+          <HeaderButton label="Move to dock" aria-label={`Move ${viewLabel(tool())} to the dock`} icon={<Icons.Workspace />} onClick={() => props.onMoveToDock?.(tool())} />
+          <HeaderButton label={`Close ${viewLabel(tool())}`} icon={<Icons.Close />} onClick={() => closeSplitView(tool())} />
         </>}>
-          <Show when={props.onOpenBeside && !(tool() === "files" && props.onOpenFile)}><HeaderButton only="desktop" label="Move to main pane" aria-label={`Move ${viewLabel(tool())} to the main pane`} icon={<Columns2Icon />} onClick={() => props.onOpenBeside?.(tool())} /></Show>
-          <HeaderButton label={props.expanded() ? "Restore" : "Maximise"} aria-label={props.expanded() ? "Restore workspace panel" : "Maximise workspace panel"} aria-pressed={props.expanded()} icon={<Show when={props.expanded()} fallback={<Maximize2Icon />}><Minimize2Icon /></Show>} onClick={props.onToggleExpanded} />
-          <HeaderButton label="Close workspace panel" icon={<XIcon />} onClick={props.onClose} />
+          <Show when={props.onOpenBeside && !(tool() === "files" && props.onOpenFile)}><HeaderButton only="desktop" label="Move to main pane" aria-label={`Move ${viewLabel(tool())} to the main pane`} icon={<Icons.Split />} onClick={() => props.onOpenBeside?.(tool())} /></Show>
+          <HeaderButton label={props.expanded() ? "Restore" : "Maximise"} aria-label={props.expanded() ? "Restore workspace panel" : "Maximise workspace panel"} aria-pressed={props.expanded()} icon={<Show when={props.expanded()} fallback={<Icons.Maximize />}><Icons.Minimize /></Show>} onClick={props.onToggleExpanded} />
+          <HeaderButton label="Close workspace panel" icon={<Icons.Close />} onClick={props.onClose} />
         </Show>} />
   );
   const toolView = (tool: PanelTab, where: "dock" | "split") => tool === "files"

@@ -1,5 +1,6 @@
+import * as Icons from "./icons";
 import { For, Show, splitProps, type JSX } from "solid-js";
-import { ChevronDownIcon } from "lucide-solid";
+
 import { Button, Spinner } from "./controls";
 import { type Motion, motionOf, sinceOf } from "./shared";
 import { Failure, foldBody } from "./transcript";
@@ -13,7 +14,7 @@ export function TraceHeader(props: { orb?: JSX.Element; status: string; time?: s
   return <button type="button" class="ui-trace" data-tone={props.tone} aria-expanded={props.opens ? Boolean(props.open) : undefined} disabled={!props.opens} onClick={() => props.onToggle?.()}>
     <span class="ui-trace-orb">{props.orb}</span>
     <span class="ui-trace-line"><b>{props.status}</b><Show when={props.time}><span class="ui-trace-time">{"\u00a0· "}{props.time}</span></Show><Show when={props.work}><span>{"\u00a0· "}{props.work}</span></Show></span>
-    <Show when={props.opens}><ChevronDownIcon class="ui-disclosure-chevron" /></Show>
+    <Show when={props.opens}><Icons.ChevronDown class="ui-disclosure-chevron" /></Show>
     <Show when={props.latest || props.live}><span class="ui-trace-latest">{props.latest || "\u00a0"}</span></Show>
   </button>;
 }
@@ -54,7 +55,7 @@ export function Step(props: { label?: string; icon?: JSX.Element; verb?: string;
   </>;
   return <li class="ui-disclosure ui-step-item" data-open={props.open && opens() ? "true" : "false"} data-state={props.state} data-note={props.note ? "" : undefined} data-discarded={props.discarded ? "" : undefined} {...motionOf(props.motion)}>
     <Show when={opens()} fallback={<div class="ui-step">{row()}</div>}>
-      <button type="button" class="ui-step" aria-label={props.label} aria-expanded={Boolean(props.open)} onClick={() => props.onToggle?.()}>{row()}<ChevronDownIcon class="ui-disclosure-chevron" /></button>
+      <button type="button" class="ui-step" aria-label={props.label} aria-expanded={Boolean(props.open)} onClick={() => props.onToggle?.()}>{row()}<Icons.ChevronDown class="ui-disclosure-chevron" /></button>
       <div class="ui-disclosure-body ui-step-body" aria-hidden={!props.open}>{body()}</div>
     </Show>
   </li>;

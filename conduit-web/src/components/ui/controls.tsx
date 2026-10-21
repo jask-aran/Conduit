@@ -1,5 +1,6 @@
+import * as Icons from "./icons";
 import { createEffect, createSignal, createUniqueId, For, Show, splitProps, type JSX } from "solid-js";
-import { ChevronDownIcon, ChevronRightIcon, SquareIcon, XIcon } from "lucide-solid";
+
 import { haptic } from "./haptics";
 import { cn } from "@/lib/utils";
 
@@ -8,7 +9,7 @@ export function Keycap(props: { children: JSX.Element; label?: string; class?: s
   if (!props.onClick && !props.onRemove) return <kbd class={cn("ui-keycap", props.class)}>{props.children}</kbd>;
   return <span class="ui-keycap" data-editable="">
     <button type="button" aria-label={props.label ? `Change ${props.label}` : undefined} onClick={() => props.onClick?.()}>{props.children}</button>
-    <Show when={props.onRemove}><button type="button" class="ui-keycap-remove" aria-label={props.label ? `Remove ${props.label}` : "Remove"} onClick={() => props.onRemove?.()}><XIcon /></button></Show>
+    <Show when={props.onRemove}><button type="button" class="ui-keycap-remove" aria-label={props.label ? `Remove ${props.label}` : "Remove"} onClick={() => props.onRemove?.()}><Icons.Close /></button></Show>
   </span>;
 }
 
@@ -31,7 +32,7 @@ export function Switch(props: { label: string; checked: boolean; onChange?: (che
 
 /** Waiting: a ring turning, the icon's size. */
 /** Stop: a small solid square in the text colour, the mark alone (Stop a turn, the composer's primary slot). */
-export const StopGlyph = () => <SquareIcon class="ui-stop-glyph" aria-hidden="true" />;
+export const StopGlyph = () => <Icons.Stop class="ui-stop-glyph" aria-hidden="true" />;
 export const Spinner = (props: { class?: string }) => <span class={cn("ui-spinner", props.class)} aria-hidden="true" />;
 
 /** Multi-line text that grows with its lines: bare, the type's size, no geometry of its own -- what holds it pads it (DesktopComposer, PillField). */
@@ -58,7 +59,7 @@ export function Input(props: JSX.InputHTMLAttributes<HTMLInputElement>) {
 /** A select's trigger: a field with a chevron, or bare (its value and a chevron, as in a settings row). A menu's behaviour opens it (Select in components/menus.tsx). */
 export function SelectTrigger(props: Omit<JSX.ButtonHTMLAttributes<HTMLButtonElement>, "value"> & { value: string; bare?: boolean }) {
   const [local, rest] = splitProps(props, ["value", "bare", "class"]);
-  return <button type="button" {...rest} class={cn("ui-input", local.class)} data-bare={local.bare ? "" : undefined}><span>{local.value}</span><ChevronDownIcon /></button>;
+  return <button type="button" {...rest} class={cn("ui-input", local.class)} data-bare={local.bare ? "" : undefined}><span>{local.value}</span><Icons.ChevronDown /></button>;
 }
 
 /** A few choices side by side, one current. arrows: one Tab stop, the arrows moving the choice (a form's radio group, Settings);
@@ -84,7 +85,7 @@ export function Segmented<T extends string>(props: { label: string; value: T; op
 /** A slider's value as a control that opens its levels (a Slider's onOpen, or a menu's submenu trigger). */
 export function SliderValue(props: JSX.ButtonHTMLAttributes<HTMLButtonElement>) {
   const [local, rest] = splitProps(props, ["children"]);
-  return <button type="button" {...rest} class="ui-slider-value" data-opens="">{local.children}<ChevronRightIcon /></button>;
+  return <button type="button" {...rest} class="ui-slider-value" data-opens="">{local.children}<Icons.ChevronRight /></button>;
 }
 
 /** How full something is, as a ring in the text colour: tone idle (nothing reported), warning and critical colour it. */

@@ -1,5 +1,6 @@
+import { Icons } from "@/components/ui";
 import { createSignal, For, onCleanup, onMount, Show } from "solid-js";
-import { DownloadIcon, LogOutIcon, QrCodeIcon, RefreshCwIcon, SettingsIcon } from "lucide-solid";
+
 import { Menu, MenuContent, MenuSection, MenuRow, MenuRadioGroup, MenuRadioItem, MenuSub, MenuSubContent, MenuSubTrigger } from "@/components/menus";
 import { MenuNote } from "@/components/ui/popover";
 import { Spinner } from "@/components/ui/controls";
@@ -236,18 +237,18 @@ export function ServerSwitcher(props: {
         </MenuSection>
       </Show>
       <MenuSection title="App">
-        <MenuRow disabled={props.pwaUpdating} onSelect={props.onUpdatePwa} icon={<Show when={props.pwaUpdating} fallback={<RefreshCwIcon />}><Spinner /></Show>}>
+        <MenuRow disabled={props.pwaUpdating} onSelect={props.onUpdatePwa} icon={<Show when={props.pwaUpdating} fallback={<Icons.Refresh />}><Spinner /></Show>}>
           {props.pwaUpdating ? "Checking for updates…" : "Check for updates"}
         </MenuRow>
         <Show when={props.downloads}>
-          <MenuRow icon={<DownloadIcon />} onSelect={() => download(release()?.windowsUrl)}>Download for Windows</MenuRow>
-          <MenuRow icon={<DownloadIcon />} onSelect={() => download(release()?.apkUrl)}>Download for Android</MenuRow>
+          <MenuRow icon={<Icons.Download />} onSelect={() => download(release()?.windowsUrl)}>Download for Windows</MenuRow>
+          <MenuRow icon={<Icons.Download />} onSelect={() => download(release()?.apkUrl)}>Download for Android</MenuRow>
         </Show>
       </MenuSection>
       <MenuSection title="Account">
-        <MenuRow icon={<QrCodeIcon />} onSelect={() => setTimeout(() => props.onAddServer(), 0)}>Connect a device or server</MenuRow>
-        <MenuRow icon={<SettingsIcon />} onSelect={props.onOpenSettings}>Manage settings</MenuRow>
-        <MenuRow destructive icon={<LogOutIcon />} onSelect={props.onLogout}>{servers().length > 1 ? `Sign out of ${serverName()}` : "Sign out"}</MenuRow>
+        <MenuRow icon={<Icons.QrCode />} onSelect={() => setTimeout(() => props.onAddServer(), 0)}>Connect a device or server</MenuRow>
+        <MenuRow icon={<Icons.Settings />} onSelect={props.onOpenSettings}>Manage settings</MenuRow>
+        <MenuRow destructive icon={<Icons.LogOut />} onSelect={props.onLogout}>{servers().length > 1 ? `Sign out of ${serverName()}` : "Sign out"}</MenuRow>
       </MenuSection>
     </MenuContent>
   </Menu>

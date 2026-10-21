@@ -200,9 +200,10 @@
   --frost-lift-rest: 0 8px 32px rgb(0 0 0 / 10%);
   --frost-lift-raised: 0 24px 70px rgb(0 0 0 / 38%);
   --status-success: oklch(0.62 0.17 145); --status-warn: oklch(0.75 0.15 75); --status-unread: oklch(0.68 0.17 250); /* a row's live state */
-  /* Code's syntax, one hue a role, in the interface's colour world (not a highlighter's theme). */
-  --syntax-keyword: oklch(0.72 0.15 305); --syntax-string: oklch(0.75 0.14 145); --syntax-number: oklch(0.78 0.13 65);
-  --syntax-title: oklch(0.78 0.13 240); --syntax-variable: oklch(0.8 0.09 200); --syntax-type: oklch(0.8 0.11 90); --syntax-meta: oklch(0.68 0.07 260);
+  /* Syntax roles read the selected code palette. */
+  --syntax-keyword: var(--code-purple); --syntax-string: var(--code-green); --syntax-number: var(--code-orange);
+  --syntax-title: var(--code-blue); --syntax-variable: var(--code-red); --syntax-type: var(--code-yellow); --syntax-meta: var(--code-orange);
+  --syntax-comment: var(--code-comment);
   --frost-sheen: rgb(255 255 255 / 10%); --frost-glow: rgb(255 255 255 / 14%); /* the aura's light from above, its rim */
   /* Over an image: a control's ground and glyph, and the shadow that keeps a glyph read on any picture. */
   --on-media-ground: rgb(0 0 0 / 62%); --on-media: #fff; --glyph-shadow: drop-shadow(0 0 var(--stroke) rgb(0 0 0 / 65%));

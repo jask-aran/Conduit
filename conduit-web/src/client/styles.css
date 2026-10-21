@@ -1,12 +1,8 @@
-@import "tailwindcss";
-@import "tw-animate-css";
 
 /* Paper Mono (OFL, fonts/PaperMono-OFL.txt): the transcript face when chosen
    in Settings → Appearance (preferences/transcript-font.ts). */
 @font-face { font-family: "Paper Mono"; src: url("./fonts/PaperMono-Variable.woff2") format("woff2"); font-weight: 100 800; font-style: normal; font-display: swap; }
 :root[data-transcript-font="paper-mono"] :is(.thread, textarea[data-composer-input], .ui-voice-captions) { font-family: "Paper Mono", ui-monospace, monospace; }
-
-@custom-variant dark (&:is(.dark *));
 
 :root {
   /* The Android shell sends the navigation bar's resting height and leaves it
@@ -24,53 +20,6 @@
      share one coordinate space. */
   --ui-scale: 1;
   --panel-motion-duration: 160ms; --panel-motion-easing: ease;
-  --background: oklch(1 0 0); --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0); --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0); --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.488 0.243 264.376); --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0); --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0); --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0); --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325); --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0); --ring: oklch(0.708 0 0); --region-focus: oklch(0.42 0.004 258); --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0); --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0); --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0); --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0); --sidebar-ring: oklch(0.708 0 0);
-}
-
-.dark {
-  /* Glass tokens used by the composer and message surfaces. */
-  --glass-bg: oklch(0.3 0.006 264 / 52%);
-  --glass-border: oklch(1 0 0 / 10%);
-  /* Legacy alias for non-settings surfaces still migrating. Neutral gray;
-     do not use in new code. */
-  --accent-cool: oklch(0.63 0.006 262);
-}
-
-@theme inline {
-  --font-heading: var(--font-sans); --font-sans: "Geist Variable", sans-serif;
-  --color-sidebar-ring: var(--sidebar-ring); --color-sidebar-border: var(--sidebar-border);
-  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground); --color-sidebar-accent: var(--sidebar-accent);
-  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground); --color-sidebar-primary: var(--sidebar-primary);
-  --color-sidebar-foreground: var(--sidebar-foreground); --color-sidebar: var(--sidebar);
-  --color-ring: var(--ring); --color-input: var(--input); --color-border: var(--border);
-  --color-destructive: var(--destructive); --color-accent-foreground: var(--accent-foreground); --color-accent: var(--accent);
-  --color-muted-foreground: var(--muted-foreground); --color-muted: var(--muted);
-  --color-secondary-foreground: var(--secondary-foreground); --color-secondary: var(--secondary);
-  --color-primary-foreground: var(--primary-foreground); --color-primary: var(--primary);
-  --color-popover-foreground: var(--popover-foreground); --color-popover: var(--popover);
-  --color-card-foreground: var(--card-foreground); --color-card: var(--card);
-  --color-foreground: var(--foreground); --color-background: var(--background);
-  --radius-sm: calc(var(--radius) * 0.6); --radius-md: calc(var(--radius) * 0.8);
-  --radius-lg: var(--radius); --radius-xl: calc(var(--radius) * 1.4); --radius-2xl: calc(var(--radius) * 1.8);
-}
-
-@layer base {
-  * { @apply border-border outline-ring/50; }
-  html { @apply font-sans; font-size: calc(16px * var(--ui-scale)); }
-  body { @apply bg-background text-foreground; }
-  button:not(:disabled), [role="button"]:not(:disabled) { cursor: pointer; }
 }
 
 * { box-sizing: border-box; }
@@ -166,7 +115,7 @@ svg.lucide { stroke-width: 2.4; }
 
 /* Menus: one solid dark surface everywhere; icons sized inside items. */
 .composer-stack { position: relative; z-index: 2; display: flex; width: 100%; flex: none; flex-direction: column; gap: var(--space-md); padding: var(--space-xl) var(--space-4xl) var(--space-3xl); background: var(--background); }
-.voice-waveform { display: grid; gap: var(--space-sm); width: 100%; box-sizing: border-box; padding: var(--space-md) var(--space-lg) var(--space-sm); border: var(--hairline) solid color-mix(in oklch, var(--accent-cool), var(--border) 66%); border-radius: var(--radius-surface); background: linear-gradient(180deg, color-mix(in oklch, var(--accent-cool), transparent 94%), color-mix(in oklch, var(--background), transparent 20%)); color: var(--muted-foreground); }
+.voice-waveform { display: grid; gap: var(--space-sm); width: 100%; box-sizing: border-box; padding: var(--space-md) var(--space-lg) var(--space-sm); border: var(--hairline) solid color-mix(in oklch, var(--muted-foreground), var(--border) 66%); border-radius: var(--radius-surface); background: linear-gradient(180deg, color-mix(in oklch, var(--muted-foreground), transparent 94%), color-mix(in oklch, var(--background), transparent 20%)); color: var(--muted-foreground); }
 .voice-waveform-header, .voice-waveform-readout, .voice-waveform-state, .voice-waveform-scale { display: flex; align-items: center; }
 .voice-waveform-header { justify-content: space-between; gap: var(--space-lg); min-height: var(--space-xl); font: var(--text-label)/var(--leading-tight) var(--font-data); letter-spacing: 0.02em; }
 .voice-waveform-state { min-width: 0; gap: var(--space-sm); color: var(--foreground); }
@@ -176,12 +125,12 @@ svg.lucide { stroke-width: 2.4; }
 .voice-waveform-gridline { position: absolute; right: var(--space-2xs); left: var(--space-2xs); height: var(--hairline); background: color-mix(in oklch, var(--border), transparent 45%); pointer-events: none; }
 .voice-waveform-gridline-high { top: 25%; }
 .voice-waveform-gridline-low { bottom: 25%; }
-.voice-waveform-bar { z-index: 1; display: block; min-width: var(--hairline); flex: 1 1 0; border-radius: var(--radius-round) var(--radius-round) var(--radius-inset) var(--radius-inset); background: linear-gradient(180deg, var(--accent-cool), color-mix(in oklch, var(--accent-cool), var(--primary) 38%)); opacity: 0.82; transition: height 90ms ease-out, opacity 140ms ease; }
-.voice-waveform-peak { position: absolute; right: var(--space-2xs); left: var(--space-2xs); z-index: 2; height: var(--hairline); border-top: var(--hairline) dashed color-mix(in oklch, var(--accent-cool), white 30%); opacity: 0; transition: bottom 120ms ease-out, opacity 120ms ease; pointer-events: none; }
+.voice-waveform-bar { z-index: 1; display: block; min-width: var(--hairline); flex: 1 1 0; border-radius: var(--radius-round) var(--radius-round) var(--radius-inset) var(--radius-inset); background: linear-gradient(180deg, var(--muted-foreground), color-mix(in oklch, var(--muted-foreground), var(--primary) 38%)); opacity: 0.82; transition: height 90ms ease-out, opacity 140ms ease; }
+.voice-waveform-peak { position: absolute; right: var(--space-2xs); left: var(--space-2xs); z-index: 2; height: var(--hairline); border-top: var(--hairline) dashed color-mix(in oklch, var(--muted-foreground), white 30%); opacity: 0; transition: bottom 120ms ease-out, opacity 120ms ease; pointer-events: none; }
 .voice-waveform-peak[data-visible="true"] { opacity: 0.95; }
 .voice-waveform-scale { justify-content: space-between; color: color-mix(in oklch, var(--muted-foreground), transparent 12%); font: var(--text-label)/var(--leading-none) var(--font-data); }
-.voice-waveform[data-state="connecting"] { border-color: color-mix(in oklch, var(--accent-cool), var(--border) 52%); }
-.voice-waveform[data-state="connecting"] .voice-waveform-dot { background: var(--accent-cool); animation: dictation-wave-pulse 900ms ease-in-out infinite alternate; }
+.voice-waveform[data-state="connecting"] { border-color: color-mix(in oklch, var(--muted-foreground), var(--border) 52%); }
+.voice-waveform[data-state="connecting"] .voice-waveform-dot { background: var(--muted-foreground); animation: dictation-wave-pulse 900ms ease-in-out infinite alternate; }
 .voice-waveform[data-state="listening"] .voice-waveform-dot { background: oklch(0.72 0.17 145); box-shadow: 0 0 0 2.4px color-mix(in oklch, oklch(0.72 0.17 145), transparent 82%); }
 .voice-waveform[data-state="error"] { border-color: color-mix(in oklch, var(--destructive), var(--border) 48%); }
 .voice-waveform[data-state="error"] .voice-waveform-dot { background: var(--destructive); }
@@ -338,7 +287,7 @@ svg.lucide { stroke-width: 2.4; }
 
 /* Menus: one solid dark surface everywhere; icons sized inside items. */
 .composer-stack { position: relative; z-index: 2; display: flex; width: 100%; flex: none; flex-direction: column; padding: var(--space-xl) var(--space-4xl) var(--space-3xl); background: var(--background); }
-.voice-waveform { display: grid; width: 100%; box-sizing: border-box; background: linear-gradient(180deg, color-mix(in oklch, var(--accent-cool), transparent 94%), color-mix(in oklch, var(--background), transparent 20%)); color: var(--muted-foreground); }
+.voice-waveform { display: grid; width: 100%; box-sizing: border-box; background: linear-gradient(180deg, color-mix(in oklch, var(--muted-foreground), transparent 94%), color-mix(in oklch, var(--background), transparent 20%)); color: var(--muted-foreground); }
 .voice-waveform-header, .voice-waveform-readout, .voice-waveform-state, .voice-waveform-scale { display: flex; align-items: center; }
 .voice-waveform-header { justify-content: space-between; letter-spacing: 0.02em; }
 .voice-waveform-state { min-width: 0; color: var(--foreground); }
@@ -348,12 +297,12 @@ svg.lucide { stroke-width: 2.4; }
 .voice-waveform-gridline { position: absolute; right: var(--space-2xs); left: var(--space-2xs); background: color-mix(in oklch, var(--border), transparent 45%); pointer-events: none; }
 .voice-waveform-gridline-high { top: 25%; }
 .voice-waveform-gridline-low { bottom: 25%; }
-.voice-waveform-bar { z-index: 1; display: block; min-width: var(--hairline); flex: 1 1 0; border-radius: var(--radius-round) var(--radius-round) var(--radius-inset) var(--radius-inset); background: linear-gradient(180deg, var(--accent-cool), color-mix(in oklch, var(--accent-cool), var(--primary) 38%)); opacity: 0.82; transition: height 90ms ease-out, opacity 140ms ease; }
+.voice-waveform-bar { z-index: 1; display: block; min-width: var(--hairline); flex: 1 1 0; border-radius: var(--radius-round) var(--radius-round) var(--radius-inset) var(--radius-inset); background: linear-gradient(180deg, var(--muted-foreground), color-mix(in oklch, var(--muted-foreground), var(--primary) 38%)); opacity: 0.82; transition: height 90ms ease-out, opacity 140ms ease; }
 .voice-waveform-peak { position: absolute; right: var(--space-2xs); left: var(--space-2xs); z-index: 2; opacity: 0; transition: bottom 120ms ease-out, opacity 120ms ease; pointer-events: none; }
 .voice-waveform-peak[data-visible="true"] { opacity: 0.95; }
 .voice-waveform-scale { justify-content: space-between; color: color-mix(in oklch, var(--muted-foreground), transparent 12%); }
-.voice-waveform[data-state="connecting"] { border-color: color-mix(in oklch, var(--accent-cool), var(--border) 52%); }
-.voice-waveform[data-state="connecting"] .voice-waveform-dot { background: var(--accent-cool); animation: dictation-wave-pulse 900ms ease-in-out infinite alternate; }
+.voice-waveform[data-state="connecting"] { border-color: color-mix(in oklch, var(--muted-foreground), var(--border) 52%); }
+.voice-waveform[data-state="connecting"] .voice-waveform-dot { background: var(--muted-foreground); animation: dictation-wave-pulse 900ms ease-in-out infinite alternate; }
 .voice-waveform[data-state="listening"] .voice-waveform-dot { background: oklch(0.72 0.17 145); box-shadow: 0 0 0 3px color-mix(in oklch, oklch(0.72 0.17 145), transparent 82%); }
 .voice-waveform[data-state="error"] { border-color: color-mix(in oklch, var(--destructive), var(--border) 48%); }
 .voice-waveform[data-state="error"] .voice-waveform-dot { background: var(--destructive); }
@@ -519,24 +468,12 @@ svg.lucide { stroke-width: 2.4; }
   .overlay-scrollbar[data-touch] .overlay-scrollbar-thumb { opacity: 1; }
 }
 
-.harness-mark { display: block; flex: none; object-fit: contain; }
 /* A workspace's own glyph (project/workspace-appearance.tsx): an icon or a monogram, sized by its slot. */
 .workspace-glyph { display: inline-grid; flex: none; place-items: center; font-size: calc(0.5625 * var(--u-type)); font-weight: 750; letter-spacing: -.04em; line-height: var(--leading-none); }
 /* A slot can size the monogram to itself (--glyph-text: the dashboard's glyph tile). */
 .workspace-glyph[data-mode="monogram"] { font-size: var(--glyph-text, calc(0.5 * var(--u-type))); }
 .workspace-glyph svg { width: 100%; height: 100%; }
 /* The dashboards' right-click menus (V2-04 moves them onto the adapter, as the sidebar's are). */
-.thread-harness-mark { display: inline-grid; width: var(--icon); height: var(--icon); flex: none; place-items: center; color: var(--muted-foreground); opacity: .78; }
-.thread-harness-mark .harness-mark { width: 100%; height: 100%; }
-.harness-mark-tinted {
-  background: currentColor;
-  mask-position: center;
-  mask-repeat: no-repeat;
-  mask-size: contain;
-  -webkit-mask-position: center;
-  -webkit-mask-repeat: no-repeat;
-  -webkit-mask-size: contain;
-}
 
 /* The first open (main.tsx): until the route is ready and laid out only the
    frame shows, composer included; then the composer is simply there and every

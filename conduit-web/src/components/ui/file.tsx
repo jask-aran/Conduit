@@ -1,5 +1,6 @@
+import * as Icons from "./icons";
 import { Show, splitProps, type JSX } from "solid-js";
-import { EllipsisIcon } from "lucide-solid";
+
 
 /*
  * A file in a pane or the dock (DESIGN Panes and windows): its header -- the name (or the pane's tabs), its git
@@ -46,7 +47,7 @@ export function FileButton(props: JSX.ButtonHTMLAttributes<HTMLButtonElement> & 
 }
 /** The header's ⋯: what fitting folded, and what a pane's viewer keeps there. A menu's trigger takes it with `as`. */
 export function FileMore(props: JSX.ButtonHTMLAttributes<HTMLButtonElement> & { ref?: (element: HTMLButtonElement) => void }) {
-  return <button type="button" aria-label="More file actions" title="More file actions" {...props} class="ui-file-button" data-more=""><EllipsisIcon /></button>;
+  return <button type="button" aria-label="More file actions" title="More file actions" {...props} class="ui-file-button" data-more=""><Icons.More /></button>;
 }
 
 /** The status bar at a file's foot: its commands, then its details at the end. Both scroll sideways, never wrap. */

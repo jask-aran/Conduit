@@ -1,8 +1,9 @@
+import { Icons } from "@/components/ui";
 import { CardPreview, CardRead } from "@/components/ui/card";
 import { Dialog } from "@/components/dialog";
 import { Button as DialogButton, TextArea as DialogTextArea } from "@/components/ui/controls";
 import { createSignal, For, lazy, Show, Suspense } from "solid-js";
-import { FileCode2Icon, FileDiffIcon } from "lucide-solid";
+
 import { Reference, References } from "@/components/ui";
 import { reviewCommentParts, type ProjectedReviewComment, type ReviewComment } from "./review-comments";
 
@@ -38,7 +39,7 @@ export function ReviewCommentCards(props: {
       const diff = item.scope !== "file";
       const parts = () => reviewCommentParts(item);
       return <>
-        <Reference icon={diff ? <FileDiffIcon /> : <FileCode2Icon />} name={item.path.split("/").at(-1) ?? item.path} at={lines} note={item.note || undefined} title={item.excerpt}
+        <Reference icon={diff ? <Icons.FileDiff /> : <Icons.FileCode />} name={item.path.split("/").at(-1) ?? item.path} at={lines} note={item.note || undefined} title={item.excerpt}
           label={diff ? "Comment on a comparison" : "Comment on the working file"} onOpen={props.chatId ? () => requestReviewNavigation(props.chatId!, item) : undefined}
           onEdit={props.onUpdate && removable ? () => { setNote(removable.note); setEditing(true); } : undefined} onRemove={props.onRemove && removable ? () => props.onRemove?.(removable) : undefined} />
         <Show when={props.onUpdate && removable}><Dialog open={editing()} onOpenChange={(open) => {

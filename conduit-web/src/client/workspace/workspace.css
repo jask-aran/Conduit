@@ -1,8 +1,4 @@
 /* Workspace panel geometry, file views, and artifact surfaces. */
-:root {
-  --workspace-git-added: #98c379;
-  --workspace-git-modified: #d19a66;
-}
 
 .workspace-panel, .main-split, .chat-main > .workspace-split-surface, .pane-a-tool-host, .chat-main > .pane-terminal {
   --workbench-bar-height: var(--control);
@@ -91,10 +87,6 @@
 .workspace-files[data-wide="false"][data-navigator-open="true"] > .ui-file { grid-column: 1 / -1; }
 .workspace-files[data-wide="false"] > .workspace-tree-pane { grid-column: 1 / -1; grid-row: 1 / -1; z-index: 8; width: min(85%, var(--measure-lg)); background: var(--background); border-right: var(--hairline) solid var(--border); box-shadow: 12px 0 28px rgb(0 0 0 / 20%); }
 .workspace-files[data-wide="false"][data-navigator-open="false"] > .workspace-tree-pane { display: none; }
-.workspace-file-icon { display: block; width: var(--icon-sm); height: var(--icon-sm); flex: none; object-fit: contain; }
-.workspace-file-icon-generic { color: var(--muted-foreground); }
-.workspace-file-icon[data-kind="vue"] { background: #42b883; color: #173f35; }
-.workspace-file-icon[data-kind="svelte"] { background: #ff3e00; }
  .workspace-diff { display: flex; min-height: 0; flex: 1; flex-direction: column; overflow: hidden; }
 .workspace-files > .ui-file { flex: none; }
 .workspace-diff { min-width: 0; container-name: workspace-source; container-type: inline-size; }
@@ -159,7 +151,6 @@
 .workspace-panel-surface { position: absolute; inset: 0; display: flex; min-width: 0; height: 100%; contain: layout paint; flex: none; flex-direction: column; overflow: hidden; background: var(--background); }
 .workspace-panel-surface > * { max-width: 100%; }
 .workspace-files { display: flex; min-height: 0; flex: 1; flex-direction: column; }
-.workspace-file-icon { border-radius: var(--radius-inset); font-size: 7px !important; }
  .workspace-diff { display: flex; min-height: 0; flex: 1; flex-direction: column; overflow: hidden; }
 .workspace-files > .ui-file { flex: none; }
 .workspace-diff-overview { display: flex; min-height: var(--measure-2xs); flex: 1; flex-direction: column; overflow: hidden; }

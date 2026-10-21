@@ -19,3 +19,58 @@
   --sidebar-accent: oklch(1 0 0 / 6%); --sidebar-accent-foreground: oklch(0.96 0.003 258);
   --sidebar-border: oklch(1 0 0 / 6%); --sidebar-ring: oklch(0.78 0.008 258);
 }
+
+/* The code palette, chosen by data-code-palette on the root (One Dark is the default).
+   Each further palette has another such block. Settings offers a choice once there is more than one.
+   ANSI colours give terminal text, selection and cursor their own palette. */
+:root, :root[data-code-palette="one-dark"] {
+  --code-foreground: #abb2bf;
+  --code-comment: #5c6370;
+  --code-red: #e06c75;
+  --code-orange: #d19a66;
+  --code-yellow: #e5c07b;
+  --code-green: #98c379;
+  --code-cyan: #56b6c2;
+  --code-blue: #61afef;
+  --code-purple: #c678dd;
+  --code-invalid: #f44747;
+  --code-invalid-foreground: #ffffff;
+  --ansi-background: #121315;
+  --ansi-foreground: #e6e8ea;
+  --ansi-cursor: #91a0af;
+  --ansi-cursor-accent: #121315;
+  --ansi-selection: #35404b;
+  --ansi-selection-foreground: #f3f4f6;
+  --ansi-black: #25272b;
+  --ansi-red: #e06c75;
+  --ansi-green: #98c379;
+  --ansi-yellow: #e5c07b;
+  --ansi-blue: #61afef;
+  --ansi-magenta: #c678dd;
+  --ansi-cyan: #56b6c2;
+  --ansi-white: #d7dae0;
+  --ansi-bright-black: #6b7078;
+  --ansi-bright-red: #ef7f88;
+  --ansi-bright-green: #a9d58a;
+  --ansi-bright-yellow: #f0cd8b;
+  --ansi-bright-blue: #77b9f2;
+  --ansi-bright-magenta: #d48be6;
+  --ansi-bright-cyan: #6cc5d0;
+  --ansi-bright-white: #f3f4f6;
+}
+:root {
+  /* Changes: content added, modified or removed. */
+  --change-added: var(--code-green); --change-modified: var(--code-yellow); --change-removed: var(--destructive);
+  /* Categories: kinds of content, in the context breakdown order, then spares. */
+  --category-1: oklch(0.72 0.15 300);
+  --category-2: oklch(0.7 0.02 260);
+  --category-3: oklch(0.74 0.12 230);
+  --category-4: oklch(0.78 0.14 75);
+  --category-5: oklch(0.75 0.15 30);
+  --category-6: oklch(0.72 0.16 350);
+  --category-7: oklch(0.8 0.12 95);
+  --category-8: oklch(0.7 0.13 150);
+  --category-9: oklch(0.7 0.1 50);
+  /* Brand: a harness mark's own colour, where a surface lights it. */
+  --brand-claude-code: #d97757;
+}

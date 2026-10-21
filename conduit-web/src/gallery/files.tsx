@@ -1,4 +1,5 @@
-import { ArrowLeftRightIcon, ArrowDownIcon, ArrowUpIcon, ChevronDownIcon, CopyIcon, DownloadIcon, EyeIcon, FileCode2Icon, FileTextIcon, ImageIcon, PencilIcon, SearchIcon, WrapTextIcon, XIcon } from "lucide-solid";
+import { Icons } from "@/components/ui";
+
 import { FileView, FileViewer, FileHead, FileName, FileGit, FileDirty, FileActions, FileTools, FileButton, FileMore, StatusBar, StatusText, StatusPicker } from "@/components/ui/file";
 import { FileImage, FileCard, FileBody, FileDivider, FileSwap, FileEmptySide, FileEmpty } from "@/components/ui/viewer";
 import { CodeSurface, CodeHost, CodeContent, SearchBar, SearchField, SearchActions, AnnotationPopup, AnnotationInput, AnnotationButton, ComparisonCounts, TurnNavigation } from "@/components/ui/editor";
@@ -20,26 +21,26 @@ const box = (units: number) => ({ width: "100%", "max-width": `calc(${units} * v
 function Head(props: { folded?: boolean; dirty?: boolean; git?: string }) {
   const fold = (key: string) => props.folded && key !== "close" ? { "data-folded": "" } : {};
   return <FileHead>
-    <FileName path="src/greet.ts" icon={<FileCode2Icon />} />
+    <FileName path="src/greet.ts" icon={<Icons.FileCode />} />
     {props.git ? <FileGit status={props.git} /> : null}
     <FileDirty dirty={Boolean(props.dirty)} />
     <FileActions>
-      <FileButton label="Copy contents" data-fold="1" {...fold("copy")}><CopyIcon /></FileButton>
-      <FileButton label="Download" data-fold="2" {...fold("download")}><DownloadIcon /></FileButton>
+      <FileButton label="Copy contents" data-fold="1" {...fold("copy")}><Icons.Copy /></FileButton>
+      <FileButton label="Download" data-fold="2" {...fold("download")}><Icons.Download /></FileButton>
     </FileActions>
     <FileTools>
-      <FileButton label="Find or replace" data-fold="3" {...fold("find")}><SearchIcon /></FileButton>
-      <FileButton label="Wrap lines" inMenu data-fold="4" {...fold("wrap")}><WrapTextIcon /></FileButton>
+      <FileButton label="Find or replace" data-fold="3" {...fold("find")}><Icons.Search /></FileButton>
+      <FileButton label="Wrap lines" inMenu data-fold="4" {...fold("wrap")}><Icons.WrapText /></FileButton>
     </FileTools>
     <FileMore aria-label="More file actions" />
-    <FileButton label="Close file" close><XIcon /></FileButton>
+    <FileButton label="Close file" close><Icons.Close /></FileButton>
   </FileHead>;
 }
 
 const Status = (props: { editing?: boolean }) => <StatusBar label="File status" commands={<>
-  <StatusPicker strong icon={props.editing ? <EyeIcon /> : <PencilIcon />}>{props.editing ? "Preview" : "Edit"}</StatusPicker>
-  <StatusPicker icon={<ChevronDownIcon />}>Spaces: 2</StatusPicker>
-  <StatusPicker icon={<ChevronDownIcon />}>TypeScript</StatusPicker>
+  <StatusPicker strong icon={props.editing ? <Icons.Preview /> : <Icons.Edit />}>{props.editing ? "Preview" : "Edit"}</StatusPicker>
+  <StatusPicker icon={<Icons.ChevronDown />}>Spaces: 2</StatusPicker>
+  <StatusPicker icon={<Icons.ChevronDown />}>TypeScript</StatusPicker>
 </>}><StatusText>Working copy · 112 B</StatusText><StatusText>Ln 1, Col 1</StatusText></StatusBar>;
 
 const File = (props: { focused?: boolean; editing?: boolean }) => <FileView focused={props.focused} style={{ height: "calc(17.5 * var(--u-space))" }}>
@@ -59,14 +60,14 @@ export const filesFamilies = (): Family[] => [
     { title: "Bodies", atoms: [
       lib("files-bodies", "FileBody · FileImage · FileCard", "both", "files", "components/ui/viewer.tsx", () => <FormTable rows={[
         form("FileView · FileBody", "a text file; focused, its header takes the wash", () => <States states={["Rest", "Focused"] as const}>{(state) => <div style={box(30)}><File focused={state() === "Focused"} /></div>}</States>, "<FileView focused><FileHead /><FileBody /><StatusBar /></FileView>"),
-        form("FileImage", "an image on its checker ground, contained", () => <div style={{ ...box(22), height: "calc(12.5 * var(--u-space))", display: "flex" }}><FileImage><ImageIcon style={{ width: "calc(6 * var(--u-space))", height: "calc(6 * var(--u-space))" }} /></FileImage></div>, "<FileImage><img /></FileImage>"),
-        form("FileCard", "a file the viewer cannot show: its kind, its size, and an action", () => <div style={{ ...box(22), display: "flex" }}><FileCard><FileTextIcon /><strong>archive.zip</strong><span>2.4 MB · application/zip</span><Button size="sm" variant="secondary"><DownloadIcon />Download</Button></FileCard></div>, "<FileCard><strong /><span /><Button /></FileCard>"),
+        form("FileImage", "an image on its checker ground, contained", () => <div style={{ ...box(22), height: "calc(12.5 * var(--u-space))", display: "flex" }}><FileImage><Icons.Image style={{ width: "calc(6 * var(--u-space))", height: "calc(6 * var(--u-space))" }} /></FileImage></div>, "<FileImage><img /></FileImage>"),
+        form("FileCard", "a file the viewer cannot show: its kind, its size, and an action", () => <div style={{ ...box(22), display: "flex" }}><FileCard><Icons.FileText /><strong>archive.zip</strong><span>2.4 MB · application/zip</span><Button size="sm" variant="secondary"><Icons.Download />Download</Button></FileCard></div>, "<FileCard><strong /><span /><Button /></FileCard>"),
       ]} on={["desktop", "phone"]} stacked />, "row"),
     ] },
     { title: "Two sides", atoms: [
       lib("files-sides", "FileViewer · two sides", "desktop", "files", "components/ui/file.tsx · viewer.tsx", () => <FormTable rows={[
         form("FileViewer · FileDivider · FileSwap", "two files beside each other: the divider between them (it drags, --side-a and --side-b), the swap over it", () => <FileViewer style={{ ...box(50), height: "calc(15 * var(--u-space))", position: "relative", display: "flex", "--side-a": "1", "--side-b": "1" }}>
-          <File focused /><FileDivider role="separator" aria-label="Resize the sides" style={{ left: "50%" }} /><FileSwap aria-label="Swap the sides" style={{ left: "calc(50% - var(--control-xs) / 2)" }}><ArrowLeftRightIcon /></FileSwap><File />
+          <File focused /><FileDivider role="separator" aria-label="Resize the sides" style={{ left: "50%" }} /><FileSwap aria-label="Swap the sides" style={{ left: "calc(50% - var(--control-xs) / 2)" }}><Icons.Swap /></FileSwap><File />
         </FileViewer>, "<FileViewer><FileView /><FileDivider /><FileSwap /><FileView /></FileViewer>"),
         form("FileEmptySide · FileEmpty", "a side opened empty, waiting for a file", () => <FileViewer style={{ ...box(25), height: "calc(10 * var(--u-space))", display: "flex" }}><FileEmptySide><FileHead><strong class="g-file-none">No file open</strong></FileHead><FileEmpty role="status">Open a file from Files to show it here.</FileEmpty></FileEmptySide></FileViewer>, "<FileEmptySide><FileHead /><FileEmpty /></FileEmptySide>"),
       ]} on={["desktop"]} stacked />, "row"),
@@ -76,9 +77,9 @@ export const filesFamilies = (): Family[] => [
     { title: "Surface", layout: "desktop", atoms: [
       lib("editor-surface", "CodeSurface · SearchBar · AnnotationPopup", "both", "editor", "components/ui/editor.tsx", () => <FormTable rows={[
         form("CodeSurface · CodeHost", "read-only, then editable: the hairline ring says you can type", () => <States states={["Read-only", "Editable"] as const}>{(state) => <div style={{ ...box(30), height: "calc(9 * var(--u-space))", display: "flex" }}><CodeSurface editable={state() === "Editable"}><CodeContent><CodeHost><Code /></CodeHost></CodeContent></CodeSurface></div>}</States>, "<CodeSurface editable><CodeContent><CodeHost /></CodeContent></CodeSurface>"),
-        form("SearchBar · SearchField · SearchActions", "find and replace over the code: two fields, then previous, next and close", () => <div style={box(37.5)}><SearchBar><SearchField placeholder="Find" value="greet" /><SearchField placeholder="Replace" /><SearchActions><FileButton label="Previous match"><ArrowUpIcon /></FileButton><FileButton label="Next match"><ArrowDownIcon /></FileButton><FileButton label="Close find"><XIcon /></FileButton></SearchActions></SearchBar></div>, "<SearchBar><SearchField /><SearchActions /></SearchBar>"),
+        form("SearchBar · SearchField · SearchActions", "find and replace over the code: two fields, then previous, next and close", () => <div style={box(37.5)}><SearchBar><SearchField placeholder="Find" value="greet" /><SearchField placeholder="Replace" /><SearchActions><FileButton label="Previous match"><Icons.ArrowUp /></FileButton><FileButton label="Next match"><Icons.ArrowDown /></FileButton><FileButton label="Close find"><Icons.Close /></FileButton></SearchActions></SearchBar></div>, "<SearchBar><SearchField /><SearchActions /></SearchBar>"),
         form("AnnotationPopup · AnnotationInput · AnnotationButton", "a comment on the selected lines, before it goes to the chat", () => <div style={{ ...box(30), height: "calc(7 * var(--u-space))", position: "relative" }}><AnnotationPopup style={{ left: "var(--space-md)", top: "var(--space-md)" }}><AnnotationInput placeholder="Comment on lines 1–2" rows={2} /><AnnotationButton>Add</AnnotationButton></AnnotationPopup></div>, "<AnnotationPopup><AnnotationInput /><AnnotationButton /></AnnotationPopup>"),
-        form("ComparisonCounts · TurnNavigation", "a comparison's removed and added lines, and the turn it compares", () => <div style={box(37.5)}><StatusBar label="Comparison" commands={<TurnNavigation><StatusPicker icon={<ChevronDownIcon />}>Turn 3</StatusPicker></TurnNavigation>}><ComparisonCounts><span>−4</span><span>+12</span></ComparisonCounts></StatusBar></div>, "<ComparisonCounts><span /><span /></ComparisonCounts>"),
+        form("ComparisonCounts · TurnNavigation", "a comparison's removed and added lines, and the turn it compares", () => <div style={box(37.5)}><StatusBar label="Comparison" commands={<TurnNavigation><StatusPicker icon={<Icons.ChevronDown />}>Turn 3</StatusPicker></TurnNavigation>}><ComparisonCounts><span>−4</span><span>+12</span></ComparisonCounts></StatusBar></div>, "<ComparisonCounts><span /><span /></ComparisonCounts>"),
       ]} on={["desktop", "phone"]} stacked />, "row"),
     ] },
   ] },

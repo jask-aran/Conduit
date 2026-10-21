@@ -1,3 +1,4 @@
+import { Icons } from "@/components/ui";
 import { FileButton, FileHead, FileTools, StatusBar, StatusText, StatusPicker } from "@/components/ui/file";
 import { CodeSurface, CodeContent, CodeHost } from "@/components/ui/editor";
 import { annotationExtension, commentHighlightsExtension, commentRange, WorkspaceAnnotationPopup, type AnnotationSelection, type CommentHighlight } from "./workspace-annotate";
@@ -9,7 +10,7 @@ import { gotoLine, openSearchPanel } from "@codemirror/search";
 import { Compartment, EditorState, Text, Transaction } from "@codemirror/state";
 import { dropCursor, EditorView, highlightActiveLine, highlightActiveLineGutter, keymap, type Command } from "@codemirror/view";
 import { workspaceReadOnlySetup } from "./workspace-editor-base";
-import { ChevronDownIcon, EyeIcon, PencilIcon, Redo2Icon, SearchIcon, Undo2Icon, WrapTextIcon } from "lucide-solid";
+import { Redo2Icon } from "lucide-solid";
 import { createEffect, createSignal, For, onCleanup, onMount, Show, type JSX } from "solid-js";
 import { Menu, MenuContent, MenuSection, MenuRadioGroup, MenuRadioItem, MenuControl } from "@/components/menus";
 import { csvLanguage, isCsvFile } from "./csv-language";
@@ -365,8 +366,8 @@ export default function WorkspaceEditor(props: {
     <FileHead>
       {props.header}
       <FileTools>
-        <FileButton data-fold="2" aria-label="Find or replace" title="Find or replace (Ctrl+F)" onClick={() => runCommand(openSearchPanel)}><SearchIcon /></FileButton>
-        <FileButton inMenu aria-label={props.wrap ? "Disable line wrapping" : "Enable line wrapping"} aria-pressed={props.wrap} title={props.wrap ? "Disable line wrapping" : "Enable line wrapping"} onClick={props.onToggleWrap}><WrapTextIcon /></FileButton>
+        <FileButton data-fold="2" aria-label="Find or replace" title="Find or replace (Ctrl+F)" onClick={() => runCommand(openSearchPanel)}><Icons.Search /></FileButton>
+        <FileButton inMenu aria-label={props.wrap ? "Disable line wrapping" : "Enable line wrapping"} aria-pressed={props.wrap} title={props.wrap ? "Disable line wrapping" : "Enable line wrapping"} onClick={props.onToggleWrap}><Icons.WrapText /></FileButton>
       </FileTools>
     </FileHead>
     <CodeContent>
@@ -375,16 +376,16 @@ export default function WorkspaceEditor(props: {
     </CodeContent>
     <StatusBar commands={<>
       <Show when={props.onToggleEditing}>
-        <StatusPicker strong icon={editable() ? <EyeIcon /> : <PencilIcon />} aria-label={editable() ? "Preview file" : "Edit file"} title={editable() ? "Switch to preview" : "Edit working file"} disabled={!editable() && !props.canEdit} onClick={props.onToggleEditing}>
+        <StatusPicker strong icon={editable() ? <Icons.Preview /> : <Icons.Edit />} aria-label={editable() ? "Preview file" : "Edit file"} title={editable() ? "Switch to preview" : "Edit working file"} disabled={!editable() && !props.canEdit} onClick={props.onToggleEditing}>
           {editable() ? "Preview" : "Edit"}
         </StatusPicker>
       </Show>
       <Show when={editable()}>
-        <FileButton aria-label="Undo" title="Undo" disabled={!canUndo()} onClick={() => runEditCommand(undo)}><Undo2Icon /></FileButton>
+        <FileButton aria-label="Undo" title="Undo" disabled={!canUndo()} onClick={() => runEditCommand(undo)}><Icons.Undo /></FileButton>
         <FileButton aria-label="Redo" title="Redo" disabled={!canRedo()} onClick={() => runEditCommand(redo)}><Redo2Icon /></FileButton>
       </Show>
       <Menu>
-        <MenuControl as={StatusPicker} icon={<ChevronDownIcon />} aria-label={`Indentation ${indentationLabel(indentation())}`} title="Indentation">
+        <MenuControl as={StatusPicker} icon={<Icons.ChevronDown />} aria-label={`Indentation ${indentationLabel(indentation())}`} title="Indentation">
           {indentationLabel(indentation())}
         </MenuControl>
         <MenuContent>
@@ -401,7 +402,7 @@ export default function WorkspaceEditor(props: {
         </MenuContent>
       </Menu>
       <Menu>
-        <MenuControl as={StatusPicker} icon={<ChevronDownIcon />} aria-label={`Language mode ${selectedLanguage()}`} title="Language mode">
+        <MenuControl as={StatusPicker} icon={<Icons.ChevronDown />} aria-label={`Language mode ${selectedLanguage()}`} title="Language mode">
           {selectedLanguage()}
         </MenuControl>
         <MenuContent height="lg">

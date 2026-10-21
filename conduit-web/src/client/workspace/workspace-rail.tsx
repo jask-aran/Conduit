@@ -1,5 +1,6 @@
+import { Icons } from "@/components/ui";
 import { For, Show } from "solid-js";
-import { PanelRightIcon, Columns3Icon, CommandIcon, FileTextIcon, FolderIcon, LayoutDashboardIcon, MessageSquareTextIcon, SquareTerminalIcon, GitCompareArrowsIcon, LayoutTemplateIcon, MessageSquareIcon, SearchIcon, TerminalIcon } from "lucide-solid";
+import { Columns3Icon, CommandIcon, LayoutTemplateIcon } from "lucide-solid";
 import { Menu, MenuContent, MenuControl, MenuRow, MenuSection } from "@/components/menus";
 import { RailButton } from "@/components/ui/nav";
 import { LayoutGlyph, RailRule, ToolRail } from "@/components/ui/pane";
@@ -24,7 +25,7 @@ const PANE_LAYOUTS: Record<number, number[][]> = {
   3: [[1, 1, 1], [2, 1, 1], [1, 2, 1], [1, 1, 2]],
 };
 const RAIL_TOOLS = ["files", "diff", "chat", "terminal"] satisfies PanelTab[];
-const RAIL_ICONS = { files: FolderIcon, diff: GitCompareArrowsIcon, chat: MessageSquareIcon, terminal: TerminalIcon };
+const RAIL_ICONS = { files: Icons.Folder, diff: Icons.GitCompareArrows, chat: Icons.Chat, terminal: Icons.Terminal };
 
 /**
  * The right edge's rail, on the frame as the sidebar's collapsed rail is: one
@@ -67,7 +68,7 @@ export function WorkspaceRail(props: {
 }) {
   const foot = () => <>
     <Show when={props.tools}><RailButton tabIndex={-1} aria-pressed={props.dockOverlay} data-open={props.dockOverlay ? "" : undefined}
-      aria-label={props.dockOverlay ? "Dock beside the panes" : "Dock over the panes"} title={props.dockOverlay ? "Dock: over the panes" : "Dock: beside the panes"} onClick={() => props.onToggleDockOverlay()}><PanelRightIcon /></RailButton></Show>
+      aria-label={props.dockOverlay ? "Dock beside the panes" : "Dock over the panes"} title={props.dockOverlay ? "Dock: over the panes" : "Dock: beside the panes"} onClick={() => props.onToggleDockOverlay()}><Icons.Workspace /></RailButton></Show>
     <Show when={PANE_LAYOUTS[props.panes]}>{(layouts) => <>
       <RailButton tabIndex={-1} aria-label="Equalise panes" title="Equalise panes" onClick={() => props.onLayout(layouts()[0]!)}><Columns3Icon /></RailButton>
       <Menu modal={false} placement="left-end">
@@ -99,14 +100,14 @@ export function WorkspaceRail(props: {
     <RailRule /></Show>
     <Show when={props.docked.length}>
       <For each={props.docked}>{(doc) => {
-        const Icon = doc.view.startsWith("chat:") ? MessageSquareTextIcon : doc.view.startsWith("page:") ? LayoutDashboardIcon : doc.view.startsWith("term:") ? SquareTerminalIcon : FileTextIcon;
+        const Icon = doc.view.startsWith("chat:") ? Icons.Message : doc.view.startsWith("page:") ? Icons.Dashboard : doc.view.startsWith("term:") ? Icons.Shell : Icons.FileText;
         return <RailButton tabIndex={-1} draggable={true} data-doc-view={doc.view}
           aria-label={`${doc.name} (docked)`} title={doc.name} current={props.currentDocked === doc.slot}
           onClick={(event) => props.onChooseDocked(doc.slot, event.altKey)}><Icon /></RailButton>;
       }}</For>
       <RailRule />
     </Show>
-    <RailButton tabIndex={-1} aria-label="Search chats" title="Search chats" onClick={() => props.onOpenSearch()}><SearchIcon /></RailButton>
+    <RailButton tabIndex={-1} aria-label="Search chats" title="Search chats" onClick={() => props.onOpenSearch()}><Icons.Search /></RailButton>
     <RailButton tabIndex={-1} aria-label="Open command palette" title="Command palette" onClick={() => props.onOpenPalette()}><CommandIcon /></RailButton>
   </ToolRail>;
 }

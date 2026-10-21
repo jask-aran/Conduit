@@ -32,7 +32,7 @@
 .ui-code-line { display: block; padding-inline: var(--space-lg); white-space: pre; counter-increment: ui-code-line; }
 .ui-code-line::before { display: inline-block; min-width: calc(var(--code-digits, 2) * 1ch); margin-right: var(--space-lg); color: var(--muted-foreground); content: counter(ui-code-line); font-variant-numeric: tabular-nums; text-align: right; user-select: none; }
 /* Syntax: a highlighter's classes, coloured by role. */
-.ui-code :is(.hljs-comment, .hljs-quote) { color: var(--muted-foreground); font-style: italic; }
+.ui-code :is(.hljs-comment, .hljs-quote) { color: var(--syntax-comment); font-style: italic; }
 .ui-code :is(.hljs-keyword, .hljs-selector-tag, .hljs-literal, .hljs-doctag) { color: var(--syntax-keyword); }
 .ui-code :is(.hljs-string, .hljs-regexp, .hljs-addition) { color: var(--syntax-string); }
 .ui-code :is(.hljs-number, .hljs-symbol, .hljs-bullet) { color: var(--syntax-number); }
