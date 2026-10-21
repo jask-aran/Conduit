@@ -52,6 +52,9 @@
   --duration-gentle: 250ms;  /* arriving, opening, settling into place */
   /* Expand: what opens in place under its row slides on its measured height, both ways, on the one curve. */
   --duration-fold: 240ms; --ease-fold: cubic-bezier(.32, .72, 0, 1);
+  /* Travel: something large crossing the page to a new place (the composer docking after a first send, a split
+     opening beside it), on --ease-arrive. Slower than gentle, since it goes further. */
+  --duration-travel: 400ms;
   /* Effects keep their own time: a level following a voice, a copy's wash fading, a spinner's turn (three
      times slower when motion is reduced), a recording's pulse, something live breathing. */
   --duration-follow: 120ms; --duration-flash: 700ms; --duration-spin: 800ms; --duration-pulse: 1.2s; --duration-breathe: 1.6s;

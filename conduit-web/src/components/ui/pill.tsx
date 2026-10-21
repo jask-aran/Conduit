@@ -1,3 +1,4 @@
+import { reducedMotion } from "./motion";
 import { createSignal, For, mergeProps, onCleanup, onMount, Show, type JSX } from "solid-js";
 import { cn } from "@/lib/utils";
 import { haptic, type Haptic } from "./haptics";
@@ -102,7 +103,7 @@ export function Aura(props: { on?: boolean; level?: number; strength?: number })
       render(dt);
     };
     const render = (dt: number) => {
-      const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
+      const still = reducedMotion();
       const blobs = AURA_BLOBS.map((blob, i) => {
         if (!still) turns[i]! += dt * (2 * Math.PI / blob.orbit) * (1 + 1.5 * level);
         const t = turns[i]!, from = blob.from * Math.PI / 180, reach = .38 * (.9 + level * blob.swell + .25 * Math.sin(2 * t));

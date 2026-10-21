@@ -1,3 +1,4 @@
+import { duration, easing, reducedMotion } from "@/components/ui/motion";
 import { Icons } from "@/components/ui";
 import { Dialog } from "@/components/dialog";
 import { Button as DialogButton } from "@/components/ui/controls";
@@ -11,7 +12,6 @@ import { attachmentUrl } from "../api/transport";
 import { AttachmentImage, sizeLabel } from "./attachments";
 import { createLeaving, fadeOut, riderMotion, type CardExit } from "./composer-cards";
 
-const reduced = () => typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
 const isImage = (item: UploadAttachment) => Boolean(item.type?.startsWith("image/"));
 const previewOf = (item: UploadAttachment, chatId?: string | null) =>
   item.objectUrl || (isImage(item) && chatId ? attachmentUrl(chatId, item.id, "?preview=1") : null);
@@ -101,7 +101,7 @@ export function AttachmentStrip(props: {
   // New chips go on the end; show them, which is what pasting several needs.
   createEffect(on(() => ids().length, (count, previous) => {
     queueMicrotask(() => {
-      if (scroller && previous != null && count > previous) scroller.scrollTo({ left: scroller.scrollWidth, behavior: reduced() ? "auto" : "smooth" });
+      if (scroller && previous != null && count > previous) scroller.scrollTo({ left: scroller.scrollWidth, behavior: reducedMotion() ? "auto" : "smooth" });
       measure();
     });
   }));
@@ -120,10 +120,10 @@ export function AttachmentStrip(props: {
     const neighbours = [...(chip.parentElement?.children || [])].filter((node): node is HTMLElement => node !== chip && node instanceof HTMLElement);
     const before = new Map(neighbours.map((node) => [node, node.getBoundingClientRect().left]));
     chip.hidden = true;
-    if (!reduced()) {
+    if (!reducedMotion()) {
       for (const [node, left] of before) {
         const dx = left - node.getBoundingClientRect().left;
-        if (Math.abs(dx) > 0.5) node.animate([{ transform: `translateX(${dx}px)` }, { transform: "none" }], { duration: 180, easing: "cubic-bezier(.2, .8, .2, 1)" });
+        if (Math.abs(dx) > 0.5) node.animate([{ transform: `translateX(${dx}px)` }, { transform: "none" }], { duration: duration("--duration-quick"), easing: easing("--ease-arrive") });
       }
     }
     measure();

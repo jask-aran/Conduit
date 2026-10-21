@@ -131,7 +131,7 @@
 .ui-nav-pane[data-folded] .ui-nav-list { display: flex; flex-direction: column; align-items: center; }
 .ui-nav-pane[data-folded] .ui-nav-list > :not(.ui-nav-rail) { display: none; }
 .ui-nav-pane[data-folded] .ui-nav-rail { display: flex; }
-.ui-nav-pane[data-folded] :is(.ui-nav-rail, .ui-nav-head > .ui-seg) { animation: ui-nav-rail-in 180ms var(--ease-arrive) both; }
+.ui-nav-pane[data-folded] :is(.ui-nav-rail, .ui-nav-head > .ui-seg) { animation: ui-nav-rail-in var(--duration-quick) var(--ease-arrive) both; }
 .ui-nav-pane[data-folded] .ui-nav-head > .ui-seg { grid-template-columns: none; grid-template-rows: repeat(var(--segments), minmax(0, 1fr)); }
 .ui-nav-pane[data-folded] .ui-nav-head > .ui-seg .ui-seg-thumb { inset: calc(var(--seg-pad) + (100% - 2 * var(--seg-pad)) / var(--segments) * var(--segment)) var(--seg-pad) auto; width: auto; height: calc((100% - 2 * var(--seg-pad)) / var(--segments)); transition: top var(--duration-gentle) var(--ease-arrive); }
 @media (prefers-reduced-motion: reduce) { .ui-nav-pane[data-folded] :is(.ui-nav-rail, .ui-nav-head > .ui-seg) { animation: none; } }

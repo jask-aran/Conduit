@@ -1,3 +1,4 @@
+import { reducedMotion } from "@/components/ui/motion";
 import { harnessMarkLabelFor } from "../harness-brand";
 import { HarnessMark, ThreadHarnessMark } from "@/components/ui";
 import { Icons } from "@/components/ui";
@@ -82,7 +83,7 @@ function SidebarChatTitle(props: { title: string; animate: boolean }) {
   let element!: HTMLSpanElement;
   let animation: Animation | undefined;
   onMount(() => {
-    if (!props.animate || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    if (!props.animate || reducedMotion()) return;
     animation = element.animate([
       { clipPath: "inset(0 100% 0 0)" },
       { clipPath: "inset(0 0 0 0)" },
@@ -223,7 +224,7 @@ export function Sidebar(props: {
       });
       return;
     }
-    if (!sidebarRoot || matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    if (!sidebarRoot || reducedMotion()) {
       batch(() => {
         setInstant(true);
         setCollapsed(nextCollapsed);

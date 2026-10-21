@@ -24,7 +24,7 @@
   font-weight: var(--weight-strong); letter-spacing: -.035em; line-height: var(--leading-none); text-overflow: ellipsis; white-space: nowrap; }
 .ui-dash-context { display: flex; min-width: 0; grid-area: status; align-items: baseline; margin: var(--space-md) 0 0; overflow: hidden; color: var(--muted-foreground); font-size: var(--text-caption); }
 .ui-dash-context > span { flex: none; white-space: nowrap; }
-.ui-dash-context > span:not(:last-child)::after { margin-inline: var(--space-md); opacity: .6; content: "·"; }
+.ui-dash-context > span:not(:last-child)::after { margin-inline: var(--space-md); opacity: var(--opacity-muted); content: "·"; }
 :is(.ui-dash-context, .ui-dash-path) code { color: color-mix(in oklch, var(--foreground), transparent var(--tone-rest)); font: var(--weight-light) var(--text-caption)/var(--leading-row) var(--font-data); }
 .ui-dash-path { border: 0; border-radius: var(--radius-inset); background: transparent; padding: 0; color: inherit; font: inherit; cursor: pointer; }
 .ui-dash-path:is(:focus-visible) code { color: var(--foreground); }
@@ -131,7 +131,7 @@
 .ui-counts [data-change="removed"] { color: var(--change-removed); }
 .ui-counts [data-change="added"] { color: var(--change-added); }
 /* Compact: under the muted chats, changes keep their colour only as a hint. */
-.ui-dash[data-compact] .ui-dash-row[data-change-row] > svg { opacity: .7; filter: grayscale(1); }
+.ui-dash[data-compact] .ui-dash-row[data-change-row] > svg { opacity: var(--opacity-rest); filter: grayscale(1); }
 .ui-dash[data-compact] .ui-change-name { color: color-mix(in oklch, var(--foreground), transparent var(--tone-rest)); }
 .ui-dash[data-compact] :is(.ui-dash-row[data-change-row] .ui-counts [data-change], .ui-change-status) { color: var(--muted-foreground); }
 

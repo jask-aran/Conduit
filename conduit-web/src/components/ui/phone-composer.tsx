@@ -1,5 +1,6 @@
 import { children, createComputed, createSignal, Index, onCleanup, onMount, Show, type JSX } from "solid-js";
 import { Aura } from "./pill";
+import { duration } from "./motion";
 
 /**
  * PhoneComposer: the phone's composer, Pills on the page: a PillField over a row of PillButtons. mode says which
@@ -55,7 +56,7 @@ export function Captions(props: { lead?: string; words: string[]; ref?: (element
     let height = 0;
     const observer = new ResizeObserver(() => {
       const next = element.offsetHeight;
-      if (height && next > height) element.animate([{ transform: `translateY(${next - height}px)` }, { transform: "none" }], { duration: 180, easing: "ease-out" });
+      if (height && next > height) element.animate([{ transform: `translateY(${next - height}px)` }, { transform: "none" }], { duration: duration("--duration-quick"), easing: "ease-out" });
       height = next;
     });
     observer.observe(element);

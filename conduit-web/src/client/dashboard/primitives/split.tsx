@@ -1,3 +1,4 @@
+import { duration, easing, reducedMotion } from "@/components/ui/motion";
 import { createContext, createEffect, createSignal, For, Index, onCleanup, onMount, Show, splitProps, useContext, type Accessor, type JSX } from "solid-js";
 import { Menu, MenuContent, MenuControl, MenuRow, MenuSection } from "@/components/menus";
 import { Counts, DashEmpty, DashHeader, DashIconButton, Dashboard, DashMore, DashRow, Group, GroupHeading, GroupToggle, QuickAction, QuickActions, QuickMore } from "@/components/ui/dashboard";
@@ -51,7 +52,7 @@ let running: Animation[] = [];
 function glide(root: HTMLElement, change: () => void, shown?: DOMRect) {
   for (const animation of running) animation.cancel();
   running = [];
-  if (matchMedia("(prefers-reduced-motion: reduce)").matches) return change();
+  if (reducedMotion()) return change();
   const composer = root.querySelector<HTMLElement>(".ui-dash-composer");
   // Where the composer was last drawn: by now the pane has already resized
   // around the old layout, which may have squeezed it.
@@ -63,13 +64,13 @@ function glide(root: HTMLElement, change: () => void, shown?: DOMRect) {
   const narrowing = !root.hasAttribute("data-one-column") && Boolean(before && after && after.width < before.width - 1);
   for (const section of root.querySelectorAll<HTMLElement>(".ui-dash-group, .ui-dash-notice")) {
     const delay = narrowing && section.closest(".ui-dash-aside") ? 200 : 0;
-    running.push(section.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 180, delay, easing: "ease-out", fill: "backwards" }));
+    running.push(section.animate([{ opacity: 0 }, { opacity: 1 }], { duration: duration("--duration-quick"), delay, easing: "ease-out", fill: "backwards" }));
   }
   if (composer && before && after && Math.abs(before.width - after.width) > 1) running.push(composer.animate([
     { width: `${before.width}px`, transform: `translate(${before.left - after.left}px, ${before.top - after.top}px)` },
     // Its column's live width, so a resize still under way carries it along.
     { width: "100%", transform: "none" },
-  ], { duration: 320, easing: "cubic-bezier(.2, .8, .2, 1)" }));
+  ], { duration: duration("--duration-travel"), easing: easing("--ease-arrive") }));
 }
 
 /** The narrowest pane that fits both columns. */

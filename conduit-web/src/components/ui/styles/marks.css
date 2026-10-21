@@ -1,6 +1,6 @@
 /* A mark's own size and look, under :where() so any slot that sizes it (a header pill, a row's icon) wins. */
 :where(.ui-harness-mark) { display: block; width: var(--icon); height: var(--icon); flex: none; object-fit: contain; }
-.ui-thread-harness-mark { display: inline-grid; width: var(--icon); height: var(--icon); flex: none; place-items: center; color: var(--muted-foreground); opacity: .78; }
+.ui-thread-harness-mark { display: inline-grid; width: var(--icon); height: var(--icon); flex: none; place-items: center; color: var(--muted-foreground); opacity: var(--opacity-rest); }
 .ui-thread-harness-mark .ui-harness-mark { width: 100%; height: 100%; }
 .ui-harness-mark-tinted {
   background: currentColor;

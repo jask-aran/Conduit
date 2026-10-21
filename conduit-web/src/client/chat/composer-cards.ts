@@ -1,3 +1,4 @@
+import { duration, easing, reducedMotion } from "@/components/ui/motion";
 import { createEffect, createSignal, onCleanup, untrack } from "solid-js";
 import type { Motion } from "@/components/ui";
 
@@ -7,9 +8,6 @@ import type { Motion } from "@/components/ui";
  * removes it, or at once when its removal has already been drawn.
  */
 export type CardExit = "drop" | "fade" | "none";
-
-const LEAVE_MS = { drop: 200, fade: 150 } as const;
-const reduced = () => typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 /**
  * Keep what a composer card last showed on screen while it leaves.
@@ -26,9 +24,9 @@ export function createLeaving<T>(source: () => T, present: (value: T) => boolean
     const next = source();
     if (present(next)) { setLeaving(null); setHeld(() => next); return; }
     const style = untrack(exit);
-    if (style === "none" || reduced() || !present(untrack(held))) { setLeaving(null); setHeld(() => next); return; }
+    if (style === "none" || reducedMotion() || !present(untrack(held))) { setLeaving(null); setHeld(() => next); return; }
     setLeaving(style);
-    const done = setTimeout(() => { setLeaving(null); setHeld(() => next); }, LEAVE_MS[style]);
+    const done = setTimeout(() => { setLeaving(null); setHeld(() => next); }, duration("--duration-quick"));
     onCleanup(() => clearTimeout(done));
   });
   return { value: held, leaving };
@@ -41,10 +39,10 @@ export const riderMotion = (leaving: Exclude<CardExit, "none"> | null): Motion =
  * Fade one card out in place before it is taken away. The animation is handed
  * back so a removal that fails can put the card back.
  */
-export async function fadeOut(element: Element | null | undefined, duration: number = LEAVE_MS.fade): Promise<Animation | null> {
-  if (!element || reduced() || typeof (element as HTMLElement).animate !== "function") return null;
+export async function fadeOut(element: Element | null | undefined, durationMs: number = duration("--duration-quick")): Promise<Animation | null> {
+  if (!element || reducedMotion() || typeof (element as HTMLElement).animate !== "function") return null;
   const animation = (element as HTMLElement).animate([{ opacity: 1 }, { opacity: 0 }],
-    { duration, easing: "cubic-bezier(.4, 0, 1, 1)", fill: "forwards" });
+    { duration: durationMs, easing: easing("--ease-leave"), fill: "forwards" });
   await animation.finished.catch(() => undefined);
   return animation;
 }

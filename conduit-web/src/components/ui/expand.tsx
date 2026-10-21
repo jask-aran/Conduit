@@ -1,3 +1,4 @@
+import { reducedMotion } from "./motion";
 import { createComputed, createEffect, createSignal, on, onCleanup, Show, type JSX } from "solid-js";
 import { haptic } from "./haptics";
 import { cssTime } from "./shared";
@@ -46,7 +47,7 @@ export function Expand(props: { open: boolean; class?: string; children: JSX.Ele
     haptic("fold");
     settle();
     if (wanted) setShown(true);
-    if (matchMedia("(prefers-reduced-motion: reduce)").matches) { showing = target = wanted ? 1 : 0; if (!wanted) setShown(false); return; }
+    if (reducedMotion()) { showing = target = wanted ? 1 : 0; if (!wanted) setShown(false); return; }
     const slide = (node: HTMLElement, to: number, done: () => void) => {
       const height = node.getBoundingClientRect().height;
       const timing: KeyframeAnimationOptions = { duration: cssTime(node, "--duration-fold", 240), easing: getComputedStyle(node).getPropertyValue("--ease-fold") || "ease", fill: "both" };

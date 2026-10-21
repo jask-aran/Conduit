@@ -1,7 +1,7 @@
 import { FileTypeIcon, FolderTypeIcon } from "@/components/ui/file-marks";
 import { Icons } from "@/components/ui";
 import { createDecisionScope } from "@/components/decision-dialog";
-import { unitPx } from "../layout-geometry";
+import { unitPx } from "@/components/ui/layout";
 import { batch, createMemo, createSignal, For, onCleanup, Show, type Accessor, type JSX } from "solid-js";
 import { ChevronsUpIcon, FilePlusIcon, FolderUpIcon, MoveIcon } from "lucide-solid";
 import { toast } from "@/components/notifications";

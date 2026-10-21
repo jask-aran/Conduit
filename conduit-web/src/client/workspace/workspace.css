@@ -93,7 +93,6 @@
 /* Fits either slot at any split ratio; the checker ground shows transparency. */
 
 /* A comment leaves its lines faintly marked, and hovering them previews the note. */
-.cm-review-comment { border-radius: var(--radius-inset); background: color-mix(in oklch, var(--warn), transparent 90%); box-shadow: inset 2px 0 0 color-mix(in oklch, var(--warn), transparent 55%); }
 .workspace-diff-overview { display: flex; min-height: var(--measure-2xs); flex: 1 1 56%; flex-direction: column; overflow: hidden; }
 .workspace-patch { display: flex; min-height: 0; max-height: 42%; flex: none; flex-direction: column; overflow: hidden; }
 .workspace-diff > .workspace-patch { max-height: none; flex: 1; border: 0; }

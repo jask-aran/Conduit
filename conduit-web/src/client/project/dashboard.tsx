@@ -1,3 +1,4 @@
+import { COPY_FEEDBACK_MS } from "@/components/ui/motion";
 import { harnessMarkLabelFor } from "../harness-brand";
 import { ThreadHarnessMark } from "@/components/ui";
 import { FileTypeIcon } from "@/components/ui/file-marks";
@@ -263,7 +264,7 @@ export function ProjectDashboard(props: {
     try {
       await navigator.clipboard.writeText(path);
       setCopied(true);
-      setTimeout(() => setCopied(false), 1200);
+      setTimeout(() => setCopied(false), COPY_FEEDBACK_MS);
     } catch (copyError) {
       props.onError((copyError as Error).message);
     }
