@@ -325,16 +325,6 @@ starts elsewhere.
    desktop going offline pauses and resumes the thread.
 4. **Typed device capabilities**, starting with notify/clipboard, then
    Android screen share.
-   *Notify and clipboard built 2026-10-22.* The catalogue is
-   src/nodes/capabilities.js (notify, clipboard-read, clipboard-write), run
-   with each platform's own commands; a device's owner grants each per server
-   (`conduit-node grant|revoke`, shown in `status` and Settings → Devices); the
-   head's own are granted (decision 22). Durable chats get `notify`,
-   `clipboard_read`, `clipboard_write` when a reachable device has one granted;
-   calls default to the chat's device, wait while it is offline, and can be
-   continued without. `notify` is replay-unsafe. Not yet: grant toggles in the
-   desktop companion (it needs the CLI today), Android screen share (needs the
-   Android app to run a node, which it does not).
 5. **Cut over first-party profiles to the Conduit durable agent.** *(Built 2026-10-22.)*
    Assistant, Coding and Runtime are templates applied to pi-durable
    conversations. Each template supplies the prompt, tools, extensions, skills
