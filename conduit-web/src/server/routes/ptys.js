@@ -9,6 +9,8 @@ async function terminalContext(projects, id, cwd) {
   if (computer) return { project: computer, cwd: computer.workingRoot };
   const project = await projects.get(id);
   if (!project) throw Object.assign(new Error("Terminal project was not found"), { code: "pty_project_not_found" });
+  // A terminal on a device goes through the device; there is none yet.
+  if (project.nodeId) throw Object.assign(new Error("Terminals in a device's folder are not available yet"), { code: "pty_cwd_unavailable" });
   try { await projects.validate(project, { createManaged: !project.externalPath }); }
   catch (error) {
     if (error.code === "workspace_identity_changed") {

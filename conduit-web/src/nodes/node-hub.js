@@ -59,6 +59,8 @@ export class NodeHub extends EventEmitter {
     this.records = this.records.filter((record) => record.id !== id);
     await this.save();
     this.live.get(id)?.socket.close(4001, "unpaired");
+    // A call waiting for this device will not see it again.
+    this.emit(`forgotten:${id}`);
     this.emit("changed");
   }
 
@@ -83,13 +85,17 @@ export class NodeHub extends EventEmitter {
   }
 
   attach(record, ws) {
-    // A call that opened a watcher keeps hearing its changes after it returns.
-    const node = { socket: ws, calls: new Map(), listeners: new Map(), roots: [], platform: null, ready: false };
+    // A call that opened a watcher keeps hearing its changes after it returns,
+    // until the watcher it opened is closed: call id -> { handle, onEvent }.
+    const node = { socket: ws, calls: new Map(), watchers: new Map(), roots: [], platform: null, ready: false };
     let ids = 0;
     node.send = (message) => ws.send(JSON.stringify(message));
     node.call = (message, onEvent) => {
       const id = `c${++ids}`;
       const done = new Promise((resolve, reject) => node.calls.set(id, { resolve, reject, onEvent }));
+      if (message.target !== "env" && message.method === "close") {
+        for (const [callId, watcher] of node.watchers) if (watcher.handle === message.target) node.watchers.delete(callId);
+      }
       node.send({ ...message, type: "call", id });
       return { id, done };
     };
@@ -112,12 +118,13 @@ export class NodeHub extends EventEmitter {
         this.emit(`online:${record.id}`);
         return;
       }
-      if (message.type === "event" && node.listeners.has(message.id)) return node.listeners.get(message.id)(message);
+      if (message.type === "event" && node.watchers.has(message.id)) return node.watchers.get(message.id).onEvent(message);
       const pending = node.calls.get(message.id);
       if (!pending) return;
       if (message.type === "event") return pending.onEvent?.(message);
       node.calls.delete(message.id);
-      if (message.type === "result" && pending.onEvent && JSON.stringify(message.value).includes('"$handle"')) node.listeners.set(message.id, pending.onEvent);
+      const handle = message.type === "result" ? message.value?.value?.$handle : null;
+      if (handle && pending.onEvent) node.watchers.set(message.id, { handle, onEvent: pending.onEvent });
       if (message.type === "result") pending.resolve(message.value);
       else pending.reject(new Error(message.message || "The device could not run the call"));
     });
@@ -135,14 +142,26 @@ export class NodeHub extends EventEmitter {
 
   /** Wait for a device to be connected, for as long as `context` allows. */
   async online(nodeId, context, onWait) {
-    while (!this.live.get(nodeId)?.ready) {
-      const record = await this.get(nodeId);
-      if (!record) throw new Error("That device is no longer paired with Conduit");
-      onWait?.(record);
-      this.emit("waiting", { nodeId, name: record.name });
-      await awaitWithContext(new Promise((resolve) => this.once(`online:${nodeId}`, resolve)), context);
+    for (;;) {
+      // Listening before looking: a device that connects while this looks is not missed.
+      let wake;
+      const woken = new Promise((resolve) => { wake = resolve; });
+      this.on(`online:${nodeId}`, wake);
+      this.on(`forgotten:${nodeId}`, wake);
+      try {
+        if (this.live.get(nodeId)?.ready) return this.live.get(nodeId);
+        const record = await this.get(nodeId);
+        if (!record) throw new Error("That device is no longer paired with Conduit");
+        if (!this.live.get(nodeId)?.ready) {
+          onWait?.(record);
+          this.emit("waiting", { nodeId, name: record.name });
+          await awaitWithContext(woken, context);
+        }
+      } finally {
+        this.off(`online:${nodeId}`, wake);
+        this.off(`forgotten:${nodeId}`, wake);
+      }
     }
-    return this.live.get(nodeId);
   }
 
   /** One call on a device: `{ target, method, args, cwd }`; events (output, changes) go to `onEvent`. */

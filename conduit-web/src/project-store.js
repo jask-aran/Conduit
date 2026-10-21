@@ -817,7 +817,8 @@ export class ProjectStore {
     return this.runExclusive(() => this.removeUnlocked(idOrSlug, options));
   }
 
-  async removeUnlocked(idOrSlug, { skipWorkingTree = false, deleteWorkspaceFiles = false } = {}) {
+  async removeUnlocked(idOrSlug, { skipWorkingTree: skip = false, deleteWorkspaceFiles = false } = {}) {
+    let skipWorkingTree = skip;
     const catalog = await this.readCatalog();
     const project = catalog.projects.find((item) => item.id === idOrSlug || item.slug === idOrSlug);
     if (!project) return null;
@@ -827,6 +828,16 @@ export class ProjectStore {
       throw error;
     }
     const view = this.projectView(project);
+    // A device's folder is the device's: unlinking it touches nothing here,
+    // where its path may name something else entirely.
+    if (project.nodeId) {
+      if (deleteWorkspaceFiles) {
+        const error = new Error("A device's folder is deleted on the device");
+        error.code = "workspace_delete_not_supported";
+        throw error;
+      }
+      skipWorkingTree = true;
+    }
     if (deleteWorkspaceFiles && project.kind !== "workspace") {
       const error = new Error("Only Workspaces can delete an external working directory");
       error.code = "workspace_delete_not_supported";

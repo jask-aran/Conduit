@@ -72,8 +72,8 @@ export const METHOD_GRANTS = Object.freeze({
   renameFile: { grant: "write", paths: [0, 1] },
   createDir: { grant: "write", paths: [0] },
   remove: { grant: "write", paths: [0] },
-  createTempDir: { grant: "write", paths: [] },
-  createTempFile: { grant: "write", paths: [] },
+  // Not served: temporary files go to the device's own temp directory, outside
+  // every shared root. A command's own spill files are the device's business.
   exec: { grant: "shell", paths: [] },
 });
 

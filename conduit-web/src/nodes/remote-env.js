@@ -65,5 +65,9 @@ export class RemoteExecutionEnv {
     });
   }
 
+  // Not served (see protocol.js): the device's temp directory is outside its roots.
+  async createTempDir() { return err(new FileError("not_supported", "Temporary files are not created on a device")); }
+  async createTempFile() { return err(new FileError("not_supported", "Temporary files are not created on a device")); }
+
   async cleanup() {}
 }
