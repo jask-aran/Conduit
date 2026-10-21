@@ -5,7 +5,7 @@ device, and any client controls it. Its agent is the **Conduit durable
 agent** (below, under Names).
 
 Status, on branch `distributed-nodes` (head on the VPS, 2026-10-21):
-milestone 1 built (the Conduit durable agent, profile `conduit-runtime`:
+milestone 1 built (the pi-durable half of the Conduit durable agent, profile id `conduit-runtime`:
 restart resume, forks, queue, questions, attachments, web research, usage).
 Milestone 3 built: `scripts/conduit-node.mjs` is the node role, Settings ›
 Devices pairs and shows devices, a shared folder becomes a workspace whose
@@ -22,12 +22,16 @@ device's folder is polled). Milestones 2, 4 and 5 not started.
 ## Names
 
 - **Distributed Conduit**: this roadmap.
-- **Conduit durable agent** (2026-10-21, the user's term): the instance of
-  pi-durable customised to be the core of Conduit. It replaces "Conduit Pi"
-  as the name for Conduit's own agent. It powers the Assistant profile, any
-  other first-party profile, and the persistent agent (milestone 2). Code
-  still says `conduit-runtime` / `durable-adapter`, and "Conduit Pi" in
-  older text means the classic Pi this replaces (milestone 5).
+- **Conduit durable agent** (2026-10-21, the user's terms): the harness
+  that powers the core Conduit experience: the Assistant profile, any other
+  first-party profile, and the persistent agent (milestone 2). It is the
+  pi-durable implementation and, during the transition (until milestone 5),
+  standard Pi 1.3.0. It replaces "Conduit Pi" as the name. In code the
+  pi-durable half is still `durable-adapter.js` and profile id
+  `conduit-runtime`.
+- **Conduit runtime**: the server backend, above all the part that handles
+  interaction with agents (adapters, live sessions, the node protocol). Not a
+  name for the agent; the `conduit-runtime` profile id is a leftover.
 
 ## Vision
 
