@@ -2,7 +2,7 @@ import { Dialog } from "@/components/dialog";
 import { Section as DialogSection, Item as DialogItem } from "@/components/ui/popover";
 import { CardActions, CardForm, CardBody, CardRead, CardNote } from "@/components/ui/card";
 import { Button as DialogButton, Input as DialogInput, Field as DialogField } from "@/components/ui/controls";
-import { Backdrop, Button, NavBrand, NavFolder, NavFolderRow, NavGroup, NavLinks, NavNote, NavNotice, NavPane, NavRail, NavRailSection, NavRow, NavSkeleton, PillSwitch, RailButton, Segmented, StatusDot } from "@/components/ui";
+import { Backdrop, Button, NavBrand, NavLead, NavFolder, NavFolderRow, NavGroup, NavLinks, NavNote, NavNotice, NavPane, NavRail, NavRailSection, NavRow, NavSkeleton, PillSwitch, RailButton, Segmented, StatusDot } from "@/components/ui";
 import { ContextMenu, ContextMenuContent, ContextMenuTrigger, MenuRow, MenuSection } from "@/components/menus";
 import { isConduitManagedProject } from "./sidebar-preferences";
 import { ServerSwitcher } from "./server-switcher";
@@ -555,15 +555,6 @@ export function Sidebar(props: {
   // marked stale, which is the honest version of the same answer.
   const processFor = (chat: ChatSummary): RuntimeProcess | null => props.runtime.getProcess(chat.id);
 
-  // A fresh draft has no row of its own -- the chat lists hide it (see the
-  // `status !== "draft"` filters below), because the New chat row is its row.
-  // So that row carries the selection while the draft is the open chat.
-  const onNewChatPage = () => {
-    if (!props.selectedId || props.dashboard || props.project || props.computer || props.terminal) return false;
-    const chat = props.projects.flatMap((project) => project.sessions).find((item) => item.id === props.selectedId);
-    return !chat || (chat.status === "draft" && !chat.pinned && !props.runtime.getProcess(chat.id));
-  };
-
   const railChats = () => [...props.projects.flatMap((project) => project.sessions
     .filter((chat) => chat.status !== "draft" || chat.id !== props.selectedId || chat.pinned || Boolean(props.runtime.getProcess(chat.id)))
     .map((chat) => ({ chat, project })))]
@@ -977,12 +968,6 @@ export function Sidebar(props: {
         {/* A phone's open sidebar has no toggle: a swipe or the backdrop closes it. */}
         <Show when={!phoneLayout()}><Button variant="ghost" size="icon-sm" aria-label="Toggle Sidebar" aria-expanded={!collapsed()} onClick={toggleSidebar}><PanelLeftIcon /></Button></Show>
         <NavBrand name="Conduit" aria-label="Conduit" onClick={() => { setArea("conduit"); closeMobile(); props.onOpenDashboard(); enterPane(); }} />
-        <Show when={phoneLayout()}>
-          <div>
-            {serverSwitcher()}
-            <UpdateNotice state={props.updateState} onTake={props.onTakeUpdate} />
-          </div>
-        </Show>
         <Show when={phoneLayout()} fallback={<Segmented icons label="Sidebar section" value={area()} onChange={setArea} options={areas} />}>
           <PillSwitch label="Sidebar section" value={area()} onChange={setArea} options={areas} />
         </Show>
@@ -1048,6 +1033,15 @@ export function Sidebar(props: {
           </NavRailSection>
         </Show>
       </NavRail>
+      {/* A phone's server, and the actions its sidebar reaches, as the list's first line: it scrolls, so an update's
+          notice grows under it without moving the head. */}
+      <Show when={phoneLayout()}>
+        <NavLead server={serverSwitcher()} actions={<>
+          <Button variant="ghost" size="icon" aria-label="New chat" title="New chat" onClick={() => startNewChat()}><MessageSquarePlusIcon /></Button>
+          <Button variant="ghost" size="icon" aria-label="Search chats" title="Search chats" onClick={() => props.onOpenPalette("chat-search")}><SearchIcon /></Button>
+          <Button variant="ghost" size="icon" aria-label="Open command palette" title="Command palette" onClick={() => props.onOpenPalette()}><TerminalIcon /></Button>
+        </>}><UpdateNotice state={props.updateState} onTake={props.onTakeUpdate} /></NavLead>
+      </Show>
       <Show when={area() === "computer"}>
         <NavRow icon={<MonitorIcon />} draggable="true" data-doc-view="page:computer" current={props.computer && !props.selectedHarness} onClick={() => { closeMobile(); props.onOpenComputer(); enterPane(); }}>Files</NavRow>
         <NavRow icon={<FolderPlusIcon />} onClick={() => openNewDialog("workspace")}>New workspace</NavRow>
@@ -1067,8 +1061,6 @@ export function Sidebar(props: {
       </Show>
       <Show when={area() === "conduit"}>
         <NavRow icon={<LayoutDashboardIcon />} draggable="true" data-doc-view="page:dashboard" current={props.dashboard} onClick={() => { closeMobile(); props.onOpenDashboard(); enterPane(); }}>Conduit Dashboard</NavRow>
-        {/* A phone's way to a new chat; on desktop a loose chat starts on the Conduit dashboard and a place's on its page. */}
-        <Show when={phoneLayout()}><NavRow icon={<MessageSquarePlusIcon />} current={onNewChatPage()} onClick={() => startNewChat()}>New chat</NavRow></Show>
         <NavRow icon={<FolderPlusIcon />} onClick={() => openNewDialog("folder")}>New project</NavRow>
         <Show when={pinnedItems().length}>
           <NavGroup label="Pinned"><For each={pinnedItems()}>{(item) => <PinnedRow item={item} />}</For></NavGroup>

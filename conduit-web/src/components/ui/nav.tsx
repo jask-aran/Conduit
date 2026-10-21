@@ -100,6 +100,12 @@ export function NavFolder(props: { open: boolean; row: JSX.Element; children: JS
 }
 
 /** What a list says when it has nothing: one muted line. */
+/** A phone's first lines of the list, on its ground: the server it is on (its switcher) with the actions a phone
+ *  reaches from the sidebar beside it (New chat, search, the palette), then what the server has to say (an update).
+ *  It scrolls with the list, so it grows without moving the head; it is not one of the list's arrow stops. */
+export const NavLead = (props: { server: JSX.Element; actions: JSX.Element; children?: JSX.Element }) =>
+  <div class="ui-nav-lead"><div class="ui-nav-lead-line">{props.server}<div class="ui-nav-lead-actions">{props.actions}</div></div>{props.children}</div>;
+
 export const NavNote = (props: { children: JSX.Element }) => <div class="ui-nav-note">{props.children}</div>;
 
 /** Rows that have not arrived: the shape of a list, still. */
