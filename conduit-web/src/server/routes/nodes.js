@@ -18,8 +18,11 @@ export function registerNodeRoutes(app, { nodeHub, config }) {
       const { node, device, key } = await nodeHub.pair({ name: request.body?.name,
         deviceId: request.body?.deviceId || null, deviceName: request.body?.deviceName || null });
       // Devices reach main over the tailnet (decision 4): its MagicDNS name when
-      // Tailscale serves it, else this machine, for a node on the same one.
-      const main = String(request.body?.mainUrl || await currentMagicDnsOrigin().catch(() => null) || `http://127.0.0.1:${config.port}`);
+      // Tailscale serves it; else its public address, when devices may use it;
+      // else this machine, for a node on the same one.
+      const publicUrl = process.env.CONDUIT_NODES_PUBLIC === "1" && process.env.CONDUIT_PUBLIC_URL
+        ? (/^https?:\/\//.test(process.env.CONDUIT_PUBLIC_URL) ? process.env.CONDUIT_PUBLIC_URL : `https://${process.env.CONDUIT_PUBLIC_URL}`) : null;
+      const main = String(request.body?.mainUrl || await currentMagicDnsOrigin().catch(() => null) || publicUrl || `http://127.0.0.1:${config.port}`);
       response.status(201).json({ node, device, key, mainUrl: main, command: `conduit-node pair ${main} ${key}` });
     } catch (error) { next(error); }
   });
