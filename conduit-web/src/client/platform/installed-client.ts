@@ -198,7 +198,7 @@ export interface CompanionStatus {
   available: boolean;
   serving: boolean;
   running: boolean;
-  node: { name: string | null; pairings: Array<{ mainUrl: string; nodeId: string | null; roots: CompanionRoot[] }> } | null;
+  node: { name: string | null; host?: string; pairings: Array<{ mainUrl: string; nodeId: string | null; routes?: string[]; roots: CompanionRoot[] }> } | null;
 }
 
 /**
@@ -213,9 +213,10 @@ export const desktopShell = installedClientKind !== "desktop" ? null : {
       const { invoke } = await import("@tauri-apps/api/core");
       return invoke<CompanionStatus>("device_companion_status");
     },
-    async pair(mainUrl: string, key: string, nodeId: string, name: string): Promise<string> {
+    /** `via`: other ways to reach the server, tried when `mainUrl` is not reachable. */
+    async pair(mainUrl: string, key: string, nodeId: string, name: string, via: string[] = []): Promise<string> {
       const { invoke } = await import("@tauri-apps/api/core");
-      return invoke<string>("device_companion_pair", { mainUrl, key, nodeId, name });
+      return invoke<string>("device_companion_pair", { mainUrl, key, nodeId, name, via });
     },
     /** Asks for a folder with the system picker; null when none was picked. */
     async share(mainUrl: string, write: boolean, shell: boolean): Promise<string | null> {

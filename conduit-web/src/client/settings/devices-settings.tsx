@@ -169,12 +169,12 @@ function ThisComputerTile(props: { devices: () => Device[] | null; refresh: () =
     if (current) setSettings(await shell.saveSettings({ ...current, serveAsDevice: on }));
   });
   const pair = () => act(async () => {
-    const deviceName = status()?.node?.name || "This computer";
-    const paired = await api<{ node: Node; key: string; mainUrl: string }>("/v0/nodes", {
+    const deviceName = status()?.node?.name || status()?.node?.host || "This computer";
+    const paired = await api<{ node: Node; key: string; mainUrl: string; routes?: string[] }>("/v0/nodes", {
       method: "POST", headers: { "content-type": "application/json" },
       body: JSON.stringify({ deviceName, name: thisPlatform(), mainUrl: dialableServer() }),
     });
-    await shell.companion.pair(paired.mainUrl, paired.key, paired.node.id, deviceName);
+    await shell.companion.pair(paired.mainUrl, paired.key, paired.node.id, deviceName, (paired.routes || []).slice(1));
     const current = settings();
     // Pairing is asking to be served: the node starts with it.
     if (current && !current.serveAsDevice) setSettings(await shell.saveSettings({ ...current, serveAsDevice: true }));

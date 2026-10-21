@@ -22,8 +22,13 @@ export function registerNodeRoutes(app, { nodeHub, config }) {
       // else this machine, for a node on the same one.
       const publicUrl = process.env.CONDUIT_NODES_PUBLIC === "1" && process.env.CONDUIT_PUBLIC_URL
         ? (/^https?:\/\//.test(process.env.CONDUIT_PUBLIC_URL) ? process.env.CONDUIT_PUBLIC_URL : `https://${process.env.CONDUIT_PUBLIC_URL}`) : null;
-      const main = String(request.body?.mainUrl || await currentMagicDnsOrigin().catch(() => null) || publicUrl || `http://127.0.0.1:${config.port}`);
-      response.status(201).json({ node, device, key, mainUrl: main, command: `conduit-node pair ${main} ${key}` });
+      const tailnet = await currentMagicDnsOrigin().catch(() => null);
+      // Every way a device may dial, best first; the first is the pairing's name.
+      const routes = [...new Set([request.body?.mainUrl, tailnet, publicUrl].filter(Boolean).map(String))];
+      if (!routes.length) routes.push(`http://127.0.0.1:${config.port}`);
+      const main = routes[0];
+      const via = routes.slice(1).map((route) => ` --via ${route}`).join("");
+      response.status(201).json({ node, device, key, mainUrl: main, routes, command: `conduit-node pair ${main} ${key}${via}` });
     } catch (error) { next(error); }
   });
 

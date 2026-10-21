@@ -77,11 +77,15 @@ pub fn set_desktop_settings<R: Runtime>(
 ) -> Result<DesktopSettings, String> {
     // The OS registration is the authority on launch-at-login, so it is changed
     // first and its failure is reported rather than written down as success.
+    // Only when it changes: disabling what was never registered fails on
+    // Windows ("cannot find the file specified"), and so did every save.
     let autostart = app.autolaunch();
-    if settings.launch_at_login {
-        autostart.enable().map_err(|error| error.to_string())?;
-    } else {
-        autostart.disable().map_err(|error| error.to_string())?;
+    if autostart.is_enabled().unwrap_or(!settings.launch_at_login) != settings.launch_at_login {
+        if settings.launch_at_login {
+            autostart.enable().map_err(|error| error.to_string())?;
+        } else {
+            autostart.disable().map_err(|error| error.to_string())?;
+        }
     }
     persist(&app, &settings)?;
     crate::node_companion::supervise(&app, settings.serve_as_device);
