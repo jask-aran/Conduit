@@ -20,7 +20,7 @@ export function ChatScreen(props: { chat?: ReturnType<typeof fakeChat> } = {}) {
   const attachments = fakeAttachments();
   return <main data-slot="sidebar-inset" data-region="chat" class="chat-main">
     <ChatHeader title="Lorem ipsum file" chat={chat} profile={profile.active()} panelOpen={false} mobileSidebarOpen={false}
-      onToggleMobileSidebar={() => {}} onNewChat={() => {}} onOpenPalette={() => {}} onOpenSearch={() => {}} onTogglePanel={() => {}} onShare={() => {}} onUpdatePwa={() => {}} pwaUpdating={() => false} />
+      onToggleMobileSidebar={() => {}} onNewChat={() => {}} onOpenPalette={() => {}} onOpenSearch={() => {}} onTogglePanel={() => {}} onShare={() => {}} />
     <Conversation chat={chat}
       transcript={<Transcript chat={chat} supports={() => true} partialContinue={false} markdownRenderer={selectedMarkdownRenderer()} profileLabel={profile.active().label} />}
       composer={<Composer chat={chat} attachments={attachments} models={models} profiles={profile.profiles} activeProfile={profile.active()} place={place} serverOnline voiceSettings={loadVoiceDictationSettings()}
