@@ -35,8 +35,9 @@ export async function ensureChatTree(project, chatId) {
 }
 
 export async function ensureConduitRoot(project) {
-  const root = path.resolve(project.workingRoot);
-  if (project.externalPath) await ensureDirectory(root);
+  const root = path.resolve(project.chatRoot || project.workingRoot);
+  // A linked folder must already exist; a device workspace's chats live in a folder Conduit owns here.
+  if (project.externalPath && !project.nodeId) await ensureDirectory(root);
   else await fs.mkdir(root, { recursive: true });
   await ensureDirectory(root);
   const conduit = path.join(root, ".conduit");

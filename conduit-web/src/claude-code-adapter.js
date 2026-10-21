@@ -14,6 +14,7 @@ import { claudePlanUsage, declarePlan } from "./plan-usage.js";
 import { unsupported } from "./harnesses/unsupported.js";
 import { within } from "./server/effect-concurrency.js";
 import { BACKGROUND_CONTEXT, withAbortSignal } from "@earendil-works/chord/context";
+import { attachmentForDevice } from "./nodes/device-attachments.js";
 import { harnessLaunch, opaqueSessionOf, requireHarnessOn, spawnOnDevice } from "./nodes/remote-spawn.js";
 
 // Claude Code's tools, by what they do.
@@ -123,7 +124,7 @@ const uuidOf = (messageId) => {
 // What the model can see of an attachment; anything else is named by its path.
 const INLINE_TYPES = new Set(["image/png", "image/jpeg", "image/gif", "image/webp", "application/pdf"]);
 const ATTACHED = /^Attached file: /;
-async function promptContent(text, attachments = []) {
+async function promptContent(text, attachments = [], { onDevice = false } = {}) {
   const blocks = [];
   const named = [];
   for (const item of attachments || []) {
@@ -136,7 +137,8 @@ async function promptContent(text, attachments = []) {
         continue;
       } catch { /* named instead */ }
     }
-    named.push(`Attached file: ${item.path}`);
+    // On a device the path names nothing; what can be said goes inline.
+    named.push(onDevice ? await attachmentForDevice(item) : `Attached file: ${item.path}`);
   }
   if (text) blocks.push({ type: "text", text });
   if (named.length) blocks.push({ type: "text", text: named.join("\n") });
@@ -344,6 +346,9 @@ function contextCategories(context) {
 }
 
 export class ClaudeCodeAdapter extends EventEmitter {
+  // Starts its harness on a device for a device's workspace (live-session-launcher.js).
+  runsOnDevices = true;
+
   /** Each model's window as Claude Code last reported it, for threads read from history. */
   static windows = new Map();
   /** Each model's autocompact reserve as Claude Code last reported it. */
@@ -914,7 +919,7 @@ export class ClaudeCodeAdapter extends EventEmitter {
       status: "working", activity: "working", detail: null });
     try {
       record.input.push({ type: "user", uuid, session_id: record.sessionId, parent_tool_use_id: null,
-        message: { role: "user", content: await promptContent(record.promptText, options.attachments) } });
+        message: { role: "user", content: await promptContent(record.promptText, options.attachments, { onDevice: Boolean(record.nodeId) }) } });
     } catch (cause) { this.failPrompt(record, cause); throw cause; }
     return { generationId, attachmentIdentity: { messageId: userMessageId } };
   }
@@ -939,7 +944,7 @@ export class ClaudeCodeAdapter extends EventEmitter {
     record.steering.push(item);
     this.publishQueue(record);
     record.input.push({ type: "user", uuid, session_id: record.sessionId, parent_tool_use_id: null, priority: "next",
-      message: { role: "user", content: await promptContent(text, attachments) } });
+      message: { role: "user", content: await promptContent(text, attachments, { onDevice: Boolean(record.nodeId) }) } });
     return { queued: "steer", attachmentIdentity: { messageId: item.id } };
   }
 

@@ -32,11 +32,36 @@ function piApi(tools) {
   return new Proxy(api, { get: (target, key) => (key in target ? target[key] : () => undefined) });
 }
 
-export async function loadPiExtensionTools(entry, { models, replaySafe = [] }) {
+/**
+ * Variables an extension reads from process.env as it runs, set only while
+ * it runs: they are the extension's, and anything this server spawns
+ * meanwhile would otherwise inherit them for good. Overlapping calls share
+ * one setting; the last to finish puts back what was there.
+ */
+function scopedEnv(variables) {
+  let depth = 0;
+  let saved = {};
+  return async (work) => {
+    if (depth++ === 0) {
+      saved = Object.fromEntries(Object.keys(variables).map((key) => [key, process.env[key]]));
+      Object.assign(process.env, variables);
+    }
+    try { return await work(); } finally {
+      if (--depth === 0) {
+        for (const [key, value] of Object.entries(saved)) {
+          if (value === undefined) delete process.env[key]; else process.env[key] = value;
+        }
+      }
+    }
+  };
+}
+
+export async function loadPiExtensionTools(entry, { models, replaySafe = [], env = {} }) {
+  const scoped = scopedEnv(env);
   const jiti = createJiti(import.meta.url, { interopDefault: true, moduleCache: true });
-  const factory = await jiti.import(entry, { default: true });
+  const factory = await scoped(() => jiti.import(entry, { default: true }));
   const tools = [];
-  await factory(piApi(tools));
+  await scoped(() => factory(piApi(tools)));
   const registry = new ModelRegistry(models);
   const safe = new Set(replaySafe);
   return tools.map((tool) => defineTool({
@@ -58,7 +83,7 @@ export async function loadPiExtensionTools(entry, { models, replaySafe = [] }) {
         const text = (partial?.content || []).filter((part) => part.type === "text").map((part) => part.text).join("");
         if (text) api.output(`${text}\n`);
       };
-      const result = await tool.execute(api.callId, args, context.abortSignal, onUpdate, ctx);
+      const result = await scoped(() => tool.execute(api.callId, args, context.abortSignal, onUpdate, ctx));
       return {
         output: (result?.content || []).filter((part) => part.type === "text" || part.type === "image"),
         ...(result?.details !== undefined ? { details: JSON.parse(JSON.stringify(result.details)) } : {}),

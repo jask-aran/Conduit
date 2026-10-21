@@ -162,6 +162,9 @@ class AcpClient {
 }
 
 export class FxAcpAdapter extends EventEmitter {
+  // Starts its harness on a device for a device's workspace (live-session-launcher.js).
+  runsOnDevices = true;
+
   constructor({ command = "fx", logs = null, nodeHub = null } = {}) {
     super();
     this.command = command;

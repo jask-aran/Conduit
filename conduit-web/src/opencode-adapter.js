@@ -167,6 +167,9 @@ const blocksOf = (row) => (row.content || []).flatMap((part, index) => {
 });
 
 export class OpenCodeAdapter extends EventEmitter {
+  // Starts its harness on a device for a device's workspace (live-session-launcher.js).
+  runsOnDevices = true;
+
   constructor({ command = "opencode2", logs = null, nodeHub = null } = {}) {
     super();
     this.command = command;

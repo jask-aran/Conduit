@@ -267,7 +267,8 @@ export class AttachmentStore {
     try {
       await pipeline(readable, limitedReadable(this.maxBytes), stream);
       await fsp.rename(partPath, finalPath);
-      const workspaceWarning = existingAttachments.length === 0
+      // A device workspace's attachments are not in its folder, so its Git is not told of them.
+      const workspaceWarning = existingAttachments.length === 0 && !project.nodeId
         ? await excludeConduitFromGit(project.workingRoot).catch(() => "Could not add .conduit/ to Git's local exclude file")
         : null;
       this.chatStore.markAttachments(chatId, true);

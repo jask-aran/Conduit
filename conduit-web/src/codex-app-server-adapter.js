@@ -17,6 +17,7 @@ import { unsupported } from "./harnesses/unsupported.js";
 import { BACKGROUND_CONTEXT, withAbortSignal } from "@earendil-works/chord/context";
 import { execOnDevice, opaqueSessionOf, requireHarnessOn } from "./nodes/remote-spawn.js";
 import { tunnelTo } from "./nodes/remote-tunnel.js";
+import { attachmentForDevice, imageDataUrl } from "./nodes/device-attachments.js";
 
 export const CODEX_CAPABILITIES = Object.freeze({
   history: "linear", fork: true, regenerate: true,
@@ -148,6 +149,9 @@ function codexPlan(snapshot, previous = null) {
 }
 
 export class CodexAppServerAdapter extends EventEmitter {
+  // Starts its harness on a device for a device's workspace (live-session-launcher.js).
+  runsOnDevices = true;
+
   /** The account's plan windows; Codex's are the account's, not a thread's. */
   static plan = { at: 0, value: null };
 
@@ -1187,7 +1191,7 @@ export class CodexAppServerAdapter extends EventEmitter {
       await this.request(record, "turn/steer", {
         threadId: record.sessionId, expectedTurnId: turnId,
         clientUserMessageId: queued.id,
-        input: CodexAppServerAdapter.inputItems(userMessage, attachments),
+        input: await CodexAppServerAdapter.inputItems(userMessage, attachments, { onDevice: Boolean(record.nodeId) }),
       });
     } catch (cause) {
       record.steering = record.steering.filter((item) => item !== queued);
@@ -1244,12 +1248,17 @@ export class CodexAppServerAdapter extends EventEmitter {
     };
   }
 
-  static inputItems(message, attachments) {
+  /** A device's Codex cannot open this server's paths: images go as data URLs and files inline, where they can. */
+  static async inputItems(message, attachments, { onDevice = false } = {}) {
     const images = (attachments || []).filter((item) => String(item?.type || "").startsWith("image/") && item.path);
     const files = (attachments || []).filter((item) => !String(item?.type || "").startsWith("image/") && item.path);
     const text = [parseAttachmentEnvelope(message).message,
-      ...files.map((item) => `Attached file: ${item.path}`)].filter(Boolean).join("\n\n");
-    return [...images.map((item) => ({ type: "localImage", path: item.path })), { type: "text", text }];
+      ...(onDevice ? await Promise.all(files.map(attachmentForDevice)) : files.map((item) => `Attached file: ${item.path}`))]
+      .filter(Boolean).join("\n\n");
+    const pictures = onDevice
+      ? await Promise.all(images.map(async (item) => ({ type: "image", url: await imageDataUrl(item) })))
+      : images.map((item) => ({ type: "localImage", path: item.path }));
+    return [...pictures, { type: "text", text }];
   }
 
   async prompt(id, message, options) {
@@ -1272,7 +1281,7 @@ export class CodexAppServerAdapter extends EventEmitter {
       result = await this.request(record, "turn/start", {
         threadId: record.sessionId,
         clientUserMessageId,
-        input: CodexAppServerAdapter.inputItems(message, options?.attachments),
+        input: await CodexAppServerAdapter.inputItems(message, options?.attachments, { onDevice: Boolean(record.nodeId) }),
         ...(record.model ? { model: record.model } : {}),
         ...(record.thinkingLevel ? { effort: record.thinkingLevel } : {}),
         ...(record.serviceLevel ? { serviceTier: record.serviceLevel } : {}),
