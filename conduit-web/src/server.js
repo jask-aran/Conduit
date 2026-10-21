@@ -1,4 +1,5 @@
 import { capabilitiesOf, headIds } from "./place.js";
+import { convertClassicChats } from "./server/convert-classic-chats.js";
 import http from "node:http";
 import https from "node:https";
 import net from "node:net";
@@ -228,6 +229,9 @@ const harnessConfig = {
   dataRoot: config.dataRoot,
   piAgentDir: config.piAgentDir,
   nodeHub,
+  // The Conduit durable agent's profiles, and their prompts as edited in Settings.
+  piTemplates: config.piTemplates,
+  promptStore,
 };
 const backends = lifetime.own("agents", ChatBackendRegistry.fromManifests(MANIFESTS, await detect(MANIFESTS, harnessConfig), harnessConfig), async (owned) => {
   const stopped = await owned.shutdown();
@@ -272,6 +276,9 @@ nodeHub.adoptHead({ ...head, name: () => serverIdentity.name,
   roots: async () => (await projects.list()).filter((project) => project.local)
     .map((project) => ({ id: project.place.root, label: project.workingRoot, read: true, write: true, shell: true, allow: [] })),
   harnesses: () => [...(backends.local || backends.adapters.keys())] });
+// Conduit's own chats run on the durable agent (milestone 5): any still on
+// classic Pi are converted once, before anything can open them.
+await convertClassicChats({ registry, projects, backends, config });
 
 manager.on("process_removed", ({ id, chatId }) => {
   runtimeHub.publishProcessRemoved(id, chatId);

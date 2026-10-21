@@ -10,17 +10,19 @@ import { answerTo, isDismissal, questionRequest } from "../harnesses/questions.j
 import { NodeExecutionEnv } from "@earendil-works/pi-durable/env/node";
 import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node";
 import { CodingTools } from "@earendil-works/pi-durable/tools";
+import { createCodemodeExtension } from "@earendil-works/pi-durable/codemode";
+import { CodemodeSandbox } from "@earendil-works/pi-codemode";
 import { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import { buildManagedToolEnvironment } from "../../../scripts/pi-runtime.mjs";
 
-const SYSTEM_PROMPT = fs.readFileSync(new URL("../../../templates/conduit-runtime/SYSTEM.md", import.meta.url), "utf8");
-// The Assistant's web section, with the web-research skill it names inlined:
-// the runtime loads no skills, and this one is short.
-const WEB_PROMPT = [
-  fs.readFileSync(new URL("../../../templates/conduit-runtime/WEB.md", import.meta.url), "utf8"),
-  fs.readFileSync(new URL("../../../templates/coding/skills/web-research/SKILL.md", import.meta.url), "utf8").replace(/^---\n[\s\S]*?\n---\n/, ""),
-].join("\n");
+// What the web tools are for and how to use them; a template that asks for
+// them also brings the web-research skill.
+const WEB_PROMPT = fs.readFileSync(new URL("../../../templates/conduit-runtime/WEB.md", import.meta.url), "utf8");
 const WEB_ACCESS = fileURLToPath(new URL("../../node_modules/pi-web-access/index.ts", import.meta.url));
+// A template's own extension that only asked Pi for its codemode, offered alone.
+const CODEMODE_ONLY = /codemode-only\.js$/;
+// Conduit's own tool, offered under every template.
+const ALWAYS = ["ask_user"];
 // Reads and searches: asking again after a restart costs a request, not a side effect.
 const WEB_REPLAY_SAFE = ["web_search", "fetch_content", "get_search_content", "source_check"];
 
@@ -73,7 +75,6 @@ const Conduit = (runtime) => defineExtension({
   name: "conduit",
   tools: [askUser(runtime)],
   sections: [
-    section("preamble", () => SYSTEM_PROMPT, { tag: false }),
     // The working directory the tools resolve against: the chat's project.
     section("cwd", (input) => input.env?.cwd),
   ],
@@ -119,8 +120,11 @@ export const ConduitWorkspace = defineDoc({
 export const USER_ENTRY = "conduit.user";
 
 export class DurableRuntime {
-  constructor({ dataRoot, piAgentDir, nodeHub = null }) {
+  constructor({ dataRoot, piAgentDir, nodeHub = null, templates = [], promptStore = null }) {
     this.nodeHub = nodeHub;
+    // The profiles (Assistant, Coding, Runtime) this agent runs: Conduit's templates.
+    this.templates = templates;
+    this.promptStore = promptStore;
     this.file = path.join(dataRoot, "runtime", "conduit-runtime.sqlite");
     this.piAgentDir = piAgentDir;
     this.context = BACKGROUND_CONTEXT;
@@ -196,9 +200,14 @@ export class DurableRuntime {
         authPath: agent("auth.json"), modelsPath: agent("models.json"), modelsStorePath: agent("models-store.json"),
       });
       const registry = createRegistry();
-      registry.install(Conduit(this));
-      registry.install(CodingTools);
-      await this.installWebTools(registry);
+      // Every extension a template may select, by name; a conversation selects its template's.
+      this.extensions = new Map();
+      const install = (extension) => { registry.install(extension); this.extensions.set(extension.name, extension); };
+      install(Conduit(this));
+      install(CodingTools);
+      const web = await this.webTools();
+      if (web) install(web);
+      install(createCodemodeExtension({ sandbox: new CodemodeSandbox() }));
       // Bash finds Conduit's managed Python first, as it does for Conduit Pi.
       const shellEnv = buildManagedToolEnvironment(process.env);
       this.harness = await Harness.open(await openNodeSqliteStorage(this.file), {
@@ -239,15 +248,51 @@ export class DurableRuntime {
    * extension Conduit Pi loads, with its configuration (web-search.json) read
    * from the Conduit Pi agent's directory. A runtime without them still runs.
    */
-  async installWebTools(registry) {
+  async webTools() {
     try {
       // Its configuration is the Conduit Pi agent's, named only while its tools run.
       const tools = await loadPiExtensionTools(WEB_ACCESS, { models: this.models, replaySafe: WEB_REPLAY_SAFE,
         env: { PI_CODING_AGENT_DIR: process.env.PI_CODING_AGENT_DIR || this.piAgentDir } });
-      registry.install(defineExtension({ name: "web", tools, sections: [section("web", () => WEB_PROMPT, { tag: false })] }));
+      return defineExtension({ name: "web", tools, sections: [section("web", () => WEB_PROMPT, { tag: false })] });
     } catch (error) {
       console.warn("[conduit-runtime] web tools unavailable:", error?.message || error);
+      return null;
     }
+  }
+
+  /**
+   * A conversation's agent under a template (Assistant when none is named,
+   * which is also what the old "Conduit runtime" profile's chats become):
+   * its extensions and tools, and its prompt -- the template's, or the one
+   * edited in Settings -- with its skills inlined. Skills are short, and
+   * inlined they are there for a device's workspace too, where the read tool
+   * cannot reach this server's files.
+   */
+  async agentFor(templateId) {
+    await this.open();
+    const template = this.templates.find((item) => item.id === templateId)
+      || this.templates.find((item) => item.id === "assistant") || this.templates[0];
+    if (!template) return {};
+    const named = (file) => (file.includes("pi-web-access") ? "web" : CODEMODE_ONLY.test(file) ? "codemode" : null);
+    const extensions = ["conduit", "coding-tools", ...template.extensions.map(named).filter(Boolean)]
+      .map((name) => this.extensions.get(name)).filter(Boolean);
+    const wanted = new Set([...ALWAYS, ...template.tools]);
+    // Codemode's own helpers (`pi.codemode.*`) come with it: its scripts call them.
+    const tools = extensions.flatMap((extension) => extension.tools || [])
+      .filter((tool) => wanted.has(tool.name) || (wanted.has("codemode") && tool.name.startsWith("pi.codemode.")));
+    // Pi's "codemode only": the model is offered codemode (and the question card); scripts call the rest.
+    const codemodeOnly = template.extensions.some((file) => CODEMODE_ONLY.test(file));
+    const prompt = this.promptStore ? (await this.promptStore.read(template.id)).content : fs.readFileSync(template.systemPrompt, "utf8");
+    const skills = template.skills.map((folder) => {
+      const text = fs.readFileSync(path.join(folder, "SKILL.md"), "utf8");
+      const name = /^name:\s*(.+)$/m.exec(text)?.[1]?.trim() || path.basename(folder);
+      return `## Skill: ${name}\n\n${text.replace(/^---\n[\s\S]*?\n---\n/, "").trim()}`;
+    });
+    return {
+      extensions, tools,
+      modelTools: codemodeOnly ? tools.filter((tool) => tool.name === "codemode" || ALWAYS.includes(tool.name)) : null,
+      instructions: [prompt.trim(), ...(skills.length ? ["# Skills", ...skills] : [])].join("\n\n"),
+    };
   }
 
   /** The models the Conduit Pi agent offers: its enabled list when it has one, else every model with credentials. */

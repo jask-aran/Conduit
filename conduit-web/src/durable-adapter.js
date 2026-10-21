@@ -227,7 +227,9 @@ export class DurableAdapter extends EventEmitter {
     const selected = (forceModel ? String(model).trim() : "") || String(context.chat.backend.model || "").trim();
     const level = (forceModel ? String(thinkingLevel).trim() : "")
       || String(context.chat.modelThinkingLevels?.[selected] || "").trim();
-    const options = { chatId: context.chat.id, project: context.project, model: selected, thinkingLevel: level };
+    // The chat's profile is a Conduit template (Assistant when it names none).
+    const options = { chatId: context.chat.id, project: context.project, model: selected, thinkingLevel: level,
+      templateId: context.chat.templateId || context.chat.backend?.profileId || null };
     const live = context.chat.backend.opaqueSession
       ? await this.restore(context.chat.backend.opaqueSession, options) : await this.create(options);
     return {
@@ -245,6 +247,7 @@ export class DurableAdapter extends EventEmitter {
     const fallback = await this.runtime.defaultModel();
     const spec = splitSpec(options.model) || (fallback && { provider: fallback.provider, modelId: fallback.modelId });
     const conversation = await harness.createConversation({ ownership: { kind: "ownerless" }, agent: {
+      ...await this.runtime.agentFor(options.templateId),
       ...(spec ? { model: spec } : {}),
       ...(options.thinkingLevel || fallback?.thinkingLevel ? { thinkingLevel: options.thinkingLevel || fallback.thinkingLevel } : {}),
       ...(options.project?.workingRoot ? { cwd: options.project.workingRoot } : {}),
@@ -261,6 +264,8 @@ export class DurableAdapter extends EventEmitter {
     if ((await harness.snapshot(ConduitIds, conversation.id, this.context))?.chatId !== options.chatId) {
       await this.remember(conversation, options.chatId);
     }
+    // The template as it is now: its tools, extensions and prompt (as edited in Settings).
+    await conversation.configure(await this.runtime.agentFor(options.templateId), this.context);
     // A conversation from before places learns its workspace's place.
     const workspace = await harness.snapshot(ConduitWorkspace, conversation.id, this.context);
     if (workspace?.nodeId && !workspace.place && options.project?.place) {

@@ -1,6 +1,6 @@
 import { resolveTemplate } from "../../config.js";
 import { isChatId } from "../../chat-store.js";
-import { agentProfiles } from "../../chat-backend.js";
+import { agentProfiles, templateBackend } from "../../chat-backend.js";
 
 const failure = (code, message, status) => Object.assign(new Error(message), { code, status });
 const text = (content) => typeof content === "string" ? content
@@ -71,7 +71,7 @@ export function registerRunRoutes(app, {
         if (!template || template.defaultable === false) throw failure("unknown_profile", `Unknown profile: ${profileId}`, 400);
         chat = await registry.create(project, {
           templateId: template.id, templateVersion: template.version,
-          runtime: runtimeFor({ runtimeKind: "conduit_profile", template }), untracked: true, run,
+          backend: templateBackend(template), untracked: true, run,
         });
       }
       const model = String(request.body?.model || "");

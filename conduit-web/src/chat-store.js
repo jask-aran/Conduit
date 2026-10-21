@@ -496,7 +496,7 @@ export class ChatStore {
     }
     if (chat.runtime) chat.runtime = this.runtimeFor(chat, chat.templateId, chat.templateVersion);
     if (patch.status === "draft" || patch.status === "active") chat.status = patch.status;
-    if (canSelectBackend && patch.backend == null
+    if (canSelectBackend && patch.backend == null && (!chat.backend || chat.backend.protocol === "pi_rpc")
       && ["templateId", "templateVersion", "runtime"].some((key) => Object.hasOwn(patch, key))) {
       chat.backend = piBackendFor(chat);
     }

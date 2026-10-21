@@ -6,8 +6,18 @@ export { conduitPiSessionFile, opaqueSessionFor } from "./backend-session.js";
 const PROFILE_MANIFESTS = MANIFESTS.filter((manifest) => manifest.profile);
 
 export function harnessIdForImplementation(implementation, installationId = "") {
-  if (implementation === "conduit_pi") return "conduit";
+  // Conduit's own chats, on the durable agent or (before it) classic Pi.
+  if (implementation === "conduit_pi" || implementation === "conduit-runtime") return "conduit";
   return implementation || "conduit";
+}
+
+/**
+ * A Conduit profile's chat (Assistant, Coding, Runtime: a template) runs on
+ * the Conduit durable agent (plan milestone 5); the template is the profile.
+ */
+export function templateBackend(template) {
+  return { profileId: template.id, profileRevision: template.version || null, management: "conduit",
+    protocol: "native_api", implementation: "conduit-runtime", installationId: "conduit-runtime", opaqueSession: null };
 }
 
 // Pi identity metadata only. Runtime dispatch still belongs to PiManager.
@@ -79,7 +89,7 @@ export function agentProfiles(templates, { available = null } = {}) {
       id: template.id,
       label: template.label,
       management: "conduit",
-      agent: { protocol: "pi_rpc", implementation: "conduit_pi", installationId: "conduit-pinned" },
+      agent: { protocol: "native_api", implementation: "conduit-runtime", installationId: "conduit-runtime" },
     })),
     ...PROFILE_MANIFESTS.map((manifest) => ({
       id: manifest.id,
@@ -100,6 +110,8 @@ export function profileSelection(body = {}) {
     throw Object.assign(new Error("profileId must be a non-empty string"), { code: "invalid_profile", status: 400 });
   }
   const profileId = body.profileId.trim();
+  // The durable agent's stand-in profile became the Assistant template.
+  if (profileId === "conduit-runtime") return profileSelection({ ...body, profileId: "assistant" });
   if (profileId === "host-pi") {
     throw Object.assign(new Error("Host Pi is not supported"), { code: "invalid_profile", status: 400 });
   }
