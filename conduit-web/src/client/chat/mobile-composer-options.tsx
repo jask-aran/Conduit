@@ -77,7 +77,7 @@ export function MobileComposerOptions(props: {
   });
 
   const placed = () => composer.place?.current && composer.place.current.slug !== "chat" ? composer.place.current : null;
-  return <Menu modal={false} placement="top-start" gutter={8} open={open()} onOpenChange={(value) => { if (value) typingAtOpen = composerTextarea(); setOpen(value); }}>
+  return <Menu modal={false} placement="top-start" open={open()} onOpenChange={(value) => { if (value) typingAtOpen = composerTextarea(); setOpen(value); }}>
       <MenuPillTrigger label="Message options" icon={<PlusIcon />} open={open()} disabled={!composer.serverOnline} keep={() => typingAtOpen !== null} ref={(element) => { root = element; }} />
       <MenuContent keep={() => typingAtOpen !== null} onOpenAutoFocus={preserveFocus} onCloseAutoFocus={(event) => { event.preventDefault(); restoreTyping(); }} onFocusOutside={preserveFocus}>
         {/* A phone option shows its value, not its name: the section names it. */}

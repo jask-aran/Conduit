@@ -32,7 +32,17 @@ export function edgePadding() {
   // Kobalte passes it to floating-ui, which takes a side each, though Kobalte's type says a number.
   return padding as unknown as number;
 }
-export const Menu = Object.assign((props: ComponentProps<typeof KMenu>) => <KMenu overflowPadding={edgePadding()} {...props} onOpenChange={(open) => { if (!open) haptic("dismiss"); props.onOpenChange?.(open); }} />, KMenu);
+/** The room between a control and the popover it opens (--popover-gap): touching it, the menu read as part of the
+ *  control. A Kobalte gutter is a number, so the step is measured where the popover opens. */
+export function popoverGap() {
+  const probe = document.createElement("div");
+  probe.style.cssText = "position:fixed;visibility:hidden;pointer-events:none;width:var(--popover-gap)";
+  document.body.append(probe);
+  const gap = probe.getBoundingClientRect().width;
+  probe.remove();
+  return gap;
+}
+export const Menu = Object.assign((props: ComponentProps<typeof KMenu>) => <KMenu overflowPadding={edgePadding()} gutter={popoverGap()} {...props} onOpenChange={(open) => { if (!open) haptic("dismiss"); props.onOpenChange?.(open); }} />, KMenu);
 /** A row's right-click (or long-press, Menu, Shift+F10) menu. Its rows, sections, choices and submenus are the
  *  Menu's own (MenuRow, MenuSection, MenuRadioItem, MenuSub), which work in either. */
 export const ContextMenu = (props: ParentProps<{ placement?: "right-start" | "bottom-start"; onOpenChange?: (open: boolean) => void }>) =>
@@ -173,14 +183,21 @@ export function MenuSub(props: ParentProps<{ phone?: boolean }>) {
     const inset = parseFloat(getComputedStyle(panel).paddingLeft);
     const offset = parent.querySelector<HTMLElement>(".ui-row")?.getBoundingClientRect().height ?? 0;
     const size = panel.getBoundingClientRect();
-    return { x: Math.max(inset, Math.min(box.left + offset, innerWidth - size.width - inset)), y: box.bottom - size.height, width: 0, height: 0 };
+    // It opens from the row that opened it, in the direction its menu opened: under a menu hanging from the top of
+    // the screen its top is the row's, over one rising from the bottom (the composer's) its foot is. Kept to its
+    // menu's foot, every submenu sat at the bottom, far from a row near a hanging menu's top.
+    const row = anchor!.getBoundingClientRect();
+    const edge = edgePadding() as unknown as { top: number; bottom: number };
+    const hangs = box.top + box.height / 2 < innerHeight / 2;
+    const y = hangs ? row.top : row.bottom - size.height;
+    return { x: Math.max(inset, Math.min(box.left + offset, innerWidth - size.width - inset)), y: Math.max(edge.top, Math.min(y, innerHeight - size.height - edge.bottom)), width: 0, height: 0 };
   };
   return <SubmenuContext.Provider value={{ phone: () => !!props.phone, close, setTrigger, setContent }}><KMenu.Sub open={open()} onOpenChange={(next) => { if (!next) haptic("dismiss"); setOpen(next); }} getAnchorRect={anchorRect} fitViewport overflowPadding={edgePadding()}>{props.children}</KMenu.Sub></SubmenuContext.Provider>;
 }
 
 /** Something edited in place over the page: the menu's surface without a menu's keys, which would take the typing. */
 export function Popover(props: ParentProps<{ open?: boolean; onOpenChange?: (open: boolean) => void; anchorRef?: () => HTMLElement | undefined; placement?: "bottom-start" | "bottom-end" | "top-start" | "top-end" }>) {
-  return <KPopover open={props.open} onOpenChange={(open) => { if (!open) haptic("dismiss"); props.onOpenChange?.(open); }} anchorRef={props.anchorRef} placement={props.placement || "bottom-end"} gutter={4} fitViewport overflowPadding={8}>{props.children}</KPopover>;
+  return <KPopover open={props.open} onOpenChange={(open) => { if (!open) haptic("dismiss"); props.onOpenChange?.(open); }} anchorRef={props.anchorRef} placement={props.placement || "bottom-end"} gutter={popoverGap()} fitViewport overflowPadding={edgePadding()}>{props.children}</KPopover>;
 }
 export const PopoverTrigger = KPopover.Trigger;
 export function PopoverContent(props: ParentProps<Caps & { "aria-label"?: string; wide?: boolean; onPointerDownOutside?: (event: Event & { target: EventTarget | null }) => void; onOpenAutoFocus?: (event: Event) => void; onCloseAutoFocus?: (event: Event) => void }>) {
@@ -265,7 +282,7 @@ export function Select(props: JSX.SelectHTMLAttributes<HTMLSelectElement> & { ba
     read();
   };
   return <>
-    <Menu modal={false} placement="bottom-end" gutter={4} onOpenChange={(open) => open && read()}>
+    <Menu modal={false} placement="bottom-end" onOpenChange={(open) => open && read()}>
       <KMenu.Trigger as={SelectTrigger} id={local.id} title={local.title} disabled={local.disabled} aria-label={local["aria-label"]} value={label()} bare={local.bare ?? true} />
       <MenuContent>
         <KMenu.RadioGroup value={value()} onChange={choose}>

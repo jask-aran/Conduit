@@ -88,7 +88,8 @@
  * a phone); --scale-ui scales it for everything, --scale-transcript for what you read (a message), so
  * the app holds together at any setting. Every gap, padding and margin is one of nine Space steps,
  * in the unit; every control one of four heights. Rows keep their measured height and text (a
- * finger's on a phone, never below 44px), written in the unit so they scale too.
+ * finger's on a phone, never below 40px: a full-width row, so a finger has its width), written in the unit so they
+ * scale too.
  */
 :root { --scale-ui: 1; --scale-transcript: 1; }
 /* The phone's unit, at any density: what a finger needs (the pills, which are the same size wherever they sit). */
@@ -115,13 +116,13 @@
   --label-face: var(--font-label); --label-weight: var(--weight-rest); --label-case: uppercase; --label-tracking: .07em; --label-size: var(--text-label);
 }
 [data-density="phone"] {
-  --u-base: var(--u-phone); --row-min-floor: 44px; --row-min-units: 2.75; --row-text-units: 0.90625;
+  --u-base: var(--u-phone); --row-min-floor: 40px; --row-min-units: 2.5; --row-text-units: 0.84375;
   --frost-inset: var(--space-sm); --nav-label-pad: var(--space-sm) var(--space-md);
   /* Desktop's label, declared again so its size resolves at the phone's unit (scaled up like everything else). */
   --label-face: var(--font-label); --label-weight: var(--weight-rest); --label-case: uppercase; --label-tracking: .07em; --label-size: var(--text-label);
 }
 @media (--conduit-phone-layout) { :root {
-  --u-base: var(--u-phone); --row-min-floor: 44px; --row-min-units: 2.75; --row-text-units: 0.90625;
+  --u-base: var(--u-phone); --row-min-floor: 40px; --row-min-units: 2.5; --row-text-units: 0.84375;
   --frost-inset: var(--space-sm); --nav-label-pad: var(--space-sm) var(--space-md);
   --label-face: var(--font-label); --label-weight: var(--weight-rest); --label-case: uppercase; --label-tracking: .07em; --label-size: var(--text-label);
 } }
@@ -147,6 +148,8 @@
   --row-text: calc(var(--row-text-units) * var(--u-type)); --row-min: max(var(--row-min-floor), calc(var(--row-min-units) * var(--u-space)));
   --row-inset: var(--space-md); --row-pad: var(--space-sm) var(--row-inset); --row-gap: var(--space-md);
   --nav-indent: calc(1.875 * var(--u-space));
+  /* A popover's distance from the control that opens it. */
+  --popover-gap: var(--space-md);
 }
 /* Four radii (DESIGN.md rounded), and inset: a keycap's or inline code's, a control's nested. control: rows, buttons, inputs, chips, in the
    density unit; surface: popovers, cards, overlays, nesting their rows (control + inset);
