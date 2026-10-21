@@ -206,11 +206,11 @@ export class DurableAdapter extends EventEmitter {
   }
 
   /** Which chat a conversation belongs to, kept beside it so a restart can find its way back. */
-  async remember(conversation, chatId, nodeId) {
+  async remember(conversation, chatId, workspace) {
     await conversation.commit(async (tx) => {
       (await tx.doc(ConduitIds, conversation.id)).chatId = chatId;
       // The device whose folder this conversation works in; none is this server.
-      if (nodeId !== undefined) (await tx.doc(ConduitWorkspace, conversation.id)).nodeId = nodeId;
+      if (workspace !== undefined) Object.assign(await tx.doc(ConduitWorkspace, conversation.id), workspace || { nodeId: null, place: null });
     }, this.context);
   }
 
@@ -240,7 +240,8 @@ export class DurableAdapter extends EventEmitter {
       ...(options.thinkingLevel || fallback?.thinkingLevel ? { thinkingLevel: options.thinkingLevel || fallback.thinkingLevel } : {}),
       ...(options.project?.workingRoot ? { cwd: options.project.workingRoot } : {}),
     } }, this.context);
-    await this.remember(conversation, options.chatId, options.project?.nodeId || null);
+    await this.remember(conversation, options.chatId,
+      options.project?.nodeId ? { nodeId: options.project.nodeId, place: options.project.place } : null);
     return this.start(conversation, options);
   }
 
@@ -250,6 +251,11 @@ export class DurableAdapter extends EventEmitter {
     if (!conversation) throw failure("This chat's conversation is missing from the Conduit runtime", "session_not_found", 404);
     if ((await harness.snapshot(ConduitIds, conversation.id, this.context))?.chatId !== options.chatId) {
       await this.remember(conversation, options.chatId);
+    }
+    // A conversation from before places learns its workspace's place.
+    const workspace = await harness.snapshot(ConduitWorkspace, conversation.id, this.context);
+    if (workspace?.nodeId && !workspace.place && options.project?.place) {
+      await this.remember(conversation, options.chatId, { nodeId: options.project.nodeId, place: options.project.place });
     }
     const record = await this.start(conversation, options);
     const spec = splitSpec(options.model);
@@ -346,7 +352,7 @@ export class DurableAdapter extends EventEmitter {
       } }, this.context);
     // A fork copies the workspace with its other documents; a new conversation is told it.
     await this.remember(fork, record.chatId, index > 0 ? undefined
-      : (await harness.snapshot(ConduitWorkspace, record.conversationId, this.context))?.nodeId || null);
+      : (await harness.snapshot(ConduitWorkspace, record.conversationId, this.context)) || null);
     await this.follow(record, fork);
     const text = source.data?.text || textOf(source.model?.[0]?.content);
     return { opaqueSession: String(fork.id), text, sourceMessage: { id: nodeId, text } };

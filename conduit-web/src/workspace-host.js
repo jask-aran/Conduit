@@ -84,15 +84,15 @@ const statOf = (info) => ({
  * that is offline is said so at once: someone browsing is not a turn that can
  * pause. Git runs as `git` on the device, so it needs the shell grant there.
  */
-export function deviceHost({ hub, nodeId, root }) {
-  const env = new RemoteExecutionEnv({ hub, nodeId, cwd: root });
+export function deviceHost({ hub, nodeId, place, label = "" }) {
+  const env = new RemoteExecutionEnv({ hub, nodeId, place, cwd: label });
   const context = (signal) => {
     if (!hub.live.get(nodeId)?.ready) {
       throw Object.assign(new Error("The device holding this workspace is offline"), { code: "device_offline", status: 503 });
     }
     return withAbortSignal(signal || AbortSignal.timeout(60_000), BACKGROUND_CONTEXT);
   };
-  const place = (relative) => relative || ".";
+  const at = (relative) => relative || ".";
   const value = (result) => {
     if (result.ok) return result.value;
     const code = result.error.code === "not_found" ? "ENOENT" : result.error.code;
@@ -101,20 +101,20 @@ export function deviceHost({ hub, nodeId, root }) {
   };
   return {
     local: false,
-    key: `node:${nodeId}:${root}`,
+    key: `node:${nodeId}:${place.root}/${place.path || ""}`,
     async checkRoot() {
       const info = value(await env.fileInfo(".", context()));
       if (info.kind !== "directory") throw Object.assign(new Error("The workspace root must be a real directory"), { code: "unsafe_workspace_root" });
     },
     localPath: () => null,
     async lstat(relative) {
-      const result = await env.fileInfo(place(relative), context());
+      const result = await env.fileInfo(at(relative), context());
       if (!result.ok && result.error.code === "not_found") return null;
       return statOf(value(result));
     },
-    async stat(relative) { return statOf(value(await env.fileInfo(place(relative), context()))); },
+    async stat(relative) { return statOf(value(await env.fileInfo(at(relative), context()))); },
     async list(relative, { limit }) {
-      const found = value(await env.listDir(place(relative), context()));
+      const found = value(await env.listDir(at(relative), context()));
       if (found.length > limit) return null;
       return found.map((info) => ({ name: info.name, type: KINDS[info.kind] || "other", symlink: info.kind === "symlink" }));
     },

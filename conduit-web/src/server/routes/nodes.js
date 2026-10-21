@@ -1,24 +1,26 @@
 /**
  * Devices paired with this server (the node role, plan milestone 3).
  *
- * Pairing returns the device's key once, with the command that starts the
- * node role on it; main keeps only the key's hash. The list says which
- * devices are connected and what each shares.
+ * A device (a PC, a phone) groups nodes (its Windows host, a WSL distro),
+ * each paired on its own with a key returned once, inside the command that
+ * starts the node role there; main keeps only the key's hash. The list is
+ * devices with their nodes: connected or not, and what each shares.
  */
 import { currentMagicDnsOrigin } from "../../tailscale-share.js";
 
 export function registerNodeRoutes(app, { nodeHub, config }) {
   app.get("/v0/nodes", async (_request, response, next) => {
-    try { response.json({ nodes: await nodeHub.list() }); } catch (error) { next(error); }
+    try { response.json({ devices: await nodeHub.listDevices() }); } catch (error) { next(error); }
   });
 
   app.post("/v0/nodes", async (request, response, next) => {
     try {
-      const { node, key } = await nodeHub.pair(request.body?.name);
+      const { node, device, key } = await nodeHub.pair({ name: request.body?.name,
+        deviceId: request.body?.deviceId || null, deviceName: request.body?.deviceName || null });
       // Devices reach main over the tailnet (decision 4): its MagicDNS name when
       // Tailscale serves it, else this machine, for a node on the same one.
       const main = String(request.body?.mainUrl || await currentMagicDnsOrigin().catch(() => null) || `http://127.0.0.1:${config.port}`);
-      response.status(201).json({ node, key, mainUrl: main, command: `conduit-node pair ${main} ${key}` });
+      response.status(201).json({ node, device, key, mainUrl: main, command: `conduit-node pair ${main} ${key}` });
     } catch (error) { next(error); }
   });
 

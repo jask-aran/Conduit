@@ -54,6 +54,11 @@ export class RemoteProcess {
     if (view.skipped) this.emitData(`\r\n[${view.skipped} bytes of output were lost while disconnected]\r\n`, "out");
   }
 
+  /** The device could not be followed again: a restarted device has none of its old processes. */
+  lost(error) {
+    this.deliver({ kind: "exit", code: null, signal: /No such process/.test(error?.message || "") ? "device_process_gone" : "device_unreachable" });
+  }
+
   deliver(message) {
     if (message.kind === "data") {
       const end = message.offset + Buffer.byteLength(message.data, "base64");

@@ -217,6 +217,8 @@ export class ProjectStore {
       // A folder another device shares: its path is that device's, and only
       // the Conduit runtime works in it, through the device.
       nodeId: project.nodeId || null,
+      // Where a node workspace's calls run: `{ root, path }` on its node.
+      place: project.nodeId ? { root: project.rootId, path: project.subpath || "" } : null,
       cloneUrl: project.cloneUrl || null,
       state: project.state === "cloning" ? "cloning" : "ready",
       cloneOperationId: project.cloneOperationId || null,
@@ -327,16 +329,20 @@ export class ProjectStore {
     });
   }
 
-  /** A workspace in a folder a paired device shares; the caller has checked the device shares it. */
-  async createOnNode({ name, nodeId, path: remotePath, defaultTemplateId = null }) {
+  /**
+   * A workspace in a folder a paired node shares: the root by id and a path
+   * inside it. `label` is how the device writes that folder, for people to
+   * read; nothing runs by it. The caller has checked the node shares the root.
+   */
+  async createOnNode({ name, nodeId, rootId, subpath = "", label, defaultTemplateId = null }) {
     return this.runExclusive(async () => {
       const catalog = await this.readCatalog();
-      if (catalog.projects.some((item) => item.nodeId === nodeId && item.externalPath === remotePath)) {
+      if (catalog.projects.some((item) => item.nodeId === nodeId && item.rootId === rootId && (item.subpath || "") === subpath)) {
         const error = new Error("That folder is already a workspace");
         error.code = "workspace_already_linked";
         throw error;
       }
-      const base = name || remotePath.split(/[\\/]/).filter(Boolean).pop() || "device";
+      const base = name || label.split(/[\\/]/).filter(Boolean).pop() || "device";
       const project = {
         id: `project_${crypto.randomUUID()}`,
         slug: await this.uniqueSlug(base),
@@ -344,7 +350,9 @@ export class ProjectStore {
         kind: "workspace",
         origin: "node",
         nodeId,
-        externalPath: remotePath,
+        rootId,
+        subpath,
+        externalPath: label,
         cloneUrl: null,
         defaultTemplateId: defaultTemplateId || null,
         createdAt: new Date().toISOString(),
