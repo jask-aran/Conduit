@@ -248,6 +248,19 @@ export function registerChatRoutes(app, {
     } catch (error) { next(error); }
   });
 
+  // Start a durable chat's context again, optionally from a handoff note (backend only, for now).
+  app.post("/v0/chats/:chatId/reset", async (request, response, next) => {
+    try {
+      const context = await findChatContext(request.params.chatId);
+      if (!context) return response.status(404).json({ error: "chat_not_found" });
+      const adapter = backends.forChat(context.chat);
+      if (typeof adapter.reset !== "function") return response.status(409).json({ error: "reset_unsupported" });
+      await adapter.reset({ liveSessionId: backends.getByChatId(context.chat.id)?.id,
+        opaqueSession: context.chat.backend?.opaqueSession, handoff: request.body?.handoff });
+      response.json({ ok: true });
+    } catch (error) { next(error); }
+  });
+
   // The subagents a durable chat delegated to, and one's transcript (backend only, for now).
   app.get("/v0/chats/:chatId/subagents/:conversationId?", async (request, response, next) => {
     try {

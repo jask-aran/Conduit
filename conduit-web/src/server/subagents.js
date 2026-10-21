@@ -48,3 +48,18 @@ export function Subagents(runtime) {
   const extension = defineExtension({ name: "subagents", tools: [subagent] });
   return extension;
 }
+
+/**
+ * The agent's own reset (pi-durable's `control.handoff`): a long-lived
+ * conversation ends its context and goes on from a note it writes, which is
+ * how the persistent shape stays bounded besides compaction (decision 9).
+ * The transcript keeps everything before it.
+ */
+export const Handoff = defineExtension({ name: "handoff", tools: [defineTool({
+  name: "handoff",
+  description: "Start your context again from a note, when what came before is finished and no longer worth carrying. "
+    + "Write everything you will still need in `note`: the goal, decisions, open work and where things are. You will "
+    + "see only the note afterwards; the person still sees the whole conversation.",
+  parameters: Type.Object({ note: Type.String({ description: "What to carry into the new context." }) }),
+  execute: async ({ note }) => ({ output: [{ type: "text", text: "Context will restart from the note." }], control: { handoff: note } }),
+})] });

@@ -964,6 +964,19 @@ export class DurableAdapter extends EventEmitter {
     return children;
   }
 
+  /**
+   * Start the chat's context again (pi-durable's reset): the model sees
+   * nothing before it, or only `handoff` when given; the transcript keeps
+   * everything. While a turn runs it waits for the next boundary.
+   */
+  async reset({ liveSessionId, opaqueSession, handoff }) {
+    const record = liveSessionId ? this.get(liveSessionId) : null;
+    const harness = await this.runtime.open();
+    const conversation = record?.conversation || await harness.conversation(Number(opaqueSession), this.context);
+    if (!conversation) throw failure("This chat has no conversation to reset", "session_not_found", 404);
+    await conversation.reset(String(handoff || "").trim() || undefined, this.context);
+  }
+
   /** The conversations a chat was on before the one given (its edits' forks), oldest first. */
   async branchesOf(conversationId) {
     const harness = await this.runtime.open();
