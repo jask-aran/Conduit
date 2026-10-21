@@ -34,7 +34,11 @@ const RETRY_MS = [1000, 2000, 5000, 10000, 30000];
  * reports them interrupted rather than this device running work nobody waits
  * for.
  */
-export function startNodeAgent({ mainUrl, key, name, roots: shared, shellEnv = process.env, log = console }) {
+export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: shared, shellEnv = process.env, log = console }) {
+  // Every way main can be reached, best first (its tailnet name, then a public
+  // tunnel): a failed attempt tries the next, and a dropped connection starts again at the best.
+  const ways = [...new Set([mainUrl, ...routes].filter(Boolean))];
+  let way = 0;
   const roots = shared.map(view);
   const envs = new Map();
   // Processes outlive any one socket (decision 18): they are the device's.
@@ -68,7 +72,8 @@ export function startNodeAgent({ mainUrl, key, name, roots: shared, shellEnv = p
   };
 
   const connect = () => {
-    const url = new URL("/v0/nodes/connect", mainUrl);
+    const via = ways[way % ways.length];
+    const url = new URL("/v0/nodes/connect", via);
     url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
     const ws = new WebSocket(url, { headers: { authorization: `Bearer ${key}` } });
     socket = ws;
@@ -82,13 +87,16 @@ export function startNodeAgent({ mainUrl, key, name, roots: shared, shellEnv = p
     const tunnels = new Map();
     const send = (message) => { if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(message)); };
 
+    let opened = false;
     ws.on("open", () => {
+      opened = true;
       attempt = 0;
+      way = 0;
       // Roots go by id; the path is for people to read, main never sends it back.
       send({ type: "hello", version: NODE_PROTOCOL_VERSION, name, platform: process.platform, boot: receipts.boot,
         harnesses: Object.keys(harnesses),
         roots: roots.map(({ id, path: label, read, write, shell, allow }) => ({ id, label, read, write, shell, allow })) });
-      log.info?.(`[conduit-node] connected to ${mainUrl}`);
+      log.info?.(`[conduit-node] connected to ${mainUrl}${via === mainUrl ? "" : ` via ${via}`}`);
     });
     ws.on("message", async (raw) => {
       let message;
@@ -143,6 +151,8 @@ export function startNodeAgent({ mainUrl, key, name, roots: shared, shellEnv = p
       handles.clear();
       if (socket === ws) socket = null;
       if (stopped) return;
+      // Not reached this way: the next one at once, and only a full round backs off.
+      if (!opened && ++way % ways.length !== 0) { timer = setTimeout(connect, 0); return; }
       const wait = RETRY_MS[Math.min(attempt++, RETRY_MS.length - 1)];
       timer = setTimeout(connect, wait);
     });

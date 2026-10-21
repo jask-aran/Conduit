@@ -13,11 +13,13 @@ const file = path.join(home, "node.json");
 
 function printHelp() {
   console.log(`Usage:
-  conduit-node pair <main-url> <key> [name] [--node <id>]
+  conduit-node pair <main-url> <key> [name] [--node <id>] [--via <url>]...
                                               Pair this device with a main server; the key
                                               comes from pairing it in that server's Devices.
                                               Pairing with another server adds to the first.
                                               --node keeps the id that server gave the pairing.
+                                              --via names another way to reach it (a public
+                                              tunnel, say), tried when <main-url> is not.
   conduit-node unpair <main-url>              Forget a server, and what was shared with it.
   conduit-node share <path> [--server <main-url>] [--write] [--shell]
                      [--allow <pattern>]... [--deny <pattern>]...
@@ -96,14 +98,15 @@ function pairingFor(server) {
 }
 
 if (command === "pair") {
-  const given = options(args, [], ["node"]);
+  const given = options(args, ["via"], ["node"]);
   const [mainUrl, key, ...name] = given.bare;
   if (!mainUrl || !key) { printHelp(); process.exit(2); }
   const at = origin(mainUrl);
   // Pairing a server again replaces its key and keeps what it was shared.
   const previous = settings.pairings.find((item) => item.mainUrl === at);
   // The server's id for this pairing, when known: how an app pointed at that server finds it here.
-  const pairing = { mainUrl: at, key, ...(given.node ? { nodeId: given.node } : {}), roots: previous?.roots || [] };
+  const pairing = { mainUrl: at, key, ...(given.node ? { nodeId: given.node } : {}),
+    ...(given.via.length ? { routes: given.via.map(origin) } : {}), roots: previous?.roots || [] };
   const pairings = [...settings.pairings.filter((item) => item.mainUrl !== at), pairing];
   write({ ...settings, name: name.join(" ") || settings.name || os.hostname(), pairings });
   console.log(`Paired with ${at}${pairings.length > 1 ? ` (${pairings.length} servers now)` : ""}. Share a folder with it, then run \`conduit-node run\`.`);
@@ -139,8 +142,8 @@ if (command === "pair") {
   write(settings);
   console.log(`No longer sharing ${target}${given.server ? ` with ${origin(given.server)}` : ""}.`);
 } else if (command === "status") {
-  console.log(JSON.stringify({ name: settings.name || null,
-    pairings: settings.pairings.map(({ mainUrl, nodeId, roots }) => ({ mainUrl, nodeId: nodeId || null, roots })) }, null, 2));
+  console.log(JSON.stringify({ name: settings.name || null, host: os.hostname(),
+    pairings: settings.pairings.map(({ mainUrl, nodeId, routes, roots }) => ({ mainUrl, nodeId: nodeId || null, routes: routes || [], roots })) }, null, 2));
 } else if (command === "run") {
   write(settings);
   if (!settings.pairings.length) { console.error("Not paired: run `conduit-node pair <main-url> <key>` first."); process.exit(2); }
@@ -148,7 +151,7 @@ if (command === "pair") {
   // One connection per server, each with only what was shared with it.
   const agents = settings.pairings.map((pairing) => {
     if (!pairing.roots.length) console.warn(`Nothing is shared with ${pairing.mainUrl} yet; it will see this device with no folders.`);
-    return startNodeAgent({ mainUrl: pairing.mainUrl, key: pairing.key, name: settings.name || os.hostname(), roots: pairing.roots, shellEnv });
+    return startNodeAgent({ mainUrl: pairing.mainUrl, routes: pairing.routes, key: pairing.key, name: settings.name || os.hostname(), roots: pairing.roots, shellEnv });
   });
   for (const signal of ["SIGINT", "SIGTERM"]) process.on(signal, () => { for (const agent of agents) agent.stop(); process.exit(0); });
 } else {

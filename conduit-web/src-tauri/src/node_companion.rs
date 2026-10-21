@@ -161,8 +161,14 @@ pub fn device_companion_status<R: Runtime>(app: AppHandle<R>, companion: State<'
 
 /// Pair with a server, given the key it handed out and the node id it made.
 #[tauri::command]
-pub async fn device_companion_pair<R: Runtime>(app: AppHandle<R>, main_url: String, key: String, node_id: String, name: String) -> Result<String, String> {
-    let said = run_cli(&app, &["pair", &main_url, &key, "--node", &node_id, &name])?;
+pub async fn device_companion_pair<R: Runtime>(app: AppHandle<R>, main_url: String, key: String, node_id: String, name: String, via: Option<Vec<String>>) -> Result<String, String> {
+    let mut args = vec!["pair", main_url.as_str(), key.as_str(), "--node", node_id.as_str(), name.as_str()];
+    let via = via.unwrap_or_default();
+    for route in &via {
+        args.push("--via");
+        args.push(route.as_str());
+    }
+    let said = run_cli(&app, &args)?;
     restart(&app);
     Ok(said)
 }
