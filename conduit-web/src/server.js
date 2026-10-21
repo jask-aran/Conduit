@@ -196,7 +196,11 @@ const manager = new PiManager({
   idleProcessTtlMs: runtimeSettings.get().idleProcessTtlMs,
 });
 // Devices paired with this server, whose shared folders the Conduit runtime can work in.
-const nodeHub = lifetime.own("nodes", new NodeHub({ dataRoot: config.dataRoot }), (owned) => owned.shutdown());
+// Devices dial over the tailnet (decision 4). A server whose owner lets them
+// in through its public address as well (CONDUIT_NODES_PUBLIC=1, e.g. behind a
+// Cloudflare tunnel) takes them on their pairing key alone.
+const nodeHub = lifetime.own("nodes", new NodeHub({ dataRoot: config.dataRoot,
+  ...(process.env.CONDUIT_NODES_PUBLIC === "1" ? { allowRemote: () => true } : {}) }), (owned) => owned.shutdown());
 terminals.nodeHub = nodeHub;
 // Everything a harness manifest needs to probe and build itself. Backends are
 // no longer named here: they come from MANIFESTS, and detection runs in
