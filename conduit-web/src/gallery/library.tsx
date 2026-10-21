@@ -1,4 +1,5 @@
 import { HarnessMark } from "@/components/ui";
+import { RiderTop, RiderFoot, Summary as RiderSummary, ChoiceInput, ChoicesPage, Prompt as RiderPrompt, Hints as RiderHints, Tabs as RiderTabs, Tab as RiderTab, LiveNote, GroupCompactHeading, ConnectionHeading } from "@/components/ui";
 import { Icons } from "@/components/ui";
 import { RailButton as PaneRailButton } from "@/components/ui/nav";
 import { HeaderButton as PaneHeaderButton } from "@/components/ui/header";
@@ -770,6 +771,11 @@ const Busy = (props: { children: JSX.Element }) => <div class="g-busy"><p>{"Crea
 
 const pieceFamilies: Family[] = [
   { title: "Connection", note: "Sign-in, first connection, server selection and recovery. Shared v2 markup and tokens in the app and the server-rendered login page.", groups: [
+    { title: "Heading", note: "ConnectionHeading: the mark and the screen's title at the top of the first connection", atoms: [
+      lib("connection-heading", "ConnectionHeading", "both", "connection", "components/ui/connection.tsx · client/main.tsx", () => <FormTable rows={[
+        form("ConnectionHeading", "Conduit's mark, then what the screen asks", () => <ConnectionHeading mark={<HarnessMark id="conduit" />}>Connect to your server</ConnectionHeading>, "<ConnectionHeading mark>title</ConnectionHeading>"),
+      ]} on={["desktop", "phone"]} stacked />, "row"),
+    ] },
     { title: "Forms and states", note: "Desktop and phone; live menu behavior uses Kobalte, while sign-in remains a plain HTML form.", layout: "desktop", atoms: [
       lib("connection-forms", "Connection · forms × densities", "both", "connection", "components/ui/connection.tsx · components/menus.tsx", () => <FormTable rows={CONNECTIONS} on={["desktop", "phone"]} widths={["200px", "minmax(0, 1fr)", "360px"]} />, "row"),
     ] },
@@ -811,6 +817,12 @@ const pieceFamilies: Family[] = [
     ] },
   ] },
   { title: "Dashboard", note: "a place's page: a header, quick actions and composer, with chats beside projects and workspaces", groups: [
+    { title: "Compact heading", note: "GroupCompactHeading: the chats list's heading on a phone -- the choice it shows, its count, and where", layout: "phone", atoms: [
+      lib("dash-compact-heading", "GroupCompactHeading", "phone", "dashboard", "components/ui/dashboard.tsx · dashboard/primitives/chat-list.tsx", () => <FormTable rows={[
+        form("GroupCompactHeading", "label, count and where", () => <GroupCompactHeading label="Unread" count={3} where="in Japan" />, "<GroupCompactHeading label count where />"),
+        form("GroupCompactHeading · label only", "no count, no place", () => <GroupCompactHeading label="All chats" />, "<GroupCompactHeading label />"),
+      ]} on={["phone"]} stacked />, "row"),
+    ] },
     { title: "Forms", note: "each piece and state at each density", layout: "desktop", atoms: [
       lib("dash-forms", "Dashboard · forms", "both", "dashboard", "components/ui/dashboard.tsx", () => <FormTable rows={[
         form("GroupHeading · the two section roles", "the strong one for dashboards and big lists; the quiet one for menus, Settings and the sidebar (Paper Mono capitals on both layouts, at each one's unit)", () => <div class="g-row g-top"><GroupHeading count={4}>Projects</GroupHeading><GNavGroup label="Projects"><GNavRow icon={<Icons.Folder />}>Japan</GNavRow></GNavGroup></div>, "<GroupHeading count> · <NavGroup label>"),
@@ -1045,6 +1057,11 @@ const pieceFamilies: Family[] = [
     ] },
   ] },
   { title: "Overlay", note: "raised frost over a dimmed page, the large surfaces: sections edge to edge, ruled off -- a Bar, a body (a List, a List beside an aside, or a Rail beside a Page), Hints. Its rows are the popover's Items at its scale; its Rail is the sidebar's NavGroups", groups: [
+    { title: "Live note", note: "LiveNote: said to a screen reader, not shown (Settings › Shortcuts says what a key change did). The cell below is meant to look empty", atoms: [
+      lib("overlay-live-note", "LiveNote", "both", "overlay", "components/ui/overlay.tsx · settings/shortcuts-settings.tsx", () => <FormTable rows={[
+        form("LiveNote", "“Shortcut saved” is announced (aria-live polite) and draws nothing", () => <LiveNote>Shortcut saved</LiveNote>, "<LiveNote>{status}</LiveNote>"),
+      ]} on={["desktop", "phone"]} stacked />, "row"),
+    ] },
     { atoms: [
       lib("overlay-anatomy", "Anatomy", "both", "overlay", "Scrim > Overlay > OverlayBar · OverlayList (Sections of Items) · OverlayHints", () => <Anatomy scene={() => <div class="g-overlay-demo"><Overlay label="Anatomy">
         <OverlayBar lead={glyph()} placeholder="Run a command…" onClose={() => {}} />
@@ -1182,6 +1199,24 @@ const pieceFamilies: Family[] = [
     ] },
   ] },
   { title: "Rider", note: "resting frost at a composer, either composer's: a row or a strip on its top edge (queued messages, attachments), or a card that takes over its slot in its material (the question: the composer takeover)", groups: [
+    { title: "The question card", note: "a card rider's parts as the question takeover (chat/question-card.tsx) uses them: RiderTop over a ChoicesPage or the Summary, RiderFoot under it", atoms: [
+      lib("rider-question-parts", "RiderTop · ChoicesPage · ChoiceInput · Summary · RiderFoot", "both", "rider", "components/ui/rider.tsx · chat/question-card.tsx", () => <FormTable rows={[
+        form("RiderTop · ChoicesPage · RiderFoot", "one question: its title and close, the prompt and choices, then hints and the next step", () => <div class="g-composer"><Rider layout="card" label="The agent has a question">
+          <RiderTop><RiderTitle>Deploy</RiderTitle><Button variant="ghost" size="icon-sm" aria-label="Dismiss"><Icons.Close /></Button></RiderTop>
+          <ChoicesPage><RiderPrompt>Where should it go?</RiderPrompt><Choices><Choice n={1} label="Staging" detail="the test server" chosen active /><Choice n={2} label="Production" /></Choices></ChoicesPage>
+          <RiderFoot><RiderHints hints={[["↑↓", "choose"], ["Enter", "next"]]} /><Button variant="primary" size="sm">Next</Button></RiderFoot>
+        </Rider></div>, "<Rider layout=card><RiderTop /><ChoicesPage><Prompt /><Choices /></ChoicesPage><RiderFoot><Hints /><Button /></RiderFoot></Rider>"),
+        form("ChoiceInput", "a secret answered on one masked line, as a Choice's own answer", () => <div class="g-composer"><Rider layout="card" label="The agent has a question">
+          <RiderTop><RiderTitle>Token</RiderTitle></RiderTop>
+          <ChoicesPage><RiderPrompt>Paste the API token</RiderPrompt><Choices><Choice n={1} chosen active own={<ChoiceInput type="password" placeholder="Type your answer" aria-label="Type your answer" value="secret-value" />} /></Choices></ChoicesPage>
+        </Rider></div>, "<Choice own={<ChoiceInput type=password />} />"),
+        form("Summary", "several questions: before submitting, each with its answer; one not answered yet", () => <div class="g-composer"><Rider layout="card" label="The agent has a question">
+          <RiderTop><RiderTabs><RiderTab done>Deploy</RiderTab><RiderTab>Token</RiderTab><RiderTab selected>Submit</RiderTab></RiderTabs></RiderTop>
+          <RiderSummary rows={[{ label: "Deploy", value: "Staging" }, { label: "Token", value: "Needs an answer", empty: true }]} />
+          <RiderFoot><RiderHints hints={[["Enter", "submit"]]} /><Button variant="primary" size="sm" disabled>Submit</Button></RiderFoot>
+        </Rider></div>, "<Summary rows={[{ label, value, empty }]} />"),
+      ]} on={["desktop", "phone"]} stacked />, "row"),
+    ] },
     { atoms: [
       lib("rider-anatomy", "Anatomy", "both", "rider", "Rider layout=row: RiderTitle · body · RiderActions", () => <Anatomy scene={() => <div class="g-composer">{queued()}</div>} parts={[
         [".ui-rider > .ui-title-text", "Title", "RiderTitle", "what it holds"],
