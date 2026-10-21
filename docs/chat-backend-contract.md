@@ -4,9 +4,10 @@
 This document is the architecture it describes: what a harness adapter owns,
 what Conduit owns, and the two channels every turn travels on.
 
-Six harnesses are behind this contract — Pi (`conduit_pi`), Codex
-(app-server), ChatGPT Web (sidecar), fx (ACP over stdio), OpenCode 2 (its
-background service), and the in-process Test stream. The
+Every harness is behind this contract — Pi (`conduit_pi`), the Conduit
+runtime (pi-durable, in-process), Codex (app-server), ChatGPT Web (sidecar), fx
+(ACP over stdio), OpenCode 2 (its background service), and the in-process Test
+stream, among others. The
 browser cannot tell which one it is talking to except by the capabilities it
 was given.
 
@@ -22,12 +23,12 @@ crosses that function, including into the chat log. A stored log entry is a
 neutral event, and translating one again is a no-op, which is what lets replay
 send log entries back through the same path as live ones.
 
-### Six adapters, one shape
+### Parallel adapters, one shape
 
 The adapters are parallel, not layered. Nothing routes through Pi, and no
 adapter knows another exists — each one takes its own harness's transport and
 puts Conduit's vocabulary on the other side, where a single delivery,
-numbering and socket path serves all six.
+numbering and socket path serves all of them.
 
 ```text
  conduit_pi    codex         chatgpt-web   fx            opencode2     test-stream
@@ -221,7 +222,7 @@ published, whatever the backlog.
   recovers it by restating the running generation, which it can do because it
   holds one.
 
-The two implementations are named under "Six adapters, one shape" above.
+The two implementations are named under "Parallel adapters, one shape" above.
 
 ## Capabilities
 
@@ -251,34 +252,34 @@ or adopts the ones it is given.
 
 ● declared, ○ not. Every adapter states every flag; there is no "unset".
 
-| | Pi | Codex | ChatGPT Web | fx | OpenCode | Test stream |
-| --- | :---: | :---: | :---: | :---: | :---: | :---: |
-| `history` | tree | linear | linear | linear | linear | tree |
-| `fork` | ● | ● | ○ | ○ | ○ | ● |
-| `regenerate` | ● | ● | ○ | ○ | ○ | ● |
-| `steer` | ● | ● | ○ | ○ | ○ | ● |
-| `followUpQueue` | ● | ● | ○ | ○ | ○ | ● |
-| `cancel` | ● | ● | ● | ● | ● | ● |
-| `compaction` | ● | ● | ○ | ○ | ● | ● |
-| `thinkingLevels` | ● | ● | ● | ● | ● | ● |
-| `modelSwitch` | ● | ● | ● | ● | ● | ● |
-| `toolUse` | ● | ● | ○ | ● | ● | ● |
-| `approvals` | ● | ● | ○ | ● | ● | ● |
-| `permissionModes` | ○ | ● | ○ | ● | ● | ○ |
-| `usage` | ● | ○ | ○ | ○ | ● | ● |
-| `replay` | ● | ○ | ○ | ○ | ○ | ● |
-| `attachments` | ● | ● | ○ | ○ | ● | ● |
-| `interruptKeepsPartial` | ○ | ○ | ○ | ○ | ○ | ● |
+| | Pi | Runtime | Codex | ChatGPT Web | fx | OpenCode | Test stream |
+| --- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| `history` | tree | linear | linear | linear | linear | linear | tree |
+| `fork` | ● | ● | ● | ○ | ○ | ○ | ● |
+| `regenerate` | ● | ● | ● | ○ | ○ | ○ | ● |
+| `steer` | ● | ● | ● | ○ | ○ | ○ | ● |
+| `followUpQueue` | ● | ● | ● | ○ | ○ | ○ | ● |
+| `cancel` | ● | ● | ● | ● | ● | ● | ● |
+| `compaction` | ● | ● | ● | ○ | ○ | ● | ● |
+| `thinkingLevels` | ● | ● | ● | ● | ● | ● | ● |
+| `modelSwitch` | ● | ● | ● | ● | ● | ● | ● |
+| `toolUse` | ● | ● | ● | ○ | ● | ● | ● |
+| `approvals` | ● | ● | ● | ○ | ● | ● | ● |
+| `permissionModes` | ○ | ○ | ● | ○ | ● | ● | ○ |
+| `usage` | ● | ● | ○ | ○ | ○ | ● | ● |
+| `replay` | ● | ● | ○ | ○ | ○ | ○ | ● |
+| `attachments` | ● | ● | ● | ○ | ○ | ● | ● |
+| `interruptKeepsPartial` | ○ | ○ | ○ | ○ | ○ | ○ | ● |
 
 And from the manifest, which decides how a chat on it is made ready:
 
-| | Pi | Codex | ChatGPT Web | fx | OpenCode | Test stream |
-| --- | :---: | :---: | :---: | :---: | :---: | :---: |
-| `protocol` | `pi_rpc` | `native_api` | `native_api` | `acp` | `native_api` | `native_api` |
-| `warm` | process | process | none | process | process | none |
-| `discovery` | none | machine | none | machine | machine | none |
-| `suppliesMessageIds` | ○ | ● | ● | ● | ● | ● |
-| `nameGeneration` | conduit | conduit | backend | backend | backend | conduit |
+| | Pi | Runtime | Codex | ChatGPT Web | fx | OpenCode | Test stream |
+| --- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| `protocol` | `pi_rpc` | `native_api` | `native_api` | `native_api` | `acp` | `native_api` | `native_api` |
+| `warm` | process | none | process | none | process | process | none |
+| `discovery` | none | none | machine | none | machine | machine | none |
+| `suppliesMessageIds` | ○ | ● | ● | ● | ● | ● | ● |
+| `nameGeneration` | conduit | conduit | conduit | backend | backend | backend | conduit |
 
 Reading down a column is the whole of what that profile can do, and reading
 across a row is the whole of what differs. Four entries are worth naming.
@@ -316,6 +317,18 @@ things — measured for Pi, not assumed. This backend's journal *is* its
 transcript and there is no model to disagree with it, so a stopped answer
 really does stand; it is also Conduit's only coverage of the `discarded: false`
 close.
+
+The Conduit runtime (`conduit-runtime`, `src/durable-adapter.js`) is pi-durable
+running in the server process on one SQLite store, and its record there is
+authoritative: the chat's log is a projection of it, and a reload folds the
+conversation's entries through the same op builders the live path uses. A
+prompt keeps the browser's id in its entry; an answer is named when it starts
+streaming and the name is written to the conversation's `conduit.ids` document
+once its entry commits. A restart resumes unfinished work on boot -- a tool
+that is not replay-safe reaches the model as interrupted -- and the adapter
+reattaches every chat with work in flight. Its `history` is linear because an
+edit or a regenerate forks the conversation before the prompt and the chat
+moves to the fork; the old branch stays in the store.
 
 ChatGPT Web declares least because the conversation lives in somebody else's
 account and Conduit follows it by cursor. The client hides what is not there,

@@ -1,6 +1,8 @@
 # Distributed Nodes, Remote Workspaces, and Durable Execution
 
-Status: shaping; decisions agreed 2026-10-08, **nothing implemented**.
+Status: milestone 1 built on branch `distributed-nodes` (the `conduit-runtime`
+profile: pi-durable chats with restart resume, forks, queue, questions,
+attachments, web research and usage); milestones 2–5 not started.
 Supersedes the earlier long-form proposal (see git history of this file for
 the full survey of mirrors, task engines and failure matrices).
 Related: [web runtime](../../conduit-web/README.md),
