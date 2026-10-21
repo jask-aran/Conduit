@@ -212,6 +212,8 @@ const harnessConfig = {
     || path.join(config.repositoryRoot, "working-files/chatgpt_web_sidecar.py"),
   chatgptWebDataDir: path.join(config.dataRoot, "chatgpt-web"),
   testStreamDataDir: path.join(config.dataRoot, "test-stream"),
+  dataRoot: config.dataRoot,
+  piAgentDir: config.piAgentDir,
 };
 const backends = lifetime.own("agents", ChatBackendRegistry.fromManifests(MANIFESTS, await detect(MANIFESTS, harnessConfig), harnessConfig), async (owned) => {
   const stopped = await owned.shutdown();
