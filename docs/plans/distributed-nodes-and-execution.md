@@ -2,19 +2,16 @@
 
 Status, on branch `distributed-nodes`: milestone 1 built (the
 `conduit-runtime` profile: pi-durable chats with restart resume, forks, queue,
-questions, attachments, web research and usage). Milestone 3 built except
-decision 18: `scripts/conduit-node.mjs` is the node role, Settings › Devices
-pairs and shows devices, a shared folder becomes a workspace whose runtime
-chats run on the device and wait while it is offline, and its files browse
-read-only. A remote shell does not yet survive a disconnect (it is reported
-cut off), and nothing watches a device's folder for changes. Milestones 2, 4
-and 5 not started.
-Supersedes the earlier long-form proposal (see git history of this file for
-the full survey of mirrors, task engines and failure matrices).
-Related: [web runtime](../../conduit-web/README.md),
-[harness contract](../chat-backend-contract.md),
-[deployment](../DEPLOYMENT.md), [testing](../TESTING.md),
-[pi-durable](https://earendil.com/posts/pi-durable/).
+questions, attachments, web research and usage). Milestone 3 built:
+`scripts/conduit-node.mjs` is the node role, Settings › Devices pairs and
+shows devices, a shared folder becomes a workspace whose runtime chats run on
+the device and wait while it is offline. Node track (a) and the terminal half
+of (b) built: Conduit's files, editing, Git and dashboard act on a device
+workspace through one inspector over a host (main's disk or the device), and
+its terminals are shells the device keeps across disconnects. Not yet: device
+harnesses (the rest of b), the ownership record (c), Windows (d); the agent's
+own bash calls still end when a connection drops; nothing watches a device's
+folder (it is polled). Milestones 2, 4 and 5 not started.
 
 ## Vision
 
