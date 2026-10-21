@@ -36,7 +36,8 @@ export const DURABLE_CAPABILITIES = Object.freeze({
   thinkingLevels: true,
   modelSwitch: true,
   toolUse: true,
-  approvals: false,
+  // The runtime asks questions (its ask_user tool) through the same card an approval uses.
+  approvals: true,
   permissionModes: false,
   usage: true,
   // The turn is folded as it is published, as Pi and the Test stream do, so a
@@ -46,7 +47,7 @@ export const DURABLE_CAPABILITIES = Object.freeze({
   interruptKeepsPartial: false,
 });
 
-const TOOL_KINDS = { bash: "command", read: "read", write: "edit", edit: "edit" };
+const TOOL_KINDS = { bash: "command", read: "read", write: "edit", edit: "edit", ask_user: "other" };
 const subjectOf = (name, args = {}) => toolSubject(name === "bash" ? args.command : args.path);
 const STOP_REASONS = new Set(["stop", "toolUse", "length", "error", "aborted"]);
 
@@ -259,7 +260,7 @@ export class DurableAdapter extends EventEmitter {
       // follow-up waits for the next one.
       modes: new Map(),
     });
-    record.scope.defer(() => record.stream?.stop());
+    record.scope.defer(() => { record.stream?.stop(); record.unasked?.(); });
     await this.follow(record, conversation);
     return record;
   }
@@ -273,6 +274,8 @@ export class DurableAdapter extends EventEmitter {
     // and at every checkpoint: the conversation it is on, a fork included.
     record.sessionId = String(conversation.id);
     await this.readAgent(record);
+    record.unasked?.();
+    record.unasked = this.runtime.answerFor(conversation.id, (request) => this.askUser(record, request));
     const stream = await watchEvents(this.runtime.harness, conversation.id, this.context);
     record.stream = stream;
     // A run the last process left going is still going; this is where it is picked up.
@@ -609,6 +612,8 @@ export class DurableAdapter extends EventEmitter {
     }
     const stopped = record.stopping || turn.last?.stopReason === "aborted";
     const outcome = stopped ? "interrupted" : turn.last?.stopReason === "error" || !turn.last ? "failed" : "complete";
+    // A question the turn was waiting on goes with it.
+    for (const request of [...record.hostUiRequests]) this.settleAsk(record, request.id, { id: request.id, cancelled: true });
     for (const promptId of turn.prompts) this.publish(record, turnSettle({ promptId, outcome, generationId: turn.generationId }));
     record.turn = null;
     record.active = false;
@@ -619,6 +624,36 @@ export class DurableAdapter extends EventEmitter {
       phase: stopped ? "stopped" : "settled", status: "idle", activity: "idle", detail: null });
     this.publishUsage(record);
     this.emit("settled", { record, completed: outcome === "complete" });
+  }
+
+  /** Put a question card up and wait for the answer (see the runtime's ask_user tool). */
+  askUser(record, request) {
+    return new Promise((resolve) => {
+      record.asks ||= new Map();
+      record.asks.set(request.id, resolve);
+      record.hostUiRequests = [...record.hostUiRequests.filter((item) => item.id !== request.id), request];
+      record.activity = "waiting_for_user";
+      this.publish(record, { type: "permission_request", generationId: record.generation?.id || null, requestId: request.id, ...request });
+    });
+  }
+
+  async respondHostUi(id, response) {
+    const record = this.get(id);
+    if (!record) throw failure("No Conduit runtime session", "backend_unavailable", 404);
+    const requestId = response?.id || response?.requestId;
+    if (!requestId) throw failure("Host UI response requires id", "host_ui_id_required", 400);
+    this.settleAsk(record, requestId, response);
+    return null;
+  }
+
+  settleAsk(record, requestId, response) {
+    const resolve = record.asks?.get(requestId);
+    record.asks?.delete(requestId);
+    if (!record.hostUiRequests.some((item) => item.id === requestId)) return;
+    record.hostUiRequests = record.hostUiRequests.filter((item) => item.id !== requestId);
+    this.publish(record, { type: "permission_resolved", generationId: record.generation?.id || null, requestId });
+    record.activity = record.active ? "working" : "idle";
+    resolve?.(response);
   }
 
   /** A prompt refused before any run took it -- a model error before the first request, say. */
@@ -808,7 +843,7 @@ export class DurableAdapter extends EventEmitter {
   }
 
   view(record) {
-    return { ...this.sessions.view(record), hostUiRequests: [], queue: this.queueView(record || { queue: [] }),
+    return { ...this.sessions.view(record), hostUiRequests: [...(record?.hostUiRequests || [])], queue: this.queueView(record || { queue: [] }),
       contextUsage: this.contextUsage(record) };
   }
 
