@@ -1,3 +1,4 @@
+import { remoteNode } from "./place.js";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import { execFile } from "node:child_process";
@@ -226,7 +227,7 @@ export class CodexAppServerAdapter extends EventEmitter {
   }
 
   async create({ chatId, project, model = "", thinkingLevel = "", permissionMode = "", permissionProfile = "", approvalPolicy = "", approvalsReviewer = "", serviceLevel = "", sandbox = null }) {
-    const record = await this.start({ chatId, projectId: project.id, cwd: project.workingRoot, nodeId: project.nodeId, place: project.place });
+    const record = await this.start({ chatId, projectId: project.id, cwd: project.workingRoot, nodeId: remoteNode(project), place: project.place });
     try {
       const result = await this.request(record, "thread/start", {
         cwd: project.workingRoot,
@@ -257,7 +258,7 @@ export class CodexAppServerAdapter extends EventEmitter {
   }
 
   async restore(opaqueSession, { chatId, project, model = "", thinkingLevel = "", permissionMode = "", permissionProfile = "", approvalPolicy = "", approvalsReviewer = "", serviceLevel = "", sandbox = null }) {
-    const record = await this.start({ chatId, projectId: project.id, cwd: project.workingRoot, nodeId: project.nodeId, place: project.place });
+    const record = await this.start({ chatId, projectId: project.id, cwd: project.workingRoot, nodeId: remoteNode(project), place: project.place });
     const threadId = typeof opaqueSession === "string" ? opaqueSession : opaqueSession?.threadId;
     if (!threadId) throw error("Codex thread identity is missing");
     try {

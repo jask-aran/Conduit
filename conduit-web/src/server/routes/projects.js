@@ -1,3 +1,4 @@
+import { remoteNode } from "../../place.js";
 import os from "node:os";
 import { applyArtifactMessageIds } from "../../message-ids.js";
 import { deviceHost } from "../../workspace-host.js";
@@ -123,8 +124,8 @@ export function registerProjectRoutes(app, {
   };
   // Where the inspector works for a project: this server's path, or the
   // device's folder through its environment (plan decision 22).
-  const rootOf = (project) => project.nodeId
-    ? deviceHost({ hub: nodeHub, nodeId: project.nodeId, place: project.place, label: project.workingRoot })
+  const rootOf = (project) => remoteNode(project)
+    ? deviceHost({ hub: nodeHub, nodeId: remoteNode(project), place: project.place, label: project.workingRoot })
     : project.workingRoot;
   const readComputerLocation = async (project) => {
     const [gitRoot, listing] = await Promise.all([
@@ -463,7 +464,7 @@ export function registerProjectRoutes(app, {
       if (!chat || chat.projectId !== project.id) return response.json(null);
       // Turn checkpoints snapshot the head's disk; a place without them has none.
       const can = await backends.capabilities?.(project);
-      if (can ? !can.checkpoints : project.nodeId) return response.json(null);
+      if (can ? !can.checkpoints : remoteNode(project)) return response.json(null);
       if (request.query.timeline === "1") {
         return response.json(applyArtifactMessageIds(await turnCheckpoints.timeline(chatId, project.workingRoot),
           await messageIds.resolver(project, chat)));

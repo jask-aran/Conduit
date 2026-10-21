@@ -1,3 +1,4 @@
+import { headRootId, remoteNode } from "./place.js";
 import crypto from "node:crypto";
 import { spawn } from "node:child_process";
 import fs from "node:fs/promises";
@@ -192,7 +193,7 @@ export class ProjectStore {
 
   workingRoot(project) {
     // A device's path is kept as that device wrote it, separators and all.
-    if (project?.nodeId) return project.externalPath;
+    if (remoteNode(project)) return project.externalPath;
     if (project?.externalPath) return path.resolve(project.externalPath);
     return this.managedPath(project.slug);
   }
@@ -207,6 +208,9 @@ export class ProjectStore {
 
   projectView(project) {
     const projectPath = this.workingRoot(project);
+    // A stored record names a node only for another device's folder; every
+    // other is the head's own, on the head's node (decision 24).
+    const remote = remoteNode(project);
     return {
       id: project.id,
       slug: project.slug,
@@ -214,11 +218,12 @@ export class ProjectStore {
       kind: project.kind || "project",
       origin: project.origin || (project.externalPath ? "linked" : "managed"),
       externalPath: project.externalPath || null,
-      // A folder another device shares: its path is that device's, and only
-      // the Conduit runtime works in it, through the device.
-      nodeId: project.nodeId || null,
-      // Where a node workspace's calls run: `{ root, path }` on its node.
-      place: project.nodeId ? { root: project.rootId, path: project.subpath || "" } : null,
+      // The device's node that holds it, and where on it: `{ root, path }`.
+      // The head's own folders are its node's roots, one per folder.
+      nodeId: remote || this.headNodeId || null,
+      place: remote ? { root: project.rootId, path: project.subpath || "" } : { root: headRootId(projectPath), path: "" },
+      // Reached in process (the head's own folder) rather than over a node's socket.
+      local: !remote,
       cloneUrl: project.cloneUrl || null,
       state: project.state === "cloning" ? "cloning" : "ready",
       cloneOperationId: project.cloneOperationId || null,
@@ -230,7 +235,7 @@ export class ProjectStore {
       // Where Conduit keeps the chats' own files (logs, attachments): always on
       // this machine. For a device's workspace that is not its working root,
       // which is a path on the device.
-      chatRoot: project.nodeId ? this.managedPath(project.slug) : projectPath,
+      chatRoot: remote ? this.managedPath(project.slug) : projectPath,
       sessionsDir: sessionDirectoryFor(projectPath, this.piAgentDir),
       deletesFilesOnRemove: (project.origin || "managed") === "managed",
     };
@@ -842,7 +847,7 @@ export class ProjectStore {
     const view = this.projectView(project);
     // A device's folder is the device's: unlinking it touches nothing here,
     // where its path may name something else entirely.
-    if (project.nodeId) {
+    if (remoteNode(project)) {
       if (deleteWorkspaceFiles) {
         const error = new Error("A device's folder is deleted on the device");
         error.code = "workspace_delete_not_supported";
@@ -884,7 +889,7 @@ export class ProjectStore {
       throw cloneError("workspace_cloning", "This Workspace is still cloning");
     }
     // A device's folder is the device's to check, when a call reaches it.
-    if (project?.nodeId) return project;
+    if (remoteNode(project)) return project;
     const expected = this.workingRoot(project);
     let stat;
     try { stat = await fs.lstat(expected); }

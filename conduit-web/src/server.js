@@ -1,4 +1,4 @@
-import { capabilitiesOf } from "./place.js";
+import { capabilitiesOf, headIds } from "./place.js";
 import http from "node:http";
 import https from "node:https";
 import net from "node:net";
@@ -104,6 +104,14 @@ const terminals = lifetime.own("terminals", new PtyManager({ filePath: config.re
   console.log(`Conduit ${config.terminalTeardown ? "stopped" : "preserved"} ${stopped} terminal session${stopped === 1 ? "" : "s"}`);
 });
 await terminals.load();
+// Bound to loopback ("This machine only" in setup), the server is reached only
+// through this machine -- directly, or by Tailscale, a tunnel or SSH landing
+// here -- so it neither publishes its network addresses nor advertises on one.
+const reachableOnNetwork = !/^(127\.\d+\.\d+\.\d+|localhost|::1|\[::1\])$/.test(config.host);
+const serverIdentity = await new ServerIdentity(config.identityFile, { port: config.port, network: reachableOnNetwork }).load();
+// The head's own device and node (decision 24), known before anything reads a project.
+const head = headIds(serverIdentity.id);
+projects.headNodeId = head.nodeId;
 const pinnedInstallation = config.installations.get("conduit-pinned");
 const registry = new ChatStore(config.sessionRegistryFile, {
   defaultRuntime: {
@@ -120,11 +128,6 @@ const attachments = new AttachmentStore(registry, { maxBytes: config.maxAttachme
 const terminalPastes = new TerminalPasteStore({ root: config.terminalPasteRoot });
 const runtimeSettings = new RuntimeSettingsStore(config.runtimeSettingsFile, defaultsFromEnv(process.env));
 await runtimeSettings.load();
-// Bound to loopback ("This machine only" in setup), the server is reached only
-// through this machine -- directly, or by Tailscale, a tunnel or SSH landing
-// here -- so it neither publishes its network addresses nor advertises on one.
-const reachableOnNetwork = !/^(127\.\d+\.\d+\.\d+|localhost|::1|\[::1\])$/.test(config.host);
-const serverIdentity = await new ServerIdentity(config.identityFile, { port: config.port, network: reachableOnNetwork }).load();
 /*
  * The certificate this server answers on over TLS, and the identity's word
  * that it is this server's.
@@ -263,6 +266,12 @@ manager.on("process_changed", ({ record, reason }) => {
 });// What a workspace's place can do -- which harnesses, checkpoints, Git -- on
 // the head or a device alike (src/place.js); every refusal asks this.
 backends.capabilities = (project) => capabilitiesOf(project, { hub: nodeHub, backends, serverName: serverIdentity.name });
+// The head is a device like the others (decision 24): its node holds the
+// folders of every workspace that is not on another device, one root each.
+nodeHub.adoptHead({ ...head, name: () => serverIdentity.name,
+  roots: async () => (await projects.list()).filter((project) => project.local)
+    .map((project) => ({ id: project.place.root, label: project.workingRoot, read: true, write: true, shell: true, allow: [] })),
+  harnesses: () => [...(backends.local || backends.adapters.keys())] });
 
 manager.on("process_removed", ({ id, chatId }) => {
   runtimeHub.publishProcessRemoved(id, chatId);

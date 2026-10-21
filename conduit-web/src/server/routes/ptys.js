@@ -1,3 +1,4 @@
+import { remoteNode } from "../../place.js";
 import { computerContext, resolveComputerContext } from "../../computer-context.js";
 
 async function terminalContext(projects, id, cwd) {
@@ -10,7 +11,7 @@ async function terminalContext(projects, id, cwd) {
   const project = await projects.get(id);
   if (!project) throw Object.assign(new Error("Terminal project was not found"), { code: "pty_project_not_found" });
   // A device's folder: the device runs the shell there and checks the grant.
-  if (project.nodeId) return { project, cwd: project.workingRoot };
+  if (remoteNode(project)) return { project, cwd: project.workingRoot };
   try { await projects.validate(project, { createManaged: !project.externalPath }); }
   catch (error) {
     if (error.code === "workspace_identity_changed") {

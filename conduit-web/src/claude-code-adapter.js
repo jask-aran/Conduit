@@ -1,3 +1,4 @@
+import { remoteNode } from "./place.js";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
@@ -436,10 +437,10 @@ export class ClaudeCodeAdapter extends EventEmitter {
   async start({ chatId, project, model = "", thinkingLevel = "", permissionMode = "", sessionId, resume = false }) {
     const existing = this.getByChatId(chatId);
     if (existing) return existing;
-    if (project?.nodeId) requireHarnessOn(this.nodeHub, project.nodeId, "claude-code", "Claude Code");
+    if (remoteNode(project)) requireHarnessOn(this.nodeHub, remoteNode(project), "claude-code", "Claude Code");
     const record = this.sessions.add({
       id: crypto.randomUUID(), chatId, projectId: project?.id || null,
-      nodeId: project?.nodeId || null, place: project?.place || null,
+      nodeId: remoteNode(project), place: project?.place || null,
       cwd: project?.workingRoot, sessionId, status: "starting", ready: false,
       activity: "starting", active: false, stopping: false, model, thinkingLevel, permissionMode,
       generation: null, generationSeq: 0, clients: new Set(), events: [], hostUiRequests: [],
@@ -492,8 +493,8 @@ export class ClaudeCodeAdapter extends EventEmitter {
     const sessionId = typeof opaqueSession === "string" ? opaqueSession : opaqueSession?.threadId;
     if (!sessionId) throw failure("Claude Code session identity is missing");
     // A chat made and never prompted has an id and nothing saved under it yet.
-    const saved = options.project?.nodeId
-      ? await this.sessionText(sessionId, options.project.nodeId).catch(() => null)
+    const saved = remoteNode(options.project)
+      ? await this.sessionText(sessionId, remoteNode(options.project)).catch(() => null)
       : await this.sdk.getSessionInfo(sessionId).catch(() => undefined);
     return this.start({ ...options, sessionId, resume: Boolean(saved) });
   }

@@ -1,3 +1,4 @@
+import { remoteNode } from "./place.js";
 import crypto from "node:crypto";
 import { answerTo, isDismissal, questionRequest } from "./harnesses/questions.js";
 import fs from "node:fs/promises";
@@ -249,7 +250,7 @@ export class DurableAdapter extends EventEmitter {
       ...(options.project?.workingRoot ? { cwd: options.project.workingRoot } : {}),
     } }, this.context);
     await this.remember(conversation, options.chatId,
-      options.project?.nodeId ? { nodeId: options.project.nodeId, place: options.project.place } : null);
+      remoteNode(options.project) ? { nodeId: remoteNode(options.project), place: options.project.place } : null);
     return this.start(conversation, options);
   }
 
@@ -263,7 +264,7 @@ export class DurableAdapter extends EventEmitter {
     // A conversation from before places learns its workspace's place.
     const workspace = await harness.snapshot(ConduitWorkspace, conversation.id, this.context);
     if (workspace?.nodeId && !workspace.place && options.project?.place) {
-      await this.remember(conversation, options.chatId, { nodeId: options.project.nodeId, place: options.project.place });
+      await this.remember(conversation, options.chatId, { nodeId: remoteNode(options.project), place: options.project.place });
     }
     const record = await this.start(conversation, options);
     const spec = splitSpec(options.model);
@@ -275,7 +276,7 @@ export class DurableAdapter extends EventEmitter {
     const existing = this.getByChatId(chatId);
     if (existing) return existing;
     const record = this.sessions.add({
-      id: crypto.randomUUID(), chatId, projectId: project?.id || null, nodeId: project?.nodeId || null, conversationId: conversation.id, conversation,
+      id: crypto.randomUUID(), chatId, projectId: project?.id || null, nodeId: remoteNode(project), conversationId: conversation.id, conversation,
       status: "running", activity: "idle", active: false, stopping: false, generation: null, generationSeq: 0,
       clients: new Set(), events: [], hostUiRequests: [], activeGeneration: null,
       model: "", modelId: "", provider: "", thinkingLevel: "", contextWindow: 0,
