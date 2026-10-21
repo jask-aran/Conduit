@@ -1,7 +1,7 @@
-import { Button as LibraryButton, Captions, Completion, ComposerField, DesktopComposer, PhoneComposer, Picker, PillButton, PillField, PillWave, Rider, Spinner, StopGlyph, TextArea, Toolbar } from "@/components/ui";
+import { Button as LibraryButton, Captions, Completion, ComposerField, DesktopComposer, PhoneComposer, Picker, PillButton, PillField, PillWave, Rider, Spinner, StopGlyph, TextArea, Toolbar, VoiceRider } from "@/components/ui";
 import { latestAway, scrollToLatest } from "./latest-away";
 import { createEffect, createMemo, createSignal, For, lazy, on, onCleanup, onMount, Show, type JSX } from "solid-js";
-import { ArrowDownIcon, ArrowUpIcon, CameraIcon, ChevronLeftIcon, ChevronRightIcon, DeleteIcon, KeyboardIcon, MicIcon, TextCursorInputIcon, Undo2Icon, ShieldCheckIcon, TriangleAlertIcon } from "lucide-solid";
+import { ArrowDownIcon, ArrowUpIcon, CameraIcon, ChevronLeftIcon, ChevronRightIcon, DeleteIcon, KeyboardIcon, MicIcon, TextCursorInputIcon, Undo2Icon, ShieldCheckIcon } from "lucide-solid";
 import { Menu, MenuContent } from "@/components/menus";
 import type { BooleanCapability, Template } from "../api/contracts";
 import type { ActiveChatStore } from "../state/active-chat";
@@ -33,12 +33,12 @@ export const SPINNING_ACTIVITY = new Set(["starting", "reconnecting", "thinking"
 
 import { FolderPicker, type FolderOptions, type PlaceOptions } from "./place-picker";
 import { COMPOSER_FOLDS, foldsFor, type ComposerFold } from "./composer-folds";
+import { createLeaving, riderMotion } from "./composer-cards";
 import { ComposerPlusMenu, PermissionChoices, ProfileChoices, ServiceChoices } from "./composer-plus-menu";
 const MobileComposerOptions = lazy(() => import("./mobile-composer-options"));
 
 export interface ComposerStatus {
   dictationState: () => VoiceDictationState;
-  dictationLabel: () => string;
   dictationError: () => string;
   dictating: () => boolean;
   recording: () => boolean;
@@ -219,7 +219,6 @@ export function Composer(props: {
   const recorderMonitorState = createMemo(() => dictationState() === "starting" ? "connecting" : dictationState() === "listening" ? "listening" : "stopped");
   const canSend = createMemo(() => hasPayload() && props.serverOnline && interactive() && props.chat.generation() !== "stopping"
     && (!busy() || supports("steer") || supports("followUpQueue")) && !dictating());
-  const activity = createMemo(() => props.chat.activity());
   const sentPrompts = createMemo(() => props.chat.messages()
     .filter((message) => message.role === "user" && !message.pending && Boolean(message.content?.trim()))
     .map((message) => parseReviewComments(message.content!).text)
@@ -229,23 +228,8 @@ export function Composer(props: {
     compaction: supports("compaction") && !busy() && !props.chat.compacting(),
     harnessCommands: props.chat.harnessCommands(),
   });
-  const dictationLabel = createMemo(() => {
-    if (dictationState() === "completed" && !dictatedRange()) return "";
-    if (dictationState() === "failed" && !dictationError()) return "";
-    return ({
-      starting: "Preparing microphone…",
-      listening: transcriberReady() ? "Recording…" : "Recording · preparing transcription…",
-      finishing: "Finishing capture…",
-      waiting: "Waiting for transcription engine…",
-      transcribing: "Transcribing…",
-      completed: "Dictation added to draft",
-      failed: "Dictation failed",
-      idle: "",
-    })[dictationState()];
-  });
   const composerStatus: ComposerStatus = {
     dictationState,
-    dictationLabel,
     dictationError,
     dictating,
     recording,
@@ -767,15 +751,14 @@ export function Composer(props: {
   // What the agent is blocked on: on a desktop it takes the composer's place; on a phone it rides over the field.
   const question = () => <Show when={props.chat.hostUiRequests().length}><HostUiRequests requests={props.chat.hostUiRequests()} onRespond={props.chat.respondHostUi} onStop={() => props.chat.stop()} /></Show>;
   const stopButton = () => <LibraryButton variant="ghost" size="icon-sm" aria-label="Stop response" onClick={props.chat.stop}><Show when={props.chat.stopping()} fallback={<StopGlyph />}><Spinner /></Show></LibraryButton>;
-  // While dictating, the voice; otherwise what the composer or the agent is doing.
-  const status = (): JSX.Element => <Show when={!recording()} fallback={<PillWave levels={dictationWaveform.history()} gain={2.5} />}>
-    <Show when={dictationLabel()} fallback={<Show when={activity()?.label && activity()?.label !== "Ready"}>
-      <Show when={SPINNING_ACTIVITY.has(activity()?.kind || "")}><Spinner /></Show><Show when={["request_failed", "runtime_failed"].includes(activity()?.kind || "")}><TriangleAlertIcon aria-hidden="true" /></Show>{activity()?.label}
-    </Show>}>{dictationLabel()}</Show>
-  </Show>;
-  const desktop = () => <DesktopComposer riders={riders()} takeover={question()}>
+  // Dictating, the voice rides over the composer and an Aura glows under it, as a phone's capsule does; the words go
+  // into the field as they come. The agent's doing reads in the transcript, as on a phone.
+  const listening = () => ["starting", "listening"].includes(dictationState());
+  const voice = createLeaving(listening, (on) => on, () => "fade");
+  const desktop = () => <DesktopComposer takeover={question()} listening={listening()} level={Math.min(1, dictationWaveform.level() * 2.5)}
+    riders={<>{riders()}<Show when={voice.value()}><VoiceRider levels={dictationWaveform.history()} gain={2.5} motion={riderMotion(voice.leaving())} /></Show></>}>
     <ComposerField>{field()}</ComposerField>
-    <Toolbar ref={toolbarRef} status={status()}
+    <Toolbar ref={toolbarRef}
       start={<>
         <ComposerPlusMenu folded={folded()} chat={props.chat} models={props.models} permissions={props.permissions} serviceLevels={props.serviceLevels}
           profiles={props.profiles} activeProfile={props.activeProfile} place={props.place} disabled={!props.serverOnline || !interactive()} modelSwitch={supports("modelSwitch")}
@@ -798,7 +781,7 @@ export function Composer(props: {
           </MenuContent>
         </Menu></div></Show>
       </>}
-      end={<LibraryButton variant="ghost" size="icon-sm" data-state={dictationState()} aria-label={["starting", "listening"].includes(dictationState()) ? "Stop voice dictation" : "Start voice dictation"} aria-pressed={dictating()} title={`Voice dictation (${props.voiceSettings.shortcut})`} disabled={!props.serverOnline || !interactive()} onPointerDown={captureDictationLaunch} onClick={toggleDictation}><Show when={dictationState() === "starting"} fallback={<MicIcon />}><Spinner /></Show></LibraryButton>}
+      end={<LibraryButton variant="ghost" size="icon-sm" data-state={dictationState()} aria-label={["starting", "listening"].includes(dictationState()) ? "Stop voice dictation" : "Start voice dictation"} aria-pressed={dictating()} title={`Voice dictation (${props.voiceSettings.shortcut})`} disabled={!props.serverOnline || !interactive()} onPointerDown={captureDictationLaunch} onClick={toggleDictation}><Show when={["starting", "finishing", "waiting", "transcribing"].includes(dictationState())} fallback={<MicIcon />}><Spinner /></Show></LibraryButton>}
       // One primary slot, so nothing beside it moves: Stop while the agent works; once a draft is typed, Send again
       // (which queues the message for the agent), and Stop steps in beside it.
       aside={<Show when={stoppable() && newDraft()}>{stopButton()}</Show>}
