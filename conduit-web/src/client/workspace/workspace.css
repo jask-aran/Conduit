@@ -24,7 +24,7 @@
 /* Over the panes: the dock takes no room in the row and floats above it. */
 .workspace-panel.workspace-panel-overlay { z-index: 40; width: 0 !important; margin-right: 0 !important; background: transparent; }
 .workspace-panel-overlay .workspace-panel-surface { right: var(--space-md); left: auto; width: var(--workspace-shell-width); box-shadow: 0 18px 48px oklch(0 0 0 / 45%), 0 0 0 1px var(--border); }
-.workspace-panel-overlay .ui-pane-edge[data-dock] { left: calc(-1 * var(--workspace-shell-width) - var(--space-3xl)); }
+.workspace-panel-overlay .ui-pane-edge[data-dock] { left: calc(-1 * var(--workspace-shell-width) - var(--space-md) - var(--control-xs) / 2); }
 /* Surface keeps settled panel width, right-anchored inside the shell. */
 .workspace-panel-surface { position: absolute; inset: 0; display: flex; min-width: 0; height: 100%; contain: layout paint; container-name: workspace-surface; container-type: inline-size; flex: none; flex-direction: column; overflow: hidden; border-radius: var(--radius-surface); background: var(--background); }
 .workspace-panel-surface > * { max-width: 100%; }
@@ -35,7 +35,7 @@
 .chat-main { flex: 1 1 auto; min-width: 0; }
 .chat-main.workspace-expanded { margin-inline: 0; pointer-events: none; }
 .workspace-layout { position: relative; overflow: hidden; container-type: inline-size; }
-/* A chat is never drawn narrower than it declares (MIN_MAIN_PANE_WIDTH, DESIGN.md "Documents and room"): on a desktop
+/* A chat is never drawn narrower than it declares (MIN_MAIN_PANE_UNITS, DESIGN.md "Documents and room"): on a desktop
    window too narrow for it beside the sidebar, the shell scrolls sideways instead. The layout holds the chat and its
    margins; its own intrinsic width is no help, as a size container it has none. A phone is full-bleed at any width. */
 @media (--conduit-wide-layout) {
@@ -123,7 +123,7 @@
   .workspace-files[data-wide="true"][data-tree-collapsed="true"] .workspace-tree-pane,
   .workspace-files[data-wide="true"][data-tree-collapsed="true"] .workspace-tree-resize-handle { display: none; }
   .workspace-tree-resize-handle { position: relative; z-index: 5; grid-column: 2; grid-row: 1; cursor: col-resize; touch-action: none; }
-  .workspace-tree-resize-handle::after { content: ""; position: absolute; inset-block: 0; left: var(--space-xs); width: 1px; background: var(--border); transition: background 120ms; }
+  .workspace-tree-resize-handle::after { content: ""; position: absolute; inset-block: 0; left: 50%; translate: -50% 0; width: var(--hairline); background: var(--border); transition: background 120ms; }
   .workspace-tree-resize-handle:hover::after, .workspace-tree-resize-handle:focus-visible::after, .workspace-tree-resizing .workspace-tree-resize-handle::after { background: var(--ring); }
 }
 
