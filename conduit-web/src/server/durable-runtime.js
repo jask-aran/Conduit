@@ -5,7 +5,6 @@ import { loadPiExtensionTools } from "./pi-extension-bridge.js";
 import { RemoteExecutionEnv } from "../nodes/remote-env.js";
 import { DeviceTools, deviceEnv } from "./device-tools.js";
 import { Handoff, Subagents } from "./subagents.js";
-import { CAPABILITY_TOOLS, DeviceCapabilities } from "./device-capabilities.js";
 import { awaitWithContext, BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import { Type } from "@earendil-works/pi-ai";
 import { createRegistry, defineDoc, defineExtension, defineTool, Harness, section } from "@earendil-works/pi-durable";
@@ -215,7 +214,6 @@ export class DurableRuntime {
       install(DeviceTools(this));
       install(Subagents(this));
       install(Handoff);
-      install(DeviceCapabilities(this));
       const web = await this.webTools();
       if (web) install(web);
       install(createCodemodeExtension({ sandbox: new CodemodeSandbox() }));
@@ -304,11 +302,7 @@ export class DurableRuntime {
     const delegates = roaming || template.tools.includes("subagent");
     const extensions = ["conduit", roaming ? "device-tools" : "coding-tools", ...template.extensions.map(named).filter(Boolean),
       ...(delegates ? ["subagents"] : []), ...(roaming ? ["handoff"] : [])].map((name) => this.extensions.get(name)).filter(Boolean);
-    // A device capability's tool, when some device it can reach has it granted.
-    const granted = new Set((await this.reachable()).flatMap((device) => device.capabilities));
-    const capable = Object.entries(CAPABILITY_TOOLS).filter(([, id]) => granted.has(id)).map(([tool]) => tool);
-    if (capable.length) extensions.push(this.extensions.get("device-capabilities"));
-    const wanted = new Set([...ALWAYS, ...template.tools, ...(roaming ? ["devices", "handoff"] : []), ...(delegates ? ["subagent"] : []), ...capable]);
+    const wanted = new Set([...ALWAYS, ...template.tools, ...(roaming ? ["devices", "handoff"] : []), ...(delegates ? ["subagent"] : [])]);
     // Codemode's own helpers (`pi.codemode.*`) come with it: its scripts call them.
     const tools = extensions.flatMap((extension) => extension.tools || [])
       .filter((tool) => wanted.has(tool.name) || (wanted.has("codemode") && tool.name.startsWith("pi.codemode.")));
@@ -332,29 +326,11 @@ export class DurableRuntime {
     return (await this.nodeHub.listDevices()).map((device) => {
       const node = device.nodes.find((item) => item.online) || device.nodes[0] || null;
       return { name: device.name, local: Boolean(device.local), online: device.nodes.some((item) => item.online),
-        nodeId: node?.id || null, roots: device.nodes.flatMap((item) => item.roots || []),
-        capabilities: device.nodes.flatMap((item) => (item.capabilities || []).filter((cap) => cap.granted).map((cap) => cap.id)) };
+        nodeId: node?.id || null, roots: device.nodes.flatMap((item) => item.roots || []) };
     }).filter((device) => device.nodeId);
   }
 
   envOn(conversationId, device, folder) { return deviceEnv(this, conversationId, device, folder); }
-
-  /** Where a capability call runs: the named device, else the conversation's own (this server when it has none). */
-  async capabilityTarget(conversationId, name, id) {
-    const devices = await this.reachable();
-    let device;
-    if (name) {
-      const wanted = String(name).trim().toLowerCase();
-      device = devices.find((item) => item.name.toLowerCase() === wanted || item.nodeId === name);
-      if (!device) throw new Error(`No device named ${JSON.stringify(name)}`);
-    } else {
-      const { nodeId } = (await this.harness.snapshot(ConduitWorkspace, conversationId, this.context)) || {};
-      device = devices.find((item) => (nodeId ? item.nodeId === nodeId : item.local));
-      if (!device) throw new Error("This conversation's device is not known; name one");
-    }
-    if (!device.capabilities.includes(id)) throw new Error(`${device.name} has not granted ${id} to Conduit`);
-    return device;
-  }
 
   /** A conversation's last answer, as text: what a subagent hands back. */
   async lastAnswer(conversationId) {
