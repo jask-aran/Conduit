@@ -19,6 +19,8 @@ export const manifest = {
   // waits for running turns, as Pi's does.
   drive: true,
   profile: true,
+  // Runs on a paired device even when not installed here (registered regardless).
+  devices: true,
   probe: (config) => commandProbe(config.claudeCommand)(),
   build: (config) => new ClaudeCodeAdapter({ command: config.claudeCommand, logs: config.logs, nodeHub: config.nodeHub }),
 };
