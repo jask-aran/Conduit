@@ -3,7 +3,7 @@ import { Icons } from "@/components/ui";
 import { For, Show, createEffect, createSignal, onCleanup } from "solid-js";
 
 import { Section, Slider } from "@/components/ui";
-import { Menu, MenuContent, MenuPillTrigger, MenuRadioGroup, MenuRadioItem, MenuRow, MenuSection, MenuSub, MenuSubContent, MenuSubTrigger, MenuSubValue, useMenuBack } from "@/components/menus";
+import { DropdownMenu, MenuContent, MenuPillTrigger, MenuRadioGroup, MenuRadioItem, MenuRow, MenuSection, MenuSub, MenuSubContent, MenuSubTrigger, MenuSubValue, useMenuBack } from "@/components/menus";
 import type { Template } from "../api/contracts";
 import type { ActiveChatStore } from "../state/active-chat";
 import type { ComposerModels } from "./composer-models";
@@ -79,7 +79,7 @@ export function MobileComposerOptions(props: {
   });
 
   const placed = () => composer.place?.current && composer.place.current.slug !== "chat" ? composer.place.current : null;
-  return <Menu modal={false} placement="top-start" open={open()} onOpenChange={(value) => { if (value) typingAtOpen = composerTextarea(); setOpen(value); }}>
+  return <DropdownMenu modal={false} placement="top-start" open={open()} onOpenChange={(value) => { if (value) typingAtOpen = composerTextarea(); setOpen(value); }}>
       <MenuPillTrigger label="Message options" icon={<Icons.Add />} open={open()} disabled={!composer.serverOnline} keep={() => typingAtOpen !== null} ref={(element) => { root = element; }} />
       <MenuContent keep={() => typingAtOpen !== null} onOpenAutoFocus={preserveFocus} onCloseAutoFocus={(event) => { event.preventDefault(); restoreTyping(); }} onFocusOutside={preserveFocus}>
         {/* A phone option shows its value, not its name: the section names it. */}
@@ -126,7 +126,7 @@ export function MobileComposerOptions(props: {
           </MenuSub>
         </MenuSection>}</Show>
       </MenuContent>
-    </Menu>;
+    </DropdownMenu>;
 }
 
 type Options = Parameters<typeof MobileComposerOptions>[0]["composer"];

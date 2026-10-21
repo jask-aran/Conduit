@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/controls";
 import { Rule } from "@/components/ui/popover";
 import { batch, createEffect, createSignal, lazy, on, onCleanup, Show, Suspense, type JSX } from "solid-js";
 import { SaveIcon } from "lucide-solid";
-import { ContextMenu, ContextMenuContent, ContextMenuTrigger, Menu, MenuContent, MenuControl, MenuRow, MenuSection } from "@/components/menus";
+import { ContextMenu, ContextMenuContent, ContextMenuTrigger, DropdownMenu, MenuContent, MenuControl, MenuRow, MenuSection } from "@/components/menus";
 import { api } from "../api/client";
 import { authorizedFetch } from "../api/native-auth-client";
 import { httpUrl } from "../api/transport";
@@ -490,7 +490,7 @@ export default function WorkspaceFileSlot(props: {
     <FileButton type="button" inMenu aria-label="Copy path" title="Copy path" onClick={() => copy(props.path ?? "")}><Icons.FileCode /></FileButton>
     <FileButton type="button" data-fold="0" aria-label="Download working file" title="Download working file" onClick={() => void download()}><Icons.Download /></FileButton>
   </FileActions>;
-  const moreMenu = (text: boolean) => <Menu modal={false}>
+  const moreMenu = (text: boolean) => <DropdownMenu modal={false}>
     <MenuControl as={FileMore} aria-label="More file actions" title="More file actions" ref={moreAnchor} />
     <MenuContent>
       <Show when={hasChanges() && isFolded("4")}><MenuRow onSelect={() => props.onShowDiff?.(false)} icon={<Icons.FileDiff />}>Review unstaged changes</MenuRow></Show>
@@ -502,7 +502,7 @@ export default function WorkspaceFileSlot(props: {
       <Show when={text}><MenuRow onSelect={() => copy(currentText())} icon={<Icons.Copy />}>Copy contents</MenuRow></Show>
       <MenuRow onSelect={() => copy(props.path ?? "")} icon={<Icons.FileCode />}>Copy path</MenuRow>
     </MenuContent>
-  </Menu>;
+  </DropdownMenu>;
   const gitControls = () => <Show when={props.gitFile}>{(file) =>
     <FileGit status={file().status === "??" ? "U" : file().status.trim()} />
   }</Show>;

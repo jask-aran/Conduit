@@ -3,7 +3,7 @@ import { FileButton, StatusText, StatusPicker } from "@/components/ui/file";
 import { ComparisonSource, TurnNavigation } from "@/components/ui/editor";
 import { For, Show } from "solid-js";
 
-import { Menu, MenuContent, MenuRow, MenuRadioGroup, MenuRadioItem, MenuControl } from "@/components/menus";
+import { DropdownMenu, MenuContent, MenuRow, MenuRadioGroup, MenuRadioItem, MenuControl } from "@/components/menus";
 import { Spinner } from "@/components/ui/controls";
 import { createWorkspaceReview, diffScopes, isDiffScope, type DiffScope } from "./workspace-review-source";
 
@@ -25,21 +25,21 @@ const turnTime = (value: string) => {
 export function ComparisonSourceControls(props: { source: WorkspaceReviewController; open: ReviewOpener; scopes: typeof diffScopes; chatAvailable: boolean }) {
   const source = () => props.source;
   return <ComparisonSource>
-    <Menu>
+    <DropdownMenu>
       <MenuControl as={StatusPicker} icon={<Icons.ChevronDown />} aria-label="Comparison source">{diffScopes.find((scope) => scope.value === source().scope())?.label}</MenuControl>
       <MenuContent>
         <MenuRadioGroup value={source().scope()} onChange={(value) => { if (isDiffScope(value) && props.scopes.some((scope) => scope.value === value)) props.open(value); }}>
           <For each={props.scopes}>{(scope) => <MenuRadioItem value={scope.value} disabled={(scope.value === "chat" || scope.value === "turn") && !props.chatAvailable}>{scope.label}</MenuRadioItem>}</For>
         </MenuRadioGroup>
       </MenuContent>
-    </Menu>
+    </DropdownMenu>
     <Show when={source().scope() === "chat" || source().scope() === "turn"}>
       <TurnNavigation aria-label="Turn navigation">
         <FileButton aria-label="Older turn" title="Older turn" disabled={source().loading() || source().turnIndex() >= source().timeline().length - 1} onClick={() => void source().stepTurn(1, source().turnIndex() + 1)}><Icons.ChevronLeft /></FileButton>
-        <Menu>
+        <DropdownMenu>
           <MenuControl as={StatusPicker} icon={<Icons.ChevronDown />} aria-label="Select turn">{source().timeline().length ? `${source().scope() === "chat" ? "Through turn" : "Turn"} ${source().turnNumber(source().turnIndex())}` : "Latest turn"}</MenuControl>
           <MenuContent><For each={source().timeline()}>{(turn, index) => <MenuRow onSelect={() => void source().stepTurn(1, index())}>{`${source().scope() === "chat" ? "Through turn" : "Turn"} ${source().turnNumber(index())}`} · {turnTime(turn.createdAt)}</MenuRow>}</For></MenuContent>
-        </Menu>
+        </DropdownMenu>
         <FileButton aria-label="Newer turn" title="Newer turn" disabled={source().loading() || source().turnIndex() <= 0} onClick={() => void source().stepTurn(-1, source().turnIndex() - 1)}><Icons.ChevronRight /></FileButton>
       </TurnNavigation>
     </Show>

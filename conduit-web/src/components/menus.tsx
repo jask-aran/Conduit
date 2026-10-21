@@ -48,7 +48,7 @@ function measureGap() {
   probe.remove();
   return gap;
 }
-export const Menu = Object.assign((props: ComponentProps<typeof KMenu>) => {
+export const DropdownMenu = Object.assign((props: ComponentProps<typeof KMenu>) => {
   // Measured once, as the menu is made: inside the JSX each is a getter Kobalte reads on every position update.
   const padding = edgePadding(), gap = popoverGap();
   return <KMenu overflowPadding={padding} gutter={gap} {...props} onOpenChange={(open) => { if (!open) haptic("dismiss"); props.onOpenChange?.(open); }} />;
@@ -293,14 +293,14 @@ export function Select(props: JSX.SelectHTMLAttributes<HTMLSelectElement> & { ba
     read();
   };
   return <>
-    <Menu modal={false} placement="bottom-end" onOpenChange={(open) => open && read()}>
+    <DropdownMenu modal={false} placement="bottom-end" onOpenChange={(open) => open && read()}>
       <KMenu.Trigger as={SelectTrigger} id={local.id} title={local.title} disabled={local.disabled} aria-label={local["aria-label"]} value={label()} bare={local.bare ?? true} />
       <MenuContent>
         <KMenu.RadioGroup value={value()} onChange={choose}>
           <For each={options()}>{(option) => <MenuRadioItem value={option.value} disabled={option.disabled}>{option.label}</MenuRadioItem>}</For>
         </KMenu.RadioGroup>
       </MenuContent>
-    </Menu>
+    </DropdownMenu>
     <select {...rest} hidden disabled={local.disabled} ref={(element) => { select = element; (local.ref as ((element: HTMLSelectElement) => void) | undefined)?.(element); }}>{local.children}</select>
   </>;
 }

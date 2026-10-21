@@ -2,7 +2,7 @@ import { HarnessMark } from "@/components/ui";
 import { Icons } from "@/components/ui";
 import { createSignal, For, Index, onMount, Show, type JSX } from "solid-js";
 
-import { Menu, MenuContent, MenuSection, MenuRadioGroup, MenuRadioItem, MenuControl } from "@/components/menus";
+import { DropdownMenu, MenuContent, MenuSection, MenuRadioGroup, MenuRadioItem, MenuControl } from "@/components/menus";
 import { DashDay, GroupAction, GroupCompactHeading } from "@/components/ui/dashboard";
 
 import { SplitGroupMore, watchFold } from "./split";
@@ -80,10 +80,10 @@ function ChoiceGroup(props: { choice: ListChoice }) {
 /** One choice as its own quiet dropdown, naming the option in force. */
 function ChoiceFilter(props: { choice: ListChoice }) {
   const current = () => props.choice.options.find((option) => option.value === props.choice.value) ?? props.choice.options[0];
-  return <Menu modal={false}>
+  return <DropdownMenu modal={false}>
     <MenuControl as={GroupAction} title={props.choice.label}>{current()?.short ?? current()?.label}<Icons.ChevronDown /></MenuControl>
     <MenuContent><ChoiceGroup choice={props.choice} /></MenuContent>
-  </Menu>;
+  </DropdownMenu>;
 }
 
 /**
@@ -107,12 +107,12 @@ export function FilterBar(props: { choices: Array<ListChoice | false | null | un
  *  each choice a group, the current option bold (no tick). */
 export function FiltersMenu(props: { choices: Array<ListChoice | false | null | undefined>; title?: string; trigger?: JSX.Element }) {
   const choices = () => props.choices.filter(Boolean) as ListChoice[];
-  return <Menu modal={false}>
+  return <DropdownMenu modal={false}>
     <MenuControl as={GroupAction} title={props.title ?? "Filters"}>{props.trigger ?? <>Filters<Icons.ChevronDown /></>}</MenuControl>
     <MenuContent>
       <For each={choices()}>{(choice) => <ChoiceGroup choice={choice} />}</For>
     </MenuContent>
-  </Menu>;
+  </DropdownMenu>;
 }
 
 export const sortChoice = (sort: "latest" | "created", onSort: (sort: "latest" | "created") => void): ListChoice => ({

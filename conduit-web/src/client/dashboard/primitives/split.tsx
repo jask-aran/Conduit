@@ -1,6 +1,6 @@
 import { duration, easing, reducedMotion } from "@/components/ui/motion";
 import { createContext, createEffect, createSignal, For, Index, onCleanup, onMount, Show, splitProps, useContext, type Accessor, type JSX } from "solid-js";
-import { Menu, MenuContent, MenuControl, MenuRow, MenuSection } from "@/components/menus";
+import { DropdownMenu, MenuContent, MenuControl, MenuRow, MenuSection } from "@/components/menus";
 import { Counts, DashEmpty, DashHeader, DashIconButton, Dashboard, DashMore, DashRow, Group, GroupHeading, GroupToggle, QuickAction, QuickActions, QuickMore } from "@/components/ui/dashboard";
 import { installSplitCursor, type SplitPage } from "./split-cursor";
 import { isMobileLayout, MOBILE_LAYOUT_QUERY } from "../../navigation/mobile-layout";
@@ -215,13 +215,13 @@ export function SplitQuickActions(props: { items: Array<SplitQuickAction | false
   return <QuickActions>
     <Index each={items()}>{(item, index) => <QuickAction icon={item().icon} label={item().label} folded={index >= fit()} onClick={() => item().onClick()} />}</Index>
     <QuickMore ref={(element) => { more = element; }} keep={Boolean(props.manage)} hidden={!props.manage && !folded().length}>
-      <Menu modal={false}>
+      <DropdownMenu modal={false}>
         <MenuControl as={DashIconButton} tabIndex={-1} aria-label={props.label ?? "More"} title={props.label ?? "More"} />
         <MenuContent>
           <Show when={folded().length}><MenuSection><For each={folded()}>{(item) => <MenuRow icon={item.icon} onSelect={() => item.onClick()}>{item.label}</MenuRow>}</For></MenuSection></Show>
           <Show when={props.manage}><MenuSection>{props.manage?.()}</MenuSection></Show>
         </MenuContent>
-      </Menu>
+      </DropdownMenu>
     </QuickMore>
   </QuickActions>;
 }

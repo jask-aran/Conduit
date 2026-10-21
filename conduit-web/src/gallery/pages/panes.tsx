@@ -7,7 +7,7 @@ import { HistoryList, HistoryRow, HistoryBranch } from "@/components/ui/history"
 import { TermKeys, TermKey } from "@/components/ui/terminal";
 import { TermHeader, TermIdentity, TermStatus, TermContext, TermShortcuts, TermShortcut, TermOverflow, TermActions, TermActionLabel, TermState, TermError } from "@/components/ui/terminal";
 import { Button as TermButton } from "@/components/ui/controls";
-import { Menu as LiveMenu, MenuContent as LiveMenuContent, MenuSection as LiveMenuSection, MenuRow as LiveMenuRow } from "@/components/menus";
+import { DropdownMenu as LiveMenu, MenuContent as LiveMenuContent, MenuSection as LiveMenuSection, MenuRow as LiveMenuRow } from "@/components/menus";
 import { ClockIcon } from "lucide-solid";
 import { Show } from "solid-js";
 import { Spinner, Segmented } from "@/components/ui";

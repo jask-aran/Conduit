@@ -2,7 +2,7 @@ import { Icons } from "@/components/ui";
 import { createMemo, For, Show } from "solid-js";
 
 import { MenuNote, Picker, Section, Slider, Spinner } from "@/components/ui";
-import { Menu, MenuContent, MenuRadioGroup, MenuRadioItem, MenuRow, MenuSection, MenuSub, MenuSubContent, MenuSubValue } from "@/components/menus";
+import { DropdownMenu, MenuContent, MenuRadioGroup, MenuRadioItem, MenuRow, MenuSection, MenuSub, MenuSubContent, MenuSubValue } from "@/components/menus";
 import type { ModelOption } from "../api/contracts";
 
 const thinkingLabel = (value: string) => value ? value[0]!.toUpperCase() + value.slice(1) : "Off";
@@ -69,9 +69,9 @@ export function ModelSelector(props: {
   // trigger for a second one just churns the composer.
   const pending = createMemo(() => Boolean(props.loading) && !label());
 
-  return <Menu>
-    <Menu.Trigger as={Picker} subject={Boolean(props.onSearchModels)} aria-label={pending() ? "Connecting to model" : `${label() || "Model"} ${props.thinkingLevel || "off"}`} disabled={props.disabled || pending()}
+  return <DropdownMenu>
+    <DropdownMenu.Trigger as={Picker} subject={Boolean(props.onSearchModels)} aria-label={pending() ? "Connecting to model" : `${label() || "Model"} ${props.thinkingLevel || "off"}`} disabled={props.disabled || pending()}
       icon={pending() ? <Spinner /> : undefined} value={pending() ? "Connecting…" : label() || "Model"} quiet={pending() ? undefined : props.thinkingLevel || "off"} />
     <MenuContent><ModelMenuItems {...props} /></MenuContent>
-  </Menu>;
+  </DropdownMenu>;
 }
