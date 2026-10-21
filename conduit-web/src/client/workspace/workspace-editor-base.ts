@@ -28,7 +28,7 @@ export const editorTheme = EditorView.theme({
   },
   ".cm-lineNumbers .cm-gutterElement": { minWidth: "28px", padding: "0 var(--space-xs) 0 var(--space-xs)" },
   ".cm-activeLine, .cm-activeLineGutter": {
-    backgroundColor: "color-mix(in oklch, var(--accent), transparent 55%)",
+    backgroundColor: "color-mix(in oklch, var(--border), transparent 55%)",
   },
   // CodeMirror's own dark selection is more specific than a theme's (.ͼ1.ͼ3.cm-focused > … .cm-selectionBackground).
   ".cm-selectionBackground, &.cm-focused .cm-selectionBackground, ::selection": {
@@ -70,26 +70,26 @@ export const editorTheme = EditorView.theme({
     backgroundSize: "calc(var(--workspace-indent-depth) * var(--workspace-indent-size)) 100%",
   },
   ".cm-matchingBracket": {
-    backgroundColor: "var(--accent)",
+    backgroundColor: "var(--border)",
     outline: "var(--hairline) solid var(--ring)",
   },
   ".cm-selectionMatch": { backgroundColor: "color-mix(in oklch, var(--foreground), transparent 88%)" },
   ".cm-foldPlaceholder": {
     border: "var(--hairline) solid var(--border)",
     borderRadius: "var(--radius-inset)",
-    backgroundColor: "var(--accent)",
+    backgroundColor: "var(--border)",
     color: "var(--muted-foreground)",
   },
   ".cm-panels": {
     borderColor: "var(--border)",
     backgroundColor: "var(--popover)",
-    color: "var(--popover-foreground)",
+    color: "var(--foreground)",
   },
   ".cm-panels.cm-panels-top": { borderBottom: "var(--hairline) solid var(--border)" },
   ".cm-panels.cm-panels-bottom": { borderTop: "var(--hairline) solid var(--border)" },
   ".cm-search label": { color: "var(--muted-foreground)", fontFamily: "var(--font-sans)" },
   ".cm-textfield": {
-    border: "var(--hairline) solid var(--input)",
+    border: "var(--hairline) solid var(--border)",
     borderRadius: "var(--radius-inset)",
     outline: "none",
     backgroundColor: "var(--background)",
@@ -100,18 +100,18 @@ export const editorTheme = EditorView.theme({
     border: "var(--hairline) solid var(--border)",
     borderRadius: "var(--radius-inset)",
     backgroundImage: "none",
-    backgroundColor: "var(--accent)",
+    backgroundColor: "var(--border)",
     color: "var(--foreground)",
   },
   ".cm-tooltip": {
     border: "var(--hairline) solid var(--border)",
     borderRadius: "var(--radius-inset)",
     backgroundColor: "var(--popover)",
-    color: "var(--popover-foreground)",
+    color: "var(--foreground)",
     boxShadow: "var(--lift-rest)",
   },
   ".cm-tooltip-autocomplete > ul > li[aria-selected]": {
-    backgroundColor: "var(--accent)",
+    backgroundColor: "var(--border)",
     color: "var(--foreground)",
   },
 }, { dark: true });
