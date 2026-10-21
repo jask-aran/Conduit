@@ -140,8 +140,8 @@
 .ui-nav-pane[data-folded] .ui-nav-head > .ui-seg .ui-seg-thumb { inset: calc(var(--seg-pad) + (100% - 2 * var(--seg-pad)) / var(--segments) * var(--segment)) var(--seg-pad) auto; width: auto; height: calc((100% - 2 * var(--seg-pad)) / var(--segments)); transition: top var(--duration-gentle) var(--ease-arrive); }
 @media (prefers-reduced-motion: reduce) { .ui-nav-pane[data-folded] :is(.ui-nav-rail, .ui-nav-head > .ui-seg) { animation: none; } }
 
-/* A phone's: a drawer over the page, the whole width, the head in pills on the top line (the server between the
-   wordmark and the switch, its text giving way first), and no foot. */
+/* A phone's: a drawer over the page, the whole width, and no foot. The head is the wordmark on the ground and the
+   switch, a frost pill; the server is the list's first line (NavLead), so what it says never moves the head. */
 .ui-nav-pane[data-drawer] { position: fixed; inset-block: 0; left: 0; z-index: var(--layer-drawer); width: 100vw; background: var(--frame); transform: translateX(-102%); transition: transform var(--panel-motion-duration) var(--panel-motion-easing); }
 .ui-nav-pane[data-drawer="open"] { transform: translateX(0); }
 .ui-nav-pane[data-drawer] .ui-nav-pane-body { width: 100%; height: var(--app-height, 100dvh); padding-top: var(--safe-area-inset-top, env(safe-area-inset-top, 0px)); padding-bottom: var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)); background: var(--frame); overscroll-behavior: contain; }
@@ -149,8 +149,12 @@
 .ui-nav-pane[data-drawer] .ui-nav-head { min-height: calc(var(--pill-size) + var(--space-md) + var(--space-xs)); justify-content: space-between; padding: var(--space-md) var(--space-md) var(--space-xs); }
 .ui-nav-pane[data-drawer] .ui-nav-brand { flex: none; height: var(--pill-slot); padding: 0 var(--space-md); }
 .ui-nav-pane[data-drawer] .ui-nav-brand > span { transform: translateY(0.16em); }
-.ui-nav-pane[data-drawer] .ui-nav-head > :not(.ui-nav-brand, .ui-seg) { display: flex; order: 1; min-width: 0; flex: 1; flex-direction: column; justify-content: center; }
-.ui-nav-pane[data-drawer] .ui-nav-notice { margin: 0; border: 0; padding: 0 var(--space-md); font-size: var(--text-caption); }
+/* NavLead: the server filling the line, its actions ghost icons at its end; a notice under it. */
+.ui-nav-lead { display: grid; gap: var(--space-xs); margin-bottom: var(--space-md); }
+.ui-nav-lead-line { display: flex; min-width: 0; align-items: center; gap: var(--space-xs); }
+.ui-nav-lead-line > :first-child { min-width: 0; flex: 1; }
+.ui-nav-lead-actions { display: flex; flex: none; gap: var(--space-2xs); }
+.ui-nav-lead > .ui-nav-notice { margin: 0; }
 
 /* StatusDot: a row's live state in an --icon slot, a dot in its tone (or a Spinner while it works). */
 .ui-status { display: inline-grid; width: var(--icon); height: var(--icon); flex: none; place-items: center; color: var(--muted-foreground); }
