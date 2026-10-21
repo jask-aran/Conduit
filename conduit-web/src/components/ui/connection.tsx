@@ -65,13 +65,14 @@ export function PasswordSignIn(props: { after: string; error?: string | null; on
   </ConnectionForm>;
 }
 
-export function ServerControl(props: JSX.ButtonHTMLAttributes<HTMLButtonElement> & { name: string; detail: string; connectivity: string; compact?: boolean }) {
-  const [local, rest] = splitProps(props, ["name", "detail", "connectivity", "compact"]);
+export function ServerControl(props: JSX.ButtonHTMLAttributes<HTMLButtonElement> & { name: string; detail: string; connectivity: string; compact?: boolean; inline?: boolean }) {
+  const [local, rest] = splitProps(props, ["name", "detail", "connectivity", "compact", "inline"]);
   const busy = () => local.connectivity === "connecting" || local.connectivity === "reconnecting";
   const tone = () => local.connectivity === "online" ? "success" : local.connectivity === "offline" ? "danger" : local.connectivity === "reconnecting" ? "warn" : "muted";
   const dot = () => <StatusDot label={local.detail} tone={tone()} spinning={busy()} />;
   // The name where you are (Row · current), its dot beside it; its state and latency in the data voice, as its menu's meta.
-  return <Button {...rest} variant="ghost" class="ui-server-control" data-compact={local.compact ? "" : undefined}>
+  // inline: one line, the state after the name (a desktop rail's foot); otherwise the state under it (a phone's list).
+  return <Button {...rest} variant="ghost" class="ui-server-control" data-compact={local.compact ? "" : undefined} data-inline={local.inline ? "" : undefined}>
     <Show when={!local.compact} fallback={dot()}>
       <span class="ui-server-copy"><span class="ui-server-name"><strong>{local.name}</strong>{dot()}</span><small>{local.detail}</small></span>
     </Show>

@@ -2,7 +2,7 @@ import { Dialog } from "@/components/dialog";
 import { Section as DialogSection, Item as DialogItem } from "@/components/ui/popover";
 import { CardActions, CardForm, CardBody, CardRead, CardNote } from "@/components/ui/card";
 import { Button as DialogButton, Input as DialogInput, Field as DialogField } from "@/components/ui/controls";
-import { Backdrop, Button, NavBrand, NavLead, NavFolder, NavFolderRow, NavGroup, NavLinks, NavNote, NavNotice, NavPane, NavRail, NavRailSection, NavRow, NavSkeleton, PillSwitch, RailButton, Segmented, StatusDot } from "@/components/ui";
+import { Backdrop, Button, NavBrand, NavLead, NavFolder, NavFolderRow, NavGroup, NavNote, NavNotice, NavPane, NavRail, NavRailSection, NavRow, NavSkeleton, PillSwitch, RailButton, Segmented, StatusDot } from "@/components/ui";
 import { ContextMenu, ContextMenuContent, ContextMenuTrigger, MenuRow, MenuSection } from "@/components/menus";
 import { isConduitManagedProject } from "./sidebar-preferences";
 import { ServerSwitcher } from "./server-switcher";
@@ -30,7 +30,6 @@ import {
 import type { ChatSummary, ComputerLocation, HarnessSummary, Project, RuntimeProcess, WorkspacePolicy, WorkspaceSuggestion } from "../api/contracts";
 import type { UpdateState } from "../main";
 import { androidShell, installedClientKind } from "../platform/installed-client";
-import { latestRelease, type PublishedRelease } from "../platform/github-release";
 import { api } from "../api/client";
 import { WorkspaceGlyph } from "../project/workspace-appearance";
 import { ChatMenuItems, MoveTo, PlaceMenuItems } from "./item-menus";
@@ -93,18 +92,6 @@ function UpdateNotice(props: { state?: UpdateState; onTake?: () => void }) {
   </Show>;
 }
 
-function InstallerDownloads() {
-  const [release, setRelease] = createSignal<PublishedRelease | null>(null);
-  const releasesPage = "https://github.com/jask-aran/Conduit/releases/latest";
-  onMount(() => { void latestRelease().then(setRelease).catch(() => setRelease(null)); });
-  return <NavLinks label="Download" links={[
-    { href: release()?.windowsUrl || releasesPage, label: "Download for Windows", icon: <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3 3h8v8H3zm10 0h8v8h-8zM3 13h8v8H3zm10 0h8v8h-8z" /></svg> },
-    { href: release()?.apkUrl || releasesPage, label: "Download for Android", icon: <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-      <path d="m7.2 6-1.8-3 .9-.5 1.9 3.1a9 9 0 0 1 7.6 0l1.9-3.1.9.5-1.8 3A9 9 0 0 1 21 13H3a9 9 0 0 1 4.2-7ZM3 14h18v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z" />
-      <path d="M7.5 9h.01m8.99 0h.01" stroke="var(--background)" stroke-width="2" stroke-linecap="round" />
-    </svg> },
-  ]} />;
-}
 
 function SidebarChatTitle(props: { title: string; animate: boolean }) {
   let element!: HTMLSpanElement;
@@ -946,8 +933,8 @@ export function Sidebar(props: {
     </NavGroup>;
   };
 
-  const serverSwitcher = () => <ServerSwitcher compact={!phoneLayout() && visualCollapsed()} connectivity={props.connectivity} pwaUpdating={props.pwaUpdating}
-    downloads={phoneLayout() && installedClientKind === "browser"}
+  const serverSwitcher = () => <ServerSwitcher compact={!phoneLayout() && visualCollapsed()} inline={!phoneLayout()} connectivity={props.connectivity} pwaUpdating={props.pwaUpdating}
+    downloads={installedClientKind === "browser"}
     onOpenSettings={() => { closeMobile(); props.onOpenSettings(); }}
     onUpdatePwa={() => props.onUpdatePwa()}
     onAddServer={() => { closeMobile(); props.onAddServer?.(); }}
@@ -990,7 +977,6 @@ export function Sidebar(props: {
           * they could not see.
           */}
         <UpdateNotice state={props.updateState} onTake={props.onTakeUpdate} />
-        <Show when={installedClientKind === "browser"}><InstallerDownloads /></Show>
         {serverSwitcher()}
       </>}>
       <NavRail label="Quick navigation">
