@@ -113,10 +113,7 @@
      original three-track layout untouched. */
   .workspace-files[data-wide="true"][data-tree-collapsed="true"] { grid-template-columns: var(--control-lg) 0 minmax(0, 1fr); }
   .workspace-files[data-wide="true"][data-tree-collapsed="true"] .workspace-tree-pane,
-  .workspace-files[data-wide="true"][data-tree-collapsed="true"] .workspace-tree-resize-handle { display: none; }
-  .workspace-tree-resize-handle { position: relative; z-index: 5; grid-column: 2; grid-row: 1; cursor: col-resize; touch-action: none; }
-  .workspace-tree-resize-handle::after { content: ""; position: absolute; inset-block: 0; left: 50%; translate: -50% 0; width: var(--hairline); background: var(--border); transition: background var(--duration-quick) var(--ease-change); }
-  .workspace-tree-resize-handle:hover::after, .workspace-tree-resize-handle:focus-visible::after, .workspace-tree-resizing .workspace-tree-resize-handle::after { background: var(--ring); }
+  .workspace-files[data-wide="true"][data-tree-collapsed="true"] > .ui-split-edge { display: none; }
 }
 
 @media (--conduit-phone-layout) {
