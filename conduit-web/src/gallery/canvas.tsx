@@ -5,21 +5,21 @@ import "../client/styles.css";
 import "./gallery.css";
 import "@/components/ui/styles";
 import { ChatScreen } from "./stories";
-import { NavGroup, NavRow, Frost } from "@/components/ui";
+import { NavGroup, NavRow } from "@/components/ui";
 import { SidebarScreen } from "./sidebar-story";
 import { TypeLens } from "./type-lens";
 
 // The gallery is all library: its rules that the app keeps to library pieces (no focus ring) hold on the whole page.
 document.documentElement.setAttribute("data-library", "");
-import { applyFaces, applyScale, foundationFamilies } from "./foundations";
-import { libraryFamilies } from "./library";
+import { applyFaces, applyScale, foundationPages } from "./foundations";
+import { libraryPages } from "./library";
 import { overlayViews, type OverlayView } from "./pages/overlay";
-import { type Atom, type Family, type Page } from "./model";
-import { PageApi, PageUsage, PageUsedIn, PageView } from "./page";
+import { type Page } from "./model";
+import { PageView } from "./page";
 
 /*
- * Components v2 (components/ui) on the left, by family: the base piece, its
- * constituents, then the app's pieces assembled from them. On the right the
+ * Components v2 (components/ui) on the left, a page each, drawn to one template (page.tsx): the foundations,
+ * the components, the blocks composed from them. On the right the
  * app's own screens, desktop or phone, drawn with components v2. The tuning
  * box applies CSS everywhere at once and never writes source.
  */
@@ -37,27 +37,6 @@ const SPEEDS = [1, .5, .25, .1];
 const frames = () => Array.from(document.querySelectorAll<HTMLIFrameElement>("iframe"));
 const tuneFrame = (event: Event) => { const doc = (event.currentTarget as HTMLIFrameElement).contentDocument; if (doc) applyTune(doc, read()); };
 
-type Density = "desktop" | "phone";
-type Surface = "ground" | "frost";
-/** The surface a staged cell is drawn on: the ground, or a raised frost. */
-const OnSurface = (props: { surface: Surface; children: () => JSX.Element }) => <>{props.surface === "frost"
-  ? <Frost lift="raised" class="g-surface g-stage-surface">{props.children()}</Frost>
-  : <div class="g-surface g-stage-surface" data-surface="ground">{props.children()}</div>}</>;
-
-/** A cell. A piece used in both layouts gets a toggle to draw it at either; fixed: drawn at that layout only; surface: drawn on it. */
-function Piece(props: { atom: Atom; fixed?: Density; surface?: Surface }) {
-  const toggles = () => !props.fixed && props.atom.scope === "both";
-  const [own, setDensity] = createSignal<Density>(props.atom.scope === "phone" ? "phone" : "desktop");
-  const density = () => props.fixed ?? own();
-  return <figure class="g-cell" id={props.atom.id} data-wide={props.atom.wide === "row" ? "row" : props.atom.wide ? "" : undefined}>
-    <figcaption class="g-tag" title={props.atom.source}><strong>{props.atom.name}</strong><span data-scope={props.atom.scope}>{props.atom.scope === "both" ? "desktop + phone" : props.atom.scope + " only"}</span><span data-kind={props.atom.kind}>{props.atom.kind}</span></figcaption>
-    <Show when={toggles()}><div class="g-cell-toggle" role="group" aria-label="Layout">
-      <button type="button" aria-pressed={density() === "desktop"} onClick={() => setDensity("desktop")}>Desktop</button>
-      <button type="button" aria-pressed={density() === "phone"} onClick={() => setDensity("phone")}>Phone</button>
-    </div></Show>
-    <div class="g-cell-body" data-density={density()}>{props.surface ? <OnSurface surface={props.surface}>{() => props.atom.render()}</OnSurface> : props.atom.render()}</div>
-  </figure>;
-}
 
 function Canvas() {
   const [tune, setTune] = createSignal(read());
@@ -96,23 +75,18 @@ function Canvas() {
   const openOnPhone = (view: OverlayView | null) => { setPhoneOverlay(view); phoneFrame()?.contentWindow?.postMessage({ galleryOverlay: view }, location.origin); };
   addEventListener("message", (event) => { if (event.origin === location.origin && event.data?.galleryOverlayClosed) setPhoneOverlay(null); });
   // One page at a time, picked from the rail: the foundations, then each component, then the blocks composed from them.
-  // Pages drawn to the template (PageView), and the families not yet moved onto it.
-  const families: (Family | Page)[] = [...foundationFamilies, ...libraryFamilies];
+  const families: Page[] = [...foundationPages, ...libraryPages];
   const stored = (() => { try { return localStorage.getItem("gallery:family"); } catch { return null; } })();
-  const [current, setCurrent] = createSignal(families.find((family) => family.title === stored)?.title ?? libraryFamilies[0]!.title);
+  const [current, setCurrent] = createSignal(families.find((family) => family.title === stored)?.title ?? libraryPages[0]!.title);
   let left!: HTMLElement;
   const pick = (title: string) => { setCurrent(title); left.scrollTop = 0; try { localStorage.setItem("gallery:family", title); } catch { /* private window */ } };
   const shown = () => families.filter((family) => family.title === current());
-  // A staged page (Controls) draws its staged groups once, on one surface at one density, picked at its top and remembered.
   const remembered = <T extends string>(key: string, values: T[]) => { try { const value = localStorage.getItem(key) as T; return values.includes(value) ? value : values[0]!; } catch { return values[0]!; } };
   const [lens, setLens] = createSignal(remembered("gallery:type-lens", ["false", "true"]) === "true");
+  // The app beside the pages: hidden, a page takes the whole width (its tables need it). Remembered.
+  const [app, setApp] = createSignal(remembered("gallery:app", ["true", "false"]) === "true");
+  const toggleApp = () => { const value = !app(); setApp(value); try { localStorage.setItem("gallery:app", String(value)); } catch { /* private window */ } };
   const toggleLens = () => { const value = !lens(); setLens(value); try { localStorage.setItem("gallery:type-lens", String(value)); } catch { /* private window */ } };
-  const [surface, setSurface] = createSignal(remembered<Surface>("gallery:stage-surface", ["ground", "frost"]));
-  const [stageDensity, setStageDensity] = createSignal(remembered<Density>("gallery:stage-density", ["desktop", "phone"]));
-  const stage = <T extends string>(set: (value: T) => void, key: string) => (value: T) => { set(value); try { localStorage.setItem(key, value); } catch { /* private window */ } };
-  const pickSurface = stage(setSurface, "gallery:stage-surface"), pickDensity = stage(setStageDensity, "gallery:stage-density");
-  // A piece for one layout only keeps it on a staged page.
-  const staged = (atom: Atom): Density => atom.scope === "both" ? stageDensity() : atom.scope;
   // Foundations keep their authored order (type first); components and blocks are A–Z, as a component index is.
   const rail = RAILS.map((label) => {
     const listed = families.filter((family) => (family.rail ?? "Components") === label);
@@ -140,7 +114,7 @@ function Canvas() {
     tick();
     onCleanup(() => cancelAnimationFrame(frame));
   });
-  return <div class="g-canvas" data-preview={preview()}>
+  return <div class="g-canvas" data-preview={preview()} data-app={app() ? undefined : "hidden"}>
     <TypeLens on={lens()} frames={frames} />
     {/* The rail is drawn as the sidebar is, with the library's NavGroups and NavRows, at the desktop's density. */}
     <nav class="g-rail" aria-label="Families" data-density="desktop">
@@ -153,6 +127,7 @@ function Canvas() {
       <div class="g-bar">
         <button type="button" aria-pressed={tuning()} onClick={() => setTuning(!tuning())}>Tune CSS</button>
         <button type="button" aria-pressed={lens()} onClick={toggleLens}>Type lens</button>
+        <button type="button" aria-pressed={!app()} onClick={toggleApp}>{app() ? "Hide app" : "Show app"}</button>
         <Show when={tuning()}><button type="button" onClick={() => void navigator.clipboard.writeText(tune())}>Copy</button></Show>
         <div class="g-toggle g-speed" role="group" aria-label="Animation speed"><span>Speed</span>
           <For each={SPEEDS}>{(rate) => <button type="button" aria-pressed={speed() === rate} onClick={() => setSpeed(rate)}>{rate}×</button>}</For>
@@ -160,23 +135,7 @@ function Canvas() {
       </div>
       <Show when={tuning()}><textarea class="g-tune" spellcheck={false} value={tune()} onInput={(event) => update(event.currentTarget.value)}
         placeholder={".ui-frost {\n  backdrop-filter: blur(30px);\n}"} /></Show>
-      <For each={shown()}>{(entry) => "groups" in entry ? (() => { const family = entry; return <section class="g-family">
-        <h2 class="g-family-title">{family.title} <small>{family.note}</small></h2>
-        <Show when={family.stage}><div class="g-stage">
-          <div class="g-toggle" role="group" aria-label="Surface">
-            <For each={["ground", "frost"] as Surface[]}>{(value) => <button type="button" aria-pressed={surface() === value} onClick={() => pickSurface(value)}>{value === "ground" ? "Ground" : "Frost"}</button>}</For>
-          </div>
-          <div class="g-toggle" role="group" aria-label="Density">
-            <For each={["desktop", "phone"] as Density[]}>{(value) => <button type="button" aria-pressed={stageDensity() === value} onClick={() => pickDensity(value)}>{value === "desktop" ? "Desktop" : "Phone"}</button>}</For>
-          </div>
-        </div></Show>
-        <Show when={family.usage}>{(code) => <PageUsage code={code()} />}</Show>
-        <For each={family.groups}>{(group) => <>
-          <Show when={group.title}><h3 class="g-heading">{group.title} <small>{group.note}</small></h3></Show>
-          <div class="g-grid g-dense"><For each={group.atoms}>{(atom) => <Piece atom={atom} fixed={group.staged ? staged(atom) : group.layout} surface={group.staged === true ? surface() : undefined} />}</For></div>
-        </>}</For>
-        <Show when={family.api?.length}><PageApi names={family.api!} /><PageUsedIn names={family.api!} /></Show>
-      </section>; })() : <PageView page={entry} />}</For>
+      <For each={shown()}>{(page) => <PageView page={page} />}</For>
     </section>
     <aside class="g-right">
       <div class="g-toggles">

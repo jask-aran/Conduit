@@ -9,8 +9,8 @@ import { PaneEmpty } from "@/components/ui/pane";
 import { Browser, BrowserLayout, BrowserSidebar, BrowserHeading, BrowserPlaces, BrowserPlace, BrowserMain, BrowserToolbar, BrowserActions, BrowserSearch, BrowserAddress, BrowserCount, BrowserSummary, BrowserSpacer, BrowserColumns, BrowserGrid, BrowserEntry, BrowserMark, BrowserDivider, BrowserEmpty, BrowserLoading, BrowserError } from "@/components/ui/browser";
 import { ListIcon } from "lucide-solid";
 import type { JSX } from "solid-js";
-import { FormTable, form, States } from "./specs";
-import { lib, type Family } from "./model";
+
+import { row, token, type Page } from "./model";
 
 /*
  * Files and the editor (components/ui/file.tsx, viewer.tsx, editor.tsx): a file's header, body and status bar, the
@@ -106,8 +106,8 @@ const Assembled = (props: { compact?: boolean; details?: boolean }) => <div styl
 </BrowserLayout></Browser></div>;
 const Pane = (props: { children: JSX.Element }) => <div style={{ ...box(45), position: "relative", display: "flex", "flex-direction": "column", "min-height": "calc(12 * var(--u-space))" }}><BrowserMain>{props.children}</BrowserMain></div>;
 
-export const filesFamilies = (): Family[] => [
-  { title: "Files", note: "a file in a pane or the dock: its header (name, git letter, unsaved dot, actions and tools, the ⋯ they fold into, close), its body, and the status bar at its foot. Two files side by side share a viewer with a divider and a swap. The app measures the header and folds actions into the ⋯ lowest data-fold first; the tab row (Panes) replaces the name when a pane holds tabs", rail: "Blocks",
+export const filesPage: Page = { title: "Files", summary: "A file in a pane or the dock: its header (name, git letter, unsaved dot, actions and tools, the ⋯ they fold into, close), its body, and the status bar at its foot. Two files side by side share a viewer with a divider and a swap. The app measures the header and folds actions into the ⋯ lowest data-fold first; the tab row (Panes) replaces the name when a pane holds tabs.", rail: "Blocks",
+  preview: () => <div style={box(30)}><File /></div>,
   usage: `import { FileViewer, FileView, FileHead, FileName, FileGit, FileDirty, FileActions, FileButton, StatusBar, StatusPicker, StatusText } from "@/components/ui/file";
 import { FileBody } from "@/components/ui/viewer";
 import { Icons } from "@/components/ui";
@@ -122,40 +122,43 @@ import { Icons } from "@/components/ui";
   <FileBody editing>{editor()}</FileBody>
   <StatusBar commands={<StatusPicker strong>Edit</StatusPicker>}><StatusText>TypeScript</StatusText></StatusBar>
 </FileView></FileViewer>`,
-  api: ["FileViewer", "FileView", "FileHead", "FileName", "FileGit", "FileDirty", "FileActions", "FileButton", "FileTools", "FileMore", "FileSuffix", "FileScope", "FileBody", "FileImage", "FileCard", "Button", "FileMedia", "StatusBar", "StatusPicker", "StatusText", "FileDivider", "FileSwap", "FileEmptySide", "FileEmpty", "FileChanges", "Comparison", "ComparisonContent", "CodeHost", "ComparisonSource", "TurnNavigation", "ComparisonCounts"],
-  groups: [
-    { title: "Header and status bar", note: "each state set by hand", layout: "desktop", atoms: [
-      lib("files-head", "FileHead · fitting", "both", "files", "components/ui/file.tsx", () => <FormTable rows={[
-        form("FileHead · FileName · FileGit · FileDirty", "a modified file with unsaved changes: the git letter, then the dot", () => <div style={box(30)}><Head git="M" dirty /></div>, "<FileHead><FileName path icon /><FileGit status /><FileDirty dirty />…</FileHead>"),
-        form("FileActions · FileTools · FileButton", "everything fits: copy and download, then find and wrap; close last", () => <div style={box(30)}><Head /></div>, '<FileButton label data-fold="1" />', "--control-tool buttons · --icon-sm"),
-        form("FileMore · data-folded", "too narrow: every action folds into the ⋯ (shown by the viewer once anything folds)", () => <FileViewer style={{ ...box(18.75), height: "auto" }}><FileView><Head folded /></FileView></FileViewer>, "data-folded on each folded button"),
-        form("StatusBar · StatusPicker · StatusText", "the mode picker leads with its mark (Edit, or Preview while editing); pickers end with a chevron; details at the right", () => <States states={["Viewing", "Editing"] as const}>{(state) => <div style={box(37.5)}><Status editing={state() === "Editing"} /></div>}</States>, "<StatusBar commands={<StatusPicker strong icon />}><StatusText /></StatusBar>", "--text-caption"),
-      ]} on={["desktop", "phone"]} stacked />, "row"),
-    ] },
-    { title: "Bodies", atoms: [
-      lib("files-bodies", "FileBody · FileImage · FileCard", "both", "files", "components/ui/viewer.tsx", () => <FormTable rows={[
-        form("FileView · FileBody", "a text file; focused, its header takes the wash", () => <States states={["Rest", "Focused"] as const}>{(state) => <div style={box(30)}><File focused={state() === "Focused"} /></div>}</States>, "<FileView focused><FileHead /><FileBody /><StatusBar /></FileView>"),
-        form("FileImage", "an image on its checker ground, contained", () => <div style={{ ...box(22), height: "calc(12.5 * var(--u-space))", display: "flex" }}><FileImage><Icons.Image style={{ width: "calc(6 * var(--u-space))", height: "calc(6 * var(--u-space))" }} /></FileImage></div>, "<FileImage><img /></FileImage>"),
-        form("FileCard", "a file the viewer cannot show: its kind, its size, and an action", () => <div style={{ ...box(22), display: "flex" }}><FileCard><Icons.FileText /><strong>archive.zip</strong><span>2.4 MB · application/zip</span><Button size="sm" variant="secondary"><Icons.Download />Download</Button></FileCard></div>, "<FileCard><strong /><span /><Button /></FileCard>"),
-      ]} on={["desktop", "phone"]} stacked />, "row"),
-    ] },
-    { title: "Two sides", atoms: [
-      lib("files-sides", "FileViewer · two sides", "desktop", "files", "components/ui/file.tsx · viewer.tsx", () => <FormTable rows={[
-        form("FileViewer · FileDivider · FileSwap", "two files beside each other: the divider between them (it drags, --side-a and --side-b), the swap over it", () => <FileViewer style={{ ...box(50), height: "calc(15 * var(--u-space))", position: "relative", display: "flex", "--side-a": "1", "--side-b": "1" }}>
-          <File focused /><FileDivider role="separator" aria-label="Resize the sides" style={{ left: "50%" }} /><FileSwap aria-label="Swap the sides" style={{ left: "calc(50% - var(--control-xs) / 2)" }}><Icons.Swap /></FileSwap><File />
-        </FileViewer>, "<FileViewer><FileView /><FileDivider /><FileSwap /><FileView /></FileViewer>"),
-        form("FileEmptySide · FileEmpty", "a side opened empty, waiting for a file", () => <FileViewer style={{ ...box(25), height: "calc(10 * var(--u-space))", display: "flex" }}><FileEmptySide><FileHead><strong class="g-file-none">No file open</strong></FileHead><FileEmpty role="status">Open a file from Files to show it here.</FileEmpty></FileEmptySide></FileViewer>, "<FileEmptySide><FileHead /><FileEmpty /></FileEmptySide>"),
-      ]} on={["desktop"]} stacked />, "row"),
-    ] },
-    { title: "Changes, media and suffix", note: "a file column holding a comparison instead of an editor, audio or video filling a body, and what a host adds to a header", atoms: [
-      lib("files-changes", "FileChanges · FileScope · FileMedia · FileSuffix", "both", "files", "components/ui/viewer.tsx · file.tsx", () => <FormTable rows={[
-        form("FileChanges · FileScope", "a file's changes in its column: the comparison (Editor › Comparison), its scope quiet beside the name; focused, it takes the wash. The app mounts CodeMirror where the text stands", () => <States states={["Rest", "Focused"] as const}>{(state) => <div style={box(37.5)}><FileChanges focused={state() === "Focused"}><ComparisonSample scope="Changes" /></FileChanges></div>}</States>, "<FileChanges focused><Comparison><FileHead><FileName /><FileScope /></FileHead>…</Comparison></FileChanges>"),
-        form("FileMedia", "audio, video or a PDF filling the file's remaining space (here an audio player with no source)", () => <FileView style={{ ...box(30), height: "calc(10 * var(--u-space))" }}><Head /><FileMedia><audio controls preload="none" aria-label="sample.mp3" /></FileMedia></FileView>, "<FileMedia><audio controls /></FileMedia>"),
-        form("FileSuffix", "what the host adds to the header, with the actions (here a pane's “Turn 3”)", () => <div style={box(30)}><FileHead><FileName path="src/greet.ts" icon={<Icons.FileCode />} /><FileSuffix><FileScope>Turn 3</FileScope></FileSuffix><FileButton label="Close file" close><Icons.Close /></FileButton></FileHead></div>, "<FileSuffix>{headerSuffix}</FileSuffix>"),
-      ]} on={["desktop", "phone"]} stacked />, "row"),
-    ] },
+  anatomy: { scene: () => <div style={box(30)}><File /></div>, parts: [
+    { selector: ".ui-file-head", name: "Header", does: "holds the file name, actions and tools", from: "FileHead" },
+    { selector: ".ui-file-body", name: "Body", does: "holds the file content", from: "FileBody" },
+    { selector: ".ui-status-bar", name: "Status", does: "shows the file mode and details", from: "StatusBar" }
   ] },
-  { title: "Editor", note: "the code surface a file's body holds (CodeMirror draws inside it): framed while editable, its find bar above, a line comment's popup over it, and a comparison's counts and turn steps in the status bar. The review's navigator (DiffShell) is the Panes family's Source control", rail: "Blocks",
+  examples: [
+    row("FileHead · FileName · FileGit · FileDirty", "a modified file with unsaved changes: the git letter, then the dot", () => <div style={box(30)}><Head git="M" dirty /></div>, { surfaces: ["ground"], phone: true, code: "<FileHead><FileName path icon /><FileGit status /><FileDirty dirty />…</FileHead>" }),
+    row("FileActions · FileTools · FileButton", "everything fits: copy and download, then find and wrap; close last; --control-tool buttons · --icon-sm", () => <div style={box(30)}><Head /></div>, { surfaces: ["ground"], phone: true, code: '<FileButton label data-fold="1" />' }),
+    row("FileMore · data-folded", "too narrow: every action folds into the ⋯ (shown by the viewer once anything folds)", () => <FileViewer style={{ ...box(18.75), height: "auto" }}><FileView><Head folded /></FileView></FileViewer>, { surfaces: ["ground"], phone: true, code: "data-folded on each folded button" }),
+    row("StatusBar · StatusPicker · StatusText · Viewing", "the mode picker leads with its mark (Edit, or Preview while editing); pickers end with a chevron; details at the right; --text-caption", () => <div style={box(37.5)}><Status editing={false} /></div>, { surfaces: ["ground"], phone: true, code: "<StatusBar commands={<StatusPicker strong icon />}><StatusText /></StatusBar>" }),
+    row("StatusBar · StatusPicker · StatusText · Editing", "the mode picker leads with its mark (Edit, or Preview while editing); pickers end with a chevron; details at the right; --text-caption", () => <div style={box(37.5)}><Status editing={true} /></div>, { surfaces: ["ground"], phone: true, code: "<StatusBar commands={<StatusPicker strong icon />}><StatusText /></StatusBar>" }),
+    row("FileView · FileBody · Rest", "a text file; focused, its header takes the wash", () => <div style={box(30)}><File focused={false} /></div>, { surfaces: ["ground"], phone: true, code: "<FileView focused><FileHead /><FileBody /><StatusBar /></FileView>" }),
+    row("FileView · FileBody · Focused", "a text file; focused, its header takes the wash", () => <div style={box(30)}><File focused={true} /></div>, { surfaces: ["ground"], phone: true, code: "<FileView focused><FileHead /><FileBody /><StatusBar /></FileView>" }),
+    row("FileImage", "an image on its checker ground, contained", () => <div style={{ ...box(22), height: "calc(12.5 * var(--u-space))", display: "flex" }}><FileImage><Icons.Image style={{ width: "calc(6 * var(--u-space))", height: "calc(6 * var(--u-space))" }} /></FileImage></div>, { surfaces: ["ground"], phone: true, code: "<FileImage><img /></FileImage>" }),
+    row("FileCard", "a file the viewer cannot show: its kind, its size, and an action", () => <div style={{ ...box(22), display: "flex" }}><FileCard><Icons.FileText /><strong>archive.zip</strong><span>2.4 MB · application/zip</span><Button size="sm" variant="secondary"><Icons.Download />Download</Button></FileCard></div>, { surfaces: ["ground"], phone: true, code: "<FileCard><strong /><span /><Button /></FileCard>" }),
+    row("FileViewer · FileDivider · FileSwap", "two files beside each other: the divider between them (it drags, --side-a and --side-b), the swap over it", () => <FileViewer style={{ ...box(50), height: "calc(15 * var(--u-space))", position: "relative", display: "flex", "--side-a": "1", "--side-b": "1" }}>
+          <File focused /><FileDivider role="separator" aria-label="Resize the sides" style={{ left: "50%" }} /><FileSwap aria-label="Swap the sides" style={{ left: "calc(50% - var(--control-xs) / 2)" }}><Icons.Swap /></FileSwap><File />
+        </FileViewer>, { surfaces: ["ground"], code: "<FileViewer><FileView /><FileDivider /><FileSwap /><FileView /></FileViewer>" }),
+    row("FileEmptySide · FileEmpty", "a side opened empty, waiting for a file", () => <FileViewer style={{ ...box(25), height: "calc(10 * var(--u-space))", display: "flex" }}><FileEmptySide><FileHead><strong class="g-file-none">No file open</strong></FileHead><FileEmpty role="status">Open a file from Files to show it here.</FileEmpty></FileEmptySide></FileViewer>, { surfaces: ["ground"], code: "<FileEmptySide><FileHead /><FileEmpty /></FileEmptySide>" }),
+    row("FileChanges · FileScope · Rest", "a file's changes in its column: the comparison (Editor › Comparison), its scope quiet beside the name; focused, it takes the wash. The app mounts CodeMirror where the text stands", () => <div style={box(37.5)}><FileChanges focused={false}><ComparisonSample scope="Changes" /></FileChanges></div>, { surfaces: ["ground"], phone: true, code: "<FileChanges focused><Comparison><FileHead><FileName /><FileScope /></FileHead>…</Comparison></FileChanges>" }),
+    row("FileChanges · FileScope · Focused", "a file's changes in its column: the comparison (Editor › Comparison), its scope quiet beside the name; focused, it takes the wash. The app mounts CodeMirror where the text stands", () => <div style={box(37.5)}><FileChanges focused={true}><ComparisonSample scope="Changes" /></FileChanges></div>, { surfaces: ["ground"], phone: true, code: "<FileChanges focused><Comparison><FileHead><FileName /><FileScope /></FileHead>…</Comparison></FileChanges>" }),
+    row("FileMedia", "audio, video or a PDF filling the file's remaining space (here an audio player with no source)", () => <FileView style={{ ...box(30), height: "calc(10 * var(--u-space))" }}><Head /><FileMedia><audio controls preload="none" aria-label="sample.mp3" /></FileMedia></FileView>, { surfaces: ["ground"], phone: true, code: "<FileMedia><audio controls /></FileMedia>" }),
+    row("FileSuffix", "what the host adds to the header, with the actions (here a pane's “Turn 3”)", () => <div style={box(30)}><FileHead><FileName path="src/greet.ts" icon={<Icons.FileCode />} /><FileSuffix><FileScope>Turn 3</FileScope></FileSuffix><FileButton label="Close file" close><Icons.Close /></FileButton></FileHead></div>, { surfaces: ["ground"], phone: true, code: "<FileSuffix>{headerSuffix}</FileSuffix>" })
+  ],
+  tokens: [{ title: "What it reads", tokens: [
+    token("--space-sm", "small spacing"),
+    token("--space-xs", "small gaps"),
+    token("--tint", "surface wash and lines"),
+    token("--icon-sm", "small icons"),
+    token("--foreground", "text and icons"),
+    token("--muted-foreground", "secondary text")
+  ] }],
+  api: ["FileViewer", "FileView", "FileHead", "FileName", "FileGit", "FileDirty", "FileActions", "FileButton", "FileTools", "FileMore", "FileSuffix", "FileScope", "FileBody", "FileImage", "FileCard", "Button", "FileMedia", "StatusBar", "StatusPicker", "StatusText", "FileDivider", "FileSwap", "FileEmptySide", "FileEmpty", "FileChanges", "Comparison", "ComparisonContent", "CodeHost", "ComparisonSource", "TurnNavigation", "ComparisonCounts"],
+};
+
+export const editorPage: Page = { title: "Editor", summary: "The code surface a file's body holds (CodeMirror draws inside it): framed while editable, its find bar above, a line comment's popup over it, and a comparison's counts and turn steps in the status bar. The review's navigator (DiffShell) is the Panes family's Source control.", rail: "Blocks",
+  preview: () => <div style={box(45)}><ComparisonSample /></div>,
   usage: `import { CodeSurface, SearchBar, SearchField, SearchActions, CodeContent, CodeHost } from "@/components/ui/editor";
 import { FileButton } from "@/components/ui/file";
 import { Icons } from "@/components/ui";
@@ -167,26 +170,36 @@ import { Icons } from "@/components/ui";
   </SearchBar>
   <CodeContent><CodeHost ref={mountEditor} /></CodeContent>
 </CodeSurface>`,
-  api: ["CodeSurface", "SearchBar", "SearchField", "SearchActions", "FileButton", "CodeContent", "CodeHost", "AnnotationPopup", "AnnotationInput", "AnnotationButton", "DiffShell", "SplitEdge", "DiffRail", "DiffBody", "PaneEmpty", "Comparison", "FileHead", "FileName", "FileScope", "FileTools", "ComparisonContent", "StatusBar", "ComparisonSource", "StatusPicker", "TurnNavigation", "StatusText", "ComparisonCounts", "CodeExcerpt"],
-  groups: [
-    { title: "Surface", layout: "desktop", atoms: [
-      lib("editor-surface", "CodeSurface · SearchBar · AnnotationPopup", "both", "editor", "components/ui/editor.tsx", () => <FormTable rows={[
-        form("CodeSurface · CodeHost", "read-only, then editable: the hairline ring says you can type", () => <States states={["Read-only", "Editable"] as const}>{(state) => <div style={{ ...box(30), height: "calc(9 * var(--u-space))", display: "flex" }}><CodeSurface editable={state() === "Editable"}><CodeContent><CodeHost><Code /></CodeHost></CodeContent></CodeSurface></div>}</States>, "<CodeSurface editable><CodeContent><CodeHost /></CodeContent></CodeSurface>"),
-        form("SearchBar · SearchField · SearchActions", "find and replace over the code: two fields, then previous, next and close", () => <div style={box(37.5)}><SearchBar><SearchField placeholder="Find" value="greet" /><SearchField placeholder="Replace" /><SearchActions><FileButton label="Previous match"><Icons.ArrowUp /></FileButton><FileButton label="Next match"><Icons.ArrowDown /></FileButton><FileButton label="Close find"><Icons.Close /></FileButton></SearchActions></SearchBar></div>, "<SearchBar><SearchField /><SearchActions /></SearchBar>"),
-        form("AnnotationPopup · AnnotationInput · AnnotationButton", "a comment on the selected lines, before it goes to the chat", () => <div style={{ ...box(30), height: "calc(7 * var(--u-space))", position: "relative" }}><AnnotationPopup style={{ left: "var(--space-md)", top: "var(--space-md)" }}><AnnotationInput placeholder="Comment on lines 1–2" rows={2} /><AnnotationButton>Add</AnnotationButton></AnnotationPopup></div>, "<AnnotationPopup><AnnotationInput /><AnnotationButton /></AnnotationPopup>"),
-        form("ComparisonCounts · TurnNavigation", "a comparison's removed and added lines, and the turn it compares", () => <div style={box(37.5)}><StatusBar label="Comparison" commands={<TurnNavigation><StatusPicker icon={<Icons.ChevronDown />}>Turn 3</StatusPicker></TurnNavigation>}><ComparisonCounts><span>−4</span><span>+12</span></ComparisonCounts></StatusBar></div>, "<ComparisonCounts><span /><span /></ComparisonCounts>"),
-      ]} on={["desktop", "phone"]} stacked />, "row"),
-    ] },
-    { title: "Comparison", note: "a change shown as a diff: its header, its code (the app mounts CodeMirror's merge view in the CodeHost; here a static stand-in), and a status bar with its source, turn steps and counts. In Source control it sits in DiffShell beside the changed-file navigator", layout: "desktop", atoms: [
-      lib("editor-comparison", "Comparison · DiffShell", "desktop", "editor", "components/ui/editor.tsx", () => <FormTable rows={[
-        form("Comparison · ComparisonContent · ComparisonSource · TurnNavigation · ComparisonCounts", "a turn's change to one file; the status bar leads with the source picker, older/newer turn and the endpoints. Static text where the app mounts CodeMirror", () => <div style={box(45)}><ComparisonSample /></div>, "<Comparison><FileHead /><ComparisonContent><CodeHost comparison /></ComparisonContent><StatusBar commands={<ComparisonSource />} /></Comparison>"),
-        form("DiffShell · SplitEdge · DiffBody", "the navigator open: changed files (stand-in here; Panes › Source control draws the real one), the edge that resizes it, then the comparison", () => <States states={["Rest", "Resizing"] as const}>{(state) => <div style={{ ...box(55), height: "calc(15 * var(--u-space))", display: "flex" }}><DiffShell width={160}><PaneEmpty>Changed files</PaneEmpty><SplitEdge resizing={state() === "Resizing"} aria-label="Resize changed files" /><DiffBody><ComparisonSample /></DiffBody></DiffShell></div>}</States>, "<DiffShell width><navigator /><SplitEdge resizing /><DiffBody /></DiffShell>"),
-        form("DiffShell collapsed · DiffRail", "the navigator folded to its rail: one button opens it again", () => <div style={{ ...box(55), height: "calc(15 * var(--u-space))", display: "flex" }}><DiffShell collapsed width={160}><DiffRail><FileButton label="Show changed files"><Icons.ExpandFiles /></FileButton></DiffRail><DiffBody><ComparisonSample /></DiffBody></DiffShell></div>, "<DiffShell collapsed><DiffRail><FileButton /></DiffRail><DiffBody /></DiffShell>"),
-        form("DiffBody · nothing chosen", "the comparison column before a file is picked", () => <div style={{ ...box(55), height: "calc(8 * var(--u-space))", display: "flex" }}><DiffShell collapsed width={160}><DiffRail><FileButton label="Show changed files"><Icons.ExpandFiles /></FileButton></DiffRail><DiffBody><PaneEmpty>Select a changed file.</PaneEmpty></DiffBody></DiffShell></div>, "<DiffBody><PaneEmpty /></DiffBody>"),
-      ]} on={["desktop"]} stacked />, "row"),
-    ] },
+  anatomy: { scene: () => <div style={box(45)}><ComparisonSample /></div>, parts: [
+    { selector: ".ui-file-head", name: "Header", does: "names the compared file", from: "FileHead" },
+    { selector: ".ui-comparison-content", name: "Content", does: "holds the comparison", from: "ComparisonContent" },
+    { selector: ".ui-status-bar", name: "Status", does: "holds the source, turns and line counts", from: "StatusBar" }
   ] },
-  { title: "Browser", note: "the file browser (the Computer page and the folder picker): a sidebar of places beside a main column of toolbar, actions and the folder's entries, as tiles or details. Composed here from its pieces with made-up entries", rail: "Blocks",
+  examples: [
+    row("CodeSurface · CodeHost · Read-only", "read-only, then editable: the hairline ring says you can type", () => <div style={{ ...box(30), height: "calc(9 * var(--u-space))", display: "flex" }}><CodeSurface editable={false}><CodeContent><CodeHost><Code /></CodeHost></CodeContent></CodeSurface></div>, { surfaces: ["ground"], phone: true, code: "<CodeSurface editable><CodeContent><CodeHost /></CodeContent></CodeSurface>" }),
+    row("CodeSurface · CodeHost · Editable", "read-only, then editable: the hairline ring says you can type", () => <div style={{ ...box(30), height: "calc(9 * var(--u-space))", display: "flex" }}><CodeSurface editable={true}><CodeContent><CodeHost><Code /></CodeHost></CodeContent></CodeSurface></div>, { surfaces: ["ground"], phone: true, code: "<CodeSurface editable><CodeContent><CodeHost /></CodeContent></CodeSurface>" }),
+    row("SearchBar · SearchField · SearchActions", "find and replace over the code: two fields, then previous, next and close", () => <div style={box(37.5)}><SearchBar><SearchField placeholder="Find" value="greet" /><SearchField placeholder="Replace" /><SearchActions><FileButton label="Previous match"><Icons.ArrowUp /></FileButton><FileButton label="Next match"><Icons.ArrowDown /></FileButton><FileButton label="Close find"><Icons.Close /></FileButton></SearchActions></SearchBar></div>, { surfaces: ["ground"], phone: true, code: "<SearchBar><SearchField /><SearchActions /></SearchBar>" }),
+    row("AnnotationPopup · AnnotationInput · AnnotationButton", "a comment on the selected lines, before it goes to the chat", () => <div style={{ ...box(30), height: "calc(7 * var(--u-space))", position: "relative" }}><AnnotationPopup style={{ left: "var(--space-md)", top: "var(--space-md)" }}><AnnotationInput placeholder="Comment on lines 1–2" rows={2} /><AnnotationButton>Add</AnnotationButton></AnnotationPopup></div>, { surfaces: ["ground"], phone: true, code: "<AnnotationPopup><AnnotationInput /><AnnotationButton /></AnnotationPopup>" }),
+    row("ComparisonCounts · TurnNavigation", "a comparison's removed and added lines, and the turn it compares", () => <div style={box(37.5)}><StatusBar label="Comparison" commands={<TurnNavigation><StatusPicker icon={<Icons.ChevronDown />}>Turn 3</StatusPicker></TurnNavigation>}><ComparisonCounts><span>−4</span><span>+12</span></ComparisonCounts></StatusBar></div>, { surfaces: ["ground"], phone: true, code: "<ComparisonCounts><span /><span /></ComparisonCounts>" }),
+    row("Comparison · ComparisonContent · ComparisonSource · TurnNavigation · ComparisonCounts", "a turn's change to one file; the status bar leads with the source picker, older/newer turn and the endpoints. Static text where the app mounts CodeMirror", () => <div style={box(45)}><ComparisonSample /></div>, { surfaces: ["ground"], code: "<Comparison><FileHead /><ComparisonContent><CodeHost comparison /></ComparisonContent><StatusBar commands={<ComparisonSource />} /></Comparison>" }),
+    row("DiffShell · SplitEdge · DiffBody · Rest", "the navigator open: changed files (stand-in here; Panes › Source control draws the real one), the edge that resizes it, then the comparison", () => <div style={{ ...box(55), height: "calc(15 * var(--u-space))", display: "flex" }}><DiffShell width={160}><PaneEmpty>Changed files</PaneEmpty><SplitEdge resizing={false} aria-label="Resize changed files" /><DiffBody><ComparisonSample /></DiffBody></DiffShell></div>, { surfaces: ["ground"], code: "<DiffShell width><navigator /><SplitEdge resizing /><DiffBody /></DiffShell>" }),
+    row("DiffShell · SplitEdge · DiffBody · Resizing", "the navigator open: changed files (stand-in here; Panes › Source control draws the real one), the edge that resizes it, then the comparison", () => <div style={{ ...box(55), height: "calc(15 * var(--u-space))", display: "flex" }}><DiffShell width={160}><PaneEmpty>Changed files</PaneEmpty><SplitEdge resizing={true} aria-label="Resize changed files" /><DiffBody><ComparisonSample /></DiffBody></DiffShell></div>, { surfaces: ["ground"], code: "<DiffShell width><navigator /><SplitEdge resizing /><DiffBody /></DiffShell>" }),
+    row("DiffShell collapsed · DiffRail", "the navigator folded to its rail: one button opens it again", () => <div style={{ ...box(55), height: "calc(15 * var(--u-space))", display: "flex" }}><DiffShell collapsed width={160}><DiffRail><FileButton label="Show changed files"><Icons.ExpandFiles /></FileButton></DiffRail><DiffBody><ComparisonSample /></DiffBody></DiffShell></div>, { surfaces: ["ground"], code: "<DiffShell collapsed><DiffRail><FileButton /></DiffRail><DiffBody /></DiffShell>" }),
+    row("DiffBody · nothing chosen", "the comparison column before a file is picked", () => <div style={{ ...box(55), height: "calc(8 * var(--u-space))", display: "flex" }}><DiffShell collapsed width={160}><DiffRail><FileButton label="Show changed files"><Icons.ExpandFiles /></FileButton></DiffRail><DiffBody><PaneEmpty>Select a changed file.</PaneEmpty></DiffBody></DiffShell></div>, { surfaces: ["ground"], code: "<DiffBody><PaneEmpty /></DiffBody>" })
+  ],
+  tokens: [{ title: "What it reads", tokens: [
+    token("--border", "boundary lines"),
+    token("--space-md", "medium spacing"),
+    token("--hairline", "spacing and size"),
+    token("--radius-control", "control corners"),
+    token("--space-xs", "small gaps"),
+    token("--space-2xs", "smallest gaps")
+  ] }],
+  api: ["CodeSurface", "SearchBar", "SearchField", "SearchActions", "FileButton", "CodeContent", "CodeHost", "AnnotationPopup", "AnnotationInput", "AnnotationButton", "DiffShell", "SplitEdge", "DiffRail", "DiffBody", "PaneEmpty", "Comparison", "FileHead", "FileName", "FileScope", "FileTools", "ComparisonContent", "StatusBar", "ComparisonSource", "StatusPicker", "TurnNavigation", "StatusText", "ComparisonCounts", "CodeExcerpt"],
+};
+
+export const browserPage: Page = { title: "Browser", summary: "The file browser (the Computer page and the folder picker): a sidebar of places beside a main column of toolbar, actions and the folder's entries, as tiles or details. Composed here from its pieces with made-up entries.", rail: "Blocks",
+  preview: () => <Assembled />,
   usage: `import { Browser, BrowserLayout, BrowserSidebar, BrowserHeading, BrowserPlace, BrowserDivider, BrowserMain, BrowserToolbar, BrowserAddress, BrowserGrid, BrowserEntry } from "@/components/ui/browser";
 import { Icons } from "@/components/ui";
 
@@ -200,32 +213,31 @@ import { Icons } from "@/components/ui";
     </BrowserMain>
   </BrowserLayout>
 </Browser>`,
-  api: ["Browser", "BrowserLayout", "BrowserSidebar", "BrowserHeading", "BrowserPlace", "BrowserPlaces", "BrowserDivider", "BrowserMain", "BrowserToolbar", "Button", "BrowserAddress", "BrowserSearch", "Input", "BrowserCount", "BrowserActions", "BrowserSummary", "BrowserSpacer", "BrowserGrid", "BrowserColumns", "BrowserEntry", "BrowserMark", "BrowserEmpty", "BrowserLoading", "BrowserError"],
-  groups: [
-    { title: "Assembled", note: "the whole browser; compact is the folder picker's dialog form", layout: "desktop", atoms: [
-      lib("browser-layout", "Browser · BrowserLayout · BrowserSidebar · BrowserMain", "desktop", "browser", "components/ui/browser.tsx", () => <FormTable rows={[
-        form("Browser · BrowserLayout", "places at the left (BrowserHeading over BrowserPlace rows, workspaces in BrowserPlaces), the divider that resizes them, then the main column", () => <Assembled />, "<Browser sidebarWidth><BrowserLayout><BrowserSidebar /><BrowserDivider /><BrowserMain /></BrowserLayout></Browser>"),
-        form("Browser compact", "the folder picker's form, inside a dialog", () => <Assembled compact />, "<Browser compact sidebarWidth>"),
-      ]} on={["desktop"]} stacked />, "row"),
-    ] },
-    { title: "Toolbar", note: "the toolbar's parts and the actions row under it", atoms: [
-      lib("browser-toolbar", "BrowserToolbar · BrowserActions", "both", "browser", "components/ui/browser.tsx", () => <FormTable rows={[
-        form("BrowserToolbar · BrowserAddress · BrowserSearch · BrowserCount", "home and parent, the folder's path (editable), search in this folder, view and refresh, then how many items", () => <div style={box(45)}><Toolbar /></div>, "<BrowserToolbar><Button /><BrowserAddress /><BrowserSearch><Input /></BrowserSearch><BrowserCount /></BrowserToolbar>"),
-        form("BrowserActions · BrowserSummary · BrowserSpacer", "the repository this folder is in, a spacer, then what opens here", () => <div style={box(45)}><Actions /></div>, "<BrowserActions><BrowserSummary /><BrowserSpacer /><Button /></BrowserActions>"),
-      ]} on={["desktop", "phone"]} stacked />, "row"),
-    ] },
-    { title: "Entries", note: "a folder's entries as tiles or as details with columns; a folder that is a workspace wears its mark", atoms: [
-      lib("browser-entries", "BrowserGrid · BrowserEntry · BrowserColumns · BrowserMark", "both", "browser", "components/ui/browser.tsx", () => <FormTable rows={[
-        form("BrowserGrid tiles · BrowserEntry · BrowserMark", "folders first, then files; Conduit is a workspace (the mark)", () => <Pane><Grid /></Pane>, '<BrowserGrid data-view="tiles"><BrowserEntry><Icon /><span /><BrowserMark /></BrowserEntry></BrowserGrid>'),
-        form("BrowserGrid details · BrowserColumns", "the same entries with type, size and dates under column names", () => <Pane><Grid details /></Pane>, '<BrowserGrid data-view="details"><BrowserColumns /><BrowserEntry>…<small /></BrowserEntry></BrowserGrid>'),
-      ]} on={["desktop", "phone"]} stacked />, "row"),
-    ] },
-    { title: "States", note: "an empty folder, a folder loading, and a folder that could not be read", atoms: [
-      lib("browser-states", "BrowserEmpty · BrowserLoading · BrowserError", "both", "browser", "components/ui/browser.tsx", () => <FormTable rows={[
-        form("BrowserEmpty", "nothing in the folder, or nothing matches the search", () => <Pane><Grid><BrowserEmpty>This folder is empty.</BrowserEmpty></Grid></Pane>, "<BrowserGrid><BrowserEmpty /></BrowserGrid>"),
-        form("BrowserLoading", "the listing on its way (the grid is busy under it)", () => <Pane><BrowserGrid data-view="tiles" aria-busy="true" /><BrowserLoading>Loading…</BrowserLoading></Pane>, "<BrowserLoading />"),
-        form("BrowserError", "the folder could not be listed; above the entries", () => <Pane><BrowserError>Permission denied: /root</BrowserError><Grid><BrowserEmpty>This folder is empty.</BrowserEmpty></Grid></Pane>, "<BrowserError />"),
-      ]} on={["desktop", "phone"]} stacked />, "row"),
-    ] },
+  anatomy: { scene: () => <Assembled />, parts: [
+    { selector: ".ui-browser-sidebar", name: "Places", does: "lists locations and workspaces", from: "BrowserSidebar" },
+    { selector: ".ui-browser-divider", name: "Divider", does: "resizes the sidebar", from: "BrowserDivider" },
+    { selector: ".ui-browser-main", name: "Main", does: "holds the toolbar, actions and entries", from: "BrowserMain" }
   ] },
-];
+  examples: [
+    row("Browser · BrowserLayout", "places at the left (BrowserHeading over BrowserPlace rows, workspaces in BrowserPlaces), the divider that resizes them, then the main column", () => <Assembled />, { surfaces: ["ground"], code: "<Browser sidebarWidth><BrowserLayout><BrowserSidebar /><BrowserDivider /><BrowserMain /></BrowserLayout></Browser>" }),
+    row("Browser compact", "the folder picker's form, inside a dialog", () => <Assembled compact />, { surfaces: ["ground"], code: "<Browser compact sidebarWidth>" }),
+    row("BrowserToolbar · BrowserAddress · BrowserSearch · BrowserCount", "home and parent, the folder's path (editable), search in this folder, view and refresh, then how many items", () => <div style={box(45)}><Toolbar /></div>, { phone: true, code: "<BrowserToolbar><Button /><BrowserAddress /><BrowserSearch><Input /></BrowserSearch><BrowserCount /></BrowserToolbar>" }),
+    row("BrowserActions · BrowserSummary · BrowserSpacer", "the repository this folder is in, a spacer, then what opens here", () => <div style={box(45)}><Actions /></div>, { phone: true, code: "<BrowserActions><BrowserSummary /><BrowserSpacer /><Button /></BrowserActions>" }),
+    row("BrowserGrid tiles · BrowserEntry · BrowserMark", "folders first, then files; Conduit is a workspace (the mark)", () => <Pane><Grid /></Pane>, { surfaces: ["ground"], phone: true, code: '<BrowserGrid data-view="tiles"><BrowserEntry><Icon /><span /><BrowserMark /></BrowserEntry></BrowserGrid>' }),
+    row("BrowserGrid details · BrowserColumns", "the same entries with type, size and dates under column names", () => <Pane><Grid details /></Pane>, { surfaces: ["ground"], phone: true, code: '<BrowserGrid data-view="details"><BrowserColumns /><BrowserEntry>…<small /></BrowserEntry></BrowserGrid>' }),
+    row("BrowserEmpty", "nothing in the folder, or nothing matches the search", () => <Pane><Grid><BrowserEmpty>This folder is empty.</BrowserEmpty></Grid></Pane>, { surfaces: ["ground"], phone: true, code: "<BrowserGrid><BrowserEmpty /></BrowserGrid>" }),
+    row("BrowserLoading", "the listing on its way (the grid is busy under it)", () => <Pane><BrowserGrid data-view="tiles" aria-busy="true" /><BrowserLoading>Loading…</BrowserLoading></Pane>, { surfaces: ["ground"], phone: true, code: "<BrowserLoading />" }),
+    row("BrowserError", "the folder could not be listed; above the entries", () => <Pane><BrowserError>Permission denied: /root</BrowserError><Grid><BrowserEmpty>This folder is empty.</BrowserEmpty></Grid></Pane>, { surfaces: ["ground"], phone: true, code: "<BrowserError />" })
+  ],
+  tokens: [{ title: "What it reads", tokens: [
+    token("--space-xs", "small gaps"),
+    token("--space-sm", "small spacing"),
+    token("--icon", "icon size"),
+    token("--muted-foreground", "secondary text"),
+    token("--text-caption", "caption text size"),
+    token("--measure-xs", "spacing and size")
+  ] }],
+  api: ["Browser", "BrowserLayout", "BrowserSidebar", "BrowserHeading", "BrowserPlace", "BrowserPlaces", "BrowserDivider", "BrowserMain", "BrowserToolbar", "Button", "BrowserAddress", "BrowserSearch", "Input", "BrowserCount", "BrowserActions", "BrowserSummary", "BrowserSpacer", "BrowserGrid", "BrowserColumns", "BrowserEntry", "BrowserMark", "BrowserEmpty", "BrowserLoading", "BrowserError"],
+};
+
+export const filesPages = (): Page[] => [filesPage, editorPage, browserPage];

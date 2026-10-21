@@ -72,16 +72,16 @@ function Heading(props: { page: Page; section: Section; note?: string }) {
   return <h3 class="g-heading" id={anchor(props.page, props.section)}>{props.section}{props.note && <small> {props.note}</small>}</h3>;
 }
 
-/** Examples and Motion: one table. Name and note down the side; across, Ground and Frost at the desktop's density,
- *  and Phone where any row differs on a phone. A cell the row does not sit on shows a dash. */
+/** Examples and Motion: one table. Name and note down the side; across, Ground and Frost at the desktop's density
+ *  (and Frame first where a row also sits on the sidebar's), and Phone where any row differs on a phone. A cell the row does not sit on shows a dash. */
 function Rows(props: { rows: Row[] }) {
-  const surfaces = (row: Row) => row.surfaces ?? ["ground", "frost"];
+  const surfaces = (row: Row): ("frame" | "ground" | "frost")[] => row.surfaces ?? ["ground", "frost"];
   const columns = () => [
-    ...(["ground", "frost"] as const).filter((where) => props.rows.some((row) => row.phone !== "only" && surfaces(row).includes(where))),
+    ...(["frame", "ground", "frost"] as const).filter((where) => props.rows.some((row) => row.phone !== "only" && surfaces(row).includes(where))),
     ...(props.rows.some((row) => row.phone) ? ["phone" as const] : []),
   ];
-  const grid = () => ({ "grid-template-columns": `260px repeat(${columns().length}, minmax(0, 1fr))` });
-  const cell = (row: Row, column: "ground" | "frost" | "phone"): JSX.Element => column === "phone"
+  const grid = () => ({ "--g-columns": String(columns().length) });
+  const cell = (row: Row, column: "frame" | "ground" | "frost" | "phone"): JSX.Element => column === "phone"
     ? row.phone ? <div class="g-form-density" data-density="phone"><On where={surfaces(row)[0]!}>{row.render()}</On></div> : <span class="g-dash">—</span>
     : row.phone !== "only" && surfaces(row).includes(column) ? <On where={column}>{row.render()}</On> : <span class="g-dash">—</span>;
   return <div class="g-scale g-forms g-rows" data-density="desktop">
@@ -92,6 +92,13 @@ function Rows(props: { rows: Row[] }) {
     </div>}</For>
   </div>;
 }
+
+/** Token groups in runs of the same density, so each run is one table with one set of columns. */
+const runs = <T extends { density?: boolean }>(groups: T[]) => groups.reduce<T[][]>((all, group) => {
+  const last = all.at(-1);
+  if (last && Boolean(last[0]!.density) === Boolean(group.density)) last.push(group); else all.push([group]);
+  return all;
+}, []);
 
 /** A page, drawn to the template. */
 export function PageView(props: { page: Page }) {
@@ -117,7 +124,7 @@ export function PageView(props: { page: Page }) {
     <Show when={has("Examples")}><section class="g-page-section"><Heading page={page()} section="Examples" note="every variant, size and state" /><Rows rows={page().examples!} /></section></Show>
     <Show when={has("Motion")}><section class="g-page-section"><Heading page={page()} section="Motion" note="replay a move from its row" /><Rows rows={page().motion!} /></section></Show>
     <Show when={has("Tokens")}><section class="g-page-section"><Heading page={page()} section="Tokens" note="what it reads, as it computes" />
-      <TokenTable groups={page().tokens!.map((group) => ({ title: group.title, rows: group.tokens }))} density={false} /></section></Show>
+      <For each={runs(page().tokens!)}>{(run) => <TokenTable groups={run.map((group) => ({ title: group.title, rows: group.tokens }))} density={Boolean(run[0]!.density)} />}</For></section></Show>
     <Show when={has("API")}><div id={anchor(page(), "API")}><PageApi names={page().api!} /></div><div id={anchor(page(), "Used in")}><PageUsedIn names={page().api!} /></div></Show>
   </section>;
 }
