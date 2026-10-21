@@ -1,3 +1,4 @@
+import { capabilitiesOf } from "./place.js";
 import http from "node:http";
 import https from "node:https";
 import net from "node:net";
@@ -259,7 +260,10 @@ const publishProcessChange = (view, record, reason) => {
 };
 manager.on("process_changed", ({ record, reason }) => {
   publishProcessChange(backends.view(record), record, reason);
-});
+});// What a workspace's place can do -- which harnesses, checkpoints, Git -- on
+// the head or a device alike (src/place.js); every refusal asks this.
+backends.capabilities = (project) => capabilitiesOf(project, { hub: nodeHub, backends, serverName: serverIdentity.name });
+
 manager.on("process_removed", ({ id, chatId }) => {
   runtimeHub.publishProcessRemoved(id, chatId);
 });

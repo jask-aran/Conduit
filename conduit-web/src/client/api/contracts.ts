@@ -86,6 +86,14 @@ export interface WorkspaceAppearance {
   color: string;
 }
 
+export interface PlaceCapabilities {
+  device: { id: string; name: string; local: boolean; online: boolean };
+  harnesses: string[];
+  checkpoints: boolean;
+  deleteFiles: boolean;
+  git: boolean;
+}
+
 export interface Project {
   id: string;
   slug: string;
@@ -99,6 +107,8 @@ export interface Project {
   nodeId?: string | null;
   /** Where its calls run on that node: a shared root by id and a path inside it. */
   place?: { root: string; path: string } | null;
+  /** Whose place it is and what can be done there (server src/place.js): asked instead of `nodeId`. */
+  capabilities?: PlaceCapabilities | null;
   state?: "ready" | "cloning";
   cloneOperationId?: string | null;
   createdAt?: string;

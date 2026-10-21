@@ -163,6 +163,8 @@ export function registerProjectRoutes(app, {
       const live = manager.list();
       response.json({ projects: await Promise.all(items.map(async (project) => ({
         ...project,
+        // Whose it is and what can be done there, so the client asks that and never `nodeId`.
+        capabilities: await backends.capabilities?.(project) || null,
         sessions: registry.listProject(project.id).map((chat) => {
           const process = live.find((item) => item.chatId === chat.id);
           return {
@@ -459,8 +461,9 @@ export function registerProjectRoutes(app, {
       const chatId = typeof request.query.chatId === "string" ? request.query.chatId : "";
       const chat = registry.metadata(chatId);
       if (!chat || chat.projectId !== project.id) return response.json(null);
-      // Turn checkpoints snapshot this server's disk; a device's folder has none.
-      if (project.nodeId) return response.json(null);
+      // Turn checkpoints snapshot the head's disk; a place without them has none.
+      const can = await backends.capabilities?.(project);
+      if (can ? !can.checkpoints : project.nodeId) return response.json(null);
       if (request.query.timeline === "1") {
         return response.json(applyArtifactMessageIds(await turnCheckpoints.timeline(chatId, project.workingRoot),
           await messageIds.resolver(project, chat)));

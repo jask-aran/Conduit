@@ -56,7 +56,7 @@ function workspaceProject(project: Project) {
 function kindLabel(project: Project) {
   if (project.origin === "cloned") return "Cloned workspace";
   if (project.origin === "created") return "Created workspace";
-  if (project.nodeId) return "On a device";
+  if (project.capabilities && !project.capabilities.device.local) return `On ${project.capabilities.device.name}`;
   if (workspaceProject(project)) return "Linked workspace";
   return "Project";
 }
@@ -336,7 +336,7 @@ export function ProjectDashboard(props: {
       </MenuSection>
       <MenuSection>
       <MenuRow destructive onSelect={props.onDelete} icon={<Icons.Delete />}>{isWorkspace() ? "Unlink workspace" : "Delete project"}</MenuRow>
-      <Show when={isWorkspace() && !props.project.nodeId}><MenuRow destructive onSelect={() => setDestroyOpen(true)} icon={<Icons.Delete />}>Delete workspace and files</MenuRow></Show>
+      <Show when={isWorkspace() && (props.project.capabilities?.deleteFiles ?? !props.project.nodeId)}><MenuRow destructive onSelect={() => setDestroyOpen(true)} icon={<Icons.Delete />}>Delete workspace and files</MenuRow></Show>
       </MenuSection>
   </>;
 

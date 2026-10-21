@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import { answerTo, isDismissal, questionRequest } from "./harnesses/questions.js";
 import fs from "node:fs/promises";
 import { attachmentForDevice } from "./nodes/device-attachments.js";
 import { EventEmitter } from "node:events";
@@ -668,16 +669,38 @@ export class DurableAdapter extends EventEmitter {
 
   /**
    * The turn's next step runs on a device that is offline (plan decision 8):
-   * the chat says which, as a retry with nothing to count, until it is back.
+   * the chat says which, as a retry with nothing to count, until it is back,
+   * and offers to go on without it (decision 21) on the card a question uses.
    */
   waitingForDevice(record, device) {
     if (record.waitingFor === device.id) return;
     record.waitingFor = device.id;
     record.waitingForName = device.name;
     this.publish(record, { type: "retry", generationId: record.generation?.id || null, active: true, retry: { waitingFor: device.name } });
-    this.runtime.nodeHub?.once(`online:${device.id}`, () => {
+    const done = () => {
+      if (record.waitingFor !== device.id) return;
       record.waitingFor = null;
       this.publish(record, { type: "retry", generationId: record.generation?.id || null, active: false });
+    };
+    const request = questionRequest({
+      id: `device-${device.id}-${crypto.randomUUID()}`, title: `${device.name} is offline`,
+      questions: [{ id: "q1", header: "", multiSelect: false,
+        prompt: `The next step runs on ${device.name}. Wait for it to come back, or go on without it?`,
+        options: [
+          { id: "wait", label: "Keep waiting", description: "" },
+          { id: "without", label: `Continue without ${device.name}`, description: "The agent is told it is unavailable and carries on." },
+        ] }],
+    });
+    void this.askUser(record, request).then((response) => {
+      if (!response || response.cancelled || response.withdrawn || isDismissal(response)) return;
+      if (!answerTo(response, request.questions[0]).options.some((option) => option.id === "without")) return;
+      this.runtime.excuse(record.conversationId, device);
+      done();
+    });
+    this.runtime.nodeHub?.once(`online:${device.id}`, () => {
+      // Back: the card is moot.
+      this.settleAsk(record, request.id, { id: request.id, withdrawn: true });
+      done();
     });
   }
 
