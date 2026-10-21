@@ -604,7 +604,7 @@ export const iconsPage: Page = {
   summary: "One glyph per concept (components/ui/icons.tsx, imported as Icons), at the type unit so an icon sits with the text beside it; and the library's own marks: harnesses, file types, a workspace's or place's glyph.",
   api: ["HarnessMark", "ThreadHarnessMark", "Glyph", "FileTypeIcon", "FolderTypeIcon"],
   preview: iconScene,
-  anatomy: { scene: iconScene, parts: ICON_MARKS },
+  anatomy: { scene: iconScene, parts: ICON_MARKS, phone: true },
   examples: [
     row("vocabulary", "one glyph per concept: its name in Icons, what it means, how many files use it", () => <div class="g-icon-grid">
       <For each={vocabulary}>{([key, meaning, files]) => { const Icon = Icons[key]; return <figure><Icon /><figcaption><code>{key}</code><small>{meaning} · {files}</small></figcaption></figure>; }}</For>
@@ -632,7 +632,7 @@ export const spacePage: Page = {
   title: "Space", rail: "Foundations",
   summary: "Everything from a few numbers: the density's unit (16px on desktop and phone) times the user's Interface size times the region's own size (chrome, sidebar, frost, composer, transcript), per density. Every gap, padding and margin is one of nine steps; every control one of four heights; rows keep their measured height and text, in the unit (a phone's never below 40px). Move the scales and every page follows.",
   preview: spaceScene,
-  anatomy: { scene: spaceScene, parts: SPACE_MARKS },
+  anatomy: { scene: spaceScene, parts: SPACE_MARKS, phone: true },
   examples: [row("Scale", "foundations.css :root --ui-scale · --scale-<region>-<density>", () => <ScaleControl />, { surfaces: ["ground"] })],
   tokens: [...SPACE.map((group) => ({ title: group.title, tokens: group.rows, density: true }))],
 };
@@ -641,7 +641,7 @@ export const radiusPage: Page = {
   title: "Radius", rail: "Foundations",
   summary: "Four radii: control, surface (a control's plus the inset, so rows nest), message (the composer and the user's message, one value everywhere), round (pills, at any size).",
   preview: radiusScene,
-  anatomy: { scene: radiusScene, parts: RADIUS_MARKS },
+  anatomy: { scene: radiusScene, parts: RADIUS_MARKS, phone: true },
   tokens: [...RADII.map((group) => ({ title: group.title, tokens: group.rows, density: true }))],
 };
 

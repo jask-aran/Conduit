@@ -39,7 +39,7 @@ export const transcriptPage: Page = { title: "Transcript", summary: "What is rea
     <MessageFoot time="22:19"><Button variant="ghost" size="icon-xs" aria-label="Copy" onClick={copyAnswer}><Icons.Copy /></Button></MessageFoot>
   </Turn></TranscriptRow>
 </Transcript>`,
-  anatomy: { scene: turnScene, parts: [{ selector: ".ui-trace", name: "the trace header", does: "the orb, Status · time · work (the Row role), the latest line muted", from: (el) => typeOf(el.querySelector(".ui-trace-line")!) },
+  anatomy: { phone: true, spacing: [".ui-turn", ".ui-answer"], scene: turnScene, parts: [{ selector: ".ui-trace", name: "the trace header", does: "the orb, Status · time · work (the Row role), the latest line muted", from: (el) => typeOf(el.querySelector(".ui-trace-line")!) },
     { selector: ".ui-answer", name: "the answer", does: "the Body role at 1.66, no bubble", from: (el) => `${typeOf(el)} · ${px(getComputedStyle(el).lineHeight)}` },
     { selector: ".ui-answer > ul", name: "one gap between blocks", does: "--answer-gap (0.75 units)", from: (el) => px(getComputedStyle(el).marginTop) },
     { selector: ".ui-answer code", name: "inline code", does: "the code face on the tint", from: (el) => typeOf(el) },

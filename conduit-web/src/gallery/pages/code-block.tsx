@@ -25,7 +25,7 @@ export const codeBlockPage: Page = {
   usage: `import { CodeBlock } from "@/components/ui/code";
 
 <CodeBlock lang="tsx" code="const ready = true;" />`,
-  anatomy: { scene: codeScene, parts: [
+  anatomy: { phone: true, spacing: [".ui-answer"], scene: codeScene, parts: [
     { selector: ".ui-code", name: "a box", does: "a --tint line at the control corner, no fill", from: (el) => rounding(el) },
     { selector: ".ui-code-lang", name: "the language, where the numbers start", does: "Caption, the data face", from: (el) => typeOf(el) },
     { selector: ".ui-code .ui-copy", name: "Copy, and the fold's chevron beside it", does: "icon-xs ghost buttons with caption-sized icons, their glyphs as far from the end as the language is from the start", from: (el) => px(`${el.getBoundingClientRect().width}px`) },
@@ -43,9 +43,9 @@ export const codeBlockPage: Page = {
     row("copied", "the check, and the code washing --tint as it fades", () => <Read class="g-read">{(() => <CodeBlock lang="ts" code={SNIPPET} copied />)()}</Read>, { phone: true, code: "<CodeBlock copied>" }),
     row("highlighted", "the caller's own lines (CODE_BLOCK.line), coloured by a highlighter's classes; the block numbers them · --syntax-* by role", () => <Read class="g-read">{(() => <CodeBlock lang="ts" lines={2}><code><span class={CODE_BLOCK.line}><span class="hljs-keyword">const</span> <span class="hljs-variable">fold</span> = <span class="hljs-number">15</span>; <span class="hljs-comment">// lines</span></span><span class={CODE_BLOCK.line}><span class="hljs-keyword">export</span> <span class="hljs-keyword">default</span> <span class="hljs-title">fold</span>;</span></code></CodeBlock>)()}</Read>, { phone: true, code: "<CodeBlock lines>{code}" }),
     row("as a string", "codeBlockHtml: the same block for a renderer that writes HTML, its icons put in by fillCodeBlocks", () => <Read class="g-read">{(() => { const el = document.createElement("div"); el.innerHTML = codeBlockHtml({ lang: "sh", code: "npm run build\nnpm run gallery", lines: 2 }); fillCodeBlocks(el); return el.firstElementChild; })()}</Read>, { phone: true, code: "codeBlockHtml · fillCodeBlocks" }),
-    row("A fence in an answer", "the Markdown's fenced code (marked and Incremark): the language as written, numbered lines", () => <Read class="g-read">{(() => <CodeBlock lang="sh" code={"npm run gallery"} />)()}</Read>, { phone: true }),
-    row("Folded by Settings · Code blocks", "long ones (past 15 lines, or every one) fold; one opened by hand stays open", () => <Read class="g-read">{(() => <CodeBlock lang="ts" code={LONG} fold={15} />)()}</Read>, { phone: true }),
-    row("Still being written, folded", "the fold holds while the model writes into it, and the foot pulses as its count climbs", () => <Read class="g-read">{(() => <CodeBlock lang="ts" code={LONG} fold={6} streaming />)()}</Read>, { phone: true })
+    row("A fence in an answer", "the Markdown's fenced code (marked and Incremark): the language as written, numbered lines", () => <Read class="g-read">{(() => <CodeBlock lang="sh" code={"npm run gallery"} />)()}</Read>, { source: "chat/code-block.ts", phone: true }),
+    row("Folded by Settings · Code blocks", "long ones (past 15 lines, or every one) fold; one opened by hand stays open", () => <Read class="g-read">{(() => <CodeBlock lang="ts" code={LONG} fold={15} />)()}</Read>, { source: "chat/code-block.ts", phone: true }),
+    row("Still being written, folded", "the fold holds while the model writes into it, and the foot pulses as its count climbs", () => <Read class="g-read">{(() => <CodeBlock lang="ts" code={LONG} fold={6} streaming />)()}</Read>, { source: "chat/code-block.ts", phone: true })
   ],
   motion: [
     row("unfolds · folds", "in height: the one move that pushes what is below · in: --duration-gentle · --ease-arrive · out: --duration-quick · --ease-leave", () => <Read class="g-read">{(() => <FoldDemo />)()}</Read>, { phone: true, code: "<CodeBlock fold open onToggle>" }),

@@ -57,16 +57,16 @@ export const riderPage: Page = { title: "Rider", summary: "Resting frost at a co
           <RiderTop><RiderTitle>Deploy</RiderTitle><Button variant="ghost" size="icon-sm" aria-label="Dismiss"><Icons.Close /></Button></RiderTop>
           <ChoicesPage><RiderPrompt>Where should it go?</RiderPrompt><Choices><Choice n={1} label="Staging" detail="the test server" chosen active /><Choice n={2} label="Production" /></Choices></ChoicesPage>
           <RiderFoot><RiderHints hints={[["↑↓", "choose"], ["Enter", "next"]]} /><Button variant="primary" size="sm">Next</Button></RiderFoot>
-        </Rider></div>, { surfaces: ["ground"], phone: true, code: "<Rider layout=card><RiderTop /><ChoicesPage><Prompt /><Choices /></ChoicesPage><RiderFoot><Hints /><Button /></RiderFoot></Rider>" }),
+        </Rider></div>, { source: "components/ui/rider.tsx · chat/question-card.tsx", surfaces: ["ground"], phone: true, code: "<Rider layout=card><RiderTop /><ChoicesPage><Prompt /><Choices /></ChoicesPage><RiderFoot><Hints /><Button /></RiderFoot></Rider>" }),
     row("ChoiceInput", "a secret answered on one masked line, as a Choice's own answer", () => <div class="g-composer"><Rider layout="card" label="The agent has a question">
           <RiderTop><RiderTitle>Token</RiderTitle></RiderTop>
           <ChoicesPage><RiderPrompt>Paste the API token</RiderPrompt><Choices><Choice n={1} chosen active own={<ChoiceInput type="password" placeholder="Type your answer" aria-label="Type your answer" value="secret-value" />} /></Choices></ChoicesPage>
-        </Rider></div>, { surfaces: ["ground"], phone: true, code: "<Choice own={<ChoiceInput type=password />} />" }),
+        </Rider></div>, { source: "components/ui/rider.tsx · chat/question-card.tsx", surfaces: ["ground"], phone: true, code: "<Choice own={<ChoiceInput type=password />} />" }),
     row("Summary", "several questions: before submitting, each with its answer; one not answered yet", () => <div class="g-composer"><Rider layout="card" label="The agent has a question">
           <RiderTop><RiderTabs><RiderTab done>Deploy</RiderTab><RiderTab>Token</RiderTab><RiderTab selected>Submit</RiderTab></RiderTabs></RiderTop>
           <RiderSummary rows={[{ label: "Deploy", value: "Staging" }, { label: "Token", value: "Needs an answer", empty: true }]} />
           <RiderFoot><RiderHints hints={[["Enter", "submit"]]} /><Button variant="primary" size="sm" disabled>Submit</Button></RiderFoot>
-        </Rider></div>, { surfaces: ["ground"], phone: true, code: "<Summary rows={[{ label, value, empty }]} />" }),
+        </Rider></div>, { source: "components/ui/rider.tsx · chat/question-card.tsx", surfaces: ["ground"], phone: true, code: "<Summary rows={[{ label, value, empty }]} />" }),
     row("Line", "Line: waiting text, one line until opened", () => <div class="g-composer"><Rider><Lines><Line text="and make the second paragraph shorter" /><Line text="then rename the file to lorem.txt, and add a heading at the top that says what it is, and then read it back to me" clipped /></Lines></Rider></div>, { phone: true, surfaces: ["ground"] }),
     row("Chip", "Chip: image · file · uploading · failed · queued · failed, retryable", () => <div class="g-row"><Chip name="photo.png" image={thumb} /><Chip name="notes.txt" detail="2.1 KB" icon={<Icons.FileText />} /><Chip name="big.pdf" detail="64%" icon={<Icons.FileText />} status="uploading" progress={64} /><Chip name="broken.txt" detail="Upload failed" icon={<Icons.FileText />} status="error" /><Chip name="queued.png" image={thumb} status="queued" progress={0} /><Chip name="draft.txt" detail="Upload failed · press to retry" icon={<Icons.FileText />} status="error" retry /></div>, { phone: true, surfaces: ["ground"] }),
     row("References", "Reference: a file's mark, name, lines and note, cut short; a press goes to it. In the composer's Rider with edit and remove; under a sent message without", () => <div class="g-composer g-stack">

@@ -50,7 +50,8 @@ export const phoneComposerPage: Page = { title: "PhoneComposer", summary: "The p
   <PillButton stretch aura label="Dictate" icon={<Icons.Microphone />} onPick={toggleDictation} />
   <PillButton voice folded={!draft()} label="Send" icon={<Icons.Send />} onPick={sendMessage} />
 </PhoneComposer>`,
-  anatomy: { scene: () => <div class="g-phone-composer">{phoneComposer("typing", { draft: true, away: true, editing: true })}</div>, parts: [{ selector: ".ui-phone-edit", name: "Edit pills", does: "Undo · Delete word · Previous word · Next word · End of draft: over the field while its cursor is moved by hand", from: "PillButtons in edit" },
+  anatomy: [
+    { title: "Anatomy", scene: () => <div class="g-phone-composer">{phoneComposer("typing", { draft: true, away: true, editing: true })}</div>, parts: [{ selector: ".ui-phone-edit", name: "Edit pills", does: "Undo · Delete word · Previous word · Next word · End of draft: over the field while its cursor is moved by hand", from: "PillButtons in edit" },
     { selector: ".ui-phone-field", name: "Field", does: "the draft; shown while typing", from: "PillField" },
     { selector: pill("Message options"), name: "Options", does: "+: opens the options menu (attach, model, ...); stays lit while the rest dims", from: "PillButton · open" },
     { selector: pill("Take a photo"), name: "Camera", does: "takes a photo to attach", from: "PillButton", side: "below" },
@@ -58,8 +59,14 @@ export const phoneComposerPage: Page = { title: "PhoneComposer", summary: "The p
     { selector: pill("Scroll to latest"), name: "Scroll to latest", does: "shown only when scrolled up", from: "PillButton · folded", side: "below" },
     { selector: pill("Dictate"), name: "Dictate", does: "the mic: fills the row's rest; starts listening", from: "PillButton · stretch aura", side: "below" },
     { selector: pill("Send"), name: "Send", does: "the arrow: shown with a draft; Stop and send while listening", from: "PillButton · voice folded", side: "below" }] },
+    { title: "Anatomy · listening", scene: () => <div class="g-phone-composer">{phoneComposer("listening")}</div>, parts: [
+      { selector: ".ui-voice-captions", name: "Captions", does: "the newest three lines heard, on the page's ground", from: "PhoneComposer captions" },
+      { selector: ".ui-voice-track", name: "Voice track", does: "the waveform, from the row's start to the mic; tap to stop", from: "PillWave" },
+      { selector: "[aria-label=\"Dictate\"]", name: "Dictate", does: "shrunk to an orb pill; its Aura follows the voice level", from: "PillButton · Aura", side: "below" },
+      { selector: "[aria-label=\"Stop and send\"]", name: "Stop and send", does: "stops and sends what was heard", from: "PillButton · voice", side: "below" }
+    ] }
+  ],
   examples: [
-    row("Anatomy · listening", "Captions show the newest three lines on the ground. PillWave runs from the row start to Dictate; tap it to stop. Dictate becomes an Aura orb pill that follows the voice level. Stop and send stops dictation and sends the words.", () => <div class="g-phone-composer">{phoneComposer("listening")}</div>, { surfaces: ["ground"], phone: "only" }),
     row("State table", "PHONE_COMPOSER_STATES", () => <StateTable />, { surfaces: ["ground"], phone: "only" }),
     row("Idle", "PhoneComposer mode=idle: the row alone; nothing to send, so Send is folded", () => <div class="g-phone-composer">{phoneComposer("idle")}</div>, { surfaces: ["ground"], phone: "only" }),
     row("Typing", "mode=typing: the field above the row, Send beside the mic", () => <div class="g-phone-composer">{phoneComposer("typing", { draft: true })}</div>, { surfaces: ["ground"], phone: "only" }),

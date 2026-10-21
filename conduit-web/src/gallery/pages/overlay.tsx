@@ -59,7 +59,8 @@ import { Item } from "@/components/ui/popover";
     <OverlayHints start={[[["Enter"], "Open"]]} end={[[["Esc"], "Close"]]} />
   </Overlay>
 </Scrim>`,
-  anatomy: { scene: () => <div class="g-overlay-demo"><Overlay label="Parts">
+  anatomy: [
+    { title: "Anatomy", scene: () => <div class="g-overlay-demo"><Overlay label="Anatomy">
         <OverlayBar lead={glyph()} placeholder="Run a command…" onClose={() => {}} />
         <OverlayList><Section title="Chat"><Item icon={<Icons.Attach />} active>Attach a file</Item><Item icon={<Icons.Search />} keys={["Ctrl", "K"]}>Search chats</Item><Item opens>Model</Item></Section></OverlayList>
         <OverlayHints start={[[["↑", "↓"], "Move"]]} end={[[["Esc"], "Close"]]} />
@@ -69,12 +70,20 @@ import { Item } from "@/components/ui/popover";
     { selector: ".ui-overlay-list .ui-row", name: "Item", does: "a choice; the cursor follows the pointer and the arrows", from: "Item · active" },
     { selector: ".ui-overlay-hints", name: "Hints", does: "the keys along the foot, start and end", from: "OverlayHints" }
   ] },
-  examples: [
-    row("LiveNote", "“Shortcut saved” is announced (aria-live polite) and draws nothing", () => <LiveNote>Shortcut saved</LiveNote>, { source: "components/ui/overlay.tsx · settings/shortcuts-settings.tsx", phone: true, code: "<LiveNote>{status}</LiveNote>" }),
-    row("Rail anatomy scene", "Settings rail beside its page: navigation groups and setting lines.", () => <div class="g-overlay-demo"><Overlay label="Settings parts" layout="rail" style={{ "--overlay-width": "600px" }}>
+    { title: "Anatomy · rail", scene: () => <div class="g-overlay-demo"><Overlay label="Anatomy" layout="rail" style={{ "--overlay-width": "600px" }}>
         <OverlayRail title="Settings"><NavGroup label="App"><NavRow icon={<Icons.Monitor />} current>Appearance</NavRow><NavRow icon={<Icons.Keyboard />}>Shortcuts</NavRow></NavGroup></OverlayRail>
         <OverlayPage title="Appearance" onClose={() => {}}><SettingGroup title="Display"><SettingLine label="Density"><SelectTrigger value="Compact" bare /></SettingLine><SettingLine label="Reduce motion"><SwitchDemo /></SettingLine></SettingGroup></OverlayPage>
-      </Overlay></div>, { surfaces: ["ground"] }),
+      </Overlay></div>, parts: [
+      { selector: ".ui-overlay-rail", name: "Rail", does: "a title, NavGroups, a foot", from: "OverlayRail" },
+      { selector: ".ui-nav-group .ui-nav-label", name: "Nav group", does: "rows under a label", from: "NavGroup" },
+      { selector: ".ui-nav-row", name: "Nav row", does: "a page; the current one lit", from: "NavRow · current" },
+      { selector: ".ui-overlay-page-head", name: "Page", does: "its title, save status and close, over its groups", from: "OverlayPage", side: "above" },
+      { selector: ".ui-setting-group", name: "Setting group", does: "lines under a title", from: "SettingGroup", side: "below" },
+      { selector: ".ui-setting-line:last-child > span:first-child", name: "Setting line", does: "a name, then its control in the one control column", from: "SettingLine", side: "below" }
+    ] }
+  ],
+  examples: [
+    row("LiveNote", "“Shortcut saved” is announced (aria-live polite) and draws nothing", () => <LiveNote>Shortcut saved</LiveNote>, { source: "components/ui/overlay.tsx · settings/shortcuts-settings.tsx", phone: true, code: "<LiveNote>{status}</LiveNote>" }),
     row("OverlayBar", "OverlayBar lead · input · end · close", () => <div class="g-stack g-overlay-demo">
         <Overlay label="Bar"><OverlayBar lead={glyph()} placeholder="Run a command…" onClose={() => {}} /></Overlay>
         <Overlay label="Bar"><OverlayBar lead={<Icons.Search />} placeholder="Search chats, projects, workspaces…" end={<SortToggle />} onClose={() => {}} /></Overlay>
