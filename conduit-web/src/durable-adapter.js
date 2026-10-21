@@ -47,8 +47,16 @@ export const DURABLE_CAPABILITIES = Object.freeze({
   interruptKeepsPartial: false,
 });
 
-const TOOL_KINDS = { bash: "command", read: "read", write: "edit", edit: "edit", ask_user: "other" };
-const subjectOf = (name, args = {}) => toolSubject(name === "bash" ? args.command : args.path);
+const TOOL_KINDS = {
+  bash: "command", read: "read", write: "edit", edit: "edit", ask_user: "other",
+  web_search: "search", source_check: "search", fetch_content: "fetch", get_search_content: "fetch",
+};
+const subjectOf = (name, args = {}) => toolSubject(
+  name === "bash" ? args.command
+    : name === "web_search" ? args.queries || args.query
+      : name === "fetch_content" ? args.urls || args.url
+        : name === "source_check" ? args.claim || args.query
+          : args.path);
 const STOP_REASONS = new Set(["stop", "toolUse", "length", "error", "aborted"]);
 
 /** What the transcript keeps about an attachment. */
