@@ -194,9 +194,20 @@ Each decision as it was put: the question, what was weighed, what was chosen
 and why. The numbered decisions above are the conclusions; this is the
 reasoning to interrogate when one of them stops fitting.
 
+**Sources.** This plan was condensed from a fuller proposal of 2026-10-08,
+still the best statement of the node model, its invariants, identity
+concepts, protocol requirements, security posture and failure matrix:
+`git show e066e6e2:docs/distributed-nodes-and-execution.md`. The older vision
+it descends from (targets running harnesses, Remotes, lineage) is
+`git show 1f2d06d1^:personal-agent-platform-design.md`. Several 2026-10-21
+questions below were already answered there; each says so.
+
 ### 2026-10-21: the model
 
-**Framing.** First sketched as "work on any client from any other client".
+**Framing.** *(Restates the October proposal's core decision: the server
+owns intelligence and coordination, nodes are where actions happen, UI
+clients observe and direct.)* First sketched as "work on any client from any
+other client".
 Corrected: harnesses run on the server, so it is two relationships with the
 server in the middle -- *control* (any client drives the server: the chat
 contract) and *action* (the server acts on devices: the node protocol). A
@@ -212,26 +223,33 @@ unreachable but knows durably where it belongs (a record beside the
 conversation, not agent context). Why: a thread has a home, which keeps short
 chats simple, while the assistant gets the reach it needs. → decision 21.
 
-**Is main's machine just another device?** Weighed: yes, trusted by default
+**Is main's machine just another device?** *(Already adopted in October:
+"Local server environment represented as a Node", one vocabulary, no "is
+remote" branches.)* Weighed: yes, trusted by default
 (one code path, nothing changes for existing users); yes with explicit grants
 (uniform, but every workspace needs a migration and a grant); no, keep local
 special (least work, but Conduit's file browser, Git and terminals stay two
 paths for good). Chosen: a device, trusted by default. → decision 22.
 
-**May third-party harnesses work in a device's folders?** Recommended: never,
+**May third-party harnesses work in a device's folders?** *(Changes the
+October proposal, which ran them on the server against mirrors of device
+folders and made "moving Codex/Claude Code's core loops onto remote devices"
+a non-goal; matches the July vision, where targets run harnesses.)* Recommended: never,
 runtime only, on the reading that devices only lend capabilities. Rejected:
 installed harnesses are properties of the devices that have them; a device
 offers them, Conduit drives them there, and can drive harnesses on several
 devices at once towards one outcome; main's own harnesses work as today. This
 revised decision 5 (which had made remote environments runtime-only).
 
-**Who approves a write or a command on a device?** Weighed: the grants are
+**Who approves a write or a command on a device?** *(October left
+"device-local approval for sensitive classes" open; this settles it.)* Weighed: the grants are
 the approval; an approval card on any client per call (safe, but long tasks
 become babysitting); a prompt on the device itself (strongest consent,
 useless when away from it -- the point of the feature). Chosen: grants are
 the approval; the chat shows every call. → decision 23.
 
-**Who owns a thread typed on the phone in a desktop folder?** Weighed: the
+**Who owns a thread typed on the phone in a desktop folder?** *(October:
+"a workspace's home is independent of the client used to access it".)* Weighed: the
 workspace's device; the device typed on (tools would default to a phone with
 no folders); a picker at start. Chosen: the workspace's device, whoever
 typed; outside any workspace, the device it was started on. → decision 21.
@@ -255,7 +273,37 @@ spawn. Chosen: main as a device first, because it makes device workspaces
 first-class rather than read-only special cases and is what remote harnesses
 and ownership build on. → the node track order under Milestones.
 
+### 2026-10-21: second round, against the October proposal
+
+**Does a workspace store a device path or a root id?** October said a root
+id, never "an arbitrary client path" main later executes in; the first build
+stored the path. Chosen: root ids -- a workspace is `{node, rootId, subpath}`
+and the device maps the root to its real path. Main never holds a path it
+runs things in, a device can move the folder, and unsharing invalidates it.
+
+**How is one PC with several environments modelled?** October separated
+Device from Node (Windows host and a WSL distro as two nodes on one desktop).
+Weighed against one node per device (what was built). Chosen: a device
+groups nodes, each with its own key, roots, grants and installed harnesses;
+the UI groups by device and a thread is owned by a node.
+
+**What happens to server-side mirrors for third-party harnesses?** They
+existed because October kept harnesses on the server. With harnesses running
+where they are installed, chosen: drop mirrors. A harness works in its own
+device's folder with that device's toolchain, the truthful environment.
+(Revisit only if a device has the folder but not the harness.)
+
+**How does the node role run on a desktop?** Weighed: a background companion
+separate from the window (October's proposal); only while the app is open; a
+standalone CLI only. Chosen: a background companion that keeps serving with
+the window closed, starts at login (a setting in Devices), and is paired
+independently of which server the UI points at. Android serves while open,
+then by push wake.
+
 ### 2026-10-21: from the security review of the node path
+
+*(Its first finding restates October's "narrow shell cwd alone is not a
+sandbox".)*
 
 An adversarial review of the first node protocol found these, and each fix
 is a decision as much as a patch:
