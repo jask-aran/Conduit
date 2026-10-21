@@ -21,10 +21,10 @@ export const pillPage: Page = {
     row("PillSwitch", "PillSwitch: a group where one slot is chosen", () => <Area />, { surfaces: ["ground"], phone: "only" }),
     row("PillField", "PillField: text in the capsule", () => <div class="g-fill"><PillField placeholder="Send a message…" /></div>, { surfaces: ["ground"], phone: "only" }),
     row("ChatHeader · the phone's pills", "Header (components/ui/header.tsx): its lead and actions groups", () => <div class="g-bar-demo"><PillGroup actions={[icon("Sidebar", <Icons.Sidebar />), icon("New chat", <Icons.NewChat />)]} /><PillGroup actions={[icon("Search", <Icons.Search />), icon("Terminal", <Icons.Terminal />), icon("More", <Icons.More />)]} /></div>, { surfaces: ["ground"], phone: "only" }),
-    row("Sidebar · header", "navigation/sidebar.tsx (the phone's drawer has no toggle: a swipe or the backdrop closes it)", () => <div class="g-bar-demo"><Area /></div>, { surfaces: ["ground"], phone: "only" }),
+    row("Sidebar · header", "navigation/sidebar.tsx (the phone's drawer has no toggle: a swipe or the backdrop closes it)", () => <div class="g-bar-demo"><Area /></div>, { source: "navigation/sidebar.tsx (the phone's drawer has no toggle: a swipe or the backdrop closes it)", surfaces: ["ground"], phone: "only" }),
     row("Composer · bar layout", "chat/composer.tsx (bar)", () => <div class="g-composer-demo"><PillField placeholder="Send a message…" /><div class="g-bar-demo">
         <PillButton {...icon("Message options", <Icons.Add />)} /><PillButton {...icon("Take a photo", <Icons.Camera />)} /><PillButton {...icon("Type a message", <Icons.Keyboard />)} /><PillButton stretch {...icon("Dictate", <Icons.Microphone />)} /><PillButton {...icon("Send", <Icons.Send />)} />
-      </div></div>, { surfaces: ["ground"], phone: "only" })
+      </div></div>, { source: "chat/composer.tsx (bar)", surfaces: ["ground"], phone: "only" })
   ],
   motion: [
     row("comes and goes · Empty", "unfolds beside the mic, which gives it room, and fades into it; fades, then gives the room back · the room: --duration-gentle · --ease-arrive; the fade: --duration-quick, after the room opens or before it closes", () => { const [s, setState] = createSignal<string>("Empty"); return <><Button variant="ghost" outline size="sm" onClick={() => setState(s() === "Empty" ? "Typed" : "Empty")}>Toggle Send</Button><div class="g-bar-demo"><PillButton {...icon("Message options", <Icons.Add />)} /><PillButton stretch {...icon("Dictate", <Icons.Microphone />)} />

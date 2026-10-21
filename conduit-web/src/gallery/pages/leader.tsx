@@ -1,4 +1,4 @@
-import { Spotlight, OverlayHead, OverlayList, Overlay } from "@/components/ui";
+import { Spotlight, Leader } from "@/components/ui";
 import { Replay } from "../specs";
 import { row, token, type Page } from "../model";
 import { LeaderPath, leaderRows, noop } from "../demos";
@@ -30,13 +30,13 @@ import { OverlayHints } from "@/components/ui/overlay";
     {selector: ".ui-spotlight-lit",name: "Spotlight",does: "keeps the current region clear of the dim",from: "Spotlight"},
   ] },
   examples: [
-    row("Crumbs", "Crumbs: the breadcrumb's places in the section label's caps; the current place white with no fill, the cursor washing the others", () => <div class="g-overlay-demo"><Overlay label="Crumbs" class="ui-leader"><OverlayHead><LeaderPath /></OverlayHead></Overlay></div>, { surfaces: ["ground"] }),
-    row("Item keysFirst", "Item keysFirst: the key leads the row, in the text colour", () => <div class="g-overlay-demo"><Overlay label="Rows" class="ui-leader"><OverlayList>{leaderRows()}</OverlayList></Overlay></div>, { surfaces: ["ground"] }),
+    row("Crumbs", "Crumbs: the breadcrumb's places in the section label's caps; the current place white with no fill, the cursor washing the others", () => <div class="g-overlay-demo"><Leader label="Crumbs" path={<LeaderPath />} /></div>, { surfaces: ["ground"] }),
+    row("Item keysFirst", "Item keysFirst: the key leads the row, in the text colour", () => <div class="g-overlay-demo"><Leader label="Rows">{leaderRows()}</Leader></div>, { surfaces: ["ground"] }),
     row("Spotlight", "Spotlight: the dim is the shadow round the lit region, cut out with its corners", () => <div class="g-page"><div class="g-page-pane" /><div class="g-page-composer" /><Spotlight lit={{ top: "12px", left: "12px", width: "calc(100% - 24px)", height: "calc(100% - 24px)", radius: "16px" }} /></div>, { surfaces: ["ground"] }),
-    row("LeaderPalette", "navigation/leader-palette.tsx · the composer region lit", leaderScene, { surfaces: ["ground"] }),
+    row("LeaderPalette", "navigation/leader-palette.tsx · the composer region lit", leaderScene, { source: "navigation/leader-palette.tsx · the composer region lit", surfaces: ["ground"] }),
   ],
   motion: [
-    row("arrives · leaves", "rises --space-md with a fade; drops back; in: --duration-gentle · --ease-arrive · out: --duration-quick · --ease-leave", () => <Replay leaves={["leaving"]}>{(m) => <Overlay label="Leader" class="ui-leader" motion={m()}><OverlayList>{leaderRows()}</OverlayList></Overlay>}</Replay>, { surfaces: ["ground"], code: "<Leader motion>" }),
+    row("arrives · leaves", "rises --space-md with a fade; drops back; in: --duration-gentle · --ease-arrive · out: --duration-quick · --ease-leave", () => <Replay leaves={["leaving"]}>{(m) => <Leader motion={m()}>{leaderRows()}</Leader>}</Replay>, { surfaces: ["ground"], code: "<Leader motion>" }),
   ],
   tokens: [{ title: "Its surface", tokens: [
     token("--dim", "Page dim"),

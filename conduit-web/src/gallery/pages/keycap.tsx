@@ -1,7 +1,7 @@
 import { createSignal } from "solid-js";
 import { Show } from "solid-js";
 import { Button, Icons, SettingLine } from "@/components/ui";
-import { Item, Keycap, Menu, Section } from "@/components/ui";
+import { Item, Keycap, Leader, Menu, Section } from "@/components/ui";
 import { row, token, type Page } from "../model";
 
 function ShortcutExample() {
@@ -23,7 +23,7 @@ export const keycapPage: Page = {
   examples: [
     row("key", "a key or a chord beside a row, muted --control-2xs tall · corner --radius-inset · fill --tint · --text-label --font-label --weight-lift · --muted-foreground", () => <div class="g-row"><Keycap>Ctrl</Keycap><Keycap>K</Keycap></div>, { code: "<Keycap>K</Keycap>" }),
     row("on the cursor", "on the row the cursor is on, white .ui-row[data-highlighted] .ui-keycap · --foreground", () => <Menu><Section><Item keys={["Ctrl", "K"]} active>Command palette</Item></Section></Menu>, { code: "<Item keys={[…]} active>", surfaces: ["ground"] }),
-    row("leading", "the leader's key, at the row's start: white in the leader .ui-leader .ui-keys[data-first] · --foreground", () => <Menu class="ui-leader"><Section><Item keysFirst keys={["A"]}>Attach files</Item></Section></Menu>, { code: "<Item keysFirst keys={[…]}> in <Leader>", surfaces: ["ground"] }),
+    row("leading", "the leader's key, at the row's start: white in the leader .ui-leader .ui-keys[data-first] · --foreground", () => <Leader label="Leader"><Section><Item keysFirst keys={["A"]}>Attach files</Item></Section></Leader>, { code: "<Item keysFirst keys={[…]}> in <Leader>", surfaces: ["ground"] }),
     row("editable", "Settings · Shortcuts: pressed to record another, × clears it 1.5625 units tall · --text-caption · --foreground · × --muted-foreground behind a --tint line · each part --tint washed", () => <Keycap label="Ctrl K" onClick={() => {}} onRemove={() => {}}>Ctrl K</Keycap>, { code: "<Keycap onClick onRemove>" }),
     row("pressable", "pressed to record another, not cleared here as editable, without the ×", () => <Keycap label="Ctrl Shift K" onClick={() => {}}>Ctrl Shift K</Keycap>, { code: "<Keycap onClick>" }),
     row("change and clear", "Click changes the chord; remove clears it", () => <ShortcutExample />, { code: "SettingLine > Keycap label onClick onRemove" }),

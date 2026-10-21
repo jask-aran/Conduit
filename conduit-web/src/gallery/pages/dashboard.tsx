@@ -52,7 +52,7 @@ import { Icons } from "@/components/ui";
     {selector: ".ui-dash-aside",name: "Places",does: "holds projects and workspaces",from: "Dashboard aside"},
   ] },
   examples: [
-    row("GroupCompactHeading", "label, count and where", () => <GroupCompactHeading label="Unread" count={3} where="in Japan" />, { phone: "only", code: "<GroupCompactHeading label count where />" }),
+    row("GroupCompactHeading", "label, count and where", () => <GroupCompactHeading label="Unread" count={3} where="in Japan" />, { source: "components/ui/dashboard.tsx · dashboard/primitives/chat-list.tsx", phone: "only", code: "<GroupCompactHeading label count where />" }),
     row("GroupCompactHeading · label only", "no count, no place", () => <GroupCompactHeading label="All chats" />, { phone: "only", code: "<GroupCompactHeading label />" }),
     row("GroupHeading · the two section roles", "the strong one for dashboards and big lists; the quiet one for menus, Settings and the sidebar (Paper Mono capitals on both layouts, at each one's unit)", () => <div class="g-row g-top"><GroupHeading count={4}>Projects</GroupHeading><GNavGroup label="Projects"><GNavRow icon={<Icons.Folder />}>Japan</GNavRow></GNavGroup></div>, { phone: true, code: "<GroupHeading count> · <NavGroup label>" }),
     row("GroupToggle · Open", "open and shut", () => <GroupToggle open={true} count={4} onClick={() => {}}>Projects</GroupToggle>, { phone: true, code: "<GroupToggle open count onClick>" }),
@@ -72,7 +72,7 @@ import { Icons } from "@/components/ui";
     row("DashPath · Copied", "a place's working path in its header's context: a tap copies it, and it says Copied for a moment; --font-data --text-caption · brightens on hover or focus", () => <DashPath path="~/Conduit" copied={true} onCopy={() => {}} />, { phone: true, code: "<DashPath path copied onCopy />" }),
     row("DashEmpty · DashNote", "an empty list, a note and an error", () => <div><DashEmpty>No chats</DashEmpty><DashNote>Choose a project to start.</DashNote><DashNote error>Could not load projects.</DashNote></div>, { phone: true, code: "<DashEmpty> · <DashNote error>" }),
     row("FolderShelf · FolderTile", "four projects, one live, and a new project action", () => <FolderShelf all><FolderTile name="Conduit" meta="3 chats" live /><FolderTile name="Japan" meta="2 chats" /><FolderTile name="Website" meta="1 chat" /><FolderTile name="Notes" meta="No chats" /><FolderTile name="New project" icon={<Icons.NewFolder />} /></FolderShelf>, { phone: true, code: "<FolderShelf all> · <FolderTile name meta live icon>" }),
-    row("Dashboard · a page", "dashboard/primitives/split.tsx", dashboardScene, { surfaces: ["ground"] }),
+    row("Dashboard · a page", "dashboard/primitives/split.tsx", dashboardScene, { source: "dashboard/primitives/split.tsx", surfaces: ["ground"] }),
   ],
   tokens: [{ title: "Its surface", tokens: [
     token("--dash-gap", "Space between columns"),

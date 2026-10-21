@@ -96,8 +96,10 @@ export function buildGalleryApi(root) {
     if (!byName.has(component.name)) byName.set(component.name, []);
     byName.get(component.name).push(component);
   }
-  for (const filename of [...sourceFiles(path.join(src, "client")), ...sourceFiles(path.join(src, "components"))]) {
-    if (filename.startsWith(`${ui}${path.sep}`)) continue;
+  // Every app source (the client, the server-rendered pages, the adapters), not the library itself or the gallery.
+  const gallery = path.join(src, "gallery");
+  for (const filename of sourceFiles(src)) {
+    if (filename.startsWith(`${ui}${path.sep}`) || filename.startsWith(`${gallery}${path.sep}`) || filename.endsWith(".d.ts")) continue;
     const source = fs.readFileSync(filename, "utf8");
     for (const statement of parseSource(source).program.body) {
       if (statement.type !== "ImportDeclaration") continue;

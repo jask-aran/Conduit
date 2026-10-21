@@ -40,7 +40,7 @@ export const TRACE_STATES: { group: string; rows: TraceState[] }[] = [
 ];
 export const TraceStates = () => <table class="g-trace-states"><thead><tr><th>Status</th><th>When</th><th>The trace</th></tr></thead>
   <For each={TRACE_STATES}>{(group) => <tbody><tr><th colspan="3" class="g-trace-group">{group.group}</th></tr>
-    <For each={group.rows}>{(row) => <tr><th>{row.status}</th><td>{row.when}</td><td class="ui-read"><TraceHeader orb={row.orb()} status={row.status} time={row.live ? "12s" : "1m 00s"} work={row.status.startsWith("Starting") || row.status === "Waiting for model" ? undefined : "1 read, 1 edit"} latest={row.latest || undefined} live={row.live} tone={row.tone} opens={row.status !== "Starting"} /></td></tr>}</For></tbody>}</For></table>;
+    <For each={group.rows}>{(row) => <tr><th>{row.status}</th><td>{row.when}</td><td><Read><TraceHeader orb={row.orb()} status={row.status} time={row.live ? "12s" : "1m 00s"} work={row.status.startsWith("Starting") || row.status === "Waiting for model" ? undefined : "1 read, 1 edit"} latest={row.latest || undefined} live={row.live} tone={row.tone} opens={row.status !== "Starting"} /></Read></td></tr>}</For></tbody>}</For></table>;
 /** A turn played, a second a beat: its Status, Work and Latest line follow the app's rules -- a running tool's Latest
  * is what it acts on, a finished one its past tense, thinking its summary; settled, the last thinking. */
 export function LiveTurn() {
@@ -74,9 +74,9 @@ export function LiveTurn() {
 }
 
 export const tracePage: Page = { title: "Trace", summary: "A turn's work, over its answer. Its head is two lines -- the Status line (Status · Time · Work) and the Latest line -- beside the Orb; opened, its Trail of Steps.", rail: "Blocks",
-  preview: () => <div class="ui-read g-read g-trace-anatomy">
+  preview: () => <Read class="g-read g-trace-anatomy">
         <FoldTrace orb={orb(true)} status="Done" time="1m 00s" work="1 read, 1 edit, 1 command" latest="The second paragraph has four sentences"><Trail><Step icon={<Icons.Thinking />} summary="The second paragraph has four sentences" /><Step icon={<Icons.FileText />} verb="Read" subject="lorem_ipsum.txt" time="0ms" /><Step icon={<Icons.WriteFile />} verb="Edited" subject="lorem_ipsum.txt" time="1m 00s" /></Trail></FoldTrace>
-      </div>,
+      </Read>,
   usage: `import { Trace, Orb, Trail, Step, StepOutput } from "@/components/ui";
 
 <Trace status="Done" time="12s" work="1 command" orb={<Orb state="working" />}
@@ -87,9 +87,9 @@ export const tracePage: Page = { title: "Trace", summary: "A turn's work, over i
     </Step>
   </Trail>
 </Trace>`,
-  anatomy: { scene: () => <div class="ui-read g-read g-trace-anatomy">
+  anatomy: { scene: () => <Read class="g-read g-trace-anatomy">
         <FoldTrace orb={orb(true)} status="Done" time="1m 00s" work="1 read, 1 edit, 1 command" latest="The second paragraph has four sentences"><Trail><Step icon={<Icons.Thinking />} summary="The second paragraph has four sentences" /><Step icon={<Icons.FileText />} verb="Read" subject="lorem_ipsum.txt" time="0ms" /><Step icon={<Icons.WriteFile />} verb="Edited" subject="lorem_ipsum.txt" time="1m 00s" /></Trail></FoldTrace>
-      </div>, parts: [{ selector: ".ui-trace-orb", name: "Orb", does: "what it is doing, as motion (Foundations · Orbs)", from: "Orb" },
+      </Read>, parts: [{ selector: ".ui-trace-orb", name: "Orb", does: "what it is doing, as motion (Foundations · Orbs)", from: "Orb" },
     { selector: ".ui-trace-line > b", name: "Status", does: "one word for what it is doing or how it ended (States below)", from: "Status line", side: "above" },
     { selector: ".ui-trace-time", name: "Time", does: "from the prompt: counting while it runs, then how long it took", from: "Status line", side: "above" },
     { selector: ".ui-trace-line > span:last-child", name: "Work", does: "its tools counted by kind, most first", from: "Status line", side: "above" },

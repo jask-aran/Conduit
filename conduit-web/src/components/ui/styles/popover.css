@@ -74,10 +74,6 @@
 .ui-row > .ui-row-end { display: inline-flex; flex: none; margin-left: auto; margin-right: calc((var(--u-icon) - var(--control-sm)) / 2); }
 
 /* Heading section: the popover's subject, then items about it (a field row). */
-.ui-heading { padding: 0; }
-.ui-heading-title, .ui-heading-detail { padding: var(--space-sm); line-height: var(--leading-tight); }
-.ui-heading-title { color: var(--foreground); font-size: var(--text-body); font-weight: var(--weight-strong); }
-.ui-heading-detail { color: var(--muted-foreground); font-size: var(--text-caption); }
 
 /* A field row: its name muted at the row role (never uppercase), its value after it. */
 /* A field row reads as its section's title (a slider's, the plus menu's PROFILE and EFFORT): the name in the label's

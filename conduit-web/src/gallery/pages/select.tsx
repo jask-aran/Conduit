@@ -35,7 +35,7 @@ export const selectPage: Page = {
   ] },
   examples: [
     row("Select", "SelectTrigger bare", () => <div class="g-field"><SelectTrigger value="System default" /><div class="g-row"><span>Provider</span><SelectTrigger bare value="OpenAI" /></div></div>),
-    row("Select · the adapter", "components/menus.tsx Select", () => <AdapterSelect />),
+    row("Select · the adapter", "components/menus.tsx Select", () => <AdapterSelect />, { source: "components/menus.tsx Select" }),
     row("choose provider", "Open choices and change the value", () => <ProviderSelect />, { code: "Field > SelectTrigger + Menu" }),
     row("disabled", "Provider unavailable while connecting", () => <SelectTrigger aria-label="Provider" value="OpenAI" disabled />, { code: "<SelectTrigger disabled>" }),
     row("disabled bare", "Locked setting without a field border", () => <SettingLine label="Provider"><SelectTrigger bare disabled aria-label="Provider" value="OpenAI" /></SettingLine>, { code: "SettingLine > SelectTrigger bare disabled" }),
