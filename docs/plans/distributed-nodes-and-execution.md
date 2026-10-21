@@ -303,7 +303,13 @@ separate from the window (October's proposal); only while the app is open; a
 standalone CLI only. Chosen: a background companion that keeps serving with
 the window closed, starts at login (a setting in Devices), and is paired
 independently of which server the UI points at. Android serves while open,
-then by push wake.
+then by push wake. Built for the desktop app: the shell runs the
+same `conduit-node`, bundled with Node and node-pty's prebuilt binaries as an
+app resource (`scripts/build-node-companion.mjs`, `src-tauri/src/
+node_companion.rs`), while "Serve this computer" is on; Settings › Devices
+adds this computer to the server in one step (the server's key, handed to
+the shell's node) and shares folders through the system picker. A real
+Windows node ran the runtime, file browsing and a ConPTY terminal.
 
 ### 2026-10-21: third round, on what October left open
 
@@ -328,7 +334,8 @@ where it broke off; only a restarted node (another `boot`) yields "unknown".
 **Can a device pair with more than one server?** Weighed: independently,
 each pairing with its own key, roots and grants (October's model); one
 server per device. Chosen: independently; switching the server a UI shows
-never moves a device's pairing.
+never moves a device's pairing. Built: node.json holds a pairing per server, each
+with its own key and folders, and `run` keeps a connection to each.
 
 **Which files never leave a device?** Weighed: a default deny-list, editable
 per root; nothing excluded; respect .gitignore (surprises when an agent needs

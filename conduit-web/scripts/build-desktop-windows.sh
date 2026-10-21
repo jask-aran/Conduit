@@ -126,11 +126,21 @@ if [ -n "$dev_client" ]; then
 else
   update_base=${CONDUIT_LOCAL_UPDATE_URL:-"http://127.0.0.1:${CONDUIT_PORT:-4310}/desktop-updates"}
 fi
+# The device companion: the node role bundled with Windows' own Node runtime,
+# shipped as an app resource for the shell to run in the background.
+windows_node=$(cmd.exe /c 'where node' 2>/dev/null | tr -d '\r' | head -n 1)
+if [ -z "$windows_node" ]; then
+  echo "No node.exe on the Windows side: the desktop app ships it to run its device companion." >&2
+  exit 1
+fi
+node ../scripts/build-node-companion.mjs "$(wslpath -u "$windows_node")" --platform win32 --arch x64
+
 overlay="src-tauri/tauri.build-overlay.conf.json"
 trap 'rm -f "$overlay"' EXIT
 node -e '
   const [out, version, localUpdates, base, dev] = process.argv.slice(1);
-  const overlay = { build: { beforeBuildCommand: "" }, bundle: { createUpdaterArtifacts: false } };
+  const overlay = { build: { beforeBuildCommand: "" },
+    bundle: { createUpdaterArtifacts: false, resources: { "companion/": "companion/" } } };
   if (version) overlay.version = version;
   if (localUpdates) {
     // The updater refuses a plain-HTTP endpoint outright, which is right for a

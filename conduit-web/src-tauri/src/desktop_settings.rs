@@ -1,6 +1,6 @@
-//! The four facts the shell needs before the webview has loaded: whether
-//! closing the window means hiding it, whether Conduit starts with Windows,
-//! and whether that start is a visible one.
+//! The facts the shell needs before the webview has loaded: whether closing
+//! the window means hiding it, whether Conduit starts with Windows, whether
+//! that start is a visible one, and whether this computer serves as a device.
 //!
 //! They are kept here rather than in the client's own settings because the
 //! close handler and the launch path both run before any of that is readable.
@@ -23,11 +23,13 @@ pub struct DesktopSettings {
     pub launch_at_login: bool,
     /// Only consulted on a launch the autostart entry made.
     pub start_hidden: bool,
+    /// Run the node role in the background, so a Conduit server can act here.
+    pub serve_as_device: bool,
 }
 
 impl Default for DesktopSettings {
     fn default() -> Self {
-        Self { keep_running_in_tray: true, launch_at_login: false, start_hidden: false }
+        Self { keep_running_in_tray: true, launch_at_login: false, start_hidden: false, serve_as_device: false }
     }
 }
 
@@ -82,6 +84,7 @@ pub fn set_desktop_settings<R: Runtime>(
         autostart.disable().map_err(|error| error.to_string())?;
     }
     persist(&app, &settings)?;
+    crate::node_companion::supervise(&app, settings.serve_as_device);
     *state.0.lock().expect("desktop settings lock") = settings;
     Ok(settings)
 }
