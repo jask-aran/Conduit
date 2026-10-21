@@ -34,16 +34,8 @@
 
 /* Phone mode retains the larger touch density. */
 @media (--conduit-phone-layout) {
-:root {
-  --transcript-column-width: var(--composer-desktop-reference-width);
-  --transcript-column-gutter: 48px;
-  --transcript-wide-scale: 150%;
-}
-
 :root[data-transcript-width="compact"] { --transcript-column-width: 660px; }
-:root[data-transcript-width="default"] { --transcript-column-width: var(--composer-desktop-reference-width); }
 :root[data-transcript-width="wide"] { --transcript-column-width: 950px; }
-:root[data-transcript-width="full"] { --transcript-column-width: 100%; }
 }
 
 /* The pane declares the Answer's bleed: past the reading column only when the chat is wide, code only when the reader
