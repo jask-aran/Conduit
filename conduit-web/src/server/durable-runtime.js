@@ -45,6 +45,8 @@ export class DurableRuntime {
     this.opening = null;
   }
 
+  exists() { return fs.existsSync(this.file); }
+
   /** Opened on first use: a server with no runtime chats pays nothing for it. */
   open() {
     return this.opening ??= (async () => {
