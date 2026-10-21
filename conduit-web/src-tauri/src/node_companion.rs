@@ -78,8 +78,22 @@ fn spawn_node<R: Runtime>(app: &AppHandle<R>) -> Result<Child, String> {
         .map_err(|error| error.to_string())
 }
 
+/// The node and everything it started: a command left running after the node
+/// is gone would finish unseen, while the server reports its outcome unknown.
+/// Windows kills one process, not its children, so the tree goes by taskkill.
 fn stop_child(companion: &Companion) {
     if let Some(mut child) = companion.child.lock().expect("companion lock").take() {
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            let _ = Command::new("taskkill")
+                .args(["/T", "/F", "/PID", &child.id().to_string()])
+                .creation_flags(0x0800_0000)
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .status();
+        }
         let _ = child.kill();
         let _ = child.wait();
     }
