@@ -1,5 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { loadPiExtensionTools } from "./pi-extension-bridge.js";
 import { awaitWithContext, BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import { Type } from "@earendil-works/pi-ai";
 import { createRegistry, defineDoc, defineExtension, defineTool, Harness, section } from "@earendil-works/pi-durable";
@@ -11,6 +13,15 @@ import { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import { buildManagedToolEnvironment } from "../../../scripts/pi-runtime.mjs";
 
 const SYSTEM_PROMPT = fs.readFileSync(new URL("../../../templates/conduit-runtime/SYSTEM.md", import.meta.url), "utf8");
+// The Assistant's web section, with the web-research skill it names inlined:
+// the runtime loads no skills, and this one is short.
+const WEB_PROMPT = [
+  fs.readFileSync(new URL("../../../templates/conduit-runtime/WEB.md", import.meta.url), "utf8"),
+  fs.readFileSync(new URL("../../../templates/coding/skills/web-research/SKILL.md", import.meta.url), "utf8").replace(/^---\n[\s\S]*?\n---\n/, ""),
+].join("\n");
+const WEB_ACCESS = fileURLToPath(new URL("../../node_modules/pi-web-access/index.ts", import.meta.url));
+// Reads and searches: asking again after a restart costs a request, not a side effect.
+const WEB_REPLAY_SAFE = ["web_search", "fetch_content", "get_search_content", "source_check"];
 
 const MAX_QUESTIONS = 4;
 
@@ -138,6 +149,7 @@ export class DurableRuntime {
       const registry = createRegistry();
       registry.install(Conduit(this));
       registry.install(CodingTools);
+      await this.installWebTools(registry);
       // Bash finds Conduit's managed Python first, as it does for Conduit Pi.
       const shellEnv = buildManagedToolEnvironment(process.env);
       this.harness = await Harness.open(await openNodeSqliteStorage(this.file), {
@@ -162,6 +174,21 @@ export class DurableRuntime {
       this.harness.resume();
       return this.harness;
     })().catch((error) => { this.opening = null; throw error; });
+  }
+
+  /**
+   * The Assistant profile's web research tools, from the same pi-web-access
+   * extension Conduit Pi loads, with its configuration (web-search.json) read
+   * from the Conduit Pi agent's directory. A runtime without them still runs.
+   */
+  async installWebTools(registry) {
+    process.env.PI_CODING_AGENT_DIR ??= this.piAgentDir;
+    try {
+      const tools = await loadPiExtensionTools(WEB_ACCESS, { models: this.models, replaySafe: WEB_REPLAY_SAFE });
+      registry.install(defineExtension({ name: "web", tools, sections: [section("web", () => WEB_PROMPT, { tag: false })] }));
+    } catch (error) {
+      console.warn("[conduit-runtime] web tools unavailable:", error?.message || error);
+    }
   }
 
   /** The models the Conduit Pi agent offers: its enabled list when it has one, else every model with credentials. */
