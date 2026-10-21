@@ -316,7 +316,9 @@ Weighed against reporting "cut off" and letting the model decide (what
 exists). Chosen: receipts for writes and commands -- every mutating call
 carries an action id, the node records its outcome, and after a reconnect
 main asks what happened; writes become exactly-once, commands report their
-exit or "unknown" truthfully.
+exit or "unknown" truthfully. Built: `src/nodes/receipts.js`; a command
+keeps running on the node through a dropped socket and its output resumes
+where it broke off; only a restarted node (another `boot`) yields "unknown".
 
 **Can a device pair with more than one server?** Weighed: independently,
 each pairing with its own key, roots and grants (October's model); one

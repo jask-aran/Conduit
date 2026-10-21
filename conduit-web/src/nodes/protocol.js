@@ -8,12 +8,19 @@ import path from "node:path";
  * Conduit's own and versioned, so an installed node survives changes to
  * pi-durable's environment API: main adapts it, the wire does not move.
  *
- * node -> main   { type: "hello", version, nodeId, name, roots: [{ path, read, write, shell }] }
- * main -> node   { type: "call", id, target: "env" | <handle id>, method, args, cwd }
- *                { type: "abort", id }
+ * node -> main   { type: "hello", version, name, platform, boot, roots: [{ id, label, read, write, shell, allow }] }
+ * main -> node   { type: "call", id, target: "env" | "proc" | <handle id>, method, args, cwd: { root, path },
+ *                  action?, from? }
+ *                { type: "abort", id } | { type: "abort", action }
  * node -> main   { type: "result", id, value }       a Result, encoded
  *                { type: "failure", id, message }    the call itself could not run
- *                { type: "event", id, kind, ... }    exec output, watch changes
+ *                { type: "event", id, kind, seq?, ... }  exec output, watch changes
+ *
+ * A write or command carries an `action` id (src/nodes/receipts.js): asked
+ * again after a reconnect, with `from` the next event main lacks, the node
+ * answers from what it recorded instead of doing it again. `boot` names the
+ * node's run; another boot has no receipts, so main reports the outcome
+ * unknown.
  *
  * Values are JSON. Bytes travel as `{ $bytes: base64 }`, the environment's two
  * error classes as `{ $error: "file" | "exec", code, message, path?, spillPath? }`,

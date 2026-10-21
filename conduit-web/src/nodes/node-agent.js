@@ -8,6 +8,7 @@ import { NodeExecutionEnv } from "@earendil-works/pi-durable/env/node";
 import { encode, decode, HANDLE_METHODS, METHOD_GRANTS, NODE_PROTOCOL_VERSION, rootFor } from "./protocol.js";
 import { NodeProcesses } from "./node-processes.js";
 import { keptBack, rootDeny } from "./secrets.js";
+import { Receipts } from "./receipts.js";
 
 const RETRY_MS = [1000, 2000, 5000, 10000, 30000];
 
@@ -36,6 +37,8 @@ export function startNodeAgent({ mainUrl, key, name, roots: shared, shellEnv = p
   const envs = new Map();
   // Processes outlive any one socket (decision 18): they are the device's.
   const processes = new NodeProcesses({ shellEnv });
+  // Writes and commands by action id: they outlive a socket, and are never done twice.
+  const receipts = new Receipts();
   let socket = null;
   let attempt = 0;
   let stopped = false;
@@ -76,21 +79,36 @@ export function startNodeAgent({ mainUrl, key, name, roots: shared, shellEnv = p
     ws.on("open", () => {
       attempt = 0;
       // Roots go by id; the path is for people to read, main never sends it back.
-      send({ type: "hello", version: NODE_PROTOCOL_VERSION, name, platform: process.platform,
+      send({ type: "hello", version: NODE_PROTOCOL_VERSION, name, platform: process.platform, boot: receipts.boot,
         roots: roots.map(({ id, path: label, read, write, shell, allow }) => ({ id, label, read, write, shell, allow })) });
       log.info?.(`[conduit-node] connected to ${mainUrl}`);
     });
     ws.on("message", async (raw) => {
       let message;
       try { message = JSON.parse(String(raw)); } catch { return; }
-      if (message.type === "abort") return calls.get(message.id)?.abort();
+      if (message.type === "abort") return message.action ? receipts.abort(message.action) : calls.get(message.id)?.abort();
       if (message.type === "refused") { log.error?.(`[conduit-node] main refused this node: ${message.reason}`); stopped = true; return ws.close(); }
       if (message.type !== "call") return;
+      if (typeof message.action === "string" && message.target === "env") {
+        let finished = false;
+        const followed = receipts.follow(message.action, Number(message.from) || 0, {
+          event: (event) => send({ ...event, type: "event", id: message.id }),
+          result: (result) => {
+            finished = true;
+            calls.delete(message.id);
+            send(result?.failure !== undefined ? { type: "failure", id: message.id, message: result.failure }
+              : { type: "result", id: message.id, value: encode(result) });
+          },
+        }, (emit, signal) => run(message, withAbortSignal(signal, BACKGROUND_CONTEXT), emit));
+        // An action already done was answered from its receipt just now.
+        if (!finished) calls.set(message.id, { abort: followed.abort, drop: followed.drop });
+        return;
+      }
       const controller = new AbortController();
       calls.set(message.id, controller);
       const context = withAbortSignal(controller.signal, BACKGROUND_CONTEXT);
       try {
-        const value = await run(message, context);
+        const value = await run(message, context, (event) => send({ ...event, type: "event", id: message.id }));
         // Something with methods of its own stays here; main gets its name.
         const result = value?.ok && value.value && typeof value.value.close === "function"
           ? { ok: true, value: keep(value.value) } : value;
@@ -104,7 +122,8 @@ export function startNodeAgent({ mainUrl, key, name, roots: shared, shellEnv = p
     ws.on("close", () => {
       for (const detach of following.values()) detach();
       following.clear();
-      for (const controller of calls.values()) controller.abort();
+      // An action keeps running for main to ask after again; any other call stops.
+      for (const call of calls.values()) (call.drop || call.abort).call(call);
       for (const handle of handles.values()) void handle.close?.(BACKGROUND_CONTEXT);
       handles.clear();
       if (socket === ws) socket = null;
@@ -155,7 +174,7 @@ export function startNodeAgent({ mainUrl, key, name, roots: shared, shellEnv = p
       }
     }
 
-    async function run({ id, target, method, args = [], cwd }, context) {
+    async function run({ target, method, args = [], cwd }, context, emit) {
       const decoded = decode(args, { FileError, ExecutionError });
       if (target === "proc") return runProcess(method, decoded);
       if (target !== "env") {
@@ -183,11 +202,11 @@ export function startNodeAgent({ mainUrl, key, name, roots: shared, shellEnv = p
       const env = envFor(home);
       if (method === "exec") {
         const options = { ...(decoded[1] || {}) };
-        options.onOutput = (text, _context, info) => send({ type: "event", id, kind: "output", text, info: encode(info) });
+        options.onOutput = (text, _context, info) => emit({ kind: "output", text, info: encode(info) });
         return env.exec(decoded[0], options, context);
       }
       if (method === "watch") {
-        return env.watch(decoded[0], (change) => send({ type: "event", id, kind: "change", change: encode(change) }), context);
+        return env.watch(decoded[0], (change) => emit({ kind: "change", change: encode(change) }), context);
       }
       if (typeof env[method] !== "function") return err(new FileError("not_supported", `${method} is not available on this device`));
       return env[method](...decoded, context);

@@ -1,9 +1,13 @@
+import crypto from "node:crypto";
 import { err, ExecutionError, FileError } from "@earendil-works/pi-durable/env";
 import { decode, encode, HANDLE_METHODS, METHOD_GRANTS } from "./protocol.js";
 
 // A read asked again after the device reconnects returns what it would have.
 const RETRY_ON_RECONNECT = new Set(Object.entries(METHOD_GRANTS)
   .filter(([method, rule]) => rule.grant === "read" && method !== "watch").map(([method]) => method));
+// A write or a command is an action: asked again by its id, the device answers from its receipt.
+const ACTIONS = new Set(Object.entries(METHOD_GRANTS)
+  .filter(([, rule]) => rule.grant === "write" || rule.grant === "shell").map(([method]) => method));
 
 /**
  * A pi-durable execution environment on another device (plan decision 5).
@@ -11,9 +15,12 @@ const RETRY_ON_RECONNECT = new Set(Object.entries(METHOD_GRANTS)
  * Every method is one call over the device's node socket, run there in `cwd`;
  * the device checks it against what it shares. The coding tools cannot tell
  * this from the local environment. A device that is offline is waited for
- * (the turn shows what it waits on); a call cut off by a disconnect is a read
- * asked again, or for anything that changes the device, an error that says
- * so, since whether it ran is unknown.
+ * (the turn shows what it waits on). A call cut off by a disconnect is asked
+ * again once the device is back: a read simply, a write or command by its
+ * action id, which the device answers from its receipt -- the command having
+ * kept running meanwhile, its output resumed where it broke off. Only a
+ * device that restarted meanwhile cannot say; the outcome is reported as
+ * unknown, never retried blind.
  */
 export class RemoteExecutionEnv {
   /**
@@ -35,13 +42,35 @@ export class RemoteExecutionEnv {
   }
 
   async call(target, method, args, context, onEvent) {
+    const action = target === "env" && ACTIONS.has(method) ? `a_${crypto.randomUUID()}` : null;
+    // Which run of the device took the action, and the next event it owes.
+    let boot;
+    let from = 0;
+    const heard = action ? (event) => {
+      if (event.seq < from) return;
+      from = event.seq + 1;
+      onEvent?.(event);
+    } : onEvent;
     for (;;) {
       try {
-        const value = await this.hub.call(this.nodeId, { target, method, args: encode(args), cwd: this.place }, context,
-          { onEvent, onWait: this.onWait });
+        const value = await this.hub.call(this.nodeId,
+          { target, method, args: encode(args), cwd: this.place, ...(action ? { action, from } : {}) }, context,
+          { onEvent: heard, onWait: this.onWait, ...(action ? { onSent: (sent) => { boot ??= sent; }, ...(boot !== undefined ? { boot } : {}) } : {}) });
         return decode(value, { FileError, ExecutionError, handle: (ref) => this.handle(ref) });
       } catch (error) {
         if (error?.interrupted && target === "env" && RETRY_ON_RECONNECT.has(method) && !context.abortSignal?.aborted) continue;
+        // A device that keeps receipts is asked what became of the action; one without them, or restarted, cannot say.
+        if (error?.interrupted && action && boot && !context.abortSignal?.aborted) continue;
+        if ((error?.interrupted && action) || error?.restarted) {
+          const what = method === "exec" ? "command" : "change";
+          const message = `The device ${error?.restarted ? "restarted" : "disconnected"} during this ${what}; whether it finished is unknown`;
+          return err(method === "exec" ? new ExecutionError("unknown", message) : new FileError("unknown", message));
+        }
+        if (context.abortSignal?.aborted && action && boot) {
+          // Stopped between sockets: the action still runs on the device, so stop it there if it is back.
+          const node = this.hub.live.get(this.nodeId);
+          if (node?.ready && node.boot === boot) node.send({ type: "abort", action });
+        }
         if (context.abortSignal?.aborted) return err(method === "exec" ? new ExecutionError("aborted", "Aborted") : new FileError("aborted", "Aborted"));
         return err(method === "exec" ? new ExecutionError("unknown", error.message) : new FileError("unknown", error.message));
       }

@@ -153,7 +153,9 @@ export class NodeHub extends EventEmitter {
         }
         // A device reconnecting replaces its old socket.
         this.live.get(record.id)?.socket.close(4000, "replaced");
-        Object.assign(node, { roots: Array.isArray(message.roots) ? message.roots : [], platform: message.platform || null, ready: true });
+        // `boot` names this run of the node; a node without one keeps no receipts.
+        Object.assign(node, { roots: Array.isArray(message.roots) ? message.roots : [], platform: message.platform || null,
+          boot: typeof message.boot === "string" ? message.boot : null, ready: true });
         this.live.set(record.id, node);
         Object.assign(record, { roots: node.roots, platform: node.platform, lastSeenAt: new Date().toISOString() });
         if (message.name && record.name === "Device") record.name = String(message.name).slice(0, 80);
@@ -216,10 +218,17 @@ export class NodeHub extends EventEmitter {
     }
   }
 
-  /** One call on a device: `{ target, method, args, cwd }`; events (output, changes) go to `onEvent`. */
-  async call(nodeId, message, context, { onEvent, onWait } = {}) {
+  /**
+   * One call on a device: `{ target, method, args, cwd }`, and for an action
+   * `{ action, from }`; events (output, changes) go to `onEvent`. `onSent`
+   * hears which run of the node (its boot) took the call; `boot` refuses to
+   * send to any other run -- a restarted node does not know the action.
+   */
+  async call(nodeId, message, context, { onEvent, onWait, onSent, boot } = {}) {
     const node = await this.online(nodeId, context, onWait);
+    if (boot !== undefined && node.boot !== boot) throw Object.assign(new Error("The device restarted"), { restarted: true });
     const { id, done } = node.call(message, onEvent);
+    onSent?.(node.boot);
     const abort = () => node.send({ type: "abort", id });
     context.abortSignal?.addEventListener("abort", abort, { once: true });
     try { return await done; } finally { context.abortSignal?.removeEventListener("abort", abort); }
