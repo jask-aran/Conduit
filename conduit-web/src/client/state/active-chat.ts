@@ -778,6 +778,20 @@ export function createActiveChat(options: ActiveChatOptions) {
     if (chatId) permissions?.follow(chatId, options.runtime.getProcess(chatId)?.permissionMode);
   });
 
+  // A turn running on the open chat that this page has not joined -- the page
+  // opened before the runtime said what runs (a link, a reload, a phone
+  // waking), or the turn began on another client -- is joined, so its stream,
+  // its questions and what it waits for show here as they do where it began.
+  createEffect(() => {
+    const chatId = selectedId();
+    if (!chatId || !options.runtime.getProcess(chatId)?.active) return;
+    untrack(() => {
+      const project = projectId();
+      if (!project || session.isOpen() || liveOpening) return;
+      void ensureAgent({ chatId, projectId: project, intent: "open" }).catch(onError);
+    });
+  });
+
   const reconcileChatScope = (chat: ChatSummary, project: Project, detail?: TranscriptDetail, launching = false) =>
     Promise.all(chatScopes.map((scope) => scope({ chat, project, detail, launching }))).then(() => {});
 
