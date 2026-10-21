@@ -303,7 +303,17 @@ starts elsewhere.
    desktop going offline pauses and resumes the thread.
 4. **Typed device capabilities**, starting with notify/clipboard, then
    Android screen share.
-5. **Cut over** default Pi to pi-durable; freeze old Pi.
+5. **Cut over** default Pi to pi-durable; freeze old Pi. *(Built 2026-10-22.)*
+   Assistant, Coding and Runtime are the durable agent's profiles: each
+   template's prompt (or its Settings edit), tools, extensions (web access;
+   Coding's codemode-only through pi-durable's codemode) and skills (inlined)
+   configure the conversation, refreshed each time a chat opens. Classic Pi
+   chats are converted at start (src/server/convert-classic-chats.js,
+   src/pi-to-durable.js: the active branch, Pi's message ids kept); the
+   "Conduit runtime" profile's chats became Assistant chats. Not yet: the
+   fork tree drawn from fork lineage; a template's `models` as the model
+   scope when Pi has no enabled list; skills as slash commands; removing
+   classic Pi's code.
 
 Node track after milestone 3, in order (agreed 2026-10-21):
 a. **Main as a device** (decision 22): workspace files, Git and the

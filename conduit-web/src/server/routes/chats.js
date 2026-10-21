@@ -4,7 +4,7 @@ import { rememberModel } from "../../profile-model-memory.js";
 import { chatView, isChatId } from "../../chat-store.js";
 import { resolveComputerContext } from "../../computer-context.js";
 import { stopSessionProcesses } from "../../session-operations.js";
-import { agentProfiles, conduitPiSessionFile, harnessCapabilities, profileSelection } from "../../chat-backend.js";
+import { agentProfiles, conduitPiSessionFile, harnessCapabilities, profileSelection, templateBackend } from "../../chat-backend.js";
 import { manifestForImplementation } from "../../harnesses/index.js";
 
 const opaqueSessionId = (chat) => typeof chat.backend?.opaqueSession === "string"
@@ -196,13 +196,11 @@ export function registerChatRoutes(app, {
         await projects.validate(project);
         // What the workspace's place runs (src/place.js): on the head, what is
         // installed here; on a device, its own harnesses and the durable agent.
-        // Without a profile named, a chat takes the default where it runs, else the durable agent.
         const can = await backends.capabilities?.(project);
         const offered = (implementation) => !can || can.harnesses.includes(implementation);
-        if (!request.body?.profileId && !offered("conduit_pi")) request.body = { ...request.body, profileId: "conduit-runtime" };
         const selectedProfile = request.body?.profileId ? profileFor(request.body.profileId) : null;
-        // A profile that is not an agent's is a Conduit template: classic Pi.
-        const implementation = selectedProfile?.agent.implementation || "conduit_pi";
+        // A profile that is not an agent's is a Conduit template: the durable agent.
+        const implementation = selectedProfile?.agent.implementation || "conduit-runtime";
         if (!offered(implementation)) {
           return response.status(409).json({ error: "harness_not_here",
             message: `${selectedProfile?.label || config.piTemplates.find((item) => item.id === request.body?.profileId)?.label || "That profile"} is not available on ${can.device.name}` });
@@ -228,18 +226,13 @@ export function registerChatRoutes(app, {
         if (runtimeKind !== "conduit_profile") {
           return response.status(400).json({ error: "unknown_runtime_kind" });
         }
-        // A page's composer asks for its draft warm: its agent is started with
-        // it, so the first message goes to an agent already up.
-        const warmed = request.body?.warm === true && warmDrafts;
-        const warm = warmed && await warmDrafts.take(project.id, template.id);
-        if (warm) return completeCreation(request, response, warm, project, { start: true });
-        const runtime = runtimeFor({ runtimeKind, template });
+        // The durable agent runs in process: there is no process to warm.
         const chat = await registry.create(project, {
           templateId: template.id,
           templateVersion: template.version,
-          runtime,
+          backend: templateBackend(template),
         });
-        completeCreation(request, response, chat, project, { start: Boolean(warmed) });
+        completeCreation(request, response, chat, project, { start: request.body?.warm === true });
       });
     } catch (error) { next(error); }
   });
@@ -431,15 +424,8 @@ export function registerChatRoutes(app, {
           status: "draft",
           templateId: template.id,
           templateVersion: template.version,
-          backend: {
-            profileId: template.id,
-            profileRevision: template.version,
-            management: "conduit",
-            protocol: "pi_rpc",
-            implementation: "conduit_pi",
-            installationId: "conduit-pinned",
-            opaqueSession: null,
-          },
+          runtime: null,
+          backend: templateBackend(template),
         });
         selectedTemplate = template;
       }
@@ -543,7 +529,7 @@ export function registerChatRoutes(app, {
         const chat = await registry.create(project, {
           templateId: template.id,
           templateVersion: template.version,
-          runtime: runtimeFor({ runtimeKind: "conduit_profile", template }),
+          backend: templateBackend(template),
         });
         response.status(201).json(chatView(chat));
       });
