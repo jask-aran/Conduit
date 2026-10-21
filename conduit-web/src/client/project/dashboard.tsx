@@ -332,7 +332,7 @@ export function ProjectDashboard(props: {
       </MenuSection>
       <MenuSection>
       <MenuRow destructive onSelect={props.onDelete} icon={<Trash2Icon />}>{isWorkspace() ? "Unlink workspace" : "Delete project"}</MenuRow>
-      <Show when={isWorkspace()}><MenuRow destructive onSelect={() => setDestroyOpen(true)} icon={<Trash2Icon />}>Delete workspace and files</MenuRow></Show>
+      <Show when={isWorkspace() && !props.project.nodeId}><MenuRow destructive onSelect={() => setDestroyOpen(true)} icon={<Trash2Icon />}>Delete workspace and files</MenuRow></Show>
       </MenuSection>
   </>;
 

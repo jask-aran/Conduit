@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import WebSocket from "ws";
@@ -14,9 +15,14 @@ const RETRY_MS = [1000, 2000, 5000, 10000, 30000];
  * The node dials main and keeps one socket open, redialling when it drops.
  * Every call names the directory it runs in and is checked here, against the
  * roots and grants the device's owner chose -- read, write, shell -- before
- * the device's own execution environment runs it. Main never gets more than
- * those roots; a path that resolves (symlinks included) outside them is
- * refused as `permission_denied`.
+ * the device's own execution environment runs it. File calls never reach past
+ * those roots: a path that resolves (symlinks included) outside them, or
+ * through a link that resolves nowhere, is refused as `permission_denied`.
+ *
+ * `shell` is different in kind. A command starts in a shared root but runs as
+ * this device's user, with everything that user can reach; nothing here
+ * sandboxes it, so granting it is granting that. (It is also what makes the
+ * check-then-use gap in file calls moot: only a command can plant a link.)
  *
  * What a call opened (a reader, a watcher) lives as a handle until main closes
  * it or the socket drops. A dropped socket aborts the calls in flight: main
@@ -42,8 +48,9 @@ export function startNodeAgent({ mainUrl, key, name, roots: shared, shellEnv = p
     const ws = new WebSocket(url, { headers: { authorization: `Bearer ${key}` } });
     socket = ws;
     const calls = new Map();
+    // Handle ids are never reused, on this socket or the next: a reader main
+    // still holds from before a reconnect names nothing rather than a stranger.
     const handles = new Map();
-    let handleIds = 0;
     const send = (message) => { if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(message)); };
 
     ws.on("open", () => {
@@ -84,7 +91,7 @@ export function startNodeAgent({ mainUrl, key, name, roots: shared, shellEnv = p
     ws.on("error", (error) => { if (attempt === 0) log.warn?.(`[conduit-node] ${error.message}`); });
 
     function keep(object) {
-      const id = `h${++handleIds}`;
+      const id = `h_${crypto.randomUUID()}`;
       handles.set(id, object);
       return { $handle: id, ...(object.mode ? { mode: object.mode } : {}) };
     }
@@ -101,16 +108,14 @@ export function startNodeAgent({ mainUrl, key, name, roots: shared, shellEnv = p
       const rule = METHOD_GRANTS[method];
       if (!rule) return err(new FileError("not_supported", `${method} is not served by this node`));
       const home = typeof cwd === "string" ? realish(cwd) : null;
-      if (!home || !roots.some((root) => rootFor([root], home, "read") || rootFor([root], home, "write") || rootFor([root], home, "shell"))) {
-        return refuse(method, cwd);
-      }
+      const allowed = (target, grant) => Boolean(target && rootFor(roots, target, grant));
+      if (!home || !["read", "write", "shell"].some((grant) => allowed(home, grant))) return refuse(method, cwd);
       for (const at of rule.paths) {
         if (typeof decoded[at] !== "string") continue;
-        if (!rootFor(roots, realish(path.resolve(home, decoded[at])), rule.grant)) return refuse(method, decoded[at]);
+        if (!allowed(realish(path.resolve(home, decoded[at])), rule.grant)) return refuse(method, decoded[at]);
       }
-      if (method === "exec" && !rootFor(roots, realish(path.resolve(home, decoded[1]?.cwd || ".")), "shell")) return refuse(method, decoded[1]?.cwd || cwd);
-      if (method === "watch" && decoded[0].some((item) => !rootFor(roots, realish(path.resolve(home, item.path)), "read"))) return refuse(method, "a watched path");
-      if ((method === "createTempDir" || method === "createTempFile") && !rootFor(roots, home, "write")) return refuse(method, cwd);
+      if (method === "exec" && !allowed(realish(path.resolve(home, decoded[1]?.cwd || ".")), "shell")) return refuse(method, decoded[1]?.cwd || cwd);
+      if (method === "watch" && decoded[0].some((item) => !allowed(realish(path.resolve(home, item.path)), "read"))) return refuse(method, "a watched path");
       const env = envFor(home);
       if (method === "exec") {
         const options = { ...(decoded[1] || {}) };
@@ -135,24 +140,27 @@ export function startNodeAgent({ mainUrl, key, name, roots: shared, shellEnv = p
   };
 }
 
-const view = (root) => ({ path: realish(root.path), read: Boolean(root.read), write: Boolean(root.write), shell: Boolean(root.shell) });
+const view = (root) => ({ path: realish(root.path) || path.resolve(root.path), read: Boolean(root.read), write: Boolean(root.write), shell: Boolean(root.shell) });
 
 /**
  * A path with its symlinks resolved, as far as it exists: a link inside a
  * shared root that points out of it is outside it, and a file about to be
- * created is judged by the directory it would be created in.
+ * created is judged by the directory it would be created in. A link that
+ * resolves nowhere is `null` -- refused -- since writing through it would
+ * create its target, wherever that is.
  */
 function realish(target) {
   const absolute = path.resolve(target);
   let existing = absolute;
   const rest = [];
-  while (!fs.existsSync(existing)) {
+  // lstat, not exists: a dangling link is something, not nothing.
+  while (!fs.lstatSync(existing, { throwIfNoEntry: false })) {
     const parent = path.dirname(existing);
     if (parent === existing) return absolute;
     rest.unshift(path.basename(existing));
     existing = parent;
   }
-  try { return path.join(fs.realpathSync(existing), ...rest); } catch { return absolute; }
+  try { return path.join(fs.realpathSync(existing), ...rest); } catch { return null; }
 }
 
 const refuse = (method, target) => err(new FileError("permission_denied", `${target} is not shared with Conduit for ${METHOD_GRANTS[method]?.grant || method}`, typeof target === "string" ? target : undefined));

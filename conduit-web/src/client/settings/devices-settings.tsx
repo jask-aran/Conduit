@@ -51,7 +51,7 @@ export function DevicesSettingsTile(props: { onAddWorkspace: (input: { mode: "no
     try { await api(`/v0/nodes/${device.id}`, { method: "DELETE" }); refresh(); }
     catch (cause) { setError(cause instanceof Error ? cause.message : "The device was not unpaired."); }
   };
-  const grants = (root: SharedRoot) => ["Read", root.write && "write", root.shell && "commands"].filter(Boolean).join(", ");
+  const grants = (root: SharedRoot) => ["Read", root.write && "write", root.shell && "commands, with the device user's full access"].filter(Boolean).join(", ");
   const seen = (device: Device) => device.online ? "Connected" : device.lastSeenAt ? `Offline · last seen ${new Date(device.lastSeenAt).toLocaleString()}` : "Not connected yet";
 
   return <>

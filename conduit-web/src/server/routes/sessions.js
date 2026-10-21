@@ -279,6 +279,8 @@ export function registerSessionRoutes(app, {
           if (!current) return null;
           if (current.chat.backend?.protocol !== "pi_rpc") return { error: "chat_move_not_supported", status: 409, message: "Agent-managed chats cannot move between working roots." };
           if (current.chat.projectId === target.id) return { error: "session_project_unchanged", status: 409 };
+          // A Pi chat's session lives on this machine; a device's folder is not here.
+          if (target.nodeId || current.project.nodeId) return { error: "chat_move_not_supported", status: 409, message: "Chats cannot move into or out of a device's folder." };
           await projects.validate(target);
           const session = await registry.find(await projects.list(), current.chat.id);
           await stopSessionProcesses(backends, current.chat);

@@ -15,7 +15,9 @@ function printHelp() {
                                               comes from pairing it in the main server's Devices.
   conduit-node share <path> [--write] [--shell]
                                               Share a folder with main (read only unless
-                                              --write / --shell are given).
+                                              --write / --shell are given). --shell lets main
+                                              run commands that start in the folder but can
+                                              reach anything this user can.
   conduit-node unshare <path>                 Stop sharing a folder.
   conduit-node status                         What this device shares, and with which server.
   conduit-node run                            Serve the shared folders to main until stopped.
@@ -42,6 +44,7 @@ if (command === "pair") {
   if (!target || !fs.statSync(target, { throwIfNoEntry: false })?.isDirectory()) { console.error("Share an existing folder."); process.exit(2); }
   const root = { path: path.resolve(target), read: true, write: args.includes("--write"), shell: args.includes("--shell") };
   write({ ...settings, roots: [...(settings.roots || []).filter((item) => item.path !== root.path), root] });
+  if (root.shell) console.warn(`--shell: commands start in ${root.path} but run as ${os.userInfo().username}, with everything that user can reach.`);
   console.log(`Sharing ${root.path}: ${["read", root.write && "write", root.shell && "shell"].filter(Boolean).join(", ")}. Restart \`conduit-node run\` to offer it.`);
 } else if (command === "unshare") {
   const target = path.resolve(args[0] || "");
