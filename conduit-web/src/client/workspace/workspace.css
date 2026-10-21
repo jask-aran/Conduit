@@ -10,12 +10,12 @@
   --workbench-font-size: var(--text-label);
   --workbench-divider: var(--border);
 }
-.workspace-panel { position: relative; display: flex; width: 0; height: calc(100dvh - var(--space-xl)); margin: var(--space-md) 0 var(--space-md) 0; flex: none; overflow: visible; pointer-events: none; border-radius: var(--radius-surface); transition: width 220ms var(--ease-change), margin-right 220ms var(--ease-change); }
+.workspace-panel { position: relative; display: flex; width: 0; height: calc(100dvh - var(--space-xl)); margin: var(--space-md) 0 var(--space-md) 0; flex: none; overflow: visible; pointer-events: none; border-radius: var(--radius-surface); transition: width var(--duration-fold) var(--ease-fold), margin-right var(--duration-fold) var(--ease-fold); }
 .workspace-panel.workspace-panel-open { pointer-events: auto; background: var(--background); }
 .workspace-panel[data-edge-instant="true"] { transition: none !important; }
 /* The gap to the rail snaps with the layer (the surface's 8px over the panes
    stands in for it), so the dock never drifts; only its room eases. */
-.workspace-panel[data-layer-switch] { z-index: var(--layer-dock); transition: width 220ms var(--ease-change); }
+.workspace-panel[data-layer-switch] { z-index: var(--layer-dock); transition: width var(--duration-fold) var(--ease-fold); }
 .workspace-panel[data-layer-switch] .workspace-panel-surface { left: auto; width: var(--workspace-shell-width); transition: none; }
 /* Over the panes: the dock takes no room in the row and floats above it. */
 .workspace-panel.workspace-panel-overlay { z-index: var(--layer-dock); width: 0 !important; margin-right: 0 !important; background: transparent; }
@@ -39,7 +39,7 @@
   .workspace-layout { min-width: calc(var(--conduit-min-main-pane) + var(--space-lg)); }
   #root { overflow: auto hidden; }
 }
-.workspace-panel-surface { right: 0; left: auto; width: 100%; transition: width 260ms var(--ease-change); }
+.workspace-panel-surface { right: 0; left: auto; width: 100%; transition: width var(--duration-fold) var(--ease-fold); }
 .workspace-panel-expanded .workspace-panel-surface { width: calc(100cqw - var(--space-md)); }
 .workspace-panel-expanded .ui-pane-edge[data-dock] { display: none; }
 /* The rail stands in for the tabs on a desktop; a phone keeps them. */
@@ -115,7 +115,7 @@
   .workspace-files[data-wide="true"][data-tree-collapsed="true"] .workspace-tree-pane,
   .workspace-files[data-wide="true"][data-tree-collapsed="true"] .workspace-tree-resize-handle { display: none; }
   .workspace-tree-resize-handle { position: relative; z-index: 5; grid-column: 2; grid-row: 1; cursor: col-resize; touch-action: none; }
-  .workspace-tree-resize-handle::after { content: ""; position: absolute; inset-block: 0; left: 50%; translate: -50% 0; width: var(--hairline); background: var(--border); transition: background 120ms; }
+  .workspace-tree-resize-handle::after { content: ""; position: absolute; inset-block: 0; left: 50%; translate: -50% 0; width: var(--hairline); background: var(--border); transition: background var(--duration-quick) var(--ease-change); }
   .workspace-tree-resize-handle:hover::after, .workspace-tree-resize-handle:focus-visible::after, .workspace-tree-resizing .workspace-tree-resize-handle::after { background: var(--ring); }
 }
 
@@ -141,39 +141,15 @@
   .workspace-panel-open .workspace-panel-surface { transform: none; }
 }
 
-/* Mobile retains v0.5.2 density. */
+/* The phone's overrides of the rules above: what differs on a phone. */
 @media (--conduit-phone-layout) {
-/* Workspace panel geometry, file views, and artifact surfaces. */
-.workspace-panel { position: relative; display: flex; width: 0; flex: none; overflow: visible; pointer-events: none; transition: width 220ms var(--ease-change), margin-right 220ms var(--ease-change); }
-.workspace-panel.workspace-panel-open { pointer-events: auto; background: var(--background); }
-.workspace-panel[data-edge-instant="true"] { transition: none !important; }
-/* Surface keeps settled panel width, right-anchored inside the shell. */
-.workspace-panel-surface { position: absolute; inset: 0; display: flex; min-width: 0; height: 100%; contain: layout paint; flex: none; flex-direction: column; overflow: hidden; background: var(--background); }
-.workspace-panel-surface > * { max-width: 100%; }
-.workspace-files { display: flex; min-height: 0; flex: 1; flex-direction: column; }
- .workspace-diff { display: flex; min-height: 0; flex: 1; flex-direction: column; overflow: hidden; }
-.workspace-files > .ui-file { flex: none; }
-.workspace-diff-overview { display: flex; min-height: var(--measure-2xs); flex: 1; flex-direction: column; overflow: hidden; }
-.workspace-patch { display: flex; min-height: 0; flex: none; flex-direction: column; overflow: hidden; }
-/* 24px hit target centered on the gap between chat-main and the panel edge. */
-.workspace-detail-resizing { cursor: row-resize; user-select: none; }
-.workspace-chat-view { display: flex; min-height: 0; flex: 1; flex-direction: column; }
-
-@media (--conduit-phone-layout) {
+.workspace-diff-overview { flex: 1; }
   .workspace-panel {
     position: fixed;
-    inset: 0;
-    z-index: var(--layer-panel);
-    width: 100vw !important;
-    height: 100dvh;
     margin: 0;
-    transform: translateX(100%);
     transition: transform var(--duration-quick) var(--ease-change);
   }
-  .workspace-panel.workspace-panel-open { margin: 0; transform: translateX(0); }
-  .workspace-panel-surface { width: 100%; border: 0; border-radius: 0; overscroll-behavior: contain; opacity: 1; transform: none; }
-   .workspace-diff { overscroll-behavior: contain; }
-  .workspace-files { grid-template-rows: minmax(var(--measure-2xs), 42%) 1fr; }
+  .workspace-panel-surface { border-radius: 0; }
   /* Full-bleed, the panel sits under the system's status and navigation bars,
      so its surface starts and ends inside them, as the chat's header and
      composer do. */
@@ -189,13 +165,6 @@
     --workbench-gap: var(--space-xs);
     --workbench-padding-inline: var(--space-md);
   }
-  html[data-vv-shell] .workspace-panel { height: var(--app-height, 100dvh); }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .workspace-panel, .workspace-panel-surface { transition-duration: 0.01ms !important; }
-  .workspace-panel-open .workspace-panel-surface { transform: none; }
-}
 }
 /* A shell as a pane's document: the terminal fills the pane, its header
    carrying the pane's swap and close. */
@@ -205,7 +174,7 @@
 /* Where a document dragged over a pane will land: a third's half, or the whole pane. */
 /* The rail's foot: pane layout controls, pushed to the bottom. */
 /* A folded pane: its letter on a hairline tile, set apart from the tools. */
-body.panes-settling :is(.chat-main, .main-split) { transition: flex-grow 220ms cubic-bezier(0.2, 0, 0, 1), margin 220ms cubic-bezier(0.2, 0, 0, 1); }
+body.panes-settling :is(.chat-main, .main-split) { transition: flex-grow var(--duration-fold) var(--ease-fold), margin var(--duration-fold) var(--ease-fold); }
 /* A file viewer's header: copying and wrapping live in its ⋯, which is always there;
    the other actions fold into it one at a time (data-folded). */
 
