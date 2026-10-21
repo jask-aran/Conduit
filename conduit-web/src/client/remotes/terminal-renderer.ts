@@ -113,7 +113,7 @@ function applyFit(fit: TerminalFit) {
 }
 
 function terminalFontSize() {
-  const fallback = isMobileLayout() ? 13 : 10.4;
+  const fallback = 13;
   return Math.max(8, Math.min(24, Number(localStorage.getItem("conduit:terminal-font-size")) || fallback));
 }
 // The terminal's size is drawn in pixels, under the stylesheet: the Interface size multiplies it as it does the units.

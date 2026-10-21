@@ -84,8 +84,8 @@
   .ui-disclosure-body, .ui-rider-button, .ui-menu, .ui-composer-slot > .ui-composer-stack, .ui-composer-slot > .ui-composer-stack > *, .ui-toolbar-end > .ui-toolbar-aside { transition: none; }
 }
 /*
- * Scale: everything is drawn from a few numbers. A density gives its unit (12.8px on desktop, 16px on
- * a phone), and --scale-ui scales it: the user's Interface size (--ui-scale, Settings · Interface, on
+ * Scale: everything is drawn from a few numbers. A density gives its unit (16px on desktop and on a
+ * phone; desktop's was 12.8px, which read small at a desk, so the app sat at 125% zoom), and --scale-ui scales it: the user's Interface size (--ui-scale, Settings · Interface, on
  * <html>) times the region's own size (--scale-region). Each region -- the chrome (headers, panes, the
  * dashboard: the default), the sidebar, the frost that floats (menus, popovers, overlays, cards,
  * toasts), the composer and what you read (the transcript) -- has a size of its own per density, ours to
@@ -117,7 +117,7 @@
 /* The reading column: the composer's and the transcript's width unless their pane declares --composer-width. */
 :root { --reading-width: 47.5rem; }
 :root, [data-density="desktop"] {
-  --u-base: 12.8px; --row-min-floor: 0px; --row-min-units: 1.875; --row-text-units: 0.8125;
+  --u-base: 16px; --row-min-floor: 0px; --row-min-units: 1.875; --row-text-units: 0.8125;
   --scale-chrome: var(--scale-chrome-desktop); --scale-sidebar: var(--scale-sidebar-desktop); --scale-frost: var(--scale-frost-desktop);
   --scale-composer: var(--scale-composer-desktop); --scale-transcript: var(--scale-transcript-desktop);
   --frost-inset: var(--space-xs); --nav-label-pad: var(--space-xs) var(--space-md);
@@ -159,13 +159,16 @@
   /* Controls: six heights (an icon button is as wide as it is tall); 2xs is a keycap, a slider thumb; tool is a workspace tool's
      and a file header's controls, between xs and sm. */
   --control-2xs: calc(1.125 * var(--u-space)); --control-xs: calc(1.5 * var(--u-space)); --control-tool: calc(1.75 * var(--u-space)); --control-sm: calc(1.875 * var(--u-space)); --control: calc(2.25 * var(--u-space)); --control-lg: calc(2.5 * var(--u-space));
-  /* Measures: six lengths for what has a width (or a scrolling height) of its own -- a column, a card, an overlay. */
-  --measure-xs: calc(12 * var(--u-space)); --measure-sm: calc(15 * var(--u-space)); --measure-md: calc(20 * var(--u-space));
-  --measure-lg: calc(25 * var(--u-space)); --measure-xl: calc(30 * var(--u-space)); --measure-2xl: calc(40 * var(--u-space));
+  /* Measures: eight lengths for what has a width (or a scrolling height) of its own -- a small panel's height, a column, a
+     card, an overlay, the wide reading column. */
+  --measure-2xs: calc(8 * var(--u-space)); --measure-xs: calc(12 * var(--u-space)); --measure-sm: calc(15 * var(--u-space)); --measure-md: calc(20 * var(--u-space));
+  --measure-lg: calc(25 * var(--u-space)); --measure-xl: calc(30 * var(--u-space)); --measure-2xl: calc(40 * var(--u-space)); --measure-3xl: calc(60 * var(--u-space));
   --measure-dialog-large: calc(60 * var(--u-space));
   /* Rows: their measured height and text, in the unit; inset, pad and gap are steps. */
   --row-text: calc(var(--row-text-units) * var(--u-type)); --row-min: max(var(--row-min-floor), calc(var(--row-min-units) * var(--u-space)));
   --row-inset: var(--space-md); --row-pad: var(--space-sm) var(--row-inset); --row-gap: var(--space-md);
+  /* The room a column keeps from its pane's edges when the pane is narrower than the column. */
+  --page-gutter: calc(3 * var(--u-space));
   --nav-indent: calc(1.875 * var(--u-space));
   /* A popover's distance from the control that opens it. */
   --popover-gap: var(--space-md);

@@ -68,7 +68,7 @@
 
 @layer base {
   * { @apply border-border outline-ring/50; }
-  html { @apply font-sans; font-size: calc(12.8px * var(--ui-scale)); }
+  html { @apply font-sans; font-size: calc(16px * var(--ui-scale)); }
   body { @apply bg-background text-foreground; }
   button:not(:disabled), [role="button"]:not(:disabled) { cursor: pointer; }
 }
@@ -112,7 +112,7 @@ svg.lucide { stroke-width: 2.4; }
 /* Inset panel: the rounded fill sits directly on the darker frame. */
 .chat-main { --chat-header-height: var(--header-height); position: relative; isolation: isolate; display: flex; min-width: 0; height: calc(100dvh - var(--space-xl)); margin: var(--space-md) var(--space-md) var(--space-md) var(--space-2xs); flex: 1; flex-direction: column; overflow: hidden; container-type: inline-size; container-name: chat-main; border-radius: var(--radius-surface); background: var(--background); color: var(--foreground); }
 /* A file viewer with no file showing stays open, saying how to fill it. */
-.workspace-warning { position: relative; z-index: 2; display: flex; width: min(var(--composer-desktop-reference-width), calc(100% - 38.4px)); gap: var(--space-md); margin: var(--space-md) auto; padding: var(--space-lg); border: var(--hairline) solid var(--border); border-radius: var(--radius-control); }
+.workspace-warning { position: relative; z-index: 2; display: flex; width: min(var(--composer-desktop-reference-width), calc(100% - var(--page-gutter))); gap: var(--space-md); margin: var(--space-md) auto; padding: var(--space-lg); border: var(--hairline) solid var(--border); border-radius: var(--radius-control); }
 .workspace-warning svg { width: var(--icon-lg); flex: none; }
 .workspace-warning p { margin: var(--space-2xs) 0 0; color: var(--muted-foreground); font-size: var(--text-row); }
 
@@ -172,7 +172,7 @@ svg.lucide { stroke-width: 2.4; }
 .voice-waveform-state { min-width: 0; gap: var(--space-sm); color: var(--foreground); }
 .voice-waveform-dot { width: var(--icon-dot); height: var(--icon-dot); flex: none; border-radius: var(--radius-round); background: var(--muted-foreground); }
 .voice-waveform-readout { flex: none; gap: var(--space-md); color: var(--muted-foreground); }
-.voice-waveform-plot { position: relative; display: flex; height: 51.2px; align-items: end; gap: var(--space-2xs); overflow: hidden; padding: var(--space-xs) var(--space-2xs); border: var(--hairline) solid color-mix(in oklch, var(--border), transparent 20%); border-radius: var(--radius-control); background: color-mix(in oklch, var(--background), transparent 32%); }
+.voice-waveform-plot { position: relative; display: flex; height: var(--control-lg); align-items: end; gap: var(--space-2xs); overflow: hidden; padding: var(--space-xs) var(--space-2xs); border: var(--hairline) solid color-mix(in oklch, var(--border), transparent 20%); border-radius: var(--radius-control); background: color-mix(in oklch, var(--background), transparent 32%); }
 .voice-waveform-gridline { position: absolute; right: var(--space-2xs); left: var(--space-2xs); height: var(--hairline); background: color-mix(in oklch, var(--border), transparent 45%); pointer-events: none; }
 .voice-waveform-gridline-high { top: 25%; }
 .voice-waveform-gridline-low { bottom: 25%; }
@@ -203,10 +203,10 @@ svg.lucide { stroke-width: 2.4; }
 .chat-main-empty .transcript { position: absolute; inset: var(--chat-header-height) 0 0; margin-top: 0; }
 .chat-main-empty .message-scroller-viewport { overflow: hidden; overscroll-behavior-y: none; }
 .chat-main-empty .thread, .chat-main-empty .empty-thread { width: 100%; min-height: 100%; padding: 0; }
-.chat-main-empty .empty-thread { --welcome-room: 140.8px; }
+.chat-main-empty .empty-thread { --welcome-room: calc(var(--measure-2xs) + var(--header-height)); }
 /* A first send waiting on its agent (main.tsx): docked, with no welcome. */
 .chat-main-sending .empty-thread { visibility: hidden; }
-.chat-main-empty .composer-stack { position: absolute; inset-inline: 0; top: 50%; z-index: 2; width: min(563.2px, calc(100% - 38.4px)); margin-inline: auto; padding: 0; transform: translateY(43.2px); background: transparent; }
+.chat-main-empty .composer-stack { position: absolute; inset-inline: 0; top: 50%; z-index: 2; width: min(var(--reading-width), calc(100% - var(--page-gutter))); margin-inline: auto; padding: 0; transform: translateY(var(--header-height)); background: transparent; }
 .chat-bootstrap { display: grid; min-height: 100%; place-items: center; color: var(--muted-foreground); font-size: var(--text-row); }
 
 
@@ -243,7 +243,7 @@ svg.lucide { stroke-width: 2.4; }
      disappears here; safe-area padding belongs to the controls that touch
      each edge. */
   .chat-main {
-    --chat-header-height: calc(38.4px + var(--safe-area-inset-top, env(safe-area-inset-top, 0px)));
+    --chat-header-height: calc(var(--header-height) + var(--safe-area-inset-top, env(safe-area-inset-top, 0px)));
     width: 100%;
     min-height: 0;
     height: var(--app-height, 100dvh);
@@ -297,7 +297,7 @@ svg { stroke-width: 1.5; }
 svg.lucide { stroke-width: 2.4; }
 /* Inset panel: the rounded fill sits directly on the darker frame. */
 .chat-main { --chat-header-height: var(--header-height); position: relative; isolation: isolate; display: flex; min-width: 0; flex: 1; flex-direction: column; overflow: hidden; container-type: inline-size; container-name: chat-main; background: var(--background); color: var(--foreground); }
-.workspace-warning { position: relative; z-index: 2; display: flex; width: min(var(--composer-desktop-reference-width), calc(100% - 48px)); }
+.workspace-warning { position: relative; z-index: 2; display: flex; width: min(var(--composer-desktop-reference-width), calc(100% - var(--page-gutter))); }
 .workspace-warning svg { flex: none; }
 .workspace-warning p { margin: var(--space-2xs) 0 0; color: var(--muted-foreground); }
 
@@ -344,7 +344,7 @@ svg.lucide { stroke-width: 2.4; }
 .voice-waveform-state { min-width: 0; color: var(--foreground); }
 .voice-waveform-dot { width: var(--icon-dot); height: var(--icon-dot); flex: none; background: var(--muted-foreground); }
 .voice-waveform-readout { flex: none; color: var(--muted-foreground); }
-.voice-waveform-plot { position: relative; display: flex; height: 64px; align-items: end; overflow: hidden; padding: var(--space-xs) var(--space-2xs); background: color-mix(in oklch, var(--background), transparent 32%); }
+.voice-waveform-plot { position: relative; display: flex; height: var(--control-lg); align-items: end; overflow: hidden; padding: var(--space-xs) var(--space-2xs); background: color-mix(in oklch, var(--background), transparent 32%); }
 .voice-waveform-gridline { position: absolute; right: var(--space-2xs); left: var(--space-2xs); background: color-mix(in oklch, var(--border), transparent 45%); pointer-events: none; }
 .voice-waveform-gridline-high { top: 25%; }
 .voice-waveform-gridline-low { bottom: 25%; }
@@ -374,8 +374,8 @@ svg.lucide { stroke-width: 2.4; }
 .chat-main-empty .transcript { position: absolute; inset: var(--chat-header-height) 0 0; margin-top: 0; }
 .chat-main-empty .message-scroller-viewport { overflow: hidden; overscroll-behavior-y: none; }
 .chat-main-empty .thread, .chat-main-empty .empty-thread { width: 100%; min-height: 100%; padding: 0; }
-.chat-main-empty .empty-thread { --welcome-room: 176px; }
-.chat-main-empty .composer-stack { position: absolute; inset-inline: 0; top: 50%; z-index: 2; width: min(704px, calc(100% - 48px)); margin-inline: auto; padding: 0; transform: translateY(54px); background: transparent; }
+.chat-main-empty .empty-thread { --welcome-room: calc(var(--measure-2xs) + var(--header-height)); }
+.chat-main-empty .composer-stack { position: absolute; inset-inline: 0; top: 50%; z-index: 2; width: min(var(--reading-width), calc(100% - var(--page-gutter))); margin-inline: auto; padding: 0; transform: translateY(var(--header-height)); background: transparent; }
 .chat-main-live-opening .transcript { visibility: hidden; }
 /* Opening a chat in a pane: its composer shows only its field until the chat is there. */
 .chat-main-live-opening :is(.ui-toolbar, .ui-composer-stack > :not(.ui-desktop-composer)) { visibility: hidden; }
@@ -415,7 +415,7 @@ svg.lucide { stroke-width: 2.4; }
      disappears here; safe-area padding belongs to the controls that touch
      each edge. */
   .chat-main {
-    --chat-header-height: calc(48px + var(--safe-area-inset-top, env(safe-area-inset-top, 0px)));
+    --chat-header-height: calc(var(--header-height) + var(--safe-area-inset-top, env(safe-area-inset-top, 0px)));
     width: 100%;
     min-height: 0;
     margin: 0;
