@@ -1,10 +1,12 @@
-import { createSignal, For, onCleanup, Show } from "solid-js";
+import { createSignal, For, onCleanup, onMount, Show } from "solid-js";
 import { FolderPlusIcon, Trash2Icon } from "lucide-solid";
 import { api } from "../api/client.ts";
-import { Button, Input } from "@/components/ui/controls";
+import { httpUrl } from "../api/transport.js";
+import { Button, Input, Switch } from "@/components/ui/controls";
 import { Select } from "@/components/menus";
 import { StatusDot } from "@/components/ui/nav";
 import { LiveNote, SettingGroup, SettingLine, SettingNote, SettingValue } from "@/components/ui/overlay";
+import { desktopShell, type CompanionStatus, type DesktopShellSettings } from "../platform/installed-client.ts";
 
 type SharedRoot = { id: string; label: string; read: boolean; write: boolean; shell: boolean; allow?: string[] };
 type Node = { id: string; deviceId: string; name: string; platform: string | null; online: boolean; roots: SharedRoot[]; harnesses?: string[]; lastSeenAt: string | null };
@@ -69,6 +71,7 @@ export function DevicesSettingsTile(props: { onAddWorkspace: (input: { mode: "no
   const seen = (node: Node) => node.online ? "Connected" : node.lastSeenAt ? `Offline · last seen ${new Date(node.lastSeenAt).toLocaleString()}` : "Not connected yet";
 
   return <>
+    <ThisComputerTile devices={devices} refresh={refresh} />
     <SettingGroup title="Pair">
       <SettingLine label="Device" title="A device already paired, for another environment on it, or a new device.">
         <Select aria-label="Device" value={deviceId()} onChange={(event) => setDeviceId(event.currentTarget.value)}>
@@ -114,4 +117,103 @@ export function DevicesSettingsTile(props: { onAddWorkspace: (input: { mode: "no
     <Show when={devices() && !devices()!.length}><SettingNote tone="quiet">No devices paired yet.</SettingNote></Show>
     <Show when={error()}><SettingNote tone="error">{error()}</SettingNote></Show>
   </>;
+}
+
+/**
+ * The URL this app reaches the server by, when a node could dial it too: on
+ * the tailnet or this machine. A public URL is left to the server, which
+ * names its tailnet address (a node is refused through a public tunnel).
+ */
+function dialableServer(): string | undefined {
+  const url = new URL(httpUrl("/"), location.href);
+  const host = url.hostname;
+  const tailnet = /\.ts\.net$/i.test(host) || /^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(host);
+  return tailnet || ["127.0.0.1", "localhost", "[::1]"].includes(host) ? url.origin : undefined;
+}
+
+const thisPlatform = () => /Windows/i.test(navigator.userAgent) ? "Windows" : /Mac/i.test(navigator.userAgent) ? "macOS" : "Linux";
+
+/**
+ * This computer as a device of the server this app is pointed at, in the
+ * desktop app only: the background node the shell runs (node_companion.rs),
+ * paired with this server in one step -- the server hands out a key, the
+ * shell's node takes it -- and the folders shared with it, picked with the
+ * system's folder picker. What a folder allows is chosen when it is shared.
+ */
+function ThisComputerTile(props: { devices: () => Device[] | null; refresh: () => void }) {
+  if (!desktopShell) return null;
+  const shell = desktopShell;
+  const [settings, setSettings] = createSignal<DesktopShellSettings | null>(null);
+  const [status, setStatus] = createSignal<CompanionStatus | null>(null);
+  const [error, setError] = createSignal("");
+  const [write, setWrite] = createSignal(true);
+  const [commands, setCommands] = createSignal(false);
+  const [busy, setBusy] = createSignal(false);
+
+  const read = () => void shell.companion.status().then(setStatus).catch(() => setError("The desktop shell did not answer."));
+  onMount(() => { void shell.settings().then(setSettings); read(); });
+  const timer = setInterval(read, 5_000);
+  onCleanup(() => clearInterval(timer));
+
+  // This server's pairing, found by the node id it gave: the URL a pairing dials may not be the one this app uses.
+  const serverNodes = () => (props.devices() || []).flatMap((device) => device.nodes);
+  const pairing = () => status()?.node?.pairings.find((item) => item.nodeId && serverNodes().some((node) => node.id === item.nodeId)) || null;
+  const act = async (work: () => Promise<unknown>) => {
+    setBusy(true);
+    setError("");
+    try { await work(); } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); }
+    finally { setBusy(false); read(); props.refresh(); }
+  };
+  const serve = (on: boolean) => act(async () => {
+    const current = settings();
+    if (current) setSettings(await shell.saveSettings({ ...current, serveAsDevice: on }));
+  });
+  const pair = () => act(async () => {
+    const deviceName = status()?.node?.name || "This computer";
+    const paired = await api<{ node: Node; key: string; mainUrl: string }>("/v0/nodes", {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ deviceName, name: thisPlatform(), mainUrl: dialableServer() }),
+    });
+    await shell.companion.pair(paired.mainUrl, paired.key, paired.node.id, deviceName);
+    const current = settings();
+    // Pairing is asking to be served: the node starts with it.
+    if (current && !current.serveAsDevice) setSettings(await shell.saveSettings({ ...current, serveAsDevice: true }));
+  });
+  const share = (mainUrl: string) => act(() => shell.companion.share(mainUrl, write(), commands()));
+  const unshare = (mainUrl: string, path: string) => act(() => shell.companion.unshare(mainUrl, path));
+  const unpair = (mainUrl: string, nodeId: string | null) => act(async () => {
+    await shell.companion.unpair(mainUrl);
+    if (nodeId) await api(`/v0/nodes/${nodeId}`, { method: "DELETE" });
+  });
+
+  return <SettingGroup title="This computer">
+    <Show when={status()?.available !== false} fallback={<SettingNote tone="quiet">This build of Conduit does not include the device companion.</SettingNote>}>
+      <SettingLine label="Serve this computer" state={status()?.running ? "Running" : settings()?.serveAsDevice ? "Starting…" : "Off"}
+        title="Lets this server work in folders you share from this computer. It keeps running in the tray with the window closed, and starts at sign-in when Launch at sign-in is on.">
+        <Switch id="device-serve" label="Serve this computer" disabled={busy() || !settings()} checked={Boolean(settings()?.serveAsDevice)} onChange={(on) => void serve(on)} />
+      </SettingLine>
+      <Show when={pairing()} fallback={
+        <SettingLine label="Pairing" state="Not paired with this server" plain>
+          <Button variant="ghost" size="sm" disabled={busy()} onClick={() => void pair()}>Add this computer</Button>
+        </SettingLine>}>
+        {(paired) => <>
+          <For each={paired().roots} fallback={<SettingNote tone="quiet">No folders shared with this server yet.</SettingNote>}>{(root) =>
+            <SettingLine label={root.path} state={["Read", root.write && "edit", root.shell && "commands (full user access)"].filter(Boolean).join(", ")} plain>
+              <Button variant="ghost" size="sm" disabled={busy()} aria-label={`Stop sharing ${root.path}`} onClick={() => void unshare(paired().mainUrl, root.path)}><Trash2Icon /> Stop sharing</Button>
+            </SettingLine>}</For>
+          <SettingLine label="Let Conduit edit files">
+            <Switch id="device-share-write" label="Let Conduit edit files" checked={write()} onChange={setWrite} />
+          </SettingLine>
+          <SettingLine label="Let Conduit run commands" title="Commands start in the folder but run as you, with everything you can reach.">
+            <Switch id="device-share-shell" label="Let Conduit run commands" checked={commands()} onChange={setCommands} />
+          </SettingLine>
+          <SettingLine label="Folders" plain>
+            <Button variant="ghost" size="sm" disabled={busy()} onClick={() => void share(paired().mainUrl)}><FolderPlusIcon /> Share a folder…</Button>
+            <Button variant="ghost" size="sm" disabled={busy()} onClick={() => void unpair(paired().mainUrl, paired().nodeId)}>Unpair</Button>
+          </SettingLine>
+        </>}
+      </Show>
+    </Show>
+    <Show when={error()}><SettingNote tone="error">{error()}</SettingNote></Show>
+  </SettingGroup>;
 }

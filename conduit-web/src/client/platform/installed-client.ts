@@ -188,6 +188,17 @@ export interface DesktopShellSettings {
   keepRunningInTray: boolean;
   launchAtLogin: boolean;
   startHidden: boolean;
+  /** Run the node role in the background so a Conduit server can act on this computer. */
+  serveAsDevice: boolean;
+}
+
+export interface CompanionRoot { id: string; path: string; read: boolean; write: boolean; shell: boolean }
+export interface CompanionStatus {
+  /** This build carries the device companion at all. */
+  available: boolean;
+  serving: boolean;
+  running: boolean;
+  node: { name: string | null; pairings: Array<{ mainUrl: string; nodeId: string | null; roots: CompanionRoot[] }> } | null;
 }
 
 /**
@@ -196,6 +207,30 @@ export interface DesktopShellSettings {
  * tile and the tray listener check rather than asking which shell this is.
  */
 export const desktopShell = installedClientKind !== "desktop" ? null : {
+  /** The node role this app runs in the background (src-tauri/src/node_companion.rs). */
+  companion: {
+    async status(): Promise<CompanionStatus> {
+      const { invoke } = await import("@tauri-apps/api/core");
+      return invoke<CompanionStatus>("device_companion_status");
+    },
+    async pair(mainUrl: string, key: string, nodeId: string, name: string): Promise<string> {
+      const { invoke } = await import("@tauri-apps/api/core");
+      return invoke<string>("device_companion_pair", { mainUrl, key, nodeId, name });
+    },
+    /** Asks for a folder with the system picker; null when none was picked. */
+    async share(mainUrl: string, write: boolean, shell: boolean): Promise<string | null> {
+      const { invoke } = await import("@tauri-apps/api/core");
+      return invoke<string | null>("device_companion_share", { mainUrl, write, shell });
+    },
+    async unshare(mainUrl: string, path: string): Promise<void> {
+      const { invoke } = await import("@tauri-apps/api/core");
+      await invoke("device_companion_unshare", { mainUrl, path });
+    },
+    async unpair(mainUrl: string): Promise<void> {
+      const { invoke } = await import("@tauri-apps/api/core");
+      await invoke("device_companion_unpair", { mainUrl });
+    },
+  },
   async settings(): Promise<DesktopShellSettings> {
     const { invoke } = await import("@tauri-apps/api/core");
     return invoke<DesktopShellSettings>("desktop_settings");

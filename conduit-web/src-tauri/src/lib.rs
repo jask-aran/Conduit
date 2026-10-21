@@ -9,6 +9,7 @@ mod desktop_settings;
 mod dev_update;
 mod discovery;
 mod global_shortcuts;
+mod node_companion;
 mod secrets;
 mod tray;
 mod update_window;
@@ -35,6 +36,8 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .plugin(global_shortcuts::plugin())
+        // Only the companion's folder picker, from Rust; the webview is given no dialog API.
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             Some(vec![HIDDEN_LAUNCH_ARG]),
@@ -43,6 +46,8 @@ pub fn run() {
             let handle = app.handle();
             let settings = desktop_settings::load(handle);
             app.manage(desktop_settings::Store(Mutex::new(settings)));
+            app.manage(node_companion::Companion::default());
+            node_companion::supervise(handle, settings.serve_as_device);
             // Empty until the client says what it wants: the registry it holds
             // is the only place a shortcut is decided.
             app.manage(global_shortcuts::Registered::default());
@@ -85,13 +90,21 @@ pub fn run() {
             global_shortcuts::set_global_shortcuts,
             discovery::discover_servers,
             certificate_trust::trust_identities,
-            update_window::remember_update_window
+            update_window::remember_update_window,
+            node_companion::device_companion_status,
+            node_companion::device_companion_pair,
+            node_companion::device_companion_share,
+            node_companion::device_companion_unshare,
+            node_companion::device_companion_unpair
         ])
         .build(tauri::generate_context!())
         .expect("Conduit desktop failed to start")
         .run(|app, event| {
             if matches!(event, tauri::RunEvent::ExitRequested { .. }) {
                 let _ = update_window::remember_update_window(app.clone());
+            }
+            if matches!(event, tauri::RunEvent::Exit) {
+                node_companion::shutdown(app);
             }
         });
 }
