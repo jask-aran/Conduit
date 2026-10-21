@@ -1,30 +1,10 @@
-import { createSignal, For, onCleanup, onMount, Show, type Accessor } from "solid-js";
+import { createSignal, onCleanup, type Accessor } from "solid-js";
 import type { AudioSignalLevel } from "./voice-audio";
-import {
-  compactWaveformBarCount,
-  emptyWaveformHistory,
-  MAX_RESPONSIVE_BAR_COUNT,
-  normalizeVoiceLevel,
-  normalizeVoicePeak,
-  selectWaveformBars,
-  VOICE_WAVEFORM_SAMPLE_COUNT,
-  waveformBarHeightPercent,
-} from "./voice-waveform-model";
+import { emptyWaveformHistory, normalizeVoiceLevel, normalizeVoicePeak, VOICE_WAVEFORM_SAMPLE_COUNT } from "@/components/ui/voice-waveform-model";
 
-export {
-  compactWaveformBarCount,
-  MAX_RESPONSIVE_BAR_COUNT,
-  normalizeVoiceLevel,
-  normalizeVoicePeak,
-  selectWaveformBars,
-  VOICE_WAVEFORM_SAMPLE_COUNT,
-  waveformBarHeightPercent,
-};
 export const VOICE_WAVEFORM_SAMPLE_INTERVAL_MS = 70;
 const PEAK_HOLD_MS = 650;
 const PEAK_DECAY = 0.86;
-
-export type VoiceWaveformState = "connecting" | "listening" | "stopped" | "error";
 
 export interface VoiceWaveformController {
   history: Accessor<number[]>;
@@ -85,73 +65,4 @@ export function createVoiceWaveformController(sampleCount = VOICE_WAVEFORM_SAMPL
   });
 
   return { history, level, peak, push, reset };
-}
-
-export interface VoiceWaveformProps {
-  history: Accessor<number[]>;
-  level: Accessor<number>;
-  peak: Accessor<number>;
-  state: VoiceWaveformState;
-  barCount?: number;
-  /** Pixels allocated to each bar when the plot width is known. */
-  barDensity?: number;
-  variant?: "monitor" | "compact";
-  /** Multiplies each bar's level before it is drawn (clamped to full height). */
-  gain?: number;
-  ariaLabel?: string;
-  class?: string;
-}
-
-const stateLabel = (state: VoiceWaveformState) => ({
-  connecting: "Connecting",
-  listening: "Listening",
-  stopped: "Stopped",
-  error: "Microphone error",
-}[state]);
-
-const percent = (value: number) => `${Math.round(Math.min(1, Math.max(0, value)) * 100)}%`;
-
-export function VoiceWaveform(props: VoiceWaveformProps) {
-  let plot!: HTMLDivElement;
-  const [plotWidth, setPlotWidth] = createSignal(0);
-  let resizeObserver: ResizeObserver | undefined;
-
-  onMount(() => {
-    if (!props.barDensity || typeof ResizeObserver === "undefined") return;
-    const measure = () => setPlotWidth(plot.getBoundingClientRect().width);
-    measure();
-    resizeObserver = new ResizeObserver(([entry]) => {
-      if (entry) setPlotWidth(entry.contentRect.width);
-    });
-    resizeObserver.observe(plot);
-  });
-
-  onCleanup(() => resizeObserver?.disconnect());
-
-  const compact = () => props.variant === "compact";
-  const bars = () => {
-    const history = props.history();
-    const responsiveCount = compactWaveformBarCount(plotWidth(), props.barDensity || 0);
-    const count = Math.max(1, Math.floor(responsiveCount || props.barCount || history.length || VOICE_WAVEFORM_SAMPLE_COUNT));
-    return selectWaveformBars(history, count, { pad: true });
-  };
-  const title = () => stateLabel(props.state);
-  const peakHeight = () => `${waveformBarHeightPercent(props.peak())}%`;
-  return <div class={`voice-waveform${props.class ? ` ${props.class}` : ""}`} data-state={props.state} data-variant={compact() ? "compact" : "monitor"} role="img" aria-label={props.ariaLabel || `${title()} microphone input`}>
-    <Show when={!compact()}>
-      <div class="voice-waveform-header">
-        <span class="voice-waveform-state"><span class="voice-waveform-dot" aria-hidden="true" />{title()}</span>
-        <span class="voice-waveform-readout"><span>Level {percent(props.level())}</span><span>Peak {percent(props.peak())}</span></span>
-      </div>
-    </Show>
-    <div ref={plot} class="voice-waveform-plot" aria-hidden="true">
-      <Show when={!compact()}>
-        <span class="voice-waveform-gridline voice-waveform-gridline-high" />
-        <span class="voice-waveform-gridline voice-waveform-gridline-low" />
-      </Show>
-      <For each={bars()}>{(value) => <span class="voice-waveform-bar" style={{ height: `${waveformBarHeightPercent(Math.min(1, value * (props.gain ?? 1)), compact())}%` }} />}</For>
-      <Show when={!compact()}><span class="voice-waveform-peak" data-visible={props.peak() >= 0.02} style={{ bottom: peakHeight() }} /></Show>
-    </div>
-    <Show when={!compact()}><div class="voice-waveform-scale" aria-hidden="true"><span>quiet</span><span>now</span></div></Show>
-  </div>;
 }

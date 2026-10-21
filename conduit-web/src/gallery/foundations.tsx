@@ -1,9 +1,12 @@
+import { IDENTITY_COLOURS } from "@/components/ui/palettes";
 import { createSignal, For, onCleanup, onMount, Show, type JSX } from "solid-js";
 import { ArrowUpIcon, CameraIcon, CopyIcon, FolderIcon, MicIcon, MonitorIcon, PaperclipIcon, PlusIcon, SettingsIcon, ShareIcon, Trash2Icon } from "lucide-solid";
 
 import { ServerControl, Reading, ReadingStats, ReadingStat, HeaderPill, Expand, Aura, Orb, settledOrbRate, PLAIN_SPHERE, SPUTTERING_SPHERE, ORBITS_TRAILED, type ModeFrame, type OrbState, Slider, Segmented, Spinner, StatusDot, Preview, Bubble, Button, Frost, HeadingSection, Input, Item, Keycap, Menu, NavRow, Overlay, OverlayBar, PillButton, PillField, PillGroup, Section, SelectTrigger, TextArea, Toolbar } from "@/components/ui";
 import { px, InUse, style, bg, fg, edge, rounding, tall, icon, FormTable, form, type Mark, type FormRow } from "./specs";
 import { resolvePreset } from "thinking-orbs/engine";
+import { IconsFoundation } from "./icons";
+import { HapticsFoundation } from "./haptics";
 import { lib, Levels, SegmentedCount, SegmentedIcons, SegmentedText, SwitchDemo, type Family } from "./library";
 import "katex/dist/katex.min.css";
 
@@ -76,7 +79,7 @@ function TokenCell(props: { row: TokenRow; density?: "desktop" | "phone" }) {
   </div>;
 }
 /** density: false for tokens that do not change with it (colours): one value column. */
-function TokenTable(props: { groups: TokenGroup[]; density?: boolean }) {
+export function TokenTable(props: { groups: TokenGroup[]; density?: boolean }) {
   const dense = props.density !== false;
   return <div class="g-scale" data-columns={dense ? 3 : 2}>
     <div class="g-scale-head"><span>Token</span>{dense ? <><span>Desktop</span><span>Phone</span></> : <span>Value</span>}</div>
@@ -150,6 +153,10 @@ const iconScene = () => <div class="g-scene-stack">
 </div>;
 
 const swatch = (name: string) => () => <i class="g-swatch-chip" style={{ background: `var(${name})` }} />;
+/** A token's value as it computes (a number, a shadow). */
+const value = (name: string) => (cell: HTMLElement) => getComputedStyle(cell).getPropertyValue(name).trim();
+/** A card standing off the page at a lift. */
+const lifted = (name: string) => () => <i class="g-lift" style={{ "box-shadow": `var(${name})` }} />;
 /** An icon drawn at a size token. */
 const glyph = (name: string) => () => <FolderIcon style={{ width: `var(${name})`, height: `var(${name})` }} />;
 const bar = (name: string) => () => <i class="g-bar-chip" style={{ width: `var(${name})` }} />;
@@ -177,61 +184,177 @@ const COLOURS: TokenGroup[] = [
   { title: "Tints", rows: [tok("--tint", "a surface's lines and washes, which its controls read: the app's --border (and --accent, the same value) on the ground, --frost-tint over frost", colour("--tint"), swatch("--tint")), tok("--well", "a surface's well, under an input or an outline button: a step darker than the ground, nothing over frost", colour("--well"), swatch("--well")), tok("--frost-tint", "frost's lines and washes: rules, the cursor", colour("--frost-tint"), swatch("--frost-tint")), tok("--frost-stroke", "frost's edge", colour("--frost-stroke"), swatch("--frost-stroke"))] },
   { title: "Frost", rows: [tok("--frost-fill", "the material's fill (Frost has its blur, highlight and lifts)", colour("--frost-fill"), swatch("--frost-fill")), tok("--frost-core-ground", "core: a solid backing for busy content", colour("--frost-core-ground"), swatch("--frost-core-ground")), tok("--dim", "over what is behind: a desktop overlay (Scrim), the leader's lit composer (Spotlight), the phone's open sidebar; not behind a phone overlay, which fills the screen", colour("--dim"), swatch("--dim"))] },
   { title: "State", rows: [tok("--destructive", "a destructive action", colour("--destructive"), swatch("--destructive")), tok("--live", "a runtime dot: live", colour("--live"), swatch("--live")), tok("--warn", "a runtime dot: warning", colour("--warn"), swatch("--warn"))] },
+  { title: "Code (One Dark)", rows: [
+    tok("--code-foreground", "content and punctuation", colour("--code-foreground"), swatch("--code-foreground")),
+    tok("--code-comment", "comments and quotes", colour("--code-comment"), swatch("--code-comment")),
+    tok("--code-red", "variables, properties, tags and deleted text", colour("--code-red"), swatch("--code-red")),
+    tok("--code-orange", "constants, attributes, numbers and metadata", colour("--code-orange"), swatch("--code-orange")),
+    tok("--code-yellow", "types, classes, namespaces and changed text", colour("--code-yellow"), swatch("--code-yellow")),
+    tok("--code-green", "strings, regular expressions and inserted text", colour("--code-green"), swatch("--code-green")),
+    tok("--code-cyan", "escapes, operators and links", colour("--code-cyan"), swatch("--code-cyan")),
+    tok("--code-blue", "function names and headings", colour("--code-blue"), swatch("--code-blue")),
+    tok("--code-purple", "keywords and modifiers", colour("--code-purple"), swatch("--code-purple")),
+    tok("--code-invalid", "invalid text background", colour("--code-invalid"), swatch("--code-invalid")),
+    tok("--code-invalid-foreground", "invalid text foreground", colour("--code-invalid-foreground"), swatch("--code-invalid-foreground")),
+  ] },
+  { title: "Syntax roles", rows: [
+    tok("--syntax-keyword", "keyword: --code-purple", colour("--syntax-keyword"), swatch("--syntax-keyword")),
+    tok("--syntax-string", "string: --code-green", colour("--syntax-string"), swatch("--syntax-string")),
+    tok("--syntax-number", "number: --code-orange", colour("--syntax-number"), swatch("--syntax-number")),
+    tok("--syntax-title", "title: --code-blue", colour("--syntax-title"), swatch("--syntax-title")),
+    tok("--syntax-variable", "variable: --code-red", colour("--syntax-variable"), swatch("--syntax-variable")),
+    tok("--syntax-type", "type: --code-yellow", colour("--syntax-type"), swatch("--syntax-type")),
+    tok("--syntax-meta", "meta: --code-orange", colour("--syntax-meta"), swatch("--syntax-meta")),
+    tok("--syntax-comment", "comment: --code-comment", colour("--syntax-comment"), swatch("--syntax-comment")),
+  ] },
+  { title: "Terminal (ANSI)", rows: [
+    tok("--ansi-background", "terminal background", colour("--ansi-background"), swatch("--ansi-background")),
+    tok("--ansi-foreground", "terminal foreground", colour("--ansi-foreground"), swatch("--ansi-foreground")),
+    tok("--ansi-cursor", "terminal cursor", colour("--ansi-cursor"), swatch("--ansi-cursor")),
+    tok("--ansi-cursor-accent", "terminal cursor accent", colour("--ansi-cursor-accent"), swatch("--ansi-cursor-accent")),
+    tok("--ansi-selection", "terminal selection", colour("--ansi-selection"), swatch("--ansi-selection")),
+    tok("--ansi-selection-foreground", "terminal selection foreground", colour("--ansi-selection-foreground"), swatch("--ansi-selection-foreground")),
+    tok("--ansi-black", "terminal black", colour("--ansi-black"), swatch("--ansi-black")),
+    tok("--ansi-red", "terminal red", colour("--ansi-red"), swatch("--ansi-red")),
+    tok("--ansi-green", "terminal green", colour("--ansi-green"), swatch("--ansi-green")),
+    tok("--ansi-yellow", "terminal yellow", colour("--ansi-yellow"), swatch("--ansi-yellow")),
+    tok("--ansi-blue", "terminal blue", colour("--ansi-blue"), swatch("--ansi-blue")),
+    tok("--ansi-magenta", "terminal magenta", colour("--ansi-magenta"), swatch("--ansi-magenta")),
+    tok("--ansi-cyan", "terminal cyan", colour("--ansi-cyan"), swatch("--ansi-cyan")),
+    tok("--ansi-white", "terminal white", colour("--ansi-white"), swatch("--ansi-white")),
+    tok("--ansi-bright-black", "terminal bright black", colour("--ansi-bright-black"), swatch("--ansi-bright-black")),
+    tok("--ansi-bright-red", "terminal bright red", colour("--ansi-bright-red"), swatch("--ansi-bright-red")),
+    tok("--ansi-bright-green", "terminal bright green", colour("--ansi-bright-green"), swatch("--ansi-bright-green")),
+    tok("--ansi-bright-yellow", "terminal bright yellow", colour("--ansi-bright-yellow"), swatch("--ansi-bright-yellow")),
+    tok("--ansi-bright-blue", "terminal bright blue", colour("--ansi-bright-blue"), swatch("--ansi-bright-blue")),
+    tok("--ansi-bright-magenta", "terminal bright magenta", colour("--ansi-bright-magenta"), swatch("--ansi-bright-magenta")),
+    tok("--ansi-bright-cyan", "terminal bright cyan", colour("--ansi-bright-cyan"), swatch("--ansi-bright-cyan")),
+    tok("--ansi-bright-white", "terminal bright white", colour("--ansi-bright-white"), swatch("--ansi-bright-white")),
+  ] },
+  { title: "Change", rows: [
+    tok("--change-added", "added content", colour("--change-added"), swatch("--change-added")),
+    tok("--change-modified", "modified content", colour("--change-modified"), swatch("--change-modified")),
+    tok("--change-removed", "removed content", colour("--change-removed"), swatch("--change-removed")),
+  ] },
+  { title: "Category", rows: [
+    tok("--category-1", "messages and what is used (the context gauge)", colour("--category-1"), swatch("--category-1")),
+    tok("--category-2", "the system prompt", colour("--category-2"), swatch("--category-2")),
+    tok("--category-3", "tools", colour("--category-3"), swatch("--category-3")),
+    tok("--category-4", "instructions", colour("--category-4"), swatch("--category-4")),
+    tok("--category-5", "other content", colour("--category-5"), swatch("--category-5")),
+    tok("--category-6", "a spare, for what has no colour of its own", colour("--category-6"), swatch("--category-6")),
+    tok("--category-7", "a spare", colour("--category-7"), swatch("--category-7")),
+    tok("--category-8", "a spare", colour("--category-8"), swatch("--category-8")),
+    tok("--category-9", "a spare", colour("--category-9"), swatch("--category-9")),
+  ] },
+  { title: "Identity", rows: IDENTITY_COLOURS.map(({ id, label, hex }) => tok(id, label, () => hex, () => <i class="g-swatch-chip" style={{ background: hex }} />)) },
+  { title: "Brand", rows: [
+    tok("--brand-claude-code", "Claude Code brand", colour("--brand-claude-code"), swatch("--brand-claude-code")),
+  ] },
 ];
 /*
- * The scale: the coefficients, set on every document (the gallery's, each phone frame's at its own
- * mount) and remembered, so the whole gallery can be checked at any setting.
+ * The scale: the user's Interface size and each region's own size per density (foundations.css, Scale), set on every
+ * document (the gallery's, each phone frame's at its own mount) and remembered, so the whole gallery can be checked at
+ * any setting and the regions tuned against each other. Copy gives the line foundations.css keeps.
  */
-const SCALES = [["--scale-ui", "UI scale", "everything"], ["--scale-transcript", "Transcript scale", "what you read"]] as const;
-const storedScale = (token: string) => { try { return Number(localStorage.getItem(`gallery:${token}`)) || 1; } catch { return 1; } };
+const REGIONS = [["chrome", "Chrome", "headers, panes, files, the dashboard: everything not below"], ["sidebar", "Sidebar", "the sidebar, its rail and its head"],
+  ["frost", "Frost", "what floats: menus, popovers, overlays (settings, the palette), cards, toasts"], ["composer", "Composer", "the composer, its riders; the phone's composer row"],
+  ["transcript", "Transcript", "what you read: messages, the answer, its traces"]] as const;
+const DENSITIES = ["desktop", "phone"] as const;
+type ScaleToken = "--ui-scale" | `--scale-${(typeof REGIONS)[number][0]}-${(typeof DENSITIES)[number]}`;
+const SCALES: ScaleToken[] = ["--ui-scale", ...REGIONS.flatMap(([region]) => DENSITIES.map((density) => `--scale-${region}-${density}` as const))];
+// A region's size unless one is picked here: foundations.css's own.
+const shipped = (token: ScaleToken) => token === "--ui-scale" ? 1 : Number(getComputedStyle(document.documentElement).getPropertyValue(token).trim()) || 1;
+const storedScale = (token: ScaleToken) => { try { const value = localStorage.getItem(`gallery:${token}`); return value === null ? null : Number(value) || null; } catch { return null; } };
 export function applyScale(doc: Document) {
-  for (const [token] of SCALES) { const value = storedScale(token); if (value === 1) doc.documentElement.style.removeProperty(token); else doc.documentElement.style.setProperty(token, String(value)); }
+  for (const token of SCALES) { const value = storedScale(token); if (value === null) doc.documentElement.style.removeProperty(token); else doc.documentElement.style.setProperty(token, String(value)); }
 }
 /** The scales as one signal, shared by the Space page's sliders and the gallery's Settings (Appearance). */
-const [scales, setScales] = createSignal<number[]>(SCALES.map(([token]) => storedScale(token)));
-export const scaleOf = (token: (typeof SCALES)[number][0]) => scales()[SCALES.findIndex(([name]) => name === token)]!;
-export function setScale(token: (typeof SCALES)[number][0], value: number) {
-  const index = SCALES.findIndex(([name]) => name === token);
-  try { localStorage.setItem(`gallery:${token}`, String(value)); } catch { /* private window */ }
-  setScales((all) => all.map((old, at) => at === index ? value : old));
+const [scales, setScales] = createSignal<Record<string, number | null>>(Object.fromEntries(SCALES.map((token) => [token, storedScale(token)])));
+export const scaleOf = (token: ScaleToken) => scales()[token] ?? shipped(token);
+export function setScale(token: ScaleToken, value: number | null) {
+  try { if (value === null) localStorage.removeItem(`gallery:${token}`); else localStorage.setItem(`gallery:${token}`, String(value)); } catch { /* private window */ }
+  setScales((all) => ({ ...all, [token]: value }));
   for (const doc of [document, ...Array.from(document.querySelectorAll("iframe"), (frame) => frame.contentDocument)]) if (doc) applyScale(doc);
   dispatchEvent(new Event("gallery:tune"));
 }
+function ScaleSlider(props: { token: ScaleToken }) {
+  return <span class="g-scale-slider">
+    <input type="range" min="0.75" max="1.5" step="0.025" aria-label={props.token} value={scaleOf(props.token)} onInput={(event) => setScale(props.token, Number(event.currentTarget.value))} />
+    <code>{scaleOf(props.token).toFixed(3)}×</code>
+    <button type="button" title="Back to foundations.css" aria-label={`Reset ${props.token}`} disabled={scales()[props.token] == null} onClick={() => setScale(props.token, null)}>↺</button>
+  </span>;
+}
 function ScaleControl() {
-  return <div class="g-scale-control"><For each={[...SCALES]}>{([token, label, use]) => <label>
-    <span><strong>{label}</strong><small>{use}</small></span>
-    <input type="range" min="0.75" max="1.5" step="0.05" value={scaleOf(token)} onInput={(event) => setScale(token, Number(event.currentTarget.value))} />
-    <code>{scaleOf(token).toFixed(2)}×</code>
-    <button type="button" disabled={scaleOf(token) === 1} onClick={() => setScale(token, 1)}>Reset</button>
-  </label>}</For></div>;
+  const line = () => `:root {\n  ${DENSITIES.map((density) => REGIONS.map(([region]) => `--scale-${region}-${density}: ${+scaleOf(`--scale-${region}-${density}`).toFixed(3)};`).join(" ")).join("\n  ")}\n}`;
+  return <div class="g-scale-control">
+    <label><span><strong>Interface size</strong><small>the user's one setting (Settings · Interface): every region at once</small></span><ScaleSlider token="--ui-scale" /></label>
+    <div class="g-scale-regions">
+      <span /><strong>Desktop</strong><strong>Phone</strong>
+      <For each={[...REGIONS]}>{([region, label, use]) => <>
+        <span><strong>{label}</strong><small>{use}</small></span>
+        <For each={[...DENSITIES]}>{(density) => <ScaleSlider token={`--scale-${region}-${density}`} />}</For>
+      </>}</For>
+    </div>
+    <p><button type="button" onClick={() => void navigator.clipboard.writeText(line())}>Copy region sizes</button> <small>the :root line for foundations.css, from the sizes picked here</small></p>
+  </div>;
 }
 const number = (name: string) => (cell: HTMLElement) => `${Number(getComputedStyle(cell).getPropertyValue(name).trim() || 1)}×`;
 const STEPS = ["2xs", "xs", "sm", "md", "lg", "xl", "2xl", "3xl", "4xl"];
 const STEP_USE: Record<string, string> = { "2xs": "0.125 units: a hairline's room (a field's 2px)", xs: "0.25: keys apart, a popover's inset (desktop)", sm: "0.375: a row's padding, a button's gap", md: "0.5: the commonest gap; a row's inset", lg: "0.75: a field's text inset, a choice's gap", xl: "1 unit: a card's gap, a list's indent", "2xl": "1.25: a card's edge, a page's top", "3xl": "1.5", "4xl": "2: a page's sides" };
+const DEPTH: TokenGroup[] = [
+  { title: "Layers: the page's stack, bottom to top (a piece's own stacking stays inside it)", rows: [
+    tok("--layer-nav", "the sidebar's pane, over what slides under its edge", value("--layer-nav")),
+    tok("--layer-dock", "the workspace dock floating over the panes, and its edge", value("--layer-dock")),
+    tok("--layer-drawer", "a phone's drawer (the sidebar's), its Backdrop just under it", value("--layer-drawer")),
+    tok("--layer-drop", "a dragged tab's drop wash over the panes it can land on", value("--layer-drop")),
+    tok("--layer-panel", "the phone's workspace panel, over the sidebar's drawer", value("--layer-panel")),
+    tok("--layer-cue", "the region cue: the page dimmed round where a key moved focus", value("--layer-cue")),
+    tok("--layer-leader", "the leader's dim, its card one above", value("--layer-leader")),
+    tok("--layer-drag", "the pill a dragged tab or row travels as", value("--layer-drag")),
+    tok("--layer-dialog", "a dialog, and the terminal's full-screen route", value("--layer-dialog")),
+    tok("--layer-popover", "a menu, submenu or picker, over everything it opens from", value("--layer-popover")),
+    tok("--layer-notification", "a toast, over everything", value("--layer-notification")),
+  ] },
+  { title: "Elevation: how far a surface stands off the page", rows: [
+    tok("--lift-rest", "laid over what it belongs to: a tooltip, a docked card; frost at rest", value("--lift-rest"), lifted("--lift-rest")),
+    tok("--lift-raised", "over everything round it: the floating dock, a popover, the drop card; raised frost", value("--lift-raised"), lifted("--lift-raised")),
+    tok("--lift-side", "a pane slid over its neighbour from the left (Files' tree, narrow)", value("--lift-side"), lifted("--lift-side")),
+  ] },
+  { title: "Dims: what is behind, held back", rows: [
+    tok("--dim", "a desktop overlay's scrim, the leader's spotlight, the phone's open sidebar", value("--dim"), swatch("--dim")),
+    tok("--dim-faint", "the region cue: reads without hiding the page", value("--dim-faint"), swatch("--dim-faint")),
+  ] },
+];
 const SPACE: TokenGroup[] = [
   { title: "Scale: the coefficients everything is drawn from (the sliders above)", rows: [tok("--scale-ui", "the whole UI: the unit times this", number("--scale-ui")), tok("--scale-transcript", "what you read: a message, its text, padding and corner", number("--scale-transcript"))] },
-  { title: "The unit: the density's (12.8px desktop, 16px phone) times the UI scale", rows: [tok("--u-space", "space and controls", length("--u-space"), bar("--u-space")), tok("--u-type", "type: every size a multiple", length("--u-type"), bar("--u-type")), tok("--u-icon", "icons", length("--u-icon"), bar("--u-icon"))] },
+  { title: "The unit: the density's (16px desktop and phone) times the Interface size and the region's size", rows: [tok("--u-space", "space and controls", length("--u-space"), bar("--u-space")), tok("--u-type", "type: every size a multiple", length("--u-type"), bar("--u-type")), tok("--u-icon", "icons", length("--u-icon"), bar("--u-icon"))] },
   { title: "Space: nine steps, every gap, padding and margin", rows: STEPS.map((step) => tok(`--space-${step}`, STEP_USE[step]!, length(`--space-${step}`), bar(`--space-${step}`))) },
   { title: "Icons: five sizes and a dot", rows: [tok("--icon-xs", "a × in a tiny control: a chip's or a keycap's remove", length("--icon-xs"), glyph("--icon-xs")), tok("--icon-sm", "a chevron, a small control's glyph", length("--icon-sm"), glyph("--icon-sm")), tok("--icon", "the icon: a row's, a button's", length("--icon"), glyph("--icon")), tok("--icon-lg", "a pill's, a slider's value", length("--icon-lg"), glyph("--icon-lg")), tok("--icon-xl", "a ring: an upload's progress", length("--icon-xl"), glyph("--icon-xl")), tok("--icon-dot", "a dot: a status, recording", length("--icon-dot"), bar("--icon-dot"))] },
   { title: "Controls: six heights", rows: [tok("--control-2xs", "a keycap, a slider's thumb", length("--control-2xs"), bar("--control-2xs")), tok("--control-xs", "an icon-xs button, a toast's ×", length("--control-xs"), bar("--control-xs")), tok("--control-tool", "a workspace tool's button, a file header's, a tree row", length("--control-tool"), bar("--control-tool")), tok("--control-sm", "a small button, an icon-sm button", length("--control-sm"), bar("--control-sm")), tok("--control", "a button, an input", length("--control"), bar("--control")), tok("--control-lg", "a rider button, a choice", length("--control-lg"), bar("--control-lg"))] },
   { title: "Measures: six lengths for what has a width of its own", rows: [tok("--measure-xs", "a menu's least width, the composer's tallest field, a chip's name", length("--measure-xs"), bar("--measure-xs")), tok("--measure-sm", "a settings rail, a preview's height", length("--measure-sm"), bar("--measure-sm")), tok("--measure-md", "a setting's control column, a step's output", length("--measure-md"), bar("--measure-md")), tok("--measure-lg", "a toast", length("--measure-lg"), bar("--measure-lg")), tok("--measure-xl", "a card, the leader", length("--measure-xl"), bar("--measure-xl")), tok("--measure-2xl", "an overlay, a wide card, the user's message", length("--measure-2xl"), bar("--measure-2xl"))] },
   { title: "Rows: every list, menu, palette and settings row, and the sidebar's", rows: [tok("--row-min", "a row's height", length("--row-min"), bar("--row-min")), tok("--row-pad", "its padding", pad("--row-pad")), tok("--row-gap", "between icon, label and meta", length("--row-gap"), bar("--row-gap")), tok("--nav-indent", "a sidebar row under another", length("--nav-indent"), bar("--nav-indent")), tok("--nav-label-pad", "a sidebar group's label", pad("--nav-label-pad"))] },
+];
+/** A piece's own sizes, read from the unit: shown with the piece (Frost, DesktopComposer). */
+export const FROST_SIZES: TokenGroup[] = [
   { title: "Frost", rows: [tok("--frost-inset", "a popover's padding round its rows", length("--frost-inset"), bar("--frost-inset"))] },
+];
+export const COMPOSER_SIZES: TokenGroup[] = [
   { title: "Composer", rows: [tok("--composer-width", "declared by the pane, not the composer", (cell) => { const el = document.createElement("div"); el.style.position = "absolute"; el.style.width = "var(--composer-width, var(--reading-width))"; cell.append(el); const value = getComputedStyle(el).width; el.remove(); return `${px(value)} (--reading-width unless the pane says)`; }), tok("--cmp-field-min", "the field's least height", classLength("ui-composer-field", "--cmp-field-min")), tok("--cmp-bar-min", "the toolbar's height", classLength("ui-toolbar", "--cmp-bar-min")), tok("--cmp-slot", "a toolbar button", classLength("ui-toolbar", "--cmp-slot"))] },
 ];
 /** A dot crossing a track, again and again, at a token's pace or along its curve. */
 const run = (duration: string, easing: string) => () => <div class="g-run"><span style={{ "animation-duration": duration, "animation-timing-function": easing }} /></div>;
 /** The page's moves, on a sketch of it: sidebar, reading, and the composer that stays put. */
 const LEVELS = Array.from({ length: 11 }, (_, i) => ({ value: (i / 10).toFixed(1), label: (i / 10).toFixed(1) }));
-/* Aura: the field on a pill-shaped and a round surface, its level moved by hand or by a voice. */
+/* Aura: the field on a pill-shaped and a round surface, its level moved by hand or by a voice, its strength by hand. */
 function AuraDemo() {
-  const [level, setLevel] = createSignal(0), [voice, setVoice] = createSignal(false);
+  const [level, setLevel] = createSignal(0), [voice, setVoice] = createSignal(false), [strength, setStrength] = createSignal("1.0");
   let t = 0;
   const timer = setInterval(() => { if (!voice()) return; t += 1; setLevel(Math.max(0, Math.min(1, (Math.sin(t / 3) * .5 + .5) * (Math.sin(t / 11) * .4 + .6) * (.5 + Math.random() * .5)))); }, 70);
   onCleanup(() => clearInterval(timer));
   return <div class="g-aura">
-    <div class="g-aura-row"><div class="ui-frost ui-pill g-aura-wide"><Aura on level={level()} /></div><div class="ui-frost ui-pill g-aura-short"><Aura on level={level()} /></div><div class="ui-frost g-aura-round"><Aura on level={level()} /></div></div>
-    <div class="g-aura-row"><Button variant="secondary" size="sm" onClick={() => setVoice(!voice())}>{voice() ? "Stop the voice" : "Speak"}</Button><Slider label="Level" options={LEVELS} value={(Math.round(level() * 10) / 10).toFixed(1)} onChange={(v) => { setVoice(false); setLevel(Number(v)); }} /><code>--aura-level {level().toFixed(2)}</code></div>
+    <div class="g-aura-row"><div class="ui-frost ui-pill g-aura-wide"><Aura on level={level()} strength={Number(strength())} /></div><div class="ui-frost ui-pill g-aura-short"><Aura on level={level()} strength={Number(strength())} /></div><div class="ui-frost g-aura-round"><Aura on level={level()} strength={Number(strength())} /></div></div>
+    <div class="g-aura-row"><Button variant="secondary" size="sm" onClick={() => setVoice(!voice())}>{voice() ? "Stop the voice" : "Speak"}</Button><Slider label="Level" options={LEVELS} value={(Math.round(level() * 10) / 10).toFixed(1)} onChange={(v) => { setVoice(false); setLevel(Number(v)); }} /><Slider label="Strength" options={LEVELS} value={strength()} onChange={setStrength} /><code>--aura-level {level().toFixed(2)}</code></div>
   </div>;
 }
 
@@ -492,9 +615,6 @@ export const foundationFamilies: Family[] = [
       lib("type-sizes", "Sizes", "both", "type", "foundations.css --text-*", () => <TokenTable groups={SIZES} />, true),
       lib("type-weights", "Weights", "both", "type", "foundations.css --weight-*", () => <TokenTable groups={WEIGHTS} density={false} />),
     ] },
-    { title: "Icons", note: "Lucide at the type unit, so an icon is sized with the text beside it; muted at rest, its stroke a tenth of its size, an eighth when current (DESIGN.md Icons)", layout: "desktop", atoms: [
-      lib("icon-inuse", "Icons in use", "both", "icon", "svg.lucide · --u-icon · --pill-icon", () => <InUse scene={iconScene} marks={ICON_MARKS} />, "row"),
-    ] },
     { title: "Shipped", note: "the faces Conduit ships, so it looks the same on every system", layout: "desktop", atoms: [
       lib("font-geist", "Geist Variable", "both", "font", "@fontsource-variable/geist", () => <Face family={GEIST} weights={[400, 450, 500, 560, 600, 660, 700]} source="@fontsource-variable/geist · OFL" />),
       lib("font-paper", "Paper Mono", "both", "font", "components/ui/fonts/PaperMono-Variable.woff2", () => <Face family={PAPER} weights={[400, 500, 600, 700]} source="components/ui/fonts/PaperMono-Variable.woff2 · OFL · the section labels; also the app's optional transcript face" />),
@@ -514,9 +634,17 @@ export const foundationFamilies: Family[] = [
   ] }, { title: "Tokens", layout: "desktop", atoms: [
     lib("colour-tokens", "Colours", "both", "colour", "styles.css :root · foundations.css :root", () => <TokenTable groups={COLOURS} density={false} />, "row"),
   ] }] },
-  { title: "Space", rail: "Foundations", note: "everything from a few numbers: the density's unit (12.8px desktop, 16px phone) times the UI scale, or the transcript scale for what you read. Every gap, padding and margin is one of nine steps; every control one of four heights; rows keep their measured height and text, in the unit (a phone's never below 40px). Move the scales and every page follows", groups: [{ title: "Scale", note: "the coefficients, remembered and applied to the whole gallery, its phone frames too: try any page at another setting", layout: "desktop", atoms: [
-    lib("space-scale", "Scale", "both", "space", "foundations.css :root --scale-ui · --scale-transcript", () => <ScaleControl />, "row"),
-  ] }, { title: "In use", note: "one popover, measured: what each number shapes. Everything is in the unit, so the phone's is the desktop's at 1.25x; rows take more, for a finger", layout: "desktop", atoms: [
+  { title: "Icons", rail: "Foundations", note: "one glyph per concept (components/ui/icons.tsx, imported as Icons), at the type unit so an icon sits with the text beside it; and the library's own marks: harnesses, file types, a workspace's or place's glyph", groups: [
+    { title: "In use", note: "Lucide at the type unit, so an icon is sized with the text beside it; muted at rest, its stroke a tenth of its size, an eighth when current (DESIGN.md Icons)", layout: "desktop", atoms: [
+      lib("icon-inuse", "Icons in use", "both", "icon", "svg.lucide · --u-icon · --pill-icon", () => <InUse scene={iconScene} marks={ICON_MARKS} />, "row"),
+    ] },
+    { title: "Vocabulary and marks", layout: "desktop", atoms: [
+      lib("icon-map", "Icons · marks", "both", "icon", "components/ui/icons.tsx · marks.tsx · file-marks.tsx", () => <IconsFoundation />, "row"),
+    ] },
+  ] },
+  { title: "Space", rail: "Foundations", note: "everything from a few numbers: the density's unit (16px on desktop and phone) times the user's Interface size times the region's own size (chrome, sidebar, frost, composer, transcript), per density. Every gap, padding and margin is one of nine steps; every control one of four heights; rows keep their measured height and text, in the unit (a phone's never below 40px). Move the scales and every page follows", groups: [{ title: "Scale", note: "the coefficients, remembered and applied to the whole gallery, its phone frames too: try any page at another setting", layout: "desktop", atoms: [
+    lib("space-scale", "Scale", "both", "space", "foundations.css :root --ui-scale · --scale-<region>-<density>", () => <ScaleControl />, "row"),
+  ] }, { title: "In use", note: "one popover, measured: what each number shapes. Everything is in the unit, the same 16px on both; the phone's rows take more, for a finger, and its frost a wider inset", layout: "desktop", atoms: [
     lib("space-inuse", "Space in use", "both", "space", "Menu · Section · Item", () => <InUse scene={spaceScene} marks={SPACE_MARKS} />, "row"),
   ] }, { title: "Tokens", note: "for reference", layout: "desktop", atoms: [
     lib("space-tokens", "Space", "both", "space", "foundations.css [data-density]", () => <TokenTable groups={SPACE} />, "row"),
@@ -526,24 +654,21 @@ export const foundationFamilies: Family[] = [
   ] }, { title: "Tokens", layout: "desktop", atoms: [
     lib("radius-tokens", "Radii", "both", "radius", "foundations.css --radius-*", () => <TokenTable groups={RADII} />, "row"),
   ] }] },
-  { title: "Orbs", rail: "Foundations", note: "one Orb, a list of animations, each with a speed. Aura (Pill) is the voice's colour field, not an orb", groups: [
-    { title: "How it draws", layout: "desktop", atoms: [lib("orb-how", "How it draws", "both", "orb", "thinking-orbs engine · orb-frames · Orb", () => <OrbHow />, "row")] },
-    { title: "Animations", note: "every animation the Orb plays, live at the sizes it is used at (a preview's 16px, a turn's 20px)", layout: "desktop", atoms: [lib("orb-animations", "Animations", "both", "orb", "<Orb state frame? tint? rate?>", () => <OrbAnimations />, "row")] },
-    { title: "Playing", note: "a change, and a still one", layout: "desktop", atoms: [
-      lib("orb-change", "A change", "both", "orb", "held 250ms, crossfaded over 200ms", () => <OrbChange />),
-      lib("orb-paused", "Paused", "both", "orb", "<Orb paused>: one still frame (and with reduced motion); a change is not faded", () => <span class="g-orb-big"><Orb state="working" paused /></span>),
-    ] },
-  ] },
+  { title: "Depth", rail: "Foundations", note: "what stands over what: the page's layers, how far a surface stands off it, and the dims that hold back what is behind", groups: [{ title: "Tokens", layout: "desktop", atoms: [
+    lib("depth-tokens", "Layers · elevation · dims", "both", "depth", "foundations.css --layer-* · --lift-* · --dim*", () => <TokenTable groups={DEPTH} density={false} />, "row"),
+  ] }] },
   { title: "Motion", rail: "Foundations", note: "motion explains a change of place (DESIGN Motion): quick out, gentle in; a change in place is quick and plain. Only transform and opacity, but for a fold the reader opens. The foundation is these tokens and four shapes (a fade in or out, a rise, a drop back the way it came); each piece owns its moves, shown on its own page under Motion. Reduced motion keeps the end state", groups: [{ title: "Tokens", note: "a dot runs each curve, and each duration at its curve", layout: "desktop", atoms: [
     lib("motion-tokens", "Motion", "both", "motion", "foundations.css :root --ease-* · --duration-*", () => <TokenTable groups={MOTION} density={false} />, "row"),
-  ] }, { title: "Expand", note: "what opens in place under the row that owns it slides on its measured height, open and shut, over --duration-fold on --ease-fold, on the compositor: what follows slides on a transform and its rows are revealed by a clip that runs with them; the page is laid out once, at the start or the end. Just after a touch, the fold is felt on a phone (haptic fold); an overlay closing likewise (haptic dismiss). Shut, nothing is in the document. When the caller drops the rows at once (chat search rebuilds its list), the shut slides over a still of them", atoms: [
-    lib("motion-expand", "Expand", "both", "motion", "components/ui/expand.tsx", () => <ExpandDemo />, "row"),
   ] }, { title: "The page", note: "no piece's own: the page's regions fade on the tokens, and the composer never moves. The first open fades in everything but the composer; a route (a dashboard's send opening its chat) fades the reading out quick, then the new one in gentle. The app's motion-rules.ts takes these at the port", layout: "desktop", atoms: [
     lib("motion-page", "The page", "desktop", "motion", "ui-fade-in · ui-fade-out on the page's regions", () => <PageMoves />, "row"),
-  ] }, { title: "Aura", note: "a field of colour behind a surface, made of numbers: each blob comes in from a direction in its hue, circles near that edge on its own period and breathes as it turns, so at rest the colours trade places; a level (0-1, the voice's) brightens them all and grows some while shrinking others. The mic's pill is filled with one while listening", layout: "desktop", atoms: [
+  ] }] },
+  { title: "Haptics", rail: "Foundations", note: "what a touch that changes something feels like on a phone: five kinds, each a piece's own, so callers never fire them (components/ui/haptics.ts). Only a touch screen with nothing that hovers feels them", groups: [{ title: "Kinds", layout: "desktop", atoms: [
+    lib("haptics", "Haptics", "phone", "haptics", "components/ui/haptics.ts · haptic(kind)", () => <HapticsFoundation />, "row"),
+  ] }] },
+  { title: "Aura", rail: "Materials", note: "a field of colour behind a surface, made of numbers: each blob comes in from a direction in its hue, circles near that edge on its own period and breathes as it turns, so at rest the colours trade places; a level (0-1, the voice's) brightens them all and grows some while shrinking others. The mic's pill is filled with one while listening", groups: [{ title: "The field", layout: "desktop", atoms: [
     lib("motion-aura", "Aura", "both", "motion", "Aura · --aura-level · styles/pill.css .ui-aura", () => <AuraDemo />, "row"),
   ] }] },
-  { title: "Controls", rail: "Foundations", stage: true, note: "what sits on any surface. A surface sets two values, --tint (its lines and washes) and --well (the fill under an input or an outline button), and a control reads only those; so each is drawn once, on the surface and at the density picked above", groups: [
+  { title: "Controls", stage: true, note: "what sits on any surface. A surface sets two values, --tint (its lines and washes) and --well (the fill under an input or an outline button), and a control reads only those; so each is drawn once, on the surface and at the density picked above", groups: [
     { title: "In use", note: "the same controls on the ground and over frost: what each takes from the surface under it", layout: "desktop", atoms: [
       lib("controls-inuse", "Controls in use", "both", "control", "Button · Input · Segmented · Keycap on [data-surface]", () => <InUse scene={controlsScene} marks={CONTROL_MARKS} />, "row"),
     ] },
@@ -568,4 +693,15 @@ export const foundationFamilies: Family[] = [
       lib("status", "StatusDot", "both", "control", "StatusDot: a row's live state", () => <div class="g-row"><StatusDot label="Idle" tone="success" /><StatusDot label="Working" tone="active" spinning /><StatusDot label="Waiting on you" tone="warn" /><StatusDot label="Failed" tone="danger" /><StatusDot label="Unread" tone="unread" /><StatusDot label="Stopping" spinning /><StatusDot label="Idle (may be stale)" tone="success" stale /></div>),
     ] },
   ] },
+  { title: "Orbs", note: "one Orb, a list of animations, each with a speed. Aura (Materials) is the voice's colour field, not an orb", groups: [
+    { title: "How it draws", layout: "desktop", atoms: [lib("orb-how", "How it draws", "both", "orb", "thinking-orbs engine · orb-frames · Orb", () => <OrbHow />, "row")] },
+    { title: "Animations", note: "every animation the Orb plays, live at the sizes it is used at (a preview's 16px, a turn's 20px)", layout: "desktop", atoms: [lib("orb-animations", "Animations", "both", "orb", "<Orb state frame? tint? rate?>", () => <OrbAnimations />, "row")] },
+    { title: "Playing", note: "a change, and a still one", layout: "desktop", atoms: [
+      lib("orb-change", "A change", "both", "orb", "held 250ms, crossfaded over 200ms", () => <OrbChange />),
+      lib("orb-paused", "Paused", "both", "orb", "<Orb paused>: one still frame (and with reduced motion); a change is not faded", () => <span class="g-orb-big"><Orb state="working" paused /></span>),
+    ] },
+  ] },
+  { title: "Expand", note: "what opens in place under the row that owns it slides on its measured height, open and shut, over --duration-fold on --ease-fold, on the compositor: what follows slides on a transform and its rows are revealed by a clip that runs with them; the page is laid out once, at the start or the end. Just after a touch, the fold is felt on a phone (haptic fold); an overlay closing likewise (haptic dismiss). Shut, nothing is in the document. When the caller drops the rows at once (chat search rebuilds its list), the shut slides over a still of them", groups: [{ title: "Open and shut", layout: "desktop", atoms: [
+    lib("motion-expand", "Expand", "both", "motion", "components/ui/expand.tsx", () => <ExpandDemo />, "row"),
+  ] }] },
 ];

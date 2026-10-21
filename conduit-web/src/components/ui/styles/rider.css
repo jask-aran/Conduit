@@ -12,6 +12,10 @@
 .ui-rider[data-leaving="remove"], .ui-chip[data-leaving="remove"] { animation: ui-fade-out var(--duration-quick) var(--ease-leave) forwards; pointer-events: none; }
 .ui-frost.ui-rider[data-layout="row"] { display: flex; align-items: center; gap: var(--rider-gap); padding: var(--space-xs) var(--space-sm) var(--space-xs) var(--space-lg); }
 .ui-frost.ui-rider[data-layout="strip"] { display: flex; align-items: center; gap: var(--space-sm); padding: 0 var(--space-sm) 0 0; }
+/* Wave: the voice while dictating, a PillWave across the rider at the composer's padding, over its Aura. */
+.ui-frost.ui-rider[data-layout="wave"] { position: relative; display: flex; height: var(--control); align-items: center; padding: 0 var(--space-lg); }
+.ui-rider[data-layout="wave"] > .ui-pill-wave { position: relative; height: var(--control-xs); }
+.ui-rider[data-layout="wave"] > .ui-aura { z-index: -1; }
 .ui-frost.ui-rider[data-layout="card"] { display: grid; width: 100%; gap: var(--space-sm); margin-inline: auto; padding: var(--space-md); outline: 0; }
 .ui-rider > .ui-title-text { flex: none; }
 .ui-rider-actions { display: flex; flex: none; align-items: center; gap: var(--space-2xs); }
@@ -59,7 +63,7 @@
 .ui-chip-body:focus-visible { outline: none; filter: brightness(var(--brighten)); }
 .ui-chip-media { position: relative; display: grid; width: calc(2 * var(--control-sm) - 2 * var(--hairline)); height: calc(2 * var(--control-sm) - 2 * var(--hairline)); flex: none; place-items: center; background: var(--tint); color: var(--muted-foreground); }
 .ui-chip[data-kind="file"] .ui-chip-media { width: auto; height: auto; background: none; }
-.ui-chip-media :is(.workspace-file-icon, .workspace-file-icon-generic, svg:not(.ui-chip-ring, .ui-chip-retry)) { display: block; width: var(--icon); height: var(--icon); }
+.ui-chip-media :is(.ui-file-icon, .ui-file-icon-generic, svg:not(.ui-chip-ring, .ui-chip-retry)) { display: block; width: var(--icon); height: var(--icon); }
 .ui-chip-media img { width: 100%; height: 100%; object-fit: cover; }
 .ui-chip-copy { display: grid; min-width: 0; max-width: var(--measure-xs); line-height: var(--leading-tight); }
 .ui-chip-copy strong { overflow: hidden; font-size: var(--text-row); font-weight: var(--weight-strong); text-overflow: ellipsis; white-space: nowrap; }

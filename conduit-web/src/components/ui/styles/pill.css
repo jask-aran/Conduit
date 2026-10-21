@@ -36,14 +36,14 @@
 /* Aura: a field of colour behind frost, drawn by Aura (index.tsx) as a mesh: every point's colour is a blend of all its
    blobs at once by distance, kept at full chroma, so no colour is painted over another and none passes through grey.
    This holds its frame: the level it reads (--aura-level, 0-1, from --voice-level unless set, eased here), whether it
-   shows (a parent turns it on, or `on`), and the frost over it. The one coloured glow DESIGN.md allows. */
+   shows (a parent turns it on, or `on`), how strongly (--aura-strength, 0-1, from `strength`), and the frost over it. The one coloured glow DESIGN.md allows. */
 @property --aura-level { syntax: "<number>"; inherits: true; initial-value: 0; }
 .ui-aura { --aura-level: var(--voice-level, 0); position: absolute; inset: 0; overflow: clip; border-radius: inherit; opacity: 0; pointer-events: none;
   --fade-ease: var(--ease-leave); transition: opacity var(--duration-gentle) var(--fade-ease), --aura-level var(--duration-follow) linear; }
 /* Its fade is its own: shown, it blooms over the gentle duration as the move that shows it runs, and goes the same way
    back (a parent shows it with data-on or a rule of its own, listed here, so the fade stays the same). */
 .ui-aura[data-on], .ui-phone-composer[data-show~="orb"] :is(.ui-pill[data-voice], .ui-voice-track) .ui-aura {
-  opacity: 1; --fade-ease: var(--ease-arrive); }
+  opacity: var(--aura-strength, 1); --fade-ease: var(--ease-arrive); }
 .ui-aura > canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
 /* The frost over it: a lit rim and a faint sheen from the top, so the colour reads as behind the glass. */
 .ui-aura::after { content: ""; position: absolute; inset: 0; z-index: 1; border-radius: inherit; background: linear-gradient(var(--frost-sheen), transparent 60%); box-shadow: var(--frost-highlight), inset 0 0 calc(.3 * var(--pill-size)) var(--frost-glow); }

@@ -1,6 +1,8 @@
+import { Icons } from "@/components/ui";
 import { setLatestAway, setLatestScroller } from "./latest-away";
+import { unitPx } from "../layout-geometry";
 import { createComputed, createEffect, createMemo, createRenderEffect, createSignal, For, on, onCleanup, onMount, Show, Suspense, untrack, type JSX } from "solid-js";
-import { ArrowDownIcon, PencilIcon, PlayIcon, RefreshCwIcon, XIcon } from "lucide-solid";
+
 import type { BooleanCapability, Message } from "../api/contracts";
 import { isChatContentActivity, type TranscriptSource } from "./transcript-source";
 import type { TurnArtifactSummary } from "../api/live-events";
@@ -86,7 +88,7 @@ function UserMessage(props: { message: Message; text: string; editing: boolean; 
   return <LibraryMessage motion={props.since != null ? "entering" : undefined} since={props.since} editing={props.editing} fold={fold()} open={open()} onToggle={toggle}
     time={timestamp() && new Date(timestamp()!).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} dateTime={timestamp()} title={timestamp() && fullDateTime(timestamp()!)}
     under={props.under}
-    actions={<Show when={props.editable}><LibraryButton variant="ghost" size="icon-xs" aria-label={props.editing ? "Cancel editing" : "Edit from here"} onClick={props.onEdit}><PencilIcon /></LibraryButton></Show>}>
+    actions={<Show when={props.editable}><LibraryButton variant="ghost" size="icon-xs" aria-label={props.editing ? "Cancel editing" : "Edit from here"} onClick={props.onEdit}><Icons.Edit /></LibraryButton></Show>}>
     {props.text || undefined}
   </LibraryMessage>;
 }
@@ -120,9 +122,9 @@ function AnswerFoot(props: { message: Message; precedingUserId?: string; chat: T
   const continuable = () => props.partialContinue && Boolean(props.message.stopped) && !props.message.discarded
     && Boolean(props.message.content) && !props.chat.streaming() && props.chat.messages().at(-1)?.id === props.message.id;
   return <MessageFoot motion={props.reveal ? "entering" : undefined} time={clock(props.message.timestamp)} dateTime={props.message.timestamp || undefined} title={props.message.timestamp ? fullDateTime(props.message.timestamp) : undefined} status={status()}>
-    <Show when={continuable()}><LibraryButton variant="ghost" size="sm" onClick={() => void props.chat.continueResponse()}><PlayIcon />Continue</LibraryButton></Show>
+    <Show when={continuable()}><LibraryButton variant="ghost" size="sm" onClick={() => void props.chat.continueResponse()}><Icons.Play />Continue</LibraryButton></Show>
     <Show when={copyable()}><CopyButton copied={props.copied} label="Copy Markdown" onCopy={props.onCopy} /></Show>
-    <Show when={props.supports("regenerate") && props.precedingUserId}><LibraryButton variant="ghost" size="icon-xs" aria-label="Regenerate response" onClick={() => void props.chat.regenerate(props.precedingUserId!)}><RefreshCwIcon /></LibraryButton></Show>
+    <Show when={props.supports("regenerate") && props.precedingUserId}><LibraryButton variant="ghost" size="icon-xs" aria-label="Regenerate response" onClick={() => void props.chat.regenerate(props.precedingUserId!)}><Icons.Refresh /></LibraryButton></Show>
     <Show when={props.artifact}>{(entry) => <TurnChanges artifact={entry()} chatId={props.chat.loadedId()!} />}</Show>
   </MessageFoot>;
 }
@@ -724,7 +726,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
       const editActions = conversation.querySelector<HTMLElement>(".ui-phone-composer[data-show~=\"edit\"] > .ui-phone-edit");
       const editTop = editActions?.getBoundingClientRect().top ?? Infinity;
       if (shellRect.width <= 0 || shellRect.height <= 0 || composerRect.width <= 0 || composerRect.height <= 0) return;
-      const bottom = `${Math.max(isMobileLayout() ? 8 : 6.4, shellRect.bottom - Math.min(composerRect.top, captionsTop, editTop) + (isMobileLayout() ? 10 : 8))}px`;
+      const bottom = `${Math.max(unitPx(0.5), shellRect.bottom - Math.min(composerRect.top, captionsTop, editTop) + unitPx(0.625))}px`;
       for (const button of anchored) {
         if (button.style.getPropertyValue("--ride-bottom") !== bottom) button.style.setProperty("--ride-bottom", bottom);
       }
@@ -1027,7 +1029,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
                   one that only ran commands -- still offers to try again. */}
               <Show when={item.answerless && !item.value.active}>
                 <MessageFoot time={clock(item.timestamp)} dateTime={item.timestamp} title={item.timestamp ? fullDateTime(item.timestamp) : undefined}>
-                  <Show when={props.supports("regenerate") && item.precedingUserId}><LibraryButton variant="ghost" size="icon-xs" aria-label="Regenerate response" onClick={() => void props.chat.regenerate(item.precedingUserId!)}><RefreshCwIcon /></LibraryButton></Show>
+                  <Show when={props.supports("regenerate") && item.precedingUserId}><LibraryButton variant="ghost" size="icon-xs" aria-label="Regenerate response" onClick={() => void props.chat.regenerate(item.precedingUserId!)}><Icons.Refresh /></LibraryButton></Show>
                   <Show when={artifact()}>{(entry) => <TurnChanges artifact={entry()} chatId={chatId()!} />}</Show>
                 </MessageFoot>
               </Show></Turn></TranscriptRow>;
@@ -1123,11 +1125,11 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
         */}
       {/* Always mounted, so it fades out as well as in: when pressed, and when
            somebody scrolls back down themselves. */}
-      <RiderButton ref={(element: HTMLButtonElement) => { latestButton = element; scheduleLatestButtonAnchor(); }} ride="centre" icon={<ArrowDownIcon />} label="Scroll to latest"
+      <RiderButton ref={(element: HTMLButtonElement) => { latestButton = element; scheduleLatestButtonAnchor(); }} ride="centre" icon={<Icons.ArrowDown />} label="Scroll to latest"
         hidden={phoneLayout() || following() || latestDistance() < TAIL_NEAR_LATEST_PX} onMouseDown={(event) => event.preventDefault()} onClick={() => followLatest()} />
       {/* Editing an earlier message: a way out that is always there, floating
           over the composer where the edit happens, as the pencil would. */}
-      <Show when={props.chat.editingEntryId()}><RiderButton ref={(element: HTMLButtonElement) => { cancelEditButton = element; scheduleLatestButtonAnchor(); }} icon={<XIcon />} label="Cancel editing" show="label"
+      <Show when={props.chat.editingEntryId()}><RiderButton ref={(element: HTMLButtonElement) => { cancelEditButton = element; scheduleLatestButtonAnchor(); }} icon={<Icons.Close />} label="Cancel editing" show="label"
         ride={!following() && latestDistance() >= TAIL_NEAR_LATEST_PX ? "beside" : "centre"} onMouseDown={(event) => event.preventDefault()} onClick={() => { props.chat.cancelEdit(); focusComposerSoon(); }} /></Show>
     </div>
   </div>;

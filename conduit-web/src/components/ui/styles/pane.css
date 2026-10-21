@@ -33,7 +33,7 @@
 @media (hover: hover) { .ui-tab:hover { background: var(--accent); } }
 .ui-tab-open { display: inline-flex; min-width: 0; height: 100%; flex: 1; align-items: center; gap: var(--space-sm); border: 0; background: transparent; padding: 0 var(--space-xs);
   color: color-mix(in oklch, var(--foreground), transparent var(--tone-quiet)); font: inherit; font-weight: var(--weight-rest); }
-.ui-tab-open > svg, .ui-tab-open > .harness-mark, .ui-tab-open > .workspace-glyph { width: var(--icon-sm); height: var(--icon-sm); flex: none; }
+.ui-tab-open > svg, .ui-tab-open > .ui-harness-mark, .ui-tab-open > .ui-glyph { width: var(--icon-sm); height: var(--icon-sm); flex: none; }
 .ui-tab-title { display: inline-flex; min-width: 0; flex-direction: column; overflow: hidden; }
 .ui-tab-title > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ui-tab-title::after { height: 0; overflow: hidden; visibility: hidden; font-weight: var(--weight-current); white-space: nowrap; content: attr(data-text); }
@@ -67,15 +67,15 @@
 
 /* An edge: its hit target centred on the frame's gap, the gutter you drag. */
 .ui-pane-edge { position: absolute; z-index: 5; inset-block: 0; left: calc(-1 * var(--space-md)); width: var(--space-md); cursor: col-resize; touch-action: none; }
-.ui-pane-edge[data-dock] { z-index: 40; left: calc(-1 * var(--space-xl)); width: var(--control-xs); }
+.ui-pane-edge[data-dock] { z-index: var(--layer-dock); left: calc(-1 * var(--space-xl)); width: var(--control-xs); }
 .ui-pane-edge:focus-visible { outline: none; }
 .ui-pane-edge[data-dock]:focus-visible::after { position: absolute; inset-block: var(--space-xl); left: 50%; width: var(--stroke-thin, 2px); border-radius: var(--radius-round); background: var(--tint); content: ""; translate: -50% 0; }
 
 /* A drop: the band washes where it lands; a pill by the pointer names the result. */
-.ui-drop-wash { position: fixed; z-index: 60; border-radius: var(--radius-surface); background: var(--tint); pointer-events: none;
+.ui-drop-wash { position: fixed; z-index: var(--layer-drop); border-radius: var(--radius-surface); background: var(--tint); pointer-events: none;
   transition: left var(--duration-quick) var(--ease-change), width var(--duration-quick) var(--ease-change); }
 .ui-drop-wash[data-within] { position: absolute; z-index: 30; inset: var(--space-md) var(--space-md) var(--space-md) 50%; transition: none; }
-.ui-drag-pill { position: fixed; top: 0; left: 0; z-index: 80; display: inline-flex; align-items: center; gap: var(--space-sm); border-radius: var(--radius-control);
+.ui-drag-pill { position: fixed; top: 0; left: 0; z-index: var(--layer-drag); display: inline-flex; align-items: center; gap: var(--space-sm); border-radius: var(--radius-control);
   padding: var(--space-2xs) var(--space-md); color: var(--foreground); font-size: var(--text-row); pointer-events: none; white-space: nowrap; will-change: transform; }
 .ui-drag-pill > svg { width: var(--icon-sm); height: var(--icon-sm); color: var(--muted-foreground); }
 @media (prefers-reduced-motion: reduce) { .ui-drop-wash { transition: none; } }

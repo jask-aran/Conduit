@@ -1,5 +1,6 @@
+import * as Icons from "./icons";
 import { For, Show, splitProps, type JSX } from "solid-js";
-import { ChevronRightIcon, SearchIcon, XIcon } from "lucide-solid";
+
 
 /*
  * Panes (DESIGN Panes and windows): a pane's tab row, the controls after it, the edge you drag, the wash a drop
@@ -46,7 +47,7 @@ export function PaneTab(props: {
       <Show when={props.live}><i class="ui-tab-live" aria-label="Running" /></Show>
       <span class="ui-tab-title" data-text={props.title}><span>{props.title}</span></span>
     </button>}><span class="ui-tab-open"><span class="ui-tab-title"><span>{props.title}</span></span></span></Show>
-    <Show when={props.onClose}><button type="button" class="ui-tab-close" tabIndex={-1} aria-label={props.closeLabel ?? `Close ${props.title}`} title={props.closeTitle ?? "Close tab"} onClick={() => props.onClose?.()}><XIcon /></button></Show>
+    <Show when={props.onClose}><button type="button" class="ui-tab-close" tabIndex={-1} aria-label={props.closeLabel ?? `Close ${props.title}`} title={props.closeTitle ?? "Close tab"} onClick={() => props.onClose?.()}><Icons.Close /></button></Show>
   </span>;
 }
 
@@ -122,7 +123,7 @@ export function ToolButton(props: JSX.ButtonHTMLAttributes<HTMLButtonElement> & 
 }
 /** A filter field in a ToolBar: the search mark, then the field. */
 export function ToolFilter(props: JSX.InputHTMLAttributes<HTMLInputElement> & { ref?: (element: HTMLInputElement) => void }) {
-  return <label class="ui-tool-filter"><SearchIcon /><input type="search" {...props} /></label>;
+  return <label class="ui-tool-filter"><Icons.Search /><input type="search" {...props} /></label>;
 }
 /** A line about the tool's state (stale, truncated, grouped): muted, or warn; an action at its end in words. */
 export function ToolNotice(props: { tone?: "warn"; live?: boolean; action?: { label: string; disabled?: boolean; onClick: () => void }; children?: JSX.Element }) {
@@ -138,7 +139,7 @@ export function ToolNotice(props: { tone?: "warn"; live?: boolean; action?: { la
 export function TreeRow(props: JSX.ButtonHTMLAttributes<HTMLButtonElement> & { depth?: number; folder?: boolean; open?: boolean; icon: JSX.Element; name: string; end?: JSX.Element; selected?: boolean; "data-open-file"?: string }) {
   const [local, rest] = splitProps(props, ["depth", "folder", "open", "icon", "name", "end", "selected", "style"]);
   return <button type="button" {...rest} class="ui-tree-row" data-selected={local.selected ? "" : undefined} style={{ "--depth": local.depth ?? 0 }}>
-    <Show when={local.folder} fallback={<span class="ui-tree-chevron" />}><ChevronRightIcon class="ui-tree-chevron" data-open={local.open ? "" : undefined} /></Show>
+    <Show when={local.folder} fallback={<span class="ui-tree-chevron" />}><Icons.ChevronRight class="ui-tree-chevron" data-open={local.open ? "" : undefined} /></Show>
     {local.icon}<span class="ui-tree-name">{local.name}</span>{local.end}
   </button>;
 }

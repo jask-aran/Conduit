@@ -1,5 +1,6 @@
+import * as Icons from "./icons";
 import { children, createEffect, createSignal, For, Show, splitProps, type JSX } from "solid-js";
-import { CheckIcon, ChevronDownIcon, PencilIcon, RotateCwIcon, XIcon } from "lucide-solid";
+import { RotateCwIcon } from "lucide-solid";
 import { cn } from "@/lib/utils";
 import { Button, Keycap } from "./controls";
 import { type Motion, motionOf, moveCursor } from "./shared";
@@ -9,7 +10,7 @@ import { type Motion, motionOf, moveCursor } from "./shared";
  * body, actions), a strip (chips, actions) or a card (the question, which takes
  * the keyboard: the app passes its ref, tabIndex and keys).
  */
-export function Rider(props: JSX.HTMLAttributes<HTMLDivElement> & { label?: string; layout?: "row" | "strip" | "card"; motion?: Motion; children: JSX.Element }) {
+export function Rider(props: JSX.HTMLAttributes<HTMLDivElement> & { label?: string; layout?: "row" | "strip" | "card" | "wave"; motion?: Motion; children: JSX.Element }) {
   const [local, rest] = splitProps(props, ["label", "layout", "motion", "class", "children"]);
   return <div role="group" {...rest} class={cn("ui-frost ui-rider", local.class)} data-surface="frost" data-lift="rest" data-layout={local.layout ?? "row"} aria-label={local.label} {...motionOf(local.motion)}>{local.children}</div>;
 }
@@ -34,7 +35,7 @@ export function Line(props: { text: string; clipped?: boolean }) {
   let body!: HTMLParagraphElement;
   createEffect(() => { props.text; if (!open()) setMeasured(body.scrollHeight > body.clientHeight + 1); });
   return <li class="ui-line" data-expanded={open() ? "true" : "false"}><p ref={body} class="ui-line-body">{props.text}</p>
-    <Show when={props.clipped ?? measured()}><button type="button" class="ui-line-more" aria-label={open() ? "Show less" : "Show more"} aria-expanded={open()} onClick={() => setOpen(!open())}><ChevronDownIcon /></button></Show></li>;
+    <Show when={props.clipped ?? measured()}><button type="button" class="ui-line-more" aria-label={open() ? "Show less" : "Show more"} aria-expanded={open()} onClick={() => setOpen(!open())}><Icons.ChevronDown /></button></Show></li>;
 }
 /** An attached thing: an image's thumbnail, or a file's mark, name and size. image: its source, or the app's own image
  *  (one that loads itself); icon: a file's mark. status: queued or uploading rings its progress (0-100); error outlines
@@ -51,7 +52,7 @@ export function Chip(props: { name: string; detail?: string; image?: string | JS
         <Show when={props.retry}><RotateCwIcon class="ui-chip-retry" /></Show></span>
       <Show when={!image()}><span class="ui-chip-copy"><strong>{props.name}</strong><small>{props.detail}</small></span></Show>
     </button>
-    <button type="button" class="ui-chip-remove" aria-label={`Remove ${props.name}`} onClick={() => props.onRemove?.(chip)}><XIcon /></button>
+    <button type="button" class="ui-chip-remove" aria-label={`Remove ${props.name}`} onClick={() => props.onRemove?.(chip)}><Icons.Close /></button>
   </div>;
 }
 /** A reference to lines of a file (a review comment): its mark, the file's name, the lines, the note, each cut short
@@ -59,8 +60,8 @@ export function Chip(props: { name: string; detail?: string; image?: string | JS
 export function Reference(props: { icon: JSX.Element; name: string; at?: string; note?: string; title?: string; label?: string; onOpen?: () => void; onEdit?: () => void; onRemove?: () => void }) {
   return <span class="ui-reference" title={props.title}>
     <button type="button" class="ui-reference-body" title={props.label} disabled={!props.onOpen} onClick={() => props.onOpen?.()}>{props.icon}<strong>{props.name}</strong><Show when={props.at}><span>{props.at}</span></Show><Show when={props.note}><span>· {props.note}</span></Show></button>
-    <Show when={props.onEdit}><Button variant="ghost" size="icon-sm" aria-label={`Edit comment for ${props.name}`} onClick={() => props.onEdit?.()}><PencilIcon /></Button></Show>
-    <Show when={props.onRemove}><Button variant="ghost" size="icon-sm" aria-label={`Remove reference to ${props.name}`} onClick={() => props.onRemove?.()}><XIcon /></Button></Show>
+    <Show when={props.onEdit}><Button variant="ghost" size="icon-sm" aria-label={`Edit comment for ${props.name}`} onClick={() => props.onEdit?.()}><Icons.Edit /></Button></Show>
+    <Show when={props.onRemove}><Button variant="ghost" size="icon-sm" aria-label={`Remove reference to ${props.name}`} onClick={() => props.onRemove?.()}><Icons.Close /></Button></Show>
   </span>;
 }
 /** References to files, wrapping onto as many lines as they need. */
@@ -75,7 +76,7 @@ export function Choice(props: { n: number; label?: string; detail?: string; titl
   return <div role="option" class="ui-choice" aria-selected={props.chosen} data-active={props.active ? "true" : undefined} title={props.title} onClick={() => props.onPick?.()} onPointerMove={() => props.onPoint?.()}>
     <span class="ui-choice-key">{props.n}</span><Show when={props.own} fallback={<span class="ui-choice-label">{props.label}</span>}>{props.own}</Show>
     <Show when={props.detail}><span class="ui-choice-detail">{props.detail}</span></Show>
-    <span class="ui-choice-check" data-multi={props.multi ? "true" : undefined}><Show when={props.chosen}><CheckIcon /></Show></span>
+    <span class="ui-choice-check" data-multi={props.multi ? "true" : undefined}><Show when={props.chosen}><Icons.Check /></Show></span>
   </div>;
 }
 
@@ -95,7 +96,7 @@ export const RiderFoot = (props: { children: JSX.Element }) => <div class="ui-ri
 export const Tabs = (props: { label?: string; children: JSX.Element }) => <div class="ui-tabs" role="tablist" aria-label={props.label}>{props.children}</div>;
 /** One page's tab; done: ticked (answered). Out of the Tab order: the card's own keys turn its pages. */
 export const Tab = (props: { selected?: boolean; done?: boolean; onClick?: () => void; children: JSX.Element }) =>
-  <button type="button" role="tab" tabIndex={-1} aria-selected={Boolean(props.selected)} onClick={() => props.onClick?.()}><Show when={props.done}><CheckIcon aria-label="Answered" /></Show>{props.children}</button>;
+  <button type="button" role="tab" tabIndex={-1} aria-selected={Boolean(props.selected)} onClick={() => props.onClick?.()}><Show when={props.done}><Icons.Check aria-label="Answered" /></Show>{props.children}</button>;
 /** The keys along a rider's foot: [key, what it does]. */
 export const Hints = (props: { hints: [string, string][] }) =>
   <div class="ui-hints" aria-hidden="true"><For each={props.hints}>{([key, label]) => <span><Keycap>{key}</Keycap>{label}</span>}</For></div>;

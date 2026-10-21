@@ -29,11 +29,21 @@
   --ease-arrive: cubic-bezier(.2, .8, .2, 1);
   --ease-leave: cubic-bezier(.4, 0, 1, 1);
   --ease-change: ease;
+  /* The page's stack, bottom to top. A piece's own stacking (1, 2, -1 inside it) stays local and is not a layer.
+     The sidebar's pane over what slides under its edge; the dock over the panes when it floats, and its edge with it. */
+  --layer-nav: 20;
+  --layer-dock: 40;
   /* A phone's drawers over the page: the sidebar's, then the workspace panel's over it; each one's Backdrop just under it. */
   --layer-drawer: 55;
+  /* A dragged tab's drop wash over the panes it can land on. */
+  --layer-drop: 60;
   --layer-panel: 70;
+  /* The region cue: the page dimmed round the region a key moved focus to. */
+  --layer-cue: 73;
   /* The leader's dim, its card one above: over the page, under a dialog. */
   --layer-leader: 74;
+  /* The pill a dragged tab or row travels as, over everything it crosses. */
+  --layer-drag: 80;
   --layer-dialog: 100;
   /* A popover (menu, submenu, picker) over everything it opens from: the app's chrome (the sidebar, a pane header) and a dialog. */
   --layer-popover: 105;
@@ -84,14 +94,21 @@
   .ui-disclosure-body, .ui-rider-button, .ui-menu, .ui-composer-slot > .ui-composer-stack, .ui-composer-slot > .ui-composer-stack > *, .ui-toolbar-end > .ui-toolbar-aside { transition: none; }
 }
 /*
- * Scale: everything is drawn from a few numbers. A density gives its unit (12.8px on desktop, 16px on
- * a phone); --scale-ui scales it for everything, --scale-transcript for what you read (a message), so
- * the app holds together at any setting. Every gap, padding and margin is one of nine Space steps,
+ * Scale: everything is drawn from a few numbers. A density gives its unit (16px on desktop and on a
+ * phone; desktop's was 12.8px, which read small at a desk, so the app sat at 125% zoom), and --scale-ui scales it: the user's Interface size (--ui-scale, Settings · Interface, on
+ * <html>) times the region's own size (--scale-region). Each region -- the chrome (headers, panes, the
+ * dashboard: the default), the sidebar, the frost that floats (menus, popovers, overlays, cards,
+ * toasts), the composer and what you read (the transcript) -- has a size of its own per density, ours to
+ * tune against the others (gallery Space · Scale); the user moves them all at once, so the app holds
+ * together at any setting. Every gap, padding and margin is one of nine Space steps,
  * in the unit; every control one of four heights. Rows keep their measured height and text (a
  * finger's on a phone, never below 40px: a full-width row, so a finger has its width), written in the unit so they
  * scale too.
  */
-:root { --scale-ui: 1; --scale-transcript: 1; }
+:root {
+  --scale-chrome-desktop: 1; --scale-sidebar-desktop: 1; --scale-frost-desktop: 1; --scale-composer-desktop: 1; --scale-transcript-desktop: 1;
+  --scale-chrome-phone: 1; --scale-sidebar-phone: 1; --scale-frost-phone: 1; --scale-composer-phone: 1; --scale-transcript-phone: 1;
+}
 /* The phone's unit, at any density: what a finger needs (the pills, which are the same size wherever they sit). */
 :root { --u-phone: 16px; --u-touch: calc(var(--u-phone) * var(--scale-ui)); }
 /* Lines, in whole pixels at any scale: a hairline (a border, a rule, the 1px between rows), a thin stroke (a spinner,
@@ -110,26 +127,38 @@
 /* The reading column: the composer's and the transcript's width unless their pane declares --composer-width. */
 :root { --reading-width: 47.5rem; }
 :root, [data-density="desktop"] {
-  --u-base: 12.8px; --row-min-floor: 0px; --row-min-units: 1.875; --row-text-units: 0.8125;
-  --frost-inset: var(--space-xs); --nav-label-pad: var(--space-xs) var(--space-md);
+  --u-base: 16px; --row-min-floor: 0px; --row-min-units: 1.875; --row-text-units: 0.8125;
+  --scale-chrome: var(--scale-chrome-desktop); --scale-sidebar: var(--scale-sidebar-desktop); --scale-frost: var(--scale-frost-desktop);
+  --scale-composer: var(--scale-composer-desktop); --scale-transcript: var(--scale-transcript-desktop);
+  --frost-inset-units: .25; --nav-label-pad-units: .25;
   /* A section label: Paper Mono capitals at desktop, where the type around it is small and tight. */
-  --label-face: var(--font-label); --label-weight: var(--weight-rest); --label-case: uppercase; --label-tracking: .07em; --label-size: var(--text-label);
+  --label-face: var(--font-label); --label-weight: var(--weight-rest); --label-case: uppercase; --label-tracking: .07em;
 }
 [data-density="phone"] {
   --u-base: var(--u-phone); --row-min-floor: 40px; --row-min-units: 2.5; --row-text-units: 0.84375;
-  --frost-inset: var(--space-sm); --nav-label-pad: var(--space-sm) var(--space-md);
+  --scale-chrome: var(--scale-chrome-phone); --scale-sidebar: var(--scale-sidebar-phone); --scale-frost: var(--scale-frost-phone);
+  --scale-composer: var(--scale-composer-phone); --scale-transcript: var(--scale-transcript-phone);
+  --frost-inset-units: .375; --nav-label-pad-units: .375;
   /* Desktop's label, declared again so its size resolves at the phone's unit (scaled up like everything else). */
-  --label-face: var(--font-label); --label-weight: var(--weight-rest); --label-case: uppercase; --label-tracking: .07em; --label-size: var(--text-label);
+  --label-face: var(--font-label); --label-weight: var(--weight-rest); --label-case: uppercase; --label-tracking: .07em;
 }
 @media (--conduit-phone-layout) { :root {
   --u-base: var(--u-phone); --row-min-floor: 40px; --row-min-units: 2.5; --row-text-units: 0.84375;
-  --frost-inset: var(--space-sm); --nav-label-pad: var(--space-sm) var(--space-md);
-  --label-face: var(--font-label); --label-weight: var(--weight-rest); --label-case: uppercase; --label-tracking: .07em; --label-size: var(--text-label);
+  --scale-chrome: var(--scale-chrome-phone); --scale-sidebar: var(--scale-sidebar-phone); --scale-frost: var(--scale-frost-phone);
+  --scale-composer: var(--scale-composer-phone); --scale-transcript: var(--scale-transcript-phone);
+  --frost-inset-units: .375; --nav-label-pad-units: .375;
+  --label-face: var(--font-label); --label-weight: var(--weight-rest); --label-case: uppercase; --label-tracking: .07em;
 } }
 /* What you read takes the transcript's scale: the units below are worked out again inside it. There a row's
    text (a trace, a trail, a table) is a step under the body on both densities, not a finger list's. */
-.ui-transcript, .ui-read, .ui-bubble, .ui-answer { --scale-ui: var(--scale-transcript); --row-text-units: 0.8125; }
-:root, [data-density], .ui-transcript, .ui-read, .ui-bubble, .ui-answer {
+/* The regions: each takes its own size, and the units are worked out again inside it (the blocks below list them). */
+:root, [data-density] { --scale-region: var(--scale-chrome); }
+.ui-nav-pane { --scale-region: var(--scale-sidebar); }
+.ui-menu, .ui-overlay, .ui-card, .ui-toast-frame { --scale-region: var(--scale-frost); }
+.ui-composer-stack, .ui-phone-composer { --scale-region: var(--scale-composer); }
+.ui-transcript, .ui-read, .ui-bubble, .ui-answer { --scale-region: var(--scale-transcript); --row-text-units: 0.8125; }
+:root, [data-density], .ui-nav-pane, .ui-menu, .ui-overlay, .ui-card, .ui-toast-frame, .ui-composer-stack, .ui-phone-composer, .ui-transcript, .ui-read, .ui-bubble, .ui-answer {
+  --scale-ui: calc(var(--ui-scale, 1) * var(--scale-region));
   --u-space: calc(var(--u-base) * var(--scale-ui)); --u-type: var(--u-space); --u-icon: var(--u-space);
   /* Space: nine steps, in the unit. */
   --space-2xs: calc(0.125 * var(--u-space)); --space-xs: calc(0.25 * var(--u-space)); --space-sm: calc(0.375 * var(--u-space));
@@ -140,13 +169,19 @@
   /* Controls: six heights (an icon button is as wide as it is tall); 2xs is a keycap, a slider thumb; tool is a workspace tool's
      and a file header's controls, between xs and sm. */
   --control-2xs: calc(1.125 * var(--u-space)); --control-xs: calc(1.5 * var(--u-space)); --control-tool: calc(1.75 * var(--u-space)); --control-sm: calc(1.875 * var(--u-space)); --control: calc(2.25 * var(--u-space)); --control-lg: calc(2.5 * var(--u-space));
-  /* Measures: six lengths for what has a width (or a scrolling height) of its own -- a column, a card, an overlay. */
-  --measure-xs: calc(12 * var(--u-space)); --measure-sm: calc(15 * var(--u-space)); --measure-md: calc(20 * var(--u-space));
-  --measure-lg: calc(25 * var(--u-space)); --measure-xl: calc(30 * var(--u-space)); --measure-2xl: calc(40 * var(--u-space));
+  /* Measures: eight lengths for what has a width (or a scrolling height) of its own -- a small panel's height, a column, a
+     card, an overlay, the wide reading column. */
+  --measure-2xs: calc(8 * var(--u-space)); --measure-xs: calc(12 * var(--u-space)); --measure-sm: calc(15 * var(--u-space)); --measure-md: calc(20 * var(--u-space));
+  --measure-lg: calc(25 * var(--u-space)); --measure-xl: calc(30 * var(--u-space)); --measure-2xl: calc(40 * var(--u-space)); --measure-3xl: calc(60 * var(--u-space));
   --measure-dialog-large: calc(60 * var(--u-space));
   /* Rows: their measured height and text, in the unit; inset, pad and gap are steps. */
   --row-text: calc(var(--row-text-units) * var(--u-type)); --row-min: max(var(--row-min-floor), calc(var(--row-min-units) * var(--u-space)));
   --row-inset: var(--space-md); --row-pad: var(--space-sm) var(--row-inset); --row-gap: var(--space-md);
+  /* A frost surface's inset and a nav label's padding: a space step each, the density's (xs desktop, sm phone), in the
+     region's unit. */
+  --frost-inset: calc(var(--frost-inset-units) * var(--u-space)); --nav-label-pad: calc(var(--nav-label-pad-units) * var(--u-space)) var(--space-md);
+  /* The room a column keeps from its pane's edges when the pane is narrower than the column. */
+  --page-gutter: calc(3 * var(--u-space));
   --nav-indent: calc(1.875 * var(--u-space));
   /* A popover's distance from the control that opens it. */
   --popover-gap: var(--space-md);
@@ -156,13 +191,13 @@
    message: the composer (the phone's field too), its riders and the user's message, one value among them, in the
    density unit at the transcript's scale -- under half a one-line bubble's height, so even one line is a rounded box, never a pill; round: fully round at any
    size -- the phone's pill groups and buttons, which never grow, and small bits inside controls. */
-:root, [data-density], .ui-transcript, .ui-read, .ui-bubble, .ui-answer {
+:root, [data-density], .ui-nav-pane, .ui-menu, .ui-overlay, .ui-card, .ui-toast-frame, .ui-composer-stack, .ui-phone-composer, .ui-transcript, .ui-read, .ui-bubble, .ui-answer {
   --radius-control: calc(0.5 * var(--u-space)); --radius-inset: calc(0.6 * var(--radius-control)); --radius-surface: calc(var(--radius-control) + var(--frost-inset));
-  --radius-message: calc(1.125 * var(--u-base) * var(--scale-transcript)); --radius-round: 999px;
+  --radius-message: calc(1.125 * var(--u-base) * var(--ui-scale, 1) * var(--scale-transcript)); --radius-round: 999px;
   /* Five type sizes, by role (Type · Scale): label, the section label and keycaps; caption, details,
      hints and data (meta, counts, crumbs); row, every row and control; body, messages, what you
      type, titles (titles at the strong weight); heading, a page's title; display, the dashboard's, larger. */
-  --text-label: calc(0.625 * var(--u-type)); --text-caption: calc(0.75 * var(--u-type));
+  --text-label: calc(0.625 * var(--u-type)); --text-caption: calc(0.75 * var(--u-type)); --label-size: var(--text-label);
   --text-row: var(--row-text); --text-body: var(--u-type); --text-heading: calc(1.40625 * var(--u-type)); --text-display: calc(1.71875 * var(--u-type));
   --pill-icon: var(--icon-lg);
 }
@@ -172,12 +207,19 @@
   --frost-fill: #ffffff2b;
   --frost-blur: blur(24px);
   --frost-highlight: inset 0 1px 0 rgb(255 255 255 / 50%), inset 0 -1px 0 rgb(255 255 255 / 10%);
-  --frost-lift-rest: 0 8px 32px rgb(0 0 0 / 10%);
-  --frost-lift-raised: 0 24px 70px rgb(0 0 0 / 38%);
+  /* Elevation: how far a surface stands off the page. Rest: a surface laid over what it belongs to (a tooltip,
+     a docked card); raised: one over everything round it (a floating dock, a popover); side: a pane slid over its
+     neighbour from the left. Frost takes rest and raised as its lifts. */
+  --lift-rest: 0 8px 32px rgb(0 0 0 / 10%);
+  --lift-raised: 0 24px 70px rgb(0 0 0 / 38%);
+  --lift-side: 12px 0 28px rgb(0 0 0 / 20%);
+  --frost-lift-rest: var(--lift-rest);
+  --frost-lift-raised: var(--lift-raised);
   --status-success: oklch(0.62 0.17 145); --status-warn: oklch(0.75 0.15 75); --status-unread: oklch(0.68 0.17 250); /* a row's live state */
-  /* Code's syntax, one hue a role, in the interface's colour world (not a highlighter's theme). */
-  --syntax-keyword: oklch(0.72 0.15 305); --syntax-string: oklch(0.75 0.14 145); --syntax-number: oklch(0.78 0.13 65);
-  --syntax-title: oklch(0.78 0.13 240); --syntax-variable: oklch(0.8 0.09 200); --syntax-type: oklch(0.8 0.11 90); --syntax-meta: oklch(0.68 0.07 260);
+  /* Syntax roles read the selected code palette. */
+  --syntax-keyword: var(--code-purple); --syntax-string: var(--code-green); --syntax-number: var(--code-orange);
+  --syntax-title: var(--code-blue); --syntax-variable: var(--code-red); --syntax-type: var(--code-yellow); --syntax-meta: var(--code-orange);
+  --syntax-comment: var(--code-comment);
   --frost-sheen: rgb(255 255 255 / 10%); --frost-glow: rgb(255 255 255 / 14%); /* the aura's light from above, its rim */
   /* Over an image: a control's ground and glyph, and the shadow that keeps a glyph read on any picture. */
   --on-media-ground: rgb(0 0 0 / 62%); --on-media: #fff; --glyph-shadow: drop-shadow(0 0 var(--stroke) rgb(0 0 0 / 65%));
@@ -185,6 +227,8 @@
   --frost-tint: oklch(1 0 0 / 10%);
   /* The dim over what is behind: a desktop overlay (the scrim), the leader's lit composer (the spotlight), the phone's open sidebar. */
   --dim: rgb(0 0 0 / 42%);
+  /* A faint dim: the page round the region a key moved focus to (the region cue), which reads without hiding it. */
+  --dim-faint: rgb(0 0 0 / 18%);
   /* Under: a piece under something opened from beside it (a submenu, a pill's menu) dims where it stands -- one dim
      for Pill and Menu, a change in place, quick. */
   --dim-under: saturate(.6) opacity(.38);
@@ -201,7 +245,7 @@
 /* Never a ring (DESIGN Interaction): no outline or focus ring from the browser or any component, in any
    colour, on a library piece or anything in one (and the whole gallery, :root[data-library]). The one rule, so no
    piece can forget it; keyboard focus is the wash, which each piece draws on :focus-visible as on :hover. */
-:root[data-library] :is(:focus, :focus-visible), :where([class*="ui-"], [class*="ui-"] *):is(:focus, :focus-visible) { outline: none !important; --tw-ring-shadow: 0 0 #0000 !important; --tw-ring-offset-shadow: 0 0 #0000 !important; }
+:root[data-library] :is(:focus, :focus-visible), :where([class*="ui-"], [class*="ui-"] *):is(:focus, :focus-visible) { outline: none !important; }
 /* The section label, one for every section: popovers, cards, riders, the sidebar. Muted caps in the label face. */
 .ui-title, .ui-title-text, .ui-nav-label, .ui-crumbs > button { color: var(--muted-foreground); font: var(--label-weight) var(--label-size)/var(--leading-text) var(--label-face); letter-spacing: var(--label-tracking); text-transform: var(--label-case); }
 

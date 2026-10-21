@@ -1,8 +1,9 @@
+import { Icons } from "@/components/ui";
 import { createSignal, For, onCleanup, Show } from "solid-js";
 import { buildHttpUrl } from "../api/transport";
 import { connectionId } from "../state/runtime.ts";
 import { api } from "../api/client.ts";
-import { Trash2Icon } from "lucide-solid";
+
 import { Button, Input, Switch } from "@/components/ui/controls";
 import { StatusDot } from "@/components/ui/nav";
 import { SettingGroup, SettingLine, SettingNote, SettingValue } from "@/components/ui/overlay";
@@ -153,7 +154,7 @@ export function ServersSettingsTile() {
         <Show when={!isActive(entry)}>
           <Button variant="ghost" size="sm" onClick={() => switchTo(entry.origin)}>Switch to</Button>
           <Button variant="ghost" size="sm" aria-label={`Forget ${entry.name}`} onClick={() => void forget(entry.origin)}>
-            <Trash2Icon /> Forget
+            <Icons.Delete /> Forget
           </Button>
         </Show>
       </SettingLine>

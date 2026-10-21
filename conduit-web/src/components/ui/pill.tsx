@@ -54,7 +54,8 @@ export function PillField(props: { placeholder?: string; value?: string; onInput
  * shrinking). Each circles near its edge and breathes twice a turn. Every point of the field is a blend of all of
  * them by distance (a mesh gradient, as Apple's glows are), its hue their weighted mean and its chroma held, so the
  * colours meet in colour, never grey, and none lies over another; a faint ground of the middle hue settles meetings. The level (--aura-level, eased by styles/pill.css)
- * turns them faster, brightens them and moves their balance. Drawn small and scaled up; it runs only while shown.
+ * turns them faster, brightens them and moves their balance; strength (0-1, --aura-strength) how strongly it shows, fainter
+ * on a large surface. Drawn small and scaled up; it runs only while shown.
  */
 const AURA_BLOBS = [
   { from: 180, l: .58, c: .2, h: 290, orbit: 7, swell: .5 },
@@ -72,7 +73,7 @@ function oklchToRgb(l: number, a: number, b: number): [number, number, number] {
   const gamma = (x: number) => 255 * (x <= .0031308 ? 12.92 * x : 1.055 * Math.max(0, x) ** (1 / 2.4) - .055);
   return [gamma(4.0767416621 * L - 3.3077115913 * M + .2309699292 * S), gamma(-1.2684380046 * L + 2.6097574011 * M - .3413193965 * S), gamma(-.0041960863 * L - .7034186147 * M + 1.707614701 * S)];
 }
-export function Aura(props: { on?: boolean; level?: number }) {
+export function Aura(props: { on?: boolean; level?: number; strength?: number }) {
   let box!: HTMLSpanElement, canvas!: HTMLCanvasElement;
   onMount(() => {
     const ctx = canvas.getContext("2d")!;
@@ -132,7 +133,7 @@ export function Aura(props: { on?: boolean; level?: number }) {
     resize.observe(box); view.observe(box); start();
     onCleanup(() => { cancelAnimationFrame(frame); resize.disconnect(); view.disconnect(); shows.disconnect(); box.removeEventListener("transitionstart", start); });
   });
-  return <span ref={box} class="ui-aura" data-on={props.on ? "" : undefined} aria-hidden="true" style={props.level === undefined ? undefined : { "--aura-level": String(props.level) }}><canvas ref={canvas} /></span>;
+  return <span ref={box} class="ui-aura" data-on={props.on ? "" : undefined} aria-hidden="true" style={{ "--aura-level": props.level === undefined ? undefined : String(props.level), "--aura-strength": props.strength === undefined ? undefined : String(props.strength) }}><canvas ref={canvas} /></span>;
 }
 
 /**

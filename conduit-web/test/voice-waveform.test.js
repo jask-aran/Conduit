@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import * as waveform from "../src/client/chat/voice-waveform-model.ts";
+import * as waveform from "../src/components/ui/voice-waveform-model.ts";
 
 test("compact waveforms size bars from plot width without exceeding history capacity", () => {
   assert.equal(waveform.compactWaveformBarCount(220, 3), 73);

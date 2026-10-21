@@ -1,6 +1,7 @@
+import { Icons } from "@/components/ui";
 import { createSignal, createEffect, For, Show } from "solid-js";
 import { Button, Line, Lines, Rider, RiderActions, RiderTitle } from "@/components/ui";
-import { PencilIcon, SendHorizontalIcon, XIcon } from "lucide-solid";
+
 import type { Message } from "../api/contracts";
 import { createLeaving, riderMotion, type CardExit } from "./composer-cards";
 
@@ -39,10 +40,10 @@ export function QueuedMessages(props: {
       <Lines><For each={shown.value()}>{(text) => <Line text={text} />}</For></Lines>
       <RiderActions>
         <Show when={props.busy && props.canInterrupt}>
-          <Button size="icon-sm" variant="ghost" aria-label="Interrupt and send now" title="Interrupt and send now" onClick={props.onInterruptAndSend}><SendHorizontalIcon /></Button>
+          <Button size="icon-sm" variant="ghost" aria-label="Interrupt and send now" title="Interrupt and send now" onClick={props.onInterruptAndSend}><Icons.Send /></Button>
         </Show>
-        <Button size="icon-sm" variant="ghost" aria-label="Edit" title="Edit in the composer" onClick={props.onEdit}><PencilIcon /></Button>
-        <Button size="icon-sm" variant="ghost" aria-label="Discard" title="Discard" onClick={() => { setExit("fade"); props.onDiscard(); }}><XIcon /></Button>
+        <Button size="icon-sm" variant="ghost" aria-label="Edit" title="Edit in the composer" onClick={props.onEdit}><Icons.Edit /></Button>
+        <Button size="icon-sm" variant="ghost" aria-label="Discard" title="Discard" onClick={() => { setExit("fade"); props.onDiscard(); }}><Icons.Close /></Button>
       </RiderActions>
     </Rider>
   </Show>;

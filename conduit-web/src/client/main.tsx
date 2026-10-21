@@ -1,4 +1,6 @@
 /// <reference types="vite-plugin-pwa/client" />
+import { HarnessMark } from "@/components/ui";
+import { Icons } from "@/components/ui";
 import { ConnectionScreen, ConnectionRecovery, ConnectionForm, ConnectionHeading, ConnectionChoices, ConnectionChoice, ConnectionGroup, ConnectionAddress, ConnectionStatus, ConnectionPassword, type AddressState } from "@/components/ui/connection";
 import { CardNote as ConnectionNote } from "@/components/ui/card";
 import { Field as ConnectionField, Button as ConnectionButton, Spinner as ConnectionSpinner } from "@/components/ui/controls";
@@ -17,9 +19,7 @@ import { androidShell, desktopShell, isInstalledClient } from "./platform/instal
 import { liveUpdateNow, startLiveUpdate } from "./platform/live-update.ts";
 // The clients that stage a downloaded update and install it on request.
 const updateShell = desktopShell ?? androidShell;
-import {
-  ArrowLeftRightIcon, Columns2Icon, PanelTopIcon, EllipsisIcon, PanelLeftIcon, PanelRightIcon, ServerIcon, QrCodeIcon, MonitorIcon, TriangleAlertIcon, XIcon, ExternalLinkIcon,
-} from "lucide-solid";
+import { PanelTopIcon } from "lucide-solid";
 import { NotificationToaster, toast } from "@/components/notifications";
 import { DefaultMeteorShower } from "@jask-aran/solid-components/meteor-shower";
 import "@jask-aran/solid-components/meteor-shower.css";
@@ -98,11 +98,11 @@ import type { FileSlotHandle, FileSummary } from "./workspace/workspace-file-slo
 import { dropScope, migrateWorkspacePanelStorage, readSetting, WORKSPACE_PANEL_GLOBAL_SCOPE, writeSetting } from "./workspace/workspace-panel-storage";
 import { readToolDrag, TOOL_DRAG_TYPE, WORKSPACE_TOOL_LABELS, WorkspaceRail } from "./workspace/workspace-rail";
 import { isPanelTab, isSplitView, type SplitView } from "./workspace/workspace-types";
-import { MIN_MAIN_PANE_WIDTH, MIN_SPLIT_PANE_WIDTH } from "./layout-geometry";
+import { minMainPaneWidth, minSplitPaneWidth } from "./layout-geometry";
 import { dispatchPanelGeometryMotion } from "./panel-motion";
 import { publishUiPreference, queueUiPreferenceSave, uiPreferenceSaves, UI_PREFERENCE_CHANGE_EVENT, type UiPreferenceKey, type UiPreferences } from "./preferences/ui-preferences";
 import { applyUiScale, selectedUiScale } from "./preferences/ui-scale";
-import { harnessLabelFor, HarnessMark } from "./harness-brand";
+import { harnessLabelFor } from "./harness-brand";
 import { OutsideThreadChip } from "./chat/outside-thread-chip";
 import type { HarnessChoices, HarnessThreadTarget } from "./dashboard/harness-dashboard";
 import {
@@ -174,7 +174,7 @@ const METEOR_FIELD_STORAGE_KEY = "conduit:meteor-field";
 const selectedMeteorField = () => localStorage.getItem(METEOR_FIELD_STORAGE_KEY) !== "false";
 const WorkspacePanel = lazy(() => import("./workspace/workspace-panel"));
 const FileViewer = lazy(() => import("./workspace/workspace-file-viewer"));
-const FileTypeIcon = lazy(() => import("./workspace/file-type-icon").then((module) => ({ default: module.FileTypeIcon })));
+const FileTypeIcon = lazy(() => import("@/components/ui/file-marks").then((module) => ({ default: module.FileTypeIcon })));
 const ComputerDashboard = lazy(() => import("./dashboard/computer-dashboard").then((module) => ({ default: module.ComputerDashboard })));
 const ProjectDashboard = lazy(() => import("./project/dashboard"));
 const HarnessDashboard = lazy(() => import("./dashboard/harness-dashboard"));
@@ -418,8 +418,8 @@ export function ServerConnectForm(props: { adding?: boolean; onDone: (origin: st
       */}
     <Show when={!verifiedOrigin() && ((!recordOnly && canScanQr()) || localServer())}>
       <ConnectionChoices>
-        <Show when={!recordOnly && canScanQr()}><ConnectionChoice type="button" onClick={() => setScanning(true)} disabled={submitting()} icon={<QrCodeIcon />} detail="conduit-server pair">Scan QR code</ConnectionChoice></Show>
-        <Show when={localServer()}><ConnectionChoice type="button" onClick={useLocalServer} disabled={submitting()} icon={<MonitorIcon />} detail={localServer()!.replace(/^https?:\/\//, "")}>This computer</ConnectionChoice></Show>
+        <Show when={!recordOnly && canScanQr()}><ConnectionChoice type="button" onClick={() => setScanning(true)} disabled={submitting()} icon={<Icons.QrCode />} detail="conduit-server pair">Scan QR code</ConnectionChoice></Show>
+        <Show when={localServer()}><ConnectionChoice type="button" onClick={useLocalServer} disabled={submitting()} icon={<Icons.Monitor />} detail={localServer()!.replace(/^https?:\/\//, "")}>This computer</ConnectionChoice></Show>
       </ConnectionChoices>
     </Show>
     <Show when={!verifiedOrigin()}>
@@ -427,7 +427,7 @@ export function ServerConnectForm(props: { adding?: boolean; onDone: (origin: st
         <ConnectionGroup>On this network<Show when={searching()}><ConnectionSpinner /></Show></ConnectionGroup>
         <Show when={found().length} fallback={<Show when={!searching()}><ConnectionNote>Nothing here yet.</ConnectionNote></Show>}>
           <ConnectionChoices>
-            <For each={found()}>{(server) => <ConnectionChoice type="button" onClick={() => void chooseFound(server)} disabled={submitting()} icon={<ServerIcon />} detail={server.origin.replace(/^https?:\/\//, "")}>{server.name}</ConnectionChoice>}</For>
+            <For each={found()}>{(server) => <ConnectionChoice type="button" onClick={() => void chooseFound(server)} disabled={submitting()} icon={<Icons.Server />} detail={server.origin.replace(/^https?:\/\//, "")}>{server.name}</ConnectionChoice>}</For>
           </ConnectionChoices>
         </Show>
       </Show>
@@ -452,11 +452,11 @@ export function ServerConnectForm(props: { adding?: boolean; onDone: (origin: st
       </ConnectionButton>
       {/* A browser on HTTPS cannot look at a plain-HTTP address on this network, though a tab of its own can open it. */}
       <Show when={recordOnly && check()?.state === "missing" && /^http:/.test((() => { try { return normalizeServerOrigin(address()); } catch { return ""; } })())}>
-        <ConnectionButton type="button" variant="ghost" onClick={() => openFound(normalizeServerOrigin(address()))}><ExternalLinkIcon />Open anyway</ConnectionButton>
+        <ConnectionButton type="button" variant="ghost" onClick={() => openFound(normalizeServerOrigin(address()))}><Icons.ExternalLink />Open anyway</ConnectionButton>
       </Show>
     </Show>
     <Show when={verifiedOrigin() && recordOnly}>
-      <ConnectionButton type="submit"><ExternalLinkIcon />Open in new tab</ConnectionButton>
+      <ConnectionButton type="submit"><Icons.ExternalLink />Open in new tab</ConnectionButton>
     </Show>
     <Show when={verifiedOrigin() && !props.adding}><ConnectionButton type="button" variant="ghost" onClick={() => {
       const previous = activeOrigin();
@@ -2359,7 +2359,7 @@ function App() {
   // A free slot for a pane in the row or, `docked`, in the dock -- each has its own room.
   const freeSlot = (docked = false) => (docked ? dockedSlots().length < MAX_DOCKED : rowSlots().length < 2) ? SLOT_IDS.find((slot) => !slotOrder().includes(slot)) ?? null : null;
   // The dock is as narrow as what it shows may go: a docked pane's document, else a tool.
-  const dockMinWidth = () => { const slot = dockSlot(); return slot !== null && inDock(slot) ? viewMinWidth(slotView(slot)) : MIN_SPLIT_PANE_WIDTH; };
+  const dockMinWidth = () => { const slot = dockSlot(); return slot !== null && inDock(slot) ? viewMinWidth(slotView(slot)) : minSplitPaneWidth(); };
   /*
    * Each document declares the narrowest its pane may go: one with a
    * composer, a chat or a page, the dashboard composer's least; a file viewer
@@ -2367,7 +2367,7 @@ function App() {
    * pane beside at their documents' minimums.
    */
   const isPaneView = (view: SplitView | null) => Boolean(view && /^(chat|page):/.test(view));
-  const viewMinWidth = (view: SplitView | null) => !view || isPaneView(view) ? MIN_MAIN_PANE_WIDTH : MIN_SPLIT_PANE_WIDTH;
+  const viewMinWidth = (view: SplitView | null) => !view || isPaneView(view) ? minMainPaneWidth() : minSplitPaneWidth();
   const paneMinWidth = (pane: PaneKey) => viewMinWidth(pane === "main" ? paneAView() : slotView(pane));
   // The open dock keeps its own minimum; panes fold before it is pushed out.
   const viewsFit = (views: (SplitView | null)[]) => layoutWidth() - (panelOpen() && dockAvailable() && !dockOverlay() ? dockMinWidth() + 8 : 0)
@@ -3865,9 +3865,9 @@ function App() {
     focusPane(free);
   };
   const fileSideMenu = (pane: PaneKey, side: number) => <>
-    <Show when={(fileTabsOf(pane, side)?.entries.length ?? 0) > 1}><MenuRow onSelect={() => closeOtherTabs(pane, side)} icon={<XIcon />}>Close other tabs</MenuRow></Show>
-    <Show when={(parseFileView(viewOf(pane))?.length ?? 0) === 2 && roomBeside(formatFileView([parseFileView(viewOf(pane))![side]!]))}><MenuRow onSelect={() => moveSideToPane(pane, side)} icon={<PanelRightIcon />}>Move to new pane</MenuRow></Show>
-    <MenuRow onSelect={() => closeSide(pane, side)} icon={<XIcon />}>Close side</MenuRow>
+    <Show when={(fileTabsOf(pane, side)?.entries.length ?? 0) > 1}><MenuRow onSelect={() => closeOtherTabs(pane, side)} icon={<Icons.Close />}>Close other tabs</MenuRow></Show>
+    <Show when={(parseFileView(viewOf(pane))?.length ?? 0) === 2 && roomBeside(formatFileView([parseFileView(viewOf(pane))![side]!]))}><MenuRow onSelect={() => moveSideToPane(pane, side)} icon={<Icons.Workspace />}>Move to new pane</MenuRow></Show>
+    <MenuRow onSelect={() => closeSide(pane, side)} icon={<Icons.Close />}>Close side</MenuRow>
   </>;
   const fileSideTabs = (pane: PaneKey, side: number) => {
     const row = createTabStrip({
@@ -4005,7 +4005,7 @@ function App() {
       }}</For>
       <Show when={folded().length}>
         <Menu modal={false} placement="bottom-end">
-          <MenuControl as={PaneAction} label={`${folded().length} more tabs`}><EllipsisIcon /></MenuControl>
+          <MenuControl as={PaneAction} label={`${folded().length} more tabs`}><Icons.More /></MenuControl>
           <MenuContent>
             <For each={groups().filter((run) => run.keys.some((key) => folded().includes(key)))}>{(run) =>
               <MenuSection title={options.placeLabel?.(run.keys[0]!)}>
@@ -4199,15 +4199,15 @@ function App() {
   };
   const paneTabActions = (pane: PaneKey) => <Show when={inDock(pane)} fallback={paneRowActions(pane)}>
     <PaneActions>
-      <Show when={isDocked(pane)}><PaneAction label="Move to a pane" onClick={() => void undockPane(pane as number)}><Columns2Icon /></PaneAction></Show>
-      <PaneAction aria-label="Close this pane" title="Close" onClick={() => closeSlot(pane as number)}><XIcon /></PaneAction>
+      <Show when={isDocked(pane)}><PaneAction label="Move to a pane" onClick={() => void undockPane(pane as number)}><Icons.Split /></PaneAction></Show>
+      <PaneAction aria-label="Close this pane" title="Close" onClick={() => closeSlot(pane as number)}><Icons.Close /></PaneAction>
     </PaneActions>
   </Show>;
   const paneRowActions = (pane: PaneKey) => <Show when={splitShown()}>
     <PaneActions>
-      <Show when={canDock(pane)}><PaneAction label="Move to dock" onClick={() => dockPane(pane)}><PanelRightIcon /></PaneAction></Show>
-      <Show when={swapPartner(pane) !== null}><PaneAction aria-label="Swap with the pane beside" title="Swap" onPointerDown={() => { keyboardBeforePress = keyboardPane(); }} onClick={(event) => { const target = swapTarget(pane); keyboardBeforePress = null; if (target !== null) void swapPanes(pane, event.shiftKey, target, true, paneBeforePress ?? keyboardPane()); }}><ArrowLeftRightIcon /></PaneAction></Show>
-      <Show when={pane !== "main" || shownSlots()[0] !== undefined}><PaneAction aria-label="Close this pane" title="Close" onClick={() => closePane(pane)}><XIcon /></PaneAction></Show>
+      <Show when={canDock(pane)}><PaneAction label="Move to dock" onClick={() => dockPane(pane)}><Icons.Workspace /></PaneAction></Show>
+      <Show when={swapPartner(pane) !== null}><PaneAction aria-label="Swap with the pane beside" title="Swap" onPointerDown={() => { keyboardBeforePress = keyboardPane(); }} onClick={(event) => { const target = swapTarget(pane); keyboardBeforePress = null; if (target !== null) void swapPanes(pane, event.shiftKey, target, true, paneBeforePress ?? keyboardPane()); }}><Icons.Swap /></PaneAction></Show>
+      <Show when={pane !== "main" || shownSlots()[0] !== undefined}><PaneAction aria-label="Close this pane" title="Close" onClick={() => closePane(pane)}><Icons.Close /></PaneAction></Show>
     </PaneActions>
   </Show>;
   /*
@@ -4404,7 +4404,7 @@ function App() {
     // document's minimum, then from the next one on, and gives it to the pane
     // on the other side.
     const widths = panes.map((pane) => pane!.getBoundingClientRect().width);
-    const minimums = panes.map((pane) => parseFloat(getComputedStyle(pane!).minWidth) || MIN_SPLIT_PANE_WIDTH);
+    const minimums = panes.map((pane) => parseFloat(getComputedStyle(pane!).minWidth) || minSplitPaneWidth());
     const startX = event.clientX;
     const weights = paneWeights();
     const weightSum = weights.reduce((sum, weight) => sum + weight, 0);
@@ -5240,7 +5240,7 @@ function App() {
       onOpenSettings={openSettings} onSaveAppearance={saveWorkspaceAppearance} onRefresh={refresh} onCancelClone={cancelClone} onDestroyWorkspace={(confirmation) => destroyWorkspace(props.project, confirmation)} onError={showError} />
   </>;
   // A workspace's other agents: two chats editing the same files.
-  const workspaceNotice = (project: Project | undefined, chatId: string | null) => <Show when={project?.kind === "workspace" && [...runtime.processes().values()].some((process) => process.chatId !== chatId && process.active)}><div class="workspace-warning"><TriangleAlertIcon /><div><strong>Another chat is working in this Workspace</strong><p>Both agents can edit the same files. Conduit does not lock the Workspace or create worktrees automatically.</p></div></div></Show>;
+  const workspaceNotice = (project: Project | undefined, chatId: string | null) => <Show when={project?.kind === "workspace" && [...runtime.processes().values()].some((process) => process.chatId !== chatId && process.active)}><div class="workspace-warning"><Icons.Warning /><div><strong>Another chat is working in this Workspace</strong><p>Both agents can edit the same files. Conduit does not lock the Workspace or create worktrees automatically.</p></div></div></Show>;
   const ChatSurface = (props: {
     session: ChatSession;
     project?: Project;
@@ -5430,7 +5430,7 @@ function App() {
     <Show when={["chat", "project", "dashboard"].includes(routeKind()) && Boolean(selectedProject()) && Boolean(workspacePanelScope())}><WorkspacePanel connectivity={runtime.connectivity} projectId={() => dockProject()!.id} projectName={() => dockProject()!.name} sourceControlEnabled={() => dockProject()!.kind === "workspace"} workingRoot={() => dockProject()!.workingRoot} chatId={() => dockScope()!} artifactChatId={() => sideFocused() ? focusedChat().loadedId() : routeKind() === "chat" ? chat.loadedId() : null} commentChatId={() => focusedChat().loadedId()} historyAvailable={() => sideFocused() ? focusedSession().history() !== "none" : routeKind() !== "chat" || chatHistory() !== "none"} open={panelOpen} expanded={workspaceExpanded} focusRequest={workspaceFocusRequest} onFocusRequestComplete={acknowledgeWorkspaceFocus} requestedTab={workspaceViewRequest} onTabChange={setDockTool} splitView={toolView} splitHost={toolHost} documentShown={() => dockSlot() !== null} widthRequest={dockWidthRequest} documentHost={(element) => setDockDocHost((current) => element ?? (current?.isConnected ? current : undefined))} minWidth={dockMinWidth} overlay={dockOverlay} onOpenBeside={isMobileLayout() ? undefined : openBeside} onMoveToDock={moveToDock} onCloseSplit={closeSplit} bindSplit={bindSplit} onOpenFile={canOpenFilePanes() ? openFileDocument : undefined} openFiles={openFileKeys} onRequestOpen={() => setPanelOpenForChat(true)} onToggleExpanded={toggleWorkspaceExpanded} onClose={closePanel} shortcuts={shortcutManager} /></Show>
     </div>
     <Show when={dragHintContent()}>{(hint) => <DragPill ref={(element) => { dragHintElement = element; placeDragHint(); onCleanup(() => { if (dragHintElement === element) dragHintElement = undefined; }); }}
-      icon={<Show when={hint().icon} keyed>{(icon) => ({ left: <PanelLeftIcon />, right: <PanelRightIcon />, column: <Columns2Icon />, tab: <PanelTopIcon />, swap: <ArrowLeftRightIcon />, here: <PanelTopIcon /> })[icon]}</Show>}>{hint().text}</DragPill>}</Show>
+      icon={<Show when={hint().icon} keyed>{(icon) => ({ left: <Icons.Sidebar />, right: <Icons.Workspace />, column: <Icons.Split />, tab: <PanelTopIcon />, swap: <Icons.Swap />, here: <PanelTopIcon /> })[icon]}</Show>}>{hint().text}</DragPill>}</Show>
     <Show when={docDrop() && ["left", "middle", "right", "dock"].includes(docDrop()!.zone) ? docDrop() : null}>{(drop) => <DropWash style={{ left: `${drop().rect.left}px`, top: `${drop().rect.top}px`, width: `${drop().rect.width}px`, height: `${drop().rect.height}px` }} />}</Show>
     <WorkspaceRail tools={Boolean(routeKind() === "computer" ? computerLocation() : ["chat", "project", "dashboard"].includes(routeKind()) && selectedProject() && workspacePanelScope())} onOpenSearch={toggleSearchPalette} onOpenPalette={() => openPalette(null)}
       panes={splitShown() ? shownSlots().length + 1 : 1} onLayout={applyPaneLayout}
