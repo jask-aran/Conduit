@@ -16,6 +16,8 @@ export const manifest = {
   restartDrain: false,
   drive: true,
   profile: true,
+  // Runs on a paired device even when not installed here (registered regardless).
+  devices: true,
   probe: (config) => commandProbe(config.fxCommand)(),
   build: (config) => new FxAcpAdapter({ command: config.fxCommand, logs: config.logs, nodeHub: config.nodeHub }),
 };

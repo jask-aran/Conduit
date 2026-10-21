@@ -25,6 +25,8 @@ export const manifest = {
   restartDrain: false,
   drive: true,
   profile: true,
+  // Runs on a paired device even when not installed here (registered regardless).
+  devices: true,
   probe: (config) => commandProbe(config.codexCommand)(),
   build: (config) => new CodexAppServerAdapter({ command: config.codexCommand, logs: config.logs, nodeHub: config.nodeHub }),
 };

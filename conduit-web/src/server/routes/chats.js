@@ -25,7 +25,7 @@ export function projectBackendSessions({ chats, sessions, projectId, implementat
 const discoverableFrom = (backends) => (implementation) => {
   const manifest = backends.manifestFor?.(implementation);
   if (!manifest || manifest.discovery === "none") return null;
-  return backends.adapters.has(implementation) ? manifest : null;
+  return (backends.local || backends.adapters).has(implementation) ? manifest : null;
 };
 
 export function registerChatRoutes(app, {
@@ -48,9 +48,10 @@ export function registerChatRoutes(app, {
   warmDrafts = null,
 }) {
   const discoverable = discoverableFrom(backends);
-  const defaultDiscovery = () => backends.where((manifest) => manifest.discovery !== "none")[0] || "";
+  const defaultDiscovery = () => backends.where((manifest) => manifest.discovery !== "none")
+    .filter((implementation) => (backends.local || backends.adapters).has(implementation))[0] || "";
   const profileFor = (profileId) => agentProfiles(config.piTemplates, {
-    available: new Set([...backends.adapters.keys()]),
+    available: new Set([...(backends.local || backends.adapters.keys())]),
   }).find((profile) => profile.id === profileId && profile.management === "agent");
   const completeCreation = (request, response, chat, project, { start = false } = {}) => {
     response.status(201).json(chatView(chat));
@@ -143,7 +144,7 @@ export function registerChatRoutes(app, {
 
   // Profiles say which harness they elect; harnesses say what they can do.
   app.get("/v0/profiles", (_request, response) => response.json({
-    profiles: agentProfiles(config.piTemplates, { available: new Set([...backends.adapters.keys()]) }),
+    profiles: agentProfiles(config.piTemplates, { available: new Set([...(backends.local || backends.adapters.keys())]) }),
     harnesses: harnessCapabilities(),
   }));
   // A place is a project or workspace, or -- for an untracked thread's chat --
@@ -205,7 +206,8 @@ export function registerChatRoutes(app, {
         }
         if (selectedProfile) {
           const profileId = request.body.profileId;
-          if (selectedProfile.disabled || !backends.adapters.has(selectedProfile.agent.implementation)) {
+          // A device's workspace was checked against the device's harnesses above.
+          if ((selectedProfile.disabled && !project.nodeId) || !backends.adapters.has(selectedProfile.agent.implementation)) {
             return response.status(409).json({ error: `${profileId}_unavailable` });
           }
           const chat = await registry.create(project, { backend: {
@@ -387,7 +389,8 @@ export function registerChatRoutes(app, {
       const selectedProfile = request.body?.profileId ? profileFor(request.body.profileId) : null;
       if (selectedProfile) {
         const profileId = request.body.profileId;
-        if (selectedProfile.disabled || !backends.adapters.has(selectedProfile.agent.implementation)) {
+        // On a device's workspace the launch checks the device has it.
+        if ((selectedProfile.disabled && !context.project?.nodeId) || !backends.adapters.has(selectedProfile.agent.implementation)) {
           return response.status(409).json({ error: `${profileId}_unavailable` });
         }
         const resident = backends.getByChatId(context.chat.id);

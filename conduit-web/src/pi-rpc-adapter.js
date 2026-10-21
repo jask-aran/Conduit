@@ -374,15 +374,24 @@ export class ChatBackendRegistry {
   // the Pi-only callers that never had a second backend.
   constructor(manager = null, adapters = null) {
     this.adapters = new Map();
+    // What this machine itself can run: built in, or found installed. A
+    // harness that runs on devices is registered either way (a head server
+    // need not have it to drive a device's), but is only offered for this
+    // machine's own workspaces when it is here.
+    this.local = new Set();
     this.manifests = new Map();
     this.detection = new Map();
     if (adapters) {
-      for (const [implementation, adapter] of adapters) this.adapters.set(implementation, assertChatBackendAdapter(adapter, implementation));
+      for (const [implementation, adapter] of adapters) {
+        this.adapters.set(implementation, assertChatBackendAdapter(adapter, implementation));
+        this.local.add(implementation);
+      }
       return;
     }
     if (manager) {
       const pi = assertChatBackendAdapter(new PiRpcAdapter(manager), "conduit-pi");
       this.adapters.set("conduit_pi", pi);
+      this.local.add("conduit_pi");
     }
   }
 
@@ -403,11 +412,13 @@ export class ChatBackendRegistry {
     for (const manifest of manifests) {
       const implementations = manifest.implementations || [manifest.id];
       if (implementations.some((implementation) => this.adapters.has(implementation))) continue;
-      if (!manifest.builtIn && !detection.get(manifest.id)?.available) continue;
+      const here = manifest.builtIn || Boolean(detection.get(manifest.id)?.available);
+      if (!here && !manifest.devices) continue;
       const adapter = assertChatBackendAdapter(manifest.build(config), manifest.id, manifest.capabilities);
       for (const implementation of implementations) {
         this.adapters.set(implementation, adapter);
         this.manifests.set(implementation, manifest);
+        if (here) this.local.add(implementation);
       }
     }
   }
