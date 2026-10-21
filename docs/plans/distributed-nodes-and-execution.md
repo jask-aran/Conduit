@@ -1,8 +1,14 @@
 # Distributed Nodes, Remote Workspaces, and Durable Execution
 
-Status: milestone 1 built on branch `distributed-nodes` (the `conduit-runtime`
-profile: pi-durable chats with restart resume, forks, queue, questions,
-attachments, web research and usage); milestones 2–5 not started.
+Status, on branch `distributed-nodes`: milestone 1 built (the
+`conduit-runtime` profile: pi-durable chats with restart resume, forks, queue,
+questions, attachments, web research and usage). Milestone 3 built except
+decision 18: `scripts/conduit-node.mjs` is the node role, Settings › Devices
+pairs and shows devices, a shared folder becomes a workspace whose runtime
+chats run on the device and wait while it is offline, and its files browse
+read-only. A remote shell does not yet survive a disconnect (it is reported
+cut off), and nothing watches a device's folder for changes. Milestones 2, 4
+and 5 not started.
 Supersedes the earlier long-form proposal (see git history of this file for
 the full survey of mirrors, task engines and failure matrices).
 Related: [web runtime](../../conduit-web/README.md),

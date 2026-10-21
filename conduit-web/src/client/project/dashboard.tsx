@@ -52,6 +52,7 @@ function workspaceProject(project: Project) {
 function kindLabel(project: Project) {
   if (project.origin === "cloned") return "Cloned workspace";
   if (project.origin === "created") return "Created workspace";
+  if (project.nodeId) return "On a device";
   if (workspaceProject(project)) return "Linked workspace";
   return "Project";
 }

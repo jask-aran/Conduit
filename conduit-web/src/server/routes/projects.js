@@ -1,6 +1,7 @@
 import os from "node:os";
 import { applyArtifactMessageIds } from "../../message-ids.js";
 import { sharedRoot } from "../../nodes/protocol.js";
+import { RemoteWorkspace } from "../../nodes/remote-workspace.js";
 import { readWorkspaceComparison } from "../../workspace-comparison.js";
 import { computerContext, findComputerGitRoot, resolveComputerContext } from "../../computer-context.js";
 import path from "node:path";
@@ -119,8 +120,14 @@ export function registerProjectRoutes(app, {
     }
     const project = await projects.get(id);
     if (project) await projects.validate(project);
+    // A device's folder has no Git here yet, and no local path to give one.
+    if (project?.nodeId && git) throw Object.assign(new Error("Source control is not available in a device's folder yet"), { status: 403, code: "source_control_disabled" });
     return project;
   };
+  // A device's folder is read through the device, and not written from here yet.
+  const onDevice = (project) => project?.nodeId ? new RemoteWorkspace({ hub: nodeHub, project }) : null;
+  const readOnlyDevice = (project, response) => project?.nodeId
+    ? (response.status(409).json({ error: "workspace_read_only", message: "A device's folder is read-only from here" }), true) : false;
   const readComputerLocation = async (project) => {
     const [gitRoot, listing] = await Promise.all([
       findComputerGitRoot(project.workingRoot),
@@ -318,7 +325,9 @@ export function registerProjectRoutes(app, {
     try {
       const project = await inspectionContext(request.params.id);
       if (!project) return response.status(404).json({ error: "project_not_found" });
-      const listing = await listWorkspaceDirectory(project.workingRoot, request.query.path, { after: request.query.after });
+      const device = onDevice(project);
+      const listing = device ? await device.list(request.query.path, { after: request.query.after })
+        : await listWorkspaceDirectory(project.workingRoot, request.query.path, { after: request.query.after });
       response.json({ path: String(request.query.path || ""), ...listing });
     } catch (error) { next(error); }
   });
@@ -327,6 +336,8 @@ export function registerProjectRoutes(app, {
     try {
       const project = await inspectionContext(request.params.id);
       if (!project) return response.status(404).json({ error: "project_not_found" });
+      // Nothing watches a device's folder yet: its version never moves.
+      if (project.nodeId) return response.json({ version: 0, changedPaths: [] });
       response.json(await readWorkspaceVersion(project.workingRoot, { paths: workspaceVersionPaths(request.query.paths) }));
     } catch (error) { next(error); }
   });
@@ -336,6 +347,22 @@ export function registerProjectRoutes(app, {
       const project = await inspectionContext(request.params.id);
       if (!project) return response.status(404).json({ error: "project_not_found" });
       if (!request.query.path) return response.status(400).json({ error: "workspace_path_required" });
+      const device = onDevice(project);
+      if (device) {
+        if (request.query.metadata === "1") return response.json(await device.metadata(request.query.path));
+        if (request.query.download !== "1" && request.query.inline !== "1") {
+          return response.json(await device.read(request.query.path, { forceText: request.query.force === "text", preview: request.query.preview === "1" }));
+        }
+        const { metadata, content } = await device.download(request.query.path);
+        const inline = request.query.inline === "1";
+        if (inline && !["image", "pdf", "audio", "video"].includes(metadata.kind)) return response.status(415).json({ error: "unsupported_inline_type" });
+        if (inline && metadata.mime === "image/svg+xml") response.setHeader("Content-Security-Policy", "sandbox");
+        response.setHeader("Content-Type", metadata.mime);
+        response.setHeader("X-Content-Type-Options", "nosniff");
+        response.setHeader("Cache-Control", "private, no-cache");
+        response.setHeader("Content-Disposition", `${inline ? "inline" : "attachment"}; filename*=UTF-8''${encodeURIComponent(metadata.path.split("/").pop())}`);
+        return response.end(content);
+      }
       if (request.query.download === "1" || request.query.inline === "1") {
         const resolved = await resolveInspectorPath(project.workingRoot, request.query.path, { kind: "file" });
         const metadata = await readWorkspaceFileMetadata(project.workingRoot, request.query.path);
@@ -369,6 +396,7 @@ export function registerProjectRoutes(app, {
       const project = await inspectionContext(request.params.id);
       if (!project) return response.status(404).json({ error: "project_not_found" });
       if (!request.query.path) return response.status(400).json({ error: "workspace_path_required" });
+      if (readOnlyDevice(project, response)) return;
       const expectedRevision = typeof request.headers["if-match"] === "string" ? request.headers["if-match"] : null;
       const content = Buffer.isBuffer(request.body) ? request.body : Buffer.alloc(0);
       const written = await writeWorkspaceFile(project.workingRoot, request.query.path, content, { expectedRevision });
@@ -381,6 +409,7 @@ export function registerProjectRoutes(app, {
       const project = await inspectionContext(request.params.id);
       if (!project) return response.status(404).json({ error: "project_not_found" });
       if (!request.query.path) return response.status(400).json({ error: "workspace_path_required" });
+      if (readOnlyDevice(project, response)) return;
       await deleteWorkspaceFile(project.workingRoot, request.query.path);
       response.status(204).end();
     } catch (error) { next(error); }
@@ -391,6 +420,7 @@ export function registerProjectRoutes(app, {
       const project = await inspectionContext(request.params.id);
       if (!project) return response.status(404).json({ error: "project_not_found" });
       if (!request.body?.path) return response.status(400).json({ error: "workspace_path_required" });
+      if (readOnlyDevice(project, response)) return;
       response.status(201).json(await createWorkspaceDirectory(project.workingRoot, request.body.path));
     } catch (error) { next(error); }
   });
@@ -402,6 +432,7 @@ export function registerProjectRoutes(app, {
       if (!request.body?.path || !request.body?.destination) {
         return response.status(400).json({ error: "workspace_path_required" });
       }
+      if (readOnlyDevice(project, response)) return;
       response.json(await moveWorkspaceEntry(project.workingRoot, request.body.path, request.body.destination));
     } catch (error) { next(error); }
   });
@@ -411,6 +442,7 @@ export function registerProjectRoutes(app, {
       const project = await inspectionContext(request.params.id);
       if (!project) return response.status(404).json({ error: "project_not_found" });
       if (!request.query.path) return response.status(400).json({ error: "workspace_path_required" });
+      if (readOnlyDevice(project, response)) return;
       await deleteWorkspaceDirectory(project.workingRoot, request.query.path);
       response.status(204).end();
     } catch (error) { next(error); }

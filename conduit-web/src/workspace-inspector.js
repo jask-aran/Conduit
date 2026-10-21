@@ -88,11 +88,11 @@ const EXTENSION_TYPES = new Map([
   ["conf", { kind: "text", mime: "text/plain" }],
 ]);
 
-function inspectorError(code, message) {
+export function inspectorError(code, message) {
   return Object.assign(new Error(message), { code });
 }
 
-function fileRevision(content) {
+export function fileRevision(content) {
   return createHash("sha256").update(content).digest("hex");
 }
 
