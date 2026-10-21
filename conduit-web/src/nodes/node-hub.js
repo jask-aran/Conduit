@@ -123,7 +123,24 @@ export class NodeHub extends EventEmitter {
 
   async list() { return (await this.load()).map((record) => this.view(record)); }
 
-  async listDevices() { await this.load(); return this.devices.map((device) => this.deviceView(device)); }
+  async listDevices() {
+    await this.load();
+    const head = this.head ? [{ id: this.head.deviceId, name: this.head.name(), local: true, nodes: [await this.headView()] }] : [];
+    return [...head, ...this.devices.map((device) => this.deviceView(device))];
+  }
+
+  /**
+   * The head's own device (decision 24): listed with the others, its node's
+   * roots the folders it holds workspaces in. It is not paired and never
+   * offline; its calls run in process, so it is not among `live` sockets.
+   */
+  adoptHead({ deviceId, nodeId, name, roots, harnesses }) { this.head = { deviceId, nodeId, name, roots, harnesses }; }
+
+  async headView() {
+    const platform = { win32: "Windows", darwin: "macOS" }[process.platform] || "Linux";
+    return { id: this.head.nodeId, deviceId: this.head.deviceId, name: platform, platform: process.platform, local: true,
+      online: true, roots: await this.head.roots(), harnesses: this.head.harnesses(), lastSeenAt: new Date().toISOString() };
+  }
 
   /** A root a node shares, by id, as it last said: `{ id, label, read, write, shell }`. */
   async root(nodeId, rootId) {

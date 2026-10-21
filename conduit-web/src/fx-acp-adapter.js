@@ -1,3 +1,4 @@
+import { remoteNode } from "./place.js";
 import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -227,10 +228,10 @@ export class FxAcpAdapter extends EventEmitter {
   async start({ chatId, project }) {
     const existing = this.getByChatId(chatId);
     if (existing) return existing;
-    if (project?.nodeId) requireHarnessOn(this.nodeHub, project.nodeId, "fx", "fx");
+    if (remoteNode(project)) requireHarnessOn(this.nodeHub, remoteNode(project), "fx", "fx");
     const record = this.sessions.add({
       id: crypto.randomUUID(), chatId, projectId: project?.id || null,
-      nodeId: project?.nodeId || null, place: project?.place || null,
+      nodeId: remoteNode(project), place: project?.place || null,
       cwd: project?.workingRoot, sessionId: null, status: "starting", ready: false,
       activity: "starting", active: false, stopping: false, model: "", thinkingLevel: "",
       permissionMode: "", generation: null, generationSeq: 0, clients: new Set(), events: [],

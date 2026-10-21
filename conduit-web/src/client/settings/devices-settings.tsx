@@ -9,9 +9,9 @@ import { LiveNote, SettingGroup, SettingLine, SettingNote, SettingValue } from "
 import { desktopShell, type CompanionStatus, type DesktopShellSettings } from "../platform/installed-client.ts";
 
 type SharedRoot = { id: string; label: string; read: boolean; write: boolean; shell: boolean; allow?: string[] };
-type Node = { id: string; deviceId: string; name: string; platform: string | null; online: boolean; roots: SharedRoot[]; harnesses?: string[]; lastSeenAt: string | null };
+type Node = { id: string; deviceId: string; name: string; platform: string | null; online: boolean; local?: boolean; roots: SharedRoot[]; harnesses?: string[]; lastSeenAt: string | null };
 const HARNESS_LABELS: Record<string, string> = { "claude-code": "Claude Code" };
-type Device = { id: string; name: string; nodes: Node[] };
+type Device = { id: string; name: string; local?: boolean; nodes: Node[] };
 
 const NEW_DEVICE = "";
 
@@ -100,21 +100,26 @@ export function DevicesSettingsTile(props: { onAddWorkspace: (input: { mode: "no
       </>}</Show>
     </SettingGroup>
 
-    <For each={devices() || []}>{(device) => <SettingGroup title={device.name}>
+    {/* The head is listed like any device (plan decision 24); its folders are already its workspaces, and it is not unpaired. */}
+    <For each={devices() || []}>{(device) => <SettingGroup title={device.local ? `${device.name} · this server` : device.name}>
       <For each={device.nodes}>{(node) => <>
         <SettingLine label={node.name} state={[seen(node), node.platform,
           node.harnesses?.length ? `runs ${node.harnesses.map((id) => HARNESS_LABELS[id] || id).join(", ")}` : null].filter(Boolean).join(" · ")} plain>
           <StatusDot label={seen(node)} tone={node.online ? "success" : "muted"} />
-          <Button variant="ghost" size="sm" aria-label={`Unpair ${node.name} on ${device.name}`} onClick={() => void forget(node)}><Trash2Icon /> Unpair</Button>
+          <Show when={!node.local}>
+            <Button variant="ghost" size="sm" aria-label={`Unpair ${node.name} on ${device.name}`} onClick={() => void forget(node)}><Trash2Icon /> Unpair</Button>
+          </Show>
         </SettingLine>
         <For each={node.roots} fallback={<SettingNote tone="quiet">{node.name} shares no folders yet.</SettingNote>}>{(root) =>
-          <SettingLine label={root.label} state={grants(root)} plain>
-            <Button variant="ghost" size="sm" aria-label={`Add ${root.label} on ${node.name} as a workspace`}
-              onClick={() => void props.onAddWorkspace({ mode: "node", nodeId: node.id, rootId: root.id })}><FolderPlusIcon /> Add workspace</Button>
+          <SettingLine label={root.label} state={node.local ? "Workspace" : grants(root)} plain>
+            <Show when={!node.local}>
+              <Button variant="ghost" size="sm" aria-label={`Add ${root.label} on ${node.name} as a workspace`}
+                onClick={() => void props.onAddWorkspace({ mode: "node", nodeId: node.id, rootId: root.id })}><FolderPlusIcon /> Add workspace</Button>
+            </Show>
           </SettingLine>}</For>
       </>}</For>
     </SettingGroup>}</For>
-    <Show when={devices() && !devices()!.length}><SettingNote tone="quiet">No devices paired yet.</SettingNote></Show>
+    <Show when={devices() && !devices()!.some((device) => !device.local)}><SettingNote tone="quiet">No other devices paired yet.</SettingNote></Show>
     <Show when={error()}><SettingNote tone="error">{error()}</SettingNote></Show>
   </>;
 }

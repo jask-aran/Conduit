@@ -266,10 +266,16 @@ starts elsewhere.
 
 ### Making it general
 
-1. **Every workspace has a place.** The head registers itself in the hub as
-   an always-online local device; `nodeId` is never absent; call sites stop
-   asking `project.nodeId ? device : local`.
-2. **Refusals become capabilities.** `capabilities(place)` → harnesses,
+1. **Every workspace has a place.** *(Built 2026-10-22.)* The head is an
+   ordinary device in the hub's list (`adoptHead`), named from the server's
+   identity; its node's roots are the folders it holds workspaces in, and
+   unscoped chats (the chat experience) live on it. Every project view
+   carries its device's node and place; stored records are unchanged (a
+   record names a node only for another device), so an older build still
+   reads them. The one difference left is transport: the head's own folders
+   are reached in process (`local`), so the seams ask `remoteNode(project)`
+   and nothing else asks whether a place is the head's.
+2. **Refusals become capabilities.** *(Built.)* `capabilities(place)` → harnesses,
    checkpoints, watch, git, delete. A device with Claude Code and a head
    without it become the same question, and the UI shows what is offered.
 3. **Close the real gaps:** checkpoints through the host (snapshotted on

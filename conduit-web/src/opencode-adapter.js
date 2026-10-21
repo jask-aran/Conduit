@@ -1,3 +1,4 @@
+import { remoteNode } from "./place.js";
 import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import os from "node:os";
@@ -339,7 +340,7 @@ export class OpenCodeAdapter extends EventEmitter {
     return this.sessions.add({
       permissionMode: PERMISSION_MODES.some((mode) => mode.id === permissionMode) ? permissionMode : "prompt",
       id: crypto.randomUUID(), chatId, projectId: project?.id || null,
-      nodeId: project?.nodeId || null, place: project?.place || null,
+      nodeId: remoteNode(project), place: project?.place || null,
       cwd: session.location?.directory || project?.workingRoot, sessionId: session.id,
       status: "running", ready: true, activity: "idle", active: false, stopping: false,
       model: spec, thinkingLevel: session.model?.variant || "", generation: null, generationSeq: 0,
@@ -355,8 +356,8 @@ export class OpenCodeAdapter extends EventEmitter {
     // The service ignores `?directory=` here; a session without a location
     // lands in the service's own directory, which is usually home.
     if (!project?.workingRoot) throw failure("OpenCode session needs a project directory");
-    if (project.nodeId) requireHarnessOn(this.nodeHub, project.nodeId, "opencode", "OpenCode");
-    const session = await this.request("POST", "/session", { on: project.nodeId || null,
+    if (remoteNode(project)) requireHarnessOn(this.nodeHub, remoteNode(project), "opencode", "OpenCode");
+    const session = await this.request("POST", "/session", { on: remoteNode(project),
       body: { location: { directory: project.workingRoot }, ...(selected ? { model: selected } : {}) },
     });
     return this.record({ chatId, project, session, permissionMode });
@@ -367,8 +368,8 @@ export class OpenCodeAdapter extends EventEmitter {
     if (existing) return existing;
     const sessionId = typeof opaqueSession === "string" ? opaqueSession : opaqueSession?.threadId;
     if (!sessionId) throw failure("OpenCode session identity is missing");
-    if (project?.nodeId) requireHarnessOn(this.nodeHub, project.nodeId, "opencode", "OpenCode");
-    const session = await this.request("GET", `/session/${encodeURIComponent(sessionId)}`, { on: project?.nodeId || null });
+    if (remoteNode(project)) requireHarnessOn(this.nodeHub, remoteNode(project), "opencode", "OpenCode");
+    const session = await this.request("GET", `/session/${encodeURIComponent(sessionId)}`, { on: remoteNode(project) });
     const record = this.record({ chatId, project, session, permissionMode });
     if (model && model !== record.model) await this.setModel(record.id, model, thinkingLevel);
     return record;

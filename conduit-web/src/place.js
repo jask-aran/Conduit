@@ -1,19 +1,32 @@
+import crypto from "node:crypto";
+
 /**
  * Where a workspace's work happens (plan › Architecture, "Making it
  * general"): a device, and a place on it. The head is a device like any
- * other -- its own folders, reached in process rather than over a socket --
- * so callers ask what a place can do, never whether it is a device.
+ * other (decision 24) -- it is listed with the rest, its folders are its
+ * node's roots, unscoped chats live on it -- and differs only in transport:
+ * its own folders are reached in process (`local`), every other device's
+ * over its node's socket. Callers ask what a place can do; only the seams
+ * ask how it is reached, through `remoteNode`.
  */
 
-/** The head's own device: always there, never in nodes.json. */
-export const HEAD = "head";
+/** The head's own device and node, named from the server's identity so they stay put. */
+export const headIds = (serverId) => ({ deviceId: `device_${serverId}`, nodeId: `node_${serverId}` });
 
-/** A project's place: `{ device, nodeId, root, path, local }`; `nodeId` is null on the head. */
+/** A root of the head's node: one per folder it holds a workspace in, named from the path. */
+export const headRootId = (folder) => `r_${crypto.createHash("sha256").update(String(folder)).digest("base64url").slice(0, 12)}`;
+
+/**
+ * The node a project's place is reached through over the network, or null
+ * when it is reached in process: the head's own folders (a project view says
+ * `local`), or a stored record that names no node.
+ */
+export const remoteNode = (project) => (project?.nodeId && project.local !== true ? project.nodeId : null);
+
+/** A project's place: `{ device, nodeId, root, path, local }`. */
 export function placeOf(project) {
-  if (project?.nodeId) {
-    return { device: project.nodeId, nodeId: project.nodeId, root: project.place?.root || null, path: project.place?.path || "", local: false };
-  }
-  return { device: HEAD, nodeId: null, root: null, path: project?.workingRoot || "", local: true };
+  return { device: project?.nodeId || null, nodeId: project?.nodeId || null, root: project?.place?.root || null,
+    path: project?.place?.path || "", local: !remoteNode(project) };
 }
 
 /**
@@ -31,7 +44,7 @@ export async function capabilitiesOf(project, { hub = null, backends, serverName
   const at = placeOf(project);
   const local = new Set(backends.local || backends.adapters.keys());
   if (at.local) {
-    return { device: { id: HEAD, name: serverName, local: true, online: true },
+    return { device: { id: at.nodeId, name: serverName, local: true, online: true },
       harnesses: [...local], checkpoints: true, deleteFiles: true, git: true };
   }
   const node = await hub?.get(at.nodeId);

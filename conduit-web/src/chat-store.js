@@ -212,7 +212,8 @@ export class ChatStore {
         },
         modelThinkingLevels: modelThinkingLevelsFor(item),
         // The device that owns the thread's work (decision 21); rows from before it was kept take their workspace's.
-        owner: typeof item.owner === "string" && item.owner ? item.owner : placeOf(project).device,
+        // ("head" was the head's name for a while before it was a device.)
+        owner: typeof item.owner === "string" && item.owner && item.owner !== "head" ? item.owner : placeOf(project).device,
         createdAt,
         updatedAt: item.updatedAt || createdAt,
         lastUserMessageAt: item.lastUserMessageAt || sessionMetadata?.lastUserMessageAt || null,

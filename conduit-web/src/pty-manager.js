@@ -1,3 +1,4 @@
+import { remoteNode } from "./place.js";
 import crypto from "node:crypto";
 import { execFile as execFileCallback } from "node:child_process";
 import { EventEmitter } from "node:events";
@@ -301,7 +302,7 @@ export class PtyManager extends EventEmitter {
     const template = TEMPLATES[templateId];
     if (!template) throw failure("pty_template_not_allowed", "That terminal template is not available");
     if (!project?.id) throw failure("pty_project_required", "A terminal must belong to a project");
-    if (project.nodeId) return this.createOnDevice({ project, cwd, templateId, title: requestedTitle, cols, rows });
+    if (remoteNode(project)) return this.createOnDevice({ project, cwd, templateId, title: requestedTitle, cols, rows });
     if (!cwd || !path.isAbsolute(cwd)) throw failure("pty_cwd_required", "Terminal working directory is unavailable");
     let cwdStat;
     try { cwdStat = await fs.stat(cwd); }
@@ -492,7 +493,7 @@ export class PtyManager extends EventEmitter {
     if ([...this.records.values()].filter((item) => item.status === "running").length >= this.maxSessions) {
       throw failure("pty_capacity_reached", "The terminal session limit has been reached");
     }
-    const shell = await RemoteProcess.spawn(this.nodeHub, project.nodeId, {
+    const shell = await RemoteProcess.spawn(this.nodeHub, remoteNode(project), {
       shell: true, cwd: project.place, pty: { cols: boundedDimension(cols, 80), rows: boundedDimension(rows, 24) } });
     // Nothing follows it until a client attaches; the device keeps its output.
     shell.detach();
@@ -502,7 +503,7 @@ export class PtyManager extends EventEmitter {
       id, projectId: project.id, templateId, cwd, status: "running",
       title: customTitle || nextTerminalTitle([...this.records.values()], project.id, TEMPLATES[templateId]?.title || "Shell"),
       createdAt: now, updatedAt: now, exitCode: null, signal: null,
-      nodeId: project.nodeId, procId: shell.procId,
+      nodeId: remoteNode(project), procId: shell.procId,
     };
     this.records.set(id, record);
     this.metadata.set(id, { currentCommand: null, lastActivityAt: now, paneDead: false });
