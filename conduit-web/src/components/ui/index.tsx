@@ -42,3 +42,4 @@ export * from "./palettes";
 
 export * as Icons from "./icons";
 export * from "./marks";
+export * from "./voice";

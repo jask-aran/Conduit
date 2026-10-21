@@ -92,7 +92,7 @@ function Canvas() {
   const phoneFrame = () => document.querySelector<HTMLIFrameElement>('iframe[title="Phone"]');
   const openOnPhone = (view: OverlayView | null) => { setPhoneOverlay(view); phoneFrame()?.contentWindow?.postMessage({ galleryOverlay: view }, location.origin); };
   addEventListener("message", (event) => { if (event.origin === location.origin && event.data?.galleryOverlayClosed) setPhoneOverlay(null); });
-  // One family at a time, picked from the rail: Foundations (Controls among them), the frosted families, then the Transcript.
+  // One family at a time, picked from the rail: the foundations, the materials, the pieces, then what the app composes from them.
   const families = [...foundationFamilies, ...libraryFamilies];
   const stored = (() => { try { return localStorage.getItem("gallery:family"); } catch { return null; } })();
   const [current, setCurrent] = createSignal(families.find((family) => family.title === stored)?.title ?? libraryFamilies[0]!.title);
@@ -109,7 +109,7 @@ function Canvas() {
   const pickSurface = stage(setSurface, "gallery:stage-surface"), pickDensity = stage(setStageDensity, "gallery:stage-density");
   // A piece for one layout only keeps it on a staged page.
   const staged = (atom: Atom): Density => atom.scope === "both" ? stageDensity() : atom.scope;
-  const rail = [...new Set(families.map((family) => family.rail ?? "Frosted"))].map((label) => [label, families.filter((family) => (family.rail ?? "Frosted") === label)] as const);
+  const rail = RAILS.map((label) => [label, families.filter((family) => (family.rail ?? "Pieces") === label)] as const);
   const update = (css: string) => {
     setTune(css);
     try { localStorage.setItem(TUNE_KEY, css); } catch { /* private window */ }
@@ -201,6 +201,8 @@ function PhoneOverlay() {
   </div>}</Show>;
 }
 
+/** The rail's tiers, in order; a family without one is a piece. */
+const RAILS = ["Foundations", "Materials", "Pieces", "In the app"] as const;
 export function mount(frame: string | null) {
   const root = document.getElementById("root")!;
   applyFaces(document);
