@@ -9,8 +9,7 @@ import { LiveNote, SettingGroup, SettingLine, SettingNote, SettingValue } from "
 import { desktopShell, type CompanionStatus, type DesktopShellSettings } from "../platform/installed-client.ts";
 
 type SharedRoot = { id: string; label: string; read: boolean; write: boolean; shell: boolean; allow?: string[] };
-type Node = { id: string; deviceId: string; name: string; platform: string | null; online: boolean; local?: boolean; roots: SharedRoot[]; harnesses?: string[];
-  capabilities?: Array<{ id: string; label: string; granted: boolean }>; lastSeenAt: string | null };
+type Node = { id: string; deviceId: string; name: string; platform: string | null; online: boolean; local?: boolean; roots: SharedRoot[]; harnesses?: string[]; lastSeenAt: string | null };
 const HARNESS_LABELS: Record<string, string> = { "claude-code": "Claude Code" };
 type Device = { id: string; name: string; local?: boolean; nodes: Node[] };
 
@@ -118,10 +117,6 @@ export function DevicesSettingsTile(props: { onAddWorkspace: (input: { mode: "no
                 onClick={() => void props.onAddWorkspace({ mode: "node", nodeId: node.id, rootId: root.id })}><FolderPlusIcon /> Add workspace</Button>
             </Show>
           </SettingLine>}</For>
-        {/* Typed capabilities (notifications, clipboard): granted on the device, with `conduit-node grant`. */}
-        <Show when={node.capabilities?.length}>
-          <SettingLine label="Capabilities" state={node.capabilities!.map((item) => item.granted ? item.label : `${item.label} (not granted)`).join(" · ")} plain />
-        </Show>
       </>}</For>
     </SettingGroup>}</For>
     <Show when={devices() && !devices()!.some((device) => !device.local)}><SettingNote tone="quiet">No other devices paired yet.</SettingNote></Show>

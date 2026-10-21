@@ -11,7 +11,6 @@ import { keptBack, rootDeny } from "./secrets.js";
 import { Receipts } from "./receipts.js";
 import net from "node:net";
 import { claudeSession, codexRollout, findHarnesses, opencodeService, tunnelTarget } from "./node-harnesses.js";
-import { capabilityArgs, capabilityViews, platformCapabilities } from "./capabilities.js";
 
 const RETRY_MS = [1000, 2000, 5000, 10000, 30000];
 // How often the connection is checked; a ping unanswered by the next check ends it.
@@ -37,7 +36,7 @@ const HEARTBEAT_MS = 30_000;
  * reports them interrupted rather than this device running work nobody waits
  * for.
  */
-export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: shared, capabilities: granted = [], shellEnv = process.env, log = console }) {
+export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: shared, shellEnv = process.env, log = console }) {
   // Every way main can be reached, best first (its tailnet name, then a public
   // tunnel): a failed attempt tries the next, and a dropped connection starts again at the best.
   const ways = [...new Set([mainUrl, ...routes].filter(Boolean))];
@@ -50,8 +49,6 @@ export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: 
   const receipts = new Receipts();
   // Harnesses are offered only with the shell grant somewhere: running one is running code.
   const harnesses = roots.some((root) => root.shell) ? findHarnesses() : {};
-  // What this device can do beyond files and a shell (capabilities.js), and which of it its owner granted this server.
-  const available = platformCapabilities();
   let socket = null;
   let attempt = 0;
   let stopped = false;
@@ -111,7 +108,7 @@ export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: 
       way = 0;
       // Roots go by id; the path is for people to read, main never sends it back.
       send({ type: "hello", version: NODE_PROTOCOL_VERSION, name, platform: process.platform, boot: receipts.boot,
-        harnesses: Object.keys(harnesses), capabilities: capabilityViews(available, granted),
+        harnesses: Object.keys(harnesses),
         roots: roots.map(({ id, path: label, read, write, shell, allow }) => ({ id, label, read, write, shell, allow })) });
       log.info?.(`[conduit-node] connected to ${mainUrl}${via === mainUrl ? "" : ` via ${via}`}`);
     });
@@ -248,12 +245,6 @@ export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: 
       if (target === "proc") return runProcess(method, decoded);
       // What a harness saved here, for the sessions main runs on it.
       if (target === "tunnel" && method === "open") return openTunnel(decoded[0], decoded[1]);
-      // A typed capability: only one this device has and its owner granted.
-      if (target === "device") {
-        if (!available[method] || !granted.includes(method)) return err(new FileError("permission_denied", `${method} is not granted to Conduit on this device`));
-        try { return { ok: true, value: { result: (await available[method](capabilityArgs(method, decoded[0]))) ?? null } }; }
-        catch (cause) { return err(new ExecutionError("unknown", `${method} failed on this device: ${cause.message}`)); }
-      }
       if (target === "harness") {
         if (method === "claudeSession" && harnesses["claude-code"]) return { ok: true, value: await claudeSession(decoded[0]) };
         if (method === "codexRollout" && harnesses.codex) return { ok: true, value: await codexRollout(decoded[0]) };
