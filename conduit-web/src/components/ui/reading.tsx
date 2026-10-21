@@ -4,7 +4,7 @@ import { Swatch } from "./controls";
 
 /*
  * Reading: what a gauge measures, laid out to be read at a glance -- the context window in the composer's gauge
- * and the chat menu's Context (DESIGN Readings). Under its Meter, one line of totals; the parts as a legend; the
+ * and the chat menu's Context (DESIGN Pieces: Reading). Under its Meter, one line of totals; the parts as a legend; the
  * figures beside them (a cache, a plan's windows) as tiles, each a number over its name; a caption at its foot.
  * Every line is the caption's size: the numbers in the data face, the names in the text's, so nothing outweighs
  * the bar. Shapes only; what is measured and what a part does stay with the caller.
