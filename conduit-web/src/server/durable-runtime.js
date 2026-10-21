@@ -214,9 +214,10 @@ export class DurableRuntime {
    * from the Conduit Pi agent's directory. A runtime without them still runs.
    */
   async installWebTools(registry) {
-    process.env.PI_CODING_AGENT_DIR ??= this.piAgentDir;
     try {
-      const tools = await loadPiExtensionTools(WEB_ACCESS, { models: this.models, replaySafe: WEB_REPLAY_SAFE });
+      // Its configuration is the Conduit Pi agent's, named only while its tools run.
+      const tools = await loadPiExtensionTools(WEB_ACCESS, { models: this.models, replaySafe: WEB_REPLAY_SAFE,
+        env: { PI_CODING_AGENT_DIR: process.env.PI_CODING_AGENT_DIR || this.piAgentDir } });
       registry.install(defineExtension({ name: "web", tools, sections: [section("web", () => WEB_PROMPT, { tag: false })] }));
     } catch (error) {
       console.warn("[conduit-runtime] web tools unavailable:", error?.message || error);

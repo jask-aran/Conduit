@@ -227,6 +227,10 @@ export class ProjectStore {
       createdAt: project.createdAt,
       path: projectPath,
       workingRoot: projectPath,
+      // Where Conduit keeps the chats' own files (logs, attachments): always on
+      // this machine. For a device's workspace that is not its working root,
+      // which is a path on the device.
+      chatRoot: project.nodeId ? this.managedPath(project.slug) : projectPath,
       sessionsDir: sessionDirectoryFor(projectPath, this.piAgentDir),
       deletesFilesOnRemove: (project.origin || "managed") === "managed",
     };
@@ -845,6 +849,8 @@ export class ProjectStore {
         throw error;
       }
       skipWorkingTree = true;
+      // What is here is Conduit's own: the chats' folder.
+      await fs.rm(view.chatRoot, { recursive: true, force: true });
     }
     if (deleteWorkspaceFiles && project.kind !== "workspace") {
       const error = new Error("Only Workspaces can delete an external working directory");

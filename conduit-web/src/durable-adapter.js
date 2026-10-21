@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import fs from "node:fs/promises";
+import { attachmentForDevice } from "./nodes/device-attachments.js";
 import { EventEmitter } from "node:events";
 import { getSupportedThinkingLevels } from "@earendil-works/pi-ai";
 import { watchEvents } from "@earendil-works/pi-durable";
@@ -70,17 +71,20 @@ const attachmentSummary = (attachments = []) => attachments.map((item) => ({
 /**
  * What the model is given for a prompt with attachments, as Conduit Pi gives
  * it: images as image input, any other file named by its path for the tools
- * to read.
+ * to read. On a device the tools cannot reach this server's files, so a
+ * text file is given inline and anything else is said to be out of reach.
  */
-async function promptInput(message, attachments = []) {
+async function promptInput(message, attachments = [], { onDevice = false } = {}) {
   const images = [];
   const files = [];
   for (const attachment of attachments) {
     const type = String(attachment.mimeType || attachment.type || "");
     if (type.startsWith("image/") && type !== "image/svg+xml") {
       images.push({ type: "image", data: await fs.readFile(attachment.path, "base64"), mimeType: type });
-    } else {
+    } else if (!onDevice) {
       files.push(`Attached file: ${attachment.path}`);
+    } else {
+      files.push(await attachmentForDevice(attachment));
     }
   }
   const text = [message, ...files].filter(Boolean).join("\n\n");
@@ -168,6 +172,9 @@ export function entriesToOps(entries, ids = {}) {
 }
 
 export class DurableAdapter extends EventEmitter {
+  // Starts its harness on a device for a device's workspace (live-session-launcher.js).
+  runsOnDevices = true;
+
   constructor({ runtime, logs = null } = {}) {
     super();
     this.runtime = runtime;
@@ -267,7 +274,7 @@ export class DurableAdapter extends EventEmitter {
     const existing = this.getByChatId(chatId);
     if (existing) return existing;
     const record = this.sessions.add({
-      id: crypto.randomUUID(), chatId, projectId: project?.id || null, conversationId: conversation.id, conversation,
+      id: crypto.randomUUID(), chatId, projectId: project?.id || null, nodeId: project?.nodeId || null, conversationId: conversation.id, conversation,
       status: "running", activity: "idle", active: false, stopping: false, generation: null, generationSeq: 0,
       clients: new Set(), events: [], hostUiRequests: [], activeGeneration: null,
       model: "", modelId: "", provider: "", thinkingLevel: "", contextWindow: 0,
@@ -424,7 +431,15 @@ export class DurableAdapter extends EventEmitter {
       status: "working", activity: "working", detail: null,
       ...(options.continuationBase ? { continuation: true, continuationBase: String(options.continuationBase) } : {}) });
     turn.opened = new Set([messageId]);
-    await this.submit(record, message, messageId, undefined, options.attachments);
+    try {
+      await this.submit(record, message, messageId, undefined, options.attachments);
+    } catch (cause) {
+      // The turn was announced; one that never reached the conversation ends failed, not busy forever.
+      this.publish(record, { type: "error", generationId: turn.generationId, scope: "runtime",
+        error: { code: cause?.code || "backend_unavailable", message: cause?.message || String(cause) } });
+      this.finish(record);
+      throw cause;
+    }
     // Conduit finds a prompt's attachments by the message they were sent with.
     return { generationId: turn.generationId, attachmentIdentity: { messageId } };
   }
@@ -432,7 +447,7 @@ export class DurableAdapter extends EventEmitter {
   async submit(record, text, messageId, whenBusy, attachments = []) {
     const summary = attachmentSummary(attachments);
     const submission = await record.conversation.submit({
-      type: "input", content: await promptInput(text, attachments), requestId: messageId, ...(whenBusy ? { whenBusy } : {}),
+      type: "input", content: await promptInput(text, attachments, { onDevice: Boolean(record.nodeId) }), requestId: messageId, ...(whenBusy ? { whenBusy } : {}),
       entry: { kind: USER_ENTRY, data: { messageId, text, timestamp: new Date().toISOString(),
         ...(summary.length ? { attachments: summary } : {}) } },
     }, this.context);

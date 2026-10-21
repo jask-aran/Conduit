@@ -520,7 +520,8 @@ export class PtyManager extends EventEmitter {
       shell = await RemoteProcess.reattach(this.nodeHub, record.nodeId, record.procId);
     } catch (error) {
       this.attachments.delete(record.id);
-      if (/No such shell/.test(error.message)) {
+      // The node's word for a process it no longer has (it restarted, or the exit was long ago).
+      if (/No such process/.test(error.message)) {
         await this.deviceExited(record, { exitCode: null, signal: "device_process_gone" });
         throw failure("pty_not_running", "Terminal is no longer running");
       }
@@ -557,7 +558,8 @@ export class PtyManager extends EventEmitter {
   }
 
   killOnDevice(record) {
-    if (!this.nodeHub?.live.get(record.nodeId)?.ready) return;
+    // A device that is away is told when it is back, so no shell outlives its terminal there.
+    if (!this.nodeHub?.live.get(record.nodeId)?.ready) return void this.nodeHub?.killLater(record.nodeId, record.procId);
     const shell = new RemoteProcess(this.nodeHub, record.nodeId, { id: record.procId });
     shell.kill();
     this.nodeHub.unfollow(shell);

@@ -111,6 +111,13 @@ export function createLiveSessionLauncher({
   } = {}) {
     lifecycle.assertAvailable(context.chat.id, context.project.id);
     const adapter = backends.forChat(context.chat);
+    // A device's workspace runs only on an adapter that starts its harness on
+    // the device (which checks the device has it); any other would run here,
+    // in whatever the device's path names on this machine. Every way a chat
+    // gets a harness -- created, switched, adopted, a run -- launches here.
+    if (context.project.nodeId && !adapter?.runsOnDevices) {
+      throw launchError("harness_not_on_device", "This harness does not run in a device's workspace", 409);
+    }
     if (requestedProject && ![context.project.id, context.project.slug].includes(requestedProject)) {
       throw launchError("session_project_mismatch", "The requested project does not own this chat", 409);
     }

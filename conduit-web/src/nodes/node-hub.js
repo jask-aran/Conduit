@@ -4,7 +4,7 @@ import net from "node:net";
 import path from "node:path";
 import { EventEmitter } from "node:events";
 import { WebSocketServer } from "ws";
-import { awaitWithContext } from "@earendil-works/chord/context";
+import { awaitWithContext, BACKGROUND_CONTEXT, withAbortSignal } from "@earendil-works/chord/context";
 import { NODE_PROTOCOL_VERSION } from "./protocol.js";
 
 const hash = (key) => crypto.createHash("sha256").update(key).digest("hex");
@@ -59,8 +59,21 @@ export class NodeHub extends EventEmitter {
     return this.records;
   }
 
-  async save() {
-    await fs.writeFile(this.file, `${JSON.stringify({ version: 2, devices: this.devices, nodes: this.records }, null, 2)}\n`, { mode: 0o600 });
+  /**
+   * Writes go one at a time and replace the file whole (a temporary file
+   * renamed over it), so devices reconnecting together cannot interleave a
+   * torn nodes.json. A failed write is logged, never thrown at a socket
+   * handler: last-seen times are not worth the server.
+   */
+  save() {
+    this.saving = (this.saving || Promise.resolve()).then(async () => {
+      const temporary = `${this.file}.${process.pid}.tmp`;
+      await fs.writeFile(temporary, `${JSON.stringify({ version: 2, devices: this.devices, nodes: this.records }, null, 2)}\n`, { mode: 0o600 });
+      await fs.rename(temporary, this.file);
+    });
+    const done = this.saving;
+    this.saving = done.catch((error) => console.error("Could not save paired devices", error));
+    return done;
   }
 
   /** Pair a node on a device: an existing one by id, else a new one by name. */
@@ -121,7 +134,7 @@ export class NodeHub extends EventEmitter {
   async get(id) { return (await this.load()).find((record) => record.id === id) || null; }
 
   handleUpgrade(request, socket, head) {
-    if (!this.allowRemote(request.socket.remoteAddress)) return socket.destroy();
+    if (!this.allowRemote(clientAddress(request))) return socket.destroy();
     const key = String(request.headers.authorization || "").replace(/^Bearer\s+/i, "");
     void this.load().then((records) => {
       const record = key && records.find((item) => crypto.timingSafeEqual(Buffer.from(item.keyHash), Buffer.from(hash(key))));
@@ -145,6 +158,8 @@ export class NodeHub extends EventEmitter {
       node.send({ ...message, type: "call", id });
       return { id, done };
     };
+    // A frame the socket refuses (too large, malformed) closes it; unheard, the error would end the server.
+    ws.on("error", (error) => console.warn(`[nodes] ${record.name}: ${error.message}`));
     ws.on("message", (raw) => {
       let message;
       try { message = JSON.parse(String(raw)); } catch { return; }
@@ -165,9 +180,19 @@ export class NodeHub extends EventEmitter {
         // Roots without ids are from a node older than root ids: it is not addressable.
         node.roots = node.roots.filter((root) => typeof root?.id === "string");
         record.roots = node.roots;
-        void this.save();
+        void this.save().catch(() => {});
         this.emit("changed");
         this.emit(`online:${record.id}`);
+        // Processes let go of while it was away are stopped now.
+        if (record.pendingKills?.length) {
+          const kills = record.pendingKills;
+          record.pendingKills = [];
+          void this.save().catch(() => {});
+          for (const procId of kills) {
+            void this.call(record.id, { target: "proc", method: "kill", args: [procId], cwd: null },
+              withAbortSignal(AbortSignal.timeout(15_000), BACKGROUND_CONTEXT)).catch(() => {});
+          }
+        }
         // A follower whose process the device no longer has (it restarted) ends; never this server.
         for (const follower of this.following.values()) {
           if (follower.nodeId === record.id) void follower.resume().catch((error) => follower.lost(error));
@@ -193,7 +218,7 @@ export class NodeHub extends EventEmitter {
       if (this.live.get(record.id) === node) {
         this.live.delete(record.id);
         record.lastSeenAt = new Date().toISOString();
-        void this.save();
+        void this.save().catch(() => {});
         this.emit("changed");
       }
     });
@@ -239,6 +264,18 @@ export class NodeHub extends EventEmitter {
     try { return await done; } finally { context.abortSignal?.removeEventListener("abort", abort); }
   }
 
+  /**
+   * Stop a device process when its device is next connected: one main let go
+   * of while the device was away (a terminal closed) must not run on there
+   * unowned. Kept in nodes.json, so a restart here does not forget it.
+   */
+  async killLater(nodeId, procId) {
+    const record = await this.get(nodeId);
+    if (!record || !procId) return;
+    record.pendingKills = [...new Set([...(record.pendingKills || []), procId])];
+    await this.save().catch(() => {});
+  }
+
   /** Follow a device process: `deliver` gets its output and exit; `resume` reattaches after a reconnect. */
   follow(follower) { this.following.set(`${follower.nodeId} ${follower.procId}`, follower); }
 
@@ -258,6 +295,26 @@ TAILNET_V4.addSubnet("100.64.0.0", 10, "ipv4");
 TAILNET_V4.addSubnet("127.0.0.0", 8, "ipv4");
 
 /** Loopback or a Tailscale address (100.64.0.0/10, fd7a:115c:a1e0::/48). */
+/**
+ * The address a device dialled from. A proxy on this machine connects from
+ * loopback for anyone, so a request it forwarded is judged by the client it
+ * names: a tailnet address passed by `tailscale serve` is the device; a
+ * public tunnel (Cloudflare, Funnel, any other forwarder) is refused, since
+ * the pairing key alone was never meant to face the internet.
+ */
+export function clientAddress(request) {
+  const headers = request.headers || {};
+  if (["cf-connecting-ip", "tailscale-funnel-request", "forwarded", "x-real-ip"].some((name) => headers[name] !== undefined)) return "";
+  const forwarded = headers["x-forwarded-for"];
+  if (forwarded === undefined) return request.socket.remoteAddress || "";
+  // The nearest proxy's entry is the last; any earlier one is the client's own word.
+  const nearest = String(forwarded).split(",").map((item) => item.trim()).filter(Boolean).at(-1) || "";
+  const local = request.socket.remoteAddress || "";
+  return isTailnetOrLoopback(local) && isTailnetOrLoopback(nearest) && !isLoopback(nearest) ? nearest : "";
+}
+
+const isLoopback = (address) => /^(::ffff:)?127\./.test(address) || address === "::1";
+
 export function isTailnetOrLoopback(address = "") {
   const plain = address.replace(/^::ffff:/, "");
   if (plain === "::1") return true;
