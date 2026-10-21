@@ -13,6 +13,8 @@ import net from "node:net";
 import { claudeSession, codexRollout, findHarnesses, opencodeService, tunnelTarget } from "./node-harnesses.js";
 
 const RETRY_MS = [1000, 2000, 5000, 10000, 30000];
+// How often the connection is checked; a ping unanswered by the next check ends it.
+const HEARTBEAT_MS = 30_000;
 
 /**
  * The node role: this device's shared folders, served to the main server.
@@ -88,8 +90,20 @@ export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: 
     const send = (message) => { if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(message)); };
 
     let opened = false;
+    // A connection that dies without a close (a sleeping laptop, a tunnel
+    // dropping it) never says so: one that misses a pong is ended, which
+    // reconnects. Main answers pings itself (the ws library does).
+    let alive = true;
+    let beat = null;
+    ws.on("pong", () => { alive = true; });
     ws.on("open", () => {
       opened = true;
+      beat = setInterval(() => {
+        if (!alive) { ws.terminate(); return; }
+        alive = false;
+        ws.ping();
+      }, HEARTBEAT_MS);
+      beat.unref?.();
       attempt = 0;
       way = 0;
       // Roots go by id; the path is for people to read, main never sends it back.
@@ -141,6 +155,7 @@ export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: 
       }
     });
     ws.on("close", () => {
+      clearInterval(beat);
       for (const detach of following.values()) detach();
       following.clear();
       for (const tunnel of tunnels.values()) tunnel.destroy();

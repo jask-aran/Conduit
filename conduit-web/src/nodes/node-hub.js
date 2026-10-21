@@ -177,6 +177,18 @@ export class NodeHub extends EventEmitter {
     };
     // A frame the socket refuses (too large, malformed) closes it; unheard, the error would end the server.
     ws.on("error", (error) => console.warn(`[nodes] ${record.name}: ${error.message}`));
+    // A node that went away without a close (a sleeping laptop, a dropped
+    // tunnel) is ended when it misses a pong, so it reads offline and its
+    // calls wait for it instead of hanging. The node answers pings itself.
+    let alive = true;
+    ws.on("pong", () => { alive = true; });
+    const beat = setInterval(() => {
+      if (!alive) { ws.terminate(); return; }
+      alive = false;
+      ws.ping();
+    }, 30_000);
+    beat.unref?.();
+    ws.on("close", () => clearInterval(beat));
     ws.on("message", (raw) => {
       let message;
       try { message = JSON.parse(String(raw)); } catch { return; }
