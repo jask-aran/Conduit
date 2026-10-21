@@ -69,9 +69,12 @@ export function ServerControl(props: JSX.ButtonHTMLAttributes<HTMLButtonElement>
   const [local, rest] = splitProps(props, ["name", "detail", "connectivity", "compact"]);
   const busy = () => local.connectivity === "connecting" || local.connectivity === "reconnecting";
   const tone = () => local.connectivity === "online" ? "success" : local.connectivity === "offline" ? "danger" : local.connectivity === "reconnecting" ? "warn" : "muted";
+  const dot = () => <StatusDot label={local.detail} tone={tone()} spinning={busy()} />;
+  // The name where you are (Row · current), its dot beside it; its state and latency in the data voice, as its menu's meta.
   return <Button {...rest} variant="ghost" class="ui-server-control" data-compact={local.compact ? "" : undefined}>
-    <span class="ui-server-copy"><strong>{local.name}</strong><small>{local.detail}</small></span>
-    <StatusDot label={local.detail} tone={tone()} spinning={busy()} />
+    <Show when={!local.compact} fallback={dot()}>
+      <span class="ui-server-copy"><span class="ui-server-name"><strong>{local.name}</strong>{dot()}</span><small>{local.detail}</small></span>
+    </Show>
   </Button>;
 }
 

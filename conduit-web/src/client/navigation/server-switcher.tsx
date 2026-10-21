@@ -214,7 +214,7 @@ export function ServerSwitcher(props: {
         if (before instanceof HTMLElement && before.isConnected && before !== event.currentTarget) before.focus({ preventScroll: true });
         else (event.currentTarget as HTMLElement).blur();
       }} onMouseDown={(event: MouseEvent) => event.preventDefault()} aria-label={`${serverName()} · ${triggerDetail()}`} title={`${activeOrigin() || "No server"} — ${triggerDetail()}`} />
-    <MenuContent onCloseAutoFocus={(event) => event.preventDefault()}>
+    <MenuContent width="md" onCloseAutoFocus={(event) => event.preventDefault()}>
       <Show when={servers().length > 0}>
         <MenuSection title="Servers">
           <MenuRadioGroup value={activeOrigin() || ""} onChange={(origin) => switchToServer(origin, isInstalledClient())}>
