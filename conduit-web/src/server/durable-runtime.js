@@ -3,6 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { loadPiExtensionTools } from "./pi-extension-bridge.js";
 import { RemoteExecutionEnv } from "../nodes/remote-env.js";
+import { DeviceTools, deviceEnv } from "./device-tools.js";
 import { awaitWithContext, BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import { Type } from "@earendil-works/pi-ai";
 import { createRegistry, defineDoc, defineExtension, defineTool, Harness, section } from "@earendil-works/pi-durable";
@@ -116,7 +117,8 @@ export const ConduitWorkspace = defineDoc({
   history: "latest",
   fork: "current",
   // `place` is `{ root, path }` on that node: a shared root by id, never a path.
-  initial: () => ({ nodeId: null, place: null }),
+  // `roaming`: no home device; its tools pick one per call (decision 21).
+  initial: () => ({ nodeId: null, place: null, roaming: false }),
 });
 
 /** A prompt as Conduit placed it: the model sees `content`, the transcript keeps the browser's id. */
@@ -208,11 +210,12 @@ export class DurableRuntime {
       const install = (extension) => { registry.install(extension); this.extensions.set(extension.name, extension); };
       install(Conduit(this));
       install(CodingTools);
+      install(DeviceTools(this));
       const web = await this.webTools();
       if (web) install(web);
       install(createCodemodeExtension({ sandbox: new CodemodeSandbox() }));
       // Bash finds Conduit's managed Python first, as it does for Conduit Pi.
-      const shellEnv = buildManagedToolEnvironment(process.env);
+      const shellEnv = this.shellEnv = buildManagedToolEnvironment(process.env);
       this.harness = await Harness.open(await openNodeSqliteStorage(this.file), {
         models: this.models,
         registry,
@@ -286,14 +289,15 @@ export class DurableRuntime {
     });
   }
 
-  async agentFor(templateId) {
+  async agentFor(templateId, { roaming = false } = {}) {
     await this.open();
     const template = this.templateFor(templateId);
     if (!template) return {};
     const named = (file) => (file.includes("pi-web-access") ? "web" : CODEMODE_ONLY.test(file) ? "codemode" : null);
-    const extensions = ["conduit", "coding-tools", ...template.extensions.map(named).filter(Boolean)]
+    // A conversation with no home device picks one per call: the same tools, placed.
+    const extensions = ["conduit", roaming ? "device-tools" : "coding-tools", ...template.extensions.map(named).filter(Boolean)]
       .map((name) => this.extensions.get(name)).filter(Boolean);
-    const wanted = new Set([...ALWAYS, ...template.tools]);
+    const wanted = new Set([...ALWAYS, ...template.tools, ...(roaming ? ["devices"] : [])]);
     // Codemode's own helpers (`pi.codemode.*`) come with it: its scripts call them.
     const tools = extensions.flatMap((extension) => extension.tools || [])
       .filter((tool) => wanted.has(tool.name) || (wanted.has("codemode") && tool.name.startsWith("pi.codemode.")));
@@ -307,6 +311,21 @@ export class DurableRuntime {
       instructions: [prompt.trim(), ...(skills.length ? ["# Skills", ...skills] : [])].join("\n\n"),
     };
   }
+
+  /**
+   * The devices a roaming conversation can work on: this server's and every
+   * paired one, each with the folders it shares and the node that serves them.
+   */
+  async reachable() {
+    if (!this.nodeHub) return [];
+    return (await this.nodeHub.listDevices()).map((device) => {
+      const node = device.nodes.find((item) => item.online) || device.nodes[0] || null;
+      return { name: device.name, local: Boolean(device.local), online: device.nodes.some((item) => item.online),
+        nodeId: node?.id || null, roots: device.nodes.flatMap((item) => item.roots || []) };
+    }).filter((device) => device.nodeId);
+  }
+
+  envOn(conversationId, device, folder) { return deviceEnv(this, conversationId, device, folder); }
 
   /**
    * The models offered, scoped as classic Pi scoped them: the agent's enabled

@@ -227,10 +227,13 @@ export function registerChatRoutes(app, {
           return response.status(400).json({ error: "unknown_runtime_kind" });
         }
         // The durable agent runs in process: there is no process to warm.
+        // `roaming`: a chat with no home device, whose tools pick one per call
+        // (decision 21; the persistent agent's shape). Only from this server's own folders.
+        const roaming = request.body?.roaming === true && project.local;
         const chat = await registry.create(project, {
           templateId: template.id,
           templateVersion: template.version,
-          backend: templateBackend(template),
+          backend: { ...templateBackend(template), ...(roaming ? { roaming: true } : {}) },
         });
         completeCreation(request, response, chat, project, { start: request.body?.warm === true });
       });

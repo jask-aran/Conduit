@@ -229,7 +229,8 @@ export class DurableAdapter extends EventEmitter {
       || String(context.chat.modelThinkingLevels?.[selected] || "").trim();
     // The chat's profile is a Conduit template (Assistant when it names none).
     const options = { chatId: context.chat.id, project: context.project, model: selected, thinkingLevel: level,
-      templateId: context.chat.templateId || context.chat.backend?.profileId || null };
+      templateId: context.chat.templateId || context.chat.backend?.profileId || null,
+      roaming: context.chat.backend?.roaming === true };
     const live = context.chat.backend.opaqueSession
       ? await this.restore(context.chat.backend.opaqueSession, options) : await this.create(options);
     return {
@@ -247,13 +248,14 @@ export class DurableAdapter extends EventEmitter {
     const fallback = await this.runtime.defaultModel();
     const spec = splitSpec(options.model) || (fallback && { provider: fallback.provider, modelId: fallback.modelId });
     const conversation = await harness.createConversation({ ownership: { kind: "ownerless" }, agent: {
-      ...await this.runtime.agentFor(options.templateId),
+      ...await this.runtime.agentFor(options.templateId, { roaming: options.roaming }),
       ...(spec ? { model: spec } : {}),
       ...(options.thinkingLevel || fallback?.thinkingLevel ? { thinkingLevel: options.thinkingLevel || fallback.thinkingLevel } : {}),
       ...(options.project?.workingRoot ? { cwd: options.project.workingRoot } : {}),
     } }, this.context);
     await this.remember(conversation, options.chatId,
-      remoteNode(options.project) ? { nodeId: remoteNode(options.project), place: options.project.place } : null);
+      remoteNode(options.project) ? { nodeId: remoteNode(options.project), place: options.project.place }
+        : options.roaming ? { nodeId: null, place: null, roaming: true } : null);
     return this.start(conversation, options);
   }
 
@@ -265,7 +267,8 @@ export class DurableAdapter extends EventEmitter {
       await this.remember(conversation, options.chatId);
     }
     // The template as it is now: its tools, extensions and prompt (as edited in Settings).
-    await conversation.configure(await this.runtime.agentFor(options.templateId), this.context);
+    const roaming = options.roaming || Boolean((await harness.snapshot(ConduitWorkspace, conversation.id, this.context))?.roaming);
+    await conversation.configure(await this.runtime.agentFor(options.templateId, { roaming }), this.context);
     // A conversation from before places learns its workspace's place.
     const workspace = await harness.snapshot(ConduitWorkspace, conversation.id, this.context);
     if (workspace?.nodeId && !workspace.place && options.project?.place) {
