@@ -131,7 +131,8 @@ export function Composer(props: {
   // The text row was zero wide while hidden; measure it again once shown.
   createEffect(on(phoneMode, () => scheduleResize(), { defer: true }));
   // Dictation failures go through the app's normal toasts.
-  createEffect(on(dictationError, (message) => { if (message) toast.error(message); }, { defer: true }));
+  // One toast for dictation's failure: pressing the mic again replaces it rather than stacking another.
+  createEffect(on(dictationError, (message) => { if (message) toast.error(message, { id: "dictation-error" }); }, { defer: true }));
   // The transcript's scroll-to-latest and cancel editing ride above the captions.
   const announceCaptions = (element: HTMLElement) => {
     const observer = new ResizeObserver(() => window.dispatchEvent(new CustomEvent("conduit:voice-captions")));
