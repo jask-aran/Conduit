@@ -1,5 +1,4 @@
-import fs from "node:fs/promises";
-import { resolveInspectorPath, runBoundedGit } from "./workspace-inspector.js";
+import { resolveInspectorPath } from "./workspace-inspector.js";
 
 const MAX_BYTES = 1024 * 1024;
 const absent = (id) => !id || /^0+$/.test(id);
@@ -11,7 +10,7 @@ export async function readWorkspaceComparison(root, filePath, { scope = "changes
   if (typeof filePath !== "string" || !filePath || filePath.includes("\0") || filePath.includes("\\") || filePath.split("/").some((part) => !part || part === "." || part === "..") || filePath === ".conduit" || filePath.startsWith(".conduit/")) {
     throw new Error("Invalid comparison path");
   }
-  const git = (args, maxBuffer = MAX_BYTES) => runBoundedGit(resolved.path, args, { signal, maxBuffer });
+  const git = (args, maxBuffer = MAX_BYTES) => resolved.host.git(args, { signal, maxBuffer });
   if (!["changes", "staged", "head"].includes(scope)) throw new Error("Invalid comparison scope");
   const revisionArgs = scope === "staged" ? ["--cached"] : scope === "head" ? ["HEAD"] : [];
   const [{ stdout: raw }, { stdout: index }] = await Promise.all([
@@ -42,16 +41,12 @@ export async function readWorkspaceComparison(root, filePath, { scope = "changes
   };
   const readWorkingCopy = async () => {
     let file;
-    try { file = await resolveInspectorPath(resolved.path, filePath, { kind: "file" }); }
+    try { file = await resolveInspectorPath(resolved.host, filePath, { kind: "file" }); }
     catch (error) { if (error.code === "path_not_found") return ""; throw error; }
     if (file.stat.size > MAX_BYTES) throw new Error("comparison_size_limit");
-    const handle = await fs.open(file.path, "r");
-    try {
-      const buffer = Buffer.alloc(MAX_BYTES + 1);
-      const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
-      if (bytesRead > MAX_BYTES) throw new Error("comparison_size_limit");
-      return buffer.subarray(0, bytesRead).toString("utf8");
-    } finally { await handle.close(); }
+    const content = await file.host.read(file.relativePath, MAX_BYTES + 1);
+    if (content.length > MAX_BYTES) throw new Error("comparison_size_limit");
+    return content.toString("utf8");
   };
   try {
     const [original, modified] = await Promise.all([

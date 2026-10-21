@@ -2,9 +2,9 @@ import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { EventEmitter } from "node:events";
 import { Worker } from "node:worker_threads";
-import fs from "node:fs/promises";
 import path from "node:path";
 import { terminate } from "./server/effect-process.js";
+import { localHost } from "./workspace-host.js";
 
 export const MAX_PREVIEW_BYTES = 25 * 1024 * 1024;
 export const GIT_COMMAND_TIMEOUT_MS = 10_000;
@@ -149,19 +149,8 @@ export function classifyWorkspaceFile(relativePath, prefix = Buffer.alloc(0)) {
   return { kind: "binary", mime: "application/octet-stream" };
 }
 
-async function readWorkspacePrefix(filePath) {
-  const handle = await fs.open(filePath, "r");
-  try {
-    const prefix = Buffer.alloc(MAX_FILE_SNIFF_BYTES);
-    const { bytesRead } = await handle.read(prefix, 0, prefix.length, 0);
-    return prefix.subarray(0, bytesRead);
-  } finally {
-    await handle.close();
-  }
-}
-
 async function readWorkspaceFileMetadataAt(resolved) {
-  const prefix = await readWorkspacePrefix(resolved.path);
+  const prefix = await resolved.host.read(resolved.relativePath, MAX_FILE_SNIFF_BYTES);
   const classification = classifyWorkspaceFile(resolved.relativePath, prefix);
   return {
     path: resolved.relativePath,
@@ -172,18 +161,6 @@ async function readWorkspaceFileMetadataAt(resolved) {
     ...classification,
     head: prefix.subarray(0, 32).toString("hex"),
   };
-}
-
-async function readWorkspaceBytes(filePath, maxBytes = null) {
-  if (maxBytes == null) return fs.readFile(filePath);
-  const handle = await fs.open(filePath, "r");
-  try {
-    const content = Buffer.alloc(maxBytes);
-    const { bytesRead } = await handle.read(content, 0, content.length, 0);
-    return content.subarray(0, bytesRead);
-  } finally {
-    await handle.close();
-  }
 }
 
 function abortError() {
@@ -302,30 +279,34 @@ function safeSegments(relativePath = "") {
   return segments;
 }
 
+/**
+ * The host a workspace's files are on: an absolute path is this server's
+ * disk; a host from workspace-host.js (a device's folder) is used as given.
+ */
+export function workspaceHost(root) {
+  return typeof root === "string" ? localHost(root, { runGit: runBoundedGit }) : root;
+}
+
+/**
+ * A workspace-relative path, checked segment by segment: no `..`, no
+ * `.conduit`, no symlink anywhere along it. `path` is its absolute path on
+ * this server, or null for a device's folder; `host` reads and writes it.
+ */
 export async function resolveInspectorPath(root, relativePath = "", { kind = null } = {}) {
-  const expectedRoot = path.resolve(root);
-  const rootStat = await fs.lstat(expectedRoot).catch((error) => {
-    if (error.code === "ENOENT") throw inspectorError("path_not_found", "The requested path does not exist");
-    throw error;
-  });
-  if (!rootStat.isDirectory() || rootStat.isSymbolicLink()) {
-    throw inspectorError("unsafe_workspace_root", "The workspace root must be a real directory");
-  }
-  const rootPath = await fs.realpath(expectedRoot);
+  const host = workspaceHost(root);
+  await host.checkRoot();
   const segments = safeSegments(relativePath);
-  let current = rootPath;
+  let current = "";
   for (const segment of segments) {
-    current = path.join(current, segment);
-    const stat = await fs.lstat(current).catch((error) => {
-      if (error.code === "ENOENT") throw inspectorError("path_not_found", "The requested path does not exist");
-      throw error;
-    });
+    current = current ? `${current}/${segment}` : segment;
+    const stat = await host.lstat(current);
+    if (!stat) throw inspectorError("path_not_found", "The requested path does not exist");
     if (stat.isSymbolicLink()) throw inspectorError("workspace_path_symlink", "Symlinked paths are not available");
   }
-  const stat = await fs.stat(current);
+  const stat = await host.stat(current);
   if (kind === "directory" && !stat.isDirectory()) throw inspectorError("path_not_directory", "The requested path is not a directory");
   if (kind === "file" && !stat.isFile()) throw inspectorError("path_not_file", "The requested path is not a file");
-  return { path: current, stat, relativePath: segments.join("/") };
+  return { path: host.localPath(current), stat, relativePath: current, host };
 }
 
 export async function listWorkspaceDirectory(root, relativePath = "", { after = null } = {}) {
@@ -337,14 +318,11 @@ export async function listWorkspaceDirectory(root, relativePath = "", { after = 
     } catch { throw inspectorError("invalid_workspace_path", "Invalid directory cursor"); }
   }
   const resolved = await resolveInspectorPath(root, relativePath, { kind: "directory" });
-  const directory = await fs.opendir(resolved.path);
-  const accepted = [];
-  let scanned = 0;
-  for await (const entry of directory) {
-    if (++scanned > 50_000) return { entries: [], total: null, truncated: false, cursor: null, oversize: true };
-    if (entry.name === ".conduit" || entry.isSymbolicLink()) continue;
-    accepted.push({ name: entry.name, type: entry.isDirectory() ? "directory" : entry.isFile() ? "file" : "other" });
-  }
+  const { host } = resolved;
+  const listed = await host.list(resolved.relativePath, { limit: 50_000 });
+  if (!listed) return { entries: [], total: null, truncated: false, cursor: null, oversize: true };
+  const accepted = listed.filter((entry) => entry.name !== ".conduit" && !entry.symlink)
+    .map((entry) => ({ name: entry.name, type: entry.type }));
   const compare = (left, right) => {
     const ranks = { directory: 0, file: 1, other: 2 };
     return ranks[left.type] - ranks[right.type] || left.name.localeCompare(right.name) || (left.name < right.name ? -1 : left.name > right.name ? 1 : 0);
@@ -352,12 +330,12 @@ export async function listWorkspaceDirectory(root, relativePath = "", { after = 
   accepted.sort(compare);
   const remaining = cursorKey ? accepted.filter((entry) => compare(entry, { type: cursorKey[0], name: cursorKey[1] }) > 0) : accepted;
   const entries = await Promise.all(remaining.slice(0, MAX_DIRECTORY_ENTRIES).map(async (entry) => {
-    const itemPath = path.join(resolved.path, entry.name);
-    const itemStat = await fs.lstat(itemPath).catch(() => null);
+    const itemPath = resolved.relativePath ? `${resolved.relativePath}/${entry.name}` : entry.name;
+    const itemStat = await host.lstat(itemPath).catch(() => null);
     const stat = itemStat?.isSymbolicLink() ? null : itemStat;
     return {
       ...entry,
-      path: resolved.relativePath ? `${resolved.relativePath}/${entry.name}` : entry.name,
+      path: itemPath,
       size: stat?.size ?? null,
       createdAt: stat && Number.isFinite(stat.birthtimeMs) && stat.birthtimeMs > 0 ? stat.birthtimeMs : null,
       modifiedAt: stat?.mtimeMs ?? null,
@@ -391,7 +369,7 @@ function closeWorkspaceWatch(record) {
   record.closeTimer = null;
   record.watcher?.close();
   record.watcher = null;
-  workspaceWatches.delete(record.root);
+  workspaceWatches.delete(record.key);
 }
 
 function scheduleWorkspaceWatchClose(record) {
@@ -440,6 +418,12 @@ function watchOffThread(root, _options, listener) {
 
 function startWorkspaceWatch(record) {
   if (record.watcher || record.fallback) return;
+  // A device's folder is not watched from here: the visible paths are polled.
+  if (!record.host.local) {
+    record.fallback = true;
+    noteWorkspaceChange(record);
+    return;
+  }
   try {
     record.watcher = record.watchImpl(record.root, { recursive: true }, (_event, filename) => {
       const relativePath = typeof filename === "string" ? filename.replaceAll("\\", "/") : null;
@@ -462,7 +446,7 @@ async function scanWorkspacePaths(record, paths) {
   const next = new Map();
   for (const relativePath of paths) {
     try {
-      const resolved = await resolveInspectorPath(record.root, relativePath);
+      const resolved = await resolveInspectorPath(record.host, relativePath);
       next.set(resolved.relativePath, `${resolved.stat.mtimeMs}:${resolved.stat.size}:${resolved.stat.isDirectory()}`);
     } catch (error) {
       if (error.code !== "path_not_found") throw error;
@@ -480,10 +464,11 @@ async function scanWorkspacePaths(record, paths) {
 /** Return one shared workspace-change version for the currently visible paths. */
 export async function readWorkspaceVersion(root, { paths = [], watchImpl = watchOffThread } = {}) {
   const resolved = await resolveInspectorPath(root, "", { kind: "directory" });
-  let record = workspaceWatches.get(resolved.path);
+  const key = resolved.host.key;
+  let record = workspaceWatches.get(key);
   if (!record) {
-    record = { root: resolved.path, watchImpl, watcher: null, fallback: false, references: 0, closeTimer: null, version: 0, changedPaths: new Set(), fullRefresh: false, pathStats: null };
-    workspaceWatches.set(resolved.path, record);
+    record = { root: resolved.path, key, host: resolved.host, watchImpl, watcher: null, fallback: false, references: 0, closeTimer: null, version: 0, changedPaths: new Set(), fullRefresh: false, pathStats: null };
+    workspaceWatches.set(key, record);
   }
   record.references += 1;
   clearTimeout(record.closeTimer);
@@ -523,7 +508,7 @@ export async function readWorkspaceFile(root, relativePath, { forceText = false,
   if (metadata.size > MAX_PREVIEW_BYTES && !preview && !forceText) {
     throw Object.assign(inspectorError("file_too_large", "File is larger than the 25 MiB preview limit"), metadata);
   }
-  const content = await readWorkspaceBytes(resolved.path, preview || (forceText && metadata.size > MAX_PREVIEW_BYTES) ? MAX_PREVIEW_BYTES : null);
+  const content = await resolved.host.read(resolved.relativePath, preview || (forceText && metadata.size > MAX_PREVIEW_BYTES) ? MAX_PREVIEW_BYTES : null);
   const classification = classifyWorkspaceFile(metadata.path, content.subarray(0, MAX_FILE_SNIFF_BYTES));
   if ((!forceText && classification.kind !== "text") || (!forceText && content.includes(0))) {
     throw Object.assign(inspectorError("file_not_text", "Binary files cannot be previewed"), { ...metadata, ...classification });
@@ -544,13 +529,9 @@ export async function writeWorkspaceFile(root, relativePath, content, { expected
   if (!segments.length) throw inspectorError("invalid_workspace_path", "The requested path is invalid");
   const name = segments.at(-1);
   const parent = await resolveInspectorPath(root, segments.slice(0, -1).join("/"), { kind: "directory" });
-  const target = path.join(parent.path, name);
-  let existing = null;
-  try {
-    existing = await fs.lstat(target);
-  } catch (error) {
-    if (error.code !== "ENOENT") throw error;
-  }
+  const { host } = parent;
+  const target = parent.relativePath ? `${parent.relativePath}/${name}` : name;
+  const existing = await host.lstat(target);
   if (existing?.isSymbolicLink()) throw inspectorError("workspace_path_symlink", "Symlinked paths are not available");
   if (existing && !existing.isFile()) throw inspectorError("path_not_file", "The requested path is not a file");
   if (expectedRevision == null && existing) {
@@ -560,13 +541,12 @@ export async function writeWorkspaceFile(root, relativePath, content, { expected
     throw Object.assign(inspectorError("workspace_file_changed", "The file changed or was removed before it could be saved"), { status: 409 });
   }
   if (existing && expectedRevision !== "*") {
-    const current = await fs.readFile(target);
+    const current = await host.read(target);
     if (fileRevision(current) !== expectedRevision) {
       throw Object.assign(inspectorError("workspace_file_changed", "The file changed before it could be saved"), { status: 409 });
     }
   }
-  await fs.writeFile(target, content, existing ? undefined : { flag: "wx" });
-  const written = await fs.stat(target);
+  const written = await host.write(target, content, { exclusive: !existing });
   return {
     path: segments.join("/"),
     size: content.byteLength,
@@ -578,7 +558,7 @@ export async function writeWorkspaceFile(root, relativePath, content, { expected
 
 export async function deleteWorkspaceFile(root, relativePath) {
   const resolved = await resolveInspectorPath(root, relativePath, { kind: "file" });
-  await fs.unlink(resolved.path);
+  await resolved.host.unlink(resolved.relativePath);
   return { path: resolved.relativePath };
 }
 
@@ -586,20 +566,16 @@ async function resolveNewWorkspacePath(root, relativePath) {
   const segments = safeSegments(relativePath);
   if (!segments.length) throw inspectorError("invalid_workspace_path", "The requested path is invalid");
   const parent = await resolveInspectorPath(root, segments.slice(0, -1).join("/"), { kind: "directory" });
-  const target = path.join(parent.path, segments.at(-1));
-  const existing = await fs.lstat(target).catch((error) => {
-    if (error.code === "ENOENT") return null;
-    throw error;
-  });
-  if (existing) {
+  const relative = segments.join("/");
+  if (await parent.host.lstat(relative)) {
     throw Object.assign(inspectorError("workspace_entry_exists", "A file or folder with this name already exists"), { status: 409 });
   }
-  return { path: target, relativePath: segments.join("/") };
+  return { relativePath: relative, host: parent.host };
 }
 
 export async function createWorkspaceDirectory(root, relativePath) {
   const target = await resolveNewWorkspacePath(root, relativePath);
-  await fs.mkdir(target.path);
+  await target.host.mkdir(target.relativePath);
   return { path: target.relativePath };
 }
 
@@ -610,7 +586,7 @@ export async function moveWorkspaceEntry(root, relativePath, destinationPath) {
   if (source.stat.isDirectory() && destination.relativePath.startsWith(`${source.relativePath}/`)) {
     throw inspectorError("invalid_workspace_move", "A folder cannot be moved inside itself");
   }
-  await fs.rename(source.path, destination.path);
+  await source.host.rename(source.relativePath, destination.relativePath);
   return {
     path: source.relativePath,
     destination: destination.relativePath,
@@ -621,13 +597,14 @@ export async function moveWorkspaceEntry(root, relativePath, destinationPath) {
 export async function deleteWorkspaceDirectory(root, relativePath) {
   const resolved = await resolveInspectorPath(root, relativePath, { kind: "directory" });
   if (!resolved.relativePath) throw inspectorError("invalid_workspace_path", "The workspace root cannot be deleted");
-  await fs.rm(resolved.path, { recursive: true });
+  await resolved.host.removeTree(resolved.relativePath);
   return { path: resolved.relativePath };
 }
 
 export async function runWorkspaceGitAction(root, { action, relativePath, message }) {
   const resolved = await resolveInspectorPath(root, "", { kind: "directory" });
-  await runBoundedGit(resolved.path, ["rev-parse", "--is-inside-work-tree"]);
+  const { host } = resolved;
+  await host.git(["rev-parse", "--is-inside-work-tree"]);
   const gitPath = () => {
     const value = safeSegments(relativePath).join("/");
     if (!value) throw inspectorError("invalid_workspace_path", "The requested path is invalid");
@@ -646,8 +623,8 @@ export async function runWorkspaceGitAction(root, { action, relativePath, messag
   else if (action === "fetch") args = ["fetch", "--all"];
   else if (action === "pull") args = ["pull", "--ff-only"];
   else throw inspectorError("workspace_git_action_invalid", "Git action is not supported");
-  const result = await runBoundedGit(resolved.path, args, { maxBuffer: 512 * 1024, timeoutMs: ["fetch", "pull", "push"].includes(action) ? 60_000 : GIT_COMMAND_TIMEOUT_MS });
-  inspections.delete(resolved.path);
+  const result = await host.git(args, { maxBuffer: 512 * 1024, timeoutMs: ["fetch", "pull", "push"].includes(action) ? 60_000 : GIT_COMMAND_TIMEOUT_MS });
+  inspections.delete(host.key);
   return { ok: true, output: [result.stdout, result.stderr].filter(Boolean).join("\n").trim() };
 }
 
@@ -711,15 +688,15 @@ function parseRefs(output) {
   });
 }
 
-async function inspectOverview(root, { signal, runGit }) {
-  try { await runGit(root, ["rev-parse", "--is-inside-work-tree"], { signal }); }
+async function inspectOverview(root, { signal, git }) {
+  try { await git(["rev-parse", "--is-inside-work-tree"], { signal }); }
   catch (error) {
     if (isAbort(error)) throw error;
     return { repository: false, files: [], diff: "" };
   }
   const readCounts = async (scope) => {
     const revisionArgs = scope === "staged" ? ["--cached"] : scope === "head" ? ["HEAD"] : [];
-    const { stdout } = await runGit(root, ["diff", ...revisionArgs, "--numstat", "-z", "--no-renames", "--no-ext-diff", "--no-textconv"], { signal, maxBuffer: 2 * 1024 * 1024 });
+    const { stdout } = await git(["diff", ...revisionArgs, "--numstat", "-z", "--no-renames", "--no-ext-diff", "--no-textconv"], { signal, maxBuffer: 2 * 1024 * 1024 });
     return new Map(stdout.split("\0").filter(Boolean).map((record) => {
       const first = record.indexOf("\t");
       const second = record.indexOf("\t", first + 1);
@@ -728,11 +705,11 @@ async function inspectOverview(root, { signal, runGit }) {
       return [record.slice(second + 1), added === "-" || removed === "-" ? null : { added: Number(added), removed: Number(removed) }];
     }));
   };
-  const headCountsRequest = runGit(root, ["rev-parse", "--verify", "HEAD"], { signal })
+  const headCountsRequest = git(["rev-parse", "--verify", "HEAD"], { signal })
     .then(() => readCounts("head"))
     .catch((error) => { if (isAbort(error)) throw error; return new Map(); });
   const [{ stdout: status }, stagedCounts, workingCounts, headCounts] = await Promise.all([
-    runGit(root, ["status", "--porcelain=v1", "-b", "-z", "--no-renames", "--untracked-files=normal"], { signal, maxBuffer: 2 * 1024 * 1024 }),
+    git(["status", "--porcelain=v1", "-b", "-z", "--no-renames", "--untracked-files=normal"], { signal, maxBuffer: 2 * 1024 * 1024 }),
     readCounts("staged"),
     readCounts("changes"),
     headCountsRequest,
@@ -752,21 +729,16 @@ async function inspectOverview(root, { signal, runGit }) {
     if (budget <= 0) return;
     const resolved = await resolveInspectorPath(root, file.path, { kind: "file" });
     if (resolved.stat.size > budget) return;
-    const handle = await fs.open(resolved.path, "r");
-    try {
-      const buffer = Buffer.alloc(budget + 1);
-      const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
-      remainingBytes -= bytesRead;
-      if (bytesRead === buffer.length) return;
-      const content = buffer.subarray(0, bytesRead);
-      if (content.includes(0)) return;
-      new TextDecoder("utf-8", { fatal: true }).decode(content);
-      let added = 0;
-      for (const byte of content) if (byte === 10) added++;
-      if (content.length && content.at(-1) !== 10) added++;
-      file.workingCounts = { added, removed: 0 };
-      file.headCounts = { added, removed: 0 };
-    } finally { await handle.close(); }
+    const content = await resolved.host.read(resolved.relativePath, budget + 1);
+    remainingBytes -= content.length;
+    if (content.length === budget + 1) return;
+    if (content.includes(0)) return;
+    new TextDecoder("utf-8", { fatal: true }).decode(content);
+    let added = 0;
+    for (const byte of content) if (byte === 10) added++;
+    if (content.length && content.at(-1) !== 10) added++;
+    file.workingCounts = { added, removed: 0 };
+    file.headCounts = { added, removed: 0 };
   };
   for (let index = 0; index < candidates.length; index += UNTRACKED_READ_BATCH) {
     if (signal?.aborted) throw abortError();
@@ -785,18 +757,18 @@ async function inspectOverview(root, { signal, runGit }) {
   };
 }
 
-async function inspectHistory(root, { signal, runGit }) {
+async function inspectHistory(root, { signal, git }) {
   const [{ stdout: log }, { stdout: refs }] = await Promise.all([
-    runGit(root, ["log", "--all", "--graph", "-30", "--pretty=format:%x1f%H%x1f%h%x1f%s%x1f%an%x1f%aI"], { signal, maxBuffer: 512 * 1024 }),
-    runGit(root, ["for-each-ref", "--format=%(refname)%00%(refname:short)%00%(objectname)%00%(upstream:short)", "refs/heads", "refs/remotes", "refs/tags"], { signal, maxBuffer: 512 * 1024 }),
+    git(["log", "--all", "--graph", "-30", "--pretty=format:%x1f%H%x1f%h%x1f%s%x1f%an%x1f%aI"], { signal, maxBuffer: 512 * 1024 }),
+    git(["for-each-ref", "--format=%(refname)%00%(refname:short)%00%(objectname)%00%(upstream:short)", "refs/heads", "refs/remotes", "refs/tags"], { signal, maxBuffer: 512 * 1024 }),
   ]);
   return { commits: parseLog(log), refs: parseRefs(refs) };
 }
 
-async function inspectPatch(root, { signal, runGit }) {
+async function inspectPatch(root, { signal, git }) {
   const [{ stdout: unstaged }, { stdout: staged }] = await Promise.all([
-    runGit(root, ["diff", "--no-ext-diff", "--no-color"], { signal, maxBuffer: 4 * 1024 * 1024 }),
-    runGit(root, ["diff", "--cached", "--no-ext-diff", "--no-color"], { signal, maxBuffer: 4 * 1024 * 1024 }),
+    git(["diff", "--no-ext-diff", "--no-color"], { signal, maxBuffer: 4 * 1024 * 1024 }),
+    git(["diff", "--cached", "--no-ext-diff", "--no-color"], { signal, maxBuffer: 4 * 1024 * 1024 }),
   ]);
   return [staged && `# Staged\n${staged}`, unstaged && `# Working tree\n${unstaged}`].filter(Boolean).join("\n");
 }
@@ -831,38 +803,45 @@ function track(record, promise, signal) {
   });
 }
 
-function inspectionFor(root, runGit, { reuse = false } = {}) {
-  let record = inspections.get(root);
+function inspectionFor(root, key, git, { reuse = false } = {}) {
+  let record = inspections.get(key);
   if (record && !record.active && !record.consumers && !reuse) {
     clearTimeout(record.evictTimer);
-    inspections.delete(root);
+    inspections.delete(key);
     record = null;
   }
   if (record && record.controller.signal.aborted) record = null;
   if (record) return record;
   const controller = new AbortController();
-  record = { root, controller, consumers: 0, active: 1, evictTimer: null, overview: null, history: null, patch: null };
-  record.overview = inspectOverview(root, { signal: controller.signal, runGit }).finally(() => {
+  record = { root: key, controller, consumers: 0, active: 1, evictTimer: null, overview: null, history: null, patch: null };
+  record.overview = inspectOverview(root, { signal: controller.signal, git }).finally(() => {
     record.active -= 1;
     scheduleEviction(record);
   });
-  inspections.set(root, record);
+  inspections.set(key, record);
   return record;
 }
 
+/** Git on the workspace's host; a `runGit` given in (tests) runs at the local path instead. */
+const gitFor = (resolved, runGit) => (runGit === runBoundedGit || !resolved.path
+  ? (args, options) => resolved.host.git(args, options)
+  : (args, options) => runGit(resolved.path, args, options));
+
 export async function readWorkspaceDiff(root, { includePatch = false, includeHistory = true, reuse = false, filePath = null, staged = false, signal, runGit = runBoundedGit } = {}) {
   const resolved = await resolveInspectorPath(root, "", { kind: "directory" });
+  const git = gitFor(resolved, runGit);
+  const target = resolved.path ?? resolved.host;
   if (filePath !== null) {
     const value = safeSegments(filePath).join("/");
     if (!value) throw inspectorError("invalid_workspace_path", "The requested path is invalid");
-    const { stdout } = await runGit(resolved.path, ["diff", ...(staged ? ["--cached"] : []), "--no-ext-diff", "--no-textconv", "--no-color", "--", `:(top,literal)${value}`], { signal, maxBuffer: 512 * 1024 });
+    const { stdout } = await git(["diff", ...(staged ? ["--cached"] : []), "--no-ext-diff", "--no-textconv", "--no-color", "--", `:(top,literal)${value}`], { signal, maxBuffer: 512 * 1024 });
     return { diff: stdout };
   }
-  const record = inspectionFor(resolved.path, runGit, { reuse });
+  const record = inspectionFor(target, resolved.host.key, git, { reuse });
   if (includeHistory && !record.history) {
     record.active += 1;
     record.history = record.overview.then((overview) => overview.repository
-      ? inspectHistory(resolved.path, { signal: record.controller.signal, runGit })
+      ? inspectHistory(target, { signal: record.controller.signal, git })
       : {}).finally(() => {
       record.active -= 1;
       scheduleEviction(record);
@@ -872,7 +851,7 @@ export async function readWorkspaceDiff(root, { includePatch = false, includeHis
     record.active += 1;
     record.patch = record.overview.then(async (overview) => ({
       ...overview,
-      diff: overview.repository ? await inspectPatch(resolved.path, { signal: record.controller.signal, runGit }) : "",
+      diff: overview.repository ? await inspectPatch(target, { signal: record.controller.signal, git }) : "",
     })).finally(() => {
       record.active -= 1;
       scheduleEviction(record);
@@ -886,8 +865,9 @@ export async function readWorkspaceDiff(root, { includePatch = false, includeHis
 export async function readWorkspaceCommit(root, hash, { signal, runGit = runBoundedGit } = {}) {
   if (!/^[0-9a-f]{40}$/i.test(hash)) throw inspectorError("invalid_workspace_commit", "The requested commit is invalid");
   const resolved = await resolveInspectorPath(root, "", { kind: "directory" });
+  const git = gitFor(resolved, runGit);
   try {
-    const result = await runGit(resolved.path, ["show", "--format=fuller", "--stat", "--patch", "--no-ext-diff", "--no-color", hash], { signal, maxBuffer: 4 * 1024 * 1024 });
+    const result = await git(["show", "--format=fuller", "--stat", "--patch", "--no-ext-diff", "--no-color", hash], { signal, maxBuffer: 4 * 1024 * 1024 });
     return { hash: hash.toLowerCase(), content: result.stdout };
   } catch (error) {
     if (isAbort(error)) throw error;
