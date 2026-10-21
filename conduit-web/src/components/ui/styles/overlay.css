@@ -75,7 +75,7 @@
 .ui-setting-group + .ui-setting-group { margin-top: var(--space-lg); border-top: var(--hairline) solid var(--tint); padding-top: var(--space-xl); }
 /* At least a row's height: a finger's on a phone, as every row is there. */
 /* A settings line's height, at least a row's (a finger's on a phone): the setting line and the recorder under it. */
-:root, [data-density] { --line-min: max(var(--control), var(--row-min)); }
+:root, [data-density], .ui-overlay { --line-min: max(var(--control), var(--row-min)); }
 /* A line too narrow for its name and its control (a phone, a line of several) wraps the control under the name, at its own width: neither squeezes. */
 .ui-setting-line { display: flex; min-height: var(--line-min); flex-wrap: wrap; align-items: center; gap: var(--space-2xs) var(--space-xl); border-radius: var(--radius-control); padding: var(--space-2xs) var(--space-sm) var(--space-2xs) var(--space-md); font-size: var(--text-row); }
 /* Focus anywhere in a row is the row's wash. */

@@ -4,11 +4,13 @@
    weight with a heavier stroke and no fill, and so is the folder holding it (within); open beside is white at
    the resting weight. The sizes are the density's tokens. */
 @font-face { font-family: "Conduit Wordmark"; src: url("../../../client/assets/fonts/druk-wide-web-super.woff2") format("woff2"); font-style: normal; font-weight: 400; font-display: swap; }
-:root, [data-density] {
-  /* The pane open and folded to its rail, and the top line every pane header centres on. */
+:root, [data-density], .ui-nav-pane {
+  /* The pane open and folded to its rail, in the sidebar's size. */
   --nav-width: calc(18.125 * var(--u-space)); --nav-rail-width: calc(3.25 * var(--u-space));
-  --nav-line: var(--control); --nav-brand: calc(2.625 * var(--u-space)); --nav-wordmark: calc(1.171875 * var(--u-type));
+  --nav-brand: calc(2.625 * var(--u-space)); --nav-wordmark: calc(1.171875 * var(--u-type));
 }
+/* The top line every pane header centres on, the sidebar's too: the chrome's, so they line up at any sidebar size. */
+:root, [data-density] { --nav-line: var(--control); }
 
 /* The pane. Its width moves with the panel's motion (--panel-motion-*); data-instant skips it. */
 .ui-nav-pane { position: relative; z-index: 20; width: var(--nav-width); flex: none; contain: layout; overflow: hidden; transition: width var(--panel-motion-duration) var(--panel-motion-easing); }
