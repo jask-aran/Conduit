@@ -7,7 +7,8 @@ import { StatusDot } from "@/components/ui/nav";
 import { LiveNote, SettingGroup, SettingLine, SettingNote, SettingValue } from "@/components/ui/overlay";
 
 type SharedRoot = { id: string; label: string; read: boolean; write: boolean; shell: boolean; allow?: string[] };
-type Node = { id: string; deviceId: string; name: string; platform: string | null; online: boolean; roots: SharedRoot[]; lastSeenAt: string | null };
+type Node = { id: string; deviceId: string; name: string; platform: string | null; online: boolean; roots: SharedRoot[]; harnesses?: string[]; lastSeenAt: string | null };
+const HARNESS_LABELS: Record<string, string> = { "claude-code": "Claude Code" };
 type Device = { id: string; name: string; nodes: Node[] };
 
 const NEW_DEVICE = "";
@@ -98,7 +99,8 @@ export function DevicesSettingsTile(props: { onAddWorkspace: (input: { mode: "no
 
     <For each={devices() || []}>{(device) => <SettingGroup title={device.name}>
       <For each={device.nodes}>{(node) => <>
-        <SettingLine label={node.name} state={[seen(node), node.platform].filter(Boolean).join(" · ")} plain>
+        <SettingLine label={node.name} state={[seen(node), node.platform,
+          node.harnesses?.length ? `runs ${node.harnesses.map((id) => HARNESS_LABELS[id] || id).join(", ")}` : null].filter(Boolean).join(" · ")} plain>
           <StatusDot label={seen(node)} tone={node.online ? "success" : "muted"} />
           <Button variant="ghost" size="sm" aria-label={`Unpair ${node.name} on ${device.name}`} onClick={() => void forget(node)}><Trash2Icon /> Unpair</Button>
         </SettingLine>

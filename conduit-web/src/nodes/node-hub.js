@@ -98,7 +98,7 @@ export class NodeHub extends EventEmitter {
   view(record) {
     const live = this.live.get(record.id);
     return { id: record.id, deviceId: record.deviceId, name: record.name, platform: live?.platform || record.platform || null,
-      online: Boolean(live), roots: live?.roots || record.roots || [], lastSeenAt: live ? new Date().toISOString() : record.lastSeenAt };
+      online: Boolean(live), roots: live?.roots || record.roots || [], harnesses: live?.harnesses || record.harnesses || [], lastSeenAt: live ? new Date().toISOString() : record.lastSeenAt };
   }
 
   deviceView(device) {
@@ -155,9 +155,10 @@ export class NodeHub extends EventEmitter {
         this.live.get(record.id)?.socket.close(4000, "replaced");
         // `boot` names this run of the node; a node without one keeps no receipts.
         Object.assign(node, { roots: Array.isArray(message.roots) ? message.roots : [], platform: message.platform || null,
-          boot: typeof message.boot === "string" ? message.boot : null, ready: true });
+          boot: typeof message.boot === "string" ? message.boot : null,
+          harnesses: Array.isArray(message.harnesses) ? message.harnesses.filter((id) => typeof id === "string") : [], ready: true });
         this.live.set(record.id, node);
-        Object.assign(record, { roots: node.roots, platform: node.platform, lastSeenAt: new Date().toISOString() });
+        Object.assign(record, { roots: node.roots, platform: node.platform, harnesses: node.harnesses, lastSeenAt: new Date().toISOString() });
         if (message.name && record.name === "Device") record.name = String(message.name).slice(0, 80);
         // Roots without ids are from a node older than root ids: it is not addressable.
         node.roots = node.roots.filter((root) => typeof root?.id === "string");

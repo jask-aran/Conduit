@@ -631,7 +631,7 @@ function checkpointNativeAdapter(adapter, record, completed = true) {
   const completedAt = new Date().toISOString();
   // A cancelled or failed turn is activity, so it moves the sort key -- but it
   // completed nothing, so it leaves nothing to read.
-  void registry.update(record.chatId, { backend: { ...registry.metadata(record.chatId)?.backend, opaqueSession: record.sessionId },
+  void registry.update(record.chatId, { backend: { ...registry.metadata(record.chatId)?.backend, opaqueSession: adapter.opaqueSessionOf?.(record) ?? record.sessionId },
     ...(record.title ? { title: record.title } : {}),
     ...(completed ? { lastAssistantCompletedAt: completedAt } : {}),
     lastMessageAt: completedAt })
@@ -739,6 +739,7 @@ const launchLiveSession = registerLiveSessionRoutes(app, {
 });
 registerChatRoutes(app, {
   backends,
+  nodeHub,
   composerDraft: (chatId) => drafts.draft(chatId),
   warmDrafts: createWarmDrafts({ backends, registry, projects }),
   catalogFor,

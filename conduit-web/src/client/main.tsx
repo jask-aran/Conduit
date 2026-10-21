@@ -1337,7 +1337,8 @@ function App() {
 
   // A device's folder only has the Conduit runtime (plan decision 5), whatever
   // the workspace or Conduit default says.
-  const projectProfile = (project: Project) => project.nodeId ? "conduit-runtime" : project.defaultTemplateId || defaultTemplateId() || "assistant";
+  // A device's workspace runs the runtime unless it was given a harness the device has.
+  const projectProfile = (project: Project) => project.nodeId ? project.defaultTemplateId || "conduit-runtime" : project.defaultTemplateId || defaultTemplateId() || "assistant";
   const createChat = async (target?: Project, launch: { templateId?: string; runtimeKind?: string } = {}, options: { reportFailure?: boolean } = {}) => {
     const reportFailure = options.reportFailure !== false;
     if (!(await leaveHarnessThread())) return null;

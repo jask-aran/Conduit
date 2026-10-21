@@ -20,5 +20,5 @@ export const manifest = {
   drive: true,
   profile: true,
   probe: (config) => commandProbe(config.claudeCommand)(),
-  build: (config) => new ClaudeCodeAdapter({ command: config.claudeCommand, logs: config.logs }),
+  build: (config) => new ClaudeCodeAdapter({ command: config.claudeCommand, logs: config.logs, nodeHub: config.nodeHub }),
 };
