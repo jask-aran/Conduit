@@ -1,11 +1,24 @@
 import fs from "node:fs";
 import path from "node:path";
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
-import { createRegistry, defineDoc, Harness } from "@earendil-works/pi-durable";
+import { createRegistry, defineDoc, defineExtension, Harness, section } from "@earendil-works/pi-durable";
 import { NodeExecutionEnv } from "@earendil-works/pi-durable/env/node";
 import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node";
 import { CodingTools } from "@earendil-works/pi-durable/tools";
 import { ModelRuntime } from "@earendil-works/pi-coding-agent";
+import { buildManagedToolEnvironment } from "../../../scripts/pi-runtime.mjs";
+
+const SYSTEM_PROMPT = fs.readFileSync(new URL("../../../templates/conduit-runtime/SYSTEM.md", import.meta.url), "utf8");
+
+/** What Conduit tells every runtime conversation, ahead of the tools' own sections. */
+const Conduit = defineExtension({
+  name: "conduit",
+  sections: [
+    section("preamble", () => SYSTEM_PROMPT, { tag: false }),
+    // The working directory the tools resolve against: the chat's project.
+    section("cwd", (input) => input.env?.cwd),
+  ],
+});
 
 /**
  * Conduit's own runtime: one pi-durable Harness for the whole server.
@@ -56,13 +69,16 @@ export class DurableRuntime {
         authPath: agent("auth.json"), modelsPath: agent("models.json"), modelsStorePath: agent("models-store.json"),
       });
       const registry = createRegistry();
+      registry.install(Conduit);
       registry.install(CodingTools);
+      // Bash finds Conduit's managed Python first, as it does for Conduit Pi.
+      const shellEnv = buildManagedToolEnvironment(process.env);
       this.harness = await Harness.open(await openNodeSqliteStorage(this.file), {
         models: this.models,
         registry,
         // Each call's files and processes are the conversation's working
         // directory: the project the chat belongs to.
-        env: ({ cwd }) => new NodeExecutionEnv({ cwd: cwd || process.cwd() }),
+        env: ({ cwd }) => new NodeExecutionEnv({ cwd: cwd || process.cwd(), shellEnv }),
         settings: {
           // A partial is committed, and so drawn, this often. The default 100ms
           // reads as a stutter; a frame at 30Hz is as often as is worth a write.
