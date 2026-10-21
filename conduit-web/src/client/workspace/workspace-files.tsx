@@ -1,4 +1,5 @@
 import { createDecisionScope } from "@/components/decision-dialog";
+import { unitPx } from "../layout-geometry";
 import { batch, createMemo, createSignal, For, onCleanup, Show, type Accessor, type JSX } from "solid-js";
 import { ChevronRightIcon, ChevronsUpIcon, Columns2Icon, CopyIcon, DownloadIcon, EllipsisIcon, EyeIcon, EyeOffIcon, FilePlusIcon, FolderIcon, FolderPlusIcon, FolderUpIcon, MoveIcon, PanelLeftCloseIcon, PanelLeftOpenIcon, PencilIcon, PinIcon, PinOffIcon, RefreshCwIcon, SearchIcon, Trash2Icon, UploadIcon } from "lucide-solid";
 import { toast } from "@/components/notifications";
@@ -18,10 +19,9 @@ import { cacheWorkspace, copyText, peekCachedWorkspace, reportError, wasAborted,
 import type { DirectoryListing, FileSlotId, FileWriteResult, GitChangedFile, MovedEntry, OpenFiles, TreeEntry, UploadTarget, WorkspaceSettings } from "./workspace-types";
 import "./workspace.css";
 
-const WIDE_FILES_MIN_WIDTH = 720;
-const DEFAULT_TREE_WIDTH = 160;
-const MIN_TREE_WIDTH = 128;
-const MAX_TREE_WIDTH = 320;
+// In the unit (layout-geometry): the width at which Files lays its tree beside the file, and the tree's own widths.
+const WIDE_FILES_MIN_UNITS = 56.25, WIDE_FILES_EXPANDED_UNITS = 40.625;
+const DEFAULT_TREE_UNITS = 12, MIN_TREE_UNITS = 10, MAX_TREE_UNITS = 25;
 
 function directoryListingsEqual(left: DirectoryListing | undefined, right: DirectoryListing): boolean {
   return Boolean(left
@@ -74,7 +74,7 @@ export function createFiles(options: {
   const [focusedSlot, setFocusedSlot] = createSignal<FileSlotId>("primary");
   const slotHandles = new Map<FileSlotId, FileSlotHandle>();
   const [wrapLines, setWrapLines] = createSignal(readSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "wrap-lines") === "true");
-  const [treeWidth, setTreeWidth] = createSignal(Math.max(MIN_TREE_WIDTH, Math.min(MAX_TREE_WIDTH, Number(settings.geometry("tree-width")) || DEFAULT_TREE_WIDTH)));
+  const [treeWidth, setTreeWidth] = createSignal(Math.max(unitPx(MIN_TREE_UNITS), Math.min(unitPx(MAX_TREE_UNITS), Number(settings.geometry("tree-width")) || unitPx(DEFAULT_TREE_UNITS))));
   const [treeCollapsed, setTreeCollapsed] = createSignal(settings.geometry("tree-collapsed") === "true");
   const [navigatorOpen, setNavigatorOpen] = createSignal(false);
   // The view's elements, for focus and scroll that outlast a single render.
@@ -492,7 +492,7 @@ export function createFiles(options: {
     setWrapLines(next);
     writeSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "wrap-lines", String(next));
   };
-  const clampTreeWidth = (next: number) => Math.max(MIN_TREE_WIDTH, Math.min(MAX_TREE_WIDTH, next));
+  const clampTreeWidth = (next: number) => Math.max(unitPx(MIN_TREE_UNITS), Math.min(unitPx(MAX_TREE_UNITS), next));
   const saveTreeWidth = (next: number) => {
     const value = clampTreeWidth(next);
     setTreeWidth(value);
@@ -593,7 +593,7 @@ export function createFiles(options: {
     },
     /** The navigator's geometry as stored, for a new project. */
     restoreGeometry: () => {
-      setTreeWidth(Math.max(MIN_TREE_WIDTH, Math.min(MAX_TREE_WIDTH, Number(settings.geometry("tree-width")) || DEFAULT_TREE_WIDTH)));
+      setTreeWidth(Math.max(unitPx(MIN_TREE_UNITS), Math.min(unitPx(MAX_TREE_UNITS), Number(settings.geometry("tree-width")) || unitPx(DEFAULT_TREE_UNITS))));
       setTreeCollapsed(settings.geometry("tree-collapsed") === "true");
       setShowHidden(settings.geometry("show-hidden") === "true");
     },
@@ -873,7 +873,7 @@ export function FilesView(props: {
         ref={(element) => {
           filesResizeObserver?.disconnect();
           const updateWideState = (width: number) =>
-            c.setFilesWide(!isMobileLayout() && width >= (props.expanded ? 520 : WIDE_FILES_MIN_WIDTH));
+            c.setFilesWide(!isMobileLayout() && width >= unitPx(props.expanded ? WIDE_FILES_EXPANDED_UNITS : WIDE_FILES_MIN_UNITS));
           updateWideState(element.clientWidth);
           // The entry already carries the new size. Reading clientWidth back
           // inside the callback instead forces a synchronous layout, and a
@@ -957,8 +957,8 @@ export function FilesView(props: {
             role="separator"
             aria-label="Resize file tree"
             aria-orientation="vertical"
-            aria-valuemin={MIN_TREE_WIDTH}
-            aria-valuemax={MAX_TREE_WIDTH}
+            aria-valuemin={unitPx(MIN_TREE_UNITS)}
+            aria-valuemax={unitPx(MAX_TREE_UNITS)}
             aria-valuenow={c.treeWidth()}
             tabIndex={0}
             onPointerDown={startTreeResize}

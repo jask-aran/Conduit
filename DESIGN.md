@@ -180,7 +180,7 @@ The panes smoke and `test/file-tabs.test.js` assert these; a change to a rule ch
 **Documents and room**
 
 - **A pane holds one document** (chat, page, file viewer, tool, shell). Pane A holds the route; panes beside it are opened, never navigated to.
-- **A document declares its minimum width** (chats and pages `MIN_MAIN_PANE_WIDTH`, viewers and tools `MIN_SPLIT_PANE_WIDTH`; the dock takes whatever it shows). Containers lay out from those, never their own guesses. A desktop window too narrow for the sidebar beside a chat at its minimum scrolls sideways; the chat is never drawn narrower.
+- **A document declares its minimum width** (chats and pages `MIN_MAIN_PANE_UNITS`, viewers and tools `MIN_SPLIT_PANE_UNITS`, in the unit so they grow with the Interface size; the dock takes whatever it shows). Containers lay out from those, never their own guesses. A desktop window too narrow for the sidebar beside a chat at its minimum scrolls sideways; the chat is never drawn narrower.
 - **Room runs out in one order.** The dock narrows first, then panes move to the dock, last first, document and state kept, and come back when the width holds them. A dragged edge takes room from its neighbour down to its minimum, then the next. Up to three panes, with Equalise and presets at the rail's foot; not on a phone.
 
 **Focus and opening**

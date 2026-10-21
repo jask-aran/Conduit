@@ -98,7 +98,7 @@ import type { FileSlotHandle, FileSummary } from "./workspace/workspace-file-slo
 import { dropScope, migrateWorkspacePanelStorage, readSetting, WORKSPACE_PANEL_GLOBAL_SCOPE, writeSetting } from "./workspace/workspace-panel-storage";
 import { readToolDrag, TOOL_DRAG_TYPE, WORKSPACE_TOOL_LABELS, WorkspaceRail } from "./workspace/workspace-rail";
 import { isPanelTab, isSplitView, type SplitView } from "./workspace/workspace-types";
-import { MIN_MAIN_PANE_WIDTH, MIN_SPLIT_PANE_WIDTH } from "./layout-geometry";
+import { minMainPaneWidth, minSplitPaneWidth } from "./layout-geometry";
 import { dispatchPanelGeometryMotion } from "./panel-motion";
 import { publishUiPreference, queueUiPreferenceSave, uiPreferenceSaves, UI_PREFERENCE_CHANGE_EVENT, type UiPreferenceKey, type UiPreferences } from "./preferences/ui-preferences";
 import { applyUiScale, selectedUiScale } from "./preferences/ui-scale";
@@ -2355,7 +2355,7 @@ function App() {
   // A free slot for a pane in the row or, `docked`, in the dock -- each has its own room.
   const freeSlot = (docked = false) => (docked ? dockedSlots().length < MAX_DOCKED : rowSlots().length < 2) ? SLOT_IDS.find((slot) => !slotOrder().includes(slot)) ?? null : null;
   // The dock is as narrow as what it shows may go: a docked pane's document, else a tool.
-  const dockMinWidth = () => { const slot = dockSlot(); return slot !== null && inDock(slot) ? viewMinWidth(slotView(slot)) : MIN_SPLIT_PANE_WIDTH; };
+  const dockMinWidth = () => { const slot = dockSlot(); return slot !== null && inDock(slot) ? viewMinWidth(slotView(slot)) : minSplitPaneWidth(); };
   /*
    * Each document declares the narrowest its pane may go: one with a
    * composer, a chat or a page, the dashboard composer's least; a file viewer
@@ -2363,7 +2363,7 @@ function App() {
    * pane beside at their documents' minimums.
    */
   const isPaneView = (view: SplitView | null) => Boolean(view && /^(chat|page):/.test(view));
-  const viewMinWidth = (view: SplitView | null) => !view || isPaneView(view) ? MIN_MAIN_PANE_WIDTH : MIN_SPLIT_PANE_WIDTH;
+  const viewMinWidth = (view: SplitView | null) => !view || isPaneView(view) ? minMainPaneWidth() : minSplitPaneWidth();
   const paneMinWidth = (pane: PaneKey) => viewMinWidth(pane === "main" ? paneAView() : slotView(pane));
   // The open dock keeps its own minimum; panes fold before it is pushed out.
   const viewsFit = (views: (SplitView | null)[]) => layoutWidth() - (panelOpen() && dockAvailable() && !dockOverlay() ? dockMinWidth() + 8 : 0)
@@ -4400,7 +4400,7 @@ function App() {
     // document's minimum, then from the next one on, and gives it to the pane
     // on the other side.
     const widths = panes.map((pane) => pane!.getBoundingClientRect().width);
-    const minimums = panes.map((pane) => parseFloat(getComputedStyle(pane!).minWidth) || MIN_SPLIT_PANE_WIDTH);
+    const minimums = panes.map((pane) => parseFloat(getComputedStyle(pane!).minWidth) || minSplitPaneWidth());
     const startX = event.clientX;
     const weights = paneWeights();
     const weightSum = weights.reduce((sum, weight) => sum + weight, 0);

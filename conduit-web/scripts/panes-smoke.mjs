@@ -73,7 +73,8 @@ let project;
 }
 
 async function scenario(name, run) {
-  const context = await browser.newContext({ storageState, viewport: { width: 1800, height: 900 } });
+  // A desktop with room for a chat, a split and the dock at the 16px unit (1800 x 900 at the old 12.8px one).
+  const context = await browser.newContext({ storageState, viewport: { width: 2250, height: 1125 } });
   const page = await context.newPage();
   const errors = [];
   page.on("pageerror", (error) => errors.push(error.message));

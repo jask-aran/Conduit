@@ -120,24 +120,24 @@
   --u-base: 16px; --row-min-floor: 0px; --row-min-units: 1.875; --row-text-units: 0.8125;
   --scale-chrome: var(--scale-chrome-desktop); --scale-sidebar: var(--scale-sidebar-desktop); --scale-frost: var(--scale-frost-desktop);
   --scale-composer: var(--scale-composer-desktop); --scale-transcript: var(--scale-transcript-desktop);
-  --frost-inset: var(--space-xs); --nav-label-pad: var(--space-xs) var(--space-md);
+  --frost-inset-units: .25; --nav-label-pad-units: .25;
   /* A section label: Paper Mono capitals at desktop, where the type around it is small and tight. */
-  --label-face: var(--font-label); --label-weight: var(--weight-rest); --label-case: uppercase; --label-tracking: .07em; --label-size: var(--text-label);
+  --label-face: var(--font-label); --label-weight: var(--weight-rest); --label-case: uppercase; --label-tracking: .07em;
 }
 [data-density="phone"] {
   --u-base: var(--u-phone); --row-min-floor: 40px; --row-min-units: 2.5; --row-text-units: 0.84375;
   --scale-chrome: var(--scale-chrome-phone); --scale-sidebar: var(--scale-sidebar-phone); --scale-frost: var(--scale-frost-phone);
   --scale-composer: var(--scale-composer-phone); --scale-transcript: var(--scale-transcript-phone);
-  --frost-inset: var(--space-sm); --nav-label-pad: var(--space-sm) var(--space-md);
+  --frost-inset-units: .375; --nav-label-pad-units: .375;
   /* Desktop's label, declared again so its size resolves at the phone's unit (scaled up like everything else). */
-  --label-face: var(--font-label); --label-weight: var(--weight-rest); --label-case: uppercase; --label-tracking: .07em; --label-size: var(--text-label);
+  --label-face: var(--font-label); --label-weight: var(--weight-rest); --label-case: uppercase; --label-tracking: .07em;
 }
 @media (--conduit-phone-layout) { :root {
   --u-base: var(--u-phone); --row-min-floor: 40px; --row-min-units: 2.5; --row-text-units: 0.84375;
   --scale-chrome: var(--scale-chrome-phone); --scale-sidebar: var(--scale-sidebar-phone); --scale-frost: var(--scale-frost-phone);
   --scale-composer: var(--scale-composer-phone); --scale-transcript: var(--scale-transcript-phone);
-  --frost-inset: var(--space-sm); --nav-label-pad: var(--space-sm) var(--space-md);
-  --label-face: var(--font-label); --label-weight: var(--weight-rest); --label-case: uppercase; --label-tracking: .07em; --label-size: var(--text-label);
+  --frost-inset-units: .375; --nav-label-pad-units: .375;
+  --label-face: var(--font-label); --label-weight: var(--weight-rest); --label-case: uppercase; --label-tracking: .07em;
 } }
 /* What you read takes the transcript's scale: the units below are worked out again inside it. There a row's
    text (a trace, a trail, a table) is a step under the body on both densities, not a finger list's. */
@@ -167,6 +167,9 @@
   /* Rows: their measured height and text, in the unit; inset, pad and gap are steps. */
   --row-text: calc(var(--row-text-units) * var(--u-type)); --row-min: max(var(--row-min-floor), calc(var(--row-min-units) * var(--u-space)));
   --row-inset: var(--space-md); --row-pad: var(--space-sm) var(--row-inset); --row-gap: var(--space-md);
+  /* A frost surface's inset and a nav label's padding: a space step each, the density's (xs desktop, sm phone), in the
+     region's unit. */
+  --frost-inset: calc(var(--frost-inset-units) * var(--u-space)); --nav-label-pad: calc(var(--nav-label-pad-units) * var(--u-space)) var(--space-md);
   /* The room a column keeps from its pane's edges when the pane is narrower than the column. */
   --page-gutter: calc(3 * var(--u-space));
   --nav-indent: calc(1.875 * var(--u-space));
@@ -184,7 +187,7 @@
   /* Five type sizes, by role (Type · Scale): label, the section label and keycaps; caption, details,
      hints and data (meta, counts, crumbs); row, every row and control; body, messages, what you
      type, titles (titles at the strong weight); heading, a page's title; display, the dashboard's, larger. */
-  --text-label: calc(0.625 * var(--u-type)); --text-caption: calc(0.75 * var(--u-type));
+  --text-label: calc(0.625 * var(--u-type)); --text-caption: calc(0.75 * var(--u-type)); --label-size: var(--text-label);
   --text-row: var(--row-text); --text-body: var(--u-type); --text-heading: calc(1.40625 * var(--u-type)); --text-display: calc(1.71875 * var(--u-type));
   --pill-icon: var(--icon-lg);
 }

@@ -66,7 +66,13 @@ function rebaseDesktopScale() {
   if (isMobileLayout() || localStorage.getItem(REBASED_STORAGE_KEY)) return;
   localStorage.setItem(REBASED_STORAGE_KEY, "1");
   const scale = selectedUiScale();
-  if (scale > 1) localStorage.setItem(UI_SCALE_STORAGE_KEY, String(nearest(scale / DESKTOP_BASE_GAIN)));
+  if (scale <= 1) return;
+  const rebased = nearest(scale / DESKTOP_BASE_GAIN);
+  localStorage.setItem(UI_SCALE_STORAGE_KEY, String(rebased));
+  // The terminal's own size is in pixels, which the unit's growth did not move, times the Interface size: it takes back
+  // what the Interface size gave up, so it draws as it did.
+  const terminal = Number(localStorage.getItem("conduit:terminal-font-size"));
+  if (terminal) localStorage.setItem("conduit:terminal-font-size", String(Math.min(24, Math.round(terminal * scale / rebased * 10) / 10)));
 }
 
 /**

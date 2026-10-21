@@ -243,7 +243,7 @@ svg.lucide { stroke-width: 2.4; }
      disappears here; safe-area padding belongs to the controls that touch
      each edge. */
   .chat-main {
-    --chat-header-height: calc(var(--header-height) + var(--safe-area-inset-top, env(safe-area-inset-top, 0px)));
+    --chat-header-height: var(--header-height);
     width: 100%;
     min-height: 0;
     height: var(--app-height, 100dvh);
@@ -415,7 +415,7 @@ svg.lucide { stroke-width: 2.4; }
      disappears here; safe-area padding belongs to the controls that touch
      each edge. */
   .chat-main {
-    --chat-header-height: calc(var(--header-height) + var(--safe-area-inset-top, env(safe-area-inset-top, 0px)));
+    --chat-header-height: var(--header-height);
     width: 100%;
     min-height: 0;
     margin: 0;
@@ -584,8 +584,8 @@ svg.lucide { stroke-width: 2.4; }
 [data-region="sidebar"]::after { bottom: var(--space-md); }
 .workspace-panel:not(.workspace-panel-open)::after { display: none; }
 /* Over the panes, or switching layer, the dock is its surface, not its room in the row. */
-:is(.workspace-panel-overlay, .workspace-panel[data-layer-switch])::after { left: auto; width: calc(var(--workspace-shell-width) - var(--control-lg)); }
-.workspace-panel-overlay::after { right: var(--space-4xl); }
+:is(.workspace-panel-overlay, .workspace-panel[data-layer-switch])::after { left: auto; width: calc(var(--workspace-shell-width) - 2 * var(--space-2xl)); }
+.workspace-panel-overlay::after { right: calc(var(--space-md) + var(--space-2xl)); }
 .region-cue {
   position: fixed;
   z-index: 73;
