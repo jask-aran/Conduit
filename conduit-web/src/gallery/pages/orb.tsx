@@ -1,0 +1,54 @@
+import { createSignal } from "solid-js";
+import { Orb, settledOrbRate, PLAIN_SPHERE, SPUTTERING_SPHERE, ORBITS_TRAILED, type ModeFrame, type OrbState, Button } from "@/components/ui";
+import { resolvePreset } from "thinking-orbs/engine";
+import { lib, type Family } from "../model";
+/* Orbs: one Orb, a list of animations, each a speed. */
+type OrbAnimation = { name: string; from: string; state: OrbState; frame?: ModeFrame; tint?: string; rate?: number; use: string };
+const ORB_ANIMATIONS: OrbAnimation[] = [
+  { name: "working", from: "thinking-orbs", state: "working", use: "Thinking: a turn with no tool running" },
+  { name: "composing", from: "thinking-orbs", state: "composing", use: "Writing: a turn writing its answer" },
+  { name: "weaving", from: "thinking-orbs", state: "weaving", use: "Reading a file" },
+  { name: "searching", from: "thinking-orbs", state: "searching", use: "Searching, fetching" },
+  { name: "solving", from: "thinking-orbs", state: "solving", use: "Running a command, a script, several tools, an unnamed tool" },
+  { name: "connecting", from: "thinking-orbs", state: "connecting", use: "A turn starting" },
+  { name: "listening", from: "thinking-orbs", state: "listening", use: "The mic, listening (PhoneComposer's Dictate)" },
+  { name: "ORBITS_TRAILED", from: "orb-frames", state: "working", frame: ORBITS_TRAILED, use: "Editing a file" },
+  { name: "PLAIN_SPHERE", from: "orb-frames", state: "working", frame: PLAIN_SPHERE, rate: settledOrbRate(false), use: "Done: a settled turn, turning slowly" },
+  { name: "SPUTTERING_SPHERE", from: "orb-frames", state: "working", frame: SPUTTERING_SPHERE, tint: "var(--destructive)", rate: settledOrbRate(true), use: "Interrupted or failed: the sphere sputtering, in --destructive" },
+  { name: "breathing", from: "thinking-orbs", state: "breathing", use: "not used" },
+  { name: "shaping", from: "thinking-orbs", state: "shaping", use: "not used" },
+];
+const speedOf = (a: OrbAnimation) => a.frame ? 1 : resolvePreset(a.state, 20).speed;
+const OrbAnimations = () => <table class="g-orb-table"><thead><tr><th>Animation</th><th>16 · 20 · 32px</th><th>Speed</th><th>Draws a second</th><th>Shows</th></tr></thead>
+  <tbody>{ORB_ANIMATIONS.map((a) => <tr><th>{a.name}<small>{a.from}</small></th>
+    <td><div class="g-orb-sizes">{[16, 20, 32].map((size) => <span style={{ width: `${size}px`, height: `${size}px` }}><Orb state={a.state} frame={a.frame} tint={a.tint} rate={a.rate} /></span>)}</div></td>
+    <td>{speedOf(a)}×</td><td>{a.rate ?? "every frame"}</td><td>{a.use}</td></tr>)}</tbody></table>;
+/** A change of animation as the Orb plays it: held a moment, then crossfaded, both still moving. */
+function OrbChange() {
+  const [pick, setPick] = createSignal(ORB_ANIMATIONS[0]!);
+  return <div class="g-orb-change"><span class="g-orb-big"><Orb state={pick().state} frame={pick().frame} tint={pick().tint} rate={pick().rate} /></span><div class="g-orb-picks">{ORB_ANIMATIONS.slice(0, 10).map((a) => <Button variant={pick() === a ? "secondary" : "ghost"} size="sm" onClick={() => setPick(a)}>{a.name}</Button>)}</div></div>;
+}
+const OrbHow = () => <ol class="g-orb-how">
+  <li><strong>The renderer</strong>: thinking-orbs' <code>paintFrame</code> draws a list of dots (position, size, depth, brightness) on a canvas, near dots larger and brighter.</li>
+  <li><strong>An animation</strong>: a frame function, (size, seconds) to dots, computed live each draw. thinking-orbs ships one per state, each a preset with a speed (how fast its time runs) and a few shape options; Conduit's own (orb-frames) are built from the engine's pieces and run at 1×.</li>
+  <li><strong>The player</strong> (Orb): one frame loop for every orb on the page; draws only on screen with the tab visible, at its rate if it has one; fills its box at the screen's pixel density; tints its dots; a change is held 250ms then crossfaded over 200ms; paused (or reduced motion) it is one still frame.</li>
+</ol>;
+
+export const orbFamily: Family = {
+  title: "Orb",
+  note: "one Orb, a list of animations, each with a speed. Aura (Materials) is the voice's colour field, not an orb",
+  usage: `import { Orb } from "@/components/ui";
+
+<Orb state="connecting" />`,
+  api: ["Orb", "Button"],
+  groups: [
+
+    { title: "How it draws", layout: "desktop", atoms: [lib("orb-how", "How it draws", "both", "orb", "thinking-orbs engine · orb-frames · Orb", () => <OrbHow />, "row")] },
+    { title: "Animations", note: "every animation the Orb plays, live at the sizes it is used at (a preview's 16px, a turn's 20px)", layout: "desktop", atoms: [lib("orb-animations", "Animations", "both", "orb", "<Orb state frame? tint? rate?>", () => <OrbAnimations />, "row")] },
+    { title: "Playing", note: "a change, and a still one", layout: "desktop", atoms: [
+      lib("orb-change", "A change", "both", "orb", "held 250ms, crossfaded over 200ms", () => <OrbChange />),
+      lib("orb-paused", "Paused", "both", "orb", "<Orb paused>: one still frame (and with reduced motion); a change is not faded", () => <span class="g-orb-big"><Orb state="working" paused /></span>),
+    ] },
+  
+  ],
+};
