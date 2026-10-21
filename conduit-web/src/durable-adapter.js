@@ -137,10 +137,33 @@ export class DurableAdapter extends EventEmitter {
     Object.assign(this, unsupported(DURABLE_CAPABILITIES, { label: "Conduit runtime" }));
     // A store that exists may hold a turn the last process left running, and
     // it goes on now rather than when somebody next opens that chat.
-    if (runtime?.exists()) void runtime.open().catch((error) => console.error("[conduit-runtime] could not open", error));
+    if (runtime?.exists()) {
+      void runtime.open().then(() => this.reattach())
+        .catch((error) => console.error("[conduit-runtime] could not open", error));
+    }
   }
 
   get context() { return this.runtime.context; }
+
+  /**
+   * Take up again every chat with work in flight, so what a resumed turn says
+   * reaches the chat's log and any page already open on it, rather than
+   * waiting for somebody to open the chat.
+   */
+  async reattach() {
+    const harness = this.runtime.harness;
+    const { submissions } = await harness.inspect(this.context);
+    for (const conversationId of new Set(submissions.map((submission) => submission.conversationId))) {
+      const chatId = (await harness.snapshot(ConduitIds, conversationId, this.context))?.chatId;
+      const conversation = chatId && !this.getByChatId(chatId) ? await harness.conversation(conversationId, this.context) : null;
+      if (conversation) await this.start(conversation, { chatId }).catch((error) => console.warn("[conduit-runtime] could not reattach", chatId, error?.message || error));
+    }
+  }
+
+  /** Which chat a conversation belongs to, kept beside it so a restart can find its way back. */
+  async remember(conversation, chatId) {
+    await conversation.commit(async (tx) => { (await tx.doc(ConduitIds, conversation.id)).chatId = chatId; }, this.context);
+  }
 
   async launch(context, { model = "", thinkingLevel = "", forceModel = false } = {}) {
     const selected = (forceModel ? String(model).trim() : "") || String(context.chat.backend.model || "").trim();
@@ -168,6 +191,7 @@ export class DurableAdapter extends EventEmitter {
       ...(options.thinkingLevel || fallback?.thinkingLevel ? { thinkingLevel: options.thinkingLevel || fallback.thinkingLevel } : {}),
       ...(options.project?.workingRoot ? { cwd: options.project.workingRoot } : {}),
     } }, this.context);
+    await this.remember(conversation, options.chatId);
     return this.start(conversation, options);
   }
 
@@ -175,6 +199,9 @@ export class DurableAdapter extends EventEmitter {
     const harness = await this.runtime.open();
     const conversation = await harness.conversation(Number(opaqueSession), this.context);
     if (!conversation) throw failure("This chat's conversation is missing from the Conduit runtime", "session_not_found", 404);
+    if ((await harness.snapshot(ConduitIds, conversation.id, this.context))?.chatId !== options.chatId) {
+      await this.remember(conversation, options.chatId);
+    }
     const record = await this.start(conversation, options);
     const spec = splitSpec(options.model);
     if (spec && spec.modelId !== record.modelId) await this.setModel(record.id, options.model);
@@ -200,7 +227,7 @@ export class DurableAdapter extends EventEmitter {
     const stream = await watchEvents(this.runtime.harness, conversation.id, this.context);
     record.scope.defer(() => stream.stop());
     // A run the last process left going is still going; this is where it is picked up.
-    if (stream.snapshot.run) this.beginTurn(record, stream.snapshot.run.inputs);
+    if (stream.snapshot.run) await this.resumeTurn(record, stream.snapshot);
     record.usage = stream.snapshot.usage;
     stream.start(async (events) => { for (const event of events) await this.translate(record, event); });
     return record;
@@ -228,6 +255,25 @@ export class DurableAdapter extends EventEmitter {
       ids.push(id);
     }
     return ids;
+  }
+
+  /**
+   * A run the last process was in the middle of: its prompts are looked up
+   * again, the tools it had going are taken as open, and the turn is stated as
+   * started, so a page attached now draws it as working.
+   */
+  async resumeTurn(record, snapshot) {
+    const turn = this.beginTurn(record, snapshot.run.inputs);
+    turn.prompts = await this.promptIdsFor(record, snapshot.run.inputs);
+    turn.answers = turn.prompts.at(-1) || null;
+    turn.opened = new Set(turn.prompts);
+    for (const slot of snapshot.tools || []) {
+      if (slot.callId && slot.status !== "done") turn.tools.set(slot.callId, { messageId: null, name: slot.name, input: {}, opened: true, output: slot.output || "" });
+    }
+    this.publish(record, { type: "status", generationId: turn.generationId, phase: "started", seq: ++record.generationSeq,
+      status: "working", activity: "working", detail: null });
+    this.publish(record, { type: "status", generationId: turn.generationId, phase: "running", seq: ++record.generationSeq,
+      status: "working", activity: "working", detail: null });
   }
 
   beginTurn(record, inputs, generationId = crypto.randomUUID()) {
@@ -432,9 +478,10 @@ export class DurableAdapter extends EventEmitter {
 
   toolEnded(record, event) {
     const turn = record.turn;
-    const tool = turn?.tools.get(event.toolCallId);
-    if (!tool?.opened) return;
     const result = event.entry?.model?.[0];
+    // A call the last process started ends here: its row was opened then, and closes now.
+    const tool = turn?.tools.get(event.toolCallId) || (turn && result && !event.parentToolCallId ? { opened: true, output: "" } : null);
+    if (!tool?.opened) return;
     const output = result ? textOf(result.content) : tool.output || "";
     const cancelled = record.stopping && !result;
     const isError = !cancelled && (result ? Boolean(result.isError) : true);
