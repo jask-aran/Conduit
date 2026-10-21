@@ -2,8 +2,9 @@ import { PiRpcAdapter, PI_CAPABILITIES } from "../pi-rpc-adapter.js";
 import { READY } from "./probe.js";
 
 // Pi is the built-in backend: Conduit ships it, so it is always available and
-// needs no probe. One adapter serves both implementations - a Conduit-managed
-// profile and the host's own Pi - which is why this manifest names two.
+// needs no probe. It runs Conduit's own profiles on this server only: a
+// device's workspace takes the Conduit runtime instead (plan decision log,
+// 2026-10-21), so Conduit Pi's configuration and credentials never leave here.
 export const manifest = {
   id: "conduit-pi",
   label: "Conduit Pi",

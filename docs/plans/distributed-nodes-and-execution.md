@@ -339,6 +339,18 @@ attachments and agent file tools unless a root allows it. Shell is unaffected
 still list, contents are refused for reads and writes; `conduit-node share
 --allow/--deny` edits a root's list.
 
+### 2026-10-21: which harnesses run on devices
+
+**Every adapter on devices?** Built for Claude Code, Codex, fx (ACP) and
+OpenCode: main's adapter keeps its translation into Conduit's internal
+representation and only its launch and saved-state reads move to the
+device (spawned process, a tunnel to the harness's own socket or loopback
+service, or a `harness` read on the node). Not for Conduit Pi: it runs
+Conduit's pinned Pi with Conduit's agent folder and the server's
+credentials, which would have to leave the server, and the Conduit runtime
+-- already acting through devices -- is replacing it. Not for ChatGPT web:
+it has no workspace or file tools, so a device adds nothing.
+
 ### 2026-10-21: from the security review of the node path
 
 *(Its first finding restates October's "narrow shell cwd alone is not a
