@@ -1,7 +1,7 @@
 import os from "node:os";
 import { applyArtifactMessageIds } from "../../message-ids.js";
 import { sharedRoot } from "../../nodes/protocol.js";
-import { RemoteWorkspace } from "../../nodes/remote-workspace.js";
+import { deviceHost } from "../../workspace-host.js";
 import { readWorkspaceComparison } from "../../workspace-comparison.js";
 import { computerContext, findComputerGitRoot, resolveComputerContext } from "../../computer-context.js";
 import path from "node:path";
@@ -120,14 +120,13 @@ export function registerProjectRoutes(app, {
     }
     const project = await projects.get(id);
     if (project) await projects.validate(project);
-    // A device's folder has no Git here yet, and no local path to give one.
-    if (project?.nodeId && git) throw Object.assign(new Error("Source control is not available in a device's folder yet"), { status: 403, code: "source_control_disabled" });
     return project;
   };
-  // A device's folder is read through the device, and not written from here yet.
-  const onDevice = (project) => project?.nodeId ? new RemoteWorkspace({ hub: nodeHub, project }) : null;
-  const readOnlyDevice = (project, response) => project?.nodeId
-    ? (response.status(409).json({ error: "workspace_read_only", message: "A device's folder is read-only from here" }), true) : false;
+  // Where the inspector works for a project: this server's path, or the
+  // device's folder through its environment (plan decision 22).
+  const rootOf = (project) => project.nodeId
+    ? deviceHost({ hub: nodeHub, nodeId: project.nodeId, root: project.workingRoot })
+    : project.workingRoot;
   const readComputerLocation = async (project) => {
     const [gitRoot, listing] = await Promise.all([
       findComputerGitRoot(project.workingRoot),
@@ -190,6 +189,7 @@ export function registerProjectRoutes(app, {
       await projects.validate(project);
       response.json(await buildProjectDashboard({
         project,
+        root: rootOf(project),
         registry,
         processes: manager.list(),
         terminals: terminals.list(),
@@ -325,9 +325,7 @@ export function registerProjectRoutes(app, {
     try {
       const project = await inspectionContext(request.params.id);
       if (!project) return response.status(404).json({ error: "project_not_found" });
-      const device = onDevice(project);
-      const listing = device ? await device.list(request.query.path, { after: request.query.after })
-        : await listWorkspaceDirectory(project.workingRoot, request.query.path, { after: request.query.after });
+      const listing = await listWorkspaceDirectory(rootOf(project), request.query.path, { after: request.query.after });
       response.json({ path: String(request.query.path || ""), ...listing });
     } catch (error) { next(error); }
   });
@@ -336,9 +334,7 @@ export function registerProjectRoutes(app, {
     try {
       const project = await inspectionContext(request.params.id);
       if (!project) return response.status(404).json({ error: "project_not_found" });
-      // Nothing watches a device's folder yet: its version never moves.
-      if (project.nodeId) return response.json({ version: 0, changedPaths: [] });
-      response.json(await readWorkspaceVersion(project.workingRoot, { paths: workspaceVersionPaths(request.query.paths) }));
+      response.json(await readWorkspaceVersion(rootOf(project), { paths: workspaceVersionPaths(request.query.paths) }));
     } catch (error) { next(error); }
   });
 
@@ -347,25 +343,10 @@ export function registerProjectRoutes(app, {
       const project = await inspectionContext(request.params.id);
       if (!project) return response.status(404).json({ error: "project_not_found" });
       if (!request.query.path) return response.status(400).json({ error: "workspace_path_required" });
-      const device = onDevice(project);
-      if (device) {
-        if (request.query.metadata === "1") return response.json(await device.metadata(request.query.path));
-        if (request.query.download !== "1" && request.query.inline !== "1") {
-          return response.json(await device.read(request.query.path, { forceText: request.query.force === "text", preview: request.query.preview === "1" }));
-        }
-        const { metadata, content } = await device.download(request.query.path);
-        const inline = request.query.inline === "1";
-        if (inline && !["image", "pdf", "audio", "video"].includes(metadata.kind)) return response.status(415).json({ error: "unsupported_inline_type" });
-        if (inline && metadata.mime === "image/svg+xml") response.setHeader("Content-Security-Policy", "sandbox");
-        response.setHeader("Content-Type", metadata.mime);
-        response.setHeader("X-Content-Type-Options", "nosniff");
-        response.setHeader("Cache-Control", "private, no-cache");
-        response.setHeader("Content-Disposition", `${inline ? "inline" : "attachment"}; filename*=UTF-8''${encodeURIComponent(metadata.path.split("/").pop())}`);
-        return response.end(content);
-      }
+      const root = rootOf(project);
       if (request.query.download === "1" || request.query.inline === "1") {
-        const resolved = await resolveInspectorPath(project.workingRoot, request.query.path, { kind: "file" });
-        const metadata = await readWorkspaceFileMetadata(project.workingRoot, request.query.path);
+        const resolved = await resolveInspectorPath(root, request.query.path, { kind: "file" });
+        const metadata = await readWorkspaceFileMetadata(root, request.query.path);
         const inline = request.query.inline === "1";
         if (inline && !["image", "pdf", "audio", "video"].includes(metadata.kind)) {
           return response.status(415).json({ error: "unsupported_inline_type" });
@@ -379,12 +360,15 @@ export function registerProjectRoutes(app, {
         response.setHeader("X-Content-Type-Options", "nosniff");
         response.setHeader("Cache-Control", "private, no-cache");
         response.setHeader("Content-Disposition", `${inline ? "inline" : "attachment"}; filename*=UTF-8''${downloadName}`);
-        return response.sendFile(resolved.path);
+        if (resolved.path) return response.sendFile(resolved.path);
+        // A device's file comes through the device, whole.
+        if (metadata.size > config.maxAttachmentBytes) return response.status(413).json({ error: "file_too_large" });
+        return response.end(await resolved.host.read(resolved.relativePath));
       }
       if (request.query.metadata === "1") {
-        return response.json(await readWorkspaceFileMetadata(project.workingRoot, request.query.path));
+        return response.json(await readWorkspaceFileMetadata(root, request.query.path));
       }
-      response.json(await readWorkspaceFile(project.workingRoot, request.query.path, {
+      response.json(await readWorkspaceFile(root, request.query.path, {
         forceText: request.query.force === "text",
         preview: request.query.preview === "1",
       }));
@@ -396,10 +380,9 @@ export function registerProjectRoutes(app, {
       const project = await inspectionContext(request.params.id);
       if (!project) return response.status(404).json({ error: "project_not_found" });
       if (!request.query.path) return response.status(400).json({ error: "workspace_path_required" });
-      if (readOnlyDevice(project, response)) return;
       const expectedRevision = typeof request.headers["if-match"] === "string" ? request.headers["if-match"] : null;
       const content = Buffer.isBuffer(request.body) ? request.body : Buffer.alloc(0);
-      const written = await writeWorkspaceFile(project.workingRoot, request.query.path, content, { expectedRevision });
+      const written = await writeWorkspaceFile(rootOf(project), request.query.path, content, { expectedRevision });
       response.status(expectedRevision == null ? 201 : 200).json(written);
     } catch (error) { next(error); }
   });
@@ -409,8 +392,7 @@ export function registerProjectRoutes(app, {
       const project = await inspectionContext(request.params.id);
       if (!project) return response.status(404).json({ error: "project_not_found" });
       if (!request.query.path) return response.status(400).json({ error: "workspace_path_required" });
-      if (readOnlyDevice(project, response)) return;
-      await deleteWorkspaceFile(project.workingRoot, request.query.path);
+      await deleteWorkspaceFile(rootOf(project), request.query.path);
       response.status(204).end();
     } catch (error) { next(error); }
   });
@@ -420,8 +402,7 @@ export function registerProjectRoutes(app, {
       const project = await inspectionContext(request.params.id);
       if (!project) return response.status(404).json({ error: "project_not_found" });
       if (!request.body?.path) return response.status(400).json({ error: "workspace_path_required" });
-      if (readOnlyDevice(project, response)) return;
-      response.status(201).json(await createWorkspaceDirectory(project.workingRoot, request.body.path));
+      response.status(201).json(await createWorkspaceDirectory(rootOf(project), request.body.path));
     } catch (error) { next(error); }
   });
 
@@ -432,8 +413,7 @@ export function registerProjectRoutes(app, {
       if (!request.body?.path || !request.body?.destination) {
         return response.status(400).json({ error: "workspace_path_required" });
       }
-      if (readOnlyDevice(project, response)) return;
-      response.json(await moveWorkspaceEntry(project.workingRoot, request.body.path, request.body.destination));
+      response.json(await moveWorkspaceEntry(rootOf(project), request.body.path, request.body.destination));
     } catch (error) { next(error); }
   });
 
@@ -442,8 +422,7 @@ export function registerProjectRoutes(app, {
       const project = await inspectionContext(request.params.id);
       if (!project) return response.status(404).json({ error: "project_not_found" });
       if (!request.query.path) return response.status(400).json({ error: "workspace_path_required" });
-      if (readOnlyDevice(project, response)) return;
-      await deleteWorkspaceDirectory(project.workingRoot, request.query.path);
+      await deleteWorkspaceDirectory(rootOf(project), request.query.path);
       response.status(204).end();
     } catch (error) { next(error); }
   });
@@ -460,9 +439,9 @@ export function registerProjectRoutes(app, {
       if (project.kind !== "workspace") return response.status(403).json({ error: "source_control_disabled", message: "Source Control is available only for Workspaces." });
       if (request.query.compare === "1") {
         const scope = typeof request.query.scope === "string" ? request.query.scope : request.query.staged === "1" ? "staged" : "changes";
-        response.json(await readWorkspaceComparison(project.workingRoot, request.query.path, { scope, signal: controller.signal }));
+        response.json(await readWorkspaceComparison(rootOf(project), request.query.path, { scope, signal: controller.signal }));
       } else {
-        response.json(await readWorkspaceDiff(project.workingRoot, { filePath: typeof request.query.path === "string" ? request.query.path : null, staged: request.query.staged === "1", includePatch: request.query.patch === "1", includeHistory: request.query.history !== "0", reuse: request.query.reuse === "1", signal: controller.signal }));
+        response.json(await readWorkspaceDiff(rootOf(project), { filePath: typeof request.query.path === "string" ? request.query.path : null, staged: request.query.staged === "1", includePatch: request.query.patch === "1", includeHistory: request.query.history !== "0", reuse: request.query.reuse === "1", signal: controller.signal }));
       }
     } catch (error) {
       if (!request.aborted && !response.destroyed) next(error);
@@ -479,6 +458,8 @@ export function registerProjectRoutes(app, {
       const chatId = typeof request.query.chatId === "string" ? request.query.chatId : "";
       const chat = registry.metadata(chatId);
       if (!chat || chat.projectId !== project.id) return response.json(null);
+      // Turn checkpoints snapshot this server's disk; a device's folder has none.
+      if (project.nodeId) return response.json(null);
       if (request.query.timeline === "1") {
         return response.json(applyArtifactMessageIds(await turnCheckpoints.timeline(chatId, project.workingRoot),
           await messageIds.resolver(project, chat)));
@@ -502,7 +483,7 @@ export function registerProjectRoutes(app, {
       const project = await inspectionContext(request.params.id, true);
       if (!project) return response.status(404).json({ error: "project_not_found" });
       if (project.kind !== "workspace") return response.status(403).json({ error: "source_control_disabled", message: "Source Control is available only for Workspaces." });
-      response.json(await readWorkspaceCommit(project.workingRoot, request.params.hash, { signal: controller.signal }));
+      response.json(await readWorkspaceCommit(rootOf(project), request.params.hash, { signal: controller.signal }));
     } catch (error) {
       if (!request.aborted && !response.destroyed) next(error);
     } finally {
@@ -516,7 +497,7 @@ export function registerProjectRoutes(app, {
       const project = await inspectionContext(request.params.id, true);
       if (!project) return response.status(404).json({ error: "project_not_found" });
       if (project.kind !== "workspace") return response.status(403).json({ error: "source_control_disabled", message: "Source Control is available only for Workspaces." });
-      response.json(await runWorkspaceGitAction(project.workingRoot, {
+      response.json(await runWorkspaceGitAction(rootOf(project), {
         action: request.body?.action,
         relativePath: request.body?.path,
         message: request.body?.message,

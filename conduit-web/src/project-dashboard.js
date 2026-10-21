@@ -1,5 +1,4 @@
-import { readdir, stat } from "node:fs/promises";
-import path from "node:path";
+import { listWorkspaceDirectory } from "./workspace-inspector.js";
 import { messagesFromEntries } from "./session-store.js";
 import { conduitPiSessionFile } from "./backend-session.js";
 
@@ -13,11 +12,11 @@ const RECENT_FILE_LIMIT = 8;
 // the dashboard more than the list is worth.
 async function listRecentFiles(root) {
   try {
-    const entries = await readdir(root, { withFileTypes: true });
-    const files = await Promise.all(entries
-      .filter((entry) => entry.isFile() && !entry.name.startsWith("."))
-      .map(async (entry) => ({ name: entry.name, modifiedAt: (await stat(path.join(root, entry.name))).mtime.toISOString() })));
-    return files.sort((left, right) => right.modifiedAt.localeCompare(left.modifiedAt)).slice(0, RECENT_FILE_LIMIT);
+    const { entries } = await listWorkspaceDirectory(root);
+    return entries
+      .filter((entry) => entry.type === "file" && !entry.name.startsWith(".") && entry.modifiedAt != null)
+      .map((entry) => ({ name: entry.name, modifiedAt: new Date(entry.modifiedAt).toISOString() }))
+      .sort((left, right) => right.modifiedAt.localeCompare(left.modifiedAt)).slice(0, RECENT_FILE_LIMIT);
   } catch {
     return [];
   }
@@ -78,6 +77,8 @@ async function recentChatView(chat, project, process, readPage, backendSessions)
 
 export async function buildProjectDashboard({
   project,
+  // Where its files are: this server's path, or a device's folder (workspace-host.js).
+  root = project.workingRoot,
   registry,
   processes,
   terminals = [],
@@ -107,11 +108,9 @@ export async function buildProjectDashboard({
 
   let git = null;
   let changes = [];
-  // A device's folder is not on this machine: no Git or recent files from here.
-  const local = !project.nodeId;
-  if (local && isWorkspace(project)) {
+  if (isWorkspace(project)) {
     try {
-      const overview = await inspectWorkspace(project.workingRoot, { signal });
+      const overview = await inspectWorkspace(root, { signal });
       if (overview.repository) {
         git = {
           branch: overview.branch || "detached HEAD",
@@ -169,7 +168,7 @@ export async function buildProjectDashboard({
     changes,
     // Uncommitted changes when there are any; otherwise what was written to
     // the folder lately.
-    recentFiles: changes.length || !local ? [] : await listRecentFiles(project.workingRoot),
+    recentFiles: changes.length ? [] : await listRecentFiles(root),
     recentChats,
   };
 }
