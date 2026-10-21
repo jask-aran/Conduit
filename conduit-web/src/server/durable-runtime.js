@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { loadPiExtensionTools } from "./pi-extension-bridge.js";
 import { RemoteExecutionEnv } from "../nodes/remote-env.js";
 import { DeviceTools, deviceEnv } from "./device-tools.js";
+import { Subagents } from "./subagents.js";
 import { awaitWithContext, BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import { Type } from "@earendil-works/pi-ai";
 import { createRegistry, defineDoc, defineExtension, defineTool, Harness, section } from "@earendil-works/pi-durable";
@@ -211,6 +212,7 @@ export class DurableRuntime {
       install(Conduit(this));
       install(CodingTools);
       install(DeviceTools(this));
+      install(Subagents(this));
       const web = await this.webTools();
       if (web) install(web);
       install(createCodemodeExtension({ sandbox: new CodemodeSandbox() }));
@@ -295,9 +297,11 @@ export class DurableRuntime {
     if (!template) return {};
     const named = (file) => (file.includes("pi-web-access") ? "web" : CODEMODE_ONLY.test(file) ? "codemode" : null);
     // A conversation with no home device picks one per call: the same tools, placed.
-    const extensions = ["conduit", roaming ? "device-tools" : "coding-tools", ...template.extensions.map(named).filter(Boolean)]
-      .map((name) => this.extensions.get(name)).filter(Boolean);
-    const wanted = new Set([...ALWAYS, ...template.tools, ...(roaming ? ["devices"] : [])]);
+    // Delegation comes with the persistent shape (decision 9), or a template that lists `subagent`.
+    const delegates = roaming || template.tools.includes("subagent");
+    const extensions = ["conduit", roaming ? "device-tools" : "coding-tools", ...template.extensions.map(named).filter(Boolean),
+      ...(delegates ? ["subagents"] : [])].map((name) => this.extensions.get(name)).filter(Boolean);
+    const wanted = new Set([...ALWAYS, ...template.tools, ...(roaming ? ["devices"] : []), ...(delegates ? ["subagent"] : [])]);
     // Codemode's own helpers (`pi.codemode.*`) come with it: its scripts call them.
     const tools = extensions.flatMap((extension) => extension.tools || [])
       .filter((tool) => wanted.has(tool.name) || (wanted.has("codemode") && tool.name.startsWith("pi.codemode.")));
@@ -326,6 +330,22 @@ export class DurableRuntime {
   }
 
   envOn(conversationId, device, folder) { return deviceEnv(this, conversationId, device, folder); }
+
+  /** A conversation's last answer, as text: what a subagent hands back. */
+  async lastAnswer(conversationId) {
+    const conversation = await this.harness.conversation(conversationId, this.context);
+    let cursor;
+    do {
+      const page = await conversation.entries({ order: "descending" }, 50, cursor, this.context);
+      for (const entry of page.items) {
+        const message = entry.kind === "pi.assistant" ? entry.model?.[0] : null;
+        const text = (Array.isArray(message?.content) ? message.content : []).filter((part) => part?.type === "text").map((part) => part.text).join("").trim();
+        if (text) return text;
+      }
+      cursor = page.next;
+    } while (cursor);
+    return "";
+  }
 
   /**
    * The models offered, scoped as classic Pi scoped them: the agent's enabled

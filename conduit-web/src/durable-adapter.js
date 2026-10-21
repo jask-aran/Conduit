@@ -939,6 +939,31 @@ export class DurableAdapter extends EventEmitter {
     return { messages: messages.filter((message) => !message.streaming), tools, page: { before: null } };
   }
 
+  /**
+   * The subagents a chat's turns delegated to (src/server/subagents.js), on
+   * its conversation and the branches it left: each child's task and, once
+   * it has one, its answer. Their transcripts read as any conversation's.
+   */
+  async subagents({ liveSessionId, opaqueSession }) {
+    const record = liveSessionId ? this.get(liveSessionId) : null;
+    const current = record?.conversationId ?? Number(opaqueSession);
+    if (!Number.isInteger(current)) return [];
+    const harness = await this.runtime.open();
+    const children = [];
+    for (const conversationId of [...await this.branchesOf(current), current]) {
+      const conversation = await harness.conversation(conversationId, this.context);
+      const page = conversation ? await conversation.commit((tx) => tx.scanConversations({ ownerConversationId: conversationId }, 200), this.context) : { items: [] };
+      for (const child of page.items) {
+        const handle = await harness.conversation(child.id, this.context);
+        const first = handle && (await handle.entries({ order: "ascending" }, 5, undefined, this.context)).items.find((entry) => entry.kind === USER_ENTRY || entry.kind === "pi.user");
+        children.push({ conversationId: String(child.id), parentConversationId: String(conversationId),
+          task: textOf(first?.model?.[0]?.content) || (typeof first?.model?.[0]?.content === "string" ? first.model[0].content : ""),
+          answer: (await this.runtime.lastAnswer(child.id)) || null });
+      }
+    }
+    return children;
+  }
+
   /** The conversations a chat was on before the one given (its edits' forks), oldest first. */
   async branchesOf(conversationId) {
     const harness = await this.runtime.open();
