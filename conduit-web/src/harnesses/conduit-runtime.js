@@ -19,7 +19,6 @@ export const manifest = {
   // In-process: a chat is usable the moment it is selected.
   warm: "none",
   nameGeneration: "conduit",
-  suppliesMessageIds: true,
   drive: false,
   profile: false,
   builtIn: true,

@@ -13,10 +13,8 @@ export const manifest = {
   warm: "process",
   // Claude Code titles sessions for its own picker, not for a third party.
   nameGeneration: "conduit",
-  // Prompts keep the uuid Conduit hands them; model messages carry the API's id.
-  suppliesMessageIds: true,
   // Each chat's Claude Code is Conduit's child and ends with it, so a restart
-  // waits for running turns, as Pi's does.
+  // waits for running turns.
   drive: true,
   profile: true,
   // Runs on a paired device even when not installed here (registered regardless).

@@ -57,7 +57,7 @@ export function ChatHeader(props: {
   // What a project or workspace page calls itself in its own menu.
   const placeKind = () => props.project && isWorkspace(props.project) ? "workspace" : "project";
   const projectLabel = () => props.placeLabel || (props.appDashboard ? "Conduit" : props.project?.slug === "chat" ? "Chats" : props.project?.name || props.project?.slug || "Chats");
-  const runtimeLabel = () => props.runtime ? harnessLabelFor(props.chat?.backendImplementation() || "conduit_pi") : null;
+  const runtimeLabel = () => props.runtime ? harnessLabelFor(props.chat?.backendImplementation() || "conduit-runtime") : null;
   const profileLabel = () => props.profile?.label || props.profile?.id;
   const posture = () => props.profile?.posture || props.profile?.tools?.join(" / ");
   const sessionId = () => typeof props.live?.sessionId === "string" ? props.live.sessionId : "";

@@ -1,8 +1,8 @@
 import { parse } from "acorn";
 
 /**
- * A script step: a tool whose input is a program that calls other tools (Pi's
- * codemode; any harness's equivalent). Conduit states it the same way for every
+ * A script step: a tool whose input is a program that calls other tools. Conduit
+ * states it the same way for every
  * harness -- kind "script", its calls as `calls` on the tool row -- and this
  * module is the whole of the work an adapter shares:
  *

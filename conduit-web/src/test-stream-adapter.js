@@ -41,8 +41,8 @@ import { KATEX_COMPENDIUM, KATEX_LIMITS, MARKDOWN_MIX, RICH_MIX, RICH_PROSE } fr
  * to be unpredictable.
  */
 export const TEST_STREAM_CAPABILITIES = Object.freeze({
-  // Forks are cuts in its own journal, so the history it reports is a tree for
-  // the same reason Pi's is: a chat can hold more than one continuation.
+  // Forks are cuts in its own journal, so one chat can hold more than one
+  // continuation.
   history: "tree",
   fork: true,
   regenerate: true,
@@ -58,7 +58,7 @@ export const TEST_STREAM_CAPABILITIES = Object.freeze({
   modelSwitch: true,
   toolUse: true,
   approvals: true,
-  // Matching Pi: it answers an approval, it does not offer profiles to answer
+  // This harness answers an approval, but it does not offer profiles to answer
   // under. That is a Codex feature, and claiming it here would mean declaring a
   // surface with nothing behind it.
   permissionModes: false,
@@ -567,7 +567,7 @@ export class TestStreamAdapter extends EventEmitter {
         : ["yes", "approve"].includes(String(response.value ?? "").toLowerCase());
     if (!approved) {
       // Refused: the call fails with the refusal as its result, and the model,
-      // told, goes on -- as Pi returns a blocked call.
+      // told, then goes on.
       const { generationId } = record.turn;
       const toolCallId = pending.step.toolCallId;
       this.publish(record, { type: "tool_activity", phase: "end", generationId, seq: ++record.generationSeq,
@@ -705,7 +705,7 @@ export class TestStreamAdapter extends EventEmitter {
     this.publishUsage(record);
     // A follow-up waited for exactly this moment. It is a prompt of its own,
     // which is the difference between the two queues.
-    // A steer still waiting when the answer ended is too, as Pi takes one.
+    // A steer still waiting when the answer ended is ready too.
     const next = (stopReason !== "aborted" && record.queue.steering.shift()) || record.queue.followUp.shift();
     if (next) {
       this.publishQueue(record);
@@ -781,7 +781,7 @@ export class TestStreamAdapter extends EventEmitter {
    * Reduced from the events this adapter published, with the same reducer the
    * browser runs -- so a reconnecting client is given the view it would have
    * built if it had never dropped the socket, and paint stays droppable for
-   * this backend the way it is for Pi.
+   * this backend too.
    */
   replay(id) {
     const record = this.get(id);
@@ -926,8 +926,8 @@ export class TestStreamAdapter extends EventEmitter {
   /**
    * The chat as a tree, which is what a forkable history is.
    *
-   * Linear until something is forked, like Pi's: the shape is the same either
-   * way, and what makes it a tree is that an entry can be cut and asked again.
+   * Linear until something is forked: the shape is the same either way, and
+   * what makes it a tree is that an entry can be cut and asked again.
    * Every user message says so -- a prompt can be forked from or re-asked --
    * and an answer can be neither, because re-asking an answer means nothing.
    */

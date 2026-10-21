@@ -751,7 +751,7 @@ export function createActiveChat(options: ActiveChatOptions) {
    * -- used to call them by hand, so adding a store meant remembering it twice
    * and leaving it out of one was invisible: nothing broke, the store simply
    * went on answering for whichever chat it last heard about. That is how a
-   * codex chat's permission profiles came to be offered in Pi chats. Anything
+   * a Codex chat's permission profiles came to be offered in another chat. Anything
    * that belongs to a chat belongs in here, so there is one list to add to and
    * no second place to forget.
    */
@@ -1163,12 +1163,6 @@ export function createActiveChat(options: ActiveChatOptions) {
     }
   };
 
-  const continueResponse = async () => {
-    if (streaming() || stopping()) return;
-    try { await requireAgent("continue"); setGeneration("active"); session.send({ type: "continue" }); }
-    catch (error) { setGeneration("idle"); onError(error); }
-  };
-
   const compact = async () => {
     if (streaming() || compacting() || !supports("compaction")) return;
     try { await requireAgent("compact"); session.send({ type: "compact" }); }
@@ -1233,7 +1227,7 @@ export function createActiveChat(options: ActiveChatOptions) {
   // What is still waiting comes from the backend's queue, not from guessing at
   // local state: it reports a message as queued when it takes it and drops it
   // when the model actually reads it, which is the moment the bubble should
-  // clear. Pi sends queue_update; Codex sends thread/queue/changed.
+  // clear. Runtime and Test stream send queue_update; Codex sends thread/queue/changed.
   const pendingMessages = createMemo(() => {
     const waiting = [...queue().steering, ...queue().followUp];
     return waiting.map((item, index) => ({
@@ -1249,9 +1243,8 @@ export function createActiveChat(options: ActiveChatOptions) {
   /**
    * Take the queued messages back off the backend, returning their text.
    *
-   * Pi carries queued messages through an abort on purpose, so stopping without
-   * clearing first would still deliver them. Its own Esc does clear-then-abort,
-   * and so does this.
+   * Clear the queue before stopping so a backend cannot deliver those messages
+   * after the user takes them back.
    */
   const takeQueued = () => {
     const text = pendingMessages().map((message) => message.content).filter(Boolean).join("\n");
@@ -1264,11 +1257,8 @@ export function createActiveChat(options: ActiveChatOptions) {
    * Interrupt the turn and send what is queued, as one server-side command.
    *
    * The sequence is clear_queue, abort, prompt, and it has to run in that
-   * order: leaving the queue in place means the abort delivers it anyway, and
-   * aborting during a tool call makes Pi fail that queued turn instantly and
-   * empty. Sequencing it here - by waiting for the stop to land before
-   * prompting - raced against the backend's terminal event, so the server owns
-   * the whole sequence now and the client sends one message.
+   * order. Keeping it on the server avoids racing the backend's terminal
+   * event, so the client sends one message.
    */
   const interruptAndSend = () => {
     const prepared = prepareOutboundMessage();
@@ -1278,11 +1268,7 @@ export function createActiveChat(options: ActiveChatOptions) {
     // model was actually asked.
     const interrupting = [...pendingMessages().map((message) => message.content), prepared.message]
       .map((text) => text.trim()).filter(Boolean).join("\n");
-    // Pi accepts a steered message without saying which entry it becomes, so
-    // unlike a prompt there is no id to reconcile against and nothing arrives
-    // until the session file is read back. Without a bubble of its own the
-    // message the interrupt sent is absent from the transcript until then --
-    // for the whole of the response it asked for.
+    // Show the replacement prompt while the backend starts it.
     const interruptId = newMessageId();
     const local: Message = { id: interruptId, role: "user", content: interrupting,
       timestamp: new Date().toISOString(), attachments: prepared.sentAttachments, local: true };
@@ -1377,7 +1363,7 @@ export function createActiveChat(options: ActiveChatOptions) {
     generation, editingEntryId, contextUsage, sessionStats, cacheStats, refreshContext, loadBreakdown, compacting, hostUiRequests, queue, pendingMessages, capabilities, harnessCommands, activeGeneration, activeGenerationChange, turnArtifacts,
     navigatingId, presentation, interactionReady: () => presentation().kind === "ready" && Boolean(loadedId()), streaming, stopping, activity,
     initialize, select, prefetch, loadDetail, ensureAgent, reset, send, stop, regenerate, rehydrateDraft,
-    continueResponse, compact, loadHarnessCommands, loadOlder, edit, cancelEdit, respondHostUi, clearQueue, interruptAndSend, editQueued, discardQueued,
+    compact, loadHarnessCommands, loadOlder, edit, cancelEdit, respondHostUi, clearQueue, interruptAndSend, editQueued, discardQueued,
   };
 }
 

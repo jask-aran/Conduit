@@ -2,7 +2,7 @@
 import { Composer } from "../client/chat/composer";
 import { loadVoiceDictationSettings } from "../client/chat/voice-dictation.js";
 import { fakeAttachments, fakeChat } from "./fake-chat";
-import { seededModels, seededPlace, seededProfile } from "./seed";
+import { seededModels, seededProfile } from "./seed";
 import { ChatHeader, Conversation } from "../client/chat/chat-screen";
 import { Transcript } from "../client/chat/transcript";
 import { selectedMarkdownRenderer } from "../client/chat/markdown-settings";
@@ -15,15 +15,14 @@ import { selectedMarkdownRenderer } from "../client/chat/markdown-settings";
 export function ChatScreen(props: { chat?: ReturnType<typeof fakeChat> } = {}) {
   const chat = props.chat ?? fakeChat();
   const models = seededModels();
-  const place = seededPlace();
   const profile = seededProfile();
   const attachments = fakeAttachments();
   return <main data-slot="sidebar-inset" data-region="chat" class="chat-main">
     <ChatHeader title="Lorem ipsum file" chat={chat} profile={profile.active()} panelOpen={false} mobileSidebarOpen={false}
       onToggleMobileSidebar={() => {}} onNewChat={() => {}} onOpenPalette={() => {}} onOpenSearch={() => {}} onTogglePanel={() => {}} onShare={() => {}} />
     <Conversation chat={chat}
-      transcript={<Transcript chat={chat} supports={() => true} partialContinue={false} markdownRenderer={selectedMarkdownRenderer()} profileLabel={profile.active().label} />}
-      composer={<Composer chat={chat} attachments={attachments} models={models} profiles={profile.profiles} activeProfile={profile.active()} place={place} serverOnline voiceSettings={loadVoiceDictationSettings()}
+      transcript={<Transcript chat={chat} supports={() => true} markdownRenderer={selectedMarkdownRenderer()} profileLabel={profile.active().label} />}
+      composer={<Composer chat={chat} attachments={attachments} models={models} profiles={profile.profiles} activeProfile={profile.active()} serverOnline voiceSettings={loadVoiceDictationSettings()}
         onChooseProfile={profile.choose} onOpenSettings={() => {}} onOpenAttachments={() => {}} />} />
   </main>;
 }

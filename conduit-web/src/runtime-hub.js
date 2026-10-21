@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 
 /**
  * Global runtime fan-out: snapshot-first, low-frequency process updates.
- * Subscribers are SSE/WS response streams; browser disconnect does not stop Pi.
+ * Subscribers are SSE/WS response streams; a browser disconnect does not stop a live session.
  */
 
 export class RuntimeHub {

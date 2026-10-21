@@ -5,7 +5,6 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { listPiTemplates, loadPiTemplate, normalizeTemplateId } from "../../scripts/pi-runtime.mjs";
 import { expandHome, parseAllowlist } from "./workspace-paths.js";
-import { PiInstallationRegistry } from "./pi-installations.js";
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 
@@ -54,16 +53,11 @@ export function loadConfig(env = process.env) {
     env.CONDUIT_WORKSPACE_DEFAULT_ROOT || env.CONDUIT_WORKSPACE_SUGGESTION_ROOT || os.homedir(),
   );
   const piAgentDir = absolute(env.CONDUIT_PI_AGENT_DIR || path.join(dataRoot, "pi"));
-  const installations = new PiInstallationRegistry({
-    conduitAgentDir: piAgentDir,
-    conduitCommand: env.CONDUIT_PI_COMMAND || "",
-  });
   const port = Number(env.CONDUIT_PORT || env.PORT || 4310);
   return {
     host: env.CONDUIT_HOST || env.HOST || "127.0.0.1",
     port,
     release: String(env.CONDUIT_RELEASE || buildLabel(buildStamp(env))),
-    piCommand: installations.get("conduit-pinned").command,
     repositoryRoot,
     dataRoot,
     filesRoot,
@@ -81,8 +75,6 @@ export function loadConfig(env = process.env) {
     voiceConfigFile: absolute(env.CONDUIT_VOICE_CONFIG_FILE || path.join(dataRoot, "voice.json")),
     voiceModelRoot: absolute(env.CONDUIT_VOICE_MODEL_ROOT || path.join(dataRoot, "voice", "models")),
     voiceRecordingsRoot: absolute(env.CONDUIT_VOICE_RECORDINGS_ROOT || path.join(dataRoot, "voice", "recordings")),
-    installations,
-    defaultInstallationId: "conduit-pinned",
     bridgeSystemPrompt: path.join(templatesRoot, "conduit-workspace", "SYSTEM.md"),
     bridgeSkill: path.join(templatesRoot, "conduit-workspace", "SKILL.md"),
     runtimeSettingsFile: absolute(env.CONDUIT_RUNTIME_SETTINGS_FILE || path.join(dataRoot, "runtime.json")),
@@ -108,8 +100,6 @@ export function loadConfig(env = process.env) {
     piTemplates: discovered,
     piTemplateById: byId,
     piTemplate,
-    // Experimental and intentionally removable until continuation quality is proven.
-    enablePartialContinue: env.ENABLE_PARTIAL_CONTINUE !== "false",
   };
 }
 

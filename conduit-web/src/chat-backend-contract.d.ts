@@ -1,8 +1,8 @@
 /** Backend-neutral contract for chat adapters. */
 
 export type SessionSurface = "chat" | "terminal";
-export type AgentProtocol = "pi_rpc" | "acp" | "native_api" | "pty";
-export type AgentImplementation = "conduit_pi" | "codex" | "claude-code" | "opencode" | "chatgpt-web" | (string & {});
+export type AgentProtocol = "acp" | "native_api" | "pty";
+export type AgentImplementation = "codex" | "claude-code" | "opencode" | "chatgpt-web" | (string & {});
 export type ProfileManagement = "conduit" | "agent";
 
 export interface AgentProfile {
@@ -17,7 +17,7 @@ export interface AgentProfile {
 }
 
 export interface PersistedChatBackend {
-  /** Null for imported Pi chats whose profile has not yet been assigned. */
+  /** Null for imported chats whose profile has not yet been assigned. */
   profileId: string | null;
   profileRevision: string | null;
   management: ProfileManagement;
@@ -45,10 +45,9 @@ export interface ChatCapabilities {
    * that was not what was wanted. For that to mean anything the partial has to
    * still be there when the next request is built.
    *
-   * No harness integrated so far does this for text. Pi writes the partial to
-   * its session file but marks it aborted with zeroed usage and leaves it out
-   * of context; Codex does not persist it at all; ChatGPT Web never advances
-   * its cursor past an interrupted exchange. Where this is false, interrupting
+   * No integrated harness keeps interrupted text in the next model context.
+   * Codex does not persist it at all; ChatGPT Web never advances its cursor
+   * past an interrupted exchange. Where this is false, interrupting
    * a text completion discards what was written, and the UI has to say so
    * rather than implying the model was redirected mid-thought.
    */
@@ -192,9 +191,9 @@ interface EventBase {
  *   below: the message is restated in full when it closes, so the worst a
  *   dropped delta costs is that the reader watches less of the answer arrive.
  *   A socket that comes back is also restated from the record's own copy of the
- *   turn -- the generation Pi reduces from the wire, replayed as
- *   `generation_replay`, or the merged paint buffer the other harnesses keep
- *   and replay on attach. Neither is promised mid-stream: a socket that falls
+ *   turn -- the durable agent reduces from its events, replayed as
+ *   `generation_replay`, or the merged paint buffer other harnesses keep and
+ *   replay on attach. Neither is promised mid-stream: a socket that falls
  *   behind and recovers without reconnecting catches up at the next
  *   `message.close`.
  * - It is never AUTHORITATIVE. `message.close` restates the message in full, so
@@ -352,13 +351,9 @@ export interface ChatRequestError { code: string; message: string }
  * sent -- a malformed frame, a steer with nothing running -- which leaves the
  * turn exactly as it was.
  *
- * The two used to travel as two event types, `runtime_error` and
- * `client_error`, and only Pi's adapter renamed either of them. The other
- * three passed `client_error` through under its own name, so the same rejected
- * command reached the browser as a different event depending on which harness
- * the chat happened to be on -- and Pi, which does rename it, had no code for
- * a bad request and coerced it to `backend_unavailable`, failing a turn that
- * was still running.
+ * These used to travel as two event types, `runtime_error` and `client_error`.
+ * The server now states both in the shared contract, so a rejected command
+ * does not look like a backend failure or fail a turn that was still running.
  */
 export type ErrorEvent = EventBase & (
   | { type: "error"; scope: "runtime"; error: ChatError }

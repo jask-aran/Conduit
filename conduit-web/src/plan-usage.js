@@ -36,7 +36,7 @@ function cached(key, ask) {
 const readJson = async (file) => JSON.parse(await fs.readFile(file, "utf8"));
 const timeout = () => AbortSignal.timeout(8000);
 
-/** ChatGPT's plan, for a Codex login (Codex itself, or Pi's openai-codex). */
+/** ChatGPT's plan, for a Codex login. */
 async function chatgptPlan(accessToken, accountId) {
   if (!accessToken) return null;
   const response = await fetch("https://chatgpt.com/backend-api/wham/usage", { signal: timeout(), headers: {
@@ -81,17 +81,6 @@ export function claudePlanUsage() {
     const oauth = credentials?.claudeAiOauth;
     const plan = oauth?.expiresAt && oauth.expiresAt < Date.now() ? null : await claudePlan(oauth?.accessToken);
     return plan ? { ...plan, name: oauth?.subscriptionType || null } : null;
-  });
-}
-
-/** Pi's plan for the model it runs: a subscription login has one, an API key does not. */
-export function piPlanUsage(agentDir, model) {
-  const provider = String(model || "").split("/")[0];
-  if (provider !== "openai-codex") return Promise.resolve(null);
-  return cached(`pi:${agentDir}:${provider}`, async () => {
-    const auth = (await readJson(path.join(agentDir, "auth.json")))?.[provider];
-    if (auth?.type !== "oauth" || (auth.expires && auth.expires < Date.now())) return null;
-    return chatgptPlan(auth.access, auth.accountId);
   });
 }
 

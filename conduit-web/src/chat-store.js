@@ -3,7 +3,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { readSessionMetadata, readSessionParentSession, validateSessionFile } from "./session-store.js";
 import { ensureChatTree } from "./owned-paths.js";
-import { harnessIdForImplementation, piBackendFor, withPiCompatibilityFields } from "./chat-backend.js";
+import { harnessIdForImplementation, piBackendFor, templateBackend, withPiCompatibilityFields } from "./chat-backend.js";
 import { conduitPiSessionFile } from "./backend-session.js";
 import { placeOf } from "./place.js";
 
@@ -359,24 +359,6 @@ export class ChatStore {
     return this.chats.find((chat) => chat.id === id) || null;
   }
 
-  /** Stamp default profile identity when a chat is missing one. */
-  async ensureTemplate(chatId, { templateId, templateVersion } = {}) {
-    const chat = this.metadata(chatId);
-    if (!chat) return null;
-    if (chat.templateId) return chat;
-    if (!templateId) return chat;
-    chat.templateId = String(templateId).trim();
-    chat.templateVersion = templateVersion ? String(templateVersion).trim() : chat.templateVersion;
-    if (chat.runtime?.kind === "conduit_profile") {
-      chat.runtime.profileId = chat.templateId;
-      chat.runtime.profileVersion = chat.templateVersion;
-    }
-    chat.updatedAt = new Date(this.now()).toISOString();
-    chat.backend = piBackendFor(chat);
-    await this.flush();
-    return chat;
-  }
-
   async find(projects, id) {
     const chat = this.metadata(id);
     const sessionFile = conduitPiSessionFile(chat);
@@ -389,6 +371,7 @@ export class ChatStore {
 
   async create(project, { templateId = null, templateVersion = null, runtime = null, backend = null, untracked = false, run = false } = {}) {
     const timestamp = new Date(this.now()).toISOString();
+    const selectedBackend = backend || templateBackend({ id: templateId || "assistant", version: templateVersion });
     const chat = {
       id: crypto.randomUUID(),
       projectId: project.id,
@@ -398,8 +381,8 @@ export class ChatStore {
       templateVersion: typeof templateVersion === "string" && templateVersion.trim()
         ? templateVersion.trim()
         : null,
-      runtime: backend?.protocol === "pi_rpc" || !backend ? this.runtimeFor({ runtime }, templateId, templateVersion) : null,
-      backend,
+      runtime: backend?.protocol === "pi_rpc" ? this.runtimeFor({ runtime }, templateId, templateVersion) : null,
+      backend: selectedBackend,
       modelThinkingLevels: {},
       // The device that owns the thread's work (plan decision 21): its
       // workspace's, whoever typed; the head's for a chat in no workspace.
@@ -464,7 +447,6 @@ export class ChatStore {
   async update(chatId, patch) {
     const chat = this.metadata(chatId);
     if (!chat) return null;
-    const canSelectBackend = chat.status === "draft" && !conduitPiSessionFile(chat) && !chat.lastUserMessageAt;
     const previousCompletedAt = chat.lastAssistantCompletedAt;
     const allowed = [
       "projectId",
@@ -496,10 +478,6 @@ export class ChatStore {
     }
     if (chat.runtime) chat.runtime = this.runtimeFor(chat, chat.templateId, chat.templateVersion);
     if (patch.status === "draft" || patch.status === "active") chat.status = patch.status;
-    if (canSelectBackend && patch.backend == null && (!chat.backend || chat.backend.protocol === "pi_rpc")
-      && ["templateId", "templateVersion", "runtime"].some((key) => Object.hasOwn(patch, key))) {
-      chat.backend = piBackendFor(chat);
-    }
     if (!patch.updatedAt) chat.updatedAt = new Date(this.now()).toISOString();
     await this.flush();
     return chat;
@@ -587,8 +565,8 @@ export class ChatStore {
 
   flush() {
     for (const chat of this.chats) {
-      if (chat.backend?.protocol !== "pi_rpc") chat.backend ||= piBackendFor(chat);
-      else chat.backend = { ...(chat.backend || piBackendFor(chat)), opaqueSession: conduitPiSessionFile(chat) };
+      if (chat.backend?.protocol === "pi_rpc") chat.backend = { ...chat.backend, opaqueSession: conduitPiSessionFile(chat) };
+      else chat.backend ||= templateBackend({ id: chat.templateId || "assistant", version: chat.templateVersion });
     }
     const value = `${JSON.stringify({ version: 5, chats: this.chats }, null, 2)}\n`;
     this.writeQueue = this.writeQueue.then(async () => {

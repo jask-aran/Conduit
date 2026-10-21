@@ -13,12 +13,7 @@ function noStore(response) {
   response.set("Cache-Control", "no-store");
 }
 
-export function registerPiAuthRoutes(app, { piAuth, installationViews }) {
-  app.get("/v0/pi-installations", async (_request, response, next) => {
-    try { response.json({ installations: await installationViews() }); }
-    catch (error) { next(error); }
-  });
-
+export function registerPiAuthRoutes(app, { piAuth }) {
   app.get("/v0/pi-auth", (request, response, next) => {
     try {
       piAuthOwner(request);

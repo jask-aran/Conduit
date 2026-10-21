@@ -7,7 +7,7 @@ import {
 } from "../shortcuts/shortcut-normalize";
 import type { PendingShortcutSequence } from "../shortcuts/shortcut-types";
 
-export type CommandHintMode = "browse" | "edit" | "rename" | "move" | "action-prefix" | "model-selector";
+export type CommandHintMode = "browse" | "edit" | "rename" | "action-prefix" | "model-selector";
 export type CommandHintContext = "chat" | "generic";
 
 type Hint = {
@@ -36,7 +36,6 @@ export function CommandHintBar(props: {
   shortcuts: ShortcutManager;
   onToggleEdit?: () => void;
   onDeleteSelected?: () => void;
-  onMoveSelected?: () => void;
 }) {
   const [shortcutRevision, setShortcutRevision] = createSignal(0);
   onCleanup(props.shortcuts.subscribe(() => setShortcutRevision((value) => value + 1)));
@@ -60,9 +59,7 @@ export function CommandHintBar(props: {
       const command = getCommandDefinition(commandId);
       const label = commandId === COMMAND_IDS.renameHighlightedChat
         ? "Rename"
-        : commandId === COMMAND_IDS.moveHighlightedChat
-          ? "Move"
-          : commandId === COMMAND_IDS.deleteHighlightedChat
+        : commandId === COMMAND_IDS.deleteHighlightedChat
             ? "Delete"
             : command.label;
       return [{ commandId, label, keys }];
@@ -79,16 +76,10 @@ export function CommandHintBar(props: {
       fixedHint("Select", "Click"),
       fixedHint("Toggle", "Space"),
       commandHint(COMMAND_IDS.deleteSelectedChats, "Delete"),
-      commandHint(COMMAND_IDS.moveSelectedChats, "Move"),
     ];
     if (props.mode === "rename") return [
       fixedHint("Save", "Enter"),
       fixedHint("Cancel", "Esc"),
-    ];
-    if (props.mode === "move") return [
-      fixedHint("Move", "Enter"),
-      fixedHint("Back", "Esc"),
-      fixedHint("Navigate", "↑", "↓"),
     ];
     if (props.mode === "model-selector") return [
       fixedHint("Navigate", "↑", "↓"),
@@ -101,7 +92,6 @@ export function CommandHintBar(props: {
       commandHint(COMMAND_IDS.toggleChatEdit, "Edit"),
       commandHint(COMMAND_IDS.renameHighlightedChat, "Rename"),
       commandHint(COMMAND_IDS.deleteHighlightedChat, "Delete"),
-      commandHint(COMMAND_IDS.moveHighlightedChat, "Move"),
       fixedHint("Expand", "→"),
       fixedHint("Search in", "/"),
       fixedHint("Project", "Ctrl", "Enter"),
@@ -116,7 +106,7 @@ export function CommandHintBar(props: {
   const primaryCount = () => props.mode === "action-prefix"
     ? resolvedHints().length
     : props.mode === "edit"
-      ? 5
+      ? 4
       : props.mode === "model-selector"
         ? 4
       : props.mode === "browse" && props.context === "chat"
@@ -129,7 +119,6 @@ export function CommandHintBar(props: {
     if (hint.commandId === COMMAND_IDS.toggleChatEdit) return props.onToggleEdit;
     if (hint.label === "Preview") return props.onTogglePreview;
     if (props.mode === "edit" && hint.commandId === COMMAND_IDS.deleteSelectedChats) return props.onDeleteSelected;
-    if (props.mode === "edit" && hint.commandId === COMMAND_IDS.moveSelectedChats) return props.onMoveSelected;
     return undefined;
   };
 

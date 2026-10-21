@@ -4,7 +4,7 @@ import { rememberModel } from "../../profile-model-memory.js";
 import { chatView, isChatId } from "../../chat-store.js";
 import { resolveComputerContext } from "../../computer-context.js";
 import { stopSessionProcesses } from "../../session-operations.js";
-import { agentProfiles, conduitPiSessionFile, harnessCapabilities, profileSelection, templateBackend } from "../../chat-backend.js";
+import { agentProfiles, harnessCapabilities, profileSelection, templateBackend } from "../../chat-backend.js";
 import { manifestForImplementation } from "../../harnesses/index.js";
 
 const opaqueSessionId = (chat) => typeof chat.backend?.opaqueSession === "string"
@@ -33,7 +33,6 @@ export function registerChatRoutes(app, {
   backends,
   catalogFor,
   chatModelView,
-  composerDraft = () => null,
   config,
   defaultTemplate,
   findChatContext,
@@ -45,7 +44,6 @@ export function registerChatRoutes(app, {
   registry,
   runtimeFor,
   templateForChat,
-  warmDrafts = null,
 }) {
   const discoverable = discoverableFrom(backends);
   const defaultDiscovery = () => backends.where((manifest) => manifest.discovery !== "none")
@@ -214,7 +212,7 @@ export function registerChatRoutes(app, {
             profileId, profileRevision: null, management: selectedProfile.management,
             ...selectedProfile.agent, opaqueSession: null,
           } });
-          return completeCreation(request, response, chat, project);
+          return completeCreation(request, response, chat, project, { start: request.body?.warm === true });
         }
         const requestedTemplateId = request.body?.templateId || project.defaultTemplateId || null;
         const template = requestedTemplateId
@@ -575,11 +573,6 @@ export function registerChatRoutes(app, {
         const context = await findChatContext(request.params.chatId);
         if (!context) return null;
         return lifecycle.withProjects([context.project.id], async () => {
-          // An untouched draft keeps its agent for the next page that wants one.
-          const typed = composerDraft(context.chat.id);
-          if (warmDrafts && !typed?.text?.trim() && !typed?.attachmentIds?.length
-            && !await registry.hasAttachments(context.project, context.chat.id)
-            && await warmDrafts.release(context.chat)) return true;
           await stopSessionProcesses(backends, context.chat);
           return registry.removeEmptyDraft(context.chat.id, context.project);
         });

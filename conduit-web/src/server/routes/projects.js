@@ -1,6 +1,5 @@
 import { remoteNode } from "../../place.js";
 import os from "node:os";
-import { applyArtifactMessageIds } from "../../message-ids.js";
 import { deviceHost } from "../../workspace-host.js";
 import { readWorkspaceComparison } from "../../workspace-comparison.js";
 import { computerContext, findComputerGitRoot, resolveComputerContext } from "../../computer-context.js";
@@ -9,7 +8,6 @@ import fs from "node:fs/promises";
 import express from "express";
 import { resolveTemplate } from "../../config.js";
 import { chatView } from "../../chat-store.js";
-import { conduitPiSessionFile } from "../../backend-session.js";
 import { removeProjectSessions, removeSession } from "../../session-store.js";
 import {
   createWorkspaceDirectory,
@@ -22,8 +20,7 @@ import {
 } from "../../workspace-inspector.js";
 import {
   findDeletableSession,
-  moveRegisteredChat,
-  stopProjectProcesses, stopSessionProcesses,
+  stopProjectProcesses,
 } from "../../session-operations.js";
 
 function resolveProjectDefaultTemplateId(config, requested, fallback = null) {
@@ -80,15 +77,12 @@ function normalizeWorkspaceAppearance(requested) {
 }
 
 export function registerProjectRoutes(app, {
-  messageIds,
   nodeHub,
   backends,
   buildProjectDashboard,
   config,
   listWorkspaceDirectory,
-  manager,
   projects,
-  readSessionPage,
   readWorkspaceCommit,
   readWorkspaceDiff,
   readWorkspaceFile,
@@ -161,7 +155,7 @@ export function registerProjectRoutes(app, {
   app.get("/v0/projects", async (_request, response, next) => {
     try {
       const items = await projects.list();
-      const live = manager.list();
+      const live = backends.list();
       response.json({ projects: await Promise.all(items.map(async (project) => ({
         ...project,
         // Whose it is and what can be done there, so the client asks that and never `nodeId`.
@@ -193,9 +187,11 @@ export function registerProjectRoutes(app, {
         project,
         root: rootOf(project),
         registry,
-        processes: manager.list(),
+        processes: backends.list(),
         terminals: terminals.list(),
-        readPage: readSessionPage,
+        readTranscript: async (chat) => backends.forChat(chat).readTranscript({
+          chatId: chat.id, opaqueSession: chat.backend?.opaqueSession, project,
+        }),
         inspectWorkspace: (root, options) => readWorkspaceDiff(root, { ...options, includePatch: false }),
         // A harness with no threads of its own to enumerate (ChatGPT Web, the
         // test profile) has nothing to list, rather than failing the page.
@@ -466,8 +462,7 @@ export function registerProjectRoutes(app, {
       const can = await backends.capabilities?.(project);
       if (can ? !can.checkpoints : remoteNode(project)) return response.json(null);
       if (request.query.timeline === "1") {
-        return response.json(applyArtifactMessageIds(await turnCheckpoints.timeline(chatId, project.workingRoot),
-          await messageIds.resolver(project, chat)));
+        return response.json(await turnCheckpoints.timeline(chatId, project.workingRoot));
       }
       const baseline = request.query.baseline === "turn" ? "turn" : "chat";
       const checkpointId = typeof request.query.checkpointId === "string" ? request.query.checkpointId : null;
@@ -507,36 +502,6 @@ export function registerProjectRoutes(app, {
         relativePath: request.body?.path,
         message: request.body?.message,
       }));
-    } catch (error) { next(error); }
-  });
-
-  app.post("/v0/projects/:id/move-sessions", async (request, response, next) => {
-    try {
-      const source = await projects.get(request.params.id);
-      const target = await projects.get(request.body?.projectId || "");
-      if (!source || !target) return response.status(404).json({ error: "project_not_found" });
-      await lifecycle.withProjects([source.id, target.id], async () => {
-        await projects.validate(source);
-        await projects.validate(target);
-        if (source.id === target.id) throw Object.assign(new Error("Project target is unchanged"), { code: "project_target_unchanged", status: 409 });
-        const chats = registry.listProject(source.id, { includeHidden: true });
-        const moved = [];
-        for (const { id } of chats) {
-          const item = await lifecycle.run(id, async () => {
-            const chat = registry.metadata(id);
-            if (!chat || chat.projectId !== source.id) return null;
-            const projectList = await projects.list();
-            const session = conduitPiSessionFile(chat) ? await registry.find(projectList, chat.id) : null;
-            await stopSessionProcesses(backends, chat);
-            lifecycle.assertAvailable(chat.id, source.id);
-            lifecycle.assertAvailable(chat.id, target.id);
-            await moveRegisteredChat({ chat, source, target, session, registry });
-            return { sourceId: chat.id, session: chatView(registry.metadata(chat.id)) };
-          });
-          if (item) moved.push(item);
-        }
-        response.json({ moved });
-      });
     } catch (error) { next(error); }
   });
 

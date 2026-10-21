@@ -1,13 +1,8 @@
 import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { SessionManager } from "@earendil-works/pi-coding-agent";
-import { wasAborted } from "./abort-signature.js";
 import { parseAttachmentEnvelope } from "./attachment-envelope.js";
-import { CONTINUE_PROMPT, mergeContinuation } from "./continuation.js";
-import { wasDiscarded } from "./abort-signature.js";
-import { PI_CAPABILITIES, PI_TOOL_KINDS, piResultCalls, piResultFailed, piResultSubject, piToolSubject } from "./pi-capabilities.js";
-import { toolKind } from "./harnesses/transcript-ops.js";
+import { CONTINUE_PROMPT } from "./continuation.js";
 import { isPathInside } from "./workspace-paths.js";
 
 
@@ -30,17 +25,9 @@ function textContent(content) {
 const sessionIndexes = new Map();
 const sessionIndexRefreshes = new Map();
 
-function consumeIndexedEntry(index, entry, offset, end) {
+function consumeIndexedEntry(index, entry) {
   const content = entry.type === "message" ? textContent(entry.message?.content) : "";
   const timestamp = typeof entry.timestamp === "string" ? entry.timestamp : null;
-  index.records.push({
-    offset,
-    end,
-    characters: content.length,
-    turnStart: entry.type === "message"
-      && entry.message?.role === "user"
-      && content.trim() !== CONTINUE_PROMPT,
-  });
   if (entry.type === "session") index.header = entry;
   if (entry.type === "session_info" && entry.name) index.name = entry.name;
   if (!index.firstMessage && entry.type === "message" && entry.message?.role === "user") {
@@ -71,7 +58,7 @@ function parseIndexedBuffer(index, buffer, baseOffset) {
     const line = buffer.subarray(lineStart, cursor);
     if (line.length) {
       try {
-        consumeIndexedEntry(index, JSON.parse(line.toString("utf8")), baseOffset + lineStart, baseOffset + cursor + 1);
+        consumeIndexedEntry(index, JSON.parse(line.toString("utf8")));
       } catch {}
     }
     lineStart = cursor + 1;
@@ -79,7 +66,7 @@ function parseIndexedBuffer(index, buffer, baseOffset) {
   const finalLine = buffer.subarray(lineStart);
   if (finalLine.length) {
     try {
-      consumeIndexedEntry(index, JSON.parse(finalLine.toString("utf8")), baseOffset + lineStart, baseOffset + buffer.length);
+      consumeIndexedEntry(index, JSON.parse(finalLine.toString("utf8")));
       lineStart = buffer.length;
     } catch {}
   }
@@ -94,7 +81,6 @@ async function buildSessionIndex(file, stat) {
     size: stat.size,
     mtimeMs: stat.mtimeMs,
     indexedThrough: 0,
-    records: [],
     header: null,
     name: null,
     firstMessage: "",
@@ -116,7 +102,6 @@ function appendSessionIndex(index, stat) {
     ...index,
     size: stat.size,
     mtimeMs: stat.mtimeMs,
-    records: [...index.records],
     announcedAttachmentIds: new Set(index.announcedAttachmentIds),
   };
 }
@@ -255,65 +240,6 @@ export async function validateSessionHeader(file, project) {
   } finally {
     await handle.close();
   }
-}
-
-export async function readSessionPage(file, project, { before, turnLimit = 10, characterLimit = 50_000 } = {}) {
-  const metadata = await readSessionMetadata(file, project);
-  const index = await sessionIndex(metadata.file);
-  const requestedEnd = Number.parseInt(before, 10);
-  const endOffset = Number.isInteger(requestedEnd)
-    ? Math.max(0, Math.min(requestedEnd, index.indexedThrough))
-    : index.indexedThrough;
-  let end = index.records.findIndex((record) => record.offset >= endOffset);
-  if (end < 0) end = index.records.length;
-  const starts = [];
-  for (let recordIndex = 0; recordIndex < end; recordIndex += 1) {
-    if (index.records[recordIndex].turnStart) starts.push(recordIndex);
-  }
-  let start = 0;
-  if (starts.length) {
-    start = starts.at(-1);
-    let characters = 0;
-    let turns = 0;
-    for (let position = starts.length - 1; position >= 0; position -= 1) {
-      const turnStart = starts[position];
-      const turnEnd = position + 1 < starts.length ? starts[position + 1] : end;
-      const turnCharacters = index.records.slice(turnStart, turnEnd)
-        .reduce((total, record) => total + record.characters, 0);
-      if (turns > 0 && (turns >= turnLimit || characters + turnCharacters > characterLimit)) break;
-      start = turnStart;
-      characters += turnCharacters;
-      turns += 1;
-    }
-  }
-  const startOffset = index.records[start]?.offset ?? endOffset;
-  const length = Math.max(0, endOffset - startOffset);
-  const handle = await fs.open(metadata.file, "r");
-  let buffer;
-  try {
-    buffer = Buffer.alloc(length);
-    await handle.read(buffer, 0, length, startOffset);
-  } finally {
-    await handle.close();
-  }
-  const entries = [];
-  for (const record of index.records.slice(start, end)) {
-    const relativeStart = record.offset - startOffset;
-    const relativeEnd = Math.min(record.end - startOffset, buffer.length);
-    const line = buffer.subarray(relativeStart, relativeEnd).toString("utf8").trim();
-    if (!line) continue;
-    try {
-      const entry = JSON.parse(line);
-      if (entry.type === "message" && !entry.id) entry.id = `entry_${record.offset}`;
-      entries.push(entry);
-    } catch {}
-  }
-  const hasMore = starts.length > 0 && start > starts[0];
-  return {
-    ...metadata,
-    entries,
-    page: { before: hasMore ? String(startOffset) : null },
-  };
 }
 
 export async function parseSession(file, project) {
@@ -492,41 +418,6 @@ export async function removeSessionFamily(file, project, options = {}) {
   return files;
 }
 
-export async function renameSession(session, project, name) {
-  const manager = SessionManager.open(session.file, project.sessionsDir, project.workingRoot);
-  manager.appendSessionInfo(name);
-  return parseSession(session.file, project);
-}
-
-export async function duplicateSession(session, targetProject, name = "") {
-  const manager = SessionManager.forkFrom(session.file, targetProject.workingRoot, targetProject.sessionsDir);
-  if (name.trim()) manager.appendSessionInfo(name);
-  return parseSession(manager.getSessionFile(), targetProject);
-}
-
-export async function moveSession(session, targetProject) {
-  const duplicate = await duplicateSession(session, targetProject);
-  try {
-    await removeSession(session);
-  } catch (error) {
-    await removeSession(duplicate);
-    throw error;
-  }
-  return duplicate;
-}
-
-export async function moveSessions(sessions, targetProject) {
-  const duplicates = [];
-  try {
-    for (const session of sessions) duplicates.push(await duplicateSession(session, targetProject));
-  } catch (error) {
-    await Promise.all(duplicates.map(removeSession));
-    throw error;
-  }
-  await Promise.all(sessions.map(removeSession));
-  return duplicates;
-}
-
 export async function removeProjectSessions(project) {
   const sessions = await discoverProjectSessions(project);
   await Promise.all(sessions.map(removeSession));
@@ -547,137 +438,6 @@ export async function removeProjectSessions(project) {
  * floor: nothing was wrong except that two producers of the same field had
  * spelled it differently and only one of them matched the reader.
  */
-export function neutralBlock(block) {
-  if (block?.type === "text") return { kind: "text", text: block.text || "" };
-  if (block?.type === "thinking") {
-    const text = block.thinking ?? block.text ?? "";
-    // Returned only encrypted -- a signature and no text -- as the live reader says too.
-    return { kind: "thinking", text, ...(block.redacted || (!text && block.thinkingSignature) ? { redacted: true } : {}) };
-  }
-  if (block?.type === "toolCall") {
-    return { kind: "tool_call", toolCallId: block.id || block.toolCallId, name: block.name, input: block.arguments };
-  }
-  return { kind: block?.type || "text", ...(block?.text ? { text: block.text } : {}) };
-}
-
-export function messagesFromEntries(entries) {
-  const messages = [];
-  let continuation = false;
-  let answers = null;
-  entries.forEach((entry, index) => {
-    if (entry.type !== "message" || !entry.message?.role) return [];
-    const role = entry.message.role;
-    if (!["user", "assistant", "toolResult"].includes(role)) return [];
-    const rawContent = textContent(entry.message.content);
-    if (role === "user" && rawContent.trim() === CONTINUE_PROMPT) {
-      continuation = true;
-      return;
-    }
-    const envelope = role === "user" ? parseAttachmentEnvelope(rawContent) : null;
-    const aborted = wasAborted(entry.message);
-    const message = {
-      id: entry.id || `entry_${index}`,
-      role,
-      content: envelope?.message ?? rawContent,
-      blocks: Array.isArray(entry.message.content) ? entry.message.content.map(neutralBlock) : [],
-      usage: entry.message.usage || null,
-      timestamp: entry.timestamp || null,
-      stopReason: aborted ? "aborted" : (entry.message.stopReason || null),
-      errorMessage: aborted ? null : (entry.message.errorMessage || null),
-      provider: entry.message.provider || null,
-      model: entry.message.model || null,
-      stopped: aborted,
-      // Pi keeps an interrupted answer in the session file and then builds every
-      // later request without it. Reading the file back has to say so too, or a
-      // reload would quietly restore it as an ordinary part of the conversation
-      // -- which is the one place the transcript could still mislead, because
-      // the live stream marks it and the file is what survives a refresh.
-      ...(aborted && wasDiscarded({ role, content: envelope?.message ?? rawContent, stopReason: "aborted" },
-        { keepsPartial: PI_CAPABILITIES.interruptKeepsPartial }) ? { discarded: true } : {}),
-      attachments: envelope?.attachments || [],
-    };
-    // The same two things the live stream states, stated by the file as well.
-    //
-    // Reading a session back used to say neither, so a reload put the browser
-    // straight back to the guessing the socket path had already stopped doing:
-    // answer-or-narration read off the shape of the turn, and tools matched to
-    // turns by timestamp. The file is ordered, so both are read off it rather
-    // than inferred -- the prompt an answer answers is the prompt above it, and
-    // a message is the turn talking as it works when it called a tool.
-    if (role === "assistant") {
-      message.interim = message.stopReason === "toolUse"
-        || message.blocks.some((block) => block.kind === "tool_call");
-      message.answers = answers;
-    }
-    if (role === "assistant" && continuation) {
-      if (!message.content) return;
-      const previous = messages.findLast((item) => item.role === "assistant");
-      if (previous) {
-        previous.content = mergeContinuation(previous.content, message.content);
-        previous.stopReason = message.stopReason;
-        previous.errorMessage = message.errorMessage;
-        previous.provider = message.provider;
-        previous.model = message.model;
-        previous.stopped = message.stopped;
-        // The continuation carries the standing of the message it completes: a
-        // partial that has been written past is no longer the thing the agent
-        // has no record of.
-        previous.discarded = message.discarded === true;
-        previous.interim = message.interim;
-        previous.continued = true;
-        previous.timestamp = message.timestamp || previous.timestamp;
-        continuation = false;
-        return;
-      }
-    }
-    if (role !== "toolResult") continuation = false;
-    if (role === "user") answers = message.id;
-    messages.push(message);
-  });
-  // How each turn ended, stated on its prompt the way the live stream states
-  // it. The file does not say, so it is read here, once: a turn with a stopped
-  // message was interrupted, one whose last message is an error failed.
-  const turns = new Map();
-  for (const message of messages) {
-    if (message.role === "user") turns.set(message.id, { prompt: message, assistants: [] });
-    else if (message.role === "assistant" && turns.has(message.answers)) turns.get(message.answers).assistants.push(message);
-  }
-  for (const { prompt, assistants } of turns.values()) {
-    if (!assistants.length) continue;
-    prompt.outcome = assistants.some((message) => message.stopped) ? "interrupted"
-      : assistants.at(-1).stopReason === "error" ? "failed"
-      : "complete";
-  }
-  return messages;
-}
-
-export function pageSessionEntries(entries, { before, turnLimit = 10, characterLimit = 50_000 } = {}) {
-  const requestedEnd = Number.parseInt(before, 10);
-  const end = Number.isInteger(requestedEnd) ? Math.max(0, Math.min(requestedEnd, entries.length)) : entries.length;
-  const starts = [];
-  for (let index = 0; index < end; index += 1) {
-    if (entries[index].type === "message"
-      && entries[index].message?.role === "user"
-      && textContent(entries[index].message.content).trim() !== CONTINUE_PROMPT) starts.push(index);
-  }
-  if (!starts.length) return { entries: entries.slice(0, end), start: 0, end, hasMore: false };
-
-  let start = starts.at(-1);
-  let characters = 0;
-  let turns = 0;
-  for (let position = starts.length - 1; position >= 0; position -= 1) {
-    const turnStart = starts[position];
-    const turnEnd = position + 1 < starts.length ? starts[position + 1] : end;
-    const turnCharacters = entries.slice(turnStart, turnEnd).reduce((total, entry) =>
-      total + (entry.type === "message" ? textContent(entry.message?.content).length : 0), 0);
-    if (turns > 0 && (turns >= turnLimit || characters + turnCharacters > characterLimit)) break;
-    start = turnStart;
-    characters += turnCharacters;
-    turns += 1;
-  }
-  return { entries: entries.slice(start, end), start, end, hasMore: start > starts[0] };
-}
-
 export function transcriptFromMessages(messages) {
   return messages
     .filter((message) => message.content.trim())
@@ -686,87 +446,4 @@ export function transcriptFromMessages(messages) {
       return `## ${role}\n\n${message.content.trim()}`;
     })
     .join("\n\n");
-}
-
-export function transcriptFromEntries(entries) {
-  return transcriptFromMessages(messagesFromEntries(entries));
-}
-
-export function toolsFromEntries(entries) {
-  const tools = new Map();
-  // A tool Pi killed because the turn was stopped is filed as a failure, and
-  // the entry after it is the stopped turn. That entry is what says which.
-  let failed = [];
-  for (const entry of entries) {
-    if (entry.type !== "message") continue;
-    const message = entry.message;
-    if (message?.role === "assistant") {
-      if (wasAborted(message)) for (const id of failed) tools.set(id, { ...tools.get(id), isError: false, cancelled: true });
-      failed = [];
-    }
-    if (message?.role === "assistant" && Array.isArray(message.content)) {
-      for (const block of message.content) {
-        if (block?.type !== "toolCall" || !block.id) continue;
-        tools.set(block.id, {
-          toolCallId: block.id,
-          name: block.name,
-          kind: toolKind(PI_TOOL_KINDS, block.name),
-          subject: piToolSubject(block.name, block.arguments) ?? undefined,
-          input: block.arguments,
-          done: false,
-          timestamp: entry.timestamp || null,
-        });
-      }
-    }
-    if (message?.role === "toolResult" && message.toolCallId) {
-      const current = tools.get(message.toolCallId) || {
-        toolCallId: message.toolCallId,
-        name: message.toolName,
-        kind: toolKind(PI_TOOL_KINDS, message.toolName),
-        input: {},
-      };
-      const name = current.name || message.toolName;
-      const subject = piResultSubject(name, message.details);
-      const calls = piResultCalls(name, message.details);
-      tools.set(message.toolCallId, {
-        ...current,
-        name,
-        ...(subject ? { subject } : {}),
-        ...(calls ? { calls } : {}),
-        done: true,
-        ...(entry.timestamp ? { completedAt: entry.timestamp } : {}),
-        isError: message.isError === true || piResultFailed(name, message.details),
-        output: textContent(message.content),
-      });
-      if (message.isError === true) failed.push(message.toolCallId);
-    }
-  }
-  return [...tools.values()];
-}
-
-/** One browser-facing projection of a backend-owned Pi transcript page. */
-export function projectSessionEntries(entries, { toolOutputLimit = 4000 } = {}) {
-  return {
-    messages: messagesFromEntries(entries).filter((message) => ["user", "assistant"].includes(message.role)),
-    tools: toolsFromEntries(entries).map((tool) => ({
-      ...tool,
-      output: tool.output?.length > toolOutputLimit ? null : tool.output,
-      outputDeferred: tool.output?.length > toolOutputLimit,
-    })),
-  };
-}
-
-export function settingsFromEntries(entries) {
-  let model = null;
-  let thinkingLevel = "";
-  for (const entry of entries) {
-    if (entry.type === "model_change" && entry.provider && entry.modelId) {
-      model = `${entry.provider}/${entry.modelId}`;
-    }
-    if (entry.type === "thinking_level_change") thinkingLevel = entry.thinkingLevel || "";
-    if (entry.type === "message" && entry.message?.role === "assistant" && entry.message.provider && entry.message.model) {
-      model = `${entry.message.provider}/${entry.message.model}`;
-    }
-  }
-  return { model, thinkingLevel };
 }

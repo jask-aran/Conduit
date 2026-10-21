@@ -1,6 +1,4 @@
 import { listWorkspaceDirectory } from "./workspace-inspector.js";
-import { messagesFromEntries } from "./session-store.js";
-import { conduitPiSessionFile } from "./backend-session.js";
 
 const RECENT_CHAT_LIMIT = 10;
 const PREVIEW_LENGTH = 180;
@@ -26,8 +24,8 @@ function isWorkspace(project) {
   return project.kind === "workspace" || ["linked", "created", "cloned"].includes(project.origin);
 }
 
-function previewText(entries) {
-  const message = messagesFromEntries(entries)
+function previewText(messages) {
+  const message = messages
     .filter((item) => ["user", "assistant"].includes(item.role) && item.content?.trim())
     .at(-1);
   if (!message) return "";
@@ -43,19 +41,17 @@ const opaqueThreadId = (chat) => typeof chat.backend?.opaqueSession === "string"
   ? chat.backend.opaqueSession
   : chat.backend?.opaqueSession?.threadId || null;
 
-async function recentChatView(chat, project, process, readPage, backendSessions) {
+async function recentChatView(chat, project, process, readTranscript, backendSessions) {
   let lastMessagePreview = backendSessions.get(opaqueThreadId(chat))?.preview || "";
   let lastMessageAt = chat.updatedAt || chat.createdAt || null;
-  const sessionFile = conduitPiSessionFile(chat);
-  if (sessionFile) {
+  if (!lastMessagePreview && readTranscript) {
     try {
-      const page = await readPage(sessionFile, project, { turnLimit: 1, characterLimit: 12_000 });
-      const messages = messagesFromEntries(page.entries)
-        .filter((item) => ["user", "assistant"].includes(item.role) && item.content?.trim());
-      lastMessagePreview = previewText(page.entries);
+      const projection = await readTranscript(chat, project);
+      const messages = (projection?.messages || []).filter((item) => ["user", "assistant"].includes(item.role) && item.content?.trim());
+      lastMessagePreview = previewText(messages);
       lastMessageAt = messages.at(-1)?.timestamp || lastMessageAt;
     } catch (error) {
-      if (error?.code !== "ENOENT") throw error;
+      if (error?.code !== "ENOENT") console.warn("Could not read recent chat preview", chat.id, error);
     }
   }
   return {
@@ -82,7 +78,7 @@ export async function buildProjectDashboard({
   registry,
   processes,
   terminals = [],
-  readPage,
+  readTranscript,
   inspectWorkspace,
   listBackendSessions,
   signal,
@@ -97,14 +93,13 @@ export async function buildProjectDashboard({
       .localeCompare(String(left.updatedAt || left.createdAt || "")))
     .slice(0, RECENT_CHAT_LIMIT);
   const backendSessions = new Map();
-  const implementations = [...new Set(recent.map((chat) => chat.backend?.implementation)
-    .filter((implementation) => implementation && implementation !== "conduit_pi"))];
+  const implementations = [...new Set(recent.map((chat) => chat.backend?.implementation).filter(Boolean))];
   await Promise.all(implementations.map(async (implementation) => {
     const sessions = await listBackendSessions?.(implementation, project.workingRoot).catch(() => []) || [];
     for (const session of sessions) backendSessions.set(session.id, session);
   }));
   const recentChats = await Promise.all(recent
-    .map((chat) => recentChatView(chat, project, processByChat.get(chat.id), readPage, backendSessions)));
+    .map((chat) => recentChatView(chat, project, processByChat.get(chat.id), readTranscript, backendSessions)));
 
   let git = null;
   let changes = [];
