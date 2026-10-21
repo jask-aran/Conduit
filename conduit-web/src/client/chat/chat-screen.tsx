@@ -1,8 +1,8 @@
 import { createSignal, For, Show, type JSX } from "solid-js";
-import { FolderIcon, MessageSquarePlusIcon, PanelLeftIcon, PanelRightIcon, PencilIcon, RefreshCwIcon, SearchIcon, ShareIcon, TerminalIcon, Trash2Icon } from "lucide-solid";
+import { FolderIcon, MessageSquarePlusIcon, PanelLeftIcon, PanelRightIcon, PencilIcon, SearchIcon, ShareIcon, TerminalIcon, Trash2Icon } from "lucide-solid";
 import { Menu, MenuContent, MenuControl, MenuRow, MenuSection } from "@/components/menus";
 import { PaneTabRow } from "@/components/ui/pane";
-import { Expand, Header, HeaderButton, HeaderCrumb, HeaderPill, Readout, Rule, Spinner } from "@/components/ui";
+import { Expand, Header, HeaderButton, HeaderCrumb, HeaderPill, Readout, Rule } from "@/components/ui";
 import type { Project, RuntimeIdentity, Template } from "../api/contracts";
 import type { ActiveChatStore } from "../state/active-chat";
 import { ContextBar, ContextBreakdown } from "./context-gauge";
@@ -10,14 +10,12 @@ import { contextUsagePercent } from "./context-metrics";
 import { isWorkspace } from "./place-picker";
 import { HarnessMark, harnessLabelFor } from "../harness-brand";
 import { WorkspaceGlyph } from "../project/workspace-appearance";
-import { isInstalledClient } from "../platform/installed-client.ts";
 import { isMobileLayout } from "../navigation/mobile-layout";
 import { tabFrostOn } from "../preferences/tab-frost";
 /*
  * A chat's screen: its header, and its transcript with the composer over it.
  * Out of main.tsx so the gallery draws the same ones.
  */
-const nativeApp = isInstalledClient();
 
 export function ChatHeader(props: {
   project?: Project;
@@ -36,8 +34,6 @@ export function ChatHeader(props: {
   onShare: () => void;
   onRename?: () => void;
   onDelete?: () => void;
-  onUpdatePwa: () => void;
-  pwaUpdating: () => boolean;
   /** Opens the place the page sits under, making its crumb a link. */
   onOpenPlace?: (project?: Project) => void;
   /** Names the crumb when the page sits under something other than a place: a harness, for its threads. */
@@ -93,6 +89,9 @@ export function ChatHeader(props: {
               <MenuRow icon={<PencilIcon />} onSelect={() => props.onRename?.()}>{props.dashboard ? `Rename ${placeKind()}` : "Rename"}</MenuRow>
             </Show>
             <Show when={isMobileLayout()}><MenuRow icon={<PanelRightIcon />} onSelect={props.onTogglePanel}>Workspace panel</MenuRow></Show>
+            <Show when={props.onDelete}>
+              <MenuRow destructive icon={<Trash2Icon />} onSelect={() => props.onDelete?.()}>{props.dashboard ? (placeKind() === "workspace" ? "Unlink workspace" : "Delete project") : "Delete chat"}</MenuRow>
+            </Show>
           </MenuSection>
           <Show when={!props.dashboard && props.chat}>{(chat) => {
             // Each opens in place, its section growing (Expand): a submenu has nowhere to go beside a menu that fills a phone.
@@ -115,17 +114,6 @@ export function ChatHeader(props: {
               </Show>
             </>;
           }}</Show>
-          <Show when={(!props.dashboard && !nativeApp) || props.onDelete}>
-            <Rule />
-            <MenuSection>
-              <Show when={!props.dashboard && !nativeApp}>
-                <MenuRow disabled={props.pwaUpdating()} onSelect={props.onUpdatePwa} icon={<Show when={props.pwaUpdating()} fallback={<RefreshCwIcon />}><Spinner /></Show>}>{props.pwaUpdating() ? "Updating app…" : "Update app"}</MenuRow>
-              </Show>
-              <Show when={props.onDelete}>
-                <MenuRow destructive icon={<Trash2Icon />} onSelect={() => props.onDelete?.()}>{props.dashboard ? (placeKind() === "workspace" ? "Unlink workspace" : "Delete project") : "Delete"}</MenuRow>
-              </Show>
-            </MenuSection>
-          </Show>
         </MenuContent>
       </Menu>
     </Show>}
