@@ -20,12 +20,14 @@
 .ui-connection-error { margin: 0; color: var(--destructive); font-size: var(--text-caption); line-height: var(--leading-row); overflow-wrap: anywhere; }
 .ui-server-control { display: flex; width: 100%; min-width: 0; height: auto; min-height: var(--control); gap: var(--space-sm); padding: var(--space-xs) var(--space-sm); text-align: start; }
 .ui-server-copy { display: flex; min-width: 0; flex: 1; flex-direction: column; }
-.ui-server-copy > strong, .ui-server-copy > small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ui-server-copy > strong { font-size: var(--text-row); font-weight: var(--weight-strong); line-height: var(--leading-tight); }
-.ui-server-copy > small { color: var(--muted-foreground); font-size: var(--text-caption); font-weight: var(--weight-rest); line-height: var(--leading-row); }
-.ui-server-control > .ui-status { flex: none; }
+.ui-server-name { display: flex; min-width: 0; align-items: center; gap: var(--space-2xs); }
+.ui-server-name > strong, .ui-server-copy > small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Row · current: the server you are on. */
+.ui-server-name > strong { min-width: 0; font-size: var(--text-row); font-weight: var(--weight-current); line-height: var(--leading-tight); }
+/* Data: its state and latency, as its menu's meta reads them. */
+.ui-server-copy > small { color: var(--muted-foreground); font: var(--weight-rest) var(--text-caption)/var(--leading-row) var(--font-data); }
+.ui-server-control .ui-status { flex: none; }
 .ui-server-control[data-compact] { width: var(--control); height: var(--control); justify-content: center; margin-inline-start: auto; padding: 0; }
-.ui-server-control[data-compact] > .ui-server-copy { display: none; }
 .ui-connection-recovery { display: grid; width: 100%; max-width: var(--measure-xl); gap: var(--space-lg); }
 .ui-connection-recovery h1 { margin: 0; font-size: var(--text-heading); font-weight: var(--weight-strong); line-height: var(--leading-tight); }
 .ui-connection-recovery p { margin: 0; overflow-wrap: anywhere; font-size: var(--text-body); line-height: var(--leading-text); }
