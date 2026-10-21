@@ -109,7 +109,7 @@ export const cardFamily: Family = { title: "Card", note: "raised frost at a dial
   <CardDetails><dt>Destination</dt><dd>/work/conduit</dd></CardDetails>
   <CardRead>Preparing clone…</CardRead>
 </Card>`,
-  api: ["Card", "CardBody", "CardActions", "CardForm", "CardColumns", "CardColumn", "CardNote", "CardRead", "CardDetails", "CardQR", "CardCaption", "CardPreview", "Attachments", "Attachment"],
+  api: ["Card", "CardBody", "CardActions", "CardForm", "CardColumns", "CardColumn", "CardNote", "CardRead", "CardDetails", "CardQR", "CardCaption", "CardPreview", "Attachments", "Attachment", "IdentityEditor", "Dialog", "OverlayDialog"],
   groups: [
     { title: "In use", note: "a confirm, measured: pink is the card's edge (--card-edge), green the gaps between its parts (--card-gap, --card-pair title to detail, half a unit between actions)", layout: "desktop", atoms: [
       lib("card-inuse", "Card in use", "both", "card", "Card title detail children actions", () => <InUse scene={cardScene} marks={CARD_MARKS} spacing={[".ui-card", ".ui-card-actions"]} />, "row"),

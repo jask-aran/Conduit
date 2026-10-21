@@ -1,6 +1,8 @@
 import { NotificationToaster, toast } from "@/components/notifications";
 import { CardNote } from "@/components/ui/card";
+import { Show } from "solid-js";
 import { createSignal, createUniqueId, onCleanup } from "solid-js";
+import { Frost } from "@/components/ui";
 import { Toast, Toaster, Button } from "@/components/ui";
 import { InUse, FormTable, form, px, rounding, fg, Replay, type Mark, type FormRow } from "../specs";
 import { typeOf } from "../demos";
@@ -59,8 +61,18 @@ export const toastFamily: Family = { title: "Toast", note: "raised frost at the 
 <Toaster>
   <Toast kind="success">Renamed chat to Trip notes</Toast>
 </Toaster>`,
-  api: ["Toast", "Toaster"],
+  api: ["Toast", "Toaster", "NotificationToaster"],
   groups: [
+    { title: "Examples", layout: "desktop", atoms: [
+      lib("toast-examples", "Toast · examples", "both", "toast", "Toaster > Toast onDismiss action", () => <FormTable on={["desktop", "phone"]} stacked rows={[
+        form("Dismiss and restore", "Local dismissal; action updates the sentence", () => {
+          const [visible, setVisible] = createSignal(true), [opened, setOpened] = createSignal(false);
+          return <Show when={visible()} fallback={<Button variant="ghost" outline onClick={() => { setOpened(false); setVisible(true); }}>Show workspace notification</Button>}><Toaster><Toast onDismiss={() => setVisible(false)} action={{ label: "Open workspace", onClick: () => setOpened(true) }}>{opened() ? "Japan workspace opened" : "This folder is the Japan workspace."}</Toast></Toaster></Show>;
+        }, "<Toaster><Toast onDismiss action={{ label, onClick }} /></Toaster>"),
+        form("Embedded frame", "Content uses the host frost surface", () => <Frost lift="raised"><Toast embedded description="The workspace remains available from the sidebar.">Disconnected from Desktop-Dev</Toast></Frost>, '<Frost lift="raised"><Toast embedded /></Frost>'),
+        form("Removing", "The third shared motion state", () => <Replay leaves={["removing"]}>{(motion) => <Toast motion={motion()}>Workspace files updated</Toast>}</Replay>, '<Toast motion="removing" />'),
+      ]} />, "row"),
+    ] },
     { title: "In use", note: "two toasts stacked, measured", layout: "desktop", atoms: [
       lib("toast-inuse", "Toast in use", "both", "toast", "Toaster > Toast kind action", () => <InUse scene={toastScene} marks={TOAST_MARKS} spacing={[".ui-toast"]} />, "row"),
     ] },

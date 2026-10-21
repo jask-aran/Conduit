@@ -1,6 +1,8 @@
 import { createSignal } from "solid-js";
+import { Transcript, Turn, Trace } from "@/components/ui";
 import { Orb, settledOrbRate, PLAIN_SPHERE, SPUTTERING_SPHERE, ORBITS_TRAILED, type ModeFrame, type OrbState, Button } from "@/components/ui";
 import { resolvePreset } from "thinking-orbs/engine";
+import { FormTable, form } from "../specs";
 import { lib, type Family } from "../model";
 /* Orbs: one Orb, a list of animations, each a speed. */
 type OrbAnimation = { name: string; from: string; state: OrbState; frame?: ModeFrame; tint?: string; rate?: number; use: string };
@@ -42,6 +44,15 @@ export const orbFamily: Family = {
 <Orb state="connecting" />`,
   api: ["Orb", "Button"],
   groups: [
+    { title: "Examples", layout: "desktop", atoms: [
+      lib("orb-examples", "Orb · examples", "both", "orb", "Turn > Trace > Orb", () => <FormTable on={["desktop", "phone"]} stacked rows={[
+        form("Pause and resume", "Turn status with a long workspace path", () => {
+          const [paused, setPaused] = createSignal(false);
+          return <><Transcript><Turn><Trace orb={<Orb state="weaving" paused={paused()} />} status="Reading" latest="/work/conduit/src/client/settings/settings-core.tsx" live /></Turn></Transcript><Button variant="ghost" outline size="sm" onClick={() => setPaused(!paused())}>{paused() ? "Resume animation" : "Pause animation"}</Button></>;
+        }, '<Trace orb={<Orb state="weaving" paused={paused()} />} />'),
+        form("Preset options", "Resolved engine options at a limited draw rate", () => <Transcript><Turn><Trace orb={<Orb state="searching" opts={resolvePreset("searching", 20).opts} rate={12} />} status="Searching" latest="Find microphone settings" live /></Turn></Transcript>, '<Orb state="searching" opts={resolvePreset("searching", 20).opts} rate={12} />'),
+      ]} />, "row"),
+    ] },
 
     { title: "How it draws", layout: "desktop", atoms: [lib("orb-how", "How it draws", "both", "orb", "thinking-orbs engine · orb-frames · Orb", () => <OrbHow />, "row")] },
     { title: "Animations", note: "every animation the Orb plays, live at the sizes it is used at (a preview's 16px, a turn's 20px)", layout: "desktop", atoms: [lib("orb-animations", "Animations", "both", "orb", "<Orb state frame? tint? rate?>", () => <OrbAnimations />, "row")] },

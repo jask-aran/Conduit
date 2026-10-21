@@ -1,4 +1,4 @@
-import { buttonFamily } from "./pages/button";
+import { buttonPage } from "./pages/button";
 import { segmentedFamily } from "./pages/segmented";
 import { keycapFamily } from "./pages/keycap";
 import { inputFamily } from "./pages/input";
@@ -22,7 +22,7 @@ import { fadeFamily } from "./pages/fade";
 import { navFamily } from "./pages/nav";
 import { dashboardFamily } from "./pages/dashboard";
 import { panesFamily } from "./pages/panes";
-import { headerFamily } from "./pages/header";
+import { headerPage } from "./pages/header";
 import { readingFamily } from "./pages/reading";
 import { popoverFamily } from "./pages/popover";
 import { cardFamily } from "./pages/card";
@@ -37,10 +37,10 @@ import { voiceFamily } from "./pages/voice";
 import { traceFamily } from "./pages/trace";
 import { codeBlockFamily } from "./pages/code-block";
 import { transcriptFamily } from "./pages/transcript";
-import { type Family, type Atom, type Group } from "./model";
+import { type Family, type Atom, type Group, type Page } from "./model";
 
-const pieceFamilies: Family[] = [
-  buttonFamily,
+const pieceFamilies: (Family | Page)[] = [
+  buttonPage,
   segmentedFamily,
   keycapFamily,
   inputFamily,
@@ -64,7 +64,7 @@ const pieceFamilies: Family[] = [
   dashboardFamily,
   panesFamily,
   ...filesFamilies(),
-  headerFamily,
+  headerPage,
   readingFamily,
   popoverFamily,
   cardFamily,
@@ -87,9 +87,9 @@ const IN_THE_APP: { title: string; note: string; atoms: string[] }[] = [
   { title: "Palette and Settings", note: "the app's large overlays, built from Overlay's parts: the command palette, chat search and Settings", atoms: ["overlay-settings", "o-palette", "o-search", "o-settings", "o-settings-record", "o-palette-phone", "o-search-phone", "o-settings-phone", "o-settings-page-phone"] },
   { title: "Phone chrome", note: "the phone's own head: the chat's pills and the sidebar's, built from Pills", atoms: ["pill-header", "pill-sidebar"] },
 ];
-function withAppFamilies(families: Family[]): Family[] {
+function withAppFamilies(families: (Family | Page)[]): (Family | Page)[] {
   const moved = new Map<string, { atom: Atom; layout?: Group["layout"] }>();
-  const pieces = families.map((family) => ({ ...family, groups: family.groups.map((group) => ({ ...group, atoms: group.atoms.filter((atom) => {
+  const pieces = families.map((family) => !("groups" in family) ? family : ({ ...family, groups: family.groups.map((group) => ({ ...group, atoms: group.atoms.filter((atom) => {
     const wanted = IN_THE_APP.some((app) => app.atoms.includes(atom.id.replace(/^ui-/, "")));
     if (wanted) moved.set(atom.id.replace(/^ui-/, ""), { atom, layout: group.layout });
     return !wanted;
