@@ -5,6 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { startNodeAgent } from "../conduit-web/src/nodes/node-agent.js";
 import { DEFAULT_DENY } from "../conduit-web/src/nodes/secrets.js";
+import { CAPABILITIES, platformCapabilities } from "../conduit-web/src/nodes/capabilities.js";
 import { buildManagedToolEnvironment } from "./pi-runtime.mjs";
 
 // The node role's own settings, apart from any main server's data on this device.
@@ -35,7 +36,13 @@ function printHelp() {
   conduit-node unshare <path> [--server <main-url>]
                                               Stop sharing a folder (with every server, unless
                                               one is named).
-  conduit-node status                         Which servers, and what each is shared.
+  conduit-node grant <capability> [--server <url>]
+                                              Let a server use one of this device's
+                                              capabilities: ${Object.keys(CAPABILITIES).join(", ")}.
+  conduit-node revoke <capability> [--server <url>]
+                                              Take one back.
+  conduit-node status                         Which servers, what each is shared and granted,
+                                              and what this device can do.
   conduit-node run                            Serve every paired server until stopped.
 
 Each server is paired on its own: its own key, its own folders and grants.
@@ -141,9 +148,20 @@ if (command === "pair") {
   }
   write(settings);
   console.log(`No longer sharing ${target}${given.server ? ` with ${origin(given.server)}` : ""}.`);
+} else if (command === "grant" || command === "revoke") {
+  const given = options(args, [], ["server"]);
+  const id = given.bare[0];
+  if (!CAPABILITIES[id]) { console.error(`Unknown capability ${JSON.stringify(id || "")}: ${Object.keys(CAPABILITIES).join(", ")}.`); process.exit(2); }
+  const pairing = pairingFor(given.server);
+  const rest = (pairing.capabilities || []).filter((item) => item !== id);
+  pairing.capabilities = command === "grant" ? [...rest, id] : rest;
+  write(settings);
+  const here = Boolean(platformCapabilities()[id]);
+  console.log(`${command === "grant" ? "Granted" : "Revoked"} ${id} for ${pairing.mainUrl}.${command === "grant" && !here ? " This device cannot do it yet (no platform support found), so it stays unoffered." : ""} Restart \`conduit-node run\` to apply.`);
 } else if (command === "status") {
-  console.log(JSON.stringify({ name: settings.name || null, host: os.hostname(),
-    pairings: settings.pairings.map(({ mainUrl, nodeId, routes, roots }) => ({ mainUrl, nodeId: nodeId || null, routes: routes || [], roots })) }, null, 2));
+  console.log(JSON.stringify({ name: settings.name || null, host: os.hostname(), canDo: Object.keys(platformCapabilities()),
+    pairings: settings.pairings.map(({ mainUrl, nodeId, routes, roots, capabilities }) => ({ mainUrl, nodeId: nodeId || null, routes: routes || [], roots,
+      granted: capabilities || [] })) }, null, 2));
 } else if (command === "run") {
   write(settings);
   if (!settings.pairings.length) { console.error("Not paired: run `conduit-node pair <main-url> <key>` first."); process.exit(2); }
@@ -151,7 +169,8 @@ if (command === "pair") {
   // One connection per server, each with only what was shared with it.
   const agents = settings.pairings.map((pairing) => {
     if (!pairing.roots.length) console.warn(`Nothing is shared with ${pairing.mainUrl} yet; it will see this device with no folders.`);
-    return startNodeAgent({ mainUrl: pairing.mainUrl, routes: pairing.routes, key: pairing.key, name: settings.name || os.hostname(), roots: pairing.roots, shellEnv });
+    return startNodeAgent({ mainUrl: pairing.mainUrl, routes: pairing.routes, key: pairing.key, name: settings.name || os.hostname(), roots: pairing.roots,
+      capabilities: pairing.capabilities || [], shellEnv });
   });
   for (const signal of ["SIGINT", "SIGTERM"]) process.on(signal, () => { for (const agent of agents) agent.stop(); process.exit(0); });
 } else {

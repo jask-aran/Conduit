@@ -5,7 +5,9 @@ import path from "node:path";
 import { EventEmitter } from "node:events";
 import { WebSocketServer } from "ws";
 import { awaitWithContext, BACKGROUND_CONTEXT, withAbortSignal } from "@earendil-works/chord/context";
-import { NODE_PROTOCOL_VERSION } from "./protocol.js";
+import { decode, encode, NODE_PROTOCOL_VERSION } from "./protocol.js";
+import { FileError, ExecutionError } from "@earendil-works/pi-durable/env";
+import { CAPABILITIES, capabilityArgs, capabilityViews, platformCapabilities } from "./capabilities.js";
 
 const hash = (key) => crypto.createHash("sha256").update(key).digest("hex");
 
@@ -113,7 +115,8 @@ export class NodeHub extends EventEmitter {
   view(record) {
     const live = this.live.get(record.id);
     return { id: record.id, deviceId: record.deviceId, name: record.name, platform: live?.platform || record.platform || null,
-      online: Boolean(live), roots: live?.roots || record.roots || [], harnesses: live?.harnesses || record.harnesses || [], lastSeenAt: live ? new Date().toISOString() : record.lastSeenAt };
+      online: Boolean(live), roots: live?.roots || record.roots || [], harnesses: live?.harnesses || record.harnesses || [],
+      capabilities: live?.capabilities || record.capabilities || [], lastSeenAt: live ? new Date().toISOString() : record.lastSeenAt };
   }
 
   deviceView(device) {
@@ -134,12 +137,29 @@ export class NodeHub extends EventEmitter {
    * roots the folders it holds workspaces in. It is not paired and never
    * offline; its calls run in process, so it is not among `live` sockets.
    */
-  adoptHead({ deviceId, nodeId, name, roots, harnesses }) { this.head = { deviceId, nodeId, name, roots, harnesses }; }
+  adoptHead({ deviceId, nodeId, name, roots, harnesses }) {
+    this.head = { deviceId, nodeId, name, roots, harnesses, capabilities: platformCapabilities() };
+  }
+
+  /** Run a capability on a device: this machine's in process, another's over its socket. */
+  async capability(nodeId, id, args, context, onWait) {
+    if (this.head && nodeId === this.head.nodeId) {
+      const run = this.head.capabilities[id];
+      if (!run) throw new Error(`This server cannot ${CAPABILITIES[id]?.label.toLowerCase() || id}`);
+      return (await run(capabilityArgs(id, args))) ?? null;
+    }
+    const result = await this.call(nodeId, { target: "device", method: id, args: encode([args]) }, context, { onWait });
+    const value = decode(result, { FileError, ExecutionError });
+    if (value?.ok === false) throw new Error(value.error?.message || `${id} failed`);
+    return value?.value?.result ?? null;
+  }
 
   async headView() {
     const platform = { win32: "Windows", darwin: "macOS" }[process.platform] || "Linux";
     return { id: this.head.nodeId, deviceId: this.head.deviceId, name: platform, platform: process.platform, local: true,
-      online: true, roots: await this.head.roots(), harnesses: this.head.harnesses(), lastSeenAt: new Date().toISOString() };
+      online: true, roots: await this.head.roots(), harnesses: this.head.harnesses(),
+      // This machine is trusted by default (decision 22): what it can do is granted.
+      capabilities: capabilityViews(this.head.capabilities, Object.keys(this.head.capabilities)), lastSeenAt: new Date().toISOString() };
   }
 
   /** A root a node shares, by id, as it last said: `{ id, label, read, write, shell }`. */
@@ -202,9 +222,12 @@ export class NodeHub extends EventEmitter {
         // `boot` names this run of the node; a node without one keeps no receipts.
         Object.assign(node, { roots: Array.isArray(message.roots) ? message.roots : [], platform: message.platform || null,
           boot: typeof message.boot === "string" ? message.boot : null,
-          harnesses: Array.isArray(message.harnesses) ? message.harnesses.filter((id) => typeof id === "string") : [], ready: true });
+          harnesses: Array.isArray(message.harnesses) ? message.harnesses.filter((id) => typeof id === "string") : [],
+          // What it can do beyond files and a shell, and whether its owner granted each (nodes/capabilities.js).
+          capabilities: Array.isArray(message.capabilities) ? message.capabilities.filter((item) => CAPABILITIES[item?.id])
+            .map((item) => ({ id: item.id, label: CAPABILITIES[item.id].label, granted: item.granted === true })) : [], ready: true });
         this.live.set(record.id, node);
-        Object.assign(record, { roots: node.roots, platform: node.platform, harnesses: node.harnesses, lastSeenAt: new Date().toISOString() });
+        Object.assign(record, { roots: node.roots, platform: node.platform, harnesses: node.harnesses, capabilities: node.capabilities, lastSeenAt: new Date().toISOString() });
         if (message.name && record.name === "Device") record.name = String(message.name).slice(0, 80);
         // Roots without ids are from a node older than root ids: it is not addressable.
         node.roots = node.roots.filter((root) => typeof root?.id === "string");
