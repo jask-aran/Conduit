@@ -1,6 +1,5 @@
 import { IDENTITY_COLOURS } from "@/components/ui/palettes";
-import { Show } from "solid-js";
-import { Dynamic } from "solid-js/web";
+import { Glyph } from "@/components/ui";
 import {
   ActivityIcon,
   ApertureIcon,
@@ -123,9 +122,6 @@ export function WorkspaceGlyph(props: { appearance?: WorkspaceAppearance | null;
   const appearance = () => normalizeWorkspaceAppearance(props.appearance);
   const color = () => workspaceColorOption(appearance().color);
   const icon = () => workspaceIconOption(appearance().value);
-  return <span class={`workspace-glyph${props.class ? ` ${props.class}` : ""}`} data-mode={appearance().mode} data-value={appearance().value} style={{ color: color().hex }} aria-hidden="true">
-    <Show when={appearance().mode === "monogram"} fallback={<Dynamic component={icon().component} />}>
-      {appearance().value}
-    </Show>
-  </span>;
+  return <Glyph icon={icon().component} monogram={appearance().mode === "monogram" ? appearance().value : undefined}
+    colour={color().hex} class={props.class} value={appearance().value} />;
 }

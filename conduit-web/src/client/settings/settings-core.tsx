@@ -13,7 +13,8 @@ import { formatMicrophoneError, hasAudioSignal, rematchInputDevice, isUnavailabl
 import { shortcutFromKeyboardEvent } from "../chat/voice-dictation";
 import type { VoiceDictationSettings } from "../chat/voice-dictation-types";
 import { isWarmMicrophoneActive, stopWarmMicrophone } from "../chat/voice-dictation-client";
-import { createVoiceWaveformController, VoiceWaveform } from "../chat/voice-waveform";
+import { createVoiceWaveformController } from "../chat/voice-waveform";
+import { VoiceWaveform } from "@/components/ui/voice";
 import { ModelSelector } from "../chat/model-selector";
 import { saveTabFrost, tabFrost } from "../preferences/tab-frost";
 import { saveTranscriptFont, TRANSCRIPT_FONT_OPTIONS, transcriptFont, type TranscriptFont } from "../preferences/transcript-font";

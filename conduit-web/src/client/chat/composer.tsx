@@ -23,7 +23,8 @@ import { ContextGauge } from "./context-gauge";
 import type { AudioSignalLevel } from "./voice-audio";
 import { toast } from "@/components/notifications";
 import { audioTransferLost, beginDictatedRange, matchesShortcut, releasesShortcut, replaceDictatedRange, shouldAutoSend, shouldReportNoSignal } from "./voice-dictation";
-import { createVoiceWaveformController, MAX_RESPONSIVE_BAR_COUNT, type VoiceWaveformController } from "./voice-waveform";
+import { createVoiceWaveformController, type VoiceWaveformController } from "./voice-waveform";
+import { MAX_RESPONSIVE_BAR_COUNT } from "@/components/ui/voice-waveform-model";
 import { ModelSelector } from "./model-selector";
 
 import { parseReviewComments, removeReviewComment, reviewComments, updateReviewComment } from "./review-comments";

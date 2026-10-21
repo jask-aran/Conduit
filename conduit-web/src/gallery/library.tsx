@@ -30,7 +30,8 @@ import { type Motion, Backdrop, RowGroup, RowAction, Welcome, Picker, Rule, Menu
 
 import { PlaceGlyph } from "../client/chat/place-picker";
 import { MODELS, PROFILES, PROJECTS } from "./seed";
-import { scaleOf, setScale } from "./foundations";
+import { COMPOSER_SIZES, FROST_SIZES, scaleOf, setScale, TokenTable } from "./foundations";
+import { VoiceFoundation } from "./voice";
 import { QuestionCard } from "../client/chat/question-card";
 import { NotebookTextIcon } from "lucide-solid";
 import type { Question } from "../client/api/contracts";
@@ -57,7 +58,7 @@ export interface Atom { id: string; name: string; scope: Scope; kind: string; so
 export const lib = (id: string, name: string, scope: Scope, layer: string, source: string, render: Atom["render"], wide?: Atom["wide"]): Atom => ({ id: `ui-${id}`, name, scope, kind: layer, source, render, wide });
 /** A run of cells; layout: fixed at that layout (no per-cell toggle); staged: drawn on the page's surface at its density, or "density": at its density only (the cell draws its own surfaces). */
 export interface Group { title?: string; note?: string; atoms: Atom[]; layout?: "desktop" | "phone"; staged?: boolean | "density" }
-/** rail: the heading it sits under in the rail (Frosted by default); stage: the page picks one surface and density for its staged groups. */
+/** rail: the tier it sits under in the rail (canvas.tsx RAILS; Pieces by default); stage: the page picks one surface and density for its staged groups. */
 export interface Family { title: string; note: string; rail?: string; stage?: boolean; groups: Group[] }
 
 export const thinking = ["off", "minimal", "low", "medium", "high", "xhigh"].map((value) => ({ value, label: value[0]!.toUpperCase() + value.slice(1) }));
@@ -767,15 +768,24 @@ const PhoneStage = (props: { children: JSX.Element }) => <div class="g-phone-sta
 /** Busy content behind a swatch, as a chat's text is behind an overlay. */
 const Busy = (props: { children: JSX.Element }) => <div class="g-busy"><p>{"Created lorem_ipsum.txt in this folder. The second paragraph is now two sentences: lorem ipsum dolor sit amet, consectetur adipiscing elit. ".repeat(4)}</p>{props.children}</div>;
 
-export const libraryFamilies: Family[] = [
+const pieceFamilies: Family[] = [
   { title: "Connection", note: "Sign-in, first connection, server selection and recovery. Shared v2 markup and tokens in the app and the server-rendered login page.", groups: [
     { title: "Forms and states", note: "Desktop and phone; live menu behavior uses Kobalte, while sign-in remains a plain HTML form.", layout: "desktop", atoms: [
       lib("connection-forms", "Connection · forms × densities", "both", "connection", "components/ui/connection.tsx · components/menus.tsx", () => <FormTable rows={CONNECTIONS} on={["desktop", "phone"]} widths={["200px", "minmax(0, 1fr)", "360px"]} />, "row"),
     ] },
   ] },
-  { title: "Frost", note: "two materials: frost, and core -- frost on a solid backing, kept for the phone's full-screen overlays should what is behind them be too busy (off for now; nothing uses it). Over a plain ground they look alike; over text the difference shows. Lift is not a material, only its shadow: rest sits on the page, raised floats above it", groups: [{ atoms: [
+  { title: "Frost", rail: "Materials", note: "two materials: frost, and core -- frost on a solid backing, kept for the phone's full-screen overlays should what is behind them be too busy (off for now; nothing uses it). Over a plain ground they look alike; over text the difference shows. Lift is not a material, only its shadow: rest sits on the page, raised floats above it", groups: [{ atoms: [
     lib("frost", "Frost", "both", "material", "Frost", () => <div class="g-material"><Busy><Frost lift="raised" class="g-swatch" /></Busy><FrostTokens names={FROST_CSS} /></div>, true),
     lib("frost-core", "Core", "both", "material", "Frost core · Overlay core (off for now)", () => <div class="g-material"><Busy><Frost lift="raised" core class="g-swatch" /></Busy><FrostTokens names={["--frost-core-ground", ...FROST_CSS]} /></div>, true),
+  ] }, { title: "Sizes", note: "frost's own, read from the unit (Space)", layout: "desktop", atoms: [
+    lib("frost-sizes", "Frost sizes", "both", "material", "foundations.css --frost-inset", () => <TokenTable groups={FROST_SIZES} />, "row"),
+  ] }] },
+  { title: "Fade", rail: "Materials", note: "content cut short fades out at its foot rather than stopping: one gradient (styles/fade.css) for every piece that folds or clamps what it holds; each sets only how far it fades (--fade-length) and, if a max height clamps it first, where (--fade-at)", groups: [{ title: "Where it fades", layout: "desktop", atoms: [
+    lib("fade-forms", "Fade", "desktop", "material", "styles/fade.css · --fade-length · --fade-at", () => <FormTable rows={[
+      form("a folded code block", "past its fold: the last line and a half fade", () => <CodeBlock lang="ts" code={LONG} fold={6} />, "<CodeBlock fold>", "--fade-length: 2.4em"),
+      form("a folded message", "past its fold: half a line fades", () => <Transcript><Message time="00:08" fold={3}>{Array.from({ length: 6 }, (_, i) => `line ${i + 1} of a long message`).join("\n")}</Message></Transcript>, "<Message fold>", "--fade-length: 0.5lh"),
+      form("a clamped glance", "math in a chat's preview: clamped at 15em, its last 2.5em fading", () => glanceMath(), "<GlanceAnswer html>", "--fade-at: 15em · --fade-length: 2.5em"),
+    ]} on={["desktop"]} widths={["220px", "minmax(0, 1fr)"]} />, "row"),
   ] }] },
   { title: "Nav", note: "the sidebar on the frame: a NavPane (head, list, foot) of NavGroups, NavRows and NavFolders, and the rail it folds to. Rows rest grey; the cursor is the wash and white; current is white at the current weight with no fill, and so is the folder holding it. The keys are the app's (navigation/sidebar-cursor.ts)", groups: [
     { title: "Forms", note: "each piece and state at each density", layout: "desktop", atoms: [
@@ -1167,6 +1177,9 @@ export const libraryFamilies: Family[] = [
             <ComposerField><TextArea placeholder="Send a message…" /></ComposerField><Toolbar start={toolbarStart()} end={toolbarEnd()} primary={send()} /></DesktopComposer></div>}</States>, "<DesktopComposer takeover>", "out: --duration-quick · --ease-leave · in: --duration-gentle · --ease-arrive, the card after --duration-quick"),
       ]} on={["desktop"]} widths={["200px", "minmax(0, 1fr)"]} />, "row"),
     ] },
+    { title: "Sizes", note: "the width the pane declares for its composer", layout: "desktop", atoms: [
+      lib("composer-sizes", "Composer sizes", "desktop", "composer", "--composer-width", () => <TokenTable groups={COMPOSER_SIZES} />, "row"),
+    ] },
   ] },
   { title: "Rider", note: "resting frost at a composer, either composer's: a row or a strip on its top edge (queued messages, attachments), or a card that takes over its slot in its material (the question: the composer takeover)", groups: [
     { atoms: [
@@ -1252,7 +1265,10 @@ export const libraryFamilies: Family[] = [
       ]} on={["phone"]} widths={["200px", "minmax(0, 1fr)"]} />, "row"),
     ] },
   ] },
-  { title: "Trace", rail: "Transcript", note: "a turn's work, over its answer. Its head is two lines -- the Status line (Status · Time · Work) and the Latest line -- beside the Orb; opened, its Trail of Steps", groups: [
+  { title: "Voice", note: "the voice while it is heard: the waveform monitor (Settings · Voice, and compact where the mic is tested), in each state it has", groups: [{ title: "States", layout: "desktop", atoms: [
+    lib("voice-waveform", "VoiceWaveform", "both", "voice", "components/ui/voice.tsx", () => <VoiceFoundation />, "row"),
+  ] }] },
+  { title: "Trace", note: "a turn's work, over its answer. Its head is two lines -- the Status line (Status · Time · Work) and the Latest line -- beside the Orb; opened, its Trail of Steps", groups: [
     { title: "Anatomy", note: "each part named", layout: "desktop", atoms: [
       lib("trace-anatomy", "Anatomy", "both", "transcript", "Trace > TraceHeader (Orb · Status line · Latest line) · Trail > Step", () => <Anatomy scene={() => <div class="ui-read g-read g-trace-anatomy">
         <FoldTrace orb={orb(true)} status="Done" time="1m 00s" work="1 read, 1 edit, 1 command" latest="The second paragraph has four sentences"><Trail><Step icon={<Icons.Thinking />} summary="The second paragraph has four sentences" /><Step icon={<Icons.FileText />} verb="Read" subject="lorem_ipsum.txt" time="0ms" /><Step icon={<Icons.WriteFile />} verb="Edited" subject="lorem_ipsum.txt" time="1m 00s" /></Trail></FoldTrace>
@@ -1272,7 +1288,7 @@ export const libraryFamilies: Family[] = [
       lib("trace-trail", "Steps", "both", "transcript", "Step · StepOutput · StepProse · Trail nested · TraceError", () => <FormTable rows={reading(TRAIL_FORMS)} on={["desktop"]} widths={["220px", "minmax(0, 1fr)"]} />, "row"),
     ] },
   ] },
-  { title: "CodeBlock", rail: "Transcript", note: "a fenced block in an answer: a box, its language and Copy, numbered lines; a long one folds. Not frosted: it reads in the transcript's units and scale", groups: [
+  { title: "CodeBlock", note: "a fenced block in an answer: a box, its language and Copy, numbered lines; a long one folds. Not frosted: it reads in the transcript's units and scale", groups: [
     { title: "In use", note: "in an answer, measured; Copy it, open and fold it", layout: "desktop", atoms: [
       lib("code-inuse", "CodeBlock in use", "both", "transcript", "Answer > CodeBlock · MessageFoot > CopyButton", () => <InUse scene={codeScene} marks={CODE_MARKS} spacing={[".ui-answer"]} />, "row"),
     ] },
@@ -1290,7 +1306,7 @@ export const libraryFamilies: Family[] = [
       ])} on={["desktop", "phone"]} widths={["200px", "minmax(0, 1fr)", "minmax(0, 1fr)"]} />, "row"),
     ] },
   ] },
-  { title: "Transcript", rail: "Transcript", note: "what is read, at the transcript's size (Space · Scale); a row's text there (a trace, a trail) is a step under the body on both densities: the user's Message (a Bubble and its foot) and a Turn (its trace header, the answer, the answer's foot). The answer is Markdown with no bubble in the Body role, one gap between blocks; the trail sits a step under it", groups: [
+  { title: "Transcript", note: "what is read, at the transcript's size (Space · Scale); a row's text there (a trace, a trail) is a step under the body on both densities: the user's Message (a Bubble and its foot) and a Turn (its trace header, the answer, the answer's foot). The answer is Markdown with no bubble in the Body role, one gap between blocks; the trail sits a step under it", groups: [
     { title: "In use", note: "a turn, measured: green the gaps (a turn's parts half a unit apart, blocks three quarters)", layout: "desktop", atoms: [
       lib("transcript-inuse", "Turn in use", "both", "transcript", "Turn > TraceHeader · Answer · MessageFoot", () => <InUse scene={turnScene} marks={TURN_MARKS} spacing={[".ui-turn", ".ui-answer"]} />, "row"),
     ] },
@@ -1314,3 +1330,26 @@ export const libraryFamilies: Family[] = [
     ] },
   ] },
 ];
+/* What the app composes from the pieces -- its own menus, its overlays, the phone's chrome -- is shown apart from the
+   pieces: each named atom moves out of its piece's family into one of these, kept in its group's layout. */
+const IN_THE_APP: { title: string; note: string; atoms: string[] }[] = [
+  { title: "Menus", note: "the app's menus, each built from Menu, Section and Item: the composer's, the model's, a chat's, the server's", atoms: ["d-model", "d-plus", "d-context", "d-profile", "d-sidebar", "d-server", "p-plus", "p-models", "p-profiles", "p-effort", "p-projects", "p-chat"] },
+  { title: "Palette and Settings", note: "the app's large overlays, built from Overlay's parts: the command palette, chat search and Settings", atoms: ["overlay-settings", "o-palette", "o-search", "o-settings", "o-settings-record", "o-palette-phone", "o-search-phone", "o-settings-phone", "o-settings-page-phone"] },
+  { title: "Phone chrome", note: "the phone's own head: the chat's pills and the sidebar's, built from Pills", atoms: ["pill-header", "pill-sidebar"] },
+];
+function withAppFamilies(families: Family[]): Family[] {
+  const moved = new Map<string, { atom: Atom; layout?: Group["layout"] }>();
+  const pieces = families.map((family) => ({ ...family, groups: family.groups.map((group) => ({ ...group, atoms: group.atoms.filter((atom) => {
+    const wanted = IN_THE_APP.some((app) => app.atoms.includes(atom.id.replace(/^ui-/, "")));
+    if (wanted) moved.set(atom.id.replace(/^ui-/, ""), { atom, layout: group.layout });
+    return !wanted;
+  }) })).filter((group) => group.atoms.length) }));
+  const app = IN_THE_APP.map(({ title, note, atoms }): Family => {
+    const found = atoms.map((id) => moved.get(id)).filter((entry) => entry !== undefined);
+    const layouts = [...new Set(found.map((entry) => entry.layout))];
+    return { title, note, rail: "In the app", groups: layouts.map((layout) => ({ title: layout === "phone" ? "Phone" : layout === "desktop" ? "Desktop" : undefined, layout, atoms: found.filter((entry) => entry.layout === layout).map((entry) => entry.atom) })) };
+  });
+  return [...pieces, ...app];
+}
+export const libraryFamilies = withAppFamilies(pieceFamilies);
+

@@ -1,4 +1,5 @@
-import { Show } from "solid-js";
+import { Show, type Component } from "solid-js";
+import { Dynamic } from "solid-js/web";
 import * as Icons from "./icons";
 
 /**
@@ -53,5 +54,14 @@ export function ThreadHarnessMark(props: { id?: string; lively?: boolean; label?
     style={props.lively && mark().brand ? { "--harness-brand": mark().brand } : undefined} role="img" aria-label={`${label()} harness`} title={label()}>
     <HarnessMark id={id()} />
     <Show when={props.lively && mark().artwork}><img class="ui-harness-mark ui-harness-mark-artwork" src={mark().artwork} alt="" /></Show>
+  </span>;
+}
+
+/** A workspace's or place's own mark: an icon or monogram in its colour, sized by its slot. */
+export function Glyph(props: { icon?: Component; monogram?: string; colour?: string; class?: string; value?: string }) {
+  return <span class={`ui-glyph${props.class ? ` ${props.class}` : ""}`} data-mode={props.monogram !== undefined ? "monogram" : "icon"} data-value={props.value} style={{ color: props.colour }} aria-hidden="true">
+    <Show when={props.monogram !== undefined} fallback={<Dynamic component={props.icon} />}>
+      {props.monogram}
+    </Show>
   </span>;
 }

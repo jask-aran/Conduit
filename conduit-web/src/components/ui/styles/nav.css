@@ -111,7 +111,7 @@
 .ui-nav-rail { display: none; flex-direction: column; align-items: center; padding: var(--space-md) 0 var(--space-xs); }
 .ui-nav-rail-section { display: flex; flex-direction: column; gap: var(--space-2xs); }
 .ui-rail-button { position: relative; display: grid; width: var(--control); height: var(--control); flex: none; place-items: center; border: 0; border-radius: var(--radius-control); background: transparent; color: color-mix(in oklch, var(--foreground), transparent var(--tone-strong)); }
-.ui-rail-button svg, .ui-rail-button > :is(.ui-harness-mark, .workspace-glyph) { width: var(--icon-lg); height: var(--icon-lg); }
+.ui-rail-button svg, .ui-rail-button > :is(.ui-harness-mark, .ui-glyph) { width: var(--icon-lg); height: var(--icon-lg); }
 .ui-rail-button:disabled { cursor: not-allowed; opacity: var(--opacity-disabled); }
 .ui-rail-button:is([data-open], [aria-pressed="true"]) { color: var(--sidebar-accent-foreground); }
 .ui-rail-button[data-live]::after { position: absolute; right: var(--space-xs); bottom: var(--space-xs); width: var(--space-sm); height: var(--space-sm); border: var(--stroke-thin) solid var(--frame); border-radius: var(--radius-round); background: var(--live); content: ""; }

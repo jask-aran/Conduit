@@ -33,7 +33,7 @@
 @media (hover: hover) { .ui-tab:hover { background: var(--accent); } }
 .ui-tab-open { display: inline-flex; min-width: 0; height: 100%; flex: 1; align-items: center; gap: var(--space-sm); border: 0; background: transparent; padding: 0 var(--space-xs);
   color: color-mix(in oklch, var(--foreground), transparent var(--tone-quiet)); font: inherit; font-weight: var(--weight-rest); }
-.ui-tab-open > svg, .ui-tab-open > .ui-harness-mark, .ui-tab-open > .workspace-glyph { width: var(--icon-sm); height: var(--icon-sm); flex: none; }
+.ui-tab-open > svg, .ui-tab-open > .ui-harness-mark, .ui-tab-open > .ui-glyph { width: var(--icon-sm); height: var(--icon-sm); flex: none; }
 .ui-tab-title { display: inline-flex; min-width: 0; flex-direction: column; overflow: hidden; }
 .ui-tab-title > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ui-tab-title::after { height: 0; overflow: hidden; visibility: hidden; font-weight: var(--weight-current); white-space: nowrap; content: attr(data-text); }

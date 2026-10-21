@@ -114,26 +114,6 @@ svg.lucide { stroke-width: 2.4; }
 
 /* Menus: one solid dark surface everywhere; icons sized inside items. */
 .composer-stack { position: relative; z-index: 2; display: flex; width: 100%; flex: none; flex-direction: column; gap: var(--space-md); padding: var(--space-xl) var(--space-4xl) var(--space-3xl); background: var(--background); }
-.voice-waveform { display: grid; gap: var(--space-sm); width: 100%; box-sizing: border-box; padding: var(--space-md) var(--space-lg) var(--space-sm); border: var(--hairline) solid color-mix(in oklch, var(--muted-foreground), var(--border) 66%); border-radius: var(--radius-surface); background: linear-gradient(180deg, color-mix(in oklch, var(--muted-foreground), transparent 94%), color-mix(in oklch, var(--background), transparent 20%)); color: var(--muted-foreground); }
-.voice-waveform-header, .voice-waveform-readout, .voice-waveform-state, .voice-waveform-scale { display: flex; align-items: center; }
-.voice-waveform-header { justify-content: space-between; gap: var(--space-lg); min-height: var(--space-xl); font: var(--text-label)/var(--leading-tight) var(--font-data); letter-spacing: 0.02em; }
-.voice-waveform-state { min-width: 0; gap: var(--space-sm); color: var(--foreground); }
-.voice-waveform-dot { width: var(--icon-dot); height: var(--icon-dot); flex: none; border-radius: var(--radius-round); background: var(--muted-foreground); }
-.voice-waveform-readout { flex: none; gap: var(--space-md); color: var(--muted-foreground); }
-.voice-waveform-plot { position: relative; display: flex; height: var(--control-lg); align-items: end; gap: var(--space-2xs); overflow: hidden; padding: var(--space-xs) var(--space-2xs); border: var(--hairline) solid color-mix(in oklch, var(--border), transparent 20%); border-radius: var(--radius-control); background: color-mix(in oklch, var(--background), transparent 32%); }
-.voice-waveform-gridline { position: absolute; right: var(--space-2xs); left: var(--space-2xs); height: var(--hairline); background: color-mix(in oklch, var(--border), transparent 45%); pointer-events: none; }
-.voice-waveform-gridline-high { top: 25%; }
-.voice-waveform-gridline-low { bottom: 25%; }
-.voice-waveform-bar { z-index: 1; display: block; min-width: var(--hairline); flex: 1 1 0; border-radius: var(--radius-round) var(--radius-round) var(--radius-inset) var(--radius-inset); background: linear-gradient(180deg, var(--muted-foreground), color-mix(in oklch, var(--muted-foreground), var(--primary) 38%)); opacity: 0.82; transition: height 90ms ease-out, opacity 140ms ease; }
-.voice-waveform-peak { position: absolute; right: var(--space-2xs); left: var(--space-2xs); z-index: 2; height: var(--hairline); border-top: var(--hairline) dashed color-mix(in oklch, var(--muted-foreground), white 30%); opacity: 0; transition: bottom 120ms ease-out, opacity 120ms ease; pointer-events: none; }
-.voice-waveform-peak[data-visible="true"] { opacity: 0.95; }
-.voice-waveform-scale { justify-content: space-between; color: color-mix(in oklch, var(--muted-foreground), transparent 12%); font: var(--text-label)/var(--leading-none) var(--font-data); }
-.voice-waveform[data-state="connecting"] { border-color: color-mix(in oklch, var(--muted-foreground), var(--border) 52%); }
-.voice-waveform[data-state="connecting"] .voice-waveform-dot { background: var(--muted-foreground); animation: dictation-wave-pulse 900ms ease-in-out infinite alternate; }
-.voice-waveform[data-state="listening"] .voice-waveform-dot { background: oklch(0.72 0.17 145); box-shadow: 0 0 0 2.4px color-mix(in oklch, oklch(0.72 0.17 145), transparent 82%); }
-.voice-waveform[data-state="error"] { border-color: color-mix(in oklch, var(--destructive), var(--border) 48%); }
-.voice-waveform[data-state="error"] .voice-waveform-dot { background: var(--destructive); }
-@keyframes dictation-wave-pulse { from { opacity: 0.4; transform: scaleY(0.65); } to { opacity: 0.95; transform: scaleY(1); } }
 
 .attachment-tray { display: flex; width: min(var(--composer-desktop-reference-width), 100%); max-height: min(var(--measure-md), 40dvh); flex-direction: column; gap: var(--space-md); margin: 0 auto var(--space-md); overflow-y: auto; }
 .attachment-card { display: flex; width: min(var(--measure-lg), 100%); align-items: center; gap: var(--space-md); padding: var(--space-sm); border: var(--hairline) solid var(--border); border-radius: var(--radius-control); }
@@ -228,7 +208,6 @@ svg.lucide { stroke-width: 2.4; }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; }
-  .voice-waveform * { animation: none !important; transition: none !important; }
 }
 
 
@@ -286,26 +265,6 @@ svg.lucide { stroke-width: 2.4; }
 
 /* Menus: one solid dark surface everywhere; icons sized inside items. */
 .composer-stack { position: relative; z-index: 2; display: flex; width: 100%; flex: none; flex-direction: column; padding: var(--space-xl) var(--space-4xl) var(--space-3xl); background: var(--background); }
-.voice-waveform { display: grid; width: 100%; box-sizing: border-box; background: linear-gradient(180deg, color-mix(in oklch, var(--muted-foreground), transparent 94%), color-mix(in oklch, var(--background), transparent 20%)); color: var(--muted-foreground); }
-.voice-waveform-header, .voice-waveform-readout, .voice-waveform-state, .voice-waveform-scale { display: flex; align-items: center; }
-.voice-waveform-header { justify-content: space-between; letter-spacing: 0.02em; }
-.voice-waveform-state { min-width: 0; color: var(--foreground); }
-.voice-waveform-dot { width: var(--icon-dot); height: var(--icon-dot); flex: none; background: var(--muted-foreground); }
-.voice-waveform-readout { flex: none; color: var(--muted-foreground); }
-.voice-waveform-plot { position: relative; display: flex; height: var(--control-lg); align-items: end; overflow: hidden; padding: var(--space-xs) var(--space-2xs); background: color-mix(in oklch, var(--background), transparent 32%); }
-.voice-waveform-gridline { position: absolute; right: var(--space-2xs); left: var(--space-2xs); background: color-mix(in oklch, var(--border), transparent 45%); pointer-events: none; }
-.voice-waveform-gridline-high { top: 25%; }
-.voice-waveform-gridline-low { bottom: 25%; }
-.voice-waveform-bar { z-index: 1; display: block; min-width: var(--hairline); flex: 1 1 0; border-radius: var(--radius-round) var(--radius-round) var(--radius-inset) var(--radius-inset); background: linear-gradient(180deg, var(--muted-foreground), color-mix(in oklch, var(--muted-foreground), var(--primary) 38%)); opacity: 0.82; transition: height 90ms ease-out, opacity 140ms ease; }
-.voice-waveform-peak { position: absolute; right: var(--space-2xs); left: var(--space-2xs); z-index: 2; opacity: 0; transition: bottom 120ms ease-out, opacity 120ms ease; pointer-events: none; }
-.voice-waveform-peak[data-visible="true"] { opacity: 0.95; }
-.voice-waveform-scale { justify-content: space-between; color: color-mix(in oklch, var(--muted-foreground), transparent 12%); }
-.voice-waveform[data-state="connecting"] { border-color: color-mix(in oklch, var(--muted-foreground), var(--border) 52%); }
-.voice-waveform[data-state="connecting"] .voice-waveform-dot { background: var(--muted-foreground); animation: dictation-wave-pulse 900ms ease-in-out infinite alternate; }
-.voice-waveform[data-state="listening"] .voice-waveform-dot { background: oklch(0.72 0.17 145); box-shadow: 0 0 0 3px color-mix(in oklch, oklch(0.72 0.17 145), transparent 82%); }
-.voice-waveform[data-state="error"] { border-color: color-mix(in oklch, var(--destructive), var(--border) 48%); }
-.voice-waveform[data-state="error"] .voice-waveform-dot { background: var(--destructive); }
-@keyframes dictation-wave-pulse { from { opacity: 0.4; transform: scaleY(0.65); } to { opacity: 0.95; transform: scaleY(1); } }
 
 .attachment-tray { display: flex; width: min(var(--composer-desktop-reference-width), 100%); flex-direction: column; overflow-y: auto; }
 .attachment-card { display: flex; align-items: center; }
@@ -417,7 +376,6 @@ svg.lucide { stroke-width: 2.4; }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; }
-  .voice-waveform * { animation: none !important; transition: none !important; }
 }
 }
 
@@ -467,11 +425,6 @@ svg.lucide { stroke-width: 2.4; }
   .overlay-scrollbar[data-touch] .overlay-scrollbar-thumb { opacity: 1; }
 }
 
-/* A workspace's own glyph (project/workspace-appearance.tsx): an icon or a monogram, sized by its slot. */
-.workspace-glyph { display: inline-grid; flex: none; place-items: center; font-size: calc(0.5625 * var(--u-type)); font-weight: 750; letter-spacing: -.04em; line-height: var(--leading-none); }
-/* A slot can size the monogram to itself (--glyph-text: the dashboard's glyph tile). */
-.workspace-glyph[data-mode="monogram"] { font-size: var(--glyph-text, calc(0.5 * var(--u-type))); }
-.workspace-glyph svg { width: 100%; height: 100%; }
 /* The dashboards' right-click menus (V2-04 moves them onto the adapter, as the sidebar's are). */
 
 /* The first open (main.tsx): until the route is ready and laid out only the

@@ -38,6 +38,7 @@
  *   connection      sign-in, first connection, server selection
  *   browser         the computer's file browser
  *   marks           harness and file-type marks
+ *   voice           VoiceWaveform monitor and compact input levels
  */
 import "./reset.css";
 import "./theme.css";
@@ -76,3 +77,4 @@ import "./connection.css";
 import "./browser.css";
 
 import "./marks.css";
+import "./voice.css";
