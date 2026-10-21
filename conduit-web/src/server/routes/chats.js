@@ -248,6 +248,21 @@ export function registerChatRoutes(app, {
     } catch (error) { next(error); }
   });
 
+  // The subagents a durable chat delegated to, and one's transcript (backend only, for now).
+  app.get("/v0/chats/:chatId/subagents/:conversationId?", async (request, response, next) => {
+    try {
+      const context = await findChatContext(request.params.chatId);
+      if (!context) return response.status(404).json({ error: "chat_not_found" });
+      const adapter = backends.forChat(context.chat);
+      if (typeof adapter.subagents !== "function") return response.json({ subagents: [] });
+      const options = { liveSessionId: backends.getByChatId(context.chat.id)?.id, opaqueSession: context.chat.backend?.opaqueSession };
+      const subagents = await adapter.subagents(options);
+      if (!request.params.conversationId) return response.json({ subagents });
+      if (!subagents.some((item) => item.conversationId === request.params.conversationId)) return response.status(404).json({ error: "subagent_not_found" });
+      response.json(await adapter.readTranscript({ opaqueSession: request.params.conversationId }));
+    } catch (error) { next(error); }
+  });
+
   app.get("/v0/chats/:chatId/history", async (request, response, next) => {
     try {
       const context = await findChatContext(request.params.chatId);
