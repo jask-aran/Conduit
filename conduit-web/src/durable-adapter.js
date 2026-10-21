@@ -135,6 +135,9 @@ export class DurableAdapter extends EventEmitter {
     this.records = this.sessions.records;
     this.byChatId = this.sessions.byChatId;
     Object.assign(this, unsupported(DURABLE_CAPABILITIES, { label: "Conduit runtime" }));
+    // A store that exists may hold a turn the last process left running, and
+    // it goes on now rather than when somebody next opens that chat.
+    if (runtime?.exists()) void runtime.open().catch((error) => console.error("[conduit-runtime] could not open", error));
   }
 
   get context() { return this.runtime.context; }
