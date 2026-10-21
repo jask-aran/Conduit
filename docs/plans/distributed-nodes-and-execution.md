@@ -526,3 +526,19 @@ The head is usually the VPS but a headed desktop may hold it, so nothing may
 assume a headless head. → decision 24, the Architecture section. The user
 accepted the rest of the sketch (seams, the differences table, making it
 general) to be folded in here; steps 1, 2 and 4 join node track (c).
+
+### 2026-10-22: the cutover (milestone 5)
+
+Asked how the first-party profiles move from Pi 1.3.0 to pi-durable.
+- **History.** pi-durable's history is linear; editing or forking an earlier
+  message makes a new chat. Accepted, with the tree still drawn by walking
+  chats' fork lineage (each fork knows the chat and message it came from).
+- **Coding's codemode** uses pi-durable's own codemode extension (the Pi
+  extension cannot run in the bridge).
+- **No dual support.** On the switch, every existing Assistant, Coding and
+  Runtime chat on classic Pi is converted to the durable agent once; classic
+  Pi is not kept for them. The user is the only user and nothing needs
+  preserving beyond what a conversion carries. (This replaces decision 2's
+  "old Pi stays to continue existing chats".)
+- **The "Conduit runtime" profile is folded in**: the templates are the
+  durable agent's profiles; its chats show as Assistant.
