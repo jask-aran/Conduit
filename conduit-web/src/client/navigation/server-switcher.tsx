@@ -1,7 +1,7 @@
 import { Icons } from "@/components/ui";
 import { createSignal, For, onCleanup, onMount, Show } from "solid-js";
 
-import { Menu, MenuContent, MenuSection, MenuRow, MenuRadioGroup, MenuRadioItem, MenuSub, MenuSubContent, MenuSubTrigger } from "@/components/menus";
+import { DropdownMenu, MenuContent, MenuSection, MenuRow, MenuRadioGroup, MenuRadioItem, MenuSub, MenuSubContent, MenuSubTrigger } from "@/components/menus";
 import { MenuNote } from "@/components/ui/popover";
 import { Spinner } from "@/components/ui/controls";
 import { ServerControl } from "@/components/ui/connection";
@@ -208,8 +208,8 @@ export function ServerSwitcher(props: {
   </MenuSection>;
   const routeDetail = () => inUse() ? `${serverPathLabel(inUse()!)} · ${shortOrigin(inUse()!.origin)}` : undefined;
 
-  return <><Menu onOpenChange={onOpenChange}>
-    <Menu.Trigger as={ServerControl} compact={props.compact} inline={props.inline} name={serverName()} detail={triggerDetail()} connectivity={props.connectivity}
+  return <><DropdownMenu onOpenChange={onOpenChange}>
+    <DropdownMenu.Trigger as={ServerControl} compact={props.compact} inline={props.inline} name={serverName()} detail={triggerDetail()} connectivity={props.connectivity}
       tabIndex={-1} onPointerDown={() => { focusBefore = document.activeElement; }} onFocus={(event: FocusEvent) => {
         if (giveBack === undefined) return;
         const before = giveBack;
@@ -251,6 +251,6 @@ export function ServerSwitcher(props: {
         <MenuRow destructive icon={<Icons.LogOut />} onSelect={props.onLogout}>{servers().length > 1 ? `Sign out of ${serverName()}` : "Sign out"}</MenuRow>
       </MenuSection>
     </MenuContent>
-  </Menu>
+  </DropdownMenu>
   </>;
 }

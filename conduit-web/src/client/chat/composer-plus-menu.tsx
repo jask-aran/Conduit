@@ -3,7 +3,7 @@ import { Icons } from "@/components/ui";
 import { createSignal, For, Show } from "solid-js";
 
 import { Button, MenuNote, Rule } from "@/components/ui";
-import { Menu, MenuContent, MenuRadioGroup, MenuRadioItem, MenuRow, MenuSection, MenuSub, MenuSubContent, MenuSubTrigger, useMenuBack } from "@/components/menus";
+import { DropdownMenu, MenuContent, MenuRadioGroup, MenuRadioItem, MenuRow, MenuSection, MenuSub, MenuSubContent, MenuSubTrigger, useMenuBack } from "@/components/menus";
 import type { Template } from "../api/contracts";
 import type { ActiveChatStore } from "../state/active-chat";
 import type { ServiceLevelSettings } from "../state/service-level-settings";
@@ -46,8 +46,8 @@ export function ComposerPlusMenu(props: {
   const anyFolded = () => props.folded.size > 0;
   const [open, setOpen] = createSignal(false);
 
-  return <Menu open={open()} onOpenChange={setOpen}>
-    <Menu.Trigger as={Button} variant="ghost" size="icon-sm" aria-label="Attach and more" title="Attach and more" disabled={props.disabled}><Icons.Add /></Menu.Trigger>
+  return <DropdownMenu open={open()} onOpenChange={setOpen}>
+    <DropdownMenu.Trigger as={Button} variant="ghost" size="icon-sm" aria-label="Attach and more" title="Attach and more" disabled={props.disabled}><Icons.Add /></DropdownMenu.Trigger>
     <MenuContent>
       <Show when={has("model")}>
         <MenuSub>
@@ -96,7 +96,7 @@ export function ComposerPlusMenu(props: {
         <MenuRow icon={<Icons.Attach />} onSelect={() => props.onAttach?.()}>Attach files</MenuRow>
       </Show>
     </MenuContent>
-  </Menu>;
+  </DropdownMenu>;
 }
 
 /** back: in a phone's submenu, a choice returns to the options rather than closing them -- the next pick is often beside it. */

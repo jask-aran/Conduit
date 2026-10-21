@@ -5,7 +5,7 @@ import { unitPx } from "@/components/ui/layout";
 import { batch, createMemo, createSignal, For, onCleanup, Show, type Accessor, type JSX } from "solid-js";
 import { ChevronsUpIcon, FilePlusIcon, FolderUpIcon, MoveIcon } from "lucide-solid";
 import { toast } from "@/components/notifications";
-import { ContextMenu, ContextMenuContent, ContextMenuTrigger, Menu, MenuContent, MenuControl, MenuRow, MenuSection } from "@/components/menus";
+import { ContextMenu, ContextMenuContent, ContextMenuTrigger, DropdownMenu, MenuContent, MenuControl, MenuRow, MenuSection } from "@/components/menus";
 import { Rule } from "@/components/ui/popover";
 import { Spinner } from "@/components/ui/controls";
 import { SplitEdge } from "@/components/ui/editor";
@@ -934,14 +934,14 @@ export function FilesView(props: {
           }}>
             <For each={treeActions}>{(action, index) => <Show when={index() < visibleTreeActions()}>{treeActionButton(action)}</Show>}</For>
             <Show when={visibleTreeActions() < treeActions.length}>
-              <Menu>
+              <DropdownMenu>
                 <MenuControl as={ToolButton} label="More file actions"><Icons.More /></MenuControl>
                 <MenuContent>
                   <For each={treeActions.slice(visibleTreeActions())}>{(action) =>
                     <MenuRow icon={action.icon()} disabled={action.disabled?.()} onSelect={action.run}>{action.label()}</MenuRow>
                   }</For>
                 </MenuContent>
-              </Menu>
+              </DropdownMenu>
             </Show>
             <input ref={(element) => { c.elements.upload = element; }} hidden type="file" multiple={c.uploadTarget().kind === "directory"} onChange={(event) => void c.uploadFiles(event.currentTarget.files)} />
           </ToolBar>

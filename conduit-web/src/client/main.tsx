@@ -26,7 +26,7 @@ import { DefaultMeteorShower } from "@jask-aran/solid-components/meteor-shower";
 import "@jask-aran/solid-components/meteor-shower.css";
 import { phoneLayerOpen } from "@/components/phone-overlays";
 import { Button, Spinner } from "@/components/ui/controls";
-import { attachRowMenus, Menu, MenuContent, MenuControl, MenuRow, MenuSection } from "@/components/menus";
+import { attachRowMenus, DropdownMenu, MenuContent, MenuControl, MenuRow, MenuSection } from "@/components/menus";
 import { Header, HeaderCrumb } from "@/components/ui/header";
 import { FileHead } from "@/components/ui/file";
 import { FileEmpty, FileEmptySide } from "@/components/ui/viewer";
@@ -3999,7 +3999,7 @@ function App() {
         </TabPlace>;
       }}</For>
       <Show when={folded().length}>
-        <Menu modal={false} placement="bottom-end">
+        <DropdownMenu modal={false} placement="bottom-end">
           <MenuControl as={PaneAction} label={`${folded().length} more tabs`}><Icons.More /></MenuControl>
           <MenuContent>
             <For each={groups().filter((run) => run.keys.some((key) => folded().includes(key)))}>{(run) =>
@@ -4008,7 +4008,7 @@ function App() {
               </MenuSection>}
             </For>
           </MenuContent>
-        </Menu>
+        </DropdownMenu>
       </Show>
     </PaneTabs>) : undefined);
   };

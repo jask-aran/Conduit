@@ -9,7 +9,7 @@ import { createEffect, createMemo, createSignal, For, on, onCleanup, onMount, Sh
 import { UnplugIcon } from "lucide-solid";
 import { toast } from "@/components/notifications";
 
-import { Menu, MenuContent, MenuControl, MenuSection, MenuRow, MenuSub, MenuSubTrigger, MenuSubContent } from "@/components/menus";
+import { DropdownMenu, MenuContent, MenuControl, MenuSection, MenuRow, MenuSub, MenuSubTrigger, MenuSubContent } from "@/components/menus";
 import { Rule, MenuNote } from "@/components/ui/popover";
 import { Spinner } from "@/components/ui/controls";
 import { api } from "../api/client";
@@ -1089,7 +1089,7 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
     </Dialog>
     <section ref={pane} class="terminal-pane" aria-label="Terminal pane" data-terminal-focused={terminalFocused() ? "true" : "false"} onKeyDown={scopeTerminalKeyboard}>
     <TermHeader actions={<TermActions>
-        <Menu onOpenChange={(open) => { if (open) void refreshSessions().catch((cause) => setError((cause as Error).message)); }}>
+        <DropdownMenu onOpenChange={(open) => { if (open) void refreshSessions().catch((cause) => setError((cause as Error).message)); }}>
           <MenuControl as={TermButton} variant="ghost" size="sm" aria-label="Active terminal sessions" title="Active terminal sessions">
             <Icons.Terminal /><span>{sessions().length}</span><Icons.ChevronDown />
           </MenuControl>
@@ -1112,7 +1112,7 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
               {starting() ? "Starting…" : "New terminal"}
             </MenuRow>
           </MenuContent>
-        </Menu>
+        </DropdownMenu>
         <Show when={pty()?.status === "running"}>
           <TermButton
             type="button"
@@ -1157,14 +1157,14 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
             {shortcut.label}
           </TermShortcut>
         }</For>
-        <Menu>
+        <DropdownMenu>
           <MenuControl as={ToolButton} aria-label="Edit terminal shortcuts" title="Edit terminal shortcuts"><Icons.Settings /></MenuControl>
           <MenuContent>{shortcutRows()}</MenuContent>
-        </Menu>
+        </DropdownMenu>
       </TermShortcuts>
       {/* The same shortcuts, for a pane too narrow to lay them out inline. */}
       <TermOverflow>
-        <Menu>
+        <DropdownMenu>
           <MenuControl as={ToolButton} aria-label="Terminal shortcuts" title="Terminal shortcuts"><Icons.More /></MenuControl>
           <MenuContent>
             <MenuSection title="Shortcuts">
@@ -1178,7 +1178,7 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
               <MenuSubContent>{shortcutRows()}</MenuSubContent>
             </MenuSub>
           </MenuContent>
-        </Menu>
+        </DropdownMenu>
       </TermOverflow>
     </TermHeader>
     <div class="terminal-pane-body">

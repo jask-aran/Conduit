@@ -1,7 +1,7 @@
 import { HarnessMark } from "@/components/ui";
 import { ConnectionHeading } from "@/components/ui";
 import { Icons } from "@/components/ui";
-import { Menu as LiveMenu, MenuContent as LiveMenuContent, MenuSection as LiveMenuSection, MenuRow as LiveMenuRow, MenuRadioGroup as LiveRadioGroup, MenuRadioItem as LiveRadioItem, MenuSub as LiveSub, MenuSubTrigger as LiveSubTrigger, MenuSubContent as LiveSubContent } from "@/components/menus";
+import { DropdownMenu as LiveMenu, MenuContent as LiveMenuContent, MenuSection as LiveMenuSection, MenuRow as LiveMenuRow, MenuRadioGroup as LiveRadioGroup, MenuRadioItem as LiveRadioItem, MenuSub as LiveSub, MenuSubTrigger as LiveSubTrigger, MenuSubContent as LiveSubContent } from "@/components/menus";
 import { ConnectionScreen, PasswordSignIn, ServerControl, ConnectionRecovery, ConnectionForm, ConnectionAddress, ConnectionStatus, ConnectionPassword } from "@/components/ui/connection";
 import { CardBody, CardNote } from "@/components/ui/card";
 import { createSignal } from "solid-js";

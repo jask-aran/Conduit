@@ -1,7 +1,7 @@
 import { Icons } from "@/components/ui";
 import { For, Show } from "solid-js";
 import { Columns3Icon, CommandIcon, LayoutTemplateIcon } from "lucide-solid";
-import { Menu, MenuContent, MenuControl, MenuRow, MenuSection } from "@/components/menus";
+import { DropdownMenu, MenuContent, MenuControl, MenuRow, MenuSection } from "@/components/menus";
 import { RailButton } from "@/components/ui/nav";
 import { LayoutGlyph, RailRule, ToolRail } from "@/components/ui/pane";
 import { isSplitView, type PanelTab, type SplitView } from "./workspace-types";
@@ -71,7 +71,7 @@ export function WorkspaceRail(props: {
       aria-label={props.dockOverlay ? "Dock beside the panes" : "Dock over the panes"} title={props.dockOverlay ? "Dock: over the panes" : "Dock: beside the panes"} onClick={() => props.onToggleDockOverlay()}><Icons.Workspace /></RailButton></Show>
     <Show when={PANE_LAYOUTS[props.panes]}>{(layouts) => <>
       <RailButton tabIndex={-1} aria-label="Equalise panes" title="Equalise panes" onClick={() => props.onLayout(layouts()[0]!)}><Columns3Icon /></RailButton>
-      <Menu modal={false} placement="left-end">
+      <DropdownMenu modal={false} placement="left-end">
         <MenuControl as={RailButton} tabIndex={-1} aria-label="Pane layouts" title="Pane layouts"><LayoutTemplateIcon /></MenuControl>
         <MenuContent>
           <MenuSection title="Pane widths">
@@ -82,7 +82,7 @@ export function WorkspaceRail(props: {
             </For>
           </MenuSection>
         </MenuContent>
-      </Menu>
+      </DropdownMenu>
     </>}</Show>
   </>;
   return <ToolRail aria-label="Workspace tools" data-region="workspace-rail" foot={PANE_LAYOUTS[props.panes] || props.tools ? foot() : undefined}
