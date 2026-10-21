@@ -1,9 +1,9 @@
+import type { ModeFrame, OrbState } from "@/components/ui";
 import { createSignal } from "solid-js";
 import { Transcript, Turn, Trace } from "@/components/ui";
-import { Orb, settledOrbRate, PLAIN_SPHERE, SPUTTERING_SPHERE, ORBITS_TRAILED, type ModeFrame, type OrbState, Button } from "@/components/ui";
+import { Orb, settledOrbRate, PLAIN_SPHERE, SPUTTERING_SPHERE, ORBITS_TRAILED, Button } from "@/components/ui";
 import { resolvePreset } from "thinking-orbs/engine";
-import { FormTable, form } from "../specs";
-import { lib, type Family } from "../model";
+import { row, token, type Page } from "../model";
 /* Orbs: one Orb, a list of animations, each a speed. */
 type OrbAnimation = { name: string; from: string; state: OrbState; frame?: ModeFrame; tint?: string; rate?: number; use: string };
 const ORB_ANIMATIONS: OrbAnimation[] = [
@@ -21,10 +21,7 @@ const ORB_ANIMATIONS: OrbAnimation[] = [
   { name: "shaping", from: "thinking-orbs", state: "shaping", use: "not used" },
 ];
 const speedOf = (a: OrbAnimation) => a.frame ? 1 : resolvePreset(a.state, 20).speed;
-const OrbAnimations = () => <table class="g-orb-table"><thead><tr><th>Animation</th><th>16 · 20 · 32px</th><th>Speed</th><th>Draws a second</th><th>Shows</th></tr></thead>
-  <tbody>{ORB_ANIMATIONS.map((a) => <tr><th>{a.name}<small>{a.from}</small></th>
-    <td><div class="g-orb-sizes">{[16, 20, 32].map((size) => <span style={{ width: `${size}px`, height: `${size}px` }}><Orb state={a.state} frame={a.frame} tint={a.tint} rate={a.rate} /></span>)}</div></td>
-    <td>{speedOf(a)}×</td><td>{a.rate ?? "every frame"}</td><td>{a.use}</td></tr>)}</tbody></table>;
+const animationSample = (a: OrbAnimation) => <div class="g-orb-sizes">{[16, 20, 32].map((size) => <span style={{ width: `${size}px`, height: `${size}px` }}><Orb state={a.state} frame={a.frame} tint={a.tint} rate={a.rate} /></span>)}</div>;
 /** A change of animation as the Orb plays it: held a moment, then crossfaded, both still moving. */
 function OrbChange() {
   const [pick, setPick] = createSignal(ORB_ANIMATIONS[0]!);
@@ -36,30 +33,26 @@ const OrbHow = () => <ol class="g-orb-how">
   <li><strong>The player</strong> (Orb): one frame loop for every orb on the page; draws only on screen with the tab visible, at its rate if it has one; fills its box at the screen's pixel density; tints its dots; a change is held 250ms then crossfaded over 200ms; paused (or reduced motion) it is one still frame.</li>
 </ol>;
 
-export const orbFamily: Family = {
+export const orbPage: Page = {
   title: "Orb",
-  note: "one Orb, a list of animations, each with a speed. Aura (Materials) is the voice's colour field, not an orb",
+  summary: "One Orb, a list of animations, each with a speed. Aura (Materials) is the voice's colour field, not an orb.",
+  preview: () => animationSample(ORB_ANIMATIONS[0]!),
   usage: `import { Orb } from "@/components/ui";
 
 <Orb state="connecting" />`,
-  api: ["Orb", "Button"],
-  groups: [
-    { title: "Examples", layout: "desktop", atoms: [
-      lib("orb-examples", "Orb · examples", "both", "orb", "Turn > Trace > Orb", () => <FormTable on={["desktop", "phone"]} stacked rows={[
-        form("Pause and resume", "Turn status with a long workspace path", () => {
+  examples: [
+    row("Pause and resume", "Turn status with a long workspace path", () => {
           const [paused, setPaused] = createSignal(false);
           return <><Transcript><Turn><Trace orb={<Orb state="weaving" paused={paused()} />} status="Reading" latest="/work/conduit/src/client/settings/settings-core.tsx" live /></Turn></Transcript><Button variant="ghost" outline size="sm" onClick={() => setPaused(!paused())}>{paused() ? "Resume animation" : "Pause animation"}</Button></>;
-        }, '<Trace orb={<Orb state="weaving" paused={paused()} />} />'),
-        form("Preset options", "Resolved engine options at a limited draw rate", () => <Transcript><Turn><Trace orb={<Orb state="searching" opts={resolvePreset("searching", 20).opts} rate={12} />} status="Searching" latest="Find microphone settings" live /></Turn></Transcript>, '<Orb state="searching" opts={resolvePreset("searching", 20).opts} rate={12} />'),
-      ]} />, "row"),
-    ] },
-
-    { title: "How it draws", layout: "desktop", atoms: [lib("orb-how", "How it draws", "both", "orb", "thinking-orbs engine · orb-frames · Orb", () => <OrbHow />, "row")] },
-    { title: "Animations", note: "every animation the Orb plays, live at the sizes it is used at (a preview's 16px, a turn's 20px)", layout: "desktop", atoms: [lib("orb-animations", "Animations", "both", "orb", "<Orb state frame? tint? rate?>", () => <OrbAnimations />, "row")] },
-    { title: "Playing", note: "a change, and a still one", layout: "desktop", atoms: [
-      lib("orb-change", "A change", "both", "orb", "held 250ms, crossfaded over 200ms", () => <OrbChange />),
-      lib("orb-paused", "Paused", "both", "orb", "<Orb paused>: one still frame (and with reduced motion); a change is not faded", () => <span class="g-orb-big"><Orb state="working" paused /></span>),
-    ] },
-  
+        }, { phone: true, code: '<Trace orb={<Orb state="weaving" paused={paused()} />} />' }),
+    row("Preset options", "Resolved engine options at a limited draw rate", () => <Transcript><Turn><Trace orb={<Orb state="searching" opts={resolvePreset("searching", 20).opts} rate={12} />} status="Searching" latest="Find microphone settings" live /></Turn></Transcript>, { phone: true, code: '<Orb state="searching" opts={resolvePreset("searching", 20).opts} rate={12} />' }),
+    row("How it draws", "thinking-orbs engine · orb-frames · Orb", () => <OrbHow />, {}),
+    row("Paused", "<Orb paused>: one still frame (and with reduced motion); a change is not faded", () => <span class="g-orb-big"><Orb state="working" paused /></span>, {})
   ],
+  motion: [
+    ...ORB_ANIMATIONS.map((a) => row(a.name, `${a.use} · ${a.from} · ${speedOf(a)}× speed · ${a.rate ?? "every frame"} draws a second · 16 / 20 / 32px`, () => animationSample(a))),
+    row("A change", "held 250ms, crossfaded over 200ms", () => <OrbChange />, {})
+  ],
+  tokens: [{ title: "Interrupted frame tint", tokens: [token("--destructive", "SPUTTERING_SPHERE tint; orb.css reads no tokens")] }],
+  api: ["Orb", "Button"]
 };

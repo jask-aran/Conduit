@@ -2,15 +2,9 @@
 import { Icons, SettingLine } from "@/components/ui";
 import { createSignal } from "solid-js";
 import { Segmented } from "@/components/ui";
-import { FormTable, form, type FormRow } from "../specs";
-import { lib, type Family } from "../model";
+import { row, token, type Page } from "../model";
 import { SegmentedCount, SegmentedIcons, SegmentedText } from "../demos";
-const SEGMENTED: FormRow[] = [
-  form("text", "two to four named peers: a settings choice; choosing a side is felt on a phone (haptic select)", () => <SegmentedText />, "<Segmented options>", "track: line --tint, corner --radius-control · thumb --tint, corner --radius-control − 2px · labels --text-row --weight-lift, --muted-foreground, chosen --foreground"),
-  form("counts", "a filter, each choice with its count: the dashboard's", () => <SegmentedCount />, "options: { count }", "count --text-caption --font-data, --muted-foreground"),
-  form("icons", "icons alone: the sidebar's sections", () => <SegmentedIcons />, "<Segmented icons>", "2.25-unit squares · icon 1.125 × --u-icon"),
-  form("small", "at a bar's end: chat search's sort", () => <SmallSegmented />, 'size="sm"', "labels --text-caption · --control-xs tall"),
-];
+
 function SmallSegmented() { const [value, setValue] = createSignal("recent"); return <Segmented size="sm" label="Sort" value={value()} onChange={setValue} options={[{ value: "recent", label: "Recent" }, { value: "relevant", label: "Relevant" }]} />; }
 
 function SegmentedExample(props: { disabled?: boolean; pill?: boolean; long?: boolean }) {
@@ -21,24 +15,35 @@ function SegmentedExample(props: { disabled?: boolean; pill?: boolean; long?: bo
   ]} /></SettingLine>;
 }
 
-export const segmentedFamily: Family = {
-  title: "Segmented", stage: true,
-  note: "Segmented reads the surface's --tint and --well values, at the surface and density picked above.",
+export const segmentedPage: Page = {
+  title: "Segmented",
+  summary: "Segmented reads the surface's --tint and --well values.",
+  preview: () => <SegmentedText />,
   usage: `import { Segmented } from "@/components/ui";
 
 <Segmented arrows label="Chats" value={filter()} onChange={setFilter}
   options={[{ value: "all", label: "All" }, { value: "unread", label: "Unread" }]} />`,
-  api: ["Segmented"],
-  groups: [
-    { title: "Examples", note: "the frame too: the sidebar's sections", staged: "density", atoms: [
-      lib("segmented-examples", "segmented · more examples", "both", "control", "segmented", () => <FormTable rows={[
-        form("keyboard choice", "Arrow keys select; setting label stays beside the control.", () => <SegmentedExample />, "<SettingLine><Segmented arrows /></SettingLine>"),
-        form("disabled", "Transcription source waits while settings save.", () => <SegmentedExample disabled />, "<Segmented disabled arrows />"),
-        form("pill", "Floating icon choices with accessible labels.", () => <SegmentedExample pill />, "<Segmented pill />"),
-        form("long labels", "Long folder names beside icons and counts.", () => <SegmentedExample long />, "<Segmented options={[{ value, label, icon, count, title }]} />"),
-      ]} on={["ground", "frost"]} />, "row"),
-
-      lib("segmented-forms", "Segmented · forms × surfaces", "both", "control", "Segmented icons size", () => <FormTable rows={SEGMENTED} on={["frame", "ground", "frost"]} />, "row"),
-    ] },
+  anatomy: { scene: () => <SegmentedText />, parts: [
+    { selector: ".ui-seg", name: "Group", does: "holds one set of choices", from: "Segmented options" },
+    { selector: ".ui-seg-thumb", name: "Thumb", does: "moves behind the selected choice", from: "Segmented value" },
+    { selector: ".ui-seg button[aria-checked=\"true\"]", name: "Choice", does: "shows the selected option", from: "Segmented value" },
+  ] },
+  examples: [
+    row("keyboard choice", "Arrow keys select; setting label stays beside the control.", () => <SegmentedExample />, { code: "<SettingLine><Segmented arrows /></SettingLine>" }),
+    row("disabled", "Transcription source waits while settings save.", () => <SegmentedExample disabled />, { code: "<Segmented disabled arrows />" }),
+    row("pill", "Floating icon choices with accessible labels.", () => <SegmentedExample pill />, { code: "<Segmented pill />", surfaces: ["ground"] }),
+    row("long labels", "Long folder names beside icons and counts.", () => <SegmentedExample long />, { code: "<Segmented options={[{ value, label, icon, count, title }]} />" }),
+    row("text", "two to four named peers: a settings choice; choosing a side is felt on a phone (haptic select) track: line --tint, corner --radius-control · thumb --tint, corner --radius-control − 2px · labels --text-row --weight-lift, --muted-foreground, chosen --foreground", () => <SegmentedText />, { code: "<Segmented options>" , surfaces: ["frame", "ground", "frost"] }),
+    row("counts", "a filter, each choice with its count: the dashboard's count --text-caption --font-data, --muted-foreground", () => <SegmentedCount />, { code: "options: { count }" , surfaces: ["frame", "ground", "frost"] }),
+    row("icons", "icons alone: the sidebar's sections 2.25-unit squares · icon 1.125 × --u-icon", () => <SegmentedIcons />, { code: "<Segmented icons>" , surfaces: ["frame", "ground", "frost"] }),
+    row("small", "at a bar's end: chat search's sort labels --text-caption · --control-xs tall", () => <SmallSegmented />, { code: 'size="sm"' , surfaces: ["frame", "ground", "frost"] }),
   ],
+  tokens: [{ title: "Segmented", tokens: [
+    token("--radius-control", "Control corner"),
+    token("--control-sm", "Choice height"),
+    token("--tint", "Surface tint"),
+    token("--text-row", "Control text size"),
+    token("--duration-gentle", "Value change duration"),
+  ] }],
+  api: ["Segmented"],
 };

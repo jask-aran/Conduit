@@ -1,6 +1,6 @@
 import { createSignal, For, onMount } from "solid-js";
 import { IDENTITY_COLOURS, PALETTE_USES, PALETTES, paletteColour, type Palette } from "@/components/ui/palettes";
-import { lib, type Family } from "./model";
+import { row, token, type Page } from "./model";
 
 /* Palettes (components/ui/palettes.ts, styles/palettes.css): each named palette once, by its own names; then each use
    and the palette colour every one of its tokens takes, found by matching computed values, so the gallery holds no
@@ -52,12 +52,17 @@ const TOKENS: Record<string, string[]> = { Code: [...CODE, ...SYNTAX], Terminal:
 
 const identityChips = () => IDENTITY_COLOURS.map((option) => ({ label: option.id, token: option.colour.slice(4, -1), colour: option.colour, from: `saved as "${option.id}" · ${option.label}` }));
 
-export const paletteFamilies: Family[] = [
-  { title: "Palettes", rail: "Foundations", note: "colours from outside Conduit's own theme, each palette once under its own names; a use points at a palette's colours, so a palette swaps in one place. The theme's own colours are in Colour", groups: [
-    { title: "Palettes", note: "each one by its own names: --<palette>-<colour> in palettes.css, the same names and labels in palettes.ts", layout: "desktop", atoms: PALETTES.map((palette) =>
-      lib(`palette-${palette.id}`, palette.label, "both", "palette", `palettes.css --${palette.id}-* · ${palette.source}`, () => <Chips chips={paletteChips(palette)} />, "row")) },
-    { title: "Uses", note: "what each palette colours, and the palette colour each of a use's tokens takes now. CSS uses point at a palette in theme.css, picked by a root attribute; identity is chosen in palettes.ts, since it is saved per workspace as a hue", layout: "desktop", atoms: PALETTE_USES.map((use) =>
-      lib(`palette-use-${use.use.toLowerCase().replace(/\s+/g, "-")}`, `${use.use} · ${use.palette.label}`, "both", "palette", use.where,
-        () => <Chips chips={use.use === "Workspace identity" ? identityChips : useChips(use.palette, TOKENS[use.use] ?? [])} />, "row")) },
-  ] },
+export const palettePages: Page[] = [
+  { title: "Palettes", rail: "Foundations",
+    summary: "Palettes supply colours outside Conduit's theme, each under its own names. Uses point at palette colours, so a palette changes in one place. The theme's own colours are in Colour.",
+    preview: () => <Chips chips={() => PALETTES.slice(0, 1).flatMap((palette) => paletteChips(palette)())} />,
+    examples: [
+      ...PALETTES.map((palette) => row(palette.label, `--${palette.id}-* in palettes.css · ${palette.source}`,
+        () => <Chips chips={paletteChips(palette)} />, { surfaces: ["ground"] })),
+      ...PALETTE_USES.map((use) => row(`${use.use} · ${use.palette.label}`, `${use.where}; each token names the palette colour it takes. CSS uses are selected in theme.css; workspace identity is saved as a hue.`,
+        () => <Chips chips={use.use === "Workspace identity" ? identityChips : useChips(use.palette, TOKENS[use.use] ?? [])} />, { surfaces: ["ground"] })),
+    ],
+    tokens: [{ title: "Palette sample", tokens: PALETTES.flatMap((palette) => palette.colours.map((colour) =>
+      token(`--${palette.id}-${colour.id}`, `${palette.label} · ${colour.label}`))).slice(0, 8) }],
+  },
 ];

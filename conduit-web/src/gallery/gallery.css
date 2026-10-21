@@ -5,7 +5,6 @@ html, body { background: var(--frame, #08090a); color: var(--foreground); }
 .g-canvas { display: grid; flex: 1; min-width: 0; grid-template-columns: auto 1fr auto; height: 100vh; font-family: "Geist Variable", sans-serif; }
 .g-left { min-width: 0; overflow: auto; }
 .g-bar { position: sticky; top: 0; z-index: 200; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid var(--border); background: var(--frame); padding: 8px 16px; font-size: 12px; }
-/* The rail: one family at a time instead of one long scroll. */
 /* The rail: the sidebar's language (NavGroups of NavRows), its head the gallery's name. */
 .g-rail { display: flex; flex: none; flex-direction: column; gap: var(--space-xl); width: 184px; overflow: auto; border-right: 1px solid var(--border); padding: var(--space-xl) var(--space-md); }
 .g-rail-head { display: grid; gap: 2px; padding: 0 var(--row-inset); }
@@ -19,26 +18,12 @@ html, body { background: var(--frame, #08090a); color: var(--foreground); }
 .g-speed > span { color: var(--muted-foreground); margin-right: 4px; }
 .g-tune { display: block; width: calc(100% - 32px); height: 160px; margin: 8px 16px; border: 1px solid var(--border); border-radius: 6px; background: transparent; padding: 8px; color: var(--foreground); font: 11px ui-monospace, monospace; }
 /* One grid of equal cells on charcoal, each piece centred in its cell. */
-.g-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 1px; margin: 16px; background: var(--border); border: 1px solid var(--border); }
-.g-cell { position: relative; display: grid; min-height: 220px; margin: 0; background: #1b1c1f; place-items: center; padding: 36px 16px 20px; }
 .g-cell-body { display: grid; place-items: center; }
-.g-tag { position: absolute; top: 8px; left: 8px; display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; border-radius: 999px; background: #26272b; padding: 2px 9px; color: var(--muted-foreground); font-size: 10px; }
-.g-tag strong { color: var(--foreground); font-weight: 600; }
-.g-tag [data-kind="one-off"] { color: #d99a22; }
-.g-tag [data-kind="class"] { color: #e5c07b; }
 .g-heading { margin: 24px 16px 8px; color: var(--muted-foreground); font-size: 12px; font-weight: 600; }
 /* Menus drawn in place, not floating. */
-.g-static { position: relative; z-index: auto; }
 .g-top { align-items: flex-start; }
-.g-parts-grid { margin: 0; grid-template-columns: 1fr; }
-.g-parts-grid .g-cell { min-height: 180px; padding-inline: 8px; }
-.g-phone-menu { width: 190px; }
 .g-swatch { width: 160px; height: 110px; border-radius: 17.6px; }
 .g-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-.g-card-demo { display: flex; width: 280px; flex-direction: column; gap: 14px; padding: 16px; }
-.g-panel-inline { display: inline-block; min-width: 10rem; border-radius: var(--radius-surface); padding: 4px; color: var(--foreground); }
-.g-search { width: 270px; }
-.g-parts { display: block; width: 412px; height: 1000px; margin: 0 16px 24px; border: 1px solid var(--border); border-radius: 18px; background: var(--background); }
 /* The preview. */
 .g-right { display: flex; flex-direction: column; align-items: center; gap: 10px; overflow: auto; border-left: 1px solid var(--border); padding: 10px 16px; }
 .g-toggle { display: flex; gap: 4px; }
@@ -49,12 +34,8 @@ html, body { background: var(--frame, #08090a); color: var(--foreground); }
    9.6px of margins, and this frame's border. */
 .g-desktop-screen { --composer-width: var(--reading-width); --app-height: calc(100vh - 60px); display: flex; flex: none; width: calc(var(--composer-width) + var(--transcript-column-gutter) + 9.6px + 2px); height: calc(100vh - 60px); overflow: hidden; border: 1px solid var(--border); border-radius: 12px; background: var(--background); }
 .g-desktop-screen .chat-main { flex: 1; height: 100%; min-height: 0; }
-.g-solo-body #root, .g-parts-body #root { height: 100vh; }
-.g-parts-body { overflow: auto; background: #1b1c1f; }
-.g-card { width: 100%; }
-.g-parts { height: 5600px; }
+.g-solo-body #root { height: 100vh; }
 /* One piece on each surface it sits on. */
-.g-surfaces { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; }
 .g-surface { position: relative; display: grid; min-width: 200px; place-items: center; border-radius: 14px; padding: 28px 16px 16px; }
 .g-surface[data-surface="ground"] { background: var(--background); box-shadow: inset 0 0 0 1px var(--border); }
 .g-surface > small { position: absolute; top: 7px; left: 10px; color: var(--muted-foreground); font: 9px ui-monospace, monospace; text-transform: uppercase; letter-spacing: .07em; }
@@ -70,114 +51,20 @@ html, body { background: var(--frame, #08090a); color: var(--foreground); }
 .g-submenu > .ui-menu:last-child { margin-top: 118px; }
 .g-field > .ui-seg { justify-self: start; }
 /* Library density: the grid takes the toggle; side-by-side cells show both. */
-.g-grid[data-density] { font-size: 13px; }
-.g-cell[data-side] { grid-column: span 2; }
-.g-side { display: flex; align-items: flex-start; gap: 28px; }
-.g-side > div { display: grid; justify-items: center; gap: 6px; }
-.g-side > div > small { color: var(--muted-foreground); font: 9px ui-monospace, monospace; letter-spacing: .07em; text-transform: uppercase; }
 .g-w12 { width: 12rem; } .g-w16 { width: 17rem; } .g-w18 { width: 18rem; }
-.g-grid[data-density="desktop"] .g-w12 { width: 154px; } .g-grid[data-density="desktop"] .g-w16, .g-grid[data-density="desktop"] .g-w18 { width: 224px; }
-.g-grid[data-density="phone"] .g-w12 { width: 190px; } .g-grid[data-density="phone"] .g-w16, .g-grid[data-density="phone"] .g-w18 { width: 280px; }
-.g-tag [data-scope="desktop"] { color: #7aa2f7; } .g-tag [data-scope="phone"] { color: #9ece6a; }
-.g-tag [data-kind] { color: var(--muted-foreground); font-style: italic; }
-/* The building blocks share one popover width per variant, as the app's popovers do. */
-.g-side > [data-density="desktop"] .ui-menu { width: 224px; }
-.g-side > [data-density="phone"] .ui-menu { width: 280px; }
 /* The phone built from the library. */
-.g-live { container-type: inline-size; position: relative; display: flex; flex: none; width: 414px; height: min(860px, calc(100vh - 60px)); flex-direction: column; overflow: hidden; border: 1px solid var(--border); border-radius: 18px; background: var(--background); font-family: "Geist Variable", sans-serif; }
-.g-live-header { position: absolute; inset: 0 0 auto; z-index: 2; display: flex; justify-content: space-between; padding: 8px 10px; }
-.g-live-transcript { display: flex; flex: 1; flex-direction: column; gap: 14px; overflow: auto; padding: 68px 14px 90px; font-size: calc(0.9375 * var(--u-type)); line-height: 1.66; }
-.g-live-answer { margin: 0; }
-.g-live-answer code { border-radius: 4px; background: var(--border); padding: 1px 5px; font-size: 13px; }
-.g-live-composer { position: absolute; inset: auto 0 0; display: flex; align-items: center; gap: 8px; padding: 10px 12px 14px; }
-.g-live-mic { display: grid; height: 44px; flex: 1; place-items: center; border-radius: 999px; color: var(--muted-foreground); }
-.g-live-mic svg { width: 18px; height: 18px; }
-.g-live-float { position: absolute; z-index: 20; }
-.g-live-float[data-at="top-right"] { top: 58px; right: 10px; }
-.g-live-float[data-at="top-left"] { top: 58px; left: 10px; }
-.g-live-float[data-at="bottom-left"] { bottom: 66px; left: 10px; }
-.g-live-menu { width: 280px; max-height: 70vh; overflow: auto; }
-.g-live-panels { position: relative; }
-.g-live-parent { transition: opacity .16s ease, filter .16s ease; }
-.g-live-panels[data-panel-open] .g-live-parent { opacity: .38; filter: saturate(.6); }
-.g-live-panel { position: absolute; inset: 0; display: flex; align-items: flex-end; padding-left: 51px; }
-.g-live-panel .g-live-menu { width: 260px; max-height: 360px; }
-.g-live-backdrop { position: absolute; inset: 0; z-index: 9; background: var(--dim); }
-.g-live-sidebar { position: absolute; inset: 0 auto 0 0; z-index: 10; display: flex; width: 86%; flex-direction: column; background: var(--frame); box-shadow: 8px 0 40px rgb(0 0 0 / 40%); animation: g-live-in .22s cubic-bezier(.2,.8,.2,1); }
 @keyframes g-live-in { from { transform: translateX(-100%); } }
-.g-live-sidebar-head { display: flex; align-items: center; gap: 8px; padding: 8px 10px; }
-.g-live-server { display: flex; min-width: 0; flex: 1; align-items: center; gap: 6px; border: 0; background: transparent; color: var(--foreground); font-size: 14px; font-weight: 600; }
-.g-live-server svg { width: 14px; height: 14px; color: var(--muted-foreground); }
-.g-live-dot { width: 7px; height: 7px; border-radius: 999px; background: oklch(0.62 0.17 145); }
-.g-live-sidebar-list { display: flex; flex-direction: column; gap: 6px; overflow: auto; padding: 4px 8px 16px; }
-.g-live-sidebar-list .ui-section + .ui-section { border-top: 0; }
 .g-sidebar-screen { position: relative; height: 100vh; overflow: hidden; }
 /* The desktop built from the library. */
-.g-live-desktop { width: min(900px, 60vw); flex-direction: row; }
-.g-live-rail { display: flex; width: 200px; flex: none; flex-direction: column; gap: 4px; overflow: auto; border-right: 1px solid var(--border); background: var(--frame); padding: 10px 6px; }
-.g-live-rail .ui-section + .ui-section { border-top: 0; }
-.g-live-main { position: relative; display: flex; min-width: 0; flex: 1; flex-direction: column; }
-.g-live-desk-head { display: flex; align-items: center; gap: 6px; padding: 8px 10px; font-size: 12px; }
-.g-live-grow { flex: 1; }
-.g-live-desk-transcript { padding: 12px 28px 150px; font-size: 13px; }
-.g-live-desk-composer { position: absolute; inset: auto 20px 18px; border-radius: 17.6px; padding: 10px 10px 6px; }
-.g-live-desk-composer textarea { width: 100%; resize: none; border: 0; background: transparent; padding: 2px 4px; color: var(--foreground); font: 13px "Geist Variable", sans-serif; outline: none; }
-.g-live-desk-row { display: flex; align-items: center; gap: 2px; }
-.g-live-model { display: inline-flex; align-items: center; gap: 6px; border: 0; border-radius: 6px; background: transparent; padding: 3px 6px; color: var(--foreground); font-size: 11px; font-weight: 560; }
-.g-live-model span { color: var(--muted-foreground); font-weight: 400; }
-.g-live-model svg { width: 12px; height: 12px; }
-.g-live-model:hover { background: var(--border); }
-.g-live-anchor { position: absolute; z-index: 20; }
-.g-live-anchor[data-at="model"] { bottom: 100%; left: 80px; margin-bottom: 4px; }
-.g-live-anchor[data-at="plus"] { bottom: 100%; left: 8px; margin-bottom: 4px; }
-.g-live-anchor[data-at="chat"] { top: 40px; right: 10px; }
-.g-live-desk-menu { width: 260px; }
-.g-live-chat-menu { width: 274px; }
 .g-toggles { display: flex; gap: 12px; }
-.g-live-place { color: var(--foreground); font: 700 10px/1 "Geist Variable", sans-serif; letter-spacing: .04em; text-transform: uppercase; margin-left: 4px; }
-/* The library's phone sidebar: the app's header geometry (56px, pill, brand, server, toggle), then the list. */
-.g-live-sb { background: var(--frame); color: var(--foreground); font-size: 16px; line-height: 24px; }
 /* The app's phone sidebar header: pill, brand and server sharing the width, the area toggle. */
-.g-live-sb-head { display: flex; height: 56px; flex: none; align-items: center; gap: 2px; padding: 8px 10px 4px; }
-.g-live-brand { display: flex; min-width: 0; height: 40px; flex: none; align-items: stretch; border: 0; border-radius: 8px; background: transparent; padding: 0 10px; color: inherit; }
-.g-live-brand > span { display: flex; align-items: center; font: 18px/1 var(--font-wordmark); transform: translateY(0.16em); }
-.g-live-sb-server { display: flex; min-width: 0; flex: 1; flex-direction: column; justify-content: center; }
-.g-live-sb-server > button { display: flex; min-width: 0; align-items: center; gap: 8px; border: 0; border-radius: 8px; background: transparent; padding: 6px 8px; color: inherit; text-align: left; }
-.g-live-sb-server > button > span:first-child { display: flex; min-width: 0; flex: 1; flex-direction: column; }
-.g-live-sb-server strong { overflow: hidden; font-size: 10.5px; font-weight: 580; letter-spacing: -.01em; line-height: 1.3; text-overflow: ellipsis; white-space: nowrap; }
-.g-live-sb-server small { overflow: hidden; color: var(--muted-foreground); font-size: 8.5px; line-height: 1.35; text-overflow: ellipsis; white-space: nowrap; }
-.g-live-sb-dot { display: grid; width: 16px; height: 16px; flex: none; place-items: center; }
-.g-live-sb-dot > i { width: 8px; height: 8px; border-radius: 999px; background: rgb(47, 159, 61); }
-.g-live-sb-list { display: flex; min-height: 0; flex: 1; flex-direction: column; overflow: auto; padding: 7px 8px 12px; }
-.g-live-desk-head { padding: 14px 14px 8px; }
-.g-live-desk-transcript { width: min(540px, 100%); margin-inline: auto; padding-inline: 0; }
-.g-live-desk-composer { left: 50%; right: auto; width: min(608px, calc(100% - 40px)); transform: translateX(-50%); }
-.g-live-sb-list .ui-nav-group + .ui-nav-group { margin-top: 12px; }
 .g-view { display: contents; } .g-view[hidden] { display: none; }
-
-/* In its own frame a library screen is the whole phone, as the live one is. */
-.g-solo-body .g-live { width: 100%; height: 100vh; border: 0; border-radius: 0; }
-/* The phone screen in flow, as the app lays it: header, then the conversation (transcript over the composer stack). */
-.g-solo-body .g-live > .g-live-header { position: relative; height: 56px; flex: none; padding: 8px 10px 4px; }
-.g-solo-body .g-live > .work-area { min-height: 0; flex: 1; }
-.g-solo-body .g-live .composer-stack > .g-live-composer { position: static; }
-/* The composer row where the app puts its composer: 10px under the transcript, 12px in from each side, 54 tall. */
-.g-solo-body .g-live .composer-stack { padding: 0; }
-.g-solo-body .g-live .composer-stack > .g-live-composer { height: 54px; margin: 10px 12px 12px; padding: 6px 1px 4px; }
-.g-live-desktop { position: relative; }
-.g-live-model-menu .ui-row > small { font-size: 11px; }
 
 /* The library as a tree: each family a section, its cells dense. */
 .g-family-title { margin: 20px 16px 4px; font-size: 15px; font-weight: 650; }
 .g-family-title small, .g-heading small { margin-left: 6px; color: var(--muted-foreground); font-size: 11px; font-weight: 400; }
-.g-dense { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); grid-auto-flow: dense; font-size: 13px; container-type: inline-size; }
-.g-dense .g-cell { min-height: 200px; padding: 44px 12px 16px; }
 /* A wide cell takes two columns only where two fit: spanning two in a one-column grid made an implicit second
    column that squeezed every cell beside it. */
-@container (min-width: 521px) { .g-dense .g-cell[data-wide]:not([data-wide="row"]) { grid-column: span 2; } }
-.g-cell-toggle { position: absolute; top: 8px; right: 8px; display: flex; gap: 2px; }
-.g-cell-toggle button { border: 1px solid var(--border); border-radius: 5px; background: transparent; padding: 1px 6px; color: var(--muted-foreground); font-size: 10px; }
-.g-cell-toggle button[aria-pressed="true"] { background: var(--border); color: var(--foreground); }
 .g-cell-body[data-density="desktop"] :is(.g-w16, .g-w18) { width: 224px; } .g-cell-body[data-density="desktop"] .g-w12 { width: 154px; }
 .g-cell-body[data-density="phone"] :is(.g-w16, .g-w18) { width: 280px; } .g-cell-body[data-density="phone"] .g-w12 { width: 190px; }
 .g-cell-body[data-density="desktop"] > .ui-menu, .g-cell-body[data-density="desktop"] > .g-anatomy .ui-menu { width: 224px; }
@@ -190,8 +77,6 @@ html, body { background: var(--frame, #08090a); color: var(--foreground); }
 .g-bar-demo { display: flex; width: 380px; align-items: center; justify-content: space-between; gap: 8px; }
 .g-composer-demo { display: grid; width: 380px; gap: 8px; }
 .g-slot { border: 1px dashed #d99a2299; border-radius: 6px; padding: 14px; color: var(--muted-foreground); text-align: center; }
-.g-dense .g-cell:has(.g-cell-toggle) .g-tag { right: 112px; flex-wrap: nowrap; overflow: hidden; white-space: nowrap; }
-.g-dense .g-cell:has(.g-cell-toggle) .g-tag [data-scope] { display: none; }
 .g-composer { width: 460px; max-width: 100%; }
 .g-cell-body:has(> .g-composer) { width: 100%; }
 .g-cell-body:has(> .g-phone-composer) { width: 100%; }
@@ -206,7 +91,6 @@ html, body { background: var(--frame, #08090a); color: var(--foreground); }
 .g-anatomy :is(.ui-composer-field, .ui-toolbar, .ui-rider) { outline: 1px dashed #d99a2299; outline-offset: -1px; }
 .g-anatomy :is(.ui-toolbar-start, .ui-toolbar-end) { outline: 1px dotted #7aa2f799; outline-offset: -2px; }
 .g-anatomy :is(.ui-lines, .ui-rider-actions, .ui-rider > .ui-title-text) { outline: 1px dotted #7aa2f799; outline-offset: 1px; }
-.g-dense .g-cell[data-wide="row"] { grid-column: 1 / -1; }
 /* A frost-free part, alone: its bounds dashed, on the cell's ground. */
 .g-part { outline: 1px dashed #ffffff33; outline-offset: 2px; border-radius: 4px; }
 .g-overlay-demo { width: 100%; max-width: 640px; }
@@ -228,23 +112,8 @@ html, body { background: var(--frame, #08090a); color: var(--foreground); }
 .g-toggles { flex-wrap: wrap; justify-content: center; }
 
 /* Foundations: a sample drawn by the library above what it computes to. */
-.g-spec { display: grid; width: 100%; gap: 14px; justify-items: center; }
-.g-spec > .g-tokens { justify-self: stretch; }
-.g-spec .g-surface { min-width: 220px; }
 .g-entry { width: min(100%, 320px); border-radius: 12px; padding: 8px 12px; }
-.g-chips { display: flex; flex-wrap: wrap; gap: 8px; }
-.g-chips > i { width: 40px; height: 40px; border-radius: 8px; box-shadow: inset 0 0 0 1px oklch(1 0 0 / 8%); }
-.g-radii { display: flex; flex-wrap: wrap; justify-content: center; gap: 14px; }
-.g-radii figure, .g-icon-sizes figure { display: grid; justify-items: center; gap: 6px; margin: 0; }
-.g-radii figcaption, .g-icon-sizes figcaption { color: var(--muted-foreground); font-size: 11px; }
 .g-radius { width: 72px; height: 48px; }
-.g-lengths { display: grid; width: 100%; gap: 4px; }
-.g-lengths > div { display: grid; grid-template-columns: 110px 1fr; align-items: center; gap: 10px; }
-.g-lengths code { color: var(--muted-foreground); font: 10.5px ui-monospace, monospace; }
-.g-lengths i { height: 8px; border-radius: 2px; background: var(--frost-stroke); }
-.g-icon-sizes { display: flex; align-items: flex-end; gap: 22px; }
-.g-icon-sizes span { display: grid; place-items: center; }
-.g-icon-sizes svg { width: 100%; height: 100%; }
 .g-face { display: grid; width: 100%; gap: 10px; }
 .g-face-specimen { font-size: 28px; line-height: 1.15; overflow-wrap: anywhere; }
 .g-face-sample { color: var(--muted-foreground); font-size: 14px; }
@@ -273,8 +142,6 @@ html, body { background: var(--frame, #08090a); color: var(--foreground); }
 .g-scale-group { padding: 18px 4px 6px; color: var(--muted-foreground); font-size: 11px; font-weight: 600; }
 .g-swatch-chip { display: block; width: 44px; height: 28px; border-radius: 6px; box-shadow: inset 0 0 0 1px oklch(1 0 0 / 10%); }
 .g-bar-chip { display: block; min-width: 1px; height: 10px; border-radius: 2px; background: var(--frost-stroke); }
-.g-glyph { display: grid; place-items: center; }
-.g-glyph svg { width: 100%; height: 100%; }
 .g-scale .g-radius { width: 56px; height: 36px; }
 /* Foundations · In use: a scene per density, numbered where each foundation shows. */
 .g-inuse { display: grid; width: 100%; gap: 18px; }
@@ -307,11 +174,6 @@ html, body { background: var(--frame, #08090a); color: var(--foreground); }
 .g-phone-stage > p { margin: 0; padding: 56px 16px; color: var(--foreground); font-size: 16px; line-height: 1.55; }
 .g-stage-scrim { position: absolute; inset: 0; }
 .g-stage-scrim > .ui-overlay { height: 100%; }
-/* A staged page's switches (Controls): one surface and one density for the page. */
-.g-stage { position: sticky; top: 41px; z-index: 2; display: flex; gap: 12px; margin: 0 16px; padding: 8px 0; background: var(--frame); }
-.g-stage-surface { width: 100%; min-width: 0; padding: 20px 16px; }
-.g-scene-surface { width: 100%; min-width: 0; justify-items: start; gap: 10px; padding: 16px; }
-.g-variants .g-scale-name small + small { font: 10.5px/1.4 ui-monospace, monospace; }
 /* Forms × surfaces (Controls): each cell a small surface, the sample centred in it. */
 .g-forms .g-scale-row { padding: 6px 4px; }
 .g-form-surface { min-width: 0; min-height: 64px; border-radius: 10px; padding: 12px; }
@@ -323,7 +185,6 @@ html, body { background: var(--frame, #08090a); color: var(--foreground); }
 /* A glance in its column, as the search overlay draws it. */
 .g-glance { width: 300px; padding: 16px; }
 .g-form-code { width: fit-content; margin-top: 4px; border-radius: 4px; background: var(--border); padding: 1px 5px; color: var(--foreground); font: 10.5px/1.4 ui-monospace, monospace; }
-.g-form-tokens { font: 10.5px/1.45 ui-monospace, monospace !important; }
 .g-forms .g-scale-head, .g-forms .g-scale-row { grid-template-columns: 300px repeat(2, minmax(0, 1fr)); }
 .g-form-density { display: grid; min-width: 0; grid-template-columns: minmax(0, 1fr); place-items: center; overflow-x: auto; padding: 8px; font-size: 13px; }
 .g-card-scene { display: grid; width: 500px; max-width: 100%; justify-items: center; }
@@ -335,9 +196,6 @@ html, body { background: var(--frame, #08090a); color: var(--foreground); }
 .g-band small { color: #fff; font: 600 9px/1 ui-monospace, monospace; text-shadow: 0 0 3px #000, 0 0 3px #000; white-space: nowrap; }
 .g-qr { width: 160px; height: 160px; align-self: center; }
 .g-scale-row[data-stacked] > .g-scale-name { grid-column: 1 / -1; }
-.g-stack-name > p { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; margin: 0; }
-.g-stack-name > p + p { margin-top: 6px; }
-.g-stack-name :is(small, code) { margin: 0; }
 /* Space · Scale: a slider per coefficient. */
 .g-scale-control { display: grid; width: min(100%, 640px); gap: 12px; }
 .g-scale-control { width: min(100%, 900px); }
@@ -389,12 +247,6 @@ html, body { background: var(--frame, #08090a); color: var(--foreground); }
 .g-aura-wide { width: 320px; } .g-aura-short { width: calc(1.5 * var(--pill-size)); }
 .g-aura-round { width: 160px; height: 160px; border-radius: var(--radius-round); }
 .g-aura-row .ui-slider, .g-aura-row [role="slider"] { width: 220px; }
-
-.g-orb-table { width: 100%; border-collapse: collapse; font-size: 12px; }
-.g-orb-table :is(th, td) { padding: var(--space-sm) var(--space-md); border-bottom: 1px solid var(--border); text-align: left; vertical-align: middle; }
-.g-orb-table thead th { color: var(--muted-foreground); font-weight: 500; }
-.g-orb-table tbody th { font-weight: 600; white-space: nowrap; } .g-orb-table tbody th small { display: block; font-weight: 400; color: var(--muted-foreground); }
-.g-orb-table td:last-child { color: var(--muted-foreground); }
 .g-orb-how { max-width: 72ch; margin: 0; padding-left: 1.2em; font-size: 13px; line-height: 1.55; color: var(--muted-foreground); }
 .g-orb-how strong { color: var(--foreground); }
 .g-orb-sizes { display: flex; align-items: center; gap: var(--space-lg); }
@@ -467,3 +319,19 @@ html, body { background: var(--frame, #08090a); color: var(--foreground); }
 .g-preview { display: grid; }
 .g-preview > .g-surface { display: grid; min-height: 160px; place-items: center; padding: 32px; border-radius: 10px; }
 .g-rows .g-dash { align-self: center; justify-self: center; color: var(--muted-foreground); }
+/* A row whose render is a catalogue (Icons): named items in a grid. */
+.g-icon-grid { display: grid; width: 100%; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px 14px; }
+.g-icon-grid > figure { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 8px; margin: 0; }
+.g-icon-grid figcaption { display: grid; min-width: 0; }
+.g-icon-grid code { overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.g-icon-grid small { overflow: hidden; color: var(--muted-foreground); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+/* The Examples and Motion table: the name beside its renders, or above them where the table is too narrow for both. */
+.g-rows { container-type: inline-size; }
+.g-rows > .g-scale-head, .g-rows > .g-scale-row { grid-template-columns: 260px repeat(var(--g-columns), minmax(0, 1fr)); }
+@container (max-width: 760px) {
+  .g-rows > .g-scale-head, .g-rows > .g-scale-row { grid-template-columns: repeat(var(--g-columns), minmax(0, 1fr)); }
+  .g-rows > .g-scale-head > span:first-child { display: none; }
+  .g-rows > .g-scale-row > .g-scale-name { grid-column: 1 / -1; }
+}
+.g-canvas[data-app="hidden"] > .g-right { display: none; }
+.g-depth-chip { display: grid; width: 140px; height: 90px; place-items: center; color: var(--muted-foreground); font-size: 12px; }

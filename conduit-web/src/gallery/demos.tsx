@@ -7,7 +7,7 @@ import { SquarePenIcon } from "lucide-solid";
 import { type Motion, Meter, Orb, settledOrbRate, PLAIN_SPHERE, SPUTTERING_SPHERE, SettingRecorder, Crumbs, Match, OverlayBar, OverlayHints, OverlayList, OverlayPage, OverlayRail, OverlayFacts, OverlayFact, OverlaySplit, Glance, GlanceHead, GlancePrompt, GlanceTurn, GlanceAnswer, Overlay, SettingGroup, SettingLine, SettingValue, SettingLink, SettingNote, SettingDetails, SettingWide, SettingLoading, Progress, Keycap, NavGroup, NavRow, Segmented, SelectTrigger, Button, Chip, Line, TextArea, Rider, RiderActions, RiderTitle, Input, Item, Section, Slider, Switch, Chips, Lines, Read } from "@/components/ui";
 import { scaleOf, setScale } from "./foundations";
 import { NotebookTextIcon } from "lucide-solid";
-import { px, type FormRow } from "./specs";
+import { px } from "./specs";
 import { Reading, ReadingTotal, ReadingParts, ReadingPart, ReadingStats, ReadingStat, ReadingFoot } from "@/components/ui";
 import katex from "katex";
 
@@ -238,7 +238,6 @@ export function ConnectionDemo() {
   </ConnectionForm>;
 }
 /** Forms drawn as what is read: in the transcript's scope (its scale, a row a step under the body). */
-export const reading = (rows: FormRow[]) => rows.map((row) => ({ ...row, sample: () => <Read class="g-read">{row.sample()}</Read> }));
 export const LONG = Array.from({ length: 20 }, (_, i) => i % 5 === 0 ? `// step ${i / 5 + 1}` : `  run(${i}, { size: ${i * 64} });`).join("\n");
 export type Lit = { top: string; left: string; width: string; height: string; radius?: string };
 export const noop = () => {};

@@ -1,9 +1,8 @@
 import { createSignal, Show } from "solid-js";
 import { Field, Item, Menu, Section, SettingLine } from "@/components/ui";
-import { FormTable, form } from "../specs";
 import { SelectTrigger } from "@/components/ui";
 import { Select } from "@/components/menus";
-import { lib, type Family } from "../model";
+import { row, token, type Page } from "../model";
 
 function ProviderSelect() {
   const [value, setValue] = createSignal("OpenAI");
@@ -19,9 +18,10 @@ function AdapterSelect() {
     <option value="compact">Compact</option><option value="comfortable">Comfortable</option><option value="wide">Wide</option>
   </Select><Select bare aria-label="Code blocks" value="fold"><option value="fold">Fold long blocks</option><option value="never">Never fold</option></Select></div>;
 }
-export const selectFamily: Family = {
-  title: "Select", stage: true,
-  note: "one choice from a list: the adapter Select (components/menus.tsx) keeps a native select as the value's owner and draws the library's SelectTrigger opening a Menu of its options. It reads the surface's --tint and --well values, at the surface and density picked above.",
+export const selectPage: Page = {
+  title: "Select",
+  summary: "one choice from a list: the adapter Select (components/menus.tsx) keeps a native select as the value's owner and draws the library's SelectTrigger opening a Menu of its options. It reads the surface's --tint and --well values.",
+  preview: () => <AdapterSelect />,
   usage: `import { Select } from "@/components/menus";
 
 <Select aria-label="Transcript width" value={width()}
@@ -29,17 +29,23 @@ export const selectFamily: Family = {
   <option value="compact">Compact</option>
   <option value="wide">Wide</option>
 </Select>`,
-  api: ["Select", "SelectTrigger"],
-  groups: [
-    { title: "Examples", staged: true, atoms: [
-      lib("select", "Select", "both", "control", "SelectTrigger bare", () => <div class="g-field"><SelectTrigger value="System default" /><div class="g-row"><span>Provider</span><SelectTrigger bare value="OpenAI" /></div></div>),
-      lib("select-adapter", "Select · the adapter", "both", "control", "components/menus.tsx Select", () => <AdapterSelect />),
-      lib("select-examples", "Select · additional examples", "both", "control", "SelectTrigger", () => <FormTable rows={[
-        form("choose provider", "Open choices and change the value", () => <ProviderSelect />, "Field > SelectTrigger + Menu"),
-        form("disabled", "Provider unavailable while connecting", () => <SelectTrigger aria-label="Provider" value="OpenAI" disabled />, "<SelectTrigger disabled>"),
-        form("disabled bare", "Locked setting without a field border", () => <SettingLine label="Provider"><SelectTrigger bare disabled aria-label="Provider" value="OpenAI" /></SettingLine>, "SettingLine > SelectTrigger bare disabled"),
-        form("long value", "Model name exceeds a short label", () => <SelectTrigger aria-label="Model" value="OpenAI / GPT-5.2 Codex / workspace review with extended context" />, "<SelectTrigger value>"),
-      ]} on={["ground", "frost"]} />, "row"),
-    ] },
+  anatomy: { scene: () => <div class="g-field"><SelectTrigger value="System default" /><div class="g-row"><span>Provider</span><SelectTrigger bare value="OpenAI" /></div></div>, parts: [
+    { selector: ".ui-input > span", name: "Value", does: "shows the current choice", from: "SelectTrigger value" },
+    { selector: ".ui-input > svg", name: "Chevron", does: "shows that choices can open", from: "SelectTrigger" },
+  ] },
+  examples: [
+    row("Select", "SelectTrigger bare", () => <div class="g-field"><SelectTrigger value="System default" /><div class="g-row"><span>Provider</span><SelectTrigger bare value="OpenAI" /></div></div>),
+    row("Select · the adapter", "components/menus.tsx Select", () => <AdapterSelect />),
+    row("choose provider", "Open choices and change the value", () => <ProviderSelect />, { code: "Field > SelectTrigger + Menu" }),
+    row("disabled", "Provider unavailable while connecting", () => <SelectTrigger aria-label="Provider" value="OpenAI" disabled />, { code: "<SelectTrigger disabled>" }),
+    row("disabled bare", "Locked setting without a field border", () => <SettingLine label="Provider"><SelectTrigger bare disabled aria-label="Provider" value="OpenAI" /></SettingLine>, { code: "SettingLine > SelectTrigger bare disabled" }),
+    row("long value", "Model name exceeds a short label", () => <SelectTrigger aria-label="Model" value="OpenAI / GPT-5.2 Codex / workspace review with extended context" />, { code: "<SelectTrigger value>" }),
   ],
+  tokens: [{ title: "Select", tokens: [
+    token("--control", "Control height"),
+    token("--text-row", "Control text size"),
+    token("--icon", "Icon or thumb size"),
+    token("--muted-foreground", "Quiet text or stroke colour"),
+  ] }],
+  api: ["Select", "SelectTrigger"],
 };

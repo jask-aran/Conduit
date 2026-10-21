@@ -1,8 +1,7 @@
 import { createSignal, Show } from "solid-js";
 import { Slider, SliderValue, Menu, Section, Button, Icons } from "@/components/ui";
-import { FormTable, form } from "../specs";
 import { thinking } from "../demos";
-import { lib, type Family } from "../model";
+import { row, token, type Page } from "../model";
 import { Levels } from "../demos";
 
 function PlainThinking() {
@@ -20,26 +19,36 @@ function ThinkingExample(props: { custom?: boolean; long?: boolean }) {
     <Show when={open()}>{options().map((level) => <Button variant="ghost" size="sm" onClick={() => { setValue(level.value); setOpen(false); }}>{level.label}</Button>)}</Show>
   </Section></Menu>;
 }
-export const sliderFamily: Family = {
-  title: "Slider", stage: true,
-  note: "Slider reads the surface's --tint and --well values, at the surface and density picked above.",
+export const sliderPage: Page = {
+  title: "Slider",
+  summary: "Slider reads the surface's --tint and --well values.",
+  preview: () => <div style={{ width: "240px" }}><Levels /></div>,
   usage: `import { Slider } from "@/components/ui";
 
 <Slider label="Thinking" value={level()} onChange={setLevel}
   options={[{ value: "low", label: "Low" }, { value: "high", label: "High" }]}
   onOpen={() => setOpen(true)} />`,
-  api: ["Slider", "SliderValue"],
-  groups: [
-    { title: "Examples", staged: true, atoms: [
-      lib("slider", "Slider", "both", "control", "Slider", () => <div style={{ width: "240px" }}><Levels /></div>),
-      lib("slider-examples", "Slider · additional examples", "both", "control", "Slider · SliderValue", () => <FormTable rows={[
-        form("in model menu", "Drag or open the value to choose a level", () => <ThinkingExample />, "Menu > Section kind=slider > Slider onOpen"),
-        form("custom value control", "Icon value opens local level choices", () => <ThinkingExample custom />, "Slider control > SliderValue onClick"),
-        form("long option labels", "Full descriptions in a model menu", () => <ThinkingExample long />, "Slider options label"),
-        form("disabled one level", "Model supports only Off", () => <Menu><Section kind="slider"><Slider label="Thinking" options={[{ value: "off", label: "Off" }]} value="off" disabled onChange={() => {}} /></Section></Menu>, "Slider disabled options={[one]}"),
-        form("plain value", "Track without an opening control", () => <PlainThinking />, "Slider without onOpen or control"),
-        form("disabled value", "Unavailable value button", () => <SliderValue disabled>High</SliderValue>, "<SliderValue disabled>"),
-      ]} on={["ground", "frost"]} />, "row"),
-    ] },
+  anatomy: { scene: () => <div style={{ width: "240px" }}><Levels /></div>, parts: [
+    { selector: ".ui-slider-head label", name: "Label", does: "names the ordered choice", from: "Slider label" },
+    { selector: ".ui-slider-value", name: "Value", does: "shows the selected level", from: "SliderValue" },
+    { selector: ".ui-slider-input", name: "Track", does: "changes the level by dragging", from: "Slider options" },
+    { selector: ".ui-slider-ticks", name: "Ticks", does: "mark the available levels", from: "Slider options" },
+  ] },
+  examples: [
+    row("Slider", "Slider", () => <div style={{ width: "240px" }}><Levels /></div>),
+    row("in model menu", "Drag or open the value to choose a level", () => <ThinkingExample />, { code: "Menu > Section kind=slider > Slider onOpen", surfaces: ["ground"] }),
+    row("custom value control", "Icon value opens local level choices", () => <ThinkingExample custom />, { code: "Slider control > SliderValue onClick", surfaces: ["ground"] }),
+    row("long option labels", "Full descriptions in a model menu", () => <ThinkingExample long />, { code: "Slider options label", surfaces: ["ground"] }),
+    row("disabled one level", "Model supports only Off", () => <Menu><Section kind="slider"><Slider label="Thinking" options={[{ value: "off", label: "Off" }]} value="off" disabled onChange={() => {}} /></Section></Menu>, { code: "Slider disabled options={[one]}", surfaces: ["ground"] }),
+    row("plain value", "Track without an opening control", () => <PlainThinking />, { code: "Slider without onOpen or control" }),
+    row("disabled value", "Unavailable value button", () => <SliderValue disabled>High</SliderValue>, { code: "<SliderValue disabled>" }),
   ],
+  tokens: [{ title: "Slider", tokens: [
+    token("--track-size", "Track height"),
+    token("--control-2xs", "Small control size"),
+    token("--foreground", "Text or filled track colour"),
+    token("--tint", "Surface tint"),
+    token("--text-caption", "Label or value size"),
+  ] }],
+  api: ["Slider", "SliderValue"],
 };

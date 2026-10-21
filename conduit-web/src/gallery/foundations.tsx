@@ -2,12 +2,13 @@ import { createSignal, For, onCleanup, onMount, Show, type JSX } from "solid-js"
 import { ArrowUpIcon, CameraIcon, FolderIcon, MicIcon, MonitorIcon, PaperclipIcon, PlusIcon, SettingsIcon, Trash2Icon } from "lucide-solid";
 
 import { ServerControl, Reading, ReadingStats, ReadingStat, HeaderPill, Expand, Aura, Slider, Segmented, Preview, Bubble, Button, Frost, HeadingSection, Item, Keycap, Menu, NavRow, Overlay, OverlayBar, PillButton, PillField, PillGroup, Section, Toolbar } from "@/components/ui";
-import { px, InUse, style, bg, fg, edge, rounding, tall, icon, form, type Mark } from "./specs";
+import { px, style, bg, fg, edge, rounding, tall, icon } from "./specs";
 
-import { IconsFoundation } from "./icons";
-import { HapticsFoundation } from "./haptics";
-import { paletteFamilies } from "./palettes";
-import { lib, type Family } from "./model";
+import { Glyph, HarnessMark, IDENTITY_COLOURS, Icons, MARKS, ThreadHarnessMark } from "@/components/ui";
+import { FileTypeIcon, FolderTypeIcon } from "@/components/ui/file-marks";
+import { haptic, type Haptic } from "@/components/ui/haptics";
+import { palettePages } from "./palettes";
+import { row, token, type Page, type Part } from "./model";
 
 import "katex/dist/katex.min.css";
 
@@ -80,7 +81,7 @@ function TokenCell(props: { row: TokenRow; density?: "desktop" | "phone" }) {
   </div>;
 }
 /** density: false for tokens that do not change with it (colours): one value column. */
-export function TokenTable(props: { groups: TokenGroup[]; density?: boolean }) {
+export function TokenTable(props: Record<"groups", TokenGroup[]> & { density?: boolean }) {
   const dense = props.density !== false;
   return <div class="g-scale" data-columns={dense ? 3 : 2}>
     <div class="g-scale-head"><span>Token</span>{dense ? <><span>Desktop</span><span>Phone</span></> : <span>Value</span>}</div>
@@ -94,42 +95,42 @@ export function TokenTable(props: { groups: TokenGroup[]; density?: boolean }) {
   </div>;
 }
 
-const COLOUR_MARKS: Mark[] = [
-  { selector: ".g-scene-frame", label: "--frame: the frame, behind the panes", read: bg },
-  { selector: ".g-scene-pane", label: "--background: a pane", read: bg },
-  { selector: ".ui-menu", label: "--frost-fill: frost", read: bg },
-  { selector: ".ui-menu", label: "--frost-stroke: frost's edge", read: edge },
-  { selector: ".ui-title", label: "--muted-foreground: a section label (and meta, icons at rest)", read: fg },
-  { selector: ".ui-row[data-checked]", label: "--foreground: the current row", read: fg },
-  { selector: ".ui-row[data-highlighted]", label: "--tint (frost's): the cursor's wash", read: bg },
-  { selector: ".ui-section + .ui-section", label: "--tint (frost's): a rule between sections", read: edge },
-  { selector: ".ui-row[data-destructive]", label: "--destructive: a destructive row", read: fg },
-  { selector: ".ui-button[data-variant='secondary']", label: "--tint: a control's line, on the ground (Controls has each surface's)", read: edge },
+const COLOUR_MARKS: Part[] = [
+  { selector: ".g-scene-frame", name: "--frame", does: "the frame, behind the panes", from: bg },
+  { selector: ".g-scene-pane", name: "--background", does: "a pane", from: bg },
+  { selector: ".ui-menu", name: "--frost-fill", does: "frost", from: bg },
+  { selector: ".ui-menu", name: "--frost-stroke", does: "frost's edge", from: edge },
+  { selector: ".ui-title", name: "--muted-foreground", does: "a section label (and meta, icons at rest)", from: fg },
+  { selector: ".ui-row[data-checked]", name: "--foreground", does: "the current row", from: fg },
+  { selector: ".ui-row[data-highlighted]", name: "--tint (frost's)", does: "the cursor's wash", from: bg },
+  { selector: ".ui-section + .ui-section", name: "--tint (frost's)", does: "a rule between sections", from: edge },
+  { selector: ".ui-row[data-destructive]", name: "--destructive", does: "a destructive row", from: fg },
+  { selector: ".ui-button[data-variant='secondary']", name: "--tint", does: "a control's line, on the ground (Controls has each surface's)", from: edge },
 ];
 const colourScene = () => <div class="g-scene-frame"><div class="g-scene-pane">
   <Menu><Section title="Section"><Item icon={<MonitorIcon />} checked>Current</Item><Item icon={<FolderIcon />} active>Cursor</Item><Item meta="2m">At rest</Item></Section><Section><Item icon={<Trash2Icon />} destructive>Delete</Item></Section></Menu>
   <Button variant="secondary" size="sm">Control</Button>
 </div></div>;
 
-const SPACE_MARKS: Mark[] = [
-  { selector: ".ui-menu", label: "a popover's inset round its rows (--frost-inset)", read: (el) => px(style(el).paddingTop) },
-  { selector: ".ui-row", label: "a row's height (--row-min)", read: tall },
-  { selector: ".ui-row", label: "its padding, top and side (--row-pad)", read: (el) => `${px(style(el).paddingTop)} ${px(style(el).paddingLeft)}` },
-  { selector: ".ui-row", label: "icon to label (--row-gap)", read: (el) => px(style(el).columnGap) },
-  { selector: ".ui-row .ui-icon svg", label: "the icon (--u-icon)", read: (el) => px(`${el.getBoundingClientRect().width}px`) },
-  { selector: ".ui-row .ui-label", label: "its text (--row-text)", read: (el) => px(style(el).fontSize) },
-  { selector: ".ui-title", label: "a section label's height", read: tall },
+const SPACE_MARKS: Part[] = [
+  { selector: ".ui-menu", name: "a popover's inset", does: "round its rows (--frost-inset)", from: (el) => px(style(el).paddingTop) },
+  { selector: ".ui-row", name: "a row's height", does: "set by --row-min", from: tall },
+  { selector: ".ui-row", name: "its padding", does: "top and side (--row-pad)", from: (el) => `${px(style(el).paddingTop)} ${px(style(el).paddingLeft)}` },
+  { selector: ".ui-row", name: "icon to label", does: "gap set by --row-gap", from: (el) => px(style(el).columnGap) },
+  { selector: ".ui-row .ui-icon svg", name: "the icon", does: "(--u-icon)", from: (el) => px(`${el.getBoundingClientRect().width}px`) },
+  { selector: ".ui-row .ui-label", name: "its text", does: "(--row-text)", from: (el) => px(style(el).fontSize) },
+  { selector: ".ui-title", name: "a section label", does: "its height", from: tall },
 ];
 const spaceScene = () => <Menu><Section title="Section"><Item icon={<FolderIcon />} meta="2m">A row</Item><Item icon={<MonitorIcon />}>Another</Item></Section></Menu>;
 
-const RADIUS_MARKS: Mark[] = [
-  { selector: ".ui-menu", label: "surface: a popover or card", read: rounding },
-  { selector: ".ui-overlay", label: "surface: an overlay", read: rounding },
-  { selector: ".ui-row[data-highlighted]", label: "control: a row", read: rounding },
-  { selector: ".ui-keycap", label: "control: a keycap", read: rounding },
-  { selector: ".ui-bubble", label: "message: the user's message", read: rounding },
-  { selector: ".ui-pill-field", label: "message: the composer (the phone's field here; the desktop composer the same)", read: rounding },
-  { selector: ".ui-pill[data-solo]", label: "round: a pill, a circle alone", read: rounding },
+const RADIUS_MARKS: Part[] = [
+  { selector: ".ui-menu", name: "surface", does: "a popover or card", from: rounding },
+  { selector: ".ui-overlay", name: "surface", does: "an overlay", from: rounding },
+  { selector: ".ui-row[data-highlighted]", name: "control", does: "a row", from: rounding },
+  { selector: ".ui-keycap", name: "control", does: "a keycap", from: rounding },
+  { selector: ".ui-bubble", name: "message", does: "the user's message", from: rounding },
+  { selector: ".ui-pill-field", name: "message", does: "the composer (the phone's field here; the desktop composer the same)", from: rounding },
+  { selector: ".ui-pill[data-solo]", name: "round", does: "a pill, a circle alone", from: rounding },
 ];
 const radiusScene = () => <div class="g-scene-stack">
   <Menu><Section><Item icon={<FolderIcon />} active keys={["Ctrl", "K"]}>A row</Item><Item>Another</Item></Section></Menu>
@@ -138,13 +139,13 @@ const radiusScene = () => <div class="g-scene-stack">
   <div class="g-scene-row"><PillButton label="Camera" icon={<CameraIcon />} /><PillField placeholder="Message" /></div>
 </div>;
 
-const ICON_MARKS: Mark[] = [
-  { selector: ".ui-row:not([data-checked]) .ui-icon svg", label: "a row's, at rest", read: icon },
-  { selector: ".ui-row[data-checked] .ui-icon svg", label: "a current row's: the heavier stroke", read: icon },
-  { selector: ".ui-nav-row svg", label: "the sidebar's", read: icon },
-  { selector: ".ui-toolbar svg", label: "the composer toolbar's", read: icon },
-  { selector: ".ui-pill:not([data-solo]) svg", label: "a pill group's: --pill-icon, a touch larger", read: icon },
-  { selector: ".ui-pill[data-solo] svg", label: "a lone pill's: the same", read: icon },
+const ICON_MARKS: Part[] = [
+  { selector: ".ui-row:not([data-checked]) .ui-icon svg", name: "a row's icon", does: "at rest", from: icon },
+  { selector: ".ui-row[data-checked] .ui-icon svg", name: "a current row's", does: "the heavier stroke", from: icon },
+  { selector: ".ui-nav-row svg", name: "the sidebar's icon", does: "sized with its row", from: icon },
+  { selector: ".ui-toolbar svg", name: "the composer toolbar's icon", does: "sized with its controls", from: icon },
+  { selector: ".ui-pill:not([data-solo]) svg", name: "a pill group's", does: "--pill-icon, a touch larger", from: icon },
+  { selector: ".ui-pill[data-solo] svg", name: "a lone pill's", does: "the same", from: icon },
 ];
 const iconScene = () => <div class="g-scene-stack">
   <Menu><Section><Item icon={<PaperclipIcon />}>At rest</Item><Item icon={<MonitorIcon />} checked>Current</Item></Section></Menu>
@@ -464,95 +465,220 @@ function spec(el: Element | null) {
   const caps = style.textTransform === "uppercase" ? " caps" : "";
   const alpha = /\/ ([\d.]+)\)$/.exec(style.color);
   const colour = alpha ? `text at ${Math.round(Number(alpha[1]) * 100)}%` : /oklch\(0\.[0-7]/.test(style.color) ? "muted" : "text";
-  return [px(`${style.fontSize}/${style.lineHeight} · ${style.fontWeight}`), `${face(style.fontFamily)}${caps} · ${colour}`];
+  return [px(`${style.fontSize}/${style.lineHeight} · ${style.fontWeight}`), `${face(style.getPropertyValue("font-family"))}${caps} · ${colour}`];
 }
-function ScaleCell(props: { role: TypeRole; density: "desktop" | "phone" }) {
+function TypeSample(props: { role: TypeRole }) {
   const [value, setValue] = createSignal(["", ""]);
   let el!: HTMLDivElement;
   const measure = () => requestAnimationFrame(() => setValue(spec(el.querySelector(props.role.selector))));
   onMount(() => { measure(); addEventListener("gallery:tune", measure); onCleanup(() => removeEventListener("gallery:tune", measure)); });
-  return <div class="g-scale-cell" data-density={props.density}>
+  return <div class="g-scale-cell">
     <div ref={el} class="g-scale-sample">{props.role.sample()}</div>
     <div class="g-scale-spec"><span>{value()[0]}</span><small>{value()[1]}</small></div>
   </div>;
 }
-function Scale() {
-  return <div class="g-scale">
-    <div class="g-scale-head"><span>Role</span><span>Desktop</span><span>Phone</span></div>
-    <For each={TYPE_ROLES}>{(role) => <div class="g-scale-row">
-      <div class="g-scale-name"><strong>{role.name}</strong><small>{role.rule}</small><small>In the app: {role.where}</small><small class="g-form-tokens">{role.tokens}</small></div>
-      <ScaleCell role={role} density="desktop" /><ScaleCell role={role} density="phone" />
-    </div>}</For>
-  </div>;
-}
-
-export const foundationFamilies: Family[] = [
-  { title: "Type", rail: "Foundations", note: "the text, top to bottom: the face each role takes, with a switcher; the scale, each role as the library draws it and as it computes; then every face Conduit ships, and the system's own last. Type lens (the bar above) names every text on any page, the phone and desktop previews too, by these roles: hover one for its sizes, pick a role to see only it, and red dashed marks a combination with no role", groups: [
-    { title: "Faces", note: "a token per role; the first option is foundations.css's default, a pick applies across the gallery", atoms: ROLES.map((role) => lib(`font-role${role.token}`, role.title, "both", "font", `${role.token} · foundations.css :root`, () => <Role role={role} />)) },
-    { title: "Scale", note: "each role once, as DESIGN.md names it: drawn by the library at both densities, and what it computes to. Rest is grey, current white at 660 with no fill; text over frost is a touch heavier and brighter", layout: "desktop", atoms: [
-      lib("type-scale", "Roles", "both", "type", "DESIGN.md Typography · foundations.css", () => <Scale />, "row"),
-    ] },
-    { title: "Sizes, weights and leading", note: "the tokens Scale's roles are made of: every size, weight and line height in the library is one of these", layout: "desktop", atoms: [
-      lib("type-sizes", "Sizes", "both", "type", "foundations.css --text-*", () => <TokenTable groups={SIZES} />, true),
-      lib("type-weights", "Weights", "both", "type", "foundations.css --weight-*", () => <TokenTable groups={WEIGHTS} density={false} />),
-      lib("type-leading", "Leading and tracking", "both", "type", "foundations.css --leading-* · --label-tracking", () => <TokenTable groups={LEADING} density={false} />),
-    ] },
-    { title: "Shipped", note: "the faces Conduit ships, so it looks the same on every system", layout: "desktop", atoms: [
-      lib("font-geist", "Geist Variable", "both", "font", "@fontsource-variable/geist", () => <Face family={GEIST} weights={[400, 450, 500, 560, 600, 660, 700]} source="@fontsource-variable/geist · OFL" />),
-      lib("font-paper", "Paper Mono", "both", "font", "components/ui/fonts/PaperMono-Variable.woff2", () => <Face family={PAPER} weights={[400, 500, 600, 700]} source="components/ui/fonts/PaperMono-Variable.woff2 · OFL · the section labels; also the app's optional transcript face" />),
-      lib("font-inconsolata", "Inconsolata Variable", "both", "font", "@fontsource-variable/inconsolata", () => <Face family={INCONSOLATA} weights={[400, 500, 600, 700]} source="@fontsource-variable/inconsolata · OFL · drawn after Consolas" />),
-      lib("font-meslo", "Meslo LG S Nerd Font Mono", "both", "font", "components/ui/fonts/MesloLGSNerdFontMono-Regular.ttf", () => <Face family={MESLO} sample="~/Conduit $ ls  │ ├─ └─ ✓ ✗" source="components/ui/fonts/MesloLGSNerdFontMono-Regular.ttf · the terminal's default, for its Nerd Font glyphs" />),
-      lib("font-wordmark", "Druk Wide Super", "both", "font", "client/assets/fonts/druk-wide-web-super.woff2", () => <Face family={WORDMARK} sample="Conduit" source="client/assets/fonts/druk-wide-web-super.woff2 · as Conduit Wordmark" />),
-      lib("font-katex", "KaTeX", "both", "font", "katex/dist/katex.min.css", () => <Face family="KaTeX_Main, serif" sample="∑ x² + ∫ f(t) dt = π" source="katex · math in messages, in its own serif faces" />),
-    ] },
-    { title: "Fallbacks", note: "the system's own: not shipped, so they differ by system; each role falls back to one", layout: "desktop", atoms: [
-      lib("font-system-sans", "System sans", "both", "font", "system-ui, sans-serif", () => <Face family="system-ui, sans-serif" source="Segoe UI on Windows, SF Pro on Apple, Roboto on Android" />),
-      lib("font-system-mono", "System mono", "both", "font", MONO, () => <Face family={MONO} sample="claude-opus-5-5  ~/src  12:04" source="SF Mono on Apple, Consolas on Windows, Droid Sans Mono on Android · meta, keycaps and times" />),
-      lib("font-consolas", "Consolas", "both", "font", "local only", () => <Face family="Consolas, monospace" sample="claude-opus-5-5  ~/src  12:04" source="Microsoft's, with Windows and Office: not ours to ship · shown from this machine's copy" />),
-    ] },
-  ] },
-  { title: "Colour", rail: "Foundations", note: "Conduit's own colours, each once: grounds, text, one tint per surface for its lines and washes, frost's own, the filled control, focus, state. Colours from named palettes (code, the terminal, categories, identity) are in Palettes; text tones by role are in Type · Scale", groups: [{ title: "In use", note: "every colour in one scene: the frame, a pane, a popover on it", layout: "desktop", atoms: [
-    lib("colour-inuse", "Colour in use", "both", "colour", "Menu · Section · Item · Button", () => <InUse scene={colourScene} marks={COLOUR_MARKS} density={false} />, "row"),
-  ] }, { title: "Tokens", layout: "desktop", atoms: [
-    lib("colour-tokens", "Colours", "both", "colour", "styles.css :root · foundations.css :root", () => <TokenTable groups={COLOURS} density={false} />, "row"),
-    lib("colour-opacity", "Emphasis", "both", "colour", "foundations.css --opacity-*", () => <TokenTable groups={OPACITY} density={false} />),
-  ] }] },
-  ...paletteFamilies,
-  { title: "Icons", rail: "Foundations", api: ["HarnessMark", "ThreadHarnessMark", "Glyph", "FileTypeIcon", "FolderTypeIcon"], note: "one glyph per concept (components/ui/icons.tsx, imported as Icons), at the type unit so an icon sits with the text beside it; and the library's own marks: harnesses, file types, a workspace's or place's glyph", groups: [
-    { title: "In use", note: "Lucide at the type unit, so an icon is sized with the text beside it; muted at rest, its stroke a tenth of its size, an eighth when current (DESIGN.md Icons)", layout: "desktop", atoms: [
-      lib("icon-inuse", "Icons in use", "both", "icon", "svg.lucide · --u-icon · --pill-icon", () => <InUse scene={iconScene} marks={ICON_MARKS} />, "row"),
-    ] },
-    { title: "Vocabulary and marks", layout: "desktop", atoms: [
-      lib("icon-map", "Icons · marks", "both", "icon", "components/ui/icons.tsx · marks.tsx · file-marks.tsx", () => <IconsFoundation />, "row"),
-    ] },
-  ] },
-  { title: "Space", rail: "Foundations", note: "everything from a few numbers: the density's unit (16px on desktop and phone) times the user's Interface size times the region's own size (chrome, sidebar, frost, composer, transcript), per density. Every gap, padding and margin is one of nine steps; every control one of four heights; rows keep their measured height and text, in the unit (a phone's never below 40px). Move the scales and every page follows", groups: [{ title: "Scale", note: "the coefficients, remembered and applied to the whole gallery, its phone frames too: try any page at another setting", layout: "desktop", atoms: [
-    lib("space-scale", "Scale", "both", "space", "foundations.css :root --ui-scale · --scale-<region>-<density>", () => <ScaleControl />, "row"),
-  ] }, { title: "In use", note: "one popover, measured: what each number shapes. Everything is in the unit, the same 16px on both; the phone's rows take more, for a finger, and its frost a wider inset", layout: "desktop", atoms: [
-    lib("space-inuse", "Space in use", "both", "space", "Menu · Section · Item", () => <InUse scene={spaceScene} marks={SPACE_MARKS} />, "row"),
-  ] }, { title: "Tokens", note: "for reference", layout: "desktop", atoms: [
-    lib("space-tokens", "Space", "both", "space", "foundations.css [data-density]", () => <TokenTable groups={SPACE} />, "row"),
-  ] }] },
-  { title: "Radius", rail: "Foundations", note: "four radii: control, surface (a control's plus the inset, so rows nest), message (the composer and the user's message, one value everywhere), round (pills, at any size)", groups: [{ title: "In use", note: "each shape the library draws, and its corner", layout: "desktop", atoms: [
-    lib("radius-inuse", "Radius in use", "both", "radius", "Menu · Overlay · Bubble · PillField · PillButton", () => <InUse scene={radiusScene} marks={RADIUS_MARKS} />, "row"),
-  ] }, { title: "Tokens", layout: "desktop", atoms: [
-    lib("radius-tokens", "Radii", "both", "radius", "foundations.css --radius-*", () => <TokenTable groups={RADII} />, "row"),
-  ] }] },
-  { title: "Depth", rail: "Foundations", note: "what stands over what: the page's layers, how far a surface stands off it, and the dims that hold back what is behind", groups: [{ title: "Tokens", layout: "desktop", atoms: [
-    lib("depth-tokens", "Layers · elevation · dims", "both", "depth", "foundations.css --layer-* · --lift-* · --dim*", () => <TokenTable groups={DEPTH} density={false} />, "row"),
-  ] }] },
-  { title: "Motion", rail: "Foundations", note: "motion explains a change of place (DESIGN Motion): quick out, gentle in; a change in place is quick and plain. Only transform and opacity, but for a fold the reader opens. The foundation is these tokens and four shapes (a fade in or out, a rise, a drop back the way it came); each piece owns its moves, shown on its own page under Motion. Reduced motion keeps the end state", groups: [{ title: "Tokens", note: "a dot runs each curve, and each duration at its curve", layout: "desktop", atoms: [
-    lib("motion-tokens", "Motion", "both", "motion", "foundations.css :root --ease-* · --duration-*", () => <TokenTable groups={MOTION} density={false} />, "row"),
-  ] }, { title: "The page", note: "no piece's own: the page's regions fade on the tokens, and the composer never moves. The first open fades in everything but the composer; a route (a dashboard's send opening its chat) fades the reading out quick, then the new one in gentle. The app's motion-rules.ts takes these at the port", layout: "desktop", atoms: [
-    lib("motion-page", "The page", "desktop", "motion", "ui-fade-in · ui-fade-out on the page's regions", () => <PageMoves />, "row"),
-  ] }] },
-  { title: "Haptics", rail: "Foundations", note: "what a touch that changes something feels like on a phone: five kinds, each a piece's own, so callers never fire them (components/ui/haptics.ts). Only a touch screen with nothing that hovers feels them", groups: [{ title: "Kinds", layout: "desktop", atoms: [
-    lib("haptics", "Haptics", "phone", "haptics", "components/ui/haptics.ts · haptic(kind)", () => <HapticsFoundation />, "row"),
-  ] }] },
-  { title: "Aura", rail: "Foundations", usage: `import { Aura } from "@/components/ui";
-
-<Aura on={listening()} level={level()} strength={0.6} />`, api: ["Aura"], note: "a field of colour behind a surface, made of numbers: each blob comes in from a direction in its hue, circles near that edge on its own period and breathes as it turns, so at rest the colours trade places; a level (0-1, the voice's) brightens them all and grows some while shrinking others. The mic's pill is filled with one while listening", groups: [{ title: "The field", layout: "desktop", atoms: [
-    lib("motion-aura", "Aura", "both", "motion", "Aura · --aura-level · styles/pill.css .ui-aura", () => <AuraDemo />, "row"),
-  ] }] },
-
+const vocabulary: [keyof typeof Icons, string, number][] = [
+  ["Add", "Add an item or open creation options.", 6],
+  ["ArrowDown", "Download, move downward or reach recent content.", 4],
+  ["ArrowUp", "Move upward or publish changes.", 4],
+  ["Attach", "Attach files to a message.", 3],
+  ["Back", "Return to the previous view.", 3],
+  ["Backspace", "Delete text before the cursor.", 2],
+  ["Boxes", "A collection or grouped identity.", 0],
+  ["Camera", "Capture a photo attachment.", 2],
+  ["Chat", "A chat or its messages.", 6],
+  ["Check", "A selected, successful or completed state.", 7],
+  ["ChevronDown", "Expand a choice or move to the next match.", 15],
+  ["ChevronLeft", "Return to the previous item.", 4],
+  ["ChevronRight", "Open a child item or move forward.", 11],
+  ["Close", "Close or dismiss the current surface.", 19],
+  ["Code", "Run a script or show code.", 2],
+  ["CollapseFiles", "Collapse the file navigation.", 3],
+  ["Compact", "Compact the chat context.", 1],
+  ["Copy", "Copy content to the clipboard.", 10],
+  ["Dashboard", "The application dashboard.", 3],
+  ["Delete", "Delete the selected item.", 12],
+  ["Download", "Download a file or update.", 7],
+  ["Edit", "Edit or rename the selected item.", 16],
+  ["ExpandFiles", "Expand the file navigation.", 2],
+  ["ExternalLink", "Open a destination outside the current view.", 4],
+  ["Fetch", "Fetch content from the web.", 2],
+  ["File", "A file with no more specific type.", 3],
+  ["FileCode", "A source file, file path or source view.", 4],
+  ["FileDiff", "File changes or an unstaged diff.", 6],
+  ["FileText", "A text file, prompt or document view.", 6],
+  ["Focus", "Give keyboard focus to the terminal.", 2],
+  ["Folder", "A folder or workspace location.", 13],
+  ["GitBranch", "A source-control branch.", 2],
+  ["GitCompareArrows", "Review source-control changes.", 5],
+  ["Hide", "Hide content from view.", 2],
+  ["Home", "The home directory or home view.", 2],
+  ["Image", "An image file or attachment.", 2],
+  ["InsertText", "Insert or edit text at the cursor.", 2],
+  ["Keyboard", "Keyboard input and shortcuts.", 4],
+  ["LocalModel", "A model hosted on this machine.", 1],
+  ["LogOut", "Sign out of the server.", 3],
+  ["Maximize", "Expand a pane or attachment.", 6],
+  ["Message", "A message or agent narration.", 3],
+  ["Microphone", "Microphone.", 3],
+  ["Minimize", "Restore a pane to its smaller size.", 2],
+  ["Monitor", "This computer or display appearance.", 4],
+  ["More", "Additional actions for this item.", 7],
+  ["MoveToFolder", "Move a chat into a folder.", 3],
+  ["NewChat", "Start a new chat.", 5],
+  ["NewFolder", "Create a folder.", 5],
+  ["Notification", "An agent notification.", 1],
+  ["Permissions", "Agent permissions and approval policy.", 4],
+  ["Pin", "Keep an item in place.", 3],
+  ["PinOff", "Release a pinned item.", 3],
+  ["Play", "Continue or start an operation.", 3],
+  ["Preview", "View content or show a preview.", 5],
+  ["Proceed", "Confirm a location or sign in.", 2],
+  ["Profile", "A harness profile or grouped profiles.", 3],
+  ["QrCode", "Scan or show a pairing code.", 4],
+  ["Reasoning", "Reasoning controls or thinking content.", 2],
+  ["Refresh", "Refresh, retry, reload or regenerate.", 8],
+  ["Reset", "Reset a value or restart an action.", 2],
+  ["Runtime", "Runtime activity and status.", 2],
+  ["Search", "Find content, commands or items.", 18],
+  ["Send", "Send a message.", 3],
+  ["Server", "A connected server.", 2],
+  ["ServiceLevel", "The model service level.", 1],
+  ["Settings", "Application, workspace and terminal settings.", 6],
+  ["Share", "Share a chat or its link.", 2],
+  ["Shell", "A shell command or terminal tool.", 3],
+  ["Sidebar", "Show or hide the left sidebar.", 5],
+  ["Split", "Show two panes or comparison columns.", 8],
+  ["Stop", "Stop the current operation.", 5],
+  ["Swap", "Swap pane or comparison sides.", 3],
+  ["Terminal", "A terminal, command or command palette.", 11],
+  ["Thinking", "Agent thinking or reasoning.", 2],
+  ["Tool", "A tool without a more specific kind.", 2],
+  ["Undo", "Undo an edit or discard changes.", 4],
+  ["Upload", "Upload a file.", 2],
+  ["Warning", "A warning or failed operation.", 3],
+  ["Workspace", "Show or hide the workspace panel.", 6],
+  ["WorkspaceIdentity", "Edit the workspace identity.", 3],
+  ["WrapText", "Toggle line wrapping.", 5],
+  ["WriteFile", "A file-writing tool.", 2],
 ];
+
+const KINDS: { kind: Haptic; what: string; pieces: string; strength: string }[] = [
+  { kind: "select", what: "a side chosen", pieces: "Segmented, PillSwitch", strength: "light" },
+  { kind: "press", what: "a press that acts at once", pieces: "PillButton with haptic=\"press\": the mic, Send, Stop", strength: "light" },
+  { kind: "hold", what: "a long press opening a context menu", pieces: "ContextMenu on a touch screen", strength: "medium" },
+  { kind: "fold", what: "what a row holds opening or shutting, just after a touch", pieces: "Expand, Disclosure", strength: "light" },
+  { kind: "dismiss", what: "an overlay closing, just after a touch", pieces: "Menu, submenu, Popover, Dialog, the phone's drawer", strength: "light" },
+];
+
+export const typePage: Page = {
+  title: "Type", rail: "Foundations",
+  summary: "Text roles define each face, size, weight and line height, with face switches and shipped and system font samples. The Type lens names text across the gallery and phone and desktop previews: hover for sizes, pick a role to isolate it, and use red dashed marks to find combinations with no role.",
+  preview: ROLES[0]!.preview,
+  examples: [
+    ...ROLES.map((role) => row(role.title, role.uses, () => <Role role={role} />, { surfaces: ["ground"], phone: true })),
+    ...TYPE_ROLES.map((role) => row(role.name, `${role.rule}; in the app: ${role.where}; ${role.tokens}`, () => <TypeSample role={role} />, { surfaces: ["ground"], phone: role.name === "Pill title" ? "only" : true })),
+    row("Geist Variable", "@fontsource-variable/geist", () => <Face family={GEIST} weights={[400, 450, 500, 560, 600, 660, 700]} source="@fontsource-variable/geist · OFL" />, { surfaces: ["ground"] }),
+    row("Paper Mono", "components/ui/fonts/PaperMono-Variable.woff2", () => <Face family={PAPER} weights={[400, 500, 600, 700]} source="components/ui/fonts/PaperMono-Variable.woff2 · OFL · the section labels; also the app's optional transcript face" />, { surfaces: ["ground"] }),
+    row("Inconsolata Variable", "@fontsource-variable/inconsolata", () => <Face family={INCONSOLATA} weights={[400, 500, 600, 700]} source="@fontsource-variable/inconsolata · OFL · drawn after Consolas" />, { surfaces: ["ground"] }),
+    row("Meslo LG S Nerd Font Mono", "components/ui/fonts/MesloLGSNerdFontMono-Regular.ttf", () => <Face family={MESLO} sample="~/Conduit $ ls  │ ├─ └─ ✓ ✗" source="components/ui/fonts/MesloLGSNerdFontMono-Regular.ttf · the terminal's default, for its Nerd Font glyphs" />, { surfaces: ["ground"] }),
+    row("Druk Wide Super", "client/assets/fonts/druk-wide-web-super.woff2", () => <Face family={WORDMARK} sample="Conduit" source="client/assets/fonts/druk-wide-web-super.woff2 · as Conduit Wordmark" />, { surfaces: ["ground"] }),
+    row("KaTeX", "katex/dist/katex.min.css", () => <Face family="KaTeX_Main, serif" sample="∑ x² + ∫ f(t) dt = π" source="katex · math in messages, in its own serif faces" />, { surfaces: ["ground"] }),
+    row("System sans", "system-ui, sans-serif", () => <Face family="system-ui, sans-serif" source="Segoe UI on Windows, SF Pro on Apple, Roboto on Android" />, { surfaces: ["ground"] }),
+    row("System mono", MONO, () => <Face family={MONO} sample="claude-opus-5-5  ~/src  12:04" source="SF Mono on Apple, Consolas on Windows, Droid Sans Mono on Android · meta, keycaps and times" />, { surfaces: ["ground"] }),
+    row("Consolas", "local only", () => <Face family="Consolas, monospace" sample="claude-opus-5-5  ~/src  12:04" source="Microsoft's, with Windows and Office: not ours to ship · shown from this machine's copy" />, { surfaces: ["ground"] })
+  ],
+  tokens: [...SIZES.map((group) => ({ title: group.title, tokens: group.rows, density: true })), ...WEIGHTS.map((group) => ({ title: group.title, tokens: group.rows })), ...LEADING.map((group) => ({ title: group.title, tokens: group.rows }))],
+};
+
+export const colourPage: Page = {
+  title: "Colour", rail: "Foundations",
+  summary: "Conduit's colours cover grounds, text, each surface's lines and washes, frost, filled controls, focus and state. Named palettes are in Palettes; text tones by role are in Type.",
+  preview: colourScene,
+  anatomy: { scene: colourScene, parts: COLOUR_MARKS },
+  tokens: [...COLOURS.map((group) => ({ title: group.title, tokens: group.rows })), ...OPACITY.map((group) => ({ title: group.title, tokens: group.rows }))],
+};
+
+export const iconsPage: Page = {
+  title: "Icons", rail: "Foundations",
+  summary: "One glyph per concept (components/ui/icons.tsx, imported as Icons), at the type unit so an icon sits with the text beside it; and the library's own marks: harnesses, file types, a workspace's or place's glyph.",
+  api: ["HarnessMark", "ThreadHarnessMark", "Glyph", "FileTypeIcon", "FolderTypeIcon"],
+  preview: iconScene,
+  anatomy: { scene: iconScene, parts: ICON_MARKS },
+  examples: [
+    row("vocabulary", "one glyph per concept: its name in Icons, what it means, how many files use it", () => <div class="g-icon-grid">
+      <For each={vocabulary}>{([key, meaning, files]) => { const Icon = Icons[key]; return <figure><Icon /><figcaption><code>{key}</code><small>{meaning} · {files}</small></figcaption></figure>; }}</For>
+    </div>, { code: "<Icons.Name />" }),
+    row("harness marks", "each harness: its tinted mark, its artwork where it has one, and the lively form that lights with its row", () => <div class="g-icon-grid">
+      <For each={Object.entries(MARKS)}>{([id, mark]) => <figure><span class="g-row"><HarnessMark id={id} />{mark.artwork && <HarnessMark id={id} artwork />}<ThreadHarnessMark id={id} lively /></span><figcaption><code>{id}</code></figcaption></figure>}</For>
+    </div>, { code: "<HarnessMark id />", surfaces: ["ground"] }),
+    row("glyphs", "a workspace's or place's own mark: an icon or a monogram in its identity colour, at --icon and --icon-lg", () => <div class="g-row">
+      <For each={IDENTITY_COLOURS.slice(3, 6)}>{({ colour }) => <For each={["var(--icon)", "var(--icon-lg)"]}>{(size) => <>
+        <span style={{ display: "grid", width: size, height: size }}><Glyph icon={Icons.Boxes} colour={colour} /></span>
+        <span style={{ display: "grid", width: size, height: size, "--glyph-text": `calc(.55 * ${size})` }}><Glyph monogram="AB" colour={colour} /></span>
+      </>}</For>}</For>
+    </div>, { code: "<Glyph icon | monogram colour />", surfaces: ["ground"] }),
+    row("file types", "a file's name picks its icon", () => <div class="g-icon-grid">
+      <For each={["index.ts", "App.vue", "Page.svelte", "README.md", "package.json", "photo.png", "notes.xyz"]}>{(name) => <figure><FileTypeIcon name={name} /><figcaption><code>{name}</code></figcaption></figure>}</For>
+    </div>, { code: "<FileTypeIcon name />" }),
+    row("folders", "closed and open", () => <div class="g-icon-grid">
+      <For each={["src", "node_modules", "docs"]}>{(name) => <figure><span class="g-row"><FolderTypeIcon name={name} expanded={false} /><FolderTypeIcon name={name} expanded /></span><figcaption><code>{name}</code></figcaption></figure>}</For>
+    </div>, { code: "<FolderTypeIcon name expanded />" }),
+  ],
+  tokens: [{ title: "Marks", tokens: [token("--icon", "harness and thread marks"), token("--icon-sm", "file icons"), token("--muted-foreground", "thread and generic file marks"), token("--opacity-rest", "a thread mark at rest")] }],
+};
+
+export const spacePage: Page = {
+  title: "Space", rail: "Foundations",
+  summary: "Everything from a few numbers: the density's unit (16px on desktop and phone) times the user's Interface size times the region's own size (chrome, sidebar, frost, composer, transcript), per density. Every gap, padding and margin is one of nine steps; every control one of four heights; rows keep their measured height and text, in the unit (a phone's never below 40px). Move the scales and every page follows.",
+  preview: spaceScene,
+  anatomy: { scene: spaceScene, parts: SPACE_MARKS },
+  examples: [row("Scale", "foundations.css :root --ui-scale · --scale-<region>-<density>", () => <ScaleControl />, { surfaces: ["ground"] })],
+  tokens: [...SPACE.map((group) => ({ title: group.title, tokens: group.rows, density: true }))],
+};
+
+export const radiusPage: Page = {
+  title: "Radius", rail: "Foundations",
+  summary: "Four radii: control, surface (a control's plus the inset, so rows nest), message (the composer and the user's message, one value everywhere), round (pills, at any size).",
+  preview: radiusScene,
+  anatomy: { scene: radiusScene, parts: RADIUS_MARKS },
+  tokens: [...RADII.map((group) => ({ title: group.title, tokens: group.rows, density: true }))],
+};
+
+export const depthPage: Page = {
+  title: "Depth", rail: "Foundations",
+  summary: "What stands over what: the page's layers, how far a surface stands off it, and the dims that hold back what is behind.",
+  preview: () => <div class="g-row" style={{ gap: "var(--space-3xl)" }}>
+    <Frost class="g-depth-chip">rest</Frost><Frost lift="raised" class="g-depth-chip">raised</Frost>
+  </div>,
+  tokens: [...DEPTH.map((group) => ({ title: group.title, tokens: group.rows }))],
+};
+
+export const motionPage: Page = {
+  title: "Motion", rail: "Foundations",
+  summary: "Motion explains a change of place: quick out, gentle in; a change in place is quick and plain. It uses transform and opacity, except for folds the reader opens, with tokens and four shapes: fade in, fade out, rise and drop back. Each piece owns its moves, and reduced motion keeps the end state.",
+  preview: () => <PageMoves />,
+  motion: [row("The page", "First open fades everything but the composer; a route change fades the reading out quick and the new one in gentle. motion-rules.ts applies these at the port.", () => <PageMoves />, { surfaces: ["ground"] })],
+  tokens: [...MOTION.map((group) => ({ title: group.title, tokens: group.rows }))],
+};
+
+export const hapticsPage: Page = {
+  title: "Haptics", rail: "Foundations",
+  preview: () => <div class="g-row"><For each={KINDS}>{(k) => <Button variant="secondary" size="sm" onClick={() => haptic(k.kind)}>{k.kind}</Button>}</For></div>,
+  summary: "What a touch that changes something feels like on a phone: five kinds, each a piece's own, so callers never fire them (components/ui/haptics.ts). Only a touch screen with nothing that hovers feels them.",
+  examples: KINDS.map((k) => row(k.kind, `${k.what}; fired by ${k.pieces}; impact: ${k.strength}`, () => <Button variant="secondary" size="sm" onClick={() => haptic(k.kind)}>Feel it</Button>, { code: `haptic("${k.kind}")`, phone: "only" })),
+};
+
+export const auraPage: Page = {
+  title: "Aura", rail: "Foundations",
+  summary: "A field of colour behind a surface, made of numbers: each blob comes in from a direction in its hue, circles near that edge on its own period and breathes as it turns, so at rest the colours trade places; a level (0-1, the voice's) brightens them all and grows some while shrinking others. The mic's pill is filled with one while listening.",
+  preview: () => <div class="ui-frost ui-pill g-aura-wide"><Aura on level={0.45} /></div>,
+  usage: `import { Aura } from "@/components/ui";
+
+<Aura on={listening()} level={level()} strength={0.6} />`,
+  api: ["Aura"],
+  motion: [row("Aura", "The field on pill-shaped and round surfaces; adjust its level and strength, or press Speak.", () => <AuraDemo />, { surfaces: ["ground"] })],
+  tokens: [{ title: "Field", tokens: [token("--duration-gentle", "field fade"), token("--duration-follow", "voice level response"), token("--ease-arrive", "field arrival"), token("--ease-leave", "field departure"), token("--frost-sheen", "glass sheen"), token("--frost-highlight", "lit rim"), token("--frost-glow", "inner glow")] }],
+};
+
+export const foundationPages: Page[] = [typePage, colourPage, ...palettePages, iconsPage, spacePage, radiusPage, depthPage, motionPage, hapticsPage, auraPage];
