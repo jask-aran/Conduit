@@ -24,8 +24,10 @@ import { ConduitIds, USER_ENTRY } from "./server/durable-runtime.js";
  */
 export const DURABLE_CAPABILITIES = Object.freeze({
   history: "linear",
-  fork: false,
-  regenerate: false,
+  // Both are a fork of the conversation just before a prompt; the chat moves
+  // to the fork and the old branch stays in the store.
+  fork: true,
+  regenerate: true,
   steer: true,
   followUpQueue: true,
   cancel: true,
@@ -223,24 +225,84 @@ export class DurableAdapter extends EventEmitter {
       // before the run that answers them has said it started.
       texts: new Map(), unopened: new Map(), closedEntries: new Set(),
     });
+    record.scope.defer(() => record.stream?.stop());
+    await this.follow(record, conversation);
+    return record;
+  }
+
+  /** Listen to a conversation: the chat's own, or the fork it has just moved to. */
+  async follow(record, conversation) {
+    await record.stream?.stop();
+    record.conversation = conversation;
+    record.conversationId = conversation.id;
+    // What the server keeps as the chat's opaque session, on its first prompt
+    // and at every checkpoint: the conversation it is on, a fork included.
+    record.sessionId = String(conversation.id);
     await this.readAgent(record);
     const stream = await watchEvents(this.runtime.harness, conversation.id, this.context);
-    record.scope.defer(() => stream.stop());
+    record.stream = stream;
     // A run the last process left going is still going; this is where it is picked up.
     if (stream.snapshot.run) await this.resumeTurn(record, stream.snapshot);
     record.usage = stream.snapshot.usage;
-    stream.start(async (events) => { for (const event of events) await this.translate(record, event); });
-    return record;
+    stream.start(async (events) => {
+      // A stream left behind by a fork says nothing more about this chat.
+      if (record.stream !== stream) return;
+      for (const event of events) await this.translate(record, event);
+    });
+  }
+
+  /** Every entry of a conversation, oldest first. */
+  async entries(conversation) {
+    const entries = [];
+    let cursor;
+    do {
+      const page = await conversation.entries({ order: "ascending" }, 500, cursor, this.context);
+      entries.push(...page.items);
+      cursor = page.next;
+    } while (cursor);
+    return entries;
+  }
+
+  /**
+   * Cut the chat's history just before a prompt (plan decision 16).
+   *
+   * pi-durable forks keep the parent's entries up to the one given, so the fork
+   * is taken at the entry before the prompt; a prompt with nothing before it
+   * starts a new conversation with the same agent. Either way the chat moves to
+   * the new conversation, and the prompt's text is handed back so a regenerate
+   * can ask it again. The old branch stays in the store, untouched.
+   */
+  async fork(id, { nodeId } = {}) {
+    const record = this.get(id);
+    if (!record) throw failure("No Conduit runtime session", "backend_unavailable", 404);
+    if (record.active) throw failure("Stop the running turn before editing history", "generation_limit", 409);
+    const entries = await this.entries(record.conversation);
+    const index = entries.findIndex((entry) => entry.kind === USER_ENTRY && entry.data?.messageId === nodeId);
+    if (index < 0) throw failure("No such prompt in this chat", "entry_not_found", 404);
+    const source = entries[index];
+    const harness = this.runtime.harness;
+    const agent = await record.conversation.agent(this.context);
+    const fork = index > 0
+      ? await record.conversation.fork(entries[index - 1].id, { ownership: { kind: "ownerless" } }, this.context)
+      : await harness.createConversation({ ownership: { kind: "ownerless" }, agent: {
+        ...(agent.model ? { model: agent.model } : {}),
+        ...(agent.thinkingLevel ? { thinkingLevel: agent.thinkingLevel } : {}),
+        ...(agent.cwd ? { cwd: agent.cwd } : {}),
+      } }, this.context);
+    await this.remember(fork, record.chatId);
+    await this.follow(record, fork);
+    const text = source.data?.text || textOf(source.model?.[0]?.content);
+    return { opaqueSession: String(fork.id), text, sourceMessage: { id: nodeId, text } };
   }
 
   async readAgent(record) {
     const agent = await record.conversation.agent(this.context);
     const model = agent.model;
     record.provider = model?.provider || "";
-    record.modelId = model?.id || "";
-    record.model = model ? `${model.provider}/${model.id}` : "";
+    record.modelId = model?.modelId || "";
+    record.model = model ? `${model.provider}/${model.modelId}` : "";
     record.thinkingLevel = agent.thinkingLevel || "";
-    record.contextWindow = model?.contextWindow || 0;
+    record.contextWindow = (model && this.runtime.models?.getModel(model.provider, model.modelId)?.contextWindow) || 0;
   }
 
   /** Which prompt each queued input is: the browser's id travels as the request id. */
@@ -660,13 +722,7 @@ export class DurableAdapter extends EventEmitter {
     const harness = await this.runtime.open();
     const conversation = record?.conversation || await harness.conversation(conversationId, this.context);
     if (!conversation) return { messages: [], tools: [], page: { before: null } };
-    const entries = [];
-    let cursor;
-    do {
-      const page = await conversation.entries({ order: "ascending" }, 500, cursor, this.context);
-      entries.push(...page.items);
-      cursor = page.next;
-    } while (cursor);
+    const entries = await this.entries(conversation);
     const ids = (await harness.snapshot(ConduitIds, conversationId, this.context))?.messages || {};
     const { messages, tools } = applyTranscriptOps({}, entriesToOps(entries, ids));
     // An answer still being written is the live stream's, not the reload's.
@@ -680,7 +736,8 @@ export class DurableAdapter extends EventEmitter {
     for (const message of [...messages].reverse()) {
       const node = { entry: { id: message.id, parentId: null, timestamp: message.timestamp || null, type: "message",
         display: `${message.role}: ${String(message.content || "").replace(/\s+/g, " ").trim().slice(0, 240)}`,
-        kind: message.role, hidden: false, forkable: false, regeneratable: false }, children: child ? [child] : [] };
+        kind: message.role, hidden: false, forkable: message.role === "user", regeneratable: message.role === "user" },
+      children: child ? [child] : [] };
       if (child) child.entry.parentId = node.entry.id;
       else leafId = node.entry.id;
       child = node;
