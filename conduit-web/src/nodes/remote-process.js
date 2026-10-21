@@ -1,3 +1,4 @@
+import { StringDecoder } from "node:string_decoder";
 import { BACKGROUND_CONTEXT, withAbortSignal } from "@earendil-works/chord/context";
 import { ExecutionError, FileError } from "@earendil-works/pi-durable/env";
 import { decode, encode } from "./protocol.js";
@@ -44,6 +45,8 @@ export class RemoteProcess {
     this.dataListeners = new Set();
     this.exitListeners = new Set();
     this.early = [];
+    // Per stream, so a character split between two chunks is not mangled.
+    this.decoders = { out: new StringDecoder("utf8"), err: new StringDecoder("utf8") };
     hub.follow(this);
   }
 
@@ -66,7 +69,8 @@ export class RemoteProcess {
       let bytes = Buffer.from(message.data, "base64");
       if (message.offset < this.offset) bytes = bytes.subarray(this.offset - message.offset);
       this.offset = end;
-      this.emitData(bytes.toString("utf8"), message.stream);
+      const text = (this.decoders[message.stream] || this.decoders.out).write(bytes);
+      if (text) this.emitData(text, message.stream);
     } else if (message.kind === "exit") {
       if (this.exitEvent) return;
       this.exitEvent = { exitCode: message.code, signal: message.signal };
@@ -95,6 +99,23 @@ export class RemoteProcess {
   write(data) {
     if (this.exitEvent || !this.hub.live.get(this.nodeId)?.ready) return;
     void call(this.hub, this.nodeId, "write", [this.procId, Buffer.isBuffer(data) ? new Uint8Array(data) : String(data)]).catch(() => {});
+  }
+
+  /**
+   * Input that must arrive, in order: a harness's protocol, not keystrokes.
+   * It waits for the device (up to `timeoutMs`) rather than being dropped.
+   */
+  send(data, timeoutMs = 10 * 60_000) {
+    this.sending = (this.sending || Promise.resolve()).catch(() => {}).then(() => {
+      if (this.exitEvent) throw new Error("The process has exited");
+      return call(this.hub, this.nodeId, "write", [this.procId, Buffer.isBuffer(data) ? new Uint8Array(data) : String(data)], timeoutMs);
+    });
+    return this.sending;
+  }
+
+  closeInput() {
+    return (this.sending || Promise.resolve()).catch(() => {})
+      .then(() => call(this.hub, this.nodeId, "closeInput", [this.procId])).catch(() => {});
   }
 
   resize(cols, rows) {

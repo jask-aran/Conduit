@@ -29,6 +29,7 @@ const discoverableFrom = (backends) => (implementation) => {
 };
 
 export function registerChatRoutes(app, {
+  nodeHub = null,
   backends,
   catalogFor,
   chatModelView,
@@ -192,13 +193,15 @@ export function registerChatRoutes(app, {
       if (!project) return response.status(404).json({ error: "project_not_found" });
       await lifecycle.withProjects([project.id], async () => {
         await projects.validate(project);
-        // Only the Conduit runtime works in a device's folder (plan decision 5),
-        // so a chat started there without a profile named is one.
+        // A device's folder takes the Conduit runtime, or a harness installed on
+        // that device (plan decision 5); without a profile named, the runtime.
         if (project.nodeId && !request.body?.profileId) request.body = { ...request.body, profileId: "conduit-runtime" };
         const selectedProfile = request.body?.profileId ? profileFor(request.body.profileId) : null;
-        if (project.nodeId && selectedProfile?.agent.implementation !== "conduit-runtime") {
-          return response.status(409).json({ error: "workspace_needs_conduit_runtime",
-            message: "Chats in a device's folder run on the Conduit runtime" });
+        const implementation = selectedProfile?.agent.implementation;
+        if (project.nodeId && implementation !== "conduit-runtime"
+          && !(await nodeHub?.get(project.nodeId))?.harnesses?.includes(implementation)) {
+          return response.status(409).json({ error: "harness_not_on_device",
+            message: `${selectedProfile?.label || "That harness"} is not installed on the device holding this workspace` });
         }
         if (selectedProfile) {
           const profileId = request.body.profileId;

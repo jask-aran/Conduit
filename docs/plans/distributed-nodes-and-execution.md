@@ -62,6 +62,11 @@ environments.
    spawn** -- the node starts the harness process and relays its stdio (or
    local port) over its socket, and main's existing adapters run unchanged
    against it; the node stays thin and there is one adapter per harness.
+   Built for Claude Code (its SDK's `spawnClaudeCodeProcess`, `src/nodes/
+   remote-spawn.js`): a node with a shell-granted root advertises the
+   harnesses it has, runs its own install by name in the workspace's place,
+   and serves the saved session back for history and resume. Codex and the
+   others follow the same shape.
    Terminals use the same spawn.
 6. **Workspaces declared by nodes.** A node mounts and declares folders to
    main; existing workspaces are simply main's local node and are unaffected.

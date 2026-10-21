@@ -13,6 +13,8 @@ import { conduitCategories } from "./context-categories.js";
 import { claudePlanUsage, declarePlan } from "./plan-usage.js";
 import { unsupported } from "./harnesses/unsupported.js";
 import { within } from "./server/effect-concurrency.js";
+import { BACKGROUND_CONTEXT, withAbortSignal } from "@earendil-works/chord/context";
+import { harnessLaunch, spawnOnDevice } from "./nodes/remote-spawn.js";
 
 // Claude Code's tools, by what they do.
 const CLAUDE_TOOL_KINDS = Object.freeze({
@@ -168,38 +170,35 @@ async function readSessionText(sessionId) {
 }
 
 async function readSavedSession(sessionId) {
-  const root = path.join(process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), ".claude"), "projects");
-  let dirs = [];
-  try { dirs = await fs.promises.readdir(root); } catch { return null; }
-  for (const dir of dirs) {
-    let text;
-    try { text = await fs.promises.readFile(path.join(root, dir, `${sessionId}.jsonl`), "utf8"); } catch { continue; }
-    const seen = new Set();
-    const entries = [];
-    for (const line of text.split("\n")) {
-      let entry;
-      try { entry = line.trim() ? JSON.parse(line) : null; } catch { entry = null; }
-      if (!entry?.uuid || entry.isSidechain || seen.has(entry.uuid)) continue;
-      seen.add(entry.uuid);
-      // What a compaction summarised is not in the conversation Claude Code
-      // resumes, so nothing before it can be gone back to.
-      if (entry.type === "system" && entry.subtype === "compact_boundary") {
-        for (const earlier of entries) earlier.compacted = true;
-        continue;
-      }
-      const queued = entry.type === "attachment" && entry.attachment?.type === "queued_command"
-        && entry.attachment.commandMode === "prompt" && entry.attachment.source_uuid;
-      if (queued) {
-        entries.push({ type: "user", uuid: entry.attachment.source_uuid, parentUuid: entry.parentUuid,
-          message: { role: "user", content: entry.attachment.prompt } });
-      } else if ((entry.type === "user" || entry.type === "assistant")
-        && !entry.isMeta && !entry.isCompactSummary && !entry.isVisibleInTranscriptOnly) {
-        entries.push(entry);
-      }
+  const text = await readSessionText(sessionId);
+  return text === null ? null : parseSavedSession(text);
+}
+
+function parseSavedSession(text) {
+  const seen = new Set();
+  const entries = [];
+  for (const line of text.split("\n")) {
+    let entry;
+    try { entry = line.trim() ? JSON.parse(line) : null; } catch { entry = null; }
+    if (!entry?.uuid || entry.isSidechain || seen.has(entry.uuid)) continue;
+    seen.add(entry.uuid);
+    // What a compaction summarised is not in the conversation Claude Code
+    // resumes, so nothing before it can be gone back to.
+    if (entry.type === "system" && entry.subtype === "compact_boundary") {
+      for (const earlier of entries) earlier.compacted = true;
+      continue;
     }
-    return entries;
+    const queued = entry.type === "attachment" && entry.attachment?.type === "queued_command"
+      && entry.attachment.commandMode === "prompt" && entry.attachment.source_uuid;
+    if (queued) {
+      entries.push({ type: "user", uuid: entry.attachment.source_uuid, parentUuid: entry.parentUuid,
+        message: { role: "user", content: entry.attachment.prompt } });
+    } else if ((entry.type === "user" || entry.type === "assistant")
+      && !entry.isMeta && !entry.isCompactSummary && !entry.isVisibleInTranscriptOnly) {
+      entries.push(entry);
+    }
   }
-  return null;
+  return entries;
 }
 // A compaction asked for is saved as a command and its output; neither is a prompt.
 const COMPACTION_ENTRY = /^<command-name>\/compact<\/command-name>|^<local-command-stdout>/;
@@ -377,9 +376,11 @@ export class ClaudeCodeAdapter extends EventEmitter {
   }
 
   /** `sdk` is the Agent SDK's surface; a test hands in its own. */
-  constructor({ command = "claude", logs = null, sdk = claudeAgentSdk } = {}) {
+  constructor({ command = "claude", logs = null, sdk = claudeAgentSdk, nodeHub = null } = {}) {
     super();
     this.sdk = sdk;
+    // Paired devices: a chat in a device's workspace runs that device's Claude Code.
+    this.nodeHub = nodeHub;
     // Unfound, the SDK runs the Claude Code it ships with; either reads the
     // user's ~/.claude configuration, credentials and sessions.
     this.executable = resolveCommand(command);
@@ -393,6 +394,9 @@ export class ClaudeCodeAdapter extends EventEmitter {
     this.byChatId = this.sessions.byChatId;
     Object.assign(this, unsupported(CLAUDE_CODE_CAPABILITIES, { label: "Claude Code" }));
   }
+
+  /** What the chat keeps of a session: its id, and for a session on a device, which device -- it is found there. */
+  opaqueSessionOf(record) { return record.nodeId ? { threadId: record.sessionId, nodeId: record.nodeId } : record.sessionId; }
 
   /** What Claude Code's settings say for a folder: model, effort, the mode a session starts in. */
   settingsFor(cwd) {
@@ -411,7 +415,8 @@ export class ClaudeCodeAdapter extends EventEmitter {
     const live = context.chat.backend.opaqueSession
       ? await this.restore(context.chat.backend.opaqueSession, options) : await this.create(options);
     return { live, mapping: {
-      backend: { ...context.chat.backend, model: live.model || selectedModel, opaqueSession: live.sessionId },
+      backend: { ...context.chat.backend, model: live.model || selectedModel,
+        opaqueSession: this.opaqueSessionOf(live) },
       ...(live.thinkingLevel ? { modelThinkingLevels: {
         ...(context.chat.modelThinkingLevels || {}), [live.model || selectedModel]: live.thinkingLevel,
       } } : {}),
@@ -427,8 +432,12 @@ export class ClaudeCodeAdapter extends EventEmitter {
   async start({ chatId, project, model = "", thinkingLevel = "", permissionMode = "", sessionId, resume = false }) {
     const existing = this.getByChatId(chatId);
     if (existing) return existing;
+    if (project?.nodeId && !this.nodeHub?.live.get(project.nodeId)?.harnesses?.includes("claude-code")) {
+      throw failure("Claude Code is not available on that device: it is offline, or Claude Code is not installed there", "harness_unavailable_on_device", 409);
+    }
     const record = this.sessions.add({
       id: crypto.randomUUID(), chatId, projectId: project?.id || null,
+      nodeId: project?.nodeId || null, place: project?.place || null,
       cwd: project?.workingRoot, sessionId, status: "starting", ready: false,
       activity: "starting", active: false, stopping: false, model, thinkingLevel, permissionMode,
       generation: null, generationSeq: 0, clients: new Set(), events: [], hostUiRequests: [],
@@ -443,7 +452,8 @@ export class ClaudeCodeAdapter extends EventEmitter {
     });
     // A permission still being asked is answered no, so the SDK is not left waiting.
     record.scope.defer(() => this.cancelRequests(record));
-    record.settings = await this.settingsFor(record.cwd);
+    // Settings are read on this machine; a device's own apply there, when it starts.
+    record.settings = record.nodeId ? {} : await this.settingsFor(record.cwd);
     // Only what the chat chose is passed, and the rest is left to the user's
     // own Claude Code settings and read back once it is up. The starting mode is
     // the exception: an SDK session starts in `default` whatever the settings
@@ -480,7 +490,9 @@ export class ClaudeCodeAdapter extends EventEmitter {
     const sessionId = typeof opaqueSession === "string" ? opaqueSession : opaqueSession?.threadId;
     if (!sessionId) throw failure("Claude Code session identity is missing");
     // A chat made and never prompted has an id and nothing saved under it yet.
-    const saved = await this.sdk.getSessionInfo(sessionId).catch(() => undefined);
+    const saved = options.project?.nodeId
+      ? await this.sessionText(sessionId, options.project.nodeId).catch(() => null)
+      : await this.sdk.getSessionInfo(sessionId).catch(() => undefined);
     return this.start({ ...options, sessionId, resume: Boolean(saved) });
   }
 
@@ -496,6 +508,10 @@ export class ClaudeCodeAdapter extends EventEmitter {
       thinking: { type: "adaptive", display: "summarized" },
       canUseTool: (toolName, input, options) => this.canUseTool(record, toolName, input, options),
       stderr: (data) => { record.stderr = `${record.stderr}${data}`.slice(-8_192); },
+      ...(record.nodeId ? { spawnClaudeCodeProcess: (spawn) => spawnOnDevice(this.nodeHub, record.nodeId, {
+        harness: "claude-code", ...harnessLaunch(spawn), place: record.place, signal: spawn.signal,
+        onStderr: (data) => { record.stderr = `${record.stderr}${data}`.slice(-8_192); },
+      }) } : {}),
     } });
     void this.consume(record, query);
     return query.initializationResult();
@@ -668,7 +684,7 @@ export class ClaudeCodeAdapter extends EventEmitter {
       if (context.model && context.maxTokens) ClaudeCodeAdapter.windows.set(context.model, context.maxTokens);
       const buffer = (context.categories || []).find((category) => category.kind === "buffer")?.tokens;
       if (context.model && buffer) ClaudeCodeAdapter.buffers.set(context.model, buffer);
-      if (record.compactions == null) record.compactions = (await this.contextFromHistory({ opaqueSession: record.sessionId }))?.contextUsage.compactions ?? 0;
+      if (record.compactions == null) record.compactions = (await this.contextFromHistory({ opaqueSession: { threadId: record.sessionId, nodeId: record.nodeId } }))?.contextUsage.compactions ?? 0;
       record.contextUsage = { ...record.contextUsage, compactions: record.compactions,
         compactAt: ClaudeCodeAdapter.compactAt(context.model, context.maxTokens), plan: await ClaudeCodeAdapter.planUsage(record.query) };
     } catch { /* the last request's count stands */ }
@@ -985,7 +1001,7 @@ export class ClaudeCodeAdapter extends EventEmitter {
     const record = this.get(id);
     if (!record?.ready) throw failure("Claude Code session is not ready");
     if (record.active) throw failure("Claude Code session is busy", "generation_limit", 409);
-    const history = await this.savedHistory(record.sessionId);
+    const history = await this.savedHistory(record.sessionId, record.nodeId);
     const index = history.findIndex((entry) => entry.type === "user" && promptId(entry.uuid) === nodeId);
     const target = history[index];
     if (!target) throw failure("Claude Code cannot find the selected message in its session", "fork_target_missing", 409);
@@ -1014,12 +1030,26 @@ export class ClaudeCodeAdapter extends EventEmitter {
     }
     record.ready = true;
     this.emit("changed", { record, reason: "forked" });
-    return { text, sessionId, opaqueSession: sessionId, sourceMessage: { id: nodeId, text } };
+    return { text, sessionId, opaqueSession: this.opaqueSessionOf(record),
+      sourceMessage: { id: nodeId, text } };
   }
 
-  /** The saved session, from its file where there is one. */
-  async savedHistory(sessionId) {
+  /** The saved session, from its file where there is one -- on the device, for a device's session. */
+  async savedHistory(sessionId, nodeId = null) {
+    if (nodeId) {
+      const text = await this.sessionText(sessionId, nodeId);
+      return text ? parseSavedSession(text) : [];
+    }
     return (await readSavedSession(sessionId)) ?? this.sdk.getSessionMessages(sessionId).catch(() => []);
+  }
+
+  /** A session's saved file, as text: here, or asked of the device that ran it (null offline or missing). */
+  async sessionText(sessionId, nodeId = null) {
+    if (!nodeId) return readSessionText(sessionId);
+    if (!this.nodeHub?.live.get(nodeId)?.ready) return null;
+    const result = await this.nodeHub.call(nodeId, { target: "harness", method: "claudeSession", args: [sessionId], cwd: null },
+      withAbortSignal(AbortSignal.timeout(20_000), BACKGROUND_CONTEXT));
+    return result?.ok ? result.value : null;
   }
 
   finish(record, result = {}) {
@@ -1196,7 +1226,7 @@ export class ClaudeCodeAdapter extends EventEmitter {
    */
   async contextFromHistory({ opaqueSession }) {
     const sessionId = typeof opaqueSession === "string" ? opaqueSession : opaqueSession?.threadId;
-    const text = sessionId ? await readSessionText(sessionId) : null;
+    const text = sessionId ? await this.sessionText(sessionId, opaqueSession?.nodeId) : null;
     if (!text) return null;
     const requests = [];
     const seen = new Set();
@@ -1227,6 +1257,8 @@ export class ClaudeCodeAdapter extends EventEmitter {
   async contextBreakdown({ opaqueSession, project }) {
     const sessionId = typeof opaqueSession === "string" ? opaqueSession : opaqueSession?.threadId;
     if (!sessionId) return null;
+    // The breakdown takes a throwaway Claude Code; on a device, what its file says will do.
+    if (opaqueSession?.nodeId) return this.contextFromHistory({ opaqueSession });
     const scratch = crypto.randomUUID();
     const input = new InputQueue();
     const query = this.sdk.query({ prompt: input, options: {
@@ -1265,7 +1297,7 @@ export class ClaudeCodeAdapter extends EventEmitter {
     const record = liveSessionId ? this.get(liveSessionId) : null;
     const sessionId = record?.sessionId || (typeof opaqueSession === "string" ? opaqueSession : opaqueSession?.threadId);
     if (!sessionId) return { messages: [], tools: [], page: { before: null } };
-    const history = await this.savedHistory(sessionId);
+    const history = await this.savedHistory(sessionId, record?.nodeId || opaqueSession?.nodeId || null);
     return { ...ClaudeCodeAdapter.transcript(history), page: { before: null } };
   }
 

@@ -9,6 +9,7 @@ import { encode, decode, HANDLE_METHODS, METHOD_GRANTS, NODE_PROTOCOL_VERSION, r
 import { NodeProcesses } from "./node-processes.js";
 import { keptBack, rootDeny } from "./secrets.js";
 import { Receipts } from "./receipts.js";
+import { claudeSession, findHarnesses } from "./node-harnesses.js";
 
 const RETRY_MS = [1000, 2000, 5000, 10000, 30000];
 
@@ -39,6 +40,8 @@ export function startNodeAgent({ mainUrl, key, name, roots: shared, shellEnv = p
   const processes = new NodeProcesses({ shellEnv });
   // Writes and commands by action id: they outlive a socket, and are never done twice.
   const receipts = new Receipts();
+  // Harnesses are offered only with the shell grant somewhere: running one is running code.
+  const harnesses = roots.some((root) => root.shell) ? findHarnesses() : {};
   let socket = null;
   let attempt = 0;
   let stopped = false;
@@ -80,6 +83,7 @@ export function startNodeAgent({ mainUrl, key, name, roots: shared, shellEnv = p
       attempt = 0;
       // Roots go by id; the path is for people to read, main never sends it back.
       send({ type: "hello", version: NODE_PROTOCOL_VERSION, name, platform: process.platform, boot: receipts.boot,
+        harnesses: Object.keys(harnesses),
         roots: roots.map(({ id, path: label, read, write, shell, allow }) => ({ id, label, read, write, shell, allow })) });
       log.info?.(`[conduit-node] connected to ${mainUrl}`);
     });
@@ -151,6 +155,13 @@ export function startNodeAgent({ mainUrl, key, name, roots: shared, shellEnv = p
           const spec = args[0] || {};
           const home = placeOf(spec.cwd);
           if (!home || !rootFor(roots, home, "shell")) return refuse("exec", "that folder");
+          // A harness is named, not given as a path: the node runs its own install of it.
+          if (spec.harness !== undefined) {
+            if (!harnesses[spec.harness]) return err(new ExecutionError("not_supported", `${spec.harness} is not installed on this device`));
+            const args = Array.isArray(spec.args) ? spec.args.map(String) : [];
+            return { ok: true, value: processes.spawn({ argv: [harnesses[spec.harness], ...args], cwd: home,
+              env: spec.env && typeof spec.env === "object" ? spec.env : {} }) };
+          }
           return { ok: true, value: processes.spawn({ ...spec, cwd: home }) };
         }
         const [procId, ...rest] = args;
@@ -177,6 +188,11 @@ export function startNodeAgent({ mainUrl, key, name, roots: shared, shellEnv = p
     async function run({ target, method, args = [], cwd }, context, emit) {
       const decoded = decode(args, { FileError, ExecutionError });
       if (target === "proc") return runProcess(method, decoded);
+      // What a harness saved here, for the sessions main runs on it.
+      if (target === "harness") {
+        if (method === "claudeSession" && harnesses["claude-code"]) return { ok: true, value: await claudeSession(decoded[0]) };
+        return err(new FileError("not_supported", `${method} is not served by this node`));
+      }
       if (target !== "env") {
         const handle = handles.get(target);
         if (!handle || !HANDLE_METHODS.includes(method)) return err(new FileError("invalid", `No open handle ${target}`));

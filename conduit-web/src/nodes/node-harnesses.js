@@ -1,0 +1,43 @@
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+
+/**
+ * The harnesses installed on this device that Conduit may drive here (plan
+ * decision 5): main's adapter for each runs against a process the node starts
+ * (remote spawn), so the node only finds the command and reads back what the
+ * harness saved -- one adapter per harness, all on main.
+ *
+ * Running a harness is running code as this device's user, so the node
+ * offers its harnesses only when it shares a folder with the shell grant, and
+ * starts one only in such a folder.
+ */
+const COMMANDS = { "claude-code": "claude" };
+
+function onPath(command) {
+  // On Windows only an .exe: a .cmd shim needs a shell to run, and argv through cmd.exe is not argv.
+  const extensions = process.platform === "win32" ? [".exe"] : [""];
+  for (const directory of String(process.env.PATH || "").split(path.delimiter)) {
+    for (const extension of extensions) {
+      const candidate = path.join(directory, command + extension);
+      try { fs.accessSync(candidate, fs.constants.X_OK); if (fs.statSync(candidate).isFile()) return candidate; } catch { /* keep looking */ }
+    }
+  }
+  return null;
+}
+
+export function findHarnesses() {
+  return Object.fromEntries(Object.entries(COMMANDS).map(([id, command]) => [id, onPath(command)]).filter(([, found]) => found));
+}
+
+const SESSION_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** A Claude Code session's saved transcript on this device, by its id; null if there is none. */
+export async function claudeSession(sessionId) {
+  if (!SESSION_ID.test(String(sessionId))) return null;
+  const root = path.join(process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), ".claude"), "projects");
+  for (const dir of await fs.promises.readdir(root).catch(() => [])) {
+    try { return await fs.promises.readFile(path.join(root, dir, `${sessionId}.jsonl`), "utf8"); } catch { /* not this project */ }
+  }
+  return null;
+}
