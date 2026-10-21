@@ -277,11 +277,11 @@ export class DurableAdapter extends EventEmitter {
     return record;
   }
 
-  async start(conversation, { chatId, project }) {
+  async start(conversation, { chatId, project, templateId = null }) {
     const existing = this.getByChatId(chatId);
     if (existing) return existing;
     const record = this.sessions.add({
-      id: crypto.randomUUID(), chatId, projectId: project?.id || null, nodeId: remoteNode(project), conversationId: conversation.id, conversation,
+      id: crypto.randomUUID(), chatId, projectId: project?.id || null, nodeId: remoteNode(project), conversationId: conversation.id, conversation, templateId,
       status: "running", activity: "idle", active: false, stopping: false, generation: null, generationSeq: 0,
       clients: new Set(), events: [], hostUiRequests: [], activeGeneration: null,
       model: "", modelId: "", provider: "", thinkingLevel: "", contextWindow: 0,
@@ -454,7 +454,7 @@ export class DurableAdapter extends EventEmitter {
   async submit(record, text, messageId, whenBusy, attachments = []) {
     const summary = attachmentSummary(attachments);
     const submission = await record.conversation.submit({
-      type: "input", content: await promptInput(text, attachments, { onDevice: Boolean(record.nodeId) }), requestId: messageId, ...(whenBusy ? { whenBusy } : {}),
+      type: "input", content: await promptInput(this.expandSkill(record, text), attachments, { onDevice: Boolean(record.nodeId) }), requestId: messageId, ...(whenBusy ? { whenBusy } : {}),
       entry: { kind: USER_ENTRY, data: { messageId, text, timestamp: new Date().toISOString(),
         ...(summary.length ? { attachments: summary } : {}) } },
     }, this.context);
@@ -820,8 +820,21 @@ export class DurableAdapter extends EventEmitter {
   }
 
   listModels() { return this.listAvailableModels(); }
-  listCommands() { return Promise.resolve([]); }
-  listAvailableCommands() { return Promise.resolve([]); }
+  // A template's skills, as `/skill:<name>`, as classic Pi offered them.
+  listCommands(id) { return Promise.resolve(this.skillCommands(this.get(id)?.templateId)); }
+  listAvailableCommands({ template } = {}) { return Promise.resolve(this.skillCommands(template?.id)); }
+  skillCommands(templateId) {
+    return this.runtime.skillsFor(templateId).map((skill) => ({ name: `skill:${skill.name}`, description: skill.description, source: "skill" }));
+  }
+
+  /** `/skill:<name> args` as the model reads it: the skill, then the args (Pi's expansion). The transcript keeps what was typed. */
+  expandSkill(record, text) {
+    const match = /^\/skill:(\S+)(?:\s+([\s\S]*))?$/.exec(String(text || ""));
+    const skill = match && this.runtime.skillsFor(record.templateId).find((item) => item.name === match[1]);
+    if (!skill) return text;
+    const block = `<skill name="${skill.name}">\n${skill.body}\n</skill>`;
+    return match[2]?.trim() ? `${block}\n\n${match[2].trim()}` : block;
+  }
 
   async setModel(id, model) {
     const record = this.get(id);

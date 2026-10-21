@@ -268,10 +268,24 @@ export class DurableRuntime {
    * inlined they are there for a device's workspace too, where the read tool
    * cannot reach this server's files.
    */
+  templateFor(templateId) {
+    return this.templates.find((item) => item.id === templateId)
+      || this.templates.find((item) => item.id === "assistant") || this.templates[0] || null;
+  }
+
+  /** A template's skills: name, description and body (frontmatter stripped). */
+  skillsFor(templateId) {
+    return (this.templateFor(templateId)?.skills || []).map((folder) => {
+      const text = fs.readFileSync(path.join(folder, "SKILL.md"), "utf8");
+      const field = (key) => new RegExp(`^${key}:\\s*(.+)$`, "m").exec(text)?.[1]?.trim().replace(/^["']|["']$/g, "");
+      return { name: field("name") || path.basename(folder), description: field("description") || "",
+        body: text.replace(/^---\n[\s\S]*?\n---\n/, "").trim() };
+    });
+  }
+
   async agentFor(templateId) {
     await this.open();
-    const template = this.templates.find((item) => item.id === templateId)
-      || this.templates.find((item) => item.id === "assistant") || this.templates[0];
+    const template = this.templateFor(templateId);
     if (!template) return {};
     const named = (file) => (file.includes("pi-web-access") ? "web" : CODEMODE_ONLY.test(file) ? "codemode" : null);
     const extensions = ["conduit", "coding-tools", ...template.extensions.map(named).filter(Boolean)]
@@ -283,11 +297,7 @@ export class DurableRuntime {
     // Pi's "codemode only": the model is offered codemode (and the question card); scripts call the rest.
     const codemodeOnly = template.extensions.some((file) => CODEMODE_ONLY.test(file));
     const prompt = this.promptStore ? (await this.promptStore.read(template.id)).content : fs.readFileSync(template.systemPrompt, "utf8");
-    const skills = template.skills.map((folder) => {
-      const text = fs.readFileSync(path.join(folder, "SKILL.md"), "utf8");
-      const name = /^name:\s*(.+)$/m.exec(text)?.[1]?.trim() || path.basename(folder);
-      return `## Skill: ${name}\n\n${text.replace(/^---\n[\s\S]*?\n---\n/, "").trim()}`;
-    });
+    const skills = this.skillsFor(template.id).map((skill) => `## Skill: ${skill.name}\n\n${skill.body}`);
     return {
       extensions, tools,
       modelTools: codemodeOnly ? tools.filter((tool) => tool.name === "codemode" || ALWAYS.includes(tool.name)) : null,
