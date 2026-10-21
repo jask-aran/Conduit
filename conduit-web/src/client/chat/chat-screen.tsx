@@ -98,16 +98,16 @@ export function ChatHeader(props: {
               <MenuSection>
                 <MenuRow closeOnSelect={false} aria-expanded={expanded()} opens meta={used() == null ? "Unavailable" : `${Math.round(used()!)}% used`}
                   onSelect={() => { if (!expanded()) chat().refreshContext(); setExpanded(!expanded()); }}>Context</MenuRow>
-                <Show when={!expanded()}>
-                  <ContextBar chat={chat()} />
-                  {/* Context open is the whole reading (it names the model and session itself), so Details gives way. */}
-                  <Show when={details().length}>
-                    <MenuRow closeOnSelect={false} aria-expanded={detailsOpen()} opens meta={runtimeLabel() ?? undefined} onSelect={() => setDetailsOpen(!detailsOpen())}>Details</MenuRow>
-                    <Show when={detailsOpen()}><For each={details()}>{([label, value]) => <Readout label={label} value={value} />}</For></Show>
-                  </Show>
-                </Show>
+                <Show when={!expanded()}><ContextBar chat={chat()} /></Show>
               </MenuSection>
               <Show when={expanded()}><ContextBreakdown chat={chat()} bare canCompact={chat().capabilities()?.compaction !== false} /></Show>
+              {/* The thread's own particulars, a section of their own: shut, the harness; open, each on a line. */}
+              <Show when={details().length}>
+                <MenuSection>
+                  <MenuRow closeOnSelect={false} aria-expanded={detailsOpen()} opens meta={runtimeLabel() ?? undefined} onSelect={() => setDetailsOpen(!detailsOpen())}>Details</MenuRow>
+                  <Show when={detailsOpen()}><For each={details()}>{([label, value]) => <Readout label={label} value={value} />}</For></Show>
+                </MenuSection>
+              </Show>
             </>;
           }}</Show>
           <Show when={(!props.dashboard && !nativeApp) || props.onDelete}>
