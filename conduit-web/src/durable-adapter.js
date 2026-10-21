@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import fs from "node:fs/promises";
 import { EventEmitter } from "node:events";
 import { getSupportedThinkingLevels } from "@earendil-works/pi-ai";
 import { watchEvents } from "@earendil-works/pi-durable";
@@ -41,13 +42,38 @@ export const DURABLE_CAPABILITIES = Object.freeze({
   // The turn is folded as it is published, as Pi and the Test stream do, so a
   // reconnecting browser is restated the generation in progress.
   replay: true,
-  attachments: false,
+  attachments: true,
   interruptKeepsPartial: false,
 });
 
 const TOOL_KINDS = { bash: "command", read: "read", write: "edit", edit: "edit" };
 const subjectOf = (name, args = {}) => toolSubject(name === "bash" ? args.command : args.path);
 const STOP_REASONS = new Set(["stop", "toolUse", "length", "error", "aborted"]);
+
+/** What the transcript keeps about an attachment. */
+const attachmentSummary = (attachments = []) => attachments.map((item) => ({
+  id: item.id, name: item.name || item.id, mimeType: item.mimeType || item.type || "application/octet-stream",
+}));
+
+/**
+ * What the model is given for a prompt with attachments, as Conduit Pi gives
+ * it: images as image input, any other file named by its path for the tools
+ * to read.
+ */
+async function promptInput(message, attachments = []) {
+  const images = [];
+  const files = [];
+  for (const attachment of attachments) {
+    const type = String(attachment.mimeType || attachment.type || "");
+    if (type.startsWith("image/") && type !== "image/svg+xml") {
+      images.push({ type: "image", data: await fs.readFile(attachment.path, "base64"), mimeType: type });
+    } else {
+      files.push(`Attached file: ${attachment.path}`);
+    }
+  }
+  const text = [message, ...files].filter(Boolean).join("\n\n");
+  return images.length ? [{ type: "text", text }, ...images] : text;
+}
 
 const failure = (message, code = "backend_unavailable", status = 409) => Object.assign(new Error(message), { code, status });
 const textOf = (content) => (Array.isArray(content) ? content : [])
@@ -102,7 +128,8 @@ export function entriesToOps(entries, ids = {}) {
       prompt = data.messageId || `u${entry.conversationId}-${entry.id}`;
       last = null;
       ops.push(messageOpen({ id: prompt, role: "user", content: data.text || textOf(entry.model?.[0]?.content),
-        ...(data.timestamp ? { timestamp: data.timestamp } : {}) }));
+        ...(data.timestamp ? { timestamp: data.timestamp } : {}),
+        ...(data.attachments?.length ? { attachments: data.attachments } : {}) }));
     } else if (entry.kind === "pi.assistant") {
       const message = entry.model?.[0];
       if (!message) continue;
@@ -362,19 +389,23 @@ export class DurableAdapter extends EventEmitter {
     turn.prompts = [messageId];
     turn.answers = messageId;
     this.publish(record, messageOpen({ id: messageId, role: "user", generationId: turn.generationId,
-      content: message, timestamp: new Date().toISOString() }));
+      content: message, timestamp: new Date().toISOString(),
+      ...(options.attachments?.length ? { attachments: attachmentSummary(options.attachments) } : {}) }));
     this.publish(record, { type: "status", generationId: turn.generationId, phase: "started", seq: ++record.generationSeq,
       status: "working", activity: "working", detail: null,
       ...(options.continuationBase ? { continuation: true, continuationBase: String(options.continuationBase) } : {}) });
     turn.opened = new Set([messageId]);
-    await this.submit(record, message, messageId);
-    return turn.generationId;
+    await this.submit(record, message, messageId, undefined, options.attachments);
+    // Conduit finds a prompt's attachments by the message they were sent with.
+    return { generationId: turn.generationId, attachmentIdentity: { messageId } };
   }
 
-  async submit(record, text, messageId, whenBusy) {
+  async submit(record, text, messageId, whenBusy, attachments = []) {
+    const summary = attachmentSummary(attachments);
     const submission = await record.conversation.submit({
-      type: "input", content: text, requestId: messageId, ...(whenBusy ? { whenBusy } : {}),
-      entry: { kind: USER_ENTRY, data: { messageId, text, timestamp: new Date().toISOString() } },
+      type: "input", content: await promptInput(text, attachments), requestId: messageId, ...(whenBusy ? { whenBusy } : {}),
+      entry: { kind: USER_ENTRY, data: { messageId, text, timestamp: new Date().toISOString(),
+        ...(summary.length ? { attachments: summary } : {}) } },
     }, this.context);
     record.prompts.set(submission.id, messageId);
     record.texts.set(messageId, text);
@@ -399,7 +430,8 @@ export class DurableAdapter extends EventEmitter {
             record.unopened.delete(promptId);
             turn.opened.add(promptId);
             this.publish(record, messageOpen({ id: promptId, role: "user", generationId: turn.generationId,
-              content: data.text || "", ...(data.timestamp ? { timestamp: data.timestamp } : {}) }));
+              content: data.text || "", ...(data.timestamp ? { timestamp: data.timestamp } : {}),
+              ...(data.attachments?.length ? { attachments: data.attachments } : {}) }));
           }
           this.publish(record, { type: "status", generationId: turn.generationId, phase: "started", seq: ++record.generationSeq,
             status: "working", activity: "working", detail: null });
@@ -466,7 +498,8 @@ export class DurableAdapter extends EventEmitter {
       // The prompt the turn moves on from is answered now.
       for (const promptId of turn.prompts) this.publish(record, turnSettle({ promptId, outcome: "complete", generationId: turn.generationId }));
       this.publish(record, messageOpen({ id: messageId, role: "user", generationId: turn.generationId,
-        content: entry.data.text || "", ...(entry.data.timestamp ? { timestamp: entry.data.timestamp } : {}) }));
+        content: entry.data.text || "", ...(entry.data.timestamp ? { timestamp: entry.data.timestamp } : {}),
+        ...(entry.data.attachments?.length ? { attachments: entry.data.attachments } : {}) }));
       turn.prompts = [messageId];
       turn.answers = messageId;
       return;
@@ -615,8 +648,8 @@ export class DurableAdapter extends EventEmitter {
     const record = this.get(id);
     if (!record) throw failure("No Conduit runtime session", "backend_unavailable", 404);
     const messageId = options.messageId || crypto.randomUUID();
-    await this.submit(record, message, messageId, type === "steer" ? "steer" : "followUp");
-    return { attachmentIdentity: { afterMessageId: messageId, ordinal: 0 } };
+    await this.submit(record, message, messageId, type === "steer" ? "steer" : "followUp", options.attachments || []);
+    return { attachmentIdentity: { messageId } };
   }
 
   async clearQueue(id) {
