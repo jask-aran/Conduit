@@ -1,6 +1,6 @@
 /* Reading (reading.tsx): a gauge's reading under its Meter. Everything at the caption's size; numbers in the data
    face and tabular, names in the text's; inset as a menu's rows are, so it lines up with the rows around it. */
-.ui-reading { display: grid; gap: var(--space-md); padding: var(--space-xs) var(--space-md) var(--space-sm); font-size: var(--text-caption); line-height: var(--leading-row); }
+.ui-reading { display: grid; gap: var(--space-lg); padding: var(--space-sm) var(--row-inset) var(--space-md); font-size: var(--text-caption); line-height: var(--leading-row); }
 .ui-reading-total { display: flex; justify-content: space-between; gap: var(--space-md); color: var(--muted-foreground); font-variant-numeric: tabular-nums; }
 .ui-reading-figure { color: var(--foreground); font-family: var(--font-data); }
 

@@ -80,8 +80,11 @@
 .ui-heading-detail { color: var(--muted-foreground); font-size: var(--text-caption); }
 
 /* A field row: its name muted at the row role (never uppercase), its value after it. */
-.ui-row[data-field] > .ui-label { color: var(--muted-foreground); }
-.ui-row[data-field] > small { color: color-mix(in oklch, var(--foreground), transparent var(--tone-quiet)); font-family: inherit; font-size: var(--text-row); }
+/* A field row reads as its section's title (a slider's, the plus menu's PROFILE and EFFORT): the name in the label's
+   voice, its value in the text's, quiet, and a small chevron -- the row that unfolds the section's reading under it. */
+.ui-row[data-field] > .ui-label { color: var(--muted-foreground); font: var(--label-weight) var(--label-size)/var(--leading-text) var(--label-face); letter-spacing: var(--label-tracking); text-transform: var(--label-case); }
+.ui-row[data-field] > small { color: color-mix(in oklch, var(--foreground), transparent var(--tone-quiet)); font: var(--weight-rest) var(--text-caption)/var(--leading-row) var(--font-sans); }
+.ui-row[data-field] > .ui-chevron { width: var(--icon-xs); height: var(--icon-xs); }
 
 /* An item's detail: a second line under its label (a route's address). */
 .ui-row > .ui-label[data-stacked] { display: flex; flex-direction: column; }
