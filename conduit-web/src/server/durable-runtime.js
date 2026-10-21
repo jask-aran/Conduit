@@ -138,6 +138,32 @@ export class DurableRuntime {
     this.waiters?.get(conversationId)?.(device);
   }
 
+  /**
+   * What a conversation's calls on a device ask before waiting for it: whether
+   * the user chose to go on without it (decision 21). That holds until the
+   * device is back; the thread keeps its owner.
+   */
+  excuseFor(conversationId, nodeId) {
+    const key = `${conversationId} ${nodeId}`;
+    const entry = () => {
+      this.excuses ||= new Map();
+      if (!this.excuses.has(key)) this.excuses.set(key, { controller: new AbortController(), excused: false, name: null });
+      return this.excuses.get(key);
+    };
+    return { excused: () => entry().excused, signal: () => entry().controller.signal, name: () => entry().name };
+  }
+
+  /** Go on without a device: its waiting calls end, and later ones answer at once that it is unavailable. */
+  excuse(conversationId, device) {
+    const key = `${conversationId} ${device.id}`;
+    this.excuseFor(conversationId, device.id).signal();
+    const entry = this.excuses.get(key);
+    if (entry.excused) return;
+    Object.assign(entry, { excused: true, name: device.name });
+    entry.controller.abort();
+    this.nodeHub?.once(`online:${device.id}`, () => { if (this.excuses.get(key) === entry) this.excuses.delete(key); });
+  }
+
   waitFor(conversationId, onWait) {
     (this.waiters ||= new Map()).set(conversationId, onWait);
     return () => { if (this.waiters.get(conversationId) === onWait) this.waiters.delete(conversationId); };
@@ -186,7 +212,7 @@ export class DurableRuntime {
           if (nodeId && (!place || !this.nodeHub)) throw new Error("This conversation's device folder is not known; open it from its workspace again");
           if (nodeId) {
             return new RemoteExecutionEnv({ hub: this.nodeHub, nodeId, place, cwd,
-              onWait: (device) => this.emitWaiting(conversationId, device) });
+              onWait: (device) => this.emitWaiting(conversationId, device), excuse: this.excuseFor(conversationId, nodeId) });
           }
           return new NodeExecutionEnv({ cwd: cwd || process.cwd(), shellEnv });
         },

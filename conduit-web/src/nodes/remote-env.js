@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import { withAbortSignal } from "@earendil-works/chord/context";
 import { err, ExecutionError, FileError } from "@earendil-works/pi-durable/env";
 import { decode, encode, HANDLE_METHODS, METHOD_GRANTS } from "./protocol.js";
 
@@ -20,7 +21,9 @@ const ACTIONS = new Set(Object.entries(METHOD_GRANTS)
  * action id, which the device answers from its receipt -- the command having
  * kept running meanwhile, its output resumed where it broke off. Only a
  * device that restarted meanwhile cannot say; the outcome is reported as
- * unknown, never retried blind.
+ * unknown, never retried blind. A conversation told to go on without the
+ * device (`excuse`, decision 21) stops waiting: each call says the device is
+ * unavailable until it is back.
  */
 export class RemoteExecutionEnv {
   /**
@@ -28,8 +31,9 @@ export class RemoteExecutionEnv {
    * by id, and a path inside it. `cwd` is only how that place reads to people
    * and the model (the device's own path); nothing is sent by it.
    */
-  constructor({ hub, nodeId, place, cwd, onWait }) {
+  constructor({ hub, nodeId, place, cwd, onWait, excuse = null }) {
     this.hub = hub;
+    this.excuse = excuse;
     this.nodeId = nodeId;
     this.place = place;
     this.cwd = cwd;
@@ -45,6 +49,16 @@ export class RemoteExecutionEnv {
     const action = target === "env" && ACTIONS.has(method) ? `a_${crypto.randomUUID()}` : null;
     // Which run of the device took the action, and the next event it owes.
     let boot;
+    const unavailable = () => {
+      // One the device had already taken may have run on there: say so.
+      const message = `${this.excuse.name() || "This device"} is unavailable: the user chose to continue without it`
+        + `${boot !== undefined ? "; whether this one finished there is unknown" : ""}. `
+        + "Do not try it again in this turn; say what is left to do there.";
+      return err(method === "exec" ? new ExecutionError("unknown", message) : new FileError("unknown", message));
+    };
+    if (this.excuse?.excused()) return unavailable();
+    // Waiting for the device ends when the user goes on without it, as well as when the turn stops.
+    const waiting = this.excuse ? withAbortSignal(this.excuse.signal(), context) : context;
     let from = 0;
     const heard = action ? (event) => {
       if (event.seq < from) return;
@@ -54,10 +68,11 @@ export class RemoteExecutionEnv {
     for (;;) {
       try {
         const value = await this.hub.call(this.nodeId,
-          { target, method, args: encode(args), cwd: this.place, ...(action ? { action, from } : {}) }, context,
+          { target, method, args: encode(args), cwd: this.place, ...(action ? { action, from } : {}) }, waiting,
           { onEvent: heard, onWait: this.onWait, ...(action ? { onSent: (sent) => { boot ??= sent; }, ...(boot !== undefined ? { boot } : {}) } : {}) });
         return decode(value, { FileError, ExecutionError, handle: (ref) => this.handle(ref) });
       } catch (error) {
+        if (this.excuse?.excused() && !context.abortSignal?.aborted) return unavailable();
         if (error?.interrupted && target === "env" && RETRY_ON_RECONNECT.has(method) && !context.abortSignal?.aborted) continue;
         // A device that keeps receipts is asked what became of the action; one without them, or restarted, cannot say.
         if (error?.interrupted && action && boot && !context.abortSignal?.aborted) continue;

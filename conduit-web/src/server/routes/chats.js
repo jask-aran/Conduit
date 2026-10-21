@@ -194,20 +194,22 @@ export function registerChatRoutes(app, {
       if (!project) return response.status(404).json({ error: "project_not_found" });
       await lifecycle.withProjects([project.id], async () => {
         await projects.validate(project);
-        // A device's folder takes the Conduit runtime, or a harness installed on
-        // that device (plan decision 5); without a profile named, the runtime.
-        if (project.nodeId && !request.body?.profileId) request.body = { ...request.body, profileId: "conduit-runtime" };
+        // What the workspace's place runs (src/place.js): on the head, what is
+        // installed here; on a device, its own harnesses and the durable agent.
+        // Without a profile named, a chat takes the default where it runs, else the durable agent.
+        const can = await backends.capabilities?.(project);
+        const offered = (implementation) => !can || can.harnesses.includes(implementation);
+        if (!request.body?.profileId && !offered("conduit_pi")) request.body = { ...request.body, profileId: "conduit-runtime" };
         const selectedProfile = request.body?.profileId ? profileFor(request.body.profileId) : null;
-        const implementation = selectedProfile?.agent.implementation;
-        if (project.nodeId && implementation !== "conduit-runtime"
-          && !(await nodeHub?.get(project.nodeId))?.harnesses?.includes(implementation)) {
-          return response.status(409).json({ error: "harness_not_on_device",
-            message: `${selectedProfile?.label || "That harness"} is not installed on the device holding this workspace` });
+        // A profile that is not an agent's is a Conduit template: classic Pi.
+        const implementation = selectedProfile?.agent.implementation || "conduit_pi";
+        if (!offered(implementation)) {
+          return response.status(409).json({ error: "harness_not_here",
+            message: `${selectedProfile?.label || config.piTemplates.find((item) => item.id === request.body?.profileId)?.label || "That profile"} is not available on ${can.device.name}` });
         }
         if (selectedProfile) {
           const profileId = request.body.profileId;
-          // A device's workspace was checked against the device's harnesses above.
-          if ((selectedProfile.disabled && !project.nodeId) || !backends.adapters.has(selectedProfile.agent.implementation)) {
+          if ((!can && selectedProfile.disabled) || !backends.adapters.has(selectedProfile.agent.implementation)) {
             return response.status(409).json({ error: `${profileId}_unavailable` });
           }
           const chat = await registry.create(project, { backend: {
@@ -389,9 +391,11 @@ export function registerChatRoutes(app, {
       const selectedProfile = request.body?.profileId ? profileFor(request.body.profileId) : null;
       if (selectedProfile) {
         const profileId = request.body.profileId;
-        // On a device's workspace the launch checks the device has it.
-        if ((selectedProfile.disabled && !context.project?.nodeId) || !backends.adapters.has(selectedProfile.agent.implementation)) {
-          return response.status(409).json({ error: `${profileId}_unavailable` });
+        const can = await backends.capabilities?.(context.project);
+        if ((can ? !can.harnesses.includes(selectedProfile.agent.implementation) : selectedProfile.disabled)
+          || !backends.adapters.has(selectedProfile.agent.implementation)) {
+          return response.status(409).json({ error: `${profileId}_unavailable`,
+            ...(can ? { message: `${selectedProfile.label} is not available on ${can.device.name}` } : {}) });
         }
         const resident = backends.getByChatId(context.chat.id);
         if (resident) await backends.stop(resident.id);

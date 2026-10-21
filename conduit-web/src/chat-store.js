@@ -5,6 +5,7 @@ import { readSessionMetadata, readSessionParentSession, validateSessionFile } fr
 import { ensureChatTree } from "./owned-paths.js";
 import { harnessIdForImplementation, piBackendFor, withPiCompatibilityFields } from "./chat-backend.js";
 import { conduitPiSessionFile } from "./backend-session.js";
+import { placeOf } from "./place.js";
 
 const CHAT_ID = /^[a-zA-Z0-9_-]{8,128}$/;
 const COMPLETED_ATTACHMENT = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}--.+$/i;
@@ -210,6 +211,8 @@ export class ChatStore {
           opaqueSession: piSessionFile,
         },
         modelThinkingLevels: modelThinkingLevelsFor(item),
+        // The device that owns the thread's work (decision 21); rows from before it was kept take their workspace's.
+        owner: typeof item.owner === "string" && item.owner ? item.owner : placeOf(project).device,
         createdAt,
         updatedAt: item.updatedAt || createdAt,
         lastUserMessageAt: item.lastUserMessageAt || sessionMetadata?.lastUserMessageAt || null,
@@ -397,6 +400,10 @@ export class ChatStore {
       runtime: backend?.protocol === "pi_rpc" || !backend ? this.runtimeFor({ runtime }, templateId, templateVersion) : null,
       backend,
       modelThinkingLevels: {},
+      // The device that owns the thread's work (plan decision 21): its
+      // workspace's, whoever typed; the head's for a chat in no workspace.
+      // It stays when the device is away; a move is what changes it.
+      owner: placeOf(project).device,
       createdAt: timestamp,
       updatedAt: timestamp,
       lastUserMessageAt: null,
@@ -466,6 +473,7 @@ export class ChatStore {
       "runtime",
       "backend",
       "modelThinkingLevels",
+      "owner",
       "updatedAt",
       "lastUserMessageAt",
       "lastAssistantCompletedAt",
@@ -546,6 +554,7 @@ export class ChatStore {
       else throw error;
     }
     chat.projectId = targetProject.id;
+    chat.owner = placeOf(targetProject).device;
     chat.updatedAt = new Date(this.now()).toISOString();
     await this.flush();
     return chat;
