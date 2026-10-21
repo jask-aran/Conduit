@@ -13,6 +13,7 @@ export { haptic, type Haptic } from "./haptics";
 export * from "./controls";
 export * from "./frost";
 export * from "./popover";
+export * from "./reading";
 export * from "./nav";
 export * from "./dashboard";
 export * from "./pane";

@@ -85,7 +85,7 @@ export function ChatHeader(props: {
     pill={<Show when={!props.appDashboard} fallback={<HeaderPill label={props.title} icon={<HarnessMark id="conduit" />} />}>
       <Menu modal={false} placement="bottom" onOpenChange={(open) => { if (!open) setDetailsOpen(false); }}>
         <MenuControl as={HeaderPill} opens label={props.title} icon={placeMark()} aria-label={`${moreLabel()}: ${props.title}`} data-header-more="" />
-        <MenuContent steady>
+        <MenuContent width="md" unfolds>
           <MenuSection>
             <MenuRow icon={<ShareIcon />} onSelect={props.onShare}>Share</MenuRow>
             <Show when={props.onRename}>

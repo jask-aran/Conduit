@@ -6,8 +6,8 @@ import { type Density, type Motion, hovers, motionOf, moveCursor } from "./share
 
 /** under: a phone's submenu is open as a panel over it, so it dims and takes no taps. */
 /** wide: a readout rather than a list, at a measure of its own (the context breakdown). */
-/** steady: for a menu whose rows open in place (the chat menu): as wide as its cap from the start, and as tall as
- *  what is open, up to the room it has, rather than scrolling. */
+/** unfolds: its rows unfold -- open in place, the menu growing with them (Expand; the chat menu's Context, the gauge's
+ *  parts): as wide as its cap from the start, and as tall as what is open, up to the room it has, before it scrolls. */
 /** A measure (Foundations · Space): a popover's width or height cap. */
 export type Measure = "xs" | "sm" | "md" | "lg" | "xl" | "2xl";
 /**
@@ -15,10 +15,10 @@ export type Measure = "xs" | "sm" | "md" | "lg" | "xl" | "2xl";
  * default (--menu-width-cap, --menu-height-cap) -- and the room its host leaves it (--menu-room: the adapter gives
  * it Kobalte's, inside the safe area); past that it scrolls. width, height: this popover's own caps, in a measure.
  */
-export function Menu(props: JSX.HTMLAttributes<HTMLDivElement> & { density?: Density; motion?: Motion; under?: boolean; wide?: boolean; steady?: boolean; width?: Measure; height?: Measure }) {
-  const [, rest] = splitProps(props, ["class", "density", "motion", "under", "wide", "steady", "width", "height", "children", "style"]);
+export function Menu(props: JSX.HTMLAttributes<HTMLDivElement> & { density?: Density; motion?: Motion; under?: boolean; wide?: boolean; unfolds?: boolean; width?: Measure; height?: Measure }) {
+  const [, rest] = splitProps(props, ["class", "density", "motion", "under", "wide", "unfolds", "width", "height", "children", "style"]);
   const caps = () => ({ ...(props.width ? { "--menu-width": `var(--measure-${props.width})` } : {}), ...(props.height ? { "--menu-height": `var(--measure-${props.height})` } : {}), ...(typeof props.style === "object" ? props.style : {}) });
-  return <div role="menu" class={cn("ui-frost ui-menu", props.class)} onPointerOver={moveCursor} {...rest} style={caps()} data-wide={props.wide ? "" : undefined} data-steady={props.steady ? "" : undefined} data-fits="" data-density={props.density} data-surface="frost" data-lift="raised" data-under={props.under ? "" : undefined} {...motionOf(props.motion)}>{props.children}</div>;
+  return <div role="menu" class={cn("ui-frost ui-menu", props.class)} onPointerOver={moveCursor} {...rest} style={caps()} data-wide={props.wide ? "" : undefined} data-unfolds={props.unfolds ? "" : undefined} data-fits="" data-density={props.density} data-surface="frost" data-lift="raised" data-under={props.under ? "" : undefined} {...motionOf(props.motion)}>{props.children}</div>;
 }
 
 /** A menu's section: a list of items (the default) or a slider, with an optional title and a note beside it.
