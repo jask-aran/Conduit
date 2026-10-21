@@ -14,16 +14,16 @@ import type { Motion } from "./shared";
  */
 /** takeover: a card Rider (the question) that takes the composer's place: the composer drops out of the pane but
  *  keeps its room, and the card rises into the slot. */
-export function DesktopComposer(props: { riders?: JSX.Element; takeover?: JSX.Element; listening?: boolean; level?: number; class?: string; children: JSX.Element }) {
+export function DesktopComposer(props: { riders?: JSX.Element; takeover?: JSX.Element; class?: string; children: JSX.Element }) {
   const takeover = children(() => props.takeover);
   return <div class="ui-composer-slot ui-composer-width" data-taken={takeover() ? "" : undefined}>
-    <div class="ui-composer-stack">{props.riders}<div class={cn("ui-frost ui-desktop-composer", props.class)} data-surface="frost" data-lift="rest">
-      <Aura on={props.listening} level={props.level} />{props.children}</div></div>{takeover()}</div>;
+    <div class="ui-composer-stack">{props.riders}<div class={cn("ui-frost ui-desktop-composer", props.class)} data-surface="frost" data-lift="rest">{props.children}</div></div>{takeover()}</div>;
 }
-/** The voice while dictating, riding just over the composer: a PillWave across a wave Rider. The words go into the
- *  field as they come. levels: the waveform's history (0-1); gain: how much it is lifted. */
-export const VoiceRider = (props: { levels: number[]; gain?: number; motion?: Motion }) =>
-  <Rider label="Listening" layout="wave" motion={props.motion}><PillWave levels={props.levels} gain={props.gain} /></Rider>;
+/** The voice while dictating, riding just over the composer: a PillWave across a wave Rider, an Aura glowing under it
+ *  as under a phone's voice track. The words go into the field as they come. levels: the waveform's history (0-1);
+ *  gain: how much it is lifted; level: the voice now (0-1), which the Aura follows. */
+export const VoiceRider = (props: { levels: number[]; gain?: number; level?: number; motion?: Motion }) =>
+  <Rider label="Listening" layout="wave" motion={props.motion}><Aura on level={props.level} /><PillWave levels={props.levels} gain={props.gain} /></Rider>;
 /** The composer's field slot: where its TextArea (or the app's, with its behaviour) sits, padded by the composer. */
 /** A toolbar picker: a small ghost button showing what is picked -- a mark, the value, a quieter second value -- and a chevron.
  *  Muted as a setting; subject: what the message goes to (the model), at full weight. */

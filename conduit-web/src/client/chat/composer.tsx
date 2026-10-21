@@ -751,12 +751,12 @@ export function Composer(props: {
   // What the agent is blocked on: on a desktop it takes the composer's place; on a phone it rides over the field.
   const question = () => <Show when={props.chat.hostUiRequests().length}><HostUiRequests requests={props.chat.hostUiRequests()} onRespond={props.chat.respondHostUi} onStop={() => props.chat.stop()} /></Show>;
   const stopButton = () => <LibraryButton variant="ghost" size="icon-sm" aria-label="Stop response" onClick={props.chat.stop}><Show when={props.chat.stopping()} fallback={<StopGlyph />}><Spinner /></Show></LibraryButton>;
-  // Dictating, the voice rides over the composer and an Aura glows under it, as a phone's capsule does; the words go
-  // into the field as they come. The agent's doing reads in the transcript, as on a phone.
+  // Dictating, the voice rides over the composer on its Aura, as a phone's track does; the words go into the field as
+  // they come. The agent's doing reads in the transcript, as on a phone.
   const listening = () => ["starting", "listening"].includes(dictationState());
   const voice = createLeaving(listening, (on) => on, () => "fade");
-  const desktop = () => <DesktopComposer takeover={question()} listening={listening()} level={Math.min(1, dictationWaveform.level() * 2.5)}
-    riders={<>{riders()}<Show when={voice.value()}><VoiceRider levels={dictationWaveform.history()} gain={2.5} motion={riderMotion(voice.leaving())} /></Show></>}>
+  const desktop = () => <DesktopComposer takeover={question()}
+    riders={<>{riders()}<Show when={voice.value()}><VoiceRider levels={dictationWaveform.history()} gain={2.5} level={Math.min(1, dictationWaveform.level() * 2.5)} motion={riderMotion(voice.leaving())} /></Show></>}>
     <ComposerField>{field()}</ComposerField>
     <Toolbar ref={toolbarRef}
       start={<>

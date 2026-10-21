@@ -27,8 +27,6 @@
    It never shrinks past its pane: min(.., 100%), so no breakpoint is needed. */
 .ui-composer-width { width: min(var(--composer-width, var(--reading-width)), 100%); margin-inline: auto; }
 .ui-frost.ui-desktop-composer { position: relative; display: block; width: 100%; border-radius: var(--cmp-radius); padding: 0; }
-/* Listening, an Aura glows under its field and toolbar, fainter than a pill's: the composer is a large surface. */
-.ui-desktop-composer > .ui-aura { z-index: -1; --aura-strength: var(--opacity-faint); }
 .ui-composer-field { position: relative; }
 /* The composer pads its TextArea and bounds its height (the app pins an empty
    field's height with !important; the composer's token wins it back). */
