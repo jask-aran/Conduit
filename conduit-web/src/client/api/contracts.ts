@@ -95,6 +95,8 @@ export interface Project {
   path?: string;
   workingRoot: string;
   externalPath?: string;
+  /** A folder a paired device shares; its path is that device's. */
+  nodeId?: string | null;
   state?: "ready" | "cloning";
   cloneOperationId?: string | null;
   createdAt?: string;

@@ -107,7 +107,9 @@ export async function buildProjectDashboard({
 
   let git = null;
   let changes = [];
-  if (isWorkspace(project)) {
+  // A device's folder is not on this machine: no Git or recent files from here.
+  const local = !project.nodeId;
+  if (local && isWorkspace(project)) {
     try {
       const overview = await inspectWorkspace(project.workingRoot, { signal });
       if (overview.repository) {
@@ -167,7 +169,7 @@ export async function buildProjectDashboard({
     changes,
     // Uncommitted changes when there are any; otherwise what was written to
     // the folder lately.
-    recentFiles: changes.length ? [] : await listRecentFiles(project.workingRoot),
+    recentFiles: changes.length || !local ? [] : await listRecentFiles(project.workingRoot),
     recentChats,
   };
 }
