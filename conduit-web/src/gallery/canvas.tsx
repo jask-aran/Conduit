@@ -12,7 +12,10 @@ import { TypeLens } from "./type-lens";
 // The gallery is all library: its rules that the app keeps to library pieces (no focus ring) hold on the whole page.
 document.documentElement.setAttribute("data-library", "");
 import { applyFaces, applyScale, foundationFamilies } from "./foundations";
-import { libraryFamilies, overlayViews, type Atom, type OverlayView } from "./library";
+import { libraryFamilies } from "./library";
+import { overlayViews, type OverlayView } from "./pages/overlay";
+import { type Atom } from "./model";
+import { PageApi, PageUsage, PageUsedIn } from "./page";
 
 /*
  * Components v2 (components/ui) on the left, by family: the base piece, its
@@ -92,7 +95,7 @@ function Canvas() {
   const phoneFrame = () => document.querySelector<HTMLIFrameElement>('iframe[title="Phone"]');
   const openOnPhone = (view: OverlayView | null) => { setPhoneOverlay(view); phoneFrame()?.contentWindow?.postMessage({ galleryOverlay: view }, location.origin); };
   addEventListener("message", (event) => { if (event.origin === location.origin && event.data?.galleryOverlayClosed) setPhoneOverlay(null); });
-  // One family at a time, picked from the rail: the foundations, the materials, the pieces, then what the app composes from them.
+  // One page at a time, picked from the rail: the foundations, then each component, then the blocks composed from them.
   const families = [...foundationFamilies, ...libraryFamilies];
   const stored = (() => { try { return localStorage.getItem("gallery:family"); } catch { return null; } })();
   const [current, setCurrent] = createSignal(families.find((family) => family.title === stored)?.title ?? libraryFamilies[0]!.title);
@@ -109,7 +112,11 @@ function Canvas() {
   const pickSurface = stage(setSurface, "gallery:stage-surface"), pickDensity = stage(setStageDensity, "gallery:stage-density");
   // A piece for one layout only keeps it on a staged page.
   const staged = (atom: Atom): Density => atom.scope === "both" ? stageDensity() : atom.scope;
-  const rail = RAILS.map((label) => [label, families.filter((family) => (family.rail ?? "Pieces") === label)] as const);
+  // Foundations keep their authored order (type first); components and blocks are A–Z, as a component index is.
+  const rail = RAILS.map((label) => {
+    const listed = families.filter((family) => (family.rail ?? "Components") === label);
+    return [label, label === "Foundations" ? listed : [...listed].sort((a, b) => a.title.localeCompare(b.title))] as const;
+  });
   const update = (css: string) => {
     setTune(css);
     try { localStorage.setItem(TUNE_KEY, css); } catch { /* private window */ }
@@ -162,10 +169,12 @@ function Canvas() {
             <For each={["desktop", "phone"] as Density[]}>{(value) => <button type="button" aria-pressed={stageDensity() === value} onClick={() => pickDensity(value)}>{value === "desktop" ? "Desktop" : "Phone"}</button>}</For>
           </div>
         </div></Show>
+        <Show when={family.usage}>{(code) => <PageUsage code={code()} />}</Show>
         <For each={family.groups}>{(group) => <>
           <Show when={group.title}><h3 class="g-heading">{group.title} <small>{group.note}</small></h3></Show>
           <div class="g-grid g-dense"><For each={group.atoms}>{(atom) => <Piece atom={atom} fixed={group.staged ? staged(atom) : group.layout} surface={group.staged === true ? surface() : undefined} />}</For></div>
         </>}</For>
+        <Show when={family.api?.length}><PageApi names={family.api!} /><PageUsedIn names={family.api!} /></Show>
       </section>}</For>
     </section>
     <aside class="g-right">
@@ -201,8 +210,8 @@ function PhoneOverlay() {
   </div>}</Show>;
 }
 
-/** The rail's tiers, in order; a family without one is a piece. */
-const RAILS = ["Foundations", "Materials", "Pieces", "In the app"] as const;
+/** The rail's tiers, in order; a page without one is a component. */
+const RAILS = ["Foundations", "Components", "Blocks"] as const;
 export function mount(frame: string | null) {
   const root = document.getElementById("root")!;
   applyFaces(document);

@@ -1,6 +1,6 @@
 import { createSignal, For, onMount } from "solid-js";
 import { IDENTITY_COLOURS, PALETTE_USES, PALETTES, paletteColour, type Palette } from "@/components/ui/palettes";
-import { lib, type Family } from "./library";
+import { lib, type Family } from "./model";
 
 /* Palettes (components/ui/palettes.ts, styles/palettes.css): each named palette once, by its own names; then each use
    and the palette colour every one of its tokens takes, found by matching computed values, so the gallery holds no

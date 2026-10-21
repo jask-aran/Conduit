@@ -1,13 +1,14 @@
 import { createSignal, For, onCleanup, onMount, Show, type JSX } from "solid-js";
-import { ArrowUpIcon, CameraIcon, CopyIcon, FolderIcon, MicIcon, MonitorIcon, PaperclipIcon, PlusIcon, SettingsIcon, ShareIcon, Trash2Icon } from "lucide-solid";
+import { ArrowUpIcon, CameraIcon, FolderIcon, MicIcon, MonitorIcon, PaperclipIcon, PlusIcon, SettingsIcon, Trash2Icon } from "lucide-solid";
 
-import { ServerControl, Reading, ReadingStats, ReadingStat, HeaderPill, Expand, Aura, Orb, settledOrbRate, PLAIN_SPHERE, SPUTTERING_SPHERE, ORBITS_TRAILED, type ModeFrame, type OrbState, Slider, Segmented, Spinner, StatusDot, Preview, Bubble, Button, Frost, HeadingSection, Input, Item, Keycap, Menu, NavRow, Overlay, OverlayBar, PillButton, PillField, PillGroup, Section, SelectTrigger, TextArea, Toolbar } from "@/components/ui";
-import { px, InUse, style, bg, fg, edge, rounding, tall, icon, FormTable, form, type Mark, type FormRow } from "./specs";
-import { resolvePreset } from "thinking-orbs/engine";
+import { ServerControl, Reading, ReadingStats, ReadingStat, HeaderPill, Expand, Aura, Slider, Segmented, Preview, Bubble, Button, Frost, HeadingSection, Item, Keycap, Menu, NavRow, Overlay, OverlayBar, PillButton, PillField, PillGroup, Section, Toolbar } from "@/components/ui";
+import { px, InUse, style, bg, fg, edge, rounding, tall, icon, form, type Mark } from "./specs";
+
 import { IconsFoundation } from "./icons";
 import { HapticsFoundation } from "./haptics";
 import { paletteFamilies } from "./palettes";
-import { lib, Levels, SegmentedCount, SegmentedIcons, SegmentedText, SwitchDemo, type Family } from "./library";
+import { lib, type Family } from "./model";
+
 import "katex/dist/katex.min.css";
 
 /*
@@ -373,61 +374,6 @@ const RADII: TokenGroup[] = [
  * Controls: what sits on any surface. A surface sets --tint (its lines and washes) and
  * --well (the fill under an input or a secondary button); a control reads only those.
  */
-const controls = () => <>
-  <div class="g-scene-row"><Button variant="ghost" outline size="sm">Cancel</Button><Button outline size="sm">Save</Button><Button variant="secondary" size="sm">Browse…</Button></div>
-  <Input value="Lorem ipsum file" />
-  <SegmentedText />
-  <div class="g-scene-row"><Keycap>Ctrl</Keycap><Keycap>K</Keycap></div>
-</>;
-const controlsScene = () => <div class="g-scene-stack">
-  <div class="g-surface g-scene-surface g-scene-ground" data-surface="ground">{controls()}</div>
-  <Frost lift="raised" class="g-surface g-scene-surface g-scene-frost">{controls()}</Frost>
-</div>;
-const none = (colour: string) => colour === "rgba(0, 0, 0, 0)" ? "none" : colour;
-const onSurface = (where: "ground" | "frost", what: string, selector: string, read: Mark["read"]): Mark => ({ selector: `.g-scene-${where} ${selector}`, label: `${where}: ${what}`, read: (el) => none(read(el)) });
-const CONTROL_MARKS: Mark[] = (["ground", "frost"] as const).flatMap((where) => [
-  onSurface(where, "a secondary button's line (--tint)", ".ui-button[data-variant='secondary']", edge),
-  onSurface(where, "an input's well (--well)", ".ui-input", bg),
-  onSurface(where, "the segmented's line and thumb (--tint)", ".ui-seg", (el) => bg(el.querySelector<HTMLElement>(".ui-seg-thumb") ?? el)),
-  onSurface(where, "a keycap (--tint)", ".ui-keycap", bg),
-]);
-
-const BUTTONS: FormRow[] = [
-  form("primary", "filled in the text colour", () => <Button>Start</Button>, "<Button>", "fill --foreground · text --background"),
-  form("primary · outline", "a line in the text colour", () => <Button outline>Save</Button>, "<Button outline>", "line and text --foreground · --tint washed"),
-  form("secondary", "the surface's well inside a --tint line (over frost, no well: the same as ghost · outline)", () => <Button variant="secondary">Browse…</Button>, '<Button variant="secondary">', "fill --well · line --tint · --tint washed"),
-  form("ghost", "text until washed", () => <Button variant="ghost">Skip</Button>, '<Button variant="ghost">', "nothing · --tint washed"),
-  form("ghost · outline", "a --tint hairline, nothing inside", () => <Button variant="ghost" outline>Cancel</Button>, '<Button variant="ghost" outline>', "line --tint · --tint washed"),
-  form("destructive", "filled red", () => <Button variant="destructive">Delete</Button>, '<Button variant="destructive">', "fill --destructive · text --foreground"),
-  form("destructive · outline", "a line in red", () => <Button variant="destructive" outline>Delete chat</Button>, '<Button variant="destructive" outline>', "line and text --destructive · --destructive at 15% washed"),
-  form("sizes", "sm at a bar's end, the default, lg where one action is the page's", () => <div class="g-row"><Button size="sm">Small</Button><Button>Default</Button><Button size="lg">Large</Button></div>, 'size="sm" | "lg"', "--control-sm, --control, --control-lg tall · lg --text-body, --space-2xl in"),
-  form("icon", "an icon alone, in any form", () => <div class="g-row"><Button variant="ghost" size="icon-sm" aria-label="Copy"><CopyIcon /></Button><Button variant="ghost" size="icon-sm" aria-label="Share"><ShareIcon /></Button><Button variant="secondary" size="icon" aria-label="Add"><PlusIcon /></Button></div>, 'size="icon-sm" | "icon" | "icon-xs"', "1.875 / 2.25 / 1.5 units square · icon --u-icon"),
-];
-const BUTTON_ALL = "every form: --control tall · corner --radius-control · --text-row at --weight-strong";
-const SEGMENTED: FormRow[] = [
-  form("text", "two to four named peers: a settings choice; choosing a side is felt on a phone (haptic select)", () => <SegmentedText />, "<Segmented options>", "track: line --tint, corner --radius-control · thumb --tint, corner --radius-control − 2px · labels --text-row --weight-lift, --muted-foreground, chosen --foreground"),
-  form("counts", "a filter, each choice with its count: the dashboard's", () => <SegmentedCount />, "options: { count }", "count --text-caption --font-data, --muted-foreground"),
-  form("icons", "icons alone: the sidebar's sections", () => <SegmentedIcons />, "<Segmented icons>", "2.25-unit squares · icon 1.125 × --u-icon"),
-  form("small", "at a bar's end: chat search's sort", () => <SmallSegmented />, 'size="sm"', "labels --text-caption · --control-xs tall"),
-];
-const KEYCAPS: FormRow[] = [
-  form("key", "a key or a chord beside a row, muted", () => <div class="g-row"><Keycap>Ctrl</Keycap><Keycap>K</Keycap></div>, "<Keycap>K</Keycap>", "--control-2xs tall · corner --radius-inset · fill --tint · --text-label --font-label --weight-lift · --muted-foreground"),
-  form("on the cursor", "on the row the cursor is on, white", () => <Menu><Section><Item keys={["Ctrl", "K"]} active>Command palette</Item></Section></Menu>, "<Item keys={[…]} active>", ".ui-row[data-highlighted] .ui-keycap · --foreground"),
-  form("leading", "the leader's key, at the row's start: white in the leader", () => <Menu class="ui-leader"><Section><Item keysFirst keys={["A"]}>Attach files</Item></Section></Menu>, "<Item keysFirst keys={[…]}> in <Leader>", ".ui-leader .ui-keys[data-first] · --foreground"),
-  form("editable", "Settings · Shortcuts: pressed to record another, × clears it", () => <Keycap label="Ctrl K" onClick={() => {}} onRemove={() => {}}>Ctrl K</Keycap>, "<Keycap onClick onRemove>", "1.5625 units tall · --text-caption · --foreground · × --muted-foreground behind a --tint line · each part --tint washed"),
-  form("pressable", "pressed to record another, not cleared here", () => <Keycap label="Ctrl Shift K" onClick={() => {}}>Ctrl Shift K</Keycap>, "<Keycap onClick>", "as editable, without the ×"),
-];
-// A folder's row and its rows, toggled: the sidebar's NavFolder and chat search's folders slide the same way.
-function ExpandDemo() {
-  const [open, setOpen] = createSignal(true);
-  return <div class="g-expand" data-surface="frame">
-    <Button variant="secondary" size="sm" aria-expanded={open()} onClick={() => setOpen(!open())}>{open() ? "Shut" : "Open"} Japan</Button>
-    <Expand open={open()}><For each={["Gassho house stays", "Six people, two nights", "Getting to Shirakawa-go"]}>{(title) => <p class="g-expand-row">{title}</p>}</For></Expand>
-    <p class="g-expand-row g-expand-after">The next folder</p>
-  </div>;
-}
-function SmallSegmented() { const [value, setValue] = createSignal("recent"); return <Segmented size="sm" label="Sort" value={value()} onChange={setValue} options={[{ value: "recent", label: "Recent" }, { value: "relevant", label: "Relevant" }]} />; }
-
 /** A typeface in the library: a specimen, the weights shipped, where it comes from. */
 function Face(props: { family: string; weights?: number[]; sample?: string; source: string }) {
   return <div class="g-face">
@@ -540,37 +486,6 @@ function Scale() {
   </div>;
 }
 
-/* Orbs: one Orb, a list of animations, each a speed. */
-type OrbAnimation = { name: string; from: string; state: OrbState; frame?: ModeFrame; tint?: string; rate?: number; use: string };
-const ORB_ANIMATIONS: OrbAnimation[] = [
-  { name: "working", from: "thinking-orbs", state: "working", use: "Thinking: a turn with no tool running" },
-  { name: "composing", from: "thinking-orbs", state: "composing", use: "Writing: a turn writing its answer" },
-  { name: "weaving", from: "thinking-orbs", state: "weaving", use: "Reading a file" },
-  { name: "searching", from: "thinking-orbs", state: "searching", use: "Searching, fetching" },
-  { name: "solving", from: "thinking-orbs", state: "solving", use: "Running a command, a script, several tools, an unnamed tool" },
-  { name: "connecting", from: "thinking-orbs", state: "connecting", use: "A turn starting" },
-  { name: "listening", from: "thinking-orbs", state: "listening", use: "The mic, listening (PhoneComposer's Dictate)" },
-  { name: "ORBITS_TRAILED", from: "orb-frames", state: "working", frame: ORBITS_TRAILED, use: "Editing a file" },
-  { name: "PLAIN_SPHERE", from: "orb-frames", state: "working", frame: PLAIN_SPHERE, rate: settledOrbRate(false), use: "Done: a settled turn, turning slowly" },
-  { name: "SPUTTERING_SPHERE", from: "orb-frames", state: "working", frame: SPUTTERING_SPHERE, tint: "var(--destructive)", rate: settledOrbRate(true), use: "Interrupted or failed: the sphere sputtering, in --destructive" },
-  { name: "breathing", from: "thinking-orbs", state: "breathing", use: "not used" },
-  { name: "shaping", from: "thinking-orbs", state: "shaping", use: "not used" },
-];
-const speedOf = (a: OrbAnimation) => a.frame ? 1 : resolvePreset(a.state, 20).speed;
-const OrbAnimations = () => <table class="g-orb-table"><thead><tr><th>Animation</th><th>16 · 20 · 32px</th><th>Speed</th><th>Draws a second</th><th>Shows</th></tr></thead>
-  <tbody>{ORB_ANIMATIONS.map((a) => <tr><th>{a.name}<small>{a.from}</small></th>
-    <td><div class="g-orb-sizes">{[16, 20, 32].map((size) => <span style={{ width: `${size}px`, height: `${size}px` }}><Orb state={a.state} frame={a.frame} tint={a.tint} rate={a.rate} /></span>)}</div></td>
-    <td>{speedOf(a)}×</td><td>{a.rate ?? "every frame"}</td><td>{a.use}</td></tr>)}</tbody></table>;
-/** A change of animation as the Orb plays it: held a moment, then crossfaded, both still moving. */
-function OrbChange() {
-  const [pick, setPick] = createSignal(ORB_ANIMATIONS[0]!);
-  return <div class="g-orb-change"><span class="g-orb-big"><Orb state={pick().state} frame={pick().frame} tint={pick().tint} rate={pick().rate} /></span><div class="g-orb-picks">{ORB_ANIMATIONS.slice(0, 10).map((a) => <Button variant={pick() === a ? "secondary" : "ghost"} size="sm" onClick={() => setPick(a)}>{a.name}</Button>)}</div></div>;
-}
-const OrbHow = () => <ol class="g-orb-how">
-  <li><strong>The renderer</strong>: thinking-orbs' <code>paintFrame</code> draws a list of dots (position, size, depth, brightness) on a canvas, near dots larger and brighter.</li>
-  <li><strong>An animation</strong>: a frame function, (size, seconds) to dots, computed live each draw. thinking-orbs ships one per state, each a preset with a speed (how fast its time runs) and a few shape options; Conduit's own (orb-frames) are built from the engine's pieces and run at 1×.</li>
-  <li><strong>The player</strong> (Orb): one frame loop for every orb on the page; draws only on screen with the tab visible, at its rate if it has one; fills its box at the screen's pixel density; tints its dots; a change is held 250ms then crossfaded over 200ms; paused (or reduced motion) it is one still frame.</li>
-</ol>;
 export const foundationFamilies: Family[] = [
   { title: "Type", rail: "Foundations", note: "the text, top to bottom: the face each role takes, with a switcher; the scale, each role as the library draws it and as it computes; then every face Conduit ships, and the system's own last. Type lens (the bar above) names every text on any page, the phone and desktop previews too, by these roles: hover one for its sizes, pick a role to see only it, and red dashed marks a combination with no role", groups: [
     { title: "Faces", note: "a token per role; the first option is foundations.css's default, a pick applies across the gallery", atoms: ROLES.map((role) => lib(`font-role${role.token}`, role.title, "both", "font", `${role.token} · foundations.css :root`, () => <Role role={role} />)) },
@@ -634,43 +549,10 @@ export const foundationFamilies: Family[] = [
   { title: "Haptics", rail: "Foundations", note: "what a touch that changes something feels like on a phone: five kinds, each a piece's own, so callers never fire them (components/ui/haptics.ts). Only a touch screen with nothing that hovers feels them", groups: [{ title: "Kinds", layout: "desktop", atoms: [
     lib("haptics", "Haptics", "phone", "haptics", "components/ui/haptics.ts · haptic(kind)", () => <HapticsFoundation />, "row"),
   ] }] },
-  { title: "Aura", rail: "Materials", note: "a field of colour behind a surface, made of numbers: each blob comes in from a direction in its hue, circles near that edge on its own period and breathes as it turns, so at rest the colours trade places; a level (0-1, the voice's) brightens them all and grows some while shrinking others. The mic's pill is filled with one while listening", groups: [{ title: "The field", layout: "desktop", atoms: [
+  { title: "Aura", rail: "Foundations", usage: `import { Aura } from "@/components/ui";
+
+<Aura on={listening()} level={level()} strength={0.6} />`, api: ["Aura"], note: "a field of colour behind a surface, made of numbers: each blob comes in from a direction in its hue, circles near that edge on its own period and breathes as it turns, so at rest the colours trade places; a level (0-1, the voice's) brightens them all and grows some while shrinking others. The mic's pill is filled with one while listening", groups: [{ title: "The field", layout: "desktop", atoms: [
     lib("motion-aura", "Aura", "both", "motion", "Aura · --aura-level · styles/pill.css .ui-aura", () => <AuraDemo />, "row"),
   ] }] },
-  { title: "Controls", stage: true, note: "what sits on any surface. A surface sets two values, --tint (its lines and washes) and --well (the fill under an input or an outline button), and a control reads only those; so each is drawn once, on the surface and at the density picked above", groups: [
-    { title: "In use", note: "the same controls on the ground and over frost: what each takes from the surface under it", layout: "desktop", atoms: [
-      lib("controls-inuse", "Controls in use", "both", "control", "Button · Input · Segmented · Keycap on [data-surface]", () => <InUse scene={controlsScene} marks={CONTROL_MARKS} />, "row"),
-    ] },
-    { title: "Button", note: "each form on each surface; outline draws primary, ghost or destructive as a line in its colour. Which form an action takes is the place's choice (Card · actions, the composer, a settings line), not the button's. Every form: 2.25 units tall, corner --radius-control, --text-row at --weight-strong", staged: "density", atoms: [
-      lib("button-forms", "Button · forms × surfaces", "both", "control", BUTTON_ALL, () => <FormTable rows={BUTTONS} on={["ground", "frost"]} />, "row"),
-    ] },
-    { title: "Segmented choice", note: "the frame too: the sidebar's sections", staged: "density", atoms: [
-      lib("segmented-forms", "Segmented · forms × surfaces", "both", "control", "Segmented icons size", () => <FormTable rows={SEGMENTED} on={["frame", "ground", "frost"]} />, "row"),
-    ] },
-    { title: "Keycap", note: "each form on each surface", staged: "density", atoms: [
-      lib("keycap-forms", "Keycap · forms × surfaces", "desktop", "control", "Keycap · Item keys", () => <FormTable rows={KEYCAPS} on={["ground", "frost"]} />, "row"),
-    ] },
-    { title: "Fields", staged: true, atoms: [
-      lib("input", "Input", "both", "control", "Input", () => <div class="g-field"><Input placeholder="Replace" /><Input value="Lorem ipsum file" /></div>),
-      lib("textarea", "TextArea", "both", "control", "TextArea: multi-line, grows with its lines, bare -- what holds it pads it", () => <div class="g-field"><TextArea placeholder="Type several lines…" /><TextArea value={"Lorem ipsum dolor sit amet,\nconsectetur adipiscing elit."} /></div>),
-      lib("select", "Select", "both", "control", "SelectTrigger bare", () => <div class="g-field"><SelectTrigger value="System default" /><div class="g-row"><span>Provider</span><SelectTrigger bare value="OpenAI" /></div></div>),
-    ] },
-    { title: "Small", staged: true, atoms: [
-      lib("slider", "Slider", "both", "control", "Slider", () => <div style={{ width: "240px" }}><Levels /></div>),
-      lib("switch", "Switch", "both", "control", "Switch", () => <SwitchDemo />),
-      lib("spinner", "Spinner", "both", "control", "Spinner", () => <Spinner />),
-      lib("status", "StatusDot", "both", "control", "StatusDot: a row's live state", () => <div class="g-row"><StatusDot label="Idle" tone="success" /><StatusDot label="Working" tone="active" spinning /><StatusDot label="Waiting on you" tone="warn" /><StatusDot label="Failed" tone="danger" /><StatusDot label="Unread" tone="unread" /><StatusDot label="Stopping" spinning /><StatusDot label="Idle (may be stale)" tone="success" stale /></div>),
-    ] },
-  ] },
-  { title: "Orbs", note: "one Orb, a list of animations, each with a speed. Aura (Materials) is the voice's colour field, not an orb", groups: [
-    { title: "How it draws", layout: "desktop", atoms: [lib("orb-how", "How it draws", "both", "orb", "thinking-orbs engine · orb-frames · Orb", () => <OrbHow />, "row")] },
-    { title: "Animations", note: "every animation the Orb plays, live at the sizes it is used at (a preview's 16px, a turn's 20px)", layout: "desktop", atoms: [lib("orb-animations", "Animations", "both", "orb", "<Orb state frame? tint? rate?>", () => <OrbAnimations />, "row")] },
-    { title: "Playing", note: "a change, and a still one", layout: "desktop", atoms: [
-      lib("orb-change", "A change", "both", "orb", "held 250ms, crossfaded over 200ms", () => <OrbChange />),
-      lib("orb-paused", "Paused", "both", "orb", "<Orb paused>: one still frame (and with reduced motion); a change is not faded", () => <span class="g-orb-big"><Orb state="working" paused /></span>),
-    ] },
-  ] },
-  { title: "Expand", note: "what opens in place under the row that owns it slides on its measured height, open and shut, over --duration-fold on --ease-fold, on the compositor: what follows slides on a transform and its rows are revealed by a clip that runs with them; the page is laid out once, at the start or the end. Just after a touch, the fold is felt on a phone (haptic fold); an overlay closing likewise (haptic dismiss). Shut, nothing is in the document. When the caller drops the rows at once (chat search rebuilds its list), the shut slides over a still of them", groups: [{ title: "Open and shut", layout: "desktop", atoms: [
-    lib("motion-expand", "Expand", "both", "motion", "components/ui/expand.tsx", () => <ExpandDemo />, "row"),
-  ] }] },
+
 ];

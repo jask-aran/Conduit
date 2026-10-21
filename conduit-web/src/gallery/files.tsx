@@ -10,7 +10,7 @@ import { Browser, BrowserLayout, BrowserSidebar, BrowserHeading, BrowserPlaces, 
 import { ListIcon } from "lucide-solid";
 import type { JSX } from "solid-js";
 import { FormTable, form, States } from "./specs";
-import { lib, type Family } from "./library";
+import { lib, type Family } from "./model";
 
 /*
  * Files and the editor (components/ui/file.tsx, viewer.tsx, editor.tsx): a file's header, body and status bar, the
@@ -107,7 +107,23 @@ const Assembled = (props: { compact?: boolean; details?: boolean }) => <div styl
 const Pane = (props: { children: JSX.Element }) => <div style={{ ...box(45), position: "relative", display: "flex", "flex-direction": "column", "min-height": "calc(12 * var(--u-space))" }}><BrowserMain>{props.children}</BrowserMain></div>;
 
 export const filesFamilies = (): Family[] => [
-  { title: "Files", note: "a file in a pane or the dock: its header (name, git letter, unsaved dot, actions and tools, the ⋯ they fold into, close), its body, and the status bar at its foot. Two files side by side share a viewer with a divider and a swap. The app measures the header and folds actions into the ⋯ lowest data-fold first; the tab row (Panes) replaces the name when a pane holds tabs", groups: [
+  { title: "Files", note: "a file in a pane or the dock: its header (name, git letter, unsaved dot, actions and tools, the ⋯ they fold into, close), its body, and the status bar at its foot. Two files side by side share a viewer with a divider and a swap. The app measures the header and folds actions into the ⋯ lowest data-fold first; the tab row (Panes) replaces the name when a pane holds tabs", rail: "Blocks",
+  usage: `import { FileViewer, FileView, FileHead, FileName, FileGit, FileDirty, FileActions, FileButton, StatusBar, StatusPicker, StatusText } from "@/components/ui/file";
+import { FileBody } from "@/components/ui/viewer";
+import { Icons } from "@/components/ui";
+
+<FileViewer><FileView focused>
+  <FileHead>
+    <FileName path="src/main.tsx" icon={<Icons.FileCode />} />
+    <FileGit status="M" /><FileDirty dirty={dirty()} />
+    <FileActions><FileButton label="Copy contents" onClick={copyFile}><Icons.Copy /></FileButton></FileActions>
+    <FileButton label="Close file" close onClick={closeFile}><Icons.Close /></FileButton>
+  </FileHead>
+  <FileBody editing>{editor()}</FileBody>
+  <StatusBar commands={<StatusPicker strong>Edit</StatusPicker>}><StatusText>TypeScript</StatusText></StatusBar>
+</FileView></FileViewer>`,
+  api: ["FileViewer", "FileView", "FileHead", "FileName", "FileGit", "FileDirty", "FileActions", "FileButton", "FileTools", "FileMore", "FileSuffix", "FileScope", "FileBody", "FileImage", "FileCard", "Button", "FileMedia", "StatusBar", "StatusPicker", "StatusText", "FileDivider", "FileSwap", "FileEmptySide", "FileEmpty", "FileChanges", "Comparison", "ComparisonContent", "CodeHost", "ComparisonSource", "TurnNavigation", "ComparisonCounts"],
+  groups: [
     { title: "Header and status bar", note: "each state set by hand", layout: "desktop", atoms: [
       lib("files-head", "FileHead · fitting", "both", "files", "components/ui/file.tsx", () => <FormTable rows={[
         form("FileHead · FileName · FileGit · FileDirty", "a modified file with unsaved changes: the git letter, then the dot", () => <div style={box(30)}><Head git="M" dirty /></div>, "<FileHead><FileName path icon /><FileGit status /><FileDirty dirty />…</FileHead>"),
@@ -139,7 +155,20 @@ export const filesFamilies = (): Family[] => [
       ]} on={["desktop", "phone"]} stacked />, "row"),
     ] },
   ] },
-  { title: "Editor", note: "the code surface a file's body holds (CodeMirror draws inside it): framed while editable, its find bar above, a line comment's popup over it, and a comparison's counts and turn steps in the status bar. The review's navigator (DiffShell) is the Panes family's Source control", groups: [
+  { title: "Editor", note: "the code surface a file's body holds (CodeMirror draws inside it): framed while editable, its find bar above, a line comment's popup over it, and a comparison's counts and turn steps in the status bar. The review's navigator (DiffShell) is the Panes family's Source control", rail: "Blocks",
+  usage: `import { CodeSurface, SearchBar, SearchField, SearchActions, CodeContent, CodeHost } from "@/components/ui/editor";
+import { FileButton } from "@/components/ui/file";
+import { Icons } from "@/components/ui";
+
+<CodeSurface editable>
+  <SearchBar>
+    <SearchField placeholder="Find" value={query()} onInput={(event) => setQuery(event.currentTarget.value)} />
+    <SearchActions><FileButton label="Close find" onClick={closeFind}><Icons.Close /></FileButton></SearchActions>
+  </SearchBar>
+  <CodeContent><CodeHost ref={mountEditor} /></CodeContent>
+</CodeSurface>`,
+  api: ["CodeSurface", "SearchBar", "SearchField", "SearchActions", "FileButton", "CodeContent", "CodeHost", "AnnotationPopup", "AnnotationInput", "AnnotationButton", "DiffShell", "SplitEdge", "DiffRail", "DiffBody", "PaneEmpty", "Comparison", "FileHead", "FileName", "FileScope", "FileTools", "ComparisonContent", "StatusBar", "ComparisonSource", "StatusPicker", "TurnNavigation", "StatusText", "ComparisonCounts"],
+  groups: [
     { title: "Surface", layout: "desktop", atoms: [
       lib("editor-surface", "CodeSurface · SearchBar · AnnotationPopup", "both", "editor", "components/ui/editor.tsx", () => <FormTable rows={[
         form("CodeSurface · CodeHost", "read-only, then editable: the hairline ring says you can type", () => <States states={["Read-only", "Editable"] as const}>{(state) => <div style={{ ...box(30), height: "calc(9 * var(--u-space))", display: "flex" }}><CodeSurface editable={state() === "Editable"}><CodeContent><CodeHost><Code /></CodeHost></CodeContent></CodeSurface></div>}</States>, "<CodeSurface editable><CodeContent><CodeHost /></CodeContent></CodeSurface>"),
@@ -157,7 +186,22 @@ export const filesFamilies = (): Family[] => [
       ]} on={["desktop"]} stacked />, "row"),
     ] },
   ] },
-  { title: "Browser", note: "the file browser (the Computer page and the folder picker): a sidebar of places beside a main column of toolbar, actions and the folder's entries, as tiles or details. Composed here from its pieces with made-up entries", groups: [
+  { title: "Browser", note: "the file browser (the Computer page and the folder picker): a sidebar of places beside a main column of toolbar, actions and the folder's entries, as tiles or details. Composed here from its pieces with made-up entries", rail: "Blocks",
+  usage: `import { Browser, BrowserLayout, BrowserSidebar, BrowserHeading, BrowserPlace, BrowserDivider, BrowserMain, BrowserToolbar, BrowserAddress, BrowserGrid, BrowserEntry } from "@/components/ui/browser";
+import { Icons } from "@/components/ui";
+
+<Browser sidebarWidth={sidebarWidth()}>
+  <BrowserLayout>
+    <BrowserSidebar><BrowserHeading>Locations</BrowserHeading><BrowserPlace onClick={goHome}><Icons.Home />Home</BrowserPlace></BrowserSidebar>
+    <BrowserDivider role="separator" aria-label="Resize locations sidebar" onPointerDown={resizeSidebar} />
+    <BrowserMain>
+      <BrowserToolbar><BrowserAddress value={path()} onChange={changePath} /></BrowserToolbar>
+      <BrowserGrid data-view="tiles"><BrowserEntry onDblClick={openFolder}><Icons.Folder /><span>Conduit</span></BrowserEntry></BrowserGrid>
+    </BrowserMain>
+  </BrowserLayout>
+</Browser>`,
+  api: ["Browser", "BrowserLayout", "BrowserSidebar", "BrowserHeading", "BrowserPlace", "BrowserPlaces", "BrowserDivider", "BrowserMain", "BrowserToolbar", "Button", "BrowserAddress", "BrowserSearch", "Input", "BrowserCount", "BrowserActions", "BrowserSummary", "BrowserSpacer", "BrowserGrid", "BrowserColumns", "BrowserEntry", "BrowserMark", "BrowserEmpty", "BrowserLoading", "BrowserError"],
+  groups: [
     { title: "Assembled", note: "the whole browser; compact is the folder picker's dialog form", layout: "desktop", atoms: [
       lib("browser-layout", "Browser · BrowserLayout · BrowserSidebar · BrowserMain", "desktop", "browser", "components/ui/browser.tsx", () => <FormTable rows={[
         form("Browser · BrowserLayout", "places at the left (BrowserHeading over BrowserPlace rows, workspaces in BrowserPlaces), the divider that resizes them, then the main column", () => <Assembled />, "<Browser sidebarWidth><BrowserLayout><BrowserSidebar /><BrowserDivider /><BrowserMain /></BrowserLayout></Browser>"),

@@ -41,6 +41,27 @@ function materialIconManifestPlugin() {
   };
 }
 
+function galleryApiPlugin() {
+  const id = "virtual:gallery-api";
+  return {
+    name: "conduit-gallery-api",
+    resolveId: (source) => source === id ? `\0${id}` : null,
+    async load(resolved) {
+      if (resolved !== `\0${id}`) return null;
+      const { buildGalleryApi } = await import("./scripts/gallery-api.mjs");
+      return `export default ${JSON.stringify(buildGalleryApi(import.meta.dirname))};`;
+    },
+    handleHotUpdate(context) {
+      const file = path.relative(import.meta.dirname, context.file).split(path.sep).join("/");
+      if (!file.startsWith("src/components/") && !file.startsWith("src/client/")) return;
+      const module = context.server.moduleGraph.getModuleById(`\0${id}`);
+      if (!module) return;
+      context.server.moduleGraph.invalidateModule(module);
+      return [...context.modules, module];
+    },
+  };
+}
+
 export default defineConfig(({ mode }) => {
   // `npm run gallery`: the component gallery, built like the app so it runs at the app's speed.
   const gallery = mode === "gallery";
@@ -57,6 +78,7 @@ export default defineConfig(({ mode }) => {
     plugins: [
       sharedGeometryCssPlugin(),
       materialIconManifestPlugin(),
+      gallery && galleryApiPlugin(),
       solid({ ssr: access }),
       !gallery && !access && accessPagePlugin(import.meta.filename),
       // Production-only installability: the client owns SW registration so

@@ -444,3 +444,16 @@ html, body { background: var(--frame, #08090a); color: var(--foreground); }
 .g-palette-chip figcaption { display: grid; min-width: 0; gap: 2px; }
 .g-palette-chip strong { font-size: 13px; }
 .g-palette-chip small { overflow: hidden; color: var(--muted-foreground); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+/* A page's Usage, API and Used in sections (page.tsx). */
+.g-page-section { display: grid; gap: 12px; margin: 24px 16px; }
+.g-page-section > .g-heading { margin: 0; }
+.g-api { display: grid; gap: 8px; padding: 16px 0; border-top: 1px solid var(--border); }
+.g-api h4 { display: flex; align-items: baseline; gap: 12px; margin: 0; font-size: 15px; }
+.g-api h4 small, .g-api-extends, .g-api-none { color: var(--muted-foreground); font-size: 12px; font-weight: 400; }
+.g-api p { max-width: 72ch; margin: 0; color: var(--muted-foreground); font-size: 13px; line-height: 1.5; }
+.g-api table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.g-api th { padding: 6px 12px 6px 0; color: var(--muted-foreground); font-weight: 500; text-align: left; border-bottom: 1px solid var(--border); }
+.g-api td { padding: 8px 12px 8px 0; vertical-align: top; border-bottom: 1px solid var(--border); }
+.g-api td:first-child code { color: var(--foreground); font-weight: 600; }
+.g-api td code { font-size: 12px; overflow-wrap: anywhere; }
+.g-used-in { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; font-size: 12px; }
