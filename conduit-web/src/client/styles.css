@@ -19,7 +19,6 @@
      geometry stays in real CSS pixels so scroll, fixed overlays, and popovers
      share one coordinate space. */
   --ui-scale: 1;
-  --panel-motion-duration: 160ms; --panel-motion-easing: ease;
 }
 
 * { box-sizing: border-box; }
@@ -145,7 +144,7 @@ svg.lucide { stroke-width: 2.4; }
 .attachment-copy small { color: var(--muted-foreground); }
 /* The commented lines, whole, with the part the comment covers picked out. */
 .chat-drop-overlay { position: absolute; inset: 0; z-index: 40; display: grid; place-items: center; pointer-events: none; background: color-mix(in oklch, var(--background), transparent 22%); backdrop-filter: blur(9.6px); }
-.chat-drop-overlay > div { padding: var(--space-xl) var(--space-2xl); border: var(--hairline) solid var(--border); border-radius: var(--radius-surface); background: var(--card); box-shadow: 0 14.4px 48px rgb(0 0 0 / 18%); }
+.chat-drop-overlay > div { padding: var(--space-xl) var(--space-2xl); border: var(--hairline) solid var(--border); border-radius: var(--radius-surface); background: var(--card); box-shadow: var(--lift-raised); }
 /* Decorative, deterministic meteor field for the entire chat main surface. */
 .chat-meteors { position: absolute; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; }
 
@@ -316,7 +315,7 @@ svg.lucide { stroke-width: 2.4; }
 .attachment-copy strong, .attachment-copy small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .attachment-copy small { color: var(--muted-foreground); }
 .chat-drop-overlay { position: absolute; inset: 0; z-index: 40; display: grid; place-items: center; pointer-events: none; background: color-mix(in oklch, var(--background), transparent 22%); backdrop-filter: blur(12px); }
-.chat-drop-overlay > div { background: var(--card); box-shadow: 0 18px 60px rgb(0 0 0 / 18%); }
+.chat-drop-overlay > div { background: var(--card); box-shadow: var(--lift-raised); }
 /* Decorative, deterministic meteor field for the entire chat main surface. */
 .chat-meteors { position: absolute; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; }
 
@@ -525,8 +524,8 @@ svg.lucide { stroke-width: 2.4; }
 .workspace-panel-overlay::after { right: calc(var(--space-md) + var(--space-2xl)); }
 .region-cue {
   position: fixed;
-  z-index: 73;
-  box-shadow: 0 0 0 200vmax rgb(0 0 0 / 18%);
+  z-index: var(--layer-cue);
+  box-shadow: 0 0 0 200vmax var(--dim-faint);
   pointer-events: none;
 }
 @media (--conduit-phone-layout) {

@@ -6,9 +6,9 @@
 .ui-code-surface:not([data-editable]) .cm-cursor { display: none; }
 .ui-code-content { position: relative; display: flex; min-width: 0; min-height: 0; flex: 1; overflow: hidden; }
 .ui-review-comment { border-radius: var(--radius-control); background: color-mix(in oklch, var(--warn), transparent 90%); box-shadow: inset var(--space-2xs) 0 0 color-mix(in oklch, var(--warn), transparent 55%); }
-.cm-tooltip.cm-tooltip-hover:has(.ui-review-tooltip) { border: var(--hairline) solid var(--border); border-radius: var(--radius-control); background: var(--popover); box-shadow: var(--shadow-md); }
+.cm-tooltip.cm-tooltip-hover:has(.ui-review-tooltip) { border: var(--hairline) solid var(--border); border-radius: var(--radius-control); background: var(--popover); box-shadow: var(--lift-rest); }
 .ui-review-tooltip { max-width: var(--measure-md); padding: var(--space-sm) var(--space-md); color: var(--popover-foreground); font: var(--text-caption)/1.45 var(--font-sans); white-space: pre-wrap; overflow-wrap: anywhere; }
-.ui-annotation { position: absolute; z-index: 8; display: flex; gap: var(--space-xs); max-width: min(var(--measure-md), calc(100% - var(--space-xl))); transform: translate(var(--space-sm), var(--space-xs)); padding: var(--space-xs); border: var(--hairline) solid var(--border); border-radius: var(--radius-control); background: var(--popover); box-shadow: var(--shadow-md); }
+.ui-annotation { position: absolute; z-index: 8; display: flex; gap: var(--space-xs); max-width: min(var(--measure-md), calc(100% - var(--space-xl))); transform: translate(var(--space-sm), var(--space-xs)); padding: var(--space-xs); border: var(--hairline) solid var(--border); border-radius: var(--radius-control); background: var(--popover); box-shadow: var(--lift-rest); }
 .ui-annotation-button { min-height: var(--control-sm); border: 0; border-radius: var(--radius-control); padding: var(--space-2xs) var(--space-md); background: var(--accent); color: var(--foreground); font: var(--text-caption) var(--font-sans); cursor: pointer; }
 .ui-annotation-input { min-width: var(--measure-sm); resize: both; border: var(--hairline) solid var(--border); border-radius: var(--radius-control); padding: var(--space-sm) var(--space-md); background: var(--background); color: var(--foreground); font: var(--text-caption) var(--font-sans); }
 .ui-code-host .cm-editor { height: 100%; }

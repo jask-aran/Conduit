@@ -12,8 +12,8 @@
 /* The top line every pane header centres on, the sidebar's too: the chrome's, so they line up at any sidebar size. */
 :root, [data-density] { --nav-line: var(--control); }
 
-/* The pane. Its width moves with the panel's motion (--panel-motion-*); data-instant skips it. */
-.ui-nav-pane { position: relative; z-index: 20; width: var(--nav-width); flex: none; contain: layout; overflow: hidden; transition: width var(--panel-motion-duration) var(--panel-motion-easing); }
+/* The pane. Its width moves on the quick change (--duration-quick, --ease-change); data-instant skips it. */
+.ui-nav-pane { position: relative; z-index: var(--layer-nav); width: var(--nav-width); flex: none; contain: layout; overflow: hidden; transition: width var(--duration-quick) var(--ease-change); }
 .ui-nav-pane[data-collapsed] { width: var(--nav-rail-width); }
 .ui-nav-pane[data-instant] { transition: none; }
 .ui-nav-pane-body { position: absolute; inset: 0 auto 0 0; display: flex; width: var(--nav-width); flex-direction: column; overflow: hidden; background: var(--sidebar); color: var(--sidebar-foreground); }
@@ -138,7 +138,7 @@
 
 /* A phone's: a drawer over the page, the whole width, and no foot. The head is the wordmark on the ground and the
    switch, a frost pill; the server is the list's first line (NavLead), so what it says never moves the head. */
-.ui-nav-pane[data-drawer] { position: fixed; inset-block: 0; left: 0; z-index: var(--layer-drawer); width: 100vw; background: var(--frame); transform: translateX(-102%); transition: transform var(--panel-motion-duration) var(--panel-motion-easing); }
+.ui-nav-pane[data-drawer] { position: fixed; inset-block: 0; left: 0; z-index: var(--layer-drawer); width: 100vw; background: var(--frame); transform: translateX(-102%); transition: transform var(--duration-quick) var(--ease-change); }
 .ui-nav-pane[data-drawer="open"] { transform: translateX(0); }
 .ui-nav-pane[data-drawer] .ui-nav-pane-body { width: 100%; height: var(--app-height, 100dvh); padding-top: var(--safe-area-inset-top, env(safe-area-inset-top, 0px)); padding-bottom: var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)); background: var(--frame); overscroll-behavior: contain; }
 .ui-nav-pane[data-drawer] .ui-nav-list { overscroll-behavior: contain; padding-bottom: var(--space-lg); }

@@ -173,7 +173,7 @@
 .ui-glance-orb > * { width: 100%; height: 100%; }
 .ui-glance-turn b { color: var(--foreground); font-weight: var(--weight-lift); }
 .ui-glance-answer { display: -webkit-box; margin: 0; overflow: hidden; color: color-mix(in oklch, var(--foreground), transparent var(--tone-strong)); font-size: var(--text-row); line-height: var(--leading-text); -webkit-box-orient: vertical; -webkit-line-clamp: 7; }
-.ui-glance-answer[data-math] { display: block; max-height: 15em; -webkit-line-clamp: unset; mask-image: linear-gradient(to bottom, #000 12.5em, transparent 15em); }
+.ui-glance-answer[data-math] { display: block; max-height: 15em; -webkit-line-clamp: unset; --fade-at: 15em; --fade-length: 2.5em; }
 .ui-glance-answer[data-math] .katex-display { margin: .55em 0; overflow: hidden; text-align: left; }
 .ui-glance-empty { margin: 0; padding-top: var(--space-4xl); text-align: center; }
 .ui-glance .ui-section { margin-inline: calc(-1 * var(--space-md)); }

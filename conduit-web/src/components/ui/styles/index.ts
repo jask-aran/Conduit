@@ -12,6 +12,7 @@
  *   foundations     tokens (type, motion, scale, space, radii, colour, surfaces) and the rules every piece shares
  *   controls        Button, Input, TextArea, Field, Keycap, Segmented, Slider, Progress, Spinner
  *   frost, orb      the material; the thinking orb's box
+ *   fade            the fade at the foot of content cut short (code, a bubble, a glance)
  *   popover         Menu > Section > Item, Match
  *   reading         Reading: a gauge's totals, parts, figures and foot
  *   nav             NavPane > NavGroup > NavRow, NavFolder, RailButton
@@ -43,6 +44,7 @@ import "./theme.css";
 import "./foundations.css";
 import "./controls.css";
 import "./frost.css";
+import "./fade.css";
 import "./orb.css";
 import "./popover.css";
 import "./reading.css";

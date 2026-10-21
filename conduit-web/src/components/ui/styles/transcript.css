@@ -3,7 +3,7 @@
 .ui-bubble[data-editing="true"] { color: var(--muted-foreground); font-style: italic; }
 /* Folded: cut at the fold's last line, half a line of it fading (the cut already falls on a line; the fade only says
    there is more). Show more under it, the foot's caption. */
-.ui-bubble-text[data-folded] { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: var(--bubble-fold); mask-image: linear-gradient(to bottom, #000 calc(100% - 0.5lh), transparent); }
+.ui-bubble-text[data-folded] { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: var(--bubble-fold); --fade-length: 0.5lh; }
 .ui-bubble-more { display: block; margin-top: var(--space-xs); border: 0; background: transparent; padding: 0; color: var(--muted-foreground); font: var(--weight-rest) var(--text-caption) var(--font-sans); cursor: pointer; }
 .ui-bubble-more:is(:focus-visible) { color: var(--foreground); }
 @media (hover: hover) { .ui-bubble-more:is(:hover, :focus-visible) { color: var(--foreground); } }

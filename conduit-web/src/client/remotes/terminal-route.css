@@ -3,7 +3,7 @@
   top: var(--vv-offset-top, 0);
   right: 0;
   left: 0;
-  z-index: 100;
+  z-index: var(--layer-dialog);
   display: flex;
   height: var(--app-height, 100dvh);
   min-width: 0;
