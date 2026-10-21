@@ -1,5 +1,6 @@
+import * as Icons from "./icons";
 import { createEffect, createSignal, For, on, onCleanup, Show, splitProps, type JSX } from "solid-js";
-import { ChevronRightIcon } from "lucide-solid";
+
 import { Button, Spinner } from "./controls";
 import { haptic } from "./haptics";
 import { Expand } from "./expand";
@@ -87,7 +88,7 @@ export function NavFolderRow(props: JSX.HTMLAttributes<HTMLDivElement> & { icon:
   const [local, rest] = splitProps(props, ["icon", "mark", "meta", "open", "current", "within", "link", "toggle", "children", "class"]);
   return <div {...rest} class="ui-nav-row ui-nav-folder" data-folder-open={local.open ? "" : undefined} {...rowData(local)}>
     <button type="button" {...local.link} class="ui-nav-link"><span class="ui-nav-icon">{local.icon}</span>{local.mark}<span class="ui-nav-text">{local.children}</span><Show when={local.meta}><small class="ui-nav-meta">{local.meta}</small></Show></button>
-    <button type="button" tabIndex={-1} aria-expanded={local.open} {...local.toggle} class="ui-nav-toggle"><ChevronRightIcon /></button>
+    <button type="button" tabIndex={-1} aria-expanded={local.open} {...local.toggle} class="ui-nav-toggle"><Icons.ChevronRight /></button>
   </div>;
 }
 
@@ -132,11 +133,6 @@ export function NavNotice(props: { icon?: JSX.Element; busy?: boolean; ready?: b
 }
 
 /** A label and its links as icons (the installers). */
-export const NavLinks = (props: { label: string; links: { href: string; label: string; icon: JSX.Element }[] }) => <div class="ui-nav-links">
-  <span>{props.label}</span>
-  <For each={props.links}>{(link) => <a href={link.href} target="_blank" rel="noopener noreferrer" aria-label={link.label} title={link.label}>{link.icon}</a>}</For>
-</div>;
-
 export type StatusTone = "success" | "active" | "warn" | "danger" | "muted" | "unread";
 /** A row's live state in an --icon slot: a dot in its tone, or a Spinner while it works; stale: it may be out of date. */
 export function StatusDot(props: JSX.HTMLAttributes<HTMLSpanElement> & { label: string; tone?: StatusTone; spinning?: boolean; stale?: boolean }) {

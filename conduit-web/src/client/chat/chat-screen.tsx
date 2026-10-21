@@ -1,5 +1,7 @@
+import { HarnessMark } from "@/components/ui";
+import { Icons } from "@/components/ui";
 import { createSignal, For, Show, type JSX } from "solid-js";
-import { FolderIcon, MessageSquarePlusIcon, PanelLeftIcon, PanelRightIcon, PencilIcon, SearchIcon, ShareIcon, TerminalIcon, Trash2Icon } from "lucide-solid";
+
 import { Menu, MenuContent, MenuControl, MenuRow, MenuSection } from "@/components/menus";
 import { PaneTabRow } from "@/components/ui/pane";
 import { Expand, Header, HeaderButton, HeaderCrumb, HeaderPill, Readout, Rule } from "@/components/ui";
@@ -8,7 +10,7 @@ import type { ActiveChatStore } from "../state/active-chat";
 import { ContextBar, ContextBreakdown } from "./context-gauge";
 import { contextUsagePercent } from "./context-metrics";
 import { isWorkspace } from "./place-picker";
-import { HarnessMark, harnessLabelFor } from "../harness-brand";
+import { harnessLabelFor } from "../harness-brand";
 import { WorkspaceGlyph } from "../project/workspace-appearance";
 import { isMobileLayout } from "../navigation/mobile-layout";
 import { tabFrostOn } from "../preferences/tab-frost";
@@ -71,11 +73,11 @@ export function ChatHeader(props: {
   // The pill's mark for where the page sits: a workspace's glyph, a folder, or Conduit's for a chat in no folder.
   const placeMark = () => props.alone || props.placeLabel ? undefined
     : !props.project || props.project.slug === "chat" ? <HarnessMark id="conduit" />
-    : isWorkspace(props.project) ? <WorkspaceGlyph appearance={props.project.workspaceAppearance} /> : <FolderIcon />;
+    : isWorkspace(props.project) ? <WorkspaceGlyph appearance={props.project.workspaceAppearance} /> : <Icons.Folder />;
   return <Header frost={!!props.tabs && tabFrostOn()}
     lead={<Show when={!props.mobileSidebarOpen}>
-      <HeaderButton label="Toggle Sidebar" icon={<PanelLeftIcon />} aria-expanded={false} tabIndex={0} onClick={props.onToggleMobileSidebar} />
-      <HeaderButton label="New chat" icon={<MessageSquarePlusIcon />} tabIndex={0} onClick={props.onNewChat} />
+      <HeaderButton label="Toggle Sidebar" icon={<Icons.Sidebar />} aria-expanded={false} tabIndex={0} onClick={props.onToggleMobileSidebar} />
+      <HeaderButton label="New chat" icon={<Icons.NewChat />} tabIndex={0} onClick={props.onNewChat} />
     </Show>}
     // A phone's name for the page, and the way into its menu (a desktop's title and rail hold what it holds).
     pill={<Show when={!props.appDashboard} fallback={<HeaderPill label={props.title} icon={<HarnessMark id="conduit" />} />}>
@@ -84,13 +86,13 @@ export function ChatHeader(props: {
         <MenuControl as={HeaderPill} opens label={props.title} icon={placeMark()} aria-label={`${moreLabel()}: ${props.title}`} data-header-more="" />
         <MenuContent width="md" unfolds>
           <MenuSection>
-            <MenuRow icon={<ShareIcon />} onSelect={props.onShare}>Share</MenuRow>
+            <MenuRow icon={<Icons.Share />} onSelect={props.onShare}>Share</MenuRow>
             <Show when={props.onRename}>
-              <MenuRow icon={<PencilIcon />} onSelect={() => props.onRename?.()}>{props.dashboard ? `Rename ${placeKind()}` : "Rename"}</MenuRow>
+              <MenuRow icon={<Icons.Edit />} onSelect={() => props.onRename?.()}>{props.dashboard ? `Rename ${placeKind()}` : "Rename"}</MenuRow>
             </Show>
-            <Show when={isMobileLayout()}><MenuRow icon={<PanelRightIcon />} onSelect={props.onTogglePanel}>Workspace panel</MenuRow></Show>
+            <Show when={isMobileLayout()}><MenuRow icon={<Icons.Workspace />} onSelect={props.onTogglePanel}>Workspace panel</MenuRow></Show>
             <Show when={props.onDelete}>
-              <MenuRow destructive icon={<Trash2Icon />} onSelect={() => props.onDelete?.()}>{props.dashboard ? (placeKind() === "workspace" ? "Unlink workspace" : "Delete project") : "Delete chat"}</MenuRow>
+              <MenuRow destructive icon={<Icons.Delete />} onSelect={() => props.onDelete?.()}>{props.dashboard ? (placeKind() === "workspace" ? "Unlink workspace" : "Delete project") : "Delete chat"}</MenuRow>
             </Show>
           </MenuSection>
           <Show when={!props.dashboard && props.chat}>{(chat) => {
@@ -120,10 +122,10 @@ export function ChatHeader(props: {
     after={props.badge}
     actions={<>
       {/* On a desktop search and the palette are the right rail's; a phone's header keeps them. */}
-      <HeaderButton only="phone" label="Search chats" icon={<SearchIcon />} onClick={props.onOpenSearch} />
-      <HeaderButton only="phone" label="Open command palette" title="Command palette" icon={<TerminalIcon />} onClick={props.onOpenPalette} />
+      <HeaderButton only="phone" label="Search chats" icon={<Icons.Search />} onClick={props.onOpenSearch} />
+      <HeaderButton only="phone" label="Open command palette" title="Command palette" icon={<Icons.Terminal />} onClick={props.onOpenPalette} />
       <Show when={!props.appDashboard}>
-        <HeaderButton only="desktop" label={shareLabel()} icon={<ShareIcon />} onClick={props.onShare} />
+        <HeaderButton only="desktop" label={shareLabel()} icon={<Icons.Share />} onClick={props.onShare} />
       </Show>
       {props.actions}
       {/* The pane's own swap and close, at its right edge: they act on the pane. */}

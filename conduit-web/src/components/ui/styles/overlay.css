@@ -75,7 +75,7 @@
 .ui-setting-group + .ui-setting-group { margin-top: var(--space-lg); border-top: var(--hairline) solid var(--tint); padding-top: var(--space-xl); }
 /* At least a row's height: a finger's on a phone, as every row is there. */
 /* A settings line's height, at least a row's (a finger's on a phone): the setting line and the recorder under it. */
-:root, [data-density] { --line-min: max(var(--control), var(--row-min)); }
+:root, [data-density], .ui-overlay { --line-min: max(var(--control), var(--row-min)); }
 /* A line too narrow for its name and its control (a phone, a line of several) wraps the control under the name, at its own width: neither squeezes. */
 .ui-setting-line { display: flex; min-height: var(--line-min); flex-wrap: wrap; align-items: center; gap: var(--space-2xs) var(--space-xl); border-radius: var(--radius-control); padding: var(--space-2xs) var(--space-sm) var(--space-2xs) var(--space-md); font-size: var(--text-row); }
 /* Focus anywhere in a row is the row's wash. */
@@ -173,7 +173,7 @@
 .ui-glance-orb > * { width: 100%; height: 100%; }
 .ui-glance-turn b { color: var(--foreground); font-weight: var(--weight-lift); }
 .ui-glance-answer { display: -webkit-box; margin: 0; overflow: hidden; color: color-mix(in oklch, var(--foreground), transparent var(--tone-strong)); font-size: var(--text-row); line-height: var(--leading-text); -webkit-box-orient: vertical; -webkit-line-clamp: 7; }
-.ui-glance-answer[data-math] { display: block; max-height: 15em; -webkit-line-clamp: unset; mask-image: linear-gradient(to bottom, #000 12.5em, transparent 15em); }
+.ui-glance-answer[data-math] { display: block; max-height: 15em; -webkit-line-clamp: unset; --fade-at: 15em; --fade-length: 2.5em; }
 .ui-glance-answer[data-math] .katex-display { margin: .55em 0; overflow: hidden; text-align: left; }
 .ui-glance-empty { margin: 0; padding-top: var(--space-4xl); text-align: center; }
 .ui-glance .ui-section { margin-inline: calc(-1 * var(--space-md)); }

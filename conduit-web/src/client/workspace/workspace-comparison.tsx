@@ -1,3 +1,5 @@
+import { FileTypeIcon } from "@/components/ui/file-marks";
+import { Icons } from "@/components/ui";
 import { PaneEmpty } from "@/components/ui/pane";
 import { FileButton, FileHead, FileTools, FileName, StatusBar, StatusText } from "@/components/ui/file";
 import { CodeHost, Comparison, ComparisonContent, ComparisonCounts } from "@/components/ui/editor";
@@ -8,12 +10,12 @@ import { Compartment, EditorState, type Extension, type Text } from "@codemirror
 import { EditorView } from "@codemirror/view";
 import { gotoLine, openSearchPanel } from "@codemirror/search";
 import { codeFolding, foldEffect } from "@codemirror/language";
-import { Columns2Icon, SearchIcon, WrapTextIcon } from "lucide-solid";
+
 import { createEffect, createMemo, createSignal, onCleanup, Show, untrack, type JSX } from "solid-js";
 import { readSetting, writeSetting, WORKSPACE_PANEL_GLOBAL_SCOPE } from "./workspace-panel-storage";
 import { workspaceReadOnlySetup } from "./workspace-editor-base";
 import { workspaceLanguageForFilename } from "./workspace-languages";
-import { FileTypeIcon } from "./file-type-icon";
+
 import { annotationExtension, annotationSpan, commentHighlightsExtension, commentRange, selectionEnd, WorkspaceAnnotationPopup, type AnnotationReading, type AnnotationSelection, type AnnotationSpan, type CommentHighlight } from "./workspace-annotate";
 import type { ReviewNavigationRequest } from "../chat/review-navigation";
 
@@ -295,9 +297,9 @@ export default function WorkspaceComparison(props: { comparison: ComparisonPaylo
       {props.headerAction}
       <Show when={props.comparison.kind === "text"}>
         <FileTools>
-          <FileButton aria-label="Find in comparison" title="Find in comparison (Ctrl+F)" onClick={() => { if (activeView) openSearchPanel(activeView); }}><SearchIcon /></FileButton>
-          <FileButton aria-label={wrap() ? "Disable line wrapping" : "Enable line wrapping"} aria-pressed={wrap()} title={wrap() ? "Disable line wrapping" : "Enable line wrapping"} onClick={() => setWrap(!wrap())}><WrapTextIcon /></FileButton>
-          <FileButton aria-label={layout() === "split" ? "Show unified diff" : "Show side-by-side diff"} aria-pressed={layout() === "split"} title={layout() === "split" ? "Show unified diff" : "Show side-by-side diff"} onClick={() => setLayout(layout() === "split" ? "unified" : "split")}><Columns2Icon /></FileButton>
+          <FileButton aria-label="Find in comparison" title="Find in comparison (Ctrl+F)" onClick={() => { if (activeView) openSearchPanel(activeView); }}><Icons.Search /></FileButton>
+          <FileButton aria-label={wrap() ? "Disable line wrapping" : "Enable line wrapping"} aria-pressed={wrap()} title={wrap() ? "Disable line wrapping" : "Enable line wrapping"} onClick={() => setWrap(!wrap())}><Icons.WrapText /></FileButton>
+          <FileButton aria-label={layout() === "split" ? "Show unified diff" : "Show side-by-side diff"} aria-pressed={layout() === "split"} title={layout() === "split" ? "Show unified diff" : "Show side-by-side diff"} onClick={() => setLayout(layout() === "split" ? "unified" : "split")}><Icons.Split /></FileButton>
         </FileTools>
       </Show>
       {props.headerEnd}

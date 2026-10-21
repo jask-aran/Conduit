@@ -1,8 +1,10 @@
+import { HarnessMark } from "@/components/ui";
+import { Icons } from "@/components/ui";
 import { createSignal, For, Index, onMount, Show, type JSX } from "solid-js";
-import { ChevronDownIcon, EllipsisIcon, LayersIcon, SearchIcon } from "lucide-solid";
+
 import { Menu, MenuContent, MenuSection, MenuRadioGroup, MenuRadioItem, MenuControl } from "@/components/menus";
 import { DashDay, GroupAction, GroupCompactHeading } from "@/components/ui/dashboard";
-import { HarnessMark } from "../../harness-brand";
+
 import { SplitGroupMore, watchFold } from "./split";
 import type { Project } from "../../api/contracts";
 import { PlaceGlyph } from "../../chat/place-picker";
@@ -79,7 +81,7 @@ function ChoiceGroup(props: { choice: ListChoice }) {
 function ChoiceFilter(props: { choice: ListChoice }) {
   const current = () => props.choice.options.find((option) => option.value === props.choice.value) ?? props.choice.options[0];
   return <Menu modal={false}>
-    <MenuControl as={GroupAction} title={props.choice.label}>{current()?.short ?? current()?.label}<ChevronDownIcon /></MenuControl>
+    <MenuControl as={GroupAction} title={props.choice.label}>{current()?.short ?? current()?.label}<Icons.ChevronDown /></MenuControl>
     <MenuContent><ChoiceGroup choice={props.choice} /></MenuContent>
   </Menu>;
 }
@@ -96,7 +98,7 @@ export function FilterBar(props: { choices: Array<ListChoice | false | null | un
   onMount(() => watchFold(more, setFit));
   return <>
     <Index each={choices()}>{(choice, index) => <span data-fold data-folded={index >= fit() ? "" : undefined}><ChoiceFilter choice={choice()} /></span>}</Index>
-    <span ref={more} data-fold-more data-folded={fit() >= choices().length ? "" : undefined}><FiltersMenu title="More filters" trigger={<EllipsisIcon />} choices={choices().slice(fit())} /></span>
+    <span ref={more} data-fold-more data-folded={fit() >= choices().length ? "" : undefined}><FiltersMenu title="More filters" trigger={<Icons.More />} choices={choices().slice(fit())} /></span>
     {props.children}
   </>;
 }
@@ -106,7 +108,7 @@ export function FilterBar(props: { choices: Array<ListChoice | false | null | un
 export function FiltersMenu(props: { choices: Array<ListChoice | false | null | undefined>; title?: string; trigger?: JSX.Element }) {
   const choices = () => props.choices.filter(Boolean) as ListChoice[];
   return <Menu modal={false}>
-    <MenuControl as={GroupAction} title={props.title ?? "Filters"}>{props.trigger ?? <>Filters<ChevronDownIcon /></>}</MenuControl>
+    <MenuControl as={GroupAction} title={props.title ?? "Filters"}>{props.trigger ?? <>Filters<Icons.ChevronDown /></>}</MenuControl>
     <MenuContent>
       <For each={choices()}>{(choice) => <ChoiceGroup choice={choice} />}</For>
     </MenuContent>
@@ -121,15 +123,15 @@ export const sortChoice = (sort: "latest" | "created", onSort: (sort: "latest" |
 export const profileChoice = (profiles: ProfileLike[], used: Set<string>, value: string, onChange: (id: string) => void): ListChoice | null => profiles.length ? {
   label: "Profile", value, onChange,
   options: [
-    { value: "", label: "All profiles", icon: <LayersIcon /> },
-    ...profiles.map((item) => ({ value: item.id, label: item.label, icon: <HarnessMark id={item.implementation || "conduit"} class="size-4" />, disabled: !used.has(item.id) && item.id !== value })),
+    { value: "", label: "All profiles", icon: <Icons.Profile /> },
+    ...profiles.map((item) => ({ value: item.id, label: item.label, icon: <HarnessMark id={item.implementation || "conduit"} />, disabled: !used.has(item.id) && item.id !== value })),
   ],
 } : null;
 
 export const placeChoice = (label: string, all: string, places: Array<{ id: string; label: string; project: Project }>, value: string, onChange: (id: string) => void): ListChoice | null => places.length ? {
   label, value, onChange,
   options: [
-    { value: "", label: all, icon: <LayersIcon /> },
+    { value: "", label: all, icon: <Icons.Profile /> },
     ...places.map((item) => ({ value: item.id, label: item.label, icon: <PlaceGlyph project={item.project} /> })),
   ],
 } : null;
@@ -137,8 +139,8 @@ export const placeChoice = (label: string, all: string, places: Array<{ id: stri
 export const harnessChoice = (harnesses: Array<{ id: string; label: string }>, value: string, onChange: (id: string) => void): ListChoice => ({
   label: "Harness", value, onChange,
   options: [
-    { value: "", label: "All harnesses", icon: <LayersIcon /> },
-    ...harnesses.map((item) => ({ value: item.id, label: item.label, icon: <HarnessMark id={item.id} class="size-4" /> })),
+    { value: "", label: "All harnesses", icon: <Icons.Profile /> },
+    ...harnesses.map((item) => ({ value: item.id, label: item.label, icon: <HarnessMark id={item.id} /> })),
   ],
 });
 
@@ -148,5 +150,5 @@ export function CompactHeading(props: { label: string; count: number; where?: st
 }
 
 export function ListSearch(props: { label: string; onClick: () => void }) {
-  return <GroupAction aria-label={props.label} title={props.label} onClick={props.onClick}><SearchIcon /></GroupAction>;
+  return <GroupAction aria-label={props.label} title={props.label} onClick={props.onClick}><Icons.Search /></GroupAction>;
 }

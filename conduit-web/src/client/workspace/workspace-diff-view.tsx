@@ -1,8 +1,9 @@
+import { Icons } from "@/components/ui";
 import { FileButton } from "@/components/ui/file";
 import { DiffShell, DiffRail, DiffBody, SplitEdge } from "@/components/ui/editor";
 import { PaneEmpty } from "@/components/ui/pane";
 import { createSignal, lazy, onCleanup, Show, Suspense, type JSX } from "solid-js";
-import { PanelLeftOpenIcon, PencilIcon } from "lucide-solid";
+
 import type { ComparisonPayload, ComparisonViewState } from "./workspace-comparison";
 import { WorkspaceReviewNavigator, type WorkspaceReviewFile } from "./workspace-review";
 import { readSetting, WORKSPACE_PANEL_GLOBAL_SCOPE, writeSetting } from "./workspace-panel-storage";
@@ -86,7 +87,7 @@ export function WorkspaceDiffView(props: WorkspaceDiffViewProps) {
   };
   onCleanup(() => stopResize?.());
   return <DiffShell collapsed={navigatorCollapsed()} width={navigatorWidth()}>
-    <Show when={!navigatorCollapsed()} fallback={<DiffRail><FileButton type="button" aria-label="Show changed files" title="Show changed files" onClick={() => setCollapsed(false)}><PanelLeftOpenIcon /></FileButton></DiffRail>}>
+    <Show when={!navigatorCollapsed()} fallback={<DiffRail><FileButton type="button" aria-label="Show changed files" title="Show changed files" onClick={() => setCollapsed(false)}><Icons.ExpandFiles /></FileButton></DiffRail>}>
       <WorkspaceReviewNavigator
       title={props.title}
       files={props.files}
@@ -107,7 +108,7 @@ export function WorkspaceDiffView(props: WorkspaceDiffViewProps) {
             comparison={comparison()}
             sourceKey={props.sourceKey}
             viewState={props.viewState}
-            headerAction={<FileButton type="button" aria-label="Open working file" title="Open working file" onClick={() => props.onOpenWorkingFile(comparison().path)}><PencilIcon /></FileButton>}
+            headerAction={<FileButton type="button" aria-label="Open working file" title="Open working file" onClick={() => props.onOpenWorkingFile(comparison().path)}><Icons.Edit /></FileButton>}
             comparisonSource={props.comparisonSource}
             commentHighlights={reviewComments(props.annotationChatId ?? "")
               .filter((comment) => comment.path === comparison().path && comment.scope === comparison().scope)

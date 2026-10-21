@@ -48,7 +48,7 @@
 .ui-term-error { position: absolute; z-index: 4; right: var(--space-md); bottom: var(--space-md);
   max-width: min(var(--measure-lg), calc(100% - var(--space-2xl))); margin: 0; padding: var(--space-sm) var(--space-md);
   border: var(--hairline) solid color-mix(in oklch, var(--destructive), transparent 45%); border-radius: var(--radius-control);
-  background: color-mix(in oklch, var(--popover), transparent 4%); box-shadow: 0 var(--space-md) var(--space-3xl) rgb(0 0 0 / 28%);
+  background: color-mix(in oklch, var(--popover), transparent 4%); box-shadow: var(--lift-raised);
   color: var(--destructive); font-size: var(--text-caption); line-height: 1.45; }
 
 /* TermKeys: a phone's key bar, a hairline over it, the page's ground, the safe area under it; it scrolls sideways

@@ -9,9 +9,9 @@ import { cacheHitPercent, compactTokens, contextBreakdown, contextTokens, contex
 /* One colour per kind of content, the same in every harness. What Conduit has
    not named takes the next of the spares. */
 const CATEGORY_COLOURS: Record<string, string> = {
-  messages: "oklch(0.72 0.15 300)", used: "oklch(0.72 0.15 300)",
-  "system-prompt": "oklch(0.7 0.02 260)", tools: "oklch(0.74 0.12 230)",
-  instructions: "oklch(0.78 0.14 75)", other: "oklch(0.75 0.15 30)",
+  messages: "var(--category-1)", used: "var(--category-1)",
+  "system-prompt": "var(--category-2)", tools: "var(--category-3)",
+  instructions: "var(--category-4)", other: "var(--category-5)",
 };
 /** When a plan window resets: the time today, else the weekday. */
 const resetText = (iso: string) => {
@@ -21,7 +21,7 @@ const resetText = (iso: string) => {
     ? at.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
     : at.toLocaleDateString([], { weekday: "short" });
 };
-const SPARES = ["oklch(0.72 0.16 350)", "oklch(0.8 0.12 95)", "oklch(0.7 0.13 150)", "oklch(0.7 0.1 50)"];
+const SPARES = ["var(--category-6)", "var(--category-7)", "var(--category-8)", "var(--category-9)"];
 const hollow = (category: ContextCategory) => category.kind === "free" || category.kind === "deferred";
 const colourOf = (category: ContextCategory, index: number) => category.kind === "free" ? "transparent"
   : category.kind === "buffer" ? "color-mix(in oklch, var(--muted-foreground), transparent 55%)"

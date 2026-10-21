@@ -8,9 +8,11 @@
  *   --well, the fill under an input or an outline button. The ground is the default; [data-surface=frost] (set by
  *   Frost, Menu, Card and the rest) brings frost's. No control has a rule of its own per surface.
  *
+ *   reset           the base reset and the root face, size and colours
  *   foundations     tokens (type, motion, scale, space, radii, colour, surfaces) and the rules every piece shares
  *   controls        Button, Input, TextArea, Field, Keycap, Segmented, Slider, Progress, Spinner
  *   frost, orb      the material; the thinking orb's box
+ *   fade            the fade at the foot of content cut short (code, a bubble, a glance)
  *   popover         Menu > Section > Item, Match
  *   reading         Reading: a gauge's totals, parts, figures and foot
  *   nav             NavPane > NavGroup > NavRow, NavFolder, RailButton
@@ -35,11 +37,15 @@
  *   identity        the account and server marks
  *   connection      sign-in, first connection, server selection
  *   browser         the computer's file browser
+ *   marks           harness and file-type marks
+ *   voice           VoiceWaveform monitor and compact input levels
  */
+import "./reset.css";
 import "./theme.css";
 import "./foundations.css";
 import "./controls.css";
 import "./frost.css";
+import "./fade.css";
 import "./orb.css";
 import "./popover.css";
 import "./reading.css";
@@ -69,3 +75,6 @@ import "./trace.css";
 import "./connection.css";
 
 import "./browser.css";
+
+import "./marks.css";
+import "./voice.css";

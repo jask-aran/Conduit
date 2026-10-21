@@ -1,5 +1,7 @@
+import { HarnessMark } from "@/components/ui";
+import { Icons } from "@/components/ui";
 import { For, Show, createEffect, createSignal, onCleanup } from "solid-js";
-import { FolderIcon, PaperclipIcon, PlusIcon, SearchIcon, ShieldCheckIcon } from "lucide-solid";
+
 import { Section, Slider } from "@/components/ui";
 import { Menu, MenuContent, MenuPillTrigger, MenuRadioGroup, MenuRadioItem, MenuRow, MenuSection, MenuSub, MenuSubContent, MenuSubTrigger, MenuSubValue, useMenuBack } from "@/components/menus";
 import type { Template } from "../api/contracts";
@@ -7,7 +9,7 @@ import type { ActiveChatStore } from "../state/active-chat";
 import type { ComposerModels } from "./composer-models";
 import type { ComposerPermissions } from "./composer-permissions";
 import type { ServiceLevelSettings } from "../state/service-level-settings";
-import { HarnessMark } from "../harness-brand";
+
 import { contextUsagePercent } from "./context-metrics";
 import { isWorkspace, PlaceGlyph, type PlaceOptions } from "./place-picker";
 import { PermissionChoices, ProfileChoices, ServiceChoices } from "./composer-plus-menu";
@@ -78,7 +80,7 @@ export function MobileComposerOptions(props: {
 
   const placed = () => composer.place?.current && composer.place.current.slug !== "chat" ? composer.place.current : null;
   return <Menu modal={false} placement="top-start" open={open()} onOpenChange={(value) => { if (value) typingAtOpen = composerTextarea(); setOpen(value); }}>
-      <MenuPillTrigger label="Message options" icon={<PlusIcon />} open={open()} disabled={!composer.serverOnline} keep={() => typingAtOpen !== null} ref={(element) => { root = element; }} />
+      <MenuPillTrigger label="Message options" icon={<Icons.Add />} open={open()} disabled={!composer.serverOnline} keep={() => typingAtOpen !== null} ref={(element) => { root = element; }} />
       <MenuContent keep={() => typingAtOpen !== null} onOpenAutoFocus={preserveFocus} onCloseAutoFocus={(event) => { event.preventDefault(); restoreTyping(); }} onFocusOutside={preserveFocus}>
         {/* A phone option shows its value, not its name: the section names it. */}
         <MenuSection title={composer.profiles.length ? "Profile" : "Model"} note={context() != null ? `${Math.round(context()!)}% context` : undefined}>
@@ -106,7 +108,7 @@ export function MobileComposerOptions(props: {
         <Show when={composer.permissions?.profiles().length}>
           <MenuSection title="Permissions">
             <MenuSub phone>
-              <MenuSubTrigger icon={<ShieldCheckIcon />} aria-label={`Permissions ${selectedPermissionLabel()}`}>{selectedPermissionLabel()}</MenuSubTrigger>
+              <MenuSubTrigger icon={<Icons.Permissions />} aria-label={`Permissions ${selectedPermissionLabel()}`}>{selectedPermissionLabel()}</MenuSubTrigger>
               <MenuSubContent>
                 <PermissionChoices permissions={composer.permissions!} back />
                 <Show when={composer.serviceLevels?.levels().length}><ServiceChoices levels={composer.serviceLevels!} back /></Show>
@@ -115,7 +117,7 @@ export function MobileComposerOptions(props: {
           </MenuSection>
         </Show>
         <MenuSection>
-          <MenuRow icon={<PaperclipIcon />} disabled={!composer.serverOnline} onSelect={composer.onOpenAttachments}>Attach files</MenuRow>
+          <MenuRow icon={<Icons.Attach />} disabled={!composer.serverOnline} onSelect={composer.onOpenAttachments}>Attach files</MenuRow>
         </MenuSection>
         <Show when={composer.place}>{(place) => <MenuSection title="Project">
           <MenuSub phone>
@@ -133,7 +135,7 @@ function ModelChoices(props: { composer: Options }) {
   const back = useMenuBack();
   return <>
     <Show when={props.composer.onOpenModelSelector}>
-      <MenuSection><MenuRow icon={<SearchIcon />} onSelect={() => props.composer.onOpenModelSelector?.()}>Search all models…</MenuRow></MenuSection>
+      <MenuSection><MenuRow icon={<Icons.Search />} onSelect={() => props.composer.onOpenModelSelector?.()}>Search all models…</MenuRow></MenuSection>
     </Show>
     <MenuSection title="Model"><MenuRadioGroup value={props.composer.models.model()} onChange={(value) => { void props.composer.models.chooseModel(value); back(); }}>
       <For each={props.composer.models.models()}>{(item) => <MenuRadioItem value={item.spec} closeOnSelect={false} meta={item.provider}>{item.label}</MenuRadioItem>}</For>
@@ -159,7 +161,7 @@ function PlaceChoices(props: { place: PlaceOptions }) {
   };
   return <MenuSection title="Project"><MenuRadioGroup value={props.place.current?.id || ""} onChange={choose}>
     <Show when={props.place.current && props.place.current.slug !== "chat" && root()}>
-      <MenuRadioItem value={root()!.id} icon={<FolderIcon />}>No folder</MenuRadioItem>
+      <MenuRadioItem value={root()!.id} icon={<Icons.Folder />}>No folder</MenuRadioItem>
     </Show>
     <For each={places()}>{(project) => <MenuRadioItem value={project.id} icon={<PlaceGlyph project={project} />}>{project.name}</MenuRadioItem>}</For>
   </MenuRadioGroup></MenuSection>;

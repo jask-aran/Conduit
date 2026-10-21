@@ -15,10 +15,10 @@ export const workspaceDiffTheme = EditorView.theme({
   ".cm-changeGutter": { width: "0", minWidth: "0", overflow: "visible", padding: "0" },
   ".cm-changeGutter .cm-gutterElement": { width: "3px", minWidth: "3px", padding: "0", transform: "translateX(-3px)" },
   "&.cm-merge-a .cm-changedLine, .cm-deletedChunk": { background: "color-mix(in srgb, var(--destructive) 14%, transparent)" },
-  "&.cm-merge-b .cm-changedLine": { background: "color-mix(in srgb, var(--workspace-git-added) 14%, transparent)" },
+  "&.cm-merge-b .cm-changedLine": { background: "color-mix(in srgb, var(--change-added) 14%, transparent)" },
   ".cm-changedText, .cm-deletedText": { background: "none !important", textDecoration: "none" },
   "&.cm-merge-a .cm-changedLineGutter, .cm-deletedLineGutter": { background: "var(--destructive)" },
-  "&.cm-merge-b .cm-changedLineGutter": { background: "var(--workspace-git-added)" },
+  "&.cm-merge-b .cm-changedLineGutter": { background: "var(--change-added)" },
   ".cm-mergeSpacer": {
     background: "repeating-linear-gradient(135deg, transparent, transparent 3px, var(--border) 3px, var(--border) 4px)",
     opacity: ".45",
@@ -35,9 +35,9 @@ export const workspaceDiffTheme = EditorView.theme({
   ".cm-collapsedLines:hover": { background: "var(--accent)", color: "var(--foreground)" },
   ".cm-deletedLine, .cm-deletedLine del": { textDecoration: "none" },
   ".cm-diff-removed": { background: "color-mix(in srgb, var(--destructive) 14%, transparent)" },
-  ".cm-diff-added": { background: "color-mix(in srgb, var(--workspace-git-added) 14%, transparent)" },
+  ".cm-diff-added": { background: "color-mix(in srgb, var(--change-added) 14%, transparent)" },
   ".cm-diff-removed-gutter": { background: "var(--destructive)" },
-  ".cm-diff-added-gutter": { background: "var(--workspace-git-added)" },
+  ".cm-diff-added-gutter": { background: "var(--change-added)" },
 });
 
 /** Replaces the rows an inline comparison is standing on. */

@@ -9,9 +9,9 @@
 .ui-file-name > svg, .ui-file-name > img { width: var(--icon-sm); height: var(--icon-sm); flex: none; }
 .ui-file-name > span { overflow: hidden; color: var(--foreground); font-size: var(--text-caption); text-overflow: ellipsis; white-space: nowrap; }
 .ui-file-head small { flex: none; color: var(--muted-foreground); font-size: var(--text-label); white-space: nowrap; }
-.ui-file-git { flex: none; color: var(--workspace-git-modified, #d19a66); font: var(--text-caption) var(--font-data); }
-.ui-file-git:is([data-status="U"], [data-status="A"]) { color: var(--workspace-git-added, #98c379); }
-.ui-file-git[data-status="D"] { color: var(--destructive); }
+.ui-file-git { flex: none; color: var(--change-modified); font: var(--text-caption) var(--font-data); }
+.ui-file-git:is([data-status="U"], [data-status="A"]) { color: var(--change-added); }
+.ui-file-git[data-status="D"] { color: var(--change-removed); }
 .ui-file-dirty { width: var(--space-sm); height: var(--space-sm); flex: none; border-radius: var(--radius-round); background: var(--warn); box-shadow: 0 0 0 var(--space-2xs) color-mix(in oklch, var(--warn), transparent 84%); opacity: 0; transform: scale(.7); transition: opacity 120ms ease, transform 160ms ease; }
 .ui-file-dirty[data-dirty] { opacity: .9; transform: scale(1); }
 

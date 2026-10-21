@@ -1,11 +1,13 @@
+import { FileTypeIcon, FolderTypeIcon } from "@/components/ui/file-marks";
+import { Icons } from "@/components/ui";
 import { createDecisionScope } from "@/components/decision-dialog";
 import { createEffect, createMemo, createSignal, For, on, Show, type Accessor } from "solid-js";
-import { CheckIcon, CirclePlusIcon, CopyIcon, DownloadIcon, EyeIcon, FileDiffIcon, GitBranchIcon, GitCommitHorizontalIcon, GitCompareArrowsIcon, RefreshCwIcon, SendIcon, Undo2Icon } from "lucide-solid";
+import { CirclePlusIcon, GitCommitHorizontalIcon, SendIcon } from "lucide-solid";
 import { ContextMenu, ContextMenuContent, ContextMenuTrigger, MenuRow, MenuSection } from "@/components/menus";
 import { Spinner } from "@/components/ui/controls";
 import { api } from "../api/client";
 import type { ReviewNavigationRequest } from "../chat/review-navigation";
-import { FileTypeIcon, FolderTypeIcon } from "./file-type-icon";
+
 import { writeSetting } from "./workspace-panel-storage";
 import { cacheWorkspace, copyText, reportError, wasAborted, type RequestScope } from "./workspace-shared";
 import { ComparisonSourceControls } from "./workspace-comparison-source";
@@ -45,8 +47,8 @@ function CommitHistory(props: { commits: GitCommit[]; refs: GitRef[]; branch?: s
             author={commit.author} hash={commit.shortHash}
             title={`Copy ${commit.hash} · ${commit.author} · ${new Date(commit.authoredAt).toLocaleString()}`} onClick={() => props.onCopy(commit.hash)} />
           <ContextMenuContent><MenuSection>
-            <MenuRow onSelect={() => props.onInspect(commit)} icon={<EyeIcon />}>Inspect commit</MenuRow>
-            <MenuRow onSelect={() => props.onCopy(commit.hash)} icon={<CopyIcon />}>Copy commit ID</MenuRow>
+            <MenuRow onSelect={() => props.onInspect(commit)} icon={<Icons.Preview />}>Inspect commit</MenuRow>
+            <MenuRow onSelect={() => props.onCopy(commit.hash)} icon={<Icons.Copy />}>Copy commit ID</MenuRow>
           </MenuSection></ContextMenuContent>
         </ContextMenu>
       }</For>
@@ -233,10 +235,10 @@ export type SourceControl = ReturnType<typeof createSourceControl>;
 /** Source Control's modes, a segmented switch in the header of whatever holds the view. */
 export function SourceControlModes(props: { control: SourceControl }) {
   return <Segmented arrows label="Source Control" value={props.control.mode()} onChange={props.control.selectMode} options={[
-    { value: "changes", label: "Changes", icon: <CheckIcon />, title: "Changes" },
-    { value: "review", label: "Review", icon: <GitCompareArrowsIcon />, title: "Review" },
+    { value: "changes", label: "Changes", icon: <Icons.Check />, title: "Changes" },
+    { value: "review", label: "Review", icon: <Icons.GitCompareArrows />, title: "Review" },
     { value: "graph", label: "Graph", icon: <GitCommitHorizontalIcon />, title: "Graph" },
-    { value: "patch", label: "Patch", icon: <FileDiffIcon />, title: "Patch" },
+    { value: "patch", label: "Patch", icon: <Icons.FileDiff />, title: "Patch" },
   ]} />;
 }
 
@@ -254,29 +256,29 @@ export function SourceControlView(props: {
   return <section class="workspace-diff">
       <ToolBar>
         <small>{c.mode() === "graph" ? `${c.diff()?.commits?.length || 0} recent` : `${c.diff()?.files.length || 0} changed`}</small>
-          <ToolButton aria-label="Fetch all remotes" title="Fetch all remotes" disabled={Boolean(c.gitAction())} onClick={() => void c.runGitAction("fetch")}><Show when={c.gitAction() === "fetch"} fallback={<RefreshCwIcon />}><Spinner /></Show></ToolButton>
-          <ToolButton aria-label="Pull current branch" title="Pull current branch (fast-forward only)" disabled={!c.diff()?.upstream || Boolean(c.gitAction())} onClick={() => void c.runGitAction("pull")}><DownloadIcon /></ToolButton>
+          <ToolButton aria-label="Fetch all remotes" title="Fetch all remotes" disabled={Boolean(c.gitAction())} onClick={() => void c.runGitAction("fetch")}><Show when={c.gitAction() === "fetch"} fallback={<Icons.Refresh />}><Spinner /></Show></ToolButton>
+          <ToolButton aria-label="Pull current branch" title="Pull current branch (fast-forward only)" disabled={!c.diff()?.upstream || Boolean(c.gitAction())} onClick={() => void c.runGitAction("pull")}><Icons.Download /></ToolButton>
           <ToolButton aria-label="Push current branch" title="Push current branch" disabled={!c.diff()?.upstream || Boolean(c.gitAction())} onClick={() => void c.runGitAction("push")}><SendIcon /></ToolButton>
       </ToolBar>
       <Show when={c.mode() === "changes"}>
       <div class="workspace-diff-overview">
-      <ToolLine icon={<GitBranchIcon />} title={c.diff() ? c.diff()!.repository ? c.diff()!.branch : "Not a Git repository" : "Loading Git status…"} detail={c.diff()?.upstream} end={<>
+      <ToolLine icon={<Icons.GitBranch />} title={c.diff() ? c.diff()!.repository ? c.diff()!.branch : "Not a Git repository" : "Loading Git status…"} detail={c.diff()?.upstream} end={<>
         <Show when={c.diff()?.ahead || c.diff()?.behind}><span>↑ {c.diff()?.ahead || 0} ↓ {c.diff()?.behind || 0}</span></Show>
-        <ToolButton label="Copy branch name" disabled={!c.diff()?.branch} onClick={() => copyText(c.diff()?.branch)}><CopyIcon /></ToolButton>
-        <ToolButton label="Refresh Git status" disabled={c.diffLoading()} onClick={() => void c.loadDiff(c.mode() === "patch", c.mode() === "graph")}><RefreshCwIcon /></ToolButton>
+        <ToolButton label="Copy branch name" disabled={!c.diff()?.branch} onClick={() => copyText(c.diff()?.branch)}><Icons.Copy /></ToolButton>
+        <ToolButton label="Refresh Git status" disabled={c.diffLoading()} onClick={() => void c.loadDiff(c.mode() === "patch", c.mode() === "graph")}><Icons.Refresh /></ToolButton>
       </>} />
       <Show when={props.stale}><ToolNotice tone="warn" live action={{ label: "Retry", onClick: () => props.onRetryPoll() }}><span>Not updating</span><span aria-hidden="true">·</span></ToolNotice></Show>
       <Show when={c.diff()?.repository}>
         <CommitBox value={c.commitMessage()} placeholder="Message (Ctrl+Enter to commit)" count={c.stagedFiles().length}
-          busy={c.gitAction() === "commit"} busyIcon={<Spinner />} icon={<CheckIcon />}
+          busy={c.gitAction() === "commit"} busyIcon={<Spinner />} icon={<Icons.Check />}
           disabled={!c.commitMessage().trim() || !c.stagedFiles().length || Boolean(c.gitAction())}
           onInput={c.setCommitMessage} onSubmit={() => void c.runGitAction("commit")} />
         <ChangeLedger>
           <ChangeSection open={c.stagedOpen()} label="Staged changes" count={c.stagedFiles().length} onToggle={() => c.setStagedOpen((open) => !open)}
-            action={<ToolButton label="Unstage all" disabled={!c.stagedFiles().length || Boolean(c.gitAction())} onClick={() => void c.runGitAction("unstage-all")}><Undo2Icon /></ToolButton>}>
+            action={<ToolButton label="Unstage all" disabled={!c.stagedFiles().length || Boolean(c.gitAction())} onClick={() => void c.runGitAction("unstage-all")}><Icons.Undo /></ToolButton>}>
             <Show when={c.stagedFiles().length} fallback={<ChangeEmpty>No staged changes</ChangeEmpty>}>
               <ChangeList><For each={c.stagedFiles()}>{(file) =>
-                <ChangeItem action={<ToolButton label={`Unstage ${file.path}`} title="Unstage" disabled={Boolean(c.gitAction())} onClick={() => void c.runGitAction("unstage", file.path)}><Undo2Icon /></ToolButton>}>
+                <ChangeItem action={<ToolButton label={`Unstage ${file.path}`} title="Unstage" disabled={Boolean(c.gitAction())} onClick={() => void c.runGitAction("unstage", file.path)}><Icons.Undo /></ToolButton>}>
                   <ChangeRow {...changeDetails(file, true)} title={`Inspect changes in ${file.path}`} data-change-path={file.path} data-staged="true"
                     onClick={(event) => props.onInspectFile(file.path, true, event.altKey)}
                     icon={file.path.endsWith("/") ? <FolderTypeIcon name={changeDetails(file, true).name} expanded={false} /> : <FileTypeIcon name={changeDetails(file, true).name} />} />

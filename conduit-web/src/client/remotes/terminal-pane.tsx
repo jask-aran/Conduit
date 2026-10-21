@@ -1,3 +1,4 @@
+import { Icons } from "@/components/ui";
 import { TermKeys, TermKey, TermHeader, TermStatus, TermIdentity, TermContext, TermShortcuts, TermShortcut, TermLead, TermOverflow, TermActions, TermActionLabel, TermState, TermError } from "@/components/ui/terminal";
 import { Button as TermButton, Segmented, Switch } from "@/components/ui/controls";
 import { ToolButton } from "@/components/ui/pane";
@@ -5,7 +6,7 @@ import { Dialog } from "@/components/dialog";
 import { CardActions, CardForm } from "@/components/ui/card";
 import { Button as DialogButton, Input as DialogInput, Field as DialogField } from "@/components/ui/controls";
 import { createEffect, createMemo, createSignal, For, on, onCleanup, onMount, Show, type JSX } from "solid-js";
-import { ArrowLeftIcon, ChevronDownIcon, Columns2Icon, EllipsisIcon, FocusIcon, KeyboardIcon, Maximize2Icon, Minimize2Icon, PencilIcon, PlusIcon, Settings2Icon, TerminalIcon, Trash2Icon, UnplugIcon } from "lucide-solid";
+import { UnplugIcon } from "lucide-solid";
 import { toast } from "@/components/notifications";
 
 import { Menu, MenuContent, MenuControl, MenuSection, MenuRow, MenuSub, MenuSubTrigger, MenuSubContent } from "@/components/menus";
@@ -267,7 +268,7 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
     if ((!event.ctrlKey && !event.metaKey) || !terminal) return;
     event.preventDefault();
     event.stopPropagation();
-    const current = Number(localStorage.getItem("conduit:terminal-font-size")) || (window.matchMedia("(max-width: 560px)").matches ? 13 : 10.4);
+    const current = Number(localStorage.getItem("conduit:terminal-font-size")) || 13;
     const next = Math.max(8, Math.min(24, current + (event.deltaY < 0 ? 1 : -1)));
     localStorage.setItem("conduit:terminal-font-size", String(next));
     terminal.setFontSize(next);
@@ -882,7 +883,7 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
           <MenuRow {...{ textValue: shortcut.label }} detailData detail={`$ ${shortcut.command}`}
             meta={`${shortcut.target === "new" ? "new" : "this"}${shortcut.onStart ? " · start" : ""}`}
             onSelect={() => setEditingShortcut({ ...shortcut })}
-            actions={[{ label: `Remove ${shortcut.label}`, icon: <Trash2Icon />, destructive: true, disabled: shortcutSaving(), onSelect: () => removeShortcut(shortcut.id) }]}
+            actions={[{ label: `Remove ${shortcut.label}`, icon: <Icons.Delete />, destructive: true, disabled: shortcutSaving(), onSelect: () => removeShortcut(shortcut.id) }]}
             draggable="true" data-shortcut-id={shortcut.id} title="Drag or Alt+↑/↓ to reorder"
             data-drop-target={shortcutDropTarget() === index() && draggingShortcut() !== index() ? "" : undefined}
             onDragStart={(event) => { setDraggingShortcut(index()); event.dataTransfer?.setData("text/plain", shortcut.id); }}
@@ -907,7 +908,7 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
     </MenuSection>
     <Show when={shortcutError()}><MenuNote error>{shortcutError()}</MenuNote></Show>
     <Rule />
-    <MenuRow icon={<PlusIcon />} disabled={shortcuts().length >= 12} onSelect={addShortcut}>Add shortcut</MenuRow>
+    <MenuRow icon={<Icons.Add />} disabled={shortcuts().length >= 12} onSelect={addShortcut}>Add shortcut</MenuRow>
   </>;
 
   /*
@@ -1090,7 +1091,7 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
     <TermHeader actions={<TermActions>
         <Menu onOpenChange={(open) => { if (open) void refreshSessions().catch((cause) => setError((cause as Error).message)); }}>
           <MenuControl as={TermButton} variant="ghost" size="sm" aria-label="Active terminal sessions" title="Active terminal sessions">
-            <TerminalIcon /><span>{sessions().length}</span><ChevronDownIcon />
+            <Icons.Terminal /><span>{sessions().length}</span><Icons.ChevronDown />
           </MenuControl>
           <MenuContent>
             <MenuSection title={`Active terminals · ${props.projectName || "Chats"}`}>
@@ -1098,16 +1099,16 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
                 <For each={sessions()}>{(session) => {
                   const name = () => session.title || "Shell";
                   return <MenuRow {...{ textValue: name() }} checked={pty()?.id === session.id} detailData detail={sessionMetadata(session)} onSelect={() => void attachSession(session)} actions={[
-                    ...(props.onOpenBeside ? [{ label: `Open ${name()} beside`, icon: <Columns2Icon />, onSelect: () => props.onOpenBeside?.(session.id) }] : []),
-                    { label: `Rename ${name()}`, icon: <PencilIcon />, onSelect: () => requestRename(session) },
+                    ...(props.onOpenBeside ? [{ label: `Open ${name()} beside`, icon: <Icons.Split />, onSelect: () => props.onOpenBeside?.(session.id) }] : []),
+                    { label: `Rename ${name()}`, icon: <Icons.Edit />, onSelect: () => requestRename(session) },
                     { label: `Detach from ${name()}`, icon: <UnplugIcon />, disabled: pty()?.id !== session.id || connectionState() !== "live", onSelect: () => detachSession(session) },
-                    { label: `Destroy ${name()}`, icon: <Trash2Icon />, destructive: true, disabled: sessionBusy() === session.id, onSelect: () => void removeSession(session) },
+                    { label: `Destroy ${name()}`, icon: <Icons.Delete />, destructive: true, disabled: sessionBusy() === session.id, onSelect: () => void removeSession(session) },
                   ]}>{name()}</MenuRow>;
                 }}</For>
               </Show>
             </MenuSection>
             <Rule />
-            <MenuRow icon={<PlusIcon />} disabled={starting()} onSelect={() => void start()}>
+            <MenuRow icon={<Icons.Add />} disabled={starting()} onSelect={() => void start()}>
               {starting() ? "Starting…" : "New terminal"}
             </MenuRow>
           </MenuContent>
@@ -1123,7 +1124,7 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
             disabled={!writable() || connectionState() !== "live"}
             onClick={focusActiveTerminal}
           >
-            <FocusIcon /><TermActionLabel>{terminalFocused() ? "Focused" : "Focus"}</TermActionLabel>
+            <Icons.Focus /><TermActionLabel>{terminalFocused() ? "Focused" : "Focus"}</TermActionLabel>
           </TermButton>
         </Show>
       </TermActions>}>
@@ -1131,15 +1132,15 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
         <TermLead phone>
           <TermButton variant="ghost" size="icon-sm" aria-label={mobileKeysVisible() ? "Hide terminal keys" : "Show terminal keys"}
             title={mobileKeysVisible() ? "Hide terminal keys" : "Show terminal keys"} aria-pressed={mobileKeysVisible()} onClick={toggleMobileKeys}>
-            <KeyboardIcon />
+            <Icons.Keyboard />
           </TermButton>
         </TermLead>
       </Show>
       <Show when={props.standaloneControls}>
         <TermLead>
-          <TermButton variant="ghost" size="icon-sm" aria-label="Open Conduit" title="Open Conduit" onClick={() => props.standaloneControls!.onOpenConduit()}><ArrowLeftIcon /></TermButton>
+          <TermButton variant="ghost" size="icon-sm" aria-label="Open Conduit" title="Open Conduit" onClick={() => props.standaloneControls!.onOpenConduit()}><Icons.Back /></TermButton>
           <TermButton variant="ghost" size="icon-sm" aria-label={fullscreen() ? "Exit fullscreen" : "Enter fullscreen and capture browser keys"} title={fullscreen() ? "Exit fullscreen" : "Enter fullscreen and capture browser keys"} aria-pressed={fullscreen()} onClick={() => void toggleFullscreen()}>
-            <Show when={fullscreen()} fallback={<Maximize2Icon />}><Minimize2Icon /></Show>
+            <Show when={fullscreen()} fallback={<Icons.Maximize />}><Icons.Minimize /></Show>
           </TermButton>
         </TermLead>
       </Show>
@@ -1157,14 +1158,14 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
           </TermShortcut>
         }</For>
         <Menu>
-          <MenuControl as={ToolButton} aria-label="Edit terminal shortcuts" title="Edit terminal shortcuts"><Settings2Icon /></MenuControl>
+          <MenuControl as={ToolButton} aria-label="Edit terminal shortcuts" title="Edit terminal shortcuts"><Icons.Settings /></MenuControl>
           <MenuContent>{shortcutRows()}</MenuContent>
         </Menu>
       </TermShortcuts>
       {/* The same shortcuts, for a pane too narrow to lay them out inline. */}
       <TermOverflow>
         <Menu>
-          <MenuControl as={ToolButton} aria-label="Terminal shortcuts" title="Terminal shortcuts"><EllipsisIcon /></MenuControl>
+          <MenuControl as={ToolButton} aria-label="Terminal shortcuts" title="Terminal shortcuts"><Icons.More /></MenuControl>
           <MenuContent>
             <MenuSection title="Shortcuts">
               <For each={shortcuts()}>{(shortcut) =>
@@ -1173,7 +1174,7 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
             </MenuSection>
             <Rule />
             <MenuSub>
-              <MenuSubTrigger icon={<Settings2Icon />}>Edit shortcuts</MenuSubTrigger>
+              <MenuSubTrigger icon={<Icons.Settings />}>Edit shortcuts</MenuSubTrigger>
               <MenuSubContent>{shortcutRows()}</MenuSubContent>
             </MenuSub>
           </MenuContent>
@@ -1193,7 +1194,7 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
       />
       <Show when={!pty() && looked()}>
         <TermState empty>
-          <TerminalIcon />
+          <Icons.Terminal />
           <strong>Start or reattach a terminal</strong>
           <p>Terminal processes stay resident in this Workspace when the browser or pane detaches. Use the sessions menu to reattach or cull them.</p>
           <TermButton disabled={starting()} onClick={() => void start()}>{starting() ? <Spinner /> : "Start terminal"}</TermButton>

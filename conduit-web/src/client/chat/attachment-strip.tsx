@@ -1,9 +1,10 @@
+import { Icons } from "@/components/ui";
 import { Dialog } from "@/components/dialog";
 import { Button as DialogButton } from "@/components/ui/controls";
 import { CardAttachments, CardAttachment } from "@/components/ui/card";
 import { createEffect, createMemo, createSignal, For, lazy, on, onCleanup, onMount, Show, Suspense } from "solid-js";
 
-import { FileIcon, Maximize2Icon, Trash2Icon } from "lucide-solid";
+
 import { Button as LibraryButton, Chip, Chips, Rider, RiderActions } from "@/components/ui";
 import type { UploadAttachment } from "../state/attachments";
 import { attachmentUrl } from "../api/transport";
@@ -16,8 +17,8 @@ const previewOf = (item: UploadAttachment, chatId?: string | null) =>
   item.objectUrl || (isImage(item) && chatId ? attachmentUrl(chatId, item.id, "?preview=1") : null);
 // The file viewer's icons. Its icon theme lives in the workspace's lazy chunk,
 // so it is fetched on the first file chip rather than carried by the composer.
-const WorkspaceFileIcon = lazy(() => import("../workspace/file-type-icon").then((module) => ({ default: module.FileTypeIcon })));
-const FileMark = (props: { name: string }) => <Suspense fallback={<FileIcon />}><WorkspaceFileIcon name={props.name} /></Suspense>;
+const WorkspaceFileIcon = lazy(() => import("@/components/ui/file-marks").then((module) => ({ default: module.FileTypeIcon })));
+const FileMark = (props: { name: string }) => <Suspense fallback={<Icons.File />}><WorkspaceFileIcon name={props.name} /></Suspense>;
 
 /** One attachment as a Chip: a press shows it (or retries a failed upload that can be), its remove button removes it. */
 function AttachmentChip(props: { item: UploadAttachment; chatId?: string | null; entering: boolean; onOpen: () => void; onRemove: (chip: HTMLElement) => void; onRetry: () => void }) {
@@ -153,8 +154,8 @@ export function AttachmentStrip(props: {
           }}</For>
         </Chips>
         <RiderActions stack>
-          <LibraryButton variant="ghost" size="icon-sm" aria-label="Show all attachments" title="Show all attachments" onClick={() => setOpen(true)}><Maximize2Icon /></LibraryButton>
-          <LibraryButton variant="ghost" size="icon-sm" aria-label="Remove all attachments" title="Remove all" onClick={() => void removeAll()}><Trash2Icon /></LibraryButton>
+          <LibraryButton variant="ghost" size="icon-sm" aria-label="Show all attachments" title="Show all attachments" onClick={() => setOpen(true)}><Icons.Maximize /></LibraryButton>
+          <LibraryButton variant="ghost" size="icon-sm" aria-label="Remove all attachments" title="Remove all" onClick={() => void removeAll()}><Icons.Delete /></LibraryButton>
         </RiderActions>
       </Rider>
     </Show>

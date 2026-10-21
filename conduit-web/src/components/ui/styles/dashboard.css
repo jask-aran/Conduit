@@ -100,14 +100,14 @@
 .ui-dash-row-context code { font: var(--weight-light) var(--text-caption)/var(--leading-row) var(--font-data); }
 .ui-dash-row-trailing { flex: none; color: var(--muted-foreground); font: var(--weight-light) var(--text-caption)/var(--leading-row) var(--font-data); font-variant-numeric: tabular-nums; }
 /* A chat's harness mark in a row: greyed with its row, its own colours on the cursor (as a nav row's). */
-.ui-dash-row:is(:focus-visible, [data-held]) .thread-harness-mark[data-lively] { color: var(--foreground); opacity: 1; }
-@media (hover: hover) { .ui-dash-row:is(:hover, :focus-visible, [data-held]) .thread-harness-mark[data-lively] { color: var(--foreground); opacity: 1; } }
-.ui-dash-row:is(:focus-visible) .thread-harness-mark[data-lively] .harness-mark-tinted { background-color: var(--harness-brand, currentColor); }
-@media (hover: hover) { .ui-dash-row:is(:hover, :focus-visible) .thread-harness-mark[data-lively] .harness-mark-tinted { background-color: var(--harness-brand, currentColor); } }
-.ui-dash-row:is(:focus-visible) .thread-harness-mark[data-artwork] .harness-mark-tinted { opacity: 0; }
-@media (hover: hover) { .ui-dash-row:is(:hover, :focus-visible) .thread-harness-mark[data-artwork] .harness-mark-tinted { opacity: 0; } }
-.ui-dash-row:is(:focus-visible) .thread-harness-mark[data-artwork] .harness-mark-artwork { opacity: 1; }
-@media (hover: hover) { .ui-dash-row:is(:hover, :focus-visible) .thread-harness-mark[data-artwork] .harness-mark-artwork { opacity: 1; } }
+.ui-dash-row:is(:focus-visible, [data-held]) .ui-thread-harness-mark[data-lively] { color: var(--foreground); opacity: 1; }
+@media (hover: hover) { .ui-dash-row:is(:hover, :focus-visible, [data-held]) .ui-thread-harness-mark[data-lively] { color: var(--foreground); opacity: 1; } }
+.ui-dash-row:is(:focus-visible) .ui-thread-harness-mark[data-lively] .ui-harness-mark-tinted { background-color: var(--harness-brand, currentColor); }
+@media (hover: hover) { .ui-dash-row:is(:hover, :focus-visible) .ui-thread-harness-mark[data-lively] .ui-harness-mark-tinted { background-color: var(--harness-brand, currentColor); } }
+.ui-dash-row:is(:focus-visible) .ui-thread-harness-mark[data-artwork] .ui-harness-mark-tinted { opacity: 0; }
+@media (hover: hover) { .ui-dash-row:is(:hover, :focus-visible) .ui-thread-harness-mark[data-artwork] .ui-harness-mark-tinted { opacity: 0; } }
+.ui-dash-row:is(:focus-visible) .ui-thread-harness-mark[data-artwork] .ui-harness-mark-artwork { opacity: 1; }
+@media (hover: hover) { .ui-dash-row:is(:hover, :focus-visible) .ui-thread-harness-mark[data-artwork] .ui-harness-mark-artwork { opacity: 1; } }
 .ui-dash-day { padding: var(--space-md) var(--row-inset) var(--space-2xs); color: var(--muted-foreground); font-size: var(--text-caption); }
 .ui-dash-group-rows > .ui-dash-day:first-child { padding-top: 0; }
 .ui-dash-more { display: flex; width: 100%; min-height: var(--control-sm); align-items: center; border: 0; border-radius: var(--radius-control); background: transparent;
@@ -124,12 +124,12 @@
 .ui-change-name { min-width: 0; flex: 0 1 auto; overflow: hidden; color: var(--foreground); text-overflow: ellipsis; white-space: nowrap; }
 .ui-change-directory { min-width: 0; flex: 1; overflow: hidden; color: var(--muted-foreground); font-size: var(--text-caption); text-overflow: ellipsis; white-space: nowrap; }
 .ui-change-status { width: var(--icon-sm); flex: none; color: var(--muted-foreground); font: var(--weight-strong) var(--text-caption)/var(--leading-row) var(--font-data); text-align: center; }
-.ui-change-status:is([data-status="M"], [data-status="T"]) { color: var(--workspace-git-modified, #e5c07b); }
-.ui-change-status:is([data-status="A"], [data-status="U"], [data-status="R"], [data-status="C"]) { color: var(--workspace-git-added, #98c379); }
-.ui-change-status[data-status="D"] { color: var(--destructive); }
+.ui-change-status:is([data-status="M"], [data-status="T"]) { color: var(--change-modified); }
+.ui-change-status:is([data-status="A"], [data-status="U"], [data-status="R"], [data-status="C"]) { color: var(--change-added); }
+.ui-change-status[data-status="D"] { color: var(--change-removed); }
 .ui-counts { display: inline-flex; flex: none; gap: var(--space-xs); margin-left: auto; font: var(--weight-light) var(--text-caption)/var(--leading-row) var(--font-data); }
-.ui-counts [data-change="removed"] { color: var(--destructive); }
-.ui-counts [data-change="added"] { color: var(--workspace-git-added, #98c379); }
+.ui-counts [data-change="removed"] { color: var(--change-removed); }
+.ui-counts [data-change="added"] { color: var(--change-added); }
 /* Compact: under the muted chats, changes keep their colour only as a hint. */
 .ui-dash[data-compact] .ui-dash-row[data-change-row] > svg { opacity: .7; filter: grayscale(1); }
 .ui-dash[data-compact] .ui-change-name { color: color-mix(in oklch, var(--foreground), transparent var(--tone-rest)); }

@@ -38,3 +38,8 @@ export * from "./code";
 export * from "./trace";
 export * from "./connection";
 export * from "./browser";
+export * from "./palettes";
+
+export * as Icons from "./icons";
+export * from "./marks";
+export * from "./voice";

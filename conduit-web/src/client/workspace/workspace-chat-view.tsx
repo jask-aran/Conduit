@@ -1,5 +1,6 @@
+import { Icons } from "@/components/ui";
 import { createEffect, createMemo, createSignal, For, on, Show, type Accessor } from "solid-js";
-import { FileDiffIcon, HistoryIcon, ListCollapseIcon, WrapTextIcon } from "lucide-solid";
+import { HistoryIcon, ListCollapseIcon } from "lucide-solid";
 import { api } from "../api/client";
 import type { ReviewNavigationRequest } from "../chat/review-navigation";
 import { readSetting, writeSetting, WORKSPACE_PANEL_GLOBAL_SCOPE } from "./workspace-panel-storage";
@@ -324,7 +325,7 @@ export function ChatModes(props: { control: ChatReview; historyAvailable: boolea
   };
   return <Segmented arrows label="Chat review" value={props.control.mode()} onChange={choose} options={[
     ...(props.historyAvailable ? [{ value: "history" as const, label: "History", icon: <HistoryIcon />, title: "History" }] : []),
-    { value: "changes" as const, label: "Agent changes", icon: <FileDiffIcon />, title: "Agent changes" },
+    { value: "changes" as const, label: "Agent changes", icon: <Icons.FileDiff />, title: "Agent changes" },
   ]} />;
 }
 
@@ -340,7 +341,7 @@ export function ChatView(props: {
   return <section class="workspace-chat-view">
       <Show when={c.mode() === "history"}><ToolBar>
             <ToolButton aria-label={c.collapseTools() ? "Expand tool calls" : "Collapse sequential tool calls"} aria-pressed={c.collapseTools()} title={c.collapseTools() ? "Expand tool calls" : "Collapse sequential tool calls"} onClick={c.toggleCollapseTools}><ListCollapseIcon /></ToolButton>
-            <ToolButton aria-label={c.historyWrap() ? "Disable line wrapping" : "Enable line wrapping"} aria-pressed={c.historyWrap()} title={c.historyWrap() ? "Disable line wrapping" : "Enable line wrapping"} onClick={c.toggleHistoryWrap}><WrapTextIcon /></ToolButton>
+            <ToolButton aria-label={c.historyWrap() ? "Disable line wrapping" : "Enable line wrapping"} aria-pressed={c.historyWrap()} title={c.historyWrap() ? "Disable line wrapping" : "Enable line wrapping"} onClick={c.toggleHistoryWrap}><Icons.WrapText /></ToolButton>
           </ToolBar></Show>
       <Show when={c.mode() === "history"}><Show when={!c.historyLoading()} fallback={<PaneEmpty>Loading history…</PaneEmpty>}><Show when={c.historyTree()?.tree.length} fallback={<PaneEmpty><div><HistoryIcon /><Show when={props.chatId} fallback={<><strong>No chat open</strong><p>Open a chat to see its history.</p></>}><strong>No chat history</strong><p>Send a message to start this tree.</p></Show></div></PaneEmpty>}><HistoryList role="tree" aria-label="Chat history" wrap={c.historyWrap()}
           ref={c.bindHistoryScroller} onScroll={c.trackHistoryScroll}><HistoryNodes nodes={c.historyTree()!.tree} activePath={c.historyActivePath()} leafId={c.historyTree()!.leafId} collapseTools={c.collapseTools()} openRuns={c.openRuns()} onToggleRun={c.toggleRun} /></HistoryList></Show></Show></Show>

@@ -18,9 +18,14 @@ import { Dynamic } from "solid-js/web";
 import { Menu as Surface, type Measure, MenuAction, Item, RowAction, RowGroup, Section, MenuPanel, MenuParent, MenuNote, SearchSection } from "./ui/popover";
 import { Button, SelectTrigger, SliderValue } from "./ui/controls";
 import { PillButton } from "./ui/pill";
+// Both are measured once and kept until the window or the Interface size changes: Kobalte reads them on every position
+// update, and a probe each time laid the page out again before floating-ui measured.
+let edges: unknown, gapPx: number | undefined;
+if (typeof window !== "undefined") for (const change of ["resize", "conduit:ui-scale"]) addEventListener(change, () => { edges = gapPx = undefined; });
 /** The room a popover keeps from the window's edges: a gutter, and the system bars an edge-to-edge window draws
  *  under (the safe area), so a menu never runs under a phone's navigation bar. */
-export function edgePadding() {
+export function edgePadding() { return (edges ??= measureEdges()) as number; }
+function measureEdges() {
   const probe = document.createElement("div");
   probe.style.cssText = "position:fixed;visibility:hidden;pointer-events:none;padding:var(--safe-area-inset-top, env(safe-area-inset-top, 0px)) var(--safe-area-inset-right, env(safe-area-inset-right, 0px)) var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)) var(--safe-area-inset-left, env(safe-area-inset-left, 0px))";
   document.body.append(probe);
@@ -33,8 +38,9 @@ export function edgePadding() {
   return padding as unknown as number;
 }
 /** The room between a control and the popover it opens (--popover-gap): touching it, the menu read as part of the
- *  control. A Kobalte gutter is a number, so the step is measured where the popover opens. */
-export function popoverGap() {
+ *  control. A Kobalte gutter is a number, so the step is measured. */
+export function popoverGap() { return gapPx ??= measureGap(); }
+function measureGap() {
   const probe = document.createElement("div");
   probe.style.cssText = "position:fixed;visibility:hidden;pointer-events:none;width:var(--popover-gap)";
   document.body.append(probe);
@@ -42,7 +48,11 @@ export function popoverGap() {
   probe.remove();
   return gap;
 }
-export const Menu = Object.assign((props: ComponentProps<typeof KMenu>) => <KMenu overflowPadding={edgePadding()} gutter={popoverGap()} {...props} onOpenChange={(open) => { if (!open) haptic("dismiss"); props.onOpenChange?.(open); }} />, KMenu);
+export const Menu = Object.assign((props: ComponentProps<typeof KMenu>) => {
+  // Measured once, as the menu is made: inside the JSX each is a getter Kobalte reads on every position update.
+  const padding = edgePadding(), gap = popoverGap();
+  return <KMenu overflowPadding={padding} gutter={gap} {...props} onOpenChange={(open) => { if (!open) haptic("dismiss"); props.onOpenChange?.(open); }} />;
+}, KMenu);
 /** A row's right-click (or long-press, Menu, Shift+F10) menu. Its rows, sections, choices and submenus are the
  *  Menu's own (MenuRow, MenuSection, MenuRadioItem, MenuSub), which work in either. */
 export const ContextMenu = (props: ParentProps<{ placement?: "right-start" | "bottom-start"; onOpenChange?: (open: boolean) => void }>) =>
@@ -197,7 +207,8 @@ export function MenuSub(props: ParentProps<{ phone?: boolean }>) {
 
 /** Something edited in place over the page: the menu's surface without a menu's keys, which would take the typing. */
 export function Popover(props: ParentProps<{ open?: boolean; onOpenChange?: (open: boolean) => void; anchorRef?: () => HTMLElement | undefined; placement?: "bottom-start" | "bottom-end" | "top-start" | "top-end" }>) {
-  return <KPopover open={props.open} onOpenChange={(open) => { if (!open) haptic("dismiss"); props.onOpenChange?.(open); }} anchorRef={props.anchorRef} placement={props.placement || "bottom-end"} gutter={popoverGap()} fitViewport overflowPadding={edgePadding()}>{props.children}</KPopover>;
+  const padding = edgePadding(), gap = popoverGap();
+  return <KPopover open={props.open} onOpenChange={(open) => { if (!open) haptic("dismiss"); props.onOpenChange?.(open); }} anchorRef={props.anchorRef} placement={props.placement || "bottom-end"} gutter={gap} fitViewport overflowPadding={padding}>{props.children}</KPopover>;
 }
 export const PopoverTrigger = KPopover.Trigger;
 export function PopoverContent(props: ParentProps<Caps & { "aria-label"?: string; wide?: boolean; onPointerDownOutside?: (event: Event & { target: EventTarget | null }) => void; onOpenAutoFocus?: (event: Event) => void; onCloseAutoFocus?: (event: Event) => void }>) {
