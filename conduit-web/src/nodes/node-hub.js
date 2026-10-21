@@ -30,6 +30,9 @@ export class NodeHub extends EventEmitter {
     this.allowRemote = allowRemote;
     this.records = null;
     this.live = new Map();
+    // Device processes main follows, by `${nodeId} ${procId}`: they outlive a
+    // socket, so a reconnect resumes each from the last byte it had.
+    this.following = new Map();
     this.wss = new WebSocketServer({ noServer: true, maxPayload: 64 * 1024 * 1024 });
   }
 
@@ -116,8 +119,10 @@ export class NodeHub extends EventEmitter {
         void this.save();
         this.emit("changed");
         this.emit(`online:${record.id}`);
+        for (const follower of this.following.values()) if (follower.nodeId === record.id) void follower.resume();
         return;
       }
+      if (message.type === "proc") return this.following.get(`${record.id} ${message.proc}`)?.deliver(message);
       if (message.type === "event" && node.watchers.has(message.id)) return node.watchers.get(message.id).onEvent(message);
       const pending = node.calls.get(message.id);
       if (!pending) return;
@@ -171,6 +176,14 @@ export class NodeHub extends EventEmitter {
     const abort = () => node.send({ type: "abort", id });
     context.abortSignal?.addEventListener("abort", abort, { once: true });
     try { return await done; } finally { context.abortSignal?.removeEventListener("abort", abort); }
+  }
+
+  /** Follow a device process: `deliver` gets its output and exit; `resume` reattaches after a reconnect. */
+  follow(follower) { this.following.set(`${follower.nodeId} ${follower.procId}`, follower); }
+
+  unfollow(follower) {
+    const key = `${follower.nodeId} ${follower.procId}`;
+    if (this.following.get(key) === follower) this.following.delete(key);
   }
 
   shutdown() {
