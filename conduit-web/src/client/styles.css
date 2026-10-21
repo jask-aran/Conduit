@@ -110,16 +110,16 @@ svg { stroke-width: 1.5; }
 svg.lucide { stroke-width: 2.4; }
 
 /* Inset panel: the rounded fill sits directly on the darker frame. */
-.chat-main { --chat-header-height: 44.8px; position: relative; isolation: isolate; display: flex; min-width: 0; height: calc(100dvh - 12.8px); margin: 6.4px 8px 6.4px 1.6px; flex: 1; flex-direction: column; overflow: hidden; container-type: inline-size; container-name: chat-main; border-radius: 12.8px; background: var(--background); color: var(--foreground); }
+.chat-main { --chat-header-height: var(--header-height); position: relative; isolation: isolate; display: flex; min-width: 0; height: calc(100dvh - var(--space-xl)); margin: var(--space-md) 8px var(--space-md) var(--space-2xs); flex: 1; flex-direction: column; overflow: hidden; container-type: inline-size; container-name: chat-main; border-radius: 12.8px; background: var(--background); color: var(--foreground); }
 /* A file viewer with no file showing stays open, saying how to fill it. */
-.workspace-warning { position: relative; z-index: 2; display: flex; width: min(var(--composer-desktop-reference-width), calc(100% - 38.4px)); gap: 8px; margin: 6.4px auto; padding: 9.6px; border: 0.8px solid var(--border); border-radius: 8px; }
-.workspace-warning svg { width: 14.4px; flex: none; }
-.workspace-warning p { margin: 2.4px 0 0; color: var(--muted-foreground); font-size: 10.4px; }
+.workspace-warning { position: relative; z-index: 2; display: flex; width: min(var(--composer-desktop-reference-width), calc(100% - 38.4px)); gap: 8px; margin: var(--space-md) auto; padding: var(--space-lg); border: 0.8px solid var(--border); border-radius: 8px; }
+.workspace-warning svg { width: var(--icon-lg); flex: none; }
+.workspace-warning p { margin: 2.4px 0 0; color: var(--muted-foreground); font-size: var(--text-row); }
 
 .work-area { position: relative; z-index: 1; display: flex; min-height: 0; flex: 1; }
 .work-area-conversation { display: flex; min-width: 0; flex: 1; flex-direction: column; }
 .terminal-pane { display: flex; min-width: 0; min-height: 0; flex: 1; flex-direction: column; overflow: hidden; background: color-mix(in oklch, var(--background), black 9%); }
-.terminal-canvas { position: relative; min-width: 0; min-height: 0; flex: 1; overflow: hidden; background: #000; padding: 6.4px; }
+.terminal-canvas { position: relative; min-width: 0; min-height: 0; flex: 1; overflow: hidden; background: #000; padding: var(--space-md); }
 .terminal-canvas > div { width: 100%; height: 100%; }
 .terminal-canvas[data-terminal-ready="false"] > canvas { opacity: 0; }
 .terminal-canvas > canvas { display: block; max-width: 100%; max-height: 100%; transition: opacity 80ms linear; }
@@ -147,7 +147,7 @@ svg.lucide { stroke-width: 2.4; }
 .message-scroller-viewport { width: 100%; height: 100%; overflow-y: auto; outline: none; scroll-padding-top: 44.8px; scrollbar-width: none; overflow-anchor: none; will-change: scroll-position; }
 .message-scroller-viewport::-webkit-scrollbar { display: none; }
 /* The chat pane's reading column (its width preset) holds the Transcript, which fills it. */
-.thread { --transcript-width: 100%; width: min(var(--transcript-column-width), calc(100% - var(--transcript-column-gutter))); min-height: 100%; margin-inline: auto; padding: 70.4px clamp(0px, calc((100% - var(--composer-desktop-reference-width) - var(--transcript-column-gutter)) / 2 + 35.2px), 35.2px) 25.6px; }
+.thread { --transcript-width: 100%; width: min(var(--transcript-column-width), calc(100% - var(--transcript-column-gutter))); min-height: 100%; margin-inline: auto; padding: 70.4px clamp(0px, calc((100% - var(--composer-desktop-reference-width) - var(--transcript-column-gutter)) / 2 + 35.2px), 35.2px) var(--space-4xl); }
 [data-transcript-visibility="hidden"] { content-visibility: hidden; }
 /* A long run of hidden blocks far above the reader, out of layout: the run's measured height stands in for it as
    the answer's top padding (transcript-visibility.ts, collapseAbove). Important: a block's own display rule is more
@@ -162,24 +162,24 @@ svg.lucide { stroke-width: 2.4; }
    blocks and tables shimmying horizontally while scrolling. Incremark Advanced
    already pinned this for its own subtree; every renderer needs it. */
 .markdown-skeleton { min-height: 4em; }
-.marker { color: var(--muted-foreground); font-size: 9.6px; }
+.marker { color: var(--muted-foreground); font-size: var(--text-caption); }
 
 /* Menus: one solid dark surface everywhere; icons sized inside items. */
-.composer-stack { position: relative; z-index: 2; display: flex; width: 100%; flex: none; flex-direction: column; gap: 6.4px; padding: 14.4px 24px 19.2px; background: var(--background); }
-.voice-waveform { display: grid; gap: 4.8px; width: 100%; box-sizing: border-box; padding: 7.2px 8.8px 5.6px; border: 0.8px solid color-mix(in oklch, var(--accent-cool), var(--border) 66%); border-radius: 9.6px; background: linear-gradient(180deg, color-mix(in oklch, var(--accent-cool), transparent 94%), color-mix(in oklch, var(--background), transparent 20%)); color: var(--muted-foreground); }
+.composer-stack { position: relative; z-index: 2; display: flex; width: 100%; flex: none; flex-direction: column; gap: var(--space-md); padding: 14.4px 24px var(--space-3xl); background: var(--background); }
+.voice-waveform { display: grid; gap: var(--space-sm); width: 100%; box-sizing: border-box; padding: 7.2px 8.8px 5.6px; border: 0.8px solid color-mix(in oklch, var(--accent-cool), var(--border) 66%); border-radius: 9.6px; background: linear-gradient(180deg, color-mix(in oklch, var(--accent-cool), transparent 94%), color-mix(in oklch, var(--background), transparent 20%)); color: var(--muted-foreground); }
 .voice-waveform-header, .voice-waveform-readout, .voice-waveform-state, .voice-waveform-scale { display: flex; align-items: center; }
-.voice-waveform-header { justify-content: space-between; gap: 9.6px; min-height: 12.8px; font: 8.8px/1.2 ui-monospace, SFMono-Regular, Consolas, monospace; letter-spacing: 0.02em; }
-.voice-waveform-state { min-width: 0; gap: 4.8px; color: var(--foreground); }
-.voice-waveform-dot { width: 4.8px; height: 4.8px; flex: none; border-radius: 999px; background: var(--muted-foreground); }
+.voice-waveform-header { justify-content: space-between; gap: var(--space-lg); min-height: var(--space-xl); font: 8.8px/1.2 ui-monospace, SFMono-Regular, Consolas, monospace; letter-spacing: 0.02em; }
+.voice-waveform-state { min-width: 0; gap: var(--space-sm); color: var(--foreground); }
+.voice-waveform-dot { width: 4.8px; height: 4.8px; flex: none; border-radius: var(--radius-round); background: var(--muted-foreground); }
 .voice-waveform-readout { flex: none; gap: 8px; color: var(--muted-foreground); }
-.voice-waveform-plot { position: relative; display: flex; height: 51.2px; align-items: end; gap: 1.6px; overflow: hidden; padding: 4px 2.4px; border: 0.8px solid color-mix(in oklch, var(--border), transparent 20%); border-radius: 6.4px; background: color-mix(in oklch, var(--background), transparent 32%); }
+.voice-waveform-plot { position: relative; display: flex; height: 51.2px; align-items: end; gap: var(--space-2xs); overflow: hidden; padding: 4px 2.4px; border: 0.8px solid color-mix(in oklch, var(--border), transparent 20%); border-radius: var(--radius-control); background: color-mix(in oklch, var(--background), transparent 32%); }
 .voice-waveform-gridline { position: absolute; right: 2.4px; left: 2.4px; height: 0.8px; background: color-mix(in oklch, var(--border), transparent 45%); pointer-events: none; }
 .voice-waveform-gridline-high { top: 25%; }
 .voice-waveform-gridline-low { bottom: 25%; }
-.voice-waveform-bar { z-index: 1; display: block; min-width: 0.8px; flex: 1 1 0; border-radius: 999px 999px 1.6px 1.6px; background: linear-gradient(180deg, var(--accent-cool), color-mix(in oklch, var(--accent-cool), var(--primary) 38%)); opacity: 0.82; transition: height 90ms ease-out, opacity 140ms ease; }
-.voice-waveform-peak { position: absolute; right: 2.4px; left: 2.4px; z-index: 2; height: 0.8px; border-top: 1px dashed color-mix(in oklch, var(--accent-cool), white 30%); opacity: 0; transition: bottom 120ms ease-out, opacity 120ms ease; pointer-events: none; }
+.voice-waveform-bar { z-index: 1; display: block; min-width: 0.8px; flex: 1 1 0; border-radius: var(--radius-round) var(--radius-round) 1.6px 1.6px; background: linear-gradient(180deg, var(--accent-cool), color-mix(in oklch, var(--accent-cool), var(--primary) 38%)); opacity: 0.82; transition: height 90ms ease-out, opacity 140ms ease; }
+.voice-waveform-peak { position: absolute; right: 2.4px; left: 2.4px; z-index: 2; height: 0.8px; border-top: var(--hairline) dashed color-mix(in oklch, var(--accent-cool), white 30%); opacity: 0; transition: bottom 120ms ease-out, opacity 120ms ease; pointer-events: none; }
 .voice-waveform-peak[data-visible="true"] { opacity: 0.95; }
-.voice-waveform-scale { justify-content: space-between; color: color-mix(in oklch, var(--muted-foreground), transparent 12%); font: 8px/1 ui-monospace, SFMono-Regular, Consolas, monospace; }
+.voice-waveform-scale { justify-content: space-between; color: color-mix(in oklch, var(--muted-foreground), transparent 12%); font: var(--text-label)/var(--leading-none) ui-monospace, SFMono-Regular, Consolas, monospace; }
 .voice-waveform[data-state="connecting"] { border-color: color-mix(in oklch, var(--accent-cool), var(--border) 52%); }
 .voice-waveform[data-state="connecting"] .voice-waveform-dot { background: var(--accent-cool); animation: dictation-wave-pulse 900ms ease-in-out infinite alternate; }
 .voice-waveform[data-state="listening"] .voice-waveform-dot { background: oklch(0.72 0.17 145); box-shadow: 0 0 0 2.4px color-mix(in oklch, oklch(0.72 0.17 145), transparent 82%); }
@@ -187,9 +187,9 @@ svg.lucide { stroke-width: 2.4; }
 .voice-waveform[data-state="error"] .voice-waveform-dot { background: var(--destructive); }
 @keyframes dictation-wave-pulse { from { opacity: 0.4; transform: scaleY(0.65); } to { opacity: 0.95; transform: scaleY(1); } }
 
-.attachment-tray { display: flex; width: min(var(--composer-desktop-reference-width), 100%); max-height: min(256px, 40dvh); flex-direction: column; gap: 6.4px; margin: 0 auto 8px; overflow-y: auto; }
-.attachment-card { display: flex; width: min(320px, 100%); align-items: center; gap: 7.2px; padding: 4.8px; border: 0.8px solid var(--border); border-radius: 8px; }
-.attachment-media { display: grid; width: 32px; height: 32px; flex: none; place-items: center; overflow: hidden; border-radius: 5.6px; background: var(--muted); }
+.attachment-tray { display: flex; width: min(var(--composer-desktop-reference-width), 100%); max-height: min(var(--measure-md), 40dvh); flex-direction: column; gap: var(--space-md); margin: 0 auto 8px; overflow-y: auto; }
+.attachment-card { display: flex; width: min(var(--measure-lg), 100%); align-items: center; gap: 7.2px; padding: var(--space-sm); border: 0.8px solid var(--border); border-radius: 8px; }
+.attachment-media { display: grid; width: var(--control-lg); height: var(--control-lg); flex: none; place-items: center; overflow: hidden; border-radius: 5.6px; background: var(--muted); }
 .attachment-media img { width: 100%; height: 100%; object-fit: cover; }
 .attachment-copy { display: flex; min-width: 0; flex: 1; flex-direction: column; }
 .attachment-copy strong, .attachment-copy small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -212,7 +212,7 @@ svg.lucide { stroke-width: 2.4; }
 
 .attachment-tray, .ui-tree, .ui-change-list, .ui-patch { scrollbar-color: var(--native-scrollbar-color); scrollbar-width: var(--native-scrollbar-width); }
 .attachment-tray::-webkit-scrollbar, .ui-tree::-webkit-scrollbar, .ui-change-list::-webkit-scrollbar, .ui-patch::-webkit-scrollbar { width: 5.6px; height: 5.6px; }
-.attachment-tray::-webkit-scrollbar-thumb, .ui-tree::-webkit-scrollbar-thumb, .ui-change-list::-webkit-scrollbar-thumb, .ui-patch::-webkit-scrollbar-thumb { border: 1.6px solid transparent; border-radius: 999px; background: color-mix(in oklch, var(--foreground), transparent 72%); background-clip: padding-box; }
+.attachment-tray::-webkit-scrollbar-thumb, .ui-tree::-webkit-scrollbar-thumb, .ui-change-list::-webkit-scrollbar-thumb, .ui-patch::-webkit-scrollbar-thumb { border: 1.6px solid transparent; border-radius: var(--radius-round); background: color-mix(in oklch, var(--foreground), transparent 72%); background-clip: padding-box; }
 
 .workspace-warning,
 .attachment-card {
@@ -252,7 +252,7 @@ svg.lucide { stroke-width: 2.4; }
   /* Three renderer probes stack above the first message on a phone. Reserve
      their height so the controls never cover the streamed transcript. */
   .composer-stack {
-    padding: 8px 9.6px calc(9.6px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)));
+    padding: var(--space-md) 9.6px calc(9.6px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)));
   }
   /* Empty chat: bottom-anchored composer (not mid-screen absolute), no rubber-band scroll. */
   .chat-main-empty {
@@ -272,7 +272,7 @@ svg.lucide { stroke-width: 2.4; }
     left: auto;
     right: auto;
     margin: 0;
-    padding: 8px 9.6px calc(9.6px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)));
+    padding: var(--space-md) 9.6px calc(9.6px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)));
   }
 }
 
@@ -296,15 +296,15 @@ button, textarea, input, select { font: inherit; }
 svg { stroke-width: 1.5; }
 svg.lucide { stroke-width: 2.4; }
 /* Inset panel: the rounded fill sits directly on the darker frame. */
-.chat-main { --chat-header-height: 56px; position: relative; isolation: isolate; display: flex; min-width: 0; height: calc(100dvh - 16px); margin: 8px 10px 8px 2px; flex: 1; flex-direction: column; overflow: hidden; container-type: inline-size; container-name: chat-main; border-radius: 16px; background: var(--background); color: var(--foreground); }
-.workspace-warning { position: relative; z-index: 2; display: flex; width: min(var(--composer-desktop-reference-width), calc(100% - 48px)); gap: 10px; margin: 8px auto; padding: 12px; border: 1px solid var(--border); border-radius: 10px; }
-.workspace-warning svg { width: 18px; flex: none; }
+.chat-main { --chat-header-height: var(--header-height); position: relative; isolation: isolate; display: flex; min-width: 0; margin: var(--space-md) 10px var(--space-md) var(--space-2xs); flex: 1; flex-direction: column; overflow: hidden; container-type: inline-size; container-name: chat-main; border-radius: 16px; background: var(--background); color: var(--foreground); }
+.workspace-warning { position: relative; z-index: 2; display: flex; width: min(var(--composer-desktop-reference-width), calc(100% - 48px)); gap: 10px; border: var(--hairline) solid var(--border); border-radius: 10px; }
+.workspace-warning svg { flex: none; }
 .workspace-warning p { margin: 3px 0 0; color: var(--muted-foreground); font-size: 13px; }
 
 .work-area { position: relative; z-index: 1; display: flex; min-height: 0; flex: 1; }
 .work-area-conversation { display: flex; min-width: 0; flex: 1; flex-direction: column; }
 .terminal-pane { display: flex; min-width: 0; min-height: 0; flex: 1; flex-direction: column; overflow: hidden; background: color-mix(in oklch, var(--background), black 9%); }
-.terminal-canvas { position: relative; min-width: 0; min-height: 0; flex: 1; overflow: hidden; background: #000; padding: 8px; }
+.terminal-canvas { position: relative; min-width: 0; min-height: 0; flex: 1; overflow: hidden; background: #000; }
 .terminal-canvas > div { width: 100%; height: 100%; }
 .terminal-canvas[data-terminal-ready="false"] > canvas { opacity: 0; }
 .terminal-canvas > canvas { display: block; max-width: 100%; max-height: 100%; transition: opacity 80ms linear; }
@@ -319,7 +319,7 @@ svg.lucide { stroke-width: 2.4; }
 .message-scroller-viewport { width: 100%; height: 100%; overflow-y: auto; scroll-padding-top: 56px; scrollbar-width: none; overflow-anchor: none; }
 .message-scroller-viewport::-webkit-scrollbar { display: none; }
 /* The chat pane's reading column (its width preset) holds the Transcript, which fills it. */
-.thread { --transcript-width: 100%; width: min(var(--transcript-column-width), calc(100% - var(--transcript-column-gutter))); min-height: 100%; margin-inline: auto; padding: 88px 44px 32px; }
+.thread { --transcript-width: 100%; width: min(var(--transcript-column-width), calc(100% - var(--transcript-column-gutter))); min-height: 100%; margin-inline: auto; padding: 88px 44px var(--space-4xl); }
 [data-transcript-visibility="hidden"] { content-visibility: hidden; }
 /* A long run of hidden blocks far above the reader, out of layout: the run's measured height stands in for it as
    the answer's top padding (transcript-visibility.ts, collapseAbove). Important: a block's own display rule is more
@@ -334,24 +334,24 @@ svg.lucide { stroke-width: 2.4; }
    blocks and tables shimmying horizontally while scrolling. Incremark Advanced
    already pinned this for its own subtree; every renderer needs it. */
 .markdown-skeleton { min-height: 5em; }
-.marker { color: var(--muted-foreground); font-size: 12px; }
+.marker { color: var(--muted-foreground); }
 
 /* Menus: one solid dark surface everywhere; icons sized inside items. */
-.composer-stack { position: relative; z-index: 2; display: flex; width: 100%; flex: none; flex-direction: column; gap: 8px; padding: 18px 44px 24px; background: var(--background); }
-.voice-waveform { display: grid; gap: 6px; width: 100%; box-sizing: border-box; padding: 9px 11px 7px; border: 1px solid color-mix(in oklch, var(--accent-cool), var(--border) 66%); border-radius: 12px; background: linear-gradient(180deg, color-mix(in oklch, var(--accent-cool), transparent 94%), color-mix(in oklch, var(--background), transparent 20%)); color: var(--muted-foreground); }
+.composer-stack { position: relative; z-index: 2; display: flex; width: 100%; flex: none; flex-direction: column; padding: 18px 44px var(--space-3xl); background: var(--background); }
+.voice-waveform { display: grid; width: 100%; box-sizing: border-box; padding: 9px 11px 7px; border: var(--hairline) solid color-mix(in oklch, var(--accent-cool), var(--border) 66%); border-radius: 12px; background: linear-gradient(180deg, color-mix(in oklch, var(--accent-cool), transparent 94%), color-mix(in oklch, var(--background), transparent 20%)); color: var(--muted-foreground); }
 .voice-waveform-header, .voice-waveform-readout, .voice-waveform-state, .voice-waveform-scale { display: flex; align-items: center; }
-.voice-waveform-header { justify-content: space-between; gap: 12px; min-height: 16px; font: 11px/1.2 ui-monospace, SFMono-Regular, Consolas, monospace; letter-spacing: 0.02em; }
-.voice-waveform-state { min-width: 0; gap: 6px; color: var(--foreground); }
-.voice-waveform-dot { width: 6px; height: 6px; flex: none; border-radius: 999px; background: var(--muted-foreground); }
+.voice-waveform-header { justify-content: space-between; font: 11px/1.2 ui-monospace, SFMono-Regular, Consolas, monospace; letter-spacing: 0.02em; }
+.voice-waveform-state { min-width: 0; color: var(--foreground); }
+.voice-waveform-dot { width: 6px; height: 6px; flex: none; background: var(--muted-foreground); }
 .voice-waveform-readout { flex: none; gap: 10px; color: var(--muted-foreground); }
-.voice-waveform-plot { position: relative; display: flex; height: 64px; align-items: end; gap: 2px; overflow: hidden; padding: 5px 3px; border: 1px solid color-mix(in oklch, var(--border), transparent 20%); border-radius: 8px; background: color-mix(in oklch, var(--background), transparent 32%); }
+.voice-waveform-plot { position: relative; display: flex; height: 64px; align-items: end; overflow: hidden; padding: 5px 3px; border: var(--hairline) solid color-mix(in oklch, var(--border), transparent 20%); background: color-mix(in oklch, var(--background), transparent 32%); }
 .voice-waveform-gridline { position: absolute; right: 3px; left: 3px; height: 1px; background: color-mix(in oklch, var(--border), transparent 45%); pointer-events: none; }
 .voice-waveform-gridline-high { top: 25%; }
 .voice-waveform-gridline-low { bottom: 25%; }
-.voice-waveform-bar { z-index: 1; display: block; min-width: 1px; flex: 1 1 0; border-radius: 999px 999px 2px 2px; background: linear-gradient(180deg, var(--accent-cool), color-mix(in oklch, var(--accent-cool), var(--primary) 38%)); opacity: 0.82; transition: height 90ms ease-out, opacity 140ms ease; }
-.voice-waveform-peak { position: absolute; right: 3px; left: 3px; z-index: 2; height: 1px; border-top: 1px dashed color-mix(in oklch, var(--accent-cool), white 30%); opacity: 0; transition: bottom 120ms ease-out, opacity 120ms ease; pointer-events: none; }
+.voice-waveform-bar { z-index: 1; display: block; min-width: 1px; flex: 1 1 0; border-radius: var(--radius-round) var(--radius-round) 2px 2px; background: linear-gradient(180deg, var(--accent-cool), color-mix(in oklch, var(--accent-cool), var(--primary) 38%)); opacity: 0.82; transition: height 90ms ease-out, opacity 140ms ease; }
+.voice-waveform-peak { position: absolute; right: 3px; left: 3px; z-index: 2; height: 1px; opacity: 0; transition: bottom 120ms ease-out, opacity 120ms ease; pointer-events: none; }
 .voice-waveform-peak[data-visible="true"] { opacity: 0.95; }
-.voice-waveform-scale { justify-content: space-between; color: color-mix(in oklch, var(--muted-foreground), transparent 12%); font: 10px/1 ui-monospace, SFMono-Regular, Consolas, monospace; }
+.voice-waveform-scale { justify-content: space-between; color: color-mix(in oklch, var(--muted-foreground), transparent 12%); }
 .voice-waveform[data-state="connecting"] { border-color: color-mix(in oklch, var(--accent-cool), var(--border) 52%); }
 .voice-waveform[data-state="connecting"] .voice-waveform-dot { background: var(--accent-cool); animation: dictation-wave-pulse 900ms ease-in-out infinite alternate; }
 .voice-waveform[data-state="listening"] .voice-waveform-dot { background: oklch(0.72 0.17 145); box-shadow: 0 0 0 3px color-mix(in oklch, oklch(0.72 0.17 145), transparent 82%); }
@@ -359,15 +359,15 @@ svg.lucide { stroke-width: 2.4; }
 .voice-waveform[data-state="error"] .voice-waveform-dot { background: var(--destructive); }
 @keyframes dictation-wave-pulse { from { opacity: 0.4; transform: scaleY(0.65); } to { opacity: 0.95; transform: scaleY(1); } }
 
-.attachment-tray { display: flex; width: min(var(--composer-desktop-reference-width), 100%); max-height: min(320px, 40dvh); flex-direction: column; gap: 8px; margin: 0 auto 10px; overflow-y: auto; }
-.attachment-card { display: flex; width: min(400px, 100%); align-items: center; gap: 9px; padding: 6px; border: 1px solid var(--border); border-radius: 10px; }
-.attachment-media { display: grid; width: 40px; height: 40px; flex: none; place-items: center; overflow: hidden; border-radius: 7px; background: var(--muted); }
+.attachment-tray { display: flex; width: min(var(--composer-desktop-reference-width), 100%); flex-direction: column; margin: 0 auto 10px; overflow-y: auto; }
+.attachment-card { display: flex; align-items: center; gap: 9px; border: var(--hairline) solid var(--border); border-radius: 10px; }
+.attachment-media { display: grid; flex: none; place-items: center; overflow: hidden; border-radius: 7px; background: var(--muted); }
 .attachment-media img { width: 100%; height: 100%; object-fit: cover; }
 .attachment-copy { display: flex; min-width: 0; flex: 1; flex-direction: column; }
 .attachment-copy strong, .attachment-copy small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .attachment-copy small { color: var(--muted-foreground); }
 .chat-drop-overlay { position: absolute; inset: 0; z-index: 40; display: grid; place-items: center; pointer-events: none; background: color-mix(in oklch, var(--background), transparent 22%); backdrop-filter: blur(12px); }
-.chat-drop-overlay > div { padding: 18px 22px; border: 1px solid var(--border); border-radius: 16px; background: var(--card); box-shadow: 0 18px 60px rgb(0 0 0 / 18%); }
+.chat-drop-overlay > div { padding: 18px 22px; border: var(--hairline) solid var(--border); border-radius: 16px; background: var(--card); box-shadow: 0 18px 60px rgb(0 0 0 / 18%); }
 /* Decorative, deterministic meteor field for the entire chat main surface. */
 .chat-meteors { position: absolute; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; }
 
@@ -384,7 +384,7 @@ svg.lucide { stroke-width: 2.4; }
 
 .attachment-tray, .ui-tree, .ui-change-list, .ui-patch { scrollbar-color: var(--native-scrollbar-color); scrollbar-width: var(--native-scrollbar-width); }
 .attachment-tray::-webkit-scrollbar, .ui-tree::-webkit-scrollbar, .ui-change-list::-webkit-scrollbar, .ui-patch::-webkit-scrollbar { width: 7px; height: 7px; }
-.attachment-tray::-webkit-scrollbar-thumb, .ui-tree::-webkit-scrollbar-thumb, .ui-change-list::-webkit-scrollbar-thumb, .ui-patch::-webkit-scrollbar-thumb { border: 2px solid transparent; border-radius: 999px; background: color-mix(in oklch, var(--foreground), transparent 72%); background-clip: padding-box; }
+.attachment-tray::-webkit-scrollbar-thumb, .ui-tree::-webkit-scrollbar-thumb, .ui-change-list::-webkit-scrollbar-thumb, .ui-patch::-webkit-scrollbar-thumb { border: var(--stroke) solid transparent; background: color-mix(in oklch, var(--foreground), transparent 72%); background-clip: padding-box; }
 
 .workspace-warning,
 .attachment-card {
@@ -425,10 +425,10 @@ svg.lucide { stroke-width: 2.4; }
   }
   /* Three renderer probes stack above the first message on a phone. Reserve
      their height so the controls never cover the streamed transcript. */
-  .thread { width: 100%; padding: 112px 16px 20px; }
+  .thread { width: 100%; padding: 112px var(--space-xl) var(--space-2xl); }
   .composer-stack {
     flex: none;
-    padding: 10px 12px calc(12px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)));
+    padding: 10px var(--space-lg) calc(var(--space-lg) + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)));
     background: var(--background);
   }
   /* Empty chat: bottom-anchored composer (not mid-screen absolute), no rubber-band scroll. */
@@ -459,7 +459,7 @@ svg.lucide { stroke-width: 2.4; }
     z-index: 2;
     width: 100%;
     margin: 0;
-    padding: 10px 12px calc(12px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)));
+    padding: 10px var(--space-lg) calc(var(--space-lg) + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)));
     transform: none;
     background: var(--background);
   }
@@ -479,7 +479,7 @@ svg.lucide { stroke-width: 2.4; }
 :where(.dark) ::-webkit-scrollbar-button { display: none !important; width: 0 !important; height: 0 !important; }
 :where(.dark) ::-webkit-scrollbar-thumb {
   border: 3px solid transparent !important;
-  border-radius: 999px !important;
+  border-radius: var(--radius-round) !important;
   background: color-mix(in oklch, var(--muted-foreground), transparent 42%) !important;
   background-clip: padding-box !important;
 }
@@ -502,7 +502,7 @@ svg.lucide { stroke-width: 2.4; }
 .overlay-scrollbar[data-touch] { pointer-events: none; }
 .overlay-scrollbar[data-touch] .overlay-scrollbar-thumb { opacity: 0.55; }
 .overlay-scrollbar-thumb {
-  position: absolute; border-radius: 999px;
+  position: absolute; border-radius: var(--radius-round);
   background: var(--muted-foreground); opacity: 0.8;
   box-shadow: 0 0 0 1px color-mix(in oklch, var(--background), transparent 30%);
 }
@@ -521,7 +521,7 @@ svg.lucide { stroke-width: 2.4; }
 
 .harness-mark { display: block; flex: none; object-fit: contain; }
 /* A workspace's own glyph (project/workspace-appearance.tsx): an icon or a monogram, sized by its slot. */
-.workspace-glyph { display: inline-grid; flex: none; place-items: center; font-size: calc(0.5625 * var(--u-type)); font-weight: 750; letter-spacing: -.04em; line-height: 1; }
+.workspace-glyph { display: inline-grid; flex: none; place-items: center; font-size: calc(0.5625 * var(--u-type)); font-weight: 750; letter-spacing: -.04em; line-height: var(--leading-none); }
 /* A slot can size the monogram to itself (--glyph-text: the dashboard's glyph tile). */
 .workspace-glyph[data-mode="monogram"] { font-size: var(--glyph-text, calc(0.5 * var(--u-type))); }
 .workspace-glyph svg { width: 100%; height: 100%; }
@@ -568,9 +568,9 @@ svg.lucide { stroke-width: 2.4; }
 [data-region]::after {
   content: "";
   position: absolute;
-  right: 16px;
+  right: var(--space-2xl);
   bottom: 0;
-  left: 16px;
+  left: var(--space-2xl);
   z-index: 5;
   height: 1.5px;
   border-radius: 1px;
@@ -581,10 +581,10 @@ svg.lucide { stroke-width: 2.4; }
 }
 [data-region][data-focus-held]::after { opacity: 1; }
 /* The sidebar runs to the foot of the window; its line sits on the cards'. */
-[data-region="sidebar"]::after { bottom: 6.4px; }
+[data-region="sidebar"]::after { bottom: var(--space-md); }
 .workspace-panel:not(.workspace-panel-open)::after { display: none; }
 /* Over the panes, or switching layer, the dock is its surface, not its room in the row. */
-:is(.workspace-panel-overlay, .workspace-panel[data-layer-switch])::after { left: auto; width: calc(var(--workspace-shell-width) - 32px); }
+:is(.workspace-panel-overlay, .workspace-panel[data-layer-switch])::after { left: auto; width: calc(var(--workspace-shell-width) - var(--control-lg)); }
 .workspace-panel-overlay::after { right: 24px; }
 .region-cue {
   position: fixed;
