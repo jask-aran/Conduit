@@ -102,7 +102,7 @@
 
 /* A comment leaves its lines faintly marked, and hovering them previews the note. */
 .cm-review-comment { border-radius: var(--radius-inset); background: color-mix(in oklch, var(--warn), transparent 90%); box-shadow: inset 2px 0 0 color-mix(in oklch, var(--warn), transparent 55%); }
-.workspace-diff-overview { display: flex; min-height: 112px; flex: 1 1 56%; flex-direction: column; overflow: hidden; }
+.workspace-diff-overview { display: flex; min-height: var(--measure-2xs); flex: 1 1 56%; flex-direction: column; overflow: hidden; }
 .workspace-patch { display: flex; min-height: 0; max-height: 42%; flex: none; flex-direction: column; overflow: hidden; }
 .workspace-diff > .workspace-patch { max-height: none; flex: 1; border: 0; }
 .workspace-patch.workspace-review { flex-direction: row; }
@@ -140,7 +140,7 @@
   .workspace-panel.workspace-panel-open { margin: 0; transform: translateX(0); }
   .workspace-panel-surface { width: 100%; border: 0; overscroll-behavior: contain; opacity: 1; transform: none; }
    .workspace-diff { overscroll-behavior: contain; }
-  .workspace-files { grid-template-rows: minmax(128px, 42%) 1fr; }
+  .workspace-files { grid-template-rows: minmax(var(--measure-2xs), 42%) 1fr; }
   html[data-vv-shell] .workspace-panel { height: var(--app-height, 100dvh); }
 }
 
@@ -162,7 +162,7 @@
 .workspace-file-icon { border-radius: var(--radius-inset); font-size: 7px !important; }
  .workspace-diff { display: flex; min-height: 0; flex: 1; flex-direction: column; overflow: hidden; }
 .workspace-files > .ui-file { flex: none; }
-.workspace-diff-overview { display: flex; min-height: 100px; flex: 1; flex-direction: column; overflow: hidden; }
+.workspace-diff-overview { display: flex; min-height: var(--measure-2xs); flex: 1; flex-direction: column; overflow: hidden; }
 .workspace-patch { display: flex; min-height: 0; flex: none; flex-direction: column; overflow: hidden; }
 /* 24px hit target centered on the gap between chat-main and the panel edge. */
 .workspace-detail-resizing { cursor: row-resize; user-select: none; }
@@ -182,7 +182,7 @@
   .workspace-panel.workspace-panel-open { margin: 0; transform: translateX(0); }
   .workspace-panel-surface { width: 100%; border: 0; border-radius: 0; overscroll-behavior: contain; opacity: 1; transform: none; }
    .workspace-diff { overscroll-behavior: contain; }
-  .workspace-files { grid-template-rows: minmax(160px, 42%) 1fr; }
+  .workspace-files { grid-template-rows: minmax(var(--measure-2xs), 42%) 1fr; }
   /* Full-bleed, the panel sits under the system's status and navigation bars,
      so its surface starts and ends inside them, as the chat's header and
      composer do. */

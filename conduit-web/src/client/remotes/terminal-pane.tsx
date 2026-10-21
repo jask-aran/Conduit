@@ -267,7 +267,7 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
     if ((!event.ctrlKey && !event.metaKey) || !terminal) return;
     event.preventDefault();
     event.stopPropagation();
-    const current = Number(localStorage.getItem("conduit:terminal-font-size")) || (window.matchMedia("(max-width: 560px)").matches ? 13 : 10.4);
+    const current = Number(localStorage.getItem("conduit:terminal-font-size")) || 13;
     const next = Math.max(8, Math.min(24, current + (event.deltaY < 0 ? 1 : -1)));
     localStorage.setItem("conduit:terminal-font-size", String(next));
     terminal.setFontSize(next);
