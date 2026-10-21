@@ -27,6 +27,10 @@
 /* Data: its state and latency, as its menu's meta reads them. */
 .ui-server-copy > small { color: var(--muted-foreground); font: var(--weight-rest) var(--text-caption)/var(--leading-row) var(--font-data); }
 .ui-server-control .ui-status { flex: none; }
+/* Inline: the name keeps its room and the state gives way, on the name's line. */
+.ui-server-control[data-inline] .ui-server-copy { flex-direction: row; align-items: baseline; gap: var(--space-sm); }
+.ui-server-control[data-inline] .ui-server-name { flex: none; max-width: 65%; align-self: center; }
+.ui-server-control[data-inline] .ui-server-copy > small { min-width: 0; flex: 1; }
 .ui-server-control[data-compact] { width: var(--control); height: var(--control); justify-content: center; margin-inline-start: auto; padding: 0; }
 .ui-connection-recovery { display: grid; width: 100%; max-width: var(--measure-xl); gap: var(--space-lg); }
 .ui-connection-recovery h1 { margin: 0; font-size: var(--text-heading); font-weight: var(--weight-strong); line-height: var(--leading-tight); }

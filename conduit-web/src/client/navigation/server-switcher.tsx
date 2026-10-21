@@ -50,6 +50,8 @@ const canProbe = (origin: string) => isInstalledClient() || origin === location.
 export function ServerSwitcher(props: {
   connectivity: string;
   compact?: boolean;
+  /** The control on one line (a desktop rail's foot). */
+  inline?: boolean;
   pwaUpdating: boolean;
   onOpenSettings: () => void;
   onUpdatePwa: () => void;
@@ -206,7 +208,7 @@ export function ServerSwitcher(props: {
   const routeDetail = () => inUse() ? `${serverPathLabel(inUse()!)} · ${shortOrigin(inUse()!.origin)}` : undefined;
 
   return <><Menu onOpenChange={onOpenChange}>
-    <Menu.Trigger as={ServerControl} compact={props.compact} name={serverName()} detail={triggerDetail()} connectivity={props.connectivity}
+    <Menu.Trigger as={ServerControl} compact={props.compact} inline={props.inline} name={serverName()} detail={triggerDetail()} connectivity={props.connectivity}
       tabIndex={-1} onPointerDown={() => { focusBefore = document.activeElement; }} onFocus={(event: FocusEvent) => {
         if (giveBack === undefined) return;
         const before = giveBack;

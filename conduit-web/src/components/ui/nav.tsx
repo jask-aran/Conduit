@@ -132,11 +132,6 @@ export function NavNotice(props: { icon?: JSX.Element; busy?: boolean; ready?: b
 }
 
 /** A label and its links as icons (the installers). */
-export const NavLinks = (props: { label: string; links: { href: string; label: string; icon: JSX.Element }[] }) => <div class="ui-nav-links">
-  <span>{props.label}</span>
-  <For each={props.links}>{(link) => <a href={link.href} target="_blank" rel="noopener noreferrer" aria-label={link.label} title={link.label}>{link.icon}</a>}</For>
-</div>;
-
 export type StatusTone = "success" | "active" | "warn" | "danger" | "muted" | "unread";
 /** A row's live state in an --icon slot: a dot in its tone, or a Spinner while it works; stale: it may be out of date. */
 export function StatusDot(props: JSX.HTMLAttributes<HTMLSpanElement> & { label: string; tone?: StatusTone; spinning?: boolean; stale?: boolean }) {
