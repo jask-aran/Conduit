@@ -1,4 +1,5 @@
 import { isChatId } from "../chat-store.js";
+import { rememberedModel } from "../profile-model-memory.js";
 import { ServerConcurrency } from "./effect-concurrency.js";
 
 function launchError(code, message, status = 400) {
@@ -93,6 +94,7 @@ export function createLiveSessionLauncher({
   findChatContext,
   lifecycle,
   maxLiveProcesses = () => 0,
+  preferences = null,
   registry,
   runtimeFor,
   templateForChat,
@@ -156,6 +158,16 @@ export function createLiveSessionLauncher({
       const held = liveProcessEntries(backends, context.chat.id).length + starting.size;
       if (max > 0 && held >= max) throw launchError("live_process_limit", "No room for a spare agent", 429);
     }).then(() => { starting.add(context.chat.id); }));
+    // A Conduit chat that has not chosen a model starts on its profile's last
+    // one, as its composer shows. A spare agent, started before the first pick,
+    // took the settings default with no effort and kept it as the chat's own.
+    if (!model && !context.chat.backend?.model && preferences
+      && (context.chat.backend?.implementation || "conduit-runtime") === "conduit-runtime") {
+      const remembered = rememberedModel(preferences, templateForChat(context.chat, context.project)?.id);
+      const known = remembered?.model && (await adapter.listAvailableModels?.(context.project.workingRoot) || [])
+        .some((item) => item.spec === remembered.model);
+      if (known) { model = remembered.model; thinkingLevel = remembered.thinkingLevel || ""; forceModel = true; }
+    }
     try {
       const result = await adapter.launch(context, { model, thinkingLevel, forceModel }, {
         catalogFor, config, lifecycle, runtimeFor, templateForChat,
