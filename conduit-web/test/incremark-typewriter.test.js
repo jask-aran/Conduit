@@ -1,12 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import {
-  BufferedIncremarkTypewriter,
-  chooseFrameBudget,
-  normalizeFrameInterval,
-  prepareTypewriterNode,
-  visibleAstCharacters,
-} from "../src/client/chat/incremark-typewriter.ts";
+import { importClient } from "./helpers/client-module.js";
+
+const { BufferedIncremarkTypewriter, chooseFrameBudget, normalizeFrameInterval, prepareTypewriterNode, visibleAstCharacters } = await importClient('export { BufferedIncremarkTypewriter, chooseFrameBudget, normalizeFrameInterval, prepareTypewriterNode, visibleAstCharacters } from "../src/client/chat/incremark-typewriter.ts";');
 import {
   advanceTailFollow,
   createTailFollowState,
