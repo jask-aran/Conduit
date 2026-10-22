@@ -102,20 +102,10 @@ svg.lucide { stroke-width: 2.4; }
    specific. */
 [data-transcript-visibility="collapsed"] { display: none !important; }
 
-/* The assistant column must be a definite width, not shrink-to-fit.
-   [data-slot="message"] is a flex row, so an auto-width message-content sizes
-   to its content's intrinsic width -- and a block virtualized with
-   content-visibility contributes zero intrinsic inline size. Blocks crossing
-   the overscan band therefore rewidened the whole column, which read as code
-   blocks and tables shimmying horizontally while scrolling. Incremark Advanced
-   already pinned this for its own subtree; every renderer needs it. */
 .markdown-skeleton { min-height: 4em; }
-.marker { color: var(--muted-foreground); font-size: var(--text-caption); }
 
-/* Menus: one solid dark surface everywhere; icons sized inside items. */
 .composer-stack { position: relative; z-index: 2; display: flex; width: 100%; flex: none; flex-direction: column; gap: var(--space-md); padding: var(--space-xl) var(--space-4xl) var(--space-3xl); background: var(--background); }
 
-/* The commented lines, whole, with the part the comment covers picked out. */
 .chat-drop-overlay { position: absolute; inset: 0; z-index: 40; display: grid; place-items: center; pointer-events: none; background: color-mix(in oklch, var(--background), transparent 22%); backdrop-filter: blur(9.6px); }
 .chat-drop-overlay > div { padding: var(--space-xl) var(--space-2xl); border: var(--hairline) solid var(--border); border-radius: var(--radius-surface); background: var(--card); box-shadow: var(--lift-raised); }
 /* Decorative, deterministic meteor field for the entire chat main surface. */
@@ -138,7 +128,6 @@ svg.lucide { stroke-width: 2.4; }
   background: var(--card);
   border-color: var(--border);
 }
-/* The primary action reads as a bright glass key: top specular line + lift. */
 
 @media (--conduit-phone-layout) {
   html[data-mobile-overlay] { overscroll-behavior-y: none; }
@@ -285,8 +274,6 @@ svg.lucide { stroke-width: 2.4; }
   .overlay-scrollbar[data-touch] .overlay-scrollbar-thumb { opacity: 1; }
 }
 
-/* The dashboards' right-click menus (V2-04 moves them onto the adapter, as the sidebar's are). */
-
 /* The first open (main.tsx): until the route is ready and laid out only the
    frame shows, composer included; then the composer is simply there and every
    other region fades in around it, once. The last selector takes, inside each
@@ -351,7 +338,6 @@ svg.lucide { stroke-width: 2.4; }
 
 
 
-/* Keyboard focus on a button is the wash (quiet buttons) or a slight lift
-   (filled ones), never a ring (DESIGN.md, Interaction). */
+/* The file viewer takes focus for its keys: never a ring (DESIGN.md, Interaction). */
 
 .file-viewer-surface:focus { outline: none; }

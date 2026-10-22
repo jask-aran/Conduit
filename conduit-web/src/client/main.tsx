@@ -4100,13 +4100,13 @@ function App() {
         <Show when={parseFileView(slotView(slot))}>{renderFileViewer(slot)}</Show>
         <Show when={slotView(slot)?.startsWith("term:")}>{renderTerminalDocument(slot, () => slotView(slot)!.slice("term:".length))}</Show>
         <Show when={page() === "computer"}>
-          <div class="main-split-chat main-split-page" tabIndex={-1} onPointerDown={focusChatSurface}>{renderPaneComputer(slot)}</div>
+          <div class="main-split-chat" tabIndex={-1} onPointerDown={focusChatSurface}>{renderPaneComputer(slot)}</div>
         </Show>
         <Show when={page()?.startsWith("harness:")}>
-          <div class="main-split-chat main-split-page" tabIndex={-1} onPointerDown={focusChatSurface}>{attachInput()}{renderPaneHarness(pane, decodeURIComponent(page()!.slice("harness:".length)))}</div>
+          <div class="main-split-chat" tabIndex={-1} onPointerDown={focusChatSurface}>{attachInput()}{renderPaneHarness(pane, decodeURIComponent(page()!.slice("harness:".length)))}</div>
         </Show>
         <Show when={page() && page() !== "computer" && !page()!.startsWith("harness:")}>
-          <div class="main-split-chat main-split-page" tabIndex={-1} onPointerDown={focusChatSurface}>
+          <div class="main-split-chat" tabIndex={-1} onPointerDown={focusChatSurface}>
             {attachInput()}
             <Show when={page() === "dashboard"} fallback={<Show when={slotPageProject(slot)}>{(project) =>
               <ProjectPage session={side} project={project()} target={{ project: project() }} keyboardOwner={owns} onSendDraft={(prompt) => sendFromPanePage(pane, prompt)} onOpenChat={openChatFromPage} tabActions={paneTabActions(slot)} />
