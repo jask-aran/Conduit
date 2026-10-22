@@ -188,7 +188,10 @@ environments.
     (Windows relaying WSL over a stdio child), chosen per environment. The
     node id, key and grants are the same either way: each environment keeps
     its own pairing key and the relay forwards its hello untouched, so the
-    head checks every environment alike. Only WSL distros now; the frame tags
+    head checks every environment alike. The relay is trusted: the relayed
+    key passes through it, so it could speak for that environment, but it
+    is the same machine and user, which can read that key on disk anyway
+    (the 2026-10-22 review). Only WSL distros now; the frame tags
     stay generic so containers and SSH hosts behind a device fit later.
     *(Built 2026-10-22: nodes/node-relay.js; `conduit-node relay add <env>
     -- <command>` on the relay, `relayed on` and `run --stdio` on the relayed
