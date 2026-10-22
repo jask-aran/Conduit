@@ -14,20 +14,28 @@ import readline from "node:readline";
  * connection, so the relay can never speak for it. Which way an environment
  * connects is its own setting (`conduit-node relayed on|off`).
  *
+ * The relay is trusted (decision 25): the relayed node's key passes through
+ * it, so it could speak for that node. It is the same machine and user,
+ * which can read that key on disk anyway.
+ *
  * The child lines:
  *   child -> relay  { t: "open", key }   dial main (once per connection)
  *                   { t: "msg", d }      a frame for main
+ *                   { t: "pong" }        answer to a ping
  *                   { t: "close" }       hang up
  *   relay -> child  { t: "opened" }      main took the key
  *                   { t: "msg", d }      a frame from main
+ *                   { t: "ping" }        main checking the child itself is alive
  *                   { t: "closed", reason }
  *
  * On the relay's socket to main the same, tagged by the environment:
- *   { type: "relay-open", env, key } / { type: "relay", env, d } / { type: "relay-close", env }
- *   and from main { type: "relay-opened", env } / { type: "relay", env, d } / { type: "relay-closed", env, reason }.
+ *   { type: "relay-open", env, key } / { type: "relay", env, d } / { type: "relay-pong", env } / { type: "relay-close", env }
+ *   and from main { type: "relay-opened", env } / { type: "relay", env, d } / { type: "relay-ping", env } / { type: "relay-closed", env, reason }.
  */
 
 const RESPAWN_MS = [1000, 5000, 30000];
+// An open main has not answered by then is given up, and the child dials again.
+const OPEN_WAIT_MS = 30_000;
 
 /**
  * The relay's side: one environment, run as a child for as long as the relay
@@ -39,6 +47,7 @@ export function relayEnvironment({ env, command, log = console }) {
   let child = null;
   let up = null; // send to main, while the relay's socket is up
   let wantsOpen = null; // the child's dial, waiting for the relay's socket
+  let opening = null; // sent to main, not yet answered: its give-up timer
   let open = false;
   let respawns = 0;
   let timer = null;
@@ -49,6 +58,13 @@ export function relayEnvironment({ env, command, log = console }) {
     if (!wantsOpen || !up) return;
     up({ type: "relay-open", env, key: wantsOpen.key });
     wantsOpen = null;
+    opening = setTimeout(() => { opening = null; down({ t: "closed", reason: "main did not answer" }); }, OPEN_WAIT_MS);
+    opening.unref?.();
+  };
+  // A dial in flight or open is ended for the child, which dials again.
+  const hangUp = (reason) => {
+    if (opening) { clearTimeout(opening); opening = null; down({ t: "closed", reason }); }
+    else if (open) { open = false; down({ t: "closed", reason }); }
   };
 
   const start = () => {
@@ -61,12 +77,15 @@ export function relayEnvironment({ env, command, log = console }) {
       try { line = JSON.parse(raw); } catch { return; }
       if (line.t === "open") { wantsOpen = { key: String(line.key || "") }; dial(); }
       else if (line.t === "msg" && open) up?.({ type: "relay", env, d: line.d });
+      else if (line.t === "pong" && open) up?.({ type: "relay-pong", env });
       else if (line.t === "close" && open) { open = false; up?.({ type: "relay-close", env }); }
     });
     child.on("error", (error) => log.warn?.(`[conduit-node] ${env}: ${error.message}`));
     child.on("exit", (code) => {
       child = null;
       wantsOpen = null;
+      clearTimeout(opening);
+      opening = null;
       if (open) { open = false; up?.({ type: "relay-close", env }); }
       if (stopped) return;
       if (Date.now() - started > 60_000) respawns = 0;
@@ -82,12 +101,18 @@ export function relayEnvironment({ env, command, log = console }) {
     attach(send) { up = send; dial(); },
     detach() {
       up = null;
-      if (open) { open = false; down({ t: "closed", reason: "relay disconnected" }); }
+      hangUp("relay disconnected");
     },
     deliver(message) {
-      if (message.type === "relay-opened") { open = true; down({ t: "opened" }); }
-      else if (message.type === "relay-closed") { open = false; down({ t: "closed", reason: message.reason || "closed" }); }
+      if (message.type === "relay-opened") {
+        if (!opening) return;
+        clearTimeout(opening);
+        opening = null;
+        open = true;
+        down({ t: "opened" });
+      } else if (message.type === "relay-closed") hangUp(message.reason || "closed");
       else if (message.type === "relay" && open) down({ t: "msg", d: message.d });
+      else if (message.type === "relay-ping" && open) down({ t: "ping" });
     },
     stop() { stopped = true; clearTimeout(timer); child?.kill(); },
   };
@@ -106,6 +131,8 @@ export function stdioDialer({ input = process.stdin, output = process.stdout } =
     if (!current) return;
     if (line.t === "opened") { current.readyState = 1; current.emit("open"); }
     else if (line.t === "msg") current.emit("message", line.d);
+    // Answered by this process's own loop: one that hangs does not answer.
+    else if (line.t === "ping") write({ t: "pong" });
     else if (line.t === "closed") current.end();
   });
   // The relay went away: nothing can reach main from here.

@@ -24,6 +24,12 @@ const hash = (key) => crypto.createHash("sha256").update(key).digest("hex");
  * context allows; `waiting` is emitted so the chat can say what it waits for.
  * A call in flight when the socket drops fails as interrupted.
  */
+// Relayed environments (decision 25): how many one socket may carry, how long a
+// name may be, and how long an open may go without its node's hello.
+const RELAYS_PER_SOCKET = 8;
+const RELAY_ENV_MAX = 64;
+const HELLO_WAIT_MS = 30_000;
+
 export class NodeHub extends EventEmitter {
   constructor({ dataRoot, allowRemote = isTailnetOrLoopback }) {
     super();
@@ -40,6 +46,8 @@ export class NodeHub extends EventEmitter {
     this.following = new Map();
     // Byte streams to endpoints on devices (remote-tunnel.js), by `${nodeId} ${tunnelId}`.
     this.tunnels = new Map();
+    // Every socket of a node, by node id, from connect: unpairing closes them all.
+    this.attached = new Map();
     this.wss = new WebSocketServer({ noServer: true, maxPayload: 64 * 1024 * 1024 });
   }
 
@@ -105,7 +113,9 @@ export class NodeHub extends EventEmitter {
       this.devices = this.devices.filter((device) => device.id !== gone.deviceId);
     }
     await this.save();
-    this.live.get(id)?.socket.close(4001, "unpaired");
+    // Every socket of it, not only the live one: one that has not said hello yet must not live after.
+    for (const socket of this.attached.get(id) || []) socket.close(4001, "unpaired");
+    this.attached.delete(id);
     // A call waiting for this device will not see it again.
     this.emit(`forgotten:${id}`);
     this.emit("changed");
@@ -176,15 +186,19 @@ export class NodeHub extends EventEmitter {
    */
   async relayOpen(outer, relaySocket, { env, key }, relaying) {
     const reply = (message) => { if (relaySocket.readyState === 1) relaySocket.send(JSON.stringify({ ...message, env })); };
-    const record = typeof env === "string" ? await this.byKey(String(key || "")) : null;
+    if (typeof env !== "string" || !env || env.length > RELAY_ENV_MAX) return reply({ type: "relay-closed", reason: "bad environment name" });
+    // A device carries a few environments, not many: past that, an open is refused.
+    if (!outer.relayed.has(env) && outer.relayed.size >= RELAYS_PER_SOCKET) return reply({ type: "relay-closed", reason: "too many relayed environments" });
+    const record = await this.byKey(String(key || ""));
     if (!record || relaySocket.readyState !== 1) return reply({ type: "relay-closed", reason: "unknown key" });
     if (record.id === relaying.id) return reply({ type: "relay-closed", reason: "a node cannot relay itself" });
     outer.relayed.get(env)?.end("replaced");
     const socket = new EventEmitter();
     socket.readyState = 1;
     socket.send = (data) => { if (socket.readyState === 1) reply({ type: "relay", d: String(data) }); };
-    // Liveness is the relay's socket's: its heartbeat ends it, and this with it.
-    socket.ping = () => queueMicrotask(() => socket.emit("pong"));
+    // Pinged through the relay to the relayed node itself, which answers: a
+    // node that hangs while its relay is fine misses pongs and is ended.
+    socket.ping = () => reply({ type: "relay-ping" });
     socket.end = (reason) => {
       if (socket.readyState === 3) return;
       socket.readyState = 3;
@@ -197,6 +211,8 @@ export class NodeHub extends EventEmitter {
     outer.relayed.set(env, socket);
     this.attach(record, socket);
     reply({ type: "relay-opened" });
+    // An open that never says hello is not kept.
+    setTimeout(() => { if (socket.readyState === 1 && this.live.get(record.id)?.socket !== socket) socket.close(4002, "no hello"); }, HELLO_WAIT_MS).unref?.();
   }
 
   attach(record, ws) {
@@ -207,6 +223,8 @@ export class NodeHub extends EventEmitter {
       relayed: new Map() };
     let ids = 0;
     node.send = (message) => ws.send(JSON.stringify(message));
+    if (!this.attached.has(record.id)) this.attached.set(record.id, new Set());
+    this.attached.get(record.id).add(ws);
     node.call = (message, onEvent) => {
       const id = `c${++ids}`;
       const done = new Promise((resolve, reject) => node.calls.set(id, { resolve, reject, onEvent }));
@@ -236,7 +254,10 @@ export class NodeHub extends EventEmitter {
       if (message.type === "relay-open") return void this.relayOpen(node, ws, message, record);
       if (message.type === "relay") return node.relayed.get(message.env)?.emit("message", message.d);
       if (message.type === "relay-close") return node.relayed.get(message.env)?.end();
+      if (message.type === "relay-pong") return node.relayed.get(message.env)?.emit("pong");
       if (message.type === "hello") {
+        // Unpaired since it connected: it says hello to nobody.
+        if (!this.records.includes(record)) return ws.close(4001, "unpaired");
         if (message.version !== NODE_PROTOCOL_VERSION) {
           node.send({ type: "refused", reason: `main speaks node protocol ${NODE_PROTOCOL_VERSION}, this node ${message.version}` });
           return ws.close();
@@ -287,6 +308,7 @@ export class NodeHub extends EventEmitter {
       else pending.reject(new Error(message.message || "The device could not run the call"));
     });
     ws.on("close", () => {
+      this.attached.get(record.id)?.delete(ws);
       for (const socket of [...node.relayed.values()]) socket.end();
       for (const [key, tunnel] of this.tunnels) if (key.startsWith(`${record.id} `) && tunnel.nodeSocket === ws) tunnel.drop();
       for (const pending of node.calls.values()) pending.reject(Object.assign(new Error(`${record.name} disconnected during the call`), { interrupted: true }));
