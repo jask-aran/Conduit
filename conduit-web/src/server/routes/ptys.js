@@ -3,14 +3,14 @@ import { computerContext, resolveComputerContext } from "../../computer-context.
 
 async function terminalContext(projects, id, cwd, nodeHub) {
   // A device's own terminal, in its home, outside any workspace: as "computer"
-  // is this server's. Only where the device's owner allows it (conduit-node terminal on).
+  // is this server's. Where any of its folders is shared with commands.
   if (id.startsWith("device:")) {
     const nodeId = id.slice("device:".length);
     const node = (await nodeHub?.list())?.find((item) => item.id === nodeId);
     if (!node) throw Object.assign(new Error("No such device"), { code: "pty_project_not_found", status: 404 });
     if (!node.online) throw Object.assign(new Error(`${node.name} is offline`), { code: "pty_cwd_unavailable", status: 409 });
     if (!node.terminal) {
-      throw Object.assign(new Error(`${node.name} does not allow a terminal outside its shared folders; run "conduit-node terminal on" there`),
+      throw Object.assign(new Error(`${node.name} shares no folder with commands, so it offers no terminal`),
         { code: "pty_cwd_unavailable", status: 403 });
     }
     const device = (await nodeHub.listDevices()).find((item) => item.nodes.some((candidate) => candidate.id === nodeId));

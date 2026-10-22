@@ -35,10 +35,6 @@ function printHelp() {
   conduit-node unshare <path> [--server <main-url>]
                                               Stop sharing a folder (with every server, unless
                                               one is named).
-  conduit-node terminal on|off [--server <url>]
-                                              Let a server open a terminal on this device in
-                                              your home folder, outside any shared folder. It
-                                              runs as you, with everything you can reach.
   conduit-node status                         Which servers, and what each is shared.
   conduit-node run                            Serve every paired server until stopped.
 
@@ -145,18 +141,9 @@ if (command === "pair") {
   }
   write(settings);
   console.log(`No longer sharing ${target}${given.server ? ` with ${origin(given.server)}` : ""}.`);
-} else if (command === "terminal") {
-  const given = options(args, [], ["server"]);
-  const value = given.bare[0];
-  if (value !== "on" && value !== "off") { console.error("conduit-node terminal on|off"); process.exit(2); }
-  const pairing = pairingFor(given.server);
-  pairing.terminal = value === "on";
-  write(settings);
-  if (pairing.terminal) console.warn(`A terminal opened from ${pairing.mainUrl} runs as ${os.userInfo().username}, with everything that user can reach.`);
-  console.log(`Terminal ${value} for ${pairing.mainUrl}. Restart \`conduit-node run\` to apply.`);
 } else if (command === "status") {
   console.log(JSON.stringify({ name: settings.name || null, host: os.hostname(),
-    pairings: settings.pairings.map(({ mainUrl, nodeId, routes, roots, terminal }) => ({ mainUrl, nodeId: nodeId || null, routes: routes || [], roots, terminal: Boolean(terminal) })) }, null, 2));
+    pairings: settings.pairings.map(({ mainUrl, nodeId, routes, roots }) => ({ mainUrl, nodeId: nodeId || null, routes: routes || [], roots })) }, null, 2));
 } else if (command === "run") {
   write(settings);
   if (!settings.pairings.length) { console.error("Not paired: run `conduit-node pair <main-url> <key>` first."); process.exit(2); }
@@ -164,8 +151,7 @@ if (command === "pair") {
   // One connection per server, each with only what was shared with it.
   const agents = settings.pairings.map((pairing) => {
     if (!pairing.roots.length) console.warn(`Nothing is shared with ${pairing.mainUrl} yet; it will see this device with no folders.`);
-    return startNodeAgent({ mainUrl: pairing.mainUrl, routes: pairing.routes, key: pairing.key, name: settings.name || os.hostname(), roots: pairing.roots,
-      terminal: pairing.terminal === true, shellEnv });
+    return startNodeAgent({ mainUrl: pairing.mainUrl, routes: pairing.routes, key: pairing.key, name: settings.name || os.hostname(), roots: pairing.roots, shellEnv });
   });
   for (const signal of ["SIGINT", "SIGTERM"]) process.on(signal, () => { for (const agent of agents) agent.stop(); process.exit(0); });
 } else {

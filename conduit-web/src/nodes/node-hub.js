@@ -115,7 +115,8 @@ export class NodeHub extends EventEmitter {
     const live = this.live.get(record.id);
     return { id: record.id, deviceId: record.deviceId, name: record.name, platform: live?.platform || record.platform || null,
       online: Boolean(live), roots: live?.roots || record.roots || [], harnesses: live?.harnesses || record.harnesses || [],
-      terminal: Boolean(live?.terminal), lastSeenAt: live ? new Date().toISOString() : record.lastSeenAt };
+      // A terminal in its home: where any folder is shared with commands (decision 27).
+      terminal: Boolean(live) && (live.roots || []).some((root) => root.shell), lastSeenAt: live ? new Date().toISOString() : record.lastSeenAt };
   }
 
   deviceView(device) {
@@ -206,8 +207,7 @@ export class NodeHub extends EventEmitter {
         Object.assign(node, { roots: Array.isArray(message.roots) ? message.roots : [], platform: message.platform || null,
           boot: typeof message.boot === "string" ? message.boot : null,
           harnesses: Array.isArray(message.harnesses) ? message.harnesses.filter((id) => typeof id === "string") : [],
-          // Whether its owner lets a terminal open on it outside its shared folders.
-          terminal: message.terminal === true, ready: true });
+          ready: true });
         this.live.set(record.id, node);
         Object.assign(record, { roots: node.roots, platform: node.platform, harnesses: node.harnesses, lastSeenAt: new Date().toISOString() });
         if (message.name && record.name === "Device") record.name = String(message.name).slice(0, 80);
