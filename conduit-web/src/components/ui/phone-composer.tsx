@@ -1,3 +1,4 @@
+import { Frost } from "./frost";
 import { children, createComputed, createSignal, Index, onCleanup, onMount, Show, type JSX } from "solid-js";
 import { Aura } from "./pill";
 import { duration } from "./motion";
@@ -42,7 +43,7 @@ export function PhoneComposer(props: { mode: VoiceMode; riders?: JSX.Element; la
     <Show when={edit()}><div class="ui-phone-edit" aria-hidden={shows("edit") ? undefined : "true"}>{edit()}</div></Show>
     <Show when={captions()}><div class="ui-voice-captions" aria-live="polite" data-leaving={shows("captions") ? undefined : ""} onAnimationEnd={(event) => { if (event.target === event.currentTarget && !shows("captions")) setCaptions(false); }}>{props.captions}</div></Show>
     <div ref={fieldBox} class="ui-phone-field">{props.field}</div>
-    <div class={surface() ? "ui-frost ui-phone-row" : "ui-phone-row"}>{props.children}<div class="ui-voice-track" aria-hidden={shows("track") ? undefined : "true"} onClick={() => shows("track") && props.onTrack?.()}><Show when={surface()}><Aura /></Show>{props.track}</div></div>
+    <Frost plain={!surface()} class="ui-phone-row">{props.children}<div class="ui-voice-track" aria-hidden={shows("track") ? undefined : "true"} onClick={() => shows("track") && props.onTrack?.()}><Show when={surface()}><Aura /></Show>{props.track}</div></Frost>
   </div>;
 }
 /**

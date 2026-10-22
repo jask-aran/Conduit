@@ -1,3 +1,4 @@
+import { Frost } from "./frost";
 import * as Icons from "./icons";
 import { children, createEffect, createRenderEffect, createSignal, For, onCleanup, onMount, Show, splitProps, type JSX } from "solid-js";
 
@@ -35,10 +36,10 @@ export function Bubble(props: { children: JSX.Element; fold?: number; open?: boo
   });
   // A new fold: fold again, then measure once that has drawn.
   createEffect(() => { if (props.fold && !props.open) { setFits(false); requestAnimationFrame(measure); } });
-  return <div class="ui-frost ui-bubble" data-editing={props.editing ? "true" : undefined}>
+  return <Frost class="ui-bubble" data-editing={props.editing ? "true" : undefined}>
     <div ref={text} class="ui-bubble-text" data-folded={folded() ? "" : undefined} style={props.fold ? { "--bubble-fold": props.fold } : undefined}>{props.children}</div>
     <Show when={foldable()}><button type="button" class="ui-bubble-more" aria-expanded={Boolean(props.open)} onClick={(event) => props.onToggle?.(event)}>{props.open ? "Show less" : "Show more"}</button></Show>
-  </div>;
+  </Frost>;
 }
 
 /*
