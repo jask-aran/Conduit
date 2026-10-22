@@ -1,3 +1,4 @@
+import { duration, reducedMotion } from "@/components/ui/motion";
 import { createEffect, createMemo, createSignal, For, on, onCleanup, Show } from "solid-js";
 import { splitPage } from "../dashboard/primitives/split-cursor";
 import { COMMAND_IDS, getCommandDefinition } from "../commands/command-registry";
@@ -26,7 +27,6 @@ const contextLabel = (context: ShortcutContext) => (context === "dashboard" ? sp
   ?? context.replace(/[-.]/g, " ").replace(/^\w/, (first) => first.toUpperCase());
 
 type Row = { commandId: string; label: string; keys: string[] };
-const LEAVE_MS = 160;
 // Numbers first, in order, then letters, then the rest.
 const rank = (key: string) => /^\d$/.test(key) ? 0 : /^[a-z]$/i.test(key) ? 1 : 2;
 
@@ -69,9 +69,9 @@ export function LeaderPalette(props: { shortcuts: ShortcutManager }) {
     if (!active) {
       const wasVisible = visible();
       setVisible(false);
-      if (wasVisible && !matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      if (wasVisible && !reducedMotion()) {
         setLeaving(true);
-        leave = setTimeout(() => setLeaving(false), LEAVE_MS);
+        leave = setTimeout(() => setLeaving(false), duration("--duration-quick"));
       }
       return;
     }

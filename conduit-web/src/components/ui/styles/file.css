@@ -12,8 +12,8 @@
 .ui-file-git { flex: none; color: var(--change-modified); font: var(--text-caption) var(--font-data); }
 .ui-file-git:is([data-status="U"], [data-status="A"]) { color: var(--change-added); }
 .ui-file-git[data-status="D"] { color: var(--change-removed); }
-.ui-file-dirty { width: var(--space-sm); height: var(--space-sm); flex: none; border-radius: var(--radius-round); background: var(--warn); box-shadow: 0 0 0 var(--space-2xs) color-mix(in oklch, var(--warn), transparent 84%); opacity: 0; transform: scale(.7); transition: opacity 120ms ease, transform 160ms ease; }
-.ui-file-dirty[data-dirty] { opacity: .9; transform: scale(1); }
+.ui-file-dirty { width: var(--space-sm); height: var(--space-sm); flex: none; border-radius: var(--radius-round); background: var(--warn); box-shadow: 0 0 0 var(--space-2xs) color-mix(in oklch, var(--warn), transparent 84%); opacity: 0; transform: scale(.7); transition: opacity var(--duration-quick) var(--ease-change), transform var(--duration-quick) var(--ease-change); }
+.ui-file-dirty[data-dirty] { opacity: 1; transform: scale(1); }
 
 /* The controls keep one order whatever the markup: save, actions, tools, the ⋯, close, the pane's own. */
 .ui-file-head > .ui-file-button { order: 2; }

@@ -1,3 +1,4 @@
+import { Frost } from "./frost";
 import * as Icons from "./icons";
 import { For, Show, splitProps, type JSX } from "solid-js";
 
@@ -19,7 +20,7 @@ export type Measure = "xs" | "sm" | "md" | "lg" | "xl" | "2xl";
 export function Menu(props: JSX.HTMLAttributes<HTMLDivElement> & { density?: Density; motion?: Motion; under?: boolean; wide?: boolean; unfolds?: boolean; width?: Measure; height?: Measure }) {
   const [, rest] = splitProps(props, ["class", "density", "motion", "under", "wide", "unfolds", "width", "height", "children", "style"]);
   const caps = () => ({ ...(props.width ? { "--menu-width": `var(--measure-${props.width})` } : {}), ...(props.height ? { "--menu-height": `var(--measure-${props.height})` } : {}), ...(typeof props.style === "object" ? props.style : {}) });
-  return <div role="menu" class={cn("ui-frost ui-menu", props.class)} onPointerOver={moveCursor} {...rest} style={caps()} data-wide={props.wide ? "" : undefined} data-unfolds={props.unfolds ? "" : undefined} data-fits="" data-density={props.density} data-surface="frost" data-lift="raised" data-under={props.under ? "" : undefined} {...motionOf(props.motion)}>{props.children}</div>;
+  return <Frost lift="raised" role="menu" class={cn("ui-menu", props.class)} onPointerOver={moveCursor} {...rest} style={caps()} data-wide={props.wide ? "" : undefined} data-unfolds={props.unfolds ? "" : undefined} data-fits="" data-density={props.density} data-under={props.under ? "" : undefined} {...motionOf(props.motion)}>{props.children}</Frost>;
 }
 
 /** A menu's section: a list of items (the default) or a slider, with an optional title and a note beside it.
@@ -38,14 +39,6 @@ export function SearchSection(props: { placeholder: string; value?: string; keys
   return <div role="search" class="ui-section ui-search-section" data-kind="search">
     <Icons.Search /><input {...props.field} class="ui-search" placeholder={props.placeholder} value={props.value ?? ""} onInput={(event) => props.onInput?.(event.currentTarget.value)} />
     <Show when={props.keys}><Keys keys={props.keys!} /></Show>
-  </div>;
-}
-
-/** A heading section: what the popover is about -- a title and a line under it (the chat menu's top). */
-export function HeadingSection(props: { title: string; detail?: JSX.Element; children?: JSX.Element }) {
-  return <div class="ui-section ui-heading" data-kind="heading">
-    <div class="ui-heading-title">{props.title}</div><Show when={props.detail}><div class="ui-heading-detail">{props.detail}</div></Show>
-    {props.children}
   </div>;
 }
 

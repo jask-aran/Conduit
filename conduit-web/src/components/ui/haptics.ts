@@ -1,3 +1,5 @@
+import { touchOnly } from "./layout";
+
 /**
  * Haptics: what a touch that changes something feels like on a phone. The kinds are each a piece's own (callers do
  * not fire them):
@@ -13,7 +15,6 @@
 export type Haptic = "select" | "press" | "hold" | "fold" | "dismiss";
 let plugin: Promise<typeof import("@capacitor/haptics")> | undefined;
 let touchedAt = -Infinity;
-const touchOnly = () => typeof matchMedia === "function" && matchMedia("(hover: none) and (pointer: coarse)").matches;
 // Down as well as up: a tap outside a menu closes it on the way down.
 const touched = (event: PointerEvent) => { if (event.pointerType === "touch") touchedAt = performance.now(); };
 if (typeof addEventListener === "function") for (const type of ["pointerdown", "pointerup"] as const) addEventListener(type, touched, { capture: true, passive: true });

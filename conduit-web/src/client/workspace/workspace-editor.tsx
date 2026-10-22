@@ -12,7 +12,7 @@ import { dropCursor, EditorView, highlightActiveLine, highlightActiveLineGutter,
 import { workspaceReadOnlySetup } from "./workspace-editor-base";
 import { Redo2Icon } from "lucide-solid";
 import { createEffect, createSignal, For, onCleanup, onMount, Show, type JSX } from "solid-js";
-import { Menu, MenuContent, MenuSection, MenuRadioGroup, MenuRadioItem, MenuControl } from "@/components/menus";
+import { DropdownMenu, MenuContent, MenuSection, MenuRadioGroup, MenuRadioItem, MenuControl } from "@/components/menus";
 import { csvLanguage, isCsvFile } from "./csv-language";
 import { workspaceLanguageForFilename, workspaceLanguageForName, workspaceLanguages } from "./workspace-languages";
 import type { ReviewNavigationRequest } from "../chat/review-navigation";
@@ -384,7 +384,7 @@ export default function WorkspaceEditor(props: {
         <FileButton aria-label="Undo" title="Undo" disabled={!canUndo()} onClick={() => runEditCommand(undo)}><Icons.Undo /></FileButton>
         <FileButton aria-label="Redo" title="Redo" disabled={!canRedo()} onClick={() => runEditCommand(redo)}><Redo2Icon /></FileButton>
       </Show>
-      <Menu>
+      <DropdownMenu>
         <MenuControl as={StatusPicker} icon={<Icons.ChevronDown />} aria-label={`Indentation ${indentationLabel(indentation())}`} title="Indentation">
           {indentationLabel(indentation())}
         </MenuControl>
@@ -400,8 +400,8 @@ export default function WorkspaceEditor(props: {
             </MenuRadioGroup>
           </MenuSection>
         </MenuContent>
-      </Menu>
-      <Menu>
+      </DropdownMenu>
+      <DropdownMenu>
         <MenuControl as={StatusPicker} icon={<Icons.ChevronDown />} aria-label={`Language mode ${selectedLanguage()}`} title="Language mode">
           {selectedLanguage()}
         </MenuControl>
@@ -415,7 +415,7 @@ export default function WorkspaceEditor(props: {
             </MenuRadioGroup>
           </MenuSection>
         </MenuContent>
-      </Menu>
+      </DropdownMenu>
     </>}>
       <StatusText><span title={props.statusTitle ?? props.statusText}>{props.statusText}</span></StatusText>
       <FileButton wide type="button" ref={positionLabel} aria-label="Go to line" title="Go to line (Alt+G)" onClick={() => runCommand(gotoLine)}>Ln 1, Col 1</FileButton>

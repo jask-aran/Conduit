@@ -1,4 +1,5 @@
 /// <reference types="vite-plugin-pwa/client" />
+import { duration, easing, reducedMotion } from "@/components/ui/motion";
 import { HarnessMark } from "@/components/ui";
 import { Icons } from "@/components/ui";
 import { ConnectionScreen, ConnectionRecovery, ConnectionForm, ConnectionHeading, ConnectionChoices, ConnectionChoice, ConnectionGroup, ConnectionAddress, ConnectionStatus, ConnectionPassword, type AddressState } from "@/components/ui/connection";
@@ -25,7 +26,7 @@ import { DefaultMeteorShower } from "@jask-aran/solid-components/meteor-shower";
 import "@jask-aran/solid-components/meteor-shower.css";
 import { phoneLayerOpen } from "@/components/phone-overlays";
 import { Button, Spinner } from "@/components/ui/controls";
-import { attachRowMenus, Menu, MenuContent, MenuControl, MenuRow, MenuSection } from "@/components/menus";
+import { attachRowMenus, DropdownMenu, MenuContent, MenuControl, MenuRow, MenuSection } from "@/components/menus";
 import { Header, HeaderCrumb } from "@/components/ui/header";
 import { FileHead } from "@/components/ui/file";
 import { FileEmpty, FileEmptySide } from "@/components/ui/viewer";
@@ -1113,13 +1114,13 @@ function App() {
     const from = emptyComposerTop;
     emptyComposerTop = null;
     if (!wasEmpty || from == null || !sendingOut() || routeKind() !== "chat") return;
-    if (matchMedia("(prefers-reduced-motion: reduce)").matches || !chatComposerStack) return;
+    if (reducedMotion() || !chatComposerStack) return;
     // Measured and started in the same frame as the layout change, so the
     // docked composer is never painted before it sets off.
     const offset = from - chatComposerStack.getBoundingClientRect().top;
     if (Math.abs(offset) < 4) return;
     chatComposerStack.animate([{ transform: `translateY(${offset}px)` }, { transform: "none" }],
-      { duration: 420, easing: "cubic-bezier(.2, .8, .2, 1)" });
+      { duration: duration("--duration-travel"), easing: easing("--ease-arrive") });
   }));
   /*
    * Sending from a dashboard. The send goes at once; then the dashboard
@@ -1133,13 +1134,12 @@ function App() {
    * moved is the inner wrap, so the stack's own rect -- which the empty-chat
    * travel measures -- is never read mid-flight. Focus goes with the composer.
    */
-  const DASHBOARD_LEAVE_MS = 200;
   const leaveDashboard = (): Promise<DOMRect | null> => {
     const wrap = document.querySelector<HTMLElement>('.chat-main :is(.ui-composer-slot, .ui-phone-composer)');
-    if (!wrap || matchMedia("(prefers-reduced-motion: reduce)").matches) return Promise.resolve(null);
+    if (!wrap || reducedMotion()) return Promise.resolve(null);
     const from = wrap.getBoundingClientRect();
     document.documentElement.dataset.routeMotion = "leaving";
-    return new Promise((resolve) => setTimeout(() => resolve(from), DASHBOARD_LEAVE_MS));
+    return new Promise((resolve) => setTimeout(() => resolve(from), duration("--duration-quick")));
   };
   const sendFromDashboard = async () => {
     const sending = chat.send().catch(() => undefined);
@@ -1159,7 +1159,7 @@ function App() {
       const dx = from.left + from.width / 2 - (to.left + to.width / 2);
       const dy = from.top - to.top;
       if (Math.abs(dx) + Math.abs(dy) >= 4) wrap.animate([{ transform: `translate(${dx}px, ${dy}px)` }, { transform: "none" }],
-        { duration: 420, easing: "cubic-bezier(.2, .8, .2, 1)" });
+        { duration: duration("--duration-travel"), easing: easing("--ease-arrive") });
     }
     setTimeout(() => { if (root.dataset.routeMotion === "arriving") delete root.dataset.routeMotion; }, 450);
   };
@@ -2536,7 +2536,7 @@ function App() {
     if (!element || index < 0 || !animatePanes()) return await close();
     // It fades out, then the panes left ease into its room.
     setPaneMotion({ slot, phase: "leaving" });
-    void element.animate([{ opacity: 1 }, { opacity: 0 }], { duration: SWAP_FADE_MS, easing: "ease-out", fill: "forwards" }).finished.then(() => {
+    void element.animate([{ opacity: 1 }, { opacity: 0 }], { duration: duration("--duration-follow"), easing: easing("--ease-arrive"), fill: "forwards" }).finished.then(() => {
       const target = weightsFor(shownSlots().length);
       target.splice(index + 1, 0, 0);
       setWeightOverride(paneShares());
@@ -3391,7 +3391,6 @@ function App() {
    * moves -- and what was on the right fades in on the left. Either way the
    * panes keep their widths: a width belongs to the position, not the document.
    */
-  const SWAP_FADE_MS = 100;
   // A chat is drawn once its transcript is in the pane, not merely loaded:
   // it renders a moment after, and a crossfade before then shows it arrive.
   const chatDrawn = (pane: PaneKey) => Boolean(paneElement(pane)?.querySelector(".thread, .empty-thread"));
@@ -3416,14 +3415,14 @@ function App() {
   // The panes' last frames stay up while the documents move and load under
   // them, then the ghosts fade off them (~100ms).
   const crossfadeUnder = async (elements: HTMLElement[], place: () => Promise<void>) => {
-    const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const still = reducedMotion();
     const ghosts = elements.map(ghostOf);
     for (const element of elements) element.style.opacity = "0";
     try { await place(); } finally {
       // The panes come back whole under their ghosts, and only the ghosts
       // fade: both layers at half opacity let the background through.
       for (const element of elements) element.style.opacity = "";
-      await Promise.all(ghosts.map(async (ghost) => { if (!still) await ghost.animate([{ opacity: 1 }, { opacity: 0 }], { duration: SWAP_FADE_MS, easing: "ease-out", fill: "forwards" }).finished.catch(() => undefined); ghost.remove(); }));
+      await Promise.all(ghosts.map(async (ghost) => { if (!still) await ghost.animate([{ opacity: 1 }, { opacity: 0 }], { duration: duration("--duration-follow"), easing: easing("--ease-arrive"), fill: "forwards" }).finished.catch(() => undefined); ghost.remove(); }));
     }
   };
   const crossfadeSwap = (left: HTMLElement, right: HTMLElement, place: () => Promise<void>) => crossfadeUnder([left, right], place);
@@ -3433,11 +3432,11 @@ function App() {
     return () => held.forEach(([node, top, left]) => { node.scrollTop = top; node.scrollLeft = left; });
   };
   const animateSwap = async (left: HTMLElement, right: HTMLElement, reorder: boolean, placeRight: () => Promise<void> | void, placeLeft: () => Promise<void> | void) => {
-    const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const still = reducedMotion();
     if (!still) {
-      await right.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 140, easing: "ease-out", fill: "forwards" }).finished;
+      await right.animate([{ opacity: 1 }, { opacity: 0 }], { duration: duration("--duration-quick"), easing: easing("--ease-leave"), fill: "forwards" }).finished;
       left.style.zIndex = "5";
-      await left.animate([{ transform: "none" }, { transform: `translateX(${right.getBoundingClientRect().left - left.getBoundingClientRect().left}px)` }], { duration: 220, easing: "cubic-bezier(.2,.7,.2,1)", fill: "forwards" }).finished;
+      await left.animate([{ transform: "none" }, { transform: `translateX(${right.getBoundingClientRect().left - left.getBoundingClientRect().left}px)` }], { duration: duration("--duration-fold"), easing: easing("--ease-fold"), fill: "forwards" }).finished;
     }
     await placeRight();
     // Reordered, the slid pane now lives on the right and the other on the
@@ -3447,7 +3446,7 @@ function App() {
     incoming.style.opacity = "0";
     for (const element of [left, right]) { element.getAnimations().forEach((animation) => animation.cancel()); element.style.zIndex = ""; }
     await placeLeft();
-    if (!still) await incoming.animate([{ opacity: 0 }, { opacity: 1 }], { duration: SWAP_FADE_MS, easing: "ease-out" }).finished;
+    if (!still) await incoming.animate([{ opacity: 0 }, { opacity: 1 }], { duration: duration("--duration-follow"), easing: easing("--ease-arrive") }).finished;
     incoming.style.opacity = "";
   };
   // `fade: false` places the documents at once, for a caller fading around several swaps. Focus is the pane's, not
@@ -4001,7 +4000,7 @@ function App() {
         </TabPlace>;
       }}</For>
       <Show when={folded().length}>
-        <Menu modal={false} placement="bottom-end">
+        <DropdownMenu modal={false} placement="bottom-end">
           <MenuControl as={PaneAction} label={`${folded().length} more tabs`}><Icons.More /></MenuControl>
           <MenuContent>
             <For each={groups().filter((run) => run.keys.some((key) => folded().includes(key)))}>{(run) =>
@@ -4010,7 +4009,7 @@ function App() {
               </MenuSection>}
             </For>
           </MenuContent>
-        </Menu>
+        </DropdownMenu>
       </Show>
     </PaneTabs>) : undefined);
   };
@@ -4040,7 +4039,7 @@ function App() {
     // then, unseen, it takes the next pane's document at that pane's width and
     // fades in once it has loaded.
     setPaneMotion({ slot: "main", phase: "leaving" });
-    void element.animate([{ opacity: 1 }, { opacity: 0 }], { duration: SWAP_FADE_MS, easing: "ease-out" }).finished.then(() => {
+    void element.animate([{ opacity: 1 }, { opacity: 0 }], { duration: duration("--duration-follow"), easing: easing("--ease-arrive") }).finished.then(() => {
       const target = weightsFor(shownSlots().length);
       target.unshift(0);
       setWeightOverride(paneShares());
@@ -4068,7 +4067,7 @@ function App() {
           });
           // Pane A is whole under the ghost, which alone fades: two layers
           // crossfading each at half opacity let the background through.
-          await ghost.animate([{ opacity: 1 }, { opacity: 0 }], { duration: SWAP_FADE_MS, easing: "ease-out", fill: "forwards" }).finished.catch(() => undefined);
+          await ghost.animate([{ opacity: 1 }, { opacity: 0 }], { duration: duration("--duration-follow"), easing: easing("--ease-arrive"), fill: "forwards" }).finished.catch(() => undefined);
           ghost.remove();
         } finally {
           swappingPanes = false;
@@ -4317,7 +4316,7 @@ function App() {
   let panesSettled = false;
   window.setTimeout(() => { panesSettled = true; }, 1500);
   const animatePanes = () => panesSettled && !isMobileLayout() && !swappingPanes && !restoringPanes && !paneMotion()
-    && !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    && !reducedMotion();
   const normalized = (weights: number[]) => { const total = weights.reduce((sum, weight) => sum + weight, 0) || 1; return weights.map((weight) => weight / total); };
   const paneShares = () => normalized(panesShown().map((pane) => paneElement(pane)?.getBoundingClientRect().width ?? 0));
   const easePaneWeights = (to: number[], done: () => void) => {
@@ -4355,7 +4354,7 @@ function App() {
       if (!element) return void setPaneMotion(null);
       element.style.opacity = "0";
       setPaneMotion(null);
-      void element.animate([{ opacity: 0 }, { opacity: 1 }], { duration: SWAP_FADE_MS, easing: "ease-out" }).finished.finally(() => { element.style.opacity = ""; });
+      void element.animate([{ opacity: 0 }, { opacity: 1 }], { duration: duration("--duration-follow"), easing: easing("--ease-arrive") }).finished.finally(() => { element.style.opacity = ""; });
     })));
   }, { defer: true }));
   // A share preset from the rail (Equalise is the even one): the panes ease to

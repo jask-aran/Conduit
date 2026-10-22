@@ -1,3 +1,4 @@
+import { reducedMotion } from "./motion";
 import { createEffect, createMemo, createSignal, on, onCleanup, onMount } from "solid-js";
 import { MODE_FRAMES, paintFrame, resolvePreset, type ModeFrame, type ModeOpts, type OrbState } from "thinking-orbs/engine";
 
@@ -98,7 +99,7 @@ export const settledOrbRate = (unfinished: boolean) => unfinished ? 30 : 15;
 export function Orb(props: { state: OrbState; opts?: ModeOpts; frame?: ModeFrame; paused?: boolean; tint?: string; class?: string; rate?: number }) {
   let front!: HTMLCanvasElement;
   let back!: HTMLCanvasElement;
-  const reduced = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const reduced = reducedMotion();
   const playing = () => !props.paused && !reduced;
 
   // What is shown, and what it is fading from while a crossfade runs.
@@ -165,17 +166,20 @@ export function Orb(props: { state: OrbState; opts?: ModeOpts; frame?: ModeFrame
       if (front.style.opacity !== opacity) { front.style.opacity = opacity; back.style.opacity = String(1 - progress); }
     };
 
-    let visible = true;
+    // The rate and whether it plays, as last read in the effect: sync also runs from the observers, outside any root,
+    // where reading a caller's computed prop would make a computation each time that is never disposed.
+    let visible = true, rate = 0, plays = false;
     const player: Player = { draw: (now) => draw(now / 1000), interval: 0, last: 0 };
     const sync = () => {
-      player.interval = props.rate ? 1000 / props.rate : 0;
-      if (playing() && visible && document.visibilityState !== "hidden") play(player); else stop(player);
+      player.interval = rate ? 1000 / rate : 0;
+      if (plays && visible && document.visibilityState !== "hidden") play(player); else stop(player);
     };
     // Still, it is drawn once for each change of what it shows.
     createEffect(() => {
       frontPreset();
       tint();
-      void props.rate;
+      rate = props.rate ?? 0;
+      plays = playing();
       if (playing()) draw(performance.now() / 1000);
       else { setLeaving(null); draw(STILL_AT); }
       sync();
@@ -187,7 +191,7 @@ export function Orb(props: { state: OrbState; opts?: ModeOpts; frame?: ModeFrame
     // repaints at once.
     const resized = new ResizeObserver(([entry]) => {
       const side = (entry?.contentRect.width || 0) * (window.devicePixelRatio || 1);
-      if (side && fit(side)) draw(playing() ? performance.now() / 1000 : STILL_AT);
+      if (side && fit(side)) draw(plays ? performance.now() / 1000 : STILL_AT);
     });
     try { resized.observe(front, { box: "device-pixel-content-box" }); } catch { resized.observe(front); }
     document.addEventListener("visibilitychange", sync);

@@ -1,13 +1,14 @@
 import { FileTypeIcon, FolderTypeIcon } from "@/components/ui/file-marks";
 import { Icons } from "@/components/ui";
 import { createDecisionScope } from "@/components/decision-dialog";
-import { unitPx } from "../layout-geometry";
+import { unitPx } from "@/components/ui/layout";
 import { batch, createMemo, createSignal, For, onCleanup, Show, type Accessor, type JSX } from "solid-js";
 import { ChevronsUpIcon, FilePlusIcon, FolderUpIcon, MoveIcon } from "lucide-solid";
 import { toast } from "@/components/notifications";
-import { ContextMenu, ContextMenuContent, ContextMenuTrigger, Menu, MenuContent, MenuControl, MenuRow, MenuSection } from "@/components/menus";
+import { ContextMenu, ContextMenuContent, ContextMenuTrigger, DropdownMenu, MenuContent, MenuControl, MenuRow, MenuSection } from "@/components/menus";
 import { Rule } from "@/components/ui/popover";
 import { Spinner } from "@/components/ui/controls";
+import { SplitEdge } from "@/components/ui/editor";
 import { api, asList } from "../api/client";
 import { authorizedFetch } from "../api/native-auth-client";
 import { httpUrl } from "../api/transport";
@@ -710,6 +711,7 @@ export function FilesView(props: {
     } else return;
     event.preventDefault();
   };
+  const [treeResizing, setTreeResizing] = createSignal(false);
   const startTreeResize = (event: PointerEvent) => {
     event.preventDefault();
     treeResizeHandle?.setPointerCapture(event.pointerId);
@@ -738,9 +740,9 @@ export function FilesView(props: {
       window.removeEventListener("pointerup", stop);
       window.removeEventListener("pointercancel", stop);
       window.removeEventListener("blur", stop);
-      document.body.classList.remove("workspace-tree-resizing");
+      setTreeResizing(false);
     };
-    document.body.classList.add("workspace-tree-resizing");
+    setTreeResizing(true);
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", stop, { once: true });
     window.addEventListener("pointercancel", stop, { once: true });
@@ -932,14 +934,14 @@ export function FilesView(props: {
           }}>
             <For each={treeActions}>{(action, index) => <Show when={index() < visibleTreeActions()}>{treeActionButton(action)}</Show>}</For>
             <Show when={visibleTreeActions() < treeActions.length}>
-              <Menu>
+              <DropdownMenu>
                 <MenuControl as={ToolButton} label="More file actions"><Icons.More /></MenuControl>
                 <MenuContent>
                   <For each={treeActions.slice(visibleTreeActions())}>{(action) =>
                     <MenuRow icon={action.icon()} disabled={action.disabled?.()} onSelect={action.run}>{action.label()}</MenuRow>
                   }</For>
                 </MenuContent>
-              </Menu>
+              </DropdownMenu>
             </Show>
             <input ref={(element) => { c.elements.upload = element; }} hidden type="file" multiple={c.uploadTarget().kind === "directory"} onChange={(event) => void c.uploadFiles(event.currentTarget.files)} />
           </ToolBar>
@@ -953,12 +955,10 @@ export function FilesView(props: {
           </ToolBar>
         </Show>
         <Show when={!props.navigatorOnly && c.filesWide()}>
-          <div
+          <SplitEdge
             ref={treeResizeHandle}
-            class="workspace-tree-resize-handle"
-            role="separator"
+            resizing={treeResizing()}
             aria-label="Resize file tree"
-            aria-orientation="vertical"
             aria-valuemin={unitPx(MIN_TREE_UNITS)}
             aria-valuemax={unitPx(MAX_TREE_UNITS)}
             aria-valuenow={c.treeWidth()}

@@ -1,5 +1,6 @@
 import { createSignal } from "solid-js";
 import { setCodeBlockOpen } from "@/components/ui/code";
+import { COPY_FEEDBACK_MS } from "@/components/ui/motion";
 import { publishCodeBlockToggle } from "./code-block";
 import { codeElementText } from "./code-highlight";
 
@@ -21,7 +22,6 @@ export function createExternalLinkController() {
   };
 }
 
-const COPY_FEEDBACK_MS = 1200;
 
 /**
  * Copy, and say so.

@@ -72,13 +72,22 @@
 .ui-card-qr[data-expired] { opacity: var(--opacity-disabled); }
 .ui-card-preview { max-height: var(--measure-lg); overflow: auto; }
 .ui-card .ui-textarea { width: 100%; max-height: var(--measure-md); resize: vertical; border: var(--hairline) solid var(--tint); border-radius: var(--radius-control); padding: var(--space-md); }
-.ui-card-attachments { display: flex; flex-direction: column; gap: var(--space-md); padding: 0; list-style: none; }
-.ui-card-attachment { display: flex; align-items: center; gap: var(--space-md); }
-.ui-card-attachment-media { display: grid; flex: none; width: var(--control); place-items: center; overflow: hidden; border-radius: var(--radius-control); color: var(--muted-foreground); }
-.ui-card-attachment-media[data-image] { width: min(45%, var(--measure-xs)); }
-.ui-card-attachment-media img { display: block; max-width: 100%; max-height: var(--measure-xs); object-fit: contain; }
-.ui-card-attachment-media svg { width: var(--icon); height: var(--icon); }
-.ui-card-attachment-copy { display: grid; flex: 1; min-width: 0; gap: var(--space-xs); overflow-wrap: anywhere; }
-.ui-card-attachment-copy strong { font-size: var(--text-row); font-weight: var(--weight-strong); }
-.ui-card-attachment-copy small { color: var(--muted-foreground); font-size: var(--text-caption); }
-.ui-card-attachment[data-error] .ui-card-attachment-copy small { color: var(--destructive); }
+.ui-attachments { display: flex; flex-direction: column; gap: var(--space-md); padding: 0; list-style: none; }
+.ui-attachment { display: flex; align-items: center; gap: var(--space-md); }
+.ui-attachment-media { display: grid; flex: none; width: var(--control); place-items: center; overflow: hidden; border-radius: var(--radius-control); color: var(--muted-foreground); }
+.ui-attachment-media[data-image] { width: min(45%, var(--measure-xs)); }
+.ui-attachment-media img { display: block; max-width: 100%; max-height: var(--measure-xs); object-fit: contain; }
+.ui-attachment-media svg { width: var(--icon); height: var(--icon); }
+.ui-attachment-copy { display: grid; flex: 1; min-width: 0; gap: var(--space-xs); overflow-wrap: anywhere; }
+.ui-attachment-copy strong { font-size: var(--text-row); font-weight: var(--weight-strong); }
+.ui-attachment-copy small { color: var(--muted-foreground); font-size: var(--text-caption); }
+.ui-attachment[data-error] .ui-attachment-copy small { color: var(--destructive); }
+/* Tray: the files a message was sent with, at the reading width under it; each framed, its image a thumbnail, its
+   name and detail on a line each, cut short. */
+.ui-attachments[data-form="tray"] { width: min(var(--reading-width), 100%); max-height: min(var(--measure-md), 40dvh); margin: 0 auto var(--space-md); overflow-y: auto;
+  scrollbar-color: var(--native-scrollbar-color); scrollbar-width: var(--native-scrollbar-width); }
+.ui-attachments[data-form="tray"] > .ui-attachment { width: min(var(--measure-lg), 100%); padding: var(--space-sm); border: var(--hairline) solid var(--border); border-radius: var(--radius-control); background: var(--card); }
+.ui-attachments[data-form="tray"] .ui-attachment-media, .ui-attachments[data-form="tray"] .ui-attachment-media[data-image] { width: var(--control-lg); height: var(--control-lg); background: var(--border); }
+.ui-attachments[data-form="tray"] .ui-attachment-media img { width: 100%; height: 100%; max-height: none; object-fit: cover; }
+.ui-attachments[data-form="tray"] .ui-attachment-copy { gap: 0; }
+.ui-attachments[data-form="tray"] .ui-attachment-copy :is(strong, small) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
