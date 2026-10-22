@@ -1,3 +1,4 @@
+import { SheetFill } from "@/components/ui";
 import type { Accessor } from "solid-js";
 import { TerminalPane } from "../remotes/terminal-pane";
 import type { Connectivity } from "../state/runtime";
@@ -18,7 +19,7 @@ export function TerminalView(props: {
   /** Open one of the place's terminals in the other side of the main pane. */
   onOpenBeside?: (terminalId: string) => void;
 }) {
-  return <section class="workspace-terminal-slot">
+  return <SheetFill>
     <TerminalPane projectId={props.computer ? "computer" : props.projectId} projectName={props.computer ? "Computer" : props.projectName} workingRoot={props.computer ? props.workingRoot : undefined} terminalId={props.terminalId} focusRequest={props.focusRequest} connectivity={props.connectivity} onOpenBeside={props.onOpenBeside} />
-  </section>;
+  </SheetFill>;
 }

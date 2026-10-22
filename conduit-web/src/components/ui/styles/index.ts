@@ -20,10 +20,11 @@
  *   shell           AppShell > Sheet, SheetFill; Dock > DockSurface, DockDocument; ToolContent
  *   pane            PaneTabRow > TabPlace > PaneTab, PaneAction, PaneEdge, DropWash, DragPill, ToolRail, ToolHeader,
  *                   ToolBar, ToolButton, ToolFilter, ToolNotice, Tree > TreeRow
- *   source          ToolLine, CommitBox, ChangeLedger > ChangeSection > ChangeList > ChangeItem, CommitList, PatchLines
+ *   source          SourceView > SourceOverview | SourcePatch; ToolLine, CommitBox, ChangeLedger > ChangeSection >
+ *                   ChangeList > ChangeItem, ChangeNav, CommitList, PatchLines
  *   history         HistoryList > HistoryRow, HistoryBranch
  *   terminal        TermHeader and its parts, TermState, TermKeys
- *   file, viewer    FileView > FileHead, FileBody, StatusBar; FileViewer's sides; FileImage, FileMedia, FileCard
+ *   file, viewer    FilesPane > FilesTree; FileView > FileHead, FileBody, StatusBar; FileViewer's sides; FileImage, FileMedia, FileCard
  *   editor          CodeSurface > CodeHost, SearchBar, AnnotationPopup, Comparison, DiffShell
  *   header          Header, HeaderCrumb, HeaderButton, HeaderNote
  *   card, toast     Card; Toast

@@ -60,3 +60,13 @@
 .ui-change-list, .ui-patch { scrollbar-color: var(--native-scrollbar-color); scrollbar-width: var(--native-scrollbar-width); }
 .ui-change-list::-webkit-scrollbar, .ui-patch::-webkit-scrollbar { width: var(--space-sm); height: var(--space-sm); }
 .ui-change-list::-webkit-scrollbar-thumb, .ui-patch::-webkit-scrollbar-thumb { border: var(--stroke) solid transparent; border-radius: var(--radius-round); background: color-mix(in oklch, var(--foreground), transparent 72%); background-clip: padding-box; }
+
+/* The tool's layout: SourceView > SourceOverview | SourcePatch; ChangeNav beside a review. */
+.ui-source-view { display: flex; min-width: 0; min-height: 0; flex: 1; flex-direction: column; overflow: hidden; container-type: inline-size; }
+.ui-source-overview { display: flex; min-height: var(--measure-2xs); flex: 1 1 56%; flex-direction: column; overflow: hidden; }
+.ui-source-patch { display: flex; min-height: 0; flex: 1; flex-direction: column; overflow: hidden; }
+.ui-change-nav { display: flex; min-width: 0; min-height: 0; flex-direction: column; background: color-mix(in oklch, var(--background), var(--border) 9%); }
+@media (--conduit-phone-layout) {
+  .ui-source-view { overscroll-behavior: contain; }
+  .ui-source-overview { flex: 1; }
+}
