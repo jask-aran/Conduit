@@ -7,7 +7,7 @@ test("backend discovery excludes every session that already has a transcript own
   const chats = [
     { id: "chat-a", projectId: "project-a", status: "active", title: "A", backend: backend("thread-a") },
     { id: "chat-b", projectId: "project-b", status: "active", title: "B", backend: backend("thread-b") },
-    { id: "pi", projectId: "project-a", status: "active", title: "Pi", backend: { implementation: "conduit_pi" } },
+    { id: "other", projectId: "project-a", status: "active", title: "Other", backend: { implementation: "chatgpt-web" } },
   ];
   const sessions = [{ id: "thread-a" }, { id: "thread-b" }, { id: "thread-c" }];
   const result = projectBackendSessions({ chats, sessions, projectId: "project-a", implementation: "codex" });

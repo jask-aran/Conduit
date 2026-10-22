@@ -15,7 +15,8 @@ export const codeExcerptSetup = (numbers: Parameters<typeof lineNumbers>[0] = {}
     { tag: [tags.typeName, tags.className], color: "var(--syntax-type)" },
     { tag: tags.function(tags.variableName), color: "var(--syntax-title)" },
     { tag: [tags.variableName, tags.propertyName], color: "var(--syntax-variable)" },
-    { tag: [tags.comment, tags.meta], color: "var(--syntax-meta)" },
+    { tag: tags.comment, color: "var(--syntax-comment)" },
+    { tag: tags.meta, color: "var(--syntax-meta)" },
   ]), { fallback: true }),
   Prec.high(EditorView.theme({
     "&": { color: "var(--foreground)", backgroundColor: "transparent" },
@@ -24,7 +25,7 @@ export const codeExcerptSetup = (numbers: Parameters<typeof lineNumbers>[0] = {}
     ".cm-line": { padding: "0 var(--space-md)" },
     ".cm-gutters": { backgroundColor: "transparent", color: "var(--muted-foreground)", border: "none" },
     ".cm-gutterElement": { padding: "0 var(--space-sm)" },
-    ".cm-review-comment": { boxShadow: "none", backgroundColor: "color-mix(in oklch, var(--warn), transparent var(--tone-line))" },
+    ".ui-review-comment": { boxShadow: "none", backgroundColor: "color-mix(in oklch, var(--warn), transparent var(--tone-line))" },
     ".cm-review-context": { color: "var(--muted-foreground)", opacity: "var(--opacity-muted)" },
     ".cm-diff-added": { backgroundColor: "color-mix(in oklch, var(--live), transparent var(--tone-wash))" },
     ".cm-diff-removed": { backgroundColor: "color-mix(in oklch, var(--destructive), transparent var(--tone-wash))" },

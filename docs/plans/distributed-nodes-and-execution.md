@@ -1,12 +1,37 @@
-# Distributed Nodes, Remote Workspaces, and Durable Execution
+# Distributed Conduit
 
-Status: shaping; decisions agreed 2026-10-08, **nothing implemented**.
-Supersedes the earlier long-form proposal (see git history of this file for
-the full survey of mirrors, task engines and failure matrices).
-Related: [web runtime](../../conduit-web/README.md),
-[harness contract](../chat-backend-contract.md),
-[deployment](../DEPLOYMENT.md), [testing](../TESTING.md),
-[pi-durable](https://earendil.com/posts/pi-durable/).
+Nodes, remote workspaces, and durable execution: one server acts on every
+device, and any client controls it. Its agent is the **Conduit durable
+agent** (below, under Names).
+
+Status, on branch `distributed-nodes` (head on the VPS, 2026-10-21):
+milestone 1 built (the pi-durable half of the Conduit durable agent, profile id `conduit-runtime`:
+restart resume, forks, queue, questions, attachments, web research, usage).
+Milestone 3 built: `scripts/conduit-node.mjs` is the node role, Settings ›
+Devices pairs and shows devices, a shared folder becomes a workspace whose
+chats run on the device and wait while it is offline. Node track (a), (b)
+and (d) built: files, editing, Git, dashboard and terminals act on a device
+through one host; Claude Code, Codex, fx (ACP) and OpenCode run on devices
+through their existing adapters (remote spawn); secrets are kept back;
+writes and commands carry receipts across reconnects; a node can pair with
+several servers; the Windows desktop app runs the node as a companion; a
+server can take devices through its public tunnel by opt-in. Not yet: the
+ownership record (c), the phone gate on real hardware, folder watching (a
+device's folder is polled). Milestones 2, 4 and 5 not started.
+
+## Names
+
+- **Distributed Conduit**: this roadmap.
+- **Conduit durable agent** (2026-10-21, the user's terms): the harness
+  that powers the core Conduit experience: the Assistant profile, any other
+  first-party profile, and the persistent agent (milestone 2). It is the
+  pi-durable implementation and, during the transition (until milestone 5),
+  standard Pi 1.3.0. It replaces "Conduit Pi" as the name. In code the
+  pi-durable half is still `durable-adapter.js` and profile id
+  `conduit-runtime`.
+- **Conduit runtime**: the server backend, above all the part that handles
+  interaction with agents (adapters, live sessions, the node protocol). Not a
+  name for the agent; the `conduit-runtime` profile id is a leftover.
 
 ## Vision
 
@@ -46,10 +71,23 @@ environments.
 4. **Tailnet for nodes.** Nodes reach main only over Tailscale, authenticated
    by tailnet identity plus a pairing key. The public tunnel stays for UI
    clients reaching main.
-5. **Remote environments are Pi-only.** A pi-durable conversation's `env` is
-   built from its workspace: the local node is the zero-network path, a remote
-   node routes read/edit/search/shell to that device. Third-party harnesses do
-   not get remote workspaces (no mirrors, no MCP bridge) until missed.
+5. **Harnesses run where they are installed** (revised 2026-10-21). A
+   pi-durable conversation's `env` is built from its thread's device: main's
+   own machine is the zero-network path, another device's calls go over the
+   node protocol. Third-party harnesses (Codex, Claude Code, …) are
+   properties of the devices that have them installed: a device offers its
+   harnesses, Conduit drives them there, in that device's folders, and can
+   drive harnesses on several devices at once towards one outcome. Main's own
+   harnesses work as today. No mirrors or MCP bridges. Mechanism: **remote
+   spawn** -- the node starts the harness process and relays its stdio (or
+   local port) over its socket, and main's existing adapters run unchanged
+   against it; the node stays thin and there is one adapter per harness.
+   Built for Claude Code (its SDK's `spawnClaudeCodeProcess`, `src/nodes/
+   remote-spawn.js`): a node with a shell-granted root advertises the
+   harnesses it has, runs its own install by name in the workspace's place,
+   and serves the saved session back for history and resume. Codex and the
+   others follow the same shape.
+   Terminals use the same spawn.
 6. **Workspaces declared by nodes.** A node mounts and declares folders to
    main; existing workspaces are simply main's local node and are unaffected.
 7. **Grants: per root + typed capabilities.** The device owner grants
@@ -115,6 +153,192 @@ environments.
 19. **Android is push-wakeable.** Main sends an FCM push to wake the Android
     node for a capability call (Firebase messaging in the app, key on main);
     otherwise the thread waits per decision 8.
+20. **The server acts, any client controls.** Clients (phone, browser,
+    desktop UI) are interchangeable controls of the server; devices lend the
+    server what they have (folders, shell, harnesses, capabilities). A device
+    can be both, but the phone never drives the desktop: it drives the server,
+    which acts on the desktop.
+21. **A thread is owned by a device.** A thread belongs to its workspace's
+    device, whoever typed (a chat in a desktop folder is the desktop's, even
+    from the phone); a chat outside any workspace belongs to the device it
+    was started on. Its tool calls and capabilities default there, and it
+    knows that owner durably (a record beside the conversation, not agent
+    context). A persistent assistant instead picks a device per call. A
+    thread whose device is unreachable waits ("Waiting for Laptop") and any
+    client can choose to continue without it: the model is told the device is
+    unavailable and may use another; the thread keeps its owner.
+22. **Main's machine is a device**, trusted by default: one path for every
+    file, shell and Conduit feature (browser, Git, terminals) through an
+    environment on `{device, path}`, main's own with full grants on its
+    workspaces unless narrowed.
+23. **Grants are the approval.** Within a device's shared roots and grants,
+    calls run without per-call approval; the chat shows every call.
+24. **The device is the unit; client, node and head are roles on it.** A
+    device runs a client, a node (the daemon), or both; most run both, and a
+    web client or a device whose owner declines runs only the client. Devices
+    and clients are the same thing seen from two sides. One device is the
+    head (the brain: chats, agent state, model calls). The head is a role,
+    not a kind of machine: a headless VPS today, possibly a headed desktop
+    that is also a client and a node. Nothing may assume the head is
+    headless or that it is the only device with a screen.
+25. **A device is a grouping of environments, each its own node.** Windows
+    and WSL on one machine are two nodes (different homes, paths, installs)
+    in one device. An environment reaches the head either by its own
+    connection or relayed by another environment's daemon on the device
+    (Windows relaying WSL over a stdio child), chosen per environment. The
+    node id, key and grants are the same either way: each environment keeps
+    its own pairing key and the relay forwards its hello untouched, so the
+    head checks every environment alike. The relay is trusted: the relayed
+    key passes through it, so it could speak for that environment, but it
+    is the same machine and user, which can read that key on disk anyway
+    (the 2026-10-22 review). Only WSL distros now; the frame tags
+    stay generic so containers and SSH hosts behind a device fit later.
+    *(Built 2026-10-22: nodes/node-relay.js; `conduit-node relay add <env>
+    -- <command>` on the relay, `relayed on` and `run --stdio` on the relayed
+    side. Measured from the head, WSL relayed through the Windows app against
+    WSL dialling directly: a folder listing 71 vs 70 ms, a 2.7 MB file 749 vs
+    725 ms -- within noise.)*
+26. **The same files shared from two environments are two places.**
+    `C:\Users\x\proj` from Windows and `/mnt/c/Users/x/proj` from WSL are
+    separate workspaces, since the environment decides the shell, tools and
+    paths a chat gets. Revisit if it confuses.
+27. **A home terminal follows the shell grant.** A shell in any shared folder
+    can already reach everything its user can, so an environment with any
+    shell-granted folder offers a terminal in its home; no separate grant.
+28. **Terminals live in tmux wherever it exists; the head is Unix.** tmux
+    outlives both the server and its own client, which matters most on the
+    head, so the head needs Linux (WSL counts) or macOS with tmux, and a
+    Windows machine is never the head. Nodes on Linux and macOS keep their
+    shells in tmux too, surviving a restart or update of the node; Windows
+    nodes keep ConPTY shells in the node daemon.
+29. **Two networks: dev and prod, both plain Conduit.** Prod's head is the
+    VPS; dev's head is this desktop (WSL), whose existing data
+    (`~/.conduit/data`) becomes the dev head's. The desktop is a device of
+    both, pairing each with its own folders and grants. Neither holds chats
+    the user relies on today. After the merge there is no "Conduit Durable":
+    dev and prod are two instances of Conduit, picked in the client's server
+    list.
+30. **Nodes learn what the head supports from its reply to hello**: a list of
+    features (the relay first), so a node uses only what the head offers and
+    new features do not refuse older nodes; the protocol version is bumped
+    only for breaking changes.
+
+## Architecture
+
+As built on `distributed-nodes`, and where it is going (agreed 2026-10-21).
+Nothing changes for anyone until a device shares a folder that becomes a
+workspace; from then a chat there must feel exactly like a chat anywhere
+else. That is the test every piece below is held to.
+
+### Topology
+
+```
+  DEVICE (any)                       DEVICE holding the HEAD role          DEVICE (any)
+ ┌──────────────────────┐           ┌──────────────────────────────┐      ┌──────────────────────┐
+ │ client  (optional)   │ HTTP+WS   │ Conduit runtime              │      │ client  (optional)   │
+ │ node    (optional)   │──────────▶│  routes, live sessions,      │◀─────│ node    (optional)   │
+ │  most devices: both  │◀──────────│  adapters, node hub          │      │                      │
+ │  web client: client  │  node WS  │ Conduit durable agent        │      │ phone, laptop,       │
+ │  only                │ (device   │ state: data root             │      │ desktop, browser...  │
+ └──────────────────────┘  dials    │ client? node? (it may be a   │      └──────────────────────┘
+                           out)     │  headed desktop: both local) │
+                                    └──────────────────────────────┘
+```
+
+- Control: a client on any device drives the head. Action: the head acts on
+  a device through that device's node. The phone never drives the laptop
+  directly: it drives the head, which acts on the laptop (decision 20).
+- The head is a device too (decision 22): its own folders are a local node,
+  reached in process rather than over a socket.
+- A node dials the head, best route first (the address the pairing client
+  used when a device can dial it, the tailnet name, a public tunnel when the
+  head allows devices through it), so no device opens a port.
+
+### Data
+
+```
+HEAD (data root)                                       DEVICE (node.json, per pairing)
+projects { id, name, kind, workingRoot (label only),  { name, pairings: [{ mainUrl, routes[], key,
+           nodeId, place { root: r_…, path },             nodeId, roots: [{ id: r_…, path, read,
+           chatRoot (head-owned chat files) }              write, shell, allow[], deny[] }] }] }
+nodes.json { devices { id, name },                      device paths never leave the device;
+             nodes { id, deviceId, keyHash, platform,   the head knows roots by id only
+                     roots[], harnesses[] },
+             pendingKills[] }
+chats { id, projectId, backend, opaqueSession, ... }    one record wherever the work runs
+```
+
+A **place** `{root, path}` is the only address the head sends a device, so
+Windows paths and every other OS's rules stay on the device.
+
+### The three seams
+
+```
+            a chat turn / a file view / a terminal          <- one body of code above
+                 |               |                |
+              HOST             ENV            PROCESSES
+          files, Git,     agent tools:     spawn, exec, tunnel,
+          tree, search    read/edit/bash   PTY (harness CLIs,
+          (inspector)                      terminals)
+                 |               |                |
+   local:   localHost       local env       child_process / pty
+   device:  deviceHost      RemoteExecEnv   spawnOnDevice / tunnelTo / remote PTY
+                 \_______________|________________/
+                         node protocol: action ids + receipts, boot id,
+                         seq/resume, offline wait
+```
+
+The inspector, the durable agent's tools, and every harness adapter's
+translation into Conduit's internal representation exist once. A Claude
+Code chat on a device is the same Claude Code adapter; only its process
+starts elsewhere.
+
+### Where a device workspace still differs (to remove)
+
+| Where | Difference | Cause |
+|---|---|---|
+| chats.js (profile default) | forced to pi-durable | Pi 1.3.0 runs on the head only (ends at milestone 5) |
+| projects.js turn-artifact | no turn checkpoints, so no Chat review of a turn | checkpoints snapshot the head's disk |
+| sessions.js move | chat moves into/out of a device workspace refused | no ownership record yet |
+| dashboard menu | no "delete workspace and files" | safety rule, kept |
+| live-session-launcher, chats.js | "harness not on this device" | right outcome, written as a device check |
+| file watching | a device folder is polled | no watch call in the protocol |
+| adapters | `nodeId` threaded through each one | remote spawn added per adapter |
+
+### Making it general
+
+1. **Every workspace has a place.** *(Built 2026-10-22.)* The head is an
+   ordinary device in the hub's list (`adoptHead`), named from the server's
+   identity; its node's roots are the folders it holds workspaces in, and
+   unscoped chats (the chat experience) live on it. Every project view
+   carries its device's node and place; stored records are unchanged (a
+   record names a node only for another device), so an older build still
+   reads them. The one difference left is transport: the head's own folders
+   are reached in process (`local`), so the seams ask `remoteNode(project)`
+   and nothing else asks whether a place is the head's.
+2. **Refusals become capabilities.** *(Built.)* `capabilities(place)` → harnesses,
+   checkpoints, watch, git, delete. A device with Claude Code and a head
+   without it become the same question, and the UI shows what is offered.
+3. **Close the real gaps:** checkpoints through the host (snapshotted on
+   whichever device holds the folder), a watch call on the node, chat moves
+   once ownership is recorded. *(Built 2026-10-22.)* The checkpoint store reads
+   the workspace only through its host (`projectWorkspace`, workspace-host.js),
+   keying a device checkpoint by its place; a device offers checkpoints on a
+   Git workspace with the shell grant (a plain folder's snapshot would read
+   all of it over the link before every turn). Device folders are watched on
+   the device, falling back to polling while it is away. Moves change the
+   record and the conversation's place, not files.
+4. **Adapters take a `processes(place)` handle at launch** and never learn
+   that devices exist. *(Built 2026-10-22: `placeProcesses`,
+   nodes/place-processes.js, used by Claude Code, Codex, fx, OpenCode and the
+   durable runtime; the head reads harness state with the node's own readers.
+   Device terminals start, reattach and are killed through its `shells`;
+   this server's own stay tmux sessions, since both must outlive it.)*
+   *Device terminals (2026-10-22):* besides a terminal in a mounted
+   workspace, an environment with any folder shared with commands offers a
+   terminal in its home (decision 27); `device:<nodeId>` is that place, as
+   `computer` is this server's, opened from Settings › Devices.
+5. Pi 1.3.0 is not generalised: milestone 5 retires it as the default.
 
 ## Milestones
 
@@ -127,6 +351,28 @@ environments.
    basics (model switch, approvals/questions, attachments, stop, history
    edits); compaction runs on a long chat without blocking the turn.
 2. **Persistent assistant** on the same runtime (compaction, reset, subagents).
+   *Backend built 2026-10-22; the product (how it is listed, opened, named,
+   what it remembers, what starts it) is still to be designed.* The pieces,
+   each usable without the others:
+   - **Roaming conversations** (decision 21): `POST /v0/chats` with
+     `roaming: true` makes a chat with no home device. Its tools are
+     `device-tools` (src/server/device-tools.js): `devices` lists every
+     device with its shared folders; read/write/edit/bash take `device` and
+     `folder` per call, waiting while a device is offline, with
+     continue-without as in owned threads.
+   - **Subagents** (decision 10, thread subagent; src/server/subagents.js):
+     a `subagent` tool runs a task in a child conversation owned by the call
+     (pi-durable's pattern: stop and restart reach the child; no nested
+     delegation or question card). Offered to roaming chats and templates
+     listing `subagent`. `GET /v0/chats/:id/subagents[/:conversationId]`
+     lists children and reads one's transcript.
+   - **Bounded context**: pi-durable's automatic compaction (already on),
+     `POST /v0/chats/:id/reset {handoff?}`, and a `handoff` tool for roaming
+     chats that restarts the agent's context from its own note. The
+     transcript always keeps everything.
+   Not built: worker threads on other harnesses (decision 10's second shape),
+   background subagents that outlive the turn, a persistent agent record or
+   listing, scheduled or event-driven turns.
 3. **Node role + one remote device.** Node mode in the install, tailnet
    pairing, root grants, remote read/edit/search/shell `env`, device status
    in the UI, offline wait.
@@ -134,7 +380,27 @@ environments.
    desktop going offline pauses and resumes the thread.
 4. **Typed device capabilities**, starting with notify/clipboard, then
    Android screen share.
-5. **Cut over** default Pi to pi-durable; freeze old Pi.
+5. **Cut over first-party profiles to the Conduit durable agent.** *(Built 2026-10-22.)*
+   Assistant, Coding and Runtime are templates applied to pi-durable
+   conversations. Each template supplies the prompt, tools, extensions, skills
+   and model scope. Classic Pi chats are converted at startup from their active
+   JSONL branch, preserving message ids; the old "Conduit runtime" chats became
+   Assistant chats. The fork tree follows chat lineage, template skills appear
+   as slash commands, and template `models` supplies scope when settings have
+   no enabled list. The classic process and `pi_rpc` adapter are removed. The
+   JSONL reader remains only for conversion and legacy cleanup.
+
+Node track after milestone 3, in order (agreed 2026-10-21):
+a. **Main as a device** (decision 22): workspace files, Git and the
+   dashboard act on `{device, path}` through an environment; main is the
+   local device. Device workspaces stop being read-only special cases.
+b. **Remote spawn** on the node protocol: processes with stdio/PTY relay,
+   then terminals on devices and third-party harnesses on devices.
+c. **Thread ownership record** and the continue-without control, together
+   with steps 1, 2 and 4 under Architecture › Making it general (they touch
+   the same records: every workspace gets a place, refusals become
+   capabilities, adapters take a processes handle).
+d. Windows node and the phone gate on real hardware.
 
 ## Open questions
 
@@ -145,3 +411,278 @@ environments.
 
 Mirrors for third-party harnesses; a Conduit-owned task engine; federation;
 browser tabs as nodes; exactly-once arbitrary shell execution.
+
+## Decision log
+
+Each decision as it was put: the question, what was weighed, what was chosen
+and why. The numbered decisions above are the conclusions; this is the
+reasoning to interrogate when one of them stops fitting.
+
+**Sources.** This plan was condensed from a fuller proposal of 2026-10-08,
+still the best statement of the node model, its invariants, identity
+concepts, protocol requirements, security posture and failure matrix:
+`git show e066e6e2:docs/distributed-nodes-and-execution.md`. The older vision
+it descends from (targets running harnesses, Remotes, lineage) is
+`git show 1f2d06d1^:personal-agent-platform-design.md`. Several 2026-10-21
+questions below were already answered there; each says so.
+
+### 2026-10-21: the model
+
+**Framing.** *(Restates the October proposal's core decision: the server
+owns intelligence and coordination, nodes are where actions happen, UI
+clients observe and direct.)* First sketched as "work on any client from any
+other client".
+Corrected: harnesses run on the server, so it is two relationships with the
+server in the middle -- *control* (any client drives the server: the chat
+contract) and *action* (the server acts on devices: the node protocol). A
+phone never drives the desktop; it drives the server, which acts on the
+desktop. → decision 20.
+
+**How does a tool call pick its device?** Weighed: a device per call with the
+workspace as default (needed for a persistent assistant); one device per
+conversation (today's code); a subagent bound to each other device. Chosen:
+a thread is owned by a device and its calls default there; a persistent
+assistant picks per call; an owned thread may go on if its device is
+unreachable but knows durably where it belongs (a record beside the
+conversation, not agent context). Why: a thread has a home, which keeps short
+chats simple, while the assistant gets the reach it needs. → decision 21.
+
+**Is main's machine just another device?** *(Already adopted in October:
+"Local server environment represented as a Node", one vocabulary, no "is
+remote" branches.)* Weighed: yes, trusted by default
+(one code path, nothing changes for existing users); yes with explicit grants
+(uniform, but every workspace needs a migration and a grant); no, keep local
+special (least work, but Conduit's file browser, Git and terminals stay two
+paths for good). Chosen: a device, trusted by default. → decision 22.
+
+**May third-party harnesses work in a device's folders?** *(Changes the
+October proposal, which ran them on the server against mirrors of device
+folders and made "moving Codex/Claude Code's core loops onto remote devices"
+a non-goal; matches the July vision, where targets run harnesses.)* Recommended: never,
+runtime only, on the reading that devices only lend capabilities. Rejected:
+installed harnesses are properties of the devices that have them; a device
+offers them, Conduit drives them there, and can drive harnesses on several
+devices at once towards one outcome; main's own harnesses work as today. This
+revised decision 5 (which had made remote environments runtime-only).
+
+**Who approves a write or a command on a device?** *(October left
+"device-local approval for sensitive classes" open; this settles it.)* Weighed: the grants are
+the approval; an approval card on any client per call (safe, but long tasks
+become babysitting); a prompt on the device itself (strongest consent,
+useless when away from it -- the point of the feature). Chosen: grants are
+the approval; the chat shows every call. → decision 23.
+
+**Who owns a thread typed on the phone in a desktop folder?** *(October:
+"a workspace's home is independent of the client used to access it".)* Weighed: the
+workspace's device; the device typed on (tools would default to a phone with
+no folders); a picker at start. Chosen: the workspace's device, whoever
+typed; outside any workspace, the device it was started on. → decision 21.
+
+**How does main drive a harness on a device?** Weighed: remote spawn -- the
+node starts the process and relays its stdio or local port, main's existing
+adapters run unchanged; adapters on the node, relaying chat-contract events
+(lower latency, survives main restarts, but two places run adapters and
+versions skew); defer. Chosen: remote spawn. Why: one adapter per harness,
+a thin node, and terminals need the same thing. → decision 5.
+
+**What does a thread do when its device is unreachable?** Weighed: wait, with
+a control on any client to continue without it; always wait; fall back
+automatically after a timeout (keeps moving, but does work somewhere you did
+not expect). Chosen: wait, and offer to continue; the model is told the
+device is unavailable and the thread keeps its owner. → decision 21.
+
+**What ships next in the node track?** Weighed: main as a device; the
+Windows node and phone gate on real hardware; the ownership record; remote
+spawn. Chosen: main as a device first, because it makes device workspaces
+first-class rather than read-only special cases and is what remote harnesses
+and ownership build on. → the node track order under Milestones.
+
+### 2026-10-21: second round, against the October proposal
+
+**Does a workspace store a device path or a root id?** October said a root
+id, never "an arbitrary client path" main later executes in; the first build
+stored the path. Chosen: root ids -- a workspace is `{node, rootId, subpath}`
+and the device maps the root to its real path. Main never holds a path it
+runs things in, a device can move the folder, and unsharing invalidates it.
+
+**How is one PC with several environments modelled?** October separated
+Device from Node (Windows host and a WSL distro as two nodes on one desktop).
+Weighed against one node per device (what was built). Chosen: a device
+groups nodes, each with its own key, roots, grants and installed harnesses;
+the UI groups by device and a thread is owned by a node.
+
+**What happens to server-side mirrors for third-party harnesses?** They
+existed because October kept harnesses on the server. With harnesses running
+where they are installed, chosen: drop mirrors. A harness works in its own
+device's folder with that device's toolchain, the truthful environment.
+(Revisit only if a device has the folder but not the harness.)
+
+**How does the node role run on a desktop?** Weighed: a background companion
+separate from the window (October's proposal); only while the app is open; a
+standalone CLI only. Chosen: a background companion that keeps serving with
+the window closed, starts at login (a setting in Devices), and is paired
+independently of which server the UI points at. Android serves while open,
+then by push wake. Built for the desktop app: the shell runs the
+same `conduit-node`, bundled with Node and node-pty's prebuilt binaries as an
+app resource (`scripts/build-node-companion.mjs`, `src-tauri/src/
+node_companion.rs`), while "Serve this computer" is on; Settings › Devices
+adds this computer to the server in one step (the server's key, handed to
+the shell's node) and shares folders through the system picker. A real
+Windows node ran the runtime, file browsing and a ConPTY terminal.
+
+### 2026-10-21: third round, on what October left open
+
+**What is a Task?** October proposed a server Task domain (queued,
+waiting_for_node, waiting_for_approval, …) beside chats. Weighed: pi-durable's
+tasks, projected; a Conduit task layer above every harness (uniform, but a
+second durable engine); defer. Chosen: pi-durable's, projected -- no Conduit
+task engine (decision 1); a task is a runtime conversation or subagent with
+its pi-durable state, shown across chats; third-party harness work appears
+as worker threads (decision 14).
+
+**How far do we go on knowing whether a cut-off action happened?** October
+required action ids, receipts and reconciliation, and no blind retries.
+Weighed against reporting "cut off" and letting the model decide (what
+exists). Chosen: receipts for writes and commands -- every mutating call
+carries an action id, the node records its outcome, and after a reconnect
+main asks what happened; writes become exactly-once, commands report their
+exit or "unknown" truthfully. Built: `src/nodes/receipts.js`; a command
+keeps running on the node through a dropped socket and its output resumes
+where it broke off; only a restarted node (another `boot`) yields "unknown".
+
+**Can a device pair with more than one server?** Weighed: independently,
+each pairing with its own key, roots and grants (October's model); one
+server per device. Chosen: independently; switching the server a UI shows
+never moves a device's pairing. Built: node.json holds a pairing per server, each
+with its own key and folders, and `run` keeps a connection to each.
+
+**Which files never leave a device?** Weighed: a default deny-list, editable
+per root; nothing excluded; respect .gitignore (surprises when an agent needs
+a generated file). Chosen: a default deny-list (`.env*`, keys, `.ssh/`,
+credential stores) that the node refuses to read through browsing,
+attachments and agent file tools unless a root allows it. Shell is unaffected
+-- it has the user's full access by decision. Built: `src/nodes/secrets.js`; names
+still list, contents are refused for reads and writes; `conduit-node share
+--allow/--deny` edits a root's list.
+
+### 2026-10-21: which harnesses run on devices
+
+**Every adapter on devices?** Built for Claude Code, Codex, fx (ACP) and
+OpenCode: main's adapter keeps its translation into Conduit's internal
+representation and only its launch and saved-state reads move to the
+device (spawned process, a tunnel to the harness's own socket or loopback
+service, or a `harness` read on the node). Not for Conduit Pi: it runs
+Conduit's pinned Pi with Conduit's agent folder and the server's
+credentials, which would have to leave the server, and the Conduit runtime
+-- already acting through devices -- is replacing it. Not for ChatGPT web:
+it has no workspace or file tools, so a device adds nothing.
+
+### 2026-10-21: from the security review of the node path
+
+*(Its first finding restates October's "narrow shell cwd alone is not a
+sandbox".)*
+
+An adversarial review of the first node protocol found these, and each fix
+is a decision as much as a patch:
+
+- **`shell` is full access as the device's user.** A command starts in a
+  shared root, but nothing confines it; the grant says so (CLI warning,
+  Devices label). Sandboxing commands (per-OS) is later. It also makes the
+  check-then-use gap in file calls moot: only a command can plant a link.
+- **File calls never resolve through a link that resolves nowhere.** A
+  dangling link inside a root could have created its target outside it.
+- **Temporary files are not created on a device for main.** They live in the
+  device's temp directory, outside its roots.
+- **A device workspace never reaches main's own filesystem.** Its path is the
+  device's: unlinking it touches nothing on main, deleting its files is
+  refused, terminals and chat moves into or out of it are refused, and the
+  dashboard reads no Git or recent files for it. Until decision 22 lands, its
+  files browse read-only through the device.
+- **Handles are never reused** across reconnects, and waiting for a device
+  listens before it looks, so a reconnect is never missed.
+
+### 2026-10-21: devices, roles and the head
+
+The architecture sketch drew clients and devices as separate boxes and the
+server as a headless brain. Corrected by the user: a device and a client are
+the same thing; client and node (daemon) are properties of a device, most
+devices run both, a web client or a declining owner runs only the client.
+The head is usually the VPS but a headed desktop may hold it, so nothing may
+assume a headless head. → decision 24, the Architecture section. The user
+accepted the rest of the sketch (seams, the differences table, making it
+general) to be folded in here; steps 1, 2 and 4 join node track (c).
+
+### 2026-10-22: the cutover (milestone 5)
+
+Asked how the first-party profiles move from Pi 1.3.0 to pi-durable.
+- **History.** pi-durable's history is linear; editing or forking an earlier
+  message makes a new chat. Accepted, with the tree still drawn by walking
+  chats' fork lineage (each fork knows the chat and message it came from).
+- **Coding's codemode** uses pi-durable's own codemode extension (the Pi
+  extension cannot run in the bridge).
+- **No dual support.** On the switch, every existing Assistant, Coding and
+  Runtime chat on classic Pi is converted to the durable agent once; classic
+  Pi is not kept for them. The user is the only user and nothing needs
+  preserving beyond what a conversion carries. (This replaces decision 2's
+  "old Pi stays to continue existing chats".)
+- **The "Conduit runtime" profile is folded in**: the templates are the
+  durable agent's profiles; its chats show as Assistant.
+
+### 2026-10-22: environments on one machine
+
+**Does each environment need its own connection?** The socket itself is
+cheap (an idle WebSocket); the cost is two pairings, routes and online states
+for one machine. Proposed: one connection per device, the Windows daemon
+relaying WSL as a stdio child. Answered: the device is a grouping and must
+handle both -- someone may expose only WSL headlessly -- and relaying all WSL
+traffic through Windows may prove too costly. → decision 25: either path,
+chosen per environment (not "direct when available", not "always relay").
+
+**Who holds a relayed environment's credentials?** Weighed: a device key
+held by the relay (simpler pairing, but the relay speaks for WSL and a direct
+connection needs pairing anyway) vs each environment's own key (the relay
+only forwards). Chosen: each its own key. → decision 25.
+
+**How does WSL get conduit-node?** Weighed: the Windows app shipping a Linux
+build and Node (zero setup, bigger installer), the distro's own Node
+(breaks without one; node-pty needs a Linux build), or the user installing it.
+Chosen: the user installs it, and the Windows client offers to download and
+install it.
+
+**Does a relayed WSL child keep the WSL2 VM awake?** Only while Serve is on:
+on-demand starts pay VM boot and kill watches and shells on idle.
+
+**Which environments does the model cover?** WSL now; dev containers and SSH
+hosts behind a device later, so frame tags and the relay are not WSL-shaped.
+
+**The same files from Windows and from WSL?** Weighed: separate, detected
+and linked (one workspace opened in either environment), or discouraging
+`/mnt` shares. Chosen: separate for now. → decision 26.
+
+**Does a terminal outside shared folders need its own grant?** It was built
+with one (`conduit-node terminal on`), but a shell grant on any folder already
+reaches the whole home. Chosen: follow the shell grant. → decision 27.
+
+### 2026-10-22: the head, terminals and the two networks
+
+**Should the head run its own node daemon, dropping tmux?** Proposed to make
+decision 24 literal (one terminal implementation) and allow a Windows head.
+Answered: tmux is too important for recovery, especially on the head; a
+Linux-only head is acceptable. Weighed: tmux on the head only, tmux on Unix
+nodes too, or a flexible head with a daemon fallback. Chosen: tmux wherever
+it exists. → decision 28.
+
+**What is the desktop after the merge?** Weighed: the VPS as the only head
+(the desktop a device), two networks, or the desktop as the head. Chosen: a
+dev network headed by the desktop and a prod network headed by the VPS, the
+desktop a device of both. Dev's head takes over this machine's existing data;
+nothing in either is relied on, so a migration such as the classic-chat
+conversion may run on dev at the merge. "Conduit Durable" ends with the
+merge. → decision 29.
+
+**How does a node learn what the head supports?** A feature list in the
+head's reply to hello, rather than bumping the protocol version for each
+addition. → decision 30.
+
+**The relay's security review:** run now, in the background, rather than at
+the merge.

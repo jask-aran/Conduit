@@ -1,5 +1,6 @@
+import { remoteNode } from "../../place.js";
 import os from "node:os";
-import { applyArtifactMessageIds } from "../../message-ids.js";
+import { projectWorkspace } from "../../workspace-host.js";
 import { readWorkspaceComparison } from "../../workspace-comparison.js";
 import { computerContext, findComputerGitRoot, resolveComputerContext } from "../../computer-context.js";
 import path from "node:path";
@@ -7,7 +8,6 @@ import fs from "node:fs/promises";
 import express from "express";
 import { resolveTemplate } from "../../config.js";
 import { chatView } from "../../chat-store.js";
-import { conduitPiSessionFile } from "../../backend-session.js";
 import { removeProjectSessions, removeSession } from "../../session-store.js";
 import {
   createWorkspaceDirectory,
@@ -20,8 +20,9 @@ import {
 } from "../../workspace-inspector.js";
 import {
   findDeletableSession,
-  moveRegisteredChat,
-  stopProjectProcesses, stopSessionProcesses,
+  stopProjectProcesses,
+  stopSessionProcesses,
+  moveDurableChat,
 } from "../../session-operations.js";
 
 function resolveProjectDefaultTemplateId(config, requested, fallback = null) {
@@ -51,9 +52,11 @@ const WORKSPACE_APPEARANCE_ICON_IDS = new Set([
   "puzzle", "rocket", "route", "server-cog", "shield-check", "sparkles",
   "star", "terminal", "workflow", "zap",
 ]);
+// Identity hues (components/ui/palettes.ts IDENTITY_HUES), and the Catppuccin names saved before hues.
 const WORKSPACE_APPEARANCE_COLOR_IDS = new Set([
-  "rosewater", "flamingo", "pink", "mauve", "red", "peach", "yellow",
-  "green", "teal", "sky", "sapphire", "blue", "lavender",
+  "rose", "coral", "pink", "violet", "red", "orange", "yellow",
+  "green", "teal", "cyan", "azure", "blue", "indigo",
+  "rosewater", "flamingo", "mauve", "peach", "sky", "sapphire", "lavender",
 ]);
 const WORKSPACE_APPEARANCE_HEX_COLOR = /^#[0-9a-f]{6}$/i;
 
@@ -78,14 +81,12 @@ function normalizeWorkspaceAppearance(requested) {
 }
 
 export function registerProjectRoutes(app, {
-  messageIds,
+  nodeHub,
   backends,
   buildProjectDashboard,
   config,
   listWorkspaceDirectory,
-  manager,
   projects,
-  readSessionPage,
   readWorkspaceCommit,
   readWorkspaceDiff,
   readWorkspaceFile,
@@ -119,6 +120,9 @@ export function registerProjectRoutes(app, {
     if (project) await projects.validate(project);
     return project;
   };
+  // Where the inspector works for a project: this server's path, or the
+  // device's folder through its environment (plan decision 22).
+  const rootOf = (project) => projectWorkspace(project, nodeHub);
   const readComputerLocation = async (project) => {
     const [gitRoot, listing] = await Promise.all([
       findComputerGitRoot(project.workingRoot),
@@ -153,9 +157,11 @@ export function registerProjectRoutes(app, {
   app.get("/v0/projects", async (_request, response, next) => {
     try {
       const items = await projects.list();
-      const live = manager.list();
+      const live = backends.list();
       response.json({ projects: await Promise.all(items.map(async (project) => ({
         ...project,
+        // Whose it is and what can be done there, so the client asks that and never `nodeId`.
+        capabilities: await backends.capabilities?.(project) || null,
         sessions: registry.listProject(project.id).map((chat) => {
           const process = live.find((item) => item.chatId === chat.id);
           return {
@@ -181,10 +187,13 @@ export function registerProjectRoutes(app, {
       await projects.validate(project);
       response.json(await buildProjectDashboard({
         project,
+        root: rootOf(project),
         registry,
-        processes: manager.list(),
+        processes: backends.list(),
         terminals: terminals.list(),
-        readPage: readSessionPage,
+        readTranscript: async (chat) => backends.forChat(chat).readTranscript({
+          chatId: chat.id, opaqueSession: chat.backend?.opaqueSession, project,
+        }),
         inspectWorkspace: (root, options) => readWorkspaceDiff(root, { ...options, includePatch: false }),
         // A harness with no threads of its own to enumerate (ChatGPT Web, the
         // test profile) has nothing to list, rather than failing the page.
@@ -238,6 +247,20 @@ export function registerProjectRoutes(app, {
           path: request.body.path,
           defaultTemplateId: resolveProjectDefaultTemplateId(config, request.body?.defaultTemplateId, null),
         });
+        return response.status(201).json(created);
+      }
+      if (mode === "node") {
+        // A folder a paired node shares: a root by id, and optionally a folder inside it.
+        const nodeId = String(request.body?.nodeId || "");
+        if (!nodeHub || !await nodeHub.get(nodeId)) return response.status(404).json({ error: "node_not_found" });
+        const root = await nodeHub.root(nodeId, String(request.body?.rootId || ""));
+        if (!root) return response.status(400).json({ error: "root_not_shared", message: "That folder is not shared by the device" });
+        const subpath = String(request.body?.path || "").replace(/\\/g, "/").split("/").filter((part) => part && part !== ".");
+        if (subpath.includes("..")) return response.status(400).json({ error: "invalid_workspace_path" });
+        const separator = root.label.includes("\\") && !root.label.includes("/") ? "\\" : "/";
+        const created = await projects.createOnNode({ name: name || undefined, nodeId, rootId: root.id, subpath: subpath.join("/"),
+          label: [root.label.replace(/[\\/]+$/, ""), ...subpath].join(separator),
+          defaultTemplateId: resolveProjectDefaultTemplateId(config, request.body?.defaultTemplateId, null) });
         return response.status(201).json(created);
       }
       if (mode === "create" || mode === "created") {
@@ -304,7 +327,7 @@ export function registerProjectRoutes(app, {
     try {
       const project = await inspectionContext(request.params.id);
       if (!project) return response.status(404).json({ error: "project_not_found" });
-      const listing = await listWorkspaceDirectory(project.workingRoot, request.query.path, { after: request.query.after });
+      const listing = await listWorkspaceDirectory(rootOf(project), request.query.path, { after: request.query.after });
       response.json({ path: String(request.query.path || ""), ...listing });
     } catch (error) { next(error); }
   });
@@ -313,7 +336,7 @@ export function registerProjectRoutes(app, {
     try {
       const project = await inspectionContext(request.params.id);
       if (!project) return response.status(404).json({ error: "project_not_found" });
-      response.json(await readWorkspaceVersion(project.workingRoot, { paths: workspaceVersionPaths(request.query.paths) }));
+      response.json(await readWorkspaceVersion(rootOf(project), { paths: workspaceVersionPaths(request.query.paths) }));
     } catch (error) { next(error); }
   });
 
@@ -322,9 +345,10 @@ export function registerProjectRoutes(app, {
       const project = await inspectionContext(request.params.id);
       if (!project) return response.status(404).json({ error: "project_not_found" });
       if (!request.query.path) return response.status(400).json({ error: "workspace_path_required" });
+      const root = rootOf(project);
       if (request.query.download === "1" || request.query.inline === "1") {
-        const resolved = await resolveInspectorPath(project.workingRoot, request.query.path, { kind: "file" });
-        const metadata = await readWorkspaceFileMetadata(project.workingRoot, request.query.path);
+        const resolved = await resolveInspectorPath(root, request.query.path, { kind: "file" });
+        const metadata = await readWorkspaceFileMetadata(root, request.query.path);
         const inline = request.query.inline === "1";
         if (inline && !["image", "pdf", "audio", "video"].includes(metadata.kind)) {
           return response.status(415).json({ error: "unsupported_inline_type" });
@@ -338,12 +362,15 @@ export function registerProjectRoutes(app, {
         response.setHeader("X-Content-Type-Options", "nosniff");
         response.setHeader("Cache-Control", "private, no-cache");
         response.setHeader("Content-Disposition", `${inline ? "inline" : "attachment"}; filename*=UTF-8''${downloadName}`);
-        return response.sendFile(resolved.path);
+        if (resolved.path) return response.sendFile(resolved.path);
+        // A device's file comes through the device, whole.
+        if (metadata.size > config.maxAttachmentBytes) return response.status(413).json({ error: "file_too_large" });
+        return response.end(await resolved.host.read(resolved.relativePath));
       }
       if (request.query.metadata === "1") {
-        return response.json(await readWorkspaceFileMetadata(project.workingRoot, request.query.path));
+        return response.json(await readWorkspaceFileMetadata(root, request.query.path));
       }
-      response.json(await readWorkspaceFile(project.workingRoot, request.query.path, {
+      response.json(await readWorkspaceFile(root, request.query.path, {
         forceText: request.query.force === "text",
         preview: request.query.preview === "1",
       }));
@@ -357,7 +384,7 @@ export function registerProjectRoutes(app, {
       if (!request.query.path) return response.status(400).json({ error: "workspace_path_required" });
       const expectedRevision = typeof request.headers["if-match"] === "string" ? request.headers["if-match"] : null;
       const content = Buffer.isBuffer(request.body) ? request.body : Buffer.alloc(0);
-      const written = await writeWorkspaceFile(project.workingRoot, request.query.path, content, { expectedRevision });
+      const written = await writeWorkspaceFile(rootOf(project), request.query.path, content, { expectedRevision });
       response.status(expectedRevision == null ? 201 : 200).json(written);
     } catch (error) { next(error); }
   });
@@ -367,7 +394,7 @@ export function registerProjectRoutes(app, {
       const project = await inspectionContext(request.params.id);
       if (!project) return response.status(404).json({ error: "project_not_found" });
       if (!request.query.path) return response.status(400).json({ error: "workspace_path_required" });
-      await deleteWorkspaceFile(project.workingRoot, request.query.path);
+      await deleteWorkspaceFile(rootOf(project), request.query.path);
       response.status(204).end();
     } catch (error) { next(error); }
   });
@@ -377,7 +404,7 @@ export function registerProjectRoutes(app, {
       const project = await inspectionContext(request.params.id);
       if (!project) return response.status(404).json({ error: "project_not_found" });
       if (!request.body?.path) return response.status(400).json({ error: "workspace_path_required" });
-      response.status(201).json(await createWorkspaceDirectory(project.workingRoot, request.body.path));
+      response.status(201).json(await createWorkspaceDirectory(rootOf(project), request.body.path));
     } catch (error) { next(error); }
   });
 
@@ -388,7 +415,7 @@ export function registerProjectRoutes(app, {
       if (!request.body?.path || !request.body?.destination) {
         return response.status(400).json({ error: "workspace_path_required" });
       }
-      response.json(await moveWorkspaceEntry(project.workingRoot, request.body.path, request.body.destination));
+      response.json(await moveWorkspaceEntry(rootOf(project), request.body.path, request.body.destination));
     } catch (error) { next(error); }
   });
 
@@ -397,7 +424,7 @@ export function registerProjectRoutes(app, {
       const project = await inspectionContext(request.params.id);
       if (!project) return response.status(404).json({ error: "project_not_found" });
       if (!request.query.path) return response.status(400).json({ error: "workspace_path_required" });
-      await deleteWorkspaceDirectory(project.workingRoot, request.query.path);
+      await deleteWorkspaceDirectory(rootOf(project), request.query.path);
       response.status(204).end();
     } catch (error) { next(error); }
   });
@@ -414,9 +441,9 @@ export function registerProjectRoutes(app, {
       if (project.kind !== "workspace") return response.status(403).json({ error: "source_control_disabled", message: "Source Control is available only for Workspaces." });
       if (request.query.compare === "1") {
         const scope = typeof request.query.scope === "string" ? request.query.scope : request.query.staged === "1" ? "staged" : "changes";
-        response.json(await readWorkspaceComparison(project.workingRoot, request.query.path, { scope, signal: controller.signal }));
+        response.json(await readWorkspaceComparison(rootOf(project), request.query.path, { scope, signal: controller.signal }));
       } else {
-        response.json(await readWorkspaceDiff(project.workingRoot, { filePath: typeof request.query.path === "string" ? request.query.path : null, staged: request.query.staged === "1", includePatch: request.query.patch === "1", includeHistory: request.query.history !== "0", reuse: request.query.reuse === "1", signal: controller.signal }));
+        response.json(await readWorkspaceDiff(rootOf(project), { filePath: typeof request.query.path === "string" ? request.query.path : null, staged: request.query.staged === "1", includePatch: request.query.patch === "1", includeHistory: request.query.history !== "0", reuse: request.query.reuse === "1", signal: controller.signal }));
       }
     } catch (error) {
       if (!request.aborted && !response.destroyed) next(error);
@@ -433,15 +460,17 @@ export function registerProjectRoutes(app, {
       const chatId = typeof request.query.chatId === "string" ? request.query.chatId : "";
       const chat = registry.metadata(chatId);
       if (!chat || chat.projectId !== project.id) return response.json(null);
+      // Turn checkpoints snapshot the workspace where it is; a place that cannot (a device without Git there) has none.
+      const can = await backends.capabilities?.(project);
+      if (can && !can.checkpoints) return response.json(null);
       if (request.query.timeline === "1") {
-        return response.json(applyArtifactMessageIds(await turnCheckpoints.timeline(chatId, project.workingRoot),
-          await messageIds.resolver(project, chat)));
+        return response.json(await turnCheckpoints.timeline(chatId, rootOf(project)));
       }
       const baseline = request.query.baseline === "turn" ? "turn" : "chat";
       const checkpointId = typeof request.query.checkpointId === "string" ? request.query.checkpointId : null;
       const artifact = request.query.path
-        ? await turnCheckpoints.compare(chatId, project.workingRoot, request.query.path, checkpointId, baseline)
-        : await turnCheckpoints.review(chatId, project.workingRoot, baseline, checkpointId);
+        ? await turnCheckpoints.compare(chatId, rootOf(project), request.query.path, checkpointId, baseline)
+        : await turnCheckpoints.review(chatId, rootOf(project), baseline, checkpointId);
       response.json(artifact);
     } catch (error) { next(error); }
   });
@@ -456,7 +485,7 @@ export function registerProjectRoutes(app, {
       const project = await inspectionContext(request.params.id, true);
       if (!project) return response.status(404).json({ error: "project_not_found" });
       if (project.kind !== "workspace") return response.status(403).json({ error: "source_control_disabled", message: "Source Control is available only for Workspaces." });
-      response.json(await readWorkspaceCommit(project.workingRoot, request.params.hash, { signal: controller.signal }));
+      response.json(await readWorkspaceCommit(rootOf(project), request.params.hash, { signal: controller.signal }));
     } catch (error) {
       if (!request.aborted && !response.destroyed) next(error);
     } finally {
@@ -470,7 +499,7 @@ export function registerProjectRoutes(app, {
       const project = await inspectionContext(request.params.id, true);
       if (!project) return response.status(404).json({ error: "project_not_found" });
       if (project.kind !== "workspace") return response.status(403).json({ error: "source_control_disabled", message: "Source Control is available only for Workspaces." });
-      response.json(await runWorkspaceGitAction(project.workingRoot, {
+      response.json(await runWorkspaceGitAction(rootOf(project), {
         action: request.body?.action,
         relativePath: request.body?.path,
         message: request.body?.message,
@@ -478,6 +507,8 @@ export function registerProjectRoutes(app, {
     } catch (error) { next(error); }
   });
 
+  // Every Conduit chat of one place moves to another; chats of other harnesses
+  // stay (their history is the harness's, tied to the folder) and are listed.
   app.post("/v0/projects/:id/move-sessions", async (request, response, next) => {
     try {
       const source = await projects.get(request.params.id);
@@ -487,23 +518,25 @@ export function registerProjectRoutes(app, {
         await projects.validate(source);
         await projects.validate(target);
         if (source.id === target.id) throw Object.assign(new Error("Project target is unchanged"), { code: "project_target_unchanged", status: 409 });
-        const chats = registry.listProject(source.id, { includeHidden: true });
         const moved = [];
-        for (const { id } of chats) {
+        const kept = [];
+        for (const { id } of registry.listProject(source.id, { includeHidden: true })) {
           const item = await lifecycle.run(id, async () => {
             const chat = registry.metadata(id);
             if (!chat || chat.projectId !== source.id) return null;
-            const projectList = await projects.list();
-            const session = conduitPiSessionFile(chat) ? await registry.find(projectList, chat.id) : null;
-            await stopSessionProcesses(backends, chat);
             lifecycle.assertAvailable(chat.id, source.id);
             lifecycle.assertAvailable(chat.id, target.id);
-            await moveRegisteredChat({ chat, source, target, session, registry });
-            return { sourceId: chat.id, session: chatView(registry.metadata(chat.id)) };
+            try {
+              return { sourceId: chat.id, session: chatView(await moveDurableChat({ chat, source, target, backends, registry })) };
+            } catch (error) {
+              if (error.code !== "chat_move_not_supported") throw error;
+              kept.push({ id: chat.id, reason: error.message });
+              return null;
+            }
           });
           if (item) moved.push(item);
         }
-        response.json({ moved });
+        response.json({ moved, kept });
       });
     } catch (error) { next(error); }
   });

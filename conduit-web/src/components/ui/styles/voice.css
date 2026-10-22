@@ -1,0 +1,24 @@
+.ui-voice-waveform { display: grid; gap: var(--space-sm); width: 100%; box-sizing: border-box; padding: var(--space-md) var(--space-lg) var(--space-sm); border: var(--hairline) solid color-mix(in oklch, var(--muted-foreground), var(--border) 66%); border-radius: var(--radius-surface); background: linear-gradient(180deg, color-mix(in oklch, var(--muted-foreground), transparent 94%), color-mix(in oklch, var(--background), transparent 20%)); color: var(--muted-foreground); }
+.ui-voice-waveform-header, .ui-voice-waveform-readout, .ui-voice-waveform-state, .ui-voice-waveform-scale { display: flex; align-items: center; }
+.ui-voice-waveform-header { justify-content: space-between; gap: var(--space-lg); min-height: var(--space-xl); font: var(--text-label)/var(--leading-tight) var(--font-data); letter-spacing: 0.02em; }
+.ui-voice-waveform-state { min-width: 0; gap: var(--space-sm); color: var(--foreground); }
+.ui-voice-waveform-dot { width: var(--icon-dot); height: var(--icon-dot); flex: none; border-radius: var(--radius-round); background: var(--muted-foreground); }
+.ui-voice-waveform-readout { flex: none; gap: var(--space-md); color: var(--muted-foreground); }
+.ui-voice-waveform-plot { position: relative; display: flex; height: var(--control-lg); align-items: end; gap: var(--space-2xs); overflow: hidden; padding: var(--space-xs) var(--space-2xs); border: var(--hairline) solid color-mix(in oklch, var(--border), transparent 20%); border-radius: var(--radius-control); background: color-mix(in oklch, var(--background), transparent 32%); }
+.ui-voice-waveform-gridline { position: absolute; right: var(--space-2xs); left: var(--space-2xs); height: var(--hairline); background: color-mix(in oklch, var(--border), transparent 45%); pointer-events: none; }
+.ui-voice-waveform-gridline-high { top: 25%; }
+.ui-voice-waveform-gridline-low { bottom: 25%; }
+.ui-voice-waveform-bar { z-index: 1; display: block; min-width: var(--hairline); flex: 1 1 0; border-radius: var(--radius-round) var(--radius-round) var(--radius-inset) var(--radius-inset); background: linear-gradient(180deg, var(--muted-foreground), color-mix(in oklch, var(--muted-foreground), var(--primary) 38%)); opacity: var(--opacity-rest); transition: height var(--duration-follow) var(--ease-arrive), opacity var(--duration-quick) var(--ease-change); }
+.ui-voice-waveform-peak { position: absolute; right: var(--space-2xs); left: var(--space-2xs); z-index: 2; height: var(--hairline); border-top: var(--hairline) dashed color-mix(in oklch, var(--muted-foreground), white 30%); opacity: 0; transition: bottom var(--duration-follow) var(--ease-arrive), opacity var(--duration-quick) var(--ease-change); pointer-events: none; }
+.ui-voice-waveform-peak[data-visible="true"] { opacity: 1; }
+.ui-voice-waveform-scale { justify-content: space-between; color: color-mix(in oklch, var(--muted-foreground), transparent 12%); font: var(--text-label)/var(--leading-none) var(--font-data); }
+.ui-voice-waveform[data-state="connecting"] { border-color: color-mix(in oklch, var(--muted-foreground), var(--border) 52%); }
+:where(.ui-voice-waveform[data-state="connecting"]) .ui-voice-waveform-dot { background: var(--muted-foreground); animation: ui-voice-pulse var(--duration-pulse) ease-in-out infinite; }
+.ui-voice-waveform[data-state="listening"] .ui-voice-waveform-dot { background: var(--live); box-shadow: 0 0 0 3px color-mix(in oklch, var(--live), transparent 82%); }
+.ui-voice-waveform[data-state="error"] { border-color: color-mix(in oklch, var(--destructive), var(--border) 48%); }
+.ui-voice-waveform[data-state="error"] .ui-voice-waveform-dot { background: var(--destructive); }
+@keyframes ui-voice-pulse { 0%, 100% { opacity: var(--opacity-faint); transform: scaleY(0.65); } 50% { opacity: 1; transform: scaleY(1); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .ui-voice-waveform * { animation: none; transition: none; }
+}

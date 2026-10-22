@@ -24,26 +24,26 @@
   font-family: var(--font-data);
   font-size: var(--text-caption);
   font-variant-numeric: tabular-nums;
-  font-weight: 400;
+  font-weight: var(--weight-rest);
   letter-spacing: 0;
   text-align: right;
   text-transform: none;
-  opacity: .85;
+  opacity: var(--opacity-rest);
 }
-.ui-history-branch { position: relative; opacity: .62; }
-@media (hover: hover) { .ui-history-branch:hover { opacity: .86; }
+.ui-history-branch { position: relative; opacity: var(--opacity-muted); }
+@media (hover: hover) { .ui-history-branch:hover { opacity: var(--opacity-rest); }
 }
 /* Rail and tick meet at one x, a tick's width left of the child text, so the
    elbow stays short and connected whatever the indent step is. */
-.ui-history-branch-rail { position: absolute; top: 0; bottom: calc(var(--history-row-height, var(--control-tool)) / 2); left: calc(var(--history-gutter) + var(--history-depth, 1) * var(--history-step) - var(--history-tick)); width: var(--hairline); background: var(--muted-foreground); opacity: .55; }
-.ui-history-tick { position: absolute; top: calc(var(--space-2xs) + var(--history-line-height) / 2); left: calc(var(--history-gutter) + var(--history-depth, 1) * var(--history-step) - var(--history-tick)); width: var(--history-tick); height: var(--hairline); background: var(--muted-foreground); opacity: .55; }
+.ui-history-branch-rail { position: absolute; top: 0; bottom: calc(var(--history-row-height, var(--control-tool)) / 2); left: calc(var(--history-gutter) + var(--history-depth, 1) * var(--history-step) - var(--history-tick)); width: var(--hairline); background: var(--muted-foreground); opacity: var(--opacity-muted); }
+.ui-history-tick { position: absolute; top: calc(var(--space-2xs) + var(--history-line-height) / 2); left: calc(var(--history-gutter) + var(--history-depth, 1) * var(--history-step) - var(--history-tick)); width: var(--history-tick); height: var(--hairline); background: var(--muted-foreground); opacity: var(--opacity-muted); }
 @media (hover: hover) { .ui-history-row:hover { background: var(--tint); }
 }
 /* A folded run of tool calls is a control, not a line of text: it opens just
    that run, and the button in the header stays the blunt all-or-nothing one. */
 .ui-history-run { width: 100%; border: 0; background: none; font: inherit; text-align: left; cursor: pointer; }
 .ui-history-run .ui-history-text { display: flex; align-items: center; gap: var(--space-xs); }
-.ui-history-chevron { width: var(--space-lg); height: var(--space-lg); flex: none; opacity: .7; transition: transform 0.15s ease; }
+.ui-history-chevron { width: var(--space-lg); height: var(--space-lg); flex: none; opacity: var(--opacity-rest); transition: transform var(--duration-quick) var(--ease-change); }
 .ui-history-chevron[data-open] { transform: rotate(180deg); }
 @media (hover: hover) { .ui-history-run:hover .ui-history-chevron { opacity: 1; }
 }
@@ -53,16 +53,16 @@
 /* A step the harness keeps in its tree but leaves out of every later request:
    an answer it was interrupted writing. Struck through and dimmed, so the
    history reads as the conversation the agent actually has. */
-.ui-history-row[data-discarded] .ui-history-text { text-decoration: line-through; opacity: 0.55; }
-.ui-history-row strong { font-weight: 650; }
+.ui-history-row[data-discarded] .ui-history-text { text-decoration: line-through; opacity: var(--opacity-muted); }
+.ui-history-row strong { font-weight: var(--weight-strong); }
 .ui-history-row[data-kind="user"] code { color: color-mix(in oklch, var(--primary), white 18%); }
 .ui-history-row[data-kind="assistant"] code { color: var(--live); }
 .ui-history-row[data-kind="tool"] { color: color-mix(in oklch, var(--muted-foreground), transparent 8%); font-family: var(--font-data); }
 .ui-history-row[data-kind="summary"] { color: var(--warn); }
-.ui-history-row[data-collapsed] .ui-history-text { font-style: italic; opacity: .85; }
+.ui-history-row[data-collapsed] .ui-history-text { font-style: italic; opacity: var(--opacity-rest); }
 .ui-history-row[data-active] code { opacity: 1; }
 .ui-history-row[data-leaf] { background: var(--tint); }
-.ui-history-row code { overflow: hidden; color: var(--muted-foreground); font-weight: 700; white-space: pre; opacity: .7; }
+.ui-history-row code { overflow: hidden; color: var(--muted-foreground); font-weight: var(--weight-strong); white-space: pre; opacity: var(--opacity-rest); }
 /* The span is the grid's second column, so it can be clipped on its own. */
 .ui-history-text { grid-column: 2; padding-left: calc(var(--history-depth, 0) * var(--history-step)); display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ui-history[data-wrap] .ui-history-row { align-items: start; }

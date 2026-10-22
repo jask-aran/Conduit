@@ -136,7 +136,7 @@ export class PiAuthBroker {
   start(owner, providerId) {
     this.expire();
     if (this.attempt?.state === "running" || this.attempt?.state === "waiting") {
-      throw error("authentication_in_progress", "Another Pi authentication attempt is already in progress", 409);
+      throw error("authentication_in_progress", "Another model-provider authentication attempt is already in progress", 409);
     }
     let provider;
     if (this.modelRuntime) {
@@ -253,7 +253,7 @@ export class PiAuthBroker {
       }
       if (this.attempt !== attempt) return;
       attempt.state = "completed";
-      attempt.message = "Pi authentication completed.";
+      attempt.message = "Model-provider authentication completed.";
       attempt.authUrl = null;
       attempt.deviceCode = null;
       attempt.prompt = null;
@@ -299,7 +299,7 @@ export class PiAuthBroker {
   async setApiKey(providerId, key) {
     if (this.modelRuntime) {
       const provider = this.modelRuntime.getProvider(providerId);
-      if (!provider || !this.authFile) throw error("api_key_provider_unknown", "Choose a provider known to Conduit Pi");
+      if (!provider || !this.authFile) throw error("api_key_provider_unknown", "Choose a provider known to the Conduit durable agent");
       const value = String(key || "");
       if (!value.trim()) throw error("api_key_required", "API key cannot be empty");
       const auth = await readAuthFile(this.authFile);
@@ -312,7 +312,7 @@ export class PiAuthBroker {
     this.authStorage.reload();
     this.modelRegistry.refresh();
     const known = new Set(this.modelRegistry.getAll().map((model) => model.provider));
-    if (!known.has(providerId)) throw error("api_key_provider_unknown", "Choose a provider known to Conduit Pi");
+    if (!known.has(providerId)) throw error("api_key_provider_unknown", "Choose a provider known to the Conduit durable agent");
     const value = String(key || "");
     if (!value.trim()) throw error("api_key_required", "API key cannot be empty");
     this.authStorage.set(providerId, { type: "api_key", key: literalApiKey(value) });

@@ -1,11 +1,10 @@
+import { remoteNode } from "./place.js";
 import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { execFile as execFileCallback } from "node:child_process";
 import { EventEmitter } from "node:events";
-import { promisify } from "node:util";
 import { parseAttachmentEnvelope } from "./attachment-envelope.js";
 import { formatHistoryTool } from "./harnesses/history-tool.js";
 import { answerTo, isDismissal, questionRequest } from "./harnesses/questions.js";
@@ -13,8 +12,9 @@ import { SessionRecords } from "./harnesses/session-records.js";
 import { messageClose, messageOpen, toolClose, toolKind, toolOpen, toolSubject, turnSettle } from "./harnesses/transcript-ops.js";
 import { countCacheRequest, usageFromRequests } from "./cache-stats.js";
 import { unsupported } from "./harnesses/unsupported.js";
+import { opaqueSessionOf } from "./nodes/remote-spawn.js";
+import { placeProcesses } from "./nodes/place-processes.js";
 
-const execFile = promisify(execFileCallback);
 
 export const OPENCODE_CAPABILITIES = Object.freeze({
   history: "linear",
@@ -164,14 +164,17 @@ const blocksOf = (row) => (row.content || []).flatMap((part, index) => {
 });
 
 export class OpenCodeAdapter extends EventEmitter {
-  constructor({ command = "opencode2", logs = null } = {}) {
+  // Starts its harness on a device for a device's workspace (live-session-launcher.js).
+  runsOnDevices = true;
+
+  constructor({ command = "opencode2", logs = null, nodeHub = null } = {}) {
     super();
     this.command = command;
-    this.connection = null;
-    this.connectionStart = null;
-    this.stream = null;
-    this.streamAttempts = 0;
-    this.recovering = false;
+    // Paired devices: a chat in a device's workspace uses that device's OpenCode service.
+    this.nodeHub = nodeHub;
+    // One service per place it runs -- this machine (key "") or a device by
+    // node id -- each with its connection and its one event stream.
+    this.services = new Map();
     this.sessions = new SessionRecords({
       capabilities: OPENCODE_CAPABILITIES,
       backend: { protocol: "native_api", implementation: "opencode", installationId: "host-opencode" },
@@ -183,9 +186,21 @@ export class OpenCodeAdapter extends EventEmitter {
     Object.assign(this, unsupported(OPENCODE_CAPABILITIES, { label: "OpenCode" }));
   }
 
-  async commandOutput(args) {
+  /** The service state for a place: `on` is a node id, or nothing for this machine. */
+  service(on = null) {
+    const key = on || "";
+    if (!this.services.has(key)) {
+      this.services.set(key, { nodeId: on || null, connection: null, connectionStart: null, stream: null, streamAttempts: 0, recovering: false });
+    }
+    return this.services.get(key);
+  }
+
+  /** OpenCode's processes on a device (its node id), or here (none). Any shared folder of a device will do for its service commands. */
+  processes(on) { return placeProcesses(this.nodeHub, { nodeId: on || null, place: on ? this.anyPlace(on) : null }); }
+
+  async commandOutput(args, on = null) {
     try {
-      const { stdout } = await execFile(this.command, args, { encoding: "utf8", maxBuffer: 8 * 1024 * 1024 });
+      const { stdout } = await this.processes(on).execFile("opencode", this.command, args, { encoding: "utf8", maxBuffer: 8 * 1024 * 1024 });
       return stdout.trim();
     } catch (cause) {
       throw failure(String(cause.stderr || cause.message || cause).trim());
@@ -197,46 +212,54 @@ export class OpenCodeAdapter extends EventEmitter {
    * `serve --service` is live, so the state file it writes is read first. A
    * service is only started when none is running, and never by a health check.
    */
-  async connect({ start = true } = {}) {
-    if (this.connection) return this.connection;
-    if (this.connectionStart) return this.connectionStart;
-    this.connectionStart = (async () => {
-      const loopback = /^http:\/\/127\.0\.0\.1:\d+$/;
-      const serviceFile = async (variable, fallback) => {
-        const root = process.env[variable] || path.join(os.homedir(), fallback);
-        try { return JSON.parse(await fs.readFile(path.join(root, "opencode", "service.json"), "utf8")); }
-        catch (cause) { if (cause.code === "ENOENT") return {}; throw cause; }
-      };
-      const alive = (pid) => { try { process.kill(pid, 0); return true; } catch (cause) { return cause.code === "EPERM"; } };
-      const state = await serviceFile("XDG_STATE_HOME", ".local/state");
-      let baseUrl = loopback.test(state.url || "") && Number.isInteger(state.pid) && alive(state.pid) ? state.url : "";
-      // `service status` prints `stopped` and succeeds when there is no service.
-      if (!baseUrl) baseUrl = await this.commandOutput(["service", "status"]).catch(() => "");
-      if (!loopback.test(baseUrl)) {
-        if (!start) throw failure("OpenCode service is not running");
-        await this.commandOutput(["service", "start"]);
-        baseUrl = await this.commandOutput(["service", "status"]);
-      }
-      if (!loopback.test(baseUrl)) throw failure("OpenCode service did not report a loopback URL");
-      const password = process.env.OPENCODE_SERVER_PASSWORD || state.password
-        || (await serviceFile("XDG_CONFIG_HOME", ".config")).password || "";
-      const headers = { accept: "application/json" };
-      if (password) headers.authorization = `Basic ${Buffer.from(`opencode:${password}`).toString("base64")}`;
-      this.connection = { baseUrl, headers };
-      return this.connection;
-    })();
-    try { return await this.connectionStart; }
-    finally { this.connectionStart = null; }
+  /** A place on the device to run in: a record's, else its first shell-granted root. */
+  anyPlace(on) {
+    const record = this.rawRecords().find((item) => item.nodeId === on && item.place);
+    if (record) return record.place;
+    const root = this.nodeHub?.live.get(on)?.roots.find((item) => item.shell);
+    return root ? { root: root.id, path: "" } : null;
   }
 
-  async request(method, route, { directory = "", query = {}, body, whole = false, start = true, timeout = 30000 } = {}) {
-    const connection = await this.connect({ start });
+  async connect({ start = true, on = null } = {}) {
+    const service = this.service(on);
+    if (service.connection) return service.connection;
+    if (service.connectionStart) return service.connectionStart;
+    service.connectionStart = (async () => {
+      // One way for every place: the service's state file where it runs, then `service status`, started if need be.
+      const where = on ? " on the device" : "";
+      const loopback = /^http:\/\/127\.0\.0\.1:\d+$/;
+      const processes = this.processes(on);
+      if (!processes.ready()) throw failure("The device is offline");
+      const state = (await processes.read("opencodeService")) || {};
+      // `service status` prints `stopped` and succeeds when there is no service.
+      let baseUrl = state.url || await this.commandOutput(["service", "status"], on).catch(() => "");
+      if (!loopback.test(baseUrl)) {
+        if (!start) throw failure(`OpenCode service is not running${where}`);
+        await this.commandOutput(["service", "start"], on);
+        baseUrl = await this.commandOutput(["service", "status"], on);
+      }
+      if (!loopback.test(baseUrl)) throw failure(`OpenCode service${where} did not report a loopback URL`);
+      const headers = { accept: "application/json" };
+      if (state.password) headers.authorization = `Basic ${Buffer.from(`opencode:${state.password}`).toString("base64")}`;
+      service.connection = { baseUrl, headers };
+      return service.connection;
+    })();
+    try { return await service.connectionStart; }
+    finally { service.connectionStart = null; }
+  }
+
+  /** `fetch`, here or through the device's tunnel. */
+  fetch(on, url, init) { return this.processes(on).fetch(url, init); }
+
+  async request(method, route, { directory = "", query = {}, body, whole = false, start = true, timeout = 30000, on = null } = {}) {
+    const service = this.service(on);
+    const connection = await this.connect({ start, on });
     const url = new URL(`/api${route}`, connection.baseUrl);
     if (directory) url.searchParams.set("directory", directory);
     for (const [key, value] of Object.entries(query)) if (value !== "" && value != null) url.searchParams.set(key, String(value));
     let response;
     try {
-      response = await fetch(url, {
+      response = await this.fetch(on, url, {
         method,
         headers: { ...connection.headers, ...(body === undefined ? {} : { "content-type": "application/json" }) },
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
@@ -245,12 +268,12 @@ export class OpenCodeAdapter extends EventEmitter {
       });
     } catch (cause) {
       // The service may have stopped or moved; ask for it again next time.
-      this.connection = null;
+      service.connection = null;
       throw failure(`OpenCode service is unreachable: ${cause.cause?.code || cause.message}`);
     }
     if (!response.ok) {
       const detail = (await response.text()).trim();
-      if (response.status === 401) this.connection = null;
+      if (response.status === 401) service.connection = null;
       throw failure(detail || `OpenCode returned HTTP ${response.status}`,
         response.status === 404 ? "backend_session_not_found" : "backend_unavailable", response.status);
     }
@@ -273,18 +296,21 @@ export class OpenCodeAdapter extends EventEmitter {
     const live = context.chat.backend.opaqueSession
       ? await this.restore(context.chat.backend.opaqueSession, options) : await this.create(options);
     return { live, mapping: {
-      backend: { ...context.chat.backend, model: live.model || selectedModel, opaqueSession: live.sessionId },
+      backend: { ...context.chat.backend, model: live.model || selectedModel, opaqueSession: this.opaqueSessionOf(live) },
       ...(live.thinkingLevel ? { modelThinkingLevels: {
         ...(context.chat.modelThinkingLevels || {}), [live.model || selectedModel]: live.thinkingLevel,
       } } : {}),
     }, modelRecovery: null };
   }
 
+  opaqueSessionOf(record) { return opaqueSessionOf(record); }
+
   record({ chatId, project, session, permissionMode = "" }) {
     const spec = modelSpec(session.model);
     return this.sessions.add({
       permissionMode: PERMISSION_MODES.some((mode) => mode.id === permissionMode) ? permissionMode : "prompt",
       id: crypto.randomUUID(), chatId, projectId: project?.id || null,
+      nodeId: remoteNode(project), place: project?.place || null,
       cwd: session.location?.directory || project?.workingRoot, sessionId: session.id,
       status: "running", ready: true, activity: "idle", active: false, stopping: false,
       model: spec, thinkingLevel: session.model?.variant || "", generation: null, generationSeq: 0,
@@ -300,7 +326,8 @@ export class OpenCodeAdapter extends EventEmitter {
     // The service ignores `?directory=` here; a session without a location
     // lands in the service's own directory, which is usually home.
     if (!project?.workingRoot) throw failure("OpenCode session needs a project directory");
-    const session = await this.request("POST", "/session", {
+    this.processes(remoteNode(project)).require("opencode", "OpenCode");
+    const session = await this.request("POST", "/session", { on: remoteNode(project),
       body: { location: { directory: project.workingRoot }, ...(selected ? { model: selected } : {}) },
     });
     return this.record({ chatId, project, session, permissionMode });
@@ -311,7 +338,8 @@ export class OpenCodeAdapter extends EventEmitter {
     if (existing) return existing;
     const sessionId = typeof opaqueSession === "string" ? opaqueSession : opaqueSession?.threadId;
     if (!sessionId) throw failure("OpenCode session identity is missing");
-    const session = await this.request("GET", `/session/${encodeURIComponent(sessionId)}`);
+    this.processes(remoteNode(project)).require("opencode", "OpenCode");
+    const session = await this.request("GET", `/session/${encodeURIComponent(sessionId)}`, { on: remoteNode(project) });
     const record = this.record({ chatId, project, session, permissionMode });
     if (model && model !== record.model) await this.setModel(record.id, model, thinkingLevel);
     return record;
@@ -330,19 +358,20 @@ export class OpenCodeAdapter extends EventEmitter {
     record.promptStartedAt = Date.now();
     record.answering = clientUserMessageId;
     record.liveMessages.clear();
-    this.streamAttempts = 0;
+    this.service(record.nodeId).streamAttempts = 0;
     this.publish(record, messageOpen({ id: clientUserMessageId, role: "user", generationId,
       content: parseAttachmentEnvelope(message).message, timestamp: new Date().toISOString() }));
     this.publish(record, { type: "status", generationId, phase: "started", seq: ++record.generationSeq,
       status: "working", activity: "working", detail: null });
     try {
       // Listen before asking, so the turn's first events are not missed.
-      await this.ensureStream();
-      await this.request("POST", `/session/${encodeURIComponent(record.sessionId)}/prompt`, { body: {
+      await this.ensureStream(record.nodeId);
+      await this.request("POST", `/session/${encodeURIComponent(record.sessionId)}/prompt`, { on: record.nodeId, body: {
         id: serviceMessageId(clientUserMessageId), text: parseAttachmentEnvelope(message).message,
         // OpenCode reads a file it is pointed at itself, and keeps its name,
         // type and contents with the prompt.
-        files: (options.attachments || []).filter((item) => item?.path).map((item) => ({ uri: pathToFileURL(item.path).href })),
+        // Paths on this machine: a device's OpenCode cannot open them.
+        files: (record.nodeId ? [] : options.attachments || []).filter((item) => item?.path).map((item) => ({ uri: pathToFileURL(item.path).href })),
         agents: [],
       } });
       return { generationId, attachmentIdentity: { messageId: clientUserMessageId } };
@@ -358,36 +387,37 @@ export class OpenCodeAdapter extends EventEmitter {
    * own TUI. It opens before the first prompt and is reopened while a turn is
    * running; a turn that ran across the gap is caught up from saved messages.
    */
-  ensureStream() {
-    if (this.stream) return this.stream.ready;
+  ensureStream(on = null) {
+    const service = this.service(on);
+    if (service.stream) return service.stream.ready;
     const stream = { controller: new AbortController(), ready: null };
-    this.stream = stream;
-    stream.ready = this.openStream(stream).catch((cause) => {
-      if (this.stream === stream) this.stream = null;
+    service.stream = stream;
+    stream.ready = this.openStream(service, stream).catch((cause) => {
+      if (service.stream === stream) service.stream = null;
       throw cause;
     });
     return stream.ready;
   }
 
-  async openStream(stream) {
-    const connection = await this.connect();
+  async openStream(service, stream) {
+    const connection = await this.connect({ on: service.nodeId });
     let response;
     try {
-      response = await fetch(new URL("/api/event", connection.baseUrl), {
+      response = await this.fetch(service.nodeId, new URL("/api/event", connection.baseUrl), {
         headers: { ...connection.headers, accept: "text/event-stream" }, signal: stream.controller.signal,
       });
     } catch (cause) {
-      this.connection = null;
+      service.connection = null;
       throw failure(`OpenCode service is unreachable: ${cause.cause?.code || cause.message}`);
     }
     if (!response.ok || !response.body) {
-      if (response.status === 401) this.connection = null;
+      if (response.status === 401) service.connection = null;
       throw failure(`OpenCode event stream returned HTTP ${response.status}`);
     }
-    void this.readStream(stream, response.body);
+    void this.readStream(service, stream, response.body);
   }
 
-  async readStream(stream, body) {
+  async readStream(service, stream, body) {
     const decoder = new TextDecoder();
     let buffer = "";
     try {
@@ -404,10 +434,10 @@ export class OpenCodeAdapter extends EventEmitter {
         }
       }
     } catch { /* the stream ended; recovered below unless it was closed on purpose */ }
-    if (this.stream !== stream) return;
-    this.stream = null;
-    this.connection = null;
-    void this.recoverStream();
+    if (service.stream !== stream) return;
+    service.stream = null;
+    service.connection = null;
+    void this.recoverStream(service);
   }
 
   /**
@@ -415,28 +445,29 @@ export class OpenCodeAdapter extends EventEmitter {
    * again counts as a failed attempt, the same as one that never opened: only
    * a running turn hearing news resets the count (in `dispatch`).
    */
-  async recoverStream() {
-    if (!this.rawRecords().some((record) => record.active) || this.stream || this.recovering) return;
-    this.recovering = true;
-    const attempt = ++this.streamAttempts;
+  async recoverStream(service) {
+    const running = () => this.rawRecords().filter((record) => record.active && (record.nodeId || null) === service.nodeId);
+    if (!running().length || service.stream || service.recovering) return;
+    service.recovering = true;
+    const attempt = ++service.streamAttempts;
     let retry = false;
     try {
       if (attempt > 1) await new Promise((resolve) => setTimeout(resolve, 1000).unref?.());
-      const active = this.rawRecords().filter((record) => record.active);
+      const active = running();
       if (attempt > STREAM_RETRY_LIMIT) {
-        this.streamAttempts = 0;
+        service.streamAttempts = 0;
         for (const record of active) this.failTurn(record, "OpenCode event stream keeps closing");
         return;
       }
-      if (!active.length || this.stream) return;
-      await this.ensureStream();
+      if (!active.length || service.stream) return;
+      await this.ensureStream(service.nodeId);
       for (const record of active) void this.catchUp(record);
     } catch {
       retry = true;
     } finally {
-      this.recovering = false;
+      service.recovering = false;
     }
-    if (retry) void this.recoverStream();
+    if (retry) void this.recoverStream(service);
   }
 
   failTurn(record, message) {
@@ -452,7 +483,7 @@ export class OpenCodeAdapter extends EventEmitter {
    */
   async catchUp(record, attempt = 1) {
     const generation = record.generation;
-    const rows = await this.messageRows(record.sessionId, { limit: 100 }).catch(() => null);
+    const rows = await this.messageRows(record.sessionId, { limit: 100, on: record.nodeId }).catch(() => null);
     if (!record.active || record.generation !== generation) return;
     if (!rows) {
       if (attempt >= STREAM_RETRY_LIMIT) this.failTurn(record, "OpenCode's saved messages could not be read");
@@ -471,7 +502,7 @@ export class OpenCodeAdapter extends EventEmitter {
     // A failed read is unknown, not empty: treating it as empty would resolve
     // every pending prompt.
     const [permissions, forms] = await Promise.all(["permission", "form"].map((kind) =>
-      this.request("GET", `/session/${encodeURIComponent(record.sessionId)}/${kind}`).catch(() => null)));
+      this.request("GET", `/session/${encodeURIComponent(record.sessionId)}/${kind}`, { on: record.nodeId }).catch(() => null)));
     // Which list a request came from is what it is; its shape is not asked.
     if (permissions && forms && record.active) this.syncRequests(record, [
       ...permissions.map((request) => ({ kind: "permission", request })),
@@ -489,7 +520,7 @@ export class OpenCodeAdapter extends EventEmitter {
     }
     const record = data.sessionID ? this.rawRecords().find((item) => item.sessionId === data.sessionID) : null;
     if (!record?.active) return;
-    this.streamAttempts = 0;
+    this.service(record.nodeId).streamAttempts = 0;
     if (type.startsWith("session.execution.") && type !== "session.execution.started") {
       const outcome = type.slice("session.execution.".length);
       if (outcome === "failed" && data.error) this.publish(record, { type: "error", generationId: record.generation?.id || null,
@@ -590,7 +621,7 @@ export class OpenCodeAdapter extends EventEmitter {
   /** Close a finished step from its saved message, which is the record. */
   async closeFromSaved(record, state, data) {
     const row = await this.request("GET",
-      `/session/${encodeURIComponent(record.sessionId)}/message/${encodeURIComponent(state.id)}`).catch(() => null);
+      `/session/${encodeURIComponent(record.sessionId)}/message/${encodeURIComponent(state.id)}`, { on: record.nodeId }).catch(() => null);
     if (state.closed || !record.active) return;
     if (row?.content) state.row = row;
     if (record.liveMessages.get(state.id) !== state) return;
@@ -611,7 +642,7 @@ export class OpenCodeAdapter extends EventEmitter {
     // The read is awaited, and a later turn may have begun by the time it
     // lands: this ending is only this turn's.
     const generation = record.generation;
-    const rows = await this.messageRows(record.sessionId, { limit: 100 }).catch(() => null);
+    const rows = await this.messageRows(record.sessionId, { limit: 100, on: record.nodeId }).catch(() => null);
     if (!record.active || record.generation !== generation) return;
     if (rows) this.syncMessages(record, rows);
     this.settle(record, outcome);
@@ -770,7 +801,7 @@ export class OpenCodeAdapter extends EventEmitter {
     if (!record?.active) return false;
     record.stopping = true;
     record.activity = "stopping";
-    await this.request("POST", `/session/${encodeURIComponent(record.sessionId)}/interrupt`, { body: {} });
+    await this.request("POST", `/session/${encodeURIComponent(record.sessionId)}/interrupt`, { on: record.nodeId, body: {} });
     return true;
   }
 
@@ -784,11 +815,11 @@ export class OpenCodeAdapter extends EventEmitter {
     try {
       if (pending.kind === "form") {
         const route = `${session}/form/${encodeURIComponent(requestId)}`;
-        if (dismissed) await this.request("DELETE", route);
-        else await this.request("POST", `${route}/reply`, { body: { answer: formAnswer(pending, response) } });
+        if (dismissed) await this.request("DELETE", route, { on: record.nodeId });
+        else await this.request("POST", `${route}/reply`, { on: record.nodeId, body: { answer: formAnswer(pending, response) } });
       } else {
         const decision = dismissed ? "reject" : pending.decisions.get(String(response.value ?? "")) || "reject";
-        await this.request("POST", `${session}/permission/${encodeURIComponent(requestId)}/reply`, { body: { decision } });
+        await this.request("POST", `${session}/permission/${encodeURIComponent(requestId)}/reply`, { on: record.nodeId, body: { decision } });
       }
     } catch (cause) {
       // Answered or withdrawn somewhere else; OpenCode's lists say which.
@@ -827,9 +858,11 @@ export class OpenCodeAdapter extends EventEmitter {
   }
 
   shutdownResources() {
-    const stream = this.stream;
-    this.stream = null;
-    stream?.controller.abort();
+    for (const service of this.services.values()) {
+      const stream = service.stream;
+      service.stream = null;
+      stream?.controller.abort();
+    }
     // The background service belongs to OpenCode and may serve its TUI and
     // other clients. Conduit never stops it.
   }
@@ -848,8 +881,8 @@ export class OpenCodeAdapter extends EventEmitter {
 
   listSessions(options) { return this.listThreads(options); }
 
-  async messageRows(sessionId, { limit = 100 } = {}) {
-    return (await this.messagePage(sessionId, { limit })).rows;
+  async messageRows(sessionId, { limit = 100, on = null } = {}) {
+    return (await this.messagePage(sessionId, { limit, on })).rows;
   }
 
   /**
@@ -857,8 +890,8 @@ export class OpenCodeAdapter extends EventEmitter {
    * sent with `order`. `next` is set on a short last page too, so only a full
    * page says there may be more.
    */
-  async messagePage(sessionId, { limit = 100, cursor = "" } = {}) {
-    const result = await this.request("GET", `/session/${encodeURIComponent(sessionId)}/message`, {
+  async messagePage(sessionId, { limit = 100, cursor = "", on = null } = {}) {
+    const result = await this.request("GET", `/session/${encodeURIComponent(sessionId)}/message`, { on,
       query: cursor ? { limit, cursor } : { limit, order: "desc" }, whole: true,
     });
     const rows = Array.isArray(result?.data) ? result.data : [];
@@ -916,6 +949,7 @@ export class OpenCodeAdapter extends EventEmitter {
     const record = liveSessionId ? this.get(liveSessionId) : null;
     const sessionId = record?.sessionId || (typeof opaqueSession === "string" ? opaqueSession : opaqueSession?.threadId);
     if (!sessionId) return { messages: [], tools: [], page: { before: null } };
+    const on = record?.nodeId || opaqueSession?.nodeId || null;
     // A page may start partway through a turn; read on to the prompt that
     // began it, so an older page never shows a reply without its question.
     // A page ends on its oldest prompt: read again only as far as that one,
@@ -923,13 +957,13 @@ export class OpenCodeAdapter extends EventEmitter {
     let rows = [];
     let cursor = before || "";
     for (;;) {
-      const page = await this.messagePage(sessionId, { limit: 100, cursor });
+      const page = await this.messagePage(sessionId, { limit: 100, cursor, on });
       const oldestPrompt = page.rows.findLastIndex((row) => row.type === "user");
       if (!page.next || oldestPrompt === page.rows.length - 1) {
         return { ...OpenCodeAdapter.transcript([...rows, ...page.rows]), page: { before: page.next } };
       }
       if (oldestPrompt >= 0) {
-        const cut = await this.messagePage(sessionId, { limit: oldestPrompt + 1, cursor });
+        const cut = await this.messagePage(sessionId, { limit: oldestPrompt + 1, cursor, on });
         return { ...OpenCodeAdapter.transcript([...rows, ...cut.rows]), page: { before: cut.next } };
       }
       rows = [...rows, ...page.rows];
@@ -993,7 +1027,7 @@ export class OpenCodeAdapter extends EventEmitter {
     const record = this.get(id);
     const selected = splitModel(model, thinkingLevel || record?.thinkingLevel);
     if (!record || !selected) throw failure("OpenCode model is invalid", "invalid_model", 400);
-    await this.request("POST", `/session/${encodeURIComponent(record.sessionId)}/model`, { body: { model: selected } });
+    await this.request("POST", `/session/${encodeURIComponent(record.sessionId)}/model`, { on: record.nodeId, body: { model: selected } });
     record.model = model;
     record.thinkingLevel = selected.variant || "";
     return model;
@@ -1014,8 +1048,8 @@ export class OpenCodeAdapter extends EventEmitter {
     const record = this.get(id);
     if (!record) return null;
     const [session, rows] = await Promise.all([
-      this.request("GET", `/session/${encodeURIComponent(record.sessionId)}`),
-      this.messageRows(record.sessionId, { limit: 20 }).catch(() => []),
+      this.request("GET", `/session/${encodeURIComponent(record.sessionId)}`, { on: record.nodeId }),
+      this.messageRows(record.sessionId, { limit: 20, on: record.nodeId }).catch(() => []),
     ]);
     const requests = rows.filter((row) => row.type === "assistant" && row.tokens).reverse();
     const usageOf = (row) => ({ input: row.tokens.input || 0, output: row.tokens.output || 0, cacheRead: row.tokens.cache?.read || 0,
@@ -1029,7 +1063,7 @@ export class OpenCodeAdapter extends EventEmitter {
     const last = requests.at(-1);
     const lastUsage = last ? usageOf(last) : null;
     const model = last ? modelSpec(last.model) : record.model || "";
-    const contextWindow = model ? await this.contextLimit(model, record.cwd) : null;
+    const contextWindow = model ? await this.contextLimit(model, record.cwd, record.nodeId) : null;
     const tokens = lastUsage ? lastUsage.input + lastUsage.cacheRead + lastUsage.cacheWrite + lastUsage.output : null;
     const contextUsage = { tokens, contextWindow, percent: tokens != null && contextWindow ? (tokens / contextWindow) * 100 : null,
       model: model || null, lastRequestUsage: lastUsage };
@@ -1044,33 +1078,36 @@ export class OpenCodeAdapter extends EventEmitter {
   async contextFromHistory({ opaqueSession, project }) {
     const sessionId = typeof opaqueSession === "string" ? opaqueSession : opaqueSession?.threadId || opaqueSession?.sessionId;
     if (!sessionId) return null;
-    const rows = await this.messageRows(sessionId, { limit: 100 }).catch(() => []);
+    const on = opaqueSession?.nodeId || null;
+    const rows = await this.messageRows(sessionId, { limit: 100, on }).catch(() => []);
     const requests = rows.filter((row) => row.type === "assistant" && row.tokens).reverse();
     const last = requests.at(-1);
     if (!last) return null;
     const model = modelSpec(last.model);
     return usageFromRequests(requests.map((row) => ({ input: row.tokens.input || 0, output: row.tokens.output || 0,
       cacheRead: row.tokens.cache?.read || 0, cacheWrite: row.tokens.cache?.write || 0, reasoning: row.tokens.reasoning ?? null })),
-    { model, contextWindow: model ? await this.contextLimit(model, project?.workingRoot) : null,
+    { model, contextWindow: model ? await this.contextLimit(model, project?.workingRoot, on) : null,
       cost: requests.reduce((sum, row) => sum + (row.cost || 0), 0) });
   }
 
   /** A model's context limit from OpenCode's catalogue, asked once per model. */
-  async contextLimit(spec, cwd) {
+  async contextLimit(spec, cwd, on = null) {
     this.contextLimits ||= new Map();
-    if (!this.contextLimits.has(spec)) {
-      const models = await this.request("GET", "/model", { directory: cwd }).catch(() => null);
+    // Per place: a device's OpenCode has its own catalogue.
+    const key = `${on || ""} ${spec}`;
+    if (!this.contextLimits.has(key)) {
+      const models = await this.request("GET", "/model", { directory: cwd, on }).catch(() => null);
       const found = (models || []).find((model) => modelSpec(model) === spec);
       if (!models) return null;
-      this.contextLimits.set(spec, Number(found?.limit?.context) || null);
+      this.contextLimits.set(key, Number(found?.limit?.context) || null);
     }
-    return this.contextLimits.get(spec);
+    return this.contextLimits.get(key);
   }
 
   async compact(id) {
     const record = this.get(id);
     if (!record) throw failure("OpenCode session is not running");
-    await this.request("POST", `/session/${encodeURIComponent(record.sessionId)}/compact`, { body: {} });
+    await this.request("POST", `/session/${encodeURIComponent(record.sessionId)}/compact`, { on: record.nodeId, body: {} });
     return { compacted: true };
   }
 

@@ -45,20 +45,8 @@ async function waitForServer(origin, child) {
   throw new Error("Conduit server did not become ready");
 }
 
-async function fakePi(root) {
-  const conduitPi = path.join(root, "conduit-pi");
-  await fs.writeFile(conduitPi, `#!/usr/bin/env node
-if (process.argv.includes("--version")) { console.log("0.84.1"); process.exit(0); }
-if (process.argv.includes("--help")) { console.log("--mode --session --append-system-prompt --skill --approve --no-approve"); process.exit(0); }
-process.exit(0);
-`);
-  await fs.chmod(conduitPi, 0o755);
-  return { conduitPi };
-}
-
 async function spawnServer(env, { password } = {}) {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-auth-server-"));
-  const { conduitPi } = await fakePi(root);
   if (password) {
     const store = new AuthStore(path.join(root, "auth.json"));
     await store.setPassword(password);
@@ -95,7 +83,6 @@ async function spawnServer(env, { password } = {}) {
       CONDUIT_PI_AGENT_DIR: path.join(root, "pi"),
       CONDUIT_AUTH_FILE: path.join(root, "auth.json"),
       CONDUIT_CLIENT_DIST: clientDist,
-      CONDUIT_PI_COMMAND: conduitPi,
       CONDUIT_WORKSPACE_ALLOWLIST: root,
       ...env,
     },
@@ -139,7 +126,6 @@ test("unauthenticated routes redirect or return 401; only the allowlist is publi
       ["GET", "/v0/templates"],
       ["GET", "/v0/runtime"],
       ["GET", "/v0/runtime/settings"],
-      ["GET", "/v0/pi-installations"],
       ["GET", "/v0/pi-auth"],
       ["GET", "/v0/pi-auth/attempt"],
       ["PUT", "/v0/pi-auth/api-key"],
@@ -376,7 +362,6 @@ test("native auth uses exact-origin bearer sessions and single-use socket ticket
 
 test("a non-loopback bind with no password and no override rejects startup", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-auth-startup-"));
-  const { conduitPi } = await fakePi(root);
   const child = spawn(process.execPath, ["src/server.js"], {
     cwd: path.resolve(import.meta.dirname, ".."),
     stdio: ["ignore", "pipe", "pipe"],
@@ -392,7 +377,6 @@ test("a non-loopback bind with no password and no override rejects startup", asy
       CONDUIT_PREFERENCES_FILE: path.join(root, "preferences.json"),
       CONDUIT_PI_AGENT_DIR: path.join(root, "pi"),
       CONDUIT_AUTH_FILE: path.join(root, "auth.json"),
-      CONDUIT_PI_COMMAND: conduitPi,
       CONDUIT_WORKSPACE_ALLOWLIST: root,
     },
   });
@@ -511,7 +495,6 @@ test("a long-dormant session is pruned at server startup and rejected on use", a
 
   // Boot a fresh server against the same data dir: pruneExpired runs at
   // startup, the row is gone, and the stale cookie is rejected.
-  const { conduitPi } = await fakePi(root);
   const workspace = path.join(root, "workspace");
   await fs.mkdir(workspace, { recursive: true });
   const child = spawn(process.execPath, ["src/server.js"], {
@@ -529,7 +512,6 @@ test("a long-dormant session is pruned at server startup and rejected on use", a
       CONDUIT_PREFERENCES_FILE: path.join(root, "preferences.json"),
       CONDUIT_PI_AGENT_DIR: path.join(root, "pi"),
       CONDUIT_AUTH_FILE: path.join(root, "auth.json"),
-      CONDUIT_PI_COMMAND: conduitPi,
       CONDUIT_WORKSPACE_ALLOWLIST: root,
     },
   });

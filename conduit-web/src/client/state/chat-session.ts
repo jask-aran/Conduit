@@ -69,7 +69,7 @@ export function createChatSession(options: {
    */
   // With no chat yet, as on the dashboard, the composer is the chosen profile's.
   const manifest = createMemo(() => manifestForChat(options.harnessCapabilities(), options.selectedChat())
-    || (activeProfile() ? options.harnessCapabilities()[activeProfile()!.implementation || "conduit_pi"] : null) || null);
+    || (activeProfile() ? options.harnessCapabilities()[activeProfile()!.implementation || "conduit-runtime"] : null) || null);
   const capability = (name: BooleanCapability, fallback = false): boolean =>
     resolveCapability(manifest(), chat.capabilities(), name, fallback);
   const history = createMemo(() => resolveHistory(manifest(), chat.capabilities()));

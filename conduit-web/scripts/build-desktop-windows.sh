@@ -34,12 +34,16 @@ cd "$(dirname "$0")/.."
 build_version=""
 local_updates=""
 dev_client=""
+# A dev client's name: "dev" is Conduit Dev; "durable" is Conduit Durable, the
+# client for the distributed-nodes head on the VPS while that branch is built.
+variant="dev"
 passthrough=()
 while [ $# -gt 0 ]; do
   case "$1" in
     --version) build_version=${2:-}; shift 2 ;;
     --local-updates) local_updates=1; shift ;;
     --dev) dev_client=1; local_updates=1; shift ;;
+    --durable) dev_client=1; local_updates=1; variant=durable; shift ;;
     *) passthrough+=("$1"); shift ;;
   esac
 done
@@ -57,7 +61,7 @@ cargo_tauri="$(wslpath -u "$windows_home")/.cargo/bin/cargo-tauri.exe"
 # Separate directories cost one more full compile the first time and a second
 # copy of the build output on disk. Both are cheaper than a build that can only
 # run when nothing is open.
-target_dir=${CONDUIT_DESKTOP_TARGET_DIR:-"$windows_home\\conduit-desktop-target${dev_client:+-dev}"}
+target_dir=${CONDUIT_DESKTOP_TARGET_DIR:-"$windows_home\\conduit-desktop-target${dev_client:+-$variant}"}
 
 if [ ! -x "$cargo_tauri" ]; then
   echo "No cargo-tauri.exe under $windows_home\\.cargo: install Rust and the" >&2
@@ -122,15 +126,28 @@ else
 fi
 
 if [ -n "$dev_client" ]; then
-  update_base=${CONDUIT_LOCAL_UPDATE_URL:-"https://localconduit.jask-aran.com/desktop-updates"}
+  # Conduit Durable updates from the durable head it is the client of.
+  default_base="https://localconduit.jask-aran.com/desktop-updates"
+  [ "$variant" = durable ] && default_base="https://conduit-durable.jask-aran.com/desktop-updates"
+  update_base=${CONDUIT_LOCAL_UPDATE_URL:-"$default_base"}
 else
   update_base=${CONDUIT_LOCAL_UPDATE_URL:-"http://127.0.0.1:${CONDUIT_PORT:-4310}/desktop-updates"}
 fi
+# The device companion: the node role bundled with Windows' own Node runtime,
+# shipped as an app resource for the shell to run in the background.
+windows_node=$(cmd.exe /c 'where node' 2>/dev/null | tr -d '\r' | head -n 1)
+if [ -z "$windows_node" ]; then
+  echo "No node.exe on the Windows side: the desktop app ships it to run its device companion." >&2
+  exit 1
+fi
+node ../scripts/build-node-companion.mjs "$(wslpath -u "$windows_node")" --platform win32 --arch x64
+
 overlay="src-tauri/tauri.build-overlay.conf.json"
 trap 'rm -f "$overlay"' EXIT
 node -e '
-  const [out, version, localUpdates, base, dev] = process.argv.slice(1);
-  const overlay = { build: { beforeBuildCommand: "" }, bundle: { createUpdaterArtifacts: false } };
+  const [out, version, localUpdates, base, dev, variant] = process.argv.slice(1);
+  const overlay = { build: { beforeBuildCommand: "" },
+    bundle: { createUpdaterArtifacts: false, resources: { "companion/": "companion/" } } };
   if (version) overlay.version = version;
   if (localUpdates) {
     // The updater refuses a plain-HTTP endpoint outright, which is right for a
@@ -151,19 +168,20 @@ node -e '
     // per-user data directory, the single-instance lock and the credential
     // entry on it, so all four separate without being listed here.
     const config = JSON.parse(require("fs").readFileSync("src-tauri/tauri.conf.json", "utf8"));
-    overlay.productName = "Conduit Dev";
-    overlay.identifier = `${config.identifier}.dev`;
+    const title = variant === "durable" ? "Durable" : "Dev";
+    overlay.productName = `Conduit ${title}`;
+    overlay.identifier = `${config.identifier}.${variant}`;
     // The executable is named too. Two installs whose binaries share a name
     // are one running application as far as Windows is concerned: the
     // installer asks to close "Conduit" when the other one is running, and
     // both read as the same entry when searched for.
-    overlay.mainBinaryName = "conduit-desktop-dev";
+    overlay.mainBinaryName = `conduit-desktop-${variant}`;
     overlay.bundle.icon = config.bundle.icon.map((icon) => icon.replace("icons/", "icons/dev/"));
     overlay.bundle.windows = { nsis: { installerIcon: "icons/dev/icon.ico" } };
     overlay.app = { windows: [{ ...config.app.windows[0], title: "" }] };
   }
   require("fs").writeFileSync(out, JSON.stringify(overlay, null, 2) + "\n");
-' "$overlay" "$build_version" "$local_updates" "$update_base" "$dev_client"
+'  "$overlay" "$build_version" "$local_updates" "$update_base" "$dev_client" "$variant"
 
 windows_args=()
 if [ -n "$dev_client" ]; then windows_args+=(-FastBuild); fi

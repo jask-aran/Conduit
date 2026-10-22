@@ -1,3 +1,5 @@
+import { FileTypeIcon } from "@/components/ui/file-marks";
+import { Icons } from "@/components/ui";
 import { FileView, FileHead, FileName, FileGit, FileDirty, FileActions, FileSuffix, FileButton, FileMore, StatusBar, StatusText } from "@/components/ui/file";
 import { FileImage, FileMedia, FileCard, FileBody } from "@/components/ui/viewer";
 import { PaneEmpty, ToolNotice } from "@/components/ui/pane";
@@ -5,12 +7,12 @@ import { Spinner } from "@/components/ui";
 import { Button } from "@/components/ui/controls";
 import { Rule } from "@/components/ui/popover";
 import { batch, createEffect, createSignal, lazy, on, onCleanup, Show, Suspense, type JSX } from "solid-js";
-import { CopyIcon, SearchIcon, DownloadIcon, WrapTextIcon, FileCode2Icon, FileDiffIcon, GitCompareArrowsIcon, PencilIcon, SaveIcon, Trash2Icon, UploadIcon, XIcon } from "lucide-solid";
-import { ContextMenu, ContextMenuContent, ContextMenuTrigger, Menu, MenuContent, MenuControl, MenuRow, MenuSection } from "@/components/menus";
+import { SaveIcon } from "lucide-solid";
+import { ContextMenu, ContextMenuContent, ContextMenuTrigger, DropdownMenu, MenuContent, MenuControl, MenuRow, MenuSection } from "@/components/menus";
 import { api } from "../api/client";
 import { authorizedFetch } from "../api/native-auth-client";
 import { httpUrl } from "../api/transport";
-import { FileTypeIcon } from "./file-type-icon";
+
 import { isInstalledClient } from "../platform/installed-client.ts";
 import type { WorkspaceEditorHandle } from "./workspace-editor";
 import { addReviewComment, reviewComments } from "../chat/review-comments";
@@ -166,7 +168,6 @@ export default function WorkspaceFileSlot(props: {
   /** The suffix's actions again, for the header's overflow menu when it is too narrow for them. */
   /** More items for the header's ⋯, given which folded actions it lists. */
   headerMenuItems?: (folded: (action: string) => boolean) => JSX.Element;
-  height?: string;
   empty?: string;
   onToggleWrap: () => void;
   annotationChatId?: string | null;
@@ -482,25 +483,25 @@ export default function WorkspaceFileSlot(props: {
   const pressHidden = (label: string, from: Element | null | undefined) => from?.closest("header")?.querySelector<HTMLElement>(`[aria-label="${label}"]`)?.click();
   let moreAnchor: HTMLElement | undefined;
   const fileActions = () => <FileActions ref={watchFolds}>
-    <Show when={hasChanges()}><FileButton type="button" data-fold="4" aria-label="Review unstaged changes" title="Review unstaged changes" onClick={(event) => props.onShowDiff?.(false, event.altKey)}><FileDiffIcon /></FileButton></Show>
-    <Show when={hasStaged()}><FileButton type="button" data-fold="3" aria-label="Review staged changes" title="Review staged changes" onClick={(event) => props.onShowDiff?.(true, event.altKey)}><GitCompareArrowsIcon /></FileButton></Show>
-    <FileButton type="button" inMenu aria-label="Copy contents" title="Copy contents" onClick={() => copy(currentText())}><CopyIcon /></FileButton>
-    <FileButton type="button" inMenu aria-label="Copy path" title="Copy path" onClick={() => copy(props.path ?? "")}><FileCode2Icon /></FileButton>
-    <FileButton type="button" data-fold="0" aria-label="Download working file" title="Download working file" onClick={() => void download()}><DownloadIcon /></FileButton>
+    <Show when={hasChanges()}><FileButton type="button" data-fold="4" aria-label="Review unstaged changes" title="Review unstaged changes" onClick={(event) => props.onShowDiff?.(false, event.altKey)}><Icons.FileDiff /></FileButton></Show>
+    <Show when={hasStaged()}><FileButton type="button" data-fold="3" aria-label="Review staged changes" title="Review staged changes" onClick={(event) => props.onShowDiff?.(true, event.altKey)}><Icons.GitCompareArrows /></FileButton></Show>
+    <FileButton type="button" inMenu aria-label="Copy contents" title="Copy contents" onClick={() => copy(currentText())}><Icons.Copy /></FileButton>
+    <FileButton type="button" inMenu aria-label="Copy path" title="Copy path" onClick={() => copy(props.path ?? "")}><Icons.FileCode /></FileButton>
+    <FileButton type="button" data-fold="0" aria-label="Download working file" title="Download working file" onClick={() => void download()}><Icons.Download /></FileButton>
   </FileActions>;
-  const moreMenu = (text: boolean) => <Menu modal={false}>
+  const moreMenu = (text: boolean) => <DropdownMenu modal={false}>
     <MenuControl as={FileMore} aria-label="More file actions" title="More file actions" ref={moreAnchor} />
     <MenuContent>
-      <Show when={hasChanges() && isFolded("4")}><MenuRow onSelect={() => props.onShowDiff?.(false)} icon={<FileDiffIcon />}>Review unstaged changes</MenuRow></Show>
-      <Show when={hasStaged() && isFolded("3")}><MenuRow onSelect={() => props.onShowDiff?.(true)} icon={<GitCompareArrowsIcon />}>Review staged changes</MenuRow></Show>
-      <Show when={text && isFolded("2")}><MenuRow onSelect={() => pressHidden("Find or replace", moreAnchor)} icon={<SearchIcon />}>Find or replace</MenuRow></Show>
+      <Show when={hasChanges() && isFolded("4")}><MenuRow onSelect={() => props.onShowDiff?.(false)} icon={<Icons.FileDiff />}>Review unstaged changes</MenuRow></Show>
+      <Show when={hasStaged() && isFolded("3")}><MenuRow onSelect={() => props.onShowDiff?.(true)} icon={<Icons.GitCompareArrows />}>Review staged changes</MenuRow></Show>
+      <Show when={text && isFolded("2")}><MenuRow onSelect={() => pressHidden("Find or replace", moreAnchor)} icon={<Icons.Search />}>Find or replace</MenuRow></Show>
       {props.headerMenuItems?.(isFolded)}
-      <Show when={isFolded("0")}><MenuRow onSelect={() => void download()} icon={<DownloadIcon />}>Download</MenuRow></Show>
-      <Show when={text}><MenuRow onSelect={() => props.onToggleWrap()} icon={<WrapTextIcon />}>{props.wrap ? "Stop wrapping lines" : "Wrap lines"}</MenuRow></Show>
-      <Show when={text}><MenuRow onSelect={() => copy(currentText())} icon={<CopyIcon />}>Copy contents</MenuRow></Show>
-      <MenuRow onSelect={() => copy(props.path ?? "")} icon={<FileCode2Icon />}>Copy path</MenuRow>
+      <Show when={isFolded("0")}><MenuRow onSelect={() => void download()} icon={<Icons.Download />}>Download</MenuRow></Show>
+      <Show when={text}><MenuRow onSelect={() => props.onToggleWrap()} icon={<Icons.WrapText />}>{props.wrap ? "Stop wrapping lines" : "Wrap lines"}</MenuRow></Show>
+      <Show when={text}><MenuRow onSelect={() => copy(currentText())} icon={<Icons.Copy />}>Copy contents</MenuRow></Show>
+      <MenuRow onSelect={() => copy(props.path ?? "")} icon={<Icons.FileCode />}>Copy path</MenuRow>
     </MenuContent>
-  </Menu>;
+  </DropdownMenu>;
   const gitControls = () => <Show when={props.gitFile}>{(file) =>
     <FileGit status={file().status === "??" ? "U" : file().status.trim()} />
   }</Show>;
@@ -516,7 +517,7 @@ export default function WorkspaceFileSlot(props: {
     <FileSuffix>{props.headerSuffix}</FileSuffix>
     {/* A header too narrow for its actions keeps them here, and the file's name in view. */}
     {moreMenu(true)}
-    <Show when={props.closable && !props.headerTabs}><FileButton type="button" close aria-label={closeLabel} title={closeLabel} onClick={props.onClose}><XIcon /></FileButton></Show>
+    <Show when={props.closable && !props.headerTabs}><FileButton type="button" close aria-label={closeLabel} title={closeLabel} onClick={props.onClose}><Icons.Close /></FileButton></Show>
     {props.headerEnd}
   </>;
   const previewStatus = (file: FileMetadata & { kind: FileKind; mime: string }) => <StatusBar commands={
@@ -539,7 +540,6 @@ export default function WorkspaceFileSlot(props: {
       data-slot={props.slot}
       focused={props.focused}
       aria-label={label}
-      style={props.height ? { height: props.height } : undefined}
       onFocusIn={props.onFocus}
       onPointerDown={props.onFocus}
     >
@@ -548,12 +548,12 @@ export default function WorkspaceFileSlot(props: {
           <Show when={props.headerPrefix}>{props.headerPrefix}</Show>
           <Show when={props.headerTabs} fallback={<FileName path={file().path} icon={<FileTypeIcon name={file().path} />} />}>{props.headerTabs}</Show>
           {gitControls()}
-          <FileButton type="button" data-fold="0" ref={watchFolds} aria-label="Download file" title="Download file" onClick={() => void download()}><DownloadIcon /></FileButton>
-          <FileButton type="button" inMenu aria-label="Copy file path" title="Copy file path" onClick={() => copy(file().path)}><CopyIcon /></FileButton>
+          <FileButton type="button" data-fold="0" ref={watchFolds} aria-label="Download file" title="Download file" onClick={() => void download()}><Icons.Download /></FileButton>
+          <FileButton type="button" inMenu aria-label="Copy file path" title="Copy file path" onClick={() => copy(file().path)}><Icons.Copy /></FileButton>
           {props.headerSuffix}
           <Show when={props.headerTabs}>{moreMenu(false)}</Show>
           <Show when={props.closable && !props.headerTabs}>
-            <FileButton type="button" close aria-label={closeLabel} title={closeLabel} onClick={props.onClose}><XIcon /></FileButton>
+            <FileButton type="button" close aria-label={closeLabel} title={closeLabel} onClick={props.onClose}><Icons.Close /></FileButton>
           </Show>
           {props.headerEnd}
         </FileHead>
@@ -668,16 +668,16 @@ export default function WorkspaceFileSlot(props: {
       <ContextMenuContent>
         <MenuSection>
           <Show when={preview()}>
-            <MenuRow disabled={!editable()} onSelect={() => void edit()} icon={<PencilIcon />}>Edit</MenuRow>
+            <MenuRow disabled={!editable()} onSelect={() => void edit()} icon={<Icons.Edit />}>Edit</MenuRow>
             <MenuRow disabled={!hasUnsavedChanges() || saving()} onSelect={() => void save()} icon={<SaveIcon />}>Save</MenuRow>
-            <MenuRow onSelect={() => copy(currentText())} icon={<CopyIcon />}>Copy contents</MenuRow>
+            <MenuRow onSelect={() => copy(currentText())} icon={<Icons.Copy />}>Copy contents</MenuRow>
           </Show>
-          <MenuRow onSelect={() => void download()} icon={<DownloadIcon />}>Download</MenuRow>
-          <Show when={props.onReplace}><MenuRow disabled={props.busy || saving()} onSelect={() => props.onReplace?.(file().path)} icon={<UploadIcon />}>Replace with upload…</MenuRow></Show>
-          <MenuRow onSelect={() => copy(file().path)} icon={<CopyIcon />}>Copy path</MenuRow>
+          <MenuRow onSelect={() => void download()} icon={<Icons.Download />}>Download</MenuRow>
+          <Show when={props.onReplace}><MenuRow disabled={props.busy || saving()} onSelect={() => props.onReplace?.(file().path)} icon={<Icons.Upload />}>Replace with upload…</MenuRow></Show>
+          <MenuRow onSelect={() => copy(file().path)} icon={<Icons.Copy />}>Copy path</MenuRow>
         </MenuSection>
         <Rule />
-        <MenuRow destructive disabled={props.busy || saving()} onSelect={() => props.onDelete(file().path)} icon={<Trash2Icon />}>Delete file</MenuRow>
+        <MenuRow destructive disabled={props.busy || saving()} onSelect={() => props.onDelete(file().path)} icon={<Icons.Delete />}>Delete file</MenuRow>
       </ContextMenuContent>
     }</Show>
   </ContextMenu>;

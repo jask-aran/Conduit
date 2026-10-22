@@ -33,7 +33,6 @@ export interface PaletteContext {
   effort: string;
   thinkingLevels: string[];
   canRegenerate: boolean;
-  canContinue: boolean;
   canCompact: boolean;
   canCopy: boolean;
   chatSort?: "latest" | "created";
@@ -63,7 +62,6 @@ export interface PaletteActions {
   stop: () => void;
   stopProcess: () => void;
   regenerate: () => void;
-  continue: () => void;
   compact: () => void;
   copy: () => void;
   retryConnection: () => void;
@@ -141,7 +139,7 @@ export const PALETTE_GROUPS: PaletteGroup[] = [
 const INTENT_GROUPS: Record<string, string> = {
   [COMMAND_IDS.renameChat]: "chat", [COMMAND_IDS.autoNameChat]: "chat", [COMMAND_IDS.moveChat]: "chat",
   [COMMAND_IDS.stopResponse]: "chat", [COMMAND_IDS.stopProcess]: "chat", [COMMAND_IDS.regenerateResponse]: "chat",
-  [COMMAND_IDS.continueResponse]: "chat", [COMMAND_IDS.compactContext]: "chat", [COMMAND_IDS.copyResponse]: "chat",
+  [COMMAND_IDS.compactContext]: "chat", [COMMAND_IDS.copyResponse]: "chat",
   [COMMAND_IDS.copyTranscript]: "chat", [COMMAND_IDS.attachFiles]: "chat", [COMMAND_IDS.stashPrompt]: "chat",
   [COMMAND_IDS.toggleDictation]: "chat", [COMMAND_IDS.renameFolder]: "chat",
   [COMMAND_IDS.searchChats]: "navigation", [COMMAND_IDS.openSettings]: "navigation", [COMMAND_IDS.openWorkspaceViews]: "navigation",
@@ -240,7 +238,6 @@ const paletteCommandRuntime: Record<string, PaletteCommandRuntime> = {
   [COMMAND_IDS.stopResponse]: { isAvailable: (context) => context.streaming, run: (actions) => actions.stop() },
   [COMMAND_IDS.stopProcess]: { isAvailable: (context) => context.liveProcess, run: (actions) => actions.stopProcess() },
   [COMMAND_IDS.regenerateResponse]: { isAvailable: (context) => Boolean(context.canRegenerate), run: (actions) => actions.regenerate() },
-  [COMMAND_IDS.continueResponse]: { isAvailable: (context) => context.canContinue, run: (actions) => actions.continue() },
   [COMMAND_IDS.compactContext]: { isAvailable: (context) => context.canCompact, run: (actions) => actions.compact() },
   [COMMAND_IDS.copyResponse]: { isAvailable: (context) => Boolean(context.canCopy), run: (actions) => actions.copy() },
   [COMMAND_IDS.retryConnection]: {

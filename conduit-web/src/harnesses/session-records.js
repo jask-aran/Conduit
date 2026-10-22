@@ -2,14 +2,13 @@ import { isLoggedEvent } from "../server/chat-log.js";
 import { SessionScope } from "../server/session-scope.js";
 import { SocketDelivery, deliveryKey, isPaint, mergeDelivery } from "./socket-delivery.js";
 
-// The live-record store every non-Pi adapter needs: the id and chat indexes, the
-// attached browser sockets, and the replay buffer. Codex and ChatGPT Web wrote
+// The live-record store adapters share: the id and chat indexes, the attached
+// browser sockets, and the replay buffer. Codex and ChatGPT Web wrote
 // this identically; adapters now compose it instead so a new harness inherits
 // the socket and replay semantics rather than re-deriving them.
 //
-// This deliberately owns no process lifecycle. Codex runs a child per record,
-// opencode runs one server for every session, and native Pi delegates to
-// PiManager - none of which belongs to a record store.
+// This deliberately owns no process lifecycle. Each adapter owns its runtime;
+// none of that belongs to a record store.
 export class SessionRecords {
   /**
    * @param capabilities the adapter's frozen ChatCapabilities
@@ -21,8 +20,8 @@ export class SessionRecords {
   constructor({ capabilities, backend, extras = () => ({}), onPublish = null, logs = null, delivery = null, replayLimit = 500 }) {
     this.logs = logs;
     this.replayLimit = replayLimit;
-    // Every harness gets the delivery discipline Pi had to itself: a frame's
-    // deltas merged into one send, and a socket that has stopped keeping up
+    // Every harness gets the same delivery discipline: a frame's deltas are
+    // merged into one send, and a socket that has stopped keeping up
     // given paint to drop rather than a longer queue to work through.
     this.delivery = delivery || new SocketDelivery();
     this.capabilities = capabilities;

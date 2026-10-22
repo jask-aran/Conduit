@@ -80,7 +80,7 @@ for (const icon of ["pwa-192x192.png", "pwa-512x512.png", "favicon.svg"]) {
 }
 const cssAssets = assets.filter((asset) => asset.initial && asset.type === "css");
 const cssText = cssAssets.map((asset) => fs.readFileSync(path.join(dist, asset.file), "utf8")).join("\n");
-// The library's frost material (components/ui/styles/frost.css): both spellings of the blur survive the build.
+// The library's frost material (components/ui/styles/frost.css), which menus wear too: both spellings of the blur survive the build.
 const frostedLiveRule = cssText.match(/\.ui-frost\{[^}]+\}/);
 const frostedLiveFailures = [];
 if (!frostedLiveRule) {
@@ -92,10 +92,6 @@ if (!frostedLiveRule) {
   if (!/-webkit-backdrop-filter:var\(--frost-blur\)/.test(frostedLiveRule[0])) {
     frostedLiveFailures.push("frost rule dropped -webkit-backdrop-filter");
   }
-}
-const popoverFrostRule = cssText.match(/:is\(\[data-slot=menu-content\][^{]*\[data-slot\]\{[^}]+\}/);
-if (!popoverFrostRule || !/(?<!-webkit-)backdrop-filter:var\(--frost-blur\)/.test(popoverFrostRule[0])) {
-  frostedLiveFailures.push("popover frost rule dropped unprefixed backdrop-filter");
 }
 if (frostedLiveFailures.length) {
   for (const failure of frostedLiveFailures) console.error(`CSS: ${failure}`);

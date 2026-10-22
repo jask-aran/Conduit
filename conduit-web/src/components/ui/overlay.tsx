@@ -1,5 +1,7 @@
+import { Frost } from "./frost";
+import * as Icons from "./icons";
 import { For, Show, splitProps, type JSX } from "solid-js";
-import { ChevronLeftIcon, XIcon } from "lucide-solid";
+
 import { cn } from "@/lib/utils";
 import { Button, Keycap, Spinner } from "./controls";
 import { type Density, type Motion, motionOf, moveCursor } from "./shared";
@@ -17,11 +19,16 @@ export function Scrim(props: JSX.HTMLAttributes<HTMLDivElement> & { placement?: 
   return <div {...rest} class={cn("ui-scrim", local.class)} data-placement={local.placement ?? "top"} data-dialog={local.dialog ? "" : undefined} {...motionOf(local.motion)} />;
 }
 
+/** Backdrop: the page dimmed under a phone's drawer (layer: the sidebar's, or the workspace panel's), a tap on it
+ *  dismissing the drawer; it fades in. */
+export const Backdrop = (props: { layer: "drawer" | "panel"; label: string; onDismiss: () => void }) =>
+  <button type="button" class="ui-backdrop" data-layer={props.layer} aria-label={props.label} onClick={() => props.onDismiss()} />;
+
 /** core: frost on a solid backing, kept for the phone's full-screen overlays should the page behind them be too busy -- off for now.
  *  embedded: inside a behaviour's dialog (OverlayDialog), which carries the role and the name. */
 export function Overlay(props: { label: string; layout?: "stack" | "rail"; core?: boolean; embedded?: boolean; density?: Density; class?: string; style?: JSX.CSSProperties; motion?: Motion; children: JSX.Element }) {
-  return <div role={props.embedded ? undefined : "dialog"} aria-label={props.embedded ? undefined : props.label} class={cn("ui-frost ui-overlay", props.class)} style={props.style} data-layout={props.layout ?? "stack"}
-    data-surface="frost" data-lift="raised" data-core={props.core ? "" : undefined} data-density={props.density} {...motionOf(props.motion)}>{props.children}</div>;
+  return <Frost lift="raised" core={props.core} role={props.embedded ? undefined : "dialog"} aria-label={props.embedded ? undefined : props.label} class={cn("ui-overlay", props.class)} style={props.style} data-layout={props.layout ?? "stack"}
+    data-density={props.density} {...motionOf(props.motion)}>{props.children}</Frost>;
 }
 
 /** The field across the top: a lead (a prompt glyph, a search icon, a back button), chips (OverlayChip: a scope, a view),
@@ -33,13 +40,13 @@ export function OverlayBar(props: { lead?: JSX.Element; chips?: JSX.Element; pla
     {props.chips}
     <input {...props.field} class="ui-overlay-input" placeholder={props.placeholder} value={props.value ?? ""} onInput={(event) => props.onInput?.(event.currentTarget.value)} />
     {props.end}
-    <Show when={props.onClose}><Button variant="ghost" size="icon-sm" aria-label={props.closeLabel ?? "Close"} title="Close" onMouseDown={(event) => event.preventDefault()} onClick={() => props.onClose?.()}><XIcon /></Button></Show>
+    <Show when={props.onClose}><Button variant="ghost" size="icon-sm" aria-label={props.closeLabel ?? "Close"} title="Close" onMouseDown={(event) => event.preventDefault()} onClick={() => props.onClose?.()}><Icons.Close /></Button></Show>
   </div>;
 }
 
 /** A scope or a view narrowing the field (in:Japan, is:unread): a mono token, removed by its × (or Backspace on an empty query, the host's). */
 export const OverlayChip = (props: { children: string; onRemove: () => void }) =>
-  <button type="button" class="ui-overlay-chip" title={`Remove ${props.children}`} onMouseDown={(event) => event.preventDefault()} onClick={() => props.onRemove()}>{props.children}<XIcon /></button>;
+  <button type="button" class="ui-overlay-chip" title={`Remove ${props.children}`} onMouseDown={(event) => event.preventDefault()} onClick={() => props.onRemove()}>{props.children}<Icons.Close /></button>;
 
 /** The scrolling body: Sections of Items, titled as groups. managed: the host moves the cursor (aria-activedescendant,
  *  each Item's active), so the pointer leaves it to the host; the rest is the host's (role, keys, focus). */
@@ -78,7 +85,7 @@ export const OverlayActions = (props: { actions: OverlayAction[] }) => <div clas
 export function OverlayRail(props: JSX.HTMLAttributes<HTMLElement> & { title: string; foot?: JSX.Element; onClose?: () => void }) {
   const [local, rest] = splitProps(props, ["title", "foot", "onClose", "children"]);
   return <nav {...rest} class="ui-overlay-rail"><div class="ui-overlay-page-head"><h2 class="ui-overlay-title">{local.title}</h2>
-    <Show when={local.onClose}><Button variant="ghost" size="icon-sm" aria-label="Close" onClick={() => local.onClose?.()}><XIcon /></Button></Show></div>{local.children}
+    <Show when={local.onClose}><Button variant="ghost" size="icon-sm" aria-label="Close" onClick={() => local.onClose?.()}><Icons.Close /></Button></Show></div>{local.children}
     <Show when={local.foot}><div class="ui-overlay-rail-foot">{local.foot}</div></Show></nav>;
 }
 
@@ -90,10 +97,10 @@ export const OverlayFact = (props: { label: string; value: string; title?: strin
  *  busy: a spinner before the status (Saving); failed: the status in the destructive colour, why in its title, and Retry when onRetry. */
 export function OverlayPage(props: { title: string; status?: string; busy?: boolean; failed?: boolean; why?: string; onRetry?: () => void; onBack?: () => void; onClose?: () => void; children: JSX.Element }) {
   return <main class="ui-overlay-page">
-    <div class="ui-overlay-page-head"><Show when={props.onBack}><Button variant="ghost" size="icon-sm" aria-label="All settings" onClick={() => props.onBack?.()}><ChevronLeftIcon /></Button></Show><h2 class="ui-overlay-title" tabIndex={-1}>{props.title}</h2>
+    <div class="ui-overlay-page-head"><Show when={props.onBack}><Button variant="ghost" size="icon-sm" aria-label="All settings" onClick={() => props.onBack?.()}><Icons.ChevronLeft /></Button></Show><h2 class="ui-overlay-title" tabIndex={-1}>{props.title}</h2>
       <Show when={props.status}><span class="ui-overlay-status" role="status" data-failed={props.failed ? "" : undefined} title={props.why}><Show when={props.busy}><Spinner /></Show>{props.status}
         <Show when={props.failed && props.onRetry}><Button variant="ghost" size="sm" onClick={() => props.onRetry?.()}>Retry</Button></Show></span></Show>
-      <Show when={props.onClose}><Button variant="ghost" size="icon-sm" aria-label="Close" onClick={() => props.onClose?.()}><XIcon /></Button></Show></div>
+      <Show when={props.onClose}><Button variant="ghost" size="icon-sm" aria-label="Close" onClick={() => props.onClose?.()}><Icons.Close /></Button></Show></div>
     {props.children}
   </main>;
 }
@@ -154,7 +161,7 @@ export const GlanceHead = (props: { mark?: JSX.Element; title: string; facts: st
   <For each={props.facts}>{(fact) => <div class="ui-glance-facts" title={fact}>{fact}</div>}</For>
 </>;
 /** The last prompt, as the user's message is drawn, clamped to four lines. */
-export const GlancePrompt = (props: { children: JSX.Element }) => <p class="ui-frost ui-bubble ui-glance-prompt">{props.children}</p>;
+export const GlancePrompt = (props: { children: JSX.Element }) => <Frost as="p" class="ui-bubble ui-glance-prompt">{props.children}</Frost>;
 /** How the turn ended: an orb (the app's), the outcome, how long and what it did. */
 export const GlanceTurn = (props: { orb?: JSX.Element; outcome: string; detail?: string }) =>
   <div class="ui-glance-turn"><Show when={props.orb}><span class="ui-glance-orb">{props.orb}</span></Show><span><b>{props.outcome}</b>{props.detail ? ` · ${props.detail}` : ""}</span></div>;

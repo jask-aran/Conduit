@@ -16,8 +16,6 @@
 .ui-browser-search { display: flex; align-items: center; gap: var(--space-xs); flex: 1; min-width: var(--control-lg); max-width: var(--measure-xs); }
 .ui-browser-search > svg { width: var(--icon); height: var(--icon); flex: none; color: var(--muted-foreground); }
 .ui-browser-search > input { min-width: 0; }
-.ui-select { width: auto; max-width: 100%; color: var(--muted-foreground); }
-.ui-select option { background: var(--background); color: var(--foreground); }
 .ui-browser-count, .ui-browser-summary { display: inline-flex; align-items: center; gap: var(--space-xs); color: var(--muted-foreground); font-size: var(--text-caption); }
 .ui-browser-summary > svg { width: var(--icon); height: var(--icon); }
 .ui-browser-spacer { flex: 1; }

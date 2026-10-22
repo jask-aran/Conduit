@@ -1,17 +1,14 @@
 import { createLiveSessionLauncher, enforceLiveProcessLimit, maySpawnProcess } from "../live-session-launcher.js";
-import { applyMessageIds } from "../../message-ids.js";
 import { rememberModel } from "../../profile-model-memory.js";
 
 export function registerLiveSessionRoutes(app, {
   attachments,
-  messageIds,
   backends,
   catalogFor,
   config,
   concurrency,
   findChatContext,
   lifecycle,
-  manager,
   preferences,
   registry,
   runtimeFor,
@@ -26,6 +23,7 @@ export function registerLiveSessionRoutes(app, {
     findChatContext,
     lifecycle,
     maxLiveProcesses: () => runtimeSettings.get().maxLiveProcesses,
+    preferences,
     registry,
     runtimeFor,
     templateForChat,
@@ -47,9 +45,7 @@ export function registerLiveSessionRoutes(app, {
       const saved = await runtimeSettings.save({
         maxLiveProcesses: request.body?.maxLiveProcesses,
         maxGeneratingProcesses: request.body?.maxGeneratingProcesses,
-        idleProcessTtlMs: request.body?.idleProcessTtlMs,
       });
-      manager.configure(saved);
       await enforceLiveProcessLimit(backends, saved.maxLiveProcesses);
       response.json(runtimeView());
     } catch (error) { next(error); }
@@ -98,9 +94,7 @@ export function registerLiveSessionRoutes(app, {
         project: context?.project,
       });
       if (context) {
-        projection.messages = applyMessageIds(
-          await attachments.decorateMessages(context.project, context.chat.id, projection.messages),
-          await messageIds.resolver(context.project, context.chat));
+        projection.messages = await attachments.decorateMessages(context.project, context.chat.id, projection.messages);
       }
       response.json({ live: backends.view(live), events: live.events, ...projection });
     } catch (error) { next(error); }
@@ -143,9 +137,7 @@ export function registerLiveSessionRoutes(app, {
       if (live.chatId) {
         const context = await findChatContext(live.chatId);
         if (context) {
-          transcript.messages = applyMessageIds(
-            await attachments.decorateMessages(context.project, context.chat.id, transcript.messages),
-            await messageIds.resolver(context.project, context.chat));
+          transcript.messages = await attachments.decorateMessages(context.project, context.chat.id, transcript.messages);
         }
       }
       response.json({ id: live.chatId || live.id, status: "active", ...transcript, attachments: [], page: { before: null } });

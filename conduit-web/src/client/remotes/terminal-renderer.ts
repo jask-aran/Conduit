@@ -1,6 +1,7 @@
 import terminalFontUrl from "../assets/MesloLGSNerdFontMono-Regular.ttf";
 import { terminalFontFamily } from "../preferences/terminal-font";
 import { isMobileLayout } from "../navigation/mobile-layout";
+import { selectedUiScale } from "../preferences/ui-scale";
 import "./terminal-pane.css";
 
 export type TerminalRenderer = {
@@ -19,30 +20,34 @@ export type TerminalRenderer = {
   dispose: () => void;
 };
 
-// Keep the terminal palette owned by Conduit rather than inheriting xterm defaults.
-export const CONDUIT_TERMINAL_THEME = {
-  background: "#121315",
-  foreground: "#e6e8ea",
-  cursor: "#91a0af",
-  cursorAccent: "#121315",
-  selectionBackground: "#35404b",
-  selectionForeground: "#f3f4f6",
-  black: "#25272b",
-  red: "#e06c75",
-  green: "#98c379",
-  yellow: "#e5c07b",
-  blue: "#61afef",
-  magenta: "#c678dd",
-  cyan: "#56b6c2",
-  white: "#d7dae0",
-  brightBlack: "#6b7078",
-  brightRed: "#ef7f88",
-  brightGreen: "#a9d58a",
-  brightYellow: "#f0cd8b",
-  brightBlue: "#77b9f2",
-  brightMagenta: "#d48be6",
-  brightCyan: "#6cc5d0",
-  brightWhite: "#f3f4f6",
+/** Read the terminal palette when a terminal is created. */
+export const CONDUIT_TERMINAL_THEME = () => {
+  const style = getComputedStyle(document.documentElement);
+  const colour = (name: string) => style.getPropertyValue(name).trim();
+  return {
+    background: colour("--ansi-background"),
+    foreground: colour("--ansi-foreground"),
+    cursor: colour("--ansi-cursor"),
+    cursorAccent: colour("--ansi-cursor-accent"),
+    selectionBackground: colour("--ansi-selection"),
+    selectionForeground: colour("--ansi-selection-foreground"),
+    black: colour("--ansi-black"),
+    red: colour("--ansi-red"),
+    green: colour("--ansi-green"),
+    yellow: colour("--ansi-yellow"),
+    blue: colour("--ansi-blue"),
+    magenta: colour("--ansi-magenta"),
+    cyan: colour("--ansi-cyan"),
+    white: colour("--ansi-white"),
+    brightBlack: colour("--ansi-bright-black"),
+    brightRed: colour("--ansi-bright-red"),
+    brightGreen: colour("--ansi-bright-green"),
+    brightYellow: colour("--ansi-bright-yellow"),
+    brightBlue: colour("--ansi-bright-blue"),
+    brightMagenta: colour("--ansi-bright-magenta"),
+    brightCyan: colour("--ansi-bright-cyan"),
+    brightWhite: colour("--ansi-bright-white"),
+  };
 };
 
 let fontPromise: Promise<void> | undefined;
@@ -69,7 +74,7 @@ export type TerminalRendererOptions = { pasteFiles?: TerminalPasteFiles; onClipb
 
 export async function createTerminalRenderer(host: HTMLElement, options: TerminalRendererOptions = {}): Promise<TerminalRenderer> {
   await loadTerminalFont();
-  host.style.setProperty("--conduit-terminal-background", CONDUIT_TERMINAL_THEME.background);
+  host.style.setProperty("--conduit-terminal-background", CONDUIT_TERMINAL_THEME().background);
   return createXtermRenderer(host, options);
 }
 
@@ -112,9 +117,11 @@ function applyFit(fit: TerminalFit) {
 }
 
 function terminalFontSize() {
-  const fallback = isMobileLayout() ? 13 : 10.4;
+  const fallback = 13;
   return Math.max(8, Math.min(24, Number(localStorage.getItem("conduit:terminal-font-size")) || fallback));
 }
+// The terminal's size is drawn in pixels, under the stylesheet: the Interface size multiplies it as it does the units.
+const scaled = (fontSize: number) => fontSize * selectedUiScale();
 
 function observeHostSize(host: HTMLElement, fit: TerminalFit) {
   let frame: number | undefined;
@@ -280,12 +287,12 @@ async function createXtermRenderer(host: HTMLElement, options: TerminalRendererO
     import("@xterm/xterm/css/xterm.css"),
   ]);
   const terminal = new Terminal({
-    fontSize: terminalFontSize(),
+    fontSize: scaled(terminalFontSize()),
     fontFamily: terminalFontFamily(),
     cursorBlink: false,
     altClickMovesCursor: false,
     scrollback: 1000,
-    theme: CONDUIT_TERMINAL_THEME,
+    theme: CONDUIT_TERMINAL_THEME(),
   });
   const fit = new FitAddon();
   const clipboard = new ClipboardAddon(new Base64(), {
@@ -323,6 +330,8 @@ async function createXtermRenderer(host: HTMLElement, options: TerminalRendererO
   }
   const stopClipboardShortcuts = installClipboardShortcuts(host, terminal, options);
   const stopObservingHost = observeHostSize(host, fit);
+  const rescale = () => { terminal.options.fontSize = scaled(terminalFontSize()); applyFit(fit); };
+  addEventListener("conduit:ui-scale", rescale);
   return {
     id: "xterm",
     cols: () => terminal.cols,
@@ -332,11 +341,11 @@ async function createXtermRenderer(host: HTMLElement, options: TerminalRendererO
     focus: () => terminal.focus(),
     // While panes ease, the host observer fits when they settle (observeHostSize).
     fit: () => { if (!document.body.classList.contains("panes-settling")) applyFit(fit); },
-    setFontSize: (fontSize) => { terminal.options.fontSize = fontSize; applyFit(fit); },
+    setFontSize: (fontSize) => { terminal.options.fontSize = scaled(fontSize); applyFit(fit); },
     repaint: () => repaintTerminal(terminal),
     resize: (cols, rows) => resizeTerminal(terminal, cols, rows),
     onData: (listener) => { const subscription = terminal.onData(listener); return () => subscription.dispose(); },
     onResize: (listener) => { const subscription = terminal.onResize(listener); return () => subscription.dispose(); },
-    dispose: () => { host.removeEventListener("mousedown", selectWithMouse, { capture: true }); document.removeEventListener("mouseup", copyMouseSelection); stopClipboardShortcuts(); stopObservingHost(); contextLoss.dispose(); webgl.dispose(); clipboard.dispose(); fit.dispose?.(); terminal.dispose(); },
+    dispose: () => { removeEventListener("conduit:ui-scale", rescale); host.removeEventListener("mousedown", selectWithMouse, { capture: true }); document.removeEventListener("mouseup", copyMouseSelection); stopClipboardShortcuts(); stopObservingHost(); contextLoss.dispose(); webgl.dispose(); clipboard.dispose(); fit.dispose?.(); terminal.dispose(); },
   };
 }

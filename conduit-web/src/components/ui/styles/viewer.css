@@ -2,7 +2,7 @@
 .ui-file-image img { max-width: 100%; max-height: 100%; object-fit: contain; }
 .ui-file-card { display: grid; min-height: var(--measure-xs); flex: 1; align-content: center; justify-items: center; gap: var(--space-sm); padding: var(--space-xl); color: var(--muted-foreground); text-align: center; }
 .ui-file-card strong { color: var(--foreground); font-size: var(--text-caption); font-weight: var(--weight-strong); }
-.ui-file-card span, .ui-file-card p { max-width: var(--measure-xl); margin: 0; font-size: var(--text-label); line-height: 1.5; }
+.ui-file-card span, .ui-file-card p { max-width: var(--measure-xl); margin: 0; font-size: var(--text-label); line-height: var(--leading-text); }
 .ui-file-card code { max-width: min(100%, var(--measure-xl)); overflow: auto; padding: var(--space-sm) var(--space-md); border: var(--hairline) solid var(--border); border-radius: var(--radius-control); background: var(--tint); color: var(--muted-foreground); font: var(--text-label)/1.4 var(--font-data); }
 .ui-file-media { display: flex; flex: 1; min-height: 0; align-items: center; justify-content: center; overflow: hidden; }
 .ui-file-media audio { width: min(90%, var(--measure-2xl)); }
@@ -27,7 +27,7 @@
 .ui-file-viewer:has(> .ui-file-swap) > .ui-file:first-child .ui-file-head { padding-right: var(--space-2xl); }
 .ui-file-viewer:has(> .ui-file-swap) > .ui-file + .ui-file .ui-file-head { padding-left: var(--space-3xl); }
 [data-region]:not([data-region="chat"])[data-focus-held]:has(.ui-file-viewer > .ui-file + .ui-file)::after { opacity: 0; }
-.ui-file-viewer > .ui-file::after { position: absolute; right: var(--space-lg); bottom: 0; left: var(--space-lg); z-index: 5; height: calc(1.5 * var(--hairline)); border-radius: var(--hairline); background: linear-gradient(to right, transparent, var(--region-focus) 18%, var(--region-focus) 82%, transparent); opacity: 0; pointer-events: none; transition: opacity 220ms ease-out; content: ""; }
+.ui-file-viewer > .ui-file::after { position: absolute; right: var(--space-lg); bottom: 0; left: var(--space-lg); z-index: 5; height: calc(1.5 * var(--hairline)); border-radius: var(--hairline); background: linear-gradient(to right, transparent, var(--region-focus) 18%, var(--region-focus) 82%, transparent); opacity: 0; pointer-events: none; transition: opacity var(--duration-gentle) var(--ease-arrive); content: ""; }
 [data-region][data-focus-held] .ui-file-viewer:has(> .ui-file + .ui-file) > .ui-file[data-focused]::after { opacity: 1; }
 @media (--conduit-phone-layout) {
   .ui-file { overscroll-behavior: contain; }

@@ -8,6 +8,7 @@ import { buildInlineDiff, inlineDocLine } from "./workspace-inline-diff";
 import { indentationGuides } from "./workspace-editor-base";
 import { workspaceLanguageForFilename } from "./workspace-languages";
 import { CodeExcerpt, codeExcerptSetup } from "@/components/ui/code-excerpt";
+import { reviewCommentClass } from "@/components/ui/editor";
 
 /**
  * A window onto the lines a review comment was written against, rendered by the
@@ -74,7 +75,7 @@ export default function WorkspaceExcerptView(props: {
             let cursor = 0;
             for (const range of ranges) {
               if (range.from > cursor) marks.push(Decoration.mark({ class: "cm-review-context" }).range(cursor, range.from));
-              marks.push(Decoration.mark({ class: "cm-review-comment" }).range(range.from, range.to));
+              marks.push(Decoration.mark({ class: reviewCommentClass }).range(range.from, range.to));
               cursor = Math.max(cursor, range.to);
             }
             if (cursor < doc.length) marks.push(Decoration.mark({ class: "cm-review-context" }).range(cursor, doc.length));

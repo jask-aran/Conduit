@@ -6,10 +6,6 @@ import {
   activityLabel,
   pickHigherActivity,
 } from "../src/activity.js";
-// Pi's own event names reduce onto the same flags, but from Pi's own module --
-// the three harnesses that are not Pi never send them.
-import { applyActivityEvent, normalizeHostUiRequest } from "../src/pi-activity.js";
-
 function record(overrides = {}) {
   return {
     status: "running",
@@ -42,64 +38,6 @@ test("settled generation is idle even when the generation handle remains open", 
   assert.equal(deriveCoarseActivity(record({
     generation: { id: "g1", closed: false, settled: true },
   })), "idle");
-  const state = record({ generation: { id: "g1", closed: false, settled: false }, active: true });
-  applyActivityEvent(state, { type: "agent_end", willRetry: false });
-  assert.equal(state.active, false);
-  assert.equal(state.generation.settled, true);
-  assert.equal(state.activity, "idle");
-});
-
-test("applyActivityEvent tracks tools, compaction, retry, and host UI", () => {
-  const state = record();
-  assert.equal(applyActivityEvent(state, { type: "tool_execution_start", toolName: "read" }), true);
-  assert.equal(state.activity, "working");
-  assert.match(state.activityDetail, /read/);
-
-  // Detail-only change while already working must still report a change for SSE/sidebar.
-  assert.equal(applyActivityEvent(state, { type: "tool_execution_start", toolName: "bash" }), true);
-  assert.equal(state.activity, "working");
-  assert.match(state.activityDetail, /bash/);
-
-  applyActivityEvent(state, { type: "compaction_start" });
-  assert.equal(state.activity, "compacting");
-
-  applyActivityEvent(state, { type: "compaction_end" });
-  applyActivityEvent(state, { type: "auto_retry_start", attempt: 2, delayMs: 3000 });
-  assert.equal(state.activity, "retrying");
-
-  applyActivityEvent(state, {
-    type: "extension_ui_request",
-    id: "req1",
-    method: "confirm",
-    title: "Allow write?",
-    message: "Write file",
-  });
-  assert.equal(state.activity, "waiting_for_user");
-  assert.equal(state.hostUiRequests.length, 1);
-
-  applyActivityEvent(state, { type: "extension_ui_resolved", requestId: "req1" });
-  assert.equal(state.hostUiRequests.length, 0);
-});
-
-test("normalizeHostUiRequest maps RPC methods", () => {
-  const request = normalizeHostUiRequest({
-    type: "extension_ui_request",
-    id: "x",
-    method: "select",
-    title: "Pick",
-    options: ["a", "b"],
-  });
-  assert.deepEqual(request, {
-    id: "x",
-    kind: "select",
-    title: "Pick",
-    message: "",
-    options: ["a", "b"],
-    placeholder: "",
-    prefill: "",
-    timeoutMs: null,
-  });
-  assert.equal(normalizeHostUiRequest({ method: "notify", id: "n" }), null);
 });
 
 test("fine activity prefers tools and stop over generic working", () => {
@@ -117,8 +55,8 @@ test("fine activity prefers tools and stop over generic working", () => {
 });
 
 test("activity labels and ranking", () => {
-  // The indicator is given a record with no harness name on it, so it says
-  // what is true of all four rather than naming Pi on a Codex chat.
+  // The indicator is given a record with no harness name, so its label is
+  // shared across adapters.
   assert.equal(activityLabel("working", "using read"), "Working — using read");
   assert.equal(activityLabel("idle"), "Ready (idle)");
   assert.ok(pickHigherActivity("failed", "working") === "failed");

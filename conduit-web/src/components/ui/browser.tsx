@@ -1,6 +1,5 @@
-import { splitProps, type JSX } from "solid-js";
+import { type JSX } from "solid-js";
 import { Button, Input } from "./controls";
-import { cn } from "@/lib/utils";
 
 export function Browser(props: { compact?: boolean; sidebarWidth: number; children: JSX.Element }) {
   return <div class="ui-browser" data-compact={props.compact ? "" : undefined} style={{ "--browser-sidebar-width": `${props.sidebarWidth}px` }}>{props.children}</div>;
@@ -26,7 +25,3 @@ export const BrowserGrid = (props: JSX.HTMLAttributes<HTMLDivElement>) => <div {
 export const BrowserEntry = (props: JSX.ButtonHTMLAttributes<HTMLButtonElement>) => <Button {...props} class="ui-browser-entry" variant="ghost" />;
 export const BrowserPlace = (props: JSX.ButtonHTMLAttributes<HTMLButtonElement>) => <Button {...props} class="ui-browser-place" variant="ghost" />;
 export const BrowserAddress = (props: JSX.InputHTMLAttributes<HTMLInputElement>) => <Input {...props} class="ui-browser-address" />;
-export function Select(props: JSX.SelectHTMLAttributes<HTMLSelectElement>) {
-  const [local, rest] = splitProps(props, ["class"]);
-  return <select {...rest} class={cn("ui-input ui-select", local.class)} />;
-}

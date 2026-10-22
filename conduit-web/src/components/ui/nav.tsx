@@ -1,6 +1,8 @@
-import { createEffect, createSignal, For, onCleanup, Show, splitProps, type JSX } from "solid-js";
-import { ChevronRightIcon } from "lucide-solid";
+import * as Icons from "./icons";
+import { createEffect, createSignal, For, on, onCleanup, Show, splitProps, type JSX } from "solid-js";
+
 import { Button, Spinner } from "./controls";
+import { haptic } from "./haptics";
 import { Expand } from "./expand";
 
 /*
@@ -16,6 +18,8 @@ import { Expand } from "./expand";
  *  (set once the edge has moved); drawer: a phone's, over the page, open or shut. */
 export function NavPane(props: JSX.HTMLAttributes<HTMLElement> & { collapsed?: boolean; folded?: boolean; instant?: boolean; drawer?: "open" | "shut"; head: JSX.Element; foot?: JSX.Element; listRef?: (element: HTMLDivElement) => void; ref?: (element: HTMLElement) => void }) {
   const [local, rest] = splitProps(props, ["collapsed", "folded", "instant", "drawer", "head", "foot", "listRef", "children", "class"]);
+  // The drawer shutting is an overlay closing: felt after a touch (a swipe, a tap outside it or on a row).
+  createEffect(on(() => local.drawer, (drawer, was) => { if (was === "open" && drawer === "shut") haptic("dismiss"); }, { defer: true }));
   return <aside {...rest} class="ui-nav-pane" data-surface="frame" data-collapsed={local.collapsed ? "" : undefined} data-folded={local.folded ? "" : undefined}
     data-instant={local.instant ? "" : undefined} data-drawer={local.drawer}>
     <div class="ui-nav-pane-body">
@@ -84,7 +88,7 @@ export function NavFolderRow(props: JSX.HTMLAttributes<HTMLDivElement> & { icon:
   const [local, rest] = splitProps(props, ["icon", "mark", "meta", "open", "current", "within", "link", "toggle", "children", "class"]);
   return <div {...rest} class="ui-nav-row ui-nav-folder" data-folder-open={local.open ? "" : undefined} {...rowData(local)}>
     <button type="button" {...local.link} class="ui-nav-link"><span class="ui-nav-icon">{local.icon}</span>{local.mark}<span class="ui-nav-text">{local.children}</span><Show when={local.meta}><small class="ui-nav-meta">{local.meta}</small></Show></button>
-    <button type="button" tabIndex={-1} aria-expanded={local.open} {...local.toggle} class="ui-nav-toggle"><ChevronRightIcon /></button>
+    <button type="button" tabIndex={-1} aria-expanded={local.open} {...local.toggle} class="ui-nav-toggle"><Icons.ChevronRight /></button>
   </div>;
 }
 
@@ -97,6 +101,12 @@ export function NavFolder(props: { open: boolean; row: JSX.Element; children: JS
 }
 
 /** What a list says when it has nothing: one muted line. */
+/** A phone's first lines of the list, on its ground: the server it is on (its switcher) with the actions a phone
+ *  reaches from the sidebar beside it (New chat, search, the palette), then what the server has to say (an update).
+ *  It scrolls with the list, so it grows without moving the head; it is not one of the list's arrow stops. */
+export const NavLead = (props: { server: JSX.Element; actions: JSX.Element; children?: JSX.Element }) =>
+  <div class="ui-nav-lead"><div class="ui-nav-lead-line">{props.server}<div class="ui-nav-lead-actions">{props.actions}</div></div>{props.children}</div>;
+
 export const NavNote = (props: { children: JSX.Element }) => <div class="ui-nav-note">{props.children}</div>;
 
 /** Rows that have not arrived: the shape of a list, still. */
@@ -123,11 +133,6 @@ export function NavNotice(props: { icon?: JSX.Element; busy?: boolean; ready?: b
 }
 
 /** A label and its links as icons (the installers). */
-export const NavLinks = (props: { label: string; links: { href: string; label: string; icon: JSX.Element }[] }) => <div class="ui-nav-links">
-  <span>{props.label}</span>
-  <For each={props.links}>{(link) => <a href={link.href} target="_blank" rel="noopener noreferrer" aria-label={link.label} title={link.label}>{link.icon}</a>}</For>
-</div>;
-
 export type StatusTone = "success" | "active" | "warn" | "danger" | "muted" | "unread";
 /** A row's live state in an --icon slot: a dot in its tone, or a Spinner while it works; stale: it may be out of date. */
 export function StatusDot(props: JSX.HTMLAttributes<HTMLSpanElement> & { label: string; tone?: StatusTone; spinning?: boolean; stale?: boolean }) {

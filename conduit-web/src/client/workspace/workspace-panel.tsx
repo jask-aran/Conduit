@@ -1,10 +1,14 @@
+import { Icons } from "@/components/ui";
+import { Dock, DockDocument, DockSurface, SheetFill, ToolContent } from "@/components/ui";
 import { createDecisionScope } from "@/components/decision-dialog";
 import { batch, createEffect, createSignal, For, on, onCleanup, onMount, Show, type Accessor } from "solid-js";
 import { Portal } from "solid-js/web";
-import { MIN_MAIN_PANE_WIDTH } from "../layout-geometry";
-import { Columns2Icon, FolderIcon, GitCompareArrowsIcon, Maximize2Icon, MessageSquareIcon, Minimize2Icon, PanelRightIcon, TerminalIcon, XIcon } from "lucide-solid";
+import { minMainPaneWidth } from "../layout-geometry";
+import { unitPx } from "@/components/ui/layout";
+
 import { Spinner } from "@/components/ui/controls";
 import { HeaderButton } from "@/components/ui/header";
+import { Backdrop } from "@/components/ui/overlay";
 import { PaneEdge, PaneLoading, ToolHeader, ToolView, ToolViews } from "@/components/ui/pane";
 import { COMMAND_IDS } from "../commands/command-registry";
 import { focusFirst, isMobileLayout, restoreFocus } from "../navigation/mobile-layout";
@@ -23,7 +27,7 @@ import { ChatModes, ChatView, createChatReview } from "./workspace-chat-view";
 import { TerminalView } from "./workspace-terminal-view";
 import { createWorkspacePoll } from "./workspace-poll";
 import type { DirectoryListing, FileSlotId, PanelTab, SplitView, WorkspaceSettings } from "./workspace-types";
-import { readToolDrag, TOOL_DRAG_TYPE, WORKSPACE_TOOL_LABELS } from "./workspace-rail";
+import { readToolDrag, TOOL_DRAG_TYPE, WORKSPACE_TOOL_ICONS, WORKSPACE_TOOL_LABELS } from "./workspace-rail";
 import type { FileEntry } from "./file-documents";
 
 /*
@@ -45,7 +49,8 @@ function panelTab(value: string): PanelTab | null {
   return value === "files" || value === "diff" || value === "chat" || value === "terminal" ? value : null;
 }
 
-const MIN_WORKSPACE_PANE_WIDTH = 240;
+// In the unit (layout-geometry): its least, its most and its first width; the gap is --space-md, the chat's margin.
+const MIN_WORKSPACE_PANE_UNITS = 18.75, MAX_WORKSPACE_PANE_UNITS = 38.75, DEFAULT_WORKSPACE_PANE_UNITS = 26.25, DOCK_GAP_UNITS = 0.5;
 
 export default function WorkspacePanel(props: { connectivity?: () => Connectivity; projectId: Accessor<string>; projectName: Accessor<string>; sourceControlEnabled: Accessor<boolean>; workingRoot: Accessor<string>; chatId: Accessor<string>; artifactChatId?: Accessor<string | null>; commentChatId?: Accessor<string | null>; historyAvailable?: Accessor<boolean>; open: Accessor<boolean>; expanded: Accessor<boolean>; focusRequest: Accessor<number>; onFocusRequestComplete?: () => void; requestedTab?: Accessor<{ tab: PanelTab; terminalId?: string; nonce: number } | null>; onRequestOpen?: () => void; onToggleExpanded: () => void; onClose: () => void; onTabChange?: (tab: PanelTab) => void; splitView?: Accessor<SplitView | null>; splitHost?: Accessor<HTMLElement | undefined>; onOpenBeside?: (view: SplitView) => void; onMoveToDock?: (view: SplitView) => void; onCloseSplit?: (focus?: boolean) => void; bindSplit?: (release: (toDock: boolean) => Promise<boolean>) => () => void; shortcuts: ShortcutManager; onBrowseDirectory?: (path: string) => void; onBrowseParent?: () => void; requestedFile?: Accessor<{ path: string } | null>; settingsScope?: Accessor<string>; initialDirectory?: Accessor<DirectoryListing>; onOpenFile?: (entry: FileEntry, options: { beside: boolean; edit: boolean; reveal?: ReviewNavigationRequest }) => void; openFiles?: Accessor<Map<string, "focused" | "shown">>; documentShown?: Accessor<boolean>; minWidth?: Accessor<number>; widthRequest?: Accessor<{ width: number; nonce: number } | null>; overlay?: Accessor<boolean>; documentHost?: (element: HTMLElement | undefined) => void }) {
   const { confirm: confirmDialog } = createDecisionScope(props.projectId);
@@ -73,9 +78,9 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
   const [tab, setTab] = createSignal<PanelTab>(storedTab());
   // The comment a chip asked to reveal, carried down to whichever view shows it.
   const [reviewReveal, setReviewReveal] = createSignal<ReviewNavigationRequest | null>(null);
-  const [width, setWidth] = createSignal(Math.max(MIN_WORKSPACE_PANE_WIDTH, Math.min(496, Number(readGeometrySetting("width")) || 336)));
+  const [width, setWidth] = createSignal(Math.max(unitPx(MIN_WORKSPACE_PANE_UNITS), Math.min(unitPx(MAX_WORKSPACE_PANE_UNITS), Number(readGeometrySetting("width")) || unitPx(DEFAULT_WORKSPACE_PANE_UNITS))));
   const [shellWidth, setShellWidth] = createSignal(props.open() ? width() : 0);
-  const [shellGap, setShellGap] = createSignal(props.open() && !isMobileLayout() ? 8 : 0);
+  const [shellGap, setShellGap] = createSignal(props.open() && !isMobileLayout() ? unitPx(DOCK_GAP_UNITS) : 0);
   const [terminalFocusRequest, setTerminalFocusRequest] = createSignal(0);
   // Review comments ride the composer, which a dashboard has before its chat
   // exists, so they follow the loaded chat rather than the panel's own scope.
@@ -144,7 +149,7 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
     const mobile = isMobileLayout();
     // A width saved while there was more room opens at what fits now.
     const targetWidth = open ? (mobile ? width() : clampWidth(width())) : 0;
-    const targetGap = open && !mobile ? 8 : 0;
+    const targetGap = open && !mobile ? unitPx(DOCK_GAP_UNITS) : 0;
     batch(() => {
       setShellWidth(targetWidth);
       setShellGap(targetGap);
@@ -162,7 +167,7 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
     if (!inSplit(resolved)) selectTab(resolved);
   };
   const focusSplit = () => queueMicrotask(() => {
-    const content = props.splitHost?.()?.querySelector<HTMLElement>(".workspace-panel-content");
+    const content = props.splitHost?.()?.querySelector<HTMLElement>(".ui-tool-content");
     focusFirst(content);
     if (!content?.contains(document.activeElement)) content?.focus({ preventScroll: true });
   });
@@ -171,7 +176,7 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
     // On a desktop the rail stands in for the tabs, so focus lands in the
     // view, or on the view itself while it has nothing to focus yet.
     if (control?.getClientRects().length) return control.focus({ preventScroll: true });
-    const content = panelRoot?.querySelector<HTMLElement>(".workspace-panel-content");
+    const content = panelRoot?.querySelector<HTMLElement>(".ui-tool-content");
     focusFirst(content);
     if (!content?.contains(document.activeElement)) content?.focus({ preventScroll: true });
   };
@@ -191,10 +196,7 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
       if (next === "terminal") setTerminalFocusRequest((request) => request + 1);
     });
   };
-  const tabIcon = (candidate: PanelTab) => candidate === "files" ? <FolderIcon />
-    : candidate === "diff" ? <GitCompareArrowsIcon />
-    : candidate === "chat" ? <MessageSquareIcon />
-    : <TerminalIcon />;
+  const tabIcon = (candidate: PanelTab) => { const Icon = WORKSPACE_TOOL_ICONS[candidate]; return <Icon />; };
   // A phone has no rail, so its header keeps a strip of the views.
   const [viewIconsOnly, setViewIconsOnly] = createSignal(false);
   const tabStrip = () => (
@@ -245,7 +247,7 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
   };
   const focusWorkspaceSurface = (event: PointerEvent) => {
     const target = event.target instanceof Element ? event.target : null;
-    if (target?.closest(".workspace-dock-document")) return;
+    if (target?.closest(".ui-dock-document")) return;
     // The terminal is its own pointer surface: preventDefault here suppresses
     // the compatibility mouse events, so xterm never sees the mousedown and
     // loses click-to-position, drag selection, and mouse reporting to the TUI.
@@ -347,11 +349,11 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
     if (!main || isMobileLayout()) return Infinity;
     // Every pane gives way down to its document's minimum.
     const panes = [...document.querySelectorAll<HTMLElement>(".chat-main, [data-pane-slot]")];
-    const slack = panes.reduce((sum, pane) => sum + pane.getBoundingClientRect().width - (parseFloat(getComputedStyle(pane).minWidth) || MIN_MAIN_PANE_WIDTH), 0);
-    return slack + (props.open() ? shellWidth() + shellGap() : 0) - 8;
+    const slack = panes.reduce((sum, pane) => sum + pane.getBoundingClientRect().width - (parseFloat(getComputedStyle(pane).minWidth) || minMainPaneWidth()), 0);
+    return slack + (props.open() ? shellWidth() + shellGap() : 0) - unitPx(DOCK_GAP_UNITS);
   };
   // Whatever the dock shows declares its minimum (a docked chat a pane's); a tool, the dock's own.
-  const minWidth = () => props.minWidth?.() ?? MIN_WORKSPACE_PANE_WIDTH;
+  const minWidth = () => props.minWidth?.() ?? unitPx(MIN_WORKSPACE_PANE_UNITS);
   const clampWidth = (next: number) => Math.max(minWidth(), Math.min(Math.floor(window.innerWidth * 0.65), room(), next));
   createEffect(on(minWidth, () => { if (props.open()) animatePanelGeometry(true); }, { defer: true }));
   // Switching between beside and over the panes changes only the dock's layer:
@@ -492,9 +494,7 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
   onCleanup(() => {
     requests.reset();
     stopResize?.();
-    document.body.classList.remove("workspace-detail-resizing");
     document.body.classList.remove("workspace-tree-resizing");
-    document.body.classList.remove("workspace-split-resizing");
   });
 
   let loadedProjectId = "";
@@ -510,7 +510,7 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
     batch(() => {
       sourceControl.restore();
       if (projectChanged) {
-        pendingWidthCommit = Number(readGeometrySetting("width")) || 336;
+        pendingWidthCommit = Number(readGeometrySetting("width")) || unitPx(DEFAULT_WORKSPACE_PANE_UNITS);
         files.restoreGeometry();
       }
       setTab(nextTab);
@@ -592,12 +592,12 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
       </>}
       views={where === "dock" ? tabStrip() : undefined}
       actions={<Show when={where === "dock"} fallback={<>
-          <HeaderButton label="Move to dock" aria-label={`Move ${viewLabel(tool())} to the dock`} icon={<PanelRightIcon />} onClick={() => props.onMoveToDock?.(tool())} />
-          <HeaderButton label={`Close ${viewLabel(tool())}`} icon={<XIcon />} onClick={() => closeSplitView(tool())} />
+          <HeaderButton label="Move to dock" aria-label={`Move ${viewLabel(tool())} to the dock`} icon={<Icons.Workspace />} onClick={() => props.onMoveToDock?.(tool())} />
+          <HeaderButton label={`Close ${viewLabel(tool())}`} icon={<Icons.Close />} onClick={() => closeSplitView(tool())} />
         </>}>
-          <Show when={props.onOpenBeside && !(tool() === "files" && props.onOpenFile)}><HeaderButton only="desktop" label="Move to main pane" aria-label={`Move ${viewLabel(tool())} to the main pane`} icon={<Columns2Icon />} onClick={() => props.onOpenBeside?.(tool())} /></Show>
-          <HeaderButton label={props.expanded() ? "Restore" : "Maximise"} aria-label={props.expanded() ? "Restore workspace panel" : "Maximise workspace panel"} aria-pressed={props.expanded()} icon={<Show when={props.expanded()} fallback={<Maximize2Icon />}><Minimize2Icon /></Show>} onClick={props.onToggleExpanded} />
-          <HeaderButton label="Close workspace panel" icon={<XIcon />} onClick={props.onClose} />
+          <Show when={props.onOpenBeside && !(tool() === "files" && props.onOpenFile)}><HeaderButton only="desktop" label="Move to main pane" aria-label={`Move ${viewLabel(tool())} to the main pane`} icon={<Icons.Split />} onClick={() => props.onOpenBeside?.(tool())} /></Show>
+          <HeaderButton label={props.expanded() ? "Restore" : "Maximise"} aria-label={props.expanded() ? "Restore workspace panel" : "Maximise workspace panel"} aria-pressed={props.expanded()} icon={<Show when={props.expanded()} fallback={<Icons.Maximize />}><Icons.Minimize /></Show>} onClick={props.onToggleExpanded} />
+          <HeaderButton label="Close workspace panel" icon={<Icons.Close />} onClick={props.onClose} />
         </Show>} />
   );
   const toolView = (tool: PanelTab, where: "dock" | "split") => tool === "files"
@@ -627,26 +627,26 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
 
   return <>
     <Show when={props.open()}>
-      <button type="button" class="mobile-panel-backdrop" data-mobile-backdrop="workspace" data-for="workspace" aria-label="Dismiss workspace panel" onClick={props.onClose} />
+      <Backdrop layer="panel" label="Dismiss workspace panel" onDismiss={props.onClose} />
     </Show>
-    <aside ref={panelRoot} class="workspace-panel" data-region="workspace-panel" classList={{ "workspace-panel-open": props.open() || shellWidth() > 0.5, "workspace-panel-expanded": props.expanded(), "workspace-panel-overlay": Boolean(props.overlay?.()) }} aria-label="Workspace panel" aria-hidden={!props.open()} inert={!props.open()} {...dockDrop} style={{ "--workspace-panel-width": `${width()}px`, "--workspace-shell-width": `${shellWidth()}px`, width: `${shellWidth()}px`, "margin-right": `${shellGap()}px` }}>
+    <Dock ref={panelRoot} class="workspace-panel" data-region="workspace-panel" open={props.open() || shellWidth() > 0.5} expanded={props.expanded()} overlay={Boolean(props.overlay?.())} aria-label="Workspace panel" aria-hidden={!props.open()} inert={!props.open()} {...dockDrop} style={{ "--workspace-panel-width": `${width()}px`, "--workspace-shell-width": `${shellWidth()}px`, width: `${shellWidth()}px`, "margin-right": `${shellGap()}px` }}>
     <PaneEdge dock ref={(element) => { resizeHandle = element; }} aria-label="Resize workspace panel" aria-valuemin={minWidth()} aria-valuemax={Math.floor(window.innerWidth * 0.65)} aria-valuenow={width()} tabIndex={0} onPointerDown={startResize} onKeyDown={(event) => { if (event.key === "ArrowLeft") saveWidth(width() + 16); if (event.key === "ArrowRight") saveWidth(width() - 16); }} />
-    <div class="workspace-panel-surface" classList={{ "workspace-panel-documented": Boolean(props.documentShown?.()) }} onPointerDown={focusWorkspaceSurface}>
+    <DockSurface documented={Boolean(props.documentShown?.())} onPointerDown={focusWorkspaceSurface}>
     {toolHeader(tab, "dock")}
-    <main class="workspace-panel-content" tabIndex={-1}>
+    <ToolContent>
       <For each={PANEL_TABS}>{(tool) => <Show when={dockShows(tool)}>{toolView(tool, "dock")}</Show>}</For>
-    </main>
+    </ToolContent>
     {/* A pane's document moved into the dock draws here, over the tools. */}
-    <div class="workspace-dock-document" ref={(element) => { props.documentHost?.(element); onCleanup(() => props.documentHost?.(undefined)); }} />
+    <DockDocument ref={(element) => { props.documentHost?.(element); onCleanup(() => props.documentHost?.(undefined)); }} />
     <Show when={requests.loading()}><PaneLoading><Spinner /><span>Loading workspace</span></PaneLoading></Show>
-    </div>
-  </aside>
+    </DockSurface>
+  </Dock>
     <Show when={props.splitHost?.() && props.splitView?.() && !/^(chat|page|files):/.test(props.splitView()!) && props.splitView()}>{(tool) =>
       <Portal mount={props.splitHost!()!}>
-        <div class="workspace-split-surface">
+        <SheetFill>
           {toolHeader(tool, "split")}
-          <main class="workspace-panel-content" tabIndex={-1}>{splitView(tool())}</main>
-        </div>
+          <ToolContent>{splitView(tool())}</ToolContent>
+        </SheetFill>
       </Portal>
     }</Show>
   </>;

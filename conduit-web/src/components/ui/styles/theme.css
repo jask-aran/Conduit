@@ -6,16 +6,72 @@
    inherits. */
 .dark {
   --frame: oklch(0.138 0.004 264); --background: oklch(0.186 0.005 264); --foreground: oklch(0.93 0.003 258);
-  --card: oklch(0.225 0.006 264); --card-foreground: oklch(0.93 0.003 258);
-  --popover: oklch(0.208 0.006 264); --popover-foreground: oklch(0.93 0.003 258);
+  --card: oklch(0.225 0.006 264);
+  --popover: oklch(0.208 0.006 264);
   --primary: oklch(0.95 0.002 258); --primary-foreground: oklch(0.2 0.006 264);
-  --secondary: oklch(1 0 0 / 6%); --secondary-foreground: oklch(0.93 0.003 258);
-  --muted: oklch(1 0 0 / 5%); --muted-foreground: oklch(0.63 0.006 262);
-  --accent: oklch(1 0 0 / 7%); --accent-foreground: oklch(0.96 0.003 258);
+  --muted-foreground: oklch(0.63 0.006 262);
   --destructive: oklch(0.645 0.19 18); --border: oklch(1 0 0 / 7%);
-  --input: oklch(1 0 0 / 9%); --ring: oklch(0.78 0.008 258); --region-focus: oklch(0.86 0.006 258);
-  --sidebar: transparent; --sidebar-foreground: oklch(0.9 0.003 258);
-  --sidebar-primary: oklch(0.74 0.004 260); --sidebar-primary-foreground: oklch(0.985 0.003 258);
-  --sidebar-accent: oklch(1 0 0 / 6%); --sidebar-accent-foreground: oklch(0.96 0.003 258);
-  --sidebar-border: oklch(1 0 0 / 6%); --sidebar-ring: oklch(0.78 0.008 258);
+  --ring: oklch(0.78 0.008 258); --region-focus: oklch(0.86 0.006 258);
+}
+
+/* Uses: what each palette (palettes.css) colours. A use is chosen by an attribute on the root, its first palette the
+   default; another palette is another such block, and Settings offers the choice once a use has more than one.
+   Workspace identity is the TS use (palettes.ts), since it is saved per workspace. */
+
+/* Code: syntax highlighting and inline code. The syntax roles (--syntax-*) read these. */
+:root, :root[data-code-palette="one-dark"] {
+  --code-foreground: var(--one-dark-foreground);
+  --code-comment: var(--one-dark-comment);
+  --code-red: var(--one-dark-red);
+  --code-orange: var(--one-dark-orange);
+  --code-yellow: var(--one-dark-yellow);
+  --code-green: var(--one-dark-green);
+  --code-cyan: var(--one-dark-cyan);
+  --code-blue: var(--one-dark-blue);
+  --code-purple: var(--one-dark-purple);
+  --code-invalid: var(--one-dark-invalid);
+  --code-invalid-foreground: var(--one-dark-invalid-text);
+}
+/* Terminal: the sixteen ANSI colours and the terminal's ground, text, cursor and selection (xterm reads them). */
+:root, :root[data-terminal-palette="one-dark"] {
+  --ansi-background: var(--one-dark-ground);
+  --ansi-foreground: var(--one-dark-text);
+  --ansi-cursor: var(--one-dark-cursor);
+  --ansi-cursor-accent: var(--one-dark-ground);
+  --ansi-selection: var(--one-dark-selection);
+  --ansi-selection-foreground: var(--one-dark-bright-white);
+  --ansi-black: var(--one-dark-black);
+  --ansi-red: var(--one-dark-red);
+  --ansi-green: var(--one-dark-green);
+  --ansi-yellow: var(--one-dark-yellow);
+  --ansi-blue: var(--one-dark-blue);
+  --ansi-magenta: var(--one-dark-purple);
+  --ansi-cyan: var(--one-dark-cyan);
+  --ansi-white: var(--one-dark-white);
+  --ansi-bright-black: var(--one-dark-bright-black);
+  --ansi-bright-red: var(--one-dark-bright-red);
+  --ansi-bright-green: var(--one-dark-bright-green);
+  --ansi-bright-yellow: var(--one-dark-bright-yellow);
+  --ansi-bright-blue: var(--one-dark-bright-blue);
+  --ansi-bright-magenta: var(--one-dark-bright-purple);
+  --ansi-bright-cyan: var(--one-dark-bright-cyan);
+  --ansi-bright-white: var(--one-dark-bright-white);
+}
+/* Categories: kinds of content, in the context breakdown's order, then spares. */
+:root, :root[data-category-palette="conduit-categories"] {
+  --category-1: var(--conduit-categories-violet);
+  --category-2: var(--conduit-categories-slate);
+  --category-3: var(--conduit-categories-azure);
+  --category-4: var(--conduit-categories-amber);
+  --category-5: var(--conduit-categories-coral);
+  --category-6: var(--conduit-categories-rose);
+  --category-7: var(--conduit-categories-gold);
+  --category-8: var(--conduit-categories-jade);
+  --category-9: var(--conduit-categories-clay);
+}
+:root {
+  /* Changes: content added, modified or removed: code's green and yellow, the theme's destructive. */
+  --change-added: var(--code-green); --change-modified: var(--code-yellow); --change-removed: var(--destructive);
+  /* Brand: a harness mark's own colour, where a surface lights it. */
+  --brand-claude-code: #d97757;
 }

@@ -7,7 +7,7 @@
   --cmp-bar-min: var(--control); --cmp-bar-gap: var(--space-lg);
   --cmp-bar-pad: var(--space-2xs) var(--space-md) var(--space-sm) var(--space-md);
   --cmp-slot: var(--control-sm); --cmp-slot-radius: var(--radius-control); --cmp-slot-gap: var(--space-xs); --cmp-icon: var(--u-icon);
-  --cmp-rider-gap: var(--space-sm); --cmp-status-max: calc(3 * var(--control));
+  --cmp-rider-gap: var(--space-sm);
 }
 .ui-composer-stack { display: grid; gap: var(--cmp-rider-gap); }
 /* The composer's slot: the composer (with its riders) and a takeover (the question) share one cell, bottom-aligned.
@@ -43,12 +43,6 @@
 .ui-toolbar-start, .ui-toolbar-end { display: flex; min-width: 0; align-items: center; gap: var(--cmp-slot-gap); }
 .ui-toolbar-start { flex: 0 1 auto; }
 .ui-toolbar-start > *, .ui-toolbar-end > * { flex-shrink: 0; }
-/* The status: muted at the end's start, cut short to its room; a dictation's PillWave fills that room. */
-.ui-toolbar-end > .ui-toolbar-status { display: block; min-width: 0; max-width: var(--cmp-status-max); flex-shrink: 1; overflow: hidden; padding-inline: var(--space-xs); color: var(--muted-foreground);
-  font: var(--weight-rest) var(--text-caption)/var(--cmp-slot) var(--font-sans); text-overflow: ellipsis; white-space: nowrap; }
-.ui-toolbar-status:empty { display: none; }
-.ui-toolbar-status > :is(.ui-spinner, svg) { display: inline-block; width: var(--icon-xs); height: var(--icon-xs); margin-inline-end: var(--space-xs); vertical-align: -0.125em; }
-.ui-toolbar-status > .ui-pill-wave { width: calc(var(--cmp-status-max) - 2 * var(--space-xs)); height: var(--cmp-slot); }
 .ui-toolbar-end { flex: 0 0 auto; }
 /* The primary slot: each action scales in where the last was, so nothing beside it moves; the aside (Stop beside
    Send) steps in from the slot's side. A held control (dictating) breathes from the text colour to muted. */
@@ -74,5 +68,11 @@
 .ui-picker > .ui-picker-value { min-width: 0; max-width: calc(3 * var(--control)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ui-picker[data-subject] > .ui-picker-value { max-width: calc(6 * var(--control)); }
 .ui-picker > .ui-picker-quiet { flex: none; color: var(--muted-foreground); font-weight: var(--weight-rest); }
-.ui-picker > :is(svg, .harness-mark) { width: var(--icon-sm); height: var(--icon-sm); flex: none; }
+.ui-picker > :is(svg, .ui-harness-mark) { width: var(--icon-sm); height: var(--icon-sm); flex: none; }
 .ui-picker > .ui-picker-chevron { color: var(--muted-foreground); }
+
+/* Opening (its chat still arriving): the field alone; the toolbar and riders keep their room, unseen. */
+.ui-composer-slot[data-opening] :is(.ui-toolbar, .ui-composer-stack > :not(.ui-desktop-composer)) { visibility: hidden; }
+
+/* The field writes in the transcript's face, so a draft reads as it will in the transcript. */
+.ui-composer-field > textarea { font-family: var(--font-transcript); }

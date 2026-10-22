@@ -1,7 +1,6 @@
 # Conduit Web
 
-The Conduit web surface combines an Express server, server-owned Pi RPC
-processes, and a strict TypeScript SolidJS/Vite client.
+The Conduit web surface combines an Express server, the in-process Conduit durable agent, external harness adapters, and a strict TypeScript SolidJS/Vite client.
 
 ## Run
 
@@ -12,9 +11,7 @@ node scripts/conduit-auth.mjs set-password
 bash .devcontainer/start-conduit.sh restart
 ```
 
-Open <http://127.0.0.1:4310>, sign in, then use **Settings → Auth** to
-authenticate the Isolated Pi runtime. `../scripts/conduit-pi.mjs` remains an
-optional terminal launcher.
+Open <http://127.0.0.1:4310>, sign in, then use **Settings → Models & accounts** to manage provider credentials and model access for the Conduit durable agent.
 
 For client development, use the managed watcher and Vite pair:
 
@@ -36,31 +33,29 @@ for installation, backup and release guidance.
 
 The reserved `chat` project uses `data/chat/files` as its working directory.
 Named projects use direct children such as `data/chat/files/example`. Project
-metadata lives centrally in ignored `data/conduit.json`; working directories
-also contain `.conduit/chats/<chat-id>/{attachments,.partial}`. Pi runs from the
-project root and native JSONL remains outside the working tree. Ignored
-`data/sessions.json` holds the atomic lightweight Conduit chat registry. Draft
-chats exist before Pi; the first message attaches a private Pi mapping and makes
-the same public chat ID active. When a session naming model is selected under
-Settings → General, Conduit sends that first message to it and stores its short
-response as the authoritative title in `data/sessions.json`. A live Pi title is
-not changed. The request uses the selected thinking level and does not delay
-the chat response. The command palette can regenerate a title
-from the full persisted transcript, including for older chats. Active mappings are checkpointed after completed
-responses and explicit mutations and reconciled with native files at startup.
-Conduit appends naming request and outcome metadata to
-`data/session-name-requests.jsonl`; it does not store prompt content there.
-Pi records each fork's `parentSession`; startup uses that family to keep
-superseded regeneration branches attached to one sidebar chat while preserving
-their JSONL files.
+metadata lives centrally in ignored `data/conduit.json`; each chat's files live
+under `.conduit/chats/<chat-id>`. `data/sessions.json` stores the lightweight
+Conduit chat registry. Assistant, Coding and Runtime chats run on the
+pi-durable-based Conduit durable agent. Each chat stores its template profile
+and durable conversation id; the template configures its prompt, tools,
+extensions, skills and model scope. The server keeps provider credentials and
+model settings under `data/pi`.
+
+At startup, the server converts registry rows that still point to classic Pi
+JSONL sessions. It carries the active branch and message ids into a durable
+conversation, then replaces the stored session path with that conversation id.
+The JSONL reader remains for this one-time conversion and legacy cleanup; new
+turns use the durable conversation as their transcript source. Conduit also
+stores chat-title requests and outcomes in `data/session-name-requests.jsonl`,
+without prompt content. A selected naming model can name a chat's first prompt
+without delaying the chat response; the command palette can regenerate a title
+from the persisted transcript.
 
 Raw attachment bodies stream to exclusive `.part` files and publish by atomic
 rename. Each upload is capped by `CONDUIT_MAX_ATTACHMENT_BYTES` (100 MiB by
 default), including chunked requests. The filesystem is the durable attachment
 registry. Prompt envelopes contain validated relative paths rather than file
-bytes. Generation IDs gate
-late output after stop; Pi receives public `abort` and `fork` RPC commands, and
-a hung abort terminates the process after 250 ms for clean resumption.
+bytes. Generation IDs gate late output after stop. The durable agent cancels its turn and forks its stored conversation when the reader edits history.
 
 The interface keeps uploaded Attachment cards above the bounded native
 textarea until send, then renders the same cards beneath their user message.
@@ -119,10 +114,7 @@ current browser profile and are not server-synced.
 
 The composer slash Popover combines Conduit's `/attach` and capability-gated
 `/compact` actions with runnable commands exposed by the selected harness.
-`GET /v0/chats/:chatId/commands` discovers Pi extension commands, prompt
-templates, and skills from the chat profile and Workspace without starting a
-process. When a process is already resident, the same route asks that process
-for its current command list. A project-aware breadcrumb identifies where each
+`GET /v0/chats/:chatId/commands` lists prompt-template and skill commands from the chat profile without starting an agent. A live harness can provide its own command list. A project-aware breadcrumb identifies where each
 chat belongs.
 
 The chat header, Cmd/Ctrl+., and Workspace views… open a per-chat Workspace
@@ -151,53 +143,14 @@ writable. New-terminal shortcuts use the shortcut name as the terminal window
 name. The editor controls shortcut order and whether each command runs in the
 current shell or a new shell.
 
-Every Isolated Pi profile process receives:
+The Conduit durable agent runs in the server process. The chat's template and
+workspace select its instructions, tools, extensions, skills, model scope and
+working directory. Device workspaces use the place-aware execution environment
+for file and shell calls; the browser still connects to the head server.
 
-- `PI_CODING_AGENT_DIR=$CONDUIT_DATA_ROOT/pi`, except a web-search-enabled
-  isolated process with a model-aware overlay, which uses
-  `$CONDUIT_DATA_ROOT/pi/model-profiles/<profile-id>`;
-- the selected project directory as `cwd`;
-- resources from the chat's sticky profile (`templates/<id>/template.json`) as
-  explicit CLI arguments.
-
-No session-directory override is supplied. The model-profile directory links
-to canonical Pi auth and model files; it contains only derived web-search
-routing. Pi writes native JSONL sessions to
-`$CONDUIT_DATA_ROOT/pi/sessions/<encoded-cwd>/`, and Conduit verifies each JSONL
-header's `cwd` when associating sessions with projects.
-
-Host Pi Workspace processes instead use the detected absolute host executable,
-login-shell environment and effective Pi home/configuration, the Workspace as `cwd`, and only the
-additive Conduit attachment bridge. They never receive `PI_CODING_AGENT_DIR`, a
-tracked profile, Conduit model scope, or tool allow-list. Conduit validates Host
-Pi project-resource paths, automatically persists trust for each registered
-Workspace at launch, and reports the active process posture in the chat header.
-Validation rejects symlinks and resource trees over 10,000 entries or 100 MiB;
-it traverses filesystem metadata without reading or hashing file contents.
-One `PiManager` owns both launch forms and enforces shared writer and process
-limits. Ready Workspace creation immediately opens a draft using the app
-default or that Workspace's explicit override; a cloning Workspace cannot
-create chats, terminals, inspections, or runtime changes until it is ready. The
-composer exposes ordinary profiles and a synthetic Host Pi choice. Host project
-trust is persisted on first launch, and the launch form becomes immutable when Pi
-first starts. Host trust covers Pi project resources such as `.pi` and `.agents`;
-ordinary files and Conduit attachments are unaffected.
-
-JSONL remains authoritative for persisted messages, tool calls, model changes,
-and thinking-level changes. Opening a chat reconstructs that state from its
-entries through an append-aware index: ordinary transcript requests read only
-the requested turn window, incomplete final writes are ignored, and file
-replacement or truncation invalidates cached offsets. Selecting a model updates
-the active process and Pi's shared `defaultModel`; a new chat starts with that
-saved model while an existing chat retains its recorded model. For
-web-search-enabled profiles, changing between different model profiles restarts
-an idle process against the same session file; the server rejects that change
-during generation. Changing within one model profile stays live. Pi has one active thinking level, so
-Conduit stores the last valid level for each model on the stable chat record and
-reapplies it when that model is selected. The selected transcript response
-seeds the composer's model and thinking level immediately; one runtime-aware
-chat-model request supplies its catalogue and reconciles resident process state
-without a second post-WebSocket reload.
+`data/pi` remains the durable agent's provider and model settings directory.
+The web-search extension may use a derived model-routing file there, while
+credentials and model settings remain in the canonical directory.
 
 ## Client composition
 
@@ -225,12 +178,11 @@ surfaces are direct Solid components rather than a copied component catalogue.
 Transcript history loads automatically as the reader approaches the top and
 preserves the visible scroll anchor; server cursors and history windows are not
 exposed as pagination controls. Direct chat routes fetch catalogue context and
-the selected transcript concurrently; capabilities, profiles, and installation
-status load independently, while workspace-path suggestions are requested only
+the selected transcript concurrently; capabilities and profiles
+load independently, while workspace-path suggestions are requested only
 when workspace creation opens.
-Settings → Workspaces stores global-profile inheritance, an explicit ordinary
-profile, or Host Pi. If Host Pi becomes unavailable, Conduit clears that
-override and retries with the inherited profile.
+Settings → Workspaces stores global-profile inheritance or an explicit ordinary
+profile for each Workspace.
 
 Assistant messages pass through `src/client/chat/markdown.tsx`. Settings → UI
 exposes five selectable Markdown renderers: Marked Stable, Marked Experimental,
@@ -250,13 +202,10 @@ results, and bounded previews; tools are data, not component registry keys.
 
 The single-line composer owns runtime-aware model and thinking controls. A
 permanent TUI-like status line below it shows fine agent activity, context usage,
-and queued-message count without displacing composer controls. Isolated Pi reads
-canonical `data/pi` state, with the selected profile's derived web-search overlay
-selected at launch; Host Pi reads its detected agent home and reconciles against the live
-process through `get_available_models` and `get_state`. A selection is
-sent through correlated RPC and saved as that installation's next-chat default.
-Opening a persisted session restores JSONL state and does not pass model flags
-that could replace it.
+and queued-message count without displacing composer controls. First-party chats
+read provider and model settings from `data/pi`; the selected template supplies
+the chat model scope. The transcript seeds the composer controls, and model
+changes update the live durable conversation.
 
 The composer also supports draft-only voice dictation. The on-screen microphone
 is a start/stop toggle. The configurable `Ctrl+Shift+D` shortcut uses the
@@ -473,25 +422,21 @@ so timing reveals nothing.
 - `POST /v0/auth/reset-sessions` — keeps the caller's token, signs out everyone
   else
 
-### Isolated Pi authentication
+### Provider authentication
 
-Settings → Auth manages credentials only in the bundled Isolated Pi runtime's
-`data/pi/auth.json`; Host Pi credentials and its environment are never read or
-changed. This surface requires an authenticated Conduit session, even when
-passwordless loopback development otherwise serves the app. OAuth attempts are
-in-memory, owned by their initiating session, expire after ten minutes, and do
-not reveal URLs, codes, or prompts to other sessions. API-key values are stored
-as literal Pi credentials and never returned by the API.
+Settings → Models & accounts manages provider credentials for the Conduit durable
+agent in `data/pi/auth.json`. This surface requires an authenticated Conduit
+session, even when passwordless loopback development otherwise serves the app.
+OAuth attempts are in memory, owned by their initiating session, expire after
+ten minutes, and do not reveal URLs, codes or prompts to other sessions. API-key
+values use the provider format and are never returned by the API.
 
-Credential changes stop only idle, unattached Isolated Pi processes; active,
-starting, and browser-attached processes remain resident.
-
-- `GET /v0/pi-auth` — redacted Isolated Pi provider status
+- `GET /v0/pi-auth` — redacted provider status for the durable agent
 - `GET /v0/pi-auth/attempt` — caller-owned OAuth attempt state
 - `POST /v0/pi-auth/oauth`, `/v0/pi-auth/attempt/respond`, and
   `/v0/pi-auth/attempt/cancel` — OAuth/device-code actions
 - `PUT /v0/pi-auth/api-key`, `DELETE /v0/pi-auth/:providerId` — store or remove
-  an Isolated Pi credential
+  a durable-agent provider credential
 
 ### Application routes
 
@@ -500,8 +445,8 @@ starting, and browser-attached processes remain resident.
 - `GET /v0/share-origin` resolves the current host's MagicDNS HTTPS origin from
   the local Tailscale CLI; the client appends the selected chat path before
   copying it.
-- `POST /v0/chats`; `{ warm: true }` starts a Pi draft's agent with it and may
-  hand back an untouched draft the server kept warm for that project and profile
+- `POST /v0/chats`; `{ warm: true }` starts the chat's live agent session before
+  the page opens
 - `POST /v0/runs` `{ prompt, projectId?, profileId?, model?, thinkingLevel? }`
   starts a headless agent run: an untracked chat (no chat list shows it) on any
   profile, launched and prompted with no page attached. `GET /v0/runs/:id`
@@ -561,24 +506,22 @@ starting, and browser-attached processes remain resident.
   Workspace parent, and input-safe default path
 - `GET /v0/workspaces/suggestions` returns visible direct folders under the
   configured suggestion root, using `~` only for paths under the native home
-- `GET /v0/workspaces/:id/native-preflight` reports derived host trust/resource status
-- `GET /v0/pi-installations` lists safe installation/version status
-- `POST /v0/pi-installations/host/detect` re-detects the host Pi executable
 - `POST /v0/runtime/chats` creates a fresh special Runtime management chat
 - `GET /v0/models`
 - `GET|PATCH /v0/preferences` reads and updates the default profile, the scoped
   model and thinking level used to name new chats, and terminal command buttons
-- `GET|PATCH /v0/settings` reads and updates Pi's shared global model scope;
+- `GET|PATCH /v0/settings` reads and updates the durable agent's shared model scope;
   terminal and web saves use the same isolated settings file.
-- `GET|PATCH /v0/chats/:id/models` resolves the selected installation's scoped
-  models and changes the draft/live chat model through the server-owned runtime.
-- `GET|PATCH|DELETE /v0/sessions/:id` (`DELETE` removes the session's complete in-project Pi fork family)
+- `GET|PATCH /v0/chats/:id/models` resolves the selected template's scoped
+  models and changes the draft/live durable conversation model.
+- `GET /v0/sessions/:id` reads a backend transcript; `PATCH` renames the chat;
+  `DELETE` removes the chat and any legacy session files it owns
+- `GET /v0/sessions/:id/context` and `POST /v0/sessions/:id/context/breakdown`
+  read context usage and optional breakdowns
 - `POST /v0/sessions/:id/auto-name` replaces the Conduit title from the full persisted chat context
-- `GET /v0/sessions/:id?before=<entry-index>` returns a ten-turn transcript page
 - `GET /v0/sessions/:id/transcript`
-- `GET /v0/sessions/:id/tools/:tool-id` fetches deferred large tool output
+- `POST /v0/sessions/:id/read` records the read watermark
 - `POST /v0/sessions/:id/duplicate` returns `409` while chat-file ownership is deferred
-- `POST /v0/sessions/:id/move`
 - `GET|POST /v0/live-sessions`
 - `GET /v0/live-sessions/:id/snapshot`
 - `DELETE /v0/live-sessions/:id/process`
@@ -603,7 +546,8 @@ starting, and browser-attached processes remain resident.
   Conduit staging and the unpublished provisional row
 - `GET /v0/runtime` returns the current global live-process snapshot
 - `GET /v0/runtime/stream` (SSE) pushes snapshot-first global process updates
-- `GET /v0/runtime/settings` and `PATCH /v0/runtime/settings` read/update max warm processes, max concurrent generations, and idle reclaim TTL (`data/runtime.json`, env defaults)
+- `GET /v0/runtime/settings` and `PATCH /v0/runtime/settings` read/update the
+  max live sessions and max concurrent generations (`data/runtime.json`, env defaults)
 - `GET|PUT /v0/voice/settings` reads or updates the redacted voice source,
   canonical local execution tuple, static execution catalogue, backend-path
   status, named adapter, endpoint, and authentication policy
@@ -632,26 +576,24 @@ Coarse `activity` values: `idle`, `starting`, `working`, `waiting_for_user`,
 tool name, responding) is derived on the selected-chat client from the
 per-chat WebSocket stream.
 
-Process residency: the server owns Pi processes. Browser disconnect does not
-stop them. Opening an active chat starts or reuses one process per chat. A
-configurable warm-pool cap (default 12) reclaims the oldest idle unattached
-process when full; otherwise create returns 429 `live_process_limit`. Concurrent
-agent loops are limited separately (default 2): starting a new generation at the
-cap returns 429 `generation_limit` without killing warm processes. Unattached
-idle processes are stopped after the idle TTL (default 2 minutes). Transcripts
-remain on disk and resume on the next open.
+The server owns live agent sessions. A browser disconnect does not stop them.
+Opening a chat attaches to an existing session but does not start one; a prompt,
+compaction, regeneration or steer may start one. The max live-session count
+(default 12) reclaims the oldest idle session when full; otherwise launch returns
+429 `live_process_limit`. Concurrent agent loops have a separate limit
+(default 2); reaching it returns 429 `generation_limit`. Durable conversations
+remain in the runtime store and resume on the next open.
 
-Context usage is synthesized by Conduit: after `agent_end` / `compaction_end`
-(and on selected-chat reconnect) the server calls Pi `get_session_stats` and
-emits a Conduit `context_usage` event. The event carries current context usage,
-the latest assistant request usage, cumulative session statistics, and
-cumulative derived cache statistics. Null tokens/percent mean unknown, not
+Context usage comes from the active harness. For the durable agent, the server
+reads its conversation context and usage records, then emits a Conduit
+`context_usage` event with current context, the latest request usage, cumulative
+session statistics and derived cache statistics. Null tokens/percent mean unknown, not
 zero. Session statistics include message and tool counts, input/output/cache
 token totals, and cumulative cost.
 
 The command palette exposes **Compact context** when the selected backend
-supports native compaction and the chat is idle. Pi uses its `compact` RPC
-command. Codex uses `thread/compact/start`.
+supports compaction and the chat is idle. The durable agent compacts its stored
+conversation; Codex uses `thread/compact/start`.
 
 `cacheStats` is derived from successive assistant request usage records. For
 each eligible pair, Conduit sets prompt tokens to input plus cache-read plus
@@ -674,41 +616,26 @@ context tokens, window size, used and remaining percentages, latest request
 token/cache/reasoning/cost fields, cumulative session token and cost fields,
 message counts, tool counts, cumulative cache-eligible tokens/hits/misses and
 eligible hit rate, and derived cache-read or uncached-input percentages.
-Derived values are display calculations only; Pi remains the source of token
-and cost values.
+Derived values are display calculations only; the active harness supplies raw
+token and cost values.
 
 ## Chat profile identity
 
-`GET /v0/profiles` returns `profiles[]` with `id`, `label`, `management`, and
-`agent: { protocol, implementation, installationId }`. Assistant, Coding,
-and the special Runtime profile use `conduit_pi` on
-`conduit-pinned`. Host Pi uses `native_pi` on `host-pi`, with agent-owned
-configuration. Both use `pi_rpc`. When the installed `codex` command is
-available, Codex CLI uses `native_api` on `host-codex` and connects to the
-Codex app-server daemon through its control-socket RPC transport with the
-user's existing Codex authentication and configuration. Runtime still requires its dedicated create
-route; Host Pi still requires a Workspace and an available host installation.
+`GET /v0/profiles` returns templates and harness-backed profiles. Assistant,
+Coding and Runtime use `native_api` with implementation `conduit-runtime`; other
+profiles select their own adapters. Runtime still uses its dedicated create
+route.
 
-`POST /v0/chats` and draft `PATCH /v0/chats/:id` accept `profileId`.
-The existing `templateId` and `runtimeKind` inputs remain supported. Conflicting
-neutral and legacy selections return `400 profile_conflict`. Existing draft,
-session, and special-profile restrictions apply to both forms.
+`POST /v0/chats` and draft `PATCH /v0/chats/:id` accept `profileId`. The existing
+`templateId` and `runtimeKind` inputs remain supported. Conflicting neutral and
+legacy selections return `400 profile_conflict`. Existing draft, session and
+special-profile restrictions apply to both forms.
 
-Chat responses add `profileId`, `profileRevision`, and `backend` identity while
-retaining existing fields. The server omits `backend.opaqueSession` from all
-chat views. The version 4 registry stores it as the current Pi session path;
-the existing Pi mapping remains the execution source and updates it on fork
-and checkpoint. Pi JSONL remains the sole transcript authority.
-
-Startup adds identity to legacy rows through the existing atomic registry
-write. It does not rewrite JSONL. Identity records the selected profile revision
-and survives ordinary resume, checkpoint, and current-template version changes.
-Draft selection can change it before a Pi session is mapped. Imported chats
-without an assigned profile can have null profile identity until the existing
-profile-assignment path runs. Host Pi has no Conduit profile revision.
-The existing editable prompt service still supplies current prompt content;
-profile revision is identity metadata, not a snapshot of prompt contents.
-
+Chat responses include `profileId`, `profileRevision` and backend identity, but
+omit `backend.opaqueSession`. For durable chats, that value is the durable
+conversation id. The startup converter reads old classic Pi JSONL paths and
+replaces them with durable conversation ids while retaining the selected
+profile and active history branch.
 ## Adapter dashboards and untracked threads
 
 Each installed harness has a page of its own, `/computer/harness/:id`, which
@@ -742,44 +669,30 @@ See [chat profile identity](#chat-profile-identity) for the additive HTTP and
 persistence contract.
 
 `WS /v0/live-sessions/:id/stream` carries newline-free JSON objects in both
-directions. This is the v0 event vocabulary: Pi JSONL remains the authoritative
-record, the rendered transcript is a projection of it, and changes to this
-vocabulary are additive and must update this section in the same change.
+directions. Adapters translate their runtime events into the shared transcript
+and status vocabulary. First-party chats use durable conversations as their
+persisted history; external adapters read their own transcript stores.
 
-The future backend-neutral vocabulary and lifecycle state machine are defined
-in `../docs/chat-backend-contract.md` and
-`src/chat-backend-contract.d.ts`. They are additive contract artifacts only;
-the Pi transport emits them through `serializePiV0`, which is the
-Pi-to-contract mapping; every other adapter constructs them directly.
-
-The rendering migration's structured protocol lives in
-`src/pi-event-normalizer.js` and `src/active-generation.js`. It assigns
-generation-local assistant-message identities, preserves native
-`contentIndex`/block order and `toolCallId`, reduces sequenced events into a
-serializable Active Generation, and derives Interim Text classification solely
-from tool structure and `stopReason`. `PiManager` maintains this state alongside
-the bounded diagnostic event ring. The client reduces structured events into
-its Live Response projection; persistence confirmation does not reconstruct
-the live response.
+The backend-neutral vocabulary and lifecycle contract are defined in
+`../docs/chat-backend-contract.md` and `src/chat-backend-contract.d.ts`. The
+server owns event ordering, the chat log, and the active-generation projection;
+the client reduces those events into its live transcript. Changes to the wire
+vocabulary must update the contract and this section in the same change.
 
 Slow WebSocket clients recover from the current runtime snapshot, the server's
-own fold of the running generation, and the chat's log rather than a replay
-queue. Paint is given up first — it is restated in full by the op that closes
-the message or the tool — and the record is delivered whatever the backlog.
-Pi additionally pauses a socket that is too far behind, retaining only
-non-reconstructible notifications in a coalesced 32-item/64 KiB budget, after
-which Conduit closes the socket with code 1013.
+own fold of the running generation, and the chat log. Paint may be dropped
+because the closing message or tool event restates its final value; ordered
+records remain available for replay.
 
 Client commands:
 
 | Command | Fields | Effect |
 |---|---|---|
-| `prompt` | `message`, `attachmentIds[]`, optional `streamingBehavior` (`steer` \| `followUp`) | Send a user prompt in the strict attachment envelope after Pi accepts it |
+| `prompt` | `message`, `attachmentIds[]`, optional `streamingBehavior` (`steer` \| `followUp`) | Send a user prompt in the strict attachment envelope through the selected backend |
 | `follow_up` / `steer` | `message`, `attachmentIds[]` | Queue mid-run follow-up or steering input |
-| `stop_generation` / `abort` | `generationId` | Close the generation gate, then ask Pi to abort |
+| `stop_generation` / `abort` | `generationId` | Close the generation gate, then cancel the active backend turn |
 | `fork_and_prompt` | `entryId`, `message`, `attachmentIds[]`, optional `model`, `thinkingLevel` | Fork history at an entry, apply the composer selection, then prompt |
 | `regenerate` | `entryId`, optional `model`, `thinkingLevel` | Fork at an entry, apply the composer selection, then resend its recorded prompt |
-| `continue` | — | Experimental hidden-prompt continuation of a stopped response |
 | `extension_ui_response` / `host_ui_response` | `id`, `confirmed` \| `value` \| `cancelled` | Answer a blocking extension UI request |
 | `refresh_context` | — | Request a context-usage refresh from the backend |
 | `compact` | — | Ask the backend to compact its context |
@@ -921,7 +834,7 @@ frame/event sizes, WebSocket buffering, connect time, and finalisation time.
 Settings-created remote endpoints require HTTPS, reject URL credentials and
 query strings, resolve only to public addresses, and pin the checked address for
 connection setup. Diagnostic WAV files use a private data directory
-and do not contain credentials or Pi JSONL content.
+and do not contain credentials or chat transcript content.
 
 ## Workspace terminal protocol
 
@@ -957,8 +870,8 @@ code `1013`.
 
 Server events use the backend-neutral vocabulary defined by
 `docs/chat-backend-contract.md` and typed in `src/chat-backend-contract.d.ts`.
-All four harnesses — Pi, Codex app-server, ChatGPT Web and the Test stream —
-map into it, and a harness's own words never cross its adapter.
+Every adapter maps its own events into it, and a harness's own words never
+cross its adapter.
 
 A turn travels on two channels. **The record** is what the browser cannot work
 out for itself: `transcript_op`, `transcript_sync`, `session_checkpoint`,
@@ -991,14 +904,13 @@ own frame: the browser measures its refresh with `requestAnimationFrame` and
 sends `frame_interval` on connect, which paces that socket alone; until then
 it gets `DELIVERY_FLUSH_MS` (8 ms), and a claim is clamped to 4–50 ms. A
 socket above the 256 KiB high-water mark stops receiving paint and keeps
-receiving the record; Pi additionally pauses such a socket and recovers it by
-restating the running generation.
+receiving the record.
 
 A client that sees a gap in `log.seq` sends `resume_log` and is either given
 exactly what it missed or told `log_reset` and re-synced from scratch.
 
-The browser does not receive Pi RPC or Codex app-server payloads. Pi-native
-payloads remain available only inside the privileged server adapter.
+The browser does not receive harness-native payloads. Adapters translate them
+inside the server boundary.
 
 ## Progressive web app
 

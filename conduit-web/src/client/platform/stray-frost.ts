@@ -2,12 +2,14 @@ import { clientBuild } from "./build-info.ts";
 
 /**
  * A temporary watch for a frost seen parked below the phone composer's row ("under the nav bar"), which no headless
- * state reproduces. Builds that are not releases, phone layout only: twice a second, any visible frost whose top is
+ * state reproduces. Builds that are not releases, phone layout only: twice a second, any visible frost that sits still with its top
  * below the row is outlined, and a note at the top of the screen names it (screenshot the note). Remove once found.
  */
 export function watchStrayFrost() {
   if (clientBuild.release || typeof document === "undefined") return;
   const seen = new Set<Element>();
+  // Parked means where it was last tick too: a bubble scrolling past the row is below it for one sample, not two.
+  let last = new Map<Element, string>();
   let note: HTMLElement | undefined;
   const describe = (element: Element) => {
     const chain: string[] = [];
@@ -20,15 +22,21 @@ export function watchStrayFrost() {
     const motion = element.getAnimations({ subtree: false }).map((a) => (a as CSSAnimation).animationName ?? (a as CSSTransition).transitionProperty ?? "script").join(",");
     return `${new Date().toLocaleTimeString()} · ${Math.round(r.left)},${Math.round(r.top)} ${Math.round(r.width)}×${Math.round(r.height)} of ${innerWidth}×${innerHeight} · op ${style.opacity} · tf ${style.transform} · ${motion || "still"}\n${chain.join("\n  < ")}`;
   };
-  setInterval(() => {
+  // In idle time: reading boxes lays the page out, which mid-move cost a frame.
+  const idle = (run: () => void) => "requestIdleCallback" in window ? requestIdleCallback(run, { timeout: 2000 }) : setTimeout(run, 0);
+  setInterval(() => idle(() => {
     const row = document.querySelector(".ui-phone-row");
     if (!row || document.hidden) return;
     const floor = row.getBoundingClientRect().bottom - 2;
+    const now = new Map<Element, string>();
     for (const element of document.querySelectorAll('[data-surface="frost"], .ui-frost')) {
       if (seen.has(element) || element.closest(".ui-phone-row")) continue;
       const r = element.getBoundingClientRect();
       if (r.top < floor || r.width < 60 || r.height < 8) continue;
       if (!element.checkVisibility({ opacityProperty: true, visibilityProperty: true })) continue;
+      const at = `${r.left},${r.top}`;
+      now.set(element, at);
+      if (last.get(element) !== at) continue;
       seen.add(element);
       (element as HTMLElement).style.outline = "2px solid red";
       note ??= Object.assign(document.body.appendChild(document.createElement("pre")), { onclick: () => { note?.remove(); note = undefined; } });
@@ -36,5 +44,6 @@ export function watchStrayFrost() {
       note.textContent = `Stray frost (tap to close)\n${describe(element)}\n\n${note.textContent?.replace(/^Stray frost \(tap to close\)\n/, "") ?? ""}`;
       console.warn("[stray-frost]", describe(element), element);
     }
-  }, 500);
+    last = now;
+  }), 500);
 }

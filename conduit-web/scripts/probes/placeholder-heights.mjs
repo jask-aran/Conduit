@@ -13,8 +13,8 @@ import { arg, open, recentChats, visit } from "./lib.mjs";
 
 const { page, close } = await open();
 await visit(page, arg("--url") ?? `/chat/${(await recentChats(page, 1))[0]}`, 6000);
-const report = await page.evaluate(() => [...document.querySelectorAll(".transcript")].map((transcript) => {
-  const viewport = transcript.querySelector(".message-scroller-viewport");
+const report = await page.evaluate(() => [...document.querySelectorAll(".ui-chat-scroller")].map((transcript) => {
+  const viewport = transcript.querySelector(".ui-chat-viewport");
   const hidden = [...transcript.querySelectorAll('[data-transcript-visibility="hidden"]')];
   const placeholder = hidden.map((element) => element.getBoundingClientRect().height);
   const scrollHeight = viewport?.scrollHeight;

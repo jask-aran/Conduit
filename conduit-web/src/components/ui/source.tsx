@@ -68,3 +68,13 @@ const lineKind = (line: string) => line.startsWith("+") && !line.startsWith("+++
 /** A patch as text: additions, deletions, hunks and headings tinted. */
 export const PatchLines = (props: { lines: string[] }) =>
   <pre class="ui-patch"><code><For each={props.lines}>{(line) => <span data-kind={lineKind(line)}>{line || " "}</span>}</For></code></pre>;
+
+/** The source control tool: its ToolBar, then the working tree's SourceOverview, or a commit's or the tree's
+ *  SourcePatch. Measured by its own width (the ledger's two groups side by side once there is room). */
+export const SourceView = (props: JSX.HTMLAttributes<HTMLElement>) => <section {...props} class="ui-source-view" />;
+/** The working tree: the branch's line, the commit box and the ledger. */
+export const SourceOverview = (props: JSX.HTMLAttributes<HTMLDivElement>) => <div {...props} class="ui-source-overview" />;
+/** A patch taking the rest of the tool. */
+export const SourcePatch = (props: JSX.HTMLAttributes<HTMLDivElement>) => <div {...props} class="ui-source-patch" />;
+/** The changed files beside a review's patch: its ToolBar, then a ChangeList, on a slightly lifted ground. */
+export const ChangeNav = (props: JSX.HTMLAttributes<HTMLElement>) => <nav {...props} class="ui-change-nav" />;

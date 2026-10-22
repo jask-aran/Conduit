@@ -1,3 +1,4 @@
+import { headRootId, remoteNode } from "./place.js";
 import crypto from "node:crypto";
 import { spawn } from "node:child_process";
 import fs from "node:fs/promises";
@@ -8,7 +9,7 @@ import { ensureConduitRoot } from "./owned-paths.js";
 import { terminate } from "./server/effect-process.js";
 
 const SLUG = /^[a-z0-9](?:[a-z0-9-]{0,46}[a-z0-9])?$/;
-const ORIGINS = new Set(["managed", "linked", "created", "cloned"]);
+const ORIGINS = new Set(["managed", "linked", "created", "cloned", "node"]);
 export const CLONE_COMMAND_TIMEOUT_MS = 120_000;
 export const CLONE_COMMAND_MAX_OUTPUT_BYTES = 64 * 1024;
 
@@ -191,6 +192,8 @@ export class ProjectStore {
   }
 
   workingRoot(project) {
+    // A device's path is kept as that device wrote it, separators and all.
+    if (remoteNode(project)) return project.externalPath;
     if (project?.externalPath) return path.resolve(project.externalPath);
     return this.managedPath(project.slug);
   }
@@ -205,6 +208,9 @@ export class ProjectStore {
 
   projectView(project) {
     const projectPath = this.workingRoot(project);
+    // A stored record names a node only for another device's folder; every
+    // other is the head's own, on the head's node (decision 24).
+    const remote = remoteNode(project);
     return {
       id: project.id,
       slug: project.slug,
@@ -212,6 +218,12 @@ export class ProjectStore {
       kind: project.kind || "project",
       origin: project.origin || (project.externalPath ? "linked" : "managed"),
       externalPath: project.externalPath || null,
+      // The device's node that holds it, and where on it: `{ root, path }`.
+      // The head's own folders are its node's roots, one per folder.
+      nodeId: remote || this.headNodeId || null,
+      place: remote ? { root: project.rootId, path: project.subpath || "" } : { root: headRootId(projectPath), path: "" },
+      // Reached in process (the head's own folder) rather than over a node's socket.
+      local: !remote,
       cloneUrl: project.cloneUrl || null,
       state: project.state === "cloning" ? "cloning" : "ready",
       cloneOperationId: project.cloneOperationId || null,
@@ -220,6 +232,10 @@ export class ProjectStore {
       createdAt: project.createdAt,
       path: projectPath,
       workingRoot: projectPath,
+      // Where Conduit keeps the chats' own files (logs, attachments): always on
+      // this machine. For a device's workspace that is not its working root,
+      // which is a path on the device.
+      chatRoot: remote ? this.managedPath(project.slug) : projectPath,
       sessionsDir: sessionDirectoryFor(projectPath, this.piAgentDir),
       deletesFilesOnRemove: (project.origin || "managed") === "managed",
     };
@@ -317,6 +333,40 @@ export class ProjectStore {
       };
       catalog.projects.push(project);
       await ensureConduitRoot({ workingRoot: externalPath, externalPath, origin: "linked" });
+      await this.writeCatalog(this.catalogFile, catalog);
+      return this.projectView(project);
+    });
+  }
+
+  /**
+   * A workspace in a folder a paired node shares: the root by id and a path
+   * inside it. `label` is how the device writes that folder, for people to
+   * read; nothing runs by it. The caller has checked the node shares the root.
+   */
+  async createOnNode({ name, nodeId, rootId, subpath = "", label, defaultTemplateId = null }) {
+    return this.runExclusive(async () => {
+      const catalog = await this.readCatalog();
+      if (catalog.projects.some((item) => item.nodeId === nodeId && item.rootId === rootId && (item.subpath || "") === subpath)) {
+        const error = new Error("That folder is already a workspace");
+        error.code = "workspace_already_linked";
+        throw error;
+      }
+      const base = name || label.split(/[\\/]/).filter(Boolean).pop() || "device";
+      const project = {
+        id: `project_${crypto.randomUUID()}`,
+        slug: await this.uniqueSlug(base),
+        name: String(base).trim(),
+        kind: "workspace",
+        origin: "node",
+        nodeId,
+        rootId,
+        subpath,
+        externalPath: label,
+        cloneUrl: null,
+        defaultTemplateId: defaultTemplateId || null,
+        createdAt: new Date().toISOString(),
+      };
+      catalog.projects.push(project);
       await this.writeCatalog(this.catalogFile, catalog);
       return this.projectView(project);
     });
@@ -784,7 +834,8 @@ export class ProjectStore {
     return this.runExclusive(() => this.removeUnlocked(idOrSlug, options));
   }
 
-  async removeUnlocked(idOrSlug, { skipWorkingTree = false, deleteWorkspaceFiles = false } = {}) {
+  async removeUnlocked(idOrSlug, { skipWorkingTree: skip = false, deleteWorkspaceFiles = false } = {}) {
+    let skipWorkingTree = skip;
     const catalog = await this.readCatalog();
     const project = catalog.projects.find((item) => item.id === idOrSlug || item.slug === idOrSlug);
     if (!project) return null;
@@ -794,6 +845,18 @@ export class ProjectStore {
       throw error;
     }
     const view = this.projectView(project);
+    // A device's folder is the device's: unlinking it touches nothing here,
+    // where its path may name something else entirely.
+    if (remoteNode(project)) {
+      if (deleteWorkspaceFiles) {
+        const error = new Error("A device's folder is deleted on the device");
+        error.code = "workspace_delete_not_supported";
+        throw error;
+      }
+      skipWorkingTree = true;
+      // What is here is Conduit's own: the chats' folder.
+      await fs.rm(view.chatRoot, { recursive: true, force: true });
+    }
     if (deleteWorkspaceFiles && project.kind !== "workspace") {
       const error = new Error("Only Workspaces can delete an external working directory");
       error.code = "workspace_delete_not_supported";
@@ -825,6 +888,8 @@ export class ProjectStore {
     if (project?.state === "cloning") {
       throw cloneError("workspace_cloning", "This Workspace is still cloning");
     }
+    // A device's folder is the device's to check, when a call reaches it.
+    if (remoteNode(project)) return project;
     const expected = this.workingRoot(project);
     let stat;
     try { stat = await fs.lstat(expected); }

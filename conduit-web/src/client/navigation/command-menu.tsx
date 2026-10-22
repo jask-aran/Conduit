@@ -1,3 +1,6 @@
+import { harnessMarkLabelFor } from "../harness-brand";
+import { ThreadHarnessMark } from "@/components/ui";
+import { Icons } from "@/components/ui";
 import { Dialog, OverlayDialog } from "@/components/dialog";
 import { Button, Input, Segmented } from "@/components/ui/controls";
 import { Crumbs } from "@/components/ui/leader";
@@ -7,12 +10,7 @@ import { Item, Match, Section } from "@/components/ui/popover";
 import { Expand } from "@/components/ui/expand";
 import { createEffect, createMemo, createSignal, For, onCleanup, Show } from "solid-js";
 import type { JSX } from "solid-js";
-import {
-  ArrowLeftIcon, BrainIcon, ChevronRightIcon, CopyIcon, FileInputIcon, FilePlus2Icon,
-  FolderIcon, FolderInputIcon, FolderPlusIcon, LayersIcon, LogOutIcon, MessageSquareIcon, MicIcon,
-  MessageSquarePlusIcon, PanelLeftIcon, PanelRightIcon, PencilIcon, PlayIcon, RefreshCwIcon, SearchIcon, SettingsIcon,
-  SlashIcon, SlidersHorizontalIcon, SquareIcon, TerminalIcon, Trash2Icon,
-} from "lucide-solid";
+import { FileInputIcon, FilePlus2Icon, SlashIcon, SlidersHorizontalIcon } from "lucide-solid";
 import { activityLabel } from "../../activity.js";
 import type { ChatSummary, ModelOption, Project } from "../api/contracts";
 import {
@@ -26,7 +24,7 @@ import {
 } from "../palette/chat-query";
 import { COMMAND_IDS, commandRegistry } from "../commands/command-registry";
 import { chatSortStamp, compareChatsBySort, saveChatSort, useChatSort } from "../preferences/chat-sort";
-import { ThreadHarnessMark } from "../harness-brand";
+
 import type { ShortcutManager } from "../shortcuts/shortcut-manager";
 import type { ShortcutContext } from "../shortcuts/shortcut-types";
 import { ChatPreview } from "./chat-preview";
@@ -38,30 +36,30 @@ import { PlaceGlyph } from "../chat/place-picker";
 import { isMobileLayout } from "./mobile-layout";
 
 const icons: Record<string, (props: { class?: string }) => JSX.Element> = {
-  "new-chat": MessageSquarePlusIcon,
-  "new-folder": FolderPlusIcon,
+  "new-chat": Icons.NewChat,
+  "new-folder": Icons.NewFolder,
   attach: FilePlus2Icon,
-  microphone: MicIcon,
-  settings: SettingsIcon,
+  microphone: Icons.Microphone,
+  settings: Icons.Settings,
   model: SlidersHorizontalIcon,
-  profile: LayersIcon,
-  rename: PencilIcon,
-  move: FolderInputIcon,
-  stop: SquareIcon,
-  regenerate: RefreshCwIcon,
-  continue: PlayIcon,
-  copy: CopyIcon,
+  profile: Icons.Profile,
+  rename: Icons.Edit,
+  move: Icons.MoveToFolder,
+  stop: Icons.Stop,
+  regenerate: Icons.Refresh,
+  continue: Icons.Play,
+  copy: Icons.Copy,
   "copy-transcript": FileInputIcon,
-  delete: Trash2Icon,
-  sidebar: PanelLeftIcon,
-  "workspace-panel": PanelRightIcon,
-  terminal: TerminalIcon,
-  chat: MessageSquareIcon,
-  thinking: BrainIcon,
-  retry: RefreshCwIcon,
-  reload: RefreshCwIcon,
-  logout: LogOutIcon,
-  command: TerminalIcon,
+  delete: Icons.Delete,
+  sidebar: Icons.Sidebar,
+  "workspace-panel": Icons.Workspace,
+  terminal: Icons.Terminal,
+  chat: Icons.Chat,
+  thinking: Icons.Reasoning,
+  retry: Icons.Refresh,
+  reload: Icons.Refresh,
+  logout: Icons.LogOut,
+  command: Icons.Terminal,
   slash: SlashIcon,
 };
 
@@ -917,7 +915,7 @@ export function CommandMenu(props: {
     onCursor: () => { setPointerCursor(true); setActive(indexOf(row)); },
     onClick: (event: MouseEvent) => runPointerRow(row, event),
   });
-  const placeIcon = (project: Project) => project.slug === "chat" ? <MessageSquareIcon /> : <PlaceGlyph project={project} />;
+  const placeIcon = (project: Project) => project.slug === "chat" ? <Icons.Chat /> : <PlaceGlyph project={project} />;
 
   const renderRow = (row: SelectableRow) => {
     if (row.type === "model") {
@@ -933,7 +931,7 @@ export function CommandMenu(props: {
       return <Item {...rowProps(row)} role="treeitem" aria-level={1} aria-expanded={row.searchResult ? undefined : expanded()} aria-current={props.context.project?.id === row.project.id ? "page" : undefined}
         icon={placeIcon(row.project)} opens onOpens={row.searchResult ? undefined : () => toggleFolder(row.project.id)} opensLabel={`${expanded() ? "Collapse" : "Expand"} ${row.project.name}`}
         meta={<><Show when={live() || unread()}><StatusDot label={live() ? `${live()} active` : `${unread()} unread`} tone={live() ? "active" : "unread"} /></Show>{facts()}</>}
-        reveal end={<Button variant="ghost" size="icon-xs" tabIndex={-1} aria-label={`Search in ${row.project.name}`} title={`Search in ${row.project.name}`} onMouseDown={(event) => event.preventDefault()} onClick={(event) => { event.stopPropagation(); enterScope(row.project, true); }}><SearchIcon /></Button>}>
+        reveal end={<Button variant="ghost" size="icon-xs" tabIndex={-1} aria-label={`Search in ${row.project.name}`} title={`Search in ${row.project.name}`} onMouseDown={(event) => event.preventDefault()} onClick={(event) => { event.stopPropagation(); enterScope(row.project, true); }}><Icons.Search /></Button>}>
         <Match text={row.project.name} query={queryText()} />
       </Item>;
     }
@@ -954,7 +952,7 @@ export function CommandMenu(props: {
     };
     return <Item {...rowProps(row)} title={command.chat?.title || command.label} aria-level={chatPage() ? row.parentId ? 2 : 1 : undefined} aria-current={command.chat?.id === props.context.chatId ? "page" : undefined}
       destructive={command.destructive} checked={command.checked || undefined} indent={Boolean(row.parentId)} picked={selectionMode() && command.entity === "chat" ? chatSelected() : undefined}
-      icon={command.chat ? <RuntimeIndicator process={props.runtime.getProcess(command.chat.id)} stale={props.runtime.stale()} unread={command.chat.unread} fallback={<ThreadHarnessMark id={command.chat.harnessId} lively />} /> : Icon ? <Icon /> : undefined}
+      icon={command.chat ? <RuntimeIndicator process={props.runtime.getProcess(command.chat.id)} stale={props.runtime.stale()} unread={command.chat.unread} fallback={<ThreadHarnessMark id={command.chat.harnessId} label={harnessMarkLabelFor(command.chat.harnessId)} lively />} /> : Icon ? <Icon /> : undefined}
       meta={meta()} keys={commandShortcut(command)?.split(/\s+/)} opens={command.kind === "page"}>
       <Show when={editing()} fallback={<Match text={command.label} query={queryText()} />}>
         <Input ref={renameInput} value={editingValue()} onInput={(event) => setEditingValue(event.currentTarget.value)} onKeyDown={renameKeydown} onClick={(event) => event.stopPropagation()} aria-label={`Rename ${command.label}`} />
@@ -991,8 +989,8 @@ export function CommandMenu(props: {
       onCloseAutoFocus={(event) => { event.preventDefault(); if (returnFocus?.isConnected) returnFocus.focus(); returnFocus = null; }}
     >
       <OverlayBar
-        lead={back() ? <Button variant="ghost" size="icon-sm" aria-label={moveMode() ? "Back to chat results" : "Back to commands"} title="Back" onMouseDown={(event) => event.preventDefault()} onClick={goBack}><ArrowLeftIcon /></Button>
-          : chatPage() ? <SearchIcon /> : modelSelectorPage() ? <SlidersHorizontalIcon /> : <ChevronRightIcon />}
+        lead={back() ? <Button variant="ghost" size="icon-sm" aria-label={moveMode() ? "Back to chat results" : "Back to commands"} title="Back" onMouseDown={(event) => event.preventDefault()} onClick={goBack}><Icons.Back /></Button>
+          : chatPage() ? <Icons.Search /> : modelSelectorPage() ? <SlidersHorizontalIcon /> : <Icons.ChevronRight />}
         chips={<>
           <Show when={!chatPage() && !modelSelectorPage() && pageMeta()}>{(meta) => <Crumbs label="Where you are" items={[{ label: "Commands", onClick: goBack }, { label: meta().heading, current: true }]} />}</Show>
           <Show when={chatPage() && !moveMode() && chatScope().kind !== "all"}><OverlayChip onRemove={() => { backScope(false); focusInput(); }}>{`in:${scopeChipName()}`}</OverlayChip></Show>

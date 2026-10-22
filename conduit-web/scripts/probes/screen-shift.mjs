@@ -33,12 +33,12 @@ try {
   // When each code block (a fence, pending or drawn) first appears: wall-clock ms, as the screencast's timestamps are.
   // --log: the transcript's virtualization log (collapse, expand, re-measure) and every backward scroll, on the
   // screencast's clock, printed beside each frame that moved down.
-  if (flag("--log")) await page.evaluate(() => { const log = globalThis.__visibilityLog = []; const v = document.querySelector(".message-scroller-viewport"); let last = v.scrollTop;
+  if (flag("--log")) await page.evaluate(() => { const log = globalThis.__visibilityLog = []; const v = document.querySelector(".ui-chat-viewport"); let last = v.scrollTop;
     v.addEventListener("scroll", () => { const d = v.scrollTop - last; last = v.scrollTop; if (d < -2) log.push({ at: Date.now(), op: "scroll back", by: +d.toFixed(1), top: v.scrollTop, height: v.scrollHeight }); }, { passive: true }); });
   await page.evaluate(() => { const w = window; w.__fences = []; const seen = new WeakSet();
     new MutationObserver(() => { for (const el of document.querySelectorAll(".ui-answer .ui-code")) if (!seen.has(el)) { seen.add(el); w.__fences.push(Date.now()); } })
-      .observe(document.querySelector(".thread") ?? document.body, { childList: true, subtree: true }); });
-  const column = await page.evaluate(() => { const r = (document.querySelector(".thread") ?? document.body).getBoundingClientRect(); const v = document.querySelector(".message-scroller-viewport").getBoundingClientRect(); return { left: r.left, width: r.width, top: v.top, height: v.height }; });
+      .observe(document.querySelector(".ui-chat-column") ?? document.body, { childList: true, subtree: true }); });
+  const column = await page.evaluate(() => { const r = (document.querySelector(".ui-chat-column") ?? document.body).getBoundingClientRect(); const v = document.querySelector(".ui-chat-viewport").getBoundingClientRect(); return { left: r.left, width: r.width, top: v.top, height: v.height }; });
   s.on("Page.screencastFrame", async ({ data, metadata, sessionId }) => { frames.push({ at: metadata.timestamp * 1000, data }); s.send("Page.screencastFrameAck", { sessionId }).catch(() => {}); });
   await page.evaluate(() => document.querySelector(".composer-keyboard-trigger, [aria-label='Type a message']")?.click());
   const ta = page.locator(".chat-main textarea").first(); await ta.fill(prompt);

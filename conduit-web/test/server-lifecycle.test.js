@@ -5,23 +5,6 @@ import path from "node:path";
 import test from "node:test";
 import { startConduitHarness, waitFor } from "./helpers/conduit-harness.js";
 
-async function pauseLaunch(harness, chat, intent = "prompt") {
-  const after = (await harness.pi.commands()).length;
-  const launch = harness.request("/v0/live-sessions", {
-    method: "POST",
-    body: JSON.stringify({ chatId: chat.id, projectId: chat.projectId, intent }),
-  });
-  const stateRequest = await harness.pi.waitForCommand("get_state", { after });
-  return { launch, stateRequest };
-}
-
-async function completeState(harness, request, chat) {
-  await harness.pi.reply(request, {
-    sessionFile: path.join(harness.root, "pi", "sessions", `${chat.id}.jsonl`),
-    sessionId: `session-${chat.id}`,
-  });
-}
-
 async function initGitRepo(directory) {
   await fs.mkdir(directory, { recursive: true });
   const git = (args) => {
@@ -35,67 +18,6 @@ async function initGitRepo(directory) {
   git(["add", "."]);
   git(["commit", "-m", "init"]);
 }
-
-test("launch cannot outlive a concurrent chat or project deletion", async () => {
-  const harness = await startConduitHarness();
-  async function startThenDelete(chat, route) {
-    const { launch, stateRequest } = await pauseLaunch(harness, chat);
-    const deletion = harness.request(route, { method: "DELETE" });
-    // The deletion reserves the chat before awaiting the launch's chat mutex.
-    await new Promise((resolve) => setTimeout(resolve, 25));
-    await completeState(harness, stateRequest, chat);
-    assert.equal((await launch).status, 409);
-    assert.equal((await deletion).status, 204);
-    await waitFor(async () => (await harness.liveSessions()).length === 0, "deleted chat left a live Pi process behind");
-  }
-
-  try {
-    const first = await harness.createChat();
-    await startThenDelete(first, `/v0/sessions/${first.id}`);
-    assert.equal((await harness.request(`/v0/chats/${first.id}`)).status, 404);
-
-    const project = await harness.createProject("Lifecycle project");
-    const second = await harness.createChat(project.id);
-    await startThenDelete(second, `/v0/projects/${project.id}`);
-    assert.equal((await harness.request(`/v0/projects/${project.id}`)).status, 404);
-
-    const source = await harness.createProject("Move source");
-    const target = await harness.createProject("Move target");
-    const moving = await harness.createChat(source.id);
-    const { launch, stateRequest } = await pauseLaunch(harness, moving);
-    const move = harness.request(`/v0/sessions/${moving.id}/move`, {
-      method: "POST",
-      body: JSON.stringify({ projectId: target.id }),
-    });
-    await completeState(harness, stateRequest, moving);
-    assert.equal((await launch).status, 201);
-    assert.equal((await move).status, 200);
-    const moved = await (await harness.request(`/v0/chats/${moving.id}`)).json();
-    assert.equal(moved.projectId, target.id);
-    await waitFor(async () => (await harness.liveSessions()).length === 0, "moved chat left its source Pi process alive");
-  } finally {
-    await harness.stop();
-  }
-});
-
-test("the harness attaches a real client stream to a live Pi process", async () => {
-  const harness = await startConduitHarness();
-  try {
-    const runtime = harness.connectRuntimeStream();
-    await runtime.opened;
-    assert.deepEqual((await runtime.next((event) => event.type === "runtime_global_snapshot")).processes, []);
-    const chat = await harness.createChat();
-    const { launch, stateRequest } = await pauseLaunch(harness, chat);
-    await completeState(harness, stateRequest, chat);
-    const live = await (await launch).json();
-    assert.equal((await runtime.next((event) => event.type === "runtime_process" && event.process.id === live.id)).process.chatId, chat.id);
-    const stream = harness.connectStream(live.id);
-    await stream.opened;
-    assert.equal((await stream.next((event) => event.type === "runtime_state")).capabilities.replay, true);
-  } finally {
-    await harness.stop();
-  }
-});
 
 test("opening a chat attaches to a live process but never starts one", async () => {
   const harness = await startConduitHarness();
@@ -114,9 +36,11 @@ test("opening a chat attaches to a live process but never starts one", async () 
     assert.deepEqual((await (await harness.request("/v0/live-sessions")).json()).sessions, []);
 
     // Real use may start one.
-    const { launch, stateRequest } = await pauseLaunch(harness, chat);
-    await completeState(harness, stateRequest, chat);
-    const live = await (await launch).json();
+    const launch = await harness.request("/v0/live-sessions", {
+      method: "POST", body: JSON.stringify({ chatId: chat.id, projectId: chat.projectId, intent: "prompt" }),
+    });
+    assert.equal(launch.status, 201);
+    const live = await launch.json();
 
     // And now an open attaches to exactly that process instead of a second one.
     const warm = await harness.request("/v0/live-sessions", {
@@ -144,9 +68,11 @@ test("selecting a chat reads it without starting an agent", async () => {
     assert.deepEqual((await (await harness.request("/v0/live-sessions")).json()).sessions, []);
 
     // The first action that needs the agent starts it.
-    const { launch, stateRequest } = await pauseLaunch(harness, chat, "prompt");
-    await completeState(harness, stateRequest, chat);
-    const live = await (await launch).json();
+    const launch = await harness.request("/v0/live-sessions", {
+      method: "POST", body: JSON.stringify({ chatId: chat.id, projectId: chat.projectId, intent: "prompt" }),
+    });
+    assert.equal(launch.status, 201);
+    const live = await launch.json();
     assert.ok(live.id);
     const prompt = await harness.request("/v0/live-sessions", {
       method: "POST",
@@ -202,99 +128,6 @@ test("Codex app-server profile creates, streams, and reconnects through neutral 
   }
 });
 
-test("changing a prewarmed draft to Codex removes Pi before the standard launch path", async () => {
-  const harness = await startConduitHarness();
-  try {
-    const chat = await harness.createChat();
-    const { launch, stateRequest } = await pauseLaunch(harness, chat);
-    await completeState(harness, stateRequest, chat);
-    assert.equal((await launch).status, 201);
-
-    const changed = await harness.request(`/v0/chats/${chat.id}`, {
-      method: "PATCH",
-      body: JSON.stringify({ profileId: "codex" }),
-    });
-    assert.equal(changed.status, 200);
-    assert.equal((await changed.json()).backend.implementation, "codex");
-
-    assert.deepEqual(await harness.liveSessions(), [], "the old Pi process cannot survive the profile change");
-    const codexLaunch = await harness.request("/v0/live-sessions", {
-      method: "POST",
-      body: JSON.stringify({ chatId: chat.id, projectId: chat.projectId, intent: "prompt" }),
-    });
-    assert.equal(codexLaunch.status, 201);
-    const live = await codexLaunch.json();
-    assert.equal(live.chatId, chat.id);
-    assert.equal(live.backend.implementation, "codex");
-    const models = await (await harness.request(`/v0/chats/${chat.id}/models`)).json();
-    assert.ok(models.models.length > 0);
-    assert.ok(models.models.some((model) => model.spec === models.model));
-    const registry = JSON.parse(await fs.readFile(path.join(harness.root, "sessions.json"), "utf8"));
-    const saved = registry.chats.find((item) => item.id === chat.id);
-    assert.equal("piSessionId" in saved, false);
-    assert.equal("piSessionFile" in saved, false);
-  } finally {
-    await harness.stop();
-  }
-});
-
-test("reattachment receives a terminal generation and its durable checkpoint", async () => {
-  const harness = await startConduitHarness();
-  try {
-    const chat = await harness.createChat();
-    const projects = await (await harness.request("/v0/projects")).json();
-    const project = projects.projects.find((item) => item.id === chat.projectId);
-    assert.ok(project);
-    const sessionFile = path.join(harness.root, "pi", "sessions", `${chat.id}.jsonl`);
-    await fs.mkdir(path.dirname(sessionFile), { recursive: true });
-    await fs.writeFile(sessionFile, `${JSON.stringify({ type: "session", id: `session-${chat.id}`, cwd: project.path })}\n`);
-    const after = (await harness.pi.commands()).length;
-    const launch = harness.request("/v0/live-sessions", {
-      method: "POST",
-      body: JSON.stringify({ chatId: chat.id, projectId: chat.projectId, intent: "prompt" }),
-    });
-    const stateRequest = await harness.pi.waitForCommand("get_state", { after });
-    await harness.pi.reply(stateRequest, { sessionFile, sessionId: `session-${chat.id}` });
-    const live = await (await launch).json();
-    const original = harness.connectStream(live.id);
-    await original.opened;
-    original.socket.send(JSON.stringify({ type: "prompt", message: "Reconnect after completion" }));
-    const prompt = await harness.pi.waitForCommand("prompt", { after: after + 1 });
-    await harness.pi.emit({ type: "agent_start" }, { pid: prompt.pid });
-    await harness.pi.emit({ type: "message_start", message: { role: "assistant", content: [] } }, { pid: prompt.pid });
-    await harness.pi.emit({
-      type: "message_update",
-      assistantMessageEvent: {
-        type: "text_start",
-        contentIndex: 0,
-        partial: { role: "assistant", content: [{ type: "text", text: "" }] },
-      },
-    }, { pid: prompt.pid });
-    await harness.pi.emit({
-      type: "message_update",
-      assistantMessageEvent: {
-        type: "text_delta",
-        contentIndex: 0,
-        delta: "Terminal state survives reconnect",
-        partial: { role: "assistant", content: [{ type: "text", text: "Terminal state survives reconnect" }] },
-      },
-    }, { pid: prompt.pid });
-    await harness.pi.emit({ type: "agent_settled" }, { pid: prompt.pid });
-    await original.next((event) => event.type === "status" && event.phase === "settled");
-    original.close();
-
-    const reattached = harness.connectStream(live.id);
-    await reattached.opened;
-    const resume = await reattached.next((event) => event.type === "generation_replay");
-    assert.equal(resume.generation.status, "complete");
-    assert.equal(resume.generation.assistantMessages[0].blocks[0].text, "Terminal state survives reconnect");
-    const checkpoint = await reattached.next((event) => event.type === "session_checkpoint", 5_000);
-    assert.equal(checkpoint.generationId, resume.generationId);
-  } finally {
-    await harness.stop();
-  }
-});
-
 test("a replaced cloned root cannot be inspected or launched, and unlink does not touch its replacement", async () => {
   const harness = await startConduitHarness();
   try {
@@ -330,7 +163,7 @@ test("a replaced cloned root cannot be inspected or launched, and unlink does no
       body: JSON.stringify({ chatId: chat.id, projectId: project.id, intent: "prompt" }),
     });
     assert.equal(launch.status, 409);
-    assert.equal((await harness.pi.commands()).length, 0);
+    assert.deepEqual(await harness.liveSessions(), []);
     assert.equal((await harness.request(`/v0/projects/${project.id}`, { method: "DELETE" })).status, 204);
     assert.equal(await fs.readFile(path.join(outside, "keep.txt"), "utf8"), "outside");
   } finally {
@@ -369,7 +202,7 @@ test("a replaced managed root rejects every root-consuming action", async () => 
       }),
     ]);
     for (const response of responses) assert.equal(response.status, 409);
-    assert.equal((await harness.pi.commands()).length, 0);
+    assert.deepEqual(await harness.liveSessions(), []);
     assert.equal(await fs.readFile(path.join(outside, "keep.txt"), "utf8"), "outside");
     await assert.rejects(fs.access(path.join(outside, ".conduit")), { code: "ENOENT" });
   } finally {

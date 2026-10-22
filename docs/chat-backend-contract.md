@@ -4,79 +4,39 @@
 This document is the architecture it describes: what a harness adapter owns,
 what Conduit owns, and the two channels every turn travels on.
 
-Six harnesses are behind this contract — Pi (`conduit_pi`), Codex
-(app-server), ChatGPT Web (sidecar), fx (ACP over stdio), OpenCode 2 (its
-background service), and the in-process Test stream. The
+Every harness is behind this contract — the Conduit durable agent
+(pi-durable, in process), Codex (app-server), ChatGPT Web (sidecar), fx (ACP
+over stdio), OpenCode 2 (its background service), and the in-process Test
+stream, among others. The
 browser cannot tell which one it is talking to except by the capabilities it
 was given.
 
 ## One translation
 
-A harness's own words appear in its adapter and nowhere else. Past that line
-everything is Conduit's vocabulary: server, wire, and browser use the same
-names, and an event with no case at both ends is not sent at all.
+A harness's own words appear in its adapter and nowhere else. Past that line,
+events use Conduit's vocabulary: the server, wire and browser use the same
+names, and an event with no case at both ends is not sent.
 
-For Pi the line is `toNeutralPiEvent`. Pi's interior may go on speaking Pi —
-its internal event bus, its own delivery bookkeeping — but nothing Pi-shaped
-crosses that function, including into the chat log. A stored log entry is a
-neutral event, and translating one again is a no-op, which is what lets replay
-send log entries back through the same path as live ones.
+The Conduit durable agent runs through `src/durable-adapter.js` and
+`src/server/durable-runtime.js`; it uses pi-durable conversations in process.
+Other adapters own their harness transport and translate its events at the same
+boundary. No adapter starts or routes through a classic Pi process.
 
-### Six adapters, one shape
+### Parallel adapters, one shape
 
-The adapters are parallel, not layered. Nothing routes through Pi, and no
-adapter knows another exists — each one takes its own harness's transport and
-puts Conduit's vocabulary on the other side, where a single delivery,
-numbering and socket path serves all six.
-
-```text
- conduit_pi    codex         chatgpt-web   fx            opencode2     test-stream
- resident      app-server    python        `fx acp`      background    in-process
- Pi JSONL      JSON-RPC      sidecar       ACP, stdio    service, SSE  own journal
-     │             │             │             │             │             │
-     ▼             ▼             ▼             ▼             ▼             ▼
-┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐
-│  PiRpc   │  │ CodexApp │  │ ChatGpt  │  │  FxAcp   │  │ OpenCode │  │TestStream│
-│ Adapter  │  │  Server  │  │   Web    │  │ Adapter  │  │ Adapter  │  │ Adapter  │
-└──────────┘  └──────────┘  └──────────┘  └──────────┘  └──────────┘  └──────────┘
-     │             │             │             │             │             │
-═════╪═════════════╪═════════════╪═════════════╪═════════════╪═════════════╪═════
-     │           the translation line — no harness word crosses it         │
-═════╪═════════════╪═════════════╪═════════════╪═════════════╪═════════════╪═════
-     │             │             │             │             │             │
-     └──────┬──────┴─────────────┴─────────────┴─────────────┴─────────────┘
-            ▼
-        ┌──────────────────────┐   the record is numbered here, per chat.
-        │  ChatLog.stamp       │   A client that finds a gap in log.seq
-        │  record only         │   asks for what it missed by resume_log.
-        └──────────────────────┘
-                  │
-       ┌──────────┴───────────┐
-       ▼                      ▼
- ┌────────────┐     ┌───────────────────┐   record: sent whatever the backlog
- │ PiManager  │     │  SessionRecords   │   paint:  merged per block, paced
- │  delivery  │     │  + SocketDelivery │           to the reader's frame,
- └────────────┘     └───────────────────┘           given up over high water
-       │                      │
-       └──────────┬───────────┘
-                  ▼
-        live-session-stream  ── one WebSocket per chat ──▶  browser
-```
-
-Two delivery implementations, one set of promises. Pi has its own because it
-pauses a slow socket and recovers it by restating the running generation,
-which it can do because it holds one; a harness that holds no such thing
-cannot, and `SocketDelivery` needs neither. They share `deliveryKey`, `isPaint`
-and the frame clamp, so what may be merged and what may be dropped has one
-answer.
+Adapters are parallel, not layered. The `ChatBackendRegistry` selects an
+adapter for each chat. The selected adapter owns its session, transcript reader
+and transport; Conduit owns admission, event ordering, delivery, and the
+browser-facing contract. A durable conversation and an external harness can
+therefore use the same chat and WebSocket path without sharing a transport.
 
 ## Two channels, not three
 
 ```text
                          ┌──────────────────────────────────┐
   ┌──────────────────┐   │            THE RECORD            │
-  │ Pi: toolCall,    │ ─┐│  transcript_op   message.open    │
-  │     thinking     │  ││                  message.close   │
+  │ Runtime: events │ ─┐│  transcript_op   message.open    │
+  │     tool calls   │  ││                  message.close   │
   ├──────────────────┤  ││                  message.drop    │
   │ Codex: item/…    │ ─┤│                  tool.open/close │
   ├──────────────────┤  ├┤  status          started         │
@@ -122,9 +82,18 @@ error is neither — it belongs to the command that failed, not to a turn, and
 numbering one would replay a bad request as a failed turn on the next
 reconnect.
 
+Settling must not re-render. A settled turn keeps its DOM: the same answer
+node, disclosures left as they were, no replayed fade, no layout shift. The
+server compares the record against what its log stated for the turn and
+publishes only where they differ, as targeted ops for those rows, never a
+window that replaces rows; a clean turn sends nothing and reads nothing more
+than the checkpoint does. A divergence is logged server side, so it is a bug
+report rather than a silent heal (`scripts/probes/settle-stability.mjs` is
+the gate).
+
 Dropping paint is safe because `message.close` restates the message in full.
 Who wrote it, with what, when, and what went wrong travel on the close when
-the adapter has them: Pi copies them off the reduced generation; Codex,
+the adapter has them: the durable agent reads its conversation entries; Codex,
 ChatGPT Web, fx and Test stream state the turn's `model` from the live record;
 OpenCode closes each step from its saved message, which carries the provider,
 model, write-time and error. They do not invent a provider or a write-time
@@ -138,8 +107,8 @@ message OpenCode saved, so the record is OpenCode's own and not the adapter's
 reading of the stream.
 
 A socket that reconnects is restated from a server-side fold of the generation
-on harnesses that declare `replay` (Pi, Test stream). Codex, ChatGPT Web, fx
-and OpenCode do not; a reconnecting browser is caught up from the record
+on harnesses that declare `replay` (the durable agent and Test stream). Codex,
+ChatGPT Web, fx and OpenCode do not; a reconnecting browser is caught up from the record
 buffer and the chat's log. When a record's buffer is full, paint is evicted before the record.
 
 ### Vocabulary
@@ -208,11 +177,9 @@ published, whatever the backlog.
   4–50ms — below a 240Hz panel is work the reader's own compositor discards,
   and the ceiling stops a throttled tab pacing the stream to a crawl.
 - **High water.** A socket over 256 KiB of buffered data stops receiving
-  paint; the record still goes. Pi additionally pauses such a socket and
-  recovers it by restating the running generation, which it can do because it
-  holds one.
+  paint; the record still goes.
 
-The two implementations are named under "Six adapters, one shape" above.
+All adapters use this shared delivery path.
 
 ## Capabilities
 
@@ -235,16 +202,13 @@ transcript, because taking away something the reader saw is worse, but nothing
 treats it as part of the conversation the model can answer to. Which harness
 says what, and why, is in the table below.
 
-`suppliesMessageIds` decides whether Conduit mints message ids for that harness
-or adopts the ones it is given.
-
 ### What each harness declares
 
 ● declared, ○ not. Every adapter states every flag; there is no "unset".
 
-| | Pi | Codex | ChatGPT Web | fx | OpenCode | Test stream |
+| | Runtime | Codex | ChatGPT Web | fx | OpenCode | Test stream |
 | --- | :---: | :---: | :---: | :---: | :---: | :---: |
-| `history` | tree | linear | linear | linear | linear | tree |
+| `history` | linear | linear | linear | linear | linear | tree |
 | `fork` | ● | ● | ○ | ○ | ○ | ● |
 | `regenerate` | ● | ● | ○ | ○ | ○ | ● |
 | `steer` | ● | ● | ○ | ○ | ○ | ● |
@@ -263,12 +227,11 @@ or adopts the ones it is given.
 
 And from the manifest, which decides how a chat on it is made ready:
 
-| | Pi | Codex | ChatGPT Web | fx | OpenCode | Test stream |
+| | Runtime | Codex | ChatGPT Web | fx | OpenCode | Test stream |
 | --- | :---: | :---: | :---: | :---: | :---: | :---: |
-| `protocol` | `pi_rpc` | `native_api` | `native_api` | `acp` | `native_api` | `native_api` |
-| `warm` | process | process | none | process | process | none |
+| `protocol` | `native_api` | `native_api` | `native_api` | `acp` | `native_api` | `native_api` |
+| `warm` | none | process | none | process | process | none |
 | `discovery` | none | machine | none | machine | machine | none |
-| `suppliesMessageIds` | ○ | ● | ● | ● | ● | ● |
 | `nameGeneration` | conduit | conduit | backend | backend | backend | conduit |
 
 Reading down a column is the whole of what that profile can do, and reading
@@ -282,8 +245,7 @@ and nothing more. A prompt's options are words; the adapter keeps what each one
 means to its harness and translates the one chosen back. A harness's question
 tool -- OpenCode's forms, Codex's `request_user_input` -- is a request of kind
 `question` on the same path: one or more questions, answered together with
-`answers`, in the shape `src/harnesses/questions.js` states. `replay` is false for Codex, fx and
-OpenCode because their `replay` returns runtime state from the record buffer
+`answers`, in the shape `src/harnesses/questions.js` states. `replay` is false for Codex, ChatGPT Web, fx and OpenCode because their `replay` returns runtime state from the record buffer
 rather than a generation in progress, so a browser reconnecting mid-turn is
 caught up from the record and the log instead; `usage` is false for Codex
 too.
@@ -303,10 +265,22 @@ the saved copy and read every prompt twice, out of order.
 `interruptKeepsPartial` is true only for the Test stream, and that is not a
 gap in the others. Every real harness drops an interrupted partial, because
 what it writes down and what it sends the model next turn are different
-things — measured for Pi, not assumed. This backend's journal *is* its
+things; each adapter declares this behavior. This backend's journal *is* its
 transcript and there is no model to disagree with it, so a stopped answer
 really does stand; it is also Conduit's only coverage of the `discarded: false`
 close.
+
+The Conduit durable agent (`conduit-runtime`, `src/durable-adapter.js`) is pi-durable
+running in the server process on one SQLite store, and its record there is
+authoritative: the chat's log is a projection of it, and a reload folds the
+conversation's entries through the same op builders the live path uses. A
+prompt keeps the browser's id in its entry; an answer is named when it starts
+streaming and the name is written to the conversation's `conduit.ids` document
+once its entry commits. A restart resumes unfinished work on boot -- a tool
+that is not replay-safe reaches the model as interrupted -- and the adapter
+reattaches every chat with work in flight. Its `history` is linear because an
+edit or a regenerate forks the conversation before the prompt and the chat
+moves to the fork; the old branch stays in the store.
 
 ChatGPT Web declares least because the conversation lives in somebody else's
 account and Conduit follows it by cursor. The client hides what is not there,
@@ -362,7 +336,7 @@ Client commands are documented in `conduit-web/README.md`.
 
 ## Script steps
 
-A tool whose input is a program that calls other tools -- Pi's `codemode`, and
+A tool whose input is a program that calls other tools -- pi-durable's codemode, and
 whatever other harnesses ship as their equivalent -- is one tool row of kind
 `script`. What it called is the row's `calls`: each `{ name, kind, subject?,
 done?, isError?, durationMs? }`, in order, plus `planned`/`repeats` rows read

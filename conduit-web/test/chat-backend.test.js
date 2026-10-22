@@ -5,7 +5,6 @@ import path from "node:path";
 import test from "node:test";
 import { ChatStore, chatView } from "../src/chat-store.js";
 import { agentProfiles, profileSelection } from "../src/chat-backend.js";
-import { startConduitHarness } from "./helpers/conduit-harness.js";
 
 test("legacy Pi rows gain durable identity without changing JSONL or exposing paths", async (t) => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-backend-"));
@@ -37,7 +36,6 @@ test("legacy Pi rows gain durable identity without changing JSONL or exposing pa
   assert.equal((await restored.find([project], "chat-test")).file, file);
   assert.equal(await fs.readFile(file, "utf8"), transcript);
   assert.equal(JSON.stringify(chatView(restored.metadata("chat-test"))).includes(file), false);
-  assert.equal(chatView(restored.metadata("chat-test")).harnessId, "conduit");
   const neutralRow = structuredClone(restored.metadata("chat-test"));
   delete neutralRow.templateId;
   delete neutralRow.templateVersion;
@@ -64,9 +62,8 @@ test("profile selection uses current names and rejects conflicting legacy fields
     profileId: "coding", templateId: "coding", runtimeKind: "conduit_profile",
   });
   assert.throws(() => profileSelection({ profileId: "coding", templateId: "assistant" }), { code: "profile_conflict" });
-  assert.throws(() => profileSelection({ profileId: "host-pi", runtimeKind: "conduit_profile" }), { code: "invalid_profile" });
   assert.throws(() => profileSelection({ profileId: {} }), { code: "invalid_profile" });
-  assert.equal(agentProfiles([{ id: "assistant", label: "Assistant" }])[0].agent.implementation, "conduit_pi");
+  assert.equal(agentProfiles([{ id: "assistant", label: "Assistant" }])[0].agent.implementation, "conduit-runtime");
   assert.deepEqual(profileSelection({ profileId: "codex" }), { profileId: "codex" });
   assert.deepEqual(profileSelection({ profileId: "chatgpt-web" }), { profileId: "chatgpt-web" });
   assert.equal(agentProfiles([]).find((profile) => profile.id === "chatgpt-web").agent.implementation, "chatgpt-web");
@@ -89,72 +86,4 @@ test("agent-managed Codex identity persists without Pi compatibility fields", as
   assert.deepEqual(restored.metadata(chat.id).backend, backend);
   assert.equal(restored.metadata(chat.id).runtime, null);
   assert.equal("piSessionFile" in restored.metadata(chat.id), false);
-});
-
-test("public profile selection and legacy chat creation keep the same Pi identity", async (t) => {
-  const harness = await startConduitHarness();
-  t.after(() => harness.stop());
-  const profiles = await (await harness.request("/v0/profiles")).json();
-  assert.ok(profiles.profiles.some((profile) => profile.id === "assistant"));
-  assert.ok(profiles.profiles.some((profile) => profile.id === "codex" && profile.management === "agent"));
-  for (const selection of [{ profileId: "assistant" }, { templateId: "assistant" }]) {
-    const response = await harness.request("/v0/chats", { method: "POST", body: JSON.stringify(selection) });
-    assert.equal(response.status, 201);
-    const chat = await response.json();
-    assert.equal(chat.profileId, "assistant");
-    assert.equal(chat.backend.implementation, "conduit_pi");
-    assert.equal("opaqueSession" in chat.backend, false);
-    const changed = await harness.request(`/v0/chats/${chat.id}`, {
-      method: "PATCH", body: JSON.stringify({ profileId: "coding" }),
-    });
-    assert.equal(changed.status, 200);
-    assert.equal((await changed.json()).profileId, "coding");
-  }
-  const warmedResponse = await harness.request("/v0/chats", {
-    method: "POST", body: JSON.stringify({ profileId: "assistant" }),
-  });
-  const warmed = await warmedResponse.json();
-  const commandOffset = (await harness.pi.commands()).length;
-  const launchRequest = harness.request("/v0/live-sessions", {
-    method: "POST", body: JSON.stringify({ chatId: warmed.id, projectId: warmed.projectId, intent: "prompt" }),
-  });
-  const stateRequest = await harness.pi.waitForCommand("get_state", { after: commandOffset });
-  await harness.pi.reply(stateRequest, {
-    sessionFile: path.join(harness.root, "pi", "sessions", `${warmed.id}.jsonl`),
-    sessionId: `session-${warmed.id}`,
-  });
-  const launched = await launchRequest;
-  assert.equal(launched.status, 201, await launched.text());
-  const switched = await harness.request(`/v0/chats/${warmed.id}`, {
-    method: "PATCH", body: JSON.stringify({ profileId: "coding" }),
-  });
-  assert.equal(switched.status, 200);
-  assert.equal((await switched.json()).profileId, "coding");
-  const emptyTranscript = await harness.request(`/v0/sessions/${warmed.id}`);
-  assert.equal(emptyTranscript.status, 200);
-  assert.deepEqual((await emptyTranscript.json()).messages, []);
-  const codexResponse = await harness.request("/v0/chats", {
-    method: "POST", body: JSON.stringify({ profileId: "codex" }),
-  });
-  assert.equal(codexResponse.status, 201);
-  const codexChat = await codexResponse.json();
-  assert.equal(codexChat.profileId, "codex");
-  assert.equal(codexChat.backend.implementation, "codex");
-  const modelsResponse = await harness.request(`/v0/chats/${codexChat.id}/models`);
-  assert.equal(modelsResponse.status, 200);
-  const models = await modelsResponse.json();
-  assert.deepEqual(models.models.map((model) => model.spec), ["codex-test", "codex-other"]);
-  assert.deepEqual(models.models[0].thinkingLevels, ["low", "medium", "high"]);
-  assert.equal(models.thinkingLevel, "medium");
-  assert.equal(models.model, "codex-test");
-  const selectedResponse = await harness.request(`/v0/chats/${codexChat.id}/models`, {
-    method: "PATCH", body: JSON.stringify({ model: "codex-other", thinkingLevel: "high" }),
-  });
-  assert.equal(selectedResponse.status, 200);
-  const selected = await selectedResponse.json();
-  assert.equal(selected.model, "codex-other");
-  assert.equal(selected.thinkingLevel, "high");
-  const persisted = await (await harness.request(`/v0/chats/${codexChat.id}/models`)).json();
-  assert.equal(persisted.model, "codex-other");
-  assert.equal(persisted.thinkingLevel, "high");
 });

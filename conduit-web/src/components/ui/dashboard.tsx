@@ -1,6 +1,7 @@
+import * as Icons from "./icons";
 import { For, Show, splitProps, type JSX } from "solid-js";
 import { Dynamic } from "solid-js/web";
-import { ChevronRightIcon, EllipsisIcon } from "lucide-solid";
+
 
 /*
  * Dashboard: a place's page. A head across the top (its mark, title, quick actions and status line); under it the
@@ -46,6 +47,10 @@ export function Dashboard(props: {
 }
 
 /** The page's head, in a Dashboard's head: its mark centred on the title and the status line under it. */
+/** DashPath: a place's working path in its header's context, copied on a tap; it says Copied for a moment. */
+export const DashPath = (props: { path?: string; copied?: boolean; onCopy: () => void }) =>
+  <button type="button" class="ui-dash-path" title="Copy working path" onClick={() => props.onCopy()}><code>{props.copied ? "Copied" : props.path || "Working path unavailable"}</code></button>;
+
 export function DashHeader(props: { title: string; glyph?: JSX.Element; context?: Array<JSX.Element | false | null | undefined> }) {
   const items = () => (props.context ?? []).filter(Boolean);
   return <>
@@ -68,7 +73,7 @@ export function QuickMore(props: { ref?: (element: HTMLSpanElement) => void; kee
 /** A small icon button in a dashboard's line (the ⋯): a menu's trigger takes it with `as`. */
 export function DashIconButton(props: JSX.ButtonHTMLAttributes<HTMLButtonElement>) {
   const [local, rest] = splitProps(props, ["children"]);
-  return <button type="button" {...rest} class="ui-dash-icon">{local.children ?? <EllipsisIcon />}</button>;
+  return <button type="button" {...rest} class="ui-dash-icon">{local.children ?? <Icons.More />}</button>;
 }
 
 /** A section's name, the strong one: Geist at the strong weight, sentence case, an optional count in data. The quiet
@@ -79,7 +84,7 @@ export function GroupHeading(props: { id?: string; count?: number | string | nul
 /** A heading that folds its group: the chevron turns as it opens. */
 export function GroupToggle(props: { id?: string; open: boolean; count?: number | string | null; onClick: () => void; children: JSX.Element }) {
   return <h2 id={props.id} class="ui-group-heading"><button type="button" class="ui-group-toggle" aria-expanded={props.open} onClick={() => props.onClick()}>
-    <ChevronRightIcon />{props.children}<Show when={props.count != null}><small>{props.count}</small></Show></button></h2>;
+    <Icons.ChevronRight />{props.children}<Show when={props.count != null}><small>{props.count}</small></Show></button></h2>;
 }
 /** The chats list's heading on a phone: the choice it shows, its count, and where. */
 export function GroupCompactHeading(props: { label: JSX.Element; count?: number | string | null; where?: JSX.Element }) {

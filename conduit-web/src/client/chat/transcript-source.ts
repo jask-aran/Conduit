@@ -28,7 +28,6 @@ export interface TranscriptSource {
   edit: (message: Message) => void;
   cancelEdit: () => void;
   regenerate: (userMessageId: string) => Promise<unknown> | void;
-  continueResponse: () => Promise<unknown> | void;
   loadOlder: () => Promise<boolean | undefined>;
 }
 

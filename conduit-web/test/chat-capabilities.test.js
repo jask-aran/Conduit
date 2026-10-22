@@ -2,17 +2,15 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { manifestForChat, resolveCapability, resolveHistory } from "../src/client/chat-capabilities.ts";
 
-const PI = { approvals: true, permissionModes: false, attachments: true, toolUse: true };
+const DURABLE = { approvals: true, permissionModes: false, attachments: true, toolUse: true };
 const CODEX = { approvals: true, permissionModes: true, attachments: false, toolUse: true };
-const harnesses = { conduit_pi: PI, codex: CODEX };
+const harnesses = { "conduit-runtime": DURABLE, codex: CODEX };
 const chat = (implementation) => ({ backend: { implementation } });
 
 test("a chat's capabilities come from the harness running it", () => {
   assert.equal(manifestForChat(harnesses, chat("codex")), CODEX);
-  // Every Pi profile elects the same harness, so they all resolve to one
-  // declaration rather than to four copies of it.
-  assert.equal(manifestForChat(harnesses, chat("conduit_pi")), PI);
-  assert.equal(manifestForChat(harnesses, { profileId: "assistant", ...chat("conduit_pi") }), PI);
+  assert.equal(manifestForChat(harnesses, chat("conduit-runtime")), DURABLE);
+  assert.equal(manifestForChat(harnesses, { profileId: "assistant", ...chat("conduit-runtime") }), DURABLE);
 });
 
 test("an unknown harness gets no capabilities rather than the default one's", () => {
@@ -21,14 +19,14 @@ test("an unknown harness gets no capabilities rather than the default one's", ()
   assert.equal(manifestForChat(harnesses, chat("chatgpt_web")), null);
   assert.equal(manifestForChat(harnesses, chat(undefined)), null);
   assert.equal(manifestForChat(harnesses, null), null);
-  assert.equal(manifestForChat({}, chat("conduit_pi")), null);
+  assert.equal(manifestForChat({}, chat("conduit-runtime")), null);
 });
 
 test("the manifest decides and a live record may only narrow it", () => {
   // Declared on, nothing reported: on immediately, with no process involved.
-  assert.equal(resolveCapability(PI, null, "approvals"), true);
+  assert.equal(resolveCapability(DURABLE, null, "approvals"), true);
   // A process may take one away -- it can outlive the profile its chat names.
-  assert.equal(resolveCapability(PI, { approvals: false }, "approvals"), false);
+  assert.equal(resolveCapability(DURABLE, { approvals: false }, "approvals"), false);
   // It may never add one. This is the flicker the manifest exists to prevent.
   assert.equal(resolveCapability(CODEX, { attachments: true }, "attachments"), false);
 });
@@ -42,11 +40,11 @@ test("with no manifest the reported value stands, and the fallback behind it", (
 });
 
 test("answering approvals and offering modes are asked separately", () => {
-  // One flag used to answer both, which is why a Pi chat showed a permission
-  // selector it had nothing to put in: Pi answers approval requests, so the
+  // One flag used to answer both, which is why the durable chat showed a permission
+  // selector it had nothing to put in: it answers approval requests, so the
   // flag was true, and the UI read that as "has modes to choose between".
-  assert.equal(resolveCapability(PI, null, "approvals"), true);
-  assert.equal(resolveCapability(PI, null, "permissionModes"), false);
+  assert.equal(resolveCapability(DURABLE, null, "approvals"), true);
+  assert.equal(resolveCapability(DURABLE, null, "permissionModes"), false);
   assert.equal(resolveCapability(CODEX, null, "approvals"), true);
   assert.equal(resolveCapability(CODEX, null, "permissionModes"), true);
 });

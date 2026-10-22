@@ -1,0 +1,6 @@
+/* Fade: content cut short fades out at its foot rather than stopping, over --fade-length (a line unless the piece says)
+   and ending at --fade-at (where the content stops: its whole height, unless a max height clamps it first). One
+   gradient for every piece that folds or clamps its content; each names itself here and sets its own length in its own
+   rule. A mask composites what it covers apart, so it is only ever on while something is cut short. */
+:is(.ui-code[data-folded] > pre, .ui-bubble-text[data-folded], .ui-glance-answer[data-math]) {
+  mask-image: linear-gradient(to bottom, #000 calc(var(--fade-at, 100%) - var(--fade-length, 1lh)), transparent var(--fade-at, 100%)); }

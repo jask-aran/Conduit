@@ -3,6 +3,7 @@ import * as KAlertDialog from "@kobalte/core/alert-dialog";
 import { createEffect, Show, type ComponentProps, type JSX } from "solid-js";
 import { createFullscreenPortalMount } from "./portal";
 import { Card } from "./ui/card";
+import { haptic } from "./ui/haptics";
 import { Overlay, Scrim } from "./ui/overlay";
 
 /** Kobalte owns modality and focus; Card and Scrim own every part of the surface. */
@@ -31,7 +32,7 @@ export function Dialog(props: {
     if (props.open && !wasOpen) target = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     wasOpen = props.open;
   });
-  const change = (open: boolean) => { if (open || !props.busy) props.onOpenChange(open); };
+  const change = (open: boolean) => { if (open || !props.busy) { if (!open) haptic("dismiss"); props.onOpenChange(open); } };
   const restore = (event: Event) => {
     if (props.onCloseAutoFocus) props.onCloseAutoFocus(event);
     else {
@@ -78,7 +79,7 @@ export function OverlayDialog(props: {
   children: JSX.Element;
 }) {
   const mount = createFullscreenPortalMount();
-  return <KDialog.Root open={props.open} onOpenChange={props.onOpenChange}>
+  return <KDialog.Root open={props.open} onOpenChange={(open) => { if (!open) haptic("dismiss"); props.onOpenChange(open); }}>
     <KDialog.Portal mount={mount()}>
       <KDialog.Content as={Scrim} dialog placement={props.placement ?? "top"} aria-label={props.label} data-state={props.open ? "open" : "closed"}
         onOpenAutoFocus={props.onOpenAutoFocus} onCloseAutoFocus={props.onCloseAutoFocus} onEscapeKeyDown={props.onEscapeKeyDown}

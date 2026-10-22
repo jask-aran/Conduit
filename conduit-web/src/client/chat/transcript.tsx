@@ -1,6 +1,9 @@
+import { Icons } from "@/components/ui";
 import { setLatestAway, setLatestScroller } from "./latest-away";
+import { unitPx } from "@/components/ui/layout";
+import { COPY_FEEDBACK_MS, reducedMotion } from "@/components/ui/motion";
 import { createComputed, createEffect, createMemo, createRenderEffect, createSignal, For, on, onCleanup, onMount, Show, Suspense, untrack, type JSX } from "solid-js";
-import { ArrowDownIcon, PencilIcon, PlayIcon, RefreshCwIcon, XIcon } from "lucide-solid";
+
 import type { BooleanCapability, Message } from "../api/contracts";
 import { isChatContentActivity, type TranscriptSource } from "./transcript-source";
 import type { TurnArtifactSummary } from "../api/live-events";
@@ -43,7 +46,7 @@ import {
 import { captureTranscriptAnchor, restoreTranscriptAnchor } from "./transcript-anchor";
 import { api } from "../api/client";
 import { requestTurnArtifactNavigation } from "./turn-artifact-navigation";
-import { Welcome, Answer, Button as LibraryButton, Changes, CopyButton, Failure, HarnessPrompt, LoadingEarlier, Message as LibraryMessage, MessageFoot, RiderButton, StopLine, Transcript as LibraryTranscript, TranscriptRow, Turn } from "@/components/ui";
+import { ChatEmpty, ChatScroller, Welcome, Answer, Button as LibraryButton, Changes, CopyButton, Failure, HarnessPrompt, LoadingEarlier, Message as LibraryMessage, MessageFoot, RiderButton, StopLine, Transcript as LibraryTranscript, TranscriptRow, Turn } from "@/components/ui";
 import { ChatMarkdown } from "./lazy-markdown";
 import { fullDateTime } from "./full-date-time";
 
@@ -86,7 +89,7 @@ function UserMessage(props: { message: Message; text: string; editing: boolean; 
   return <LibraryMessage motion={props.since != null ? "entering" : undefined} since={props.since} editing={props.editing} fold={fold()} open={open()} onToggle={toggle}
     time={timestamp() && new Date(timestamp()!).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} dateTime={timestamp()} title={timestamp() && fullDateTime(timestamp()!)}
     under={props.under}
-    actions={<Show when={props.editable}><LibraryButton variant="ghost" size="icon-xs" aria-label={props.editing ? "Cancel editing" : "Edit from here"} onClick={props.onEdit}><PencilIcon /></LibraryButton></Show>}>
+    actions={<Show when={props.editable}><LibraryButton variant="ghost" size="icon-xs" aria-label={props.editing ? "Cancel editing" : "Edit from here"} onClick={props.onEdit}><Icons.Edit /></LibraryButton></Show>}>
     {props.text || undefined}
   </LibraryMessage>;
 }
@@ -102,8 +105,8 @@ function TurnChanges(props: { artifact: TurnArtifactSummary; chatId: string }) {
 /* A message's time leads its foot, muted -- not a line of its own above it. */
 const clock = (timestamp?: string | null) => timestamp ? new Date(timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : undefined;
 
-/** An answer's foot: its time, how it ended if it did not finish, then Continue, Copy, Regenerate and its changes. */
-function AnswerFoot(props: { message: Message; precedingUserId?: string; chat: TranscriptSource; supports: (capability: BooleanCapability) => boolean; partialContinue: boolean; artifact?: TurnArtifactSummary; traced?: boolean; reveal?: boolean; copied: boolean; onCopy: () => void }) {
+/** An answer's foot: its time, how it ended if it did not finish, then Copy, Regenerate and its changes. */
+function AnswerFoot(props: { message: Message; precedingUserId?: string; chat: TranscriptSource; supports: (capability: BooleanCapability) => boolean; artifact?: TurnArtifactSummary; traced?: boolean; reveal?: boolean; copied: boolean; onCopy: () => void }) {
   /* A stopped turn says "Interrupted" once, on its first row. A trace above
      says it for the turn; a discarded or unwritten answer says it on its stop
      row; a kept answer with nothing above it says it here. */
@@ -115,14 +118,9 @@ function AnswerFoot(props: { message: Message; precedingUserId?: string; chat: T
   /* Nothing to copy from an answer that was never written, or one the agent
      was not given back. */
   const copyable = () => !props.message.discarded && Boolean(props.message.content || props.message.errorMessage);
-  /* Continue carries on the latest turn, so it is offered only there, and only
-     when the agent kept what it had written. */
-  const continuable = () => props.partialContinue && Boolean(props.message.stopped) && !props.message.discarded
-    && Boolean(props.message.content) && !props.chat.streaming() && props.chat.messages().at(-1)?.id === props.message.id;
   return <MessageFoot motion={props.reveal ? "entering" : undefined} time={clock(props.message.timestamp)} dateTime={props.message.timestamp || undefined} title={props.message.timestamp ? fullDateTime(props.message.timestamp) : undefined} status={status()}>
-    <Show when={continuable()}><LibraryButton variant="ghost" size="sm" onClick={() => void props.chat.continueResponse()}><PlayIcon />Continue</LibraryButton></Show>
     <Show when={copyable()}><CopyButton copied={props.copied} label="Copy Markdown" onCopy={props.onCopy} /></Show>
-    <Show when={props.supports("regenerate") && props.precedingUserId}><LibraryButton variant="ghost" size="icon-xs" aria-label="Regenerate response" onClick={() => void props.chat.regenerate(props.precedingUserId!)}><RefreshCwIcon /></LibraryButton></Show>
+    <Show when={props.supports("regenerate") && props.precedingUserId}><LibraryButton variant="ghost" size="icon-xs" aria-label="Regenerate response" onClick={() => void props.chat.regenerate(props.precedingUserId!)}><Icons.Refresh /></LibraryButton></Show>
     <Show when={props.artifact}>{(entry) => <TurnChanges artifact={entry()} chatId={props.chat.loadedId()!} />}</Show>
   </MessageFoot>;
 }
@@ -131,7 +129,7 @@ function AnswerFoot(props: { message: Message; precedingUserId?: string; chat: T
    caret there once the draft has been swapped in. */
 const focusComposerSoon = () => requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>("textarea[data-composer-input]:not([disabled])")?.focus({ preventScroll: true }));
 
-export function Transcript(props: { chat: TranscriptSource; supports: (capability: BooleanCapability) => boolean; partialContinue: boolean; markdownRenderer: MarkdownRendererId; profileLabel?: string; projectId?: string }) {
+export function Transcript(props: { chat: TranscriptSource; supports: (capability: BooleanCapability) => boolean; markdownRenderer: MarkdownRendererId; profileLabel?: string; projectId?: string }) {
   let transcriptRoot!: HTMLDivElement;
   let motionShell!: HTMLDivElement;
   let viewport!: HTMLDivElement;
@@ -375,7 +373,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
     // since their rows may be built a frame late.
     const target = () => viewport.scrollHeight - viewport.clientHeight;
     const first = target();
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches || Math.abs(first - from) < 2) { setViewportScrollTop(first, true, true); then(); return; }
+    if (reducedMotion() || Math.abs(first - from) < 2) { setViewportScrollTop(first, true, true); then(); return; }
     // About the pace of the browser's own smooth scroll: longer for further,
     // eased at both ends.
     const duration = Math.min(700, 280 + Math.sqrt(Math.abs(first - from)) * 6);
@@ -710,7 +708,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
       // button rather than the inherited transcript root.
       const anchored = [latestButton, cancelEditButton].filter((button): button is HTMLButtonElement => Boolean(button?.isConnected));
       if (!anchored.length) return;
-      const conversation = transcriptRoot.closest<HTMLElement>(".work-area-conversation");
+      const conversation = transcriptRoot.closest<HTMLElement>(".ui-chat");
       // A question stands in for the composer, which has slid out of the pane; otherwise the composer and its riders.
       const composerShell = conversation?.querySelector<HTMLElement>(".ui-composer-slot[data-taken] > :not(.ui-composer-stack)")
         || conversation?.querySelector<HTMLElement>(".ui-composer-slot > .ui-composer-stack, .ui-phone-composer");
@@ -724,7 +722,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
       const editActions = conversation.querySelector<HTMLElement>(".ui-phone-composer[data-show~=\"edit\"] > .ui-phone-edit");
       const editTop = editActions?.getBoundingClientRect().top ?? Infinity;
       if (shellRect.width <= 0 || shellRect.height <= 0 || composerRect.width <= 0 || composerRect.height <= 0) return;
-      const bottom = `${Math.max(isMobileLayout() ? 8 : 6.4, shellRect.bottom - Math.min(composerRect.top, captionsTop, editTop) + (isMobileLayout() ? 10 : 8))}px`;
+      const bottom = `${Math.max(unitPx(0.5), shellRect.bottom - Math.min(composerRect.top, captionsTop, editTop) + unitPx(0.625))}px`;
       for (const button of anchored) {
         if (button.style.getPropertyValue("--ride-bottom") !== bottom) button.style.setProperty("--ride-bottom", bottom);
       }
@@ -737,7 +735,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
     onCleanup(() => setLatestScroller(null));
     window.addEventListener("conduit:voice-captions", scheduleLatestButtonAnchor);
     onCleanup(() => window.removeEventListener("conduit:voice-captions", scheduleLatestButtonAnchor));
-    const composerStack = transcriptRoot.closest<HTMLElement>(".work-area-conversation")?.querySelector<HTMLElement>(".composer-stack");
+    const composerStack = transcriptRoot.closest<HTMLElement>(".ui-chat")?.querySelector<HTMLElement>(".ui-composer-dock");
     // The composer floats over the bottom of the transcript, so the thread has
     // to reserve its height itself. A fixed reservation only ever matched the
     // resting composer: a multi-line draft, attachments, or the queued-message
@@ -1009,11 +1007,24 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
     });
   });
 
-  return <div ref={transcriptRoot} class="transcript" data-part="transcript" data-slot="message-scroller">
-    <div ref={motionShell} class="transcript-motion-shell">
-      <div ref={viewport} class="message-scroller-viewport" data-slot="message-scroller-viewport" tabIndex={-1} aria-label="Transcript">
-        <div class="thread">
-        <Show when={empty()}><div class="empty-thread"><Welcome title="How can I help you today?" /></div></Show>
+  return <ChatScroller ref={(element) => { transcriptRoot = element; }} motionRef={(element) => { motionShell = element; }} viewportRef={(element) => { viewport = element; }} data-part="transcript" data-slot="message-scroller" over={<>
+      {/*
+        * `mousedown` is cancelled so pressing this does not take focus off the
+        * composer: on a phone that closes the keyboard, and jumping to the
+        * latest message is exactly what somebody does mid-sentence to check
+        * what they are replying to. The click still lands -- only the focus
+        * change is refused.
+        */}
+      {/* Always mounted, so it fades out as well as in: when pressed, and when
+           somebody scrolls back down themselves. */}
+      <RiderButton ref={(element: HTMLButtonElement) => { latestButton = element; scheduleLatestButtonAnchor(); }} ride="centre" icon={<Icons.ArrowDown />} label="Scroll to latest"
+        hidden={phoneLayout() || following() || latestDistance() < TAIL_NEAR_LATEST_PX} onMouseDown={(event) => event.preventDefault()} onClick={() => followLatest()} />
+      {/* Editing an earlier message: a way out that is always there, floating
+          over the composer where the edit happens, as the pencil would. */}
+      <Show when={props.chat.editingEntryId()}><RiderButton ref={(element: HTMLButtonElement) => { cancelEditButton = element; scheduleLatestButtonAnchor(); }} icon={<Icons.Close />} label="Cancel editing" show="label"
+        ride={!following() && latestDistance() >= TAIL_NEAR_LATEST_PX ? "beside" : "centre"} onMouseDown={(event) => event.preventDefault()} onClick={() => { props.chat.cancelEdit(); focusComposerSoon(); }} /></Show>
+    </>}>
+        <Show when={empty()}><ChatEmpty><Welcome title="How can I help you today?" /></ChatEmpty></Show>
         <LibraryTranscript ref={thread} data-slot="message-scroller-content">
         <Show when={props.chat.loadingOlder()}><TranscriptRow data-slot="message-scroller-item"><LoadingEarlier /></TranscriptRow></Show>
         <For each={timeline}>{(item) => {
@@ -1022,12 +1033,12 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
             const chatId = () => props.chat.loadedId();
             const artifact = () => item.answerless && item.precedingUserId ? artifactSummaries().get(item.precedingUserId) : undefined;
             const arrive = arrivalOf(lastArrivedId);
-            return <TranscriptRow ref={traceRow} data-slot="message-scroller-item"><Turn><TurnTrace since={arrive} trace={item.value} writing={item.answerless === false} sessionId={chatId()} renderer={markdownRenderer()} profileLabel={props.profileLabel} initialOpen={itemExpanded(chatId(), item.key)} onOpenChange={(open) => setItemExpanded(chatId(), item.key, open)} toolOpen={(id) => itemExpanded(chatId(), `tool:${id}`)} onToolOpenChange={(id, open) => setItemExpanded(chatId(), `tool:${id}`, open)} onRendered={() => settleAfterMarkdown(traceRow)} />
+            return <TranscriptRow ref={traceRow} data-slot="message-scroller-item"><Turn><TurnTrace since={arrive} trace={item.value} writing={item.answerless === false} renderer={markdownRenderer()} profileLabel={props.profileLabel} initialOpen={itemExpanded(chatId(), item.key)} onOpenChange={(open) => setItemExpanded(chatId(), item.key, open)} toolOpen={(id) => itemExpanded(chatId(), `tool:${id}`)} onToolOpenChange={(id, open) => setItemExpanded(chatId(), `tool:${id}`, open)} onRendered={() => settleAfterMarkdown(traceRow)} />
               {/* A turn that ended without an answer -- stopped under a tool, or
                   one that only ran commands -- still offers to try again. */}
               <Show when={item.answerless && !item.value.active}>
                 <MessageFoot time={clock(item.timestamp)} dateTime={item.timestamp} title={item.timestamp ? fullDateTime(item.timestamp) : undefined}>
-                  <Show when={props.supports("regenerate") && item.precedingUserId}><LibraryButton variant="ghost" size="icon-xs" aria-label="Regenerate response" onClick={() => void props.chat.regenerate(item.precedingUserId!)}><RefreshCwIcon /></LibraryButton></Show>
+                  <Show when={props.supports("regenerate") && item.precedingUserId}><LibraryButton variant="ghost" size="icon-xs" aria-label="Regenerate response" onClick={() => void props.chat.regenerate(item.precedingUserId!)}><Icons.Refresh /></LibraryButton></Show>
                   <Show when={artifact()}>{(entry) => <TurnChanges artifact={entry()} chatId={chatId()!} />}</Show>
                 </MessageFoot>
               </Show></Turn></TranscriptRow>;
@@ -1078,7 +1089,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
           const copy = async () => {
             if (!await copyWithFeedback(message().content || message().errorMessage || "")) return;
             setCopied(true);
-            setTimeout(() => setCopied(false), 1200);
+            setTimeout(() => setCopied(false), COPY_FEEDBACK_MS);
           };
           return <TranscriptRow ref={row} data-slot="message-scroller-item" data-message-id={message().id} turn={!user() && item.traced}>
             <Show when={user()} fallback={<Turn>
@@ -1096,7 +1107,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
                   facts={[message().model && `Model: ${message().model}`, message().provider && `Provider: ${message().provider}`, props.profileLabel && `Profile: ${props.profileLabel}`].filter(Boolean) as string[]} />
               </Show>
               {/* Held empty while it streams, so the foot arriving moves nothing. */}
-              <Show when={actionsShown()} fallback={<MessageFoot />}><AnswerFoot message={message()} precedingUserId={precedingUserId()} chat={props.chat} supports={props.supports} partialContinue={props.partialContinue} artifact={artifact()} traced={item.traced} reveal={streamed()} copied={copied()} onCopy={() => void copy()} /></Show>
+              <Show when={actionsShown()} fallback={<MessageFoot />}><AnswerFoot message={message()} precedingUserId={precedingUserId()} chat={props.chat} supports={props.supports} artifact={artifact()} traced={item.traced} reveal={streamed()} copied={copied()} onCopy={() => void copy()} /></Show>
             </Turn>}>
               <UserMessage message={message()} text={review().text} editing={props.chat.editingEntryId() === message().id}
                 editable={!message().pending && props.supports("fork")} since={arrive} onEdit={() => { props.chat.edit(message()); focusComposerSoon(); }}
@@ -1112,23 +1123,5 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
             own header later takes the same spot instead of pushing in. */}
         <Show when={awaitingTurn()}>{(_) => { const arrive = untrack(() => arrival(props.chat.messages().at(-1)!)); return <TranscriptRow data-slot="message-scroller-item"><TraceStarting since={arrive} startedAt={props.chat.messages().at(-1)?.timestamp} label="Starting" /></TranscriptRow>; }}</Show>
         </LibraryTranscript>
-        </div>
-      </div>
-      {/*
-        * `mousedown` is cancelled so pressing this does not take focus off the
-        * composer: on a phone that closes the keyboard, and jumping to the
-        * latest message is exactly what somebody does mid-sentence to check
-        * what they are replying to. The click still lands -- only the focus
-        * change is refused.
-        */}
-      {/* Always mounted, so it fades out as well as in: when pressed, and when
-           somebody scrolls back down themselves. */}
-      <RiderButton ref={(element: HTMLButtonElement) => { latestButton = element; scheduleLatestButtonAnchor(); }} ride="centre" icon={<ArrowDownIcon />} label="Scroll to latest"
-        hidden={phoneLayout() || following() || latestDistance() < TAIL_NEAR_LATEST_PX} onMouseDown={(event) => event.preventDefault()} onClick={() => followLatest()} />
-      {/* Editing an earlier message: a way out that is always there, floating
-          over the composer where the edit happens, as the pencil would. */}
-      <Show when={props.chat.editingEntryId()}><RiderButton ref={(element: HTMLButtonElement) => { cancelEditButton = element; scheduleLatestButtonAnchor(); }} icon={<XIcon />} label="Cancel editing" show="label"
-        ride={!following() && latestDistance() >= TAIL_NEAR_LATEST_PX ? "beside" : "centre"} onMouseDown={(event) => event.preventDefault()} onClick={() => { props.chat.cancelEdit(); focusComposerSoon(); }} /></Show>
-    </div>
-  </div>;
+  </ChatScroller>;
 }

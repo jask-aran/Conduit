@@ -1,9 +1,8 @@
+import { Icons } from "@/components/ui";
 import {
   createEffect, createMemo, createSignal, For, onCleanup, Show,
 } from "solid-js";
-import {
-  PlusIcon, RotateCcwIcon,
-} from "lucide-solid";
+
 import { Button, Input, Keycap, LiveNote, SettingGroup, SettingLine, SettingNote, SettingRecorder, SettingValue } from "@/components/ui";
 import { Select } from "@/components/menus";
 import { desktopShell } from "../platform/installed-client";
@@ -236,7 +235,7 @@ export function ShortcutsSettings(props: { manager: ShortcutManager }) {
   return <>
     <SettingGroup title="Keyboard">
       <SettingLine plain label="Keys for" state={shortcutEnvironmentLabel(props.manager.environment)}>
-        <Button variant="ghost" size="sm" onClick={resetAll} disabled={!hasOverrides()}><RotateCcwIcon /> Reset all</Button></SettingLine>
+        <Button variant="ghost" size="sm" onClick={resetAll} disabled={!hasOverrides()}><Icons.Reset /> Reset all</Button></SettingLine>
       <SettingLine label="Leader menu" state={<Show when={props.manager.leader}>{(stroke) => <Keycap>{formatShortcutStroke(stroke(), props.manager.environment)}</Keycap>}</Show>}>
         <Select id="leader-menu" aria-label="When the leader menu shows" value={leaderMenu()} onChange={(event) => saveLeaderMenu(event.currentTarget.value as LeaderMenuMode)}>
           <For each={LEADER_MENU_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
@@ -261,9 +260,9 @@ export function ShortcutsSettings(props: { manager: ShortcutManager }) {
                 <For each={bindings()}>{(binding, index) => <Keycap label={`${formatShortcutBinding(binding, props.manager.environment)} for ${command.label}`}
                   onClick={() => beginRecording(command.id, index())} onRemove={() => clearBinding(command, index())}>{formatShortcutBinding(binding, props.manager.environment)}</Keycap>}</For>
               </Show>
-              <Button variant="ghost" size="icon-sm" aria-label={`Add a shortcut for ${command.label}`} title="Add a shortcut" onClick={() => beginRecording(command.id, null)}><PlusIcon /></Button>
+              <Button variant="ghost" size="icon-sm" aria-label={`Add a shortcut for ${command.label}`} title="Add a shortcut" onClick={() => beginRecording(command.id, null)}><Icons.Add /></Button>
               <Show when={overridden(command.id)}>
-                <Button variant="ghost" size="icon-sm" aria-label={`Reset ${command.label} to its defaults`} title="Reset to default" onClick={() => resetCommand(command)}><RotateCcwIcon /></Button>
+                <Button variant="ghost" size="icon-sm" aria-label={`Reset ${command.label} to its defaults`} title="Reset to default" onClick={() => resetCommand(command)}><Icons.Reset /></Button>
               </Show>
             </SettingLine>
 

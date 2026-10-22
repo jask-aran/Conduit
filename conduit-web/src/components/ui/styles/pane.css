@@ -20,7 +20,7 @@
 /* The place: the crumb's caps (HeaderCrumb), on the titles' baseline. */
 .ui-tab-place-label { flex: 0 1 auto; max-width: var(--measure-xs); margin-right: var(--space-2xs); overflow: hidden; border: 0; background: none; padding: 0;
   color: color-mix(in oklch, var(--foreground), transparent var(--tone-quiet)); font: var(--weight-strong) var(--text-label)/var(--leading-row) var(--font-label);
-  letter-spacing: .07em; text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; cursor: pointer; }
+  letter-spacing: var(--label-tracking); text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; cursor: pointer; }
 .ui-tab-place-label > span { overflow: hidden; text-overflow: ellipsis; }
 .ui-tab-place[data-current] .ui-tab-place-label { color: var(--foreground); }
 @media (hover: hover) { .ui-tab-place-label:hover { color: var(--foreground); } }
@@ -30,10 +30,10 @@
 .ui-tab + .ui-tab::before { position: absolute; left: calc(-1 * var(--tab-gap) * .72); color: color-mix(in oklch, var(--foreground), transparent var(--tone-line)); content: "·"; pointer-events: none; }
 .ui-tab[data-lead]::before { content: none; }
 /* The pointer's wash is solid here, so an unlit tab's × can cover the title's end in it. */
-@media (hover: hover) { .ui-tab:hover { background: var(--accent); } }
+@media (hover: hover) { .ui-tab:hover { background: var(--border); } }
 .ui-tab-open { display: inline-flex; min-width: 0; height: 100%; flex: 1; align-items: center; gap: var(--space-sm); border: 0; background: transparent; padding: 0 var(--space-xs);
   color: color-mix(in oklch, var(--foreground), transparent var(--tone-quiet)); font: inherit; font-weight: var(--weight-rest); }
-.ui-tab-open > svg, .ui-tab-open > .harness-mark, .ui-tab-open > .workspace-glyph { width: var(--icon-sm); height: var(--icon-sm); flex: none; }
+.ui-tab-open > svg, .ui-tab-open > .ui-harness-mark, .ui-tab-open > .ui-glyph { width: var(--icon-sm); height: var(--icon-sm); flex: none; }
 .ui-tab-title { display: inline-flex; min-width: 0; flex-direction: column; overflow: hidden; }
 .ui-tab-title > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ui-tab-title::after { height: 0; overflow: hidden; visibility: hidden; font-weight: var(--weight-current); white-space: nowrap; content: attr(data-text); }
@@ -48,7 +48,7 @@
   border: 0; border-radius: var(--radius-inset); background: var(--background); color: var(--muted-foreground); }
 .ui-tab-close > svg { width: var(--icon-sm); height: var(--icon-sm); }
 .ui-tab:not([data-lit]) .ui-tab-close { position: absolute; right: var(--space-2xs); opacity: 0; box-shadow: calc(-1 * var(--space-md)) 0 var(--space-sm) var(--background); }
-@media (hover: hover) { .ui-tab:not([data-lit]):hover .ui-tab-close { background: var(--accent); box-shadow: calc(-1 * var(--space-md)) 0 var(--space-sm) var(--accent); opacity: 1; } }
+@media (hover: hover) { .ui-tab:not([data-lit]):hover .ui-tab-close { background: var(--border); box-shadow: calc(-1 * var(--space-md)) 0 var(--space-sm) var(--border); opacity: 1; } }
 .ui-tab[data-lit] .ui-tab-close { background: transparent; }
 @media (hover: hover) { .ui-tab-close:hover { color: var(--foreground); } }
 /* Unsaved: a dot where the × sits, the × on the pointer. */
@@ -67,15 +67,15 @@
 
 /* An edge: its hit target centred on the frame's gap, the gutter you drag. */
 .ui-pane-edge { position: absolute; z-index: 5; inset-block: 0; left: calc(-1 * var(--space-md)); width: var(--space-md); cursor: col-resize; touch-action: none; }
-.ui-pane-edge[data-dock] { z-index: 40; left: calc(-1 * var(--space-xl)); width: var(--control-xs); }
+.ui-pane-edge[data-dock] { z-index: var(--layer-dock); left: calc(-1 * var(--space-xl)); width: var(--control-xs); }
 .ui-pane-edge:focus-visible { outline: none; }
 .ui-pane-edge[data-dock]:focus-visible::after { position: absolute; inset-block: var(--space-xl); left: 50%; width: var(--stroke-thin, 2px); border-radius: var(--radius-round); background: var(--tint); content: ""; translate: -50% 0; }
 
 /* A drop: the band washes where it lands; a pill by the pointer names the result. */
-.ui-drop-wash { position: fixed; z-index: 60; border-radius: var(--radius-surface); background: var(--tint); pointer-events: none;
+.ui-drop-wash { position: fixed; z-index: var(--layer-drop); border-radius: var(--radius-surface); background: var(--tint); pointer-events: none;
   transition: left var(--duration-quick) var(--ease-change), width var(--duration-quick) var(--ease-change); }
 .ui-drop-wash[data-within] { position: absolute; z-index: 30; inset: var(--space-md) var(--space-md) var(--space-md) 50%; transition: none; }
-.ui-drag-pill { position: fixed; top: 0; left: 0; z-index: 80; display: inline-flex; align-items: center; gap: var(--space-sm); border-radius: var(--radius-control);
+.ui-drag-pill { position: fixed; top: 0; left: 0; z-index: var(--layer-drag); display: inline-flex; align-items: center; gap: var(--space-sm); border-radius: var(--radius-control);
   padding: var(--space-2xs) var(--space-md); color: var(--foreground); font-size: var(--text-row); pointer-events: none; white-space: nowrap; will-change: transform; }
 .ui-drag-pill > svg { width: var(--icon-sm); height: var(--icon-sm); color: var(--muted-foreground); }
 @media (prefers-reduced-motion: reduce) { .ui-drop-wash { transition: none; } }
@@ -150,7 +150,7 @@
 .ui-tree-row[data-open-file="focused"] { font-weight: var(--weight-current); }
 .ui-tree-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ui-tree-name + svg { width: var(--icon-xs); height: var(--icon-xs); margin-left: auto; color: var(--muted-foreground); }
-.ui-tree-row > .ui-tree-chevron { width: var(--icon-sm); height: var(--icon-sm); flex: none; margin-right: calc(-1 * var(--space-xs)); transition: transform 120ms ease; }
+.ui-tree-row > .ui-tree-chevron { width: var(--icon-sm); height: var(--icon-sm); flex: none; margin-right: calc(-1 * var(--space-xs)); transition: transform var(--duration-quick) var(--ease-change); }
 .ui-tree-chevron[data-open] { transform: rotate(90deg); }
 .ui-tool-bar[data-vertical] > [role="toolbar"] { display: flex; flex-direction: column; align-items: center; gap: var(--space-2xs); margin-top: auto; }
 .ui-tool-bar > small { min-width: 0; flex: 1; overflow: hidden; padding-inline: var(--space-xs); color: var(--muted-foreground); font: var(--text-caption) var(--font-data); text-overflow: ellipsis; white-space: nowrap; }
@@ -158,7 +158,7 @@
 .ui-pane-empty > div { display: grid; max-width: var(--measure-md); justify-items: center; gap: var(--space-sm); }
 .ui-pane-empty svg { width: var(--icon-lg); height: var(--icon-lg); }
 .ui-pane-empty strong { color: var(--foreground); }
-.ui-pane-empty p { margin: 0; line-height: 1.5; }
+.ui-pane-empty p { margin: 0; line-height: var(--leading-text); }
 
 /* Phone tool controls retain the reference's finger targets and strip spacing. */
 @media (--conduit-phone-layout) {
@@ -177,3 +177,11 @@
   .ui-tree-row { min-height: var(--control); gap: var(--space-sm); font-size: var(--text-row); }
   .ui-tree-row > svg, .ui-tree-row > img, .ui-tree-row > .ui-tree-chevron { width: var(--icon-sm); height: var(--icon-sm); }
 }
+/* The tree scrolls on the native bar, its thumb the shared one. */
+.ui-tree { scrollbar-color: var(--native-scrollbar-color); scrollbar-width: var(--native-scrollbar-width); }
+.ui-tree::-webkit-scrollbar { width: var(--space-sm); height: var(--space-sm); }
+.ui-tree::-webkit-scrollbar-thumb { border: var(--stroke) solid transparent; border-radius: var(--radius-round); background: color-mix(in oklch, var(--foreground), transparent 72%); background-clip: padding-box; }
+
+/* DropOverlay: over the pane's content (its own stacking), the card at its centre. */
+.ui-drop-overlay { position: absolute; inset: 0; z-index: var(--layer-drop); display: grid; place-items: center; pointer-events: none; background: var(--fog); backdrop-filter: var(--fog-blur); }
+.ui-drop-overlay-card { padding: var(--space-xl) var(--space-2xl); border-radius: var(--radius-surface); font-size: var(--text-row); }

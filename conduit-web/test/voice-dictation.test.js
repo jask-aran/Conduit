@@ -45,11 +45,11 @@ test("voice shortcut capture and push-to-talk release use the configured chord",
 test("voice settings remain draft-only by default and auto-send only a timely final", () => {
   const values = new Map();
   const storage = { getItem: (key) => values.get(key) ?? null, setItem: (key, value) => values.set(key, value) };
-  assert.deepEqual(loadVoiceDictationSettings(storage), { shortcut: "Ctrl+Shift+D", activation: "push_to_talk", autoSend: false, inputDeviceId: "", captureProfile: "raw", warmMicrophone: false });
+  assert.deepEqual(loadVoiceDictationSettings(storage), { shortcut: "Ctrl+Shift+D", activation: "push_to_talk", autoSend: false, inputDeviceId: "", inputDeviceLabel: "", captureProfile: "raw", warmMicrophone: false });
   storage.setItem("conduit:voice-dictation", JSON.stringify({ shortcut: "Super+D" }));
-  assert.deepEqual(loadVoiceDictationSettings(storage), { shortcut: "Ctrl+Shift+D", activation: "push_to_talk", autoSend: false, inputDeviceId: "", captureProfile: "raw", warmMicrophone: false });
-  assert.deepEqual(saveVoiceDictationSettings({ shortcut: "Ctrl+Shift+V", activation: "toggle", autoSend: true, inputDeviceId: "mic-2", captureProfile: "processed", warmMicrophone: true }, storage), { shortcut: "Ctrl+Shift+V", activation: "toggle", autoSend: true, inputDeviceId: "mic-2", captureProfile: "processed", warmMicrophone: true });
-  assert.deepEqual(loadVoiceDictationSettings(storage), { shortcut: "Ctrl+Shift+V", activation: "toggle", autoSend: true, inputDeviceId: "mic-2", captureProfile: "processed", warmMicrophone: true });
+  assert.deepEqual(loadVoiceDictationSettings(storage), { shortcut: "Ctrl+Shift+D", activation: "push_to_talk", autoSend: false, inputDeviceId: "", inputDeviceLabel: "", captureProfile: "raw", warmMicrophone: false });
+  assert.deepEqual(saveVoiceDictationSettings({ shortcut: "Ctrl+Shift+V", activation: "toggle", autoSend: true, inputDeviceId: "mic-2", inputDeviceLabel: "", captureProfile: "processed", warmMicrophone: true }, storage), { shortcut: "Ctrl+Shift+V", activation: "toggle", autoSend: true, inputDeviceId: "mic-2", inputDeviceLabel: "", captureProfile: "processed", warmMicrophone: true });
+  assert.deepEqual(loadVoiceDictationSettings(storage), { shortcut: "Ctrl+Shift+V", activation: "toggle", autoSend: true, inputDeviceId: "mic-2", inputDeviceLabel: "", captureProfile: "processed", warmMicrophone: true });
   assert.equal(normalizeActivation("unknown"), "push_to_talk");
   assert.equal(shouldAutoSend({ enabled: true, final: true, finalWithinDeadline: true }), true);
   assert.equal(shouldAutoSend({ enabled: true, final: false, finalWithinDeadline: true }), false);

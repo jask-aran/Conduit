@@ -9,11 +9,11 @@
 .ui-file-name > svg, .ui-file-name > img { width: var(--icon-sm); height: var(--icon-sm); flex: none; }
 .ui-file-name > span { overflow: hidden; color: var(--foreground); font-size: var(--text-caption); text-overflow: ellipsis; white-space: nowrap; }
 .ui-file-head small { flex: none; color: var(--muted-foreground); font-size: var(--text-label); white-space: nowrap; }
-.ui-file-git { flex: none; color: var(--workspace-git-modified, #d19a66); font: var(--text-caption) var(--font-data); }
-.ui-file-git:is([data-status="U"], [data-status="A"]) { color: var(--workspace-git-added, #98c379); }
-.ui-file-git[data-status="D"] { color: var(--destructive); }
-.ui-file-dirty { width: var(--space-sm); height: var(--space-sm); flex: none; border-radius: var(--radius-round); background: var(--warn); box-shadow: 0 0 0 var(--space-2xs) color-mix(in oklch, var(--warn), transparent 84%); opacity: 0; transform: scale(.7); transition: opacity 120ms ease, transform 160ms ease; }
-.ui-file-dirty[data-dirty] { opacity: .9; transform: scale(1); }
+.ui-file-git { flex: none; color: var(--change-modified); font: var(--text-caption) var(--font-data); }
+.ui-file-git:is([data-status="U"], [data-status="A"]) { color: var(--change-added); }
+.ui-file-git[data-status="D"] { color: var(--change-removed); }
+.ui-file-dirty { width: var(--space-sm); height: var(--space-sm); flex: none; border-radius: var(--radius-round); background: var(--warn); box-shadow: 0 0 0 var(--space-2xs) color-mix(in oklch, var(--warn), transparent 84%); opacity: 0; transform: scale(.7); transition: opacity var(--duration-quick) var(--ease-change), transform var(--duration-quick) var(--ease-change); }
+.ui-file-dirty[data-dirty] { opacity: 1; transform: scale(1); }
 
 /* The controls keep one order whatever the markup: save, actions, tools, the ⋯, close, the pane's own. */
 .ui-file-head > .ui-file-button { order: 2; }
@@ -70,4 +70,23 @@
   .ui-file-head { min-height: var(--control-lg); }
   .ui-file-head .ui-file-button, .ui-status-bar .ui-file-button, .ui-status-picker { min-width: var(--control-sm); height: var(--control-sm); }
   .ui-file-button > svg { width: var(--icon); height: var(--icon); }
+}
+
+/* The files tool (FilesPane): the tree, a SplitEdge, the file. */
+.ui-files { position: relative; display: flex; min-height: 0; flex: 1; flex-direction: column; }
+.ui-files-tree { display: flex; min-width: 0; min-height: 0; flex: 1; flex-direction: column; overflow: hidden; }
+.ui-files > .ui-file { flex: none; }
+/* Narrow: the tree a rail at the left, opening over the file as a drawer. */
+.ui-files[data-wide="false"] { display: grid; grid-template-columns: var(--control-lg) minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
+.ui-files[data-wide="false"] > .ui-file { grid-column: 2; grid-row: 1; }
+.ui-files[data-wide="false"][data-navigator-open] > .ui-file { grid-column: 1 / -1; }
+.ui-files[data-wide="false"] > .ui-files-tree { grid-column: 1 / -1; grid-row: 1 / -1; z-index: 8; width: min(85%, var(--measure-lg)); border-right: var(--hairline) solid var(--border); background: var(--background); box-shadow: var(--lift-side); }
+.ui-files[data-wide="false"]:not([data-navigator-open]) > .ui-files-tree { display: none; }
+@media (--conduit-wide-layout) {
+  /* Wide: the tree, the edge, the file. */
+  .ui-files[data-wide="true"] { display: grid; grid-template-columns: var(--files-tree-width, var(--measure-xs)) var(--space-lg) minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
+  .ui-files[data-wide="true"] > .ui-files-tree { grid-column: 1; grid-row: 1; }
+  .ui-files[data-wide="true"] > .ui-file { grid-column: 3; grid-row: 1; }
+  .ui-files[data-wide="true"][data-tree-collapsed] { grid-template-columns: var(--control-lg) 0 minmax(0, 1fr); }
+  .ui-files[data-wide="true"][data-tree-collapsed] > :is(.ui-files-tree, .ui-split-edge) { display: none; }
 }

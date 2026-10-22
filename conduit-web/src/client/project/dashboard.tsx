@@ -1,17 +1,22 @@
+import { COPY_FEEDBACK_MS } from "@/components/ui/motion";
+import { harnessMarkLabelFor } from "../harness-brand";
+import { ThreadHarnessMark } from "@/components/ui";
+import { FileTypeIcon } from "@/components/ui/file-marks";
+import { Icons } from "@/components/ui";
 import { Dialog } from "@/components/dialog";
 import { Button as DialogButton, Input as DialogInput, Field as DialogField, Segmented, Spinner } from "@/components/ui/controls";
 import { isConduitManagedProject } from "../navigation/sidebar-preferences";
 import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show, type JSX } from "solid-js";
 
-import { FolderIcon, FolderOpenIcon, PaletteIcon, PencilIcon, Settings2Icon, TerminalIcon, Trash2Icon, XIcon } from "lucide-solid";
-import { ThreadHarnessMark } from "../harness-brand";
+import { FolderOpenIcon } from "lucide-solid";
+
 import { activityLabel } from "../../activity.js";
 import { loadOutsideThreads, type OutsideThread } from "../dashboard/outside-threads";
 import { CHAT_PAGE, CompactHeading, DayGroups, FilterBar, FiltersMenu, groupByDay, harnessChoice, ListSearch, profileChoice, profileOf, ShowMore, sortChoice } from "../dashboard/primitives/chat-list";
-import { FileTypeIcon } from "../workspace/file-type-icon";
+
 import { ContextMenu, ContextMenuContent, ContextMenuGroup, ContextMenuItem, ContextMenuTrigger, MenuSection, MenuRow } from "@/components/menus";
 import { ContextMenu as MenuHost, ContextMenuContent as MenuContent, ContextMenuTrigger as MenuTrigger } from "@/components/menus";
-import { ChangeRow, DashNote, GroupAction, GroupSwitches } from "@/components/ui/dashboard";
+import { ChangeRow, DashNote, DashPath, GroupAction, GroupSwitches } from "@/components/ui/dashboard";
 import { Card, CardDetails, CardRead } from "@/components/ui/card";
 import { Section } from "@/components/ui/popover";
 import { ChatMenuFor, type ItemActions } from "../navigation/item-menus";
@@ -52,6 +57,7 @@ function workspaceProject(project: Project) {
 function kindLabel(project: Project) {
   if (project.origin === "cloned") return "Cloned workspace";
   if (project.origin === "created") return "Created workspace";
+  if (project.capabilities && !project.capabilities.device.local) return `On ${project.capabilities.device.name}`;
   if (workspaceProject(project)) return "Linked workspace";
   return "Project";
 }
@@ -259,7 +265,7 @@ export function ProjectDashboard(props: {
     try {
       await navigator.clipboard.writeText(path);
       setCopied(true);
-      setTimeout(() => setCopied(false), 1200);
+      setTimeout(() => setCopied(false), COPY_FEEDBACK_MS);
     } catch (copyError) {
       props.onError((copyError as Error).message);
     }
@@ -325,13 +331,13 @@ export function ProjectDashboard(props: {
 
   const manageItems = () => <>
       <MenuSection>
-        <Show when={isWorkspace()}><MenuRow onSelect={() => setAppearanceOpen(true)} icon={<PaletteIcon />}>Workspace identity</MenuRow></Show>
-        <MenuRow onSelect={props.onRename} icon={<PencilIcon />}>Rename</MenuRow>
-        <MenuRow onSelect={() => props.onOpenSettings("workspaces", props.project.id)} icon={<Settings2Icon />}>{isWorkspace() ? "Workspace settings" : "Project settings"}</MenuRow>
+        <Show when={isWorkspace()}><MenuRow onSelect={() => setAppearanceOpen(true)} icon={<Icons.WorkspaceIdentity />}>Workspace identity</MenuRow></Show>
+        <MenuRow onSelect={props.onRename} icon={<Icons.Edit />}>Rename</MenuRow>
+        <MenuRow onSelect={() => props.onOpenSettings("workspaces", props.project.id)} icon={<Icons.Settings />}>{isWorkspace() ? "Workspace settings" : "Project settings"}</MenuRow>
       </MenuSection>
       <MenuSection>
-      <MenuRow destructive onSelect={props.onDelete} icon={<Trash2Icon />}>{isWorkspace() ? "Unlink workspace" : "Delete project"}</MenuRow>
-      <Show when={isWorkspace()}><MenuRow destructive onSelect={() => setDestroyOpen(true)} icon={<Trash2Icon />}>Delete workspace and files</MenuRow></Show>
+      <MenuRow destructive onSelect={props.onDelete} icon={<Icons.Delete />}>{isWorkspace() ? "Unlink workspace" : "Delete project"}</MenuRow>
+      <Show when={isWorkspace() && (props.project.capabilities?.deleteFiles ?? false)}><MenuRow destructive onSelect={() => setDestroyOpen(true)} icon={<Icons.Delete />}>Delete workspace and files</MenuRow></Show>
       </MenuSection>
   </>;
 
@@ -341,7 +347,7 @@ export function ProjectDashboard(props: {
       const process = () => props.runtime.getProcess(item.id);
       const live = () => process()?.active ? activityLabel(runtimeActivity(process()) || "working", activityDetail(process())) : "";
       return <MenuHost><MenuTrigger as={SplitRow} element="button" draggable="true" data-doc-view={`chat:${item.id}`} onPointerEnter={() => props.onPrefetchChat(item)} onFocus={() => props.onPrefetchChat(item)} onClick={() => void props.onOpenChat(item, props.project)}
-          lead={<RuntimeIndicator process={process()} stale={props.runtime.stale()} unread={item.unread} fallback={<ThreadHarnessMark id={item.harnessId} lively />} />}
+          lead={<RuntimeIndicator process={process()} stale={props.runtime.stale()} unread={item.unread} fallback={<ThreadHarnessMark id={item.harnessId} label={harnessMarkLabelFor(item.harnessId)} lively />} />}
           primary={item.title || "Untitled chat"}
           context={live()}
           trailing={<time dateTime={item.lastMessageAt || item.createdAt}>{relativeActivity(item.lastMessageAt || item.createdAt, now())}</time>} />
@@ -353,7 +359,7 @@ export function ProjectDashboard(props: {
     <Show when={filteredOutside().length} fallback={<SplitEmpty>No threads outside Conduit in this workspace.</SplitEmpty>}>
       <DayGroups groups={outsideGroups()}>{(thread) =>
         <SplitRow element="button" title={thread.preview || thread.title} onClick={() => props.onOpenHarnessThread?.(thread.harnessId, workingRoot(), thread.id, thread.title)}
-          lead={<ThreadHarnessMark id={thread.harnessId} lively />} primary={thread.title || "Untitled thread"} context={thread.preview}
+          lead={<ThreadHarnessMark id={thread.harnessId} label={harnessMarkLabelFor(thread.harnessId)} lively />} primary={thread.title || "Untitled thread"} context={thread.preview}
           trailing={thread.at ? relativeActivity(new Date(thread.at).toISOString(), now()) : ""} />}
       </DayGroups>
     </Show>
@@ -398,11 +404,11 @@ export function ProjectDashboard(props: {
     <Show when={scopedTerminals().length} fallback={<SplitEmpty>{terminalsLoading() ? "Loading terminals…" : "No live terminals."}</SplitEmpty>}>
       <For each={scopedTerminals()}>{(terminal) =>
         <ContextMenu><ContextMenuTrigger as={SplitRow} element="button" onPointerEnter={props.onPrefetchTerminal} onFocus={props.onPrefetchTerminal} onClick={() => props.onOpenTerminal(terminal)}
-            lead={<TerminalIcon />} primary={terminal.title || "Shell"} context={terminal.currentCommand || "shell"} trailing={terminalActivity(terminal)} />
+            lead={<Icons.Terminal />} primary={terminal.title || "Shell"} context={terminal.currentCommand || "shell"} trailing={terminalActivity(terminal)} />
           <ContextMenuContent><ContextMenuGroup as={Section}>
-            <ContextMenuItem onSelect={() => props.onOpenTerminalMaximized(terminal)}><TerminalIcon />Open maximized</ContextMenuItem>
-            <ContextMenuItem onSelect={() => props.onContextAction("rename-terminal", { terminal })}><PencilIcon />Rename</ContextMenuItem>
-          </ContextMenuGroup><ContextMenuGroup as={Section}><ContextMenuItem variant="destructive" onSelect={() => props.onContextAction("delete-terminal", { terminal })}><Trash2Icon />Destroy shell</ContextMenuItem></ContextMenuGroup></ContextMenuContent></ContextMenu>}
+            <ContextMenuItem onSelect={() => props.onOpenTerminalMaximized(terminal)}><Icons.Terminal />Open maximized</ContextMenuItem>
+            <ContextMenuItem onSelect={() => props.onContextAction("rename-terminal", { terminal })}><Icons.Edit />Rename</ContextMenuItem>
+          </ContextMenuGroup><ContextMenuGroup as={Section}><ContextMenuItem variant="destructive" onSelect={() => props.onContextAction("delete-terminal", { terminal })}><Icons.Delete />Destroy shell</ContextMenuItem></ContextMenuGroup></ContextMenuContent></ContextMenu>}
       </For>
     </Show>
   </SplitGroup>;
@@ -431,9 +437,9 @@ export function ProjectDashboard(props: {
   return <>
     <SplitDashboard page={isWorkspace() ? "Workspace" : "Project"} label={`${props.project.name} dashboard`}
       header={<SplitHeader title={props.project.name} kind={kindLabel(props.project)}
-        glyph={<Show when={isWorkspace()} fallback={<FolderIcon />}><WorkspaceGlyph appearance={activeAppearance()} /></Show>}
+        glyph={<Show when={isWorkspace()} fallback={<Icons.Folder />}><WorkspaceGlyph appearance={activeAppearance()} /></Show>}
         context={[
-          <button type="button" title="Copy working path" onClick={() => void copyPath()}><code>{copied() ? "Copied" : workingRoot() || "Working path unavailable"}</code></button>,
+          <DashPath path={workingRoot()} copied={copied()} onCopy={() => void copyPath()} />,
           git() && <>{git()!.branch}{git()!.upstream ? ` → ${git()!.upstream}` : ""}</>,
           git() && (git()!.ahead || git()!.behind) ? [git()!.ahead && `${git()!.ahead} ahead`, git()!.behind && `${git()!.behind} behind`].filter(Boolean).join(", ") : null,
           !isWorkspace() && payload()?.stats.lastActivityAt && `last active ${relativeActivity(payload()?.stats.lastActivityAt, now()).toLowerCase()}`,
@@ -449,7 +455,7 @@ export function ProjectDashboard(props: {
       notice={cloning() || (error() && !cloning()) ? <>
         <Show when={cloning()}>
           <div aria-live="polite"><Card embedded size="wide" title={<><Spinner /> {operation()?.state === "cancelling" ? "Cancelling clone" : "Cloning workspace"}</>} detail="Closing this tab does not stop the operation."
-            actions={<DialogButton variant="destructive" size="sm" disabled={cancellingClone()} onClick={() => void cancelClone()}><XIcon />{cancellingClone() ? "Cancelling…" : "Cancel clone"}</DialogButton>}>
+            actions={<DialogButton variant="destructive" size="sm" disabled={cancellingClone()} onClick={() => void cancelClone()}><Icons.Close />{cancellingClone() ? "Cancelling…" : "Cancel clone"}</DialogButton>}>
             <CardDetails><dt>Destination</dt><dd title={props.project.workingRoot}>{props.project.workingRoot}</dd></CardDetails>
             <CardRead>{operation()?.diagnostic || "Preparing clone…"}</CardRead>
           </Card></div>
@@ -476,7 +482,7 @@ export function ProjectDashboard(props: {
       description={<>This removes <strong>{props.project.name}</strong> from Conduit and permanently erases its working directory. Type the exact workspace name to continue.</>}
       actions={<>
         <DialogButton variant="ghost" outline size="sm" disabled={destroying()} onClick={() => setDestroyOpen(false)}>Cancel</DialogButton>
-        <DialogButton variant="destructive" size="sm" disabled={destroying() || destroyConfirmation() !== props.project.name} onClick={() => void destroyWorkspace()}><Trash2Icon />{destroying() ? "Deleting…" : "Delete workspace and files"}</DialogButton>
+        <DialogButton variant="destructive" size="sm" disabled={destroying() || destroyConfirmation() !== props.project.name} onClick={() => void destroyWorkspace()}><Icons.Delete />{destroying() ? "Deleting…" : "Delete workspace and files"}</DialogButton>
       </>}>
       <DialogField label={<>Workspace name</>}>
         <DialogInput id="workspace-destroy-confirmation" value={destroyConfirmation()} onInput={(event) => setDestroyConfirmation(event.currentTarget.value)} autocomplete="off" />

@@ -11,6 +11,8 @@
 .ui-title { display: flex; align-items: baseline; justify-content: space-between; gap: var(--row-gap); padding: var(--space-sm) var(--space-md) var(--space-sm); }
 .ui-title small { font-weight: var(--weight-rest); letter-spacing: 0; text-transform: none; }
 .ui-section { display: flex; flex-direction: column; }
+/* A section inside a section is a part of it (a row's reading opened in place, Context): it follows with a gap, no rule. */
+.ui-section .ui-section + .ui-section { margin: var(--space-sm) 0 0; border-top: 0; padding: 0; }
 .ui-section + .ui-section { margin-top: var(--frost-inset); border-top: var(--hairline) solid var(--tint); margin-inline: calc(-1 * var(--frost-inset)); padding: var(--frost-inset) var(--frost-inset) 0; }
 .ui-search-section { flex-direction: row; align-items: center; gap: var(--row-gap); padding: var(--row-pad); }
 .ui-search-section > svg { width: var(--icon); height: var(--icon); flex: none; color: var(--muted-foreground); }
@@ -23,8 +25,8 @@
    harness mark -- fills one icon-sized square. */
 .ui-icon { display: inline-grid; width: var(--icon); height: var(--icon); flex: none; place-items: center; }
 .ui-icon > * { width: 100% !important; height: 100% !important; }
-.ui-icon > .workspace-glyph svg { width: 100%; height: 100%; }
-.ui-icon:has(> .harness-mark) { width: var(--icon-sm); height: var(--icon-sm); }
+.ui-icon > .ui-glyph svg { width: 100%; height: 100%; }
+.ui-icon:has(> .ui-harness-mark) { width: var(--icon-sm); height: var(--icon-sm); }
 .ui-row > .ui-label { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* Meta: muted mono beside the title, right-aligned, tabular. */
 /* The meta gives way before the label does: a long one (a model's spec) truncates first. */
@@ -36,6 +38,9 @@
 .ui-row:is([data-highlighted], [data-expanded]) { background: var(--tint); color: var(--foreground); }
 /* On a touch screen the row under the finger is washed while it is pressed: what lifting it will choose. */
 @media (hover: none) { .ui-row:not([data-disabled]):active { background: var(--tint); color: var(--foreground); } }
+/* There a menu item is focused only to carry the keys (a submenu shut puts it back on its trigger): it is the cursor
+   only when the focus is shown, so a row tapped or returned to is not left washed. A search's rows keep theirs. */
+@media (hover: none) { .ui-row[role^="menuitem"][data-highlighted]:not(:focus-visible, :active, [data-expanded]) { background: none; color: inherit; } }
 .ui-row[data-checked], [data-surface="frost"] .ui-row[data-checked] { color: var(--foreground); font-weight: var(--weight-current); }
 /* Over frost the row reads a touch heavier and brighter (text over frost reads thinner). */
 /* The row role, one for every row (list, menu, palette, settings, the sidebar): over frost a touch heavier and brighter, since text there reads thinner. */
@@ -45,31 +50,46 @@
 .ui-row:is([data-highlighted], [data-checked]) > .ui-icon { color: var(--foreground); }
 :is(.ui-row[data-checked] > .ui-icon, .ui-nav-row[aria-current="page"] > .ui-nav-icon, .ui-tabs > [aria-selected="true"]) svg.lucide { stroke-width: 3; }
 /* A harness mark rests greyed with its row and shows its colour on the cursor or the current row. */
-.ui-row .harness-mark { filter: grayscale(1); opacity: var(--opacity-rest); }
-.ui-row:is([data-highlighted], [data-checked]) .harness-mark { filter: none; opacity: 1; }
+.ui-row .ui-harness-mark { filter: grayscale(1); opacity: var(--opacity-rest); }
+.ui-row:is([data-highlighted], [data-checked]) .ui-harness-mark { filter: none; opacity: 1; }
 .ui-row[data-disabled], [data-surface="frost"] .ui-row[data-disabled] { pointer-events: none; color: color-mix(in oklch, var(--foreground), transparent var(--tone-faint)); text-decoration: line-through var(--stroke-thin); }
 .ui-row[data-disabled] > small { text-decoration: none; }
 .ui-row[data-destructive], .ui-row[data-destructive] > .ui-icon { color: var(--destructive); }
 .ui-row[data-destructive][data-highlighted] { background: color-mix(in oklch, var(--destructive), transparent var(--tone-wash)); }
+/* A row dragged over (data-drop-target, a list a pointer reorders): a line where the dragged row will land. */
+.ui-row[data-drop-target] { box-shadow: inset 0 var(--stroke) 0 var(--foreground); }
+/* RowGroup: the row fills; its actions are --control-sm squares after it, each with the row's cursor wash when it holds
+   the cursor. Where a pointer hovers they show on the hovered row or the one the cursor is in. */
+.ui-row-group { display: flex; width: 100%; min-width: 0; align-items: center; gap: var(--space-2xs); }
+.ui-row-group > .ui-row { min-width: 0; flex: 1; }
+.ui-row-actions { display: inline-flex; flex: none; gap: var(--space-2xs); }
+.ui-row-action { display: grid; width: var(--control-sm); height: var(--control-sm); flex: none; place-items: center; border-radius: var(--radius-control); color: var(--muted-foreground); cursor: pointer; }
+.ui-row-action > svg { width: var(--icon-sm); height: var(--icon-sm); }
+.ui-row-action[data-highlighted] { background: var(--tint); color: var(--foreground); }
+.ui-row-action[data-destructive] { color: var(--destructive); }
+.ui-row-action[data-destructive][data-highlighted] { background: color-mix(in oklch, var(--destructive), transparent var(--tone-wash)); }
+.ui-row-action[data-disabled] { opacity: var(--opacity-disabled); pointer-events: none; }
+@media (hover: hover) { .ui-row-group:not(:hover, :focus-within) > .ui-row-actions { visibility: hidden; } }
 
 .ui-row > .ui-row-end { display: inline-flex; flex: none; margin-left: auto; margin-right: calc((var(--u-icon) - var(--control-sm)) / 2); }
 
 /* Heading section: the popover's subject, then items about it (a field row). */
-.ui-heading { padding: 0; }
-.ui-heading-title, .ui-heading-detail { padding: var(--space-sm); line-height: var(--leading-tight); }
-.ui-heading-title { color: var(--foreground); font-size: var(--text-body); font-weight: var(--weight-strong); }
-.ui-heading-detail { color: var(--muted-foreground); font-size: var(--text-caption); }
 
 /* A field row: its name muted at the row role (never uppercase), its value after it. */
-.ui-row[data-field] > .ui-label { color: var(--muted-foreground); }
-.ui-row[data-field] > small { color: color-mix(in oklch, var(--foreground), transparent var(--tone-quiet)); font-family: inherit; font-size: var(--text-row); }
+/* A field row reads as its section's title (a slider's, the plus menu's PROFILE and EFFORT): the name in the label's
+   voice, its value in the text's, quiet, and a small chevron -- the row that unfolds the section's reading under it. */
+.ui-row[data-field] > .ui-label { color: var(--muted-foreground); font: var(--label-weight) var(--label-size)/var(--leading-text) var(--label-face); letter-spacing: var(--label-tracking); text-transform: var(--label-case); }
+.ui-row[data-field] > small { color: color-mix(in oklch, var(--foreground), transparent var(--tone-quiet)); font: var(--weight-rest) var(--text-caption)/var(--leading-row) var(--font-sans); }
+.ui-row[data-field] > .ui-chevron { width: var(--icon-xs); height: var(--icon-xs); }
 
 /* An item's detail: a second line under its label (a route's address). */
 .ui-row > .ui-label[data-stacked] { display: flex; flex-direction: column; }
 .ui-label > .ui-detail { overflow: hidden; color: var(--muted-foreground); font: var(--weight-rest) var(--text-caption)/var(--leading-tight) inherit; font-family: inherit; text-overflow: ellipsis; white-space: nowrap; }
+/* Data: a second line that is a value reads in the data face, as a row's meta does. */
+.ui-label > .ui-detail[data-data] { font-family: var(--font-data); }
 /* An app row's own icon, placed straight in the row (not in an icon slot), is sized as one. */
-.ui-row > :is(svg, .workspace-glyph, img):not(.ui-chevron) { width: var(--icon); height: var(--icon); flex: none; }
-.ui-row > .harness-mark { width: var(--icon-sm); height: var(--icon-sm); flex: none; }
+.ui-row > :is(svg, .ui-glyph, img):not(.ui-chevron) { width: var(--icon); height: var(--icon); flex: none; }
+.ui-row > .ui-harness-mark { width: var(--icon-sm); height: var(--icon-sm); flex: none; }
 .ui-match { color: var(--muted-foreground); }
 .ui-match > b { color: var(--foreground); font-weight: var(--weight-current); }
 /* A phone variant has no keyboard: shortcut keys are off wherever they sit (after the rows' keys, before the leader's,
@@ -106,7 +126,12 @@
 /* Kobalte lifts its positioner to the surface's own layer. */
 .ui-menu:not(.ui-menu-panel) { z-index: var(--layer-popover); }
 .ui-menu[data-wide] { width: var(--measure-md); --menu-width: var(--measure-md); }
+/* Unfolds: as wide as its cap from the start, so a row opening in place (Details, Context) neither widens nor moves it;
+   and its height grows with what opens, to the room it has (its host's, inside the safe area), before it scrolls. */
+.ui-menu[data-unfolds] { --menu-height-cap: 100dvh; width: min(var(--menu-width, var(--menu-width-cap)), calc(100vw - var(--space-xl))); }
 .ui-readout { display: flex; justify-content: space-between; gap: var(--row-gap); padding: 0 var(--space-md); color: var(--muted-foreground); font-size: var(--text-caption); font-variant-numeric: tabular-nums; }
+/* A long value (a tool list, an id) wraps at its end rather than pushing past the menu. */
+.ui-readout > span:last-child { min-width: 0; text-align: end; overflow-wrap: anywhere; }
 .ui-section > .ui-meter { margin: var(--space-xs) var(--space-md) var(--space-sm); }
 /* A row that opens in place turns its chevron down while open. */
 .ui-row > .ui-chevron { transition: rotate var(--duration-quick) var(--ease-change); }

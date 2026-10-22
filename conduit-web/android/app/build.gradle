@@ -43,6 +43,17 @@ android {
             applicationIdSuffix ".dev"
             versionNameSuffix "-dev"
         }
+        /*
+         * Conduit Durable: the client for the distributed-nodes head on the
+         * VPS while that branch is built -- a debug build with its own id and
+         * launcher name (src/durable/res), beside Conduit and Conduit Dev.
+         */
+        durable {
+            initWith debug
+            applicationIdSuffix ".durable"
+            versionNameSuffix "-durable"
+            matchingFallbacks = ['debug']
+        }
         release {
             minifyEnabled false
             signingConfig signingConfigs.release

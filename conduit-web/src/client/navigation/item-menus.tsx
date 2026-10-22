@@ -1,5 +1,6 @@
+import { Icons } from "@/components/ui";
 import { For, Show, type JSX } from "solid-js";
-import { ClipboardCopyIcon, Columns2Icon, FolderInputIcon, LoaderCircleIcon, Maximize2Icon, MessageSquarePlusIcon, PaletteIcon, PencilIcon, PinIcon, PinOffIcon, Settings2Icon, SquareIcon, TerminalIcon, Trash2Icon } from "lucide-solid";
+import { LoaderCircleIcon } from "lucide-solid";
 import { MenuRadioGroup, MenuRadioItem, MenuRow, MenuSection, MenuSub, MenuSubContent, MenuSubTrigger } from "@/components/menus";
 import type { ChatSummary, Project } from "../api/contracts";
 import { isWorkspace, PlaceGlyph } from "../chat/place-picker";
@@ -19,7 +20,7 @@ import { isConduitManagedProject } from "./sidebar-preferences";
 export function MoveTo(props: { label: string; places: Project[]; current?: string; held?: (place: Project) => boolean; disabled?: boolean; onMove: (place: Project) => void }) {
   const pick = (id: string) => { const place = props.places.find((item) => item.id === id); if (place) props.onMove(place); };
   return <MenuSub phone={isMobileLayout()}>
-    <MenuSubTrigger icon={<FolderInputIcon />} disabled={props.disabled}>{props.label}</MenuSubTrigger>
+    <MenuSubTrigger icon={<Icons.MoveToFolder />} disabled={props.disabled}>{props.label}</MenuSubTrigger>
     <MenuSubContent height="md"><MenuSection title="Move to">
       <Show when={props.current} fallback={<For each={props.places}>{(place) =>
         <MenuRow icon={<PlaceGlyph project={place} />} disabled={props.held?.(place)} onSelect={() => props.onMove(place)}>{place.name}</MenuRow>}</For>}>
@@ -33,7 +34,7 @@ export function MoveTo(props: { label: string; places: Project[]; current?: stri
 
 /** Pin to the sidebar, or unpin. */
 const PinRow = (props: { pinned: boolean; onToggle: () => void }) =>
-  <MenuRow icon={props.pinned ? <PinOffIcon /> : <PinIcon />} onSelect={props.onToggle}>{props.pinned ? "Unpin" : "Pin to sidebar"}</MenuRow>;
+  <MenuRow icon={props.pinned ? <Icons.PinOff /> : <Icons.Pin />} onSelect={props.onToggle}>{props.pinned ? "Unpin" : "Pin to sidebar"}</MenuRow>;
 
 /** A chat's menu. pin: absent where a chat cannot be pinned; openBeside, stop: absent where they do not apply. */
 export function ChatMenuItems(props: {
@@ -43,16 +44,16 @@ export function ChatMenuItems(props: {
 }) {
   return <>
     <MenuSection>
-      <MenuRow icon={<PencilIcon />} onSelect={props.onRename}>{commandLabel(COMMAND_IDS.renameChat)}</MenuRow>
+      <MenuRow icon={<Icons.Edit />} onSelect={props.onRename}>{commandLabel(COMMAND_IDS.renameChat)}</MenuRow>
       <MoveTo label="Move to folder…" places={props.places} current={props.project.id} onMove={props.onMove} />
-      <MenuRow icon={<ClipboardCopyIcon />} onSelect={props.onCopy}>{commandLabel(COMMAND_IDS.copyTranscript)}</MenuRow>
-      <Show when={props.onOpenBeside}><MenuRow icon={<Columns2Icon />} onSelect={() => props.onOpenBeside?.()}>Open beside</MenuRow></Show>
-      <MenuRow icon={<TerminalIcon />} onSelect={props.onOpenTerminal}>Open terminal</MenuRow>
-      <Show when={props.onStop}><MenuRow icon={<SquareIcon />} onSelect={() => props.onStop?.()}>Stop process</MenuRow></Show>
+      <MenuRow icon={<Icons.Copy />} onSelect={props.onCopy}>{commandLabel(COMMAND_IDS.copyTranscript)}</MenuRow>
+      <Show when={props.onOpenBeside}><MenuRow icon={<Icons.Split />} onSelect={() => props.onOpenBeside?.()}>Open beside</MenuRow></Show>
+      <MenuRow icon={<Icons.Terminal />} onSelect={props.onOpenTerminal}>Open terminal</MenuRow>
+      <Show when={props.onStop}><MenuRow icon={<Icons.Stop />} onSelect={() => props.onStop?.()}>Stop process</MenuRow></Show>
       <Show when={props.pin}>{(pin) => <PinRow pinned={pin().pinned} onToggle={pin().onToggle} />}</Show>
     </MenuSection>
     <MenuSection>
-      <MenuRow destructive icon={<Trash2Icon />} onSelect={props.onDelete}>{commandLabel(COMMAND_IDS.deleteChat)}</MenuRow>
+      <MenuRow destructive icon={<Icons.Delete />} onSelect={props.onDelete}>{commandLabel(COMMAND_IDS.deleteChat)}</MenuRow>
     </MenuSection>
   </>;
 }
@@ -70,16 +71,16 @@ export function PlaceMenuItems(props: {
   const workspace = () => isWorkspace(props.project);
   return <Show when={props.project.state !== "cloning"} fallback={<MenuSection><MenuRow disabled icon={<LoaderCircleIcon />}>Clone in progress</MenuRow></MenuSection>}>
     <MenuSection>
-      <MenuRow icon={<MessageSquarePlusIcon />} onSelect={props.onNewChat}>{commandLabel(COMMAND_IDS.newChat)}</MenuRow>
-      <Show when={workspace() && props.onOpenMaximized}><MenuRow icon={<Maximize2Icon />} onSelect={() => props.onOpenMaximized?.()}>Open maximized Workspace</MenuRow></Show>
-      <MenuRow icon={<PencilIcon />} onSelect={props.onRename}>Rename {workspace() ? "workspace" : "folder"}</MenuRow>
+      <MenuRow icon={<Icons.NewChat />} onSelect={props.onNewChat}>{commandLabel(COMMAND_IDS.newChat)}</MenuRow>
+      <Show when={workspace() && props.onOpenMaximized}><MenuRow icon={<Icons.Maximize />} onSelect={() => props.onOpenMaximized?.()}>Open maximized Workspace</MenuRow></Show>
+      <MenuRow icon={<Icons.Edit />} onSelect={props.onRename}>Rename {workspace() ? "workspace" : "folder"}</MenuRow>
       <Show when={props.pin}>{(pin) => <PinRow pinned={pin().pinned} onToggle={pin().onToggle} />}</Show>
-      <Show when={workspace()}><MenuRow icon={<PaletteIcon />} onSelect={props.onIdentity}>Identity</MenuRow></Show>
-      <MenuRow icon={<Settings2Icon />} onSelect={props.onSettings}>{workspace() ? "Workspace settings" : "Folder settings"}</MenuRow>
+      <Show when={workspace()}><MenuRow icon={<Icons.WorkspaceIdentity />} onSelect={props.onIdentity}>Identity</MenuRow></Show>
+      <MenuRow icon={<Icons.Settings />} onSelect={props.onSettings}>{workspace() ? "Workspace settings" : "Folder settings"}</MenuRow>
       <MoveTo label="Move chats to…" places={props.places.filter((place) => place.id !== props.project.id)} disabled={!props.project.sessions.length} onMove={props.onMoveChats} />
     </MenuSection>
     <MenuSection>
-      <MenuRow destructive icon={<Trash2Icon />} onSelect={props.onDelete}>{deletePlaceLabel(props.project)}</MenuRow>
+      <MenuRow destructive icon={<Icons.Delete />} onSelect={props.onDelete}>{deletePlaceLabel(props.project)}</MenuRow>
     </MenuSection>
   </Show>;
 }

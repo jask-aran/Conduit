@@ -1,12 +1,15 @@
+import { harnessMarkLabelFor } from "../harness-brand";
+import { HarnessMark, ThreadHarnessMark } from "@/components/ui";
+import { Icons } from "@/components/ui";
 import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show, type JSX } from "solid-js";
-import { ArrowUpIcon, ArrowRightIcon, FolderIcon, HomeIcon, LayersIcon, SearchIcon, XIcon } from "lucide-solid";
+
 import { api } from "../api/client";
 import type { ChatSummary, ComputerLocation, HarnessSummary, HarnessThread, HarnessThreadDiscovery, HarnessThreadGroup, ModelOption, ModelState, PermissionMode, PermissionModeState, Project } from "../api/contracts";
 import type { ComposerModels } from "../chat/composer-models";
 import type { ComposerPermissions } from "../chat/composer-permissions";
 import type { FolderOptions } from "../chat/place-picker";
 import { saveChatSort, useChatSort } from "../preferences/chat-sort";
-import { HarnessMark, harnessStatusLabel, ThreadHarnessMark } from "../harness-brand";
+import { harnessStatusLabel } from "../harness-brand";
 import { isConduitManagedProject } from "../navigation/sidebar-preferences";
 import { activityDetail, runtimeActivity, RuntimeIndicator } from "../navigation/runtime-indicator";
 import { activityLabel } from "../../activity.js";
@@ -269,7 +272,7 @@ export function HarnessDashboard(props: {
     <Show when={outside().length} fallback={<SplitEmpty>{query() ? "No threads match this search." : `No threads outside Conduit ${scope() ? "in this folder" : "yet"}.`}</SplitEmpty>}>
       <DayGroups groups={groupByDay(outside().slice(0, limit()), ({ thread }) => sortTime(thread), now())}>{({ group, thread }) =>
         <SplitRow element="button" disabled={group.missing} title={thread.preview || thread.title} onClick={() => openThread(group, thread)}
-          lead={<ThreadHarnessMark id={props.harnessId} lively />} primary={thread.title || "Untitled thread"}
+          lead={<ThreadHarnessMark id={props.harnessId} label={harnessMarkLabelFor(props.harnessId)} lively />} primary={thread.title || "Untitled thread"}
           context={[scope() ? null : group.display, group.repository?.branch, group.missing ? "Folder is gone" : null].filter(Boolean).join(" · ")}
           trailing={shortAge(sortTime(thread), now())} />}
       </DayGroups>
@@ -281,7 +284,7 @@ export function HarnessDashboard(props: {
       const process = () => props.runtime.getProcess(chat.id);
       const live = () => process()?.active ? activityLabel(runtimeActivity(process()) || "working", activityDetail(process())) : "";
       return <SplitRow element="button" onClick={() => props.onOpenChat(chat, project)}
-        lead={<RuntimeIndicator process={process()} stale={props.runtime.stale()} unread={chat.unread} fallback={<ThreadHarnessMark id={chat.harnessId} lively />} />}
+        lead={<RuntimeIndicator process={process()} stale={props.runtime.stale()} unread={chat.unread} fallback={<ThreadHarnessMark id={chat.harnessId} label={harnessMarkLabelFor(chat.harnessId)} lively />} />}
         primary={chat.title || "Untitled chat"}
         context={[live(), scope() ? null : project.name].filter(Boolean).join(" · ")}
         trailing={shortAge(Date.parse(chat.lastMessageAt || chat.createdAt || "") || 0, now())} />;
@@ -293,9 +296,9 @@ export function HarnessDashboard(props: {
     { value: "conduit", label: "In Conduit", detail: kept().length },
     { value: "outside", label: "Not in Conduit", detail: loading() ? undefined : outside().length },
   ] });
-  const search = () => <Show when={searching()} fallback={<DashIconButton aria-label="Search threads" title="Search threads" onClick={() => setSearching(true)}><SearchIcon /></DashIconButton>}>
+  const search = () => <Show when={searching()} fallback={<DashIconButton aria-label="Search threads" title="Search threads" onClick={() => setSearching(true)}><Icons.Search /></DashIconButton>}>
     <Input type="search" aria-label="Search threads" placeholder="Search" autofocus value={query()} onInput={(event) => setQuery(event.currentTarget.value)} onKeyDown={(event) => { if (event.key === "Escape") { setQuery(""); setSearching(false); } }} />
-    <DashIconButton aria-label="Close search" title="Close search" onClick={() => { setQuery(""); setSearching(false); }}><XIcon /></DashIconButton>
+    <DashIconButton aria-label="Close search" title="Close search" onClick={() => { setQuery(""); setSearching(false); }}><Icons.Close /></DashIconButton>
   </Show>;
   const threadsGroup = () => <SplitGroup id="harness-threads" order="list" busy={loading()}
     heading={<GroupSwitches><Show when={discovers()} fallback={<GroupHeading id="harness-threads" count={kept().length}>Chats</GroupHeading>}>
@@ -313,10 +316,10 @@ export function HarnessDashboard(props: {
 
   const foldersGroup = () => <SplitGroup id="harness-folders" label={showOutside() ? "Folders" : "Workspaces"} count={folders().length} actions={showOutside() ? <GroupAction onClick={() => void browse(launchCwd())}>Browse</GroupAction> : undefined}>
     <Show when={folders().length} fallback={<SplitEmpty>{showOutside() ? `${label()} has not said where it ran.` : "No workspaces yet."}</SplitEmpty>}>
-      <SplitRow element="button" aria-current={scope() ? undefined : "true"} onClick={() => props.onScope(null)} lead={<LayersIcon />} primary="All folders" />
+      <SplitRow element="button" aria-current={scope() ? undefined : "true"} onClick={() => props.onScope(null)} lead={<Icons.Profile />} primary="All folders" />
       <For each={folders()}>{(row) =>
         <SplitRow element="button" aria-current={row.path === scope() ? "true" : undefined} disabled={row.missing} title={row.path} onClick={() => props.onScope(row.path)}
-          lead={row.project ? <WorkspaceGlyph appearance={row.project.workspaceAppearance} /> : <FolderIcon />} primary={row.label} context={row.missing ? "Folder is gone" : row.path} />}
+          lead={row.project ? <WorkspaceGlyph appearance={row.project.workspaceAppearance} /> : <Icons.Folder />} primary={row.label} context={row.missing ? "Folder is gone" : row.path} />}
       </For>
     </Show>
   </SplitGroup>;
@@ -337,19 +340,19 @@ export function HarnessDashboard(props: {
     {/* Choosing the working folder: where it is now, then a list that starts with Home and Up, its folders, and the
         recent ones; Use folder takes the one shown. */}
     <Dialog open={Boolean(picker())} onOpenChange={(open) => !open && setPicker(null)} title="Select working folder" close="Cancel" size="wide"
-      actions={<Button type="button" disabled={pickerBusy() || !picker()} onClick={() => { const location = picker(); if (!location) return; props.onScope(location.project.workingRoot); setPicker(null); }}>Use folder <ArrowRightIcon /></Button>}>
+      actions={<Button type="button" disabled={pickerBusy() || !picker()} onClick={() => { const location = picker(); if (!location) return; props.onScope(location.project.workingRoot); setPicker(null); }}>Use folder <Icons.Proceed /></Button>}>
     <Show when={picker()}>{(location) => <>
       <CardRead>{location().project.workingRoot}</CardRead>
       <CardPreview>
         <Show when={location().project.workingRoot !== location().home}>
-          <DashRow element="button" type="button" lead={<HomeIcon />} primary="Home" context={location().home} onClick={() => void browse(location().home)} />
-          <DashRow element="button" type="button" lead={<ArrowUpIcon />} primary="Up" context={location().parent} onClick={() => void browse(location().parent)} />
+          <DashRow element="button" type="button" lead={<Icons.Home />} primary="Home" context={location().home} onClick={() => void browse(location().home)} />
+          <DashRow element="button" type="button" lead={<Icons.ArrowUp />} primary="Up" context={location().parent} onClick={() => void browse(location().parent)} />
         </Show>
-        <For each={pickerDirectories()}>{(entry) => <DashRow element="button" type="button" lead={<FolderIcon />} primary={entry.name} onClick={() => void browse(`${location().project.workingRoot}/${entry.path}`)} />}</For>
+        <For each={pickerDirectories()}>{(entry) => <DashRow element="button" type="button" lead={<Icons.Folder />} primary={entry.name} onClick={() => void browse(`${location().project.workingRoot}/${entry.path}`)} />}</For>
         <Show when={!pickerDirectories().length}><DashEmpty>No folders here.</DashEmpty></Show>
         <Show when={launchFolders().length}>
           <DashDay>Recent</DashDay>
-          <For each={launchFolders()}>{(row) => <DashRow element="button" type="button" lead={<FolderIcon />} primary={row.label} context={row.path} title={row.path} onClick={() => void browse(row.path)} />}</For>
+          <For each={launchFolders()}>{(row) => <DashRow element="button" type="button" lead={<Icons.Folder />} primary={row.label} context={row.path} title={row.path} onClick={() => void browse(row.path)} />}</For>
         </Show>
       </CardPreview>
     </>}</Show>

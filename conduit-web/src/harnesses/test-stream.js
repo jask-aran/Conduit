@@ -21,8 +21,6 @@ export const manifest = {
   // No process to start: a chat is usable the moment it is selected.
   warm: "none",
   nameGeneration: "conduit",
-  // It names its own messages before it writes a word of them.
-  suppliesMessageIds: true,
   drive: false,
   profile: true,
   builtIn: true,

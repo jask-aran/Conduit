@@ -439,7 +439,7 @@ function liveRows(generation: ActiveGenerationView, owner: Message | null, tools
     // Only an error the turn moved past belongs in the trace, which is what the
     // persisted path means by `assistant !== finalAssistant`. The last message
     // is either the turn's own failure, and renders as the answer row below, or
-    // one Pi is still retrying - and a retry in flight is not a failed request.
+    // one backend is still retrying - and a retry in flight is not a failed request.
     if (assistant.stopReason === "error" && generation.assistantMessages.at(-1) !== assistant) {
       segments.push(buildLiveErrorSegment(assistant));
     }
@@ -657,7 +657,7 @@ export function projectPersistedTurns(
 
 /**
  * Persisted history retains its transcript projection while a live Generation
- * projects directly from normalized Pi blocks.
+ * projects directly from normalized backend blocks.
  */
 export function buildTurnRows(
   messages: Message[],

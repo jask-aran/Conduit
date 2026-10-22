@@ -1,4 +1,8 @@
 /// <reference types="vite-plugin-pwa/client" />
+import { duration, easing, reducedMotion } from "@/components/ui/motion";
+import { HarnessMark } from "@/components/ui";
+import { Icons } from "@/components/ui";
+import { AppShell, DropOverlay, Notice, PaneEmpty, Sheet, SheetFill } from "@/components/ui";
 import { ConnectionScreen, ConnectionRecovery, ConnectionForm, ConnectionHeading, ConnectionChoices, ConnectionChoice, ConnectionGroup, ConnectionAddress, ConnectionStatus, ConnectionPassword, type AddressState } from "@/components/ui/connection";
 import { CardNote as ConnectionNote } from "@/components/ui/card";
 import { Field as ConnectionField, Button as ConnectionButton, Spinner as ConnectionSpinner } from "@/components/ui/controls";
@@ -17,15 +21,13 @@ import { androidShell, desktopShell, isInstalledClient } from "./platform/instal
 import { liveUpdateNow, startLiveUpdate } from "./platform/live-update.ts";
 // The clients that stage a downloaded update and install it on request.
 const updateShell = desktopShell ?? androidShell;
-import {
-  ArrowLeftRightIcon, Columns2Icon, PanelTopIcon, EllipsisIcon, PanelLeftIcon, PanelRightIcon, ServerIcon, QrCodeIcon, MonitorIcon, TriangleAlertIcon, XIcon, ExternalLinkIcon,
-} from "lucide-solid";
+import { PanelTopIcon } from "lucide-solid";
 import { NotificationToaster, toast } from "@/components/notifications";
-import { DefaultMeteorShower } from "@jask-aran/solid-components/meteor-shower";
+import { createMeteorField } from "./chat/meteor-field";
 import "@jask-aran/solid-components/meteor-shower.css";
 import { phoneLayerOpen } from "@/components/phone-overlays";
 import { Button, Spinner } from "@/components/ui/controls";
-import { attachRowMenus, Menu, MenuContent, MenuControl, MenuRow, MenuSection } from "@/components/menus";
+import { attachRowMenus, DropdownMenu, MenuContent, MenuControl, MenuRow, MenuSection } from "@/components/menus";
 import { Header, HeaderCrumb } from "@/components/ui/header";
 import { FileHead } from "@/components/ui/file";
 import { FileEmpty, FileEmptySide } from "@/components/ui/viewer";
@@ -42,7 +44,7 @@ import { publishServerDirectory } from "./platform/server-directory";
 import { canScanQr, parsePairingLink, QrScanner, redeemPairing, type PairingLink } from "./platform/pairing";
 import { authorizedFetch, clearNativeBearerToken, nativeBearerToken, NATIVE_AUTH_REQUIRED_EVENT, saveNativeBearerToken } from "./api/native-auth-client";
 import { resolveCapability } from "./chat-capabilities";
-import type { ChatSummary, DashboardChat, HarnessManifestView, Installation, Project, Template, TranscriptDetail, WorkspaceAppearance, WorkspacePolicy, WorkspaceSuggestion, WorkspaceSuggestionsPayload } from "./api/contracts";
+import type { ChatSummary, DashboardChat, HarnessManifestView, Project, Template, TranscriptDetail, WorkspaceAppearance, WorkspacePolicy, WorkspaceSuggestion, WorkspaceSuggestionsPayload } from "./api/contracts";
 import { createErrorDiagnostic, formatRuntimeDiagnosticPrompt, type ErrorDiagnostic, type ErrorDiagnosticContext } from "./error-diagnostics";
 import { Composer } from "./chat/composer";
 import { AppDashboard } from "./dashboard/app-dashboard";
@@ -98,11 +100,11 @@ import type { FileSlotHandle, FileSummary } from "./workspace/workspace-file-slo
 import { dropScope, migrateWorkspacePanelStorage, readSetting, WORKSPACE_PANEL_GLOBAL_SCOPE, writeSetting } from "./workspace/workspace-panel-storage";
 import { readToolDrag, TOOL_DRAG_TYPE, WORKSPACE_TOOL_LABELS, WorkspaceRail } from "./workspace/workspace-rail";
 import { isPanelTab, isSplitView, type SplitView } from "./workspace/workspace-types";
-import { MIN_MAIN_PANE_WIDTH, MIN_SPLIT_PANE_WIDTH } from "./layout-geometry";
+import { minMainPaneWidth, minSplitPaneWidth } from "./layout-geometry";
 import { dispatchPanelGeometryMotion } from "./panel-motion";
 import { publishUiPreference, queueUiPreferenceSave, uiPreferenceSaves, UI_PREFERENCE_CHANGE_EVENT, type UiPreferenceKey, type UiPreferences } from "./preferences/ui-preferences";
 import { applyUiScale, selectedUiScale } from "./preferences/ui-scale";
-import { harnessLabelFor, HarnessMark } from "./harness-brand";
+import { harnessLabelFor } from "./harness-brand";
 import { OutsideThreadChip } from "./chat/outside-thread-chip";
 import type { HarnessChoices, HarnessThreadTarget } from "./dashboard/harness-dashboard";
 import {
@@ -129,7 +131,6 @@ import {
   TRANSCRIPT_WIDE_BLOCKS_STORAGE_KEY,
   TRANSCRIPT_WIDTH_STORAGE_KEY,
 } from "./chat/transcript-appearance";
-import "./chat/composer-geometry.css";
 import "./styles.css";
 // The library's styles (components v2): inert until a piece the app draws with it carries its .ui- classes.
 import "@/components/ui/styles";
@@ -174,7 +175,7 @@ const METEOR_FIELD_STORAGE_KEY = "conduit:meteor-field";
 const selectedMeteorField = () => localStorage.getItem(METEOR_FIELD_STORAGE_KEY) !== "false";
 const WorkspacePanel = lazy(() => import("./workspace/workspace-panel"));
 const FileViewer = lazy(() => import("./workspace/workspace-file-viewer"));
-const FileTypeIcon = lazy(() => import("./workspace/file-type-icon").then((module) => ({ default: module.FileTypeIcon })));
+const FileTypeIcon = lazy(() => import("@/components/ui/file-marks").then((module) => ({ default: module.FileTypeIcon })));
 const ComputerDashboard = lazy(() => import("./dashboard/computer-dashboard").then((module) => ({ default: module.ComputerDashboard })));
 const ProjectDashboard = lazy(() => import("./project/dashboard"));
 const HarnessDashboard = lazy(() => import("./dashboard/harness-dashboard"));
@@ -418,8 +419,8 @@ export function ServerConnectForm(props: { adding?: boolean; onDone: (origin: st
       */}
     <Show when={!verifiedOrigin() && ((!recordOnly && canScanQr()) || localServer())}>
       <ConnectionChoices>
-        <Show when={!recordOnly && canScanQr()}><ConnectionChoice type="button" onClick={() => setScanning(true)} disabled={submitting()} icon={<QrCodeIcon />} detail="conduit-server pair">Scan QR code</ConnectionChoice></Show>
-        <Show when={localServer()}><ConnectionChoice type="button" onClick={useLocalServer} disabled={submitting()} icon={<MonitorIcon />} detail={localServer()!.replace(/^https?:\/\//, "")}>This computer</ConnectionChoice></Show>
+        <Show when={!recordOnly && canScanQr()}><ConnectionChoice type="button" onClick={() => setScanning(true)} disabled={submitting()} icon={<Icons.QrCode />} detail="conduit-server pair">Scan QR code</ConnectionChoice></Show>
+        <Show when={localServer()}><ConnectionChoice type="button" onClick={useLocalServer} disabled={submitting()} icon={<Icons.Monitor />} detail={localServer()!.replace(/^https?:\/\//, "")}>This computer</ConnectionChoice></Show>
       </ConnectionChoices>
     </Show>
     <Show when={!verifiedOrigin()}>
@@ -427,7 +428,7 @@ export function ServerConnectForm(props: { adding?: boolean; onDone: (origin: st
         <ConnectionGroup>On this network<Show when={searching()}><ConnectionSpinner /></Show></ConnectionGroup>
         <Show when={found().length} fallback={<Show when={!searching()}><ConnectionNote>Nothing here yet.</ConnectionNote></Show>}>
           <ConnectionChoices>
-            <For each={found()}>{(server) => <ConnectionChoice type="button" onClick={() => void chooseFound(server)} disabled={submitting()} icon={<ServerIcon />} detail={server.origin.replace(/^https?:\/\//, "")}>{server.name}</ConnectionChoice>}</For>
+            <For each={found()}>{(server) => <ConnectionChoice type="button" onClick={() => void chooseFound(server)} disabled={submitting()} icon={<Icons.Server />} detail={server.origin.replace(/^https?:\/\//, "")}>{server.name}</ConnectionChoice>}</For>
           </ConnectionChoices>
         </Show>
       </Show>
@@ -452,11 +453,11 @@ export function ServerConnectForm(props: { adding?: boolean; onDone: (origin: st
       </ConnectionButton>
       {/* A browser on HTTPS cannot look at a plain-HTTP address on this network, though a tab of its own can open it. */}
       <Show when={recordOnly && check()?.state === "missing" && /^http:/.test((() => { try { return normalizeServerOrigin(address()); } catch { return ""; } })())}>
-        <ConnectionButton type="button" variant="ghost" onClick={() => openFound(normalizeServerOrigin(address()))}><ExternalLinkIcon />Open anyway</ConnectionButton>
+        <ConnectionButton type="button" variant="ghost" onClick={() => openFound(normalizeServerOrigin(address()))}><Icons.ExternalLink />Open anyway</ConnectionButton>
       </Show>
     </Show>
     <Show when={verifiedOrigin() && recordOnly}>
-      <ConnectionButton type="submit"><ExternalLinkIcon />Open in new tab</ConnectionButton>
+      <ConnectionButton type="submit"><Icons.ExternalLink />Open in new tab</ConnectionButton>
     </Show>
     <Show when={verifiedOrigin() && !props.adding}><ConnectionButton type="button" variant="ghost" onClick={() => {
       const previous = activeOrigin();
@@ -563,8 +564,6 @@ function App() {
   // is what declares what it can do.
   const [harnessCapabilities, setHarnessCapabilities] = createSignal<Record<string, HarnessManifestView>>({});
   const [templatesLoading, setTemplatesLoading] = createSignal(true);
-  const [installations, setInstallations] = createSignal<Installation[]>([]);
-  const [installationsLoading, setInstallationsLoading] = createSignal(true);
   const [workspaceSuggestions, setWorkspaceSuggestions] = createSignal<WorkspaceSuggestion[]>([]);
   const [workspacePolicy, setWorkspacePolicy] = createSignal<WorkspacePolicy | null>(null);
   const [defaultTemplateId, setDefaultTemplateId] = createSignal("assistant");
@@ -588,10 +587,11 @@ function App() {
       if (moved) updateVoiceSettings({ ...voiceSettings(), inputDeviceId: moved });
     }).catch(() => {});
   });
-  const [partialContinue, setPartialContinue] = createSignal(true);
   const [maxAttachmentBytes, setMaxAttachmentBytes] = createSignal(DEFAULT_MAX_ATTACHMENT_BYTES);
   const [markdownRenderer, setMarkdownRenderer] = createSignal<MarkdownRendererId>(selectedMarkdownRenderer());
   const [meteorField, setMeteorField] = createSignal(selectedMeteorField());
+  // One shower behind every pane that shows a chat or a page (each Sheet's backdrop is a window onto it).
+  const meteors = createMeteorField();
   const [sidebarChatLimit, setSidebarChatLimit] = createSignal(selectedSidebarChatLimit());
   const chatSort = useChatSort();
   const [settingsOpen, setSettingsOpen] = createSignal(false);
@@ -729,6 +729,10 @@ function App() {
   // Whether the first open has been shown. Decoration waits for it: the
   // meteor field cost a phone a tenth of a second of the open it decorates.
   const [arrived, setArrived] = createSignal(false);
+  // Whether it has begun to show: the meteors arrive with the regions, under
+  // the launch screen's fade (their forecast is worked out while loading, so
+  // mounting them is a dozen spans).
+  const [revealing, setRevealing] = createSignal(false);
   // A phone's sidebar is off-screen at the first open, and its rows -- each
   // with its own menu -- were a large part of what that open built. They are
   // filled in once it has been shown, or at once if the sidebar is opened.
@@ -744,6 +748,7 @@ function App() {
     const arrive = () => {
       if (root.dataset.arrival !== "waiting") return;
       root.dataset.arrival = "arriving";
+      setRevealing(true);
       settleFocus();
       settle = setTimeout(() => { delete root.dataset.arrival; dismissLaunchMark(); setArrived(true); attachRowMenus(); }, 400);
     };
@@ -759,7 +764,7 @@ function App() {
       let last = "";
       let still = 0;
       const check = () => {
-        const shape = [...document.querySelectorAll<HTMLElement>(".chat-main, .main-split, .thread")].map((element) => { const box = element.getBoundingClientRect(); return `${Math.round(box.width)}x${Math.round(box.height)}`; }).join();
+        const shape = [...document.querySelectorAll<HTMLElement>(".chat-main, .main-split, .ui-chat-column")].map((element) => { const box = element.getBoundingClientRect(); return `${Math.round(box.width)}x${Math.round(box.height)}`; }).join();
         still = shape === last ? still + 1 : 0;
         last = shape;
         if (still >= 3 || root.dataset.arrival !== "waiting") resolve(); else requestAnimationFrame(check);
@@ -1116,13 +1121,13 @@ function App() {
     const from = emptyComposerTop;
     emptyComposerTop = null;
     if (!wasEmpty || from == null || !sendingOut() || routeKind() !== "chat") return;
-    if (matchMedia("(prefers-reduced-motion: reduce)").matches || !chatComposerStack) return;
+    if (reducedMotion() || !chatComposerStack) return;
     // Measured and started in the same frame as the layout change, so the
     // docked composer is never painted before it sets off.
     const offset = from - chatComposerStack.getBoundingClientRect().top;
     if (Math.abs(offset) < 4) return;
     chatComposerStack.animate([{ transform: `translateY(${offset}px)` }, { transform: "none" }],
-      { duration: 420, easing: "cubic-bezier(.2, .8, .2, 1)" });
+      { duration: duration("--duration-travel"), easing: easing("--ease-arrive") });
   }));
   /*
    * Sending from a dashboard. The send goes at once; then the dashboard
@@ -1136,13 +1141,12 @@ function App() {
    * moved is the inner wrap, so the stack's own rect -- which the empty-chat
    * travel measures -- is never read mid-flight. Focus goes with the composer.
    */
-  const DASHBOARD_LEAVE_MS = 200;
   const leaveDashboard = (): Promise<DOMRect | null> => {
     const wrap = document.querySelector<HTMLElement>('.chat-main :is(.ui-composer-slot, .ui-phone-composer)');
-    if (!wrap || matchMedia("(prefers-reduced-motion: reduce)").matches) return Promise.resolve(null);
+    if (!wrap || reducedMotion()) return Promise.resolve(null);
     const from = wrap.getBoundingClientRect();
     document.documentElement.dataset.routeMotion = "leaving";
-    return new Promise((resolve) => setTimeout(() => resolve(from), DASHBOARD_LEAVE_MS));
+    return new Promise((resolve) => setTimeout(() => resolve(from), duration("--duration-quick")));
   };
   const sendFromDashboard = async () => {
     const sending = chat.send().catch(() => undefined);
@@ -1162,7 +1166,7 @@ function App() {
       const dx = from.left + from.width / 2 - (to.left + to.width / 2);
       const dy = from.top - to.top;
       if (Math.abs(dx) + Math.abs(dy) >= 4) wrap.animate([{ transform: `translate(${dx}px, ${dy}px)` }, { transform: "none" }],
-        { duration: 420, easing: "cubic-bezier(.2, .8, .2, 1)" });
+        { duration: duration("--duration-travel"), easing: easing("--ease-arrive") });
     }
     setTimeout(() => { if (root.dataset.routeMotion === "arriving") delete root.dataset.routeMotion; }, 450);
   };
@@ -1335,6 +1339,10 @@ function App() {
     await chat.initialize({ ...created, templateId: created.templateId || profileId || undefined }, project);
   };
 
+  // A device's folder only has the Conduit runtime (plan decision 5), whatever
+  // the workspace or Conduit default says.
+  // A device's workspace runs the runtime unless it was given a harness the device has.
+  const projectProfile = (project: Project) => project.nodeId ? project.defaultTemplateId || "conduit-runtime" : project.defaultTemplateId || defaultTemplateId() || "assistant";
   const createChat = async (target?: Project, launch: { templateId?: string; runtimeKind?: string } = {}, options: { reportFailure?: boolean } = {}) => {
     const reportFailure = options.reportFailure !== false;
     if (!(await leaveHarnessThread())) return null;
@@ -1343,7 +1351,7 @@ function App() {
     const requestEpoch = ++newChatRequestEpoch;
     const replacedDraftId = currentDraftId();
     const fromDashboard = routeKind() === "project" || routeKind() === "dashboard" || routeKind() === "computer";
-    const profileId = launch.templateId || project.defaultTemplateId || defaultTemplateId() || "assistant";
+    const profileId = launch.templateId || projectProfile(project);
     discardDraftImmediately(replacedDraftId);
     chat.reset(profileId);
     attachments.clear({ discard: false });
@@ -1411,7 +1419,7 @@ function App() {
       ? selectedProject()
       : catalogue.projects().find((item) => item.slug === "chat") || catalogue.projects()[0];
     if (!project || project.state === "cloning") return;
-    const templateId = project.defaultTemplateId || defaultTemplateId() || "assistant";
+    const templateId = projectProfile(project);
     const expectedRoute = route;
     const expectedProjectId = project.id;
     let scopeChanged = false;
@@ -1587,7 +1595,7 @@ function App() {
     };
     if (!location()) void browse();
     return <>
-      <ChatHeader title="Computer" tabActions={paneTabActions(slot)} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void startNewChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => {}} onUpdatePwa={() => void runPwaUpdate()} pwaUpdating={pwaUpdating} appDashboard alone />
+      <ChatHeader title="Computer" tabActions={paneTabActions(slot)} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void startNewChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => {}} appDashboard alone />
       <ComputerDashboard projects={catalogue.projects()} location={location()} loading={loading()} error={error()} onOpenHarnessHere={(id) => setSlotView(slot, `page:harness:${encodeURIComponent(id)}`)} onBrowse={(path) => void browse(path)} onPrefetch={prefetchComputerFolder} onMakeWorkspace={() => { const here = location(); if (here) void createComputerWorkspace(here.project.workingRoot); }} onCreateWorkspace={(path) => void createComputerWorkspace(path)} onOpenWorkspace={(project) => void openProjectHere(project)} onManageWorkspace={(action, project) => { if (action === "rename") runSidebar("rename-folder", { project }); else if (action === "identity") openWorkspaceIdentity(project); else runSidebar("delete-project", { project }); }} onStartWorkspaceAction={(action, path) => runSidebar(action === "created" ? "new-workspace-created" : "new-workspace-cloned", { path })} onOpenView={openWorkspaceView} onOpenTerminalView={() => openTerminalRoute()} onOpenTerminalHere={() => void openComputerTerminalHere()} onOpenFile={async (path) => { const here = location(); if (here) await openFileDocument({ projectId: here.project.id, path }, { beside: altActivation(), edit: false }); }} />
     </>;
   };
@@ -1630,7 +1638,7 @@ function App() {
       await side.chat.send();
     };
     onCleanup(() => { const left = draft(); if (left) { if (untrack(side.chat.loadedId) === left.chatId) side.close(); drop(left.chatId); } });
-    return <>{<ChatHeader title={harnessLabelFor(harnessId) || harnessId} tabActions={paneTabActions(pane.index)} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void startNewChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => {}} onUpdatePwa={() => void runPwaUpdate()} pwaUpdating={pwaUpdating} appDashboard alone />}<HarnessDashboard harnessId={harnessId} projects={catalogue.projects()} runtime={runtime} scope={scope()} onScope={setScope} home={computerLocation()?.home || ""}
+    return <>{<ChatHeader title={harnessLabelFor(harnessId) || harnessId} tabActions={paneTabActions(pane.index)} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void startNewChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => {}} appDashboard alone />}<HarnessDashboard harnessId={harnessId} projects={catalogue.projects()} runtime={runtime} scope={scope()} onScope={setScope} home={computerLocation()?.home || ""}
       composer={(input) => {
         const drafted = () => Boolean(draft() && side.chat.loadedId() === draft()!.chatId);
         const choices = (): HarnessChoices => drafted()
@@ -1867,6 +1875,15 @@ function App() {
     if (historyMode === "push") history.pushState({}, "", "/terminal");
     else if (historyMode === "replace") history.replaceState({}, "", "/terminal");
   };
+  /** A shell on a device itself (Settings › Devices): this server's "computer" one, or a device's in its home. */
+  const openDeviceTerminal = async (node: { id: string; local?: boolean }) => {
+    try {
+      const terminal = await api<{ id: string }>("/v0/ptys", { method: "POST",
+        body: JSON.stringify({ projectId: node.local ? "computer" : `device:${node.id}` }) });
+      setSettingsOpen(false);
+      await openTerminalRoute("push", terminal.id);
+    } catch (error) { showError(error); }
+  };
   const leaveTerminalRoute = async () => {
     if (terminalCanReturn()) history.back();
     else await openComputer();
@@ -2067,11 +2084,11 @@ function App() {
     if (!isMobileLayout() && collapsed) runSidebar("toggle-sidebar");
     focusSidebar();
   };
-  const hasTranscript = () => Boolean(document.querySelector(".message-scroller-viewport"));
+  const hasTranscript = () => Boolean(document.querySelector(".ui-chat-viewport"));
   const focusTranscript = () => {
     if (isMobileLayout()) setMobileSidebarOpen(false);
-    ((keyboardSlot() !== null ? document.querySelector<HTMLElement>(`${paneSelector(keyboardSlot()!)} .message-scroller-viewport`) : null)
-      ?? document.querySelector<HTMLElement>(".message-scroller-viewport"))?.focus({ preventScroll: true });
+    ((keyboardSlot() !== null ? document.querySelector<HTMLElement>(`${paneSelector(keyboardSlot()!)} .ui-chat-viewport`) : null)
+      ?? document.querySelector<HTMLElement>(".ui-chat-viewport"))?.focus({ preventScroll: true });
   };
   const toggleChatWorkspaceFocus = () => {
     const inWorkspacePanel = document.activeElement instanceof Element && Boolean(document.activeElement.closest('[data-region="workspace-panel"]'));
@@ -2085,7 +2102,7 @@ function App() {
     migrateWorkspacePanelStorage(workspacePanelScopes(projects));
     return projects;
   };
-  const addProject = async (input: { mode: string; name?: string; path?: string; directoryName?: string; cloneUrl?: string; cloneParentPath?: string; cloneDirectoryName?: string }) => {
+  const addProject = async (input: { mode: string; name?: string; path?: string; nodeId?: string; rootId?: string; directoryName?: string; cloneUrl?: string; cloneParentPath?: string; cloneDirectoryName?: string }) => {
     try {
       const result = await api<Project | { project: Project; operation: { id: string; state: string } }>("/v0/projects", { method: "POST", body: JSON.stringify(input) });
       const created = "project" in result ? result.project : result;
@@ -2096,8 +2113,8 @@ function App() {
         return true;
       }
       await refresh();
-      if (["link", "linked", "create", "created"].includes(input.mode)) await openProject(created);
-      else await createChat(created, { templateId: created.defaultTemplateId || defaultTemplateId() || "assistant" });
+      if (["link", "linked", "create", "created", "node"].includes(input.mode)) await openProject(created);
+      else await createChat(created, { templateId: projectProfile(created) });
       return true;
     } catch (error) { showError(error); return false; }
   };
@@ -2355,7 +2372,7 @@ function App() {
   // A free slot for a pane in the row or, `docked`, in the dock -- each has its own room.
   const freeSlot = (docked = false) => (docked ? dockedSlots().length < MAX_DOCKED : rowSlots().length < 2) ? SLOT_IDS.find((slot) => !slotOrder().includes(slot)) ?? null : null;
   // The dock is as narrow as what it shows may go: a docked pane's document, else a tool.
-  const dockMinWidth = () => { const slot = dockSlot(); return slot !== null && inDock(slot) ? viewMinWidth(slotView(slot)) : MIN_SPLIT_PANE_WIDTH; };
+  const dockMinWidth = () => { const slot = dockSlot(); return slot !== null && inDock(slot) ? viewMinWidth(slotView(slot)) : minSplitPaneWidth(); };
   /*
    * Each document declares the narrowest its pane may go: one with a
    * composer, a chat or a page, the dashboard composer's least; a file viewer
@@ -2363,7 +2380,7 @@ function App() {
    * pane beside at their documents' minimums.
    */
   const isPaneView = (view: SplitView | null) => Boolean(view && /^(chat|page):/.test(view));
-  const viewMinWidth = (view: SplitView | null) => !view || isPaneView(view) ? MIN_MAIN_PANE_WIDTH : MIN_SPLIT_PANE_WIDTH;
+  const viewMinWidth = (view: SplitView | null) => !view || isPaneView(view) ? minMainPaneWidth() : minSplitPaneWidth();
   const paneMinWidth = (pane: PaneKey) => viewMinWidth(pane === "main" ? paneAView() : slotView(pane));
   // The open dock keeps its own minimum; panes fold before it is pushed out.
   const viewsFit = (views: (SplitView | null)[]) => layoutWidth() - (panelOpen() && dockAvailable() && !dockOverlay() ? dockMinWidth() + 8 : 0)
@@ -2466,7 +2483,7 @@ function App() {
     return element?.closest(".chat-main") ? "main" : null;
   };
   const focusSplit = (slot: number | null = toolSlot() ?? shownSlots()[0] ?? null) => requestAnimationFrame(() => {
-    const content = slot === null ? null : paneSlot(slot).host()?.querySelector<HTMLElement>(".workspace-panel-content, textarea[data-composer-input]:not([disabled]), .file-viewer-surface");
+    const content = slot === null ? null : paneSlot(slot).host()?.querySelector<HTMLElement>(".ui-tool-content, textarea[data-composer-input]:not([disabled]), .file-viewer-surface");
     focusFirst(content);
     if (!content?.contains(document.activeElement)) content?.focus({ preventScroll: true });
   });
@@ -2535,7 +2552,7 @@ function App() {
     if (!element || index < 0 || !animatePanes()) return await close();
     // It fades out, then the panes left ease into its room.
     setPaneMotion({ slot, phase: "leaving" });
-    void element.animate([{ opacity: 1 }, { opacity: 0 }], { duration: SWAP_FADE_MS, easing: "ease-out", fill: "forwards" }).finished.then(() => {
+    void element.animate([{ opacity: 1 }, { opacity: 0 }], { duration: duration("--duration-follow"), easing: easing("--ease-arrive"), fill: "forwards" }).finished.then(() => {
       const target = weightsFor(shownSlots().length);
       target.splice(index + 1, 0, 0);
       setWeightOverride(paneShares());
@@ -2550,7 +2567,7 @@ function App() {
   // A rail icon opens the dock on its tool, or goes to it in its pane; the
   // tool the dock already shows closes it.
   const chooseRailTool = async (tool: WorkspaceView) => {
-    if (splitToolShown() === tool && toolInPaneA()) focusFirst(paneAToolHost()?.querySelector<HTMLElement>(".workspace-panel-content"));
+    if (splitToolShown() === tool && toolInPaneA()) focusFirst(paneAToolHost()?.querySelector<HTMLElement>(".ui-tool-content"));
     else if (splitToolShown() === tool) focusSplit(toolSlot());
     else if (panelOpen() && dockSlot() === null && dockTool() === tool) closePanel();
     else if (dockSlot() !== null && !(tool === "terminal" && altActivation())) { setDockSlot(null); await openWorkspaceView(tool); }
@@ -2691,12 +2708,12 @@ function App() {
   };
   const onDocDragOver = (event: DragEvent) => {
     if (!draggedView || !event.dataTransfer?.types.includes(DOC_DRAG_TYPE)) return;
-    const dockTarget = draggedPane !== null && event.target instanceof Element ? event.target.closest<HTMLElement>(".workspace-panel-open, [data-region=\"workspace-rail\"]") : null;
+    const dockTarget = draggedPane !== null && event.target instanceof Element ? event.target.closest<HTMLElement>(".ui-dock[data-open], [data-region=\"workspace-rail\"]") : null;
     if (dockTarget && draggedPane !== null && canDock(draggedPane)) {
       event.preventDefault();
       event.dataTransfer.dropEffect = "move";
       setDragHint({ x: event.clientX, y: event.clientY, text: "Move to the dock", icon: "right" });
-      const box = (dockTarget.querySelector(".workspace-panel-surface") ?? dockTarget).getBoundingClientRect();
+      const box = (dockTarget.querySelector(".ui-dock-surface") ?? dockTarget).getBoundingClientRect();
       if (docDrop()?.zone !== "dock") setDocDrop({ pane: draggedPane, zone: "dock", rect: { left: box.left, top: box.top, width: box.width, height: box.height } });
       return;
     }
@@ -2917,13 +2934,13 @@ function App() {
         .catch(() => setRecord(null));
     }));
     const placeName = (projectId: string) => projectId === "computer" || projectId.startsWith("computer:") ? "Computer" : catalogue.projects().find((item) => item.id === projectId)?.name || "Chats";
-    return <div class="pane-terminal">
+    return <SheetFill class="pane-terminal">
       <Show when={record()} fallback={<Show when={record() === null}>
-        <div class="pane-terminal-gone"><span>This terminal has ended.</span>{paneTabActions(pane)}</div>
+        <Header actions={paneTabActions(pane)}><HeaderCrumb title="Terminal" /></Header><PaneEmpty>This terminal has ended.</PaneEmpty>
       </Show>}>{(found) =>
         <TerminalPane projectId={found().projectId} projectName={placeName(found().projectId)} workingRoot={found().cwd || undefined} terminalId={id()} onShown={(next) => setPaneView(pane, `term:${next}`)} headerActions={paneTabActions(pane)} />
       }</Show>
-    </div>;
+    </SheetFill>;
   };
   const focusAnyPane = (pane: PaneKey) => {
     if (parseFileView(viewOf(pane))) return focusColumn(pane, fileFocus()[String(pane)] ?? 0);
@@ -3045,7 +3062,7 @@ function App() {
   const renderFileViewer = (pane: PaneKey) => {
     const entries = () => parseFileView(viewOf(pane)) ?? [];
     // Focusable itself, so an image or PDF side still takes the keyboard (a click, Ctrl+Shift+2).
-    return <div class="workspace-split-surface file-viewer-surface" tabIndex={-1}>
+    return <SheetFill class="file-viewer-surface" tabIndex={-1}>
       <Show when={entries().length} fallback={<>
         <Header actions={paneTabActions(pane)}><HeaderCrumb title="No file open" /></Header>
         <FileEmpty role="status">Open a file from Files, or Ctrl-click one to add it as a tab.</FileEmpty>
@@ -3068,7 +3085,7 @@ function App() {
           onSetMode={(index, mode) => setFileMode(pane, index, mode)}
           onLoaded={(index, file) => noteFileLoaded(pane, index, file)} reveal={fileReveal()} ref={(index, handle) => { handlesOf(pane)[index] = handle; setHandlesChanged((count) => count + 1); }} />
       </Show>
-    </div>;
+    </SheetFill>;
   };
 
   /*
@@ -3390,10 +3407,9 @@ function App() {
    * moves -- and what was on the right fades in on the left. Either way the
    * panes keep their widths: a width belongs to the position, not the document.
    */
-  const SWAP_FADE_MS = 100;
   // A chat is drawn once its transcript is in the pane, not merely loaded:
   // it renders a moment after, and a crossfade before then shows it arrive.
-  const chatDrawn = (pane: PaneKey) => Boolean(paneElement(pane)?.querySelector(".thread, .empty-thread"));
+  const chatDrawn = (pane: PaneKey) => Boolean(paneElement(pane)?.querySelector(".ui-chat-column"));
   // A pane's last frame, held over its place while what is under it changes.
   const ghostOf = (element: HTMLElement) => {
     const box = element.getBoundingClientRect();
@@ -3415,14 +3431,14 @@ function App() {
   // The panes' last frames stay up while the documents move and load under
   // them, then the ghosts fade off them (~100ms).
   const crossfadeUnder = async (elements: HTMLElement[], place: () => Promise<void>) => {
-    const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const still = reducedMotion();
     const ghosts = elements.map(ghostOf);
     for (const element of elements) element.style.opacity = "0";
     try { await place(); } finally {
       // The panes come back whole under their ghosts, and only the ghosts
       // fade: both layers at half opacity let the background through.
       for (const element of elements) element.style.opacity = "";
-      await Promise.all(ghosts.map(async (ghost) => { if (!still) await ghost.animate([{ opacity: 1 }, { opacity: 0 }], { duration: SWAP_FADE_MS, easing: "ease-out", fill: "forwards" }).finished.catch(() => undefined); ghost.remove(); }));
+      await Promise.all(ghosts.map(async (ghost) => { if (!still) await ghost.animate([{ opacity: 1 }, { opacity: 0 }], { duration: duration("--duration-follow"), easing: easing("--ease-arrive"), fill: "forwards" }).finished.catch(() => undefined); ghost.remove(); }));
     }
   };
   const crossfadeSwap = (left: HTMLElement, right: HTMLElement, place: () => Promise<void>) => crossfadeUnder([left, right], place);
@@ -3432,11 +3448,11 @@ function App() {
     return () => held.forEach(([node, top, left]) => { node.scrollTop = top; node.scrollLeft = left; });
   };
   const animateSwap = async (left: HTMLElement, right: HTMLElement, reorder: boolean, placeRight: () => Promise<void> | void, placeLeft: () => Promise<void> | void) => {
-    const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const still = reducedMotion();
     if (!still) {
-      await right.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 140, easing: "ease-out", fill: "forwards" }).finished;
+      await right.animate([{ opacity: 1 }, { opacity: 0 }], { duration: duration("--duration-quick"), easing: easing("--ease-leave"), fill: "forwards" }).finished;
       left.style.zIndex = "5";
-      await left.animate([{ transform: "none" }, { transform: `translateX(${right.getBoundingClientRect().left - left.getBoundingClientRect().left}px)` }], { duration: 220, easing: "cubic-bezier(.2,.7,.2,1)", fill: "forwards" }).finished;
+      await left.animate([{ transform: "none" }, { transform: `translateX(${right.getBoundingClientRect().left - left.getBoundingClientRect().left}px)` }], { duration: duration("--duration-fold"), easing: easing("--ease-fold"), fill: "forwards" }).finished;
     }
     await placeRight();
     // Reordered, the slid pane now lives on the right and the other on the
@@ -3446,7 +3462,7 @@ function App() {
     incoming.style.opacity = "0";
     for (const element of [left, right]) { element.getAnimations().forEach((animation) => animation.cancel()); element.style.zIndex = ""; }
     await placeLeft();
-    if (!still) await incoming.animate([{ opacity: 0 }, { opacity: 1 }], { duration: SWAP_FADE_MS, easing: "ease-out" }).finished;
+    if (!still) await incoming.animate([{ opacity: 0 }, { opacity: 1 }], { duration: duration("--duration-follow"), easing: easing("--ease-arrive") }).finished;
     incoming.style.opacity = "";
   };
   // `fade: false` places the documents at once, for a caller fading around several swaps. Focus is the pane's, not
@@ -3861,9 +3877,9 @@ function App() {
     focusPane(free);
   };
   const fileSideMenu = (pane: PaneKey, side: number) => <>
-    <Show when={(fileTabsOf(pane, side)?.entries.length ?? 0) > 1}><MenuRow onSelect={() => closeOtherTabs(pane, side)} icon={<XIcon />}>Close other tabs</MenuRow></Show>
-    <Show when={(parseFileView(viewOf(pane))?.length ?? 0) === 2 && roomBeside(formatFileView([parseFileView(viewOf(pane))![side]!]))}><MenuRow onSelect={() => moveSideToPane(pane, side)} icon={<PanelRightIcon />}>Move to new pane</MenuRow></Show>
-    <MenuRow onSelect={() => closeSide(pane, side)} icon={<XIcon />}>Close side</MenuRow>
+    <Show when={(fileTabsOf(pane, side)?.entries.length ?? 0) > 1}><MenuRow onSelect={() => closeOtherTabs(pane, side)} icon={<Icons.Close />}>Close other tabs</MenuRow></Show>
+    <Show when={(parseFileView(viewOf(pane))?.length ?? 0) === 2 && roomBeside(formatFileView([parseFileView(viewOf(pane))![side]!]))}><MenuRow onSelect={() => moveSideToPane(pane, side)} icon={<Icons.Workspace />}>Move to new pane</MenuRow></Show>
+    <MenuRow onSelect={() => closeSide(pane, side)} icon={<Icons.Close />}>Close side</MenuRow>
   </>;
   const fileSideTabs = (pane: PaneKey, side: number) => {
     const row = createTabStrip({
@@ -4000,8 +4016,8 @@ function App() {
         </TabPlace>;
       }}</For>
       <Show when={folded().length}>
-        <Menu modal={false} placement="bottom-end">
-          <MenuControl as={PaneAction} label={`${folded().length} more tabs`}><EllipsisIcon /></MenuControl>
+        <DropdownMenu modal={false} placement="bottom-end">
+          <MenuControl as={PaneAction} label={`${folded().length} more tabs`}><Icons.More /></MenuControl>
           <MenuContent>
             <For each={groups().filter((run) => run.keys.some((key) => folded().includes(key)))}>{(run) =>
               <MenuSection title={options.placeLabel?.(run.keys[0]!)}>
@@ -4009,7 +4025,7 @@ function App() {
               </MenuSection>}
             </For>
           </MenuContent>
-        </Menu>
+        </DropdownMenu>
       </Show>
     </PaneTabs>) : undefined);
   };
@@ -4039,7 +4055,7 @@ function App() {
     // then, unseen, it takes the next pane's document at that pane's width and
     // fades in once it has loaded.
     setPaneMotion({ slot: "main", phase: "leaving" });
-    void element.animate([{ opacity: 1 }, { opacity: 0 }], { duration: SWAP_FADE_MS, easing: "ease-out" }).finished.then(() => {
+    void element.animate([{ opacity: 1 }, { opacity: 0 }], { duration: duration("--duration-follow"), easing: easing("--ease-arrive") }).finished.then(() => {
       const target = weightsFor(shownSlots().length);
       target.unshift(0);
       setWeightOverride(paneShares());
@@ -4067,7 +4083,7 @@ function App() {
           });
           // Pane A is whole under the ghost, which alone fades: two layers
           // crossfading each at half opacity let the background through.
-          await ghost.animate([{ opacity: 1 }, { opacity: 0 }], { duration: SWAP_FADE_MS, easing: "ease-out", fill: "forwards" }).finished.catch(() => undefined);
+          await ghost.animate([{ opacity: 1 }, { opacity: 0 }], { duration: duration("--duration-follow"), easing: easing("--ease-arrive"), fill: "forwards" }).finished.catch(() => undefined);
           ghost.remove();
         } finally {
           swappingPanes = false;
@@ -4096,42 +4112,42 @@ function App() {
       const owns = () => slotHasKeyboard(slot);
       const page = () => slotPage(slot);
       const attachInput = () => <input ref={side.setAttachInput} type="file" multiple hidden aria-hidden="true" onChange={(event) => { if (event.currentTarget.files) side.attachments.addFiles(event.currentTarget.files); event.currentTarget.value = ""; }} />;
-      return <section ref={(element) => { pane.setHost(element); onCleanup(() => { if (pane.host() === element) pane.setHost(undefined); }); }} class="main-split" classList={{ "main-split-docked": docked, "main-split-docked-hidden": docked && dockSlot() !== slot }} data-pane-slot={slot} data-region={slotChatId(slot) ? "chat" : page() ? "dashboard" : "workspace-panel"} aria-label={docked ? "Docked pane" : position() === 0 ? "Pane B" : "Pane C"} style={docked ? undefined : { flex: `${paneWeights()[position() + 1] ?? 0.5} 1 0`, "min-width": paneMotion()?.slot === slot ? "0px" : `${paneMinWidth(slot)}px`, ...(paneMotion()?.slot === slot ? { opacity: 0, overflow: "hidden" } : {}), ...(paneMotion()?.slot === slot && paneMotion()!.collapsed ? { "margin-right": "0px" } : {}) }}>
+      return <Sheet ref={(element) => { pane.setHost(element); onCleanup(() => { if (pane.host() === element) pane.setHost(undefined); }); }} class="main-split" docked={docked ? (dockSlot() !== slot ? "hidden" : true) : false} backdrop={<Show when={!docked && meteorField() && (revealing() || arrived()) && Boolean(slotChatId(slot) || page() === "dashboard" || slotPageProject(slot))}><meteors.Window /></Show>} data-pane-slot={slot} data-region={slotChatId(slot) ? "chat" : page() ? "dashboard" : "workspace-panel"} aria-label={docked ? "Docked pane" : position() === 0 ? "Pane B" : "Pane C"} style={docked ? undefined : { flex: `${paneWeights()[position() + 1] ?? 0.5} 1 0`, "min-width": paneMotion()?.slot === slot ? "0px" : `${paneMinWidth(slot)}px`, ...(paneMotion()?.slot === slot ? { opacity: 0, overflow: "hidden" } : {}), ...(paneMotion()?.slot === slot && paneMotion()!.collapsed ? { "margin-right": "0px" } : {}) }}>
         <Show when={!docked}><PaneEdge aria-label="Resize panes" onPointerDown={(event) => startSplitResize(event, position() + 1)} /></Show>
         <Show when={parseFileView(slotView(slot))}>{renderFileViewer(slot)}</Show>
         <Show when={slotView(slot)?.startsWith("term:")}>{renderTerminalDocument(slot, () => slotView(slot)!.slice("term:".length))}</Show>
         <Show when={page() === "computer"}>
-          <div class="main-split-chat main-split-page" tabIndex={-1} onPointerDown={focusChatSurface}>{renderPaneComputer(slot)}</div>
+          <SheetFill tabIndex={-1} onPointerDown={focusChatSurface}>{renderPaneComputer(slot)}</SheetFill>
         </Show>
         <Show when={page()?.startsWith("harness:")}>
-          <div class="main-split-chat main-split-page" tabIndex={-1} onPointerDown={focusChatSurface}>{attachInput()}{renderPaneHarness(pane, decodeURIComponent(page()!.slice("harness:".length)))}</div>
+          <SheetFill tabIndex={-1} onPointerDown={focusChatSurface}>{attachInput()}{renderPaneHarness(pane, decodeURIComponent(page()!.slice("harness:".length)))}</SheetFill>
         </Show>
         <Show when={page() && page() !== "computer" && !page()!.startsWith("harness:")}>
-          <div class="main-split-chat main-split-page" tabIndex={-1} onPointerDown={focusChatSurface}>
+          <SheetFill tabIndex={-1} onPointerDown={focusChatSurface}>
             {attachInput()}
             <Show when={page() === "dashboard"} fallback={<Show when={slotPageProject(slot)}>{(project) =>
               <ProjectPage session={side} project={project()} target={{ project: project() }} keyboardOwner={owns} onSendDraft={(prompt) => sendFromPanePage(pane, prompt)} onOpenChat={openChatFromPage} tabActions={paneTabActions(slot)} />
             }</Show>}>
               <AppDashboardPage session={side} place={chatPlace(side)} keyboardOwner={owns} onSendDraft={(prompt) => sendFromPanePage(pane, prompt)} onOpenChat={(target, project) => void openChatFromPage(target, project)} tabActions={paneTabActions(slot)} />
             </Show>
-          </div>
+          </SheetFill>
         </Show>
         <Show when={slotChatId(slot)}>
-          <div class="main-split-chat" classList={{ "chat-main-live-opening": side.chat.presentation().kind !== "ready" || side.chat.loadedId() !== slotChatId(slot) }}>
+          <SheetFill>
             {attachInput()}
             {/* With no chat in the session yet the pane says it is loading;
                 after that it switches in place, as pane A does -- the surface
                 stays (and keeps focus), its transcript withheld while a live
                 chat opens rather than showing an empty chat's welcome. */}
-            <Show when={side.chat.loadedId()} fallback={<div class="chat-bootstrap" role="status">Loading chat…</div>}>
-            <ChatSurface session={side} project={side.selected()?.project} {...paneTabRow(slot)} keyboardOwner={owns} place={chatPlace(side)} modelSelector onShare={() => void shareChat(side.selectedId())}
+            <Show when={side.chat.loadedId()} fallback={<PaneEmpty role="status">Loading chat…</PaneEmpty>}>
+            <ChatSurface session={side} opening={side.chat.presentation().kind !== "ready" || side.chat.loadedId() !== slotChatId(slot)} project={side.selected()?.project} {...paneTabRow(slot)} keyboardOwner={owns} place={chatPlace(side)} modelSelector onShare={() => void shareChat(side.selectedId())}
               onRename={() => runSidebar("rename-chat", side.selected() ?? {})} onDelete={() => runSidebar("delete-chat", side.selected() ?? {})}
               notice={workspaceNotice(side.selected()?.project, side.selectedId())}
               tabActions={paneTabActions(slot)} />
             </Show>
-          </div>
+          </SheetFill>
         </Show>
-      </section>;
+      </Sheet>;
   };
   /*
    * Any pane's document can move into the dock: it keeps its slot and session,
@@ -4195,15 +4211,15 @@ function App() {
   };
   const paneTabActions = (pane: PaneKey) => <Show when={inDock(pane)} fallback={paneRowActions(pane)}>
     <PaneActions>
-      <Show when={isDocked(pane)}><PaneAction label="Move to a pane" onClick={() => void undockPane(pane as number)}><Columns2Icon /></PaneAction></Show>
-      <PaneAction aria-label="Close this pane" title="Close" onClick={() => closeSlot(pane as number)}><XIcon /></PaneAction>
+      <Show when={isDocked(pane)}><PaneAction label="Move to a pane" onClick={() => void undockPane(pane as number)}><Icons.Split /></PaneAction></Show>
+      <PaneAction aria-label="Close this pane" title="Close" onClick={() => closeSlot(pane as number)}><Icons.Close /></PaneAction>
     </PaneActions>
   </Show>;
   const paneRowActions = (pane: PaneKey) => <Show when={splitShown()}>
     <PaneActions>
-      <Show when={canDock(pane)}><PaneAction label="Move to dock" onClick={() => dockPane(pane)}><PanelRightIcon /></PaneAction></Show>
-      <Show when={swapPartner(pane) !== null}><PaneAction aria-label="Swap with the pane beside" title="Swap" onPointerDown={() => { keyboardBeforePress = keyboardPane(); }} onClick={(event) => { const target = swapTarget(pane); keyboardBeforePress = null; if (target !== null) void swapPanes(pane, event.shiftKey, target, true, paneBeforePress ?? keyboardPane()); }}><ArrowLeftRightIcon /></PaneAction></Show>
-      <Show when={pane !== "main" || shownSlots()[0] !== undefined}><PaneAction aria-label="Close this pane" title="Close" onClick={() => closePane(pane)}><XIcon /></PaneAction></Show>
+      <Show when={canDock(pane)}><PaneAction label="Move to dock" onClick={() => dockPane(pane)}><Icons.Workspace /></PaneAction></Show>
+      <Show when={swapPartner(pane) !== null}><PaneAction aria-label="Swap with the pane beside" title="Swap" onPointerDown={() => { keyboardBeforePress = keyboardPane(); }} onClick={(event) => { const target = swapTarget(pane); keyboardBeforePress = null; if (target !== null) void swapPanes(pane, event.shiftKey, target, true, paneBeforePress ?? keyboardPane()); }}><Icons.Swap /></PaneAction></Show>
+      <Show when={pane !== "main" || shownSlots()[0] !== undefined}><PaneAction aria-label="Close this pane" title="Close" onClick={() => closePane(pane)}><Icons.Close /></PaneAction></Show>
     </PaneActions>
   </Show>;
   /*
@@ -4316,13 +4332,15 @@ function App() {
   let panesSettled = false;
   window.setTimeout(() => { panesSettled = true; }, 1500);
   const animatePanes = () => panesSettled && !isMobileLayout() && !swappingPanes && !restoringPanes && !paneMotion()
-    && !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    && !reducedMotion();
   const normalized = (weights: number[]) => { const total = weights.reduce((sum, weight) => sum + weight, 0) || 1; return weights.map((weight) => weight / total); };
   const paneShares = () => normalized(panesShown().map((pane) => paneElement(pane)?.getBoundingClientRect().width ?? 0));
+  // The panes' shares easing (body.panes-settling for the terminal's fit; the shell eases the sheets).
+  const [panesSettling, setPanesSettling] = createSignal(false);
   const easePaneWeights = (to: number[], done: () => void) => {
     splitMotionId += 1;
     announceSplit("begin", besideWidth());
-    document.body.classList.add("panes-settling");
+    document.body.classList.add("panes-settling"); setPanesSettling(true);
     batch(() => {
       setWeightOverride(to);
       // Its margin eases with it, so nothing jumps when it comes or goes.
@@ -4332,7 +4350,7 @@ function App() {
     const started = performance.now();
     const follow = () => {
       if (performance.now() - started < 240) { announceSplit("change", besideWidth()); requestAnimationFrame(follow); return; }
-      document.body.classList.remove("panes-settling");
+      document.body.classList.remove("panes-settling"); setPanesSettling(false);
       done();
       splitSize = besideWidth();
       announceSplit("end", splitSize);
@@ -4354,7 +4372,7 @@ function App() {
       if (!element) return void setPaneMotion(null);
       element.style.opacity = "0";
       setPaneMotion(null);
-      void element.animate([{ opacity: 0 }, { opacity: 1 }], { duration: SWAP_FADE_MS, easing: "ease-out" }).finished.finally(() => { element.style.opacity = ""; });
+      void element.animate([{ opacity: 0 }, { opacity: 1 }], { duration: duration("--duration-follow"), easing: easing("--ease-arrive") }).finished.finally(() => { element.style.opacity = ""; });
     })));
   }, { defer: true }));
   // A share preset from the rail (Equalise is the even one): the panes ease to
@@ -4366,7 +4384,7 @@ function App() {
     const next = weights.map((weight) => weight / total);
     splitMotionId += 1;
     announceSplit("begin", besideWidth());
-    document.body.classList.add("panes-settling");
+    document.body.classList.add("panes-settling"); setPanesSettling(true);
     if (count === 2) { setSplitRatio(next[1]!); writeSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "main-split-ratio", String(next[1]!)); }
     else { setSplitRatios3(next); writeSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "main-split-ratios", JSON.stringify(next)); }
     // Each frame of the ease is a change, so transcripts follow their panes
@@ -4378,7 +4396,7 @@ function App() {
         requestAnimationFrame(follow);
         return;
       }
-      document.body.classList.remove("panes-settling");
+      document.body.classList.remove("panes-settling"); setPanesSettling(false);
       splitSize = besideWidth();
       announceSplit("end", splitSize);
     };
@@ -4400,7 +4418,7 @@ function App() {
     // document's minimum, then from the next one on, and gives it to the pane
     // on the other side.
     const widths = panes.map((pane) => pane!.getBoundingClientRect().width);
-    const minimums = panes.map((pane) => parseFloat(getComputedStyle(pane!).minWidth) || MIN_SPLIT_PANE_WIDTH);
+    const minimums = panes.map((pane) => parseFloat(getComputedStyle(pane!).minWidth) || minSplitPaneWidth());
     const startX = event.clientX;
     const weights = paneWeights();
     const weightSum = weights.reduce((sum, weight) => sum + weight, 0);
@@ -4550,7 +4568,6 @@ function App() {
     effort: focusedModels().effort(),
     thinkingLevels: thinkingLevels(),
     canRegenerate: focusedSession().capability("regenerate") && Boolean(lastUserEntryId()) && !focusedChat().streaming() && !focusedChat().stopping(),
-    canContinue: partialContinue() && Boolean(lastAssistant()?.stopped) && !focusedChat().streaming(),
     canCompact: focusedSession().capability("compaction") && !focusedChat().streaming() && !focusedChat().compacting() && focusedChat().messages().length > 0,
     canCopy: Boolean(lastAssistant()?.content),
     chatSort: chatSort(),
@@ -4617,7 +4634,6 @@ function App() {
     stop: () => focusedChat().stop(),
     stopProcess: () => void stopChatProcess(focusedChatId()),
     regenerate: () => { const id = lastUserEntryId(); if (id) void focusedChat().regenerate(id); },
-    continue: () => void focusedChat().continueResponse(),
     compact: () => void focusedChat().compact(),
     copy: () => { const content = lastAssistant()?.content; if (content) void navigator.clipboard.writeText(content); },
     retryConnection: () => runtime.retry(),
@@ -5028,17 +5044,12 @@ function App() {
             disabled: profile.disabled, implementation: profile.agent?.implementation, drive: profile.drive })));
       })
       .catch(() => { setExternalProfiles([]); setHarnessCapabilities({}); });
-    void apiWhenServed<{ partialContinue?: boolean; maxAttachmentBytes?: number }>("/v0/capabilities")
+    void apiWhenServed<{ maxAttachmentBytes?: number }>("/v0/capabilities")
       .then((payload) => {
-        setPartialContinue(payload.partialContinue !== false);
         const maxBytes = payload.maxAttachmentBytes;
         if (typeof maxBytes === "number" && Number.isSafeInteger(maxBytes) && maxBytes > 0) setMaxAttachmentBytes(maxBytes);
       })
-      .catch(() => setPartialContinue(true));
-    void apiWhenServed<{ installations: Installation[] }>("/v0/pi-installations")
-      .then((payload) => setInstallations(asList<Installation>(payload.installations)))
-      .catch(() => setInstallations([]))
-      .finally(() => setInstallationsLoading(false));
+      .catch(() => {});
 
     void (async () => {
       const [cataloguePayload, selectedChat] = await Promise.all([
@@ -5195,7 +5206,7 @@ function App() {
     deletePlace: (project) => runSidebar("delete-project", { project }),
   };
   const AppDashboardPage = (props: { session: ChatSession; place?: ReturnType<typeof chatPlace>; keyboardOwner: () => boolean; onSendDraft: (prompt: string) => Promise<void>; onOpenChat: (target: ChatSummary, project: Project) => void; actions?: JSX.Element; tabActions?: JSX.Element }) => <>
-    <ChatHeader title="Conduit Dashboard" panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void startNewChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => {}} onUpdatePwa={() => void runPwaUpdate()} pwaUpdating={pwaUpdating} appDashboard actions={props.actions}  tabActions={props.tabActions} />
+    <ChatHeader title="Conduit Dashboard" panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void startNewChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => {}} appDashboard actions={props.actions}  tabActions={props.tabActions} />
     <AppDashboard
       projects={catalogue.projects()}
       composer={<PageComposer session={props.session} place={props.place} keyboardOwner={props.keyboardOwner} onSendDraft={props.onSendDraft} />}
@@ -5217,7 +5228,7 @@ function App() {
     />
   </>;
   const ProjectPage = (props: { session: ChatSession; project: Project; keyboardOwner: () => boolean; onSendDraft: (prompt: string) => Promise<void>; onOpenChat: (target: DashboardChat, project: Project) => Promise<void>; target?: { project: Project }; actions?: JSX.Element; tabActions?: JSX.Element }) => <>
-    <ChatHeader project={props.project} title={props.project.name} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void startNewChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => void shareProject(props.project)} onRename={() => runSidebar("rename-folder", props.target ?? {})} onDelete={() => runSidebar("delete-project", props.target ?? {})} onUpdatePwa={() => void runPwaUpdate()} pwaUpdating={pwaUpdating} dashboard actions={props.actions}  tabActions={props.tabActions} />
+    <ChatHeader project={props.project} title={props.project.name} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void startNewChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => void shareProject(props.project)} onRename={() => runSidebar("rename-folder", props.target ?? {})} onDelete={() => runSidebar("delete-project", props.target ?? {})} dashboard actions={props.actions}  tabActions={props.tabActions} />
     <ProjectDashboard project={props.project} runtime={runtime} profiles={profiles()} onOpenHarnessThread={(harnessId, path, id, title) => void openHarnessThread({ harnessId, path, id, title })}
       composer={<PageComposer session={props.session} keyboardOwner={props.keyboardOwner} onSendDraft={props.onSendDraft} />}
       onOpenChat={props.onOpenChat}
@@ -5236,9 +5247,14 @@ function App() {
       onOpenSettings={openSettings} onSaveAppearance={saveWorkspaceAppearance} onRefresh={refresh} onCancelClone={cancelClone} onDestroyWorkspace={(confirmation) => destroyWorkspace(props.project, confirmation)} onError={showError} />
   </>;
   // A workspace's other agents: two chats editing the same files.
-  const workspaceNotice = (project: Project | undefined, chatId: string | null) => <Show when={project?.kind === "workspace" && [...runtime.processes().values()].some((process) => process.chatId !== chatId && process.active)}><div class="workspace-warning"><TriangleAlertIcon /><div><strong>Another chat is working in this Workspace</strong><p>Both agents can edit the same files. Conduit does not lock the Workspace or create worktrees automatically.</p></div></div></Show>;
+  const workspaceNotice = (project: Project | undefined, chatId: string | null) => <Show when={project?.kind === "workspace" && [...runtime.processes().values()].some((process) => process.chatId !== chatId && process.active)}><Notice icon={<Icons.Warning />} title="Another chat is working in this Workspace">Both agents can edit the same files. Conduit does not lock the Workspace or create worktrees automatically.</Notice></Show>;
   const ChatSurface = (props: {
     session: ChatSession;
+    /** Its chat is still arriving (reattaching): the transcript waits and the composer shows its field alone. */
+    opening?: boolean;
+    /** Nothing said yet (the composer centred), or the first send waiting on its agent (ChatView). */
+    empty?: boolean;
+    sending?: boolean;
     project?: Project;
     keyboardOwner: () => boolean;
     onShare: () => void;
@@ -5255,11 +5271,11 @@ function App() {
     const current = props.session;
     const surfaceChat = current.chat;
     return <>
-      <ChatHeader project={props.project} onOpenPlace={openPlace} title={surfaceChat.title() || (surfaceChat.status() === "active" ? "Untitled chat" : "New chat")} profile={current.activeProfile()} runtime={surfaceChat.runtimeIdentity()} live={surfaceChat.live() as unknown as Record<string, unknown>} chat={surfaceChat} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void startNewChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={props.onShare} onRename={props.onRename} onDelete={props.onDelete} onUpdatePwa={() => void runPwaUpdate()} pwaUpdating={pwaUpdating} actions={props.actions} tabActions={props.tabActions} tabs={props.tabs} />
+      <ChatHeader project={props.project} onOpenPlace={openPlace} title={surfaceChat.title() || (surfaceChat.status() === "active" ? "Untitled chat" : "New chat")} profile={current.activeProfile()} runtime={surfaceChat.runtimeIdentity()} live={surfaceChat.live() as unknown as Record<string, unknown>} chat={surfaceChat} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void startNewChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={props.onShare} onRename={props.onRename} onDelete={props.onDelete} actions={props.actions} tabActions={props.tabActions} tabs={props.tabs} />
       {props.notice}
-      <Conversation chat={surfaceChat} busy={surfaceChat.presentation().kind === "opening_live"} stackRef={props.stackRef}
-        transcript={<Transcript chat={surfaceChat} supports={current.capability} partialContinue={partialContinue()} markdownRenderer={markdownRenderer()} profileLabel={current.activeProfile()?.label || current.activeProfile()?.id || surfaceChat.templateId() || undefined} projectId={props.project?.id} />}
-        composer={<Composer chat={surfaceChat} place={props.place} supports={current.capability} attachments={current.attachments} attachmentsSupported={current.capability("attachments", true)} models={current.models} permissions={current.capability("permissionModes") ? current.permissions : undefined} serviceLevels={current.manifest()?.serviceLevels?.length ? current.serviceLevels : undefined} profiles={profiles()} activeProfile={current.activeProfile()} onOpenModelSelector={props.modelSelector ? openModelSelector : undefined} modelSelectorShortcut={props.modelSelector ? shortcutManager.formatEffectiveBinding(COMMAND_IDS.openModelSelector) : undefined} serverOnline={serverReachable()} voiceSettings={voiceSettings()} keyboardOwner={props.keyboardOwner} onChooseProfile={(id) => void current.switchProfile(id).catch(showError)} onOpenSettings={openSettings} onOpenAttachments={current.openAttachments} onStatusChange={current.setComposerStatus} />} />
+      <Conversation chat={surfaceChat} busy={surfaceChat.presentation().kind === "opening_live"} empty={props.empty} sending={props.sending} opening={props.opening} stackRef={props.stackRef}
+        transcript={<Transcript chat={surfaceChat} supports={current.capability} markdownRenderer={markdownRenderer()} profileLabel={current.activeProfile()?.label || current.activeProfile()?.id || surfaceChat.templateId() || undefined} projectId={props.project?.id} />}
+        composer={<Composer chat={surfaceChat} opening={props.opening} place={props.place} supports={current.capability} attachments={current.attachments} attachmentsSupported={current.capability("attachments", true)} models={current.models} permissions={current.capability("permissionModes") ? current.permissions : undefined} serviceLevels={current.manifest()?.serviceLevels?.length ? current.serviceLevels : undefined} profiles={profiles()} activeProfile={current.activeProfile()} onOpenModelSelector={props.modelSelector ? openModelSelector : undefined} modelSelectorShortcut={props.modelSelector ? shortcutManager.formatEffectiveBinding(COMMAND_IDS.openModelSelector) : undefined} serverOnline={serverReachable()} voiceSettings={voiceSettings()} keyboardOwner={props.keyboardOwner} onChooseProfile={(id) => void current.switchProfile(id).catch(showError)} onOpenSettings={openSettings} onOpenAttachments={current.openAttachments} onStatusChange={current.setComposerStatus} />} />
     </>;
   };
 
@@ -5316,21 +5332,16 @@ function App() {
         void publishServerDirectory(servers()).finally(() => switchToServer(origin, isInstalledClient()));
       }} />
     } /></Show>
-    <div class="workspace-layout" ref={(element) => { const observer = new ResizeObserver(() => setLayoutWidth(element.clientWidth)); observer.observe(element); onCleanup(() => observer.disconnect()); }}>
-    <main data-slot="sidebar-inset" data-region={paneAOverride() ? "workspace-panel" : routeKind() === "chat" || harnessThread() ? "chat" : routeKind() === "terminal" ? "terminal" : "dashboard"} tabIndex={-1} onPointerDown={focusChatSurface} onKeyDown={paneKeydown} class={`chat-main${routeKind() === "chat" && emptyLayout() ? " chat-main-empty" : ""}${routeKind() === "chat" && emptyChat() && !emptyLayout() ? " chat-main-sending" : ""}${routeKind() === "chat" && withheldLiveChat() ? " chat-main-live-opening" : ""}${workspaceExpanded() ? " workspace-expanded" : ""}`} style={{ ...(splitShown() ? { flex: `${paneWeights()[0]} 1 0`, "min-width": paneMotion()?.slot === "main" ? "0px" : `${paneMinWidth("main")}px` } : {}), ...(paneMotion()?.slot === "main" ? { opacity: 0 } : {}), ...(paneMotion()?.slot === "main" && paneMotion()!.collapsed ? { "margin-left": "0px", "margin-right": "0px" } : {}) }} {...mainDropHandlers}>
+    <AppShell class="workspace-layout" settling={panesSettling()} ref={(element) => { meteors.observe(element); const observer = new ResizeObserver(() => setLayoutWidth(element.clientWidth)); observer.observe(element); onCleanup(() => observer.disconnect()); }}>
+    <Sheet as="main" lead under={workspaceExpanded()} backdrop={<Show when={!paneAOverride() && routeBootstrap() === "ready" && ["chat", "dashboard", "project"].includes(routeKind()) && meteorField() && (revealing() || arrived())}><meteors.Window /></Show>} data-slot="sidebar-inset" data-region={paneAOverride() ? "workspace-panel" : routeKind() === "chat" || harnessThread() ? "chat" : routeKind() === "terminal" ? "terminal" : "dashboard"} tabIndex={-1} onPointerDown={focusChatSurface} onKeyDown={paneKeydown} class="chat-main" style={{ ...(splitShown() ? { flex: `${paneWeights()[0]} 1 0`, "min-width": paneMotion()?.slot === "main" ? "0px" : `${paneMinWidth("main")}px` } : {}), ...(paneMotion()?.slot === "main" ? { opacity: 0 } : {}), ...(paneMotion()?.slot === "main" && paneMotion()!.collapsed ? { "margin-left": "0px", "margin-right": "0px" } : {}) }} {...mainDropHandlers}>
       <Show when={splitDropActive()}><DropWash within /></Show>
       {/* Pane A holding a file viewer or a tool, over its route (5f). */}
       <Show when={parseFileView(paneAOverride())}>{renderFileViewer("main")}</Show>
       <Show when={paneAOverride()?.startsWith("term:")}>{renderTerminalDocument("main", () => paneAOverride()!.slice("term:".length))}</Show>
-      <Show when={toolInPaneA()}><div ref={(element) => { setPaneAToolHost(element); onCleanup(() => setPaneAToolHost(undefined)); }} class="pane-a-tool-host" /></Show>
-      <Show when={!paneAOverride() && routeBootstrap() === "ready"} fallback={paneAOverride() ? null : <div class="chat-bootstrap" role={routeBootstrap() === "error" ? "alert" : "status"}>{routeBootstrap() === "error"
+      <Show when={toolInPaneA()}><SheetFill ref={(element) => { setPaneAToolHost(element); onCleanup(() => setPaneAToolHost(undefined)); }} class="pane-a-tool-host" /></Show>
+      <Show when={!paneAOverride() && routeBootstrap() === "ready"} fallback={paneAOverride() ? null : <PaneEmpty role={routeBootstrap() === "error" ? "alert" : "status"}>{routeBootstrap() === "error"
         ? routeBootstrapError() || (routeKind() === "project" ? "This project could not be loaded." : "This chat could not be loaded.")
-        : routeKind() === "project" ? "Loading project…" : routeKind() === "dashboard" ? "Loading Conduit…" : "Loading chat…"}</div>}>
-        <Show when={["chat", "dashboard", "project"].includes(routeKind()) && meteorField() && arrived()}>
-          <div class="chat-meteors" aria-hidden="true">
-            <DefaultMeteorShower />
-          </div>
-        </Show>
+        : routeKind() === "project" ? "Loading project…" : routeKind() === "dashboard" ? "Loading Conduit…" : "Loading chat…"}</PaneEmpty>}>
         <Show when={routeKind() === "dashboard"}>
           <AppDashboardPage session={session} place={chatPlace()} tabActions={paneTabActions("main")} keyboardOwner={() => !sideHasKeyboard()} onOpenChat={(target, project) => void openChatFromPage(target, project)}
             onSendDraft={async (prompt) => {
@@ -5352,10 +5363,10 @@ function App() {
         </Show>
         <Show when={routeKind() === "computer"}>
           <Show when={harnessThread()} fallback={<Show when={computerHarness()} fallback={<>
-            <ChatHeader title="Computer" tabActions={paneTabActions("main")} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void startNewChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => {}} onUpdatePwa={() => void runPwaUpdate()} pwaUpdating={pwaUpdating} appDashboard alone />
+            <ChatHeader title="Computer" tabActions={paneTabActions("main")} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void startNewChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => {}} appDashboard alone />
             <ComputerDashboard projects={catalogue.projects()} location={computerLocation()} loading={computerLoading()} error={computerError()} onOpenHarnessHere={openComputerHarnessHere} onBrowse={(path) => void browseComputer(path)} onPrefetch={prefetchComputerFolder} onMakeWorkspace={() => void designateComputerWorkspace()} onCreateWorkspace={(path) => void createComputerWorkspace(path)} onOpenWorkspace={(project) => void openProject(project)} onManageWorkspace={(action, project) => { if (action === "rename") runSidebar("rename-folder", { project }); else if (action === "identity") openWorkspaceIdentity(project); else runSidebar("delete-project", { project }); }} onStartWorkspaceAction={(action, path) => runSidebar(action === "created" ? "new-workspace-created" : "new-workspace-cloned", { path })} onOpenView={openWorkspaceView} onOpenTerminalView={() => openTerminalRoute()} onOpenTerminalHere={() => void openComputerTerminalHere()} onOpenFile={async (path) => { setComputerFile({ path }); await openWorkspaceView("files"); }} />
           </>}>{(harnessId) => <>
-            <ChatHeader title={harnessLabelFor(harnessId()) || harnessId()} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void startNewChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => {}} onUpdatePwa={() => void runPwaUpdate()} pwaUpdating={pwaUpdating} appDashboard alone />
+            <ChatHeader title={harnessLabelFor(harnessId()) || harnessId()} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void startNewChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => {}} appDashboard alone />
             <HarnessDashboard harnessId={harnessId()} projects={catalogue.projects()} runtime={runtime} scope={harnessScope()} onScope={scopeHarness} home={computerLocation()?.home || ""}
               composer={(input) => {
                 const drafted = () => { const draft = harnessDraft(); return Boolean(draft && draft.harnessId === harnessId() && chat.loadedId() === draft.chatId); };
@@ -5380,20 +5391,20 @@ function App() {
             const workspace = () => catalogue.projects().find((project) => !isConduitManagedProject(project) && project.workingRoot === thread().path);
             const label = () => harnessLabelFor(thread().harnessId) || thread().harnessId;
             return <>
-              <Show when={dropActive()}><div class="chat-drop-overlay"><div>Drop files to attach</div></div></Show>
-              <ChatHeader project={workspace()} placeLabel={label()} onOpenPlace={() => openComputerHarness(thread().harnessId, "push", thread().path)} title={chat.title() || thread().title || "Untitled thread"} badge={<OutsideThreadChip harness={label()} folder={thread().path} workspace={Boolean(workspace())} busy={trackingThread()} onTrack={() => void trackHarnessThread()} />} profile={activeProfile()} runtime={chat.runtimeIdentity()} live={chat.live() as unknown as Record<string, unknown>} chat={chat} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => openComputerHarness(thread().harnessId, "push", thread().path)} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => void shareHarnessThread()} onUpdatePwa={() => void runPwaUpdate()} pwaUpdating={pwaUpdating} />
+              <Show when={dropActive()}><DropOverlay>Drop files to attach</DropOverlay></Show>
+              <ChatHeader project={workspace()} placeLabel={label()} onOpenPlace={() => openComputerHarness(thread().harnessId, "push", thread().path)} title={chat.title() || thread().title || "Untitled thread"} badge={<OutsideThreadChip harness={label()} folder={thread().path} workspace={Boolean(workspace())} busy={trackingThread()} onTrack={() => void trackHarnessThread()} />} profile={activeProfile()} runtime={chat.runtimeIdentity()} live={chat.live() as unknown as Record<string, unknown>} chat={chat} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => openComputerHarness(thread().harnessId, "push", thread().path)} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => void shareHarnessThread()} />
               {/* The same conversation a chat page has; only moving it to another
                   place is missing, since the thread's folder is where it ran. */}
-              <Conversation chat={chat} busy={openingLiveChat()} stackRef={(element) => { chatComposerStack = element; }}
-                transcript={<Transcript chat={chat} supports={chatCapability} partialContinue={partialContinue()} markdownRenderer={markdownRenderer()} profileLabel={label()} projectId={catalogue.projectId()} />}
+              <Conversation chat={chat} busy={openingLiveChat()} empty={routeKind() === "chat" && emptyLayout()} sending={routeKind() === "chat" && emptyChat() && !emptyLayout()} opening={routeKind() === "chat" && withheldLiveChat()} stackRef={(element) => { chatComposerStack = element; }}
+                transcript={<Transcript chat={chat} supports={chatCapability} markdownRenderer={markdownRenderer()} profileLabel={label()} projectId={catalogue.projectId()} />}
                 composer={<Composer chat={chat} supports={chatCapability} attachments={attachments} attachmentsSupported={chatCapability("attachments", true)} models={models} permissions={chatCapability("permissionModes") ? permissions : undefined} serviceLevels={chatManifest()?.serviceLevels?.length ? serviceLevels : undefined} profiles={profiles()} activeProfile={activeProfile()} onOpenModelSelector={openModelSelector} modelSelectorShortcut={shortcutManager.formatEffectiveBinding(COMMAND_IDS.openModelSelector)} serverOnline={serverReachable()} voiceSettings={voiceSettings()} onChooseProfile={() => {}} onOpenSettings={openSettings} onOpenAttachments={session.openAttachments} onStatusChange={setComposerStatus} />} />
             </>;
           }}</Show>
         </Show>
         <Show when={routeKind() !== "dashboard" && routeKind() !== "computer"}>
         <Show when={routeKind() === "project" && selectedProject()} fallback={<>
-          <Show when={dropActive()}><div class="chat-drop-overlay"><div>Drop files to attach</div></div></Show>
-          <ChatSurface session={session} project={selectedProject()} tabActions={paneTabActions("main")} {...paneTabRow("main")} keyboardOwner={() => !sideHasKeyboard()} place={chatPlace()} modelSelector stackRef={(element) => { chatComposerStack = element; }}
+          <Show when={dropActive()}><DropOverlay>Drop files to attach</DropOverlay></Show>
+          <ChatSurface session={session} opening={withheldLiveChat()} empty={routeKind() === "chat" && emptyLayout()} sending={routeKind() === "chat" && emptyChat() && !emptyLayout()} project={selectedProject()} tabActions={paneTabActions("main")} {...paneTabRow("main")} keyboardOwner={() => !sideHasKeyboard()} place={chatPlace()} modelSelector stackRef={(element) => { chatComposerStack = element; }}
             onShare={() => void shareChat()} onRename={() => runSidebar("rename-chat")} onDelete={() => runSidebar("delete-chat")}
             notice={workspaceNotice(selectedProject(), catalogue.selectedId())} />
         </>}>
@@ -5417,16 +5428,16 @@ function App() {
         </Show>
         </Show>
       </Show>
-    </main>
+    </Sheet>
     <For each={renderSlots()}>{(slot, position) => renderSlot(slot, position, false)}</For>
     {/* Docked panes stay mounted, so each keeps its state and tabs; the dock shows one. */}
     <Show when={dockDocHost()} keyed>{(host) =>
       <For each={dockContents()}>{(slot) => <Portal mount={host}>{renderSlot(slot, () => 0, true)}</Portal>}</For>}</Show>
     <Show when={routeKind() === "computer" && computerLocation()}><WorkspacePanel connectivity={runtime.connectivity} projectId={() => computerLocation()!.project.id} projectName={() => computerLocation()!.project.name} sourceControlEnabled={() => computerLocation()!.repository} workingRoot={() => computerLocation()!.project.workingRoot} chatId={() => "computer"} settingsScope={() => "computer"} initialDirectory={() => computerLocation()!.listing} requestedFile={computerFile} open={panelOpen} expanded={workspaceExpanded} focusRequest={workspaceFocusRequest} onFocusRequestComplete={acknowledgeWorkspaceFocus} requestedTab={workspaceViewRequest} onTabChange={setDockTool} splitView={toolView} splitHost={toolHost} documentShown={() => dockSlot() !== null} widthRequest={dockWidthRequest} documentHost={(element) => setDockDocHost((current) => element ?? (current?.isConnected ? current : undefined))} minWidth={dockMinWidth} overlay={dockOverlay} onOpenBeside={isMobileLayout() ? undefined : openBeside} onMoveToDock={moveToDock} onCloseSplit={closeSplit} bindSplit={bindSplit} onOpenFile={canOpenFilePanes() ? openFileDocument : undefined} openFiles={openFileKeys} onToggleExpanded={toggleWorkspaceExpanded} onClose={closePanel} shortcuts={shortcutManager} onBrowseDirectory={(path) => void browseComputer(`${computerLocation()!.project.workingRoot}/${path}`)} onBrowseParent={() => void browseComputer(computerLocation()!.parent)} /></Show>
     <Show when={["chat", "project", "dashboard"].includes(routeKind()) && Boolean(selectedProject()) && Boolean(workspacePanelScope())}><WorkspacePanel connectivity={runtime.connectivity} projectId={() => dockProject()!.id} projectName={() => dockProject()!.name} sourceControlEnabled={() => dockProject()!.kind === "workspace"} workingRoot={() => dockProject()!.workingRoot} chatId={() => dockScope()!} artifactChatId={() => sideFocused() ? focusedChat().loadedId() : routeKind() === "chat" ? chat.loadedId() : null} commentChatId={() => focusedChat().loadedId()} historyAvailable={() => sideFocused() ? focusedSession().history() !== "none" : routeKind() !== "chat" || chatHistory() !== "none"} open={panelOpen} expanded={workspaceExpanded} focusRequest={workspaceFocusRequest} onFocusRequestComplete={acknowledgeWorkspaceFocus} requestedTab={workspaceViewRequest} onTabChange={setDockTool} splitView={toolView} splitHost={toolHost} documentShown={() => dockSlot() !== null} widthRequest={dockWidthRequest} documentHost={(element) => setDockDocHost((current) => element ?? (current?.isConnected ? current : undefined))} minWidth={dockMinWidth} overlay={dockOverlay} onOpenBeside={isMobileLayout() ? undefined : openBeside} onMoveToDock={moveToDock} onCloseSplit={closeSplit} bindSplit={bindSplit} onOpenFile={canOpenFilePanes() ? openFileDocument : undefined} openFiles={openFileKeys} onRequestOpen={() => setPanelOpenForChat(true)} onToggleExpanded={toggleWorkspaceExpanded} onClose={closePanel} shortcuts={shortcutManager} /></Show>
-    </div>
+    </AppShell>
     <Show when={dragHintContent()}>{(hint) => <DragPill ref={(element) => { dragHintElement = element; placeDragHint(); onCleanup(() => { if (dragHintElement === element) dragHintElement = undefined; }); }}
-      icon={<Show when={hint().icon} keyed>{(icon) => ({ left: <PanelLeftIcon />, right: <PanelRightIcon />, column: <Columns2Icon />, tab: <PanelTopIcon />, swap: <ArrowLeftRightIcon />, here: <PanelTopIcon /> })[icon]}</Show>}>{hint().text}</DragPill>}</Show>
+      icon={<Show when={hint().icon} keyed>{(icon) => ({ left: <Icons.Sidebar />, right: <Icons.Workspace />, column: <Icons.Split />, tab: <PanelTopIcon />, swap: <Icons.Swap />, here: <PanelTopIcon /> })[icon]}</Show>}>{hint().text}</DragPill>}</Show>
     <Show when={docDrop() && ["left", "middle", "right", "dock"].includes(docDrop()!.zone) ? docDrop() : null}>{(drop) => <DropWash style={{ left: `${drop().rect.left}px`, top: `${drop().rect.top}px`, width: `${drop().rect.width}px`, height: `${drop().rect.height}px` }} />}</Show>
     <WorkspaceRail tools={Boolean(routeKind() === "computer" ? computerLocation() : ["chat", "project", "dashboard"].includes(routeKind()) && selectedProject() && workspacePanelScope())} onOpenSearch={toggleSearchPalette} onOpenPalette={() => openPalette(null)}
       panes={splitShown() ? shownSlots().length + 1 : 1} onLayout={applyPaneLayout}
@@ -5440,7 +5451,7 @@ function App() {
       context={paletteContext()} runtime={runtime} actions={paletteActions} onChooseModel={(spec) => void focusedModels().chooseModel(spec)} currentModel={focusedModels().model()} scopeModels={focusedModels().allModels()} enabledModelSpecs={focusedModels().enabledModels()} onToggleModelScope={(spec) => { const models = focusedModels(); const enabled = models.enabledModels(); void models.saveScope(enabled.includes(spec) ? enabled.filter((item) => item !== spec) : [...enabled, spec]); }} shortcuts={shortcutManager} />
     <LeaderPalette shortcuts={shortcutManager} />
     <Show when={settingsLoaded()}>
-      <Settings open={settingsOpen()} initialSection={settingsSection()} sectionWasNamed={settingsNamedSection()} initialWorkspaceId={settingsWorkspaceId()} onOpenChange={setSettingsOpen} models={models} templates={templates()} templatesLoading={templatesLoading()} defaultTemplateId={defaultTemplateId()} projects={catalogue.projects()} installations={installations()} installationsLoading={installationsLoading()} onInstallationsChange={setInstallations} onDefaultTemplateChange={saveDefaultTemplate} onWorkspaceDefaultChange={saveWorkspaceDefault} markdownRenderer={markdownRenderer()} onMarkdownRendererChange={switchMarkdownRenderer} meteorField={meteorField()} onMeteorFieldChange={switchMeteorField} voiceSettings={voiceSettings()} onVoiceSettingsSave={updateVoiceSettings} sidebarChatLimit={sidebarChatLimit()} onSidebarChatLimitChange={switchSidebarChatLimit} onOpenModelSelector={openModelSelector} shortcuts={shortcutManager} />
+      <Settings open={settingsOpen()} initialSection={settingsSection()} sectionWasNamed={settingsNamedSection()} initialWorkspaceId={settingsWorkspaceId()} onOpenChange={setSettingsOpen} models={models} templates={templates()} templatesLoading={templatesLoading()} defaultTemplateId={defaultTemplateId()} projects={catalogue.projects()} onDefaultTemplateChange={saveDefaultTemplate} onWorkspaceDefaultChange={saveWorkspaceDefault} markdownRenderer={markdownRenderer()} onMarkdownRendererChange={switchMarkdownRenderer} meteorField={meteorField()} onMeteorFieldChange={switchMeteorField} voiceSettings={voiceSettings()} onVoiceSettingsSave={updateVoiceSettings} sidebarChatLimit={sidebarChatLimit()} onSidebarChatLimitChange={switchSidebarChatLimit} onOpenModelSelector={openModelSelector} onAddWorkspace={addProject} onOpenDeviceTerminal={(node) => void openDeviceTerminal(node)} shortcuts={shortcutManager} />
     </Show>
   </>;
 }

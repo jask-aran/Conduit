@@ -2,7 +2,7 @@ import { MOBILE_LAYOUT_QUERY } from "./mobile-layout";
 
 const EDGE = 16;
 const DWELL = 180;
-const HIDDEN = ".message-scroller-viewport, .xterm-viewport, .ui-term-shortcuts, .terminal-mobile-keys, .katex-display, .incremark-math-block, .ui-answer-table";
+const HIDDEN = ".ui-chat-viewport, .xterm-viewport, .ui-term-shortcuts, .ui-term-keys, .katex-display, .incremark-math-block, .ui-answer-table";
 type Target = { element: HTMLElement; axis: "x" | "y" };
 
 export function scrollbarGeometry(view: number, content: number, position: number, track: number) {

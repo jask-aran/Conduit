@@ -1,5 +1,7 @@
+import { SheetFill } from "@/components/ui";
+import { Icons } from "@/components/ui";
 import { createEffect, createMemo, createSignal, For, on, Show, type Accessor } from "solid-js";
-import { FileDiffIcon, HistoryIcon, ListCollapseIcon, WrapTextIcon } from "lucide-solid";
+import { HistoryIcon, ListCollapseIcon } from "lucide-solid";
 import { api } from "../api/client";
 import type { ReviewNavigationRequest } from "../chat/review-navigation";
 import { readSetting, writeSetting, WORKSPACE_PANEL_GLOBAL_SCOPE } from "./workspace-panel-storage";
@@ -47,9 +49,8 @@ function historyToolRun(node: HistoryNode): HistoryNode[] {
   let current = node;
   for (;;) {
     let next: HistoryNode | undefined = current.children.length === 1 ? current.children[0] : undefined;
-    // Pi threads hidden assistant and system entries between visible tool
-    // calls. They are never drawn, so walk straight through them: a run the
-    // reader sees as consecutive has to be one run here too.
+    // Hidden assistant and system entries can sit between visible tool calls.
+    // Walk through them so a run that looks consecutive stays one run here.
     while (next?.entry.hidden && next.children.length === 1) next = next.children[0];
     if (!next || next.entry.hidden || next.entry.kind !== "tool") break;
     run.push(next);
@@ -324,7 +325,7 @@ export function ChatModes(props: { control: ChatReview; historyAvailable: boolea
   };
   return <Segmented arrows label="Chat review" value={props.control.mode()} onChange={choose} options={[
     ...(props.historyAvailable ? [{ value: "history" as const, label: "History", icon: <HistoryIcon />, title: "History" }] : []),
-    { value: "changes" as const, label: "Agent changes", icon: <FileDiffIcon />, title: "Agent changes" },
+    { value: "changes" as const, label: "Agent changes", icon: <Icons.FileDiff />, title: "Agent changes" },
   ]} />;
 }
 
@@ -337,10 +338,10 @@ export function ChatView(props: {
   onOpenWorkingFile: (path: string) => void;
 }) {
   const c = props.control;
-  return <section class="workspace-chat-view">
+  return <SheetFill>
       <Show when={c.mode() === "history"}><ToolBar>
             <ToolButton aria-label={c.collapseTools() ? "Expand tool calls" : "Collapse sequential tool calls"} aria-pressed={c.collapseTools()} title={c.collapseTools() ? "Expand tool calls" : "Collapse sequential tool calls"} onClick={c.toggleCollapseTools}><ListCollapseIcon /></ToolButton>
-            <ToolButton aria-label={c.historyWrap() ? "Disable line wrapping" : "Enable line wrapping"} aria-pressed={c.historyWrap()} title={c.historyWrap() ? "Disable line wrapping" : "Enable line wrapping"} onClick={c.toggleHistoryWrap}><WrapTextIcon /></ToolButton>
+            <ToolButton aria-label={c.historyWrap() ? "Disable line wrapping" : "Enable line wrapping"} aria-pressed={c.historyWrap()} title={c.historyWrap() ? "Disable line wrapping" : "Enable line wrapping"} onClick={c.toggleHistoryWrap}><Icons.WrapText /></ToolButton>
           </ToolBar></Show>
       <Show when={c.mode() === "history"}><Show when={!c.historyLoading()} fallback={<PaneEmpty>Loading history…</PaneEmpty>}><Show when={c.historyTree()?.tree.length} fallback={<PaneEmpty><div><HistoryIcon /><Show when={props.chatId} fallback={<><strong>No chat open</strong><p>Open a chat to see its history.</p></>}><strong>No chat history</strong><p>Send a message to start this tree.</p></Show></div></PaneEmpty>}><HistoryList role="tree" aria-label="Chat history" wrap={c.historyWrap()}
           ref={c.bindHistoryScroller} onScroll={c.trackHistoryScroll}><HistoryNodes nodes={c.historyTree()!.tree} activePath={c.historyActivePath()} leafId={c.historyTree()!.leafId} collapseTools={c.collapseTools()} openRuns={c.openRuns()} onToggleRun={c.toggleRun} /></HistoryList></Show></Show></Show>
@@ -361,5 +362,5 @@ export function ChatView(props: {
         onOpenWorkingFile={props.onOpenWorkingFile}
         onViewStateChange={c.review.setViewState}
       /></Show>
-    </section>;
+    </SheetFill>;
 }

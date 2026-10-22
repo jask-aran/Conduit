@@ -1,4 +1,6 @@
-import { Button, Gauge, Item, Meter, Readout, Section, Swatch } from "@/components/ui";
+import { COPY_FEEDBACK_MS } from "@/components/ui/motion";
+import { Button, Gauge, Meter, Reading, ReadingFoot, ReadingPart, ReadingParts, ReadingStat, ReadingStats, ReadingTotal } from "@/components/ui";
+import { ShrinkIcon } from "lucide-solid";
 import { Popover, PopoverContent } from "@/components/menus";
 import { createEffect, createMemo, createSignal, For, on, Show } from "solid-js";
 import type { ActiveChatStore } from "../state/active-chat";
@@ -8,9 +10,9 @@ import { cacheHitPercent, compactTokens, contextBreakdown, contextTokens, contex
 /* One colour per kind of content, the same in every harness. What Conduit has
    not named takes the next of the spares. */
 const CATEGORY_COLOURS: Record<string, string> = {
-  messages: "oklch(0.72 0.15 300)", used: "oklch(0.72 0.15 300)",
-  "system-prompt": "oklch(0.7 0.02 260)", tools: "oklch(0.74 0.12 230)",
-  instructions: "oklch(0.78 0.14 75)", other: "oklch(0.75 0.15 30)",
+  messages: "var(--category-1)", used: "var(--category-1)",
+  "system-prompt": "var(--category-2)", tools: "var(--category-3)",
+  instructions: "var(--category-4)", other: "var(--category-5)",
 };
 /** When a plan window resets: the time today, else the weekday. */
 const resetText = (iso: string) => {
@@ -20,7 +22,7 @@ const resetText = (iso: string) => {
     ? at.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
     : at.toLocaleDateString([], { weekday: "short" });
 };
-const SPARES = ["oklch(0.72 0.16 350)", "oklch(0.8 0.12 95)", "oklch(0.7 0.13 150)", "oklch(0.7 0.1 50)"];
+const SPARES = ["var(--category-6)", "var(--category-7)", "var(--category-8)", "var(--category-9)"];
 const hollow = (category: ContextCategory) => category.kind === "free" || category.kind === "deferred";
 const colourOf = (category: ContextCategory, index: number) => category.kind === "free" ? "transparent"
   : category.kind === "buffer" ? "color-mix(in oklch, var(--muted-foreground), transparent 55%)"
@@ -54,7 +56,7 @@ export function ContextGauge(props: { chat: ActiveChatStore; compact?: boolean; 
       <Gauge value={percent()} tone={tone()} />
       <Show when={!props.compact}>{Math.round(percent())}%</Show>
     </Button>
-    <PopoverContent wide aria-label="Context usage"
+    <PopoverContent width="lg" unfolds aria-label="Context usage"
       onOpenAutoFocus={(event) => event.preventDefault()} onCloseAutoFocus={(event) => event.preventDefault()}
       onPointerDownOutside={(event) => { if (trigger?.contains(event.target as Node)) event.preventDefault(); }}>
       <ContextBreakdown chat={props.chat} canCompact={props.canCompact} />
@@ -62,18 +64,21 @@ export function ContextGauge(props: { chat: ActiveChatStore; compact?: boolean; 
   </Popover>;
 }
 
-/** The window as one bar of its parts, in their colours, and where it compacts. */
+/** Where the window compacts, as a share of it. */
+const compactShare = (usage: ReturnType<ActiveChatStore["contextUsage"]>) => {
+  const at = usage?.compactAt;
+  const window = contextWindow(usage);
+  return at && window ? Math.min(100, (at / window) * 100) : null;
+};
+
+/** The window as one bar of its parts, in their colours, and where it compacts (named in the reading's totals). */
 export function ContextBar(props: { chat: ActiveChatStore }) {
   const usage = () => props.chat.contextUsage();
   const inWindow = () => contextBreakdown(usage()).filter((category) => category.kind !== "deferred");
-  const threshold = () => {
-    const at = usage()?.compactAt;
-    const window = contextWindow(usage());
-    return at && window ? Math.min(100, (at / window) * 100) : null;
-  };
+  const threshold = () => compactShare(usage());
   return <Show when={contextWindow(usage()) && inWindow().length}>
     <Meter parts={inWindow().map((category, index) => ({ value: category.tokens, colour: colourOf(category, index) ?? "transparent" }))}
-      mark={threshold() != null ? { at: threshold()!, label: `compacts at ${Math.round(threshold()!)}%` } : undefined} />
+      mark={threshold() != null ? { at: threshold()!, label: `compacts at ${Math.round(threshold()!)}%`, quiet: true } : undefined} />
   </Show>;
 }
 
@@ -112,52 +117,60 @@ export function ContextBreakdown(props: { chat: ActiveChatStore; bare?: boolean;
     props.chat.loadBreakdown().catch(() => setFailed(true)).finally(() => setLoading(false));
   };
   const [copied, setCopied] = createSignal(false);
-  const copySession = () => void navigator.clipboard?.writeText(sessionId()).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1200); });
+  const copySession = () => void navigator.clipboard?.writeText(sessionId()).then(() => { setCopied(true); setTimeout(() => setCopied(false), COPY_FEEDBACK_MS); });
   // A row that does something: a keyboard reaches it and Enter or Space runs it, as a button.
   const act = (run: () => void, disabled?: boolean) => ({ role: "button" as const, tabIndex: disabled ? -1 : 0, onClick: () => { if (!disabled) run(); },
     onKeyDown: (event: KeyboardEvent) => { if (!disabled && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); run(); } } });
   const [opened, setOpened] = createSignal<string | null>(null);
-  return <div>
-    <Section title={props.bare ? undefined : "Context"} note={props.bare ? undefined : reported() == null ? "Unavailable" : `${Math.round(reported()!)}% used`}>
+  const threshold = () => compactShare(usage());
+  // The cache is the session's: one line. Unread, it has no figure, so no line.
+  const cacheLine = () => uncached() ? null
+    : cache() != null ? { label: eligible() != null ? `Cache hits · ${Math.round(eligible()! * 100)}% of what could be reused` : "Cache hits, of input", value: `${Math.round(cache()!)}%` }
+    : eligible() != null ? { label: "Cache, of what could be reused", value: `${Math.round(eligible()! * 100)}%` } : null;
+  const foot = () => model();
+  return <Reading>
+    <Show when={!props.bare}>
+      <ReadingTotal label={<strong>Context</strong>} value={reported() == null ? "Unavailable" : `${Math.round(reported()!)}% used`} />
       <ContextBar chat={props.chat} />
-      <Show when={contextTokens(usage()) != null}>
-        <Readout label={`${compactTokens(contextTokens(usage())!)}${window() ? ` of ${compactTokens(window()!)}` : ""} tokens`} value={cost() ? `$${cost().toFixed(2)}` : undefined} />
-      </Show>
-    </Section>
-    <Show when={categories().length}>
-      <Section>
+    </Show>
+    <Show when={contextTokens(usage()) != null}>
+      <ReadingTotal label={`${compactTokens(contextTokens(usage())!)}${window() ? ` of ${compactTokens(window()!)}` : ""} tokens`}
+        value={cost() ? `$${cost().toFixed(2)}` : undefined} />
+    </Show>
+    <Show when={categories().length || usage()?.breakdown === "loadable"}>
+      <ReadingParts label="What fills the window">
         <Show when={usage()?.breakdown === "loadable" && !usage()?.categories?.length}>
-          <Item {...act(load, loading())} disabled={loading()} meta="starts Claude Code">{loading() ? "Asking Claude Code…" : failed() ? "Could not load the breakdown" : "Load breakdown"}</Item>
+          <ReadingPart {...act(load, loading())} hollow label={loading() ? "Asking Claude Code…" : failed() ? "Could not load the breakdown" : "Load breakdown"} value="starts Claude Code" />
         </Show>
         <For each={categories()}>{(category, index) => {
           const value = () => `${compactTokens(category.tokens)}${category.kind === "deferred" ? "" : ` · ${share(category.tokens)}`}`;
           const label = <>{category.label}<Show when={category.items?.length}> ({category.items!.length})</Show></>;
-          const swatch = <Swatch colour={colourOf(category, index())} hollow={hollow(category)} />;
-          return <Show when={category.items?.length} fallback={<Item icon={swatch} meta={value()}>{label}</Item>}>
-            <Item {...act(() => setOpened(opened() === category.id ? null : category.id))} aria-expanded={opened() === category.id} icon={swatch} meta={value()} opens>{label}</Item>
+          return <Show when={category.items?.length} fallback={<ReadingPart colour={colourOf(category, index())} hollow={hollow(category)} label={label} value={value()} />}>
+            <ReadingPart {...act(() => setOpened(opened() === category.id ? null : category.id))} opens expanded={opened() === category.id}
+              colour={colourOf(category, index())} hollow={hollow(category)} label={label} value={value()} />
             <Show when={opened() === category.id}>
-              <For each={category.items}>{(item) => <Item icon={<Swatch hollow />} meta={compactTokens(item.tokens)}>{item.label}</Item>}</For>
+              <For each={category.items}>{(item) => <ReadingPart sub label={item.label} value={compactTokens(item.tokens)} />}</For>
             </Show>
           </Show>;
         }}</For>
-      </Section>
+      </ReadingParts>
     </Show>
-    <Show when={cache() != null || eligible() != null}>
-      <Section title="Cache" note={uncached() ? "No reads yet" : cache() != null ? `${Math.round(cache()!)}% of input` : `${Math.round(eligible()! * 100)}% reused`}>
-        <Show when={!uncached() && cache() != null && eligible() != null}><Readout label="Of what could be reused" value={`${Math.round(eligible()! * 100)}%`} /></Show>
-      </Section>
+    <Show when={cacheLine()}>{(line) => <ReadingTotal label={line().label} value={line().value} />}</Show>
+    {/* Compaction: where it happens and how often it has, and the one thing to do about it. */}
+    <ReadingFoot action={<Button variant="ghost" outline size="sm" disabled={!props.canCompact || busy()} onClick={() => void props.chat.compact()}
+      title={props.canCompact ? "Summarise the conversation so far to free the window" : "This harness cannot be asked to compact"}>
+      <ShrinkIcon />{props.chat.compacting() ? "Compacting…" : "Compact now"}</Button>}>
+      {[threshold() != null ? `Compacts at ${Math.round(threshold()!)}%` : null, compactions() ? `${compactions()} so far` : null, props.canCompact ? null : "not supported here"].filter(Boolean).join(" · ")}
+    </ReadingFoot>
+    {/* The gauge has no Details beside it: the model and session are named here. */}
+    <Show when={!props.bare && (foot() || sessionId())}>
+      <ReadingFoot action={<Show when={sessionId()}><Button variant="ghost" size="sm" title={`Copy session ID ${sessionId()}`} onClick={copySession}>{copied() ? "Copied" : `${sessionId().slice(0, 6)}…${sessionId().slice(-4)}`}</Button></Show>}>{foot()}</ReadingFoot>
     </Show>
-    <Show when={plan()}>{(current) => <Section title={`Plan${current().name ? ` · ${current().name}` : ""}`} note={`${Math.round(Math.max(...current().windows.map((window) => window.usedPercent)))}% used`}>
-      <For each={current().windows}>{(window) => <Readout label={window.label} value={<>{Math.round(window.usedPercent)}%<Show when={window.resetsAt}> · resets {resetText(window.resetsAt!)}</Show></>} />}</For>
-    </Section>}</Show>
-    <Section>
-      <Item {...act(() => void props.chat.compact(), !props.canCompact || busy())} disabled={!props.canCompact || busy()} title={props.canCompact ? "Summarise the conversation so far to free the window" : "This harness cannot be asked to compact"}
-        meta={compactions() ? `${compactions()} so far` : props.canCompact ? undefined : "not supported"}>{props.chat.compacting() ? "Compacting…" : "Compact now"}</Item>
-    </Section>
-    <Show when={model() || sessionId()}>
-      <Section>
-        <Item meta={<Show when={sessionId()}><Button variant="ghost" size="sm" title={`Copy session ID ${sessionId()}`} onClick={copySession}>{copied() ? "Copied" : `${sessionId().slice(0, 6)}…${sessionId().slice(-4)}`}</Button></Show>}>{model()}</Item>
-      </Section>
+    {/* The plan's windows are the account's, not the session's: last, under their own name. */}
+    <Show when={plan()}>{(current) =>
+      <ReadingStats title={`Plan${current().name ? ` · ${current().name}` : ""}`}>
+        <For each={current().windows}>{(window) => <ReadingStat label={window.label} value={`${Math.round(window.usedPercent)}%`} detail={window.resetsAt ? `resets ${resetText(window.resetsAt)}` : undefined} />}</For>
+      </ReadingStats>}
     </Show>
-  </div>;
+  </Reading>;
 }

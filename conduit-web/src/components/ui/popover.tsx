@@ -1,11 +1,15 @@
+import { Frost } from "./frost";
+import * as Icons from "./icons";
 import { For, Show, splitProps, type JSX } from "solid-js";
-import { CheckIcon, ChevronRightIcon, ExternalLinkIcon, SearchIcon } from "lucide-solid";
+
 import { cn } from "@/lib/utils";
 import { Keycap } from "./controls";
 import { type Density, type Motion, hovers, motionOf, moveCursor } from "./shared";
 
 /** under: a phone's submenu is open as a panel over it, so it dims and takes no taps. */
 /** wide: a readout rather than a list, at a measure of its own (the context breakdown). */
+/** unfolds: its rows unfold -- open in place, the menu growing with them (Expand; the chat menu's Context, the gauge's
+ *  parts): as wide as its cap from the start, and as tall as what is open, up to the room it has, before it scrolls. */
 /** A measure (Foundations · Space): a popover's width or height cap. */
 export type Measure = "xs" | "sm" | "md" | "lg" | "xl" | "2xl";
 /**
@@ -13,10 +17,10 @@ export type Measure = "xs" | "sm" | "md" | "lg" | "xl" | "2xl";
  * default (--menu-width-cap, --menu-height-cap) -- and the room its host leaves it (--menu-room: the adapter gives
  * it Kobalte's, inside the safe area); past that it scrolls. width, height: this popover's own caps, in a measure.
  */
-export function Menu(props: JSX.HTMLAttributes<HTMLDivElement> & { density?: Density; motion?: Motion; under?: boolean; wide?: boolean; width?: Measure; height?: Measure }) {
-  const [, rest] = splitProps(props, ["class", "density", "motion", "under", "wide", "width", "height", "children", "style"]);
+export function Menu(props: JSX.HTMLAttributes<HTMLDivElement> & { density?: Density; motion?: Motion; under?: boolean; wide?: boolean; unfolds?: boolean; width?: Measure; height?: Measure }) {
+  const [, rest] = splitProps(props, ["class", "density", "motion", "under", "wide", "unfolds", "width", "height", "children", "style"]);
   const caps = () => ({ ...(props.width ? { "--menu-width": `var(--measure-${props.width})` } : {}), ...(props.height ? { "--menu-height": `var(--measure-${props.height})` } : {}), ...(typeof props.style === "object" ? props.style : {}) });
-  return <div role="menu" class={cn("ui-frost ui-menu", props.class)} onPointerOver={moveCursor} {...rest} style={caps()} data-wide={props.wide ? "" : undefined} data-density={props.density} data-surface="frost" data-lift="raised" data-under={props.under ? "" : undefined} {...motionOf(props.motion)}>{props.children}</div>;
+  return <Frost lift="raised" role="menu" class={cn("ui-menu", props.class)} onPointerOver={moveCursor} {...rest} style={caps()} data-wide={props.wide ? "" : undefined} data-unfolds={props.unfolds ? "" : undefined} data-fits="" data-density={props.density} data-under={props.under ? "" : undefined} {...motionOf(props.motion)}>{props.children}</Frost>;
 }
 
 /** A menu's section: a list of items (the default) or a slider, with an optional title and a note beside it.
@@ -33,23 +37,30 @@ export function Section(props: JSX.HTMLAttributes<HTMLDivElement> & { note?: JSX
  *  field: what a behaviour adds to the input (combobox state, keys, focus). */
 export function SearchSection(props: { placeholder: string; value?: string; keys?: string[]; onInput?: (value: string) => void; field?: JSX.InputHTMLAttributes<HTMLInputElement> }) {
   return <div role="search" class="ui-section ui-search-section" data-kind="search">
-    <SearchIcon /><input {...props.field} class="ui-search" placeholder={props.placeholder} value={props.value ?? ""} onInput={(event) => props.onInput?.(event.currentTarget.value)} />
+    <Icons.Search /><input {...props.field} class="ui-search" placeholder={props.placeholder} value={props.value ?? ""} onInput={(event) => props.onInput?.(event.currentTarget.value)} />
     <Show when={props.keys}><Keys keys={props.keys!} /></Show>
   </div>;
 }
 
-/** A heading section: what the popover is about -- a title and a line under it (the chat menu's top). */
-export function HeadingSection(props: { title: string; detail?: JSX.Element; children?: JSX.Element }) {
-  return <div class="ui-section ui-heading" data-kind="heading">
-    <div class="ui-heading-title">{props.title}</div><Show when={props.detail}><div class="ui-heading-detail">{props.detail}</div></Show>
-    {props.children}
-  </div>;
+/** RowGroup: a row and its actions side by side, each an item of its own, so the arrow keys reach every one and
+ *  Enter runs it. The actions are icons at the row's end, shown on the hovered row or the one holding the cursor
+ *  (always where nothing hovers). */
+export const RowGroup = (props: { actions: JSX.Element; children: JSX.Element }) =>
+  <div class="ui-row-group">{props.children}<span class="ui-row-actions">{props.actions}</span></div>;
+/** RowAction: one action in a RowGroup, an icon named by its label; destructive, it washes red. */
+export function RowAction(props: JSX.HTMLAttributes<HTMLDivElement> & { label: string; icon: JSX.Element; destructive?: boolean }) {
+  const [local, rest] = splitProps(props, ["label", "icon", "destructive", "children"]);
+  return <div role="menuitem" {...rest} class="ui-row-action" aria-label={local.label} title={local.label} data-destructive={local.destructive ? "" : undefined}>{local.icon}</div>;
 }
 
 /** An item in a list section. Icon, meta, keys and opens are its parts; checked, disabled and destructive its states. */
 export function Item(props: JSX.HTMLAttributes<HTMLDivElement> & {
   icon?: JSX.Element; meta?: JSX.Element; detail?: JSX.Element; keys?: string[]; opens?: boolean; active?: boolean;
-  /** field: the label is a field name (title type) and meta its value, as in "CONTEXT  Unavailable ›". */
+  /** detailData: the second line is a value (an address, a command, a session's place and age), so it takes the Data
+   *  voice; without it the second line is a description, in the Caption voice. */
+  detailData?: boolean;
+  /** field: the row is its section's title -- the name in the label's voice, meta its value in the text's, as in "CONTEXT  8% used ›"
+   *  (the row that unfolds a reading under it, like the plus menu's EFFORT). */
   field?: boolean;
   /** keysFirst: the keycaps lead the row (the leader menu, where the key is what you read first). */
   keysFirst?: boolean;
@@ -65,18 +76,18 @@ export function Item(props: JSX.HTMLAttributes<HTMLDivElement> & {
   /** indent: a child, under the row it belongs to. picked: in an edit, chosen or not -- a check column, and the wash on each chosen. */
   indent?: boolean; picked?: boolean;
 }) {
-  const [, rest] = splitProps(props, ["icon", "meta", "detail", "keys", "opens", "active", "field", "keysFirst", "checked", "disabled", "destructive", "children", "end", "class", "onOpens", "opensLabel", "indent", "picked", "reveal", "away", "onCursor"]);
+  const [, rest] = splitProps(props, ["icon", "meta", "detail", "detailData", "keys", "opens", "active", "field", "keysFirst", "checked", "disabled", "destructive", "children", "end", "class", "onOpens", "opensLabel", "indent", "picked", "reveal", "away", "onCursor"]);
   return <div role={props.checked !== undefined ? "menuitemradio" : "menuitem"} class="ui-row" aria-checked={props.checked} data-field={props.field ? "" : undefined}
     data-highlighted={props.active ? "" : undefined} data-checked={props.checked ? "" : undefined} data-disabled={props.disabled ? "" : undefined} data-destructive={props.destructive ? "" : undefined} data-indent={props.indent ? "" : undefined} data-picked={props.picked ? "" : undefined} onPointerMove={props.onCursor ? (event: PointerEvent) => { if (hovers(event)) props.onCursor!(); } : undefined} {...rest}>
-    <Show when={props.picked !== undefined}><span class="ui-row-check" aria-hidden="true"><Show when={props.picked}><CheckIcon /></Show></span></Show>
+    <Show when={props.picked !== undefined}><span class="ui-row-check" aria-hidden="true"><Show when={props.picked}><Icons.Check /></Show></span></Show>
     <Show when={props.keysFirst && props.keys}><Keys keys={props.keys!} first /></Show>
-    <Show when={props.icon}><span class="ui-icon">{props.icon}</span></Show><span class="ui-label" data-stacked={props.detail ? "" : undefined}><Show when={props.detail} fallback={props.children}><span>{props.children}</span><small class="ui-detail">{props.detail}</small></Show></span>
+    <Show when={props.icon}><span class="ui-icon">{props.icon}</span></Show><span class="ui-label" data-stacked={props.detail ? "" : undefined}><Show when={props.detail} fallback={props.children}><span>{props.children}</span><small class="ui-detail" data-data={props.detailData ? "" : undefined}>{props.detail}</small></Show></span>
     <Show when={props.meta}><small>{props.meta}</small></Show>
     <Show when={!props.keysFirst && props.keys}><Keys keys={props.keys!} /></Show>
-    <Show when={props.opens}><Show when={props.onOpens} fallback={<ChevronRightIcon class="ui-chevron" />}>
-      <button type="button" class="ui-chevron" tabIndex={-1} aria-label={props.opensLabel} onMouseDown={(event) => event.preventDefault()} onClick={(event) => { event.stopPropagation(); props.onOpens?.(); }}><ChevronRightIcon /></button>
+    <Show when={props.opens}><Show when={props.onOpens} fallback={<Icons.ChevronRight class="ui-chevron" />}>
+      <button type="button" class="ui-chevron" tabIndex={-1} aria-label={props.opensLabel} onMouseDown={(event) => event.preventDefault()} onClick={(event) => { event.stopPropagation(); props.onOpens?.(); }}><Icons.ChevronRight /></button>
     </Show></Show>
-    <Show when={props.away && !props.opens}><ExternalLinkIcon class="ui-chevron" data-away="" aria-hidden="true" /></Show>
+    <Show when={props.away && !props.opens}><Icons.ExternalLink class="ui-chevron" data-away="" aria-hidden="true" /></Show>
     <Show when={props.end}><span class="ui-row-end" data-reveal={props.reveal ? "" : undefined}>{props.end}</span></Show>
   </div>;
 }

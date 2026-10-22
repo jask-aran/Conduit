@@ -4,11 +4,6 @@ import path from "node:path";
 const DEFAULTS = {
   maxLiveProcesses: 12,
   maxGeneratingProcesses: 2,
-  // Five minutes, because the wait it removes is an agent starting from cold,
-  // which is long enough to notice and frequent enough to be the reason a
-  // process was kept at all. A process that idles that long costs memory; a
-  // restart costs the person in front of it.
-  idleProcessTtlMs: 300_000,
 };
 
 function clampInt(value, min, max, fallback) {
@@ -21,7 +16,6 @@ export function normalizeRuntimeSettings(input = {}, fallback = DEFAULTS) {
   return {
     maxLiveProcesses: clampInt(input.maxLiveProcesses, 1, 32, fallback.maxLiveProcesses),
     maxGeneratingProcesses: clampInt(input.maxGeneratingProcesses, 1, 8, fallback.maxGeneratingProcesses),
-    idleProcessTtlMs: clampInt(input.idleProcessTtlMs, 30_000, 3_600_000, fallback.idleProcessTtlMs),
   };
 }
 
@@ -29,7 +23,6 @@ export function defaultsFromEnv(env = process.env) {
   return normalizeRuntimeSettings({
     maxLiveProcesses: env.CONDUIT_MAX_LIVE_PROCESSES,
     maxGeneratingProcesses: env.CONDUIT_MAX_GENERATING_PROCESSES,
-    idleProcessTtlMs: env.CONDUIT_IDLE_PROCESS_TTL_MS,
   }, DEFAULTS);
 }
 

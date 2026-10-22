@@ -125,8 +125,7 @@ test("normalizes aggregate session stats on context usage updates", () => {
 });
 
 test("an error states whose fault it was", () => {
-  // Two event names used to carry this, and only Pi's adapter knew to rename
-  // either of them. A rejected command must not read as a failed turn.
+  // The server states command refusals separately from failed turns.
   const rejected = normalizeLiveEvent({
     type: "error", scope: "request", generationId: "g1",
     error: { code: "invalid_request", message: "not JSON" },

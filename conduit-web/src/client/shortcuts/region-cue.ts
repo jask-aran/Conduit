@@ -1,4 +1,4 @@
-const reduced = () => typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+import { reducedMotion } from "@/components/ui/motion";
 
 const CUE_MS = 800;
 let current: { lit: HTMLElement; frame: number } | null = null;
@@ -13,7 +13,7 @@ let current: { lit: HTMLElement; frame: number } | null = null;
  * Reduced motion shows nothing extra.
  */
 export function acknowledgeRegion(region: Element) {
-  if (reduced() || typeof document === "undefined") return;
+  if (reducedMotion() || typeof document === "undefined") return;
   if (current) { cancelAnimationFrame(current.frame); current.lit.remove(); }
   const lit = document.createElement("div");
   lit.className = "region-cue";

@@ -16,9 +16,9 @@ export function IdentityEditor(props: {
   showCustomColor: () => boolean; setShowCustomColor: Toggle;
   customHex: () => string; setCustomHex: (value: string) => void;
   setCustomColor: (value: string) => void; colorHex: string;
-  colors: readonly { id: string; label: string; hex: string }[];
+  colors: readonly { id: string; label: string; colour: string }[];
   setMode: (mode: IdentityValue["mode"]) => void; setMonogram: (value: string) => void;
-  onIcon: (id: string) => void; onColor: (id: string, hex: string) => void; onSave: () => void;
+  onIcon: (id: string) => void; onColor: (id: string, colour: string) => void; onSave: () => void;
 }) {
   const { draft, canSave, selectedIcon, filteredIconOptions, iconQuery, setIconQuery, showIconBrowser, setShowIconBrowser, showCustomColor, setShowCustomColor, customHex, setCustomHex, setCustomColor, setMode, setMonogram } = props;
   return <section class="ui-identity" data-workspace-appearance="editor" aria-label="Workspace identity">
@@ -84,7 +84,7 @@ export function IdentityEditor(props: {
         }}>{showCustomColor() ? "Use Mocha colours" : "More colours"}</Button>
       </div>
       <div class="ui-identity-color-grid" role="radiogroup" aria-label="Workspace color">
-        <For each={props.colors}>{(option) => <Button variant="ghost" type="button" role="radio" aria-label={option.label} aria-checked={draft().color === option.id} data-selected={draft().color === option.id} title={option.label} onClick={() => { props.onColor(option.id, option.hex); }}><Swatch colour={option.hex} fill /></Button>}</For>
+        <For each={props.colors}>{(option) => <Button variant="ghost" type="button" role="radio" aria-label={option.label} aria-checked={draft().color === option.id} data-selected={draft().color === option.id} title={option.label} onClick={() => { props.onColor(option.id, option.colour); }}><Swatch colour={option.colour} fill /></Button>}</For>
       </div>
       <Show when={showCustomColor()}>
         <div class="ui-identity-custom-color">

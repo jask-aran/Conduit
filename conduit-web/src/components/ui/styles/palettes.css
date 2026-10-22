@@ -1,0 +1,64 @@
+/* Palettes: named sets of colours from outside Conduit's own theme, each colour under its palette's own name
+   (--<palette>-<colour>). Nothing draws with these directly: a use (code, the terminal, categories, workspace
+   identity) points at a palette's colours, in theme.css for the CSS uses and palettes.ts for identity, so a palette
+   swaps in one place. palettes.ts lists the same names and labels for the pickers and the gallery. */
+
+/* Catppuccin Mocha's accents (catppuccin.com/palette). Workspace identity. */
+:root {
+  --catppuccin-mocha-rosewater: #f5e0dc;
+  --catppuccin-mocha-flamingo: #f2cdcd;
+  --catppuccin-mocha-pink: #f5c2e7;
+  --catppuccin-mocha-mauve: #cba6f7;
+  --catppuccin-mocha-red: #f38ba8;
+  --catppuccin-mocha-peach: #fab387;
+  --catppuccin-mocha-yellow: #f9e2af;
+  --catppuccin-mocha-green: #a6e3a1;
+  --catppuccin-mocha-teal: #94e2d5;
+  --catppuccin-mocha-sky: #89dceb;
+  --catppuccin-mocha-sapphire: #74c7ec;
+  --catppuccin-mocha-blue: #89b4fa;
+  --catppuccin-mocha-lavender: #b4befe;
+}
+
+/* One Dark (Atom's), with the brights, black and white a terminal needs, and Conduit's terminal ground, text,
+   cursor and selection. Code and the terminal. */
+:root {
+  --one-dark-foreground: #abb2bf;
+  --one-dark-comment: #5c6370;
+  --one-dark-red: #e06c75;
+  --one-dark-orange: #d19a66;
+  --one-dark-yellow: #e5c07b;
+  --one-dark-green: #98c379;
+  --one-dark-cyan: #56b6c2;
+  --one-dark-blue: #61afef;
+  --one-dark-purple: #c678dd;
+  --one-dark-invalid: #f44747;
+  --one-dark-invalid-text: #ffffff;
+  --one-dark-black: #25272b;
+  --one-dark-white: #d7dae0;
+  --one-dark-bright-black: #6b7078;
+  --one-dark-bright-red: #ef7f88;
+  --one-dark-bright-green: #a9d58a;
+  --one-dark-bright-yellow: #f0cd8b;
+  --one-dark-bright-blue: #77b9f2;
+  --one-dark-bright-purple: #d48be6;
+  --one-dark-bright-cyan: #6cc5d0;
+  --one-dark-bright-white: #f3f4f6;
+  --one-dark-ground: #121315;
+  --one-dark-text: #e6e8ea;
+  --one-dark-cursor: #91a0af;
+  --one-dark-selection: #35404b;
+}
+
+/* Conduit categories: nine hues at one lightness, distinct side by side in a bar, slate the quiet one. Categories. */
+:root {
+  --conduit-categories-violet: oklch(0.72 0.15 300);
+  --conduit-categories-slate: oklch(0.7 0.02 260);
+  --conduit-categories-azure: oklch(0.74 0.12 230);
+  --conduit-categories-amber: oklch(0.78 0.14 75);
+  --conduit-categories-coral: oklch(0.75 0.15 30);
+  --conduit-categories-rose: oklch(0.72 0.16 350);
+  --conduit-categories-gold: oklch(0.8 0.12 95);
+  --conduit-categories-jade: oklch(0.7 0.13 150);
+  --conduit-categories-clay: oklch(0.7 0.1 50);
+}

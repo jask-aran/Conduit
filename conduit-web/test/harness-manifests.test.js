@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { MANIFESTS, NAME_GENERATION_MODES, manifestForImplementation, implementationsOf } from "../src/harnesses/index.js";
-import { ChatBackendRegistry } from "../src/pi-rpc-adapter.js";
+import { ChatBackendRegistry } from "../src/chat-backend-registry.js";
 import { assertChatBackendAdapter } from "../src/chat-backend-contract.js";
 import { harnessCatalog } from "../src/server/routes/harnesses.js";
 import { agentProfiles, profileSelection } from "../src/chat-backend.js";
@@ -9,14 +9,14 @@ import { SessionRecords } from "../src/harnesses/session-records.js";
 import { unsupported } from "../src/harnesses/unsupported.js";
 import { READY, UNAVAILABLE, detect } from "../src/harnesses/probe.js";
 
-const config = { manager: {}, codexCommand: "codex", chatgptWebPython: "python3", chatgptWebScript: "x.py", chatgptWebDataDir: "/tmp/x" };
+const config = { manager: {}, dataRoot: "/tmp/conduit-manifests-test", codexCommand: "codex", chatgptWebPython: "python3", chatgptWebScript: "x.py", chatgptWebDataDir: "/tmp/x" };
 const allAvailable = () => new Map(MANIFESTS.map((manifest) => [manifest.id, READY("test")]));
 
 test("every manifest declares the fields the server reads from it", () => {
   for (const manifest of MANIFESTS) {
     assert.ok(manifest.id, "id");
     assert.ok(manifest.label, `${manifest.id} label`);
-    assert.ok(["pi_rpc", "acp", "native_api", "pty"].includes(manifest.protocol), `${manifest.id} protocol`);
+    assert.ok(["acp", "native_api", "pty"].includes(manifest.protocol), `${manifest.id} protocol`);
     assert.ok(["machine", "folder", "none"].includes(manifest.discovery), `${manifest.id} discovery`);
     assert.equal(typeof manifest.probe, "function", `${manifest.id} probe`);
     assert.equal(typeof manifest.build, "function", `${manifest.id} build`);
@@ -65,7 +65,7 @@ test("registration, catalog and profile selection all agree with the manifests",
 });
 
 test("registration rejects incomplete adapters and dishonest capabilities", () => {
-  const valid = ChatBackendRegistry.fromManifests(MANIFESTS, allAvailable(), config).forImplementation("conduit_pi");
+  const valid = ChatBackendRegistry.fromManifests(MANIFESTS, allAvailable(), config).forImplementation("conduit-runtime");
   const incomplete = Object.create(valid);
   incomplete.readTranscript = null;
   assert.throws(() => assertChatBackendAdapter(incomplete, "broken"),
@@ -84,7 +84,9 @@ test("an unavailable harness registers nothing but a built-in one always does", 
   const backends = ChatBackendRegistry.fromManifests(MANIFESTS, detection, config);
   for (const manifest of MANIFESTS) {
     for (const implementation of implementationsOf(manifest)) {
-      assert.equal(backends.adapters.has(implementation), Boolean(manifest.builtIn), implementation);
+      // A harness devices can run is registered for them even when it is absent here.
+      assert.equal(backends.adapters.has(implementation), Boolean(manifest.builtIn || manifest.devices), implementation);
+      assert.equal(backends.local.has(implementation), Boolean(manifest.builtIn), implementation);
     }
   }
   assert.deepEqual(harnessCatalog(backends).map((row) => row.available),
@@ -96,11 +98,12 @@ test("an unavailable harness registers nothing but a built-in one always does", 
 test("re-probing registers a harness that appeared after startup", async () => {
   const detection = new Map(MANIFESTS.map((manifest) => [manifest.id, UNAVAILABLE()]));
   const backends = ChatBackendRegistry.fromManifests(MANIFESTS, detection, config);
-  assert.equal(backends.adapters.has("codex"), false);
+  assert.equal(backends.local.has("codex"), false);
   backends.manifestList = MANIFESTS.map((manifest) =>
     manifest.id === "codex" ? { ...manifest, probe: () => READY("codex-cli 1.2.3") } : { ...manifest, probe: () => UNAVAILABLE() });
   await backends.refreshDetection();
   assert.equal(backends.adapters.has("codex"), true);
+  assert.equal(backends.local.has("codex"), true);
   assert.equal(backends.detection.get("codex").version, "codex-cli 1.2.3");
 });
 
@@ -167,7 +170,7 @@ test("session replay keeps only the latest 500 events", () => {
 test("refusals are derived from the capability flags, not hand-written", () => {
   const capable = unsupported(
     { approvals: true, steer: true, followUpQueue: true, modelSwitch: true, thinkingLevels: true, usage: true },
-    { label: "Full", protocol: "pi_rpc" },
+    { label: "Full", protocol: "native_api" },
   );
   assert.deepEqual(Object.keys(capable), ["compact", "fork"]);
 
@@ -219,9 +222,9 @@ test("a profile elects a harness and the harness declares the capabilities", asy
   }
 
   // The client joins on implementation, which is what every chat carries.
-  assert.equal(harnesses.conduit_pi.toolUse, true);
-  assert.equal(harnesses.conduit_pi.approvals, true);
-  assert.equal(harnesses.conduit_pi.permissionModes, false);
+  assert.equal(harnesses["conduit-runtime"].toolUse, true);
+  assert.equal(harnesses["conduit-runtime"].approvals, true);
+  assert.equal(harnesses["conduit-runtime"].permissionModes, false);
   assert.equal(harnesses.codex.permissionModes, true);
   assert.deepEqual(harnesses.codex.serviceLevels, manifestForImplementation("codex").serviceLevels);
   for (const capabilities of Object.values(harnesses)) {

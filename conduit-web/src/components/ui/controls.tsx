@@ -1,5 +1,7 @@
+import { Frost } from "./frost";
+import * as Icons from "./icons";
 import { createEffect, createSignal, createUniqueId, For, Show, splitProps, type JSX } from "solid-js";
-import { ChevronDownIcon, ChevronRightIcon, SquareIcon, XIcon } from "lucide-solid";
+
 import { haptic } from "./haptics";
 import { cn } from "@/lib/utils";
 
@@ -8,7 +10,7 @@ export function Keycap(props: { children: JSX.Element; label?: string; class?: s
   if (!props.onClick && !props.onRemove) return <kbd class={cn("ui-keycap", props.class)}>{props.children}</kbd>;
   return <span class="ui-keycap" data-editable="">
     <button type="button" aria-label={props.label ? `Change ${props.label}` : undefined} onClick={() => props.onClick?.()}>{props.children}</button>
-    <Show when={props.onRemove}><button type="button" class="ui-keycap-remove" aria-label={props.label ? `Remove ${props.label}` : "Remove"} onClick={() => props.onRemove?.()}><XIcon /></button></Show>
+    <Show when={props.onRemove}><button type="button" class="ui-keycap-remove" aria-label={props.label ? `Remove ${props.label}` : "Remove"} onClick={() => props.onRemove?.()}><Icons.Close /></button></Show>
   </span>;
 }
 
@@ -31,7 +33,7 @@ export function Switch(props: { label: string; checked: boolean; onChange?: (che
 
 /** Waiting: a ring turning, the icon's size. */
 /** Stop: a small solid square in the text colour, the mark alone (Stop a turn, the composer's primary slot). */
-export const StopGlyph = () => <SquareIcon class="ui-stop-glyph" aria-hidden="true" />;
+export const StopGlyph = () => <Icons.Stop class="ui-stop-glyph" aria-hidden="true" />;
 export const Spinner = (props: { class?: string }) => <span class={cn("ui-spinner", props.class)} aria-hidden="true" />;
 
 /** Multi-line text that grows with its lines: bare, the type's size, no geometry of its own -- what holds it pads it (DesktopComposer, PillField). */
@@ -41,8 +43,13 @@ export function TextArea(props: JSX.TextareaHTMLAttributes<HTMLTextAreaElement>)
 }
 
 /** A field's name over its control: Caption type, --card-pair above it. */
-export function Field(props: { label: JSX.Element; children: JSX.Element }) {
-  return <label class="ui-field"><span class="ui-field-label">{props.label}</span>{props.children}</label>;
+/** A form field: its label over its control. plain: the label names a group of controls (a Segmented), so it is no
+ *  label element (a press on it would pick the first). inline: the label and its control on one line (a Switch). */
+export function Field(props: { label: JSX.Element; plain?: boolean; inline?: boolean; children: JSX.Element }) {
+  const inner = () => <><span class="ui-field-label">{props.label}</span>{props.children}</>;
+  return props.plain
+    ? <div role="group" class="ui-field" data-inline={props.inline ? "" : undefined}>{inner()}</div>
+    : <label class="ui-field" data-inline={props.inline ? "" : undefined}>{inner()}</label>;
 }
 
 export function Input(props: JSX.InputHTMLAttributes<HTMLInputElement>) {
@@ -53,7 +60,7 @@ export function Input(props: JSX.InputHTMLAttributes<HTMLInputElement>) {
 /** A select's trigger: a field with a chevron, or bare (its value and a chevron, as in a settings row). A menu's behaviour opens it (Select in components/menus.tsx). */
 export function SelectTrigger(props: Omit<JSX.ButtonHTMLAttributes<HTMLButtonElement>, "value"> & { value: string; bare?: boolean }) {
   const [local, rest] = splitProps(props, ["value", "bare", "class"]);
-  return <button type="button" {...rest} class={cn("ui-input", local.class)} data-bare={local.bare ? "" : undefined}><span>{local.value}</span><ChevronDownIcon /></button>;
+  return <button type="button" {...rest} class={cn("ui-input", local.class)} data-bare={local.bare ? "" : undefined}><span>{local.value}</span><Icons.ChevronDown /></button>;
 }
 
 /** A few choices side by side, one current. arrows: one Tab stop, the arrows moving the choice (a form's radio group, Settings);
@@ -68,18 +75,18 @@ export function Segmented<T extends string>(props: { label: string; value: T; op
     const group = event.currentTarget;
     queueMicrotask(() => group.querySelector<HTMLElement>('[aria-checked="true"]')?.focus());
   };
-  return <div id={props.id} role="radiogroup" aria-label={props.label} aria-disabled={props.disabled || undefined} class={props.pill ? "ui-seg ui-frost" : "ui-seg"} data-pill={props.pill ? "" : undefined} data-icons={props.icons || props.pill ? "" : undefined} data-size={props.size}
+  return <Frost plain={!props.pill} id={props.id} role="radiogroup" aria-label={props.label} aria-disabled={props.disabled || undefined} class="ui-seg" data-pill={props.pill ? "" : undefined} data-icons={props.icons || props.pill ? "" : undefined} data-size={props.size}
     style={{ "--segments": props.options.length, "--segment": index() }} onKeyDown={move}>
     <span class="ui-seg-thumb" aria-hidden="true" />
     <For each={props.options}>{(option) => <button type="button" role="radio" aria-checked={option.value === props.value} tabIndex={props.arrows && option.value !== props.value ? -1 : undefined} disabled={props.disabled} aria-label={props.icons || props.pill ? option.label : undefined} title={option.title ?? (props.icons || props.pill ? option.label : undefined)}
       onClick={() => { if (option.value === props.value) return; haptic("select"); props.onChange(option.value); }}>{option.icon}{props.icons || props.pill ? null : <span>{option.label}</span>}{option.count !== undefined && <small>{option.count}</small>}</button>}</For>
-  </div>;
+  </Frost>;
 }
 
 /** A slider's value as a control that opens its levels (a Slider's onOpen, or a menu's submenu trigger). */
 export function SliderValue(props: JSX.ButtonHTMLAttributes<HTMLButtonElement>) {
   const [local, rest] = splitProps(props, ["children"]);
-  return <button type="button" {...rest} class="ui-slider-value" data-opens="">{local.children}<ChevronRightIcon /></button>;
+  return <button type="button" {...rest} class="ui-slider-value" data-opens="">{local.children}<Icons.ChevronRight /></button>;
 }
 
 /** How full something is, as a ring in the text colour: tone idle (nothing reported), warning and critical colour it. */
@@ -93,11 +100,12 @@ export function Gauge(props: { value: number; tone?: "idle" | "normal" | "warnin
 /** fill: the whole of its host (a colour choice) rather than a dot beside a label. */
 export const Swatch = (props: { colour?: string; hollow?: boolean; fill?: boolean }) => <i class="ui-swatch" data-hollow={props.hollow ? "" : undefined} data-fill={props.fill ? "" : undefined} style={{ background: props.hollow ? undefined : props.colour }} aria-hidden="true" />;
 
-/** A whole as one bar of its parts, each in its colour and grown by its value; mark: a rule where something happens, named under it. */
-export function Meter(props: { parts: { value: number; colour: string }[]; mark?: { at: number; label: string } }) {
-  return <div class="ui-meter" data-marked={props.mark ? "" : undefined}>
+/** A whole as one bar of its parts, each in its colour and grown by its value; mark: a rule where something happens,
+ *  named under it -- or, quiet, its rule alone, named by what reads it (a Reading's totals) and its title. */
+export function Meter(props: { parts: { value: number; colour: string }[]; mark?: { at: number; label: string; quiet?: boolean } }) {
+  return <div class="ui-meter" data-marked={props.mark && !props.mark.quiet ? "" : undefined} title={props.mark?.quiet ? props.mark.label : undefined}>
     <div class="ui-meter-bar" aria-hidden="true"><For each={props.parts}>{(part) => <span style={{ "flex-grow": part.value, background: part.colour }} />}</For></div>
-    <Show when={props.mark}>{(mark) => <><i class="ui-meter-mark" style={{ left: `${mark().at}%` }} /><small class="ui-meter-label" style={{ left: `${mark().at}%` }}>{mark().label}</small></>}</Show>
+    <Show when={props.mark}>{(mark) => <><i class="ui-meter-mark" style={{ left: `${mark().at}%` }} /><Show when={!mark().quiet}><small class="ui-meter-label" style={{ left: `${mark().at}%` }}>{mark().label}</small></Show></>}</Show>
   </div>;
 }
 

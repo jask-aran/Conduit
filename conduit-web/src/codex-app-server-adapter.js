@@ -1,8 +1,6 @@
+import { remoteNode } from "./place.js";
 import crypto from "node:crypto";
-import fs from "node:fs";
-import { execFile } from "node:child_process";
 import { EventEmitter } from "node:events";
-import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import WebSocket from "ws";
@@ -14,6 +12,9 @@ import { messageClose, messageDrop, messageOpen, toolClose, toolKind, toolOpen, 
 import { countCacheRequest, planWindowLabel, usageFromRequests } from "./cache-stats.js";
 import { codexPlanUsage, declarePlan } from "./plan-usage.js";
 import { unsupported } from "./harnesses/unsupported.js";
+import { opaqueSessionOf } from "./nodes/remote-spawn.js";
+import { placeProcesses } from "./nodes/place-processes.js";
+import { attachmentForDevice, imageDataUrl } from "./nodes/device-attachments.js";
 
 export const CODEX_CAPABILITIES = Object.freeze({
   history: "linear", fork: true, regenerate: true,
@@ -145,15 +146,20 @@ function codexPlan(snapshot, previous = null) {
 }
 
 export class CodexAppServerAdapter extends EventEmitter {
+  // Starts its harness on a device for a device's workspace (live-session-launcher.js).
+  runsOnDevices = true;
+
   /** The account's plan windows; Codex's are the account's, not a thread's. */
   static plan = { at: 0, value: null };
 
   constructor({ command = "codex", socketPath = path.join(process.env.CODEX_HOME || path.join(os.homedir(), ".codex"),
     "app-server-control", "app-server-control.sock"), requestTimeoutMs = 15_000, discoveryIdleMs = 60_000,
-    logs = null } = {}) {
+    logs = null, nodeHub = null } = {}) {
     super();
     this.command = command;
     this.socketPath = socketPath;
+    // Paired devices: a chat in a device's workspace runs on that device's Codex daemon.
+    this.nodeHub = nodeHub;
     this.requestTimeoutMs = requestTimeoutMs;
     this.discoveryIdleMs = discoveryIdleMs;
     this.discoveryId = null;
@@ -174,16 +180,21 @@ export class CodexAppServerAdapter extends EventEmitter {
     Object.assign(this, unsupportedMethods);
   }
 
-  startDaemon() {
-    if (!this.daemonStart) {
-      this.daemonStart = new Promise((resolve, reject) => {
-        execFile(this.command, ["app-server", "daemon", "start"], (cause, _stdout, stderr) => {
-          if (cause) reject(error(stderr.trim() || cause.message));
-          else resolve();
-        });
-      }).finally(() => { this.daemonStart = null; });
+  opaqueSessionOf(record) { return opaqueSessionOf(record); }
+
+  /** Codex's processes in a place (`{ nodeId, place }`; none is this server). */
+  processes(on) { return placeProcesses(this.nodeHub, on || {}); }
+
+  /** Start the place's Codex daemon; chats asking at once share the one start. */
+  startDaemon(record = null) {
+    const key = record?.nodeId || "";
+    this.daemonStarts ||= new Map();
+    if (!this.daemonStarts.has(key)) {
+      this.daemonStarts.set(key, this.processes(record).execFile("codex", this.command, ["app-server", "daemon", "start"])
+        .then(() => {}, (cause) => { throw error(String(cause.stderr || cause.message).trim()); })
+        .finally(() => this.daemonStarts.delete(key)));
     }
-    return this.daemonStart;
+    return this.daemonStarts.get(key);
   }
 
   async launch(context, { model = "", thinkingLevel = "", forceModel = false }) {
@@ -202,7 +213,7 @@ export class CodexAppServerAdapter extends EventEmitter {
     const live = context.chat.backend.opaqueSession
       ? await this.restore(context.chat.backend.opaqueSession, options) : await this.create(options);
     return { live, mapping: {
-      backend: { ...context.chat.backend, model: selectedModel, opaqueSession: live.sessionId },
+      backend: { ...context.chat.backend, model: selectedModel, opaqueSession: this.opaqueSessionOf(live) },
       ...(selectedThinkingLevel ? { modelThinkingLevels: {
         ...(context.chat.modelThinkingLevels || {}), [selectedModel]: selectedThinkingLevel,
       } } : {}),
@@ -210,7 +221,7 @@ export class CodexAppServerAdapter extends EventEmitter {
   }
 
   async create({ chatId, project, model = "", thinkingLevel = "", permissionMode = "", permissionProfile = "", approvalPolicy = "", approvalsReviewer = "", serviceLevel = "", sandbox = null }) {
-    const record = await this.start({ chatId, projectId: project.id, cwd: project.workingRoot });
+    const record = await this.start({ chatId, projectId: project.id, cwd: project.workingRoot, nodeId: remoteNode(project), place: project.place });
     try {
       const result = await this.request(record, "thread/start", {
         cwd: project.workingRoot,
@@ -241,7 +252,7 @@ export class CodexAppServerAdapter extends EventEmitter {
   }
 
   async restore(opaqueSession, { chatId, project, model = "", thinkingLevel = "", permissionMode = "", permissionProfile = "", approvalPolicy = "", approvalsReviewer = "", serviceLevel = "", sandbox = null }) {
-    const record = await this.start({ chatId, projectId: project.id, cwd: project.workingRoot });
+    const record = await this.start({ chatId, projectId: project.id, cwd: project.workingRoot, nodeId: remoteNode(project), place: project.place });
     const threadId = typeof opaqueSession === "string" ? opaqueSession : opaqueSession?.threadId;
     if (!threadId) throw error("Codex thread identity is missing");
     try {
@@ -513,10 +524,9 @@ export class CodexAppServerAdapter extends EventEmitter {
   async contextFromHistory({ opaqueSession }) {
     const threadId = typeof opaqueSession === "string" ? opaqueSession : opaqueSession?.threadId;
     if (!threadId) return null;
-    const root = path.join(process.env.CODEX_HOME || path.join(os.homedir(), ".codex"), "sessions");
-    const name = (await fs.promises.readdir(root, { recursive: true }).catch(() => []))
-      .find((file) => file.endsWith(`${threadId}.jsonl`));
-    const text = name ? await fs.promises.readFile(path.join(root, name), "utf8").catch(() => null) : null;
+    let text = null;
+    // The rollout is read where the thread ran.
+    text = await this.processes({ nodeId: opaqueSession?.nodeId }).read("codexRollout", threadId);
     if (!text) return null;
     const requests = [];
     let window = null;
@@ -546,7 +556,20 @@ export class CodexAppServerAdapter extends EventEmitter {
     const threadId = live?.sessionId
       || (typeof opaqueSession === "string" ? opaqueSession : opaqueSession?.threadId);
     if (!threadId) return { messages: [], tools: [], page: { before: null } };
-    const transport = live || await this.discovery(project?.workingRoot);
+    // A device's thread is read from its own daemon, over a connection made for the read.
+    const device = !live && opaqueSession?.nodeId && project?.place
+      ? await this.start({ chatId: `read-${crypto.randomUUID()}`, cwd: project.workingRoot, nodeId: opaqueSession.nodeId, place: project.place })
+      : null;
+    if (device) device.ephemeral = true;
+    const transport = live || device || await this.discovery(project?.workingRoot);
+    try {
+      return await this.readThread(transport, threadId, { turnLimit, before });
+    } finally {
+      if (device) await this.close(device.id).catch(() => {});
+    }
+  }
+
+  async readThread(transport, threadId, { turnLimit, before }) {
     const result = await this.request(transport, "thread/read", { threadId, includeTurns: true });
     const allTurns = result?.thread?.turns || [];
     const turns = Number.isSafeInteger(turnLimit) && turnLimit > 0 ? allTurns.slice(-turnLimit) : allTurns;
@@ -593,11 +616,12 @@ export class CodexAppServerAdapter extends EventEmitter {
     return "";
   }
 
-  async start({ chatId, projectId, cwd }) {
+  async start({ chatId, projectId, cwd, nodeId = null, place = null }) {
     const existing = this.getByChatId(chatId);
     if (existing) return existing;
+    this.processes({ nodeId }).require("codex", "Codex");
     const record = {
-      id: crypto.randomUUID(), chatId, projectId, cwd, status: "starting", activity: "starting",
+      id: crypto.randomUUID(), chatId, projectId, cwd, nodeId, place, status: "starting", activity: "starting",
       active: false, stopping: false, sessionId: null, model: "", thinkingLevel: "", generation: null,
       clients: new Set(), events: [], pending: new Map(), approvals: new Map(),
       steering: [], followUp: [],
@@ -626,7 +650,8 @@ export class CodexAppServerAdapter extends EventEmitter {
       for (let attempt = 0; attempt < 2; attempt += 1) {
         record.socket = new WebSocket("ws://localhost/rpc", {
           perMessageDeflate: false,
-          createConnection: () => net.connect(this.socketPath),
+          // On a device, its daemon's socket, through the node.
+          createConnection: () => this.processes(record).connect({ harness: "codex", path: this.socketPath }),
         });
         try {
           await new Promise((resolve, reject) => {
@@ -637,7 +662,7 @@ export class CodexAppServerAdapter extends EventEmitter {
         } catch (cause) {
           record.socket.terminate();
           if (attempt || !["ECONNREFUSED", "ENOENT"].includes(cause.code)) throw cause;
-          await this.startDaemon();
+          await this.startDaemon(record);
         }
       }
       record.socket.on("message", (data) => this.receive(record, String(data)));
@@ -927,6 +952,7 @@ export class CodexAppServerAdapter extends EventEmitter {
       }
     } else if (method === "turn/started") {
       record.active = true;
+      record.turnStarting = false;
       record.activity = "working";
       record.generation = { id: turnId, closed: false, settled: false };
       record.turn = null;
@@ -943,7 +969,7 @@ export class CodexAppServerAdapter extends EventEmitter {
       this.refreshPlan(record);
       if (record.compactions == null) {
         record.compactions = 0;
-        void this.contextFromHistory({ opaqueSession: record.sessionId }).then((history) => {
+        void this.contextFromHistory({ opaqueSession: this.opaqueSessionOf(record) }).then((history) => {
           record.compactions += history?.contextUsage.compactions || 0;
         }).catch(() => {});
       }
@@ -1116,6 +1142,7 @@ export class CodexAppServerAdapter extends EventEmitter {
       }
       record.prompts = new Set();
       record.answering = null;
+      record.turnStarting = false;
       this.publish(record, failed
         ? { type: "error", generationId: turnId, error: { code: "backend_unavailable", message: params.turn?.error?.message || "Codex turn failed" } }
         : { type: "status", generationId: turnId, phase: "settled", seq: ++record.generationSeq, status: "idle", activity: "idle", detail: null });
@@ -1151,7 +1178,7 @@ export class CodexAppServerAdapter extends EventEmitter {
       await this.request(record, "turn/steer", {
         threadId: record.sessionId, expectedTurnId: turnId,
         clientUserMessageId: queued.id,
-        input: CodexAppServerAdapter.inputItems(userMessage, attachments),
+        input: await CodexAppServerAdapter.inputItems(userMessage, attachments, { onDevice: Boolean(record.nodeId) }),
       });
     } catch (cause) {
       record.steering = record.steering.filter((item) => item !== queued);
@@ -1208,12 +1235,17 @@ export class CodexAppServerAdapter extends EventEmitter {
     };
   }
 
-  static inputItems(message, attachments) {
+  /** A device's Codex cannot open this server's paths: images go as data URLs and files inline, where they can. */
+  static async inputItems(message, attachments, { onDevice = false } = {}) {
     const images = (attachments || []).filter((item) => String(item?.type || "").startsWith("image/") && item.path);
     const files = (attachments || []).filter((item) => !String(item?.type || "").startsWith("image/") && item.path);
     const text = [parseAttachmentEnvelope(message).message,
-      ...files.map((item) => `Attached file: ${item.path}`)].filter(Boolean).join("\n\n");
-    return [...images.map((item) => ({ type: "localImage", path: item.path })), { type: "text", text }];
+      ...(onDevice ? await Promise.all(files.map(attachmentForDevice)) : files.map((item) => `Attached file: ${item.path}`))]
+      .filter(Boolean).join("\n\n");
+    const pictures = onDevice
+      ? await Promise.all(images.map(async (item) => ({ type: "image", url: await imageDataUrl(item) })))
+      : images.map((item) => ({ type: "localImage", path: item.path }));
+    return [...pictures, { type: "text", text }];
   }
 
   async prompt(id, message, options) {
@@ -1226,6 +1258,8 @@ export class CodexAppServerAdapter extends EventEmitter {
     // whatever came before it, which is the previous turn.
     record.messageIds.add(clientUserMessageId);
     record.answering = clientUserMessageId;
+    // The slot is held from turn/start until Codex says the turn started (see isGeneratingRecord).
+    record.turnStarting = true;
     record.prompts = new Set([clientUserMessageId]);
     this.openMessage(record, clientUserMessageId, "user", {
       content: parseAttachmentEnvelope(message).message,
@@ -1236,7 +1270,7 @@ export class CodexAppServerAdapter extends EventEmitter {
       result = await this.request(record, "turn/start", {
         threadId: record.sessionId,
         clientUserMessageId,
-        input: CodexAppServerAdapter.inputItems(message, options?.attachments),
+        input: await CodexAppServerAdapter.inputItems(message, options?.attachments, { onDevice: Boolean(record.nodeId) }),
         ...(record.model ? { model: record.model } : {}),
         ...(record.thinkingLevel ? { effort: record.thinkingLevel } : {}),
         ...(record.serviceLevel ? { serviceTier: record.serviceLevel } : {}),
@@ -1248,6 +1282,7 @@ export class CodexAppServerAdapter extends EventEmitter {
       // back rather than waiting for a turn that will never start.
       record.messageIds.delete(clientUserMessageId);
       record.answering = null;
+      record.turnStarting = false;
       if (this.states(record)) {
         this.publish(record, messageDrop({ messageId: clientUserMessageId }));
       }
@@ -1418,7 +1453,7 @@ export class CodexAppServerAdapter extends EventEmitter {
     return {
       text,
       sessionId: record.sessionId,
-      opaqueSession: record.sessionId,
+      opaqueSession: this.opaqueSessionOf(record),
       sourceMessage: { id: entryId, text },
     };
   }

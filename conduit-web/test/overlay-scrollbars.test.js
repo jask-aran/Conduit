@@ -1,6 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { scrollbarGeometry } from "../src/client/navigation/overlay-scrollbars.ts";
+import { importClient } from "./helpers/client-module.js";
+
+const { scrollbarGeometry } = await importClient('export { scrollbarGeometry } from "../src/client/navigation/overlay-scrollbars.ts";');
 
 test("overlay thumb covers both scroll endpoints and remains grabbable", () => {
   const start = scrollbarGeometry(200, 1000, 0, 196);

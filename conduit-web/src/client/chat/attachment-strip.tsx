@@ -1,23 +1,24 @@
+import { duration, easing, reducedMotion } from "@/components/ui/motion";
+import { Icons } from "@/components/ui";
 import { Dialog } from "@/components/dialog";
 import { Button as DialogButton } from "@/components/ui/controls";
-import { CardAttachments, CardAttachment } from "@/components/ui/card";
+import { Attachments, Attachment } from "@/components/ui/card";
 import { createEffect, createMemo, createSignal, For, lazy, on, onCleanup, onMount, Show, Suspense } from "solid-js";
 
-import { FileIcon, Maximize2Icon, Trash2Icon } from "lucide-solid";
+
 import { Button as LibraryButton, Chip, Chips, Rider, RiderActions } from "@/components/ui";
 import type { UploadAttachment } from "../state/attachments";
 import { attachmentUrl } from "../api/transport";
 import { AttachmentImage, sizeLabel } from "./attachments";
 import { createLeaving, fadeOut, riderMotion, type CardExit } from "./composer-cards";
 
-const reduced = () => typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
 const isImage = (item: UploadAttachment) => Boolean(item.type?.startsWith("image/"));
 const previewOf = (item: UploadAttachment, chatId?: string | null) =>
   item.objectUrl || (isImage(item) && chatId ? attachmentUrl(chatId, item.id, "?preview=1") : null);
 // The file viewer's icons. Its icon theme lives in the workspace's lazy chunk,
 // so it is fetched on the first file chip rather than carried by the composer.
-const WorkspaceFileIcon = lazy(() => import("../workspace/file-type-icon").then((module) => ({ default: module.FileTypeIcon })));
-const FileMark = (props: { name: string }) => <Suspense fallback={<FileIcon />}><WorkspaceFileIcon name={props.name} /></Suspense>;
+const WorkspaceFileIcon = lazy(() => import("@/components/ui/file-marks").then((module) => ({ default: module.FileTypeIcon })));
+const FileMark = (props: { name: string }) => <Suspense fallback={<Icons.File />}><WorkspaceFileIcon name={props.name} /></Suspense>;
 
 /** One attachment as a Chip: a press shows it (or retries a failed upload that can be), its remove button removes it. */
 function AttachmentChip(props: { item: UploadAttachment; chatId?: string | null; entering: boolean; onOpen: () => void; onRemove: (chip: HTMLElement) => void; onRetry: () => void }) {
@@ -47,17 +48,17 @@ function AttachmentsDialog(props: {
     description={sizeLabel(total())}
     actions={<><DialogButton variant="ghost" size="sm" onClick={removeAll}>Remove all</DialogButton>
             <DialogButton size="sm" onClick={() => props.onOpenChange(false)}>Done</DialogButton></>}>
-    <CardAttachments>
+    <Attachments>
             <For each={props.items.map((item) => item.id)}>{(id) => {
               const item = createMemo<UploadAttachment | undefined>((last) => props.items.find((candidate) => candidate.id === id) ?? last);
               const source = () => item() && previewOf(item()!, props.chatId);
-              return <Show when={item()}>{(current) => <CardAttachment name={current().name}
+              return <Show when={item()}>{(current) => <Attachment name={current().name}
                 detail={current().status === "error" ? current().error || "Upload failed" : [sizeLabel(current().size), current().type].filter(Boolean).join(" · ")}
                 failed={current().status === "error"} icon={<FileMark name={current().name} />}
                 image={source() ? <AttachmentImage src={source()!} /> : undefined}
                 onRemove={() => void props.onRemove(current())} />}</Show>;
             }}</For>
-          </CardAttachments>
+          </Attachments>
   </Dialog>;
 }
 
@@ -100,7 +101,7 @@ export function AttachmentStrip(props: {
   // New chips go on the end; show them, which is what pasting several needs.
   createEffect(on(() => ids().length, (count, previous) => {
     queueMicrotask(() => {
-      if (scroller && previous != null && count > previous) scroller.scrollTo({ left: scroller.scrollWidth, behavior: reduced() ? "auto" : "smooth" });
+      if (scroller && previous != null && count > previous) scroller.scrollTo({ left: scroller.scrollWidth, behavior: reducedMotion() ? "auto" : "smooth" });
       measure();
     });
   }));
@@ -119,10 +120,10 @@ export function AttachmentStrip(props: {
     const neighbours = [...(chip.parentElement?.children || [])].filter((node): node is HTMLElement => node !== chip && node instanceof HTMLElement);
     const before = new Map(neighbours.map((node) => [node, node.getBoundingClientRect().left]));
     chip.hidden = true;
-    if (!reduced()) {
+    if (!reducedMotion()) {
       for (const [node, left] of before) {
         const dx = left - node.getBoundingClientRect().left;
-        if (Math.abs(dx) > 0.5) node.animate([{ transform: `translateX(${dx}px)` }, { transform: "none" }], { duration: 180, easing: "cubic-bezier(.2, .8, .2, 1)" });
+        if (Math.abs(dx) > 0.5) node.animate([{ transform: `translateX(${dx}px)` }, { transform: "none" }], { duration: duration("--duration-quick"), easing: easing("--ease-arrive") });
       }
     }
     measure();
@@ -153,8 +154,8 @@ export function AttachmentStrip(props: {
           }}</For>
         </Chips>
         <RiderActions stack>
-          <LibraryButton variant="ghost" size="icon-sm" aria-label="Show all attachments" title="Show all attachments" onClick={() => setOpen(true)}><Maximize2Icon /></LibraryButton>
-          <LibraryButton variant="ghost" size="icon-sm" aria-label="Remove all attachments" title="Remove all" onClick={() => void removeAll()}><Trash2Icon /></LibraryButton>
+          <LibraryButton variant="ghost" size="icon-sm" aria-label="Show all attachments" title="Show all attachments" onClick={() => setOpen(true)}><Icons.Maximize /></LibraryButton>
+          <LibraryButton variant="ghost" size="icon-sm" aria-label="Remove all attachments" title="Remove all" onClick={() => void removeAll()}><Icons.Delete /></LibraryButton>
         </RiderActions>
       </Rider>
     </Show>

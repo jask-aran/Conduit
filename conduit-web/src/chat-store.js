@@ -3,8 +3,9 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { readSessionMetadata, readSessionParentSession, validateSessionFile } from "./session-store.js";
 import { ensureChatTree } from "./owned-paths.js";
-import { harnessIdForImplementation, piBackendFor, withPiCompatibilityFields } from "./chat-backend.js";
+import { harnessIdForImplementation, piBackendFor, templateBackend, withPiCompatibilityFields } from "./chat-backend.js";
 import { conduitPiSessionFile } from "./backend-session.js";
+import { placeOf } from "./place.js";
 
 const CHAT_ID = /^[a-zA-Z0-9_-]{8,128}$/;
 const COMPLETED_ATTACHMENT = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}--.+$/i;
@@ -28,8 +29,9 @@ export function isChatId(value) {
 }
 
 export function chatDirectory(project, chatId) {
-  if (!project?.workingRoot || !isChatId(chatId)) throw new Error("Invalid chat path");
-  return path.join(path.resolve(project.workingRoot), ".conduit", "chats", chatId);
+  const root = project?.chatRoot || project?.workingRoot;
+  if (!root || !isChatId(chatId)) throw new Error("Invalid chat path");
+  return path.join(path.resolve(root), ".conduit", "chats", chatId);
 }
 
 const at = (value) => Date.parse(value || "") || 0;
@@ -209,6 +211,9 @@ export class ChatStore {
           opaqueSession: piSessionFile,
         },
         modelThinkingLevels: modelThinkingLevelsFor(item),
+        // The device that owns the thread's work (decision 21); rows from before it was kept take their workspace's.
+        // ("head" was the head's name for a while before it was a device.)
+        owner: typeof item.owner === "string" && item.owner && item.owner !== "head" ? item.owner : placeOf(project).device,
         createdAt,
         updatedAt: item.updatedAt || createdAt,
         lastUserMessageAt: item.lastUserMessageAt || sessionMetadata?.lastUserMessageAt || null,
@@ -243,6 +248,17 @@ export class ChatStore {
       reconciled.push(chat);
     }
 
+    // A classic session a chat was converted from (convert-classic-chats.js)
+    // is that chat's, with its whole family of forks: not a lost session to
+    // recover as another chat.
+    for (const item of rows) {
+      const from = item.backend?.convertedFrom;
+      if (!from) continue;
+      const family = families.get(path.resolve(from));
+      for (const file of [...discoveredFiles.keys()]) {
+        if (file === path.resolve(from) || (family && families.get(file) === family)) discoveredFiles.delete(file);
+      }
+    }
     const discoveredFamilies = new Map();
     for (const [file, candidates] of discoveredFiles) {
       const family = families.get(file) || file;
@@ -257,7 +273,10 @@ export class ChatStore {
         for (const project of candidates) {
           try {
             const session = await readSessionMetadata(file, project);
-            const id = isChatId(session.id) && !usedIds.has(session.id) ? session.id : crypto.randomUUID();
+            // Recovered before, under its own id (and converted since): it is
+            // that chat already, not a lost session.
+            if (usedIds.has(session.id)) { imported = true; break; }
+            const id = isChatId(session.id) ? session.id : crypto.randomUUID();
             const chat = {
               id,
               projectId: project.id,
@@ -354,24 +373,6 @@ export class ChatStore {
     return this.chats.find((chat) => chat.id === id) || null;
   }
 
-  /** Stamp default profile identity when a chat is missing one. */
-  async ensureTemplate(chatId, { templateId, templateVersion } = {}) {
-    const chat = this.metadata(chatId);
-    if (!chat) return null;
-    if (chat.templateId) return chat;
-    if (!templateId) return chat;
-    chat.templateId = String(templateId).trim();
-    chat.templateVersion = templateVersion ? String(templateVersion).trim() : chat.templateVersion;
-    if (chat.runtime?.kind === "conduit_profile") {
-      chat.runtime.profileId = chat.templateId;
-      chat.runtime.profileVersion = chat.templateVersion;
-    }
-    chat.updatedAt = new Date(this.now()).toISOString();
-    chat.backend = piBackendFor(chat);
-    await this.flush();
-    return chat;
-  }
-
   async find(projects, id) {
     const chat = this.metadata(id);
     const sessionFile = conduitPiSessionFile(chat);
@@ -384,6 +385,7 @@ export class ChatStore {
 
   async create(project, { templateId = null, templateVersion = null, runtime = null, backend = null, untracked = false, run = false } = {}) {
     const timestamp = new Date(this.now()).toISOString();
+    const selectedBackend = backend || templateBackend({ id: templateId || "assistant", version: templateVersion });
     const chat = {
       id: crypto.randomUUID(),
       projectId: project.id,
@@ -393,9 +395,13 @@ export class ChatStore {
       templateVersion: typeof templateVersion === "string" && templateVersion.trim()
         ? templateVersion.trim()
         : null,
-      runtime: backend?.protocol === "pi_rpc" || !backend ? this.runtimeFor({ runtime }, templateId, templateVersion) : null,
-      backend,
+      runtime: backend?.protocol === "pi_rpc" ? this.runtimeFor({ runtime }, templateId, templateVersion) : null,
+      backend: selectedBackend,
       modelThinkingLevels: {},
+      // The device that owns the thread's work (plan decision 21): its
+      // workspace's, whoever typed; the head's for a chat in no workspace.
+      // It stays when the device is away; a move is what changes it.
+      owner: placeOf(project).device,
       createdAt: timestamp,
       updatedAt: timestamp,
       lastUserMessageAt: null,
@@ -455,7 +461,6 @@ export class ChatStore {
   async update(chatId, patch) {
     const chat = this.metadata(chatId);
     if (!chat) return null;
-    const canSelectBackend = chat.status === "draft" && !conduitPiSessionFile(chat) && !chat.lastUserMessageAt;
     const previousCompletedAt = chat.lastAssistantCompletedAt;
     const allowed = [
       "projectId",
@@ -465,6 +470,7 @@ export class ChatStore {
       "runtime",
       "backend",
       "modelThinkingLevels",
+      "owner",
       "updatedAt",
       "lastUserMessageAt",
       "lastAssistantCompletedAt",
@@ -486,10 +492,6 @@ export class ChatStore {
     }
     if (chat.runtime) chat.runtime = this.runtimeFor(chat, chat.templateId, chat.templateVersion);
     if (patch.status === "draft" || patch.status === "active") chat.status = patch.status;
-    if (canSelectBackend && patch.backend == null
-      && ["templateId", "templateVersion", "runtime"].some((key) => Object.hasOwn(patch, key))) {
-      chat.backend = piBackendFor(chat);
-    }
     if (!patch.updatedAt) chat.updatedAt = new Date(this.now()).toISOString();
     await this.flush();
     return chat;
@@ -545,6 +547,7 @@ export class ChatStore {
       else throw error;
     }
     chat.projectId = targetProject.id;
+    chat.owner = placeOf(targetProject).device;
     chat.updatedAt = new Date(this.now()).toISOString();
     await this.flush();
     return chat;
@@ -576,8 +579,8 @@ export class ChatStore {
 
   flush() {
     for (const chat of this.chats) {
-      if (chat.backend?.protocol !== "pi_rpc") chat.backend ||= piBackendFor(chat);
-      else chat.backend = { ...(chat.backend || piBackendFor(chat)), opaqueSession: conduitPiSessionFile(chat) };
+      if (chat.backend?.protocol === "pi_rpc") chat.backend = { ...chat.backend, opaqueSession: conduitPiSessionFile(chat) };
+      else chat.backend ||= templateBackend({ id: chat.templateId || "assistant", version: chat.templateVersion });
     }
     const value = `${JSON.stringify({ version: 5, chats: this.chats }, null, 2)}\n`;
     this.writeQueue = this.writeQueue.then(async () => {

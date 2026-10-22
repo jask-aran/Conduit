@@ -1,5 +1,6 @@
+import * as Icons from "./icons";
 import { Show, splitProps, type JSX } from "solid-js";
-import { EllipsisIcon } from "lucide-solid";
+
 
 /*
  * A file in a pane or the dock (DESIGN Panes and windows): its header -- the name (or the pane's tabs), its git
@@ -13,6 +14,16 @@ export function FileView(props: JSX.HTMLAttributes<HTMLElement> & { ref?: (eleme
   const [local, rest] = splitProps(props, ["focused"]);
   return <section {...rest} class="ui-file" data-focused={local.focused ? "" : undefined} />;
 }
+/** The files tool: the FilesTree, then the open file. wide: the tree beside the file, its width treeWidth (px) and a
+ *  SplitEdge between them (the edge and the tree hidden when treeCollapsed); false: the tree folded to a rail, opening
+ *  over the file as a drawer (navigatorOpen); "navigator": the tree alone. On a phone the tree stacks over the file. */
+export function FilesPane(props: JSX.HTMLAttributes<HTMLDivElement> & { ref?: (element: HTMLDivElement) => void; wide?: boolean | "navigator"; treeCollapsed?: boolean; navigatorOpen?: boolean; treeWidth?: number }) {
+  const [local, rest] = splitProps(props, ["wide", "treeCollapsed", "navigatorOpen", "treeWidth"]);
+  return <div {...rest} class="ui-files" data-wide={local.wide === undefined ? undefined : String(local.wide)} data-tree-collapsed={local.treeCollapsed ? "" : undefined}
+    data-navigator-open={local.navigatorOpen ? "" : undefined} style={local.treeWidth === undefined ? undefined : { "--files-tree-width": `${local.treeWidth}px` }} />;
+}
+/** The files tool's tree: its ToolBar and filter, the TreeList, the tree's actions. */
+export const FilesTree = (props: JSX.HTMLAttributes<HTMLDivElement>) => <div {...props} class="ui-files-tree" />;
 /** One file or two side by side in a pane: its sides share the width by --side-a/--side-b. Inside it a header's ⋯
  *  is always there, and the buttons it also holds (inMenu: copy, wrap) stay in it. */
 export function FileViewer(props: JSX.HTMLAttributes<HTMLDivElement> & { ref?: (element: HTMLDivElement) => void }) {
@@ -46,7 +57,7 @@ export function FileButton(props: JSX.ButtonHTMLAttributes<HTMLButtonElement> & 
 }
 /** The header's ⋯: what fitting folded, and what a pane's viewer keeps there. A menu's trigger takes it with `as`. */
 export function FileMore(props: JSX.ButtonHTMLAttributes<HTMLButtonElement> & { ref?: (element: HTMLButtonElement) => void }) {
-  return <button type="button" aria-label="More file actions" title="More file actions" {...props} class="ui-file-button" data-more=""><EllipsisIcon /></button>;
+  return <button type="button" aria-label="More file actions" title="More file actions" {...props} class="ui-file-button" data-more=""><Icons.More /></button>;
 }
 
 /** The status bar at a file's foot: its commands, then its details at the end. Both scroll sideways, never wrap. */
