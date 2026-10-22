@@ -244,7 +244,7 @@ export function AppDashboard(props: {
     <Show when={terminals().length} fallback={<SplitEmpty>{loading() ? "Loading terminals…" : "No live terminals."}</SplitEmpty>}>
       <For each={terminals()}>{(terminal) =>
         <ContextMenu><ContextMenuTrigger as={SplitRow} element="button" onPointerEnter={props.onPrefetchTerminal} onFocus={props.onPrefetchTerminal} onClick={() => props.onOpenTerminal(terminal)}
-            lead={<Icons.Terminal />} primary={terminal.title || "Shell"} context={`${terminal.currentCommand || "shell"} · ${terminalScope(terminal)?.name || "Unscoped"}`} trailing={terminalAge(terminal)} />
+            lead={<Icons.Terminal />} primary={terminal.title || "Shell"} context={`${terminal.currentCommand || "shell"} · ${terminalScope(terminal)?.name || (/^(computer|device)(:|$)/.test(terminal.projectId) ? terminal.cwd || "Computer" : "Unscoped")}`} trailing={terminalAge(terminal)} />
           <ContextMenuContent><ContextMenuGroup>
             <ContextMenuItem onSelect={() => props.onOpenTerminalMaximized(terminal)}><Icons.Terminal />Open maximized</ContextMenuItem>
             <ContextMenuItem onSelect={() => props.onContextAction("rename-terminal", { terminal })}><Icons.Edit />Rename</ContextMenuItem>
