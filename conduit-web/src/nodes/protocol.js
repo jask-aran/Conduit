@@ -28,6 +28,13 @@ import path from "node:path";
  * as `{ $handle: id }`, which main turns back into an object whose methods
  * are calls on that handle.
  */
+/**
+ * What this head offers past the protocol itself, told to a node in its
+ * reply to hello (decision 30): a node uses only what is listed, so adding a
+ * feature never refuses an older node. The version is for breaking changes.
+ */
+export const NODE_FEATURES = ["relay"];
+
 export const NODE_PROTOCOL_VERSION = 1;
 
 export function encode(value) {
