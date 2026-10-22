@@ -73,3 +73,6 @@
 
 /* Opening (its chat still arriving): the field alone; the toolbar and riders keep their room, unseen. */
 .ui-composer-slot[data-opening] :is(.ui-toolbar, .ui-composer-stack > :not(.ui-desktop-composer)) { visibility: hidden; }
+
+/* The field writes in the transcript's face, so a draft reads as it will in the transcript. */
+.ui-composer-field > textarea { font-family: var(--font-transcript); }

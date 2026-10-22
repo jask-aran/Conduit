@@ -2,7 +2,7 @@
 /* Paper Mono (OFL, fonts/PaperMono-OFL.txt): the transcript face when chosen
    in Settings → Appearance (preferences/transcript-font.ts). */
 @font-face { font-family: "Paper Mono"; src: url("./fonts/PaperMono-Variable.woff2") format("woff2"); font-weight: 100 800; font-style: normal; font-display: swap; }
-:root[data-transcript-font="paper-mono"] :is(.thread, textarea[data-composer-input], .ui-voice-captions) { font-family: "Paper Mono", ui-monospace, monospace; }
+:root[data-transcript-font="paper-mono"] { --font-transcript: "Paper Mono", ui-monospace, monospace; }
 
 :root {
   /* The Android shell sends the navigation bar's resting height and leaves it
@@ -22,15 +22,6 @@
 }
 
 * { box-sizing: border-box; }
-/* Standard properties override WebKit pseudo-element painting when non-auto.
-   Keep Firefox's thin fallback, but let Chrome/Safari use the shared thumb. */
-:root {
-  --native-scrollbar-width: thin;
-  --native-scrollbar-color: color-mix(in oklch, var(--muted-foreground), transparent 42%) transparent;
-}
-@supports selector(::-webkit-scrollbar) {
-  :root { --native-scrollbar-width: auto; --native-scrollbar-color: auto; }
-}
 :where(.dark) { scrollbar-color: var(--native-scrollbar-color); scrollbar-width: var(--native-scrollbar-width); }
 html, body { height: 100%; }
 body {
@@ -95,7 +86,7 @@ svg.lucide { stroke-width: 2.4; }
 .message-scroller-viewport { width: 100%; height: 100%; overflow-y: auto; outline: none; scroll-padding-top: var(--header-height); scrollbar-width: none; overflow-anchor: none; will-change: scroll-position; }
 .message-scroller-viewport::-webkit-scrollbar { display: none; }
 /* The chat pane's reading column (its width preset) holds the Transcript, which fills it. */
-.thread { --transcript-width: 100%; width: min(var(--transcript-column-width), calc(100% - var(--transcript-column-gutter))); min-height: 100%; margin-inline: auto; padding: calc(var(--header-height) + var(--space-4xl)) clamp(0px, calc((100% - var(--composer-desktop-reference-width) - var(--transcript-column-gutter)) / 2 + var(--space-4xl)), var(--space-4xl)) var(--space-4xl); }
+.thread { --transcript-width: 100%; font-family: var(--font-transcript); width: min(var(--transcript-column-width), calc(100% - var(--transcript-column-gutter))); min-height: 100%; margin-inline: auto; padding: calc(var(--header-height) + var(--space-4xl)) clamp(0px, calc((100% - var(--composer-desktop-reference-width) - var(--transcript-column-gutter)) / 2 + var(--space-4xl)), var(--space-4xl)) var(--space-4xl); }
 [data-transcript-visibility="hidden"] { content-visibility: hidden; }
 /* A long run of hidden blocks far above the reader, out of layout: the run's measured height stands in for it as
    the answer's top padding (transcript-visibility.ts, collapseAbove). Important: a block's own display rule is more
@@ -122,9 +113,6 @@ svg.lucide { stroke-width: 2.4; }
 .chat-main-live-opening .transcript { visibility: hidden; }
 .chat-bootstrap { display: grid; min-height: 100%; place-items: center; color: var(--muted-foreground); font-size: var(--text-row); }
 
-.ui-tree, .ui-change-list, .ui-patch { scrollbar-color: var(--native-scrollbar-color); scrollbar-width: var(--native-scrollbar-width); }
-.ui-tree::-webkit-scrollbar, .ui-change-list::-webkit-scrollbar, .ui-patch::-webkit-scrollbar { width: var(--space-sm); height: var(--space-sm); }
-.ui-tree::-webkit-scrollbar-thumb, .ui-change-list::-webkit-scrollbar-thumb, .ui-patch::-webkit-scrollbar-thumb { border: var(--stroke) solid transparent; border-radius: var(--radius-round); background: color-mix(in oklch, var(--foreground), transparent 72%); background-clip: padding-box; }
 
 .workspace-warning {
   background: var(--card);

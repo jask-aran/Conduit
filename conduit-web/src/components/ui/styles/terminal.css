@@ -7,6 +7,7 @@
 .ui-term-header svg { width: var(--icon-sm); height: var(--icon-sm); color: var(--muted-foreground); }
 .ui-term-header strong { font-size: var(--text-row); font-weight: var(--weight-strong); }
 .ui-term-identity { display: flex; min-width: 0; align-items: center; gap: var(--space-md); margin-right: auto; overflow: hidden; }
+.ui-term-identity-end { display: flex; flex: none; align-items: center; margin-left: auto; }
 .ui-term-identity > strong, .ui-term-context { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ui-term-context { color: var(--muted-foreground); font: var(--text-label) var(--font-data); }
 .ui-term-lead { display: flex; min-width: 0; align-items: center; gap: var(--space-md); flex: none; margin-right: var(--space-sm); }
