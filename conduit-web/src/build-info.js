@@ -16,7 +16,8 @@ export function buildStamp(env = process.env, now = new Date()) {
   catch (error) { if (error.code !== "ENOENT") throw error; }
   const commit = (env.GITHUB_SHA || git("rev-parse", "HEAD")).slice(0, 12) || "unknown";
   const release = env.CONDUIT_RELEASE_TAG || (env.GITHUB_REF_TYPE === "tag" ? env.GITHUB_REF_NAME : "") || "";
-  const last = git("describe", "--tags", "--abbrev=0", "--match", "v[0-9]*") || "v0.0.0";
+  // The last release, not a candidate: v0.8.5-rc.6 read as patch "5-rc" made every dev build 0.8.1.
+  const last = git("describe", "--tags", "--abbrev=0", "--match", "v[0-9]*", "--exclude", "*-*") || "v0.0.0";
   const [major, minor, patch] = last.replace(/^v/, "").split(".").map(Number);
   const timestamp = now.toISOString().replace(/[-:T]/g, "").slice(0, 14);
   const version = env.CONDUIT_BUILD_VERSION || release.replace(/^v/, "")
