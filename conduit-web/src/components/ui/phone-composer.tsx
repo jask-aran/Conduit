@@ -1,5 +1,7 @@
+import { Frost } from "./frost";
 import { children, createComputed, createSignal, Index, onCleanup, onMount, Show, type JSX } from "solid-js";
 import { Aura } from "./pill";
+import { duration } from "./motion";
 
 /**
  * PhoneComposer: the phone's composer, Pills on the page: a PillField over a row of PillButtons. mode says which
@@ -10,7 +12,8 @@ import { Aura } from "./pill";
  * under: a menu opened from one of the row's pills (PillButton open) is over it; the rest dims at once, as a menu under its submenu.
  * layout: bar (the default: each pill its own frost, the mic stretched) or surface (the row one frost capsule, its pills slots in it,
  * the mic at its end; listening, an Aura fills the capsule under the track). riders: Riders over the field, as on a
- * DesktopComposer's top edge (queued messages, attachments, a question).
+ * DesktopComposer's top edge (queued messages, attachments, a question). opening: its chat is still arriving
+ * (reattaching), so its riders and edit pills keep their room unseen; the row, which is the field's way in, stays.
  */
 export type VoiceMode = "idle" | "typing" | "listening";
 /** PhoneComposer's parts, as its state table names them: the field, the row's pills (not the mic or Send, which are
@@ -25,7 +28,7 @@ export const PHONE_COMPOSER_STATES = {
   listening: ["track", "captions", "orb"],
 } as const satisfies Record<string, readonly PhonePart[]>;
 export type PhoneState = keyof typeof PHONE_COMPOSER_STATES;
-export function PhoneComposer(props: { mode: VoiceMode; riders?: JSX.Element; layout?: "bar" | "surface"; field: JSX.Element; track?: JSX.Element; onTrack?: () => void; captions?: JSX.Element; edit?: JSX.Element; editing?: boolean; under?: boolean; level?: number; children: JSX.Element }) {
+export function PhoneComposer(props: { mode: VoiceMode; riders?: JSX.Element; layout?: "bar" | "surface"; field: JSX.Element; track?: JSX.Element; onTrack?: () => void; captions?: JSX.Element; edit?: JSX.Element; editing?: boolean; under?: boolean; level?: number; children: JSX.Element ; opening?: boolean}) {
   const edit = children(() => props.edit);
   const state = (): PhoneState => props.mode === "typing" && props.editing ? "editing" : props.mode;
   const shows = (part: PhonePart) => (PHONE_COMPOSER_STATES[state()] as readonly PhonePart[]).includes(part);
@@ -36,12 +39,12 @@ export function PhoneComposer(props: { mode: VoiceMode; riders?: JSX.Element; la
   // The field's height, kept on the root: the captions' words going are clipped above it (it grows as the transcript lands).
   onMount(() => { const observer = new ResizeObserver(() => root.style.setProperty("--under-field", `${fieldBox.offsetHeight}px`)); observer.observe(fieldBox); onCleanup(() => observer.disconnect()); });
   const surface = () => props.layout === "surface";
-  return <div ref={root} class="ui-phone-composer" data-state={state()} data-show={PHONE_COMPOSER_STATES[state()].join(" ")} data-layout={surface() ? "surface" : undefined} data-under={props.under ? "" : undefined} style={{ "--voice-level": shows("orb") && props.level !== undefined ? String(props.level) : undefined }}>
+  return <div ref={root} class="ui-phone-composer" data-state={state()} data-show={PHONE_COMPOSER_STATES[state()].join(" ")} data-layout={surface() ? "surface" : undefined} data-under={props.under ? "" : undefined} data-opening={props.opening ? "" : undefined} style={{ "--voice-level": shows("orb") && props.level !== undefined ? String(props.level) : undefined }}>
     <div class="ui-composer-stack">{props.riders}</div>
     <Show when={edit()}><div class="ui-phone-edit" aria-hidden={shows("edit") ? undefined : "true"}>{edit()}</div></Show>
     <Show when={captions()}><div class="ui-voice-captions" aria-live="polite" data-leaving={shows("captions") ? undefined : ""} onAnimationEnd={(event) => { if (event.target === event.currentTarget && !shows("captions")) setCaptions(false); }}>{props.captions}</div></Show>
     <div ref={fieldBox} class="ui-phone-field">{props.field}</div>
-    <div class={surface() ? "ui-frost ui-phone-row" : "ui-phone-row"}>{props.children}<div class="ui-voice-track" aria-hidden={shows("track") ? undefined : "true"} onClick={() => shows("track") && props.onTrack?.()}><Show when={surface()}><Aura /></Show>{props.track}</div></div>
+    <Frost plain={!surface()} class="ui-phone-row">{props.children}<div class="ui-voice-track" aria-hidden={shows("track") ? undefined : "true"} onClick={() => shows("track") && props.onTrack?.()}><Show when={surface()}><Aura /></Show>{props.track}</div></Frost>
   </div>;
 }
 /**
@@ -55,7 +58,7 @@ export function Captions(props: { lead?: string; words: string[]; ref?: (element
     let height = 0;
     const observer = new ResizeObserver(() => {
       const next = element.offsetHeight;
-      if (height && next > height) element.animate([{ transform: `translateY(${next - height}px)` }, { transform: "none" }], { duration: 180, easing: "ease-out" });
+      if (height && next > height) element.animate([{ transform: `translateY(${next - height}px)` }, { transform: "none" }], { duration: duration("--duration-quick"), easing: "ease-out" });
       height = next;
     });
     observer.observe(element);

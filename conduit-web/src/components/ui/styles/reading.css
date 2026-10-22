@@ -1,0 +1,34 @@
+/* Reading (reading.tsx): a gauge's reading under its Meter. Everything at the caption's size; numbers in the data
+   face and tabular, names in the text's; inset as a menu's rows are, so it lines up with the rows around it. */
+.ui-reading { display: grid; gap: var(--space-lg); padding: var(--space-sm) var(--row-inset) var(--space-md); font-size: var(--text-caption); line-height: var(--leading-row); }
+.ui-reading-total { display: flex; justify-content: space-between; gap: var(--space-md); color: var(--muted-foreground); font-variant-numeric: tabular-nums; }
+.ui-reading-figure { color: var(--foreground); font-family: var(--font-data); }
+
+/* The legend: a dot, the name, its share at the end; a part that opens is pressable and turns its chevron. */
+.ui-reading-parts { display: grid; margin: 0; padding: 0; list-style: none; }
+.ui-reading-part { display: flex; min-height: var(--control-sm); align-items: center; gap: var(--space-sm); margin-inline: calc(-1 * var(--space-xs)); padding-inline: var(--space-xs); border-radius: var(--radius-inset); color: var(--foreground); }
+.ui-reading-part[data-sub] { padding-inline-start: calc(var(--space-xs) + var(--icon-dot) + var(--space-sm)); color: var(--muted-foreground); }
+.ui-reading-part[data-sub] > .ui-swatch { display: none; }
+.ui-reading-name { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ui-reading-value { flex: none; color: var(--muted-foreground); font-family: var(--font-data); font-variant-numeric: tabular-nums; }
+.ui-reading-chevron { width: var(--icon-xs); height: var(--icon-xs); flex: none; color: var(--muted-foreground); transition: rotate var(--duration-quick) var(--ease-change); }
+.ui-reading-part[aria-expanded="true"] > .ui-reading-chevron { rotate: 90deg; }
+.ui-reading-part[role="button"] { cursor: pointer; }
+.ui-reading-part[role="button"]:is(:focus-visible, :active) { background: var(--tint); outline: none; }
+@media (hover: hover) { .ui-reading-part[role="button"]:hover { background: var(--tint); } }
+
+/* The account's figures: their name in the label's voice, then tiles side by side, as many as there are, each a tint
+   well -- its name, its number, a line under it. */
+.ui-reading-group { display: grid; gap: var(--space-sm); }
+.ui-reading-group > h4 { margin: 0; color: var(--muted-foreground); font: var(--label-weight) var(--label-size)/var(--leading-row) var(--label-face); letter-spacing: var(--label-tracking); text-transform: var(--label-case); }
+.ui-reading-stats { display: grid; grid-auto-columns: minmax(0, 1fr); grid-auto-flow: column; gap: var(--space-sm); margin: 0; }
+.ui-reading-stat { display: grid; min-width: 0; align-content: start; gap: var(--space-2xs); padding: var(--space-sm); border-radius: var(--radius-inset); background: var(--tint); }
+.ui-reading-stat > dt { overflow: hidden; color: var(--muted-foreground); font: var(--label-weight) var(--label-size)/var(--leading-row) var(--label-face); letter-spacing: var(--label-tracking); text-overflow: ellipsis; text-transform: var(--label-case); white-space: nowrap; }
+.ui-reading-stat > dd { margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ui-reading-stat > dd:first-of-type { color: var(--foreground); font-family: var(--font-data); font-size: var(--text-row); font-variant-numeric: tabular-nums; }
+/* The line under it wraps rather than being cut short: when it resets is the point of it. */
+.ui-reading-stat > dd + dd { color: var(--muted-foreground); white-space: normal; overflow-wrap: anywhere; }
+
+/* A foot line: what it says, in the lines' voice, its one control at the end. */
+.ui-reading-foot { display: flex; min-height: var(--control-sm); align-items: center; justify-content: space-between; gap: var(--space-md); color: var(--muted-foreground); }
+.ui-reading-foot > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

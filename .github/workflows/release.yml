@@ -138,10 +138,14 @@ jobs:
           set -euo pipefail
           npm ci
           npm run build
+          # The device companion (the node role with Windows' own Node), shipped
+          # as an app resource, as the local build does: without it the app
+          # cannot serve this computer as a device.
+          node ../scripts/build-node-companion.mjs "$(node -p process.execPath)" --platform win32 --arch x64
           # The same split the local build uses: the CLI bundles, and the
           # updater archive is signed afterwards by a command that can be given
           # a password rather than one that stops to ask for it.
-          npx tauri build --config src-tauri/tauri.prebuilt.conf.json
+          npx tauri build --config src-tauri/tauri.prebuilt.conf.json --config '{"bundle":{"resources":{"companion/":"companion/"}}}'
       - name: Sign the updater artifact
         shell: bash
         env:

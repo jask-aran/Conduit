@@ -1,3 +1,5 @@
+import { Frost } from "./frost";
+import { reducedMotion } from "./motion";
 import { createSignal, For, mergeProps, onCleanup, onMount, Show, type JSX } from "solid-js";
 import { cn } from "@/lib/utils";
 import { haptic, type Haptic } from "./haptics";
@@ -31,21 +33,21 @@ export function PillButton(props: PillAction & { stretch?: boolean; folded?: boo
   const attrs = mergeProps(() => ({ tabIndex: props.folded ? -1 : undefined }), () => props.button ?? {}, () => props.haptic ? {
     onClick: (event: MouseEvent) => { haptic(props.haptic!); const click = props.button?.onClick; if (typeof click === "function") (click as (event: MouseEvent) => void)(event); },
   } : {}) as PillAttrs;
-  const pill = <div class="ui-frost ui-pill" data-solo="" data-stretch={props.stretch ? "" : undefined} data-folded={props.folded ? "" : undefined} data-voice={props.voice || mic ? "" : undefined} data-open={props.open ? "" : undefined}
+  const pill = <Frost class="ui-pill" data-solo="" data-stretch={props.stretch ? "" : undefined} data-folded={props.folded ? "" : undefined} data-voice={props.voice || mic ? "" : undefined} data-open={props.open ? "" : undefined}
     aria-hidden={props.folded ? "true" : undefined}>{mic
       ? pillSlot({ get label() { return props.label; }, icon: <><Aura />{props.icon}</> }, props.onPick, attrs)
-      : pillSlot(props, props.onPick, attrs)}</div>;
+      : pillSlot(props, props.onPick, attrs)}</Frost>;
   return mic && props.stretch ? <><span class="ui-pill-room" />{pill}</> : pill;
 }
 export function PillGroup(props: { actions: PillAction[]; onPick?: (label: string) => void }) {
-  return <div class="ui-frost ui-pill"><For each={props.actions}>{(item) => pillSlot(item, props.onPick)}</For></div>;
+  return <Frost class="ui-pill"><For each={props.actions}>{(item) => pillSlot(item, props.onPick)}</For></Frost>;
 }
 export function PillSwitch<T extends string>(props: { label: string; value: T; options: ReadonlyArray<{ value: T; label: string; icon: JSX.Element }>; onChange: (value: T) => void }) {
   return <Segmented pill icons label={props.label} value={props.value} options={props.options} onChange={props.onChange} />;
 }
 /** Its own textarea, or the caller's field as children (the composer's, with its behaviour). */
 export function PillField(props: { placeholder?: string; value?: string; onInput?: (value: string) => void; class?: string; children?: JSX.Element }) {
-  return <div class={cn("ui-frost ui-pill ui-pill-field", props.class)}><Show when={props.children} fallback={<TextArea placeholder={props.placeholder} value={props.value} onInput={(event) => props.onInput?.(event.currentTarget.value)} />}>{props.children}</Show></div>;
+  return <Frost class={cn("ui-pill ui-pill-field", props.class)}><Show when={props.children} fallback={<TextArea placeholder={props.placeholder} value={props.value} onInput={(event) => props.onInput?.(event.currentTarget.value)} />}>{props.children}</Show></Frost>;
 }
 
 /**
@@ -54,7 +56,8 @@ export function PillField(props: { placeholder?: string; value?: string; onInput
  * shrinking). Each circles near its edge and breathes twice a turn. Every point of the field is a blend of all of
  * them by distance (a mesh gradient, as Apple's glows are), its hue their weighted mean and its chroma held, so the
  * colours meet in colour, never grey, and none lies over another; a faint ground of the middle hue settles meetings. The level (--aura-level, eased by styles/pill.css)
- * turns them faster, brightens them and moves their balance. Drawn small and scaled up; it runs only while shown.
+ * turns them faster, brightens them and moves their balance; strength (0-1, --aura-strength) how strongly it shows, fainter
+ * on a large surface. Drawn small and scaled up; it runs only while shown.
  */
 const AURA_BLOBS = [
   { from: 180, l: .58, c: .2, h: 290, orbit: 7, swell: .5 },
@@ -72,7 +75,7 @@ function oklchToRgb(l: number, a: number, b: number): [number, number, number] {
   const gamma = (x: number) => 255 * (x <= .0031308 ? 12.92 * x : 1.055 * Math.max(0, x) ** (1 / 2.4) - .055);
   return [gamma(4.0767416621 * L - 3.3077115913 * M + .2309699292 * S), gamma(-1.2684380046 * L + 2.6097574011 * M - .3413193965 * S), gamma(-.0041960863 * L - .7034186147 * M + 1.707614701 * S)];
 }
-export function Aura(props: { on?: boolean; level?: number }) {
+export function Aura(props: { on?: boolean; level?: number; strength?: number }) {
   let box!: HTMLSpanElement, canvas!: HTMLCanvasElement;
   onMount(() => {
     const ctx = canvas.getContext("2d")!;
@@ -91,15 +94,17 @@ export function Aura(props: { on?: boolean; level?: number }) {
     let wake = 0;
     const draw = (now: number) => {
       frame = 0;
+      // Out of the document (built but never placed, or taken out) it has no opacity to read: it stops there too, and
+      // its view starts it again if it is placed.
       const style = getComputedStyle(box);
-      if (!seen || (style.opacity === "0" && now > wake)) { last = 0; return; }
+      if (!seen || !box.isConnected || (style.opacity === "0" && now > wake)) { last = 0; return; }
       frame = requestAnimationFrame(draw);
       level = Math.min(1, Math.max(0, parseFloat(style.getPropertyValue("--aura-level")) || 0));
       const dt = last ? Math.min(.1, (now - last) / 1000) : 0; last = now;
       render(dt);
     };
     const render = (dt: number) => {
-      const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
+      const still = reducedMotion();
       const blobs = AURA_BLOBS.map((blob, i) => {
         if (!still) turns[i]! += dt * (2 * Math.PI / blob.orbit) * (1 + 1.5 * level);
         const t = turns[i]!, from = blob.from * Math.PI / 180, reach = .38 * (.9 + level * blob.swell + .25 * Math.sin(2 * t));
@@ -130,7 +135,7 @@ export function Aura(props: { on?: boolean; level?: number }) {
     resize.observe(box); view.observe(box); start();
     onCleanup(() => { cancelAnimationFrame(frame); resize.disconnect(); view.disconnect(); shows.disconnect(); box.removeEventListener("transitionstart", start); });
   });
-  return <span ref={box} class="ui-aura" data-on={props.on ? "" : undefined} aria-hidden="true" style={props.level === undefined ? undefined : { "--aura-level": String(props.level) }}><canvas ref={canvas} /></span>;
+  return <span ref={box} class="ui-aura" data-on={props.on ? "" : undefined} aria-hidden="true" style={{ "--aura-level": props.level === undefined ? undefined : String(props.level), "--aura-strength": props.strength === undefined ? undefined : String(props.strength) }}><canvas ref={canvas} /></span>;
 }
 
 /**

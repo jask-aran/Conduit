@@ -1,27 +1,31 @@
+import { FilesPane, FilesTree } from "@/components/ui";
+import { FileTypeIcon, FolderTypeIcon } from "@/components/ui/file-marks";
+import { Icons } from "@/components/ui";
 import { createDecisionScope } from "@/components/decision-dialog";
+import { unitPx } from "@/components/ui/layout";
 import { batch, createMemo, createSignal, For, onCleanup, Show, type Accessor, type JSX } from "solid-js";
-import { ChevronRightIcon, ChevronsUpIcon, Columns2Icon, CopyIcon, DownloadIcon, EllipsisIcon, EyeIcon, EyeOffIcon, FilePlusIcon, FolderIcon, FolderPlusIcon, FolderUpIcon, MoveIcon, PanelLeftCloseIcon, PanelLeftOpenIcon, PencilIcon, PinIcon, PinOffIcon, RefreshCwIcon, SearchIcon, Trash2Icon, UploadIcon } from "lucide-solid";
+import { ChevronsUpIcon, FilePlusIcon, FolderUpIcon, MoveIcon } from "lucide-solid";
 import { toast } from "@/components/notifications";
-import { ContextMenu, ContextMenuContent, ContextMenuTrigger, Menu, MenuContent, MenuControl, MenuRow, MenuSection } from "@/components/menus";
+import { ContextMenu, ContextMenuContent, ContextMenuTrigger, DropdownMenu, MenuContent, MenuControl, MenuRow, MenuSection } from "@/components/menus";
 import { Rule } from "@/components/ui/popover";
 import { Spinner } from "@/components/ui/controls";
+import { SplitEdge } from "@/components/ui/editor";
 import { api, asList } from "../api/client";
 import { authorizedFetch } from "../api/native-auth-client";
 import { httpUrl } from "../api/transport";
 import type { ReviewNavigationRequest } from "../chat/review-navigation";
 import { isMobileLayout } from "../navigation/mobile-layout";
 import { PaneEmpty, ToolBar, ToolButton, ToolFilter, ToolNotice, Tree as TreeList, TreeRow } from "@/components/ui/pane";
-import { FileTypeIcon, FolderTypeIcon } from "./file-type-icon";
+
 import WorkspaceFileSlot, { preloadWorkspaceEditor, type FileSlotHandle, type FileSummary } from "./workspace-file-slot";
 import { readSetting, WORKSPACE_PANEL_GLOBAL_SCOPE, writeSetting } from "./workspace-panel-storage";
 import { cacheWorkspace, copyText, peekCachedWorkspace, reportError, wasAborted, type RequestScope, type WorkspaceCacheEntry } from "./workspace-shared";
 import type { DirectoryListing, FileSlotId, FileWriteResult, GitChangedFile, MovedEntry, OpenFiles, TreeEntry, UploadTarget, WorkspaceSettings } from "./workspace-types";
 import "./workspace.css";
 
-const WIDE_FILES_MIN_WIDTH = 720;
-const DEFAULT_TREE_WIDTH = 160;
-const MIN_TREE_WIDTH = 128;
-const MAX_TREE_WIDTH = 320;
+// In the unit (layout-geometry): the width at which Files lays its tree beside the file, and the tree's own widths.
+const WIDE_FILES_MIN_UNITS = 56.25, WIDE_FILES_EXPANDED_UNITS = 40.625;
+const DEFAULT_TREE_UNITS = 12, MIN_TREE_UNITS = 10, MAX_TREE_UNITS = 25;
 
 function directoryListingsEqual(left: DirectoryListing | undefined, right: DirectoryListing): boolean {
   return Boolean(left
@@ -74,7 +78,7 @@ export function createFiles(options: {
   const [focusedSlot, setFocusedSlot] = createSignal<FileSlotId>("primary");
   const slotHandles = new Map<FileSlotId, FileSlotHandle>();
   const [wrapLines, setWrapLines] = createSignal(readSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "wrap-lines") === "true");
-  const [treeWidth, setTreeWidth] = createSignal(Math.max(MIN_TREE_WIDTH, Math.min(MAX_TREE_WIDTH, Number(settings.geometry("tree-width")) || DEFAULT_TREE_WIDTH)));
+  const [treeWidth, setTreeWidth] = createSignal(Math.max(unitPx(MIN_TREE_UNITS), Math.min(unitPx(MAX_TREE_UNITS), Number(settings.geometry("tree-width")) || unitPx(DEFAULT_TREE_UNITS))));
   const [treeCollapsed, setTreeCollapsed] = createSignal(settings.geometry("tree-collapsed") === "true");
   const [navigatorOpen, setNavigatorOpen] = createSignal(false);
   // The view's elements, for focus and scroll that outlast a single render.
@@ -492,7 +496,7 @@ export function createFiles(options: {
     setWrapLines(next);
     writeSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "wrap-lines", String(next));
   };
-  const clampTreeWidth = (next: number) => Math.max(MIN_TREE_WIDTH, Math.min(MAX_TREE_WIDTH, next));
+  const clampTreeWidth = (next: number) => Math.max(unitPx(MIN_TREE_UNITS), Math.min(unitPx(MAX_TREE_UNITS), next));
   const saveTreeWidth = (next: number) => {
     const value = clampTreeWidth(next);
     setTreeWidth(value);
@@ -593,7 +597,7 @@ export function createFiles(options: {
     },
     /** The navigator's geometry as stored, for a new project. */
     restoreGeometry: () => {
-      setTreeWidth(Math.max(MIN_TREE_WIDTH, Math.min(MAX_TREE_WIDTH, Number(settings.geometry("tree-width")) || DEFAULT_TREE_WIDTH)));
+      setTreeWidth(Math.max(unitPx(MIN_TREE_UNITS), Math.min(unitPx(MAX_TREE_UNITS), Number(settings.geometry("tree-width")) || unitPx(DEFAULT_TREE_UNITS))));
       setTreeCollapsed(settings.geometry("tree-collapsed") === "true");
       setShowHidden(settings.geometry("show-hidden") === "true");
     },
@@ -708,6 +712,7 @@ export function FilesView(props: {
     } else return;
     event.preventDefault();
   };
+  const [treeResizing, setTreeResizing] = createSignal(false);
   const startTreeResize = (event: PointerEvent) => {
     event.preventDefault();
     treeResizeHandle?.setPointerCapture(event.pointerId);
@@ -736,9 +741,9 @@ export function FilesView(props: {
       window.removeEventListener("pointerup", stop);
       window.removeEventListener("pointercancel", stop);
       window.removeEventListener("blur", stop);
-      document.body.classList.remove("workspace-tree-resizing");
+      setTreeResizing(false);
     };
-    document.body.classList.add("workspace-tree-resizing");
+    setTreeResizing(true);
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", stop, { once: true });
     window.addEventListener("pointercancel", stop, { once: true });
@@ -751,11 +756,11 @@ export function FilesView(props: {
   interface TreeAction { id: string; label: () => string; title: () => string; icon: () => JSX.Element; disabled?: () => boolean; pressed?: () => boolean; run: () => void }
   const treeActions: TreeAction[] = [
     { id: "new-file", label: () => "New file", title: () => "Create a file in the workspace root", icon: () => <FilePlusIcon />, disabled: c.uploading, run: () => void c.createFile() },
-    { id: "new-folder", label: () => "New folder", title: () => "Create a folder in the workspace root", icon: () => <FolderPlusIcon />, disabled: c.uploading, run: () => void c.createDirectory() },
+    { id: "new-folder", label: () => "New folder", title: () => "Create a folder in the workspace root", icon: () => <Icons.NewFolder />, disabled: c.uploading, run: () => void c.createDirectory() },
     { id: "collapse", label: () => "Collapse all folders", title: () => "Collapse all folders", icon: () => <ChevronsUpIcon />, run: c.collapseTree },
-    { id: "hidden", label: () => c.showHidden() ? "Hide hidden files" : "Show hidden files", title: () => c.showHidden() ? "Hide hidden files" : "Show hidden files", icon: () => <Show when={c.showHidden()} fallback={<EyeOffIcon />}><EyeIcon /></Show>, pressed: c.showHidden, run: c.toggleHidden },
-    { id: "upload", label: () => "Upload files", title: () => "Upload files to workspace root", icon: () => <Show when={c.uploading()} fallback={<UploadIcon />}><Spinner /></Show>, disabled: c.uploading, run: () => c.chooseUpload() },
-    { id: "refresh", label: () => "Refresh files", title: () => "Refresh files", icon: () => <RefreshCwIcon />, disabled: c.filesLoading, run: () => void c.refreshFiles() },
+    { id: "hidden", label: () => c.showHidden() ? "Hide hidden files" : "Show hidden files", title: () => c.showHidden() ? "Hide hidden files" : "Show hidden files", icon: () => <Show when={c.showHidden()} fallback={<Icons.Hide />}><Icons.Preview /></Show>, pressed: c.showHidden, run: c.toggleHidden },
+    { id: "upload", label: () => "Upload files", title: () => "Upload files to workspace root", icon: () => <Show when={c.uploading()} fallback={<Icons.Upload />}><Spinner /></Show>, disabled: c.uploading, run: () => c.chooseUpload() },
+    { id: "refresh", label: () => "Refresh files", title: () => "Refresh files", icon: () => <Icons.Refresh />, disabled: c.filesLoading, run: () => void c.refreshFiles() },
   ];
   const treeActionButton = (action: TreeAction) =>
     <ToolButton data-tree-action={action.id} aria-label={action.label()} title={action.title()} aria-pressed={action.pressed?.()} disabled={action.disabled?.()} onClick={action.run}>{action.icon()}</ToolButton>;
@@ -798,7 +803,7 @@ export function FilesView(props: {
             open={c.directoryIsOpen(entry.path)}
             icon={entry.type === "directory" ? <FolderTypeIcon name={entry.name} expanded={c.directoryIsOpen(entry.path)} /> : <FileTypeIcon name={entry.name} />}
             name={entry.name}
-            end={c.keptVisible().has(entry.path) ? <PinIcon aria-label="Always visible" /> : undefined}
+            end={c.keptVisible().has(entry.path) ? <Icons.Pin aria-label="Always visible" /> : undefined}
             selected={c.isFileOpen(entry.path)}
             data-name={entry.name.toLowerCase()}
             data-path={entry.path}
@@ -821,37 +826,37 @@ export function FilesView(props: {
             <MenuSection>
               <Show when={entry.type === "file"}>
                 <MenuRow onSelect={() => c.openFile(entry.path)} icon={<FileTypeIcon name={entry.name} />}>Open preview</MenuRow>
-                <Show when={props.onOpenBeside}><MenuRow onSelect={() => props.onOpenBeside?.(entry.path)} icon={<Columns2Icon />}>Open beside</MenuRow></Show>
-                <MenuRow onSelect={() => c.editFile(entry.path)} icon={<PencilIcon />}>Edit</MenuRow>
-                <MenuRow onSelect={() => void c.downloadPath(entry.path)} icon={<DownloadIcon />}>Download</MenuRow>
+                <Show when={props.onOpenBeside}><MenuRow onSelect={() => props.onOpenBeside?.(entry.path)} icon={<Icons.Split />}>Open beside</MenuRow></Show>
+                <MenuRow onSelect={() => c.editFile(entry.path)} icon={<Icons.Edit />}>Edit</MenuRow>
+                <MenuRow onSelect={() => void c.downloadPath(entry.path)} icon={<Icons.Download />}>Download</MenuRow>
 
-                <MenuRow disabled={c.uploading()} onSelect={() => c.chooseUpload({ kind: "replacement", path: entry.path })} icon={<UploadIcon />}>Replace with upload…</MenuRow>
+                <MenuRow disabled={c.uploading()} onSelect={() => c.chooseUpload({ kind: "replacement", path: entry.path })} icon={<Icons.Upload />}>Replace with upload…</MenuRow>
               </Show>
               <Show when={entry.type === "directory"}>
-                <Show when={props.onBrowseDirectory}><MenuRow onSelect={() => props.onBrowseDirectory?.(entry.path)} icon={<FolderIcon />}>Open folder</MenuRow></Show>
+                <Show when={props.onBrowseDirectory}><MenuRow onSelect={() => props.onBrowseDirectory?.(entry.path)} icon={<Icons.Folder />}>Open folder</MenuRow></Show>
                 <MenuRow disabled={c.uploading()} onSelect={() => void c.createFile(entry.path)} icon={<FilePlusIcon />}>New file…</MenuRow>
-                <MenuRow disabled={c.uploading()} onSelect={() => void c.createDirectory(entry.path)} icon={<FolderPlusIcon />}>New folder…</MenuRow>
-                <MenuRow onSelect={() => c.chooseUpload({ kind: "directory", path: entry.path })} icon={<UploadIcon />}>Upload files here</MenuRow>
+                <MenuRow disabled={c.uploading()} onSelect={() => void c.createDirectory(entry.path)} icon={<Icons.NewFolder />}>New folder…</MenuRow>
+                <MenuRow onSelect={() => c.chooseUpload({ kind: "directory", path: entry.path })} icon={<Icons.Upload />}>Upload files here</MenuRow>
               </Show>
               <Show when={entry.type === "file" || entry.type === "directory"}>
-                <MenuRow disabled={c.uploading()} onSelect={() => c.renameEntry(entry)} icon={<PencilIcon />}>Rename…</MenuRow>
+                <MenuRow disabled={c.uploading()} onSelect={() => c.renameEntry(entry)} icon={<Icons.Edit />}>Rename…</MenuRow>
                 <MenuRow disabled={c.uploading()} onSelect={() => c.moveEntryToFolder(entry)} icon={<MoveIcon />}>Move…</MenuRow>
               </Show>
-              <MenuRow onSelect={() => copyText(entry.path)} icon={<CopyIcon />}>Copy path</MenuRow>
+              <MenuRow onSelect={() => copyText(entry.path)} icon={<Icons.Copy />}>Copy path</MenuRow>
             </MenuSection>
             <Show when={entry.name.startsWith(".") || c.keptVisible().has(entry.path)}>
               <Rule />
-              <MenuRow onSelect={() => c.toggleKeptVisible(entry.path)} icon={<Show when={c.keptVisible().has(entry.path)} fallback={<PinIcon />}><PinOffIcon /></Show>}>
+              <MenuRow onSelect={() => c.toggleKeptVisible(entry.path)} icon={<Show when={c.keptVisible().has(entry.path)} fallback={<Icons.Pin />}><Icons.PinOff /></Show>}>
                 {c.keptVisible().has(entry.path) ? "Stop keeping visible" : "Keep visible"}
               </MenuRow>
             </Show>
             <Show when={entry.type === "file"}>
               <Rule />
-              <MenuRow destructive disabled={c.uploading()} onSelect={() => void c.deleteFile(entry.path)} icon={<Trash2Icon />}>Delete file</MenuRow>
+              <MenuRow destructive disabled={c.uploading()} onSelect={() => void c.deleteFile(entry.path)} icon={<Icons.Delete />}>Delete file</MenuRow>
             </Show>
             <Show when={entry.type === "directory"}>
               <Rule />
-              <MenuRow destructive disabled={c.uploading()} onSelect={() => void c.deleteDirectory(entry.path)} icon={<Trash2Icon />}>Delete folder</MenuRow>
+              <MenuRow destructive disabled={c.uploading()} onSelect={() => void c.deleteDirectory(entry.path)} icon={<Icons.Delete />}>Delete folder</MenuRow>
             </Show>
           </ContextMenuContent>
         </ContextMenu>
@@ -869,17 +874,17 @@ export function FilesView(props: {
 
   const gitFile = (path: string | null) => props.sourceControlEnabled ? props.gitFiles.find((file) => file.path === path) : undefined;
 
-  return <div
+  return <FilesPane
         ref={(element) => {
           filesResizeObserver?.disconnect();
           const updateWideState = (width: number) =>
-            c.setFilesWide(!isMobileLayout() && width >= (props.expanded ? 520 : WIDE_FILES_MIN_WIDTH));
+            c.setFilesWide(!isMobileLayout() && width >= unitPx(props.expanded ? WIDE_FILES_EXPANDED_UNITS : WIDE_FILES_MIN_UNITS));
           updateWideState(element.clientWidth);
           // The entry already carries the new size. Reading clientWidth back
           // inside the callback instead forces a synchronous layout, and a
           // panel drag resizes this element every frame: traced at one forced
           // layout per frame for the whole drag, 1.9ms of a 6.94ms budget.
-          // .workspace-files has no border or padding, so the content box is
+          // The pane has no border or padding, so the content box is
           // the same number clientWidth was reporting.
           filesResizeObserver = new ResizeObserver((entries) => {
             const box = entries[entries.length - 1]?.contentBoxSize?.[0];
@@ -888,18 +893,15 @@ export function FilesView(props: {
           filesResizeObserver.observe(element);
           c.elements.host = element;
         }}
-        class="workspace-files"
-        data-wide={props.navigatorOnly ? "navigator" : c.filesWide()}
+        wide={props.navigatorOnly ? "navigator" : c.filesWide()}
         data-doc-project={props.navigatorOnly ? props.projectId : undefined}
-        data-tree-collapsed={c.treeCollapsed()}
-        data-navigator-open={c.navigatorOpen()}
-        style={{
-          "--workspace-tree-width": `${c.treeWidth()}px`,
-        }}
+        treeCollapsed={c.treeCollapsed()}
+        navigatorOpen={c.navigatorOpen()}
+        treeWidth={c.treeWidth()}
       >
-        <div class="workspace-tree-pane">
+        <FilesTree>
           <ToolBar>
-            <Show when={!props.navigatorOnly}><ToolButton label="Hide file navigator" onClick={c.hideFileNavigator}><PanelLeftCloseIcon /></ToolButton></Show>
+            <Show when={!props.navigatorOnly}><ToolButton label="Hide file navigator" onClick={c.hideFileNavigator}><Icons.CollapseFiles /></ToolButton></Show>
             <ToolFilter
                 ref={(element) => { c.elements.filter = element; }}
                 aria-label="Filter loaded files"
@@ -930,35 +932,33 @@ export function FilesView(props: {
           }}>
             <For each={treeActions}>{(action, index) => <Show when={index() < visibleTreeActions()}>{treeActionButton(action)}</Show>}</For>
             <Show when={visibleTreeActions() < treeActions.length}>
-              <Menu>
-                <MenuControl as={ToolButton} label="More file actions"><EllipsisIcon /></MenuControl>
+              <DropdownMenu>
+                <MenuControl as={ToolButton} label="More file actions"><Icons.More /></MenuControl>
                 <MenuContent>
                   <For each={treeActions.slice(visibleTreeActions())}>{(action) =>
                     <MenuRow icon={action.icon()} disabled={action.disabled?.()} onSelect={action.run}>{action.label()}</MenuRow>
                   }</For>
                 </MenuContent>
-              </Menu>
+              </DropdownMenu>
             </Show>
             <input ref={(element) => { c.elements.upload = element; }} hidden type="file" multiple={c.uploadTarget().kind === "directory"} onChange={(event) => void c.uploadFiles(event.currentTarget.files)} />
           </ToolBar>
-        </div>
+        </FilesTree>
         <Show when={!props.navigatorOnly && (c.filesWide() ? c.treeCollapsed() : !c.navigatorOpen())}>
           <ToolBar vertical data-tree-rail="">
-            <ToolButton label="Show file navigator" onClick={c.showFileNavigator}><PanelLeftOpenIcon /></ToolButton>
+            <ToolButton label="Show file navigator" onClick={c.showFileNavigator}><Icons.ExpandFiles /></ToolButton>
             <div role="toolbar" aria-label="File tree actions">
               <For each={treeActions}>{(action) => treeActionButton(action)}</For>
             </div>
           </ToolBar>
         </Show>
         <Show when={!props.navigatorOnly && c.filesWide()}>
-          <div
+          <SplitEdge
             ref={treeResizeHandle}
-            class="workspace-tree-resize-handle"
-            role="separator"
+            resizing={treeResizing()}
             aria-label="Resize file tree"
-            aria-orientation="vertical"
-            aria-valuemin={MIN_TREE_WIDTH}
-            aria-valuemax={MAX_TREE_WIDTH}
+            aria-valuemin={unitPx(MIN_TREE_UNITS)}
+            aria-valuemax={unitPx(MAX_TREE_UNITS)}
             aria-valuenow={c.treeWidth()}
             tabIndex={0}
             onPointerDown={startTreeResize}
@@ -992,7 +992,7 @@ export function FilesView(props: {
             ref={(handle) => c.slotHandles.set("primary", handle)}
             onDispose={() => c.slotHandles.delete("primary")}
           /></Show>
-      </div>;
+      </FilesPane>;
 }
 
 /**
@@ -1011,7 +1011,7 @@ export function FileBesideView(props: {
 }) {
   const c = props.control;
   const gitFile = () => props.sourceControlEnabled ? props.gitFiles.find((file) => file.path === c.openPaths().secondary) : undefined;
-  return <div class="workspace-files workspace-file-beside">
+  return <FilesPane>
     <WorkspaceFileSlot
       projectId={props.projectId}
       path={c.openPaths().secondary}
@@ -1036,5 +1036,5 @@ export function FileBesideView(props: {
       ref={(handle) => c.slotHandles.set("secondary", handle)}
       onDispose={() => c.slotHandles.delete("secondary")}
     />
-  </div>;
+  </FilesPane>;
 }

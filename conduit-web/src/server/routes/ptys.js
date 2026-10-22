@@ -1,6 +1,22 @@
+import { remoteNode } from "../../place.js";
 import { computerContext, resolveComputerContext } from "../../computer-context.js";
 
-async function terminalContext(projects, id, cwd) {
+async function terminalContext(projects, id, cwd, nodeHub) {
+  // A device's own terminal, in its home, outside any workspace: as "computer"
+  // is this server's. Where any of its folders is shared with commands.
+  if (id.startsWith("device:")) {
+    const nodeId = id.slice("device:".length);
+    const node = (await nodeHub?.list())?.find((item) => item.id === nodeId);
+    if (!node) throw Object.assign(new Error("No such device"), { code: "pty_project_not_found", status: 404 });
+    if (!node.online) throw Object.assign(new Error(`${node.name} is offline`), { code: "pty_cwd_unavailable", status: 409 });
+    if (!node.terminal) {
+      throw Object.assign(new Error(`${node.name} shares no folder with commands, so it offers no terminal`),
+        { code: "pty_cwd_unavailable", status: 403 });
+    }
+    const device = (await nodeHub.listDevices()).find((item) => item.nodes.some((candidate) => candidate.id === nodeId));
+    const where = `~ on ${device?.name || node.name}`;
+    return { project: { id, nodeId, local: false, place: { home: true }, workingRoot: where }, cwd: where };
+  }
   if (id === "computer") {
     const context = await computerContext(cwd);
     return { project: { ...context, id: "computer" }, cwd: context.workingRoot };
@@ -9,6 +25,8 @@ async function terminalContext(projects, id, cwd) {
   if (computer) return { project: computer, cwd: computer.workingRoot };
   const project = await projects.get(id);
   if (!project) throw Object.assign(new Error("Terminal project was not found"), { code: "pty_project_not_found" });
+  // A device's folder: the device runs the shell there and checks the grant.
+  if (remoteNode(project)) return { project, cwd: project.workingRoot };
   try { await projects.validate(project, { createManaged: !project.externalPath }); }
   catch (error) {
     if (error.code === "workspace_identity_changed") {
@@ -25,7 +43,7 @@ async function terminalContext(projects, id, cwd) {
   return { project, cwd: projects.workingRoot(project) };
 }
 
-export function registerPtyRoutes(app, { projects, terminals }) {
+export function registerPtyRoutes(app, { projects, terminals, nodeHub = null }) {
   app.get("/v0/ptys", async (request, response, next) => {
     try {
       await terminals.reconcile();
@@ -37,7 +55,7 @@ export function registerPtyRoutes(app, { projects, terminals }) {
 
   app.post("/v0/ptys", async (request, response, next) => {
     try {
-      const { project, cwd } = await terminalContext(projects, String(request.body?.projectId || ""), request.body?.cwd);
+      const { project, cwd } = await terminalContext(projects, String(request.body?.projectId || ""), request.body?.cwd, nodeHub);
       response.status(201).json(await terminals.create({ project, cwd, templateId: String(request.body?.templateId || "shell"), title: request.body?.title, cols: request.body?.cols, rows: request.body?.rows }));
     }
     catch (error) { next(error); }

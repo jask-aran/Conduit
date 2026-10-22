@@ -27,7 +27,7 @@ test("project dashboard stays registry-bounded and enriches only recent active c
       projectId: project.id,
       status: "active",
       title: "Recent",
-      backend: { implementation: "conduit_pi", opaqueSession: "/sessions/recent.jsonl" },
+      backend: { implementation: "conduit-runtime", opaqueSession: "1" },
       createdAt: "2026-07-20T00:00:00.000Z",
       updatedAt: "2026-07-28T01:00:00.000Z",
     },
@@ -36,7 +36,7 @@ test("project dashboard stays registry-bounded and enriches only recent active c
       projectId: project.id,
       status: "active",
       title: "Older",
-      backend: { implementation: "conduit_pi", opaqueSession: "/sessions/older.jsonl" },
+      backend: { implementation: "conduit-runtime", opaqueSession: "2" },
       createdAt: "2026-07-10T00:00:00.000Z",
       updatedAt: "2026-07-27T01:00:00.000Z",
     },
@@ -49,7 +49,7 @@ test("project dashboard stays registry-bounded and enriches only recent active c
       updatedAt: "2026-07-28T02:00:00.000Z",
     },
   ];
-  const pageReads = [];
+  const transcriptReads = [];
   const dashboard = await buildProjectDashboard({
     project,
     registry: { listProject: (id) => id === project.id ? chats : [] },
@@ -62,12 +62,12 @@ test("project dashboard stays registry-bounded and enriches only recent active c
       active: true,
     }],
     terminals: [{ id: "pty_running", projectId: project.id, status: "running" }, { id: "pty_exited", projectId: project.id, status: "exited" }],
-    readPage: async (file, _project, options) => {
-      pageReads.push({ file, options });
-      return { entries: [
+    readTranscript: async (chat) => {
+      transcriptReads.push(chat.id);
+      return { messages: [
         message("user", "Please inspect the dashboard", "2026-07-28T01:00:00.000Z"),
-        message("assistant", file.includes("recent") ? "The recent dashboard result\nis ready." : "Older result", "2026-07-28T01:01:00.000Z"),
-      ] };
+        message("assistant", chat.id === "chat_recent" ? "The recent dashboard result\nis ready." : "Older result", "2026-07-28T01:01:00.000Z"),
+      ].map(({ message, timestamp }) => ({ ...message, timestamp })) };
     },
     inspectWorkspace: async () => ({
       repository: true,
@@ -92,8 +92,7 @@ test("project dashboard stays registry-bounded and enriches only recent active c
   assert.deepEqual(dashboard.recentChats.map((chat) => chat.id), ["chat_recent", "chat_older"]);
   assert.equal(dashboard.recentChats[0].lastMessagePreview, "The recent dashboard result is ready.");
   assert.equal(dashboard.recentChats[0].liveActivity, "working");
-  assert.equal(pageReads.length, 2);
-  assert.deepEqual(pageReads[0].options, { turnLimit: 1, characterLimit: 12_000 });
+  assert.deepEqual(transcriptReads, ["chat_recent", "chat_older"]);
   assert.deepEqual(dashboard.git, {
     branch: "main",
     upstream: "origin/main",
@@ -111,7 +110,6 @@ test("managed project dashboard skips Git inspection", async () => {
     project: { ...project, kind: "project", origin: "managed" },
     registry: { listProject: () => [] },
     processes: [],
-    readPage: async () => ({ entries: [] }),
     inspectWorkspace: async () => { inspected = true; return { repository: true }; },
   });
 
@@ -126,25 +124,25 @@ test("project dashboard caps transcript enrichment at ten recent chats", async (
     projectId: project.id,
     status: "active",
     title: `Chat ${index}`,
-    backend: { implementation: "conduit_pi", opaqueSession: `/sessions/${index}.jsonl` },
+    backend: { implementation: "conduit-runtime", opaqueSession: String(index) },
     createdAt: `2026-07-${String(index + 1).padStart(2, "0")}T00:00:00.000Z`,
     updatedAt: `2026-07-${String(index + 1).padStart(2, "0")}T00:00:00.000Z`,
   }));
-  const pageReads = [];
+  const transcriptReads = [];
   const dashboard = await buildProjectDashboard({
     project,
     registry: { listProject: () => chats },
     processes: [],
-    readPage: async (file) => {
-      pageReads.push(file);
-      return { entries: [] };
+    readTranscript: async (chat) => {
+      transcriptReads.push(chat.id);
+      return { messages: [] };
     },
     inspectWorkspace: async () => ({ repository: false }),
   });
 
   assert.equal(dashboard.stats.activeChats, 14);
   assert.equal(dashboard.recentChats.length, 10);
-  assert.equal(pageReads.length, 10);
+  assert.equal(transcriptReads.length, 10);
   assert.deepEqual(
     dashboard.recentChats.map((chat) => chat.id),
     ["chat_13", "chat_12", "chat_11", "chat_10", "chat_9", "chat_8", "chat_7", "chat_6", "chat_5", "chat_4"],

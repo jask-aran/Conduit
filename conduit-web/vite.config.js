@@ -1,21 +1,20 @@
 import { accessPagePlugin } from "./scripts/access-page-plugin.mjs";
 import { defineConfig } from "vite";
 import solid from "vite-plugin-solid";
-import tailwindcss from "@tailwindcss/vite";
 import { VitePWA } from "vite-plugin-pwa";
 import path from "node:path";
 import { buildStamp } from "./src/build-info.js";
 import { buildMaterialIconManifest } from "./scripts/material-icon-manifest.mjs";
 import { solidComponentsViteOptions } from "./scripts/solid-components-mode.mjs";
-import { MIN_MAIN_PANE_WIDTH, MOBILE_LAYOUT_BREAKPOINT_PX, NON_PHONE_LAYOUT_QUERY, PHONE_LAYOUT_QUERY } from "./src/client/layout-geometry.ts";
+import { MOBILE_LAYOUT_BREAKPOINT_PX, NON_PHONE_LAYOUT_QUERY, PHONE_LAYOUT_QUERY } from "./src/components/ui/layout.ts";
+import { MIN_MAIN_PANE_UNITS } from "./src/client/layout-geometry.ts";
 
 function sharedGeometryCssPlugin() {
   const replacements = [
-    ["@media (--conduit-mobile-layout)", `@media (max-width: ${MOBILE_LAYOUT_BREAKPOINT_PX}px)`],
     ["@media (--conduit-phone-layout)", `@media ${PHONE_LAYOUT_QUERY}`],
     ["@media (--conduit-wide-layout)", `@media ${NON_PHONE_LAYOUT_QUERY}`],
     ["@container chat-main (--conduit-wide-chat)", `@container chat-main (min-width: ${MOBILE_LAYOUT_BREAKPOINT_PX}px)`],
-    ["var(--conduit-min-main-pane)", `${MIN_MAIN_PANE_WIDTH}px`],
+    ["var(--conduit-min-main-pane)", `calc(${MIN_MAIN_PANE_UNITS} * var(--u-space))`],
   ];
   return {
     name: "conduit-shared-geometry-css",
@@ -42,6 +41,27 @@ function materialIconManifestPlugin() {
   };
 }
 
+function galleryApiPlugin() {
+  const id = "virtual:gallery-api";
+  return {
+    name: "conduit-gallery-api",
+    resolveId: (source) => source === id ? `\0${id}` : null,
+    async load(resolved) {
+      if (resolved !== `\0${id}`) return null;
+      const { buildGalleryApi } = await import("./scripts/gallery-api.mjs");
+      return `export default ${JSON.stringify(buildGalleryApi(import.meta.dirname))};`;
+    },
+    handleHotUpdate(context) {
+      const file = path.relative(import.meta.dirname, context.file).split(path.sep).join("/");
+      if (!file.startsWith("src/components/") && !file.startsWith("src/client/")) return;
+      const module = context.server.moduleGraph.getModuleById(`\0${id}`);
+      if (!module) return;
+      context.server.moduleGraph.invalidateModule(module);
+      return [...context.modules, module];
+    },
+  };
+}
+
 export default defineConfig(({ mode }) => {
   // `npm run gallery`: the component gallery, built like the app so it runs at the app's speed.
   const gallery = mode === "gallery";
@@ -58,8 +78,8 @@ export default defineConfig(({ mode }) => {
     plugins: [
       sharedGeometryCssPlugin(),
       materialIconManifestPlugin(),
+      gallery && galleryApiPlugin(),
       solid({ ssr: access }),
-      tailwindcss(),
       !gallery && !access && accessPagePlugin(import.meta.filename),
       // Production-only installability: the client owns SW registration so
       // updates can reload the current page. Dev keeps HMR free of a worker.

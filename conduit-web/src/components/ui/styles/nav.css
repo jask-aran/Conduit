@@ -4,17 +4,19 @@
    weight with a heavier stroke and no fill, and so is the folder holding it (within); open beside is white at
    the resting weight. The sizes are the density's tokens. */
 @font-face { font-family: "Conduit Wordmark"; src: url("../../../client/assets/fonts/druk-wide-web-super.woff2") format("woff2"); font-style: normal; font-weight: 400; font-display: swap; }
-:root, [data-density] {
-  /* The pane open and folded to its rail, and the top line every pane header centres on. */
+:root, [data-density], .ui-nav-pane {
+  /* The pane open and folded to its rail, in the sidebar's size. */
   --nav-width: calc(18.125 * var(--u-space)); --nav-rail-width: calc(3.25 * var(--u-space));
-  --nav-line: var(--control); --nav-brand: calc(2.625 * var(--u-space)); --nav-wordmark: calc(1.171875 * var(--u-type));
+  --nav-brand: calc(2.625 * var(--u-space)); --nav-wordmark: calc(1.171875 * var(--u-type));
 }
+/* The top line every pane header centres on, the sidebar's too: the chrome's, so they line up at any sidebar size. */
+:root, [data-density] { --nav-line: var(--control); }
 
-/* The pane. Its width moves with the panel's motion (--panel-motion-*); data-instant skips it. */
-.ui-nav-pane { position: relative; z-index: 20; width: var(--nav-width); flex: none; contain: layout; overflow: hidden; transition: width var(--panel-motion-duration) var(--panel-motion-easing); }
+/* The pane. Its width moves on the quick change (--duration-quick, --ease-change); data-instant skips it. */
+.ui-nav-pane { position: relative; z-index: var(--layer-nav); width: var(--nav-width); flex: none; contain: layout; overflow: hidden; transition: width var(--duration-quick) var(--ease-change); }
 .ui-nav-pane[data-collapsed] { width: var(--nav-rail-width); }
 .ui-nav-pane[data-instant] { transition: none; }
-.ui-nav-pane-body { position: absolute; inset: 0 auto 0 0; display: flex; width: var(--nav-width); flex-direction: column; overflow: hidden; background: var(--sidebar); color: var(--sidebar-foreground); }
+.ui-nav-pane-body { position: absolute; inset: 0 auto 0 0; display: flex; width: var(--nav-width); flex-direction: column; overflow: hidden; background: transparent; color: var(--foreground); }
 .ui-nav-pane[data-folded] .ui-nav-pane-body { width: var(--nav-rail-width); }
 @media (prefers-reduced-motion: reduce) { .ui-nav-pane { transition-duration: 0.01ms; } }
 
@@ -28,7 +30,7 @@
    into layers again). Scroll anchoring is off while a folder slides: every frame of the slide looked like a reason
    to move the scroll, and the rows above jumped. */
 .ui-nav-list { min-height: 0; flex: 1; overflow-y: auto; padding: var(--space-sm) var(--space-md); scrollbar-color: var(--native-scrollbar-color); scrollbar-width: var(--native-scrollbar-width); will-change: scroll-position; overflow-anchor: none; }
-.ui-nav-foot { padding: var(--space-md); border-top: var(--hairline) solid var(--sidebar-border); }
+.ui-nav-foot { padding: var(--space-md); border-top: var(--hairline) solid var(--border); }
 
 .ui-nav-group { display: flex; flex-direction: column; gap: var(--hairline); }
 .ui-nav-list > .ui-nav-group { margin-top: var(--space-lg); }
@@ -51,18 +53,18 @@
 .ui-nav-toggle { display: grid; width: var(--control-xs); height: var(--control-xs); flex: none; margin-right: calc((var(--icon) - var(--control-xs)) / 2); place-items: center; border: 0; border-radius: var(--radius-inset); background: transparent; color: var(--muted-foreground); cursor: pointer; }
 .ui-nav-toggle svg { width: var(--icon); height: var(--icon); transition: rotate var(--duration-quick) var(--ease-change); }
 .ui-nav-toggle[aria-expanded="true"] svg { rotate: 90deg; }
-@media (hover: hover) { .ui-nav-toggle:hover { color: var(--sidebar-accent-foreground); } }
+@media (hover: hover) { .ui-nav-toggle:hover { color: var(--foreground); } }
 
 /* The cursor: the wash and white. Held: the window is away and the cursor waits where it was. */
 /* On a phone a row is never washed by a touch: a tap goes somewhere (the current row says where), and a long press
    opens the row's menu, which says what it is for. Pressed, and while its menu is open (Kobalte's data-expanded on
    its trigger), a row is washed only where a pointer hovers. */
-.ui-nav-row:is(:focus-visible, [data-focus-shown], [data-held], [data-held-within], [data-selected]), .ui-rail-button:is(:focus-visible, [data-held]) { background: var(--sidebar-accent); color: var(--sidebar-accent-foreground); }
-@media (hover: hover) { .ui-nav-row:is(:hover, :focus-visible, :active, [data-focus-shown], [data-held], [data-held-within], [data-selected], [data-expanded]), .ui-rail-button:is(:hover, :focus-visible, :active, [data-held]) { background: var(--sidebar-accent); color: var(--sidebar-accent-foreground); } }
-.ui-nav-row:is([aria-current="page"], [data-within]), .ui-rail-button[aria-current="page"] { color: var(--sidebar-accent-foreground); font-weight: var(--weight-current); }
-.ui-nav-row[data-open] { color: var(--sidebar-accent-foreground); }
-.ui-nav-row:is(:focus-visible, [data-focus-shown], [data-held], [data-held-within], [aria-current="page"], [data-within]) .ui-nav-icon { color: var(--sidebar-accent-foreground); }
-@media (hover: hover) { .ui-nav-row:is(:hover, :focus-visible, :active, [data-focus-shown], [data-held], [data-held-within], [aria-current="page"], [data-within]) .ui-nav-icon { color: var(--sidebar-accent-foreground); } }
+.ui-nav-row:is(:focus-visible, [data-focus-shown], [data-held], [data-held-within], [data-selected]), .ui-rail-button:is(:focus-visible, [data-held]) { background: var(--border); color: var(--foreground); }
+@media (hover: hover) { .ui-nav-row:is(:hover, :focus-visible, :active, [data-focus-shown], [data-held], [data-held-within], [data-selected], [data-expanded]), .ui-rail-button:is(:hover, :focus-visible, :active, [data-held]) { background: var(--border); color: var(--foreground); } }
+.ui-nav-row:is([aria-current="page"], [data-within]), .ui-rail-button[aria-current="page"] { color: var(--foreground); font-weight: var(--weight-current); }
+.ui-nav-row[data-open] { color: var(--foreground); }
+.ui-nav-row:is(:focus-visible, [data-focus-shown], [data-held], [data-held-within], [aria-current="page"], [data-within]) .ui-nav-icon { color: var(--foreground); }
+@media (hover: hover) { .ui-nav-row:is(:hover, :focus-visible, :active, [data-focus-shown], [data-held], [data-held-within], [aria-current="page"], [data-within]) .ui-nav-icon { color: var(--foreground); } }
 :is(.ui-nav-row:is([aria-current="page"], [data-within]), .ui-rail-button[aria-current="page"]) svg.lucide { stroke-width: 3; }
 /* While the keyboard moves the cursor, a row under a still pointer rests until the pointer moves: only the cursor
    is washed. An override, not pointer-events: Chromium keeps :hover on an element that stops taking the pointer. */
@@ -73,27 +75,27 @@
 @media (hover: hover) { .ui-nav-pane[data-keyboard-cursor] .ui-seg button:hover:not(:focus-visible, [data-held], [aria-checked="true"]) { background: transparent; color: var(--muted-foreground); } }
 
 /* A harness's mark rests greyed with its row and shows its own colours on the cursor or the current row (ThreadHarnessMark lively). */
-.ui-nav-icon:has(> .harness-mark) { width: var(--icon-sm); }
-.ui-nav-row > .ui-nav-icon > .harness-mark { width: var(--icon-sm); height: calc(0.75 * var(--icon-sm)); opacity: var(--opacity-rest); transition: opacity var(--duration-quick) var(--ease-change); }
-.ui-nav-row:is(:focus-visible, [aria-current="page"]) > .ui-nav-icon > .harness-mark { opacity: 1; }
-@media (hover: hover) { .ui-nav-row:is(:hover, :focus-visible, [aria-current="page"]) > .ui-nav-icon > .harness-mark { opacity: 1; } }
-:is(.ui-nav-icon, .ui-rail-button) > .harness-mark-tinted { background-color: var(--sidebar-foreground); }
-.ui-nav-icon > .thread-harness-mark { width: var(--icon); height: var(--icon); }
-.thread-harness-mark[data-lively] { position: relative; transition: color var(--duration-quick) var(--ease-change), opacity var(--duration-quick) var(--ease-change); }
-.thread-harness-mark[data-lively] .harness-mark { transition: background-color var(--duration-quick) var(--ease-change), opacity var(--duration-quick) var(--ease-change); }
-.thread-harness-mark .harness-mark-artwork { position: absolute; inset: 0; opacity: 0; }
-.ui-nav-row:is(:focus-visible, [aria-current="page"], [data-held], [data-held-within]) .thread-harness-mark[data-lively] { color: var(--foreground); opacity: 1; }
-@media (hover: hover) { .ui-nav-row:is(:hover, :focus-visible, [aria-current="page"], [data-held], [data-held-within]) .thread-harness-mark[data-lively] { color: var(--foreground); opacity: 1; } }
-.ui-nav-row:is(:focus-visible, [aria-current="page"]) .thread-harness-mark[data-lively] .harness-mark-tinted { background-color: var(--harness-brand, currentColor); }
-@media (hover: hover) { .ui-nav-row:is(:hover, :focus-visible, [aria-current="page"]) .thread-harness-mark[data-lively] .harness-mark-tinted { background-color: var(--harness-brand, currentColor); } }
-.ui-nav-row:is(:focus-visible, [aria-current="page"]) .thread-harness-mark[data-artwork] .harness-mark-tinted { opacity: 0; }
-@media (hover: hover) { .ui-nav-row:is(:hover, :focus-visible, [aria-current="page"]) .thread-harness-mark[data-artwork] .harness-mark-tinted { opacity: 0; } }
-.ui-nav-row:is(:focus-visible, [aria-current="page"]) .thread-harness-mark[data-artwork] .harness-mark-artwork { opacity: 1; }
-@media (hover: hover) { .ui-nav-row:is(:hover, :focus-visible, [aria-current="page"]) .thread-harness-mark[data-artwork] .harness-mark-artwork { opacity: 1; } }
-@media (hover: hover) { .ui-nav-pane[data-keyboard-cursor] .ui-nav-row:hover:not(:focus-visible, [aria-current="page"]) .thread-harness-mark[data-lively] { color: var(--muted-foreground); opacity: var(--opacity-rest); } }
-@media (hover: hover) { .ui-nav-pane[data-keyboard-cursor] .ui-nav-row:hover:not(:focus-visible, [aria-current="page"]) .thread-harness-mark[data-lively] .harness-mark-tinted { background-color: currentColor; opacity: 1; } }
-@media (hover: hover) { .ui-nav-pane[data-keyboard-cursor] .ui-nav-row:hover:not(:focus-visible, [aria-current="page"]) .thread-harness-mark[data-artwork] .harness-mark-artwork { opacity: 0; } }
-@media (prefers-reduced-motion: reduce) { .thread-harness-mark[data-lively], .thread-harness-mark[data-lively] .harness-mark, .ui-nav-toggle svg { transition: none; } }
+.ui-nav-icon:has(> .ui-harness-mark) { width: var(--icon-sm); }
+.ui-nav-row > .ui-nav-icon > .ui-harness-mark { width: var(--icon-sm); height: calc(0.75 * var(--icon-sm)); opacity: var(--opacity-rest); transition: opacity var(--duration-quick) var(--ease-change); }
+.ui-nav-row:is(:focus-visible, [aria-current="page"]) > .ui-nav-icon > .ui-harness-mark { opacity: 1; }
+@media (hover: hover) { .ui-nav-row:is(:hover, :focus-visible, [aria-current="page"]) > .ui-nav-icon > .ui-harness-mark { opacity: 1; } }
+:is(.ui-nav-icon, .ui-rail-button) > .ui-harness-mark-tinted { background-color: var(--foreground); }
+.ui-nav-icon > .ui-thread-harness-mark { width: var(--icon); height: var(--icon); }
+.ui-thread-harness-mark[data-lively] { position: relative; transition: color var(--duration-quick) var(--ease-change), opacity var(--duration-quick) var(--ease-change); }
+.ui-thread-harness-mark[data-lively] .ui-harness-mark { transition: background-color var(--duration-quick) var(--ease-change), opacity var(--duration-quick) var(--ease-change); }
+.ui-thread-harness-mark .ui-harness-mark-artwork { position: absolute; inset: 0; opacity: 0; }
+.ui-nav-row:is(:focus-visible, [aria-current="page"], [data-held], [data-held-within]) .ui-thread-harness-mark[data-lively] { color: var(--foreground); opacity: 1; }
+@media (hover: hover) { .ui-nav-row:is(:hover, :focus-visible, [aria-current="page"], [data-held], [data-held-within]) .ui-thread-harness-mark[data-lively] { color: var(--foreground); opacity: 1; } }
+.ui-nav-row:is(:focus-visible, [aria-current="page"]) .ui-thread-harness-mark[data-lively] .ui-harness-mark-tinted { background-color: var(--harness-brand, currentColor); }
+@media (hover: hover) { .ui-nav-row:is(:hover, :focus-visible, [aria-current="page"]) .ui-thread-harness-mark[data-lively] .ui-harness-mark-tinted { background-color: var(--harness-brand, currentColor); } }
+.ui-nav-row:is(:focus-visible, [aria-current="page"]) .ui-thread-harness-mark[data-artwork] .ui-harness-mark-tinted { opacity: 0; }
+@media (hover: hover) { .ui-nav-row:is(:hover, :focus-visible, [aria-current="page"]) .ui-thread-harness-mark[data-artwork] .ui-harness-mark-tinted { opacity: 0; } }
+.ui-nav-row:is(:focus-visible, [aria-current="page"]) .ui-thread-harness-mark[data-artwork] .ui-harness-mark-artwork { opacity: 1; }
+@media (hover: hover) { .ui-nav-row:is(:hover, :focus-visible, [aria-current="page"]) .ui-thread-harness-mark[data-artwork] .ui-harness-mark-artwork { opacity: 1; } }
+@media (hover: hover) { .ui-nav-pane[data-keyboard-cursor] .ui-nav-row:hover:not(:focus-visible, [aria-current="page"]) .ui-thread-harness-mark[data-lively] { color: var(--muted-foreground); opacity: var(--opacity-rest); } }
+@media (hover: hover) { .ui-nav-pane[data-keyboard-cursor] .ui-nav-row:hover:not(:focus-visible, [aria-current="page"]) .ui-thread-harness-mark[data-lively] .ui-harness-mark-tinted { background-color: currentColor; opacity: 1; } }
+@media (hover: hover) { .ui-nav-pane[data-keyboard-cursor] .ui-nav-row:hover:not(:focus-visible, [aria-current="page"]) .ui-thread-harness-mark[data-artwork] .ui-harness-mark-artwork { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .ui-thread-harness-mark[data-lively], .ui-thread-harness-mark[data-lively] .ui-harness-mark, .ui-nav-toggle svg { transition: none; } }
 
 /* A folder's rows are clipped by the sliding box, and each frame's layout stays inside this folder. */
 .ui-nav-folder-body { contain: layout paint; }
@@ -101,7 +103,7 @@
 .ui-nav-note { padding: var(--space-2xs) var(--space-md) var(--space-xs); color: var(--muted-foreground); font-size: var(--text-caption); }
 /* Static: nothing here is worth an animation. */
 .ui-nav-skeleton { display: flex; flex-direction: column; gap: var(--space-md); padding: var(--space-xs) var(--space-md) var(--space-sm); }
-.ui-nav-skeleton > span { height: var(--space-lg); border-radius: var(--radius-inset); background: var(--muted); }
+.ui-nav-skeleton > span { height: var(--space-lg); border-radius: var(--radius-inset); background: var(--border); }
 .ui-nav-skeleton > span:nth-child(2n) { width: 72%; }
 .ui-nav-skeleton > span:nth-child(3n) { width: 58%; }
 
@@ -109,9 +111,9 @@
 .ui-nav-rail { display: none; flex-direction: column; align-items: center; padding: var(--space-md) 0 var(--space-xs); }
 .ui-nav-rail-section { display: flex; flex-direction: column; gap: var(--space-2xs); }
 .ui-rail-button { position: relative; display: grid; width: var(--control); height: var(--control); flex: none; place-items: center; border: 0; border-radius: var(--radius-control); background: transparent; color: color-mix(in oklch, var(--foreground), transparent var(--tone-strong)); }
-.ui-rail-button svg, .ui-rail-button > :is(.harness-mark, .workspace-glyph) { width: var(--icon-lg); height: var(--icon-lg); }
+.ui-rail-button svg, .ui-rail-button > :is(.ui-harness-mark, .ui-glyph) { width: var(--icon-lg); height: var(--icon-lg); }
 .ui-rail-button:disabled { cursor: not-allowed; opacity: var(--opacity-disabled); }
-.ui-rail-button:is([data-open], [aria-pressed="true"]) { color: var(--sidebar-accent-foreground); }
+.ui-rail-button:is([data-open], [aria-pressed="true"]) { color: var(--foreground); }
 .ui-rail-button[data-live]::after { position: absolute; right: var(--space-xs); bottom: var(--space-xs); width: var(--space-sm); height: var(--space-sm); border: var(--stroke-thin) solid var(--frame); border-radius: var(--radius-round); background: var(--live); content: ""; }
 
 /* What the app is doing about itself, above the server: hairline and near-monochrome; ready waits on a person. */
@@ -119,45 +121,43 @@
 .ui-nav-notice > :is(svg, .ui-spinner) { width: var(--icon); height: var(--icon); flex: none; }
 .ui-nav-notice > span { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ui-nav-notice[data-ready] { border-color: color-mix(in oklch, var(--foreground), transparent var(--tone-line)); color: var(--foreground); }
-.ui-nav-links { display: flex; align-items: center; gap: var(--space-xs); padding: var(--space-xs) var(--space-md); color: var(--muted-foreground); font-size: var(--text-row); }
-.ui-nav-links > span { flex: 1; }
-.ui-nav-links > a { display: grid; width: var(--control); height: var(--control); place-items: center; border-radius: var(--radius-control); color: inherit; }
-.ui-nav-links > a:is(:focus-visible) { background: var(--sidebar-accent); color: var(--sidebar-accent-foreground); }
-@media (hover: hover) { .ui-nav-links > a:is(:hover, :focus-visible) { background: var(--sidebar-accent); color: var(--sidebar-accent-foreground); } }
-.ui-nav-links svg { width: var(--icon-lg); height: var(--icon-lg); }
 
 /* Folded to the rail: the head stacks (its switch too), the brand, the list's rows and the links go, and the rail's
    buttons fade in once the edge has moved. */
 @keyframes ui-nav-rail-in { from { opacity: 0; } to { opacity: 1; } }
 .ui-nav-pane[data-folded] .ui-nav-head { flex-direction: column; align-items: center; gap: var(--space-lg); padding-inline: 0; }
 .ui-nav-pane[data-folded] .ui-nav-head > .ui-button { margin-top: var(--space-xs); }
-.ui-nav-pane[data-folded] :is(.ui-nav-brand, .ui-nav-links) { display: none; }
+.ui-nav-pane[data-folded] .ui-nav-brand { display: none; }
 .ui-nav-pane[data-folded] .ui-nav-list { display: flex; flex-direction: column; align-items: center; }
 .ui-nav-pane[data-folded] .ui-nav-list > :not(.ui-nav-rail) { display: none; }
 .ui-nav-pane[data-folded] .ui-nav-rail { display: flex; }
-.ui-nav-pane[data-folded] :is(.ui-nav-rail, .ui-nav-head > .ui-seg) { animation: ui-nav-rail-in 180ms var(--ease-arrive) both; }
+.ui-nav-pane[data-folded] :is(.ui-nav-rail, .ui-nav-head > .ui-seg) { animation: ui-nav-rail-in var(--duration-quick) var(--ease-arrive) both; }
 .ui-nav-pane[data-folded] .ui-nav-head > .ui-seg { grid-template-columns: none; grid-template-rows: repeat(var(--segments), minmax(0, 1fr)); }
 .ui-nav-pane[data-folded] .ui-nav-head > .ui-seg .ui-seg-thumb { inset: calc(var(--seg-pad) + (100% - 2 * var(--seg-pad)) / var(--segments) * var(--segment)) var(--seg-pad) auto; width: auto; height: calc((100% - 2 * var(--seg-pad)) / var(--segments)); transition: top var(--duration-gentle) var(--ease-arrive); }
 @media (prefers-reduced-motion: reduce) { .ui-nav-pane[data-folded] :is(.ui-nav-rail, .ui-nav-head > .ui-seg) { animation: none; } }
 
-/* A phone's: a drawer over the page, the whole width, the head in pills on the top line (the server between the
-   wordmark and the switch, its text giving way first), and no foot. */
-.ui-nav-pane[data-drawer] { position: fixed; inset-block: 0; left: 0; z-index: 55; width: 100vw; background: var(--frame); transform: translateX(-102%); transition: transform var(--panel-motion-duration) var(--panel-motion-easing); }
+/* A phone's: a drawer over the page, the whole width, and no foot. The head is the wordmark on the ground and the
+   switch, a frost pill; the server is the list's first line (NavLead), so what it says never moves the head. */
+.ui-nav-pane[data-drawer] { position: fixed; inset-block: 0; left: 0; z-index: var(--layer-drawer); width: 100vw; background: var(--frame); transform: translateX(-102%); transition: transform var(--duration-quick) var(--ease-change); }
 .ui-nav-pane[data-drawer="open"] { transform: translateX(0); }
 .ui-nav-pane[data-drawer] .ui-nav-pane-body { width: 100%; height: var(--app-height, 100dvh); padding-top: var(--safe-area-inset-top, env(safe-area-inset-top, 0px)); padding-bottom: var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)); background: var(--frame); overscroll-behavior: contain; }
 .ui-nav-pane[data-drawer] .ui-nav-list { overscroll-behavior: contain; padding-bottom: var(--space-lg); }
 .ui-nav-pane[data-drawer] .ui-nav-head { min-height: calc(var(--pill-size) + var(--space-md) + var(--space-xs)); justify-content: space-between; padding: var(--space-md) var(--space-md) var(--space-xs); }
 .ui-nav-pane[data-drawer] .ui-nav-brand { flex: none; height: var(--pill-slot); padding: 0 var(--space-md); }
 .ui-nav-pane[data-drawer] .ui-nav-brand > span { transform: translateY(0.16em); }
-.ui-nav-pane[data-drawer] .ui-nav-head > :not(.ui-nav-brand, .ui-seg) { display: flex; order: 1; min-width: 0; flex: 1; flex-direction: column; justify-content: center; }
-.ui-nav-pane[data-drawer] .ui-nav-notice { margin: 0; border: 0; padding: 0 var(--space-md); font-size: var(--text-caption); }
+/* NavLead: the server filling the line, its actions ghost icons at its end; a notice under it. */
+.ui-nav-lead { display: grid; gap: var(--space-xs); margin-bottom: var(--space-md); }
+.ui-nav-lead-line { display: flex; min-width: 0; align-items: center; gap: var(--space-xs); }
+.ui-nav-lead-line > :first-child { min-width: 0; flex: 1; }
+.ui-nav-lead-actions { display: flex; flex: none; gap: var(--space-2xs); }
+.ui-nav-lead > .ui-nav-notice { margin: 0; }
 
 /* StatusDot: a row's live state in an --icon slot, a dot in its tone (or a Spinner while it works). */
 .ui-status { display: inline-grid; width: var(--icon); height: var(--icon); flex: none; place-items: center; color: var(--muted-foreground); }
 .ui-status > .ui-spinner { width: var(--icon-sm); height: var(--icon-sm); }
 .ui-status-dot { width: var(--icon-dot); height: var(--icon-dot); border-radius: var(--radius-round); background: currentColor; }
 .ui-status[data-tone="success"] { color: var(--status-success); }
-.ui-status[data-tone="active"] { color: var(--accent-cool); }
+.ui-status[data-tone="active"] { color: var(--muted-foreground); }
 .ui-status[data-tone="warn"] { color: var(--status-warn); }
 .ui-status[data-tone="danger"] { color: var(--destructive); }
 .ui-status[data-tone="unread"] { color: var(--status-unread); }

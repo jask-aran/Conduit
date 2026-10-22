@@ -1,9 +1,8 @@
+import { Icons } from "@/components/ui";
 import { createMemo, createSignal, Index, Show, type Component } from "solid-js";
 import { Dynamic } from "solid-js/web";
-import { CodeXmlIcon, FilePenLineIcon, FileTextIcon, GlobeIcon, SearchIcon, SquareTerminalIcon, WrenchIcon } from "lucide-solid";
+
 import type { ToolItem, ToolKind } from "../api/contracts";
-import { httpUrl } from "../api/transport";
-import { authorizedFetch } from "../api/native-auth-client";
 import { Step, StepOutput, Trail } from "@/components/ui";
 
 const MAX_PREVIEW = 8_000;
@@ -24,8 +23,8 @@ function stringify(value: unknown) {
 /* A step of the trail names its kind with an icon and a verb -- present while
    it runs, past once it has -- and what it acted on in mono beside it. */
 export const KIND_ICONS: Record<ToolKind, Component<{ class?: string }>> = {
-  command: SquareTerminalIcon, read: FileTextIcon, edit: FilePenLineIcon,
-  search: SearchIcon, fetch: GlobeIcon, script: CodeXmlIcon, other: WrenchIcon,
+  command: Icons.Shell, read: Icons.FileText, edit: Icons.WriteFile,
+  search: Icons.Search, fetch: Icons.Fetch, script: Icons.Code, other: Icons.Tool,
 };
 export const VERBS: Record<ToolKind, [string, string]> = {
   command: ["Running", "Ran"], read: ["Reading", "Read"], edit: ["Editing", "Edited"],
@@ -48,34 +47,21 @@ export function stepDuration(from?: string, to?: string): string {
 /* A tool step: the library's Step, StepOutput, a code-mode script's calls as a Trail of quiet Steps. `open`,
    `onToggle` are the trail's; its body is drawn the first time it opens (the Step's opens). Output a reload
    left on the server is fetched the first time it is opened. */
-export function ToolStep(props: { tool: ToolItem; sessionId?: string | null; settled?: boolean; open: boolean; onToggle: () => void; motion?: "entering" }) {
-  const [loaded, setLoaded] = createSignal<unknown>(undefined);
-  const [loading, setLoading] = createSignal(false);
+export function ToolStep(props: { tool: ToolItem; settled?: boolean; open: boolean; onToggle: () => void; motion?: "entering" }) {
   const [full, setFull] = createSignal(false);
   const status = createMemo(() => props.tool.isError ? "failed" : props.tool.cancelled ? "stopped" : props.tool.done ? "done" : props.settled ? "stopped" : "running");
-  const output = createMemo(() => stringify(loaded() ?? props.tool.output ?? (props.tool.kind === "script" ? "" : props.tool.input ?? {})));
+  const output = createMemo(() => stringify(props.tool.output ?? (props.tool.kind === "script" ? "" : props.tool.input ?? {})));
   const preview = createMemo(() => {
     const text = output();
     if (full() || text.length <= MAX_PREVIEW) return text;
     return commandTools.has(String(props.tool.name || "").toLowerCase()) ? text.slice(-MAX_PREVIEW) : text.slice(0, MAX_PREVIEW);
   });
-  const load = async () => {
-    const current = props.tool;
-    if (!current.outputDeferred || loaded() !== undefined || loading() || !props.sessionId) return;
-    setLoading(true);
-    try {
-      const response = await authorizedFetch(httpUrl(`/v0/sessions/${encodeURIComponent(props.sessionId)}/tools/${encodeURIComponent(current.toolCallId)}`));
-      if (!response.ok) throw new Error("Could not load tool output");
-      setLoaded(((await response.json()) as { output?: unknown }).output ?? "");
-    } catch (error) { setLoaded((error as Error).message); }
-    finally { setLoading(false); }
-  };
   const kind = () => props.tool.kind || "other";
   const verb = () => `${VERBS[kind()][status() === "running" ? 0 : 1]}${kind() === "other" ? ` ${props.tool.name || "a tool"}` : ""}`;
   const subject = () => summary(props.tool) || (kind() === "other" || kind() === "script" ? "" : props.tool.name || "");
   return <Step label={`${props.tool.name || "Tool"} ${status()}`} icon={<Dynamic component={KIND_ICONS[kind()]} />} verb={verb()} subject={subject() || undefined} time={stepDuration(props.tool.timestamp, props.tool.completedAt) || undefined}
     state={status() === "done" ? undefined : status() as "running" | "failed" | "stopped"} opens open={props.open} motion={props.motion}
-    onToggle={() => { if (!props.open) void load(); props.onToggle(); }}>
+    onToggle={props.onToggle}>
     <>
       <Show when={props.tool.calls?.length}><Trail nested="calls"><Index each={props.tool.calls!}>{(call) => {
         const callKind = () => call().kind in KIND_ICONS ? call().kind : "other";
@@ -84,7 +70,7 @@ export function ToolStep(props: { tool: ToolItem; sessionId?: string | null; set
           subject={call().earlier ? undefined : call().subject} state={call().earlier ? "earlier" : call().planned ? "planned" : running() ? "running" : call().isError ? "failed" : undefined}
           flags={call().repeats ? ["repeats"] : undefined} time={call().durationMs != null ? stepDuration("1970-01-01T00:00:00.000Z", new Date(call().durationMs!).toISOString()) : undefined} />;
       }}</Index></Trail></Show>
-      <Show when={loading() || preview()}><StepOutput text={loading() ? "Loading…" : preview()} hidden={!loading() && output().length > MAX_PREVIEW ? output().length - MAX_PREVIEW : undefined} full={full()} onToggleFull={() => setFull(!full())} /></Show>
+      <Show when={preview()}><StepOutput text={preview()} hidden={output().length > MAX_PREVIEW ? output().length - MAX_PREVIEW : undefined} full={full()} onToggleFull={() => setFull(!full())} /></Show>
     </>
   </Step>;
 }

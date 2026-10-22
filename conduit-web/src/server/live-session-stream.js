@@ -1,11 +1,8 @@
-import { CONTINUE_PROMPT } from "../continuation.js";
-import { messageDrop, messageOpen } from "../harnesses/transcript-ops.js";
-import { messagesFromEntries } from "../session-store.js";
+import { messageDrop } from "../harnesses/transcript-ops.js";
 import { parseAttachmentEnvelope } from "../attachment-envelope.js";
 import { manifestForImplementation } from "../harnesses/index.js";
 import { startWebSocketKeepalive } from "./ws-keepalive.js";
 import { ServerConcurrency } from "./effect-concurrency.js";
-import { applyMessageIds, isConduitMessageId } from "../message-ids.js";
 
 /**
  * An id a client chose for the message it is sending.
@@ -41,8 +38,8 @@ export function interruptedPromptInput(taken, message, attachmentIds = []) {
  * Every frame this stream sends a browser is the adapter's translation of the
  * event, stringified -- there is no second spelling of that anywhere. It used
  * to be written out at each send site, and the one site that forgot it was the
- * replay a reconnecting browser reads first, so a Pi reconnect was the single
- * path that put native harness events in front of the client.
+ * replay a reconnecting browser reads first, so it was the one path that put
+ * native harness events in front of the client.
  *
  * The exception is Conduit refusing a command, which is Conduit's own
  * statement about its own API rather than a harness event, and is written in
@@ -62,12 +59,12 @@ export function createLiveSessionStream({
   wss,
   attachments,
   registry,
-  config,
   turnCheckpoints,
+  // Where a project's checkpoints are taken: its path here, its device's
+  // folder (workspace-host.js), or null where the place takes none.
+  checkpointWorkspace = async (project) => project.workingRoot,
   findChatContext,
-  findRegisteredSession,
   chatModelView,
-  messageIds,
   chatLogs,
   backends,
   concurrency = new ServerConcurrency(),
@@ -110,55 +107,9 @@ export function createLiveSessionStream({
     return backends.forChat(registry.metadata(record.chatId));
   }
 
-  // A target the client names is a Conduit message id; the harness knows only
-  // its own entry. Unknown ids pass straight through, so Pi's own history tree
-  // and any client that predates this still work.
-  /**
-   * The harness's own name for a message, for a fork or regenerate to cut at.
-   *
-   * Pi names a prompt only by the session entry it writes, and says nothing
-   * when it does, so a Conduit id is bound to its entry when its turn
-   * checkpoints. Something asked of a message whose turn has not checkpointed
-   * yet -- a fork straight after a stop -- is bound here, by reading what Pi
-   * has written so far, rather than by reading after every stop in case.
-   */
-  async function harnessEntryId(context, messageId, record = null) {
-    if (!context) return messageId;
-    const known = await messageIds.entryIdFor(context.project, context.chat, messageId);
-    if (known !== messageId || !record || !isConduitMessageId(messageId)) return known;
-    try {
-      const { messages } = await adapterFor(record).readTranscript({
-        liveSessionId: record.id, chatId: record.chatId, project: context.project, turns: 3,
-      });
-      await messageIds.bind(context.project, context.chat, messages || []);
-    } catch (error) {
-      console.warn("Could not bind a message to its entry", error.message);
-    }
-    return messageIds.entryIdFor(context.project, context.chat, messageId);
-  }
-
-  /**
-   * Let the process name anything the chat writes, not just what Conduit sent.
-   *
-   * Pi writes messages nobody here asked for: the answers to a turn it started
-   * off its own queue, a message typed into the CLI of a thread driven from
-   * here, the second and third answers of a turn that only claimed one. Those
-   * used to reach the transcript unnamed, streaming under an id invented for
-   * the stream and settling under one derived from the entry -- the same
-   * message twice. The process cannot reach the ledger itself, so it is handed
-   * the one way in, and the ledger is warmed so a name can be taken from inside
-   * the event loop where there is nothing to await.
-   */
-  function bindNaming(record, context) {
-    if (!record || record.ephemeral || !context || !messageIds.owns(context.chat)) return;
-    void messageIds.load(context.project, context.chat.id).catch(() => {});
-    record.claimMessage = (role, after = null) => messageIds.claimNow(context.chat, role, after);
-  }
-
   async function promptForChat(record, command, message) {
     const context = await findChatContext(record.chatId);
     if (!context) throw new Error("Chat no longer exists");
-    bindNaming(record, context);
     const selectedAttachments = await attachments.resolveMany(context.project, context.chat.id, command.attachmentIds);
     const prompt = message;
     // The harness owns transcript text. Conduit sends native attachment inputs
@@ -200,14 +151,7 @@ export function createLiveSessionStream({
         });
         projection.messages ||= [];
         projection.tools ||= [];
-        // A snapshot can be the first sight of entries Pi has only just
-        // written, so the ids claimed for them are bound before it is named;
-        // otherwise it names a prompt `pi:<entryId>` while the client holds the
-        // id it was handed, and the same message arrives a second time.
-        await messageIds.bind(context.project, context.chat, projection.messages);
         projection.messages = await attachments.decorateMessages(context.project, context.chat.id, projection.messages, { fromStart: false });
-        projection.messages = applyMessageIds(projection.messages,
-          await messageIds.resolver(context.project, context.chat));
         // A read outside the event loop can straddle a numbered transcript
         // change. Retry while attempts remain; the last publish stands.
         if (log && log.state().seq !== logSeq && attempt < SNAPSHOT_ATTEMPTS - 1) continue;
@@ -234,83 +178,28 @@ export function createLiveSessionStream({
     }
     let checkpoint = null;
     try {
-      checkpoint = await turnCheckpoints?.capture({
+      const at = await checkpointWorkspace(prepared.context.project);
+      if (at) checkpoint = await turnCheckpoints?.capture({
         chatId: prepared.context.chat.id,
         projectId: prepared.context.project.id,
         projectKind: prepared.context.project.kind,
-        workingRoot: prepared.context.project.workingRoot,
+        workingRoot: at,
         // The transcript as it stands, so the checkpoint anchors on the entry
         // the turn about to start will hang under. Without it nothing ties a
         // checkpoint to its own turn, and they all reach for the newest one.
-        sessionFile: record.sessionFile,
         sourceCheckpointId,
       });
     } catch (error) {
       console.warn("Could not capture turn checkpoint", error.message);
     }
-    // Claimed before the prompt goes out, so the commit event that comes back
-    // can carry the id the transcript will eventually agree on.
-    // Both halves of the turn are named before it starts: the prompt, and the
-    // answer it will produce. They are handed to the harness with the prompt so
-    // they belong to that generation and nothing else can consume them. The
-    // answer is claimed against the prompt, so it can only ever name an entry
-    // this turn wrote: a turn that produces more than one answer runs out of
-    // claims, and the extras derive their ids from their entries like any
-    // message Conduit did not send.
-    // The browser names the message it is sending, so the row already on
-    // screen is that message rather than a stand-in; a caller that offers no
-    // name gets one here. A harness that names its own messages claims
-    // nothing and this stays null.
-    const user = await messageIds.claim(prepared.context.project, prepared.context.chat, "user", messageId);
-    const claimed = user
-      ? {
-        user,
-        assistant: await messageIds.mint(prepared.context.project, prepared.context.chat, "assistant", user),
-        // Every further message this turn writes is named as it starts, so no
-        // message is ever streamed under one name and stored under another.
-        claimAnswer: (after) => messageIds.claimNow(prepared.context.chat, "assistant", after || user),
-        // The entry the prompt is written under, once the harness says.
-        anchor: (parent) => messageIds.anchor?.(prepared.context.chat, user, parent),
-      }
-      : null;
-    // Stated before it is sent, not after it is accepted. The harness can begin
-    // answering while the prompt's own acceptance is still in flight, and an
-    // answer placed before its prompt existed put the prompt underneath its own
-    // reply -- and, because an answer belongs to the prompt it names, took the
-    // whole turn with it into the turn above.
-    if (claimed?.user) {
-      adapter.publish(record, messageOpen({ id: claimed.user, role: "user",
-        content: prepared.message, timestamp: new Date().toISOString() }));
-    }
     let accepted;
     try {
       accepted = await startGeneration(record, () => adapter.prompt(record.id, prepared.prompt,
         { ...promptOptions, attachments: prepared.attachments,
-          // A harness that names its own messages still has to name this one
-          // what the browser already calls it. The row is on screen before the
-          // prompt is sent, so an adapter that invents an id here states a
-          // second row for a message that is already drawn -- the same prompt,
-          // twice, which is what claiming an id prevents for everyone else.
-          ...(claimed ? { messageIds: claimed } : messageId ? { clientUserMessageId: messageId } : {}) }),
+          ...(messageId ? { clientUserMessageId: messageId } : {}) }),
         { reuseSlot: promptOptions.streamingBehavior === "steer" || promptOptions.streamingBehavior === "followUp" });
-    } catch (error) {
-      // A prompt the harness refused writes nothing, so its names go back
-      // rather than waiting for messages that will never be written -- and the
-      // row stated for it goes with them.
-      await messageIds.release(prepared.context.project, prepared.context.chat, claimed);
-      if (claimed?.user) {
-        adapter.publish(record, messageDrop({ messageId: claimed.user }));
-      }
-      throw error;
-    }
+    } catch (error) { throw error; }
     const generationId = typeof accepted === "string" ? accepted : accepted?.generationId;
-    // With an id of its own, a Pi prompt's attachments are found by that id
-    // like every other harness's, instead of by counting from an anchor.
-    // `attachmentIdentity` itself stays as the harness gave it: the turn
-    // checkpoint below anchors on harness entries, not on Conduit ids.
-    await attachments.recordMessage(prepared.context.project, prepared.context.chat.id,
-      claimed ? { ...(accepted?.attachmentIdentity || {}), messageId: claimed.user } : accepted?.attachmentIdentity || null,
-      prepared.attachments);
     if (checkpoint && generationId) {
       const messageId = typeof accepted === "object" ? accepted?.attachmentIdentity?.messageId : null;
       try { await turnCheckpoints.assignTurn(checkpoint, generationId, messageId); }
@@ -320,7 +209,7 @@ export function createLiveSessionStream({
     if (prepared.context.chat.status === "draft") {
       await registry.update(prepared.context.chat.id, { status: "active", backend: {
         ...prepared.context.chat.backend,
-        opaqueSession: manifestForImplementation(record.adapterImplementation)?.profile ? record.sessionId : record.sessionFile,
+        opaqueSession: adapter.opaqueSessionOf?.(record) ?? record.sessionId ?? null,
       } });
     }
     if (needsName) {
@@ -352,9 +241,7 @@ export function createLiveSessionStream({
    *
    * A fork abandons the message it was pointed at and everything after it, and
    * the client is told that directly rather than being left to work it out from
-   * a transcript that may not exist yet: when the retained branch has no
-   * assistant message, Pi names the fork's file before writing it, and the sync
-   * below has nothing to read.
+   * a transcript that may not exist yet.
    */
   function announceTruncation(record, messageId, { keep = false } = {}) {
     if (!messageId) return;
@@ -374,12 +261,9 @@ export function createLiveSessionStream({
   /**
    * Repoint the chat at the branch the fork created.
    *
-   * It used to read the whole forked transcript back and republish it, which
-   * was the only statement the client got about what the fork removed -- and
-   * the one it never got when the retained branch has no assistant message,
-   * because Pi names the fork's file before writing it and there was nothing
-   * to read. The truncation above says that directly, and a fork keeps the
-   * entry ids of everything it retains, so there is nothing left to re-sync.
+   * It used to read the whole forked transcript back and republish it. The
+   * truncation above states what changed, and a fork keeps the ids of the
+   * entries it retains, so there is nothing left to re-sync.
    *
    * Which file the chat now points at is the server's business. This also
    * published a `history_forked` carrying the updated row, but the one field a
@@ -405,12 +289,6 @@ export function createLiveSessionStream({
     if (taken?.discardedAttachmentIdentities?.length) {
       await attachments.discardMessages(context.project, context.chat.id, taken.discardedAttachmentIdentities);
     }
-    // A queued message taken back is a message that will never be written, so
-    // its name goes back too. Left in the queue it would be handed to the next
-    // entry along and shift every binding after it by one.
-    for (const messageId of taken?.discardedMessageIds || []) {
-      await messageIds.release(context.project, context.chat, { user: messageId });
-    }
     return taken;
   }
 
@@ -432,45 +310,29 @@ export function createLiveSessionStream({
       }
       if (command.type === "steer") {
         try {
-          await turnCheckpoints?.capture({
+          const at = await checkpointWorkspace(prepared.context.project);
+          if (at) await turnCheckpoints?.capture({
             chatId: prepared.context.chat.id,
             projectId: prepared.context.project.id,
             projectKind: prepared.context.project.kind,
-            workingRoot: prepared.context.project.workingRoot,
-            sessionFile: record.sessionFile,
-          });
+            workingRoot: at,
+              });
         } catch (error) {
           console.warn("Could not capture steering checkpoint", error.message);
         }
       }
-      // A queued message is named before it goes, exactly like a prompt. Pi
-      // writes it as an ordinary user entry whenever it takes it off the queue,
-      // and this is the name that entry binds to -- so the message the browser
-      // drew and the message the transcript records are one thing, rather than
-      // two that have to be matched up afterwards.
-      const queuedMessageId = await messageIds.claim(prepared.context.project, prepared.context.chat,
-        "user", offeredMessageId(command.messageId));
-      // A turn Pi starts for itself, off its own queue, still writes messages
-      // that need names. It cannot reach the ledger, so it is given the one way
-      // in that it needs.
-      if (queuedMessageId) {
-        record.claimAnswer = (after) => messageIds.claimNow(prepared.context.chat, "assistant", after || queuedMessageId);
-      }
+      const queuedMessageId = offeredMessageId(command.messageId);
       const accepted = await adapter.queue(record.id, command.type, prepared.prompt,
         { attachments: prepared.attachments, messageId: queuedMessageId });
       await attachments.recordMessage(prepared.context.project, prepared.context.chat.id,
-        queuedMessageId ? { ...(accepted?.attachmentIdentity || {}), messageId: queuedMessageId } : accepted?.attachmentIdentity || null,
-        prepared.attachments);
+        accepted?.attachmentIdentity || null, prepared.attachments);
       return null;
     }
     if (command.type === "clear_queue") {
       const capabilities = adapter.getCapabilities();
       return capabilities.steer || capabilities.followUpQueue ? clearQueuedMessages(record, adapter) : null;
     }
-    // Pi's documented interrupt recipe, run in order on this side of the
-    // socket. Clearing first is what stops the abort from continuing the queue
-    // itself; the client used to sequence these three steps by watching
-    // generation state, which raced.
+    // Clear the queue before cancellation, then send the replacement prompt.
     if (command.type === "interrupt_and_send") {
       // Clearing comes first and must succeed: aborting with the queue still in
       // place makes the backend deliver it anyway, so a half-run sequence
@@ -498,10 +360,7 @@ export function createLiveSessionStream({
     }
     if (command.type === "stop_generation" || command.type === "abort") {
       const stoppedGenerationId = command.generationId || record.activeGeneration?.id || null;
-      // A stop stops. Pi carries its queue through an abort and runs it -- a
-      // message an extension queued as much as one the reader did, so a
-      // background fetch finishing mid-turn started a new turn under the stop
-      // -- and Codex sends its follow-ups once the turn ends. The client puts
+      // A stop clears the queue before it cancels the turn. The client puts
       // the reader's own queued words back in the composer.
       const capabilities = adapter.getCapabilities();
       if (capabilities.steer || capabilities.followUpQueue) {
@@ -512,10 +371,9 @@ export function createLiveSessionStream({
     if (command.type === "fork_and_prompt") {
       if (!adapter.getCapabilities().fork) throw Object.assign(new Error("This agent does not support forks"), { code: "fork_unsupported", status: 409 });
       const context = await findChatContext(record.chatId);
-      const entryId = await harnessEntryId(context, command.entryId, record);
-      const sourceCheckpointId = context ? await turnCheckpoints?.checkpointForMessage(
-        context.chat.id, context.project.workingRoot, entryId,
-      ) : null;
+      const entryId = command.entryId;
+      const at = context ? await checkpointWorkspace(context.project) : null;
+      const sourceCheckpointId = at ? await turnCheckpoints?.checkpointForMessage(context.chat.id, at, entryId) : null;
       const forked = await adapter.fork(record.id, { nodeId: entryId });
       announceTruncation(record, command.entryId);
       await syncForkedChat(record, forked);
@@ -526,35 +384,16 @@ export function createLiveSessionStream({
     if (command.type === "regenerate") {
       if (!adapter.getCapabilities().regenerate) throw Object.assign(new Error("This agent does not support regeneration"), { code: "regenerate_unsupported", status: 409 });
       const context = await findChatContext(record.chatId);
-      const entryId = await harnessEntryId(context, command.entryId, record);
-      const sourceCheckpointId = context ? await turnCheckpoints?.checkpointForMessage(
-        context.chat.id, context.project.workingRoot, entryId,
-      ) : null;
+      const entryId = command.entryId;
+      const at = context ? await checkpointWorkspace(context.project) : null;
+      const sourceCheckpointId = at ? await turnCheckpoints?.checkpointForMessage(context.chat.id, at, entryId) : null;
       const forked = await adapter.fork(record.id, { nodeId: entryId });
       announceTruncation(record, command.entryId, { keep: true });
       await syncForkedChat(record, forked);
       await applyComposerModel(record, command);
       const prepared = await promptForChat(record, command, forked.sourceMessage?.text || forked.text);
-      // The prompt keeps the name the row on screen already has, so the harness
-      // writing a new entry for it is invisible: the message is restated where
-      // it already sits instead of being taken away and sent back as a copy.
-      // A prompt adopted from history has no Conduit name to keep, and gets a
-      // fresh one as before.
-      // A harness that names its prompts with Conduit's own ids (Claude Code)
-      // has no ledger entry to reclaim; its prompt's id is the name to keep.
-      const messageId = !context ? null : messageIds.owns(context.chat)
-        ? await messageIds.reclaim(context.project, context.chat, command.entryId)
-        : isConduitMessageId(command.entryId) ? command.entryId : null;
+      const messageId = CLIENT_MESSAGE_ID.test(String(command.entryId || "")) ? command.entryId : null;
       return sendPrompt(record, prepared, { sourceCheckpointId, messageId });
-    }
-    if (command.type === "continue") {
-      if (!config.enablePartialContinue) throw Object.assign(new Error("Partial continuation is disabled"), { code: "partial_continue_disabled" });
-      const persisted = await findRegisteredSession(record.chatId);
-      const previous = persisted ? messagesFromEntries(persisted.entries).findLast((message) => message.role === "assistant") : null;
-      const partial = previous?.content || record.generation?.partial || "";
-      if (!partial || (!previous?.stopped && !record.generation?.closed)) throw new Error("There is no stopped response to continue");
-      return startGeneration(record,
-        () => adapter.prompt(record.id, CONTINUE_PROMPT, { continuationBase: partial }));
     }
     if (command.type === "extension_ui_response" || command.type === "host_ui_response") {
       // Awaited: a harness that answers over the network can refuse, and a
@@ -573,7 +412,7 @@ export function createLiveSessionStream({
    * Send a prompt to a chat's live agent from the server itself.
    *
    * The same path a browser's prompt takes -- the chat's lock, its model, the
-   * names claimed for the message and its answer, the generation cap -- for a
+   * generation cap -- for a
    * caller with no socket: a headless run.
    */
   async function submitPrompt(chatId, message, { model = "", thinkingLevel = "" } = {}) {
@@ -620,9 +459,6 @@ export function createLiveSessionStream({
     // suffix in the attach replay is a hole against zero rather than a number
     // it could adopt as complete.
     if (log) send({ type: "log_state", log: log.state() });
-    // A chat can be written to without anyone prompting from here, so naming is
-    // set up on attach rather than waiting for the first prompt.
-    if (record.chatId) void findChatContext(record.chatId).then((context) => bindNaming(record, context)).catch(() => {});
     // An untracked thread is Conduit's only while a page drives it. Once the
     // last one has gone -- a reload, a closed tab, a lost connection -- and
     // none is back within the grace, its process closes; the page's own
@@ -643,8 +479,7 @@ export function createLiveSessionStream({
       // Conduit rejecting a command the browser sent is Conduit's own
       // statement, not a harness event, so it is written in the contract's
       // words here rather than handed to a harness translator. Routing it
-      // through `toClientEvent` meant Pi renamed it and the other three did
-      // not, and Pi had no code for a bad request so it read as the backend
+      // through `toClientEvent` let backends rename it, so it read as the backend
       // going away -- which failed a turn that was still running fine.
       const report = (error) => {
         if (ws.readyState === 1) ws.send(JSON.stringify({

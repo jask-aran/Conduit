@@ -12,11 +12,6 @@
   contain: inline-size;
 }
 
-/* No per-block compositor layers during panel motion. The motion shell is
-   already one layer and slides as one; promoting each visible block on
-   pointer-down re-snapped it to the device pixel grid, which under fractional
-   display scaling moved the text sideways before the handle had moved. */
-
 /* A display formula sits in its own horizontally scrolling box, so a narrower
    column changes that box but never the formula: KaTeX has already resolved
    every glyph position, and none of them depend on the space available. Blink
@@ -29,6 +24,6 @@
    Layout only: paint containment snapped each formula to the device pixel
    grid while it applied, so under fractional scaling the formulas sitting
    between pixels moved sideways on pointer-down and back on release. */
-.transcript[data-panel-motion] .ui-answer .katex-display > .katex {
+.ui-chat-scroller[data-panel-motion] .ui-answer .katex-display > .katex {
   contain: layout;
 }

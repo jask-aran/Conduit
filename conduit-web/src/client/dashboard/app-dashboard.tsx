@@ -1,6 +1,9 @@
+import { harnessMarkLabelFor } from "../harness-brand";
+import { ThreadHarnessMark } from "@/components/ui";
+import { Icons } from "@/components/ui";
 import { isConduitManagedProject } from "../navigation/sidebar-preferences";
 import { createMemo, createSignal, For, onCleanup, onMount, Show, type JSX } from "solid-js";
-import { FolderPlusIcon, PencilIcon, TerminalIcon, Trash2Icon } from "lucide-solid";
+
 import { ContextMenu, ContextMenuContent, ContextMenuGroup, ContextMenuItem, ContextMenuTrigger, MenuSection } from "@/components/menus";
 import { ContextMenu as MenuHost, ContextMenuContent as MenuContent, ContextMenuTrigger as MenuTrigger } from "@/components/menus";
 import { ChatMenuFor, PlaceMenuFor, type ItemActions } from "../navigation/item-menus";
@@ -8,7 +11,7 @@ import { api, projectPath } from "../api/client";
 import type { ChatSummary, Project, Template } from "../api/contracts";
 import { activityDetail, runtimeActivity, RuntimeIndicator } from "../navigation/runtime-indicator";
 import { activityLabel } from "../../activity.js";
-import { ThreadHarnessMark } from "../harness-brand";
+
 import type { Pty } from "../remotes/terminal-pane";
 import { WorkspaceGlyph } from "../project/workspace-appearance";
 import type { RuntimeStore } from "../state/runtime";
@@ -142,7 +145,7 @@ export function AppDashboard(props: {
     const live = () => process()?.active ? activityLabel(runtimeActivity(process()) || "working", activityDetail(process())) : "";
     const where = () => project.slug === "chat" ? "" : project.name;
     return <MenuHost><MenuTrigger as={SplitRow} element="button" draggable="true" data-doc-view={`chat:${chat.id}`} onPointerEnter={() => props.onPrefetchChat(chat)} onFocus={() => props.onPrefetchChat(chat)} onClick={() => props.onOpenChat(chat, project)}
-        lead={<RuntimeIndicator process={process()} stale={props.runtime.stale()} unread={chat.unread} fallback={<ThreadHarnessMark id={chat.harnessId} lively />} />}
+        lead={<RuntimeIndicator process={process()} stale={props.runtime.stale()} unread={chat.unread} fallback={<ThreadHarnessMark id={chat.harnessId} label={harnessMarkLabelFor(chat.harnessId)} lively />} />}
         primary={chat.title || "Untitled chat"}
         context={<>{live()}{live() && where() ? " · " : ""}{where()}</>}
         trailing={<time dateTime={chat.lastMessageAt || chat.createdAt}>{shortAge(Date.parse(chat.lastMessageAt || chat.createdAt || "") || 0, now())}</time>} />
@@ -222,7 +225,7 @@ export function AppDashboard(props: {
           name={project.name} live={folderLive(project)}
           meta={`${project.sessions.filter((chat) => chat.status === "active").length} chats${latestActivity(project) ? ` · ${shortAge(latestActivity(project), now())}` : ""}`} />{projectMenu(project)}</MenuHost>}
       </For>
-      <FolderTile element="button" icon={<FolderPlusIcon />} name="New project" onClick={() => props.onContextAction("new-folder", {})} />
+      <FolderTile element="button" icon={<Icons.NewFolder />} name="New project" onClick={() => props.onContextAction("new-folder", {})} />
     </FolderShelf>
   </SplitGroup>;
 
@@ -241,11 +244,11 @@ export function AppDashboard(props: {
     <Show when={terminals().length} fallback={<SplitEmpty>{loading() ? "Loading terminals…" : "No live terminals."}</SplitEmpty>}>
       <For each={terminals()}>{(terminal) =>
         <ContextMenu><ContextMenuTrigger as={SplitRow} element="button" onPointerEnter={props.onPrefetchTerminal} onFocus={props.onPrefetchTerminal} onClick={() => props.onOpenTerminal(terminal)}
-            lead={<TerminalIcon />} primary={terminal.title || "Shell"} context={`${terminal.currentCommand || "shell"} · ${terminalScope(terminal)?.name || "Unscoped"}`} trailing={terminalAge(terminal)} />
+            lead={<Icons.Terminal />} primary={terminal.title || "Shell"} context={`${terminal.currentCommand || "shell"} · ${terminalScope(terminal)?.name || (/^(computer|device)(:|$)/.test(terminal.projectId) ? terminal.cwd || "Computer" : "Unscoped")}`} trailing={terminalAge(terminal)} />
           <ContextMenuContent><ContextMenuGroup>
-            <ContextMenuItem onSelect={() => props.onOpenTerminalMaximized(terminal)}><TerminalIcon />Open maximized</ContextMenuItem>
-            <ContextMenuItem onSelect={() => props.onContextAction("rename-terminal", { terminal })}><PencilIcon />Rename</ContextMenuItem>
-          </ContextMenuGroup><MenuSection><ContextMenuItem variant="destructive" onSelect={() => props.onContextAction("delete-terminal", { terminal })}><Trash2Icon />Destroy shell</ContextMenuItem></MenuSection></ContextMenuContent></ContextMenu>}
+            <ContextMenuItem onSelect={() => props.onOpenTerminalMaximized(terminal)}><Icons.Terminal />Open maximized</ContextMenuItem>
+            <ContextMenuItem onSelect={() => props.onContextAction("rename-terminal", { terminal })}><Icons.Edit />Rename</ContextMenuItem>
+          </ContextMenuGroup><MenuSection><ContextMenuItem variant="destructive" onSelect={() => props.onContextAction("delete-terminal", { terminal })}><Icons.Delete />Destroy shell</ContextMenuItem></MenuSection></ContextMenuContent></ContextMenu>}
       </For>
     </Show>
   </SplitGroup>;

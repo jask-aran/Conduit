@@ -16,8 +16,8 @@ export const MODELS: ModelOption[] = [
 ];
 
 export const PROFILES: Template[] = [
-  { id: "assistant", label: "Assistant", description: "General help", implementation: "conduit_pi" },
-  { id: "coder", label: "Coder", description: "Works in a folder", implementation: "conduit_pi" },
+  { id: "assistant", label: "Assistant", description: "General help", implementation: "conduit-runtime" },
+  { id: "coder", label: "Coder", description: "Works in a folder", implementation: "conduit-runtime" },
   { id: "claude-code", label: "Claude Code", implementation: "claude_code" },
   { id: "codex", label: "Codex", implementation: "codex" },
 ];

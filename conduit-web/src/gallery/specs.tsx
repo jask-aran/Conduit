@@ -96,10 +96,6 @@ export function InUse(props: { scene: () => JSX.Element; marks: Mark[]; density?
     </div>
   </div>;
 }
-/** Anatomy: an assembly's parts numbered on it, as In use numbers places -- each part's name and what it does, and what builds it. */
-export type Part = [selector: string, name: string, from: string, does: string, side?: Mark["side"]];
-export const Anatomy = (props: { scene: () => JSX.Element; parts: Part[] }) => <InUse density={false} scene={() => <div class="g-anatomy">{props.scene()}</div>}
-  marks={props.parts.map(([selector, name, from, does, side]) => ({ selector, label: `${name}: ${does}`, read: () => from, side }))} />;
 export const style = (el: HTMLElement) => getComputedStyle(el);
 export const bg = (el: HTMLElement) => style(el).backgroundColor;
 export const fg = (el: HTMLElement) => style(el).color;
@@ -108,36 +104,13 @@ export const rounding = (el: HTMLElement) => px(style(el).borderTopLeftRadius);
 export const tall = (el: HTMLElement) => px(`${el.getBoundingClientRect().height}px`);
 export const icon = (el: HTMLElement) => `${px(`${el.getBoundingClientRect().width}px`)} · stroke ${style(el).strokeWidth.replace("px", "")}`;
 
-/*
- * A control's forms down the side, the surfaces it sits on across: each cell drawn by the
- * library on that surface, at the page's density.
- */
+/** A surface cell: the form drawn on the frame, the ground or frost, or at a density (page.tsx's Examples table). */
 export type Where = "frame" | "ground" | "frost";
-/** A column: a surface the form sits on, or a density it is drawn at (for what is its own surface, like a card). */
 export type Column = Where | "desktop" | "phone";
-/** code: how to write it; tokens: what it reads, so a form can be named and tuned. */
-export interface FormRow { name: string; use: string; code?: string; tokens?: string; sample: () => JSX.Element }
-const On = (props: { where: Column; children: JSX.Element }) => props.where === "desktop" || props.where === "phone"
+export const On = (props: { where: Column; children: JSX.Element }) => props.where === "desktop" || props.where === "phone"
   ? <div class="g-form-density" data-density={props.where}>{props.children}</div>
   : props.where === "frost" ? <Frost class="g-surface g-form-surface">{props.children}</Frost>
   : <div class="g-surface g-form-surface" data-surface={props.where}>{props.children}</div>;
-/** widths: every column's, the form's first (a phone column a phone wide, for what fills its width).
- *  stacked: each form's name over its samples, which then take the row's whole width (for a wide piece). */
-export function FormTable(props: { rows: FormRow[]; on: Column[]; widths?: string[]; stacked?: boolean }) {
-  // Stacked, the name has its own line, so the samples share the whole row.
-  const columns = { "grid-template-columns": props.widths?.join(" ") ?? (props.stacked ? `repeat(${props.on.length}, minmax(0, 1fr))` : `300px repeat(${props.on.length}, minmax(0, 1fr))`) };
-  return <div class="g-scale g-forms">
-    <div class="g-scale-head" style={columns}>{!props.stacked && <span>Form</span>}<For each={props.on}>{(where) => <span>{where[0]!.toUpperCase() + where.slice(1)}</span>}</For></div>
-    <For each={props.rows}>{(row) => <div class="g-scale-row" style={columns} data-stacked={props.stacked ? "" : undefined}>
-      {props.stacked
-        ? <div class="g-scale-name g-stack-name"><p><strong>{row.name}</strong><small>{row.use}</small></p><p>{row.code && <code class="g-form-code">{row.code}</code>}{row.tokens && <small class="g-form-tokens">{row.tokens}</small>}</p></div>
-        : <div class="g-scale-name"><strong>{row.name}</strong><small>{row.use}</small>
-          {row.code && <code class="g-form-code">{row.code}</code>}{row.tokens && <small class="g-form-tokens">{row.tokens}</small>}</div>}
-      <For each={props.on}>{(where) => <On where={where}>{row.sample()}</On>}</For>
-    </div>}</For>
-  </div>;
-}
-export const form = (name: string, use: string, sample: FormRow["sample"], code?: string, tokens?: string): FormRow => ({ name, use, sample, code, tokens });
 
 /** Once the moves under it have played: their own animations and transitions, at whatever rate the page runs them. */
 const settled = async (root: Element) => { await new Promise(requestAnimationFrame); await Promise.allSettled(root.getAnimations({ subtree: true }).map((a) => a.finished)); };
@@ -161,14 +134,6 @@ export function Replay(props: { leaves?: Motion[]; children: (motion: () => Moti
   </div>;
 }
 
-/** A piece's states, switched by hand: a button each, the piece drawn for the one chosen (it plays its own moves). */
-export function States<T extends string>(props: { states: readonly T[]; children: (state: () => T) => JSX.Element }) {
-  const [state, setState] = createSignal<T>(props.states[0]!);
-  return <div class="g-replay">
-    <div class="g-replay-bar"><For each={props.states}>{(name) => <Button size="sm" variant="ghost" outline={state() === name} aria-pressed={state() === name} onClick={() => setState(() => name)}>{name}</Button>}</For></div>
-    <div class="g-replay-stage">{props.children(state)}</div>
-  </div>;
-}
 /** Shows its child while `when`, arriving as it comes and playing its leave (default: back the way it came) before it goes. */
 export function Presence(props: { when: boolean; leave?: Motion; children: (motion: () => Motion) => JSX.Element }) {
   const [shown, setShown] = createSignal(props.when), [motion, setMotion] = createSignal<Motion>("entering");

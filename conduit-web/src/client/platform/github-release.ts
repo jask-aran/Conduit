@@ -31,6 +31,20 @@ export function isNewerVersion(candidate: string, current: string): boolean {
  * the repository is public and this is the same document a browser would be
  * shown -- so nothing here carries a Conduit token to a third party.
  */
+/**
+ * Where the Download buttons lead: the installers the server publishes itself
+ * when it has any (a dev head and its client), else the public release.
+ */
+export async function installerDownloads(): Promise<Pick<PublishedRelease, "windowsUrl" | "apkUrl">> {
+  const { api } = await import("../api/client.ts");
+  const { httpUrl } = await import("../api/transport.js");
+  const own = await api<{ windowsUrl: string | null; apkUrl: string | null }>("/v0/downloads").catch(() => null);
+  const needsRelease = !own?.windowsUrl || !own?.apkUrl;
+  const release = needsRelease ? await latestRelease().catch(() => null) : null;
+  const served = (url: string | null | undefined) => (url ? new URL(httpUrl(url), location.href).href : null);
+  return { windowsUrl: served(own?.windowsUrl) || release?.windowsUrl || null, apkUrl: served(own?.apkUrl) || release?.apkUrl || null };
+}
+
 export async function latestRelease(fetchImpl: typeof fetch = fetch): Promise<PublishedRelease | null> {
   // A question, not a download: answered in seconds or not at all.
   const response = await fetchImpl(RELEASES_API, { headers: { accept: "application/vnd.github+json" }, signal: AbortSignal.timeout(8_000) });

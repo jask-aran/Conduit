@@ -4,7 +4,7 @@ import { rememberModel } from "../../profile-model-memory.js";
 import { chatView, isChatId } from "../../chat-store.js";
 import { resolveComputerContext } from "../../computer-context.js";
 import { stopSessionProcesses } from "../../session-operations.js";
-import { agentProfiles, conduitPiSessionFile, harnessCapabilities, profileSelection } from "../../chat-backend.js";
+import { agentProfiles, harnessCapabilities, profileSelection, templateBackend } from "../../chat-backend.js";
 import { manifestForImplementation } from "../../harnesses/index.js";
 
 const opaqueSessionId = (chat) => typeof chat.backend?.opaqueSession === "string"
@@ -25,14 +25,14 @@ export function projectBackendSessions({ chats, sessions, projectId, implementat
 const discoverableFrom = (backends) => (implementation) => {
   const manifest = backends.manifestFor?.(implementation);
   if (!manifest || manifest.discovery === "none") return null;
-  return backends.adapters.has(implementation) ? manifest : null;
+  return (backends.local || backends.adapters).has(implementation) ? manifest : null;
 };
 
 export function registerChatRoutes(app, {
+  nodeHub = null,
   backends,
   catalogFor,
   chatModelView,
-  composerDraft = () => null,
   config,
   defaultTemplate,
   findChatContext,
@@ -44,12 +44,12 @@ export function registerChatRoutes(app, {
   registry,
   runtimeFor,
   templateForChat,
-  warmDrafts = null,
 }) {
   const discoverable = discoverableFrom(backends);
-  const defaultDiscovery = () => backends.where((manifest) => manifest.discovery !== "none")[0] || "";
+  const defaultDiscovery = () => backends.where((manifest) => manifest.discovery !== "none")
+    .filter((implementation) => (backends.local || backends.adapters).has(implementation))[0] || "";
   const profileFor = (profileId) => agentProfiles(config.piTemplates, {
-    available: new Set([...backends.adapters.keys()]),
+    available: new Set([...(backends.local || backends.adapters.keys())]),
   }).find((profile) => profile.id === profileId && profile.management === "agent");
   const completeCreation = (request, response, chat, project, { start = false } = {}) => {
     response.status(201).json(chatView(chat));
@@ -142,7 +142,7 @@ export function registerChatRoutes(app, {
 
   // Profiles say which harness they elect; harnesses say what they can do.
   app.get("/v0/profiles", (_request, response) => response.json({
-    profiles: agentProfiles(config.piTemplates, { available: new Set([...backends.adapters.keys()]) }),
+    profiles: agentProfiles(config.piTemplates, { available: new Set([...(backends.local || backends.adapters.keys())]) }),
     harnesses: harnessCapabilities(),
   }));
   // A place is a project or workspace, or -- for an untracked thread's chat --
@@ -192,17 +192,27 @@ export function registerChatRoutes(app, {
       if (!project) return response.status(404).json({ error: "project_not_found" });
       await lifecycle.withProjects([project.id], async () => {
         await projects.validate(project);
+        // What the workspace's place runs (src/place.js): on the head, what is
+        // installed here; on a device, its own harnesses and the durable agent.
+        const can = await backends.capabilities?.(project);
+        const offered = (implementation) => !can || can.harnesses.includes(implementation);
         const selectedProfile = request.body?.profileId ? profileFor(request.body.profileId) : null;
+        // A profile that is not an agent's is a Conduit template: the durable agent.
+        const implementation = selectedProfile?.agent.implementation || "conduit-runtime";
+        if (!offered(implementation)) {
+          return response.status(409).json({ error: "harness_not_here",
+            message: `${selectedProfile?.label || config.piTemplates.find((item) => item.id === request.body?.profileId)?.label || "That profile"} is not available on ${can.device.name}` });
+        }
         if (selectedProfile) {
           const profileId = request.body.profileId;
-          if (selectedProfile.disabled || !backends.adapters.has(selectedProfile.agent.implementation)) {
+          if ((!can && selectedProfile.disabled) || !backends.adapters.has(selectedProfile.agent.implementation)) {
             return response.status(409).json({ error: `${profileId}_unavailable` });
           }
           const chat = await registry.create(project, { backend: {
             profileId, profileRevision: null, management: selectedProfile.management,
             ...selectedProfile.agent, opaqueSession: null,
           } });
-          return completeCreation(request, response, chat, project);
+          return completeCreation(request, response, chat, project, { start: request.body?.warm === true });
         }
         const requestedTemplateId = request.body?.templateId || project.defaultTemplateId || null;
         const template = requestedTemplateId
@@ -214,18 +224,16 @@ export function registerChatRoutes(app, {
         if (runtimeKind !== "conduit_profile") {
           return response.status(400).json({ error: "unknown_runtime_kind" });
         }
-        // A page's composer asks for its draft warm: its agent is started with
-        // it, so the first message goes to an agent already up.
-        const warmed = request.body?.warm === true && warmDrafts;
-        const warm = warmed && await warmDrafts.take(project.id, template.id);
-        if (warm) return completeCreation(request, response, warm, project, { start: true });
-        const runtime = runtimeFor({ runtimeKind, template });
+        // The durable agent runs in process: there is no process to warm.
+        // `roaming`: a chat with no home device, whose tools pick one per call
+        // (decision 21; the persistent agent's shape). Only from this server's own folders.
+        const roaming = request.body?.roaming === true && project.local;
         const chat = await registry.create(project, {
           templateId: template.id,
           templateVersion: template.version,
-          runtime,
+          backend: { ...templateBackend(template), ...(roaming ? { roaming: true } : {}) },
         });
-        completeCreation(request, response, chat, project, { start: Boolean(warmed) });
+        completeCreation(request, response, chat, project, { start: request.body?.warm === true });
       });
     } catch (error) { next(error); }
   });
@@ -235,6 +243,34 @@ export function registerChatRoutes(app, {
       const context = await findChatContext(request.params.chatId);
       if (!context) return response.status(404).json({ error: "chat_not_found" });
       response.json(chatView(context.chat));
+    } catch (error) { next(error); }
+  });
+
+  // Start a durable chat's context again, optionally from a handoff note (backend only, for now).
+  app.post("/v0/chats/:chatId/reset", async (request, response, next) => {
+    try {
+      const context = await findChatContext(request.params.chatId);
+      if (!context) return response.status(404).json({ error: "chat_not_found" });
+      const adapter = backends.forChat(context.chat);
+      if (typeof adapter.reset !== "function") return response.status(409).json({ error: "reset_unsupported" });
+      await adapter.reset({ liveSessionId: backends.getByChatId(context.chat.id)?.id,
+        opaqueSession: context.chat.backend?.opaqueSession, handoff: request.body?.handoff });
+      response.json({ ok: true });
+    } catch (error) { next(error); }
+  });
+
+  // The subagents a durable chat delegated to, and one's transcript (backend only, for now).
+  app.get("/v0/chats/:chatId/subagents/:conversationId?", async (request, response, next) => {
+    try {
+      const context = await findChatContext(request.params.chatId);
+      if (!context) return response.status(404).json({ error: "chat_not_found" });
+      const adapter = backends.forChat(context.chat);
+      if (typeof adapter.subagents !== "function") return response.json({ subagents: [] });
+      const options = { liveSessionId: backends.getByChatId(context.chat.id)?.id, opaqueSession: context.chat.backend?.opaqueSession };
+      const subagents = await adapter.subagents(options);
+      if (!request.params.conversationId) return response.json({ subagents });
+      if (!subagents.some((item) => item.conversationId === request.params.conversationId)) return response.status(404).json({ error: "subagent_not_found" });
+      response.json(await adapter.readTranscript({ opaqueSession: request.params.conversationId }));
     } catch (error) { next(error); }
   });
 
@@ -377,8 +413,11 @@ export function registerChatRoutes(app, {
       const selectedProfile = request.body?.profileId ? profileFor(request.body.profileId) : null;
       if (selectedProfile) {
         const profileId = request.body.profileId;
-        if (selectedProfile.disabled || !backends.adapters.has(selectedProfile.agent.implementation)) {
-          return response.status(409).json({ error: `${profileId}_unavailable` });
+        const can = await backends.capabilities?.(context.project);
+        if ((can ? !can.harnesses.includes(selectedProfile.agent.implementation) : selectedProfile.disabled)
+          || !backends.adapters.has(selectedProfile.agent.implementation)) {
+          return response.status(409).json({ error: `${profileId}_unavailable`,
+            ...(can ? { message: `${selectedProfile.label} is not available on ${can.device.name}` } : {}) });
         }
         const resident = backends.getByChatId(context.chat.id);
         if (resident) await backends.stop(resident.id);
@@ -414,15 +453,8 @@ export function registerChatRoutes(app, {
           status: "draft",
           templateId: template.id,
           templateVersion: template.version,
-          backend: {
-            profileId: template.id,
-            profileRevision: template.version,
-            management: "conduit",
-            protocol: "pi_rpc",
-            implementation: "conduit_pi",
-            installationId: "conduit-pinned",
-            opaqueSession: null,
-          },
+          runtime: null,
+          backend: templateBackend(template),
         });
         selectedTemplate = template;
       }
@@ -526,7 +558,7 @@ export function registerChatRoutes(app, {
         const chat = await registry.create(project, {
           templateId: template.id,
           templateVersion: template.version,
-          runtime: runtimeFor({ runtimeKind: "conduit_profile", template }),
+          backend: templateBackend(template),
         });
         response.status(201).json(chatView(chat));
       });
@@ -541,11 +573,6 @@ export function registerChatRoutes(app, {
         const context = await findChatContext(request.params.chatId);
         if (!context) return null;
         return lifecycle.withProjects([context.project.id], async () => {
-          // An untouched draft keeps its agent for the next page that wants one.
-          const typed = composerDraft(context.chat.id);
-          if (warmDrafts && !typed?.text?.trim() && !typed?.attachmentIds?.length
-            && !await registry.hasAttachments(context.project, context.chat.id)
-            && await warmDrafts.release(context.chat)) return true;
           await stopSessionProcesses(backends, context.chat);
           return registry.removeEmptyDraft(context.chat.id, context.project);
         });

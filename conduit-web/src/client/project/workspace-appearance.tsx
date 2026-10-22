@@ -1,5 +1,5 @@
-import { Show } from "solid-js";
-import { Dynamic } from "solid-js/web";
+import { IDENTITY_COLOURS, identityHue } from "@/components/ui/palettes";
+import { Glyph } from "@/components/ui";
 import {
   ActivityIcon,
   ApertureIcon,
@@ -47,7 +47,7 @@ import type { WorkspaceAppearance } from "../api/contracts";
 export const DEFAULT_WORKSPACE_APPEARANCE: WorkspaceAppearance = {
   mode: "icon",
   value: "boxes",
-  color: "mauve",
+  color: "violet",
 };
 
 export const WORKSPACE_ICON_OPTIONS = [
@@ -93,21 +93,8 @@ export const WORKSPACE_ICON_OPTIONS = [
   { id: "zap", label: "Zap", component: ZapIcon },
 ] as const;
 
-export const WORKSPACE_COLOR_OPTIONS = [
-  { id: "rosewater", label: "Rosewater", hex: "#f5e0dc" },
-  { id: "flamingo", label: "Flamingo", hex: "#f2cdcd" },
-  { id: "pink", label: "Pink", hex: "#f5c2e7" },
-  { id: "mauve", label: "Mauve", hex: "#cba6f7" },
-  { id: "red", label: "Red", hex: "#f38ba8" },
-  { id: "peach", label: "Peach", hex: "#fab387" },
-  { id: "yellow", label: "Yellow", hex: "#f9e2af" },
-  { id: "green", label: "Green", hex: "#a6e3a1" },
-  { id: "teal", label: "Teal", hex: "#94e2d5" },
-  { id: "sky", label: "Sky", hex: "#89dceb" },
-  { id: "sapphire", label: "Sapphire", hex: "#74c7ec" },
-  { id: "blue", label: "Blue", hex: "#89b4fa" },
-  { id: "lavender", label: "Lavender", hex: "#b4befe" },
-] as const;
+export const WORKSPACE_COLOR_OPTIONS = IDENTITY_COLOURS;
+const DEFAULT_COLOUR = IDENTITY_COLOURS.find((option) => option.id === "violet")!;
 
 const HEX_COLOR = /^#[0-9a-f]{6}$/i;
 
@@ -119,8 +106,9 @@ export function workspaceIconOption(value?: string) {
 
 export function workspaceColorOption(value?: string) {
   const normalized = String(value || "").trim().toLowerCase();
-  return WORKSPACE_COLOR_OPTIONS.find((option) => option.id === normalized)
-    || (HEX_COLOR.test(normalized) ? { id: normalized, label: normalized, hex: normalized } : WORKSPACE_COLOR_OPTIONS[3]);
+  const hue = identityHue(normalized);
+  return WORKSPACE_COLOR_OPTIONS.find((option) => option.id === hue)
+    || (HEX_COLOR.test(normalized) ? { id: normalized, label: normalized, colour: normalized } : DEFAULT_COLOUR);
 }
 
 export function normalizeWorkspaceAppearance(value?: WorkspaceAppearance | null): WorkspaceAppearance {
@@ -136,9 +124,6 @@ export function WorkspaceGlyph(props: { appearance?: WorkspaceAppearance | null;
   const appearance = () => normalizeWorkspaceAppearance(props.appearance);
   const color = () => workspaceColorOption(appearance().color);
   const icon = () => workspaceIconOption(appearance().value);
-  return <span class={`workspace-glyph${props.class ? ` ${props.class}` : ""}`} data-mode={appearance().mode} data-value={appearance().value} style={{ color: color().hex }} aria-hidden="true">
-    <Show when={appearance().mode === "monogram"} fallback={<Dynamic component={icon().component} />}>
-      {appearance().value}
-    </Show>
-  </span>;
+  return <Glyph icon={icon().component} monogram={appearance().mode === "monogram" ? appearance().value : undefined}
+    colour={color().colour} class={props.class} value={appearance().value} />;
 }

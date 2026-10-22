@@ -217,11 +217,8 @@ const retry = (value: unknown): RetryState | null | undefined => {
  *
  * Stated flat: `permission_request` carries `requestId` and the fields beside
  * it, and `runtime_state` lists the same thing under `id`. The nested
- * `{ request: { method } }` shape this also accepted is Pi's own, and it is
- * read where Pi's bytes are read -- `normalizeHostUiRequest` in
- * `pi-activity.js` -- so by the time anything reaches the browser it has
- * already been said once, in these names. Accepting the second shape here only
- * kept a spelling alive that no adapter sends.
+ * `{ request: { method } }` shape was accepted for the old Pi RPC adapter.
+ * No current adapter sends it, so the contract accepts only flat requests.
  */
 export function normalizeHostUiRequest(value: unknown): HostUiRequest | null {
   const source = record(value);

@@ -5,8 +5,8 @@ import { computerContext, resolveComputerContext } from "../../computer-context.
 import { groupThreadsByFolder, trackedByThread } from "../../harness-threads.js";
 import { MANIFESTS } from "../../harnesses/index.js";
 
-// Pi is built in rather than a harness the dashboard offers, so it is the one
-// manifest this surface excludes.
+// The Conduit durable agent is built in rather than a detected harness, so it
+// is omitted from this catalogue route.
 const HARNESS_MANIFESTS = MANIFESTS.filter((manifest) => !manifest.builtIn);
 const SUPPORTED = new Set(HARNESS_MANIFESTS.map((manifest) => manifest.id));
 
@@ -18,7 +18,8 @@ export function harnessCatalog(backends) {
     id: manifest.id,
     label: manifest.label,
     profileLabel: manifest.profileLabel || manifest.label,
-    available: backends.adapters.has(manifest.id),
+    // Installed here; one that only runs on devices is registered without being here.
+    available: (backends.local || backends.adapters).has(manifest.id),
     sessions: manifest.discovery !== "none",
     drive: manifest.drive,
     discovery: manifest.discovery,
@@ -84,7 +85,7 @@ export function registerHarnessRoutes(app, { backends, harnessModels, preference
   app.get("/v0/harnesses/:implementation/sessions", async (request, response, next) => {
     try {
       const implementation = request.params.implementation;
-      if (!SUPPORTED.has(implementation) || !backends.adapters.has(implementation)) {
+      if (!SUPPORTED.has(implementation) || !(backends.local || backends.adapters).has(implementation)) {
         return response.status(404).json({ error: "harness_not_found" });
       }
       const project = await projects.get(request.query.projectId);
@@ -105,7 +106,7 @@ export function registerHarnessRoutes(app, { backends, harnessModels, preference
   app.get("/v0/harnesses/:implementation/threads", async (request, response, next) => {
     try {
       const implementation = request.params.implementation;
-      if (!SUPPORTED.has(implementation) || !backends.adapters.has(implementation)) {
+      if (!SUPPORTED.has(implementation) || !(backends.local || backends.adapters).has(implementation)) {
         return response.status(404).json({ error: "harness_not_found" });
       }
       const adapter = backends.forImplementation(implementation);
@@ -124,7 +125,7 @@ export function registerHarnessRoutes(app, { backends, harnessModels, preference
   app.get("/v0/harnesses/:implementation/models", async (request, response, next) => {
     try {
       const implementation = request.params.implementation;
-      if (!SUPPORTED.has(implementation) || !backends.adapters.has(implementation)) {
+      if (!SUPPORTED.has(implementation) || !(backends.local || backends.adapters).has(implementation)) {
         return response.status(404).json({ error: "harness_not_found" });
       }
       const adapter = backends.forImplementation(implementation);
@@ -166,7 +167,7 @@ export function registerHarnessRoutes(app, { backends, harnessModels, preference
   app.patch("/v0/harnesses/:implementation/models", async (request, response, next) => {
     try {
       const implementation = request.params.implementation;
-      if (!SUPPORTED.has(implementation) || !backends.adapters.has(implementation)) {
+      if (!SUPPORTED.has(implementation) || !(backends.local || backends.adapters).has(implementation)) {
         return response.status(404).json({ error: "harness_not_found" });
       }
       const adapter = backends.forImplementation(implementation);
@@ -194,7 +195,7 @@ export function registerHarnessRoutes(app, { backends, harnessModels, preference
   app.get("/v0/harnesses/:implementation/permission-modes", async (request, response, next) => {
     try {
       const implementation = request.params.implementation;
-      if (!SUPPORTED.has(implementation) || !backends.adapters.has(implementation)) {
+      if (!SUPPORTED.has(implementation) || !(backends.local || backends.adapters).has(implementation)) {
         return response.status(404).json({ error: "harness_not_found" });
       }
       const adapter = backends.forImplementation(implementation);

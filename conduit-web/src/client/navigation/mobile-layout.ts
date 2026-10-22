@@ -1,6 +1,6 @@
 import { installedClientKind } from "../platform/installed-client.ts";
 import { logKeyboardEvent, noteKeyboardFrame, reportKeyboardProbe } from "./keyboard-probe.ts";
-import { PHONE_LAYOUT_QUERY } from "../layout-geometry";
+import { PHONE_LAYOUT_QUERY } from "@/components/ui/layout";
 
 /** Shared phone-shell query. Narrow desktop windows keep desktop navigation. */
 export const MOBILE_LAYOUT_QUERY = PHONE_LAYOUT_QUERY;

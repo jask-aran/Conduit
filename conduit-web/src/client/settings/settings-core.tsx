@@ -1,10 +1,12 @@
+import { Icons } from "@/components/ui";
 import { createDecisionScope } from "@/components/decision-dialog";
 import { createEffect, createMemo, createSignal, For, lazy, on, onCleanup, onMount, Show } from "solid-js";
-import { ActivityIcon, BotIcon, ChevronLeftIcon, ChevronRightIcon, FileTextIcon, XIcon, KeyboardIcon, Mic2Icon, MonitorIcon, SearchIcon } from "lucide-solid";
-import { CableIcon, CloudIcon, CpuIcon, HandIcon, MicOffIcon, PlayIcon, RefreshCwIcon, RepeatIcon, RotateCcwIcon, SquareIcon } from "lucide-solid";
+import { BotIcon, LaptopIcon, Mic2Icon } from "lucide-solid";
+import { CableIcon, CloudIcon, HandIcon, MicOffIcon, RepeatIcon } from "lucide-solid";
 import { AboutSettingsFooter } from "./about-settings";
 import { ServersSettingsTile } from "./servers-settings";
 import { DesktopSettingsTile } from "./desktop-settings";
+import { DevicesSettingsTile } from "./devices-settings";
 import { toast } from "@/components/notifications";
 import { api } from "../api/client";
 import { MARKDOWN_RENDERER_OPTIONS, type MarkdownRendererId } from "../chat/markdown-settings";
@@ -12,13 +14,14 @@ import { formatMicrophoneError, hasAudioSignal, rematchInputDevice, isUnavailabl
 import { shortcutFromKeyboardEvent } from "../chat/voice-dictation";
 import type { VoiceDictationSettings } from "../chat/voice-dictation-types";
 import { isWarmMicrophoneActive, stopWarmMicrophone } from "../chat/voice-dictation-client";
-import { createVoiceWaveformController, VoiceWaveform } from "../chat/voice-waveform";
+import { createVoiceWaveformController } from "../chat/voice-waveform";
+import { VoiceWaveform } from "@/components/ui/voice";
 import { ModelSelector } from "../chat/model-selector";
 import { saveTabFrost, tabFrost } from "../preferences/tab-frost";
 import { saveTranscriptFont, TRANSCRIPT_FONT_OPTIONS, transcriptFont, type TranscriptFont } from "../preferences/transcript-font";
 import { saveTerminalFont, TERMINAL_FONT_OPTIONS, terminalFont, type TerminalFont } from "../preferences/terminal-font";
 import { saveStreamFade, saveStreamMathFade, STREAM_FADE_OPTIONS, streamFadeMs, streamMathFade } from "../preferences/stream-fade";
-import type { Installation, Project, Template, VoiceExecutionCatalogueView, VoiceExecutionProfile, VoiceLocalSelection, VoiceServerSettings } from "../api/contracts";
+import type { Project, Template, VoiceExecutionCatalogueView, VoiceExecutionProfile, VoiceLocalSelection, VoiceServerSettings } from "../api/contracts";
 import type { ModelSettings } from "../state/model-settings";
 import { MAX_SIDEBAR_CHAT_LIMIT, MIN_SIDEBAR_CHAT_LIMIT } from "../navigation/sidebar-preferences";
 import type { ShortcutManager } from "../shortcuts/shortcut-manager";
@@ -48,10 +51,10 @@ import { isMobileLayout } from "../navigation/mobile-layout";
 import { uiPreferenceSaves } from "../preferences/ui-preferences";
 
 const sectionGroups = [
-  { label: "Personal", sections: [{ id: "ui", label: "Appearance", icon: MonitorIcon }, { id: "shortcuts", label: "Shortcuts", icon: KeyboardIcon }] },
-  { label: "AI", sections: [{ id: "models", label: "Models & accounts", icon: BotIcon }, { id: "prompts", label: "Prompts", icon: FileTextIcon }] },
-  { label: "System", sections: [{ id: "runtime", label: "Runtime", icon: ActivityIcon }, { id: "servers", label: "Servers", icon: CableIcon }] },
-  { label: "Services", sections: [{ id: "voice", label: "Voice", icon: Mic2Icon }, { id: "search", label: "Web search", icon: SearchIcon }] },
+  { label: "Personal", sections: [{ id: "ui", label: "Appearance", icon: Icons.Monitor }, { id: "shortcuts", label: "Shortcuts", icon: Icons.Keyboard }] },
+  { label: "AI", sections: [{ id: "models", label: "Models & accounts", icon: BotIcon }, { id: "prompts", label: "Prompts", icon: Icons.FileText }] },
+  { label: "System", sections: [{ id: "runtime", label: "Runtime", icon: Icons.Runtime }, { id: "servers", label: "Servers", icon: CableIcon }, { id: "devices", label: "Devices", icon: LaptopIcon }] },
+  { label: "Services", sections: [{ id: "voice", label: "Voice", icon: Mic2Icon }, { id: "search", label: "Web search", icon: Icons.Search }] },
 ] as const;
 type VisibleSection = typeof sectionGroups[number]["sections"][number]["id"];
 type Section = VisibleSection | "workspaces";
@@ -62,6 +65,7 @@ const sectionLabels: Record<Section, string> = {
   prompts: "Prompts",
   runtime: "Runtime",
   servers: "Servers",
+  devices: "Devices",
   workspaces: "Workspace profile",
   voice: "Voice",
   search: "Web search",
@@ -70,7 +74,6 @@ const label = (section: Section) => sectionLabels[section];
 interface RuntimeSettings {
   maxLiveProcesses: number;
   maxGeneratingProcesses: number;
-  idleProcessTtlMs: number;
   liveCount?: number;
   generatingCount?: number;
 }
@@ -163,12 +166,11 @@ const sameVoiceSelection = (left: VoiceLocalSelection | null | undefined, right:
   && left.segmentation === right.segmentation);
 // The runtime fields as typed, checked against the ranges the server keeps
 // them in (runtime-settings.js), which it would otherwise clamp to silently.
-type RuntimeDraft = { live: string; generating: string; ttl: string };
-const RUNTIME_LIMITS = { live: [1, 32], generating: [1, 8], ttl: [30, 3600] } as const;
+type RuntimeDraft = { live: string; generating: string };
+const RUNTIME_LIMITS = { live: [1, 32], generating: [1, 8] } as const;
 const runtimeDraftOf = (settings: RuntimeSettings): RuntimeDraft => ({
   live: String(settings.maxLiveProcesses),
   generating: String(settings.maxGeneratingProcesses),
-  ttl: String(Math.round(settings.idleProcessTtlMs / 1000)),
 });
 const runtimeFieldError = (draft: RuntimeDraft, field: keyof RuntimeDraft) => {
   const [min, max] = RUNTIME_LIMITS[field];
@@ -204,9 +206,6 @@ export function Settings(props: {
   templatesLoading: boolean;
   defaultTemplateId: string;
   projects: Project[];
-  installations: Installation[];
-  installationsLoading: boolean;
-  onInstallationsChange: (items: Installation[]) => void;
   onDefaultTemplateChange: (id: string) => Promise<unknown>;
   onWorkspaceDefaultChange: (id: string, templateId: string | null) => Promise<Project>;
   markdownRenderer: MarkdownRendererId;
@@ -234,6 +233,9 @@ export function Settings(props: {
   sidebarChatLimit: number;
   onSidebarChatLimitChange: (limit: number) => void;
   onOpenModelSelector: () => void;
+  /** Adds a folder a paired device shares as a workspace (Devices). */
+  onAddWorkspace: (input: { mode: "node"; nodeId: string; rootId: string }) => Promise<boolean>;
+  onOpenDeviceTerminal: (node: { id: string; local?: boolean }) => void;
   shortcuts: ShortcutManager;
 }) {
   const { confirm: confirmDialog } = createDecisionScope(() => props.open ? promptId() : null);
@@ -265,7 +267,7 @@ export function Settings(props: {
   /** The list is a screen of its own only when there is no room for both. */
   const showingIndex = () => narrow() && browsingSections();
   const [runtime, setRuntime] = createSignal<RuntimeSettings | null>(null);
-  const [runtimeDraft, setRuntimeDraft] = createSignal<RuntimeDraft>({ live: "", generating: "", ttl: "" });
+  const [runtimeDraft, setRuntimeDraft] = createSignal<RuntimeDraft>({ live: "", generating: "" });
   const [runtimeStatus, setRuntimeStatus] = createSignal<"idle" | "loading" | "ready" | "error">("idle");
   const [runtimeError, setRuntimeError] = createSignal("");
   const runtimeAutosave = createAutosave<RuntimeSettings>({
@@ -1056,8 +1058,8 @@ export function Settings(props: {
   const editRuntime = (field: keyof RuntimeDraft, text: string) => {
     const draft = { ...runtimeDraft(), [field]: text };
     setRuntimeDraft(draft);
-    if ((["live", "generating", "ttl"] as const).some((key) => runtimeFieldError(draft, key))) return runtimeAutosave.hold();
-    runtimeAutosave.edit({ maxLiveProcesses: Number(draft.live), maxGeneratingProcesses: Number(draft.generating), idleProcessTtlMs: Number(draft.ttl) * 1000 });
+    if ((["live", "generating"] as const).some((key) => runtimeFieldError(draft, key))) return runtimeAutosave.hold();
+    runtimeAutosave.edit({ maxLiveProcesses: Number(draft.live), maxGeneratingProcesses: Number(draft.generating) });
   };
   // Each section saved as it is edited, and how its header says so. Leaving
   // the section or closing Settings sends what is waiting rather than
@@ -1106,7 +1108,7 @@ export function Settings(props: {
       <OverlayRail title="Settings" role="tablist" aria-label="Settings sections" aria-orientation="vertical" foot={<AboutSettingsFooter />} onClose={narrow() ? close : undefined}>
         <For each={sectionGroups}>{(group) => <NavGroup label={group.label}>
           <For each={group.sections}>{(item) => <NavRow role="tab" tabIndex={section() === item.id ? 0 : -1} aria-selected={section() === item.id} current={!narrow() && section() === item.id}
-            icon={<item.icon />} end={narrow() ? <ChevronRightIcon /> : undefined} onClick={() => openSection(item.id)} onKeyDown={navigateSettingsTabs}>{item.label}</NavRow>}</For>
+            icon={<item.icon />} end={narrow() ? <Icons.ChevronRight /> : undefined} onClick={() => openSection(item.id)} onKeyDown={navigateSettingsTabs}>{item.label}</NavRow>}</For>
         </NavGroup>}</For>
       </OverlayRail>
     </Show>
@@ -1120,7 +1122,7 @@ export function Settings(props: {
                       <Select id="prompt-selector" aria-label="Prompt" value={promptId()} onChange={(event) => choosePrompt(event.currentTarget.value)}>
                         <For each={prompts()}>{(prompt) => <option value={prompt.id} selected={prompt.id === promptId()}>{prompt.label}{prompt.kind === "service" ? " · service" : ""}</option>}</For>
                       </Select>
-                      <Button variant="ghost" size="icon-sm" aria-label="Reset to default" title="Reset to default" disabled={promptSaving() || (!prompts().find((item) => item.id === promptId())?.modified && promptDraft() === promptBaseline())} onClick={() => void resetPrompt()}><RotateCcwIcon /></Button>
+                      <Button variant="ghost" size="icon-sm" aria-label="Reset to default" title="Reset to default" disabled={promptSaving() || (!prompts().find((item) => item.id === promptId())?.modified && promptDraft() === promptBaseline())} onClick={() => void resetPrompt()}><Icons.Reset /></Button>
                   </SettingLine>
                   <Show when={!promptDraft().trim()}><SettingNote tone="error">A prompt cannot be empty; it is not saved until it has text.</SettingNote></Show>
                   <Show when={promptError() || promptStatus() === "error"}><SettingNote tone="error">{promptError()}</SettingNote></Show>
@@ -1132,8 +1134,8 @@ export function Settings(props: {
           <Show when={section() === "ui"}>
             <>
               <SettingGroup title="Interface">
-                  <SettingLine label="Scale">
-                    <Select id="interface-scale" aria-label="Interface scale" value={props.interfaceScale} onChange={(event) => props.onInterfaceScaleChange(parseUiScale(event.currentTarget.value))}>
+                  <SettingLine label="Interface size">
+                    <Select id="interface-scale" aria-label="Interface size" value={props.interfaceScale} onChange={(event) => props.onInterfaceScaleChange(parseUiScale(event.currentTarget.value))}>
                       <For each={UI_SCALE_OPTIONS}>{(scale) => <option value={scale}>{Math.round(scale * 100)}%</option>}</For>
                     </Select>
                   </SettingLine>
@@ -1218,6 +1220,7 @@ export function Settings(props: {
             </>
           </Show>
           <Show when={section() === "servers"}><ServersSettingsTile /></Show>
+          <Show when={section() === "devices"}><DevicesSettingsTile onAddWorkspace={props.onAddWorkspace} onOpenTerminal={props.onOpenDeviceTerminal} /></Show>
           <Show when={section() === "shortcuts"}><ShortcutsSettings manager={props.shortcuts} /></Show>
           <Show when={section() === "runtime"}>
             <>
@@ -1225,18 +1228,12 @@ export function Settings(props: {
                 <SettingGroup title="Agent processes">
                   <SettingLine label="Warm processes" state={<><Show when={runtimeFieldError(runtimeDraft(), "live")} fallback={<>{runtime()!.liveCount || 0} live</>}>{(message) => message()}</Show></>}><Input id="warm-processes" type="number" inputMode="numeric" value={runtimeDraft().live} aria-invalid={Boolean(runtimeFieldError(runtimeDraft(), "live")) || undefined} onInput={(event) => editRuntime("live", event.currentTarget.value)} /></SettingLine>
                   <SettingLine label="Concurrent generations" state={<><Show when={runtimeFieldError(runtimeDraft(), "generating")} fallback={<>{runtime()!.generatingCount || 0} generating</>}>{(message) => message()}</Show></>}><Input id="generations" type="number" inputMode="numeric" value={runtimeDraft().generating} aria-invalid={Boolean(runtimeFieldError(runtimeDraft(), "generating")) || undefined} onInput={(event) => editRuntime("generating", event.currentTarget.value)} /></SettingLine>
-                  <SettingLine label="Idle timeout (s)" state={<><Show when={runtimeFieldError(runtimeDraft(), "ttl")} fallback={null}>{(message) => message()}</Show></>}><Input id="idle-ttl" type="number" inputMode="numeric" value={runtimeDraft().ttl} aria-invalid={Boolean(runtimeFieldError(runtimeDraft(), "ttl")) || undefined} onInput={(event) => editRuntime("ttl", event.currentTarget.value)} /></SettingLine>
                 </SettingGroup>
               </Show>
-              <SettingGroup title="Pi">
-                <Show when={!props.installationsLoading} fallback={<SettingLine plain label="Checking…"></SettingLine>}>
-                  <For each={props.installations}>{(item) => <SettingLine plain label={item.label} title={item.available ? undefined : item.reason || (item as Installation & { error?: string }).error || undefined}><SettingValue mono>{item.available ? item.version ? `Pi ${item.version}` : "Available" : "Unavailable"}</SettingValue></SettingLine>}</For>
-                </Show>
-              </SettingGroup>
             </>
           </Show>
           <Show when={section() === "workspaces"}>
-            <Show when={!props.templatesLoading && !props.installationsLoading} fallback={<SettingLoading>Loading workspace settings…</SettingLoading>}><Show when={workspaceProjects().find((workspace) => workspace.id === workspaceId())} fallback={<SettingNote>This workspace is not available.</SettingNote>}>{(workspace) => <SettingGroup title={workspace().name}><SettingNote>{workspace().workingRoot}</SettingNote><SettingNote>Override: {workspaceDefaultLabel(workspace()).startsWith("Inherit") ? "None" : workspaceDefaultLabel(workspace())}</SettingNote><SettingLine label="Default profile"><Select id={`workspace-default-profile-${workspace().id}`} aria-label={`${workspace().name} default profile`} value={workspace().defaultTemplateId || ""} onChange={(event) => void saveWorkspace(workspace(), event.currentTarget.value || null)}>
+            <Show when={!props.templatesLoading} fallback={<SettingLoading>Loading workspace settings…</SettingLoading>}><Show when={workspaceProjects().find((workspace) => workspace.id === workspaceId())} fallback={<SettingNote>This workspace is not available.</SettingNote>}>{(workspace) => <SettingGroup title={workspace().name}><SettingNote>{workspace().workingRoot}</SettingNote><SettingNote>Override: {workspaceDefaultLabel(workspace()).startsWith("Inherit") ? "None" : workspaceDefaultLabel(workspace())}</SettingNote><SettingLine label="Default profile"><Select id={`workspace-default-profile-${workspace().id}`} aria-label={`${workspace().name} default profile`} value={workspace().defaultTemplateId || ""} onChange={(event) => void saveWorkspace(workspace(), event.currentTarget.value || null)}>
                 <option value="">Inherit global ({props.templates.find((item) => item.id === props.defaultTemplateId)?.label || "General"})</option>
                 <For each={props.templates.filter((item) => item.defaultable !== false)}>{(item) => <option value={item.id}>{item.label}</option>}</For>
               </Select></SettingLine></SettingGroup>}</Show></Show>
@@ -1248,7 +1245,7 @@ export function Settings(props: {
                   <SettingLine plain label="Source">
                     <Segmented arrows label="Transcription source" value={voiceServerSettings()!.mode} disabled={voiceBusy()} onChange={(mode) => updateVoiceServer({ mode })} options={[
                       { value: "off", label: "Off", icon: <MicOffIcon /> },
-                      { value: "local", label: "Local", icon: <CpuIcon />, title: "This machine" },
+                      { value: "local", label: "Local", icon: <Icons.LocalModel />, title: "This machine" },
                       { value: "remote", label: "Cloud", icon: <CloudIcon /> },
                     ]} />
                   </SettingLine>
@@ -1322,8 +1319,8 @@ export function Settings(props: {
                         <Show when={voiceDraft().inputDeviceId && !audioInputDevices().some((device) => device.deviceId === voiceDraft().inputDeviceId)}><option value={voiceDraft().inputDeviceId}>Unavailable microphone</option></Show>
                         <For each={audioInputDevices()}>{(device) => <option value={device.deviceId}>{device.label}</option>}</For>
                       </Select>
-                      <Button variant="ghost" size="icon-sm" aria-label="Refresh microphones" title="Refresh microphones" disabled={audioInputBusy() || audioInputStatus() === "loading"} onClick={() => void loadAudioInputs()}><RefreshCwIcon /></Button>
-                      <Show when={audioInputTest()?.recording && !audioInputBusy()}><Button variant="ghost" size="icon-sm" aria-label={audioInputPlayback() ? "Stop playback" : "Play test recording"} title={audioInputPlayback() ? "Stop playback" : "Play test recording"} onClick={() => audioInputPlayback() ? stopAudioInputPlayback() : void playAudioInputTest()}>{audioInputPlayback() ? <SquareIcon /> : <PlayIcon />}</Button></Show>
+                      <Button variant="ghost" size="icon-sm" aria-label="Refresh microphones" title="Refresh microphones" disabled={audioInputBusy() || audioInputStatus() === "loading"} onClick={() => void loadAudioInputs()}><Icons.Refresh /></Button>
+                      <Show when={audioInputTest()?.recording && !audioInputBusy()}><Button variant="ghost" size="icon-sm" aria-label={audioInputPlayback() ? "Stop playback" : "Play test recording"} title={audioInputPlayback() ? "Stop playback" : "Play test recording"} onClick={() => audioInputPlayback() ? stopAudioInputPlayback() : void playAudioInputTest()}>{audioInputPlayback() ? <Icons.Stop /> : <Icons.Play />}</Button></Show>
                       <Button variant="ghost" size="sm" disabled={audioInputStatus() === "loading"} onClick={() => audioInputBusy() ? stopAudioInputTest() : void testAudioInput()}>{audioInputBusy() ? "Stop" : "Test"}</Button>
                   </SettingLine>
                   <Show when={audioInputBusy() || audioInputTest()}>
@@ -1419,15 +1416,15 @@ export function Settings(props: {
               <Show when={chatGptError()}><SettingNote tone="error">{chatGptError()}</SettingNote></Show>
             </SettingGroup>
             <SettingGroup title="Provider accounts">
-              <Show when={authUnavailable()}><SettingNote tone="error">Set a Conduit password with <code>node scripts/conduit-auth.mjs set-password</code>, then sign in to manage Pi credentials here.</SettingNote></Show>
+              <Show when={authUnavailable()}><SettingNote tone="error">Set a Conduit password with <code>node scripts/conduit-auth.mjs set-password</code>, then sign in to manage agent credentials here.</SettingNote></Show>
               <Show when={authError() && !authUnavailable()}><SettingNote tone="error">{authError()}</SettingNote></Show>
               <Show when={!authUnavailable() && authLoading() && !authProviders().length} fallback={<Show when={!authUnavailable()}>
-                <SettingLine label="Provider" title="Credentials are stored only in Conduit's pinned Pi runtime."><Select id="pi-auth-provider" aria-label="Pi authentication provider" value={authProviderId()} onChange={(event) => setAuthProviderId(event.currentTarget.value)}><For each={authProviders()}>{(provider) => <option value={provider.id}>{provider.label}</option>}</For></Select></SettingLine>
+                <SettingLine label="Provider" title="Credentials are stored only in Conduit durable agent."><Select id="pi-auth-provider" aria-label="Model provider" value={authProviderId()} onChange={(event) => setAuthProviderId(event.currentTarget.value)}><For each={authProviders()}>{(provider) => <option value={provider.id}>{provider.label}</option>}</For></Select></SettingLine>
                 <Show when={authProviders().find((provider) => provider.id === authProviderId())?.oauth}>
                   <SettingLine plain label="Sign in"><Button variant="ghost" size="sm" disabled={authLoading() || Boolean(authAttempt()?.active)} onClick={() => void startOAuth()}>{authLoading() ? <Spinner /> : null}Sign in with browser</Button></SettingLine>
                 </Show>
                 <SettingLine plain label="API key">
-                    <Input id="pi-api-key" aria-label="API key" type="password" autocomplete="new-password" data-1p-ignore data-lpignore="true" data-bwignore value={apiKey()} onInput={(event) => setApiKey(event.currentTarget.value)} placeholder="Stored in Conduit Pi only" onKeyDown={(event) => { if (event.key === "Enter" && apiKey()) void saveApiKey(); }} />
+                    <Input id="pi-api-key" aria-label="API key" type="password" autocomplete="new-password" data-1p-ignore data-lpignore="true" data-bwignore value={apiKey()} onInput={(event) => setApiKey(event.currentTarget.value)} placeholder="Stored in the Conduit durable agent" onKeyDown={(event) => { if (event.key === "Enter" && apiKey()) void saveApiKey(); }} />
                     <Show when={apiKey()}><Button size="sm" disabled={authLoading()} onClick={() => void saveApiKey()}>{authLoading() ? <Spinner /> : null}Save</Button></Show>
                 </SettingLine>
                 <Show when={authAttempt()?.owned}>
@@ -1441,7 +1438,7 @@ export function Settings(props: {
                   <Show when={authAttempt()!.prompt && authAttempt()!.prompt!.type !== "select"}><SettingLine plain label={authAttempt()!.prompt!.message}><Input id="pi-auth-response" aria-label={authAttempt()!.prompt!.message} type="text" autocomplete="off" value={authResponse()} onInput={(event) => setAuthResponse(event.currentTarget.value)} placeholder={authAttempt()!.prompt!.placeholder || ""} onKeyDown={(event) => { if (event.key === "Enter") void answerAuthPrompt(authResponse()); }} /><Button size="sm" disabled={authLoading() || !authResponse().trim()} onClick={() => void answerAuthPrompt(authResponse())}>Continue</Button></SettingLine></Show>
                   <Show when={authAttempt()!.error}><SettingNote tone="error">{authAttempt()!.error}</SettingNote></Show>
                 </Show>
-                <For each={authProviders().filter((provider) => provider.auth.configured)}>{(provider) => <SettingLine plain label={provider.label} state={<>{provider.auth.source === "stored" ? "stored" : provider.auth.source === "environment" ? "environment" : "Pi config"}</>} title={provider.auth.source === "stored" ? "Credential stored in Conduit Pi" : provider.auth.source === "environment" ? "Credential available from the server environment" : "Credential managed by Pi configuration"}>
+                <For each={authProviders().filter((provider) => provider.auth.configured)}>{(provider) => <SettingLine plain label={provider.label} state={<>{provider.auth.source === "stored" ? "stored" : provider.auth.source === "environment" ? "environment" : "Agent settings"}</>} title={provider.auth.source === "stored" ? "Credential stored for the Conduit durable agent" : provider.auth.source === "environment" ? "Credential available from the server environment" : "Credential managed by the agent settings"}>
                   <Show when={provider.auth.removable} fallback={<span />}><Button variant="ghost" size="sm" disabled={authLoading()} onClick={() => void removePiAuth(provider.id)}>Remove</Button></Show>
                 </SettingLine>}</For>
               </Show>}><SettingLine plain label="Provider" state={<>loading…</>}><span /></SettingLine></Show>

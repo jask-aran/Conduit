@@ -40,7 +40,7 @@ for (const prompt of ["400t", "400t"]) {
   await textarea.fill(prompt); await page.keyboard.press("Enter"); await settled(); await page.waitForTimeout(500);
 }
 await page.evaluate(() => document.activeElement?.blur());
-await page.evaluate(() => { const v = document.querySelector(".message-scroller-viewport"); v.dispatchEvent(new WheelEvent("wheel", { deltaY: -800, bubbles: true })); v.scrollTop -= 800; });
+await page.evaluate(() => { const v = document.querySelector(".ui-chat-viewport"); v.dispatchEvent(new WheelEvent("wheel", { deltaY: -800, bubbles: true })); v.scrollTop -= 800; });
 await page.waitForTimeout(800);
 
 const record = (label, action) => page.evaluate(async ([label, action]) => {

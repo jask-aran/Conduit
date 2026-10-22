@@ -95,6 +95,8 @@ test("Codex prompt writes the installed app-server turn/start shape", async () =
   await adapter.setThinkingLevel(live.id, "high");
   await adapter.setServiceLevel(live.id, "priority");
   const pending = adapter.prompt(live.id, "Test prompt");
+  // The input items are built asynchronously (device attachments), so the write lands a tick later.
+  await new Promise(setImmediate);
   const { clientUserMessageId, ...params } = writes[0].params;
   assert.equal(typeof clientUserMessageId, "string");
   assert.deepEqual({ ...writes[0], params }, { id: 1, method: "turn/start", params: {
@@ -167,8 +169,8 @@ test("one app-server serves repeated discovery instead of spawning per request",
   assert.equal(starts, 2, "a retired discovery process is replaced on the next lookup");
 });
 
-test("attached images become native localImage input items", () => {
-  const items = CodexAppServerAdapter.inputItems("Look at this", [
+test("attached images become native localImage input items", async () => {
+  const items = await CodexAppServerAdapter.inputItems("Look at this", [
     { type: "image/png", path: "/chats/c1/attachments/a--shot.png" },
     { type: "application/octet-stream", path: "/chats/c1/attachments/b--notes.bin" },
     { type: "image/webp", path: "/chats/c1/attachments/c--diagram.webp" },
@@ -180,9 +182,9 @@ test("attached images become native localImage input items", () => {
   ]);
 });
 
-test("a prompt with no attachments is still a single text item", () => {
-  assert.deepEqual(CodexAppServerAdapter.inputItems("Hello", undefined), [{ type: "text", text: "Hello" }]);
-  assert.deepEqual(CodexAppServerAdapter.inputItems("Hello", []), [{ type: "text", text: "Hello" }]);
+test("a prompt with no attachments is still a single text item", async () => {
+  assert.deepEqual(await CodexAppServerAdapter.inputItems("Hello", undefined), [{ type: "text", text: "Hello" }]);
+  assert.deepEqual(await CodexAppServerAdapter.inputItems("Hello", []), [{ type: "text", text: "Hello" }]);
 });
 
 test("tool noise is trimmed to the recent end without dropping older messages", () => {

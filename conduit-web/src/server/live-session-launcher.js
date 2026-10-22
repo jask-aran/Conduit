@@ -1,4 +1,5 @@
 import { isChatId } from "../chat-store.js";
+import { rememberedModel } from "../profile-model-memory.js";
 import { ServerConcurrency } from "./effect-concurrency.js";
 
 function launchError(code, message, status = 400) {
@@ -17,7 +18,6 @@ function launchError(code, message, status = 400) {
  */
 export const SPAWNING_INTENTS = new Set([
   "prompt",
-  "continue",
   "compact",
   "regenerate",
   "steer",
@@ -94,6 +94,7 @@ export function createLiveSessionLauncher({
   findChatContext,
   lifecycle,
   maxLiveProcesses = () => 0,
+  preferences = null,
   registry,
   runtimeFor,
   templateForChat,
@@ -111,13 +112,21 @@ export function createLiveSessionLauncher({
   } = {}) {
     lifecycle.assertAvailable(context.chat.id, context.project.id);
     const adapter = backends.forChat(context.chat);
+    // Only what the workspace's place runs (src/place.js): a harness that
+    // cannot act there would run on the head, in whatever a device's path
+    // names here. Every way a chat gets a harness -- created, switched,
+    // adopted, a run -- launches here.
+    const can = await backends.capabilities?.(context.project);
+    if (can && !can.harnesses.includes(context.chat.backend?.implementation || "conduit-runtime")) {
+      throw launchError("harness_not_here", `This chat's harness is not available on ${can.device.name}`, 409);
+    }
     if (requestedProject && ![context.project.id, context.project.slug].includes(requestedProject)) {
       throw launchError("session_project_mismatch", "The requested project does not own this chat", 409);
     }
     const resident = backends.getByChatId(context.chat.id);
     if (resident) {
-      // A warm draft was started on whatever model its first page had; one
-      // taken by another page with another choice is moved to it.
+      // A draft may have a live session from an earlier launch. Apply the
+      // model selected by this request before using that session.
       if (context.chat.status === "draft") {
         const view = backends.view(resident);
         if (model && view.model !== model) await adapter.setModel?.(resident.id, model);
@@ -149,6 +158,16 @@ export function createLiveSessionLauncher({
       const held = liveProcessEntries(backends, context.chat.id).length + starting.size;
       if (max > 0 && held >= max) throw launchError("live_process_limit", "No room for a spare agent", 429);
     }).then(() => { starting.add(context.chat.id); }));
+    // A Conduit chat that has not chosen a model starts on its profile's last
+    // one, as its composer shows. A spare agent, started before the first pick,
+    // took the settings default with no effort and kept it as the chat's own.
+    if (!model && !context.chat.backend?.model && preferences
+      && (context.chat.backend?.implementation || "conduit-runtime") === "conduit-runtime") {
+      const remembered = rememberedModel(preferences, templateForChat(context.chat, context.project)?.id);
+      const known = remembered?.model && (await adapter.listAvailableModels?.(context.project.workingRoot) || [])
+        .some((item) => item.spec === remembered.model);
+      if (known) { model = remembered.model; thinkingLevel = remembered.thinkingLevel || ""; forceModel = true; }
+    }
     try {
       const result = await adapter.launch(context, { model, thinkingLevel, forceModel }, {
         catalogFor, config, lifecycle, runtimeFor, templateForChat,

@@ -2,12 +2,7 @@ import assert from "node:assert/strict";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import fs from "node:fs";
-import { fileURLToPath } from "node:url";
 import { loadConfig } from "../src/config.js";
-
-const manifest = JSON.parse(fs.readFileSync(fileURLToPath(new URL("../package.json", import.meta.url)), "utf8"));
-const pinnedPiVersion = manifest.dependencies["@earendil-works/pi-coding-agent"];
 
 const configEnv = (overrides = {}) => ({ ...overrides });
 
@@ -37,12 +32,6 @@ test("default runtime paths are owned by the repository root", () => {
   assert.equal(config.remotesFile.endsWith(path.join("data", "remotes.json")), true);
   assert.equal(config.piAgentDir.endsWith(path.join("data", "pi")), true);
   assert.equal(config.searchConfigFile.endsWith(path.join("data", "pi", "web-search.json")), true);
-  // The pinned installation is whatever the dependency resolves to. Asserting a
-  // literal here only records the version at the time of writing, and fails on
-  // every legitimate bump.
-  assert.equal(config.installations.get("conduit-pinned").version, pinnedPiVersion);
-  assert.equal(path.isAbsolute(config.installations.get("conduit-pinned").command), true);
-  assert.equal(config.enablePartialContinue, true);
   assert.equal(config.maxAttachmentBytes, 100 * 1024 * 1024);
   assert.equal(config.voiceFinalizationBaseMs, 30_000);
   assert.equal(config.voiceFinalizationMaxMs, 600_000);
@@ -51,7 +40,6 @@ test("default runtime paths are owned by the repository root", () => {
   assert.equal(config.voiceModelRoot.endsWith(path.join("data", "voice", "models")), true);
   assert.equal(config.voiceRecordingsRoot.endsWith(path.join("data", "voice", "recordings")), true);
   assert.equal(config.workspaceDefaultRoot, os.homedir());
-  assert.equal(loadConfig(configEnv({ ENABLE_PARTIAL_CONTINUE: "false" })).enablePartialContinue, false);
 });
 
 test("one data root relocates every durable Conduit path", () => {

@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 /**
- * Does a turn hold still as it settles? (docs/plans/transcript-projection-plan.md,
- * Regression coverage.) Each scenario starts a fresh chat on the Test profile --
+ * Does a turn hold still as it settles? Each scenario starts a fresh chat on the Test profile --
  * deterministic, no model call -- streams a turn, tags the answer and its trace
  * while they are live, and asserts once everything has settled that:
  *
@@ -50,7 +49,7 @@ const tag = () => page.evaluate(() => {
 const inspect = () => page.evaluate(() => new Promise((finish) => {
   const answer = document.querySelector("[data-probe='answer']");
   const trace = document.querySelector("[data-probe='trace']");
-  const thread = document.querySelector(".thread") || document.body;
+  const thread = document.querySelector(".ui-chat-column") || document.body;
   const watched = () => [...thread.querySelectorAll(".ui-bubble, .ui-answer, .ui-trace-fold, .ui-message-foot")];
   const rects = () => watched().map((node) => { const r = node.getBoundingClientRect(); return `${Math.round(r.top)}:${Math.round(r.height)}`; }).join("|");
   let churn = 0;
@@ -96,7 +95,7 @@ async function watchQueue(text) {
     let quiet = null;
     let aboveFirst = null;
     const frame = () => {
-      const nodes = [...document.querySelectorAll(".thread .ui-answer, .thread .ui-bubble, .thread .ui-trace-fold")];
+      const nodes = [...document.querySelectorAll(".ui-chat-column .ui-answer, .ui-chat-column .ui-bubble, .ui-chat-column .ui-trace-fold")];
       const users = nodes.filter((node) => node.classList.contains("ui-bubble"));
       const sent = users.find((node) => node.textContent.trim().startsWith(text));
       if (sent) {
@@ -124,7 +123,7 @@ async function watchQueue(text) {
 }
 
 async function settledShape() {
-  const shape = () => page.evaluate(() => [...document.querySelectorAll(".thread .ui-answer, .thread .ui-bubble, .thread .ui-trace-fold")]
+  const shape = () => page.evaluate(() => [...document.querySelectorAll(".ui-chat-column .ui-answer, .ui-chat-column .ui-bubble, .ui-chat-column .ui-trace-fold")]
     .map((node) => node.classList.contains("ui-bubble") ? "U" : node.classList.contains("ui-trace-fold") ? "T" : "A").join(""));
   const live = await shape();
   await page.reload();

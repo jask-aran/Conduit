@@ -12,10 +12,11 @@ export const manifest = {
   discovery: "machine",
   warm: "process",
   nameGeneration: "backend",
-  suppliesMessageIds: true,
   restartDrain: false,
   drive: true,
   profile: true,
+  // Runs on a paired device even when not installed here (registered regardless).
+  devices: true,
   probe: (config) => commandProbe(config.opencodeCommand)(),
-  build: (config) => new OpenCodeAdapter({ command: config.opencodeCommand, logs: config.logs }),
+  build: (config) => new OpenCodeAdapter({ command: config.opencodeCommand, logs: config.logs, nodeHub: config.nodeHub }),
 };

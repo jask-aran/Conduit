@@ -1,13 +1,14 @@
+import { Icons } from "@/components/ui";
 import { createSignal, For, onCleanup, onMount, Show } from "solid-js";
-import { QrCodeIcon, RefreshCwIcon } from "lucide-solid";
-import { Menu, MenuContent, MenuSection, MenuRow, MenuRadioGroup, MenuRadioItem, MenuSub, MenuSubContent, MenuSubTrigger } from "@/components/menus";
-import { Rule, MenuNote } from "@/components/ui/popover";
+
+import { DropdownMenu, MenuContent, MenuSection, MenuRow, MenuRadioGroup, MenuRadioItem, MenuSub, MenuSubContent, MenuSubTrigger } from "@/components/menus";
+import { MenuNote } from "@/components/ui/popover";
 import { Spinner } from "@/components/ui/controls";
 import { ServerControl } from "@/components/ui/connection";
 import { isMobileLayout } from "./mobile-layout";
 import { buildHttpUrl } from "../api/transport";
 import { proveServer } from "../platform/server-proof";
-import { latestRelease, type PublishedRelease } from "../platform/github-release";
+import { installerDownloads, type PublishedRelease } from "../platform/github-release";
 
 /** Not an address: the row that hands the choice back to the client. */
 const AUTOMATIC = "automatic";
@@ -50,6 +51,8 @@ const canProbe = (origin: string) => isInstalledClient() || origin === location.
 export function ServerSwitcher(props: {
   connectivity: string;
   compact?: boolean;
+  /** The control on one line (a desktop rail's foot). */
+  inline?: boolean;
   pwaUpdating: boolean;
   onOpenSettings: () => void;
   onUpdatePwa: () => void;
@@ -58,9 +61,9 @@ export function ServerSwitcher(props: {
   /** The installers, for a phone's browser: its sidebar has no footer to hold them. */
   downloads?: boolean;
 }) {
-  const [release, setRelease] = createSignal<PublishedRelease | null>(null);
+  const [release, setRelease] = createSignal<Pick<PublishedRelease, "windowsUrl" | "apkUrl"> | null>(null);
   const releasesPage = "https://github.com/jask-aran/Conduit/releases/latest";
-  onMount(() => { if (props.downloads) void latestRelease().then(setRelease).catch(() => setRelease(null)); });
+  onMount(() => { if (props.downloads) void installerDownloads().then(setRelease).catch(() => setRelease(null)); });
   const download = (url?: string | null) => window.open(url || releasesPage, "_blank", "noopener,noreferrer");
   const [latency, setLatency] = createSignal<Record<string, number | null>>({});
   const [probing, setProbing] = createSignal(false);
@@ -196,7 +199,7 @@ export function ServerSwitcher(props: {
           meta={inUse() ? latencyLabel(inUse()!.origin) : ""}>Automatic</MenuRadioItem>
       </Show>
       <For each={activeServerPaths()}>{(path) =>
-        <MenuRadioItem value={path.origin} title={path.origin} detail={shortOrigin(path.origin)}
+        <MenuRadioItem value={path.origin} title={path.origin} detailData detail={shortOrigin(path.origin)}
           disabled={(!canReachOtherOrigins() && path.origin !== location.origin) || unreachable(path.origin)}
           away={!isInstalledClient() && !isStandaloneBrowser() && path.origin !== location.origin}
           meta={checking() === path.origin ? "Checking…" : latencyLabel(path.origin)}>{serverPathLabel(path)}</MenuRadioItem>
@@ -205,8 +208,8 @@ export function ServerSwitcher(props: {
   </MenuSection>;
   const routeDetail = () => inUse() ? `${serverPathLabel(inUse()!)} · ${shortOrigin(inUse()!.origin)}` : undefined;
 
-  return <><Menu onOpenChange={onOpenChange}>
-    <Menu.Trigger as={ServerControl} compact={props.compact} name={serverName()} detail={triggerDetail()} connectivity={props.connectivity}
+  return <><DropdownMenu onOpenChange={onOpenChange}>
+    <DropdownMenu.Trigger as={ServerControl} compact={props.compact} inline={props.inline} name={serverName()} detail={triggerDetail()} connectivity={props.connectivity}
       tabIndex={-1} onPointerDown={() => { focusBefore = document.activeElement; }} onFocus={(event: FocusEvent) => {
         if (giveBack === undefined) return;
         const before = giveBack;
@@ -214,7 +217,7 @@ export function ServerSwitcher(props: {
         if (before instanceof HTMLElement && before.isConnected && before !== event.currentTarget) before.focus({ preventScroll: true });
         else (event.currentTarget as HTMLElement).blur();
       }} onMouseDown={(event: MouseEvent) => event.preventDefault()} aria-label={`${serverName()} · ${triggerDetail()}`} title={`${activeOrigin() || "No server"} — ${triggerDetail()}`} />
-    <MenuContent onCloseAutoFocus={(event) => event.preventDefault()}>
+    <MenuContent width="md" height="2xl" onCloseAutoFocus={(event) => event.preventDefault()}>
       <Show when={servers().length > 0}>
         <MenuSection title="Servers">
           <MenuRadioGroup value={activeOrigin() || ""} onChange={(origin) => switchToServer(origin, isInstalledClient())}>
@@ -224,28 +227,30 @@ export function ServerSwitcher(props: {
                 away={away(entry)} meta={latencyLabel(entry.origin)}>{entry.name}</MenuRadioItem>
             }</For>
           </MenuRadioGroup>
-        </MenuSection><Rule />
+          <Show when={activeServerPaths().length > 0}>
+            <MenuSub phone={phone()}>
+              <MenuSubTrigger detailData detail={routeDetail()} title={inUse()?.origin}>Route</MenuSubTrigger>
+              <MenuSubContent><RouteChoices /><Show when={routeError()}><MenuNote error>{routeError()}</MenuNote></Show></MenuSubContent>
+            </MenuSub>
+            <Show when={routeError()}><MenuNote error>{routeError()}</MenuNote></Show>
+          </Show>
+        </MenuSection>
       </Show>
-      <Show when={activeServerPaths().length > 0}>
-        <MenuSection>
-          <MenuSub phone={phone()}>
-            <MenuSubTrigger detail={routeDetail()} title={inUse()?.origin}>Route</MenuSubTrigger>
-            <MenuSubContent><RouteChoices /><Show when={routeError()}><MenuNote error>{routeError()}</MenuNote></Show></MenuSubContent>
-          </MenuSub>
-          <Show when={routeError()}><MenuNote error>{routeError()}</MenuNote></Show>
-        </MenuSection><Rule />
-      </Show>
-      <MenuRow icon={<QrCodeIcon />} onSelect={() => setTimeout(() => props.onAddServer(), 0)}>Connect a device or server</MenuRow><Rule />
-      <MenuRow onSelect={props.onOpenSettings}>Manage settings</MenuRow>
-      <MenuRow disabled={props.pwaUpdating} onSelect={props.onUpdatePwa} icon={<Show when={props.pwaUpdating} fallback={<RefreshCwIcon />}><Spinner /></Show>}>
-        {props.pwaUpdating ? "Checking for updates…" : "Check for updates"}
-      </MenuRow>
-      <Show when={props.downloads}>
-        <MenuRow onSelect={() => download(release()?.windowsUrl)}>Download for Windows</MenuRow>
-        <MenuRow onSelect={() => download(release()?.apkUrl)}>Download for Android</MenuRow>
-      </Show>
-      <MenuRow onSelect={props.onLogout}>{servers().length > 1 ? `Sign out of ${serverName()}` : "Sign out"}</MenuRow>
+      <MenuSection title="App">
+        <MenuRow disabled={props.pwaUpdating} onSelect={props.onUpdatePwa} icon={<Show when={props.pwaUpdating} fallback={<Icons.Refresh />}><Spinner /></Show>}>
+          {props.pwaUpdating ? "Checking for updates…" : "Check for updates"}
+        </MenuRow>
+        <Show when={props.downloads}>
+          <MenuRow icon={<Icons.Download />} onSelect={() => download(release()?.windowsUrl)}>Download for Windows</MenuRow>
+          <MenuRow icon={<Icons.Download />} onSelect={() => download(release()?.apkUrl)}>Download for Android</MenuRow>
+        </Show>
+      </MenuSection>
+      <MenuSection title="Account">
+        <MenuRow icon={<Icons.QrCode />} onSelect={() => setTimeout(() => props.onAddServer(), 0)}>Connect a device or server</MenuRow>
+        <MenuRow icon={<Icons.Settings />} onSelect={props.onOpenSettings}>Manage settings</MenuRow>
+        <MenuRow destructive icon={<Icons.LogOut />} onSelect={props.onLogout}>{servers().length > 1 ? `Sign out of ${serverName()}` : "Sign out"}</MenuRow>
+      </MenuSection>
     </MenuContent>
-  </Menu>
+  </DropdownMenu>
   </>;
 }

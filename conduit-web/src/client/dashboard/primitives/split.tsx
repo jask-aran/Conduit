@@ -1,5 +1,7 @@
+import { ComposerDock } from "@/components/ui";
+import { duration, easing, reducedMotion } from "@/components/ui/motion";
 import { createContext, createEffect, createSignal, For, Index, onCleanup, onMount, Show, splitProps, useContext, type Accessor, type JSX } from "solid-js";
-import { Menu, MenuContent, MenuControl, MenuRow, MenuSection } from "@/components/menus";
+import { DropdownMenu, MenuContent, MenuControl, MenuRow, MenuSection } from "@/components/menus";
 import { Counts, DashEmpty, DashHeader, DashIconButton, Dashboard, DashMore, DashRow, Group, GroupHeading, GroupToggle, QuickAction, QuickActions, QuickMore } from "@/components/ui/dashboard";
 import { installSplitCursor, type SplitPage } from "./split-cursor";
 import { isMobileLayout, MOBILE_LAYOUT_QUERY } from "../../navigation/mobile-layout";
@@ -51,7 +53,7 @@ let running: Animation[] = [];
 function glide(root: HTMLElement, change: () => void, shown?: DOMRect) {
   for (const animation of running) animation.cancel();
   running = [];
-  if (matchMedia("(prefers-reduced-motion: reduce)").matches) return change();
+  if (reducedMotion()) return change();
   const composer = root.querySelector<HTMLElement>(".ui-dash-composer");
   // Where the composer was last drawn: by now the pane has already resized
   // around the old layout, which may have squeezed it.
@@ -63,13 +65,13 @@ function glide(root: HTMLElement, change: () => void, shown?: DOMRect) {
   const narrowing = !root.hasAttribute("data-one-column") && Boolean(before && after && after.width < before.width - 1);
   for (const section of root.querySelectorAll<HTMLElement>(".ui-dash-group, .ui-dash-notice")) {
     const delay = narrowing && section.closest(".ui-dash-aside") ? 200 : 0;
-    running.push(section.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 180, delay, easing: "ease-out", fill: "backwards" }));
+    running.push(section.animate([{ opacity: 0 }, { opacity: 1 }], { duration: duration("--duration-quick"), delay, easing: "ease-out", fill: "backwards" }));
   }
   if (composer && before && after && Math.abs(before.width - after.width) > 1) running.push(composer.animate([
     { width: `${before.width}px`, transform: `translate(${before.left - after.left}px, ${before.top - after.top}px)` },
     // Its column's live width, so a resize still under way carries it along.
     { width: "100%", transform: "none" },
-  ], { duration: 320, easing: "cubic-bezier(.2, .8, .2, 1)" }));
+  ], { duration: duration("--duration-travel"), easing: easing("--ease-arrive") }));
 }
 
 /** The narrowest pane that fits both columns. */
@@ -135,17 +137,19 @@ export function SplitDashboard(props: {
       if (!measured) requestAnimationFrame(() => { measured = true; });
     };
     const schedule = () => { if (!frame) frame = requestAnimationFrame(measure); };
-    const sizes = new ResizeObserver(schedule);
+    // Measured where the observer delivers, after layout, where its reads are free: deferred to the next frame they
+    // came after that frame's writes (the dock easing open) and forced a layout of the page every frame.
+    const sizes = new ResizeObserver(() => { cancelAnimationFrame(frame); measure(); });
     const watch = () => { sizes.disconnect(); sizes.observe(root); for (const element of root.querySelectorAll(WATCHED)) sizes.observe(element); schedule(); };
     const tree = new MutationObserver(watch);
     tree.observe(root, { childList: true, subtree: true });
     watch();
     onCleanup(() => { cancelAnimationFrame(frame); sizes.disconnect(); tree.disconnect(); });
   });
-  // A phone docks the composer at the foot, as a chat does (composer-stack is the chat screen's layout).
+  // A phone docks the composer at the foot, as a chat does (ComposerDock, as the chat's).
   return <Phone.Provider value={phone}><Dashboard ref={(element) => { root = element; }} label={props.label} page={props.page} compact={phone()} oneColumn={oneColumn()}
     head={props.header} actions={props.quickActions} notice={props.notice} composer={!phone() ? props.composer : undefined} list={props.list} aside={props.aside}
-    dock={<Show when={phone() && props.composer}><div class="composer-stack" data-dash-dock="">{props.composer}</div></Show>} /></Phone.Provider>;
+    dock={<Show when={phone() && props.composer}><ComposerDock data-dash-dock="">{props.composer}</ComposerDock></Show>} /></Phone.Provider>;
 }
 
 /** The page's mark, centred on its name and, under the name, its kind and
@@ -214,13 +218,13 @@ export function SplitQuickActions(props: { items: Array<SplitQuickAction | false
   return <QuickActions>
     <Index each={items()}>{(item, index) => <QuickAction icon={item().icon} label={item().label} folded={index >= fit()} onClick={() => item().onClick()} />}</Index>
     <QuickMore ref={(element) => { more = element; }} keep={Boolean(props.manage)} hidden={!props.manage && !folded().length}>
-      <Menu modal={false}>
+      <DropdownMenu modal={false}>
         <MenuControl as={DashIconButton} tabIndex={-1} aria-label={props.label ?? "More"} title={props.label ?? "More"} />
         <MenuContent>
           <Show when={folded().length}><MenuSection><For each={folded()}>{(item) => <MenuRow icon={item.icon} onSelect={() => item.onClick()}>{item.label}</MenuRow>}</For></MenuSection></Show>
           <Show when={props.manage}><MenuSection>{props.manage?.()}</MenuSection></Show>
         </MenuContent>
-      </Menu>
+      </DropdownMenu>
     </QuickMore>
   </QuickActions>;
 }

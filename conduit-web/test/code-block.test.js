@@ -1,14 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import {
-  CODE_BLOCK_COLLAPSE_DEFAULT_LINES,
-  codeBlockExpandLabel,
-  codeBlockMarkup,
-  codeBlockState,
-  countCodeLines,
-  normalizeCodeLanguage,
-  shouldCollapseCodeBlock,
-} from "../src/client/chat/code-block.ts";
+import { importClient } from "./helpers/client-module.js";
+
+const { CODE_BLOCK_COLLAPSE_DEFAULT_LINES, codeBlockFold, countCodeLines, normalizeCodeLanguage, shouldCollapseCodeBlock, codeBlockHtml } = await importClient('export { CODE_BLOCK_COLLAPSE_DEFAULT_LINES, codeBlockFold, countCodeLines, normalizeCodeLanguage, shouldCollapseCodeBlock } from "../src/client/chat/code-block.ts"; export { codeBlockHtml } from "../src/components/ui/code.tsx";');
 
 test("countCodeLines ignores the trailing newline a fence always carries", () => {
   assert.equal(countCodeLines(""), 0);
@@ -38,22 +32,11 @@ test("off never folds and all folds anything past one line", () => {
   assert.equal(shouldCollapseCodeBlock(2, "all", 15), true);
 });
 
-test("the expander names how much is hidden", () => {
-  assert.equal(codeBlockExpandLabel(60, 15), "Show 45 more lines");
-  assert.equal(codeBlockExpandLabel(16, 15), "Show 1 more line");
-  assert.equal(codeBlockExpandLabel(10, 15), "Show more");
-});
-
-test("state reports lines, collapsibility and the label together", () => {
-  const long = codeBlockState("x\n".repeat(60), "long", CODE_BLOCK_COLLAPSE_DEFAULT_LINES, false);
-  assert.equal(long.lines, 60);
-  assert.equal(long.collapsed, true);
-  assert.equal(long.collapsible, true);
-  assert.equal(long.expandLabel, "Show 45 more lines");
-
-  const short = codeBlockState("x\ny\n", "long", CODE_BLOCK_COLLAPSE_DEFAULT_LINES, false);
-  assert.equal(short.collapsed, false);
-  assert.equal(short.collapsible, false);
+test("fold depth follows the collapse preference", () => {
+  assert.equal(codeBlockFold(60, "long", CODE_BLOCK_COLLAPSE_DEFAULT_LINES), 15);
+  assert.equal(codeBlockFold(2, "all", 15), 1);
+  assert.equal(codeBlockFold(15, "long", 15), undefined);
+  assert.equal(codeBlockFold(60, "off", 15), undefined);
 });
 
 test("normalizeCodeLanguage takes the first token and defaults to text", () => {
@@ -63,59 +46,60 @@ test("normalizeCodeLanguage takes the first token and defaults to text", () => {
 });
 
 test("markup escapes the body and language", () => {
-  const html = codeBlockMarkup({
-    language: '"><script>',
-    text: "<b>&</b>",
-    state: codeBlockState("<b>&</b>", "long", 15, false),
+  const html = codeBlockHtml({
+    lang: '"><script>',
+    code: "<b>&</b>",
+    lines: countCodeLines("<b>&</b>"),
+    fold: codeBlockFold(countCodeLines("<b>&</b>"), "long", 15),
   });
   assert.ok(!html.includes("<script>"));
   assert.ok(html.includes("&lt;b&gt;&amp;&lt;/b&gt;"));
-  assert.ok(!html.includes('data-collapsed="true"'));
+  assert.ok(!html.includes('data-folded'));
 });
 
 test("a collapsed card carries the attributes the delegated handler toggles", () => {
   const text = "x\n".repeat(40);
-  const html = codeBlockMarkup({
-    language: "ts",
-    text,
-    state: codeBlockState(text, "long", 15, false),
+  const html = codeBlockHtml({
+    lang: "ts",
+    code: text,
+    lines: countCodeLines(text),
+    fold: codeBlockFold(countCodeLines(text), "long", 15),
   });
   assert.ok(html.includes('data-lines="40"'));
-  assert.ok(html.includes('data-collapsible="true"'));
-  assert.ok(html.includes('data-collapsed="true"'));
+  assert.ok(html.includes('data-folded'));
   assert.ok(html.includes("data-expand-code"));
   assert.ok(html.includes("Show 25 more lines"));
   // Both controls exist: the footer button and the toggle pinned in the header.
   assert.equal(html.split("data-expand-code").length - 1, 2);
-  assert.ok(html.includes('class="artifact-toggle"'));
+  assert.ok(html.includes('class="ui-button ui-code-toggle"'));
   assert.ok(html.includes('aria-label="Expand code"'));
 });
 
 test("a streaming fence past the threshold folds and keeps its expander", () => {
   const text = "x\n".repeat(40);
-  const html = codeBlockMarkup({
-    language: "ts",
-    text,
+  const html = codeBlockHtml({
+    lang: "ts",
+    code: text,
     streaming: true,
-    pending: true,
-    state: codeBlockState(text, "long", 15, true),
+    lines: countCodeLines(text),
+    fold: codeBlockFold(countCodeLines(text), "long", 15),
   });
-  assert.ok(html.includes('data-streaming-pending="fence"'));
-  assert.ok(html.includes('data-collapsed="true"'));
+  assert.ok(html.includes('data-streaming'));
+  assert.ok(html.includes('data-folded'));
   assert.ok(html.includes("data-expand-code"));
-  assert.ok(html.includes("artifact-toggle"));
+  assert.ok(html.includes("ui-code-toggle"));
   // The label is the activity: it counts the hidden lines as they arrive.
   assert.ok(html.includes("Show 25 more lines"));
 });
 
 test("a streaming fence under the threshold stays open", () => {
   const text = "x\n".repeat(4);
-  const html = codeBlockMarkup({
-    language: "ts",
-    text,
+  const html = codeBlockHtml({
+    lang: "ts",
+    code: text,
     streaming: true,
-    pending: true,
-    state: codeBlockState(text, "long", 15, true),
+    lines: countCodeLines(text),
+    fold: codeBlockFold(countCodeLines(text), "long", 15),
   });
-  assert.ok(!html.includes('data-collapsed="true"'));
+  assert.ok(!html.includes('data-folded'));
 });

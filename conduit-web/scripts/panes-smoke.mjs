@@ -73,7 +73,8 @@ let project;
 }
 
 async function scenario(name, run) {
-  const context = await browser.newContext({ storageState, viewport: { width: 1800, height: 900 } });
+  // A desktop with room for a chat, a split and the dock at the 16px unit (1800 x 900 at the old 12.8px one).
+  const context = await browser.newContext({ storageState, viewport: { width: 2250, height: 1125 } });
   const page = await context.newPage();
   const errors = [];
   page.on("pageerror", (error) => errors.push(error.message));
@@ -142,7 +143,16 @@ await scenario("opening a file gives its viewer the keyboard and marks it in Fil
   // A cold first load fetches the viewer's chunks: allow it the 6s focus waits.
   check("focus in the viewer", await until(page, () => document.activeElement?.closest(".ui-file-viewer .cm-content") || document.activeElement?.closest(".ui-file-viewer"), undefined, 8000), await focusIn(page));
   check("file bold as focused", await until(page, (path) => document.querySelector(`[data-path="${CSS.escape(path)}"][data-open-file="focused"]`), name));
-  await page.locator(".chat-main").first().click({ position: { x: 300, y: 400 } }).catch(() => {});
+  // Somewhere in the main pane with no control under it: a fixed point landed on a row once the layout moved.
+  const blank = await page.evaluate(() => {
+    const main = document.querySelector(".chat-main").getBoundingClientRect();
+    for (let y = main.top + 80; y < main.bottom; y += 16) for (let x = main.left + 40; x < main.right; x += 40) {
+      const hit = document.elementFromPoint(x, y);
+      if (hit && main && hit.closest(".chat-main") && !hit.closest("button, a, input, textarea, [role=button], [role=option], .ui-file-viewer")) return { x, y };
+    }
+    return { x: main.left + 300, y: main.top + 400 };
+  });
+  await page.mouse.click(blank.x, blank.y);
   check("file still bold once focus leaves", await until(page, (path) => document.querySelector(`[data-path="${CSS.escape(path)}"][data-open-file="shown"]`), name));
 });
 

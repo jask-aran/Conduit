@@ -108,42 +108,6 @@ export function templatePublicView(template) {
   };
 }
 
-const PI_BUILTIN_TOOLS = new Map([["codemode", "builtin:codemode"], ["tool_search", "builtin:tool-search"]]);
-
-export function buildPiResourceArgs(template) {
-  const args = [
-    "--no-approve",
-    "--no-extensions",
-    "--no-skills",
-    "--no-prompt-templates",
-    "--no-themes",
-    "--no-context-files",
-    "--system-prompt", template.systemPrompt,
-    "--tools", template.tools.join(","),
-  ];
-  if (template.models?.length) args.push("--models", template.models.join(","));
-  // --no-extensions also turns off Pi's built-in extensions; a tool they own
-  // comes back by loading its extension by name.
-  // A template bringing its own codemode (its own mode) replaces the built-in.
-  const own = (builtin) => template.extensions.some((extension) => path.basename(extension).startsWith(builtin.slice(8)));
-  for (const [tool, builtin] of PI_BUILTIN_TOOLS) if (template.tools.includes(tool) && !own(builtin)) args.push("--extension", builtin);
-  for (const extension of template.extensions) args.push("--extension", extension);
-  for (const skill of template.skills) args.push("--skill", skill);
-  for (const promptTemplate of template.promptTemplates) args.push("--prompt-template", promptTemplate);
-  return args;
-}
-
-export function loadPiModelPatterns(agentDir, fallbackModels = []) {
-  const settingsFile = path.join(path.resolve(agentDir), "settings.json");
-  try {
-    const settings = JSON.parse(fs.readFileSync(settingsFile, "utf8"));
-    return Array.isArray(settings.enabledModels) ? settings.enabledModels : fallbackModels;
-  } catch (error) {
-    if (error.code === "ENOENT") return fallbackModels;
-    throw error;
-  }
-}
-
 export function buildManagedToolEnvironment(
   env = process.env,
   { root = repositoryRoot, delimiter = path.delimiter, platform = process.platform } = {},
@@ -160,20 +124,4 @@ export function buildManagedToolEnvironment(
     ? `${managedBin}${delimiter}${runtimeEnv[pathKey]}`
     : managedBin;
   return runtimeEnv;
-}
-
-export function buildPiEnvironment(agentDir, env = process.env, options = {}) {
-  const resolvedAgentDir = path.resolve(requireString(agentDir, "agent directory"));
-  const { PI_CODING_AGENT_SESSION_DIR: _sessionDir, ...runtimeEnv } = env;
-  return buildManagedToolEnvironment({
-    ...runtimeEnv,
-    PI_CODING_AGENT_DIR: resolvedAgentDir,
-  }, options);
-}
-
-export function resolvePiProcess(command, args = [], { platform = process.platform, nodePath = process.execPath } = {}) {
-  if (platform === "win32" && /\.(?:c|m)?js$/i.test(String(command || ""))) {
-    return { command: nodePath, args: [command, ...args] };
-  }
-  return { command, args };
 }

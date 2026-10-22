@@ -1,5 +1,6 @@
+import { Icons } from "@/components/ui";
 import { createEffect, createMemo, createSignal, Index, Match, onCleanup, Suspense, Switch } from "solid-js";
-import { LightbulbIcon, MessageSquareTextIcon } from "lucide-solid";
+
 import type { Message, ToolItem, ToolKind } from "../api/contracts";
 import type { TraceSegment, TurnTraceData } from "../turn-rows";
 import { KIND_ICONS, stepDuration, ToolStep, VERBS } from "./tool-card";
@@ -14,7 +15,6 @@ import { fullDateTime } from "./full-date-time";
 
 type RowProps = {
   onRendered?: () => void;
-  sessionId: string | null;
   renderer?: MarkdownRendererId;
   profileLabel?: string;
   toolOpen?: (id: string) => boolean;
@@ -299,7 +299,7 @@ function TrailLine(props: RowProps & { item: TrailItem; arriving?: boolean }) {
   return <Switch>
     <Match when={props.item.type === "text" && props.item}>{(item) => {
       const segment = () => item().segment, fold = useFold(() => segment().id, props);
-      return <Step icon={segment().kind === "thinking" ? <LightbulbIcon /> : <MessageSquareTextIcon />} summary={inline(props, summaryOf(segment().text))} discarded={segment().discarded} motion={motion()} opens open={fold.open()} onToggle={fold.toggle}>
+      return <Step icon={segment().kind === "thinking" ? <Icons.Thinking /> : <Icons.Message />} summary={inline(props, summaryOf(segment().text))} discarded={segment().discarded} motion={motion()} opens open={fold.open()} onToggle={fold.toggle}>
         <StepProse><Suspense fallback={<div class="markdown-skeleton" />}><ChatMarkdown streaming={Boolean(segment().live)} renderer={props.renderer} onRendered={props.onRendered}>{segment().text}</ChatMarkdown></Suspense></StepProse>
       </Step>;
     }}</Match>
@@ -307,22 +307,22 @@ function TrailLine(props: RowProps & { item: TrailItem; arriving?: boolean }) {
       facts={[item().message.model && `Model: ${item().message.model}`, item().message.provider && `Provider: ${item().message.provider}`, props.profileLabel && `Profile: ${props.profileLabel}`].filter(Boolean) as string[]}
       message={item().message.errorMessage || "The model request failed."} />}</Match>
     <Match when={props.item.type === "tool" && props.item}>{(item) => { const fold = useFold(() => item().tool.toolCallId, props);
-      return <ToolStep tool={item().tool} settled={props.settled} sessionId={props.sessionId} open={fold.open()} onToggle={fold.toggle} motion={motion()} />; }}</Match>
-    <Match when={props.item.type === "hidden"}><Step note icon={<LightbulbIcon />} summary="Reasoning not shared by the provider" motion={motion()} /></Match>
+      return <ToolStep tool={item().tool} settled={props.settled} open={fold.open()} onToggle={fold.toggle} motion={motion()} />; }}</Match>
+    <Match when={props.item.type === "hidden"}><Step note icon={<Icons.Thinking />} summary="Reasoning not shared by the provider" motion={motion()} /></Match>
     <Match when={props.item.type === "group" && props.item}>{(item) => {
       const tools = () => (item() as Extract<TrailItem, { type: "group" }>).tools, kind = () => (item() as Extract<TrailItem, { type: "group" }>).kind;
       const fold = useFold(() => `group:${tools()[0]!.toolCallId}`, props);
       return <Step icon={<Dynamic component={KIND_ICONS[kind()]} />} verb={GROUP_WORDS[kind()](tools().length)} state={!props.settled && tools().some((tool) => !tool.done) ? "running" : undefined}
         time={stepDuration(tools()[0]!.timestamp, tools().at(-1)!.completedAt) || undefined} motion={motion()} opens open={fold.open()} onToggle={fold.toggle}>
         <Trail nested="group"><Index each={tools()}>{(tool) => { const inner = useFold(() => tool().toolCallId, props);
-          return <ToolStep tool={tool()} settled={props.settled} sessionId={props.sessionId} open={inner.open()} onToggle={inner.toggle} />; }}</Index></Trail>
+          return <ToolStep tool={tool()} settled={props.settled} open={inner.open()} onToggle={inner.toggle} />; }}</Index></Trail>
       </Step>;
     }}</Match>
   </Switch>;
 }
 const LATEST_CHARS = 240;
 /** since: how far into a sent message's entrance the turn arrives, so it fades in with it. */
-export function TurnTrace(props: { trace: TurnTraceData; writing?: boolean; sessionId: string | null; renderer?: MarkdownRendererId; profileLabel?: string; initialOpen?: boolean; onOpenChange?: (open: boolean) => void; toolOpen?: (id: string) => boolean; onToolOpenChange?: (id: string, open: boolean) => void; onRendered?: () => void; since?: number }) {
+export function TurnTrace(props: { trace: TurnTraceData; writing?: boolean; renderer?: MarkdownRendererId; profileLabel?: string; initialOpen?: boolean; onOpenChange?: (open: boolean) => void; toolOpen?: (id: string) => boolean; onToolOpenChange?: (id: string, open: boolean) => void; onRendered?: () => void; since?: number }) {
   const preview = createMemo(() => previewOf(props.trace, Boolean(props.writing)));
   const time = turnTime(() => props.trace);
   const unfinished = () => !props.trace.active && (props.trace.status === "failed" || props.trace.status === "interrupted");
@@ -339,7 +339,7 @@ export function TurnTrace(props: { trace: TurnTraceData; writing?: boolean; sess
       status={preview().status.verb} time={time() || undefined} work={preview().work || undefined} latest={latest()} live={props.trace.active} tone={unfinished() ? "failed" : undefined}
       opens={props.trace.segments.length > 0} open={open()} onToggle={() => { const next = !open(); setOpen(next); props.onOpenChange?.(next); }}>
       {(() => { opened = trail().length; return <Trail><Index each={trail()}>{(item, index) =>
-        <TrailLine item={item()} arriving={index >= opened} settled={!props.trace.active} sessionId={props.sessionId} renderer={props.renderer} profileLabel={props.profileLabel} toolOpen={props.toolOpen} onToolOpenChange={props.onToolOpenChange} onRendered={props.onRendered} />}</Index></Trail>; })()}
+        <TrailLine item={item()} arriving={index >= opened} settled={!props.trace.active} renderer={props.renderer} profileLabel={props.profileLabel} toolOpen={props.toolOpen} onToolOpenChange={props.onToolOpenChange} onRendered={props.onRendered} />}</Index></Trail>; })()}
     </Trace>;
 }
 

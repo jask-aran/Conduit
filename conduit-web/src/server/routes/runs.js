@@ -1,6 +1,6 @@
 import { resolveTemplate } from "../../config.js";
 import { isChatId } from "../../chat-store.js";
-import { agentProfiles } from "../../chat-backend.js";
+import { agentProfiles, templateBackend } from "../../chat-backend.js";
 
 const failure = (code, message, status) => Object.assign(new Error(message), { code, status });
 const text = (content) => typeof content === "string" ? content
@@ -57,8 +57,8 @@ export function registerRunRoutes(app, {
       const run = { ...(hostUiTimeoutMs > 0 ? { hostUiTimeoutMs } : {}),
         // Off unless asked: a run is named only with { autoName: true }.
         ...(request.body?.autoName === true ? { autoName: true } : {}) };
-      // Any profile a chat can be made with: a harness's own, or a Conduit Pi one.
-      const harness = profileId && agentProfiles(config.piTemplates, { available: new Set(backends.adapters.keys()) })
+      // Any profile a chat can use: a harness profile or a Conduit template.
+      const harness = profileId && agentProfiles(config.piTemplates, { available: new Set(backends.local || backends.adapters.keys()) })
         .find((profile) => profile.id === profileId && profile.management === "agent");
       let chat;
       if (harness) {
@@ -71,7 +71,7 @@ export function registerRunRoutes(app, {
         if (!template || template.defaultable === false) throw failure("unknown_profile", `Unknown profile: ${profileId}`, 400);
         chat = await registry.create(project, {
           templateId: template.id, templateVersion: template.version,
-          runtime: runtimeFor({ runtimeKind: "conduit_profile", template }), untracked: true, run,
+          backend: templateBackend(template), untracked: true, run,
         });
       }
       const model = String(request.body?.model || "");

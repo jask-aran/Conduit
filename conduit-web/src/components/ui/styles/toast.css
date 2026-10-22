@@ -25,15 +25,18 @@
 .ui-toast-copy { min-width: 0; }
 .ui-toast-description { margin: var(--space-xs) 0 0; color: var(--muted-foreground); font-size: var(--text-caption); line-height: var(--leading-text); overflow-wrap: anywhere; }
 /* Sonner's behavioral host: only its positioning and gesture state remain.
-   All visible content is Toast, and all geometry and motion use v2 tokens. */
-.ui-notifications[data-sonner-toaster] { width: min(var(--measure-lg), calc(100% - 2 * var(--space-xl))); right: var(--space-xl); bottom: calc(var(--space-xl) + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))); font-family: var(--font-sans); z-index: var(--layer-notification); }
-.ui-notifications [data-sonner-toast] { width: 100%; outline: none; transition: transform var(--duration-gentle) var(--ease-arrive), opacity var(--duration-gentle) var(--ease-arrive); }
+   All visible content is Toast, and all geometry and motion use v2 tokens. Its placement names data-y-position:
+   Sonner's own sheet, injected after ours, places it by [data-sonner-toaster][data-y-position], and at a tie won
+   (a phone's toasts hung below the screen's foot, their frost peeking up). */
+.ui-notifications[data-sonner-toaster][data-y-position] { width: min(var(--measure-lg), calc(100% - 2 * var(--space-xl))); right: var(--space-xl); bottom: calc(var(--space-xl) + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))); font-family: var(--font-sans); z-index: var(--layer-notification); }
+.ui-notifications[data-sonner-toaster] [data-sonner-toast] { width: 100%; outline: none; transition: transform var(--duration-gentle) var(--ease-arrive), opacity var(--duration-gentle) var(--ease-arrive); }
 .ui-notifications [data-sonner-toast][data-removed="true"] { transition-duration: var(--duration-quick); transition-timing-function: var(--ease-leave); }
 .ui-notifications [data-sonner-toast] > * { width: 100%; transition: none; }
 .ui-notifications [data-sonner-toast]:focus-visible { box-shadow: none; }
 .ui-notifications [data-sonner-toast]:focus-visible { border-color: var(--foreground); }
 .ui-notifications .ui-toast { width: 100%; }
 @media (--conduit-phone-layout) {
-  .ui-notifications[data-sonner-toaster] { right: var(--phone-overlay-padding); bottom: auto; top: calc(var(--phone-overlay-padding) + var(--safe-area-inset-top, env(safe-area-inset-top, 0px))); width: calc(100% - 2 * var(--phone-overlay-padding)); }
+  /* A phone's toasts come down from the top at the header pills' inset, the screen's width inside it. */
+  .ui-notifications[data-sonner-toaster][data-y-position] { right: var(--space-md); left: var(--space-md); bottom: auto; top: calc(var(--space-md) + var(--safe-area-inset-top, env(safe-area-inset-top, 0px))); width: auto; }
   .ui-notifications [data-sonner-toast][data-y-position="bottom"] { top: 0; bottom: auto; --lift: 1; --lift-amount: var(--gap); }
 }

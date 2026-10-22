@@ -8,7 +8,9 @@ const git = (...args) => {
   catch { return ""; }
 };
 
-/** Artifact metadata, never user data. Dev versions follow the Windows updater convention. */
+/** Artifact metadata, never user data. Dev versions follow the Windows updater convention. The commit is prefixed
+ *  (git describe's "g"): a short hash of digits with a leading zero is not a valid semver identifier, and the build
+ *  refused 0916886. */
 export function buildStamp(env = process.env, now = new Date()) {
   try { return JSON.parse(readFileSync(new URL("../../BUILD.json", import.meta.url), "utf8")); }
   catch (error) { if (error.code !== "ENOENT") throw error; }
@@ -18,7 +20,7 @@ export function buildStamp(env = process.env, now = new Date()) {
   const [major, minor, patch] = last.replace(/^v/, "").split(".").map(Number);
   const timestamp = now.toISOString().replace(/[-:T]/g, "").slice(0, 14);
   const version = env.CONDUIT_BUILD_VERSION || release.replace(/^v/, "")
-    || `${major || 0}.${minor || 0}.${(patch || 0) + 1}-dev.${timestamp}.${commit.slice(0, 7)}`;
+    || `${major || 0}.${minor || 0}.${(patch || 0) + 1}-dev.${timestamp}.g${commit.slice(0, 7)}`;
   const dirty = !release && Boolean(git("status", "--porcelain", "--untracked-files=no"));
   return { version, commit, release, builtAt: now.toISOString(), dirty };
 }

@@ -1,5 +1,7 @@
+import { Frost } from "./frost";
+import * as Icons from "./icons";
 import { Show, type JSX } from "solid-js";
-import { CircleCheckIcon, CircleXIcon, InfoIcon, TriangleAlertIcon, XIcon } from "lucide-solid";
+import { CircleCheckIcon, CircleXIcon, InfoIcon } from "lucide-solid";
 import { Button } from "./controls";
 import { type Density, type Motion, motionOf } from "./shared";
 
@@ -9,15 +11,15 @@ import { type Density, type Motion, motionOf } from "./shared";
  * An action, when there is one thing to do about it; a × to dismiss. An error is an alert, the rest status.
  */
 export type ToastKind = "success" | "info" | "warning" | "error";
-const TOAST_ICONS: Record<ToastKind, () => JSX.Element> = { success: () => <CircleCheckIcon />, info: () => <InfoIcon />, warning: () => <TriangleAlertIcon />, error: () => <CircleXIcon /> };
+const TOAST_ICONS: Record<ToastKind, () => JSX.Element> = { success: () => <CircleCheckIcon />, info: () => <InfoIcon />, warning: () => <Icons.Warning />, error: () => <CircleXIcon /> };
 export function Toast(props: { kind?: ToastKind; children: JSX.Element; action?: { label: string; onClick?: (event: MouseEvent) => void }; description?: string; onDismiss?: () => void; density?: Density; motion?: Motion; embedded?: boolean }) {
   const kind = () => props.kind ?? "info";
-  return <div role={kind() === "error" ? "alert" : "status"} class={props.embedded ? "ui-toast" : "ui-frost ui-toast-frame ui-toast"} data-kind={kind()} data-density={props.density} data-surface="frost" data-lift="raised" {...motionOf(props.motion)}>
+  return <Frost plain={props.embedded ? "on-frost" : false} lift="raised" role={kind() === "error" ? "alert" : "status"} class={props.embedded ? "ui-toast" : "ui-toast-frame ui-toast"} data-kind={kind()} data-density={props.density} {...motionOf(props.motion)}>
     <span class="ui-toast-icon">{TOAST_ICONS[kind()]()}</span>
     <div class="ui-toast-copy"><p class="ui-toast-text">{props.children}</p><Show when={props.description}><p class="ui-toast-description">{props.description}</p></Show></div>
     <Show when={props.action}>{(action) => <Button variant="ghost" outline size="sm" onClick={(event) => action().onClick?.(event)}>{action().label}</Button>}</Show>
-    <Button variant="ghost" size="icon-xs" class="ui-toast-close" aria-label="Dismiss" onClick={() => props.onDismiss?.()}><XIcon /></Button>
-  </div>;
+    <Button variant="ghost" size="icon-xs" class="ui-toast-close" aria-label="Dismiss" onClick={() => props.onDismiss?.()}><Icons.Close /></Button>
+  </Frost>;
 }
 /** Where toasts gather: newest nearest the edge, the rest stacked away from it. */
 export function Toaster(props: { children?: JSX.Element; host?: (attrs: { class: string; frameClass: string; style: JSX.CSSProperties }) => JSX.Element }) {

@@ -1,18 +1,9 @@
 import path from "node:path";
-import {
-  duplicateSession,
-  removeSession,
-  sessionDirectoryFor,
-} from "./session-store.js";
+import { sessionDirectoryFor } from "./session-store.js";
 
 export async function stopSessionProcesses(backends, session) {
   const chatId = session.chatId || session.id;
   const matching = backends.rawRecords().filter((record) => record.chatId === chatId);
-  await Promise.all(matching.map((record) => backends.adapterForRecord(record).close(record.id)));
-}
-
-export async function stopSessionFamilyProcesses(backends, chat, _files) {
-  const matching = backends.rawRecords().filter((record) => record.chatId === chat.id);
   await Promise.all(matching.map((record) => backends.adapterForRecord(record).close(record.id)));
 }
 
@@ -22,13 +13,11 @@ export async function stopProjectProcesses(backends, projectId) {
 }
 
 export function sessionDirectoryForChat(config, chat, project) {
-  const installation = config.installations.get(chat.runtime?.installationId || "conduit-pinned");
-  return installation ? sessionDirectoryFor(project.workingRoot, installation.agentDir) : project.sessionsDir;
+  return sessionDirectoryFor(project.workingRoot, config.piAgentDir);
 }
 
 export function sessionDirectoryRootForChat(config, chat) {
-  const installation = config.installations.get(chat.runtime?.installationId || "conduit-pinned");
-  return installation?.agentDir || null;
+  return config.piAgentDir;
 }
 
 export async function findDeletableSession(registry, projectList, chat) {
@@ -39,22 +28,30 @@ export async function findDeletableSession(registry, projectList, chat) {
   }
 }
 
-export async function moveRegisteredChat({ chat, source, target, session, registry }) {
-  let duplicate = null;
-  let folderMoved = false;
+/**
+ * Move a Conduit durable agent chat to another project or workspace: a record
+ * and metadata change, not a file move of its history. Its folder (logs,
+ * attachments) follows it, its conversations work in the target from now on,
+ * and its owner becomes the target's device. Chats of other harnesses keep
+ * their history in the harness, tied to a folder, so they do not move.
+ */
+export async function moveDurableChat({ chat, source, target, backends, registry }) {
+  if (chat.backend?.implementation !== "conduit-runtime") {
+    throw Object.assign(new Error("Only Conduit chats can move; this one's history lives in its harness, tied to its folder."),
+      { code: "chat_move_not_supported", status: 409 });
+  }
+  if (chat.projectId === target.id) throw Object.assign(new Error("The chat is already there"), { code: "session_project_unchanged", status: 409 });
+  // Roaming chats belong to no device; one moved onto a device's workspace is owned by it.
+  if (chat.backend?.roaming && !target.local) {
+    throw Object.assign(new Error("A chat that works on any device stays on this server's folders."), { code: "chat_move_not_supported", status: 409 });
+  }
+  await stopSessionProcesses(backends, chat);
+  await registry.move(chat.id, source, target);
   try {
-    if (session) duplicate = await duplicateSession(session, target);
-    await registry.move(chat.id, source, target);
-    folderMoved = true;
-    if (duplicate) await registry.commitSession(chat.id, duplicate);
-    if (session) await removeSession(session);
-    return duplicate;
+    await backends.adapters.get("conduit-runtime").relocate({ opaqueSession: chat.backend?.opaqueSession, project: target });
   } catch (error) {
-    if (folderMoved) {
-      await registry.move(chat.id, target, source).catch(() => {});
-      if (session) await registry.commitSession(chat.id, session).catch(() => {});
-    }
-    if (duplicate) await removeSession(duplicate).catch(() => {});
+    await registry.move(chat.id, target, source).catch(() => {});
     throw error;
   }
+  return registry.metadata(chat.id);
 }

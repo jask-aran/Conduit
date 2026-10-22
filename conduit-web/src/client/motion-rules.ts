@@ -22,13 +22,13 @@ const MOTION_RULES = `
   [data-region="workspace-panel"],
   [data-region="workspace-rail"],
   :is(.chat-main, .main-split, :is(.chat-main, .main-split) :has(:is(.ui-composer-slot, .ui-phone-composer))) > :not(:is(.ui-composer-slot, .ui-phone-composer), :has(:is(.ui-composer-slot, .ui-phone-composer)))
-) { animation: ui-arrive 300ms cubic-bezier(.2, .8, .2, 1) both; }
+) { animation: ui-arrive var(--duration-gentle) var(--ease-arrive) both; }
 
 :root[data-route-motion="leaving"] :is(.chat-main, .chat-main :has(:is(.ui-composer-slot, .ui-phone-composer))) > :not(:is(.ui-composer-slot, .ui-phone-composer), :has(:is(.ui-composer-slot, .ui-phone-composer))) {
-  animation: ui-leave 200ms cubic-bezier(.4, 0, 1, 1) both;
+  animation: ui-leave var(--duration-quick) var(--ease-leave) both;
 }
 :root[data-route-motion="arriving"] :is(.chat-main, .chat-main :has(:is(.ui-composer-slot, .ui-phone-composer))) > :not(:is(.ui-composer-slot, .ui-phone-composer), :has(:is(.ui-composer-slot, .ui-phone-composer))) {
-  animation: ui-arrive 300ms cubic-bezier(.2, .8, .2, 1) both;
+  animation: ui-arrive var(--duration-gentle) var(--ease-arrive) both;
 }
 @media (prefers-reduced-motion: reduce) {
   :root[data-arrival="arriving"] :is(

@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { citationHost } from "../src/client/chat/markdown-security.ts";
+import { importClient } from "./helpers/client-module.js";
+
+const { citationHost } = await importClient('export { citationHost } from "../src/client/chat/markdown-security.ts";');
 
 test("a link whose visible text is its own URL becomes a citation", () => {
   const url = "https://en.wikipedia.org/wiki/Kendrick_Lamar";

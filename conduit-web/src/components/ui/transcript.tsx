@@ -1,7 +1,10 @@
+import { Frost } from "./frost";
+import * as Icons from "./icons";
 import { children, createEffect, createRenderEffect, createSignal, For, onCleanup, onMount, Show, splitProps, type JSX } from "solid-js";
-import { BellIcon, ChevronDownIcon, SquareIcon, TriangleAlertIcon } from "lucide-solid";
+
 import { cn } from "@/lib/utils";
 import { Spinner } from "./controls";
+import { haptic } from "./haptics";
 import { type Motion, motionOf, sinceOf } from "./shared";
 export { ANSWER_MARKDOWN } from "./shared";
 
@@ -17,26 +20,31 @@ export function Bubble(props: { children: JSX.Element; fold?: number; open?: boo
   const [fits, setFits] = createSignal(false);
   const foldable = () => Boolean(props.fold) && !fits();
   const folded = () => foldable() && !props.open;
-  const measure = () => { if (folded()) setFits(text.scrollHeight - text.clientHeight <= 1); };
+  // Whether the text fits its fold: its whole height (scrollHeight, folded or not) against the fold's lines. Never by
+  // folding it again to look -- a resize does that every frame of a drag, and the fold's line came and went with it.
+  const measure = () => {
+    const line = Number.parseFloat(getComputedStyle(text).lineHeight);
+    if (Number.isFinite(line)) setFits(text.scrollHeight <= (props.fold ?? 0) * line + 1);
+    else if (folded()) setFits(text.scrollHeight - text.clientHeight <= 1);
+  };
   onMount(() => {
     if (!props.fold) return;
     let width = text.clientWidth;
     const resized = new ResizeObserver(() => {
       if (text.clientWidth === width) return;
       width = text.clientWidth;
-      setFits(false);
-      requestAnimationFrame(measure);
+      measure();
     });
     resized.observe(text);
     onCleanup(() => resized.disconnect());
     measure();
   });
-  // A new fold: fold again, then measure once that has drawn.
-  createEffect(() => { if (props.fold && !props.open) { setFits(false); requestAnimationFrame(measure); } });
-  return <div class="ui-frost ui-bubble" data-editing={props.editing ? "true" : undefined}>
+  // A new fold: measure against it once it has drawn.
+  createEffect(() => { if (props.fold && !props.open) requestAnimationFrame(measure); });
+  return <Frost class="ui-bubble" data-editing={props.editing ? "true" : undefined}>
     <div ref={text} class="ui-bubble-text" data-folded={folded() ? "" : undefined} style={props.fold ? { "--bubble-fold": props.fold } : undefined}>{props.children}</div>
     <Show when={foldable()}><button type="button" class="ui-bubble-more" aria-expanded={Boolean(props.open)} onClick={(event) => props.onToggle?.(event)}>{props.open ? "Show less" : "Show more"}</button></Show>
-  </div>;
+  </Frost>;
 }
 
 /*
@@ -51,13 +59,13 @@ export const Answer = (props: { html?: string; copied?: boolean; children?: JSX.
 /** A request that failed: Request failed and when, its facts (model, provider, profile), then what the provider
  *  said. In an answer's place, or in a trace's trail (TraceError). */
 export function Failure(props: { time?: string; dateTime?: string; facts?: string[]; message: string }) {
-  return <div class="ui-failure" role="alert"><div class="ui-failure-head"><TriangleAlertIcon /><b>Request failed</b><Show when={props.time}><time dateTime={props.dateTime}>{props.time}</time></Show></div>
+  return <div class="ui-failure" role="alert"><div class="ui-failure-head"><Icons.Warning /><b>Request failed</b><Show when={props.time}><time dateTime={props.dateTime}>{props.time}</time></Show></div>
     <Show when={props.facts?.length}><div class="ui-failure-facts"><For each={props.facts}>{(fact) => <span>{fact}</span>}</For></div></Show>
     <pre>{props.message}</pre></div>;
 }
 /** A prompt the harness sent on its own (a background task finishing): one muted line at the right, a bell before
  *  it, no bubble and no actions. */
-export const HarnessPrompt = (props: { children: JSX.Element }) => <p class="ui-harness-prompt"><BellIcon aria-hidden="true" /><span>{props.children}</span></p>;
+export const HarnessPrompt = (props: { children: JSX.Element }) => <p class="ui-harness-prompt"><Icons.Notification aria-hidden="true" /><span>{props.children}</span></p>;
 /** What a turn changed, as counts in the data's colours (+added, −removed, mono); opens the changes. In a foot. */
 export const Changes = (props: { added: number; removed: number; title?: string; label?: string; onOpen?: () => void }) =>
   <button type="button" class="ui-changes" title={props.title} aria-label={props.label} onClick={() => props.onOpen?.()}><span data-change="added">+{props.added}</span><span data-change="removed">−{props.removed}</span></button>;
@@ -77,7 +85,7 @@ export function foldBody(props: { opens?: boolean; open?: boolean; children?: JS
 export function Disclosure(props: { header: JSX.Element; open?: boolean; onToggle?: () => void; disabled?: boolean; opens?: boolean; children?: JSX.Element }) {
   const { body } = foldBody(props);
   return <div class="ui-disclosure" data-open={props.open ? "true" : "false"}>
-    <button type="button" class="ui-disclosure-header" aria-expanded={Boolean(props.open)} disabled={props.disabled} onClick={() => props.onToggle?.()}>{props.header}<ChevronDownIcon class="ui-disclosure-chevron" /></button>
+    <button type="button" class="ui-disclosure-header" aria-expanded={Boolean(props.open)} disabled={props.disabled} onClick={() => { haptic("fold"); props.onToggle?.(); }}>{props.header}<Icons.ChevronDown class="ui-disclosure-chevron" /></button>
     <div class="ui-disclosure-body" aria-hidden={!props.open}>{body()}</div>
   </div>;
 }
@@ -87,7 +95,7 @@ export const MessageFoot = (props: { time?: string; dateTime?: string; title?: s
   <div class="ui-message-foot" data-end={props.end ? "" : undefined} {...motionOf(props.motion)}><Show when={props.time}><time dateTime={props.dateTime} title={props.title}>{props.time}</time></Show><Show when={props.status}><b class="ui-message-status">{props.status}</b></Show>{props.children}</div>;
 /** In an answer's place, one stopped before writing any: the stop mark, Interrupted, and when. */
 export const StopLine = (props: { detail: string }) =>
-  <div class="ui-stop-line" role="status"><SquareIcon aria-hidden="true" /><b>Interrupted</b>{`\u00a0· ${props.detail}`}</div>;
+  <div class="ui-stop-line" role="status"><Icons.Stop aria-hidden="true" /><b>Interrupted</b>{`\u00a0· ${props.detail}`}</div>;
 /** A turn: the trace header, the answer and its foot, one gap apart. */
 /** An empty chat's greeting: centred in what holds it, above the room its host keeps for the composer (--welcome-room). */
 export const Welcome = (props: { title: string }) => <div class="ui-welcome"><h1>{props.title}</h1></div>;

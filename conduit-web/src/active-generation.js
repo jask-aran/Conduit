@@ -69,25 +69,12 @@ export function snapshotActiveGeneration(state) {
   return state ? structuredClone(state) : null;
 }
 
-export function generationResumeEvent(state) {
-  return {
-    type: "generation_resume",
-    generationId: state.id,
-    seq: state.lastSeq,
-    generation: snapshotActiveGeneration(state),
-  };
-}
-
 /**
  * The turn so far, from the events the browser is sent.
  *
- * This read Pi's own event names while the browser's store read the contract's
- * -- one turn, two reducers, two vocabularies, agreeing only because a test
- * said so. It now reduces exactly what crosses the socket, so the snapshot it
- * builds is what a browser that saw everything would have built, by
- * construction rather than by assertion. That snapshot is the whole point of
- * keeping one here: it is what a reconnecting or paused socket is restated
- * from, which is what makes paint droppable.
+ * It reduces exactly what crosses the socket, so the snapshot it builds is
+ * what a browser that saw everything would have built. A reconnecting or
+ * paused socket is restated from this snapshot, which makes paint droppable.
  *
  * Block starts and completions are gone with the rename, because the browser
  * is not sent them: a block opens on its first delta and completes when the
@@ -275,79 +262,4 @@ export function textBlockClassifications(state) {
     }
   }
   return result;
-}
-
-/** The same question, for a message the server is about to state as finished. */
-export function messageIsInterim(message) {
-  return Boolean(message && (message.stopReason === "toolUse"
-    || (message.blocks || []).some((block) => block.kind === "tool_call")));
-}
-
-export function activeGenerationFromPersistedMessages(generationId, messages, { toolExecutions = {} } = {}) {
-  const state = createActiveGeneration(generationId, { status: "complete" });
-  // Named exactly as the normalizer names an answer it was given no id for:
-  // the generation, then its position in the turn. The live view and the view
-  // rebuilt from what was persisted are compared block by block, so a message
-  // that is the same message has to be called the same thing on both sides.
-  const fallbackId = (index) => `${generationId}:m${index + 1}`;
-  state.assistantMessages = messages
-    .filter((message) => message?.role === "assistant")
-    .map((message, messageIndex) => ({
-      id: fallbackId(messageIndex),
-      status: message.stopReason === "error" || message.stopReason === "aborted" ? "error" : "complete",
-      stopReason: message.stopReason || "stop",
-      errorMessage: message.errorMessage || null,
-      blocks: normalizePersistedBlocks(fallbackId(messageIndex), message.content),
-    }));
-  state.toolExecutions = structuredClone(toolExecutions);
-  state.status = terminalStatus(state);
-  return state;
-}
-
-/**
- * A message Pi has already written, rebuilt as a generation view of it.
- *
- * The reads are Pi's, because this is reading Pi's stored content. What it
- * builds is Conduit's, and it has to be identical to what the live reducer
- * builds from the same turn arriving as deltas -- that equivalence is asserted
- * directly, and it is what lets a reconnecting browser be given the view it
- * would have had if it had never dropped the socket.
- */
-function normalizePersistedBlocks(messageId, content) {
-  if (!Array.isArray(content)) {
-    return content == null || content === "" ? [] : [{
-      kind: "text",
-      contentIndex: 0,
-      text: String(content),
-      status: "complete",
-      identity: contentBlockIdentity(messageId, 0),
-    }];
-  }
-  return content.flatMap((block, contentIndex) => {
-    if (block?.type === "text") return [{
-      kind: "text",
-      contentIndex,
-      text: String(block.text || ""),
-      status: "complete",
-      identity: contentBlockIdentity(messageId, contentIndex),
-    }];
-    if (block?.type === "thinking") return [{
-      kind: "thinking",
-      contentIndex,
-      text: String(block.thinking || ""),
-      redacted: Boolean(block.redacted),
-      status: "complete",
-      identity: contentBlockIdentity(messageId, contentIndex),
-    }];
-    if (block?.type === "toolCall") return [{
-      kind: "tool_call",
-      contentIndex,
-      toolCallId: String(block.id || ""),
-      name: String(block.name || ""),
-      input: block.arguments,
-      status: "complete",
-      identity: contentBlockIdentity(messageId, contentIndex),
-    }];
-    return [];
-  });
 }

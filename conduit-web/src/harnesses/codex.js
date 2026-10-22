@@ -14,8 +14,6 @@ export const manifest = {
   // App-server stores names but does not start the first-party client's hidden
   // naming turn for third-party threads.
   nameGeneration: "conduit",
-  // Every item the app-server reports carries its own id.
-  suppliesMessageIds: true,
   serviceLevels: [
     { id: "default", label: "Normal" },
     { id: "priority", label: "Priority" },
@@ -25,6 +23,8 @@ export const manifest = {
   restartDrain: false,
   drive: true,
   profile: true,
+  // Runs on a paired device even when not installed here (registered regardless).
+  devices: true,
   probe: (config) => commandProbe(config.codexCommand)(),
-  build: (config) => new CodexAppServerAdapter({ command: config.codexCommand, logs: config.logs }),
+  build: (config) => new CodexAppServerAdapter({ command: config.codexCommand, logs: config.logs, nodeHub: config.nodeHub }),
 };
