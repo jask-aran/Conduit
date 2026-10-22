@@ -31,6 +31,7 @@ export async function convertClassicChats({ registry, projects, backends, config
     const sessionFile = backend.opaqueSession && fs.existsSync(backend.opaqueSession) ? backend.opaqueSession : null;
     try {
       let opaqueSession = null;
+      let ran = { model: null, thinkingLevel: null };
       if (sessionFile) {
         const project = await projects.get(chat.projectId);
         const harness = await durable.runtime.open();
@@ -40,11 +41,14 @@ export async function convertClassicChats({ registry, projects, backends, config
         const conversation = await harness.conversation(result.conversationId, BACKGROUND_CONTEXT);
         await conversation?.configure(await durable.runtime.agentFor(template.id), BACKGROUND_CONTEXT);
         opaqueSession = String(result.conversationId);
+        ran = result;
       }
       await registry.update(chat.id, { templateId: template.id, templateVersion: template.version, runtime: null,
         // The session it came from, so startup's recovery of lost sessions
         // (chat-store.js) never brings it back as a second chat.
-        backend: { ...templateBackend(template), opaqueSession, ...(sessionFile ? { convertedFrom: sessionFile } : {}) } });
+        backend: { ...templateBackend(template), opaqueSession, ...(ran.model ? { model: ran.model } : {}),
+          ...(sessionFile ? { convertedFrom: sessionFile } : {}) },
+        ...(ran.model && ran.thinkingLevel ? { modelThinkingLevels: { [ran.model]: ran.thinkingLevel } } : {}) });
       converted += 1;
     } catch (error) {
       failed += 1;
