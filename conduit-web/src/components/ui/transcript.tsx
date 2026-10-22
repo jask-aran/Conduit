@@ -20,22 +20,27 @@ export function Bubble(props: { children: JSX.Element; fold?: number; open?: boo
   const [fits, setFits] = createSignal(false);
   const foldable = () => Boolean(props.fold) && !fits();
   const folded = () => foldable() && !props.open;
-  const measure = () => { if (folded()) setFits(text.scrollHeight - text.clientHeight <= 1); };
+  // Whether the text fits its fold: its whole height (scrollHeight, folded or not) against the fold's lines. Never by
+  // folding it again to look -- a resize does that every frame of a drag, and the fold's line came and went with it.
+  const measure = () => {
+    const line = Number.parseFloat(getComputedStyle(text).lineHeight);
+    if (Number.isFinite(line)) setFits(text.scrollHeight <= (props.fold ?? 0) * line + 1);
+    else if (folded()) setFits(text.scrollHeight - text.clientHeight <= 1);
+  };
   onMount(() => {
     if (!props.fold) return;
     let width = text.clientWidth;
     const resized = new ResizeObserver(() => {
       if (text.clientWidth === width) return;
       width = text.clientWidth;
-      setFits(false);
-      requestAnimationFrame(measure);
+      measure();
     });
     resized.observe(text);
     onCleanup(() => resized.disconnect());
     measure();
   });
-  // A new fold: fold again, then measure once that has drawn.
-  createEffect(() => { if (props.fold && !props.open) { setFits(false); requestAnimationFrame(measure); } });
+  // A new fold: measure against it once it has drawn.
+  createEffect(() => { if (props.fold && !props.open) requestAnimationFrame(measure); });
   return <Frost class="ui-bubble" data-editing={props.editing ? "true" : undefined}>
     <div ref={text} class="ui-bubble-text" data-folded={folded() ? "" : undefined} style={props.fold ? { "--bubble-fold": props.fold } : undefined}>{props.children}</div>
     <Show when={foldable()}><button type="button" class="ui-bubble-more" aria-expanded={Boolean(props.open)} onClick={(event) => props.onToggle?.(event)}>{props.open ? "Show less" : "Show more"}</button></Show>

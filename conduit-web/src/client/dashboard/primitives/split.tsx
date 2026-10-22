@@ -137,7 +137,9 @@ export function SplitDashboard(props: {
       if (!measured) requestAnimationFrame(() => { measured = true; });
     };
     const schedule = () => { if (!frame) frame = requestAnimationFrame(measure); };
-    const sizes = new ResizeObserver(schedule);
+    // Measured where the observer delivers, after layout, where its reads are free: deferred to the next frame they
+    // came after that frame's writes (the dock easing open) and forced a layout of the page every frame.
+    const sizes = new ResizeObserver(() => { cancelAnimationFrame(frame); measure(); });
     const watch = () => { sizes.disconnect(); sizes.observe(root); for (const element of root.querySelectorAll(WATCHED)) sizes.observe(element); schedule(); };
     const tree = new MutationObserver(watch);
     tree.observe(root, { childList: true, subtree: true });

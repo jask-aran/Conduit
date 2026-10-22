@@ -166,28 +166,29 @@ export function Composer(props: {
     model: () => true,
   };
   let refitFrame = 0;
-  const refit = () => {
-    cancelAnimationFrame(refitFrame);
-    refitFrame = requestAnimationFrame(() => {
-      if (phoneLayout() || !actionsRow?.isConnected) { if (folded().size) setFolded(new Set<ComposerFold>()); return; }
-      for (const element of actionsLeft().querySelectorAll<HTMLElement>(":scope > [data-composer-fold]")) foldWidths.set(element.dataset.composerFold as ComposerFold, element.getBoundingClientRect().width);
-      const widths = new Map<ComposerFold, number>();
-      for (const key of COMPOSER_FOLDS) if (foldPresent[key]() && foldWidths.has(key)) widths.set(key, foldWidths.get(key)!);
-      const gap = parseFloat(getComputedStyle(actionsLeft()).columnGap) || 0;
-      const fixedChildren = ([...actionsLeft().children] as HTMLElement[]).filter((child) => !child.dataset.composerFold);
-      const fixed = fixedChildren.reduce((sum, child) => sum + child.getBoundingClientRect().width, 0) + gap * Math.max(0, fixedChildren.length - 1);
-      const row = getComputedStyle(actionsRow);
-      const others = ([...actionsRow.children] as HTMLElement[]).filter((child) => child !== actionsLeft());
-      const available = actionsRow.clientWidth - (parseFloat(row.paddingLeft) || 0) - (parseFloat(row.paddingRight) || 0)
-        - others.reduce((sum, child) => sum + child.getBoundingClientRect().width + (parseFloat(row.columnGap) || 0), 0);
-      const next = foldsFor(available, fixed, widths, gap);
-      const current = folded();
-      if (next.size !== current.size || [...next].some((key) => !current.has(key))) setFolded(next);
-    });
+  const fit = () => {
+    if (phoneLayout() || !actionsRow?.isConnected) { if (folded().size) setFolded(new Set<ComposerFold>()); return; }
+    for (const element of actionsLeft().querySelectorAll<HTMLElement>(":scope > [data-composer-fold]")) foldWidths.set(element.dataset.composerFold as ComposerFold, element.getBoundingClientRect().width);
+    const widths = new Map<ComposerFold, number>();
+    for (const key of COMPOSER_FOLDS) if (foldPresent[key]() && foldWidths.has(key)) widths.set(key, foldWidths.get(key)!);
+    const gap = parseFloat(getComputedStyle(actionsLeft()).columnGap) || 0;
+    const fixedChildren = ([...actionsLeft().children] as HTMLElement[]).filter((child) => !child.dataset.composerFold);
+    const fixed = fixedChildren.reduce((sum, child) => sum + child.getBoundingClientRect().width, 0) + gap * Math.max(0, fixedChildren.length - 1);
+    const row = getComputedStyle(actionsRow);
+    const others = ([...actionsRow.children] as HTMLElement[]).filter((child) => child !== actionsLeft());
+    const available = actionsRow.clientWidth - (parseFloat(row.paddingLeft) || 0) - (parseFloat(row.paddingRight) || 0)
+      - others.reduce((sum, child) => sum + child.getBoundingClientRect().width + (parseFloat(row.columnGap) || 0), 0);
+    const next = foldsFor(available, fixed, widths, gap);
+    const current = folded();
+    if (next.size !== current.size || [...next].some((key) => !current.has(key))) setFolded(next);
   };
+  const refit = () => { cancelAnimationFrame(refitFrame); refitFrame = requestAnimationFrame(fit); };
   const shows = (key: ComposerFold) => phoneLayout() || !folded().has(key);
   // The desktop row's folding, observed from whenever its Toolbar is drawn; a phone's row has none of it.
-  const foldObserver = new ResizeObserver(refit);
+  // Measured where the observer delivers, after layout: its reads are free there. Deferred to the next frame, they came
+  // after that frame's writes -- the dock easing open set every pane's width -- and forced a whole layout of the page
+  // per composer per frame (440ms of a 3s dock toggle with three composers drawn).
+  const foldObserver = new ResizeObserver(() => { cancelAnimationFrame(refitFrame); fit(); });
   onCleanup(() => foldObserver.disconnect());
   const toolbarRef = (element: HTMLDivElement) => { actionsRow = element; foldObserver.observe(element); refit(); };
   const dictationWaveform = createVoiceWaveformController(MAX_RESPONSIVE_BAR_COUNT);
