@@ -41,13 +41,13 @@ if (process.argv[2]==="seed") {
     await send("Input.insertText",{text:`Message ${i+1}. `+para.repeat(6)});
     await wait(300); key(66); await wait(1800);
   }
-  console.log("scroller:", await ev(`(()=>{const v=document.querySelector(".message-scroller-viewport");return v?{scrollHeight:v.scrollHeight,clientHeight:v.clientHeight,max:v.scrollHeight-v.clientHeight}:null})()`));
+  console.log("scroller:", await ev(`(()=>{const v=document.querySelector(".ui-chat-viewport");return v?{scrollHeight:v.scrollHeight,clientHeight:v.clientHeight,max:v.scrollHeight-v.clientHeight}:null})()`));
   ws.close(); process.exit(0);
 }
 
 // full trace, unbounded, of every frame of a keyboard travel
 const RECORD=`(()=>{window.__tr=[];const s=performance.now();const cs=getComputedStyle(document.documentElement);
- const v=document.querySelector(".message-scroller-viewport");
+ const v=document.querySelector(".ui-chat-viewport");
  const tick=()=>{const h=parseInt(cs.getPropertyValue("--app-height"))||0;
   const row={t:Math.round(performance.now()-s),h,st:v?Math.round(v.scrollTop):-1,ch:v?Math.round(v.clientHeight):-1,sh:v?Math.round(v.scrollHeight):-1};
   const l=window.__tr[window.__tr.length-1];
@@ -61,9 +61,9 @@ const show=(label,rows)=>{
 };
 
 const where=process.argv[2]||"bottom";
-await ev(`(()=>{const v=document.querySelector(".message-scroller-viewport");if(!v)return;v.scrollTop=${where==="bottom"?"v.scrollHeight":"Math.max(0,(v.scrollHeight-v.clientHeight)/2)"};})()`);
+await ev(`(()=>{const v=document.querySelector(".ui-chat-viewport");if(!v)return;v.scrollTop=${where==="bottom"?"v.scrollHeight":"Math.max(0,(v.scrollHeight-v.clientHeight)/2)"};})()`);
 await wait(700);
-console.log("start:", await ev(`(()=>{const v=document.querySelector(".message-scroller-viewport");return v?{st:Math.round(v.scrollTop),ch:v.clientHeight,sh:v.scrollHeight,fromBottom:Math.round(v.scrollHeight-v.scrollTop-v.clientHeight)}:null})()`));
+console.log("start:", await ev(`(()=>{const v=document.querySelector(".ui-chat-viewport");return v?{st:Math.round(v.scrollTop),ch:v.clientHeight,sh:v.scrollHeight,fromBottom:Math.round(v.scrollHeight-v.scrollTop-v.clientHeight)}:null})()`));
 const c=await composer();
 await ev(RECORD); tap(c.x,c.y); await wait(2800);
 show(`OPEN @ ${where}`, await ev("window.__tr"));

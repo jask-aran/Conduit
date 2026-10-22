@@ -24,6 +24,6 @@
    Layout only: paint containment snapped each formula to the device pixel
    grid while it applied, so under fractional scaling the formulas sitting
    between pixels moved sideways on pointer-down and back on release. */
-.transcript[data-panel-motion] .ui-answer .katex-display > .katex {
+.ui-chat-scroller[data-panel-motion] .ui-answer .katex-display > .katex {
   contain: layout;
 }

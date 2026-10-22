@@ -31,7 +31,7 @@ const sample = () => page.evaluate(() => new Promise((done) => {
   const t0 = performance.now();
   const tick = () => {
     const dock = document.querySelector(".workspace-panel");
-    const surface = dock.querySelector(".workspace-panel-surface").getBoundingClientRect();
+    const surface = dock.querySelector(".ui-dock-surface").getBoundingClientRect();
     const frame = dock.getBoundingClientRect();
     const line = getComputedStyle(dock, "::after");
     const lineWidth = parseFloat(line.width);

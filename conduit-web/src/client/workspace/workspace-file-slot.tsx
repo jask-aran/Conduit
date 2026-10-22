@@ -168,7 +168,6 @@ export default function WorkspaceFileSlot(props: {
   /** The suffix's actions again, for the header's overflow menu when it is too narrow for them. */
   /** More items for the header's ⋯, given which folded actions it lists. */
   headerMenuItems?: (folded: (action: string) => boolean) => JSX.Element;
-  height?: string;
   empty?: string;
   onToggleWrap: () => void;
   annotationChatId?: string | null;
@@ -541,7 +540,6 @@ export default function WorkspaceFileSlot(props: {
       data-slot={props.slot}
       focused={props.focused}
       aria-label={label}
-      style={props.height ? { height: props.height } : undefined}
       onFocusIn={props.onFocus}
       onPointerDown={props.onFocus}
     >

@@ -91,3 +91,8 @@
 .ui-attachments[data-form="tray"] .ui-attachment-media img { width: 100%; height: 100%; max-height: none; object-fit: cover; }
 .ui-attachments[data-form="tray"] .ui-attachment-copy { gap: 0; }
 .ui-attachments[data-form="tray"] .ui-attachment-copy :is(strong, small) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Notice: across the reading column, above what follows it. */
+.ui-notice { position: relative; z-index: 2; display: flex; width: min(var(--reading-width), calc(100% - var(--page-gutter))); gap: var(--space-md); margin: var(--space-md) auto; padding: var(--space-lg); border: var(--hairline) solid var(--border); border-radius: var(--radius-control); background: var(--card); }
+.ui-notice > svg { width: var(--icon-lg); flex: none; }
+.ui-notice p { margin: var(--space-2xs) 0 0; color: var(--muted-foreground); font-size: var(--text-row); }

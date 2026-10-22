@@ -1,3 +1,4 @@
+import { Sheet } from "@/components/ui";
 
 import { Composer } from "../client/chat/composer";
 import { loadVoiceDictationSettings } from "../client/chat/voice-dictation.js";
@@ -17,12 +18,12 @@ export function ChatScreen(props: { chat?: ReturnType<typeof fakeChat> } = {}) {
   const models = seededModels();
   const profile = seededProfile();
   const attachments = fakeAttachments();
-  return <main data-slot="sidebar-inset" data-region="chat" class="chat-main">
+  return <Sheet as="main" lead data-slot="sidebar-inset" data-region="chat" class="chat-main">
     <ChatHeader title="Lorem ipsum file" chat={chat} profile={profile.active()} panelOpen={false} mobileSidebarOpen={false}
       onToggleMobileSidebar={() => {}} onNewChat={() => {}} onOpenPalette={() => {}} onOpenSearch={() => {}} onTogglePanel={() => {}} onShare={() => {}} />
     <Conversation chat={chat}
       transcript={<Transcript chat={chat} supports={() => true} markdownRenderer={selectedMarkdownRenderer()} profileLabel={profile.active().label} />}
       composer={<Composer chat={chat} attachments={attachments} models={models} profiles={profile.profiles} activeProfile={profile.active()} serverOnline voiceSettings={loadVoiceDictationSettings()}
         onChooseProfile={profile.choose} onOpenSettings={() => {}} onOpenAttachments={() => {}} />} />
-  </main>;
+  </Sheet>;
 }

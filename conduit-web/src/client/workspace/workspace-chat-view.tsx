@@ -1,3 +1,4 @@
+import { SheetFill } from "@/components/ui";
 import { Icons } from "@/components/ui";
 import { createEffect, createMemo, createSignal, For, on, Show, type Accessor } from "solid-js";
 import { HistoryIcon, ListCollapseIcon } from "lucide-solid";
@@ -337,7 +338,7 @@ export function ChatView(props: {
   onOpenWorkingFile: (path: string) => void;
 }) {
   const c = props.control;
-  return <section class="workspace-chat-view">
+  return <SheetFill>
       <Show when={c.mode() === "history"}><ToolBar>
             <ToolButton aria-label={c.collapseTools() ? "Expand tool calls" : "Collapse sequential tool calls"} aria-pressed={c.collapseTools()} title={c.collapseTools() ? "Expand tool calls" : "Collapse sequential tool calls"} onClick={c.toggleCollapseTools}><ListCollapseIcon /></ToolButton>
             <ToolButton aria-label={c.historyWrap() ? "Disable line wrapping" : "Enable line wrapping"} aria-pressed={c.historyWrap()} title={c.historyWrap() ? "Disable line wrapping" : "Enable line wrapping"} onClick={c.toggleHistoryWrap}><Icons.WrapText /></ToolButton>
@@ -361,5 +362,5 @@ export function ChatView(props: {
         onOpenWorkingFile={props.onOpenWorkingFile}
         onViewStateChange={c.review.setViewState}
       /></Show>
-    </section>;
+    </SheetFill>;
 }

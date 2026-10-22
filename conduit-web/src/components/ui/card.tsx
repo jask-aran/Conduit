@@ -51,3 +51,7 @@ export function Attachment(props: { name: string; detail: string; image?: JSX.El
     <Show when={props.onRemove}><Button variant="ghost" size="icon-sm" aria-label={`Remove ${props.name}`} onClick={() => props.onRemove?.()}><Icons.Close /></Button></Show>
   </li>;
 }
+
+/** A notice in a pane's reading column: a warning's icon, what is the matter, and what it means, on a card ground. */
+export const Notice = (props: { icon?: JSX.Element; title: JSX.Element; children?: JSX.Element }) =>
+  <div class="ui-notice" role="note">{props.icon}<div><strong>{props.title}</strong><Show when={props.children}><p>{props.children}</p></Show></div></div>;

@@ -22,6 +22,18 @@
   --font-terminal: "Meslo Nerd Font Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
   --font-wordmark: "Conduit Wordmark", sans-serif;
 }
+/* A chat's reading column (ChatScroller): its width, the gutter it keeps from the pane's edges, and how far a block that
+   needs the room (a table; code, when --transcript-code-bleed is set) may bleed past it in a wide chat. The reader
+   picks presets in Settings and the app sets these from them. The column is the reading width, not the composer's:
+   a wider column is less scrolling, the composer keeps its typing measure. */
+:root {
+  --transcript-column-width: var(--reading-width);
+  --transcript-column-gutter: var(--page-gutter);
+  --transcript-wide-scale: 150%;
+  /* The bleed is centred on the column, which sits a little left of the pane's centre: reserving the gutter on both
+     sides keeps it inside with the column's breathing room. */
+  --transcript-wide-max: calc(100cqw - 2 * var(--transcript-column-gutter));
+}
 /*
  * Motion (DESIGN Motion): the foundation is its tokens, three curves and two durations -- quick out, gentle in.
  * Arriving, opening and settling are gentle (the long curve); leaving and folding are quick and accelerate;
@@ -149,6 +161,7 @@
   --label-face: var(--font-label); --label-weight: var(--weight-rest); --label-case: uppercase; --label-tracking: .07em;
 }
 @media (--conduit-phone-layout) { :root {
+  --fog-blur: blur(12px);
   --u-base: var(--u-phone); --row-min-floor: 40px; --row-min-units: 2.5; --row-text-units: 0.84375;
   --scale-chrome: var(--scale-chrome-phone); --scale-sidebar: var(--scale-sidebar-phone); --scale-frost: var(--scale-frost-phone);
   --scale-composer: var(--scale-composer-phone); --scale-transcript: var(--scale-transcript-phone);
@@ -235,6 +248,10 @@
   --dim: rgb(0 0 0 / 42%);
   /* A faint dim: the page round the region a key moved focus to (the region cue), which reads without hiding it. */
   --dim-faint: rgb(0 0 0 / 18%);
+  /* Fog: the pane's own ground thinned and blurred over what it holds (a drop about to land); the content stays
+     placeable under it, unlike a dim. */
+  --fog: color-mix(in oklch, var(--background), transparent 22%);
+  --fog-blur: blur(9.6px);
   /* Under: a piece under something opened from beside it (a submenu, a pill's menu) dims where it stands -- one dim
      for Pill and Menu, a change in place, quick. */
   --dim-under: saturate(.6) opacity(.38);

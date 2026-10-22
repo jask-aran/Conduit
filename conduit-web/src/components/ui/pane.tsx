@@ -107,7 +107,7 @@ export function ToolView(props: JSX.ButtonHTMLAttributes<HTMLButtonElement> & { 
 }
 
 /** What a tool says while it has nothing to show, or is loading: centred, quiet. */
-export const PaneEmpty = (props: { children: JSX.Element }) => <div class="ui-pane-empty">{props.children}</div>;
+export const PaneEmpty = (props: { children: JSX.Element; role?: "status" | "alert" }) => <div class="ui-pane-empty" role={props.role}>{props.children}</div>;
 /** Loading, at the corner of what it loads into: a frost capsule with a spinner. */
 export const PaneLoading = (props: { children: JSX.Element }) => <Frost class="ui-pane-loading" role="status">{props.children}</Frost>;
 
@@ -146,3 +146,7 @@ export function TreeRow(props: JSX.ButtonHTMLAttributes<HTMLButtonElement> & { d
 }
 /** A tree: the scrolling list its rows sit in. */
 export const Tree = (props: JSX.HTMLAttributes<HTMLElement> & { ref?: (element: HTMLElement) => void }) => <nav role="tree" {...props} class="ui-tree" />;
+
+/** Files dragged over a pane: its content fogged, and what dropping does on a raised Frost card at its centre. */
+export const DropOverlay = (props: { children: JSX.Element }) =>
+  <div class="ui-drop-overlay"><Frost lift="raised" class="ui-drop-overlay-card">{props.children}</Frost></div>;

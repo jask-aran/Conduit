@@ -39,7 +39,7 @@ try {
   await page.goto(`${origin}/chat/${id}`); await page.waitForTimeout(5000);
   // The checks, every frame, in the page.
   await page.evaluate(() => {
-    const w = window; const viewport = document.querySelector(".message-scroller-viewport");
+    const w = window; const viewport = document.querySelector(".ui-chat-viewport");
     w.__guard = { phase: "start", phases: {} };
     // What the transcript virtualizes: every block of an answer, and each row with none (a prompt, a trace) whole.
     const blocks = () => [...document.querySelectorAll('[data-slot="message-scroller-item"]')].flatMap((row) => {
@@ -89,7 +89,7 @@ try {
     requestAnimationFrame(tick);
   });
   const phase = (name) => page.evaluate((name) => { window.__guard.phase = name; }, name);
-  const wheel = async (dy, steps, pause = 40) => { const box = await page.locator(".message-scroller-viewport").boundingBox();
+  const wheel = async (dy, steps, pause = 40) => { const box = await page.locator(".ui-chat-viewport").boundingBox();
     await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2); for (let i = 0; i < steps; i++) { await page.mouse.wheel(0, dy); await page.waitForTimeout(pause); } };
   const state = () => page.evaluate(() => document.querySelector(".ui-trace-line")?.textContent ?? "");
   await page.evaluate(() => document.querySelector(".composer-keyboard-trigger, [aria-label='Type a message']")?.click());
@@ -98,7 +98,7 @@ try {
   await phase("follow"); await page.waitForTimeout(20_000);
   await phase("wheel up, streaming"); await wheel(-500, 12);
   await page.waitForTimeout(1500);
-  await phase("jump to top, no input"); await page.evaluate(() => { document.querySelector(".message-scroller-viewport").scrollTop = 0; });
+  await phase("jump to top, no input"); await page.evaluate(() => { document.querySelector(".ui-chat-viewport").scrollTop = 0; });
   await page.waitForTimeout(1500);
   await phase("wheel down, streaming"); await wheel(400, 15);
   await page.waitForTimeout(1000);
@@ -107,7 +107,7 @@ try {
   await phase("follow again");
   await page.waitForFunction(() => /^(Done|Interrupted|Failed)/.test(document.querySelector(".ui-trace-line")?.textContent ?? ""), null, { timeout: 300_000, polling: 500 });
   await phase("settling"); await page.waitForTimeout(2500);
-  await phase("settled: top"); await page.evaluate(() => { document.querySelector(".message-scroller-viewport").scrollTop = 0; }); await page.waitForTimeout(1000);
+  await phase("settled: top"); await page.evaluate(() => { document.querySelector(".ui-chat-viewport").scrollTop = 0; }); await page.waitForTimeout(1000);
   await phase("settled: wheel down"); await wheel(350, 60, 30);
   await page.waitForTimeout(1000);
   results.push(await page.evaluate(() => window.__guard.phases), await state(), await page.evaluate(() => [...(window.__guard.examples ?? []), ...(window.__guard.blanks ?? []).map((b) => "blank " + b), ...(window.__guard.moves ?? []).map((b) => "moved " + b)]));

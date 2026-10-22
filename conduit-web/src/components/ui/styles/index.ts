@@ -17,21 +17,24 @@
  *   reading         Reading: a gauge's totals, parts, figures and foot
  *   nav             NavPane > NavGroup > NavRow, NavFolder, RailButton
  *   dashboard       Dashboard, DashHeader, Group (GroupHeading), DashRow, ChangeRow, FolderShelf
- *   pane            PaneTabRow > TabPlace > PaneTab, PaneAction, PaneEdge, DropWash, DragPill, ToolRail, ToolHeader,
+ *   shell           AppShell > Sheet (its backdrop), SheetFill; Dock > DockSurface, DockDocument; ToolContent
+ *   pane            PaneTabRow > TabPlace > PaneTab, PaneAction, PaneEdge, DropWash, DropOverlay, DragPill, ToolRail, ToolHeader,
  *                   ToolBar, ToolButton, ToolFilter, ToolNotice, Tree > TreeRow
- *   source          ToolLine, CommitBox, ChangeLedger > ChangeSection > ChangeList > ChangeItem, CommitList, PatchLines
+ *   source          SourceView > SourceOverview | SourcePatch; ToolLine, CommitBox, ChangeLedger > ChangeSection >
+ *                   ChangeList > ChangeItem, ChangeNav, CommitList, PatchLines
  *   history         HistoryList > HistoryRow, HistoryBranch
  *   terminal        TermHeader and its parts, TermState, TermKeys
- *   file, viewer    FileView > FileHead, FileBody, StatusBar; FileViewer's sides; FileImage, FileMedia, FileCard
+ *   file, viewer    FilesPane > FilesTree; FileView > FileHead, FileBody, StatusBar; FileViewer's sides; FileImage, FileMedia, FileCard
  *   editor          CodeSurface > CodeHost, SearchBar, AnnotationPopup, Comparison, DiffShell
  *   header          Header, HeaderCrumb, HeaderButton, HeaderNote
- *   card, toast     Card; Toast
+ *   card, toast     Card, Notice; Toast
  *   overlay         Scrim > Overlay (Bar, List, Split, Hints, Rail, Page), Settings, Glance
  *   leader          Leader, Crumbs, Spotlight
  *   pill            Pill*, Aura
  *   phone-composer  PhoneComposer
  *   composer        DesktopComposer, Toolbar
  *   rider           Rider, Line, Chip, Choice, the question card, RiderButton
+ *   chat            ChatView > ChatScroller > ChatEmpty, ComposerDock
  *   transcript      Transcript, Turn, Message, Bubble, Answer, Disclosure
  *   code, trace     CodeBlock, CopyButton; Trace, Trail, Step
  *   identity        the account and server marks
@@ -53,6 +56,7 @@ import "./reading.css";
 import "./nav.css";
 import "./dashboard.css";
 import "./pane.css";
+import "./shell.css";
 import "./source.css";
 import "./history.css";
 import "./terminal.css";
@@ -70,6 +74,7 @@ import "./phone-composer.css";
 import "./composer.css";
 import "./rider.css";
 import "./transcript.css";
+import "./chat.css";
 import "./code.css";
 import "./trace.css";
 
