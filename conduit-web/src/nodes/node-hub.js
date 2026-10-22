@@ -88,7 +88,10 @@ export class NodeHub extends EventEmitter {
   /** Pair a node on a device: an existing one by id, else a new one by name. */
   async pair({ name, deviceId = null, deviceName = null } = {}) {
     await this.load();
-    let device = deviceId && this.devices.find((item) => item.id === deviceId);
+    // The head's own device takes nodes too: on a desktop that is the head
+    // (decision 29), its Windows side pairs into the device its WSL heads.
+    const onHead = Boolean(deviceId) && deviceId === this.head?.deviceId;
+    let device = onHead ? { id: deviceId } : deviceId && this.devices.find((item) => item.id === deviceId);
     if (deviceId && !device) throw Object.assign(new Error("No such device"), { status: 404, code: "device_not_found" });
     if (!device) {
       device = { id: `device_${crypto.randomUUID()}`, name: String(deviceName || name || "Device").trim().slice(0, 80) || "Device",
@@ -101,7 +104,7 @@ export class NodeHub extends EventEmitter {
       keyHash: hash(key), createdAt: new Date().toISOString(), lastSeenAt: null, roots: [], platform: null };
     this.records.push(record);
     await this.save();
-    return { node: this.view(record), device: this.deviceView(device), key };
+    return { node: this.view(record), device: onHead ? (await this.listDevices())[0] : this.deviceView(device), key };
   }
 
   async forget(id) {
@@ -138,7 +141,8 @@ export class NodeHub extends EventEmitter {
 
   async listDevices() {
     await this.load();
-    const head = this.head ? [{ id: this.head.deviceId, name: this.head.name(), local: true, nodes: [await this.headView()] }] : [];
+    const head = this.head ? [{ id: this.head.deviceId, name: this.head.name(), local: true,
+      nodes: [await this.headView(), ...this.records.filter((record) => record.deviceId === this.head.deviceId).map((record) => this.view(record))] }] : [];
     return [...head, ...this.devices.map((device) => this.deviceView(device))];
   }
 
