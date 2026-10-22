@@ -157,17 +157,54 @@ export class NodeHub extends EventEmitter {
   handleUpgrade(request, socket, head) {
     if (!this.allowRemote(clientAddress(request))) return socket.destroy();
     const key = String(request.headers.authorization || "").replace(/^Bearer\s+/i, "");
-    void this.load().then((records) => {
-      const record = key && records.find((item) => crypto.timingSafeEqual(Buffer.from(item.keyHash), Buffer.from(hash(key))));
+    void this.byKey(key).then((record) => {
       if (!record) return socket.destroy();
       this.wss.handleUpgrade(request, socket, head, (ws) => this.attach(record, ws));
     }, () => socket.destroy());
   }
 
+  async byKey(key) {
+    const records = await this.load();
+    return (key && records.find((item) => crypto.timingSafeEqual(Buffer.from(item.keyHash), Buffer.from(hash(key))))) || null;
+  }
+
+  /*
+   * An environment relayed on another node's socket (node-relay.js, decision
+   * 25): it proves itself with its own key, as a direct connection would, and
+   * is then attached as one -- a socket of its own, its frames tagged `env` on
+   * the relay's. The relay's socket going carries them all with it.
+   */
+  async relayOpen(outer, relaySocket, { env, key }, relaying) {
+    const reply = (message) => { if (relaySocket.readyState === 1) relaySocket.send(JSON.stringify({ ...message, env })); };
+    const record = typeof env === "string" ? await this.byKey(String(key || "")) : null;
+    if (!record || relaySocket.readyState !== 1) return reply({ type: "relay-closed", reason: "unknown key" });
+    if (record.id === relaying.id) return reply({ type: "relay-closed", reason: "a node cannot relay itself" });
+    outer.relayed.get(env)?.end("replaced");
+    const socket = new EventEmitter();
+    socket.readyState = 1;
+    socket.send = (data) => { if (socket.readyState === 1) reply({ type: "relay", d: String(data) }); };
+    // Liveness is the relay's socket's: its heartbeat ends it, and this with it.
+    socket.ping = () => queueMicrotask(() => socket.emit("pong"));
+    socket.end = (reason) => {
+      if (socket.readyState === 3) return;
+      socket.readyState = 3;
+      if (outer.relayed.get(env) === socket) outer.relayed.delete(env);
+      socket.emit("close");
+      return reason;
+    };
+    socket.close = (_code, reason) => { if (socket.readyState === 1) reply({ type: "relay-closed", reason: reason || "closed" }); socket.end(); };
+    socket.terminate = socket.close;
+    outer.relayed.set(env, socket);
+    this.attach(record, socket);
+    reply({ type: "relay-opened" });
+  }
+
   attach(record, ws) {
     // A call that opened a watcher keeps hearing its changes after it returns,
     // until the watcher it opened is closed: call id -> { handle, onEvent }.
-    const node = { socket: ws, calls: new Map(), watchers: new Map(), roots: [], platform: null, ready: false };
+    const node = { socket: ws, calls: new Map(), watchers: new Map(), roots: [], platform: null, ready: false,
+      // Environments relayed on this socket: env -> their socket (relayOpen).
+      relayed: new Map() };
     let ids = 0;
     node.send = (message) => ws.send(JSON.stringify(message));
     node.call = (message, onEvent) => {
@@ -196,6 +233,9 @@ export class NodeHub extends EventEmitter {
     ws.on("message", (raw) => {
       let message;
       try { message = JSON.parse(String(raw)); } catch { return; }
+      if (message.type === "relay-open") return void this.relayOpen(node, ws, message, record);
+      if (message.type === "relay") return node.relayed.get(message.env)?.emit("message", message.d);
+      if (message.type === "relay-close") return node.relayed.get(message.env)?.end();
       if (message.type === "hello") {
         if (message.version !== NODE_PROTOCOL_VERSION) {
           node.send({ type: "refused", reason: `main speaks node protocol ${NODE_PROTOCOL_VERSION}, this node ${message.version}` });
@@ -246,6 +286,7 @@ export class NodeHub extends EventEmitter {
       else pending.reject(new Error(message.message || "The device could not run the call"));
     });
     ws.on("close", () => {
+      for (const socket of [...node.relayed.values()]) socket.end();
       for (const [key, tunnel] of this.tunnels) if (key.startsWith(`${record.id} `) && tunnel.nodeSocket === ws) tunnel.drop();
       for (const pending of node.calls.values()) pending.reject(Object.assign(new Error(`${record.name} disconnected during the call`), { interrupted: true }));
       node.calls.clear();

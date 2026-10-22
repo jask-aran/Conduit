@@ -4,6 +4,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { startNodeAgent } from "../conduit-web/src/nodes/node-agent.js";
+import { relayEnvironment, stdioDialer } from "../conduit-web/src/nodes/node-relay.js";
 import { DEFAULT_DENY } from "../conduit-web/src/nodes/secrets.js";
 import { buildManagedToolEnvironment } from "./pi-runtime.mjs";
 
@@ -35,8 +36,18 @@ function printHelp() {
   conduit-node unshare <path> [--server <main-url>]
                                               Stop sharing a folder (with every server, unless
                                               one is named).
+  conduit-node relay add <name> [--server <url>] -- <command...>
+                                              Carry another environment of this device (a
+                                              WSL distro) on this one's connection: <command>
+                                              starts its conduit-node with \`run --stdio\`, e.g.
+                                              -- wsl.exe -d Ubuntu -- conduit-node run --stdio
+  conduit-node relay remove <name> [--server <url>]
+  conduit-node relayed on|off [--server <url>]
+                                              Reach that server only through a relay (another
+                                              environment's \`relay add\`), not by dialling it.
   conduit-node status                         Which servers, and what each is shared.
   conduit-node run                            Serve every paired server until stopped.
+  conduit-node run --stdio [--server <url>]   Serve a relayed pairing over stdin/stdout.
 
 Each server is paired on its own: its own key, its own folders and grants.
 Settings live in ${file} (CONDUIT_NODE_HOME moves them).`);
@@ -114,6 +125,29 @@ if (command === "pair") {
   const at = origin(args[0] || "");
   write({ ...settings, pairings: settings.pairings.filter((item) => item.mainUrl !== at) });
   console.log(`No longer paired with ${at}.`);
+} else if (command === "relay") {
+  const split = args.indexOf("--");
+  const given = options(split < 0 ? args : args.slice(0, split), [], ["server"]);
+  const [action, env] = given.bare;
+  const pairing = pairingFor(given.server);
+  if (!env || !["add", "remove"].includes(action) || (action === "add" && split < 0)) { printHelp(); process.exit(2); }
+  pairing.relays = (pairing.relays || []).filter((item) => item.env !== env);
+  if (action === "add") {
+    const relayed = args.slice(split + 1);
+    if (!relayed.length) { console.error("Name the command that starts it after --."); process.exit(2); }
+    pairing.relays.push({ env, command: relayed });
+  }
+  write(settings);
+  console.log(`${action === "add" ? "Relaying" : "No longer relaying"} ${env} to ${pairing.mainUrl}. Restart \`conduit-node run\` to apply.`);
+} else if (command === "relayed") {
+  const given = options(args, [], ["server"]);
+  const value = given.bare[0];
+  if (value !== "on" && value !== "off") { printHelp(); process.exit(2); }
+  const pairing = pairingFor(given.server);
+  pairing.relayed = value === "on";
+  write(settings);
+  console.log(value === "on" ? `${pairing.mainUrl} is reached only through a relay now; \`conduit-node run\` leaves it to that.`
+    : `${pairing.mainUrl} is dialled directly again by \`conduit-node run\`.`);
 } else if (command === "share") {
   const given = options(args, ["allow", "deny"], ["server"]);
   if ([...given.allow, ...given.deny].some((pattern) => !pattern)) { console.error("--allow and --deny each take a pattern."); process.exit(2); }
@@ -143,15 +177,25 @@ if (command === "pair") {
   console.log(`No longer sharing ${target}${given.server ? ` with ${origin(given.server)}` : ""}.`);
 } else if (command === "status") {
   console.log(JSON.stringify({ name: settings.name || null, host: os.hostname(),
-    pairings: settings.pairings.map(({ mainUrl, nodeId, routes, roots }) => ({ mainUrl, nodeId: nodeId || null, routes: routes || [], roots })) }, null, 2));
+    pairings: settings.pairings.map(({ mainUrl, nodeId, routes, roots, relays, relayed }) => ({ mainUrl, nodeId: nodeId || null, routes: routes || [], roots,
+      relays: relays || [], relayed: Boolean(relayed) })) }, null, 2));
+} else if (command === "run" && args.includes("--stdio")) {
+  // stdout carries the relay's frames: everything said goes to stderr.
+  console.log = console.info = console.warn = console.error;
+  const pairing = pairingFor(options(args, [], ["server"]).server);
+  const agent = startNodeAgent({ mainUrl: pairing.mainUrl, key: pairing.key, name: settings.name || os.hostname(), roots: pairing.roots,
+    shellEnv: buildManagedToolEnvironment(process.env), dial: stdioDialer() });
+  for (const signal of ["SIGINT", "SIGTERM"]) process.on(signal, () => { agent.stop(); process.exit(0); });
 } else if (command === "run") {
   write(settings);
   if (!settings.pairings.length) { console.error("Not paired: run `conduit-node pair <main-url> <key>` first."); process.exit(2); }
   const shellEnv = buildManagedToolEnvironment(process.env);
-  // One connection per server, each with only what was shared with it.
-  const agents = settings.pairings.map((pairing) => {
+  // One connection per server, each with only what was shared with it, and
+  // the environments relayed on it; one reached through a relay is left to it.
+  const agents = settings.pairings.filter((pairing) => !pairing.relayed).map((pairing) => {
     if (!pairing.roots.length) console.warn(`Nothing is shared with ${pairing.mainUrl} yet; it will see this device with no folders.`);
-    return startNodeAgent({ mainUrl: pairing.mainUrl, routes: pairing.routes, key: pairing.key, name: settings.name || os.hostname(), roots: pairing.roots, shellEnv });
+    return startNodeAgent({ mainUrl: pairing.mainUrl, routes: pairing.routes, key: pairing.key, name: settings.name || os.hostname(), roots: pairing.roots, shellEnv,
+      relays: (pairing.relays || []).map(({ env, command: relayed }) => relayEnvironment({ env, command: relayed })) });
   });
   for (const signal of ["SIGINT", "SIGTERM"]) process.on(signal, () => { for (const agent of agents) agent.stop(); process.exit(0); });
 } else {

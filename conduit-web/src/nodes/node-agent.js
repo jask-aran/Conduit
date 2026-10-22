@@ -37,7 +37,11 @@ const HEARTBEAT_MS = 30_000;
  * reports them interrupted rather than this device running work nobody waits
  * for.
  */
-export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: shared, shellEnv = process.env, log = console }) {
+export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: shared, shellEnv = process.env, log = console,
+  // How main is reached: a WebSocket, or a relay's stdin/stdout (node-relay.js).
+  dial = (url, { key: bearer }) => new WebSocket(url, { headers: { authorization: `Bearer ${bearer}` } }),
+  // Environments this one carries on its socket (decision 25): relayEnvironment()s.
+  relays = [] }) {
   // Every way main can be reached, best first (its tailnet name, then a public
   // tunnel): a failed attempt tries the next, and a dropped connection starts again at the best.
   const ways = [...new Set([mainUrl, ...routes].filter(Boolean))];
@@ -78,7 +82,7 @@ export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: 
     const via = ways[way % ways.length];
     const url = new URL("/v0/nodes/connect", via);
     url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
-    const ws = new WebSocket(url, { headers: { authorization: `Bearer ${key}` } });
+    const ws = dial(url, { key });
     socket = ws;
     const calls = new Map();
     // Handle ids are never reused, on this socket or the next: a reader main
@@ -89,6 +93,7 @@ export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: 
     // Byte streams main opened to endpoints here (remote-tunnel.js): tunnel id -> socket.
     const tunnels = new Map();
     const send = (message) => { if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(message)); };
+    const relayFor = (env) => relays.find((relay) => relay.env === env);
 
     let opened = false;
     // A connection that dies without a close (a sleeping laptop, a tunnel
@@ -112,6 +117,7 @@ export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: 
         harnesses: Object.keys(harnesses),
         roots: roots.map(({ id, path: label, read, write, shell, allow }) => ({ id, label, read, write, shell, allow })) });
       log.info?.(`[conduit-node] connected to ${mainUrl}${via === mainUrl ? "" : ` via ${via}`}`);
+      for (const relay of relays) relay.attach(send);
     });
     ws.on("message", async (raw) => {
       let message;
@@ -123,6 +129,7 @@ export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: 
         if (message.end) tunnel?.end();
         return;
       }
+      if (typeof message.type === "string" && message.type.startsWith("relay")) return relayFor(message.env)?.deliver(message);
       if (message.type === "refused") { log.error?.(`[conduit-node] main refused this node: ${message.reason}`); stopped = true; return ws.close(); }
       if (message.type !== "call") return;
       if (typeof message.action === "string" && message.target === "env") {
@@ -157,6 +164,7 @@ export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: 
     });
     ws.on("close", () => {
       clearInterval(beat);
+      for (const relay of relays) relay.detach();
       for (const detach of following.values()) detach();
       following.clear();
       for (const tunnel of tunnels.values()) tunnel.destroy();
@@ -300,6 +308,7 @@ export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: 
     stop() {
       stopped = true;
       processes.stopAll();
+      for (const relay of relays) relay.stop();
       clearTimeout(timer);
       socket?.close();
     },
