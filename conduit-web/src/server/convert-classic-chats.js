@@ -42,7 +42,9 @@ export async function convertClassicChats({ registry, projects, backends, config
         opaqueSession = String(result.conversationId);
       }
       await registry.update(chat.id, { templateId: template.id, templateVersion: template.version, runtime: null,
-        backend: { ...templateBackend(template), opaqueSession } });
+        // The session it came from, so startup's recovery of lost sessions
+        // (chat-store.js) never brings it back as a second chat.
+        backend: { ...templateBackend(template), opaqueSession, ...(sessionFile ? { convertedFrom: sessionFile } : {}) } });
       converted += 1;
     } catch (error) {
       failed += 1;

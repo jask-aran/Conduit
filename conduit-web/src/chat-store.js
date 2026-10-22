@@ -248,6 +248,17 @@ export class ChatStore {
       reconciled.push(chat);
     }
 
+    // A classic session a chat was converted from (convert-classic-chats.js)
+    // is that chat's, with its whole family of forks: not a lost session to
+    // recover as another chat.
+    for (const item of rows) {
+      const from = item.backend?.convertedFrom;
+      if (!from) continue;
+      const family = families.get(path.resolve(from));
+      for (const file of [...discoveredFiles.keys()]) {
+        if (file === path.resolve(from) || (family && families.get(file) === family)) discoveredFiles.delete(file);
+      }
+    }
     const discoveredFamilies = new Map();
     for (const [file, candidates] of discoveredFiles) {
       const family = families.get(file) || file;
@@ -262,7 +273,10 @@ export class ChatStore {
         for (const project of candidates) {
           try {
             const session = await readSessionMetadata(file, project);
-            const id = isChatId(session.id) && !usedIds.has(session.id) ? session.id : crypto.randomUUID();
+            // Recovered before, under its own id (and converted since): it is
+            // that chat already, not a lost session.
+            if (usedIds.has(session.id)) { imported = true; break; }
+            const id = isChatId(session.id) ? session.id : crypto.randomUUID();
             const chat = {
               id,
               projectId: project.id,
