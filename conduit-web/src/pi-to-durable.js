@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import { convertToLlm, migrateSessionEntries, parseSessionEntries, sessionEntryToContextMessages } from "@earendil-works/pi-coding-agent";
 import { ConduitIds, USER_ENTRY } from "./server/durable-runtime.js";
+import { parseAttachmentEnvelope } from "./attachment-envelope.js";
 
 /**
  * A classic Pi chat (one session JSONL) placed once as a Conduit durable conversation.
@@ -19,7 +20,11 @@ export async function convertPiSession({ harness, sessionFile, chatId, cwd, mode
   const fileEntries = parseSessionEntries(await fs.readFile(sessionFile, "utf8"));
   migrateSessionEntries(fileEntries);
   const path = activePath(fileEntries);
-  const spec = splitModel(model);
+  // The model and effort the chat last ran on, as Pi resumed it, unless the caller names them.
+  const lastOf = (type) => path.findLast((entry) => entry.type === type);
+  const changed = lastOf("model_change");
+  const spec = splitModel(model) || (changed?.provider && changed?.modelId ? { provider: changed.provider, modelId: changed.modelId } : null);
+  thinkingLevel ||= lastOf("thinking_level_change")?.thinkingLevel || null;
   let written = 0;
   const conversation = await harness.createConversation({
     ownership: { kind: "ownerless" },
@@ -63,7 +68,8 @@ export async function convertPiSession({ harness, sessionFile, chatId, cwd, mode
         const message = entry.message;
         if (message.role === "user") {
           const user = { ...message, content: userContent(message.content) };
-          await append(entry.id, { kind: USER_ENTRY, model: [user], data: { messageId: entry.id, text: textOf(message.content),
+          // What was typed, without the attachment envelope classic Pi wrapped it in (the model keeps it).
+          await append(entry.id, { kind: USER_ENTRY, model: [user], data: { messageId: entry.id, text: parseAttachmentEnvelope(textOf(message.content)).message,
             timestamp: new Date(stamp(message.timestamp ?? entry.timestamp)).toISOString() } });
         } else if (message.role === "assistant") {
           const placedEntry = await append(entry.id, { kind: "pi.assistant", model: [{ ...message, content: message.content ?? [] }] });
@@ -77,7 +83,8 @@ export async function convertPiSession({ harness, sessionFile, chatId, cwd, mode
       }
     },
   }, context);
-  return { conversationId: conversation.id, entries: written };
+  return { conversationId: conversation.id, entries: written,
+    model: spec ? `${spec.provider}/${spec.modelId}` : null, thinkingLevel: thinkingLevel || null };
 }
 
 // pi-durable's own compaction wording (harness/compaction.js), so a converted summary reads like a native one.
