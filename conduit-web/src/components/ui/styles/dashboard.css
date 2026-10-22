@@ -6,11 +6,11 @@
 @property --dash-aside { syntax: "<length>"; inherits: true; initial-value: 0px; }
 @property --dash-gutter { syntax: "<length>"; inherits: true; initial-value: 0px; }
 .ui-dash { --dash-aside: calc(21.875 * var(--u-space)); --dash-min: calc(29.6875 * var(--u-space)); --dash-tile: calc(2 * var(--u-icon)); --dash-glyph: clamp(var(--dash-tile), 3vw, calc(1.325 * var(--dash-tile))); --dash-folder: calc(7.1875 * var(--u-space)); --dash-tile-action: calc(3.75 * var(--u-space)); --dash-gap: calc(2.5 * var(--u-space)); --dash-gutter: calc(1.875 * var(--u-space));
-  --dash-max: calc(var(--composer-desktop-reference-width) + var(--dash-gap) + var(--dash-aside));
+  --dash-max: calc(var(--reading-width) + var(--dash-gap) + var(--dash-aside));
   position: relative; z-index: 1; display: flex; min-height: 0; flex: 1; flex-direction: column; overflow: auto; scrollbar-width: var(--native-scrollbar-width); }
 /* Centred when there is room; otherwise its left gutter holds and a body at its minimum runs off the right, so nothing drifts sideways. */
 .ui-dash-body { display: grid; width: min(var(--dash-max), calc(100% - 2 * var(--dash-gutter))); min-width: var(--dash-min); min-height: 0; flex: 1;
-  grid-template-areas: "head head" "notice notice" "main aside"; grid-template-columns: minmax(0, var(--composer-desktop-reference-width)) var(--dash-aside);
+  grid-template-areas: "head head" "notice notice" "main aside"; grid-template-columns: minmax(0, var(--reading-width)) var(--dash-aside);
   grid-template-rows: auto auto minmax(var(--dash-aside), 1fr); column-gap: var(--dash-gap);
   margin: 0 0 0 max(var(--dash-gutter), calc((100% - var(--dash-max)) / 2)); padding: var(--space-3xl) 0 var(--space-2xl); }
 

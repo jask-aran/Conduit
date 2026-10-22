@@ -33,6 +33,7 @@
  *   phone-composer  PhoneComposer
  *   composer        DesktopComposer, Toolbar
  *   rider           Rider, Line, Chip, Choice, the question card, RiderButton
+ *   chat            ChatView > ChatScroller > ChatEmpty, ComposerDock
  *   transcript      Transcript, Turn, Message, Bubble, Answer, Disclosure
  *   code, trace     CodeBlock, CopyButton; Trace, Trail, Step
  *   identity        the account and server marks
@@ -72,6 +73,7 @@ import "./phone-composer.css";
 import "./composer.css";
 import "./rider.css";
 import "./transcript.css";
+import "./chat.css";
 import "./code.css";
 import "./trace.css";
 

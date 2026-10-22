@@ -22,6 +22,18 @@
   --font-terminal: "Meslo Nerd Font Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
   --font-wordmark: "Conduit Wordmark", sans-serif;
 }
+/* A chat's reading column (ChatScroller): its width, the gutter it keeps from the pane's edges, and how far a block that
+   needs the room (a table; code, when --transcript-code-bleed is set) may bleed past it in a wide chat. The reader
+   picks presets in Settings and the app sets these from them. The column is the reading width, not the composer's:
+   a wider column is less scrolling, the composer keeps its typing measure. */
+:root {
+  --transcript-column-width: var(--reading-width);
+  --transcript-column-gutter: var(--page-gutter);
+  --transcript-wide-scale: 150%;
+  /* The bleed is centred on the column, which sits a little left of the pane's centre: reserving the gutter on both
+     sides keeps it inside with the column's breathing room. */
+  --transcript-wide-max: calc(100cqw - 2 * var(--transcript-column-gutter));
+}
 /*
  * Motion (DESIGN Motion): the foundation is its tokens, three curves and two durations -- quick out, gentle in.
  * Arriving, opening and settling are gentle (the long curve); leaving and folding are quick and accelerate;

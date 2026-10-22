@@ -54,7 +54,7 @@ export function mountTranscriptPanelMotion(
     // began above the viewport can itself grow, so anchoring its top does not
     // protect the later text the user can see. Disable native anchoring for
     // this transaction so Chrome and Conduit do not both apply a correction.
-    const viewport = transcript.querySelector<HTMLElement>(".message-scroller-viewport");
+    const viewport = transcript.querySelector<HTMLElement>(".ui-chat-viewport");
     const viewportTop = viewport?.getBoundingClientRect().top ?? 0;
     const blocks = [...transcript.querySelectorAll<HTMLElement>(".chat-markdown > .incremark > *")];
     const anchor = blocks.find((element) => element.getBoundingClientRect().top >= viewportTop)
@@ -137,7 +137,7 @@ export function mountTranscriptPanelMotion(
       // geometry-neutral; all visible movement starts with a change event.
       const width = layoutWidth(motionShell);
       const rect = sharesMainPane() ? transcript.getBoundingClientRect() : null;
-      const thread = transcript.querySelector<HTMLElement>(".thread");
+      const thread = transcript.querySelector<HTMLElement>(".ui-chat-column");
       const contentWidth = thread?.getBoundingClientRect().width || width;
       const gutter = thread ? Number.parseFloat(getComputedStyle(thread).getPropertyValue("--transcript-column-gutter")) || 0 : 0;
       motionShell.style.width = `${width}px`;

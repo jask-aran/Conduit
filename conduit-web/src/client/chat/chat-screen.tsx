@@ -1,3 +1,4 @@
+import { ChatView, ComposerDock } from "@/components/ui";
 import { HarnessMark } from "@/components/ui";
 import { Icons } from "@/components/ui";
 import { createSignal, For, Show, type JSX } from "solid-js";
@@ -135,14 +136,10 @@ export function ChatHeader(props: {
 
 /** A chat's transcript with its composer over it: a Conduit chat's and an
  *  untracked harness thread's alike. */
-export function Conversation(props: { chat: ActiveChatStore; busy?: boolean; transcript: JSX.Element; composer: JSX.Element; stackRef?: (element: HTMLDivElement) => void }) {
-  return <div class="work-area">
-    <section class="work-area-conversation" aria-label="Conversation" aria-busy={props.busy}>
-      {props.transcript}
-      <div ref={(element) => props.stackRef?.(element)} class="composer-stack">
-        {props.composer}
-      </div>
-    </section>
-  </div>;
+export function Conversation(props: { chat: ActiveChatStore; busy?: boolean; empty?: boolean; sending?: boolean; opening?: boolean; transcript: JSX.Element; composer: JSX.Element; stackRef?: (element: HTMLDivElement) => void }) {
+  return <ChatView aria-busy={props.busy} empty={props.empty} sending={props.sending} opening={props.opening}>
+    {props.transcript}
+    <ComposerDock ref={(element) => props.stackRef?.(element)}>{props.composer}</ComposerDock>
+  </ChatView>;
 }
 

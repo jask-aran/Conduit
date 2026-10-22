@@ -1,6 +1,5 @@
 import { createEffect, createSignal, For, onCleanup, Show, type JSX } from "solid-js";
 import { render } from "solid-js/web";
-import "../client/chat/composer-geometry.css";
 import "../client/styles.css";
 import "./gallery.css";
 import "@/components/ui/styles";
