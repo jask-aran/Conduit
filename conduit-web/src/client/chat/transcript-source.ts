@@ -29,6 +29,8 @@ export interface TranscriptSource {
   cancelEdit: () => void;
   regenerate: (userMessageId: string) => Promise<unknown> | void;
   loadOlder: () => Promise<boolean | undefined>;
+  /** The chat's turn summaries, from a request its open already started when it has one. */
+  turnArtifactTimeline?: (projectId: string, chatId: string) => Promise<TurnArtifactSummary[]>;
 }
 
 /**

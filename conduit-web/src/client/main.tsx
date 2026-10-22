@@ -4732,9 +4732,15 @@ function App() {
   onMount(() => {
     if (!desktopShell) return;
     const shell = desktopShell;
+    // Only a changed set: the registry changes as panes mount their commands (twice per chat opened), the global
+    // keys almost never, and each send is a round trip to the shell on the main thread.
+    let sent = "";
     const publish = () => {
-      void shell.setGlobalShortcuts(globalShortcuts(shortcutManager.commands, shortcutManager.shortcutOverrides()))
-        .catch(showPlainError);
+      const shortcuts = globalShortcuts(shortcutManager.commands, shortcutManager.shortcutOverrides());
+      const key = JSON.stringify(shortcuts);
+      if (key === sent) return;
+      sent = key;
+      void shell.setGlobalShortcuts(shortcuts).catch((error) => { sent = ""; showPlainError(error); });
     };
     publish();
     onCleanup(shortcutManager.subscribe(publish));

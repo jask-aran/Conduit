@@ -177,9 +177,11 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
         return;
       }
       const controller = new AbortController();
-      void api<TurnArtifactSummary[]>(`/v0/projects/${encodeURIComponent(projectId)}/turn-artifact?${new URLSearchParams({ chatId, timeline: "1" })}`, { signal: controller.signal, cache: "no-store" })
-        .then((items) => setArtifactSummaries(new Map(items.filter((item) => item.messageId && item.summary).map((item) => [item.messageId!, item]))))
-        .catch((error) => { if (error?.name !== "AbortError") setArtifactSummaries(new Map()); });
+      const request = props.chat.turnArtifactTimeline?.(projectId, chatId)
+        ?? api<TurnArtifactSummary[]>(`/v0/projects/${encodeURIComponent(projectId)}/turn-artifact?${new URLSearchParams({ chatId, timeline: "1" })}`, { signal: controller.signal, cache: "no-store" });
+      void request
+        .then((items) => { if (!controller.signal.aborted) setArtifactSummaries(new Map(items.filter((item) => item.messageId && item.summary).map((item) => [item.messageId!, item]))); })
+        .catch((error) => { if (error?.name !== "AbortError" && !controller.signal.aborted) setArtifactSummaries(new Map()); });
       onCleanup(() => controller.abort());
     },
   ));
