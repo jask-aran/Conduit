@@ -52,6 +52,10 @@ export class TurnCheckpointStore {
   constructor(root) {
     this.root = path.resolve(root);
     this.queues = new Map();
+    // A turn's summary between two stored checkpoints never changes, and a checkpoint file only by its own rewrite:
+    // a chat's open read every checkpoint (megabytes each) and compared every turn again.
+    this.summaries = new Map();
+    this.parsed = new Map();
   }
 
   async capture({ chatId, projectId, projectKind, workingRoot, sessionFile = null, sourceCheckpointId = null }) {
@@ -92,7 +96,7 @@ export class TurnCheckpointStore {
     for (const [index, item] of numbered.entries()) {
       const { checkpoint, sequence } = item;
       const target = numbered[index + 1] || null;
-      const summary = await this.#summary(workspace, checkpoint, target?.checkpoint || null);
+      const summary = await this.#closedSummary(workspace, checkpoint, target?.checkpoint || null);
       timeline.push({
         id: checkpoint.id,
         createdAt: checkpoint.createdAt,
@@ -282,6 +286,16 @@ export class TurnCheckpointStore {
     try { originalText = decode(original); modifiedText = decode(modified); }
     catch { return { kind: "unavailable", path: relativePath, oldPath: relativePath, scope, status: "M", reason: "binary", message: "Binary or non-UTF-8 files cannot be shown as a text comparison." }; }
     return { kind: "text", path: relativePath, oldPath: relativePath, scope, status: original.length === 0 ? "A" : modified.length === 0 ? "D" : "M", original: originalText, modified: modifiedText };
+  }
+
+  async #closedSummary(workspace, checkpoint, targetCheckpoint) {
+    if (!targetCheckpoint) return this.#summary(workspace, checkpoint, null);
+    const key = `${checkpoint.id}\u0000${targetCheckpoint.id}`;
+    if (this.summaries.has(key)) return this.summaries.get(key);
+    const summary = await this.#summary(workspace, checkpoint, targetCheckpoint);
+    this.summaries.set(key, summary);
+    while (this.summaries.size > 2_000) this.summaries.delete(this.summaries.keys().next().value);
+    return summary;
   }
 
   async #summary(workspace, checkpoint, targetCheckpoint) {
@@ -482,8 +496,16 @@ export class TurnCheckpointStore {
     for (const name of names.filter((item) => item.endsWith(".json")).sort()) {
       try {
         const file = path.join(directory, name);
-        const checkpoint = JSON.parse(await fs.readFile(file, "utf8"));
-        checkpoint[FILE] = file;
+        const stat = await fs.stat(file);
+        const stamp = `${stat.size}:${stat.mtimeMs}`;
+        let checkpoint = this.parsed.get(file)?.stamp === stamp ? this.parsed.get(file).checkpoint : null;
+        if (!checkpoint) {
+          checkpoint = JSON.parse(await fs.readFile(file, "utf8"));
+          checkpoint[FILE] = file;
+          this.parsed.delete(file);
+          this.parsed.set(file, { stamp, checkpoint });
+          while (this.parsed.size > 32) this.parsed.delete(this.parsed.keys().next().value);
+        }
         checkpoints.push(checkpoint);
       }
       catch (error) { if (error.code !== "ENOENT") throw error; }
@@ -493,12 +515,37 @@ export class TurnCheckpointStore {
 
   async #workspacePaths(workspace) {
     await workspace.ready();
+    // Every directory is listed at once, a few at a time, then walked in the order the listings were always read:
+    // one listing awaited after another took ~130 ms over the chats' shared folder (700 directories).
+    const listings = new Map();
+    const listing = (relativeDirectory) => {
+      if (!listings.has(relativeDirectory)) listings.set(relativeDirectory, workspace.host.list(relativeDirectory, { limit: 10_000 })
+        .catch((error) => error.code === "ENOENT" ? [] : Promise.reject(error)).then((entries) => entries || []));
+      return listings.get(relativeDirectory);
+    };
+    let level = [""];
+    let listed = 0;
+    while (level.length && listed < 10_000) {
+      const next = [];
+      for (let index = 0; index < level.length; index += 16) {
+        const batch = level.slice(index, index + 16);
+        const results = await Promise.all(batch.map(listing));
+        for (const [offset, entries] of results.entries()) {
+          for (const entry of entries) {
+            if (!batch[offset] && (entry.name === ".conduit" || entry.name === ".git")) continue;
+            if (entry.symlink) continue;
+            if (entry.type === "directory") next.push(batch[offset] ? `${batch[offset]}/${entry.name}` : entry.name);
+            else if (entry.type === "file") listed += 1;
+          }
+        }
+      }
+      level = next;
+    }
     const files = [];
     const pending = [""];
     while (pending.length && files.length < 10_000) {
       const relativeDirectory = pending.pop();
-      const entries = await workspace.host.list(relativeDirectory, { limit: 10_000 })
-        .catch((error) => error.code === "ENOENT" ? [] : Promise.reject(error)) || [];
+      const entries = await listing(relativeDirectory);
       for (const entry of entries) {
         if (!relativeDirectory && (entry.name === ".conduit" || entry.name === ".git")) continue;
         const relativePath = relativeDirectory ? `${relativeDirectory}/${entry.name}` : entry.name;
