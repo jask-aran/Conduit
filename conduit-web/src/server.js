@@ -362,7 +362,8 @@ async function chatModelView(context) {
       adapter.getModelState(resident.id),
     ]);
     const enabled = new Set(catalogView.models.map((item) => item.spec));
-    const liveModels = available.map((item) => catalog.modelView({ model: item }));
+    // The runtime lists model views already (label, levels), not Pi models.
+    const liveModels = available;
     models = enabled.size ? liveModels.filter((item) => enabled.has(item.spec)) : liveModels;
     model = state.model || model;
     thinkingLevel = state.thinkingLevel || thinkingLevel;
