@@ -2,7 +2,7 @@ import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { presentableDiff } from "@codemirror/merge";
-import { runBoundedGit } from "./workspace-inspector.js";
+import { workspaceHost } from "./workspace-inspector.js";
 
 const MAX_FILE_BYTES = 1024 * 1024;
 const MAX_CHECKPOINT_BYTES = 16 * 1024 * 1024;
@@ -11,6 +11,26 @@ const ANCHOR_TAIL_BYTES = 64 * 1024;
 const MAX_ANCHOR_HOPS = 8;
 
 const keyFor = (value) => crypto.createHash("sha256").update(String(value)).digest("hex").slice(0, 32);
+
+/**
+ * Where a chat's workspace is (decision 24: the head is a device like the
+ * others): an absolute path on this server, or a device's folder as a host
+ * (workspace-host.js). Every read of the workspace goes through the host, so
+ * checkpoints work the same on either; `identity` is what a checkpoint
+ * records as its `workingRoot` -- the path here, the place on a device.
+ */
+async function openWorkspace(workingRoot) {
+  const host = workspaceHost(workingRoot);
+  const identity = typeof workingRoot === "string" ? path.resolve(workingRoot) : host.key;
+  let checked = null;
+  const ready = () => (checked ??= host.checkRoot());
+  const git = async (args, maxBuffer = 2 * 1024 * 1024) => { await ready(); return host.git(args, { maxBuffer }); };
+  return { host, identity, ready, git };
+}
+
+// A workspace-relative path the store may read: `/`-separated, no `.`/`..`, never `.conduit` or `.git` at the top.
+const safeRelative = (relativePath) => typeof relativePath === "string" && relativePath && !relativePath.includes("\0")
+  && relativePath.split("/").every((part) => part && part !== "." && part !== "..");
 const FILE = Symbol("checkpoint file");
 
 /**
@@ -54,7 +74,7 @@ export class TurnCheckpointStore {
   }
 
   async checkpointForMessage(chatId, workingRoot, messageId) {
-    const root = path.resolve(workingRoot);
+    const root = (await openWorkspace(workingRoot)).identity;
     const stored = (await this.#checkpoints(chatId))
       .filter((checkpoint) => checkpoint.version === 1 && checkpoint.workingRoot === root);
     const { checkpoints, mappings } = await this.#activeCheckpoints(null, stored);
@@ -62,7 +82,8 @@ export class TurnCheckpointStore {
   }
 
   async timeline(chatId, workingRoot, sessionFile = null) {
-    const root = path.resolve(workingRoot);
+    const workspace = await openWorkspace(workingRoot);
+    const root = workspace.identity;
     const stored = (await this.#checkpoints(chatId))
       .filter((checkpoint) => checkpoint.version === 1 && checkpoint.workingRoot === root);
     const { checkpoints, mappings } = await this.#activeCheckpoints(sessionFile, stored);
@@ -71,7 +92,7 @@ export class TurnCheckpointStore {
     for (const [index, item] of numbered.entries()) {
       const { checkpoint, sequence } = item;
       const target = numbered[index + 1] || null;
-      const summary = await this.#summary(checkpoint, target?.checkpoint || null);
+      const summary = await this.#summary(workspace, checkpoint, target?.checkpoint || null);
       timeline.push({
         id: checkpoint.id,
         createdAt: checkpoint.createdAt,
@@ -105,14 +126,15 @@ export class TurnCheckpointStore {
   }
 
   async review(chatId, workingRoot, baseline = "chat", checkpointId = null, sessionFile = null) {
-    const { checkpoint, targetCheckpoint } = await this.#comparisonRange(chatId, workingRoot, baseline, checkpointId, sessionFile);
-    if (!checkpoint || path.resolve(workingRoot) !== checkpoint.workingRoot) return null;
-    const git = (args, maxBuffer = 2 * 1024 * 1024) => runBoundedGit(checkpoint.workingRoot, args, { maxBuffer });
+    const workspace = await openWorkspace(workingRoot);
+    const { checkpoint, targetCheckpoint } = await this.#comparisonRange(chatId, workspace.identity, baseline, checkpointId, sessionFile);
+    if (!checkpoint || workspace.identity !== checkpoint.workingRoot) return null;
+    const { git } = workspace;
     const targetPaths = targetCheckpoint
       ? Object.keys(targetCheckpoint.entries)
       : checkpoint.repository
         ? (await git(["status", "--porcelain=v1", "-z", "--no-renames", "--untracked-files=all"])).stdout.split("\0").filter(Boolean).map((record) => record.slice(3))
-        : await this.#workspacePaths(checkpoint.workingRoot);
+        : await this.#workspacePaths(workspace);
     const paths = new Set([...Object.keys(checkpoint.entries), ...targetPaths]);
     if (checkpoint.repository && checkpoint.head && (!targetCheckpoint || targetCheckpoint.head !== checkpoint.head)) {
       const target = targetCheckpoint?.head || undefined;
@@ -121,10 +143,10 @@ export class TurnCheckpointStore {
     }
     const files = [];
     for (const relativePath of [...paths].sort()) {
-      const comparison = await this.#compare(checkpoint, relativePath, git, baseline === "turn" ? "turn" : "session", targetCheckpoint);
+      const comparison = await this.#compare(workspace, checkpoint, relativePath, baseline === "turn" ? "turn" : "session", targetCheckpoint);
       if (comparison.kind === "text" && comparison.original === comparison.modified) continue;
       if (comparison.kind === "unavailable" && comparison.reason === "unchanged") continue;
-      const stat = await fs.stat(path.join(checkpoint.workingRoot, relativePath)).catch(() => null);
+      const stat = safeRelative(relativePath) ? await workspace.host.stat(relativePath).catch(() => null) : null;
       files.push({ path: relativePath, status: comparison.status, available: comparison.kind === "text", changedAt: stat?.mtimeMs || Date.parse(checkpoint.createdAt) });
     }
     files.sort((left, right) => right.changedAt - left.changedAt || left.path.localeCompare(right.path));
@@ -132,16 +154,17 @@ export class TurnCheckpointStore {
   }
 
   async compare(chatId, workingRoot, relativePath, checkpointId, baseline = "chat", sessionFile = null) {
-    const { checkpoint, targetCheckpoint } = await this.#comparisonRange(chatId, workingRoot, baseline, checkpointId, sessionFile);
-    if (!checkpoint || path.resolve(workingRoot) !== checkpoint.workingRoot) return null;
-    if (typeof relativePath !== "string" || !relativePath || relativePath.includes("\0") || relativePath.split("/").some((part) => !part || part === "." || part === "..")) throw new Error("Invalid checkpoint path");
-    const git = (args, maxBuffer = 2 * 1024 * 1024) => runBoundedGit(checkpoint.workingRoot, args, { maxBuffer });
-    return this.#compare(checkpoint, relativePath, git, baseline === "turn" ? "turn" : "session", targetCheckpoint);
+    const workspace = await openWorkspace(workingRoot);
+    const { checkpoint, targetCheckpoint } = await this.#comparisonRange(chatId, workspace.identity, baseline, checkpointId, sessionFile);
+    if (!checkpoint || workspace.identity !== checkpoint.workingRoot) return null;
+    if (!safeRelative(relativePath)) throw new Error("Invalid checkpoint path");
+    return this.#compare(workspace, checkpoint, relativePath, baseline === "turn" ? "turn" : "session", targetCheckpoint);
   }
 
   async #capture({ chatId, projectId, projectKind, workingRoot, sessionFile, sourceCheckpointId, chatKey }) {
-    const root = path.resolve(workingRoot);
-    const git = (args, maxBuffer = 2 * 1024 * 1024) => runBoundedGit(root, args, { maxBuffer });
+    const workspace = await openWorkspace(workingRoot);
+    const root = workspace.identity;
+    const { git, host } = workspace;
     const source = sourceCheckpointId
       ? (await this.#checkpoints(chatId)).find((checkpoint) => checkpoint.id === sourceCheckpointId && checkpoint.workingRoot === root)
       : null;
@@ -152,36 +175,34 @@ export class TurnCheckpointStore {
       head = source.head ?? null;
       paths = [];
     } else if (repository) {
-      const [{ stdout: topLevel }, { stdout: status }, revision] = await Promise.all([
-        git(["rev-parse", "--show-toplevel"]),
+      // The repository's own root, asked as Git's prefix from here: empty at the top, on any device's paths.
+      const [{ stdout: prefix }, { stdout: status }, revision] = await Promise.all([
+        git(["rev-parse", "--show-prefix"]),
         git(["status", "--porcelain=v1", "-z", "--no-renames", "--untracked-files=all"]),
         git(["rev-parse", "--verify", "HEAD"]).then(({ stdout }) => stdout.trim(), () => null),
       ]);
-      if (path.resolve(topLevel.trim()) !== root) throw new Error("Workspace root is not the Git repository root");
+      if (prefix.trim()) throw new Error("Workspace root is not the Git repository root");
       head = revision;
       paths = status.split("\0").filter(Boolean).map((record) => record.slice(3));
     } else {
-      paths = await this.#workspacePaths(root);
+      paths = await this.#workspacePaths(workspace);
     }
     const entries = source ? structuredClone(source.entries) : {};
     let byteLength = 0;
+    if (paths.length) await workspace.ready();
     for (const relativePath of paths) {
-      const target = path.resolve(root, relativePath);
-      if (target !== root && !target.startsWith(`${root}${path.sep}`)) continue;
-      let stat;
-      try { stat = await fs.lstat(target); }
-      catch (error) {
-        if (error.code === "ENOENT") { entries[relativePath] = { kind: "missing" }; continue; }
-        throw error;
-      }
+      if (!safeRelative(relativePath)) continue;
+      const stat = await host.lstat(relativePath);
+      if (!stat) { entries[relativePath] = { kind: "missing" }; continue; }
       if (!stat.isFile()) { entries[relativePath] = { kind: "unsupported" }; continue; }
       if (stat.size > MAX_FILE_BYTES || byteLength + stat.size > MAX_CHECKPOINT_BYTES) {
         entries[relativePath] = { kind: "unavailable", size: stat.size, modifiedAt: stat.mtimeMs };
         continue;
       }
-      const content = await fs.readFile(target);
+      const content = await host.read(relativePath);
       byteLength += content.byteLength;
-      entries[relativePath] = { kind: "file", mode: stat.mode & 0o777, content: content.toString("base64") };
+      // A device's stat carries no mode; the digest then reads it as 0 on both sides.
+      entries[relativePath] = { kind: "file", mode: (stat.mode ?? 0) & 0o777, content: content.toString("base64") };
     }
     const createdAt = new Date().toISOString();
     const id = crypto.randomUUID();
@@ -205,7 +226,9 @@ export class TurnCheckpointStore {
     return { id, file, turnId: null };
   }
 
-  async #compare(checkpoint, relativePath, git, scope = "session", targetCheckpoint = null) {
+  async #compare(workspace, checkpoint, relativePath, scope = "session", targetCheckpoint = null) {
+    const { git, host } = workspace;
+    const current = async () => { if (!safeRelative(relativePath)) return null; await workspace.ready(); return host.stat(relativePath).catch(() => null); };
     const stored = checkpoint.entries[relativePath];
     if (stored?.kind === "unavailable") {
       if (targetCheckpoint) {
@@ -213,7 +236,7 @@ export class TurnCheckpointStore {
         if (targetStored?.kind === "unavailable" && targetStored.size === stored.size && targetStored.modifiedAt === stored.modifiedAt) return { kind: "unavailable", path: relativePath, oldPath: relativePath, scope, status: "M", reason: "unchanged", message: "This file did not change from the selected checkpoint." };
         return { kind: "unavailable", path: relativePath, oldPath: relativePath, scope, status: "M", reason: "unavailable", message: "The selected checkpoint is unavailable for this file." };
       }
-      const stat = await fs.stat(path.join(checkpoint.workingRoot, relativePath)).catch(() => null);
+      const stat = await current();
       if (stat?.isFile() && stat.size === stored.size && stat.mtimeMs === stored.modifiedAt) return { kind: "unavailable", path: relativePath, oldPath: relativePath, scope, status: "M", reason: "unchanged", message: "This file did not change from the selected checkpoint." };
       return { kind: "unavailable", path: relativePath, oldPath: relativePath, scope, status: "M", reason: "unavailable", message: "The selected checkpoint is unavailable for this file." };
     }
@@ -241,12 +264,12 @@ export class TurnCheckpointStore {
       }
     } else {
       try {
-        const target = path.resolve(checkpoint.workingRoot, relativePath);
-        if (target !== checkpoint.workingRoot && target.startsWith(`${checkpoint.workingRoot}${path.sep}`)) {
-          const stat = await fs.stat(target);
+        if (safeRelative(relativePath)) {
+          await workspace.ready();
+          const stat = await host.stat(relativePath);
           if (!stat.isFile()) throw Object.assign(new Error(), { code: "unsupported" });
           if (stat.size > MAX_FILE_BYTES) return { kind: "unavailable", path: relativePath, oldPath: relativePath, scope, status: "M", reason: "size", message: "This file exceeds the 1 MiB checkpoint comparison limit." };
-          modified = await fs.readFile(target);
+          modified = await host.read(relativePath);
         }
       } catch (error) {
         if (error.code !== "ENOENT") return { kind: "unavailable", path: relativePath, oldPath: relativePath, scope, status: "M", reason: "unsupported", message: "Checkpoint comparison is available for regular files only." };
@@ -261,19 +284,19 @@ export class TurnCheckpointStore {
     return { kind: "text", path: relativePath, oldPath: relativePath, scope, status: original.length === 0 ? "A" : modified.length === 0 ? "D" : "M", original: originalText, modified: modifiedText };
   }
 
-  async #summary(checkpoint, targetCheckpoint) {
-    const git = (args, maxBuffer = 2 * 1024 * 1024) => runBoundedGit(checkpoint.workingRoot, args, { maxBuffer });
+  async #summary(workspace, checkpoint, targetCheckpoint) {
+    const { git } = workspace;
     const targetPaths = targetCheckpoint
       ? Object.keys(targetCheckpoint.entries)
       : checkpoint.repository
         ? (await git(["status", "--porcelain=v1", "-z", "--no-renames", "--untracked-files=all"])).stdout.split("\0").filter(Boolean).map((record) => record.slice(3))
-        : await this.#workspacePaths(checkpoint.workingRoot);
+        : await this.#workspacePaths(workspace);
     const paths = new Set([...Object.keys(checkpoint.entries), ...targetPaths]);
     let added = 0;
     let removed = 0;
     let preferredPath = null;
     for (const relativePath of paths) {
-      const comparison = await this.#compare(checkpoint, relativePath, git, "turn", targetCheckpoint);
+      const comparison = await this.#compare(workspace, checkpoint, relativePath, "turn", targetCheckpoint);
       if (comparison.kind !== "text") {
         if (comparison.reason !== "unchanged") return null;
         continue;
@@ -405,8 +428,7 @@ export class TurnCheckpointStore {
     };
   }
 
-  async #comparisonRange(chatId, workingRoot, baseline, checkpointId, sessionFile) {
-    const root = path.resolve(workingRoot);
+  async #comparisonRange(chatId, root, baseline, checkpointId, sessionFile) {
     const stored = (await this.#checkpoints(chatId)).filter((checkpoint) => checkpoint.version === 1 && typeof checkpoint.repository === "boolean" && checkpoint.workingRoot === root);
     const { checkpoints } = await this.#activeCheckpoints(sessionFile, stored);
     const index = checkpointId ? checkpoints.findIndex((checkpoint) => checkpoint.id === checkpointId) : baseline === "turn" ? checkpoints.length - 1 : 0;
@@ -469,18 +491,20 @@ export class TurnCheckpointStore {
     return checkpoints;
   }
 
-  async #workspacePaths(root) {
+  async #workspacePaths(workspace) {
+    await workspace.ready();
     const files = [];
     const pending = [""];
     while (pending.length && files.length < 10_000) {
       const relativeDirectory = pending.pop();
-      const directory = path.join(root, relativeDirectory);
-      const entries = await fs.readdir(directory, { withFileTypes: true }).catch((error) => error.code === "ENOENT" ? [] : Promise.reject(error));
+      const entries = await workspace.host.list(relativeDirectory, { limit: 10_000 })
+        .catch((error) => error.code === "ENOENT" ? [] : Promise.reject(error)) || [];
       for (const entry of entries) {
         if (!relativeDirectory && (entry.name === ".conduit" || entry.name === ".git")) continue;
         const relativePath = relativeDirectory ? `${relativeDirectory}/${entry.name}` : entry.name;
-        if (entry.isDirectory()) pending.push(relativePath);
-        else if (entry.isFile()) files.push(relativePath);
+        if (entry.symlink) continue;
+        if (entry.type === "directory") pending.push(relativePath);
+        else if (entry.type === "file") files.push(relativePath);
         if (files.length >= 10_000) break;
       }
     }

@@ -60,6 +60,9 @@ export function createLiveSessionStream({
   attachments,
   registry,
   turnCheckpoints,
+  // Where a project's checkpoints are taken: its path here, its device's
+  // folder (workspace-host.js), or null where the place takes none.
+  checkpointWorkspace = async (project) => project.workingRoot,
   findChatContext,
   chatModelView,
   chatLogs,
@@ -175,11 +178,12 @@ export function createLiveSessionStream({
     }
     let checkpoint = null;
     try {
-      checkpoint = await turnCheckpoints?.capture({
+      const at = await checkpointWorkspace(prepared.context.project);
+      if (at) checkpoint = await turnCheckpoints?.capture({
         chatId: prepared.context.chat.id,
         projectId: prepared.context.project.id,
         projectKind: prepared.context.project.kind,
-        workingRoot: prepared.context.project.workingRoot,
+        workingRoot: at,
         // The transcript as it stands, so the checkpoint anchors on the entry
         // the turn about to start will hang under. Without it nothing ties a
         // checkpoint to its own turn, and they all reach for the newest one.
@@ -306,11 +310,12 @@ export function createLiveSessionStream({
       }
       if (command.type === "steer") {
         try {
-          await turnCheckpoints?.capture({
+          const at = await checkpointWorkspace(prepared.context.project);
+          if (at) await turnCheckpoints?.capture({
             chatId: prepared.context.chat.id,
             projectId: prepared.context.project.id,
             projectKind: prepared.context.project.kind,
-            workingRoot: prepared.context.project.workingRoot,
+            workingRoot: at,
               });
         } catch (error) {
           console.warn("Could not capture steering checkpoint", error.message);
@@ -367,9 +372,8 @@ export function createLiveSessionStream({
       if (!adapter.getCapabilities().fork) throw Object.assign(new Error("This agent does not support forks"), { code: "fork_unsupported", status: 409 });
       const context = await findChatContext(record.chatId);
       const entryId = command.entryId;
-      const sourceCheckpointId = context ? await turnCheckpoints?.checkpointForMessage(
-        context.chat.id, context.project.workingRoot, entryId,
-      ) : null;
+      const at = context ? await checkpointWorkspace(context.project) : null;
+      const sourceCheckpointId = at ? await turnCheckpoints?.checkpointForMessage(context.chat.id, at, entryId) : null;
       const forked = await adapter.fork(record.id, { nodeId: entryId });
       announceTruncation(record, command.entryId);
       await syncForkedChat(record, forked);
@@ -381,9 +385,8 @@ export function createLiveSessionStream({
       if (!adapter.getCapabilities().regenerate) throw Object.assign(new Error("This agent does not support regeneration"), { code: "regenerate_unsupported", status: 409 });
       const context = await findChatContext(record.chatId);
       const entryId = command.entryId;
-      const sourceCheckpointId = context ? await turnCheckpoints?.checkpointForMessage(
-        context.chat.id, context.project.workingRoot, entryId,
-      ) : null;
+      const at = context ? await checkpointWorkspace(context.project) : null;
+      const sourceCheckpointId = at ? await turnCheckpoints?.checkpointForMessage(context.chat.id, at, entryId) : null;
       const forked = await adapter.fork(record.id, { nodeId: entryId });
       announceTruncation(record, command.entryId, { keep: true });
       await syncForkedChat(record, forked);

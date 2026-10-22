@@ -1,6 +1,6 @@
 import { remoteNode } from "../../place.js";
 import os from "node:os";
-import { deviceHost } from "../../workspace-host.js";
+import { projectWorkspace } from "../../workspace-host.js";
 import { readWorkspaceComparison } from "../../workspace-comparison.js";
 import { computerContext, findComputerGitRoot, resolveComputerContext } from "../../computer-context.js";
 import path from "node:path";
@@ -119,9 +119,7 @@ export function registerProjectRoutes(app, {
   };
   // Where the inspector works for a project: this server's path, or the
   // device's folder through its environment (plan decision 22).
-  const rootOf = (project) => remoteNode(project)
-    ? deviceHost({ hub: nodeHub, nodeId: remoteNode(project), place: project.place, label: project.workingRoot })
-    : project.workingRoot;
+  const rootOf = (project) => projectWorkspace(project, nodeHub);
   const readComputerLocation = async (project) => {
     const [gitRoot, listing] = await Promise.all([
       findComputerGitRoot(project.workingRoot),
@@ -459,17 +457,17 @@ export function registerProjectRoutes(app, {
       const chatId = typeof request.query.chatId === "string" ? request.query.chatId : "";
       const chat = registry.metadata(chatId);
       if (!chat || chat.projectId !== project.id) return response.json(null);
-      // Turn checkpoints snapshot the head's disk; a place without them has none.
+      // Turn checkpoints snapshot the workspace where it is; a place that cannot (a device without Git there) has none.
       const can = await backends.capabilities?.(project);
-      if (can ? !can.checkpoints : remoteNode(project)) return response.json(null);
+      if (can && !can.checkpoints) return response.json(null);
       if (request.query.timeline === "1") {
-        return response.json(await turnCheckpoints.timeline(chatId, project.workingRoot));
+        return response.json(await turnCheckpoints.timeline(chatId, rootOf(project)));
       }
       const baseline = request.query.baseline === "turn" ? "turn" : "chat";
       const checkpointId = typeof request.query.checkpointId === "string" ? request.query.checkpointId : null;
       const artifact = request.query.path
-        ? await turnCheckpoints.compare(chatId, project.workingRoot, request.query.path, checkpointId, baseline)
-        : await turnCheckpoints.review(chatId, project.workingRoot, baseline, checkpointId);
+        ? await turnCheckpoints.compare(chatId, rootOf(project), request.query.path, checkpointId, baseline)
+        : await turnCheckpoints.review(chatId, rootOf(project), baseline, checkpointId);
       response.json(artifact);
     } catch (error) { next(error); }
   });
