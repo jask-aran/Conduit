@@ -27,7 +27,7 @@ const NEW_DEVICE = "";
  * folder becomes a workspace from here; chats in it run on that node.
  */
 export function DevicesSettingsTile(props: { onAddWorkspace: (input: { mode: "node"; nodeId: string; rootId: string }) => Promise<boolean>;
-  /** A terminal on the device itself, in its home: this server's "computer" one, or a device's where it allows it. */
+  /** A terminal on the device itself, in its home: this server's "computer" one, or a device's where a folder is shared with commands. */
   onOpenTerminal: (node: { id: string; local?: boolean }) => void }) {
   const [devices, setDevices] = createSignal<Device[] | null>(null);
   const [error, setError] = createSignal("");
