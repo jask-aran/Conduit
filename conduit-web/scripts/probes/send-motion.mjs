@@ -47,12 +47,12 @@ await textarea.fill("Hello, this is a message being sent 300t");
 await page.waitForTimeout(600);
 // Scrolled up into the transcript, the way a send usually starts.
 const up = Number(arg("--up", "0"));
-if (up) { await page.evaluate((up) => { const v = document.querySelector(".message-scroller-viewport"); v.dispatchEvent(new WheelEvent("wheel", { deltaY: -up, bubbles: true })); v.scrollTop -= up; }, up); await page.waitForTimeout(600); }
+if (up) { await page.evaluate((up) => { const v = document.querySelector(".ui-chat-viewport"); v.dispatchEvent(new WheelEvent("wheel", { deltaY: -up, bubbles: true })); v.scrollTop -= up; }, up); await page.waitForTimeout(600); }
 await cdp.send("Animation.enable");
 await cdp.send("Animation.setPlaybackRate", { playbackRate: rate });
 await page.evaluate(() => {
   const log = window.__frames = []; const t0 = performance.now();
-  const viewport = document.querySelector(".message-scroller-viewport");
+  const viewport = document.querySelector(".ui-chat-viewport");
   const frame = () => {
     const shell = document.querySelector(".composer-input-shell");
     const users = [...document.querySelectorAll("[data-slot='message-scroller-item']")].filter((row) => row.querySelector(".ui-message"));
@@ -66,7 +66,7 @@ await page.evaluate(() => {
       users: users.length, bubbleTop: bubble ? Math.round(r(bubble).top) : null,
       bubbleOp: bubble ? +getComputedStyle(bubble).opacity : null,
       scroll: Math.round(viewport.scrollTop), height: Math.round(viewport.scrollHeight),
-      trace: (() => { const t = [...document.querySelectorAll(".thread .ui-trace-fold")].at(-1); return t ? `${/^(Starting|Waiting)/.test(t.querySelector(".ui-trace-line")?.textContent ?? "") ? "S" : "T"}${Math.round(t.getBoundingClientRect().top)}/${(+getComputedStyle(t).opacity).toFixed(2)}` : "-"; })(),
+      trace: (() => { const t = [...document.querySelectorAll(".ui-chat-column .ui-trace-fold")].at(-1); return t ? `${/^(Starting|Waiting)/.test(t.querySelector(".ui-trace-line")?.textContent ?? "") ? "S" : "T"}${Math.round(t.getBoundingClientRect().top)}/${(+getComputedStyle(t).opacity).toFixed(2)}` : "-"; })(),
     });
     if (performance.now() - t0 < 4000) requestAnimationFrame(frame);
   };

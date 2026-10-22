@@ -5,7 +5,7 @@ import { ComputerExplorer } from "../../client/dashboard/computer-dashboard";
 import WorkspaceExcerptView from "../../client/workspace/workspace-excerpt-view";
 import { CameraPreview } from "@/components/ui/connection";
 import { Dialog } from "@/components/dialog";
-import { CardColumns, CardColumn, CardCaption, CardActions, CardForm, CardBody, CardNote, CardRead, CardDetails, CardQR, CardPreview, Attachments, Attachment } from "@/components/ui/card";
+import { CardColumns, CardColumn, CardCaption, CardActions, CardForm, CardBody, CardNote, CardRead, CardDetails, CardQR, CardPreview, Attachments, Attachment, Notice } from "@/components/ui/card";
 import { createSignal, For } from "solid-js";
 import { Field, Segmented, Button, Card, TextArea, Input, Read, Preview } from "@/components/ui";
 import { PROJECTS } from "../seed";
@@ -85,6 +85,7 @@ export const cardPage: Page = {
     { selector: ".ui-card", name: "Corner", does: "--radius-surface; at most 30 units wide (a phone: its width)", from: (el) => `${rounding(el)} · ${px(`${el.getBoundingClientRect().width}px`)} wide` }
   ] },
   examples: [
+    row("Notice", "another chat is working in this workspace: a warning across the reading column", () => <div style={{ width: "100%" }}><Notice icon={<Icons.Warning />} title="Another chat is working in this Workspace">Both agents can edit the same files. Conduit does not lock the Workspace or create worktrees automatically.</Notice></div>, { surfaces: ["ground"], code: "<Notice icon title>…</Notice>", source: "main.tsx" }),
     row("async decisions", "confirm, prompt, queue, cancellation and stale target guard · the live app's shared decision queue", () => <DecisionDemo />, { surfaces: ["ground"], phone: true, code: "createDecisionDialogs > Dialog" }),
     row("workspace identity", "mark, icon search, palette and custom colour; Save retains the draft · v2 controls and tokens", () => <WorkspaceAppearanceEditor compact onSave={() => {}} />, { surfaces: ["ground"], phone: true, code: "WorkspaceAppearanceEditor > IdentityEditor" }),
     row("folder explorer", "search, sort, tiles/details, hidden files and context menus · same presentation as the live folder dialog", () => <ExplorerDemo />, { surfaces: ["ground"], phone: true, code: "ComputerExplorer > Browser" }),
@@ -122,5 +123,5 @@ export const cardPage: Page = {
     token("--card-pair", "space from title to detail"),
     token("--radius-surface", "card corner")
   ] }],
-  api: ["Card", "CardBody", "CardActions", "CardForm", "CardColumns", "CardColumn", "CardNote", "CardRead", "CardDetails", "CardQR", "CardCaption", "CardPreview", "Attachments", "Attachment", "IdentityEditor", "Dialog", "OverlayDialog"]
+  api: ["Card", "Notice", "CardBody", "CardActions", "CardForm", "CardColumns", "CardColumn", "CardNote", "CardRead", "CardDetails", "CardQR", "CardCaption", "CardPreview", "Attachments", "Attachment", "IdentityEditor", "Dialog", "OverlayDialog"]
 };

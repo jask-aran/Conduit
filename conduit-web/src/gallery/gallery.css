@@ -345,3 +345,5 @@ html, body { background: var(--frame, #08090a); color: var(--foreground); }
    at least a narrow column wide, and a page-sized one a pane's. */
 .g-inuse-scene { min-width: min(320px, 70vw); }
 .g-anatomy > .g-page { width: 560px; }
+/* Shell page: the window row at a fraction of its height, on the frame. */
+.g-shell { display: flex; width: 100%; overflow: hidden; border-radius: 10px; background: var(--frame); }

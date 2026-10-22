@@ -1,0 +1,51 @@
+/* A chat in its pane: ChatView > ChatScroller (motion > viewport > column), ComposerDock (chat.tsx). */
+
+.ui-chat { position: relative; z-index: 1; display: flex; min-width: 0; min-height: 0; flex: 1; flex-direction: column; }
+
+/* The one surface allowed under the header: it takes the header's height back so scrolled text runs to the pane's
+   top edge and fades under the gradient rather than stopping at a hard cut; the column restates the clearance as its
+   top padding, so the first message still starts below the bar. */
+.ui-chat-scroller { position: relative; z-index: 1; min-height: 0; margin-top: calc(-1 * var(--header-height)); flex: 1; overflow: hidden; }
+.ui-chat-motion { position: relative; width: 100%; height: 100%; contain: layout paint; container: ui-chat / inline-size; transform: translate3d(0, 0, 0); }
+/* `overflow-anchor: none` because the transcript holds its own scroll: when the keyboard shortens the scroller the
+   app puts the thread back where it was, against a position it keeps; Chromium's anchoring would make a second
+   correction from its own reading of what moved. Scrolled on the compositor: below 1.5x a transparent scroller is
+   not, so each scroll (the tail follow's, every frame of an answer) laid the page out into layers again. */
+.ui-chat-viewport { width: 100%; height: 100%; overflow-y: auto; outline: none; scroll-padding-top: var(--header-height); scrollbar-width: none; overflow-anchor: none; will-change: scroll-position; }
+.ui-chat-viewport::-webkit-scrollbar { display: none; }
+/* The reading column holds the Transcript, which fills it. Its foot clears the composer: the app measures the dock
+   into --transcript-composer-inset (the fallback is its resting height), so a taller dock -- a multi-line draft,
+   attachments, a queued message -- pushes the last output up instead of covering it. */
+.ui-chat-column { --transcript-width: 100%; font-family: var(--font-transcript); width: min(var(--transcript-column-width), calc(100% - var(--transcript-column-gutter))); min-height: 100%; margin-inline: auto;
+  padding: calc(var(--header-height) + var(--space-4xl)) clamp(0px, calc((100% - var(--reading-width) - var(--transcript-column-gutter)) / 2 + var(--space-4xl)), var(--space-4xl)) var(--transcript-composer-inset, 147.2px); }
+/* An Answer's bleed past the column, only when the chat is wide. */
+@container ui-chat (--conduit-wide-chat) {
+  .ui-chat-column { --answer-bleed: min(var(--transcript-wide-scale), var(--transcript-wide-max)); --answer-bleed-code: var(--transcript-code-bleed, 100%); }
+}
+
+.ui-composer-dock { position: absolute; inset: auto 0 0; z-index: 2; display: flex; width: 100%; flex: none; flex-direction: column; gap: var(--space-md); margin: 0; padding: var(--space-xl) var(--space-4xl) var(--space-3xl); background: transparent; pointer-events: none; }
+.ui-composer-dock > * { pointer-events: auto; }
+
+/* Empty: the column is the welcome, below the header and unscrollable; the composer sits centred under it. */
+.ui-chat[data-empty] .ui-chat-scroller { position: absolute; inset: var(--header-height) 0 0; margin-top: 0; }
+.ui-chat[data-empty] .ui-chat-viewport { overflow: hidden; overscroll-behavior-y: none; }
+.ui-chat[data-empty] :is(.ui-chat-column, .ui-chat-empty) { width: 100%; min-height: 100%; padding: 0; }
+.ui-chat[data-empty] .ui-chat-empty { --welcome-room: calc(var(--measure-2xs) + var(--header-height)); }
+.ui-chat[data-empty] .ui-composer-dock { inset: 50% 0 auto; width: min(var(--reading-width), calc(100% - var(--page-gutter))); margin-inline: auto; padding: 0; transform: translateY(var(--header-height)); pointer-events: auto; }
+.ui-chat[data-sending] .ui-chat-empty { visibility: hidden; }
+.ui-chat[data-opening] .ui-chat-scroller { visibility: hidden; }
+
+/* A phone: the column full-width, the dock on its own gradient clear of the safe area; empty, the composer at the
+   foot (not mid-screen) and no rubber-band scroll. */
+@media (--conduit-phone-layout) {
+  .ui-chat-column { width: 100%; padding: calc(var(--header-height) + var(--space-4xl)) var(--space-xl) var(--transcript-composer-inset, 160px); }
+  .ui-composer-dock {
+    padding: var(--space-md) var(--space-lg) calc(var(--space-lg) + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)));
+    background: linear-gradient(to top, var(--background) calc(var(--space-lg) + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))),
+      transparent calc(var(--space-4xl) + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))));
+  }
+  .ui-chat[data-empty] .ui-chat-scroller { position: relative; inset: auto; flex: 1 1 auto; min-height: 0; }
+  .ui-chat[data-empty] :is(.ui-chat-column, .ui-chat-empty) { height: 100%; }
+  .ui-chat[data-empty] .ui-chat-empty { --welcome-room: 0; }
+  .ui-chat[data-empty] .ui-composer-dock { position: relative; inset: auto; width: 100%; margin: 0; padding: var(--space-md) var(--space-lg) calc(var(--space-lg) + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))); transform: none; background: var(--background); }
+}

@@ -1,3 +1,4 @@
+import { FilesPane, FilesTree } from "@/components/ui";
 import { FileTypeIcon, FolderTypeIcon } from "@/components/ui/file-marks";
 import { Icons } from "@/components/ui";
 import { createDecisionScope } from "@/components/decision-dialog";
@@ -873,7 +874,7 @@ export function FilesView(props: {
 
   const gitFile = (path: string | null) => props.sourceControlEnabled ? props.gitFiles.find((file) => file.path === path) : undefined;
 
-  return <div
+  return <FilesPane
         ref={(element) => {
           filesResizeObserver?.disconnect();
           const updateWideState = (width: number) =>
@@ -883,7 +884,7 @@ export function FilesView(props: {
           // inside the callback instead forces a synchronous layout, and a
           // panel drag resizes this element every frame: traced at one forced
           // layout per frame for the whole drag, 1.9ms of a 6.94ms budget.
-          // .workspace-files has no border or padding, so the content box is
+          // The pane has no border or padding, so the content box is
           // the same number clientWidth was reporting.
           filesResizeObserver = new ResizeObserver((entries) => {
             const box = entries[entries.length - 1]?.contentBoxSize?.[0];
@@ -892,16 +893,13 @@ export function FilesView(props: {
           filesResizeObserver.observe(element);
           c.elements.host = element;
         }}
-        class="workspace-files"
-        data-wide={props.navigatorOnly ? "navigator" : c.filesWide()}
+        wide={props.navigatorOnly ? "navigator" : c.filesWide()}
         data-doc-project={props.navigatorOnly ? props.projectId : undefined}
-        data-tree-collapsed={c.treeCollapsed()}
-        data-navigator-open={c.navigatorOpen()}
-        style={{
-          "--workspace-tree-width": `${c.treeWidth()}px`,
-        }}
+        treeCollapsed={c.treeCollapsed()}
+        navigatorOpen={c.navigatorOpen()}
+        treeWidth={c.treeWidth()}
       >
-        <div class="workspace-tree-pane">
+        <FilesTree>
           <ToolBar>
             <Show when={!props.navigatorOnly}><ToolButton label="Hide file navigator" onClick={c.hideFileNavigator}><Icons.CollapseFiles /></ToolButton></Show>
             <ToolFilter
@@ -945,7 +943,7 @@ export function FilesView(props: {
             </Show>
             <input ref={(element) => { c.elements.upload = element; }} hidden type="file" multiple={c.uploadTarget().kind === "directory"} onChange={(event) => void c.uploadFiles(event.currentTarget.files)} />
           </ToolBar>
-        </div>
+        </FilesTree>
         <Show when={!props.navigatorOnly && (c.filesWide() ? c.treeCollapsed() : !c.navigatorOpen())}>
           <ToolBar vertical data-tree-rail="">
             <ToolButton label="Show file navigator" onClick={c.showFileNavigator}><Icons.ExpandFiles /></ToolButton>
@@ -994,7 +992,7 @@ export function FilesView(props: {
             ref={(handle) => c.slotHandles.set("primary", handle)}
             onDispose={() => c.slotHandles.delete("primary")}
           /></Show>
-      </div>;
+      </FilesPane>;
 }
 
 /**
@@ -1013,7 +1011,7 @@ export function FileBesideView(props: {
 }) {
   const c = props.control;
   const gitFile = () => props.sourceControlEnabled ? props.gitFiles.find((file) => file.path === c.openPaths().secondary) : undefined;
-  return <div class="workspace-files">
+  return <FilesPane>
     <WorkspaceFileSlot
       projectId={props.projectId}
       path={c.openPaths().secondary}
@@ -1038,5 +1036,5 @@ export function FileBesideView(props: {
       ref={(handle) => c.slotHandles.set("secondary", handle)}
       onDispose={() => c.slotHandles.delete("secondary")}
     />
-  </div>;
+  </FilesPane>;
 }

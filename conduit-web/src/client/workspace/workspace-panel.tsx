@@ -1,4 +1,5 @@
 import { Icons } from "@/components/ui";
+import { Dock, DockDocument, DockSurface, SheetFill, ToolContent } from "@/components/ui";
 import { createDecisionScope } from "@/components/decision-dialog";
 import { batch, createEffect, createSignal, For, on, onCleanup, onMount, Show, type Accessor } from "solid-js";
 import { Portal } from "solid-js/web";
@@ -166,7 +167,7 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
     if (!inSplit(resolved)) selectTab(resolved);
   };
   const focusSplit = () => queueMicrotask(() => {
-    const content = props.splitHost?.()?.querySelector<HTMLElement>(".workspace-panel-content");
+    const content = props.splitHost?.()?.querySelector<HTMLElement>(".ui-tool-content");
     focusFirst(content);
     if (!content?.contains(document.activeElement)) content?.focus({ preventScroll: true });
   });
@@ -175,7 +176,7 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
     // On a desktop the rail stands in for the tabs, so focus lands in the
     // view, or on the view itself while it has nothing to focus yet.
     if (control?.getClientRects().length) return control.focus({ preventScroll: true });
-    const content = panelRoot?.querySelector<HTMLElement>(".workspace-panel-content");
+    const content = panelRoot?.querySelector<HTMLElement>(".ui-tool-content");
     focusFirst(content);
     if (!content?.contains(document.activeElement)) content?.focus({ preventScroll: true });
   };
@@ -246,7 +247,7 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
   };
   const focusWorkspaceSurface = (event: PointerEvent) => {
     const target = event.target instanceof Element ? event.target : null;
-    if (target?.closest(".workspace-dock-document")) return;
+    if (target?.closest(".ui-dock-document")) return;
     // The terminal is its own pointer surface: preventDefault here suppresses
     // the compatibility mouse events, so xterm never sees the mousedown and
     // loses click-to-position, drag selection, and mouse reporting to the TUI.
@@ -493,9 +494,7 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
   onCleanup(() => {
     requests.reset();
     stopResize?.();
-    document.body.classList.remove("workspace-detail-resizing");
     document.body.classList.remove("workspace-tree-resizing");
-    document.body.classList.remove("workspace-split-resizing");
   });
 
   let loadedProjectId = "";
@@ -630,24 +629,24 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
     <Show when={props.open()}>
       <Backdrop layer="panel" label="Dismiss workspace panel" onDismiss={props.onClose} />
     </Show>
-    <aside ref={panelRoot} class="workspace-panel" data-region="workspace-panel" classList={{ "workspace-panel-open": props.open() || shellWidth() > 0.5, "workspace-panel-expanded": props.expanded(), "workspace-panel-overlay": Boolean(props.overlay?.()) }} aria-label="Workspace panel" aria-hidden={!props.open()} inert={!props.open()} {...dockDrop} style={{ "--workspace-panel-width": `${width()}px`, "--workspace-shell-width": `${shellWidth()}px`, width: `${shellWidth()}px`, "margin-right": `${shellGap()}px` }}>
+    <Dock ref={panelRoot} class="workspace-panel" data-region="workspace-panel" open={props.open() || shellWidth() > 0.5} expanded={props.expanded()} overlay={Boolean(props.overlay?.())} aria-label="Workspace panel" aria-hidden={!props.open()} inert={!props.open()} {...dockDrop} style={{ "--workspace-panel-width": `${width()}px`, "--workspace-shell-width": `${shellWidth()}px`, width: `${shellWidth()}px`, "margin-right": `${shellGap()}px` }}>
     <PaneEdge dock ref={(element) => { resizeHandle = element; }} aria-label="Resize workspace panel" aria-valuemin={minWidth()} aria-valuemax={Math.floor(window.innerWidth * 0.65)} aria-valuenow={width()} tabIndex={0} onPointerDown={startResize} onKeyDown={(event) => { if (event.key === "ArrowLeft") saveWidth(width() + 16); if (event.key === "ArrowRight") saveWidth(width() - 16); }} />
-    <div class="workspace-panel-surface" classList={{ "workspace-panel-documented": Boolean(props.documentShown?.()) }} onPointerDown={focusWorkspaceSurface}>
+    <DockSurface documented={Boolean(props.documentShown?.())} onPointerDown={focusWorkspaceSurface}>
     {toolHeader(tab, "dock")}
-    <main class="workspace-panel-content" tabIndex={-1}>
+    <ToolContent>
       <For each={PANEL_TABS}>{(tool) => <Show when={dockShows(tool)}>{toolView(tool, "dock")}</Show>}</For>
-    </main>
+    </ToolContent>
     {/* A pane's document moved into the dock draws here, over the tools. */}
-    <div class="workspace-dock-document" ref={(element) => { props.documentHost?.(element); onCleanup(() => props.documentHost?.(undefined)); }} />
+    <DockDocument ref={(element) => { props.documentHost?.(element); onCleanup(() => props.documentHost?.(undefined)); }} />
     <Show when={requests.loading()}><PaneLoading><Spinner /><span>Loading workspace</span></PaneLoading></Show>
-    </div>
-  </aside>
+    </DockSurface>
+  </Dock>
     <Show when={props.splitHost?.() && props.splitView?.() && !/^(chat|page|files):/.test(props.splitView()!) && props.splitView()}>{(tool) =>
       <Portal mount={props.splitHost!()!}>
-        <div class="workspace-split-surface">
+        <SheetFill>
           {toolHeader(tool, "split")}
-          <main class="workspace-panel-content" tabIndex={-1}>{splitView(tool())}</main>
-        </div>
+          <ToolContent>{splitView(tool())}</ToolContent>
+        </SheetFill>
       </Portal>
     }</Show>
   </>;
