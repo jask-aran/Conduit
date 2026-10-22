@@ -67,6 +67,9 @@
   --duration-gentle: 250ms;  /* arriving, opening, settling into place */
   /* Expand: what opens in place under its row slides on its measured height, both ways, on the one curve. */
   --duration-fold: 240ms; --ease-fold: cubic-bezier(.32, .72, 0, 1);
+  /* Settle: panes easing to new widths beside each other start from rest. A curve that starts at speed (fold's,
+     arrive's) moves a pane hundreds of pixels in its first frame, which reads as a snap. */
+  --ease-settle: cubic-bezier(.2, 0, 0, 1);
   /* Travel: something large crossing the page to a new place (the composer docking after a first send, a split
      opening beside it), on --ease-arrive. Slower than gentle, since it goes further. */
   --duration-travel: 400ms;

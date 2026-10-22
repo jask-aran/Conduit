@@ -37,7 +37,7 @@
 .ui-sheet[data-docked="hidden"] { display: none; }
 .ui-sheet:not([data-lead]) > div:not(.ui-pane-edge) { display: flex; min-width: 0; min-height: 0; flex: 1; flex-direction: column; overflow: hidden; border-radius: inherit; }
 /* The panes' shares easing: each sheet's room and margins move with them. */
-.ui-shell[data-settling] > .ui-sheet { transition: flex-grow var(--duration-fold) var(--ease-fold), margin var(--duration-fold) var(--ease-fold); }
+.ui-shell[data-settling] > .ui-sheet { transition: flex-grow var(--duration-fold) var(--ease-settle), margin var(--duration-fold) var(--ease-settle); }
 
 /* Filling a sheet edge to edge: a chat or page, a tool, a terminal, a file viewer's host. */
 .ui-sheet-fill { position: relative; isolation: isolate; display: flex; min-width: 0; min-height: 0; flex: 1; flex-direction: column; overflow: hidden; border-radius: inherit; container-type: inline-size; }
