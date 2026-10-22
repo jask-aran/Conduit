@@ -87,7 +87,7 @@ function holdFocus(element: HTMLElement, keep: () => boolean) {
   element.focus = (options?: FocusOptions) => { if (!keep()) focus(options); };
 }
 type Caps = { width?: Measure; height?: Measure; unfolds?: boolean };
-type ContentProps = ParentProps<Caps & { "data-settling"?: boolean; keep?: () => boolean; onOpenAutoFocus?: (event: Event) => void; onPointerDownOutside?: (event: Event) => void; onFocusOutside?: (event: FocusOutsideEvent) => void; onCloseAutoFocus?: (event: Event) => void }>;
+type ContentProps = ParentProps<Caps & { keep?: () => boolean; onOpenAutoFocus?: (event: Event) => void; onPointerDownOutside?: (event: Event) => void; onFocusOutside?: (event: FocusOutsideEvent) => void; onCloseAutoFocus?: (event: Event) => void }>;
 type RowProps = Omit<ComponentProps<typeof Item>, "onSelect"> & { onSelect?: () => void; closeOnSelect?: boolean };
 type ChoiceProps = RowProps & { value: string };
 /** keep: while true, opening leaves focus where it is (MenuPillTrigger's typing). */
