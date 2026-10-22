@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import { spawn } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import os from "node:os";
 import nodePty from "node-pty";
 
@@ -103,6 +103,16 @@ export class NodeProcesses {
   kill(id, signal = "SIGTERM") {
     const record = this.processes.get(id);
     if (!record || record.exit) return;
+    if (record.pty && process.platform === "win32") {
+      // node-pty's own kill forks a helper to list the console's processes,
+      // which dies with "AttachConsole failed" once the shell is going. Ending
+      // the shell's tree closes the terminal as \`exit\` would; its kill is
+      // only the fallback.
+      execFile("taskkill", ["/PID", String(record.pid), "/T", "/F"], { windowsHide: true }, () => {
+        setTimeout(() => { if (!record.exit) try { record.child.kill(); } catch {} }, 3000).unref?.();
+      });
+      return;
+    }
     try { record.child.kill(record.pty ? undefined : signal); } catch {}
   }
 
