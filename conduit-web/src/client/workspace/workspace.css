@@ -1,44 +1,12 @@
-/* Workspace panel geometry, file views, and artifact surfaces. */
+/* The workspace's app-level rules; its tools' layouts are the library's (FilesPane, SourceView, ChangeNav). */
 
 /* A desktop too narrow for the main pane beside the sidebar scrolls the window's root sideways (AppShell holds its room). */
 @media (--conduit-wide-layout) {
   #root { overflow: auto hidden; }
 }
-.workspace-split-resizing { cursor: col-resize; user-select: none; }
-.workspace-files { position: relative; display: flex; min-height: 0; flex: 1; flex-direction: column; }
-.workspace-tree-pane { display: flex; min-width: 0; min-height: 0; flex: 1; flex-direction: column; overflow: hidden; }
-.workspace-files[data-wide="false"] { display: grid; grid-template-columns: var(--control-lg) minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
-.workspace-files[data-wide="false"] > .ui-file { grid-column: 2; grid-row: 1; height: auto !important; }
-.workspace-files[data-wide="false"][data-navigator-open="true"] > .ui-file { grid-column: 1 / -1; }
-.workspace-files[data-wide="false"] > .workspace-tree-pane { grid-column: 1 / -1; grid-row: 1 / -1; z-index: 8; width: min(85%, var(--measure-lg)); background: var(--background); border-right: var(--hairline) solid var(--border); box-shadow: var(--lift-side); }
-.workspace-files[data-wide="false"][data-navigator-open="false"] > .workspace-tree-pane { display: none; }
-.workspace-files > .ui-file { flex: none; }
-.workspace-diff { display: flex; min-width: 0; min-height: 0; flex: 1; flex-direction: column; overflow: hidden; container-name: workspace-source; container-type: inline-size; }
-.workspace-diff-overview { display: flex; min-height: var(--measure-2xs); flex: 1 1 56%; flex-direction: column; overflow: hidden; }
-.workspace-patch { display: flex; min-height: 0; max-height: 42%; flex: none; flex-direction: column; overflow: hidden; }
-.workspace-diff > .workspace-patch { max-height: none; flex: 1; border: 0; }
-.workspace-review-files { display: flex; min-width: 0; min-height: 0; flex-direction: column; background: color-mix(in oklch, var(--background), var(--border) 9%); }
-.workspace-terminal-slot { display: flex; min-width: 0; min-height: 0; overflow: hidden; }
-.workspace-detail-resizing { cursor: row-resize; user-select: none; }
-.workspace-chat-view { display: flex; min-height: 0; flex: 1; flex-direction: column; }
-
-@media (--conduit-wide-layout) {
-  .workspace-files[data-wide="true"] { display: grid; grid-template-columns: var(--workspace-tree-width, var(--measure-xs)) var(--space-lg) minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
-  .workspace-files[data-wide="true"] .workspace-tree-pane { grid-column: 1; grid-row: 1; }
-  .workspace-files[data-wide="true"] > .ui-file { height: auto !important; grid-column: 3; grid-row: 1; }
-  /* Two open files split the track right of the tree; one file keeps the
-     original three-track layout untouched. */
-  .workspace-files[data-wide="true"][data-tree-collapsed="true"] { grid-template-columns: var(--control-lg) 0 minmax(0, 1fr); }
-  .workspace-files[data-wide="true"][data-tree-collapsed="true"] .workspace-tree-pane,
-  .workspace-files[data-wide="true"][data-tree-collapsed="true"] > .ui-split-edge { display: none; }
-}
-
-/* A phone: no rail (the dock's tabs stand in), and the tools stacked for a finger. */
+/* A phone has no rail: the dock's tabs stand in. */
 @media (--conduit-phone-layout) {
   [data-region="workspace-rail"] { display: none; }
-  .workspace-diff { overscroll-behavior: contain; }
-  .workspace-diff-overview { flex: 1; }
-  .workspace-files { grid-template-rows: minmax(var(--measure-2xs), 42%) 1fr; }
 }
 /* A terminal pane whose shell has ended. */
 .pane-terminal-gone { display: flex; align-items: center; justify-content: space-between; gap: var(--space-md); padding: var(--space-xl) var(--space-2xl); color: var(--muted-foreground); font-size: var(--text-body); }

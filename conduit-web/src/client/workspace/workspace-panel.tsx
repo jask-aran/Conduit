@@ -494,9 +494,7 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
   onCleanup(() => {
     requests.reset();
     stopResize?.();
-    document.body.classList.remove("workspace-detail-resizing");
     document.body.classList.remove("workspace-tree-resizing");
-    document.body.classList.remove("workspace-split-resizing");
   });
 
   let loadedProjectId = "";
