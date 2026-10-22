@@ -46,7 +46,9 @@ export function DeviceTools(runtime) {
 /** A device's shared folder as an environment: this server's own disk, or the device's node. */
 export async function deviceEnv(runtime, conversationId, name, folder) {
   const wanted = String(name || "").trim().toLowerCase();
-  const device = (await runtime.reachable()).find((item) => item.name.toLowerCase() === wanted || item.nodeId === name);
+  // Two environments may share a name (one paired again): the one online is meant.
+  const named = (await runtime.reachable()).filter((item) => item.name.toLowerCase() === wanted || item.nodeId === name);
+  const device = named.find((item) => item.online) || named[0];
   if (!device) throw new Error(`No device named ${JSON.stringify(name)}; list them with \`devices\``);
   const root = folder
     ? device.roots.find((item) => [item.path, item.label, item.id].includes(folder))
