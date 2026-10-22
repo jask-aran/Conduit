@@ -131,6 +131,20 @@ interface ActiveChatOptions {
   saveWorkspaceDefault: (workspaceId: string, templateId: string | null) => Promise<unknown>;
 }
 
+type ChatCaches = {
+  prefetches: Map<string, { revision: string; expiresAt: number; request: Promise<TranscriptDetail> }>;
+  transcripts: Map<string, { revision: string; detail: TranscriptDetail }>;
+  turnArtifacts: Map<string, { projectId: string; revision: string; expiresAt: number; request: Promise<TurnArtifactSummary[]> }>;
+};
+// What any pane's chat fetched, for every pane's: each had its own, so a chat hovered in the sidebar (prefetched by
+// pane A's) was fetched again when it opened beside. One set per runtime, so separate apps (tests) share nothing.
+const sharedChatCaches = new WeakMap<RuntimeStore, ChatCaches>();
+function chatCaches(runtime: RuntimeStore): ChatCaches {
+  let caches = sharedChatCaches.get(runtime);
+  if (!caches) sharedChatCaches.set(runtime, caches = { prefetches: new Map(), transcripts: new Map(), turnArtifacts: new Map() });
+  return caches;
+}
+
 export function createActiveChat(options: ActiveChatOptions) {
   const { catalogue, models, permissions, serviceLevels, attachments, onError } = options;
   const [status, setStatus] = createSignal<ChatStatus>("draft");
@@ -234,15 +248,9 @@ export function createActiveChat(options: ActiveChatOptions) {
   let selectionToken = 0;
   let navigationToken = 0;
   let liveOpening: LiveOpening | null = null;
-  const transcriptPrefetches = new Map<string, {
-    revision: string;
-    expiresAt: number;
-    request: Promise<TranscriptDetail>;
-  }>();
-  const transcriptCache = new Map<string, {
-    revision: string;
-    detail: TranscriptDetail;
-  }>();
+  const caches = chatCaches(options.runtime);
+  const transcriptPrefetches = caches.prefetches;
+  const transcriptCache = caches.transcripts;
 
   // The runtime stream is the live-process authority. The catalogue carries a
   // point-in-time copy that can still say active after the process has settled.
@@ -278,8 +286,31 @@ export function createActiveChat(options: ActiveChatOptions) {
     return request;
   };
 
+  const fetchTurnArtifacts = (projectId: string, chatId: string) =>
+    api<TurnArtifactSummary[]>(`/v0/projects/${encodeURIComponent(projectId)}/turn-artifact?${new URLSearchParams({ chatId, timeline: "1" })}`, { cache: "no-store" });
+  // A chat's turn summaries, asked for with its transcript (a hover's prefetch, or the open itself): the transcript
+  // asked only once it had mounted, so they arrived ~190 ms after it had faded in, and moved what it showed.
+  const warmTurnArtifacts = (projectId: string, chat: ChatSummary) => {
+    const revision = transcriptRevision(chat);
+    const cached = caches.turnArtifacts.get(chat.id);
+    if (cached && cached.projectId === projectId && cached.revision === revision && cached.expiresAt > Date.now()) return;
+    const request = fetchTurnArtifacts(projectId, chat.id);
+    caches.turnArtifacts.delete(chat.id);
+    caches.turnArtifacts.set(chat.id, { projectId, revision, expiresAt: Date.now() + 30_000, request });
+    request.catch(() => { if (caches.turnArtifacts.get(chat.id)?.request === request) caches.turnArtifacts.delete(chat.id); });
+    while (caches.turnArtifacts.size > 10) caches.turnArtifacts.delete(caches.turnArtifacts.keys().next().value!);
+  };
+  /** The transcript's read: the request already under way, taken once (a later read asks afresh), else a new one. */
+  const turnArtifactTimeline = (projectId: string, chatId: string) => {
+    const cached = caches.turnArtifacts.get(chatId);
+    caches.turnArtifacts.delete(chatId);
+    return cached && cached.projectId === projectId && cached.expiresAt > Date.now() ? cached.request : fetchTurnArtifacts(projectId, chatId);
+  };
+
   const prefetch = (chat: ChatSummary) => {
-    if (!chatIsLive(chat)) void loadTranscript(chat).catch(() => {});
+    if (chatIsLive(chat)) return;
+    void loadTranscript(chat).catch(() => {});
+    if (chat.projectId) warmTurnArtifacts(chat.projectId, chat);
   };
   // A stop is finished when the turn says it stopped, settled or is stopping.
   // `generation_failed` used to be in here and could never arrive: a failed
@@ -994,6 +1025,7 @@ export function createActiveChat(options: ActiveChatOptions) {
   ) => {
     if (navigatingId() === chat.id && navigationRequest) return navigationRequest;
     setNavigatingId(chat.id);
+    warmTurnArtifacts(project.id, chat);
     let request: Promise<void>;
     const shown = () => { if (navigatingId() === chat.id) setNavigatingId(null); };
     request = performSelect(chat, project, { ...navigationOptions, onShown: shown }).finally(() => {
@@ -1362,7 +1394,7 @@ export function createActiveChat(options: ActiveChatOptions) {
     live, messages, setMessages, tools, loadedId, pageBefore, loadingOlder, draft, setDraft,
     generation, editingEntryId, contextUsage, sessionStats, cacheStats, refreshContext, loadBreakdown, compacting, hostUiRequests, queue, pendingMessages, capabilities, harnessCommands, activeGeneration, activeGenerationChange, turnArtifacts,
     navigatingId, presentation, interactionReady: () => presentation().kind === "ready" && Boolean(loadedId()), streaming, stopping, activity,
-    initialize, select, prefetch, loadDetail, ensureAgent, reset, send, stop, regenerate, rehydrateDraft,
+    initialize, select, prefetch, turnArtifactTimeline, loadDetail, ensureAgent, reset, send, stop, regenerate, rehydrateDraft,
     compact, loadHarnessCommands, loadOlder, edit, cancelEdit, respondHostUi, clearQueue, interruptAndSend, editQueued, discardQueued,
   };
 }
