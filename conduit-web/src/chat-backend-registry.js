@@ -39,8 +39,13 @@ export class ChatBackendRegistry {
   register(manifests, detection, config) {
     for (const manifest of manifests) {
       const implementations = manifest.implementations || [manifest.id];
-      if (implementations.some((implementation) => this.adapters.has(implementation))) continue;
       const here = manifest.builtIn || Boolean(detection.get(manifest.id)?.available);
+      // Registered already (for devices, perhaps, before it was installed
+      // here): a probe that now finds it here only says so.
+      if (implementations.some((implementation) => this.adapters.has(implementation))) {
+        if (here) for (const implementation of implementations) this.local.add(implementation);
+        continue;
+      }
       if (!here && !manifest.devices) continue;
       const adapter = assertChatBackendAdapter(manifest.build(config), manifest.id, manifest.capabilities);
       for (const implementation of implementations) {

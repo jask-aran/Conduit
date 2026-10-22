@@ -9,7 +9,7 @@ import { SessionRecords } from "../src/harnesses/session-records.js";
 import { unsupported } from "../src/harnesses/unsupported.js";
 import { READY, UNAVAILABLE, detect } from "../src/harnesses/probe.js";
 
-const config = { manager: {}, codexCommand: "codex", chatgptWebPython: "python3", chatgptWebScript: "x.py", chatgptWebDataDir: "/tmp/x" };
+const config = { manager: {}, dataRoot: "/tmp/conduit-manifests-test", codexCommand: "codex", chatgptWebPython: "python3", chatgptWebScript: "x.py", chatgptWebDataDir: "/tmp/x" };
 const allAvailable = () => new Map(MANIFESTS.map((manifest) => [manifest.id, READY("test")]));
 
 test("every manifest declares the fields the server reads from it", () => {
@@ -84,7 +84,9 @@ test("an unavailable harness registers nothing but a built-in one always does", 
   const backends = ChatBackendRegistry.fromManifests(MANIFESTS, detection, config);
   for (const manifest of MANIFESTS) {
     for (const implementation of implementationsOf(manifest)) {
-      assert.equal(backends.adapters.has(implementation), Boolean(manifest.builtIn), implementation);
+      // A harness devices can run is registered for them even when it is absent here.
+      assert.equal(backends.adapters.has(implementation), Boolean(manifest.builtIn || manifest.devices), implementation);
+      assert.equal(backends.local.has(implementation), Boolean(manifest.builtIn), implementation);
     }
   }
   assert.deepEqual(harnessCatalog(backends).map((row) => row.available),
@@ -96,11 +98,12 @@ test("an unavailable harness registers nothing but a built-in one always does", 
 test("re-probing registers a harness that appeared after startup", async () => {
   const detection = new Map(MANIFESTS.map((manifest) => [manifest.id, UNAVAILABLE()]));
   const backends = ChatBackendRegistry.fromManifests(MANIFESTS, detection, config);
-  assert.equal(backends.adapters.has("codex"), false);
+  assert.equal(backends.local.has("codex"), false);
   backends.manifestList = MANIFESTS.map((manifest) =>
     manifest.id === "codex" ? { ...manifest, probe: () => READY("codex-cli 1.2.3") } : { ...manifest, probe: () => UNAVAILABLE() });
   await backends.refreshDetection();
   assert.equal(backends.adapters.has("codex"), true);
+  assert.equal(backends.local.has("codex"), true);
   assert.equal(backends.detection.get("codex").version, "codex-cli 1.2.3");
 });
 

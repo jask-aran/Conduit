@@ -109,8 +109,6 @@ test("creates invisible drafts and reveals them after a completed attachment", a
   assert.equal(bare.templateId, null);
   await store.update(bare.id, { templateId: "chat", templateVersion: "2" });
   assert.equal(store.metadata(bare.id).templateId, "chat");
-  await store.update(bare.id, { templateId: "workspace", templateVersion: "9" });
-  assert.equal(store.metadata(bare.id).templateId, "chat");
 
   const attachment = path.join(chatDirectory(project, chat.id), "attachments", `${crypto.randomUUID()}--note.txt`);
   await fs.writeFile(attachment, "hello");

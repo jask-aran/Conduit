@@ -21,6 +21,7 @@ import {
 import {
   findDeletableSession,
   stopProjectProcesses,
+  stopSessionProcesses,
   moveDurableChat,
 } from "../../session-operations.js";
 
