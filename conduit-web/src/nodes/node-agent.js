@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import WebSocket from "ws";
 import { BACKGROUND_CONTEXT, withAbortSignal } from "@earendil-works/chord/context";
@@ -36,7 +37,7 @@ const HEARTBEAT_MS = 30_000;
  * reports them interrupted rather than this device running work nobody waits
  * for.
  */
-export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: shared, shellEnv = process.env, log = console }) {
+export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: shared, terminal = false, shellEnv = process.env, log = console }) {
   // Every way main can be reached, best first (its tailnet name, then a public
   // tunnel): a failed attempt tries the next, and a dropped connection starts again at the best.
   const ways = [...new Set([mainUrl, ...routes].filter(Boolean))];
@@ -108,7 +109,7 @@ export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: 
       way = 0;
       // Roots go by id; the path is for people to read, main never sends it back.
       send({ type: "hello", version: NODE_PROTOCOL_VERSION, name, platform: process.platform, boot: receipts.boot,
-        harnesses: Object.keys(harnesses),
+        harnesses: Object.keys(harnesses), terminal: Boolean(terminal),
         roots: roots.map(({ id, path: label, read, write, shell, allow }) => ({ id, label, read, write, shell, allow })) });
       log.info?.(`[conduit-node] connected to ${mainUrl}${via === mainUrl ? "" : ` via ${via}`}`);
     });
@@ -189,6 +190,13 @@ export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: 
       try {
         if (method === "spawn") {
           const spec = args[0] || {};
+          // The device's own terminal (its owner's \`conduit-node terminal on\`): an
+          // interactive shell in this user's home, outside any shared folder.
+          if (spec.cwd?.home === true) {
+            if (!terminal) return err(new FileError("permission_denied", "This device does not let Conduit open a terminal outside its shared folders"));
+            if (spec.shell !== true || !spec.pty || spec.harness !== undefined) return refuse("exec", "this device's home");
+            return { ok: true, value: processes.spawn({ shell: true, pty: spec.pty, cwd: os.homedir() }) };
+          }
           const home = placeOf(spec.cwd);
           if (!home || !rootFor(roots, home, "shell")) return refuse("exec", "that folder");
           // A harness is named, not given as a path: the node runs its own install of it.

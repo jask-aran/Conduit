@@ -485,7 +485,7 @@ export function Sidebar(props: {
     if (seconds < 86_400) return `${Math.floor(seconds / 3600)}h ago`;
     return `${Math.floor(seconds / 86_400)}d ago`;
   };
-  const terminalScope = (terminal: Pty) => props.projects.find((project) => project.id === terminal.projectId)?.name || ((terminal.projectId === "computer" || terminal.projectId.startsWith("computer:")) ? terminal.cwd || "Computer" : "Unknown workspace");
+  const terminalScope = (terminal: Pty) => props.projects.find((project) => project.id === terminal.projectId)?.name || ((terminal.projectId === "computer" || terminal.projectId.startsWith("computer:") || terminal.projectId.startsWith("device:")) ? terminal.cwd || "Computer" : "Unknown workspace");
   const selectedTargets = createMemo<ChatTarget[]>(() => props.projects.flatMap((project) =>
     project.sessions.filter((chat) => selectedChatIds().has(chat.id)).map((chat) => ({ chat, project }))));
   const clearSelection = () => setSelectedChatIds(new Set<string>());
