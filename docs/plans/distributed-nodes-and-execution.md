@@ -202,6 +202,23 @@ environments.
 27. **A home terminal follows the shell grant.** A shell in any shared folder
     can already reach everything its user can, so an environment with any
     shell-granted folder offers a terminal in its home; no separate grant.
+28. **Terminals live in tmux wherever it exists; the head is Unix.** tmux
+    outlives both the server and its own client, which matters most on the
+    head, so the head needs Linux (WSL counts) or macOS with tmux, and a
+    Windows machine is never the head. Nodes on Linux and macOS keep their
+    shells in tmux too, surviving a restart or update of the node; Windows
+    nodes keep ConPTY shells in the node daemon.
+29. **Two networks: dev and prod, both plain Conduit.** Prod's head is the
+    VPS; dev's head is this desktop (WSL), whose existing data
+    (`~/.conduit/data`) becomes the dev head's. The desktop is a device of
+    both, pairing each with its own folders and grants. Neither holds chats
+    the user relies on today. After the merge there is no "Conduit Durable":
+    dev and prod are two instances of Conduit, picked in the client's server
+    list.
+30. **Nodes learn what the head supports from its reply to hello**: a list of
+    features (the relay first), so a node uses only what the head offers and
+    new features do not refuse older nodes; the protocol version is bumped
+    only for breaking changes.
 
 ## Architecture
 
@@ -643,3 +660,26 @@ and linked (one workspace opened in either environment), or discouraging
 with one (`conduit-node terminal on`), but a shell grant on any folder already
 reaches the whole home. Chosen: follow the shell grant. → decision 27.
 
+### 2026-10-22: the head, terminals and the two networks
+
+**Should the head run its own node daemon, dropping tmux?** Proposed to make
+decision 24 literal (one terminal implementation) and allow a Windows head.
+Answered: tmux is too important for recovery, especially on the head; a
+Linux-only head is acceptable. Weighed: tmux on the head only, tmux on Unix
+nodes too, or a flexible head with a daemon fallback. Chosen: tmux wherever
+it exists. → decision 28.
+
+**What is the desktop after the merge?** Weighed: the VPS as the only head
+(the desktop a device), two networks, or the desktop as the head. Chosen: a
+dev network headed by the desktop and a prod network headed by the VPS, the
+desktop a device of both. Dev's head takes over this machine's existing data;
+nothing in either is relied on, so a migration such as the classic-chat
+conversion may run on dev at the merge. "Conduit Durable" ends with the
+merge. → decision 29.
+
+**How does a node learn what the head supports?** A feature list in the
+head's reply to hello, rather than bumping the protocol version for each
+addition. → decision 30.
+
+**The relay's security review:** run now, in the background, rather than at
+the merge.
