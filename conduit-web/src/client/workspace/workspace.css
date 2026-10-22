@@ -1,61 +1,10 @@
 /* Workspace panel geometry, file views, and artifact surfaces. */
 
-.workspace-panel, .main-split, .chat-main > .workspace-split-surface, .pane-a-tool-host, .chat-main > .pane-terminal {
-  --workbench-bar-height: var(--control);
-  --workbench-control-size: var(--control-tool);
-  --workbench-gap: var(--space-2xs);
-  --workbench-padding-block: var(--space-xs);
-  --workbench-padding-inline: var(--space-sm);
-  --workbench-icon-size: var(--icon-sm);
-  --workbench-font-size: var(--text-label);
-  --workbench-divider: var(--border);
-}
-.workspace-panel { position: relative; display: flex; width: 0; height: calc(100dvh - var(--space-xl)); margin: var(--space-md) 0 var(--space-md) 0; flex: none; overflow: visible; pointer-events: none; border-radius: var(--radius-surface); transition: width var(--duration-fold) var(--ease-fold), margin-right var(--duration-fold) var(--ease-fold); }
-.workspace-panel.workspace-panel-open { pointer-events: auto; background: var(--background); }
-.workspace-panel[data-edge-instant="true"] { transition: none !important; }
-/* The gap to the rail snaps with the layer (the surface's 8px over the panes
-   stands in for it), so the dock never drifts; only its room eases. */
-.workspace-panel[data-layer-switch] { z-index: var(--layer-dock); transition: width var(--duration-fold) var(--ease-fold); }
-.workspace-panel[data-layer-switch] .workspace-panel-surface { left: auto; width: var(--workspace-shell-width); transition: none; }
-/* Over the panes: the dock takes no room in the row and floats above it. */
-.workspace-panel.workspace-panel-overlay { z-index: var(--layer-dock); width: 0 !important; margin-right: 0 !important; background: transparent; }
-.workspace-panel-overlay .workspace-panel-surface { right: var(--space-md); left: auto; width: var(--workspace-shell-width); box-shadow: var(--lift-raised), 0 0 0 var(--hairline) var(--border); }
-.workspace-panel-overlay .ui-pane-edge[data-dock] { left: calc(-1 * var(--workspace-shell-width) - var(--space-md) - var(--control-xs) / 2); }
-/* Surface keeps settled panel width, right-anchored inside the shell. */
-.workspace-panel-surface { position: absolute; inset: 0; display: flex; min-width: 0; height: 100%; contain: layout paint; container-name: workspace-surface; container-type: inline-size; flex: none; flex-direction: column; overflow: hidden; border-radius: var(--radius-surface); background: var(--background); }
-.workspace-panel-surface > * { max-width: 100%; }
-.chat-main { flex: 1 1 auto; min-width: 0; }
-.chat-main.workspace-expanded { margin-inline: 0; pointer-events: none; }
-.workspace-layout { position: relative; overflow: hidden; container-type: inline-size; }
-/* A chat is never drawn narrower than it declares (MIN_MAIN_PANE_UNITS, DESIGN.md "Documents and room"): on a desktop
-   window too narrow for it beside the sidebar, the shell scrolls sideways instead. The layout holds the chat and its
-   margins; its own intrinsic width is no help, as a size container it has none. A phone is full-bleed at any width. */
+/* A desktop too narrow for the main pane beside the sidebar scrolls the window's root sideways (AppShell holds its room). */
 @media (--conduit-wide-layout) {
-  .chat-main { min-width: var(--conduit-min-main-pane); }
-  .workspace-layout { min-width: calc(var(--conduit-min-main-pane) + var(--space-lg)); }
   #root { overflow: auto hidden; }
 }
-.workspace-panel-surface { right: 0; left: auto; width: 100%; transition: width var(--duration-fold) var(--ease-fold); }
-.workspace-panel-expanded .workspace-panel-surface { width: calc(100cqw - var(--space-md)); }
-.workspace-panel-expanded .ui-pane-edge[data-dock] { display: none; }
-.workspace-panel-content { position: relative; display: flex; min-width: 0; min-height: 0; flex: 1; overflow: hidden; outline: none; }
-.workspace-panel-content > * { min-width: 0; flex: 1; }
 .workspace-split-resizing { cursor: col-resize; user-select: none; }
-/* The main pane's split: a view moved out of the dock, its own sheet on the
-   frame beside the chat, as the dock is. The chat's 8px right margin is the
-   gutter; the drag edge sits in it. */
-.main-split { position: relative; display: flex; min-width: 0; height: calc(100dvh - var(--space-xl)); margin: var(--space-md) var(--space-md) var(--space-md) 0; flex-direction: column; border-radius: var(--radius-surface); background: var(--background); }
-/* A pane moved into the dock fills it in place of the tools (their state kept). */
-.workspace-dock-document { display: none; }
-.workspace-panel-documented > :not(.workspace-dock-document) { display: none !important; }
-.workspace-panel-documented > .workspace-dock-document { display: flex; min-width: 0; min-height: 0; flex: 1; flex-direction: column; }
-.workspace-dock-document > div { display: contents; }
-.main-split.main-split-docked-hidden { display: none; }
-.main-split.main-split-docked { height: auto; min-height: 0; flex: 1; margin: 0; border-radius: inherit; }
-.main-split > div:not(.ui-pane-edge) { display: flex; min-width: 0; min-height: 0; flex: 1; flex-direction: column; overflow: hidden; border-radius: inherit; }
-/* Pane A holding the dock's tool, over its route (5f). */
-.pane-a-tool-host { display: flex; min-width: 0; min-height: 0; flex: 1; flex-direction: column; }
-.workspace-split-surface { display: flex; min-width: 0; min-height: 0; flex: 1; flex-direction: column; container-name: workspace-surface; container-type: inline-size; }
 /* A chat beside the main one: laid out as the main pane's chat is, measured by its own width. */
 .main-split-chat { --chat-header-height: var(--header-height); position: relative; isolation: isolate; container-type: inline-size; container-name: chat-main; color: var(--foreground); }
 .workspace-files { position: relative; display: flex; min-height: 0; flex: 1; flex-direction: column; }
@@ -86,55 +35,12 @@
   .workspace-files[data-wide="true"][data-tree-collapsed="true"] > .ui-split-edge { display: none; }
 }
 
+/* A phone: no rail (the dock's tabs stand in), and the tools stacked for a finger. */
 @media (--conduit-phone-layout) {
-  [data-region="workspace-rail"], .main-split { display: none; }
-  .chat-main.workspace-expanded { display: flex; }
-  .workspace-panel {
-    inset: 0;
-    z-index: var(--layer-panel);
-    width: 100vw !important;
-    height: 100dvh;
-    transform: translateX(100%);
-  }
-  .workspace-panel.workspace-panel-open { margin: 0; transform: translateX(0); }
-  .workspace-panel-surface { width: 100%; border: 0; overscroll-behavior: contain; opacity: 1; transform: none; }
-   .workspace-diff { overscroll-behavior: contain; }
+  [data-region="workspace-rail"] { display: none; }
+  .workspace-diff { overscroll-behavior: contain; }
+  .workspace-diff-overview { flex: 1; }
   .workspace-files { grid-template-rows: minmax(var(--measure-2xs), 42%) 1fr; }
-  html[data-vv-shell] .workspace-panel { height: var(--app-height, 100dvh); }
 }
-
-@media (prefers-reduced-motion: reduce) {
-  .workspace-panel, .workspace-panel-surface { transition-duration: 0.01ms !important; }
-  .workspace-panel-open .workspace-panel-surface { transform: none; }
-}
-
-/* The phone's overrides of the rules above: what differs on a phone. */
-@media (--conduit-phone-layout) {
-.workspace-diff-overview { flex: 1; }
-  .workspace-panel {
-    position: fixed;
-    margin: 0;
-    transition: transform var(--duration-quick) var(--ease-change);
-  }
-  .workspace-panel-surface { border-radius: 0; }
-  /* Full-bleed, the panel sits under the system's status and navigation bars,
-     so its surface starts and ends inside them, as the chat's header and
-     composer do. */
-  .workspace-panel-surface {
-    top: var(--safe-area-inset-top, env(safe-area-inset-top, 0px));
-    bottom: var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px));
-    height: auto;
-  }
-  /* Sized for a finger: 36px rows, 32px controls. */
-  .workspace-panel {
-    --workbench-bar-height: var(--control-lg);
-    --workbench-control-size: var(--control-sm);
-    --workbench-gap: var(--space-xs);
-    --workbench-padding-inline: var(--space-md);
-  }
-}
-/* A shell as a pane's document: the terminal fills the pane, its header
-   carrying the pane's swap and close. */
-.pane-terminal { display: flex; min-width: 0; min-height: 0; flex: 1; flex-direction: column; overflow: hidden; border-radius: inherit; }
+/* A terminal pane whose shell has ended. */
 .pane-terminal-gone { display: flex; align-items: center; justify-content: space-between; gap: var(--space-md); padding: var(--space-xl) var(--space-2xl); color: var(--muted-foreground); font-size: var(--text-body); }
-body.panes-settling :is(.chat-main, .main-split) { transition: flex-grow var(--duration-fold) var(--ease-fold), margin var(--duration-fold) var(--ease-fold); }
