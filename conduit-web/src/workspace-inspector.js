@@ -418,9 +418,31 @@ function watchOffThread(root, _options, listener) {
 
 function startWorkspaceWatch(record) {
   if (record.watcher || record.fallback) return;
-  // A device's folder is not watched from here: the visible paths are polled.
+  // A device's folder is watched on the device; while it cannot be (offline,
+  // or its watch stopped), the visible paths are polled and the watch is tried
+  // again a little later.
   if (!record.host.local) {
-    record.fallback = true;
+    if (!record.host.watch || Date.now() < (record.retryAt || 0)) {
+      record.polling = true;
+      noteWorkspaceChange(record);
+      return;
+    }
+    const lost = () => {
+      record.watcher?.close();
+      record.watcher = null;
+      record.retryAt = Date.now() + 10_000;
+      noteWorkspaceChange(record);
+    };
+    const watcher = { closed: false, handle: null, close() { this.closed = true; this.handle?.close(); } };
+    watcher.ready = record.host.watch((paths) => {
+      if (!paths) return noteWorkspaceChange(record);
+      for (const relativePath of paths) noteWorkspaceChange(record, relativePath);
+    }, lost).then((handle) => {
+      watcher.handle = handle;
+      if (watcher.closed) handle.close();
+      record.polling = false;
+    }, lost);
+    record.watcher = watcher;
     noteWorkspaceChange(record);
     return;
   }
@@ -476,7 +498,7 @@ export async function readWorkspaceVersion(root, { paths = [], watchImpl = watch
   try {
     startWorkspaceWatch(record);
     await record.watcher?.ready;
-    if (record.fallback) await scanWorkspacePaths(record, paths);
+    if (record.fallback || record.polling || (!record.host.local && !record.watcher)) await scanWorkspacePaths(record, paths);
     const changedPaths = record.fullRefresh || record.changedPaths === null ? null : [...record.changedPaths];
     if (record.fullRefresh) {
       record.fullRefresh = false;
