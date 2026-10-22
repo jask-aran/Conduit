@@ -1013,7 +1013,7 @@ export function FileBesideView(props: {
 }) {
   const c = props.control;
   const gitFile = () => props.sourceControlEnabled ? props.gitFiles.find((file) => file.path === c.openPaths().secondary) : undefined;
-  return <div class="workspace-files workspace-file-beside">
+  return <div class="workspace-files">
     <WorkspaceFileSlot
       projectId={props.projectId}
       path={c.openPaths().secondary}

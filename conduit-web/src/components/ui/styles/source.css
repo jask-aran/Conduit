@@ -56,3 +56,7 @@
 .ui-patch [data-kind="deletion"] { background: color-mix(in oklch, var(--destructive), transparent 91%); color: color-mix(in oklch, var(--destructive), var(--foreground) 35%); }
 .ui-patch [data-kind="hunk"] { color: var(--warn); }
 .ui-patch [data-kind="heading"] { color: var(--foreground); font-weight: var(--weight-strong); }
+/* The change list and the patch scroll on the native bar, their thumb the shared one. */
+.ui-change-list, .ui-patch { scrollbar-color: var(--native-scrollbar-color); scrollbar-width: var(--native-scrollbar-width); }
+.ui-change-list::-webkit-scrollbar, .ui-patch::-webkit-scrollbar { width: var(--space-sm); height: var(--space-sm); }
+.ui-change-list::-webkit-scrollbar-thumb, .ui-patch::-webkit-scrollbar-thumb { border: var(--stroke) solid transparent; border-radius: var(--radius-round); background: color-mix(in oklch, var(--foreground), transparent 72%); background-clip: padding-box; }

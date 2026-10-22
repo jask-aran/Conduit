@@ -8,9 +8,9 @@ import { row, token, type Page } from "../model";
 /** The phone's composer, as components v2 builds it; each option a value or an accessor (the Motion cell switches them). */
 export type Live<T> = T | (() => T);
 export const read = <T,>(value: Live<T>) => typeof value === "function" ? (value as () => T)() : value;
-export const phoneComposer = (mode: Live<VoiceMode>, opts: { draft?: Live<boolean>; away?: Live<boolean>; editing?: Live<boolean>; under?: Live<boolean>; riders?: boolean; layout?: "bar" | "surface" } = {}) => {
+export const phoneComposer = (mode: Live<VoiceMode>, opts: { draft?: Live<boolean>; away?: Live<boolean>; editing?: Live<boolean>; under?: Live<boolean>; riders?: boolean; opening?: boolean; layout?: "bar" | "surface" } = {}) => {
   const m = () => read(mode), draft = () => !!read(opts.draft ?? false), under = () => !!read(opts.under ?? false), voice = speech(() => m() === "listening");
-  return <PhoneComposer mode={m()} layout={opts.layout} under={under()} editing={!!read(opts.editing ?? false)} level={voice.level()} riders={opts.riders ? queued() : undefined}
+  return <PhoneComposer mode={m()} opening={opts.opening} layout={opts.layout} under={under()} editing={!!read(opts.editing ?? false)} level={voice.level()} riders={opts.riders ? queued() : undefined}
     field={<PillField value={draft() ? "make the second paragraph shorter" : ""} placeholder="Send a message…" />}
     track={<PillWave levels={voice.bars()} />}
     captions={<Captions lead="make the second paragraph shorter" words={["then ", "rename ", "the ", "file ", "to ", "lorem.txt"]} />}
@@ -70,6 +70,7 @@ export const phoneComposerPage: Page = { title: "PhoneComposer", summary: "The p
     row("State table", "PHONE_COMPOSER_STATES", () => <StateTable />, { surfaces: ["ground"], phone: "only" }),
     row("Idle", "PhoneComposer mode=idle: the row alone; nothing to send, so Send is folded", () => <div class="g-phone-composer">{phoneComposer("idle")}</div>, { surfaces: ["ground"], phone: "only" }),
     row("Typing", "mode=typing: the field above the row, Send beside the mic", () => <div class="g-phone-composer">{phoneComposer("typing", { draft: true })}</div>, { surfaces: ["ground"], phone: "only" }),
+    row("Opening", "opening: its chat still arriving (reattaching): the riders and edit pills keep their room, unseen; the row stays", () => <div class="g-phone-composer">{phoneComposer("typing", { draft: true, riders: true, opening: true })}</div>, { code: "<PhoneComposer opening>", surfaces: ["ground"], phone: "only" }),
     row("Listening", "mode=listening: the mic an orb pill at the row's end, Stop and send beside it, the track and captions", () => <div class="g-phone-composer">{phoneComposer("listening")}</div>, { surfaces: ["ground"], phone: "only" }),
     row("Editing", "edit · editing: pills over the field while its cursor is moved by hand", () => <div class="g-phone-composer">{phoneComposer("typing", { draft: true, editing: true })}</div>, { surfaces: ["ground"], phone: "only" }),
     row("Menu open", "under · PillButton open: the + menu is open, so the rest dims at once and its opener stays lit", () => <div class="g-phone-composer">{phoneComposer("typing", { draft: true, under: true })}</div>, { surfaces: ["ground"], phone: "only" }),

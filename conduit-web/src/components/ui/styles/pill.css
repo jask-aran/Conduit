@@ -55,3 +55,6 @@
 .ui-frost.ui-pill[data-surface] { display: inline-flex; flex: none; }
 .ui-pill[data-surface] > :is(button, [data-slot="button"]) { width: var(--pill-slot); min-width: var(--pill-slot); height: var(--pill-slot-height); padding: 0; border-radius: var(--radius-round); }
 .ui-pill[data-surface][data-solo] > :is(button, [data-slot="button"]) { width: 100%; min-width: 0; height: 100%; }
+
+/* A phone's field writes in the transcript's face, as the desktop composer's does. */
+.ui-pill-field textarea { font-family: var(--font-transcript); }

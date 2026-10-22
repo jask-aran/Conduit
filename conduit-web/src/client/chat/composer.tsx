@@ -82,6 +82,8 @@ export function Composer(props: {
   onSendDraft?: (text: string) => Promise<void>;
   /** Sending starts the chat (through `onSendDraft`), so there is none to wait for. */
   launches?: boolean;
+  /** Its chat is still arriving (reattaching): the field alone shows. */
+  opening?: boolean;
   /** The folder button beside attach: where this chat lives. */
   place?: PlaceOptions;
   /** A harness thread's folder, in the place button's slot. */
@@ -758,7 +760,7 @@ export function Composer(props: {
   // they come. The agent's doing reads in the transcript, as on a phone.
   const listening = () => ["starting", "listening"].includes(dictationState());
   const voice = createLeaving(listening, (on) => on, () => "fade");
-  const desktop = () => <DesktopComposer takeover={question()}
+  const desktop = () => <DesktopComposer takeover={question()} opening={props.opening}
     riders={<>{riders()}<Show when={voice.value()}><VoiceRider levels={dictationWaveform.history()} gain={2.5} level={Math.min(1, dictationWaveform.level() * 2.5)} motion={riderMotion(voice.leaving())} /></Show></>}>
     <ComposerField>{field()}</ComposerField>
     <Toolbar ref={toolbarRef}
@@ -790,7 +792,7 @@ export function Composer(props: {
       aside={<Show when={stoppable() && newDraft()}>{stopButton()}</Show>}
       primary={<Show when={stoppable() && !newDraft()} fallback={<LibraryButton variant="ghost" size="icon-sm" aria-label={busy() ? "Send to the agent" : "Send message"} title={busy() ? "Send — the agent takes it when the current step finishes" : undefined} disabled={!canSend()} onClick={() => sendMessage()}><Icons.Send /></LibraryButton>}>{stopButton()}</Show>} />
   </DesktopComposer>;
-  const phone = () => <PhoneComposer mode={phoneMode() ?? "idle"} layout="bar" under={optionsOpen()} editing={editing()} level={Math.min(1, dictationWaveform.level() * 2.5)} onTrack={toggleDictation}
+  const phone = () => <PhoneComposer opening={props.opening} mode={phoneMode() ?? "idle"} layout="bar" under={optionsOpen()} editing={editing()} level={Math.min(1, dictationWaveform.level() * 2.5)} onTrack={toggleDictation}
     riders={<>{question()}{riders()}</>}
     field={<PillField>{field()}</PillField>}
     track={<PillWave levels={dictationWaveform.history()} gain={2.5} />}

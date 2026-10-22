@@ -2,7 +2,7 @@
 /* Paper Mono (OFL, fonts/PaperMono-OFL.txt): the transcript face when chosen
    in Settings → Appearance (preferences/transcript-font.ts). */
 @font-face { font-family: "Paper Mono"; src: url("./fonts/PaperMono-Variable.woff2") format("woff2"); font-weight: 100 800; font-style: normal; font-display: swap; }
-:root[data-transcript-font="paper-mono"] :is(.thread, textarea[data-composer-input], .ui-voice-captions) { font-family: "Paper Mono", ui-monospace, monospace; }
+:root[data-transcript-font="paper-mono"] { --font-transcript: "Paper Mono", ui-monospace, monospace; }
 
 :root {
   /* The Android shell sends the navigation bar's resting height and leaves it
@@ -22,15 +22,6 @@
 }
 
 * { box-sizing: border-box; }
-/* Standard properties override WebKit pseudo-element painting when non-auto.
-   Keep Firefox's thin fallback, but let Chrome/Safari use the shared thumb. */
-:root {
-  --native-scrollbar-width: thin;
-  --native-scrollbar-color: color-mix(in oklch, var(--muted-foreground), transparent 42%) transparent;
-}
-@supports selector(::-webkit-scrollbar) {
-  :root { --native-scrollbar-width: auto; --native-scrollbar-color: auto; }
-}
 :where(.dark) { scrollbar-color: var(--native-scrollbar-color); scrollbar-width: var(--native-scrollbar-width); }
 html, body { height: 100%; }
 body {
@@ -95,27 +86,17 @@ svg.lucide { stroke-width: 2.4; }
 .message-scroller-viewport { width: 100%; height: 100%; overflow-y: auto; outline: none; scroll-padding-top: var(--header-height); scrollbar-width: none; overflow-anchor: none; will-change: scroll-position; }
 .message-scroller-viewport::-webkit-scrollbar { display: none; }
 /* The chat pane's reading column (its width preset) holds the Transcript, which fills it. */
-.thread { --transcript-width: 100%; width: min(var(--transcript-column-width), calc(100% - var(--transcript-column-gutter))); min-height: 100%; margin-inline: auto; padding: calc(var(--header-height) + var(--space-4xl)) clamp(0px, calc((100% - var(--composer-desktop-reference-width) - var(--transcript-column-gutter)) / 2 + var(--space-4xl)), var(--space-4xl)) var(--space-4xl); }
+.thread { --transcript-width: 100%; font-family: var(--font-transcript); width: min(var(--transcript-column-width), calc(100% - var(--transcript-column-gutter))); min-height: 100%; margin-inline: auto; padding: calc(var(--header-height) + var(--space-4xl)) clamp(0px, calc((100% - var(--composer-desktop-reference-width) - var(--transcript-column-gutter)) / 2 + var(--space-4xl)), var(--space-4xl)) var(--space-4xl); }
 [data-transcript-visibility="hidden"] { content-visibility: hidden; }
 /* A long run of hidden blocks far above the reader, out of layout: the run's measured height stands in for it as
    the answer's top padding (transcript-visibility.ts, collapseAbove). Important: a block's own display rule is more
    specific. */
 [data-transcript-visibility="collapsed"] { display: none !important; }
 
-/* The assistant column must be a definite width, not shrink-to-fit.
-   [data-slot="message"] is a flex row, so an auto-width message-content sizes
-   to its content's intrinsic width -- and a block virtualized with
-   content-visibility contributes zero intrinsic inline size. Blocks crossing
-   the overscan band therefore rewidened the whole column, which read as code
-   blocks and tables shimmying horizontally while scrolling. Incremark Advanced
-   already pinned this for its own subtree; every renderer needs it. */
 .markdown-skeleton { min-height: 4em; }
-.marker { color: var(--muted-foreground); font-size: var(--text-caption); }
 
-/* Menus: one solid dark surface everywhere; icons sized inside items. */
 .composer-stack { position: relative; z-index: 2; display: flex; width: 100%; flex: none; flex-direction: column; gap: var(--space-md); padding: var(--space-xl) var(--space-4xl) var(--space-3xl); background: var(--background); }
 
-/* The commented lines, whole, with the part the comment covers picked out. */
 .chat-drop-overlay { position: absolute; inset: 0; z-index: 40; display: grid; place-items: center; pointer-events: none; background: color-mix(in oklch, var(--background), transparent 22%); backdrop-filter: blur(9.6px); }
 .chat-drop-overlay > div { padding: var(--space-xl) var(--space-2xl); border: var(--hairline) solid var(--border); border-radius: var(--radius-surface); background: var(--card); box-shadow: var(--lift-raised); }
 /* Decorative, deterministic meteor field for the entire chat main surface. */
@@ -128,17 +109,15 @@ svg.lucide { stroke-width: 2.4; }
 /* A first send waiting on its agent (main.tsx): docked, with no welcome. */
 .chat-main-sending .empty-thread { visibility: hidden; }
 .chat-main-empty .composer-stack { position: absolute; inset-inline: 0; top: 50%; z-index: 2; width: min(var(--reading-width), calc(100% - var(--page-gutter))); margin-inline: auto; padding: 0; transform: translateY(var(--header-height)); background: transparent; }
+/* A chat still arriving (reattaching) waits unseen; its composer shows its field alone (Composer opening). */
+.chat-main-live-opening .transcript { visibility: hidden; }
 .chat-bootstrap { display: grid; min-height: 100%; place-items: center; color: var(--muted-foreground); font-size: var(--text-row); }
 
-.ui-tree, .ui-change-list, .ui-patch { scrollbar-color: var(--native-scrollbar-color); scrollbar-width: var(--native-scrollbar-width); }
-.ui-tree::-webkit-scrollbar, .ui-change-list::-webkit-scrollbar, .ui-patch::-webkit-scrollbar { width: var(--space-sm); height: var(--space-sm); }
-.ui-tree::-webkit-scrollbar-thumb, .ui-change-list::-webkit-scrollbar-thumb, .ui-patch::-webkit-scrollbar-thumb { border: var(--stroke) solid transparent; border-radius: var(--radius-round); background: color-mix(in oklch, var(--foreground), transparent 72%); background-clip: padding-box; }
 
 .workspace-warning {
   background: var(--card);
   border-color: var(--border);
 }
-/* The primary action reads as a bright glass key: top specular line + lift. */
 
 @media (--conduit-phone-layout) {
   html[data-mobile-overlay] { overscroll-behavior-y: none; }
@@ -207,9 +186,6 @@ svg.lucide { stroke-width: 2.4; }
   html { font-size: calc(16px * var(--ui-scale)); }
 .markdown-skeleton { min-height: 5em; }
 .chat-drop-overlay { backdrop-filter: blur(12px); }
-.chat-main-live-opening .transcript { visibility: hidden; }
-/* Opening a chat in a pane: its composer shows only its field until the chat is there. */
-.chat-main-live-opening :is(.ui-toolbar, .ui-composer-stack > :not(.ui-desktop-composer)) { visibility: hidden; }
   /* The phone shell owns the full visual viewport. Desktop's inset frame
      disappears here; safe-area padding belongs to the controls that touch
      each edge. */
@@ -285,8 +261,6 @@ svg.lucide { stroke-width: 2.4; }
   .overlay-scrollbar[data-touch] .overlay-scrollbar-thumb { opacity: 1; }
 }
 
-/* The dashboards' right-click menus (V2-04 moves them onto the adapter, as the sidebar's are). */
-
 /* The first open (main.tsx): until the route is ready and laid out only the
    frame shows, composer included; then the composer is simply there and every
    other region fades in around it, once. The last selector takes, inside each
@@ -351,7 +325,6 @@ svg.lucide { stroke-width: 2.4; }
 
 
 
-/* Keyboard focus on a button is the wash (quiet buttons) or a slight lift
-   (filled ones), never a ring (DESIGN.md, Interaction). */
+/* The file viewer takes focus for its keys: never a ring (DESIGN.md, Interaction). */
 
 .file-viewer-surface:focus { outline: none; }
