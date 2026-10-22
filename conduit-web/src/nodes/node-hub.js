@@ -5,7 +5,7 @@ import path from "node:path";
 import { EventEmitter } from "node:events";
 import { WebSocketServer } from "ws";
 import { awaitWithContext, BACKGROUND_CONTEXT, withAbortSignal } from "@earendil-works/chord/context";
-import { encode, NODE_PROTOCOL_VERSION } from "./protocol.js";
+import { encode, NODE_FEATURES, NODE_PROTOCOL_VERSION } from "./protocol.js";
 import { FileError } from "@earendil-works/pi-durable/env";
 
 const hash = (key) => crypto.createHash("sha256").update(key).digest("hex");
@@ -249,6 +249,7 @@ export class NodeHub extends EventEmitter {
           harnesses: Array.isArray(message.harnesses) ? message.harnesses.filter((id) => typeof id === "string") : [],
           ready: true });
         this.live.set(record.id, node);
+        node.send({ type: "welcome", features: NODE_FEATURES });
         Object.assign(record, { roots: node.roots, platform: node.platform, harnesses: node.harnesses, lastSeenAt: new Date().toISOString() });
         if (message.name && record.name === "Device") record.name = String(message.name).slice(0, 80);
         // Roots without ids are from a node older than root ids: it is not addressable.

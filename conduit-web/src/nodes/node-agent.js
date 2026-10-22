@@ -49,7 +49,7 @@ export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: 
   const roots = shared.map(view);
   const envs = new Map();
   // Processes outlive any one socket (decision 18): they are the device's.
-  const processes = new NodeProcesses({ shellEnv });
+  const processes = new NodeProcesses({ shellEnv, scope: mainUrl });
   // Writes and commands by action id: they outlive a socket, and are never done twice.
   const receipts = new Receipts();
   // Harnesses are offered only with the shell grant somewhere: running one is running code.
@@ -117,7 +117,6 @@ export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: 
         harnesses: Object.keys(harnesses),
         roots: roots.map(({ id, path: label, read, write, shell, allow }) => ({ id, label, read, write, shell, allow })) });
       log.info?.(`[conduit-node] connected to ${mainUrl}${via === mainUrl ? "" : ` via ${via}`}`);
-      for (const relay of relays) relay.attach(send);
     });
     ws.on("message", async (raw) => {
       let message;
@@ -127,6 +126,13 @@ export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: 
         const tunnel = tunnels.get(message.tunnel);
         if (message.data) tunnel?.write(Buffer.from(message.data, "base64"));
         if (message.end) tunnel?.end();
+        return;
+      }
+      // What main offers (decision 30): environments are carried only where it relays them.
+      if (message.type === "welcome") {
+        const features = Array.isArray(message.features) ? message.features : [];
+        if (features.includes("relay")) for (const relay of relays) relay.attach(send);
+        else if (relays.length) log.warn?.(`[conduit-node] ${mainUrl} does not relay; ${relays.map((relay) => relay.env).join(", ")} not carried`);
         return;
       }
       if (typeof message.type === "string" && message.type.startsWith("relay")) return relayFor(message.env)?.deliver(message);

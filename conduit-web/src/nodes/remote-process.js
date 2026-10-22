@@ -53,6 +53,9 @@ export class RemoteProcess {
   async resume() {
     if (this.exitEvent) return;
     const view = await call(this.hub, this.nodeId, "attach", [this.procId, this.offset]);
+    // The device started again and took the process up (a shell kept in
+    // tmux): its bytes start over, so it is followed again from its start.
+    if (view.behind) { this.offset = view.start || 0; return this.resume(); }
     // Output the device no longer had is said, not silently skipped.
     if (view.skipped) this.emitData(`\r\n[${view.skipped} bytes of output were lost while disconnected]\r\n`, "out");
   }
