@@ -1,4 +1,5 @@
 import { capabilitiesOf, headIds } from "./place.js";
+import { projectWorkspace } from "./workspace-host.js";
 import { convertClassicChats } from "./server/convert-classic-chats.js";
 import http from "node:http";
 import https from "node:https";
@@ -801,6 +802,7 @@ const liveSessionStream = createLiveSessionStream({
   registry,
   config,
   turnCheckpoints,
+  checkpointWorkspace: async (project) => ((await backends.capabilities(project))?.checkpoints ? projectWorkspace(project, nodeHub) : null),
   findChatContext,
   chatModelView,
   chatLogs,

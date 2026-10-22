@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { BACKGROUND_CONTEXT, withAbortSignal } from "@earendil-works/chord/context";
 import { RemoteExecutionEnv } from "./nodes/remote-env.js";
+import { remoteNode } from "./place.js";
 
 /**
  * Where a workspace's files and Git live, under the workspace inspector.
@@ -165,4 +166,14 @@ export function deviceHost({ hub, nodeId, place, label = "" }) {
       }
     },
   };
+}
+
+/**
+ * A project's workspace, for the inspector and turn checkpoints: its path on
+ * this server, or its device's folder as a host. The one place that decides.
+ */
+export function projectWorkspace(project, hub) {
+  return remoteNode(project)
+    ? deviceHost({ hub, nodeId: remoteNode(project), place: project.place, label: project.workingRoot })
+    : project.workingRoot;
 }
