@@ -225,6 +225,13 @@ export function registerSessionRoutes(app, {
           }
           await stopSessionProcesses(backends, context.chat);
           if (session && !foreign) await removeSessionFamily(session.file, context.project, sessionOptions);
+          // A converted chat's classic session goes too: left behind, startup
+          // recovers it as a lost session and the chat comes back.
+          const convertedFrom = context.chat.backend?.convertedFrom;
+          if (convertedFrom && installationRoot) {
+            await removeSessionFamily(convertedFrom, context.project, { sessionsDir: path.dirname(convertedFrom), allowedRoot: installationRoot })
+              .catch((error) => console.warn("Chat deleted; its classic session was left in place", { chatId: context.chat.id, file: convertedFrom, error: error.message }));
+          }
           const familyFiles = new Set(family.map((file) => path.resolve(file)));
           const relatedChats = registry.listProject(context.project.id, { includeHidden: true })
             .filter((chat) => chat.id === context.chat.id
