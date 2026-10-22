@@ -181,6 +181,22 @@ environments.
     not a kind of machine: a headless VPS today, possibly a headed desktop
     that is also a client and a node. Nothing may assume the head is
     headless or that it is the only device with a screen.
+25. **A device is a grouping of environments, each its own node.** Windows
+    and WSL on one machine are two nodes (different homes, paths, installs)
+    in one device. An environment reaches the head either by its own
+    connection or relayed by another environment's daemon on the device
+    (Windows relaying WSL over a stdio child), chosen per environment. The
+    node id, key and grants are the same either way: each environment keeps
+    its own pairing key and the relay forwards its hello untouched, so the
+    head checks every environment alike. Only WSL distros now; the frame tags
+    stay generic so containers and SSH hosts behind a device fit later.
+26. **The same files shared from two environments are two places.**
+    `C:\Users\x\proj` from Windows and `/mnt/c/Users/x/proj` from WSL are
+    separate workspaces, since the environment decides the shell, tools and
+    paths a chat gets. Revisit if it confuses.
+27. **A home terminal follows the shell grant.** A shell in any shared folder
+    can already reach everything its user can, so an environment with any
+    shell-granted folder offers a terminal in its home; no separate grant.
 
 ## Architecture
 
@@ -586,3 +602,39 @@ Asked how the first-party profiles move from Pi 1.3.0 to pi-durable.
   "old Pi stays to continue existing chats".)
 - **The "Conduit runtime" profile is folded in**: the templates are the
   durable agent's profiles; its chats show as Assistant.
+
+### 2026-10-22: environments on one machine
+
+**Does each environment need its own connection?** The socket itself is
+cheap (an idle WebSocket); the cost is two pairings, routes and online states
+for one machine. Proposed: one connection per device, the Windows daemon
+relaying WSL as a stdio child. Answered: the device is a grouping and must
+handle both -- someone may expose only WSL headlessly -- and relaying all WSL
+traffic through Windows may prove too costly. → decision 25: either path,
+chosen per environment (not "direct when available", not "always relay").
+
+**Who holds a relayed environment's credentials?** Weighed: a device key
+held by the relay (simpler pairing, but the relay speaks for WSL and a direct
+connection needs pairing anyway) vs each environment's own key (the relay
+only forwards). Chosen: each its own key. → decision 25.
+
+**How does WSL get conduit-node?** Weighed: the Windows app shipping a Linux
+build and Node (zero setup, bigger installer), the distro's own Node
+(breaks without one; node-pty needs a Linux build), or the user installing it.
+Chosen: the user installs it, and the Windows client offers to download and
+install it.
+
+**Does a relayed WSL child keep the WSL2 VM awake?** Only while Serve is on:
+on-demand starts pay VM boot and kill watches and shells on idle.
+
+**Which environments does the model cover?** WSL now; dev containers and SSH
+hosts behind a device later, so frame tags and the relay are not WSL-shaped.
+
+**The same files from Windows and from WSL?** Weighed: separate, detected
+and linked (one workspace opened in either environment), or discouraging
+`/mnt` shares. Chosen: separate for now. → decision 26.
+
+**Does a terminal outside shared folders need its own grant?** It was built
+with one (`conduit-node terminal on`), but a shell grant on any folder already
+reaches the whole home. Chosen: follow the shell grant. → decision 27.
+
