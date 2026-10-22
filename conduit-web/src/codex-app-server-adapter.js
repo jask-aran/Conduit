@@ -1,9 +1,6 @@
 import { remoteNode } from "./place.js";
 import crypto from "node:crypto";
-import fs from "node:fs";
-import { execFile } from "node:child_process";
 import { EventEmitter } from "node:events";
-import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import WebSocket from "ws";
@@ -15,9 +12,8 @@ import { messageClose, messageDrop, messageOpen, toolClose, toolKind, toolOpen, 
 import { countCacheRequest, planWindowLabel, usageFromRequests } from "./cache-stats.js";
 import { codexPlanUsage, declarePlan } from "./plan-usage.js";
 import { unsupported } from "./harnesses/unsupported.js";
-import { BACKGROUND_CONTEXT, withAbortSignal } from "@earendil-works/chord/context";
-import { execOnDevice, opaqueSessionOf, requireHarnessOn } from "./nodes/remote-spawn.js";
-import { tunnelTo } from "./nodes/remote-tunnel.js";
+import { opaqueSessionOf } from "./nodes/remote-spawn.js";
+import { placeProcesses } from "./nodes/place-processes.js";
 import { attachmentForDevice, imageDataUrl } from "./nodes/device-attachments.js";
 
 export const CODEX_CAPABILITIES = Object.freeze({
@@ -186,21 +182,19 @@ export class CodexAppServerAdapter extends EventEmitter {
 
   opaqueSessionOf(record) { return opaqueSessionOf(record); }
 
+  /** Codex's processes in a place (`{ nodeId, place }`; none is this server). */
+  processes(on) { return placeProcesses(this.nodeHub, on || {}); }
+
+  /** Start the place's Codex daemon; chats asking at once share the one start. */
   startDaemon(record = null) {
-    // A device starts its own daemon; several chats may ask at once, which Codex settles.
-    if (record?.nodeId) {
-      return execOnDevice(this.nodeHub, record.nodeId, { harness: "codex", args: ["app-server", "daemon", "start"], place: record.place })
-        .catch((cause) => { throw error(String(cause.stderr || cause.message).trim()); });
+    const key = record?.nodeId || "";
+    this.daemonStarts ||= new Map();
+    if (!this.daemonStarts.has(key)) {
+      this.daemonStarts.set(key, this.processes(record).execFile("codex", this.command, ["app-server", "daemon", "start"])
+        .then(() => {}, (cause) => { throw error(String(cause.stderr || cause.message).trim()); })
+        .finally(() => this.daemonStarts.delete(key)));
     }
-    if (!this.daemonStart) {
-      this.daemonStart = new Promise((resolve, reject) => {
-        execFile(this.command, ["app-server", "daemon", "start"], (cause, _stdout, stderr) => {
-          if (cause) reject(error(stderr.trim() || cause.message));
-          else resolve();
-        });
-      }).finally(() => { this.daemonStart = null; });
-    }
-    return this.daemonStart;
+    return this.daemonStarts.get(key);
   }
 
   async launch(context, { model = "", thinkingLevel = "", forceModel = false }) {
@@ -531,18 +525,8 @@ export class CodexAppServerAdapter extends EventEmitter {
     const threadId = typeof opaqueSession === "string" ? opaqueSession : opaqueSession?.threadId;
     if (!threadId) return null;
     let text = null;
-    if (opaqueSession?.nodeId) {
-      // A device's rollout is read there.
-      if (!this.nodeHub?.live.get(opaqueSession.nodeId)?.ready) return null;
-      const result = await this.nodeHub.call(opaqueSession.nodeId, { target: "harness", method: "codexRollout", args: [threadId], cwd: null },
-        withAbortSignal(AbortSignal.timeout(20_000), BACKGROUND_CONTEXT)).catch(() => null);
-      text = result?.ok ? result.value : null;
-    } else {
-      const root = path.join(process.env.CODEX_HOME || path.join(os.homedir(), ".codex"), "sessions");
-      const name = (await fs.promises.readdir(root, { recursive: true }).catch(() => []))
-        .find((file) => file.endsWith(`${threadId}.jsonl`));
-      text = name ? await fs.promises.readFile(path.join(root, name), "utf8").catch(() => null) : null;
-    }
+    // The rollout is read where the thread ran.
+    text = await this.processes({ nodeId: opaqueSession?.nodeId }).read("codexRollout", threadId);
     if (!text) return null;
     const requests = [];
     let window = null;
@@ -635,7 +619,7 @@ export class CodexAppServerAdapter extends EventEmitter {
   async start({ chatId, projectId, cwd, nodeId = null, place = null }) {
     const existing = this.getByChatId(chatId);
     if (existing) return existing;
-    if (nodeId) requireHarnessOn(this.nodeHub, nodeId, "codex", "Codex");
+    this.processes({ nodeId }).require("codex", "Codex");
     const record = {
       id: crypto.randomUUID(), chatId, projectId, cwd, nodeId, place, status: "starting", activity: "starting",
       active: false, stopping: false, sessionId: null, model: "", thinkingLevel: "", generation: null,
@@ -667,7 +651,7 @@ export class CodexAppServerAdapter extends EventEmitter {
         record.socket = new WebSocket("ws://localhost/rpc", {
           perMessageDeflate: false,
           // On a device, its daemon's socket, through the node.
-          createConnection: () => (record.nodeId ? tunnelTo(this.nodeHub, record.nodeId, { harness: "codex" }) : net.connect(this.socketPath)),
+          createConnection: () => this.processes(record).connect({ harness: "codex", path: this.socketPath }),
         });
         try {
           await new Promise((resolve, reject) => {
