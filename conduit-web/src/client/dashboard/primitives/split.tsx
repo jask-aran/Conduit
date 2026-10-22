@@ -1,3 +1,4 @@
+import { ComposerDock } from "@/components/ui";
 import { duration, easing, reducedMotion } from "@/components/ui/motion";
 import { createContext, createEffect, createSignal, For, Index, onCleanup, onMount, Show, splitProps, useContext, type Accessor, type JSX } from "solid-js";
 import { DropdownMenu, MenuContent, MenuControl, MenuRow, MenuSection } from "@/components/menus";
@@ -143,10 +144,10 @@ export function SplitDashboard(props: {
     watch();
     onCleanup(() => { cancelAnimationFrame(frame); sizes.disconnect(); tree.disconnect(); });
   });
-  // A phone docks the composer at the foot, as a chat does (composer-stack is the chat screen's layout).
+  // A phone docks the composer at the foot, as a chat does (ComposerDock, as the chat's).
   return <Phone.Provider value={phone}><Dashboard ref={(element) => { root = element; }} label={props.label} page={props.page} compact={phone()} oneColumn={oneColumn()}
     head={props.header} actions={props.quickActions} notice={props.notice} composer={!phone() ? props.composer : undefined} list={props.list} aside={props.aside}
-    dock={<Show when={phone() && props.composer}><div class="composer-stack" data-dash-dock="">{props.composer}</div></Show>} /></Phone.Provider>;
+    dock={<Show when={phone() && props.composer}><ComposerDock data-dash-dock="">{props.composer}</ComposerDock></Show>} /></Phone.Provider>;
 }
 
 /** The page's mark, centred on its name and, under the name, its kind and

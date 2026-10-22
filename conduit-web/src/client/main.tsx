@@ -131,7 +131,6 @@ import {
   TRANSCRIPT_WIDE_BLOCKS_STORAGE_KEY,
   TRANSCRIPT_WIDTH_STORAGE_KEY,
 } from "./chat/transcript-appearance";
-import "./chat/composer-geometry.css";
 import "./styles.css";
 // The library's styles (components v2): inert until a piece the app draws with it carries its .ui- classes.
 import "@/components/ui/styles";
@@ -761,7 +760,7 @@ function App() {
       let last = "";
       let still = 0;
       const check = () => {
-        const shape = [...document.querySelectorAll<HTMLElement>(".chat-main, .main-split, .thread")].map((element) => { const box = element.getBoundingClientRect(); return `${Math.round(box.width)}x${Math.round(box.height)}`; }).join();
+        const shape = [...document.querySelectorAll<HTMLElement>(".chat-main, .main-split, .ui-chat-column")].map((element) => { const box = element.getBoundingClientRect(); return `${Math.round(box.width)}x${Math.round(box.height)}`; }).join();
         still = shape === last ? still + 1 : 0;
         last = shape;
         if (still >= 3 || root.dataset.arrival !== "waiting") resolve(); else requestAnimationFrame(check);
@@ -2068,11 +2067,11 @@ function App() {
     if (!isMobileLayout() && collapsed) runSidebar("toggle-sidebar");
     focusSidebar();
   };
-  const hasTranscript = () => Boolean(document.querySelector(".message-scroller-viewport"));
+  const hasTranscript = () => Boolean(document.querySelector(".ui-chat-viewport"));
   const focusTranscript = () => {
     if (isMobileLayout()) setMobileSidebarOpen(false);
-    ((keyboardSlot() !== null ? document.querySelector<HTMLElement>(`${paneSelector(keyboardSlot()!)} .message-scroller-viewport`) : null)
-      ?? document.querySelector<HTMLElement>(".message-scroller-viewport"))?.focus({ preventScroll: true });
+    ((keyboardSlot() !== null ? document.querySelector<HTMLElement>(`${paneSelector(keyboardSlot()!)} .ui-chat-viewport`) : null)
+      ?? document.querySelector<HTMLElement>(".ui-chat-viewport"))?.focus({ preventScroll: true });
   };
   const toggleChatWorkspaceFocus = () => {
     const inWorkspacePanel = document.activeElement instanceof Element && Boolean(document.activeElement.closest('[data-region="workspace-panel"]'));
@@ -3393,7 +3392,7 @@ function App() {
    */
   // A chat is drawn once its transcript is in the pane, not merely loaded:
   // it renders a moment after, and a crossfade before then shows it arrive.
-  const chatDrawn = (pane: PaneKey) => Boolean(paneElement(pane)?.querySelector(".thread, .empty-thread"));
+  const chatDrawn = (pane: PaneKey) => Boolean(paneElement(pane)?.querySelector(".ui-chat-column"));
   // A pane's last frame, held over its place while what is under it changes.
   const ghostOf = (element: HTMLElement) => {
     const box = element.getBoundingClientRect();
@@ -4101,23 +4100,23 @@ function App() {
         <Show when={parseFileView(slotView(slot))}>{renderFileViewer(slot)}</Show>
         <Show when={slotView(slot)?.startsWith("term:")}>{renderTerminalDocument(slot, () => slotView(slot)!.slice("term:".length))}</Show>
         <Show when={page() === "computer"}>
-          <div class="main-split-chat" tabIndex={-1} onPointerDown={focusChatSurface}>{renderPaneComputer(slot)}</div>
+          <SheetFill tabIndex={-1} onPointerDown={focusChatSurface}>{renderPaneComputer(slot)}</SheetFill>
         </Show>
         <Show when={page()?.startsWith("harness:")}>
-          <div class="main-split-chat" tabIndex={-1} onPointerDown={focusChatSurface}>{attachInput()}{renderPaneHarness(pane, decodeURIComponent(page()!.slice("harness:".length)))}</div>
+          <SheetFill tabIndex={-1} onPointerDown={focusChatSurface}>{attachInput()}{renderPaneHarness(pane, decodeURIComponent(page()!.slice("harness:".length)))}</SheetFill>
         </Show>
         <Show when={page() && page() !== "computer" && !page()!.startsWith("harness:")}>
-          <div class="main-split-chat" tabIndex={-1} onPointerDown={focusChatSurface}>
+          <SheetFill tabIndex={-1} onPointerDown={focusChatSurface}>
             {attachInput()}
             <Show when={page() === "dashboard"} fallback={<Show when={slotPageProject(slot)}>{(project) =>
               <ProjectPage session={side} project={project()} target={{ project: project() }} keyboardOwner={owns} onSendDraft={(prompt) => sendFromPanePage(pane, prompt)} onOpenChat={openChatFromPage} tabActions={paneTabActions(slot)} />
             }</Show>}>
               <AppDashboardPage session={side} place={chatPlace(side)} keyboardOwner={owns} onSendDraft={(prompt) => sendFromPanePage(pane, prompt)} onOpenChat={(target, project) => void openChatFromPage(target, project)} tabActions={paneTabActions(slot)} />
             </Show>
-          </div>
+          </SheetFill>
         </Show>
         <Show when={slotChatId(slot)}>
-          <div class="main-split-chat" classList={{ "chat-main-live-opening": side.chat.presentation().kind !== "ready" || side.chat.loadedId() !== slotChatId(slot) }}>
+          <SheetFill>
             {attachInput()}
             {/* With no chat in the session yet the pane says it is loading;
                 after that it switches in place, as pane A does -- the surface
@@ -4129,7 +4128,7 @@ function App() {
               notice={workspaceNotice(side.selected()?.project, side.selectedId())}
               tabActions={paneTabActions(slot)} />
             </Show>
-          </div>
+          </SheetFill>
         </Show>
       </Sheet>;
   };
@@ -5243,6 +5242,9 @@ function App() {
     session: ChatSession;
     /** Its chat is still arriving (reattaching): the transcript waits and the composer shows its field alone. */
     opening?: boolean;
+    /** Nothing said yet (the composer centred), or the first send waiting on its agent (ChatView). */
+    empty?: boolean;
+    sending?: boolean;
     project?: Project;
     keyboardOwner: () => boolean;
     onShare: () => void;
@@ -5261,7 +5263,7 @@ function App() {
     return <>
       <ChatHeader project={props.project} onOpenPlace={openPlace} title={surfaceChat.title() || (surfaceChat.status() === "active" ? "Untitled chat" : "New chat")} profile={current.activeProfile()} runtime={surfaceChat.runtimeIdentity()} live={surfaceChat.live() as unknown as Record<string, unknown>} chat={surfaceChat} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void startNewChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={props.onShare} onRename={props.onRename} onDelete={props.onDelete} actions={props.actions} tabActions={props.tabActions} tabs={props.tabs} />
       {props.notice}
-      <Conversation chat={surfaceChat} busy={surfaceChat.presentation().kind === "opening_live"} stackRef={props.stackRef}
+      <Conversation chat={surfaceChat} busy={surfaceChat.presentation().kind === "opening_live"} empty={props.empty} sending={props.sending} opening={props.opening} stackRef={props.stackRef}
         transcript={<Transcript chat={surfaceChat} supports={current.capability} partialContinue={partialContinue()} markdownRenderer={markdownRenderer()} profileLabel={current.activeProfile()?.label || current.activeProfile()?.id || surfaceChat.templateId() || undefined} projectId={props.project?.id} />}
         composer={<Composer chat={surfaceChat} opening={props.opening} place={props.place} supports={current.capability} attachments={current.attachments} attachmentsSupported={current.capability("attachments", true)} models={current.models} permissions={current.capability("permissionModes") ? current.permissions : undefined} serviceLevels={current.manifest()?.serviceLevels?.length ? current.serviceLevels : undefined} profiles={profiles()} activeProfile={current.activeProfile()} onOpenModelSelector={props.modelSelector ? openModelSelector : undefined} modelSelectorShortcut={props.modelSelector ? shortcutManager.formatEffectiveBinding(COMMAND_IDS.openModelSelector) : undefined} serverOnline={serverReachable()} voiceSettings={voiceSettings()} keyboardOwner={props.keyboardOwner} onChooseProfile={(id) => void current.switchProfile(id).catch(showError)} onOpenSettings={openSettings} onOpenAttachments={current.openAttachments} onStatusChange={current.setComposerStatus} />} />
     </>;
@@ -5321,7 +5323,7 @@ function App() {
       }} />
     } /></Show>
     <AppShell class="workspace-layout" settling={panesSettling()} ref={(element) => { const observer = new ResizeObserver(() => setLayoutWidth(element.clientWidth)); observer.observe(element); onCleanup(() => observer.disconnect()); }}>
-    <Sheet as="main" lead under={workspaceExpanded()} data-slot="sidebar-inset" data-region={paneAOverride() ? "workspace-panel" : routeKind() === "chat" || harnessThread() ? "chat" : routeKind() === "terminal" ? "terminal" : "dashboard"} tabIndex={-1} onPointerDown={focusChatSurface} onKeyDown={paneKeydown} class={`chat-main${routeKind() === "chat" && emptyLayout() ? " chat-main-empty" : ""}${routeKind() === "chat" && emptyChat() && !emptyLayout() ? " chat-main-sending" : ""}${routeKind() === "chat" && withheldLiveChat() ? " chat-main-live-opening" : ""}`} style={{ ...(splitShown() ? { flex: `${paneWeights()[0]} 1 0`, "min-width": paneMotion()?.slot === "main" ? "0px" : `${paneMinWidth("main")}px` } : {}), ...(paneMotion()?.slot === "main" ? { opacity: 0 } : {}), ...(paneMotion()?.slot === "main" && paneMotion()!.collapsed ? { "margin-left": "0px", "margin-right": "0px" } : {}) }} {...mainDropHandlers}>
+    <Sheet as="main" lead under={workspaceExpanded()} data-slot="sidebar-inset" data-region={paneAOverride() ? "workspace-panel" : routeKind() === "chat" || harnessThread() ? "chat" : routeKind() === "terminal" ? "terminal" : "dashboard"} tabIndex={-1} onPointerDown={focusChatSurface} onKeyDown={paneKeydown} class="chat-main" style={{ ...(splitShown() ? { flex: `${paneWeights()[0]} 1 0`, "min-width": paneMotion()?.slot === "main" ? "0px" : `${paneMinWidth("main")}px` } : {}), ...(paneMotion()?.slot === "main" ? { opacity: 0 } : {}), ...(paneMotion()?.slot === "main" && paneMotion()!.collapsed ? { "margin-left": "0px", "margin-right": "0px" } : {}) }} {...mainDropHandlers}>
       <Show when={splitDropActive()}><DropWash within /></Show>
       {/* Pane A holding a file viewer or a tool, over its route (5f). */}
       <Show when={parseFileView(paneAOverride())}>{renderFileViewer("main")}</Show>
@@ -5388,7 +5390,7 @@ function App() {
               <ChatHeader project={workspace()} placeLabel={label()} onOpenPlace={() => openComputerHarness(thread().harnessId, "push", thread().path)} title={chat.title() || thread().title || "Untitled thread"} badge={<OutsideThreadChip harness={label()} folder={thread().path} workspace={Boolean(workspace())} busy={trackingThread()} onTrack={() => void trackHarnessThread()} />} profile={activeProfile()} runtime={chat.runtimeIdentity()} live={chat.live() as unknown as Record<string, unknown>} chat={chat} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => openComputerHarness(thread().harnessId, "push", thread().path)} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => void shareHarnessThread()} />
               {/* The same conversation a chat page has; only moving it to another
                   place is missing, since the thread's folder is where it ran. */}
-              <Conversation chat={chat} busy={openingLiveChat()} stackRef={(element) => { chatComposerStack = element; }}
+              <Conversation chat={chat} busy={openingLiveChat()} empty={routeKind() === "chat" && emptyLayout()} sending={routeKind() === "chat" && emptyChat() && !emptyLayout()} opening={routeKind() === "chat" && withheldLiveChat()} stackRef={(element) => { chatComposerStack = element; }}
                 transcript={<Transcript chat={chat} supports={chatCapability} partialContinue={partialContinue()} markdownRenderer={markdownRenderer()} profileLabel={label()} projectId={catalogue.projectId()} />}
                 composer={<Composer chat={chat} supports={chatCapability} attachments={attachments} attachmentsSupported={chatCapability("attachments", true)} models={models} permissions={chatCapability("permissionModes") ? permissions : undefined} serviceLevels={chatManifest()?.serviceLevels?.length ? serviceLevels : undefined} profiles={profiles()} activeProfile={activeProfile()} onOpenModelSelector={openModelSelector} modelSelectorShortcut={shortcutManager.formatEffectiveBinding(COMMAND_IDS.openModelSelector)} serverOnline={serverReachable()} voiceSettings={voiceSettings()} onChooseProfile={() => {}} onOpenSettings={openSettings} onOpenAttachments={session.openAttachments} onStatusChange={setComposerStatus} />} />
             </>;
@@ -5397,7 +5399,7 @@ function App() {
         <Show when={routeKind() !== "dashboard" && routeKind() !== "computer"}>
         <Show when={routeKind() === "project" && selectedProject()} fallback={<>
           <Show when={dropActive()}><div class="chat-drop-overlay"><div>Drop files to attach</div></div></Show>
-          <ChatSurface session={session} opening={withheldLiveChat()} project={selectedProject()} tabActions={paneTabActions("main")} {...paneTabRow("main")} keyboardOwner={() => !sideHasKeyboard()} place={chatPlace()} modelSelector stackRef={(element) => { chatComposerStack = element; }}
+          <ChatSurface session={session} opening={withheldLiveChat()} empty={routeKind() === "chat" && emptyLayout()} sending={routeKind() === "chat" && emptyChat() && !emptyLayout()} project={selectedProject()} tabActions={paneTabActions("main")} {...paneTabRow("main")} keyboardOwner={() => !sideHasKeyboard()} place={chatPlace()} modelSelector stackRef={(element) => { chatComposerStack = element; }}
             onShare={() => void shareChat()} onRename={() => runSidebar("rename-chat")} onDelete={() => runSidebar("delete-chat")}
             notice={workspaceNotice(selectedProject(), catalogue.selectedId())} />
         </>}>

@@ -48,44 +48,17 @@ svg { stroke-width: 1.5; }
    icon set it in those units. */
 svg.lucide { stroke-width: 2.4; }
 
-/* The main pane's chat: its header's height and the container its layout measures (the pane is a Sheet). */
-.chat-main { --chat-header-height: var(--header-height); container-type: inline-size; container-name: chat-main; }
 /* A file viewer with no file showing stays open, saying how to fill it. */
-.workspace-warning { position: relative; z-index: 2; display: flex; width: min(var(--composer-desktop-reference-width), calc(100% - var(--page-gutter))); gap: var(--space-md); margin: var(--space-md) auto; padding: var(--space-lg); border: var(--hairline) solid var(--border); border-radius: var(--radius-control); }
+.workspace-warning { position: relative; z-index: 2; display: flex; width: min(var(--reading-width), calc(100% - var(--page-gutter))); gap: var(--space-md); margin: var(--space-md) auto; padding: var(--space-lg); border: var(--hairline) solid var(--border); border-radius: var(--radius-control); }
 .workspace-warning svg { width: var(--icon-lg); flex: none; }
 .workspace-warning p { margin: var(--space-2xs) 0 0; color: var(--muted-foreground); font-size: var(--text-row); }
 
-.work-area { position: relative; z-index: 1; display: flex; min-height: 0; flex: 1; }
-.work-area-conversation { display: flex; min-width: 0; flex: 1; flex-direction: column; }
 .terminal-pane { display: flex; min-width: 0; min-height: 0; flex: 1; flex-direction: column; overflow: hidden; background: color-mix(in oklch, var(--background), black 9%); }
 .terminal-canvas { position: relative; min-width: 0; min-height: 0; flex: 1; overflow: hidden; background: #000; padding: var(--space-md); }
 .terminal-canvas > div { width: 100%; height: 100%; }
 .terminal-canvas[data-terminal-ready="false"] > canvas { opacity: 0; }
 .terminal-canvas > canvas { display: block; max-width: 100%; max-height: 100%; transition: opacity 80ms linear; }
 
-/* The one surface allowed under the header: it takes the header's height back
-   so scrolled text runs to the pane's top edge and fades under the gradient
-   rather than stopping at a hard cut, and restates the clearance as the
-   thread's own top padding so the first message still starts below the bar.
-   Every other pane keeps the space the header reserved, by doing nothing. */
-.transcript { position: relative; z-index: 1; min-height: 0; margin-top: calc(-1 * var(--chat-header-height)); flex: 1; overflow: hidden; }
-.transcript-motion-shell { position: relative; width: var(--workspace-transcript-width, 100%); height: 100%; contain: layout paint; container-name: chat-main; container-type: inline-size; transform: translate3d(0, 0, 0); }
-/*
- * `overflow-anchor: none` because the transcript holds its own scroll.
- *
- * When the keyboard shortens this scroller the thread is put back where it
- * was, from a `ResizeObserver` on the scroller itself, against a position kept
- * in JavaScript. Chromium's scroll anchoring would make its own correction
- * from its own reading of what moved, and two corrections on one surface is
- * how this went wrong twice already. Only one of them can be right, and the
- * one that knows a keyboard is involved is this one.
- */
-/* Scrolled on the compositor: below 1.5x a transparent scroller is not, so each scroll -- the tail follow's, every frame
-   of an answer -- laid the whole page out into layers again (0.7ms a frame). Its text was grayscale either way. */
-.message-scroller-viewport { width: 100%; height: 100%; overflow-y: auto; outline: none; scroll-padding-top: var(--header-height); scrollbar-width: none; overflow-anchor: none; will-change: scroll-position; }
-.message-scroller-viewport::-webkit-scrollbar { display: none; }
-/* The chat pane's reading column (its width preset) holds the Transcript, which fills it. */
-.thread { --transcript-width: 100%; font-family: var(--font-transcript); width: min(var(--transcript-column-width), calc(100% - var(--transcript-column-gutter))); min-height: 100%; margin-inline: auto; padding: calc(var(--header-height) + var(--space-4xl)) clamp(0px, calc((100% - var(--composer-desktop-reference-width) - var(--transcript-column-gutter)) / 2 + var(--space-4xl)), var(--space-4xl)) var(--space-4xl); }
 [data-transcript-visibility="hidden"] { content-visibility: hidden; }
 /* A long run of hidden blocks far above the reader, out of layout: the run's measured height stands in for it as
    the answer's top padding (transcript-visibility.ts, collapseAbove). Important: a block's own display rule is more
@@ -94,22 +67,11 @@ svg.lucide { stroke-width: 2.4; }
 
 .markdown-skeleton { min-height: 4em; }
 
-.composer-stack { position: relative; z-index: 2; display: flex; width: 100%; flex: none; flex-direction: column; gap: var(--space-md); padding: var(--space-xl) var(--space-4xl) var(--space-3xl); background: var(--background); }
-
 .chat-drop-overlay { position: absolute; inset: 0; z-index: 40; display: grid; place-items: center; pointer-events: none; background: color-mix(in oklch, var(--background), transparent 22%); backdrop-filter: blur(9.6px); }
 .chat-drop-overlay > div { padding: var(--space-xl) var(--space-2xl); border: var(--hairline) solid var(--border); border-radius: var(--radius-surface); background: var(--card); box-shadow: var(--lift-raised); }
 /* Decorative, deterministic meteor field for the entire chat main surface. */
 .chat-meteors { position: absolute; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; }
 
-.chat-main-empty .transcript { position: absolute; inset: var(--chat-header-height) 0 0; margin-top: 0; }
-.chat-main-empty .message-scroller-viewport { overflow: hidden; overscroll-behavior-y: none; }
-.chat-main-empty .thread, .chat-main-empty .empty-thread { width: 100%; min-height: 100%; padding: 0; }
-.chat-main-empty .empty-thread { --welcome-room: calc(var(--measure-2xs) + var(--header-height)); }
-/* A first send waiting on its agent (main.tsx): docked, with no welcome. */
-.chat-main-sending .empty-thread { visibility: hidden; }
-.chat-main-empty .composer-stack { position: absolute; inset-inline: 0; top: 50%; z-index: 2; width: min(var(--reading-width), calc(100% - var(--page-gutter))); margin-inline: auto; padding: 0; transform: translateY(var(--header-height)); background: transparent; }
-/* A chat still arriving (reattaching) waits unseen; its composer shows its field alone (Composer opening). */
-.chat-main-live-opening .transcript { visibility: hidden; }
 .chat-bootstrap { display: grid; min-height: 100%; place-items: center; color: var(--muted-foreground); font-size: var(--text-row); }
 
 
@@ -136,31 +98,6 @@ svg.lucide { stroke-width: 2.4; }
     right: 0;
     width: 100%;
   }
-  /* Three renderer probes stack above the first message on a phone. Reserve
-     their height so the controls never cover the streamed transcript. */
-  .composer-stack {
-    padding: var(--space-md) var(--space-md) calc(var(--space-md) + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)));
-  }
-  /* Empty chat: bottom-anchored composer (not mid-screen absolute), no rubber-band scroll. */
-  .chat-main-empty {
-    display: flex;
-    flex-direction: column;
-  }
-  .chat-main-empty .transcript {
-    flex: 1 1 auto;
-    min-height: 0;
-  }
-  .chat-main-empty .thread,
-  .chat-main-empty .empty-thread {
-    height: 100%;
-  }
-  .chat-main-empty .composer-stack {
-    inset: auto;
-    left: auto;
-    right: auto;
-    margin: 0;
-    padding: var(--space-md) var(--space-md) calc(var(--space-md) + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)));
-  }
 }
 
 
@@ -175,26 +112,6 @@ svg.lucide { stroke-width: 2.4; }
   html { font-size: calc(16px * var(--ui-scale)); }
 .markdown-skeleton { min-height: 5em; }
 .chat-drop-overlay { backdrop-filter: blur(12px); }
-  /* Three renderer probes stack above the first message on a phone. Reserve
-     their height so the controls never cover the streamed transcript. */
-  .thread { width: 100%; padding: calc(var(--header-height) + var(--space-4xl)) var(--space-xl) var(--space-2xl); }
-  .composer-stack {
-    padding: var(--space-md) var(--space-lg) calc(var(--space-lg) + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)));
-  }
-  /* Empty chat: bottom-anchored composer (not mid-screen absolute), no rubber-band scroll. */
-  .chat-main-empty .transcript {
-    position: relative;
-    inset: auto;
-  }
-  .chat-main-empty .empty-thread { --welcome-room: 0; }
-  .chat-main-empty .composer-stack {
-    position: relative;
-    top: auto;
-    width: 100%;
-    padding: var(--space-md) var(--space-lg) calc(var(--space-lg) + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)));
-    transform: none;
-    background: var(--background);
-  }
 }
 
 /* Native fallback for touch, forced colours, and browsers without popovers. */

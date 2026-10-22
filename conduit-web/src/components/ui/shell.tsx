@@ -19,14 +19,16 @@ export function AppShell(props: JSX.HTMLAttributes<HTMLDivElement> & { settling?
 /** A pane: the charcoal ground inset on the frame. lead: the main pane, first beside the sidebar (it clips what it
  *  holds; a split pane's edge stands out of it). docked: a split pane moved into the dock, filling it ("hidden": docked
  *  while the dock shows another). under: the dock, expanded, covers it. On a phone the main pane is the whole screen
- *  and the others are not drawn. Its weight and min-width are the app's, as inline style. */
+ *  and the others are not drawn. A sheet is a size container: what it holds is measured by its width. Its weight and
+ *  min-width are the app's, as inline style. */
 export function Sheet(props: JSX.HTMLAttributes<HTMLElement> & { as?: "main" | "section"; lead?: boolean; docked?: boolean | "hidden"; under?: boolean }) {
   const [local, rest] = splitProps(props, ["as", "class", "lead", "docked", "under"]);
   return <Dynamic component={local.as ?? "section"} {...rest} class={cn("ui-sheet", local.class)} data-lead={local.lead ? "" : undefined}
     data-docked={local.docked === "hidden" ? "hidden" : local.docked ? "" : undefined} data-under={local.under ? "" : undefined} />;
 }
 
-/** What fills a sheet edge to edge, measured by its own width: a tool, a terminal, a file viewer's host. */
+/** What fills a sheet edge to edge, measured by its own width: a split pane's chat or page, a tool, a terminal, a
+ *  file viewer's host. */
 export const SheetFill = (props: JSX.HTMLAttributes<HTMLDivElement>) => {
   const [local, rest] = splitProps(props, ["class"]);
   return <div {...rest} class={cn("ui-sheet-fill", local.class)} />;

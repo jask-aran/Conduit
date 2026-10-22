@@ -23,8 +23,8 @@
 
 /* A pane: the rounded charcoal ground inset on the frame. The main pane's 8px right margin is the gutter between
    panes; a split pane's drag edge sits in it. */
-.ui-sheet { position: relative; display: flex; min-width: 0; height: calc(100dvh - var(--space-xl)); margin: var(--space-md) var(--space-md) var(--space-md) 0; flex: 1 1 auto; flex-direction: column; border-radius: var(--radius-surface); background: var(--background); color: var(--foreground); }
-.ui-sheet[data-lead] { isolation: isolate; margin-left: var(--space-2xs); overflow: hidden; }
+.ui-sheet { position: relative; display: flex; min-width: 0; height: calc(100dvh - var(--space-xl)); margin: var(--space-md) var(--space-md) var(--space-md) 0; flex: 1 1 auto; flex-direction: column; container-type: inline-size; border-radius: var(--radius-surface); background: var(--background); color: var(--foreground); }
+.ui-sheet[data-lead] { isolation: isolate; margin-left: var(--space-2xs); overflow: hidden; outline: none; }
 @media (--conduit-wide-layout) {
   .ui-sheet[data-lead] { min-width: var(--conduit-min-main-pane); }
 }
@@ -37,8 +37,8 @@
 /* The panes' shares easing: each sheet's room and margins move with them. */
 .ui-shell[data-settling] > .ui-sheet { transition: flex-grow var(--duration-fold) var(--ease-fold), margin var(--duration-fold) var(--ease-fold); }
 
-/* Filling a sheet edge to edge: a tool, a terminal, a file viewer's host. */
-.ui-sheet-fill { display: flex; min-width: 0; min-height: 0; flex: 1; flex-direction: column; overflow: hidden; border-radius: inherit; container-type: inline-size; }
+/* Filling a sheet edge to edge: a chat or page, a tool, a terminal, a file viewer's host. */
+.ui-sheet-fill { position: relative; isolation: isolate; display: flex; min-width: 0; min-height: 0; flex: 1; flex-direction: column; overflow: hidden; border-radius: inherit; container-type: inline-size; }
 
 /* The dock: its room in the row eases open; its surface keeps the settled width, right-anchored inside it. */
 .ui-dock { position: relative; display: flex; width: 0; height: calc(100dvh - var(--space-xl)); margin: var(--space-md) 0 var(--space-md) 0; flex: none; overflow: visible; pointer-events: none; border-radius: var(--radius-surface); transition: width var(--duration-fold) var(--ease-fold), margin-right var(--duration-fold) var(--ease-fold); }

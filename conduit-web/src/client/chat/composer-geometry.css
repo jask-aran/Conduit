@@ -1,2 +1,0 @@
-/* The composer's reference width: the reading column's, in the unit at the Interface size. */
-:root { --composer-desktop-reference-width: var(--reading-width); }

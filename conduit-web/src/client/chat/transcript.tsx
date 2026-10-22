@@ -46,7 +46,7 @@ import {
 import { captureTranscriptAnchor, restoreTranscriptAnchor } from "./transcript-anchor";
 import { api } from "../api/client";
 import { requestTurnArtifactNavigation } from "./turn-artifact-navigation";
-import { Welcome, Answer, Button as LibraryButton, Changes, CopyButton, Failure, HarnessPrompt, LoadingEarlier, Message as LibraryMessage, MessageFoot, RiderButton, StopLine, Transcript as LibraryTranscript, TranscriptRow, Turn } from "@/components/ui";
+import { ChatEmpty, ChatScroller, Welcome, Answer, Button as LibraryButton, Changes, CopyButton, Failure, HarnessPrompt, LoadingEarlier, Message as LibraryMessage, MessageFoot, RiderButton, StopLine, Transcript as LibraryTranscript, TranscriptRow, Turn } from "@/components/ui";
 import { ChatMarkdown } from "./lazy-markdown";
 import { fullDateTime } from "./full-date-time";
 
@@ -713,7 +713,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
       // button rather than the inherited transcript root.
       const anchored = [latestButton, cancelEditButton].filter((button): button is HTMLButtonElement => Boolean(button?.isConnected));
       if (!anchored.length) return;
-      const conversation = transcriptRoot.closest<HTMLElement>(".work-area-conversation");
+      const conversation = transcriptRoot.closest<HTMLElement>(".ui-chat");
       // A question stands in for the composer, which has slid out of the pane; otherwise the composer and its riders.
       const composerShell = conversation?.querySelector<HTMLElement>(".ui-composer-slot[data-taken] > :not(.ui-composer-stack)")
         || conversation?.querySelector<HTMLElement>(".ui-composer-slot > .ui-composer-stack, .ui-phone-composer");
@@ -740,7 +740,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
     onCleanup(() => setLatestScroller(null));
     window.addEventListener("conduit:voice-captions", scheduleLatestButtonAnchor);
     onCleanup(() => window.removeEventListener("conduit:voice-captions", scheduleLatestButtonAnchor));
-    const composerStack = transcriptRoot.closest<HTMLElement>(".work-area-conversation")?.querySelector<HTMLElement>(".composer-stack");
+    const composerStack = transcriptRoot.closest<HTMLElement>(".ui-chat")?.querySelector<HTMLElement>(".ui-composer-dock");
     // The composer floats over the bottom of the transcript, so the thread has
     // to reserve its height itself. A fixed reservation only ever matched the
     // resting composer: a multi-line draft, attachments, or the queued-message
@@ -1012,11 +1012,24 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
     });
   });
 
-  return <div ref={transcriptRoot} class="transcript" data-part="transcript" data-slot="message-scroller">
-    <div ref={motionShell} class="transcript-motion-shell">
-      <div ref={viewport} class="message-scroller-viewport" data-slot="message-scroller-viewport" tabIndex={-1} aria-label="Transcript">
-        <div class="thread">
-        <Show when={empty()}><div class="empty-thread"><Welcome title="How can I help you today?" /></div></Show>
+  return <ChatScroller ref={(element) => { transcriptRoot = element; }} motionRef={(element) => { motionShell = element; }} viewportRef={(element) => { viewport = element; }} data-part="transcript" data-slot="message-scroller" over={<>
+      {/*
+        * `mousedown` is cancelled so pressing this does not take focus off the
+        * composer: on a phone that closes the keyboard, and jumping to the
+        * latest message is exactly what somebody does mid-sentence to check
+        * what they are replying to. The click still lands -- only the focus
+        * change is refused.
+        */}
+      {/* Always mounted, so it fades out as well as in: when pressed, and when
+           somebody scrolls back down themselves. */}
+      <RiderButton ref={(element: HTMLButtonElement) => { latestButton = element; scheduleLatestButtonAnchor(); }} ride="centre" icon={<Icons.ArrowDown />} label="Scroll to latest"
+        hidden={phoneLayout() || following() || latestDistance() < TAIL_NEAR_LATEST_PX} onMouseDown={(event) => event.preventDefault()} onClick={() => followLatest()} />
+      {/* Editing an earlier message: a way out that is always there, floating
+          over the composer where the edit happens, as the pencil would. */}
+      <Show when={props.chat.editingEntryId()}><RiderButton ref={(element: HTMLButtonElement) => { cancelEditButton = element; scheduleLatestButtonAnchor(); }} icon={<Icons.Close />} label="Cancel editing" show="label"
+        ride={!following() && latestDistance() >= TAIL_NEAR_LATEST_PX ? "beside" : "centre"} onMouseDown={(event) => event.preventDefault()} onClick={() => { props.chat.cancelEdit(); focusComposerSoon(); }} /></Show>
+    </>}>
+        <Show when={empty()}><ChatEmpty><Welcome title="How can I help you today?" /></ChatEmpty></Show>
         <LibraryTranscript ref={thread} data-slot="message-scroller-content">
         <Show when={props.chat.loadingOlder()}><TranscriptRow data-slot="message-scroller-item"><LoadingEarlier /></TranscriptRow></Show>
         <For each={timeline}>{(item) => {
@@ -1115,23 +1128,5 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
             own header later takes the same spot instead of pushing in. */}
         <Show when={awaitingTurn()}>{(_) => { const arrive = untrack(() => arrival(props.chat.messages().at(-1)!)); return <TranscriptRow data-slot="message-scroller-item"><TraceStarting since={arrive} startedAt={props.chat.messages().at(-1)?.timestamp} label="Starting" /></TranscriptRow>; }}</Show>
         </LibraryTranscript>
-        </div>
-      </div>
-      {/*
-        * `mousedown` is cancelled so pressing this does not take focus off the
-        * composer: on a phone that closes the keyboard, and jumping to the
-        * latest message is exactly what somebody does mid-sentence to check
-        * what they are replying to. The click still lands -- only the focus
-        * change is refused.
-        */}
-      {/* Always mounted, so it fades out as well as in: when pressed, and when
-           somebody scrolls back down themselves. */}
-      <RiderButton ref={(element: HTMLButtonElement) => { latestButton = element; scheduleLatestButtonAnchor(); }} ride="centre" icon={<Icons.ArrowDown />} label="Scroll to latest"
-        hidden={phoneLayout() || following() || latestDistance() < TAIL_NEAR_LATEST_PX} onMouseDown={(event) => event.preventDefault()} onClick={() => followLatest()} />
-      {/* Editing an earlier message: a way out that is always there, floating
-          over the composer where the edit happens, as the pencil would. */}
-      <Show when={props.chat.editingEntryId()}><RiderButton ref={(element: HTMLButtonElement) => { cancelEditButton = element; scheduleLatestButtonAnchor(); }} icon={<Icons.Close />} label="Cancel editing" show="label"
-        ride={!following() && latestDistance() >= TAIL_NEAR_LATEST_PX ? "beside" : "centre"} onMouseDown={(event) => event.preventDefault()} onClick={() => { props.chat.cancelEdit(); focusComposerSoon(); }} /></Show>
-    </div>
-  </div>;
+  </ChatScroller>;
 }
