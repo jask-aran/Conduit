@@ -952,6 +952,7 @@ export class CodexAppServerAdapter extends EventEmitter {
       }
     } else if (method === "turn/started") {
       record.active = true;
+      record.turnStarting = false;
       record.activity = "working";
       record.generation = { id: turnId, closed: false, settled: false };
       record.turn = null;
@@ -1141,6 +1142,7 @@ export class CodexAppServerAdapter extends EventEmitter {
       }
       record.prompts = new Set();
       record.answering = null;
+      record.turnStarting = false;
       this.publish(record, failed
         ? { type: "error", generationId: turnId, error: { code: "backend_unavailable", message: params.turn?.error?.message || "Codex turn failed" } }
         : { type: "status", generationId: turnId, phase: "settled", seq: ++record.generationSeq, status: "idle", activity: "idle", detail: null });
@@ -1256,6 +1258,8 @@ export class CodexAppServerAdapter extends EventEmitter {
     // whatever came before it, which is the previous turn.
     record.messageIds.add(clientUserMessageId);
     record.answering = clientUserMessageId;
+    // The slot is held from turn/start until Codex says the turn started (see isGeneratingRecord).
+    record.turnStarting = true;
     record.prompts = new Set([clientUserMessageId]);
     this.openMessage(record, clientUserMessageId, "user", {
       content: parseAttachmentEnvelope(message).message,
@@ -1278,6 +1282,7 @@ export class CodexAppServerAdapter extends EventEmitter {
       // back rather than waiting for a turn that will never start.
       record.messageIds.delete(clientUserMessageId);
       record.answering = null;
+      record.turnStarting = false;
       if (this.states(record)) {
         this.publish(record, messageDrop({ messageId: clientUserMessageId }));
       }
