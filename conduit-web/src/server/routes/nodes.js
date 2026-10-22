@@ -6,7 +6,7 @@
  * starts the node role there; main keeps only the key's hash. The list is
  * devices with their nodes: connected or not, and what each shares.
  */
-import { currentMagicDnsOrigin } from "../../tailscale-share.js";
+import { servedMagicDnsOrigin } from "../../tailscale-share.js";
 
 export function registerNodeRoutes(app, { nodeHub, config }) {
   app.get("/v0/nodes", async (_request, response, next) => {
@@ -22,7 +22,7 @@ export function registerNodeRoutes(app, { nodeHub, config }) {
       // else this machine, for a node on the same one.
       const publicUrl = process.env.CONDUIT_NODES_PUBLIC === "1" && process.env.CONDUIT_PUBLIC_URL
         ? (/^https?:\/\//.test(process.env.CONDUIT_PUBLIC_URL) ? process.env.CONDUIT_PUBLIC_URL : `https://${process.env.CONDUIT_PUBLIC_URL}`) : null;
-      const tailnet = await currentMagicDnsOrigin().catch(() => null);
+      const tailnet = await servedMagicDnsOrigin().catch(() => null);
       // Every way a device may dial, best first; the first is the pairing's name.
       const routes = [...new Set([request.body?.mainUrl, tailnet, publicUrl].filter(Boolean).map(String))];
       if (!routes.length) routes.push(`http://127.0.0.1:${config.port}`);

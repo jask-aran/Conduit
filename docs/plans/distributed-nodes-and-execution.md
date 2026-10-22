@@ -4,20 +4,21 @@ Nodes, remote workspaces, and durable execution: one server acts on every
 device, and any client controls it. Its agent is the **Conduit durable
 agent** (below, under Names).
 
-Status, on branch `distributed-nodes` (head on the VPS, 2026-10-21):
-milestone 1 built (the pi-durable half of the Conduit durable agent, profile id `conduit-runtime`:
-restart resume, forks, queue, questions, attachments, web research, usage).
-Milestone 3 built: `scripts/conduit-node.mjs` is the node role, Settings ›
-Devices pairs and shows devices, a shared folder becomes a workspace whose
-chats run on the device and wait while it is offline. Node track (a), (b)
-and (d) built: files, editing, Git, dashboard and terminals act on a device
-through one host; Claude Code, Codex, fx (ACP) and OpenCode run on devices
-through their existing adapters (remote spawn); secrets are kept back;
-writes and commands carry receipts across reconnects; a node can pair with
-several servers; the Windows desktop app runs the node as a companion; a
-server can take devices through its public tunnel by opt-in. Not yet: the
-ownership record (c), the phone gate on real hardware, folder watching (a
-device's folder is polled). Milestones 2, 4 and 5 not started.
+Status (2026-10-23, on main since v0.8.5, PR #66): milestones 1, 3 and 5
+built, and the node track (a)-(d): the node role (`scripts/conduit-node.mjs`,
+the Windows app's companion), device workspaces acting through one host
+(files, Git, dashboard, terminals, checkpoints, watching), harness CLIs on
+devices through their adapters, the ownership record, environments of one
+device relayed (decision 25), tmux wherever it exists (decision 28) and the
+head's feature list (decision 30). Milestone 2's backend is built (roaming
+conversations, subagents, bounded context); its product is not designed.
+Milestone 4 is deferred (device features are later), as are further harnesses
+on devices. Two networks run (decision 29): dev, headed by the desktop's WSL
+(device Desktop-Dev: Linux, the head, and Windows over loopback), and prod,
+headed by the VPS (device Desktop: Windows, and WSL relayed by it). Not yet:
+a node on another machine reaching a head that serves only its self-signed
+HTTPS (a LAN laptop on the dev network) -- it has no way to check that
+certificate; pinning the head's identity in the pairing would.
 
 ## Names
 
@@ -686,3 +687,21 @@ addition. → decision 30.
 
 **The relay's security review:** run now, in the background, rather than at
 the merge.
+
+### 2026-10-23: the desktop on both networks
+
+**Which folders, which grants?** One projects folder on Windows
+(`C:\Users\jaska\Projects`), read, write and commands, with each network. WSL
+joins prod relayed by the Windows app (decision 25), sharing nothing until its
+owner shares a folder there (`conduit-node share` in WSL; the Windows app does
+not manage a relayed environment's folders yet).
+
+**How does Windows reach a head in this machine's WSL?** The head serves HTTPS
+with its own self-signed certificate, which the apps accept through its
+identity and a node could not check; its tailnet name was advertised to
+devices though nothing served it, and Windows reaches WSL over the tailnet
+only through a relay. Windows dials the head on loopback over plain HTTP,
+which the port also answers; the tailnet route is offered only when Tailscale
+serves it. The user chose to pin the head's identity in a pairing for the
+case loopback does not cover (a node on another machine and a head with no
+trusted certificate); not built yet.

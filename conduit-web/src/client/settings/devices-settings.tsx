@@ -138,7 +138,10 @@ function dialableServer(): string | undefined {
   const url = new URL(httpUrl("/"), location.href);
   const host = url.hostname;
   const tailnet = /\.ts\.net$/i.test(host) || /^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(host);
-  return tailnet || ["127.0.0.1", "localhost", "[::1]"].includes(host) ? url.origin : undefined;
+  // This machine's server answers plain HTTP on the same port, and a node cannot check the self-signed certificate
+  // its HTTPS presents (the app trusts it through the server's identity; the node has none).
+  if (["127.0.0.1", "localhost", "[::1]"].includes(host)) return `http://${url.host}`;
+  return tailnet ? url.origin : undefined;
 }
 
 const thisPlatform = () => /Windows/i.test(navigator.userAgent) ? "Windows" : /Mac/i.test(navigator.userAgent) ? "macOS" : "Linux";
