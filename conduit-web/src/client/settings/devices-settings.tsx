@@ -1,5 +1,5 @@
 import { createSignal, For, onCleanup, onMount, Show } from "solid-js";
-import { FolderPlusIcon, Trash2Icon } from "lucide-solid";
+import { FolderPlusIcon, TerminalIcon, Trash2Icon } from "lucide-solid";
 import { api } from "../api/client.ts";
 import { httpUrl } from "../api/transport.js";
 import { Button, Input, Switch } from "@/components/ui/controls";
@@ -9,7 +9,7 @@ import { LiveNote, SettingGroup, SettingLine, SettingNote, SettingValue } from "
 import { desktopShell, type CompanionStatus, type DesktopShellSettings } from "../platform/installed-client.ts";
 
 type SharedRoot = { id: string; label: string; read: boolean; write: boolean; shell: boolean; allow?: string[] };
-type Node = { id: string; deviceId: string; name: string; platform: string | null; online: boolean; local?: boolean; roots: SharedRoot[]; harnesses?: string[]; lastSeenAt: string | null };
+type Node = { id: string; deviceId: string; name: string; platform: string | null; online: boolean; local?: boolean; roots: SharedRoot[]; harnesses?: string[]; terminal?: boolean; lastSeenAt: string | null };
 const HARNESS_LABELS: Record<string, string> = { "claude-code": "Claude Code" };
 type Device = { id: string; name: string; local?: boolean; nodes: Node[] };
 
@@ -26,7 +26,9 @@ const NEW_DEVICE = "";
  * here. Pairing gives a key once, inside the command to run there. A shared
  * folder becomes a workspace from here; chats in it run on that node.
  */
-export function DevicesSettingsTile(props: { onAddWorkspace: (input: { mode: "node"; nodeId: string; rootId: string }) => Promise<boolean> }) {
+export function DevicesSettingsTile(props: { onAddWorkspace: (input: { mode: "node"; nodeId: string; rootId: string }) => Promise<boolean>;
+  /** A terminal on the device itself, in its home: this server's "computer" one, or a device's where it allows it. */
+  onOpenTerminal: (node: { id: string; local?: boolean }) => void }) {
   const [devices, setDevices] = createSignal<Device[] | null>(null);
   const [error, setError] = createSignal("");
   const [deviceId, setDeviceId] = createSignal(NEW_DEVICE);
@@ -106,6 +108,9 @@ export function DevicesSettingsTile(props: { onAddWorkspace: (input: { mode: "no
         <SettingLine label={node.name} state={[seen(node), node.platform,
           node.harnesses?.length ? `runs ${node.harnesses.map((id) => HARNESS_LABELS[id] || id).join(", ")}` : null].filter(Boolean).join(" · ")} plain>
           <StatusDot label={seen(node)} tone={node.online ? "success" : "muted"} />
+          <Show when={node.online && (node.local || node.terminal)}>
+            <Button variant="ghost" size="sm" aria-label={`Open a terminal on ${device.name}`} onClick={() => props.onOpenTerminal(node)}><TerminalIcon /> Terminal</Button>
+          </Show>
           <Show when={!node.local}>
             <Button variant="ghost" size="sm" aria-label={`Unpair ${node.name} on ${device.name}`} onClick={() => void forget(node)}><Trash2Icon /> Unpair</Button>
           </Show>

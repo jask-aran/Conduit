@@ -114,7 +114,8 @@ export class NodeHub extends EventEmitter {
   view(record) {
     const live = this.live.get(record.id);
     return { id: record.id, deviceId: record.deviceId, name: record.name, platform: live?.platform || record.platform || null,
-      online: Boolean(live), roots: live?.roots || record.roots || [], harnesses: live?.harnesses || record.harnesses || [], lastSeenAt: live ? new Date().toISOString() : record.lastSeenAt };
+      online: Boolean(live), roots: live?.roots || record.roots || [], harnesses: live?.harnesses || record.harnesses || [],
+      terminal: Boolean(live?.terminal), lastSeenAt: live ? new Date().toISOString() : record.lastSeenAt };
   }
 
   deviceView(device) {
@@ -140,7 +141,8 @@ export class NodeHub extends EventEmitter {
   async headView() {
     const platform = { win32: "Windows", darwin: "macOS" }[process.platform] || "Linux";
     return { id: this.head.nodeId, deviceId: this.head.deviceId, name: platform, platform: process.platform, local: true,
-      online: true, roots: await this.head.roots(), harnesses: this.head.harnesses(), lastSeenAt: new Date().toISOString() };
+      // Its own terminal is the "computer" one this server always offers.
+      online: true, roots: await this.head.roots(), harnesses: this.head.harnesses(), terminal: true, lastSeenAt: new Date().toISOString() };
   }
 
   /** A root a node shares, by id, as it last said: `{ id, label, read, write, shell }`. */
@@ -203,7 +205,9 @@ export class NodeHub extends EventEmitter {
         // `boot` names this run of the node; a node without one keeps no receipts.
         Object.assign(node, { roots: Array.isArray(message.roots) ? message.roots : [], platform: message.platform || null,
           boot: typeof message.boot === "string" ? message.boot : null,
-          harnesses: Array.isArray(message.harnesses) ? message.harnesses.filter((id) => typeof id === "string") : [], ready: true });
+          harnesses: Array.isArray(message.harnesses) ? message.harnesses.filter((id) => typeof id === "string") : [],
+          // Whether its owner lets a terminal open on it outside its shared folders.
+          terminal: message.terminal === true, ready: true });
         this.live.set(record.id, node);
         Object.assign(record, { roots: node.roots, platform: node.platform, harnesses: node.harnesses, lastSeenAt: new Date().toISOString() });
         if (message.name && record.name === "Device") record.name = String(message.name).slice(0, 80);

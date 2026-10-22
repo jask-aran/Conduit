@@ -1868,6 +1868,15 @@ function App() {
     if (historyMode === "push") history.pushState({}, "", "/terminal");
     else if (historyMode === "replace") history.replaceState({}, "", "/terminal");
   };
+  /** A shell on a device itself (Settings › Devices): this server's "computer" one, or a device's in its home. */
+  const openDeviceTerminal = async (node: { id: string; local?: boolean }) => {
+    try {
+      const terminal = await api<{ id: string }>("/v0/ptys", { method: "POST",
+        body: JSON.stringify({ projectId: node.local ? "computer" : `device:${node.id}` }) });
+      setSettingsOpen(false);
+      await openTerminalRoute("push", terminal.id);
+    } catch (error) { showError(error); }
+  };
   const leaveTerminalRoute = async () => {
     if (terminalCanReturn()) history.back();
     else await openComputer();
@@ -5433,7 +5442,7 @@ function App() {
       context={paletteContext()} runtime={runtime} actions={paletteActions} onChooseModel={(spec) => void focusedModels().chooseModel(spec)} currentModel={focusedModels().model()} scopeModels={focusedModels().allModels()} enabledModelSpecs={focusedModels().enabledModels()} onToggleModelScope={(spec) => { const models = focusedModels(); const enabled = models.enabledModels(); void models.saveScope(enabled.includes(spec) ? enabled.filter((item) => item !== spec) : [...enabled, spec]); }} shortcuts={shortcutManager} />
     <LeaderPalette shortcuts={shortcutManager} />
     <Show when={settingsLoaded()}>
-      <Settings open={settingsOpen()} initialSection={settingsSection()} sectionWasNamed={settingsNamedSection()} initialWorkspaceId={settingsWorkspaceId()} onOpenChange={setSettingsOpen} models={models} templates={templates()} templatesLoading={templatesLoading()} defaultTemplateId={defaultTemplateId()} projects={catalogue.projects()} onDefaultTemplateChange={saveDefaultTemplate} onWorkspaceDefaultChange={saveWorkspaceDefault} markdownRenderer={markdownRenderer()} onMarkdownRendererChange={switchMarkdownRenderer} meteorField={meteorField()} onMeteorFieldChange={switchMeteorField} voiceSettings={voiceSettings()} onVoiceSettingsSave={updateVoiceSettings} sidebarChatLimit={sidebarChatLimit()} onSidebarChatLimitChange={switchSidebarChatLimit} onOpenModelSelector={openModelSelector} onAddWorkspace={addProject} shortcuts={shortcutManager} />
+      <Settings open={settingsOpen()} initialSection={settingsSection()} sectionWasNamed={settingsNamedSection()} initialWorkspaceId={settingsWorkspaceId()} onOpenChange={setSettingsOpen} models={models} templates={templates()} templatesLoading={templatesLoading()} defaultTemplateId={defaultTemplateId()} projects={catalogue.projects()} onDefaultTemplateChange={saveDefaultTemplate} onWorkspaceDefaultChange={saveWorkspaceDefault} markdownRenderer={markdownRenderer()} onMarkdownRendererChange={switchMarkdownRenderer} meteorField={meteorField()} onMeteorFieldChange={switchMeteorField} voiceSettings={voiceSettings()} onVoiceSettingsSave={updateVoiceSettings} sidebarChatLimit={sidebarChatLimit()} onSidebarChatLimitChange={switchSidebarChatLimit} onOpenModelSelector={openModelSelector} onAddWorkspace={addProject} onOpenDeviceTerminal={(node) => void openDeviceTerminal(node)} shortcuts={shortcutManager} />
     </Show>
   </>;
 }

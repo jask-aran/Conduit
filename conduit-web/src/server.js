@@ -581,7 +581,7 @@ registerSearchRoutes(app, {
 });
 registerVoiceRoutes(app, { voiceSettings, voiceRuntime, voiceModel });
 
-registerPtyRoutes(app, { projects, terminals });
+registerPtyRoutes(app, { projects, terminals, nodeHub });
 registerTerminalPasteRoutes(app, { terminalPastes });
 
 registerNodeRoutes(app, { nodeHub, config });

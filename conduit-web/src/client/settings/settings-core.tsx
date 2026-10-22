@@ -235,6 +235,7 @@ export function Settings(props: {
   onOpenModelSelector: () => void;
   /** Adds a folder a paired device shares as a workspace (Devices). */
   onAddWorkspace: (input: { mode: "node"; nodeId: string; rootId: string }) => Promise<boolean>;
+  onOpenDeviceTerminal: (node: { id: string; local?: boolean }) => void;
   shortcuts: ShortcutManager;
 }) {
   const { confirm: confirmDialog } = createDecisionScope(() => props.open ? promptId() : null);
@@ -1219,7 +1220,7 @@ export function Settings(props: {
             </>
           </Show>
           <Show when={section() === "servers"}><ServersSettingsTile /></Show>
-          <Show when={section() === "devices"}><DevicesSettingsTile onAddWorkspace={props.onAddWorkspace} /></Show>
+          <Show when={section() === "devices"}><DevicesSettingsTile onAddWorkspace={props.onAddWorkspace} onOpenTerminal={props.onOpenDeviceTerminal} /></Show>
           <Show when={section() === "shortcuts"}><ShortcutsSettings manager={props.shortcuts} /></Show>
           <Show when={section() === "runtime"}>
             <>

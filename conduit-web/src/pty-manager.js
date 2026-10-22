@@ -8,7 +8,7 @@ import { projectEnvironment } from "./project-environment.js";
 import { StringDecoder } from "node:string_decoder";
 import { promisify } from "node:util";
 import nodePty from "node-pty";
-import { RemoteProcess } from "./nodes/remote-process.js";
+import { placeProcesses } from "./nodes/place-processes.js";
 import { removeUnresponsiveSocket, terminalSocketName } from "../../scripts/terminal-lifecycle.mjs";
 
 const execFileAsync = promisify(execFileCallback);
@@ -493,8 +493,8 @@ export class PtyManager extends EventEmitter {
     if ([...this.records.values()].filter((item) => item.status === "running").length >= this.maxSessions) {
       throw failure("pty_capacity_reached", "The terminal session limit has been reached");
     }
-    const shell = await RemoteProcess.spawn(this.nodeHub, remoteNode(project), {
-      shell: true, cwd: project.place, pty: { cols: boundedDimension(cols, 80), rows: boundedDimension(rows, 24) } });
+    const shell = await placeProcesses(this.nodeHub, { nodeId: remoteNode(project), place: project.place })
+      .shells.start({ cols: boundedDimension(cols, 80), rows: boundedDimension(rows, 24) });
     // Nothing follows it until a client attaches; the device keeps its output.
     shell.detach();
     const id = crypto.randomUUID();
@@ -518,7 +518,7 @@ export class PtyManager extends EventEmitter {
     let shell;
     try {
       // From the device's first buffered byte: the screen is repainted as tmux would.
-      shell = await RemoteProcess.reattach(this.nodeHub, record.nodeId, record.procId);
+      shell = await placeProcesses(this.nodeHub, { nodeId: record.nodeId }).shells.reattach(record.procId);
     } catch (error) {
       this.attachments.delete(record.id);
       // The node's word for a process it no longer has (it restarted, or the exit was long ago).
@@ -560,10 +560,7 @@ export class PtyManager extends EventEmitter {
 
   killOnDevice(record) {
     // A device that is away is told when it is back, so no shell outlives its terminal there.
-    if (!this.nodeHub?.live.get(record.nodeId)?.ready) return void this.nodeHub?.killLater(record.nodeId, record.procId);
-    const shell = new RemoteProcess(this.nodeHub, record.nodeId, { id: record.procId });
-    shell.kill();
-    this.nodeHub.unfollow(shell);
+    placeProcesses(this.nodeHub, { nodeId: record.nodeId }).shells.kill(record.procId);
   }
 
   killAttachment(id) {
