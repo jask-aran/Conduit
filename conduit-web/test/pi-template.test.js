@@ -35,8 +35,10 @@ test("repository templates are discoverable launch presets", () => {
   const systemPrompt = fs.readFileSync(general.systemPrompt, "utf8");
   assert.match(systemPrompt, /Bash is your code-mode runtime/);
   assert.match(systemPrompt, /use `python` from Bash/);
-  assert.match(systemPrompt, /Use this sequence:/);
-  assert.match(systemPrompt, /fetch_content.*selected pages/s);
+  // Web research guidance is the durable agent's, shared by every profile with web tools.
+  const web = fs.readFileSync(path.resolve(root, "conduit-runtime/WEB.md"), "utf8");
+  assert.match(web, /Use this sequence:/);
+  assert.match(web, /fetch_content.*selected pages/s);
   assert.equal(view.extensionCount, 2);
   assert.equal(templatePublicView(templates.find((template) => template.id === "runtime")).defaultable, false);
 });

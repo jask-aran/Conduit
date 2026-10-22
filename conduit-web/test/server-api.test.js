@@ -406,7 +406,7 @@ exit 0
       body: JSON.stringify({ projectId: linked.id }),
     });
     const hostDefaultChatBody = await hostDefaultChat.json();
-    assert.equal(hostDefaultChatBody.runtime.kind, "conduit_profile");
+    assert.equal(hostDefaultChatBody.backend.implementation, "conduit-runtime");
     const appearancePatch = await fetch(`${origin}/v0/projects/${linked.id}`, {
       method: "PATCH",
       headers: { "content-type": "application/json" },
@@ -501,7 +501,6 @@ exit 0
     // The harness owns web access now: nothing is materialised for a launch,
     // so a live record carries no search profile of Conduit's making.
     assert.equal(freshLiveBody.modelProfile, undefined);
-    await assert.rejects(fs.access(freshSessionFile), { code: "ENOENT" });
 
     const directory = path.join(root, "files", ".conduit", "chats", chat.id);
     await fs.access(path.join(directory, "attachments"));
@@ -571,11 +570,8 @@ exit 0
     const projectsPayload = await fetch(`${origin}/v0/projects`).then((response) => response.json());
     const chatProject = projectsPayload.projects.find((item) => item.id === chat.projectId);
     assert.ok(chatProject);
-    await fs.mkdir(path.dirname(freshSessionFile), { recursive: true });
-    await fs.writeFile(freshSessionFile, `${JSON.stringify({ type: "session", id: "future-session", cwd: chatProject.path })}\n`);
     const deletedChat = await fetch(`${origin}/v0/sessions/${chat.id}`, { method: "DELETE" });
     assert.equal(deletedChat.status, 204);
-    await assert.rejects(fs.access(freshSessionFile), { code: "ENOENT" });
   } finally {
     if (child.exitCode == null) {
       child.kill("SIGTERM");

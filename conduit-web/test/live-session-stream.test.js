@@ -198,7 +198,8 @@ test("a successful fork replaces the browser transcript before the new prompt", 
   assert.equal(operations[0], "fork");
   assert.deepEqual(operations.filter((item) => typeof item === "string"), ["fork", "prompt"]);
   assert.deepEqual(operations.filter((item) => item?.type).map((item) => item.type),
-    ["history_truncated", "transcript_op", "transcript_op"]);
+    // The prompt's own row is the adapter's to state now, not the server's.
+    ["history_truncated", "transcript_op"]);
   assert.deepEqual(operations.find((item) => item?.type === "history_truncated"),
     { type: "history_truncated", beforeMessageId: "user-old" });
 });

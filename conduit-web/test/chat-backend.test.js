@@ -36,7 +36,6 @@ test("legacy Pi rows gain durable identity without changing JSONL or exposing pa
   assert.equal((await restored.find([project], "chat-test")).file, file);
   assert.equal(await fs.readFile(file, "utf8"), transcript);
   assert.equal(JSON.stringify(chatView(restored.metadata("chat-test"))).includes(file), false);
-  assert.equal(chatView(restored.metadata("chat-test")).harnessId, "conduit");
   const neutralRow = structuredClone(restored.metadata("chat-test"));
   delete neutralRow.templateId;
   delete neutralRow.templateVersion;

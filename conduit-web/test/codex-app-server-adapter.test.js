@@ -95,6 +95,8 @@ test("Codex prompt writes the installed app-server turn/start shape", async () =
   await adapter.setThinkingLevel(live.id, "high");
   await adapter.setServiceLevel(live.id, "priority");
   const pending = adapter.prompt(live.id, "Test prompt");
+  // The input items are built asynchronously (device attachments), so the write lands a tick later.
+  await new Promise(setImmediate);
   const { clientUserMessageId, ...params } = writes[0].params;
   assert.equal(typeof clientUserMessageId, "string");
   assert.deepEqual({ ...writes[0], params }, { id: 1, method: "turn/start", params: {
