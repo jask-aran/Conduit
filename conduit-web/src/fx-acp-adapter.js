@@ -2,18 +2,16 @@ import { remoteNode } from "./place.js";
 import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { spawn, execFile as execFileCallback } from "node:child_process";
 import { EventEmitter } from "node:events";
-import { promisify } from "node:util";
 import { parseAttachmentEnvelope } from "./attachment-envelope.js";
 import { SessionRecords } from "./harnesses/session-records.js";
 import { messageClose, messageOpen, toolClose, toolKind, toolOpen, toolSubject, turnSettle } from "./harnesses/transcript-ops.js";
 import { unsupported } from "./harnesses/unsupported.js";
 import { terminate } from "./server/effect-process.js";
-import { harnessProcesses, opaqueSessionOf, requireHarnessOn } from "./nodes/remote-spawn.js";
+import { opaqueSessionOf } from "./nodes/remote-spawn.js";
+import { placeProcesses } from "./nodes/place-processes.js";
 import { within } from "./server/effect-concurrency.js";
 
-const execFile = promisify(execFileCallback);
 
 // fx's tools, by what they do, as its saved history names them. Live, ACP
 // states a kind of its own beside a name that may be only a title, so that is
@@ -87,9 +85,9 @@ const readTurnIds = async (file) => {
 };
 
 class AcpClient {
-  /** `start` is Node's spawn, or a device's (src/nodes/remote-spawn.js). */
-  constructor(command, cwd, onNotification, onRequest, onExit = () => {}, start = spawn) {
-    this.child = start(command, ["acp"], { cwd, stdio: ["pipe", "pipe", "pipe"] });
+  /** `processes` is where fx runs: this server or a device (src/nodes/place-processes.js). */
+  constructor(command, cwd, onNotification, onRequest, onExit = () => {}, processes) {
+    this.child = processes.spawn("fx", command, ["acp"], { cwd, stdio: ["pipe", "pipe", "pipe"] });
     this.pending = new Map();
     this.nextId = 1;
     this.buffer = "";
@@ -182,14 +180,12 @@ export class FxAcpAdapter extends EventEmitter {
     Object.assign(this, unsupported(FX_CAPABILITIES, { label: "fx" }));
   }
 
-  /** fx's own processes for a chat: here, or on its device (`{ nodeId, place }`). */
-  processes(on) {
-    return on?.nodeId ? harnessProcesses({ hub: this.nodeHub, nodeId: on.nodeId, place: on.place, harness: "fx" }) : null;
-  }
+  /** fx's own processes for a chat's place (`{ nodeId, place }`; none is this server). */
+  processes(on) { return placeProcesses(this.nodeHub, on || {}); }
 
   async run(args, options = {}) {
     try {
-      const { stdout } = await (this.processes(options.on)?.execFile || execFile)(this.command, args, {
+      const { stdout } = await this.processes(options.on).execFile("fx", this.command, args, {
         cwd: options.cwd, maxBuffer: 32 * 1024 * 1024, encoding: "utf8", timeout: options.timeout || 0,
       });
       return stdout;
@@ -228,7 +224,7 @@ export class FxAcpAdapter extends EventEmitter {
   async start({ chatId, project }) {
     const existing = this.getByChatId(chatId);
     if (existing) return existing;
-    if (remoteNode(project)) requireHarnessOn(this.nodeHub, remoteNode(project), "fx", "fx");
+    this.processes({ nodeId: remoteNode(project) }).require("fx", "fx");
     const record = this.sessions.add({
       id: crypto.randomUUID(), chatId, projectId: project?.id || null,
       nodeId: remoteNode(project), place: project?.place || null,
@@ -241,7 +237,7 @@ export class FxAcpAdapter extends EventEmitter {
     record.client = new AcpClient(this.command, record.cwd,
       (message) => this.notification(record, message),
       (message) => this.requestFromAgent(record, message),
-      (cause) => this.processExited(record, cause), this.processes(record)?.spawn);
+      (cause) => this.processExited(record, cause), this.processes(record));
     record.turnIdsFile = await turnIdsFile(project, chatId);
     try {
       await record.client.request("initialize", {

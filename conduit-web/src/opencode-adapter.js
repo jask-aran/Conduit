@@ -4,9 +4,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { execFile as execFileCallback } from "node:child_process";
 import { EventEmitter } from "node:events";
-import { promisify } from "node:util";
 import { parseAttachmentEnvelope } from "./attachment-envelope.js";
 import { formatHistoryTool } from "./harnesses/history-tool.js";
 import { answerTo, isDismissal, questionRequest } from "./harnesses/questions.js";
@@ -14,11 +12,9 @@ import { SessionRecords } from "./harnesses/session-records.js";
 import { messageClose, messageOpen, toolClose, toolKind, toolOpen, toolSubject, turnSettle } from "./harnesses/transcript-ops.js";
 import { countCacheRequest, usageFromRequests } from "./cache-stats.js";
 import { unsupported } from "./harnesses/unsupported.js";
-import { BACKGROUND_CONTEXT, withAbortSignal } from "@earendil-works/chord/context";
-import { execOnDevice, opaqueSessionOf, requireHarnessOn } from "./nodes/remote-spawn.js";
-import { fetchOnDevice } from "./nodes/remote-tunnel.js";
+import { opaqueSessionOf } from "./nodes/remote-spawn.js";
+import { placeProcesses } from "./nodes/place-processes.js";
 
-const execFile = promisify(execFileCallback);
 
 export const OPENCODE_CAPABILITIES = Object.freeze({
   history: "linear",
@@ -199,12 +195,12 @@ export class OpenCodeAdapter extends EventEmitter {
     return this.services.get(key);
   }
 
+  /** OpenCode's processes on a device (its node id), or here (none). Any shared folder of a device will do for its service commands. */
+  processes(on) { return placeProcesses(this.nodeHub, { nodeId: on || null, place: on ? this.anyPlace(on) : null }); }
+
   async commandOutput(args, on = null) {
     try {
-      const { stdout } = on
-        // Any shared folder of the device will do to run its OpenCode's service commands in.
-        ? await execOnDevice(this.nodeHub, on, { harness: "opencode", args, place: this.anyPlace(on) })
-        : await execFile(this.command, args, { encoding: "utf8", maxBuffer: 8 * 1024 * 1024 });
+      const { stdout } = await this.processes(on).execFile("opencode", this.command, args, { encoding: "utf8", maxBuffer: 8 * 1024 * 1024 });
       return stdout.trim();
     } catch (cause) {
       throw failure(String(cause.stderr || cause.message || cause).trim());
@@ -229,28 +225,22 @@ export class OpenCodeAdapter extends EventEmitter {
     if (service.connection) return service.connection;
     if (service.connectionStart) return service.connectionStart;
     service.connectionStart = (async () => {
+      // One way for every place: the service's state file where it runs, then `service status`, started if need be.
+      const where = on ? " on the device" : "";
       const loopback = /^http:\/\/127\.0\.0\.1:\d+$/;
-      if (on) return this.connectDevice(service, { start, loopback });
-      const serviceFile = async (variable, fallback) => {
-        const root = process.env[variable] || path.join(os.homedir(), fallback);
-        try { return JSON.parse(await fs.readFile(path.join(root, "opencode", "service.json"), "utf8")); }
-        catch (cause) { if (cause.code === "ENOENT") return {}; throw cause; }
-      };
-      const alive = (pid) => { try { process.kill(pid, 0); return true; } catch (cause) { return cause.code === "EPERM"; } };
-      const state = await serviceFile("XDG_STATE_HOME", ".local/state");
-      let baseUrl = loopback.test(state.url || "") && Number.isInteger(state.pid) && alive(state.pid) ? state.url : "";
+      const processes = this.processes(on);
+      if (!processes.ready()) throw failure("The device is offline");
+      const state = (await processes.read("opencodeService")) || {};
       // `service status` prints `stopped` and succeeds when there is no service.
-      if (!baseUrl) baseUrl = await this.commandOutput(["service", "status"]).catch(() => "");
+      let baseUrl = state.url || await this.commandOutput(["service", "status"], on).catch(() => "");
       if (!loopback.test(baseUrl)) {
-        if (!start) throw failure("OpenCode service is not running");
-        await this.commandOutput(["service", "start"]);
-        baseUrl = await this.commandOutput(["service", "status"]);
+        if (!start) throw failure(`OpenCode service is not running${where}`);
+        await this.commandOutput(["service", "start"], on);
+        baseUrl = await this.commandOutput(["service", "status"], on);
       }
-      if (!loopback.test(baseUrl)) throw failure("OpenCode service did not report a loopback URL");
-      const password = process.env.OPENCODE_SERVER_PASSWORD || state.password
-        || (await serviceFile("XDG_CONFIG_HOME", ".config")).password || "";
+      if (!loopback.test(baseUrl)) throw failure(`OpenCode service${where} did not report a loopback URL`);
       const headers = { accept: "application/json" };
-      if (password) headers.authorization = `Basic ${Buffer.from(`opencode:${password}`).toString("base64")}`;
+      if (state.password) headers.authorization = `Basic ${Buffer.from(`opencode:${state.password}`).toString("base64")}`;
       service.connection = { baseUrl, headers };
       return service.connection;
     })();
@@ -258,28 +248,8 @@ export class OpenCodeAdapter extends EventEmitter {
     finally { service.connectionStart = null; }
   }
 
-  /** A device's service, found as here: its state file there, then `service status`, started if need be. */
-  async connectDevice(service, { start, loopback }) {
-    const on = service.nodeId;
-    if (!this.nodeHub?.live.get(on)?.ready) throw failure("The device is offline");
-    const found = await this.nodeHub.call(on, { target: "harness", method: "opencodeService", args: [], cwd: null },
-      withAbortSignal(AbortSignal.timeout(15_000), BACKGROUND_CONTEXT));
-    const state = found?.ok ? found.value || {} : {};
-    let baseUrl = state.url || await this.commandOutput(["service", "status"], on).catch(() => "");
-    if (!loopback.test(baseUrl)) {
-      if (!start) throw failure("OpenCode service is not running on the device");
-      await this.commandOutput(["service", "start"], on);
-      baseUrl = await this.commandOutput(["service", "status"], on);
-    }
-    if (!loopback.test(baseUrl)) throw failure("OpenCode service on the device did not report a loopback URL");
-    const headers = { accept: "application/json" };
-    if (state.password) headers.authorization = `Basic ${Buffer.from(`opencode:${state.password}`).toString("base64")}`;
-    service.connection = { baseUrl, headers };
-    return service.connection;
-  }
-
   /** `fetch`, here or through the device's tunnel. */
-  fetch(on, url, init) { return on ? fetchOnDevice(this.nodeHub, on, url, init) : fetch(url, init); }
+  fetch(on, url, init) { return this.processes(on).fetch(url, init); }
 
   async request(method, route, { directory = "", query = {}, body, whole = false, start = true, timeout = 30000, on = null } = {}) {
     const service = this.service(on);
@@ -356,7 +326,7 @@ export class OpenCodeAdapter extends EventEmitter {
     // The service ignores `?directory=` here; a session without a location
     // lands in the service's own directory, which is usually home.
     if (!project?.workingRoot) throw failure("OpenCode session needs a project directory");
-    if (remoteNode(project)) requireHarnessOn(this.nodeHub, remoteNode(project), "opencode", "OpenCode");
+    this.processes(remoteNode(project)).require("opencode", "OpenCode");
     const session = await this.request("POST", "/session", { on: remoteNode(project),
       body: { location: { directory: project.workingRoot }, ...(selected ? { model: selected } : {}) },
     });
@@ -368,7 +338,7 @@ export class OpenCodeAdapter extends EventEmitter {
     if (existing) return existing;
     const sessionId = typeof opaqueSession === "string" ? opaqueSession : opaqueSession?.threadId;
     if (!sessionId) throw failure("OpenCode session identity is missing");
-    if (remoteNode(project)) requireHarnessOn(this.nodeHub, remoteNode(project), "opencode", "OpenCode");
+    this.processes(remoteNode(project)).require("opencode", "OpenCode");
     const session = await this.request("GET", `/session/${encodeURIComponent(sessionId)}`, { on: remoteNode(project) });
     const record = this.record({ chatId, project, session, permissionMode });
     if (model && model !== record.model) await this.setModel(record.id, model, thinkingLevel);

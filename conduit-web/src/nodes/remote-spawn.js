@@ -98,22 +98,6 @@ export function execOnDevice(hub, nodeId, { harness, args, place, env = {}, time
   });
 }
 
-/**
- * How an adapter runs its harness for one chat: `spawn` and `execFile` with
- * the shapes Node's give, here or on the chat's device. On a device the
- * command is the harness's name -- the device runs its own install -- and
- * only the variables the adapter added to this server's environment go along.
- */
-export function harnessProcesses({ hub, nodeId, place, harness }) {
-  const added = (env) => Object.fromEntries(Object.entries(env || {})
-    .filter(([key, value]) => value !== undefined && process.env[key] !== value));
-  return {
-    spawn: (_command, args = [], options = {}) => spawnOnDevice(hub, nodeId, { harness, args, place, env: added(options.env) }),
-    execFile: (_command, args = [], options = {}) => execOnDevice(hub, nodeId,
-      { harness, args, place, env: added(options.env), timeout: options.timeout || 0 }),
-  };
-}
-
 /** Refuse a device chat whose device is away or lacks the harness, before anything starts. */
 export function requireHarnessOn(hub, nodeId, harness, label) {
   if (hub?.live.get(nodeId)?.harnesses?.includes(harness)) return;

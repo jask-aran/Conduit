@@ -14,9 +14,10 @@ import { conduitCategories } from "./context-categories.js";
 import { claudePlanUsage, declarePlan } from "./plan-usage.js";
 import { unsupported } from "./harnesses/unsupported.js";
 import { within } from "./server/effect-concurrency.js";
-import { BACKGROUND_CONTEXT, withAbortSignal } from "@earendil-works/chord/context";
 import { attachmentForDevice } from "./nodes/device-attachments.js";
-import { harnessLaunch, opaqueSessionOf, requireHarnessOn, spawnOnDevice } from "./nodes/remote-spawn.js";
+import { opaqueSessionOf } from "./nodes/remote-spawn.js";
+import { placeProcesses } from "./nodes/place-processes.js";
+import { claudeSession } from "./nodes/node-harnesses.js";
 
 // Claude Code's tools, by what they do.
 const CLAUDE_TOOL_KINDS = Object.freeze({
@@ -162,18 +163,8 @@ const requestUsage = (usage) => {
  * A steer is saved as the command it was queued as, and read back as the
  * prompt it became.
  */
-async function readSessionText(sessionId) {
-  const root = path.join(process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), ".claude"), "projects");
-  let dirs = [];
-  try { dirs = await fs.promises.readdir(root); } catch { return null; }
-  for (const dir of dirs) {
-    try { return await fs.promises.readFile(path.join(root, dir, `${sessionId}.jsonl`), "utf8"); } catch { /* not this project */ }
-  }
-  return null;
-}
-
 async function readSavedSession(sessionId) {
-  const text = await readSessionText(sessionId);
+  const text = await claudeSession(sessionId);
   return text === null ? null : parseSavedSession(text);
 }
 
@@ -437,7 +428,7 @@ export class ClaudeCodeAdapter extends EventEmitter {
   async start({ chatId, project, model = "", thinkingLevel = "", permissionMode = "", sessionId, resume = false }) {
     const existing = this.getByChatId(chatId);
     if (existing) return existing;
-    if (remoteNode(project)) requireHarnessOn(this.nodeHub, remoteNode(project), "claude-code", "Claude Code");
+    this.processes({ nodeId: remoteNode(project) }).require("claude-code", "Claude Code");
     const record = this.sessions.add({
       id: crypto.randomUUID(), chatId, projectId: project?.id || null,
       nodeId: remoteNode(project), place: project?.place || null,
@@ -511,10 +502,11 @@ export class ClaudeCodeAdapter extends EventEmitter {
       thinking: { type: "adaptive", display: "summarized" },
       canUseTool: (toolName, input, options) => this.canUseTool(record, toolName, input, options),
       stderr: (data) => { record.stderr = `${record.stderr}${data}`.slice(-8_192); },
-      ...(record.nodeId ? { spawnClaudeCodeProcess: (spawn) => spawnOnDevice(this.nodeHub, record.nodeId, {
-        harness: "claude-code", ...harnessLaunch(spawn), place: record.place, signal: spawn.signal,
-        onStderr: (data) => { record.stderr = `${record.stderr}${data}`.slice(-8_192); },
-      }) } : {}),
+      // Where the chat runs: the SDK spawns its own process here, a device runs its own install.
+      ...(() => {
+        const spawn = this.processes(record).sdkSpawn?.("claude-code", (data) => { record.stderr = `${record.stderr}${data}`.slice(-8_192); });
+        return spawn ? { spawnClaudeCodeProcess: spawn } : {};
+      })(),
     } });
     void this.consume(record, query);
     return query.initializationResult();
@@ -1046,14 +1038,11 @@ export class ClaudeCodeAdapter extends EventEmitter {
     return (await readSavedSession(sessionId)) ?? this.sdk.getSessionMessages(sessionId).catch(() => []);
   }
 
-  /** A session's saved file, as text: here, or asked of the device that ran it (null offline or missing). */
-  async sessionText(sessionId, nodeId = null) {
-    if (!nodeId) return readSessionText(sessionId);
-    if (!this.nodeHub?.live.get(nodeId)?.ready) return null;
-    const result = await this.nodeHub.call(nodeId, { target: "harness", method: "claudeSession", args: [sessionId], cwd: null },
-      withAbortSignal(AbortSignal.timeout(20_000), BACKGROUND_CONTEXT));
-    return result?.ok ? result.value : null;
-  }
+  /** Claude Code's processes in a place (`{ nodeId, place }`; none is this server). */
+  processes(on) { return placeProcesses(this.nodeHub, on || {}); }
+
+  /** A session's saved file, as text, read where it ran (null offline or missing). */
+  sessionText(sessionId, nodeId = null) { return this.processes({ nodeId }).read("claudeSession", sessionId); }
 
   finish(record, result = {}) {
     if (!record.active) return;

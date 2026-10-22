@@ -1,8 +1,7 @@
 import { Type } from "@earendil-works/pi-ai";
 import { defineExtension, defineTool } from "@earendil-works/pi-durable";
-import { NodeExecutionEnv } from "@earendil-works/pi-durable/env/node";
 import { CodingTools } from "@earendil-works/pi-durable/tools";
-import { RemoteExecutionEnv } from "../nodes/remote-env.js";
+import { placeProcesses } from "../nodes/place-processes.js";
 
 /**
  * Tools that pick their device per call (plan decision 21): for a
@@ -53,8 +52,7 @@ export async function deviceEnv(runtime, conversationId, name, folder) {
     ? device.roots.find((item) => [item.path, item.label, item.id].includes(folder))
     : device.roots[0];
   if (!root) throw new Error(folder ? `${device.name} shares no folder ${JSON.stringify(folder)}` : `${device.name} shares no folders`);
-  const cwd = root.path || root.label;
-  if (device.local) return new NodeExecutionEnv({ cwd, shellEnv: runtime.shellEnv });
-  return new RemoteExecutionEnv({ hub: runtime.nodeHub, nodeId: device.nodeId, place: { root: root.id, path: "" }, cwd,
-    onWait: (waiting) => runtime.emitWaiting(conversationId, waiting), excuse: runtime.excuseFor(conversationId, device.nodeId) });
+  return placeProcesses(runtime.nodeHub, device.local ? {} : { nodeId: device.nodeId, place: { root: root.id, path: "" } })
+    .env({ cwd: root.path || root.label, shellEnv: runtime.shellEnv,
+      onWait: (waiting) => runtime.emitWaiting(conversationId, waiting), excuse: runtime.excuseFor(conversationId, device.nodeId) });
 }

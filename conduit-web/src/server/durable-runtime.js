@@ -2,14 +2,13 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { loadPiExtensionTools } from "./pi-extension-bridge.js";
-import { RemoteExecutionEnv } from "../nodes/remote-env.js";
+import { placeProcesses } from "../nodes/place-processes.js";
 import { DeviceTools, deviceEnv } from "./device-tools.js";
 import { Handoff, Subagents } from "./subagents.js";
 import { awaitWithContext, BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import { Type } from "@earendil-works/pi-ai";
 import { createRegistry, defineDoc, defineExtension, defineTool, Harness, section } from "@earendil-works/pi-durable";
 import { answerTo, isDismissal, questionRequest } from "../harnesses/questions.js";
-import { NodeExecutionEnv } from "@earendil-works/pi-durable/env/node";
 import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node";
 import { CodingTools } from "@earendil-works/pi-durable/tools";
 import { createCodemodeExtension } from "@earendil-works/pi-durable/codemode";
@@ -228,11 +227,8 @@ export class DurableRuntime {
           const { nodeId, place } = (await read.snapshot(ConduitWorkspace, conversationId, context)) || {};
           // A conversation on a node never falls back to this machine's disk.
           if (nodeId && (!place || !this.nodeHub)) throw new Error("This conversation's device folder is not known; open it from its workspace again");
-          if (nodeId) {
-            return new RemoteExecutionEnv({ hub: this.nodeHub, nodeId, place, cwd,
-              onWait: (device) => this.emitWaiting(conversationId, device), excuse: this.excuseFor(conversationId, nodeId) });
-          }
-          return new NodeExecutionEnv({ cwd: cwd || process.cwd(), shellEnv });
+          return placeProcesses(this.nodeHub, { nodeId, place }).env({ cwd, shellEnv,
+            onWait: (device) => this.emitWaiting(conversationId, device), excuse: nodeId ? this.excuseFor(conversationId, nodeId) : null });
         },
         settings: {
           // A partial is committed, and so drawn, this often. The default 100ms
