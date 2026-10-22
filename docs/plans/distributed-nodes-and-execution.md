@@ -310,9 +310,9 @@ starts elsewhere.
    Device terminals start, reattach and are killed through its `shells`;
    this server's own stay tmux sessions, since both must outlive it.)*
    *Device terminals (2026-10-22):* besides a terminal in a mounted
-   workspace, a device's owner can allow a terminal in their home outside
-   any shared folder (`conduit-node terminal on`); `device:<nodeId>` is that
-   place, as `computer` is this server's, opened from Settings › Devices.
+   workspace, an environment with any folder shared with commands offers a
+   terminal in its home (decision 27); `device:<nodeId>` is that place, as
+   `computer` is this server's, opened from Settings › Devices.
 5. Pi 1.3.0 is not generalised: milestone 5 retires it as the default.
 
 ## Milestones
