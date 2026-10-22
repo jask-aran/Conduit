@@ -92,7 +92,8 @@ export function createMeteorField() {
       const moved = new ResizeObserver(measure);
       moved.observe(frame.parentElement ?? frame);
       if (shell) moved.observe(shell);
-      measure();
+      // No read now: the observers' first call comes after the layout, before the paint. One here forced the
+      // whole new pane's layout inside the click that opened it.
       onCleanup(() => { moved.disconnect(); if (--watchers === 0) window.clearTimeout(timer); });
     });
     return <div ref={frame} class="solid-meteor-shower" style={{ width: `${shellWidth()}px`, transform: `translateX(${-offset()}px)` }}>
