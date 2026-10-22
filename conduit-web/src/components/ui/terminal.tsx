@@ -43,9 +43,11 @@ export function TermStatus(props: Omit<JSX.HTMLAttributes<HTMLDivElement>, "clas
     <Show when={local.label}><small>{local.label}</small></Show>
   </div>;
 }
-/** Status, a strong title and muted context, followed by the caller's controls. */
-export function TermIdentity(props: Omit<JSX.HTMLAttributes<HTMLDivElement>, "class">) {
-  return <div {...props} class="ui-term-identity" />;
+/** Status, a strong title and muted context, followed by the caller's controls. end: what closes the line at its far
+ *  end (a pane's own actions, when the terminal is a pane's document). */
+export function TermIdentity(props: Omit<JSX.HTMLAttributes<HTMLDivElement>, "class"> & { end?: JSX.Element }) {
+  const [local, rest] = splitProps(props, ["children", "end"]);
+  return <div {...rest} class="ui-term-identity">{local.children}<Show when={local.end}><span class="ui-term-identity-end">{local.end}</span></Show></div>;
 }
 /** A context line that truncates within the identity. */
 export const TermContext = (props: { children: JSX.Element }) => <span class="ui-term-context">{props.children}</span>;

@@ -106,3 +106,6 @@
 
 /* Opening (its chat still arriving): the riders and edit pills keep their room, unseen; the row stays. */
 .ui-phone-composer[data-opening] :is(.ui-composer-stack, .ui-phone-edit) { visibility: hidden; }
+
+/* Captions are the draft's words: the transcript's face. */
+.ui-voice-captions { font-family: var(--font-transcript); }

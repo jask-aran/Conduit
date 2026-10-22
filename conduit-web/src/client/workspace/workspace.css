@@ -136,6 +136,5 @@
 /* A shell as a pane's document: the terminal fills the pane, its header
    carrying the pane's swap and close. */
 .pane-terminal { display: flex; min-width: 0; min-height: 0; flex: 1; flex-direction: column; overflow: hidden; border-radius: inherit; }
-.pane-terminal .ui-term-identity .ui-pane-actions { margin-left: auto; }
 .pane-terminal-gone { display: flex; align-items: center; justify-content: space-between; gap: var(--space-md); padding: var(--space-xl) var(--space-2xl); color: var(--muted-foreground); font-size: var(--text-body); }
 body.panes-settling :is(.chat-main, .main-split) { transition: flex-grow var(--duration-fold) var(--ease-fold), margin var(--duration-fold) var(--ease-fold); }

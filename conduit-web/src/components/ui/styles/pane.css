@@ -177,3 +177,7 @@
   .ui-tree-row { min-height: var(--control); gap: var(--space-sm); font-size: var(--text-row); }
   .ui-tree-row > svg, .ui-tree-row > img, .ui-tree-row > .ui-tree-chevron { width: var(--icon-sm); height: var(--icon-sm); }
 }
+/* The tree scrolls on the native bar, its thumb the shared one. */
+.ui-tree { scrollbar-color: var(--native-scrollbar-color); scrollbar-width: var(--native-scrollbar-width); }
+.ui-tree::-webkit-scrollbar { width: var(--space-sm); height: var(--space-sm); }
+.ui-tree::-webkit-scrollbar-thumb { border: var(--stroke) solid transparent; border-radius: var(--radius-round); background: color-mix(in oklch, var(--foreground), transparent 72%); background-clip: padding-box; }

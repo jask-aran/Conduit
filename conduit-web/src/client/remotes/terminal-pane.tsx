@@ -1144,11 +1144,10 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
           </TermButton>
         </TermLead>
       </Show>
-      <TermIdentity>
+      <TermIdentity end={props.headerActions}>
         <TermStatus tone={headerStatus().tone} busy={headerStatus().tone === "busy"} label={headerStatus().label} title={headerStatus().title} aria-label={headerStatus().title} />
         <Show when={pty()?.title}><strong>{pty()!.title}</strong></Show>
         <TermContext>{[props.projectName || "Chats", pty()?.currentCommand].filter(Boolean).join(" · ")}</TermContext>
-        {props.headerActions}
       </TermIdentity>
       <TermShortcuts aria-label="Terminal shortcuts">
         <For each={shortcuts()}>{(shortcut) =>
