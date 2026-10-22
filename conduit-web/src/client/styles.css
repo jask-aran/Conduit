@@ -118,6 +118,8 @@ svg.lucide { stroke-width: 2.4; }
 /* A first send waiting on its agent (main.tsx): docked, with no welcome. */
 .chat-main-sending .empty-thread { visibility: hidden; }
 .chat-main-empty .composer-stack { position: absolute; inset-inline: 0; top: 50%; z-index: 2; width: min(var(--reading-width), calc(100% - var(--page-gutter))); margin-inline: auto; padding: 0; transform: translateY(var(--header-height)); background: transparent; }
+/* A chat still arriving (reattaching) waits unseen; its composer shows its field alone (Composer opening). */
+.chat-main-live-opening .transcript { visibility: hidden; }
 .chat-bootstrap { display: grid; min-height: 100%; place-items: center; color: var(--muted-foreground); font-size: var(--text-row); }
 
 .ui-tree, .ui-change-list, .ui-patch { scrollbar-color: var(--native-scrollbar-color); scrollbar-width: var(--native-scrollbar-width); }
@@ -196,9 +198,6 @@ svg.lucide { stroke-width: 2.4; }
   html { font-size: calc(16px * var(--ui-scale)); }
 .markdown-skeleton { min-height: 5em; }
 .chat-drop-overlay { backdrop-filter: blur(12px); }
-.chat-main-live-opening .transcript { visibility: hidden; }
-/* Opening a chat in a pane: its composer shows only its field until the chat is there. */
-.chat-main-live-opening :is(.ui-toolbar, .ui-composer-stack > :not(.ui-desktop-composer)) { visibility: hidden; }
   /* The phone shell owns the full visual viewport. Desktop's inset frame
      disappears here; safe-area padding belongs to the controls that touch
      each edge. */

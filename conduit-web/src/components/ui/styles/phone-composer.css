@@ -103,3 +103,6 @@
   .ui-pill[data-solo], .ui-aura, .ui-phone-field, .ui-phone-field > *, .ui-pill-room, .ui-voice-track, .ui-voice-track > .ui-pill-wave, .ui-phone-edit > .ui-pill, .ui-phone-row > .ui-pill { transition: none !important; }
   .ui-voice-captions, .ui-captions > span { animation: none; }
 }
+
+/* Opening (its chat still arriving): the riders and edit pills keep their room, unseen; the row stays. */
+.ui-phone-composer[data-opening] :is(.ui-composer-stack, .ui-phone-edit) { visibility: hidden; }
