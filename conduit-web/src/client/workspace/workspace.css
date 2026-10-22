@@ -8,5 +8,3 @@
 @media (--conduit-phone-layout) {
   [data-region="workspace-rail"] { display: none; }
 }
-/* A terminal pane whose shell has ended. */
-.pane-terminal-gone { display: flex; align-items: center; justify-content: space-between; gap: var(--space-md); padding: var(--space-xl) var(--space-2xl); color: var(--muted-foreground); font-size: var(--text-body); }

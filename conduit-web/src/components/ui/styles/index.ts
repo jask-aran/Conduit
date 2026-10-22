@@ -17,8 +17,8 @@
  *   reading         Reading: a gauge's totals, parts, figures and foot
  *   nav             NavPane > NavGroup > NavRow, NavFolder, RailButton
  *   dashboard       Dashboard, DashHeader, Group (GroupHeading), DashRow, ChangeRow, FolderShelf
- *   shell           AppShell > Sheet, SheetFill; Dock > DockSurface, DockDocument; ToolContent
- *   pane            PaneTabRow > TabPlace > PaneTab, PaneAction, PaneEdge, DropWash, DragPill, ToolRail, ToolHeader,
+ *   shell           AppShell > Sheet (its backdrop), SheetFill; Dock > DockSurface, DockDocument; ToolContent
+ *   pane            PaneTabRow > TabPlace > PaneTab, PaneAction, PaneEdge, DropWash, DropOverlay, DragPill, ToolRail, ToolHeader,
  *                   ToolBar, ToolButton, ToolFilter, ToolNotice, Tree > TreeRow
  *   source          SourceView > SourceOverview | SourcePatch; ToolLine, CommitBox, ChangeLedger > ChangeSection >
  *                   ChangeList > ChangeItem, ChangeNav, CommitList, PatchLines
@@ -27,7 +27,7 @@
  *   file, viewer    FilesPane > FilesTree; FileView > FileHead, FileBody, StatusBar; FileViewer's sides; FileImage, FileMedia, FileCard
  *   editor          CodeSurface > CodeHost, SearchBar, AnnotationPopup, Comparison, DiffShell
  *   header          Header, HeaderCrumb, HeaderButton, HeaderNote
- *   card, toast     Card; Toast
+ *   card, toast     Card, Notice; Toast
  *   overlay         Scrim > Overlay (Bar, List, Split, Hints, Rail, Page), Settings, Glance
  *   leader          Leader, Crumbs, Spotlight
  *   pill            Pill*, Aura

@@ -1,4 +1,4 @@
-import { splitProps, type JSX } from "solid-js";
+import { Show, splitProps, type JSX } from "solid-js";
 import { Dynamic } from "solid-js/web";
 import { cn } from "@/lib/utils";
 
@@ -20,11 +20,15 @@ export function AppShell(props: JSX.HTMLAttributes<HTMLDivElement> & { settling?
  *  holds; a split pane's edge stands out of it). docked: a split pane moved into the dock, filling it ("hidden": docked
  *  while the dock shows another). under: the dock, expanded, covers it. On a phone the main pane is the whole screen
  *  and the others are not drawn. A sheet is a size container: what it holds is measured by its width. Its weight and
- *  min-width are the app's, as inline style. */
-export function Sheet(props: JSX.HTMLAttributes<HTMLElement> & { as?: "main" | "section"; lead?: boolean; docked?: boolean | "hidden"; under?: boolean }) {
-  const [local, rest] = splitProps(props, ["as", "class", "lead", "docked", "under"]);
+ *  min-width are the app's, as inline style. backdrop: what is drawn on its ground, under everything it holds (the
+ *  meteor field), never taking the pointer. */
+export function Sheet(props: JSX.HTMLAttributes<HTMLElement> & { as?: "main" | "section"; lead?: boolean; docked?: boolean | "hidden"; under?: boolean; backdrop?: JSX.Element }) {
+  const [local, rest] = splitProps(props, ["as", "class", "lead", "docked", "under", "backdrop", "children"]);
   return <Dynamic component={local.as ?? "section"} {...rest} class={cn("ui-sheet", local.class)} data-lead={local.lead ? "" : undefined}
-    data-docked={local.docked === "hidden" ? "hidden" : local.docked ? "" : undefined} data-under={local.under ? "" : undefined} />;
+    data-docked={local.docked === "hidden" ? "hidden" : local.docked ? "" : undefined} data-under={local.under ? "" : undefined}>
+    <Show when={local.backdrop}><div class="ui-sheet-backdrop" aria-hidden="true">{local.backdrop}</div></Show>
+    {local.children}
+  </Dynamic>;
 }
 
 /** What fills a sheet edge to edge, measured by its own width: a split pane's chat or page, a tool, a terminal, a

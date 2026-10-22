@@ -1,3 +1,5 @@
+import { DefaultMeteorShower } from "@jask-aran/solid-components/meteor-shower";
+import "@jask-aran/solid-components/meteor-shower.css";
 import { AppShell, Dock, DockSurface, Header, HeaderCrumb, PaneEdge, Sheet, SheetFill, ToolContent, ToolHeader } from "@/components/ui";
 import { row, token, type Page } from "../model";
 
@@ -38,6 +40,7 @@ export const shellPage: Page = {
     row("split", "a pane split from the main one", () => scene({ split: true }), { surfaces: ["ground"], source: "main.tsx" }),
     row("dock beside", "the dock taking room in the row", () => scene({ dock: "open" }), { surfaces: ["ground"], code: "<Dock open>", source: "workspace/workspace-panel.tsx" }),
     row("dock over", "the dock floating over the panes", () => scene({ dock: "overlay" }), { surfaces: ["ground"], code: "<Dock open overlay>", source: "workspace/workspace-panel.tsx" }),
+    row("backdrop", "the main pane's ground drawn on: the meteor field, under everything it holds", () => <div class="g-shell" style={{ height: "calc(20 * var(--u-space) + var(--space-xl))" }}><AppShell><Sheet as="main" lead backdrop={<DefaultMeteorShower />} style={tall}><Header><HeaderCrumb title="Conduit" /></Header></Sheet></AppShell></div>, { surfaces: ["ground"], code: "<Sheet lead backdrop={<DefaultMeteorShower />}>", source: "main.tsx" }),
     row("dock expanded", "the dock covering the panes; the main pane under it", () => scene({ dock: "expanded" }), { surfaces: ["ground"], code: "<Dock open expanded> · <Sheet under>" }),
   ],
   tokens: [{ title: "The sheets", tokens: [

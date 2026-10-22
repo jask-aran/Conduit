@@ -181,3 +181,7 @@
 .ui-tree { scrollbar-color: var(--native-scrollbar-color); scrollbar-width: var(--native-scrollbar-width); }
 .ui-tree::-webkit-scrollbar { width: var(--space-sm); height: var(--space-sm); }
 .ui-tree::-webkit-scrollbar-thumb { border: var(--stroke) solid transparent; border-radius: var(--radius-round); background: color-mix(in oklch, var(--foreground), transparent 72%); background-clip: padding-box; }
+
+/* DropOverlay: over the pane's content (its own stacking), the card at its centre. */
+.ui-drop-overlay { position: absolute; inset: 0; z-index: var(--layer-drop); display: grid; place-items: center; pointer-events: none; background: var(--fog); backdrop-filter: var(--fog-blur); }
+.ui-drop-overlay-card { padding: var(--space-xl) var(--space-2xl); border-radius: var(--radius-surface); font-size: var(--text-row); }
