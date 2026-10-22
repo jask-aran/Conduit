@@ -12,7 +12,8 @@ import { duration } from "./motion";
  * under: a menu opened from one of the row's pills (PillButton open) is over it; the rest dims at once, as a menu under its submenu.
  * layout: bar (the default: each pill its own frost, the mic stretched) or surface (the row one frost capsule, its pills slots in it,
  * the mic at its end; listening, an Aura fills the capsule under the track). riders: Riders over the field, as on a
- * DesktopComposer's top edge (queued messages, attachments, a question).
+ * DesktopComposer's top edge (queued messages, attachments, a question). opening: its chat is still arriving
+ * (reattaching), so its riders and edit pills keep their room unseen; the row, which is the field's way in, stays.
  */
 export type VoiceMode = "idle" | "typing" | "listening";
 /** PhoneComposer's parts, as its state table names them: the field, the row's pills (not the mic or Send, which are
@@ -27,7 +28,7 @@ export const PHONE_COMPOSER_STATES = {
   listening: ["track", "captions", "orb"],
 } as const satisfies Record<string, readonly PhonePart[]>;
 export type PhoneState = keyof typeof PHONE_COMPOSER_STATES;
-export function PhoneComposer(props: { mode: VoiceMode; riders?: JSX.Element; layout?: "bar" | "surface"; field: JSX.Element; track?: JSX.Element; onTrack?: () => void; captions?: JSX.Element; edit?: JSX.Element; editing?: boolean; under?: boolean; level?: number; children: JSX.Element }) {
+export function PhoneComposer(props: { mode: VoiceMode; riders?: JSX.Element; layout?: "bar" | "surface"; field: JSX.Element; track?: JSX.Element; onTrack?: () => void; captions?: JSX.Element; edit?: JSX.Element; editing?: boolean; under?: boolean; level?: number; children: JSX.Element ; opening?: boolean}) {
   const edit = children(() => props.edit);
   const state = (): PhoneState => props.mode === "typing" && props.editing ? "editing" : props.mode;
   const shows = (part: PhonePart) => (PHONE_COMPOSER_STATES[state()] as readonly PhonePart[]).includes(part);
@@ -38,7 +39,7 @@ export function PhoneComposer(props: { mode: VoiceMode; riders?: JSX.Element; la
   // The field's height, kept on the root: the captions' words going are clipped above it (it grows as the transcript lands).
   onMount(() => { const observer = new ResizeObserver(() => root.style.setProperty("--under-field", `${fieldBox.offsetHeight}px`)); observer.observe(fieldBox); onCleanup(() => observer.disconnect()); });
   const surface = () => props.layout === "surface";
-  return <div ref={root} class="ui-phone-composer" data-state={state()} data-show={PHONE_COMPOSER_STATES[state()].join(" ")} data-layout={surface() ? "surface" : undefined} data-under={props.under ? "" : undefined} style={{ "--voice-level": shows("orb") && props.level !== undefined ? String(props.level) : undefined }}>
+  return <div ref={root} class="ui-phone-composer" data-state={state()} data-show={PHONE_COMPOSER_STATES[state()].join(" ")} data-layout={surface() ? "surface" : undefined} data-under={props.under ? "" : undefined} data-opening={props.opening ? "" : undefined} style={{ "--voice-level": shows("orb") && props.level !== undefined ? String(props.level) : undefined }}>
     <div class="ui-composer-stack">{props.riders}</div>
     <Show when={edit()}><div class="ui-phone-edit" aria-hidden={shows("edit") ? undefined : "true"}>{edit()}</div></Show>
     <Show when={captions()}><div class="ui-voice-captions" aria-live="polite" data-leaving={shows("captions") ? undefined : ""} onAnimationEnd={(event) => { if (event.target === event.currentTarget && !shows("captions")) setCaptions(false); }}>{props.captions}</div></Show>

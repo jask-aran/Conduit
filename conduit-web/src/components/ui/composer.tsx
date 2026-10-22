@@ -15,10 +15,11 @@ import type { Motion } from "./shared";
  * the pane's to declare (--composer-width).
  */
 /** takeover: a card Rider (the question) that takes the composer's place: the composer drops out of the pane but
- *  keeps its room, and the card rises into the slot. */
-export function DesktopComposer(props: { riders?: JSX.Element; takeover?: JSX.Element; class?: string; children: JSX.Element }) {
+ *  keeps its room, and the card rises into the slot. opening: its chat is still arriving (reattaching), so only the
+ *  field shows; its toolbar and riders keep their room, unseen. */
+export function DesktopComposer(props: { riders?: JSX.Element; takeover?: JSX.Element; opening?: boolean; class?: string; children: JSX.Element }) {
   const takeover = children(() => props.takeover);
-  return <div class="ui-composer-slot ui-composer-width" data-taken={takeover() ? "" : undefined}>
+  return <div class="ui-composer-slot ui-composer-width" data-taken={takeover() ? "" : undefined} data-opening={props.opening ? "" : undefined}>
     <div class="ui-composer-stack">{props.riders}<Frost class={cn("ui-desktop-composer", props.class)}>{props.children}</Frost></div>{takeover()}</div>;
 }
 /** The voice while dictating, riding just over the composer: a PillWave across a wave Rider, an Aura glowing under it

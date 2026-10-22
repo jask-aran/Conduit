@@ -70,3 +70,9 @@
 .ui-picker > .ui-picker-quiet { flex: none; color: var(--muted-foreground); font-weight: var(--weight-rest); }
 .ui-picker > :is(svg, .ui-harness-mark) { width: var(--icon-sm); height: var(--icon-sm); flex: none; }
 .ui-picker > .ui-picker-chevron { color: var(--muted-foreground); }
+
+/* Opening (its chat still arriving): the field alone; the toolbar and riders keep their room, unseen. */
+.ui-composer-slot[data-opening] :is(.ui-toolbar, .ui-composer-stack > :not(.ui-desktop-composer)) { visibility: hidden; }
+
+/* The field writes in the transcript's face, so a draft reads as it will in the transcript. */
+.ui-composer-field > textarea { font-family: var(--font-transcript); }

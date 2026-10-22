@@ -37,20 +37,7 @@
 }
 
 
-/* Phone mode retains the larger touch density. */
-@media (--conduit-phone-layout) {
-
-/* Performance rebuild: keep the composer as a later-painted sibling of the
-   transcript. The transcript remains the v0.4.7 layout/paint island while the
-   composer overlays its bottom edge without becoming part of the scroll or
-   panel-motion subtree. */
-:is(.chat-main:not(.chat-main-empty), .main-split-chat) .thread { padding-bottom: var(--transcript-composer-inset, 184px); }
-:is(.chat-main:not(.chat-main-empty), .main-split-chat) .composer-stack {
-  padding: var(--space-xl) 44px var(--space-3xl);
-  background: transparent;
-}
-
-
+/* A phone: the composer on its own gradient over the transcript's foot, clear of the safe area. */
 @media (--conduit-phone-layout) {
   :is(.chat-main:not(.chat-main-empty), .main-split-chat) .thread { padding-bottom: var(--transcript-composer-inset, 160px); }
   :is(.chat-main:not(.chat-main-empty), .main-split-chat) .composer-stack {
@@ -58,5 +45,4 @@
     background: linear-gradient(to top, var(--background) calc(var(--space-lg) + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))),
       transparent calc(var(--space-4xl) + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))));
   }
-}
 }
