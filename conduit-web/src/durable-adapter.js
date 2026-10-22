@@ -3,6 +3,7 @@ import crypto from "node:crypto";
 import { answerTo, isDismissal, questionRequest } from "./harnesses/questions.js";
 import fs from "node:fs/promises";
 import { attachmentForDevice } from "./nodes/device-attachments.js";
+import { withConduitNote } from "./attachment-envelope.js";
 import { EventEmitter } from "node:events";
 import { getSupportedThinkingLevels } from "@earendil-works/pi-ai";
 import { watchEvents } from "@earendil-works/pi-durable";
@@ -50,6 +51,14 @@ export const DURABLE_CAPABILITIES = Object.freeze({
   attachments: true,
   interruptKeepsPartial: false,
 });
+
+/**
+ * What the model is told on the turn after a stop, as classic Pi was. A stopped
+ * tool is filed as an aborted one and nothing else says a person did it, so
+ * without this the next turn blames the system.
+ */
+const STOPPED_NOTE = "The user stopped your previous response before it finished. "
+  + "Anything it was running was cancelled by that stop, not by an error or by the system.";
 
 const TOOL_KINDS = {
   bash: "command", read: "read", write: "edit", edit: "edit", ask_user: "other",
@@ -471,8 +480,12 @@ export class DurableAdapter extends EventEmitter {
 
   async submit(record, text, messageId, whenBusy, attachments = []) {
     const summary = attachmentSummary(attachments);
+    // A fresh prompt after a stop says so; a steer or follow-up joins the turn it lands in.
+    const afterStop = record.stoppedByUser && !whenBusy;
+    if (!whenBusy) record.stoppedByUser = false;
+    const said = afterStop ? withConduitNote(STOPPED_NOTE, this.expandSkill(record, text)) : this.expandSkill(record, text);
     const submission = await record.conversation.submit({
-      type: "input", content: await promptInput(this.expandSkill(record, text), attachments, { onDevice: Boolean(record.nodeId) }), requestId: messageId, ...(whenBusy ? { whenBusy } : {}),
+      type: "input", content: await promptInput(said, attachments, { onDevice: Boolean(record.nodeId) }), requestId: messageId, ...(whenBusy ? { whenBusy } : {}),
       entry: { kind: USER_ENTRY, data: { messageId, text, timestamp: new Date().toISOString(),
         ...(summary.length ? { attachments: summary } : {}) } },
     }, this.context);
@@ -537,6 +550,8 @@ export class DurableAdapter extends EventEmitter {
       case "compaction_end":
         this.publish(record, { type: "compaction", generationId: record.generation?.id || null, active: false,
           ...(event.error ? { error: event.error } : {}) });
+        // The meter is the compacted context's from here, not the old one's.
+        void this.publishUsage(record).catch(() => {});
         break;
       case "auto_retry_start":
         this.publish(record, { type: "retry", generationId: record.generation?.id || null, active: true,
@@ -768,10 +783,13 @@ export class DurableAdapter extends EventEmitter {
     this.finish(record);
   }
 
-  async cancel(id) {
+  async cancel(id, generationId = null) {
     const record = this.get(id);
     if (!record?.active) return null;
+    // A Stop for a turn that has already ended (from another tab, say) leaves the next one alone.
+    if (generationId && record.generation?.id && generationId !== record.generation.id) return null;
     record.stopping = true;
+    record.stoppedByUser = true;
     record.activity = "stopping";
     this.publish(record, { type: "status", generationId: record.generation?.id || null, phase: "stopping", seq: ++record.generationSeq,
       status: "stopping", activity: "stopping", detail: null });
