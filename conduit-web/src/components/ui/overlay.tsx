@@ -1,3 +1,4 @@
+import { Frost } from "./frost";
 import * as Icons from "./icons";
 import { For, Show, splitProps, type JSX } from "solid-js";
 
@@ -26,8 +27,8 @@ export const Backdrop = (props: { layer: "drawer" | "panel"; label: string; onDi
 /** core: frost on a solid backing, kept for the phone's full-screen overlays should the page behind them be too busy -- off for now.
  *  embedded: inside a behaviour's dialog (OverlayDialog), which carries the role and the name. */
 export function Overlay(props: { label: string; layout?: "stack" | "rail"; core?: boolean; embedded?: boolean; density?: Density; class?: string; style?: JSX.CSSProperties; motion?: Motion; children: JSX.Element }) {
-  return <div role={props.embedded ? undefined : "dialog"} aria-label={props.embedded ? undefined : props.label} class={cn("ui-frost ui-overlay", props.class)} style={props.style} data-layout={props.layout ?? "stack"}
-    data-surface="frost" data-lift="raised" data-core={props.core ? "" : undefined} data-density={props.density} {...motionOf(props.motion)}>{props.children}</div>;
+  return <Frost lift="raised" core={props.core} role={props.embedded ? undefined : "dialog"} aria-label={props.embedded ? undefined : props.label} class={cn("ui-overlay", props.class)} style={props.style} data-layout={props.layout ?? "stack"}
+    data-density={props.density} {...motionOf(props.motion)}>{props.children}</Frost>;
 }
 
 /** The field across the top: a lead (a prompt glyph, a search icon, a back button), chips (OverlayChip: a scope, a view),
@@ -160,7 +161,7 @@ export const GlanceHead = (props: { mark?: JSX.Element; title: string; facts: st
   <For each={props.facts}>{(fact) => <div class="ui-glance-facts" title={fact}>{fact}</div>}</For>
 </>;
 /** The last prompt, as the user's message is drawn, clamped to four lines. */
-export const GlancePrompt = (props: { children: JSX.Element }) => <p class="ui-frost ui-bubble ui-glance-prompt">{props.children}</p>;
+export const GlancePrompt = (props: { children: JSX.Element }) => <Frost as="p" class="ui-bubble ui-glance-prompt">{props.children}</Frost>;
 /** How the turn ended: an orb (the app's), the outcome, how long and what it did. */
 export const GlanceTurn = (props: { orb?: JSX.Element; outcome: string; detail?: string }) =>
   <div class="ui-glance-turn"><Show when={props.orb}><span class="ui-glance-orb">{props.orb}</span></Show><span><b>{props.outcome}</b>{props.detail ? ` · ${props.detail}` : ""}</span></div>;

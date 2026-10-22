@@ -1,3 +1,4 @@
+import { Frost } from "./frost";
 import * as Icons from "./icons";
 import { createSignal, Show, type JSX } from "solid-js";
 
@@ -7,13 +8,13 @@ import { type Density, type Motion, motionOf } from "./shared";
 
 /** size wide: a card that holds content (a list, an excerpt, an editor). close: a × in its corner, for a card with no Cancel. */
 export function Card(props: { title: JSX.Element; detail?: JSX.Element; description?: JSX.Element; embedded?: boolean; class?: string; density?: Density; size?: "wide" | "large" | "split"; close?: boolean | (() => void); closeLabel?: string; closeDisabled?: boolean; actions?: JSX.Element; motion?: Motion; children?: JSX.Element }) {
-  return <div role={props.embedded ? undefined : "dialog"} aria-label={!props.embedded && typeof props.title === "string" ? props.title : undefined} class={cn("ui-frost ui-card", props.class)} data-density={props.density} data-size={props.size} data-close={props.close ? "" : undefined} data-surface="frost" data-lift="raised" {...motionOf(props.motion)}>
+  return <Frost lift="raised" role={props.embedded ? undefined : "dialog"} aria-label={!props.embedded && typeof props.title === "string" ? props.title : undefined} class={cn("ui-card", props.class)} data-density={props.density} data-size={props.size} data-close={props.close ? "" : undefined} {...motionOf(props.motion)}>
     <h3>{props.title}</h3><Show when={props.detail}><p>{props.detail}</p></Show>
     <Show when={props.description}><span class="ui-card-description">{props.description}</span></Show>
     <Show when={props.close}><Button variant="ghost" size="icon-sm" class="ui-card-close" aria-label={props.closeLabel ?? "Close"} disabled={props.closeDisabled} onClick={() => typeof props.close === "function" && props.close()}><Icons.Close /></Button></Show>
     {props.children}
     <Show when={props.actions}><CardActions>{props.actions}</CardActions></Show>
-  </div>;
+  </Frost>;
 }
 
 export const CardActions = (props: { children: JSX.Element }) => <div class="ui-card-actions">{props.children}</div>;

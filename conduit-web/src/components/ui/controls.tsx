@@ -1,3 +1,4 @@
+import { Frost } from "./frost";
 import * as Icons from "./icons";
 import { createEffect, createSignal, createUniqueId, For, Show, splitProps, type JSX } from "solid-js";
 
@@ -74,12 +75,12 @@ export function Segmented<T extends string>(props: { label: string; value: T; op
     const group = event.currentTarget;
     queueMicrotask(() => group.querySelector<HTMLElement>('[aria-checked="true"]')?.focus());
   };
-  return <div id={props.id} role="radiogroup" aria-label={props.label} aria-disabled={props.disabled || undefined} class={props.pill ? "ui-seg ui-frost" : "ui-seg"} data-pill={props.pill ? "" : undefined} data-icons={props.icons || props.pill ? "" : undefined} data-size={props.size}
+  return <Frost plain={!props.pill} id={props.id} role="radiogroup" aria-label={props.label} aria-disabled={props.disabled || undefined} class="ui-seg" data-pill={props.pill ? "" : undefined} data-icons={props.icons || props.pill ? "" : undefined} data-size={props.size}
     style={{ "--segments": props.options.length, "--segment": index() }} onKeyDown={move}>
     <span class="ui-seg-thumb" aria-hidden="true" />
     <For each={props.options}>{(option) => <button type="button" role="radio" aria-checked={option.value === props.value} tabIndex={props.arrows && option.value !== props.value ? -1 : undefined} disabled={props.disabled} aria-label={props.icons || props.pill ? option.label : undefined} title={option.title ?? (props.icons || props.pill ? option.label : undefined)}
       onClick={() => { if (option.value === props.value) return; haptic("select"); props.onChange(option.value); }}>{option.icon}{props.icons || props.pill ? null : <span>{option.label}</span>}{option.count !== undefined && <small>{option.count}</small>}</button>}</For>
-  </div>;
+  </Frost>;
 }
 
 /** A slider's value as a control that opens its levels (a Slider's onOpen, or a menu's submenu trigger). */
