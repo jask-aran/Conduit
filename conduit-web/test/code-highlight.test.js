@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { resolveHighlightLanguage } from "../src/client/chat/code-highlight.ts";
+import { importClient } from "./helpers/client-module.js";
+
+const { resolveHighlightLanguage } = await importClient('export { resolveHighlightLanguage } from "../src/client/chat/code-highlight.ts";');
 
 test("language aliases resolve to the registered grammar", () => {
   assert.equal(resolveHighlightLanguage("TS"), "typescript");
