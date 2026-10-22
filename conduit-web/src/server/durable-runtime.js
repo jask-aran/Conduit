@@ -314,16 +314,16 @@ export class DurableRuntime {
   }
 
   /**
-   * The devices a roaming conversation can work on: this server's and every
-   * paired one, each with the folders it shares and the node that serves them.
+   * Where a roaming conversation can work: this server and every paired
+   * environment, each with the folders it shares. A device with several
+   * environments (Windows and WSL, decision 25) is one entry per environment,
+   * "Jask desktop · WSL", since each serves only its own folders.
    */
   async reachable() {
     if (!this.nodeHub) return [];
-    return (await this.nodeHub.listDevices()).map((device) => {
-      const node = device.nodes.find((item) => item.online) || device.nodes[0] || null;
-      return { name: device.name, local: Boolean(device.local), online: device.nodes.some((item) => item.online),
-        nodeId: node?.id || null, roots: device.nodes.flatMap((item) => item.roots || []) };
-    }).filter((device) => device.nodeId);
+    return (await this.nodeHub.listDevices()).flatMap((device) => device.nodes.map((node) => ({
+      name: device.nodes.length > 1 ? `${device.name} · ${node.name}` : device.name,
+      local: Boolean(node.local), online: Boolean(node.online), nodeId: node.id, roots: node.roots || [] })));
   }
 
   envOn(conversationId, device, folder) { return deviceEnv(this, conversationId, device, folder); }
