@@ -1,3 +1,4 @@
+import { Frost } from "./frost";
 import * as Icons from "./icons";
 import { children, createEffect, createSignal, For, Show, splitProps, type JSX } from "solid-js";
 import { RotateCwIcon } from "lucide-solid";
@@ -12,7 +13,7 @@ import { type Motion, motionOf, moveCursor } from "./shared";
  */
 export function Rider(props: JSX.HTMLAttributes<HTMLDivElement> & { label?: string; layout?: "row" | "strip" | "card" | "wave"; motion?: Motion; children: JSX.Element }) {
   const [local, rest] = splitProps(props, ["label", "layout", "motion", "class", "children"]);
-  return <div role="group" {...rest} class={cn("ui-frost ui-rider", local.class)} data-surface="frost" data-lift="rest" data-layout={local.layout ?? "row"} aria-label={local.label} {...motionOf(local.motion)}>{local.children}</div>;
+  return <Frost role="group" {...rest} class={cn("ui-rider", local.class)} data-layout={local.layout ?? "row"} aria-label={local.label} {...motionOf(local.motion)}>{local.children}</Frost>;
 }
 /** A rider's title; title: what it means, on hover. */
 export const RiderTitle = (props: { title?: string; children: JSX.Element }) => <span class="ui-title-text" title={props.title}>{props.children}</span>;
@@ -22,9 +23,9 @@ export const RiderTitle = (props: { title?: string; children: JSX.Element }) => 
 /** ride: where it floats over what it rides (a transcript above its composer) -- centred, or beside a centred one; the host sets how high (--ride-bottom). */
 export function RiderButton(props: JSX.ButtonHTMLAttributes<HTMLButtonElement> & { icon: JSX.Element; label: string; show?: "icon" | "label"; motion?: Motion; hidden?: boolean; ride?: "centre" | "beside" }) {
   const [local, rest] = splitProps(props, ["icon", "label", "show", "class", "motion", "hidden", "ride"]);
-  return <button type="button" {...rest} {...motionOf(local.motion)} class={cn("ui-frost ui-rider-button", local.class)} data-surface="frost" data-lift="rest" data-labelled={local.show === "label" ? "" : undefined} data-ride={local.ride}
+  return <Frost as="button" type="button" {...rest} {...motionOf(local.motion)} class={cn("ui-rider-button", local.class)} data-labelled={local.show === "label" ? "" : undefined} data-ride={local.ride}
     data-hidden={local.hidden ? "" : undefined} aria-hidden={local.hidden ? "true" : undefined} tabIndex={local.hidden ? -1 : undefined}
-    aria-label={local.show === "label" ? undefined : local.label} title={local.show === "label" ? undefined : local.label}>{local.icon}<Show when={local.show === "label"}><span>{local.label}</span></Show></button>;
+    aria-label={local.show === "label" ? undefined : local.label} title={local.show === "label" ? undefined : local.label}>{local.icon}<Show when={local.show === "label"}><span>{local.label}</span></Show></Frost>;
 }
 export const RiderActions = (props: { stack?: boolean; children: JSX.Element }) => <div class="ui-rider-actions" data-stack={props.stack ? "" : undefined}>{props.children}</div>;
 /** A line of waiting text, one line until opened; it offers to open only when it is really cut short (measured, not

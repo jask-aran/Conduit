@@ -8,11 +8,11 @@
 .ui-tool-line-main > small { color: var(--muted-foreground); font-size: var(--text-caption); }
 
 .ui-commit-box { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-sm); padding: var(--space-md); border-bottom: var(--hairline) solid var(--border); }
-.ui-commit-box > textarea { min-width: 0; min-height: var(--control); max-height: calc(4lh + 2 * var(--space-sm)); resize: none; overflow-y: auto; border: var(--hairline) solid var(--input); border-radius: var(--radius-control); outline: 0; background: var(--tint); padding: var(--space-sm) var(--space-md); color: var(--foreground); font: var(--text-row)/1.4 var(--font-sans); }
+.ui-commit-box > textarea { min-width: 0; min-height: var(--control); max-height: calc(4lh + 2 * var(--space-sm)); resize: none; overflow-y: auto; border: var(--hairline) solid var(--border); border-radius: var(--radius-control); outline: 0; background: var(--tint); padding: var(--space-sm) var(--space-md); color: var(--foreground); font: var(--text-row)/1.4 var(--font-sans); }
 .ui-commit-box > textarea:focus { border-color: var(--ring); }
 .ui-commit-box > textarea::placeholder { color: var(--muted-foreground); }
 .ui-commit-box > button { align-self: start; height: auto; min-height: var(--control); }
-.ui-commit-box > button > small { font: var(--text-label) var(--font-data); opacity: .7; }
+.ui-commit-box > button > small { font: var(--text-label) var(--font-data); opacity: var(--opacity-rest); }
 
 .ui-change-ledger { display: flex; min-height: 0; flex: 1; flex-direction: column; overflow: hidden; container-type: inline-size; }
 .ui-change-ledger > div { display: flex; min-height: 0; flex: 1; flex-direction: column; }

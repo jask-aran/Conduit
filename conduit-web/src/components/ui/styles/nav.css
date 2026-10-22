@@ -16,7 +16,7 @@
 .ui-nav-pane { position: relative; z-index: var(--layer-nav); width: var(--nav-width); flex: none; contain: layout; overflow: hidden; transition: width var(--duration-quick) var(--ease-change); }
 .ui-nav-pane[data-collapsed] { width: var(--nav-rail-width); }
 .ui-nav-pane[data-instant] { transition: none; }
-.ui-nav-pane-body { position: absolute; inset: 0 auto 0 0; display: flex; width: var(--nav-width); flex-direction: column; overflow: hidden; background: var(--sidebar); color: var(--sidebar-foreground); }
+.ui-nav-pane-body { position: absolute; inset: 0 auto 0 0; display: flex; width: var(--nav-width); flex-direction: column; overflow: hidden; background: transparent; color: var(--foreground); }
 .ui-nav-pane[data-folded] .ui-nav-pane-body { width: var(--nav-rail-width); }
 @media (prefers-reduced-motion: reduce) { .ui-nav-pane { transition-duration: 0.01ms; } }
 
@@ -30,7 +30,7 @@
    into layers again). Scroll anchoring is off while a folder slides: every frame of the slide looked like a reason
    to move the scroll, and the rows above jumped. */
 .ui-nav-list { min-height: 0; flex: 1; overflow-y: auto; padding: var(--space-sm) var(--space-md); scrollbar-color: var(--native-scrollbar-color); scrollbar-width: var(--native-scrollbar-width); will-change: scroll-position; overflow-anchor: none; }
-.ui-nav-foot { padding: var(--space-md); border-top: var(--hairline) solid var(--sidebar-border); }
+.ui-nav-foot { padding: var(--space-md); border-top: var(--hairline) solid var(--border); }
 
 .ui-nav-group { display: flex; flex-direction: column; gap: var(--hairline); }
 .ui-nav-list > .ui-nav-group { margin-top: var(--space-lg); }
@@ -53,18 +53,18 @@
 .ui-nav-toggle { display: grid; width: var(--control-xs); height: var(--control-xs); flex: none; margin-right: calc((var(--icon) - var(--control-xs)) / 2); place-items: center; border: 0; border-radius: var(--radius-inset); background: transparent; color: var(--muted-foreground); cursor: pointer; }
 .ui-nav-toggle svg { width: var(--icon); height: var(--icon); transition: rotate var(--duration-quick) var(--ease-change); }
 .ui-nav-toggle[aria-expanded="true"] svg { rotate: 90deg; }
-@media (hover: hover) { .ui-nav-toggle:hover { color: var(--sidebar-accent-foreground); } }
+@media (hover: hover) { .ui-nav-toggle:hover { color: var(--foreground); } }
 
 /* The cursor: the wash and white. Held: the window is away and the cursor waits where it was. */
 /* On a phone a row is never washed by a touch: a tap goes somewhere (the current row says where), and a long press
    opens the row's menu, which says what it is for. Pressed, and while its menu is open (Kobalte's data-expanded on
    its trigger), a row is washed only where a pointer hovers. */
-.ui-nav-row:is(:focus-visible, [data-focus-shown], [data-held], [data-held-within], [data-selected]), .ui-rail-button:is(:focus-visible, [data-held]) { background: var(--sidebar-accent); color: var(--sidebar-accent-foreground); }
-@media (hover: hover) { .ui-nav-row:is(:hover, :focus-visible, :active, [data-focus-shown], [data-held], [data-held-within], [data-selected], [data-expanded]), .ui-rail-button:is(:hover, :focus-visible, :active, [data-held]) { background: var(--sidebar-accent); color: var(--sidebar-accent-foreground); } }
-.ui-nav-row:is([aria-current="page"], [data-within]), .ui-rail-button[aria-current="page"] { color: var(--sidebar-accent-foreground); font-weight: var(--weight-current); }
-.ui-nav-row[data-open] { color: var(--sidebar-accent-foreground); }
-.ui-nav-row:is(:focus-visible, [data-focus-shown], [data-held], [data-held-within], [aria-current="page"], [data-within]) .ui-nav-icon { color: var(--sidebar-accent-foreground); }
-@media (hover: hover) { .ui-nav-row:is(:hover, :focus-visible, :active, [data-focus-shown], [data-held], [data-held-within], [aria-current="page"], [data-within]) .ui-nav-icon { color: var(--sidebar-accent-foreground); } }
+.ui-nav-row:is(:focus-visible, [data-focus-shown], [data-held], [data-held-within], [data-selected]), .ui-rail-button:is(:focus-visible, [data-held]) { background: var(--border); color: var(--foreground); }
+@media (hover: hover) { .ui-nav-row:is(:hover, :focus-visible, :active, [data-focus-shown], [data-held], [data-held-within], [data-selected], [data-expanded]), .ui-rail-button:is(:hover, :focus-visible, :active, [data-held]) { background: var(--border); color: var(--foreground); } }
+.ui-nav-row:is([aria-current="page"], [data-within]), .ui-rail-button[aria-current="page"] { color: var(--foreground); font-weight: var(--weight-current); }
+.ui-nav-row[data-open] { color: var(--foreground); }
+.ui-nav-row:is(:focus-visible, [data-focus-shown], [data-held], [data-held-within], [aria-current="page"], [data-within]) .ui-nav-icon { color: var(--foreground); }
+@media (hover: hover) { .ui-nav-row:is(:hover, :focus-visible, :active, [data-focus-shown], [data-held], [data-held-within], [aria-current="page"], [data-within]) .ui-nav-icon { color: var(--foreground); } }
 :is(.ui-nav-row:is([aria-current="page"], [data-within]), .ui-rail-button[aria-current="page"]) svg.lucide { stroke-width: 3; }
 /* While the keyboard moves the cursor, a row under a still pointer rests until the pointer moves: only the cursor
    is washed. An override, not pointer-events: Chromium keeps :hover on an element that stops taking the pointer. */
@@ -79,7 +79,7 @@
 .ui-nav-row > .ui-nav-icon > .ui-harness-mark { width: var(--icon-sm); height: calc(0.75 * var(--icon-sm)); opacity: var(--opacity-rest); transition: opacity var(--duration-quick) var(--ease-change); }
 .ui-nav-row:is(:focus-visible, [aria-current="page"]) > .ui-nav-icon > .ui-harness-mark { opacity: 1; }
 @media (hover: hover) { .ui-nav-row:is(:hover, :focus-visible, [aria-current="page"]) > .ui-nav-icon > .ui-harness-mark { opacity: 1; } }
-:is(.ui-nav-icon, .ui-rail-button) > .ui-harness-mark-tinted { background-color: var(--sidebar-foreground); }
+:is(.ui-nav-icon, .ui-rail-button) > .ui-harness-mark-tinted { background-color: var(--foreground); }
 .ui-nav-icon > .ui-thread-harness-mark { width: var(--icon); height: var(--icon); }
 .ui-thread-harness-mark[data-lively] { position: relative; transition: color var(--duration-quick) var(--ease-change), opacity var(--duration-quick) var(--ease-change); }
 .ui-thread-harness-mark[data-lively] .ui-harness-mark { transition: background-color var(--duration-quick) var(--ease-change), opacity var(--duration-quick) var(--ease-change); }
@@ -103,7 +103,7 @@
 .ui-nav-note { padding: var(--space-2xs) var(--space-md) var(--space-xs); color: var(--muted-foreground); font-size: var(--text-caption); }
 /* Static: nothing here is worth an animation. */
 .ui-nav-skeleton { display: flex; flex-direction: column; gap: var(--space-md); padding: var(--space-xs) var(--space-md) var(--space-sm); }
-.ui-nav-skeleton > span { height: var(--space-lg); border-radius: var(--radius-inset); background: var(--muted); }
+.ui-nav-skeleton > span { height: var(--space-lg); border-radius: var(--radius-inset); background: var(--border); }
 .ui-nav-skeleton > span:nth-child(2n) { width: 72%; }
 .ui-nav-skeleton > span:nth-child(3n) { width: 58%; }
 
@@ -113,7 +113,7 @@
 .ui-rail-button { position: relative; display: grid; width: var(--control); height: var(--control); flex: none; place-items: center; border: 0; border-radius: var(--radius-control); background: transparent; color: color-mix(in oklch, var(--foreground), transparent var(--tone-strong)); }
 .ui-rail-button svg, .ui-rail-button > :is(.ui-harness-mark, .ui-glyph) { width: var(--icon-lg); height: var(--icon-lg); }
 .ui-rail-button:disabled { cursor: not-allowed; opacity: var(--opacity-disabled); }
-.ui-rail-button:is([data-open], [aria-pressed="true"]) { color: var(--sidebar-accent-foreground); }
+.ui-rail-button:is([data-open], [aria-pressed="true"]) { color: var(--foreground); }
 .ui-rail-button[data-live]::after { position: absolute; right: var(--space-xs); bottom: var(--space-xs); width: var(--space-sm); height: var(--space-sm); border: var(--stroke-thin) solid var(--frame); border-radius: var(--radius-round); background: var(--live); content: ""; }
 
 /* What the app is doing about itself, above the server: hairline and near-monochrome; ready waits on a person. */
@@ -131,7 +131,7 @@
 .ui-nav-pane[data-folded] .ui-nav-list { display: flex; flex-direction: column; align-items: center; }
 .ui-nav-pane[data-folded] .ui-nav-list > :not(.ui-nav-rail) { display: none; }
 .ui-nav-pane[data-folded] .ui-nav-rail { display: flex; }
-.ui-nav-pane[data-folded] :is(.ui-nav-rail, .ui-nav-head > .ui-seg) { animation: ui-nav-rail-in 180ms var(--ease-arrive) both; }
+.ui-nav-pane[data-folded] :is(.ui-nav-rail, .ui-nav-head > .ui-seg) { animation: ui-nav-rail-in var(--duration-quick) var(--ease-arrive) both; }
 .ui-nav-pane[data-folded] .ui-nav-head > .ui-seg { grid-template-columns: none; grid-template-rows: repeat(var(--segments), minmax(0, 1fr)); }
 .ui-nav-pane[data-folded] .ui-nav-head > .ui-seg .ui-seg-thumb { inset: calc(var(--seg-pad) + (100% - 2 * var(--seg-pad)) / var(--segments) * var(--segment)) var(--seg-pad) auto; width: auto; height: calc((100% - 2 * var(--seg-pad)) / var(--segments)); transition: top var(--duration-gentle) var(--ease-arrive); }
 @media (prefers-reduced-motion: reduce) { .ui-nav-pane[data-folded] :is(.ui-nav-rail, .ui-nav-head > .ui-seg) { animation: none; } }

@@ -1,8 +1,9 @@
 import { Icons } from "@/components/ui";
+import { Attachment, Attachments } from "@/components/ui/card";
 import { createSignal, For, onCleanup, onMount, Show } from "solid-js";
 import { isInstalledClient } from "../platform/installed-client.ts";
 
-import type { Attachment } from "../api/contracts";
+import type { Attachment as SentAttachment } from "../api/contracts";
 import type { UploadAttachment } from "../state/attachments";
 import { attachmentUrl } from "../api/transport";
 import { authorizedFetch } from "../api/native-auth-client";
@@ -27,23 +28,18 @@ export function AttachmentImage(props: { src: string }) {
 
 /** Attachments already sent, under their prompt in the transcript. */
 export function AttachmentCards(props: {
-  items: Array<Attachment | UploadAttachment>;
+  items: Array<SentAttachment | UploadAttachment>;
   chatId?: string | null;
   label: string;
 }) {
   return <Show when={props.items.length}>
-    <div class="attachment-tray" data-slot="attachment-group" aria-label={props.label}>
+    <Attachments form="tray" label={props.label}>
       <For each={props.items}>{(item) => {
         const upload = item as UploadAttachment;
         const image = item.type?.startsWith("image/");
         const source = upload.objectUrl || (image && props.chatId ? attachmentUrl(props.chatId, item.id, "?preview=1") : null);
-        return <div data-slot="attachment" data-size="default" class="attachment-card">
-          <span data-slot="attachment-media" class="attachment-media"><Show when={source} fallback={image ? <Icons.Image /> : <Icons.File />}>
-            <AttachmentImage src={source!} />
-          </Show></span>
-          <span class="attachment-copy"><strong>{item.name}</strong><small>{sizeLabel(item.size)}</small></span>
-        </div>;
+        return <Attachment name={item.name} detail={sizeLabel(item.size)} icon={image ? <Icons.Image /> : <Icons.File />} image={source ? <AttachmentImage src={source} /> : undefined} />;
       }}</For>
-    </div>
+    </Attachments>
   </Show>;
 }

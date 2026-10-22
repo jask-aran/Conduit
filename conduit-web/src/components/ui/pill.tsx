@@ -1,3 +1,5 @@
+import { Frost } from "./frost";
+import { reducedMotion } from "./motion";
 import { createSignal, For, mergeProps, onCleanup, onMount, Show, type JSX } from "solid-js";
 import { cn } from "@/lib/utils";
 import { haptic, type Haptic } from "./haptics";
@@ -31,21 +33,21 @@ export function PillButton(props: PillAction & { stretch?: boolean; folded?: boo
   const attrs = mergeProps(() => ({ tabIndex: props.folded ? -1 : undefined }), () => props.button ?? {}, () => props.haptic ? {
     onClick: (event: MouseEvent) => { haptic(props.haptic!); const click = props.button?.onClick; if (typeof click === "function") (click as (event: MouseEvent) => void)(event); },
   } : {}) as PillAttrs;
-  const pill = <div class="ui-frost ui-pill" data-solo="" data-stretch={props.stretch ? "" : undefined} data-folded={props.folded ? "" : undefined} data-voice={props.voice || mic ? "" : undefined} data-open={props.open ? "" : undefined}
+  const pill = <Frost class="ui-pill" data-solo="" data-stretch={props.stretch ? "" : undefined} data-folded={props.folded ? "" : undefined} data-voice={props.voice || mic ? "" : undefined} data-open={props.open ? "" : undefined}
     aria-hidden={props.folded ? "true" : undefined}>{mic
       ? pillSlot({ get label() { return props.label; }, icon: <><Aura />{props.icon}</> }, props.onPick, attrs)
-      : pillSlot(props, props.onPick, attrs)}</div>;
+      : pillSlot(props, props.onPick, attrs)}</Frost>;
   return mic && props.stretch ? <><span class="ui-pill-room" />{pill}</> : pill;
 }
 export function PillGroup(props: { actions: PillAction[]; onPick?: (label: string) => void }) {
-  return <div class="ui-frost ui-pill"><For each={props.actions}>{(item) => pillSlot(item, props.onPick)}</For></div>;
+  return <Frost class="ui-pill"><For each={props.actions}>{(item) => pillSlot(item, props.onPick)}</For></Frost>;
 }
 export function PillSwitch<T extends string>(props: { label: string; value: T; options: ReadonlyArray<{ value: T; label: string; icon: JSX.Element }>; onChange: (value: T) => void }) {
   return <Segmented pill icons label={props.label} value={props.value} options={props.options} onChange={props.onChange} />;
 }
 /** Its own textarea, or the caller's field as children (the composer's, with its behaviour). */
 export function PillField(props: { placeholder?: string; value?: string; onInput?: (value: string) => void; class?: string; children?: JSX.Element }) {
-  return <div class={cn("ui-frost ui-pill ui-pill-field", props.class)}><Show when={props.children} fallback={<TextArea placeholder={props.placeholder} value={props.value} onInput={(event) => props.onInput?.(event.currentTarget.value)} />}>{props.children}</Show></div>;
+  return <Frost class={cn("ui-pill ui-pill-field", props.class)}><Show when={props.children} fallback={<TextArea placeholder={props.placeholder} value={props.value} onInput={(event) => props.onInput?.(event.currentTarget.value)} />}>{props.children}</Show></Frost>;
 }
 
 /**
@@ -102,7 +104,7 @@ export function Aura(props: { on?: boolean; level?: number; strength?: number })
       render(dt);
     };
     const render = (dt: number) => {
-      const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
+      const still = reducedMotion();
       const blobs = AURA_BLOBS.map((blob, i) => {
         if (!still) turns[i]! += dt * (2 * Math.PI / blob.orbit) * (1 + 1.5 * level);
         const t = turns[i]!, from = blob.from * Math.PI / 180, reach = .38 * (.9 + level * blob.swell + .25 * Math.sin(2 * t));

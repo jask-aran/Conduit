@@ -4,7 +4,7 @@ import { Button as LibraryButton, Captions, Completion, ComposerField, DesktopCo
 import { latestAway, scrollToLatest } from "./latest-away";
 import { createEffect, createMemo, createSignal, For, lazy, on, onCleanup, onMount, Show, type JSX } from "solid-js";
 
-import { Menu, MenuContent } from "@/components/menus";
+import { DropdownMenu, MenuContent } from "@/components/menus";
 import type { BooleanCapability, Template } from "../api/contracts";
 import type { ActiveChatStore } from "../state/active-chat";
 import { filesFromDataTransfer } from "../state/attachments";
@@ -769,20 +769,20 @@ export function Composer(props: {
           onAttach={props.attachmentsSupported !== false ? attach : undefined} />
         <Show when={props.folder}>{(folder) => <FolderPicker {...folder()} />}</Show>
         <Show when={shows("context")}><div data-composer-fold="context"><ContextGauge chat={props.chat} compact canCompact={supports("compaction")} /></div></Show>
-        <Show when={props.profiles.length && shows("profile")}><div data-composer-fold="profile"><Menu>
-          <Menu.Trigger as={Picker} icon={<HarnessMark id={props.activeProfile?.implementation || "conduit"} />} title={props.activeProfile?.label || "Profile"} aria-label={`Profile ${props.activeProfile?.label || "General"}`} disabled={!props.serverOnline || !interactive()} />
+        <Show when={props.profiles.length && shows("profile")}><div data-composer-fold="profile"><DropdownMenu>
+          <DropdownMenu.Trigger as={Picker} icon={<HarnessMark id={props.activeProfile?.implementation || "conduit"} />} title={props.activeProfile?.label || "Profile"} aria-label={`Profile ${props.activeProfile?.label || "General"}`} disabled={!props.serverOnline || !interactive()} />
           <MenuContent><ProfileChoices profiles={props.profiles} active={props.activeProfile} locked={props.chat.status() !== "draft"} onChoose={props.onChooseProfile} /></MenuContent>
-        </Menu></div></Show>
+        </DropdownMenu></div></Show>
         <Show when={shows("model")}><div data-composer-fold="model">
           <ModelSelector models={props.models.models()} model={props.models.model()} thinkingLevel={props.models.effort()} notice={props.models.notice()} loading={props.modelsLoading} disabled={!props.serverOnline || !interactive() || !supports("modelSwitch")} onModelChange={(value) => void props.models.chooseModel(value)} onThinkingLevelChange={(value) => void props.models.chooseEffort(value)} onSearchModels={props.onOpenModelSelector} searchShortcut={props.modelSelectorShortcut} />
         </div></Show>
-        <Show when={(props.permissions?.profiles().length || props.serviceLevels?.levels().length) && shows("permissions")}><div data-composer-fold="permissions"><Menu>
-          <Menu.Trigger as={Picker} icon={<Icons.Permissions />} value={props.permissions?.profiles().find((profile) => profile.id === props.permissions?.selected())?.label || "Settings"} aria-label="Session settings" disabled={!props.serverOnline || !interactive()} />
+        <Show when={(props.permissions?.profiles().length || props.serviceLevels?.levels().length) && shows("permissions")}><div data-composer-fold="permissions"><DropdownMenu>
+          <DropdownMenu.Trigger as={Picker} icon={<Icons.Permissions />} value={props.permissions?.profiles().find((profile) => profile.id === props.permissions?.selected())?.label || "Settings"} aria-label="Session settings" disabled={!props.serverOnline || !interactive()} />
           <MenuContent>
             <Show when={props.permissions?.profiles().length}><PermissionChoices permissions={props.permissions!} /></Show>
             <Show when={props.serviceLevels?.levels().length}><ServiceChoices levels={props.serviceLevels!} /></Show>
           </MenuContent>
-        </Menu></div></Show>
+        </DropdownMenu></div></Show>
       </>}
       end={<LibraryButton variant="ghost" size="icon-sm" data-state={dictationState()} aria-label={["starting", "listening"].includes(dictationState()) ? "Stop voice dictation" : "Start voice dictation"} aria-pressed={dictating()} title={`Voice dictation (${props.voiceSettings.shortcut})`} disabled={!props.serverOnline || !interactive()} onPointerDown={captureDictationLaunch} onClick={toggleDictation}><Show when={["starting", "finishing", "waiting", "transcribing"].includes(dictationState())} fallback={<Icons.Microphone />}><Spinner /></Show></LibraryButton>}
       // One primary slot, so nothing beside it moves: Stop while the agent works; once a draft is typed, Send again

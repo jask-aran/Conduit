@@ -2,7 +2,7 @@ import { HarnessMark } from "@/components/ui";
 import { Icons } from "@/components/ui";
 import { createSignal, For, Show, type JSX } from "solid-js";
 
-import { Menu, MenuContent, MenuControl, MenuRow, MenuSection } from "@/components/menus";
+import { DropdownMenu, MenuContent, MenuControl, MenuRow, MenuSection } from "@/components/menus";
 import { PaneTabRow } from "@/components/ui/pane";
 import { Expand, Header, HeaderButton, HeaderCrumb, HeaderPill, Readout, Rule } from "@/components/ui";
 import type { Project, RuntimeIdentity, Template } from "../api/contracts";
@@ -82,7 +82,7 @@ export function ChatHeader(props: {
     // A phone's name for the page, and the way into its menu (a desktop's title and rail hold what it holds).
     pill={<Show when={!props.appDashboard} fallback={<HeaderPill label={props.title} icon={<HarnessMark id="conduit" />} />}>
       {/* Opening, the context is read afresh, so Context shows its reading before it is unfolded. */}
-      <Menu modal={false} placement="bottom" onOpenChange={(open) => { if (open) props.chat?.refreshContext(); else setDetailsOpen(false); }}>
+      <DropdownMenu modal={false} placement="bottom" onOpenChange={(open) => { if (open) props.chat?.refreshContext(); else setDetailsOpen(false); }}>
         <MenuControl as={HeaderPill} opens label={props.title} icon={placeMark()} aria-label={`${moreLabel()}: ${props.title}`} data-header-more="" />
         <MenuContent width="md" unfolds>
           <MenuSection>
@@ -117,7 +117,7 @@ export function ChatHeader(props: {
             </>;
           }}</Show>
         </MenuContent>
-      </Menu>
+      </DropdownMenu>
     </Show>}
     after={props.badge}
     actions={<>

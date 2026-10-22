@@ -16,7 +16,7 @@
 .ui-header-crumb > * { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ui-header-crumb > strong { font-weight: var(--weight-strong); }
 .ui-header-place { flex: 0 1 auto; max-width: var(--measure-xs); border: 0; background: none; padding: 0; color: var(--foreground);
-  font: var(--weight-strong) var(--text-label)/var(--leading-row) var(--font-label); letter-spacing: .07em; text-transform: uppercase; }
+  font: var(--weight-strong) var(--text-label)/var(--leading-row) var(--font-label); letter-spacing: var(--label-tracking); text-transform: uppercase; }
 button.ui-header-place { cursor: pointer; }
 @media (hover: hover) { button.ui-header-place:hover { color: var(--muted-foreground); } }
 

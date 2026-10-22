@@ -1,6 +1,7 @@
 import { Icons } from "@/components/ui";
 import { setLatestAway, setLatestScroller } from "./latest-away";
-import { unitPx } from "../layout-geometry";
+import { unitPx } from "@/components/ui/layout";
+import { COPY_FEEDBACK_MS, reducedMotion } from "@/components/ui/motion";
 import { createComputed, createEffect, createMemo, createRenderEffect, createSignal, For, on, onCleanup, onMount, Show, Suspense, untrack, type JSX } from "solid-js";
 
 import type { BooleanCapability, Message } from "../api/contracts";
@@ -372,7 +373,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
     // since their rows may be built a frame late.
     const target = () => viewport.scrollHeight - viewport.clientHeight;
     const first = target();
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches || Math.abs(first - from) < 2) { setViewportScrollTop(first, true, true); then(); return; }
+    if (reducedMotion() || Math.abs(first - from) < 2) { setViewportScrollTop(first, true, true); then(); return; }
     // About the pace of the browser's own smooth scroll: longer for further,
     // eased at both ends.
     const duration = Math.min(700, 280 + Math.sqrt(Math.abs(first - from)) * 6);
@@ -1075,7 +1076,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
           const copy = async () => {
             if (!await copyWithFeedback(message().content || message().errorMessage || "")) return;
             setCopied(true);
-            setTimeout(() => setCopied(false), 1200);
+            setTimeout(() => setCopied(false), COPY_FEEDBACK_MS);
           };
           return <TranscriptRow ref={row} data-slot="message-scroller-item" data-message-id={message().id} turn={!user() && item.traced}>
             <Show when={user()} fallback={<Turn>

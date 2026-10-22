@@ -1,11 +1,12 @@
 import { HarnessMark } from "@/components/ui";
 import { FileTypeIcon } from "@/components/ui/file-marks";
 import { Icons } from "@/components/ui";
-import { Browser, BrowserLayout, BrowserSidebar, BrowserHeading, BrowserPlaces, BrowserMain, BrowserToolbar, BrowserActions, BrowserSearch, BrowserCount, BrowserSummary, BrowserSpacer, BrowserColumns, BrowserMark, BrowserEmpty, BrowserLoading, BrowserError, BrowserDivider, BrowserGrid, BrowserEntry, BrowserPlace, BrowserAddress, Select } from "@/components/ui/browser";
+import { Browser, BrowserLayout, BrowserSidebar, BrowserHeading, BrowserPlaces, BrowserMain, BrowserToolbar, BrowserActions, BrowserSearch, BrowserCount, BrowserSummary, BrowserSpacer, BrowserColumns, BrowserMark, BrowserEmpty, BrowserLoading, BrowserError, BrowserDivider, BrowserGrid, BrowserEntry, BrowserPlace, BrowserAddress } from "@/components/ui/browser";
 import { Button, Input } from "@/components/ui/controls";
 import { createEffect, createMemo, createSignal, For, onCleanup, Show } from "solid-js";
 import { Grid2X2Icon, ListIcon, UnlinkIcon } from "lucide-solid";
-import { ContextMenu, ContextMenuContent, ContextMenuGroup, ContextMenuItem, ContextMenuTrigger, Menu, MenuContent, MenuGroup, MenuItem, MenuTrigger } from "@/components/menus";
+import { Select } from "@/components/menus";
+import { ContextMenu, ContextMenuContent, ContextMenuGroup, ContextMenuItem, ContextMenuTrigger, DropdownMenu, MenuContent, MenuGroup, MenuItem, MenuTrigger } from "@/components/menus";
 import { api } from "../api/client";
 import type { ComputerLocation, HarnessSummary, Project } from "../api/contracts";
 import { isConduitManagedProject } from "../navigation/sidebar-preferences";
@@ -202,9 +203,9 @@ export function ComputerDashboard(props: {
           <WorkspaceActions />
           <Show when={!props.dialog}>
             <Button variant="ghost" type="button" disabled={!props.location || props.loading} onClick={props.onOpenTerminalHere}><Icons.Terminal />Terminal Here</Button>
-            <Show when={harnesses().some((item) => item.available)}><Menu><MenuTrigger disabled={!props.location || props.loading} aria-label="Open harness here"><Icons.Terminal />Harness Here<Icons.ChevronDown /></MenuTrigger><MenuContent><MenuGroup><For each={harnesses().filter((item) => item.available)}>{(harness) =>
+            <Show when={harnesses().some((item) => item.available)}><DropdownMenu><MenuTrigger disabled={!props.location || props.loading} aria-label="Open harness here"><Icons.Terminal />Harness Here<Icons.ChevronDown /></MenuTrigger><MenuContent><MenuGroup><For each={harnesses().filter((item) => item.available)}>{(harness) =>
               <MenuItem onSelect={() => props.onOpenHarnessHere?.(harness.id, props.location!.project.workingRoot)}><HarnessMark id={harness.id} />Open {harness.label} here</MenuItem>
-            }</For></MenuGroup></MenuContent></Menu></Show>
+            }</For></MenuGroup></MenuContent></DropdownMenu></Show>
             <Button variant="ghost" type="button" disabled={!props.location?.repository || props.loading} onClick={() => props.onOpenView("diff")}><Icons.GitBranch />Source Control</Button>
           </Show>
         </BrowserActions>

@@ -1,6 +1,7 @@
 import { createEffect, createMemo, createSignal } from "solid-js";
 import { Dynamic } from "solid-js/web";
 import { IdentityEditor } from "@/components/ui/identity";
+import { colourHex } from "@/components/ui/palettes";
 import type { WorkspaceAppearance } from "../api/contracts";
 import {
   normalizeWorkspaceAppearance,
@@ -28,7 +29,7 @@ export function WorkspaceAppearanceEditor(props: {
   createEffect(() => {
     const normalized = normalizeWorkspaceAppearance(props.value);
     setDraft(normalized);
-    setCustomHex(workspaceColorOption(normalized.color).hex);
+    setCustomHex(colourHex(workspaceColorOption(normalized.color).colour));
     setShowCustomColor(HEX_COLOR.test(normalized.color));
   });
 
@@ -67,9 +68,9 @@ export function WorkspaceAppearanceEditor(props: {
     showIconBrowser={showIconBrowser} setShowIconBrowser={setShowIconBrowser}
     showCustomColor={showCustomColor} setShowCustomColor={setShowCustomColor}
     customHex={customHex} setCustomHex={setCustomHex} setCustomColor={setCustomColor}
-    colorHex={workspaceColorOption(draft().color).hex} colors={WORKSPACE_COLOR_OPTIONS}
+    colorHex={colourHex(workspaceColorOption(draft().color).colour)} colors={WORKSPACE_COLOR_OPTIONS}
     setMode={setMode} setMonogram={setMonogram}
     onIcon={(value) => setDraft((current) => ({ ...current, mode: "icon", value }))}
-    onColor={(color, hex) => { setCustomHex(hex); setDraft((current) => ({ ...current, color })); }}
+    onColor={(color, colour) => { setCustomHex(colourHex(colour)); setDraft((current) => ({ ...current, color })); }}
     onSave={() => props.onSave({ ...draft(), value: draft().value.trim() })} />;
 }

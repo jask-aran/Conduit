@@ -90,9 +90,9 @@
 .ui-seg[data-pill] button { width: var(--pill-slot); min-height: var(--pill-slot-height); border-radius: var(--radius-round); padding: 0; }
 .ui-seg[data-pill] button svg { width: var(--pill-icon); height: var(--pill-icon); }
 /* On the frame (the sidebar) controls take the sidebar's own ink. */
-[data-surface="frame"] :is(.ui-pill > button, .ui-seg button:is([aria-checked="true"], :focus-visible, [data-held])) { color: var(--sidebar-accent-foreground); }
-@media (hover: hover) { [data-surface="frame"] :is(.ui-pill > button, .ui-seg button:is([aria-checked="true"], :hover, :focus-visible, [data-held])) { color: var(--sidebar-accent-foreground); } }
-[data-surface="frame"] .ui-seg .ui-seg-thumb { background: var(--sidebar-accent); }
+[data-surface="frame"] :is(.ui-pill > button, .ui-seg button:is([aria-checked="true"], :focus-visible, [data-held])) { color: var(--foreground); }
+@media (hover: hover) { [data-surface="frame"] :is(.ui-pill > button, .ui-seg button:is([aria-checked="true"], :hover, :focus-visible, [data-held])) { color: var(--foreground); } }
+[data-surface="frame"] .ui-seg .ui-seg-thumb { background: var(--border); }
 @media (prefers-reduced-motion: reduce) { .ui-seg-thumb { transition: none; } }
 .ui-seg[aria-disabled] { opacity: var(--opacity-disabled); pointer-events: none; }
 /* The cursor on the chosen segment (already washed) brightens that wash a step: a second tint over the thumb's. */

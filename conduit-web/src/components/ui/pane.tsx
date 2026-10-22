@@ -1,3 +1,4 @@
+import { Frost } from "./frost";
 import * as Icons from "./icons";
 import { For, Show, splitProps, type JSX } from "solid-js";
 
@@ -68,7 +69,7 @@ export function PaneEdge(props: JSX.HTMLAttributes<HTMLDivElement> & { ref?: (el
 export const DropWash = (props: { style?: JSX.CSSProperties; within?: boolean }) => <div class="ui-drop-wash" data-within={props.within ? "" : undefined} style={props.style} aria-hidden="true" />;
 /** What a drop will do, beside the pointer: an icon and its result. */
 export const DragPill = (props: { ref?: (element: HTMLDivElement) => void; icon?: JSX.Element; children: JSX.Element }) =>
-  <div ref={props.ref} class="ui-frost ui-drag-pill" data-surface="frost" data-lift="raised" aria-hidden="true">{props.icon}<span>{props.children}</span></div>;
+  <Frost ref={props.ref} lift="raised" class="ui-drag-pill" aria-hidden="true">{props.icon}<span>{props.children}</span></Frost>;
 
 /** The workspace rail on the frame: tools, then what is docked, under hairlines; the foot at the bottom. Its
  *  buttons are RailButtons (nav.tsx). */
@@ -108,7 +109,7 @@ export function ToolView(props: JSX.ButtonHTMLAttributes<HTMLButtonElement> & { 
 /** What a tool says while it has nothing to show, or is loading: centred, quiet. */
 export const PaneEmpty = (props: { children: JSX.Element }) => <div class="ui-pane-empty">{props.children}</div>;
 /** Loading, at the corner of what it loads into: a frost capsule with a spinner. */
-export const PaneLoading = (props: { children: JSX.Element }) => <div class="ui-frost ui-pane-loading" data-surface="frost" role="status">{props.children}</div>;
+export const PaneLoading = (props: { children: JSX.Element }) => <Frost class="ui-pane-loading" role="status">{props.children}</Frost>;
 
 /** A strip of a tool's controls (the file tree's filter, its actions; a folded tree's rail): small icon buttons on a
  *  hairline. edge: which side the hairline is on. vertical: a rail. */

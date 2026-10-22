@@ -41,6 +41,7 @@
  *   voice           VoiceWaveform monitor and compact input levels
  */
 import "./reset.css";
+import "./palettes.css";
 import "./theme.css";
 import "./foundations.css";
 import "./controls.css";

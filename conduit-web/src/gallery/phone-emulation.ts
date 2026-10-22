@@ -1,4 +1,4 @@
-import { PHONE_LAYOUT_QUERY, NON_PHONE_LAYOUT_QUERY } from "../client/layout-geometry";
+import { PHONE_LAYOUT_QUERY, NON_PHONE_LAYOUT_QUERY } from "@/components/ui/layout";
 
 /** The phone query as a width alone, which an iframe's width does satisfy. */
 const PHONE_AS_WIDTH = PHONE_LAYOUT_QUERY.replace(/ and \(hover: none\) and \(pointer: coarse\)/, "");

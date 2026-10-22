@@ -1,3 +1,4 @@
+import { Frost } from "./frost";
 import * as Icons from "./icons";
 import { children, createEffect, createSignal, Show, splitProps, type JSX } from "solid-js";
 
@@ -18,7 +19,7 @@ import type { Motion } from "./shared";
 export function DesktopComposer(props: { riders?: JSX.Element; takeover?: JSX.Element; class?: string; children: JSX.Element }) {
   const takeover = children(() => props.takeover);
   return <div class="ui-composer-slot ui-composer-width" data-taken={takeover() ? "" : undefined}>
-    <div class="ui-composer-stack">{props.riders}<div class={cn("ui-frost ui-desktop-composer", props.class)} data-surface="frost" data-lift="rest">{props.children}</div></div>{takeover()}</div>;
+    <div class="ui-composer-stack">{props.riders}<Frost class={cn("ui-desktop-composer", props.class)}>{props.children}</Frost></div>{takeover()}</div>;
 }
 /** The voice while dictating, riding just over the composer: a PillWave across a wave Rider, an Aura glowing under it
  *  as under a phone's voice track. The words go into the field as they come. levels: the waveform's history (0-1);
