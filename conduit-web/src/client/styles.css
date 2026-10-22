@@ -48,8 +48,8 @@ svg { stroke-width: 1.5; }
    icon set it in those units. */
 svg.lucide { stroke-width: 2.4; }
 
-/* Inset panel: the rounded fill sits directly on the darker frame. */
-.chat-main { --chat-header-height: var(--header-height); position: relative; isolation: isolate; display: flex; min-width: 0; height: calc(100dvh - var(--space-xl)); margin: var(--space-md) var(--space-md) var(--space-md) var(--space-2xs); flex: 1; flex-direction: column; overflow: hidden; container-type: inline-size; container-name: chat-main; border-radius: var(--radius-surface); background: var(--background); color: var(--foreground); }
+/* The main pane's chat: its header's height and the container its layout measures (the pane is a Sheet). */
+.chat-main { --chat-header-height: var(--header-height); container-type: inline-size; container-name: chat-main; }
 /* A file viewer with no file showing stays open, saying how to fill it. */
 .workspace-warning { position: relative; z-index: 2; display: flex; width: min(var(--composer-desktop-reference-width), calc(100% - var(--page-gutter))); gap: var(--space-md); margin: var(--space-md) auto; padding: var(--space-lg); border: var(--hairline) solid var(--border); border-radius: var(--radius-control); }
 .workspace-warning svg { width: var(--icon-lg); flex: none; }
@@ -69,7 +69,6 @@ svg.lucide { stroke-width: 2.4; }
    thread's own top padding so the first message still starts below the bar.
    Every other pane keeps the space the header reserved, by doing nothing. */
 .transcript { position: relative; z-index: 1; min-height: 0; margin-top: calc(-1 * var(--chat-header-height)); flex: 1; overflow: hidden; }
-.workspace-layout { display: flex; flex: 1; min-width: 0; }
 .transcript-motion-shell { position: relative; width: var(--workspace-transcript-width, 100%); height: 100%; contain: layout paint; container-name: chat-main; container-type: inline-size; transform: translate3d(0, 0, 0); }
 /*
  * `overflow-anchor: none` because the transcript holds its own scroll.
@@ -137,16 +136,6 @@ svg.lucide { stroke-width: 2.4; }
     right: 0;
     width: 100%;
   }
-  /* The phone shell owns the full visual viewport. Desktop's inset frame
-     disappears here; safe-area padding belongs to the controls that touch
-     each edge. */
-  .chat-main {
-    --chat-header-height: var(--header-height);
-    width: 100%;
-    min-height: 0;
-    height: var(--app-height, 100dvh);
-    max-height: var(--app-height, 100dvh);
-  }
   /* Three renderer probes stack above the first message on a phone. Reserve
      their height so the controls never cover the streamed transcript. */
   .composer-stack {
@@ -186,13 +175,6 @@ svg.lucide { stroke-width: 2.4; }
   html { font-size: calc(16px * var(--ui-scale)); }
 .markdown-skeleton { min-height: 5em; }
 .chat-drop-overlay { backdrop-filter: blur(12px); }
-  /* The phone shell owns the full visual viewport. Desktop's inset frame
-     disappears here; safe-area padding belongs to the controls that touch
-     each edge. */
-  .chat-main {
-    margin: 0;
-    border-radius: 0;
-  }
   /* Three renderer probes stack above the first message on a phone. Reserve
      their height so the controls never cover the streamed transcript. */
   .thread { width: 100%; padding: calc(var(--header-height) + var(--space-4xl)) var(--space-xl) var(--space-2xl); }
@@ -305,10 +287,10 @@ svg.lucide { stroke-width: 2.4; }
 [data-region][data-focus-held]::after { opacity: 1; }
 /* The sidebar runs to the foot of the window; its line sits on the cards'. */
 [data-region="sidebar"]::after { bottom: var(--space-md); }
-.workspace-panel:not(.workspace-panel-open)::after { display: none; }
+.ui-dock:not([data-open])::after { display: none; }
 /* Over the panes, or switching layer, the dock is its surface, not its room in the row. */
-:is(.workspace-panel-overlay, .workspace-panel[data-layer-switch])::after { left: auto; width: calc(var(--workspace-shell-width) - 2 * var(--space-2xl)); }
-.workspace-panel-overlay::after { right: calc(var(--space-md) + var(--space-2xl)); }
+:is(.ui-dock[data-overlay], .ui-dock[data-layer-switch])::after { left: auto; width: calc(var(--workspace-shell-width) - 2 * var(--space-2xl)); }
+.ui-dock[data-overlay]::after { right: calc(var(--space-md) + var(--space-2xl)); }
 .region-cue {
   position: fixed;
   z-index: var(--layer-cue);

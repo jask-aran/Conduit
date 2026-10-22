@@ -21,6 +21,7 @@ import { navPage } from "./pages/nav";
 import { dashboardPage } from "./pages/dashboard";
 import { panesPage } from "./pages/panes";
 import { headerPage } from "./pages/header";
+import { shellPage } from "./pages/shell";
 import { readingPage } from "./pages/reading";
 import { popoverPage } from "./pages/popover";
 import { cardPage } from "./pages/card";
@@ -61,6 +62,7 @@ const piecePages: Page[] = [
   panesPage,
   ...filesPages(),
   headerPage,
+  shellPage,
   readingPage,
   popoverPage,
   cardPage,

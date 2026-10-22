@@ -1,0 +1,97 @@
+/* The shell: AppShell's row, the Sheets the panes are, the Dock at its end (shell.tsx). */
+
+/* The row: the panes and the dock beside the sidebar. A chat is never drawn narrower than it declares
+   (MIN_MAIN_PANE_UNITS, DESIGN.md "Documents and room"): on a desktop window too narrow for it beside the sidebar,
+   the shell scrolls sideways instead (#root, the app's). The row holds the main pane and its margins; its own
+   intrinsic width is no help, as a size container it has none. A phone is full-bleed at any width. */
+.ui-shell { position: relative; display: flex; min-width: 0; flex: 1; overflow: hidden; container-type: inline-size; }
+@media (--conduit-wide-layout) {
+  .ui-shell { min-width: calc(var(--conduit-min-main-pane) + var(--space-lg)); }
+}
+
+/* A tool's controls, in the dock, a split pane and anything filling a sheet. */
+.ui-dock, .ui-sheet:not([data-lead]), .ui-sheet-fill {
+  --workbench-bar-height: var(--control);
+  --workbench-control-size: var(--control-tool);
+  --workbench-gap: var(--space-2xs);
+  --workbench-padding-block: var(--space-xs);
+  --workbench-padding-inline: var(--space-sm);
+  --workbench-icon-size: var(--icon-sm);
+  --workbench-font-size: var(--text-label);
+  --workbench-divider: var(--border);
+}
+
+/* A pane: the rounded charcoal ground inset on the frame. The main pane's 8px right margin is the gutter between
+   panes; a split pane's drag edge sits in it. */
+.ui-sheet { position: relative; display: flex; min-width: 0; height: calc(100dvh - var(--space-xl)); margin: var(--space-md) var(--space-md) var(--space-md) 0; flex: 1 1 auto; flex-direction: column; border-radius: var(--radius-surface); background: var(--background); color: var(--foreground); }
+.ui-sheet[data-lead] { isolation: isolate; margin-left: var(--space-2xs); overflow: hidden; }
+@media (--conduit-wide-layout) {
+  .ui-sheet[data-lead] { min-width: var(--conduit-min-main-pane); }
+}
+/* The dock, expanded, covers the main pane. */
+.ui-sheet[data-under] { margin-inline: 0; pointer-events: none; }
+/* A split pane moved into the dock fills it in place of the tools (their state kept). */
+.ui-sheet[data-docked] { height: auto; min-height: 0; flex: 1; margin: 0; border-radius: inherit; }
+.ui-sheet[data-docked="hidden"] { display: none; }
+.ui-sheet:not([data-lead]) > div:not(.ui-pane-edge) { display: flex; min-width: 0; min-height: 0; flex: 1; flex-direction: column; overflow: hidden; border-radius: inherit; }
+/* The panes' shares easing: each sheet's room and margins move with them. */
+.ui-shell[data-settling] > .ui-sheet { transition: flex-grow var(--duration-fold) var(--ease-fold), margin var(--duration-fold) var(--ease-fold); }
+
+/* Filling a sheet edge to edge: a tool, a terminal, a file viewer's host. */
+.ui-sheet-fill { display: flex; min-width: 0; min-height: 0; flex: 1; flex-direction: column; overflow: hidden; border-radius: inherit; container-type: inline-size; }
+
+/* The dock: its room in the row eases open; its surface keeps the settled width, right-anchored inside it. */
+.ui-dock { position: relative; display: flex; width: 0; height: calc(100dvh - var(--space-xl)); margin: var(--space-md) 0 var(--space-md) 0; flex: none; overflow: visible; pointer-events: none; border-radius: var(--radius-surface); transition: width var(--duration-fold) var(--ease-fold), margin-right var(--duration-fold) var(--ease-fold); }
+.ui-dock[data-open] { pointer-events: auto; background: var(--background); }
+.ui-dock[data-edge-instant="true"] { transition: none !important; }
+/* The gap to the rail snaps with the layer (the surface's 8px over the panes stands in for it), so the dock never
+   drifts; only its room eases. */
+.ui-dock[data-layer-switch] { z-index: var(--layer-dock); transition: width var(--duration-fold) var(--ease-fold); }
+.ui-dock-surface { position: absolute; inset: 0; right: 0; left: auto; display: flex; width: 100%; min-width: 0; height: 100%; contain: layout paint; container-type: inline-size; flex: none; flex-direction: column; overflow: hidden; border-radius: var(--radius-surface); background: var(--background); transition: width var(--duration-fold) var(--ease-fold); }
+.ui-dock-surface > * { max-width: 100%; }
+.ui-dock[data-expanded] .ui-pane-edge[data-dock] { display: none; }
+/* Over the panes: the dock takes no room in the row and floats above it, its edge at its surface's. */
+.ui-dock[data-overlay] { z-index: var(--layer-dock); width: 0 !important; margin-right: 0 !important; background: transparent; }
+.ui-dock[data-overlay] .ui-dock-surface { right: var(--space-md); left: auto; width: var(--workspace-shell-width); box-shadow: var(--lift-raised), 0 0 0 var(--hairline) var(--border); }
+.ui-dock[data-overlay] .ui-pane-edge[data-dock] { left: calc(-1 * var(--workspace-shell-width) - var(--space-md) - var(--control-xs) / 2); }
+/* In this order, as their cascade was: expanded over overlay, a layer switch over both. */
+.ui-dock[data-expanded] .ui-dock-surface { width: calc(100cqw - var(--space-md)); }
+.ui-dock[data-layer-switch] .ui-dock-surface { left: auto; width: var(--workspace-shell-width); transition: none; }
+.ui-dock-document { display: none; }
+.ui-dock-document > div { display: contents; }
+.ui-dock-surface[data-documented] > :not(.ui-dock-document) { display: none !important; }
+.ui-dock-surface[data-documented] > .ui-dock-document { display: flex; min-width: 0; min-height: 0; flex: 1; flex-direction: column; }
+
+/* A tool's body under its header. */
+.ui-tool-content { position: relative; display: flex; min-width: 0; min-height: 0; flex: 1; overflow: hidden; outline: none; }
+.ui-tool-content > * { min-width: 0; flex: 1; }
+
+/* A phone: the main pane is the whole visual viewport (safe-area padding belongs to the controls that touch each
+   edge), the other panes are not drawn, and the dock is a full-screen sheet sliding in from the right, sized for a
+   finger (36px rows, 32px controls), its surface inside the system's status and navigation bars. */
+@media (--conduit-phone-layout) {
+  .ui-sheet[data-lead] { width: 100%; min-height: 0; height: var(--app-height, 100dvh); max-height: var(--app-height, 100dvh); margin: 0; border-radius: 0; }
+  .ui-sheet:not([data-lead]) { display: none; }
+  .ui-sheet[data-under] { display: flex; }
+  .ui-dock {
+    --workbench-bar-height: var(--control-lg);
+    --workbench-control-size: var(--control-sm);
+    --workbench-gap: var(--space-xs);
+    --workbench-padding-inline: var(--space-md);
+    position: fixed;
+    inset: 0;
+    z-index: var(--layer-panel);
+    width: 100vw !important;
+    height: var(--app-height, 100dvh);
+    margin: 0;
+    transform: translateX(100%);
+    transition: transform var(--duration-quick) var(--ease-change);
+  }
+  .ui-dock[data-open] { margin: 0; transform: translateX(0); }
+  .ui-dock-surface { top: var(--safe-area-inset-top, env(safe-area-inset-top, 0px)); bottom: var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)); width: 100%; height: auto; border: 0; border-radius: 0; overscroll-behavior: contain; opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ui-dock, .ui-dock-surface { transition-duration: 0.01ms !important; }
+  .ui-dock[data-open] .ui-dock-surface { transform: none; }
+}

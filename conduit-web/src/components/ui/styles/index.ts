@@ -17,6 +17,7 @@
  *   reading         Reading: a gauge's totals, parts, figures and foot
  *   nav             NavPane > NavGroup > NavRow, NavFolder, RailButton
  *   dashboard       Dashboard, DashHeader, Group (GroupHeading), DashRow, ChangeRow, FolderShelf
+ *   shell           AppShell > Sheet, SheetFill; Dock > DockSurface, DockDocument; ToolContent
  *   pane            PaneTabRow > TabPlace > PaneTab, PaneAction, PaneEdge, DropWash, DragPill, ToolRail, ToolHeader,
  *                   ToolBar, ToolButton, ToolFilter, ToolNotice, Tree > TreeRow
  *   source          ToolLine, CommitBox, ChangeLedger > ChangeSection > ChangeList > ChangeItem, CommitList, PatchLines
@@ -53,6 +54,7 @@ import "./reading.css";
 import "./nav.css";
 import "./dashboard.css";
 import "./pane.css";
+import "./shell.css";
 import "./source.css";
 import "./history.css";
 import "./terminal.css";
