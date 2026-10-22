@@ -280,9 +280,19 @@ starts elsewhere.
    without it become the same question, and the UI shows what is offered.
 3. **Close the real gaps:** checkpoints through the host (snapshotted on
    whichever device holds the folder), a watch call on the node, chat moves
-   once ownership is recorded.
+   once ownership is recorded. *(Built 2026-10-22.)* The checkpoint store reads
+   the workspace only through its host (`projectWorkspace`, workspace-host.js),
+   keying a device checkpoint by its place; a device offers checkpoints on a
+   Git workspace with the shell grant (a plain folder's snapshot would read
+   all of it over the link before every turn). Device folders are watched on
+   the device, falling back to polling while it is away. Moves change the
+   record and the conversation's place, not files.
 4. **Adapters take a `processes(place)` handle at launch** and never learn
-   that devices exist.
+   that devices exist. *(Built 2026-10-22: `placeProcesses`,
+   nodes/place-processes.js, used by Claude Code, Codex, fx, OpenCode and the
+   durable runtime; the head reads harness state with the node's own readers.
+   Terminals still open device processes themselves: PTYs are a different
+   shape.)*
 5. Pi 1.3.0 is not generalised: milestone 5 retires it as the default.
 
 ## Milestones
