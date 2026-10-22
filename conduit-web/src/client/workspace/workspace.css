@@ -24,10 +24,6 @@
 /* Surface keeps settled panel width, right-anchored inside the shell. */
 .workspace-panel-surface { position: absolute; inset: 0; display: flex; min-width: 0; height: 100%; contain: layout paint; container-name: workspace-surface; container-type: inline-size; flex: none; flex-direction: column; overflow: hidden; border-radius: var(--radius-surface); background: var(--background); }
 .workspace-panel-surface > * { max-width: 100%; }
-/* The dock's header shares the top line of the app: the main header's height
-   and padding, the name at the breadcrumb's size, 14px icons, no hairline. */
-/* Its modes are the dashboard heading's switch (components/ui/styles/dashboard.css), folding to icons
-   when the header runs out of room. */
 .chat-main { flex: 1 1 auto; min-width: 0; }
 .chat-main.workspace-expanded { margin-inline: 0; pointer-events: none; }
 .workspace-layout { position: relative; overflow: hidden; container-type: inline-size; }
@@ -42,15 +38,9 @@
 .workspace-panel-surface { right: 0; left: auto; width: 100%; transition: width var(--duration-fold) var(--ease-fold); }
 .workspace-panel-expanded .workspace-panel-surface { width: calc(100cqw - var(--space-md)); }
 .workspace-panel-expanded .ui-pane-edge[data-dock] { display: none; }
-/* The rail stands in for the tabs on a desktop; a phone keeps them. */
-/* Keyboard focus on a tab is the wash, as on a row: no ring. */
 .workspace-panel-content { position: relative; display: flex; min-width: 0; min-height: 0; flex: 1; overflow: hidden; outline: none; }
 .workspace-panel-content > * { min-width: 0; flex: 1; }
 .workspace-split-resizing { cursor: col-resize; user-select: none; }
-/* The right edge's rail mirrors the sidebar's collapsed one: on the frame,
-   28.8px targets 8px from the pane and 6.4px from the window's edge, the
-   cursor the wash, the current tool white at the heavier stroke. */
-/* A tool in the main pane's split is open there without being the dock's. */
 /* The main pane's split: a view moved out of the dock, its own sheet on the
    frame beside the chat, as the dock is. The chat's 8px right margin is the
    gutter; the drag edge sits in it. */
@@ -68,39 +58,20 @@
 .workspace-split-surface { display: flex; min-width: 0; min-height: 0; flex: 1; flex-direction: column; container-name: workspace-surface; container-type: inline-size; }
 /* A chat beside the main one: laid out as the main pane's chat is, measured by its own width. */
 .main-split-chat { --chat-header-height: var(--header-height); position: relative; isolation: isolate; container-type: inline-size; container-name: chat-main; color: var(--foreground); }
-/* Where a view dragged from the dock will land: the chat's right half, washed. */
 .workspace-files { position: relative; display: flex; min-height: 0; flex: 1; flex-direction: column; }
-/* A pane's file viewer: one file, or two side by side (6d-2). */
-.workspace-file-viewer { position: relative; flex-direction: row; }
-/* A column without an editor (an image, rendered Markdown) holds the keyboard itself; its pane's line shows it. */
-
-/* With two sides, the held pane's bottom line runs under the side with the keyboard only. */
-/* Never a chat region: a file viewer is not in one, and a :has() searching the region below it ran on every word a
-   streaming answer added -- over every element of the transcript (a fifth of a frame's style recalc, late in a long
-   answer on a phone's CPU). */
-/* The rule between two sides drags their shares; a double-click evens them. */
-
 .workspace-tree-pane { display: flex; min-width: 0; min-height: 0; flex: 1; flex-direction: column; overflow: hidden; }
-.workspace-tree-pane > .workspace-review-files { width: 100%; min-height: 0; flex: 1; border-right: 0; }
 .workspace-files[data-wide="false"] { display: grid; grid-template-columns: var(--control-lg) minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
 .workspace-files[data-wide="false"] > .ui-file { grid-column: 2; grid-row: 1; height: auto !important; }
 .workspace-files[data-wide="false"][data-navigator-open="true"] > .ui-file { grid-column: 1 / -1; }
 .workspace-files[data-wide="false"] > .workspace-tree-pane { grid-column: 1 / -1; grid-row: 1 / -1; z-index: 8; width: min(85%, var(--measure-lg)); background: var(--background); border-right: var(--hairline) solid var(--border); box-shadow: var(--lift-side); }
 .workspace-files[data-wide="false"][data-navigator-open="false"] > .workspace-tree-pane { display: none; }
- .workspace-diff { display: flex; min-height: 0; flex: 1; flex-direction: column; overflow: hidden; }
 .workspace-files > .ui-file { flex: none; }
-.workspace-diff { min-width: 0; container-name: workspace-source; container-type: inline-size; }
-/* Fits either slot at any split ratio; the checker ground shows transparency. */
-
-/* A comment leaves its lines faintly marked, and hovering them previews the note. */
+.workspace-diff { display: flex; min-width: 0; min-height: 0; flex: 1; flex-direction: column; overflow: hidden; container-name: workspace-source; container-type: inline-size; }
 .workspace-diff-overview { display: flex; min-height: var(--measure-2xs); flex: 1 1 56%; flex-direction: column; overflow: hidden; }
 .workspace-patch { display: flex; min-height: 0; max-height: 42%; flex: none; flex-direction: column; overflow: hidden; }
 .workspace-diff > .workspace-patch { max-height: none; flex: 1; border: 0; }
-.workspace-patch.workspace-review { flex-direction: row; }
-.workspace-patch.workspace-review[data-full="true"] { max-height: none; flex: 1; }
 .workspace-review-files { display: flex; min-width: 0; min-height: 0; flex-direction: column; background: color-mix(in oklch, var(--background), var(--border) 9%); }
 .workspace-terminal-slot { display: flex; min-width: 0; min-height: 0; overflow: hidden; }
-/* 19.2px hit target centered on the gap between chat-main and the panel edge. */
 .workspace-detail-resizing { cursor: row-resize; user-select: none; }
 .workspace-chat-view { display: flex; min-height: 0; flex: 1; flex-direction: column; }
 
@@ -167,12 +138,4 @@
 .pane-terminal { display: flex; min-width: 0; min-height: 0; flex: 1; flex-direction: column; overflow: hidden; border-radius: inherit; }
 .pane-terminal .ui-term-identity .ui-pane-actions { margin-left: auto; }
 .pane-terminal-gone { display: flex; align-items: center; justify-content: space-between; gap: var(--space-md); padding: var(--space-xl) var(--space-2xl); color: var(--muted-foreground); font-size: var(--text-body); }
-/* Where a document dragged over a pane will land: a third's half, or the whole pane. */
-/* The rail's foot: pane layout controls, pushed to the bottom. */
-/* A folded pane: its letter on a hairline tile, set apart from the tools. */
 body.panes-settling :is(.chat-main, .main-split) { transition: flex-grow var(--duration-fold) var(--ease-fold), margin var(--duration-fold) var(--ease-fold); }
-/* A file viewer's header: copying and wrapping live in its ⋯, which is always there;
-   the other actions fold into it one at a time (data-folded). */
-
-/* The ⇄ on the rule between two sides trades them; the headers keep clear of it. */
-
