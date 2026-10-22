@@ -100,9 +100,31 @@ export function deviceHost({ hub, nodeId, place, label = "" }) {
     throw Object.assign(new Error(result.error.message), { code,
       status: { permission_denied: 403, not_supported: 501 }[result.error.code] });
   };
+  // A path the device reported, as workspace-relative: null when it is not below the folder (or is the folder).
+  const relativeOf = (reported) => {
+    const base = String(label || "").replace(/[\\/]+$/, "");
+    const value = String(reported || "");
+    if (!base || !value.startsWith(base) || !/[\\/]/.test(value[base.length] || "")) return null;
+    return value.slice(base.length + 1).replace(/\\/g, "/") || null;
+  };
   return {
     local: false,
     key: `node:${nodeId}:${place.root}/${place.path || ""}`,
+    /**
+     * Watch the folder on the device: `onChange(paths)` with workspace-relative
+     * paths, or `null` for "anything may have changed" (an overflow, or a
+     * path outside it); `onLost()` once the watch has stopped (the device
+     * went away). Resolves to the watcher, to close.
+     */
+    async watch(onChange, onLost) {
+      const result = await env.watch([{ path: ".", recursive: true, exclude: { names: [".git", "node_modules"] } }], (change) => {
+        if (change.error) return onLost();
+        if (change.overflow) return onChange(null);
+        const paths = (change.paths || []).map(relativeOf);
+        onChange(paths.includes(null) ? null : paths);
+      }, context());
+      return { close: () => value(result).close(BACKGROUND_CONTEXT).catch(() => {}) };
+    },
     async checkRoot() {
       const info = value(await env.fileInfo(".", context()));
       if (info.kind !== "directory") throw Object.assign(new Error("The workspace root must be a real directory"), { code: "unsafe_workspace_root" });

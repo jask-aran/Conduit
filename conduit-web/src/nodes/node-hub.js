@@ -5,7 +5,8 @@ import path from "node:path";
 import { EventEmitter } from "node:events";
 import { WebSocketServer } from "ws";
 import { awaitWithContext, BACKGROUND_CONTEXT, withAbortSignal } from "@earendil-works/chord/context";
-import { NODE_PROTOCOL_VERSION } from "./protocol.js";
+import { encode, NODE_PROTOCOL_VERSION } from "./protocol.js";
+import { FileError } from "@earendil-works/pi-durable/env";
 
 const hash = (key) => crypto.createHash("sha256").update(key).digest("hex");
 
@@ -244,6 +245,11 @@ export class NodeHub extends EventEmitter {
       for (const [key, tunnel] of this.tunnels) if (key.startsWith(`${record.id} `) && tunnel.nodeSocket === ws) tunnel.drop();
       for (const pending of node.calls.values()) pending.reject(Object.assign(new Error(`${record.name} disconnected during the call`), { interrupted: true }));
       node.calls.clear();
+      // A watcher on the device stopped with the socket: say so, as a watcher that stops does (WatchChange `error`).
+      for (const watcher of node.watchers.values()) {
+        try { watcher.onEvent({ kind: "change", change: encode({ error: new FileError("unknown", `${record.name} disconnected`) }) }); } catch {}
+      }
+      node.watchers.clear();
       if (this.live.get(record.id) === node) {
         this.live.delete(record.id);
         record.lastSeenAt = new Date().toISOString();
