@@ -23,6 +23,7 @@ export function registerLiveSessionRoutes(app, {
     findChatContext,
     lifecycle,
     maxLiveProcesses: () => runtimeSettings.get().maxLiveProcesses,
+    preferences,
     registry,
     runtimeFor,
     templateForChat,
