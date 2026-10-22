@@ -291,8 +291,12 @@ starts elsewhere.
    that devices exist. *(Built 2026-10-22: `placeProcesses`,
    nodes/place-processes.js, used by Claude Code, Codex, fx, OpenCode and the
    durable runtime; the head reads harness state with the node's own readers.
-   Terminals still open device processes themselves: PTYs are a different
-   shape.)*
+   Device terminals start, reattach and are killed through its `shells`;
+   this server's own stay tmux sessions, since both must outlive it.)*
+   *Device terminals (2026-10-22):* besides a terminal in a mounted
+   workspace, a device's owner can allow a terminal in their home outside
+   any shared folder (`conduit-node terminal on`); `device:<nodeId>` is that
+   place, as `computer` is this server's, opened from Settings › Devices.
 5. Pi 1.3.0 is not generalised: milestone 5 retires it as the default.
 
 ## Milestones
