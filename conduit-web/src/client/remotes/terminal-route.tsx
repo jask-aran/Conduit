@@ -1,3 +1,4 @@
+import { PaneEmpty } from "@/components/ui";
 import { createEffect, createResource, onCleanup, Show } from "solid-js";
 import type { ComputerLocation } from "../api/contracts";
 import type { Connectivity } from "../state/runtime";
@@ -40,9 +41,7 @@ export function TerminalRoute(props: { terminalId?: string; connectivity?: () =>
   });
 
   return <main class="terminal-route">
-    <Show when={home()} fallback={<div class="terminal-route-loading">
-      {home.error ? "Waiting for Conduit…" : "Loading terminal…"}
-    </div>}>
+    <Show when={home()} fallback={<PaneEmpty role="status">{home.error ? "Waiting for Conduit…" : "Loading terminal…"}</PaneEmpty>}>
       {(location) => <TerminalPane projectId={location().project.id} projectName="Computer" workingRoot={location().home} terminalId={props.terminalId} connectivity={props.connectivity} autoStart standaloneControls={{ onOpenConduit: props.onOpenConduit }} />}
     </Show>
   </main>;

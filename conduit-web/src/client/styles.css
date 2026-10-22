@@ -48,10 +48,6 @@ svg { stroke-width: 1.5; }
    icon set it in those units. */
 svg.lucide { stroke-width: 2.4; }
 
-/* A file viewer with no file showing stays open, saying how to fill it. */
-.workspace-warning { position: relative; z-index: 2; display: flex; width: min(var(--reading-width), calc(100% - var(--page-gutter))); gap: var(--space-md); margin: var(--space-md) auto; padding: var(--space-lg); border: var(--hairline) solid var(--border); border-radius: var(--radius-control); }
-.workspace-warning svg { width: var(--icon-lg); flex: none; }
-.workspace-warning p { margin: var(--space-2xs) 0 0; color: var(--muted-foreground); font-size: var(--text-row); }
 
 .terminal-pane { display: flex; min-width: 0; min-height: 0; flex: 1; flex-direction: column; overflow: hidden; background: color-mix(in oklch, var(--background), black 9%); }
 .terminal-canvas { position: relative; min-width: 0; min-height: 0; flex: 1; overflow: hidden; background: #000; padding: var(--space-md); }
@@ -67,18 +63,9 @@ svg.lucide { stroke-width: 2.4; }
 
 .markdown-skeleton { min-height: 4em; }
 
-.chat-drop-overlay { position: absolute; inset: 0; z-index: 40; display: grid; place-items: center; pointer-events: none; background: color-mix(in oklch, var(--background), transparent 22%); backdrop-filter: blur(9.6px); }
-.chat-drop-overlay > div { padding: var(--space-xl) var(--space-2xl); border: var(--hairline) solid var(--border); border-radius: var(--radius-surface); background: var(--card); box-shadow: var(--lift-raised); }
-/* Decorative, deterministic meteor field for the entire chat main surface. */
-.chat-meteors { position: absolute; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; }
-
-.chat-bootstrap { display: grid; min-height: 100%; place-items: center; color: var(--muted-foreground); font-size: var(--text-row); }
 
 
-.workspace-warning {
-  background: var(--card);
-  border-color: var(--border);
-}
+
 
 @media (--conduit-phone-layout) {
   html[data-mobile-overlay] { overscroll-behavior-y: none; }
@@ -111,7 +98,6 @@ svg.lucide { stroke-width: 2.4; }
 @media (--conduit-phone-layout) {
   html { font-size: calc(16px * var(--ui-scale)); }
 .markdown-skeleton { min-height: 5em; }
-.chat-drop-overlay { backdrop-filter: blur(12px); }
 }
 
 /* Native fallback for touch, forced colours, and browsers without popovers. */
