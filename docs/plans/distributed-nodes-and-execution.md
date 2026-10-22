@@ -190,6 +190,11 @@ environments.
     its own pairing key and the relay forwards its hello untouched, so the
     head checks every environment alike. Only WSL distros now; the frame tags
     stay generic so containers and SSH hosts behind a device fit later.
+    *(Built 2026-10-22: nodes/node-relay.js; `conduit-node relay add <env>
+    -- <command>` on the relay, `relayed on` and `run --stdio` on the relayed
+    side. Measured from the head, WSL relayed through the Windows app against
+    WSL dialling directly: a folder listing 71 vs 70 ms, a 2.7 MB file 749 vs
+    725 ms -- within noise.)*
 26. **The same files shared from two environments are two places.**
     `C:\Users\x\proj` from Windows and `/mnt/c/Users/x/proj` from WSL are
     separate workspaces, since the environment decides the shell, tools and
