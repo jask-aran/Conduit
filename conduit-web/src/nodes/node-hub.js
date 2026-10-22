@@ -187,10 +187,11 @@ export class NodeHub extends EventEmitter {
   async relayOpen(outer, relaySocket, { env, key }, relaying) {
     const reply = (message) => { if (relaySocket.readyState === 1) relaySocket.send(JSON.stringify({ ...message, env })); };
     if (typeof env !== "string" || !env || env.length > RELAY_ENV_MAX) return reply({ type: "relay-closed", reason: "bad environment name" });
-    // A device carries a few environments, not many: past that, an open is refused.
-    if (!outer.relayed.has(env) && outer.relayed.size >= RELAYS_PER_SOCKET) return reply({ type: "relay-closed", reason: "too many relayed environments" });
     const record = await this.byKey(String(key || ""));
     if (!record || relaySocket.readyState !== 1) return reply({ type: "relay-closed", reason: "unknown key" });
+    // A device carries a few environments, not many: past that, an open is
+    // refused. Counted after the key's lookup, so opens sent together cannot all pass.
+    if (!outer.relayed.has(env) && outer.relayed.size >= RELAYS_PER_SOCKET) return reply({ type: "relay-closed", reason: "too many relayed environments" });
     if (record.id === relaying.id) return reply({ type: "relay-closed", reason: "a node cannot relay itself" });
     outer.relayed.get(env)?.end("replaced");
     const socket = new EventEmitter();
