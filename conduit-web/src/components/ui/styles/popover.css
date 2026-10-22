@@ -108,7 +108,7 @@
   overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: var(--tint) transparent; }
 .ui-menu-parent { display: flex; flex-direction: column; transition: filter var(--duration-quick) var(--ease-change); }
 .ui-menu-parent[data-under] { filter: var(--dim-under); }
-.ui-menu-parent[data-under] > *, .ui-menu[data-settling="true"] * { pointer-events: none; }
+.ui-menu-parent[data-under] > * { pointer-events: none; }
 .ui-menu-panel { pointer-events: auto; z-index: calc(var(--layer-popover) + 1); width: min(var(--menu-width, var(--menu-width-cap)), calc(100vw - var(--space-xl))); }
 .ui-menu-note { margin: 0; padding: var(--row-pad); color: var(--muted-foreground); font-size: var(--text-caption); line-height: var(--leading-row); white-space: normal; overflow-wrap: anywhere; }
 .ui-menu-note[data-error] { color: var(--destructive); }
