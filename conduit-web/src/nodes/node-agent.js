@@ -10,6 +10,8 @@ import { encode, decode, HANDLE_METHODS, METHOD_GRANTS, NODE_PROTOCOL_VERSION, r
 import { NodeProcesses } from "./node-processes.js";
 import { keptBack, rootDeny } from "./secrets.js";
 import { Receipts } from "./receipts.js";
+import { keySecret } from "./direct.js";
+import { serveDirect } from "./node-direct.js";
 import net from "node:net";
 import { claudeSession, codexRollout, findHarnesses, opencodeService, tunnelTarget } from "./node-harnesses.js";
 
@@ -51,7 +53,9 @@ export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: 
   // The grants a folder shared by browsing gets: the device's choice for new folders, read when one is shared.
   newFolders = () => ({ write: true, shell: true }),
   // Told when another run of this node took the pairing over (main replaced this connection).
-  onReplaced = null }) {
+  onReplaced = null,
+  // Answer reads on loopback for clients holding the hub's grant (node-direct.js): the same device's app.
+  direct = false }) {
   // Every way main can be reached, best first (its tailnet name, then a public
   // tunnel): a failed attempt tries the next, and a dropped connection starts again at the best.
   const ways = [...new Set([mainUrl, ...routes].filter(Boolean))];
@@ -65,6 +69,8 @@ export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: 
   // Harnesses are offered only with the shell grant somewhere: running one is running code.
   const harnesses = roots.some((root) => root.shell) ? findHarnesses() : {};
   let socket = null;
+  let served = null;
+  let directPort = null;
   let attempt = 0;
   let stopped = false;
   let timer = null;
@@ -87,6 +93,39 @@ export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: 
     if (!envs.has(cwd)) envs.set(cwd, new NodeExecutionEnv({ cwd, shellEnv }));
     return envs.get(cwd);
   };
+
+  /*
+   * A call on this device's files or processes at a place, by the grants of the folder it falls in: what main asks over
+   * the socket, and what direct reads (node-direct.js) ask here.
+   */
+  async function envCall(method, decoded, cwd, context, emit) {
+    const rule = METHOD_GRANTS[method];
+    if (!rule) return err(new FileError("not_supported", `${method} is not served by this node`));
+    const home = placeOf(cwd);
+    const allowed = (target, grant) => Boolean(target && rootFor(roots, target, grant));
+    if (!home) return refuse(method, "that folder");
+    for (const at of rule.paths) {
+      if (typeof decoded[at] !== "string") continue;
+      const target = realish(path.resolve(home, decoded[at]));
+      if (!allowed(target, rule.grant)) return refuse(method, decoded[at]);
+      if (rule.contents && keptBack(rootFor(roots, target, rule.grant), target)) {
+        return err(new FileError("permission_denied", `${decoded[at]} is kept private on this device`, decoded[at]));
+      }
+    }
+    if (method === "exec" && !allowed(realish(path.resolve(home, decoded[1]?.cwd || ".")), "shell")) return refuse(method, decoded[1]?.cwd || "that folder");
+    if (method === "watch" && decoded[0].some((item) => !allowed(realish(path.resolve(home, item.path)), "read"))) return refuse(method, "a watched path");
+    const env = envFor(home);
+    if (method === "exec") {
+      const options = { ...(decoded[1] || {}) };
+      options.onOutput = (text, _context, info) => emit({ kind: "output", text, info: encode(info) });
+      return env.exec(decoded[0], options, context);
+    }
+    if (method === "watch") {
+      return env.watch(decoded[0], (change) => emit({ kind: "change", change: encode(change) }), context);
+    }
+    if (typeof env[method] !== "function") return err(new FileError("not_supported", `${method} is not available on this device`));
+    return env[method](...decoded, context);
+  }
 
   const connect = () => {
     const via = ways[way % ways.length];
@@ -124,7 +163,7 @@ export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: 
       way = 0;
       // Roots go by id; the path is for people to read, main never sends it back.
       send({ type: "hello", version: NODE_PROTOCOL_VERSION, name, platform: process.platform, boot: receipts.boot,
-        harnesses: Object.keys(harnesses), browse: Boolean(browse && onShare),
+        harnesses: Object.keys(harnesses), browse: Boolean(browse && onShare), ...(directPort ? { direct: { port: directPort } } : {}),
         roots: roots.map(({ id, path: label, read, write, shell, allow }) => ({ id, label, read, write, shell, allow })) });
       log.info?.(`[conduit-node] connected to ${mainUrl}${via === mainUrl ? "" : ` via ${via}`}`);
     });
@@ -327,41 +366,21 @@ export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: 
         if (method === "close") handles.delete(target);
         return value;
       }
-      const rule = METHOD_GRANTS[method];
-      if (!rule) return err(new FileError("not_supported", `${method} is not served by this node`));
-      const home = placeOf(cwd);
-      const allowed = (target, grant) => Boolean(target && rootFor(roots, target, grant));
-      if (!home) return refuse(method, "that folder");
-      for (const at of rule.paths) {
-        if (typeof decoded[at] !== "string") continue;
-        const target = realish(path.resolve(home, decoded[at]));
-        if (!allowed(target, rule.grant)) return refuse(method, decoded[at]);
-        if (rule.contents && keptBack(rootFor(roots, target, rule.grant), target)) {
-          return err(new FileError("permission_denied", `${decoded[at]} is kept private on this device`, decoded[at]));
-        }
-      }
-      if (method === "exec" && !allowed(realish(path.resolve(home, decoded[1]?.cwd || ".")), "shell")) return refuse(method, decoded[1]?.cwd || "that folder");
-      if (method === "watch" && decoded[0].some((item) => !allowed(realish(path.resolve(home, item.path)), "read"))) return refuse(method, "a watched path");
-      const env = envFor(home);
-      if (method === "exec") {
-        const options = { ...(decoded[1] || {}) };
-        options.onOutput = (text, _context, info) => emit({ kind: "output", text, info: encode(info) });
-        return env.exec(decoded[0], options, context);
-      }
-      if (method === "watch") {
-        return env.watch(decoded[0], (change) => emit({ kind: "change", change: encode(change) }), context);
-      }
-      if (typeof env[method] !== "function") return err(new FileError("not_supported", `${method} is not available on this device`));
-      return env[method](...decoded, context);
+      return envCall(method, decoded, cwd, context, emit);
     }
   };
 
-  connect();
+  // Listening first, so the first hello can say where.
+  if (direct) {
+    served = serveDirect({ secret: keySecret(key), call: envCall, log });
+    void served.listening.then((port) => { directPort = port; if (!stopped) connect(); });
+  } else connect();
   return {
     stop() {
       stopped = true;
       processes.stopAll();
       for (const relay of relays) relay.stop();
+      served?.close();
       clearTimeout(timer);
       socket?.close();
     },

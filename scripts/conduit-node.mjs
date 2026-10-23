@@ -259,7 +259,7 @@ if (command === "pair") {
   const agents = settings.pairings.filter((pairing) => !pairing.relayed).map((pairing) => {
     if (!pairing.roots.length) console.warn(`Nothing is shared with ${pairing.mainUrl} yet; it will see this device with no folders.`);
     return startNodeAgent({ mainUrl: pairing.mainUrl, routes: pairing.routes, key: pairing.key, name: settings.name || os.hostname(), roots: pairing.roots, shellEnv,
-      browse: Boolean(pairing.browse), onShare: keepShare(pairing.mainUrl), newFolders: newFoldersFor(pairing.mainUrl), onReplaced: replaced,
+      browse: Boolean(pairing.browse), onShare: keepShare(pairing.mainUrl), newFolders: newFoldersFor(pairing.mainUrl), onReplaced: replaced, direct: true,
       relays: (pairing.relays || []).map(({ env, command: relayed }) => relayEnvironment({ env, command: relayed })) });
   });
   for (const signal of ["SIGINT", "SIGTERM"]) process.on(signal, () => { for (const agent of agents) agent.stop(); process.exit(0); });

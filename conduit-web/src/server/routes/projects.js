@@ -399,6 +399,20 @@ export function registerProjectRoutes(app, {
     } catch (error) { next(error); }
   });
 
+  // A grant to read this workspace's files from its node itself, the shortest way (nodes/direct.js).
+  app.get("/v0/projects/:id/direct", async (request, response, next) => {
+    try {
+      const project = await inspectionContext(request.params.id);
+      if (!project) return response.status(404).json({ error: "project_not_found" });
+      const nodeId = remoteNode(project);
+      if (!nodeId) return response.status(404).json({ error: "direct_not_on_node" });
+      const grant = await nodeHub.directGrant(nodeId, project.place, project.workingRoot);
+      if (!grant) return response.status(404).json({ error: "direct_unavailable" });
+      response.setHeader("Cache-Control", "no-store");
+      response.json(grant);
+    } catch (error) { next(error); }
+  });
+
   app.get("/v0/projects/:id/file", async (request, response, next) => {
     try {
       const project = await inspectionContext(request.params.id);

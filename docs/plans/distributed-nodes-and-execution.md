@@ -744,3 +744,33 @@ agent's code), serving while Share is on as a foreground service, its first
 sources the media store (read only, by album), folders granted through
 Android's picker, and files shared in to Conduit. No shell: Android gives apps
 none.
+
+### 2026-10-23: files take the shortest way (direct reads)
+
+The hub stays the one that says who may do what; the bytes need not pass
+through it. A client reading a file in a workspace on another machine sent
+every byte to the hub and back: an app opening a photo on its own disk, with
+the hub on a VPS, crossed the internet twice for it.
+
+A node also answers reads itself. The hub hands a client a **grant** for one
+place: `{ place, read, expires }`, signed with an HMAC keyed by the hash of
+the node's key (the secret the hub and the node already share; no new keys,
+nothing for the node to ask the hub). The node checks the signature and the
+expiry, then serves the read with the same inspector code the hub runs, over
+its own disk, through its own grant and kept-back checks: a grant can never
+reach further than the hub could.
+
+Which way, best first, the client trying each with a short timeout and
+falling back to the hub on any failure:
+
+1. **Same device** (built): the app's own companion is the workspace's node.
+   The node listens on loopback and says its port in its hello; the hub's
+   grant names `http://127.0.0.1:<port>`.
+2. **Same LAN** (next): the node also listens on its private addresses and
+   says them; the hub passes them on, and a client tries them. A browser on
+   an https page cannot fetch a plain-http LAN address, so browsers stay on
+   the hub until the node serves https.
+3. **Otherwise**: through the hub, as before.
+
+Reads only, for now: writes, terminals and the agent's own tools stay on the
+hub's connection, where actions keep receipts and the agent runs.
