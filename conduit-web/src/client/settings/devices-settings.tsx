@@ -14,7 +14,7 @@ import { ClientCard, ClientCards, ClientPlaces, NetworkMap, type NetworkClient }
 import { CardActions, CardColumn, CardColumns } from "@/components/ui/card";
 import { Reading, ReadingStat, ReadingStats } from "@/components/ui/reading";
 import { connectionId } from "../state/runtime.ts";
-import { LiveNote, SettingGroup, SettingLine, SettingNote, SettingValue } from "@/components/ui/overlay";
+import { LiveNote, SettingGroup, SettingLine, SettingNote, SettingTitle, SettingValue } from "@/components/ui/overlay";
 import { WorkspaceGlyph } from "../project/workspace-appearance.tsx";
 import { desktopShell, isInstalledClient, type CompanionStatus, type DesktopShellSettings } from "../platform/installed-client.ts";
 import { pairingWith, pairThisComputer } from "../platform/this-computer.ts";
@@ -172,18 +172,19 @@ export function DevicesSettingsTile(props: { projects: Project[]; onAddWorkspace
           <Show when={nodes().some((node) => mounted(node).length || unmounted(node).length)} fallback={<SettingNote>None mounted</SettingNote>}>
             <div><For each={nodes()}>{(node) => places(node, nodes().length > 1)}</For></div>
           </Show>
-          <CardActions>
-            <For each={nodes().filter((node) => node.online && (node.local || node.terminal))}>{(node) =>
-              <Button variant="ghost" size="sm" onClick={() => props.onOpenTerminal(node)}><Icons.Terminal /> {nodes().length > 1 ? `Terminal on ${node.name}` : "Terminal"}</Button>}</For>
-            <Show when={companion}>
-              <Show when={paired()} fallback={<Button variant="ghost" size="sm" disabled={companion!.busy()} onClick={() => void companion!.pair()}><Icons.Add /> Add this computer</Button>}>{(pairing) => <>
-                <Button variant="ghost" size="sm" disabled={companion!.busy()} onClick={() => void companion!.share(pairing().mainUrl)}><Icons.NewFolder /> Mount a folder…</Button>
-                <Button variant="ghost" size="sm" disabled={companion!.busy()} onClick={() => void companion!.unpair(pairing().mainUrl, pairing().nodeId)}>Unpair</Button>
-              </>}</Show>
-            </Show>
-          </CardActions>
         </CardColumn>
       </CardColumns>
+      {/* What can be done here, under both: a terminal on each client that has one, mounting a folder of this app's. */}
+      <CardActions>
+        <For each={nodes().filter((node) => node.online && (node.local || node.terminal))}>{(node) =>
+          <Button variant="ghost" size="sm" onClick={() => props.onOpenTerminal(node)}><Icons.Terminal /> {nodes().length > 1 ? `Terminal on ${node.name}` : "Terminal"}</Button>}</For>
+        <Show when={companion}>
+          <Show when={paired()} fallback={<Button variant="ghost" size="sm" disabled={companion!.busy()} onClick={() => void companion!.pair()}><Icons.Add /> Add this computer</Button>}>{(pairing) => <>
+            <Button variant="ghost" size="sm" disabled={companion!.busy()} onClick={() => void companion!.share(pairing().mainUrl)}><Icons.NewFolder /> Mount a folder…</Button>
+            <Button variant="ghost" size="sm" disabled={companion!.busy()} onClick={() => void companion!.unpair(pairing().mainUrl, pairing().nodeId)}>Unpair</Button>
+          </>}</Show>
+        </Show>
+      </CardActions>
       {/* The app can bring another environment of this machine in (a WSL distro); not where the hub already runs. */}
       <Show when={companion && device.paired && !device.clients.some((shown) => shown.node?.local)}><PairEnvironment device={device} onPaired={refresh} /></Show>
     </>;
@@ -213,9 +214,8 @@ export function DevicesSettingsTile(props: { projects: Project[]; onAddWorkspace
       devices={network().map((device) => ({ id: device.id, name: device.name, clients: device.clients.map((shown) => shown.part) }))} /></Show>
 
     <Show when={active() && thisDevice()}>{(device) => <SettingGroup title="This device">
-      <Show when={device().paired}>
-        <SettingLine label="Name"><Input aria-label="This device's name" value={device().name} onChange={(event) => rename(device(), event.currentTarget.value)} /></SettingLine>
-      </Show>
+      {/* Its name, large: what the network calls this device, renamed here only. */}
+      <SettingTitle label="This device's name" value={device().name} editable={device().paired} onChange={(name) => rename(device(), name)} />
       {here(device())}
       <Show when={companion?.error()}><SettingNote tone="error">{companion!.error()}</SettingNote></Show>
     </SettingGroup>}</Show>

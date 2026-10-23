@@ -173,14 +173,18 @@ export function Counts(props: { added: number | null; removed: number | null }) 
 /** Project folders as folders, no box; two rows until all. */
 export const FolderShelf = (props: { ref?: (element: HTMLDivElement) => void; all?: boolean; children: JSX.Element }) =>
   <div ref={props.ref} class="ui-folder-shelf" data-all={props.all ? "" : undefined}>{props.children}</div>;
-/** A folder on the shelf: its mark (a dot when something runs in it), name and a line of data. A link, a button, or a menu's trigger with `as`. */
-export function FolderTile(props: Omit<JSX.HTMLAttributes<HTMLElement>, "class" | "children"> & Partial<Pick<JSX.AnchorHTMLAttributes<HTMLAnchorElement>, "href">> & { element?: "a" | "button"; name: string; meta?: string; live?: boolean; icon?: JSX.Element; ref?: (element: HTMLElement) => void }) {
-  const [local, rest] = splitProps(props, ["element", "name", "meta", "live", "icon"]);
+/**
+ * A folder on the shelf: its mark (a dot when something runs in it), name and a line of data. A link, a button, or a
+ * menu's trigger with `as`. `icon`: an action's (New project), quiet; `mark`: a thing's own mark in its colours (a
+ * harness on the hub's page), in place of the folder.
+ */
+export function FolderTile(props: Omit<JSX.HTMLAttributes<HTMLElement>, "class" | "children"> & Partial<Pick<JSX.AnchorHTMLAttributes<HTMLAnchorElement>, "href">> & { element?: "a" | "button"; name: string; meta?: string; live?: boolean; icon?: JSX.Element; mark?: JSX.Element; ref?: (element: HTMLElement) => void }) {
+  const [local, rest] = splitProps(props, ["element", "name", "meta", "live", "icon", "mark"]);
   return <Dynamic component={local.element || (rest.href ? "a" : "button")} {...rest} class="ui-folder" data-new={local.icon ? "" : undefined}>
-    <Show when={local.icon} fallback={<svg class="ui-folder-mark" viewBox="0 0 30 24" aria-hidden="true">
+    <Show when={!local.mark} fallback={<span class="ui-folder-own" aria-hidden="true">{local.mark}</span>}><Show when={local.icon} fallback={<svg class="ui-folder-mark" viewBox="0 0 30 24" aria-hidden="true">
       <path data-part="back" d="M1 4a2 2 0 0 1 2-2h7l3 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2z" />
       <path data-part="front" d="M1 8h28v13a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2z" />
-    </svg>}>{local.icon}</Show>
+    </svg>}>{local.icon}</Show></Show>
     <Show when={local.live}><span class="ui-folder-live" aria-label="Running" /></Show>
     <span class="ui-folder-name">{local.name}</span>
     <Show when={local.meta}><span class="ui-folder-meta">{local.meta}</span></Show>

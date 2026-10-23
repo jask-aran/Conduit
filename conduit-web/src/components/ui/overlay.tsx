@@ -128,6 +128,15 @@ export function SettingRecorder(props: { keys?: string[]; label?: string; ref?: 
 export const LiveNote = (props: { children: JSX.Element }) => <p class="ui-live-note" aria-live="polite">{props.children}</p>;
 
 /** A titled group of SettingLines; groups after the first are ruled off. */
+/**
+ * A group's subject named large, under the group's label: the thing the lines below are about (This device's own
+ * name). Editable where it may be renamed, as a field that reads as a title until pointed at.
+ */
+export const SettingTitle = (props: { value: string; label: string; editable?: boolean; onChange?: (value: string) => void }) => props.editable
+  ? <input class="ui-setting-title" aria-label={props.label} value={props.value} spellcheck={false}
+      onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); if (event.key === "Escape") { event.currentTarget.value = props.value; event.currentTarget.blur(); } }}
+      onChange={(event) => props.onChange?.(event.currentTarget.value)} />
+  : <h3 class="ui-setting-title">{props.value}</h3>;
 export const SettingGroup = (props: { title: string; children: JSX.Element }) =>
   <section class="ui-setting-group" aria-label={props.title}><div class="ui-nav-label">{props.title}</div>{props.children}</section>;
 

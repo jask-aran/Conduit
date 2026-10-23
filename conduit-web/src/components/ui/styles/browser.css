@@ -12,6 +12,7 @@
 .ui-browser-main { position: relative; display: flex; min-width: 0; min-height: 0; flex-direction: column; overflow: hidden; }
 .ui-browser-toolbar, .ui-browser-actions { display: flex; min-width: 0; align-items: center; flex-wrap: wrap; gap: var(--space-xs); padding: var(--space-sm); border-bottom: var(--hairline) solid var(--tint); }
 .ui-browser-toolbar > .ui-button { width: var(--control); padding-inline: 0; flex: none; }
+.ui-browser-shelf { flex: none; padding: var(--space-sm); border-bottom: var(--hairline) solid var(--tint); }
 .ui-browser-toolbar > .ui-browser-machine { width: auto; max-width: var(--measure-xs); padding-inline: var(--space-sm); }
 .ui-browser-machine > span { overflow: hidden; min-width: 0; text-overflow: ellipsis; white-space: nowrap; }
 .ui-browser-machine > svg { flex: none; }
