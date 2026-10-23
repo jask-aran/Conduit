@@ -1,4 +1,4 @@
-// Props: devices (NetworkDevice: id, name, parts of NetworkPart: id, name, head, headed desktop | phone | browser, meta, online), label.
+// Props: devices (NetworkDevice: id, name, parts of NetworkPart: id, name, head, headed desktop | phone | browser, meta, online), label, current, onPick.
 import { NetworkMap, type NetworkDevice } from "@/components/ui";
 import { row, token, type Page } from "../model";
 
@@ -16,7 +16,7 @@ const laptop: NetworkDevice = { id: "laptop", name: "Laptop", parts: [
 export const networkPage: Page = {
   title: "NetworkMap",
   summary: "The devices of a network: the head's device, its environments and clients, and every other device hung from it by a line.",
-  preview: () => <NetworkMap devices={[desk(false), phone, browser]} />,
+  preview: () => <NetworkMap devices={[desk(false), phone, browser]} current="windows" />,
   usage: `import { NetworkMap } from "@/components/ui";
 
 <NetworkMap devices={[{ id: "desk", name: "Desktop-Dev", parts: [
@@ -24,6 +24,7 @@ export const networkPage: Page = {
   { id: "windows", name: "Windows", headed: "desktop", meta: "Conduit Dev · this app", online: true },
 ] }]} />`,
   examples: [
+    row("picked", "The part picked is current, as in the sidebar; the page shows what it holds under the map.", () => <NetworkMap devices={[desk(false)]} current="ubuntu" />, { surfaces: ["frost"] }),
     row("head alone", "Only the head's device: the head headless, Windows headed by this app but not serving.", () => <NetworkMap devices={[desk(false)]} />, { surfaces: ["frost"] }),
     row("spokes", "A phone and a browser, each a device of one headed environment, hung from the head.", () => <NetworkMap devices={[desk(true), phone, browser]} />, { surfaces: ["frost"] }),
     row("offline device", "A device with nothing connected hangs by a dashed line; headless environments, one relayed by the other.", () => <NetworkMap devices={[desk(true), laptop, phone]} />, { surfaces: ["frost"] }),
