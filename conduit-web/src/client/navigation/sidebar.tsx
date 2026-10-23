@@ -1038,7 +1038,8 @@ export function Sidebar(props: {
     onAddServer={() => { closeMobile(); props.onAddServer?.(); }}
     onLogout={() => props.onLogout?.()} />;
 
-  const areas = [{ value: "conduit" as const, label: "Conduit", icon: <Icons.Dashboard /> }, { value: "computer" as const, label: "Computer", icon: <Icons.Monitor /> }];
+  // The two halves: Chat (projects and chats, the hub's) and Work (workspaces, terminals and harnesses, by machine).
+  const areas = [{ value: "conduit" as const, label: "Chat", icon: <Icons.Dashboard /> }, { value: "computer" as const, label: "Work", icon: <Icons.Monitor /> }];
   return <>
     <Show when={props.mobileOpen}>
       <Backdrop layer="drawer" label="Dismiss sidebar" onDismiss={closeMobile} />
@@ -1079,7 +1080,7 @@ export function Sidebar(props: {
       </>}>
       <NavRail label="Quick navigation">
         <Show when={area() === "computer"}>
-          <RailAction label="Computer" current={props.computer && !props.selectedHarness} onClick={() => { setArea("computer"); closeMobile(); props.onOpenComputer(); enterPane(); }}><Icons.Monitor /></RailAction>
+          <RailAction label="Files" current={props.computer && !props.selectedHarness} onClick={() => { setArea("computer"); closeMobile(); props.onOpenComputer(); enterPane(); }}><Icons.Monitor /></RailAction>
           <RailAction label="New workspace" onClick={() => openNewDialog("workspace")}><Icons.NewFolder /></RailAction>
           <RailAction label="Terminal View" current={props.terminal} onClick={() => { setArea("computer"); closeMobile(); props.onOpenTerminalView(); }}><Icons.Terminal /></RailAction>
           <For each={harnesses()}>{(harness) => <RailAction label={`${harness.label} · ${harnessStatusLabel(harness.status)}`} current={props.selectedHarness === harness.id} onClick={() => { setArea("computer"); closeMobile(); props.onOpenHarness(harness.id); enterPane(); }}><HarnessMark id={harness.id} artwork /></RailAction>}</For>
