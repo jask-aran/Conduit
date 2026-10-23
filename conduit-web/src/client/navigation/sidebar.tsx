@@ -485,7 +485,36 @@ export function Sidebar(props: {
     if (seconds < 86_400) return `${Math.floor(seconds / 3600)}h ago`;
     return `${Math.floor(seconds / 86_400)}d ago`;
   };
-  const terminalScope = (terminal: Pty) => props.projects.find((project) => project.id === terminal.projectId)?.name || ((terminal.projectId === "computer" || terminal.projectId.startsWith("computer:") || terminal.projectId.startsWith("device:")) ? terminal.cwd || "Computer" : "Unknown workspace");
+  /*
+   * The machines workspaces and terminals are on: every environment the server can work on (its own and the paired
+   * ones), named as their device and client ("Desktop · Ubuntu"). Asked while the Computer view shows, and again now
+   * and then: a client pairing or a folder mounted changes the list under it.
+   */
+  type Machine = { id: string; label: string; head: boolean };
+  const [machines, setMachines] = createSignal<Machine[] | null>(null);
+  const readMachines = () => void api<{ devices: Array<{ name: string; nodes: Array<{ id: string; name: string; local?: boolean }> }> }>("/v0/nodes")
+    .then(({ devices }) => setMachines(devices.flatMap((device) => device.nodes.map((node) => ({ id: node.id, label: `${device.name} · ${node.name}`, head: Boolean(node.local) })))))
+    .catch(() => {});
+  createEffect(() => {
+    if (area() !== "computer") return;
+    readMachines();
+    const timer = setInterval(readMachines, 30_000);
+    onCleanup(() => clearInterval(timer));
+  });
+  const headMachine = () => machines()?.find((machine) => machine.head)?.id ?? "";
+  // A workspace is placed on one machine; a terminal is in a workspace, a device's home, or the server's own.
+  const machineOfProject = (project: Project) => project.nodeId || headMachine();
+  const machineOfTerminal = (terminal: Pty) => terminal.projectId.startsWith("device:") ? terminal.projectId.slice("device:".length)
+    : terminal.projectId === "computer" || terminal.projectId.startsWith("computer:") ? headMachine()
+    : machineOfProject(props.projects.find((project) => project.id === terminal.projectId) || ({ nodeId: null } as Project));
+  // The head's machine always, then any other holding a workspace or a terminal.
+  const byMachine = createMemo(() => (machines() || []).map((machine) => ({ machine,
+    workspaces: workspaces().filter((project) => machineOfProject(project) === machine.id),
+    terminals: terminals().filter((terminal) => machineOfTerminal(terminal) === machine.id) }))
+    .filter((group) => group.machine.head || group.workspaces.length || group.terminals.length)
+    .sort((a, b) => Number(b.machine.head) - Number(a.machine.head)));
+  // A device's home terminal names its device after its folder ("~ on Desktop"); its section already does.
+  const terminalScope = (terminal: Pty) => props.projects.find((project) => project.id === terminal.projectId)?.name || ((terminal.projectId === "computer" || terminal.projectId.startsWith("computer:") || terminal.projectId.startsWith("device:")) ? (terminal.cwd || "Computer").replace(/ on .+$/, "") : "Unknown workspace");
   const selectedTargets = createMemo<ChatTarget[]>(() => props.projects.flatMap((project) =>
     project.sessions.filter((chat) => selectedChatIds().has(chat.id)).map((chat) => ({ chat, project }))));
   const clearSelection = () => setSelectedChatIds(new Set<string>());
@@ -1025,11 +1054,20 @@ export function Sidebar(props: {
             title={`${harness.label} · ${harnessStatusLabel(harness.status)}`} onClick={() => { closeMobile(); props.onOpenHarness(harness.id); enterPane(); }}
             end={harness.status && harness.status !== "ready" ? <StatusDot label={harnessStatusLabel(harness.status)} tone={harness.status === "authentication_required" ? "warn" : "muted"} /> : undefined}>{harness.label}</NavRow>
         }</For>
-        <Group label="Workspaces" projects={workspaces()} workspace emptyLabel="No workspaces" />
-        <NavGroup label="Terminals">
-          <For each={terminals()}>{(terminal) => <TerminalRow terminal={terminal} />}</For>
-          <Show when={!terminals().length}><NavNote>No live terminals</NavNote></Show>
-        </NavGroup>
+        {/* By machine once the server has said which it has; until then, as one list. */}
+        <Show when={machines()?.length} fallback={<>
+          <Group label="Workspaces" projects={workspaces()} workspace emptyLabel="No workspaces" />
+          <NavGroup label="Terminals">
+            <For each={terminals()}>{(terminal) => <TerminalRow terminal={terminal} />}</For>
+            <Show when={!terminals().length}><NavNote>No live terminals</NavNote></Show>
+          </NavGroup>
+        </>}>
+          <For each={byMachine()}>{(group) => <NavGroup label={group.machine.label}>
+            <For each={group.workspaces}>{(project) => <ProjectBlock project={project} workspace />}</For>
+            <For each={group.terminals}>{(terminal) => <TerminalRow terminal={terminal} />}</For>
+            <Show when={!group.workspaces.length && !group.terminals.length}><NavNote>No workspaces</NavNote></Show>
+          </NavGroup>}</For>
+        </Show>
       </Show>
       <Show when={area() === "conduit"}>
         <NavRow icon={<Icons.Dashboard />} draggable="true" data-doc-view="page:dashboard" current={props.dashboard} onClick={() => { closeMobile(); props.onOpenDashboard(); enterPane(); }}>Conduit Dashboard</NavRow>
