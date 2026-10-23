@@ -7,6 +7,7 @@ import { EventEmitter } from "node:events";
 import { WebSocketServer } from "ws";
 import { awaitWithContext, BACKGROUND_CONTEXT, withAbortSignal } from "@earendil-works/chord/context";
 import { decode, encode, NODE_FEATURES, NODE_PROTOCOL_VERSION } from "./protocol.js";
+import { DIRECT_TTL_MS, signGrant } from "./direct.js";
 import { FileError } from "@earendil-works/pi-durable/env";
 
 const hash = (key) => crypto.createHash("sha256").update(key).digest("hex");
@@ -209,6 +210,20 @@ export class NodeHub extends EventEmitter {
    * The device's computer beyond its roots, where it lets this server browse: `list` a folder (home when none), or
    * `share` one, which makes it a root and comes back as the roots it shares now. Not waited for when it is away.
    */
+  /**
+   * A grant to read `place` on its node without passing through here, where the node answers reads itself
+   * (node-direct.js): its loopback address and the token, signed with the key hash the node can work out. Null when
+   * it is away or does not.
+   */
+  async directGrant(nodeId, place, label = "") {
+    const node = this.live.get(nodeId);
+    const record = await this.get(nodeId);
+    if (!node?.ready || !node.direct || !record?.keyHash || !place?.root) return null;
+    const expiresAt = Date.now() + DIRECT_TTL_MS;
+    return { nodeId, url: `http://127.0.0.1:${node.direct.port}`, expiresAt,
+      token: signGrant(record.keyHash, { place: { root: place.root, path: place.path || "" }, label, read: true, expires: expiresAt }) };
+  }
+
   async computer(nodeId, method, at) {
     if (!this.live.get(nodeId)?.ready) throw Object.assign(new Error("That device is offline"), { code: "device_offline", status: 503 });
     const context = withAbortSignal(AbortSignal.timeout(15_000), BACKGROUND_CONTEXT);
@@ -333,7 +348,9 @@ export class NodeHub extends EventEmitter {
         Object.assign(node, { roots: Array.isArray(message.roots) ? message.roots : [], platform: message.platform || null,
           boot: typeof message.boot === "string" ? message.boot : null,
           harnesses: Array.isArray(message.harnesses) ? message.harnesses.filter((id) => typeof id === "string") : [],
-          browse: message.browse === true, ready: true });
+          browse: message.browse === true, ready: true,
+          // Where it answers reads itself on its own machine (node-direct.js).
+          direct: Number.isInteger(message.direct?.port) && message.direct.port > 0 ? { port: message.direct.port } : null });
         this.live.set(record.id, node);
         node.send({ type: "welcome", features: NODE_FEATURES });
         Object.assign(record, { roots: node.roots, platform: node.platform, harnesses: node.harnesses, browse: node.browse, lastSeenAt: new Date().toISOString() });

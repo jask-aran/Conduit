@@ -10,10 +10,10 @@ import { batch, createEffect, createSignal, lazy, on, onCleanup, Show, Suspense,
 import { SaveIcon } from "lucide-solid";
 import { ContextMenu, ContextMenuContent, ContextMenuTrigger, DropdownMenu, MenuContent, MenuControl, MenuRow, MenuSection } from "@/components/menus";
 import { api } from "../api/client";
-import { authorizedFetch } from "../api/native-auth-client";
 import { httpUrl } from "../api/transport";
 
 import { isInstalledClient } from "../platform/installed-client.ts";
+import { workspaceFileJson, workspaceFileResponse } from "./direct-files";
 import type { WorkspaceEditorHandle } from "./workspace-editor";
 import { addReviewComment, reviewComments } from "../chat/review-comments";
 import type { ReviewNavigationRequest } from "../chat/review-navigation";
@@ -252,10 +252,7 @@ export default function WorkspaceFileSlot(props: {
     const headers: HeadersInit = current?.path === path && current.revision && current.revision === metadata.revision
       ? { "if-none-match": `"${metadata.revision}"` }
       : {};
-    const response = await authorizedFetch(
-      httpUrl(`/v0/projects/${encodeURIComponent(projectId)}/file?path=${encodeURIComponent(path)}&download=1`),
-      { signal: controller?.signal, headers },
-    );
+    const response = await workspaceFileResponse(projectId, `path=${encodeURIComponent(path)}&download=1`, { signal: controller?.signal, headers });
     if (response.status === 304 && current?.url) {
       props.onLoaded?.({ path, size: metadata.size, kind: metadata.kind, mime: metadata.mime });
       return;
@@ -277,10 +274,7 @@ export default function WorkspaceFileSlot(props: {
   const loadText = async (path: string, projectId: string, owns: () => boolean, options: { forceText?: boolean; preview?: boolean }) => {
     const replacesOpenDocument = preview()?.path === path;
     const query = [options.forceText && "force=text", options.preview && "preview=1"].filter(Boolean).join("&");
-    const payload = await api<FilePreview>(
-      `/v0/projects/${encodeURIComponent(projectId)}/file?path=${encodeURIComponent(path)}${query ? `&${query}` : ""}`,
-      { signal: controller?.signal },
-    );
+    const payload = await workspaceFileJson<FilePreview>(projectId, `path=${encodeURIComponent(path)}${query ? `&${query}` : ""}`, { signal: controller?.signal });
     if (!owns()) return;
     if (replacesOpenDocument && editorDirty()) return;
     releaseAsset();
@@ -329,10 +323,8 @@ export default function WorkspaceFileSlot(props: {
       if (controller?.signal.aborted || !owns()) return;
       const code = errorCode(cause);
       if (["file_not_text", "file_too_large"].includes(code)) {
-        const metadataPayload = metadataFromError(path, cause) ?? await api<FileMetadata>(
-          `/v0/projects/${encodeURIComponent(projectId)}/file?path=${encodeURIComponent(path)}&metadata=1`,
-          { signal: controller.signal },
-        ).catch(() => null);
+        const metadataPayload = metadataFromError(path, cause) ?? await workspaceFileJson<FileMetadata>(projectId,
+          `path=${encodeURIComponent(path)}&metadata=1`, { signal: controller.signal }).catch(() => null);
         if (!metadataPayload) {
           clear();
           if (!background) props.onError((cause as Error).message);
@@ -422,7 +414,7 @@ export default function WorkspaceFileSlot(props: {
     const file = preview()?.path || asset()?.path;
     if (!file) return;
     try {
-      const response = await authorizedFetch(httpUrl(`/v0/projects/${encodeURIComponent(props.projectId)}/file?path=${encodeURIComponent(file)}&download=1`));
+      const response = await workspaceFileResponse(props.projectId, `path=${encodeURIComponent(file)}&download=1`);
       if (!response.ok) {
         const body: unknown = await response.json().catch(() => ({}));
         const message = body && typeof body === "object" && "message" in body ? String(body.message) : "Download failed";
