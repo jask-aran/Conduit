@@ -89,6 +89,7 @@ pub fn run() {
             dev_update::check_dev_update,
             global_shortcuts::set_global_shortcuts,
             discovery::discover_servers,
+            discovery::resolve_host,
             certificate_trust::trust_identities,
             update_window::remember_update_window,
             node_companion::device_companion_status,

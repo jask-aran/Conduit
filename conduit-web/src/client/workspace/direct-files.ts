@@ -24,11 +24,29 @@ const ownNodes = () => {
 // Per workspace: the grant in hand, or that there is none to have (on the hub, or on another machine).
 const grants = new Map<string, Promise<Grant | null>>();
 const notHere = new Set<string>();
+const renewing = new Set<string>();
+const RENEW_MS = 3 * 60_000;
 async function grantFor(projectId: string): Promise<Grant | null> {
   if (!desktopShell || notHere.has(projectId)) return null;
   const held = await grants.get(projectId);
-  if (held && held.expiresAt - 60_000 > Date.now()) return held;
-  const asked = api<Grant>(`/v0/projects/${encodeURIComponent(projectId)}/direct`).then(async (grant) => {
+  if (held && held.expiresAt - 60_000 > Date.now()) {
+    // Renewed while still good, so no read waits on the hub for it.
+    if (held.expiresAt - RENEW_MS < Date.now() && !renewing.has(projectId)) {
+      renewing.add(projectId);
+      void ask(projectId).then((grant) => { if (grant) grants.set(projectId, Promise.resolve(grant)); }).finally(() => renewing.delete(projectId));
+    }
+    return held;
+  }
+  const asked = ask(projectId);
+  grants.set(projectId, asked);
+  return asked;
+}
+
+/** Asked for as a workspace's files are first shown, so its first file opens without asking. */
+export const prefetchDirect = (projectId: string) => { void grantFor(projectId); };
+
+function ask(projectId: string): Promise<Grant | null> {
+  const asked: Promise<Grant | null> = api<Grant>(`/v0/projects/${encodeURIComponent(projectId)}/direct`).then(async (grant) => {
     if ((await ownNodes()).has(grant.nodeId)) return grant;
     notHere.add(projectId);
     return null;
@@ -38,7 +56,6 @@ async function grantFor(projectId: string): Promise<Grant | null> {
     else setTimeout(() => { if (grants.get(projectId) === asked) grants.delete(projectId); }, 30_000);
     return null;
   });
-  grants.set(projectId, asked);
   return asked;
 }
 

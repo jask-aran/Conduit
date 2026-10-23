@@ -61,6 +61,23 @@ public class ConduitDiscoveryPlugin extends Plugin {
         super.handleOnDestroy();
     }
 
+    /** The addresses a name stands for, as this device's resolver answers: how near a server's name really is. */
+    @PluginMethod
+    public void resolve(PluginCall call) {
+        String host = call.getString("host", "");
+        new Thread(() -> {
+            JSArray addresses = new JSArray();
+            try {
+                for (InetAddress address : InetAddress.getAllByName(host)) addresses.put(address.getHostAddress());
+            } catch (Exception ignored) {
+                // Not found is no addresses: the name is judged by itself.
+            }
+            JSObject result = new JSObject();
+            result.put("addresses", addresses);
+            call.resolve(result);
+        }).start();
+    }
+
     @PluginMethod
     public void discover(PluginCall call) {
         long timeout = Math.max(MIN_TIMEOUT_MS, Math.min(MAX_TIMEOUT_MS, call.getInt("timeoutMs", 3000).longValue()));

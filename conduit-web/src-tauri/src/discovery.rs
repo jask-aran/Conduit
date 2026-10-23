@@ -85,3 +85,19 @@ fn browse(window: Duration, on_found: Channel<Advertisement>) -> Result<Vec<Adve
     let _ = daemon.shutdown();
     Ok(found.into_values().collect())
 }
+
+/// The addresses a name stands for, as this machine's resolver answers: a
+/// server's name can be on this network (`lan.example.com` at 192.168.x)
+/// though only its address says so. A name that does not resolve is none.
+#[tauri::command]
+pub async fn resolve_host(host: String) -> Vec<String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        use std::net::ToSocketAddrs;
+        (host.as_str(), 0)
+            .to_socket_addrs()
+            .map(|found| found.map(|address| address.ip().to_string()).collect())
+            .unwrap_or_default()
+    })
+    .await
+    .unwrap_or_default()
+}

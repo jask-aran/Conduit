@@ -3,7 +3,7 @@ import { FileTypeIcon, FolderTypeIcon } from "@/components/ui/file-marks";
 import { Icons } from "@/components/ui";
 import { createDecisionScope } from "@/components/decision-dialog";
 import { unitPx } from "@/components/ui/layout";
-import { batch, createMemo, createSignal, For, onCleanup, Show, type Accessor, type JSX } from "solid-js";
+import { batch, createEffect, createMemo, createSignal, For, onCleanup, Show, type Accessor, type JSX } from "solid-js";
 import { ChevronsUpIcon, FilePlusIcon, FolderUpIcon, MoveIcon } from "lucide-solid";
 import { toast } from "@/components/notifications";
 import { ContextMenu, ContextMenuContent, ContextMenuTrigger, DropdownMenu, MenuContent, MenuControl, MenuRow, MenuSection } from "@/components/menus";
@@ -11,8 +11,6 @@ import { Rule } from "@/components/ui/popover";
 import { Spinner } from "@/components/ui/controls";
 import { SplitEdge } from "@/components/ui/editor";
 import { api, asList } from "../api/client";
-import { authorizedFetch } from "../api/native-auth-client";
-import { httpUrl } from "../api/transport";
 import type { ReviewNavigationRequest } from "../chat/review-navigation";
 import { isMobileLayout } from "../navigation/mobile-layout";
 import { PaneEmpty, ToolBar, ToolButton, ToolFilter, ToolNotice, Tree as TreeList, TreeRow } from "@/components/ui/pane";
@@ -21,6 +19,7 @@ import WorkspaceFileSlot, { preloadWorkspaceEditor, type FileSlotHandle, type Fi
 import { readSetting, WORKSPACE_PANEL_GLOBAL_SCOPE, writeSetting } from "./workspace-panel-storage";
 import { cacheWorkspace, copyText, peekCachedWorkspace, reportError, wasAborted, type RequestScope, type WorkspaceCacheEntry } from "./workspace-shared";
 import type { DirectoryListing, FileSlotId, FileWriteResult, GitChangedFile, MovedEntry, OpenFiles, TreeEntry, UploadTarget, WorkspaceSettings } from "./workspace-types";
+import { prefetchDirect, workspaceFileResponse } from "./direct-files";
 import "./workspace.css";
 
 // In the unit (layout-geometry): the width at which Files lays its tree beside the file, and the tree's own widths.
@@ -64,6 +63,7 @@ export function createFiles(options: {
 }) {
   const { confirm: confirmDialog, prompt: promptDialog } = createDecisionScope(options.projectId);
   const { requests, settings } = options;
+  createEffect(() => prefetchDirect(options.projectId()));
   const [directories, setDirectories] = createSignal<Record<string, DirectoryListing>>({});
   const [expanded, setExpanded] = createSignal<Set<string>>(new Set());
   const [fileFilter, setFileFilter] = createSignal("");
@@ -228,7 +228,7 @@ export function createFiles(options: {
   // Downloading works on any tree entry, open or not, so it stays with the tree.
   const downloadPath = async (path: string) => {
     try {
-      const response = await authorizedFetch(httpUrl(`/v0/projects/${encodeURIComponent(options.projectId())}/file?path=${encodeURIComponent(path)}&download=1`));
+      const response = await workspaceFileResponse(options.projectId(), `path=${encodeURIComponent(path)}&download=1`);
       if (!response.ok) {
         const body: unknown = await response.json().catch(() => ({}));
         const message = body && typeof body === "object" && "message" in body ? String(body.message) : "Download failed";

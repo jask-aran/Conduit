@@ -2,6 +2,7 @@ import { createEffect, createSignal, on } from "solid-js";
 import { installedClientKind, isInstalledClient } from "./installed-client.ts";
 import { publishTrustedIdentities, type TrustedIdentity } from "./certificate-pins.ts";
 import { LOOPBACK_HOST, PRIVATE_HOST } from "../../network-hosts.js";
+import { resolveHost } from "./resolve-host.ts";
 
 /**
  * The Conduit servers this client knows how to reach.
@@ -162,16 +163,43 @@ export function scopeOf(origin: string): PathScope {
   return PRIVATE_HOST.test(host) ? "private" : "public";
 }
 
-/** Display the route provider without changing its trust or selection scope. */
+/**
+ * How near an address really is, for putting a server's routes in order and naming them: by the address, or for a
+ * name by what this machine's resolver says it stands for (`lan.example.com` at 192.168.x is this network; a page has
+ * no resolver and judges a name as the internet). What may go over plain HTTP stays `scopeOf`'s, by the text alone.
+ */
+export type Reach = "loopback" | "private" | "tailnet" | "public";
+const REACHES: Reach[] = ["loopback", "private", "tailnet", "public"];
+// Tailscale's addresses: 100.64/10.
+const TAILNET_HOST = /^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])(\.\d{1,3}){2}$/;
+const reachOfAddress = (host: string): Reach | null => LOOPBACK_HOST.test(host) ? "loopback" : PRIVATE_HOST.test(host) ? "private"
+  : TAILNET_HOST.test(host) || host.endsWith(".ts.net") ? "tailnet" : null;
+const [resolvedReach, setResolvedReach] = createSignal<Record<string, Reach>>({});
+const lookedUp = new Set<string>();
+export function reachOf(origin: string): Reach {
+  const host = hostOf(origin);
+  const known = reachOfAddress(host) ?? resolvedReach()[host];
+  if (known) return known;
+  if (isInstalledClient() && !lookedUp.has(host)) {
+    lookedUp.add(host);
+    void resolveHost(host).then((addresses) => {
+      const nearest = addresses.map((address) => reachOfAddress(address.replace(/^::ffff:/, "")) ?? "public")
+        .sort((left, right) => REACHES.indexOf(left) - REACHES.indexOf(right))[0];
+      if (nearest && nearest !== "public") setResolvedReach((all) => ({ ...all, [host]: nearest }));
+    });
+  }
+  return "public";
+}
+
+/** The route's name, by how near it is. */
 export function serverPathLabel(path: ServerPath): string {
-  if (hostOf(path.origin).endsWith(".ts.net")) return "Tailscale";
-  return path.scope === "loopback" ? "This machine" : path.scope === "private" ? "This network" : "Internet";
+  return { loopback: "This machine", private: "This network", tailnet: "Tailscale", public: "Internet" }[reachOf(path.origin)];
 }
 
 /** Every address that reaches this server, its own included, nearest first. */
 export function pathsOf(entry: ServerEntry): ServerPath[] {
   const all = [{ origin: entry.origin, scope: scopeOf(entry.origin) }, ...(entry.paths ?? [])];
-  return all.sort((left, right) => SCOPES.indexOf(left.scope) - SCOPES.indexOf(right.scope));
+  return all.sort((left, right) => REACHES.indexOf(reachOf(left.origin)) - REACHES.indexOf(reachOf(right.origin)));
 }
 
 export function readServers(storage: Storageish | null): ServerEntry[] {
