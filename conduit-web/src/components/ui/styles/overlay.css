@@ -76,6 +76,11 @@
 input.ui-setting-title { outline: none; }
 input.ui-setting-title:focus-visible { border-color: var(--ring); background: var(--tint); }
 @media (hover: hover) { input.ui-setting-title:hover { background: var(--tint); } }
+.ui-setting-columns { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--measure-sm)), 1fr)); gap: var(--space-md) var(--space-2xl); }
+.ui-setting-column { position: relative; display: flex; min-width: 0; flex-direction: column; gap: var(--hairline); }
+.ui-setting-column + .ui-setting-column::before { position: absolute; top: 0; bottom: 0; left: calc(-0.5 * var(--space-2xl)); border-left: var(--hairline) solid var(--tint); content: ""; }
+.ui-setting-actions { display: flex; flex-wrap: wrap; gap: var(--space-xs); margin-top: var(--space-sm); padding-inline: calc(var(--space-md) - var(--space-sm)); }
+.ui-setting-actions > .ui-button { white-space: nowrap; }
 .ui-setting-group + .ui-setting-group { margin-top: var(--space-lg); border-top: var(--hairline) solid var(--tint); padding-top: var(--space-xl); }
 /* At least a row's height: a finger's on a phone, as every row is there. */
 /* A settings line's height, at least a row's (a finger's on a phone): the setting line and the recorder under it. */

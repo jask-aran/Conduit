@@ -11,10 +11,9 @@ import { Button, Input, Switch } from "@/components/ui/controls";
 import * as Icons from "@/components/ui/icons";
 import { NavFolder, NavFolderRow, NavRow, StatusDot } from "@/components/ui/nav";
 import { ClientCard, ClientCards, ClientPlaces, NetworkMap, type NetworkClient } from "@/components/ui/network";
-import { CardActions, CardColumn, CardColumns } from "@/components/ui/card";
 import { Reading, ReadingStat, ReadingStats } from "@/components/ui/reading";
 import { connectionId } from "../state/runtime.ts";
-import { LiveNote, SettingGroup, SettingLine, SettingNote, SettingTitle, SettingValue } from "@/components/ui/overlay";
+import { LiveNote, SettingActions, SettingColumn, SettingColumns, SettingGroup, SettingLine, SettingNote, SettingTitle, SettingValue } from "@/components/ui/overlay";
 import { WorkspaceGlyph } from "../project/workspace-appearance.tsx";
 import { desktopShell, isInstalledClient, type CompanionStatus, type DesktopShellSettings } from "../platform/installed-client.ts";
 import { pairingWith, pairThisComputer } from "../platform/this-computer.ts";
@@ -149,10 +148,11 @@ export function DevicesSettingsTile(props: { projects: Project[]; onAddWorkspace
     const paired = () => companion?.pairing() ?? null;
     const grants = () => paired()?.newFolders ?? { write: true, shell: false };
     return <>
-      <CardColumns>
-        <CardColumn title="Clients">
-          <For each={device.clients}>{(shown) => <SettingLine label={<>{shown.part.name}<Show when={shown.part.meta}><small>{shown.part.meta}</small></Show></>}
-            state={<StatusDot label={status(shown)} tone={shown.part.online ? "success" : "muted"} />} />}</For>
+      <SettingColumns>
+        <SettingColumn title="Clients">
+          <For each={device.clients}>{(shown) => <SettingLine label={<>{shown.part.name}<Show when={shown.part.meta}><small>{shown.part.meta}</small></Show></>}>
+            <StatusDot label={status(shown)} tone={shown.part.online ? "success" : "muted"} />
+          </SettingLine>}</For>
           <Show when={companion && paired()}>
             <SettingLine label={`Share with ${server()}`} title="Mounts the folders you choose on this computer in the network. It keeps running in the tray with the window closed.">
               <Switch id="device-serve" label={`Share with ${server()}`} disabled={companion!.busy() || !companion!.settings()} checked={Boolean(companion!.settings()?.serveAsDevice)} onChange={(on) => void companion!.serve(on)} />
@@ -167,15 +167,15 @@ export function DevicesSettingsTile(props: { projects: Project[]; onAddWorkspace
               <Switch id="device-share-shell" label="New folders run commands" disabled={companion!.busy()} checked={grants().shell} onChange={(on) => void companion!.grant({ ...grants(), shell: on })} />
             </SettingLine>
           </Show>
-        </CardColumn>
-        <CardColumn title="Workspaces">
+        </SettingColumn>
+        <SettingColumn title="Workspaces">
           <Show when={nodes().some((node) => mounted(node).length || unmounted(node).length)} fallback={<SettingNote>None mounted</SettingNote>}>
             <div><For each={nodes()}>{(node) => places(node, nodes().length > 1)}</For></div>
           </Show>
-        </CardColumn>
-      </CardColumns>
+        </SettingColumn>
+      </SettingColumns>
       {/* What can be done here, under both: a terminal on each client that has one, mounting a folder of this app's. */}
-      <CardActions>
+      <SettingActions>
         <For each={nodes().filter((node) => node.online && (node.local || node.terminal))}>{(node) =>
           <Button variant="ghost" size="sm" onClick={() => props.onOpenTerminal(node)}><Icons.Terminal /> {nodes().length > 1 ? `Terminal on ${node.name}` : "Terminal"}</Button>}</For>
         <Show when={companion}>
@@ -184,7 +184,7 @@ export function DevicesSettingsTile(props: { projects: Project[]; onAddWorkspace
             <Button variant="ghost" size="sm" disabled={companion!.busy()} onClick={() => void companion!.unpair(pairing().mainUrl, pairing().nodeId)}>Unpair</Button>
           </>}</Show>
         </Show>
-      </CardActions>
+      </SettingActions>
       {/* The app can bring another environment of this machine in (a WSL distro); not where the hub already runs. */}
       <Show when={companion && device.paired && !device.clients.some((shown) => shown.node?.local)}><PairEnvironment device={device} onPaired={refresh} /></Show>
     </>;
