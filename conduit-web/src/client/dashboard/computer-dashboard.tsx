@@ -71,6 +71,8 @@ export function ComputerDashboard(props: {
   onCloneRepository?: () => void;
   /** Choosing a folder only: a device's, where Conduit neither creates folders nor clones (its grants are the device's). */
   selectOnly?: boolean;
+  /** A client's environment page: its files over the node (no harnesses, terminals here or source control yet). */
+  device?: boolean;
   /** The hub's page: its harnesses as tiles above its files, each opening its own page. */
   onOpenHarness?: (id: string) => void;
   /** Leads the toolbar: which machine is browsed, and the menu of the others (New workspace). */
@@ -93,10 +95,13 @@ export function ComputerDashboard(props: {
   let stopSidebarResize: (() => void) | undefined;
 
   // This machine's: a client's workspaces are browsed on its own machine, not among these files.
-  const workspaces = () => props.projects.filter((project) => !isConduitManagedProject(project) && (props.dialog || !project.capabilities || project.capabilities.device.local));
-  const designated = () => workspaces().find((project) => project.workingRoot === props.location?.project.workingRoot);
+  const workspaces = () => props.projects.filter((project) => !isConduitManagedProject(project) && (props.dialog || props.device || !project.capabilities || project.capabilities.device.local));
+  // One path however it is written: a Windows client's are joined with either separator, in any case.
+  const samePath = (a?: string, b?: string) => Boolean(a && b) && (/^[a-z]:/i.test(a!)
+    ? a!.replace(/[\\/]+/g, "/").toLowerCase() === b!.replace(/[\\/]+/g, "/").toLowerCase() : a === b);
+  const designated = () => workspaces().find((project) => samePath(project.workingRoot, props.location?.project.workingRoot));
   const workspaceFor = (entry: Entry) => entry.type === "directory"
-    ? workspaces().find((project) => project.workingRoot === `${props.location?.project.workingRoot}/${entry.path}`)
+    ? workspaces().find((project) => samePath(project.workingRoot, `${props.location?.project.workingRoot}/${entry.path}`))
     : undefined;
   const visibleEntries = createMemo(() => {
     const filter = query().trim().toLowerCase();
@@ -117,7 +122,7 @@ export function ComputerDashboard(props: {
     setRefreshing(false);
   });
   createEffect(() => {
-    if (props.dialog) return;
+    if (props.dialog || props.device) return;
     void api<{ harnesses: HarnessSummary[] }>("/v0/harnesses")
       .then((result) => setHarnesses(result.harnesses))
       .catch(() => setHarnesses([]));
@@ -173,7 +178,7 @@ export function ComputerDashboard(props: {
   };
 
   const WorkspaceActions = () => <>
-    <Button variant="ghost" type="button" disabled={!props.location || props.loading} onClick={() => props.dialog ? props.onSelectFolder?.() : props.onMakeWorkspace()}><Icons.Folder />{props.dialog ? "Select folder" : designated() ? "Open workspace" : "Make workspace"}</Button>
+    <Button variant="ghost" type="button" disabled={!props.location || props.loading} onClick={() => props.dialog ? props.onSelectFolder?.() : props.device && designated() ? props.onOpenWorkspace(designated()!) : props.onMakeWorkspace()}><Icons.Folder />{props.dialog ? "Select folder" : designated() ? "Open workspace" : "Make workspace"}</Button>
     <Show when={!props.selectOnly}>
       <Button variant="ghost" type="button" disabled={!props.location || props.loading} onClick={() => props.dialog ? props.onCreateFolder?.() : props.onStartWorkspaceAction("created", props.location!.project.workingRoot)}><Icons.Add />Create folder</Button>
       <Button variant="ghost" type="button" disabled={!props.location || props.loading} onClick={() => props.dialog ? props.onCloneRepository?.() : props.onStartWorkspaceAction("cloned", props.location!.project.workingRoot)}><Icons.GitBranch />Clone repository</Button>
@@ -226,7 +231,7 @@ export function ComputerDashboard(props: {
           <Show when={props.location?.repositoryRoot}><BrowserSummary title={props.location?.repositoryRoot || ""}><Icons.GitBranch />{props.location?.repositoryRoot?.split("/").at(-1)}</BrowserSummary></Show>
           <BrowserSpacer />
           <WorkspaceActions />
-          <Show when={!props.dialog}>
+          <Show when={!props.dialog && !props.device}>
             <Button variant="ghost" type="button" disabled={!props.location || props.loading} onClick={props.onOpenTerminalHere}><Icons.Terminal />Terminal Here</Button>
             <Show when={harnesses().some((item) => item.available)}><DropdownMenu><MenuTrigger disabled={!props.location || props.loading} aria-label="Open harness here"><Icons.Terminal />Harness Here<Icons.ChevronDown /></MenuTrigger><MenuContent><MenuGroup><For each={harnesses().filter((item) => item.available)}>{(harness) =>
               <MenuItem onSelect={() => props.onOpenHarnessHere?.(harness.id, props.location!.project.workingRoot)}><HarnessMark id={harness.id} />Open {harness.label} here</MenuItem>
@@ -270,7 +275,7 @@ export function ComputerDashboard(props: {
           <Show when={!props.dialog}><For each={harnesses().filter((item) => item.available)}>{(harness) => <ContextMenuItem disabled={!props.location} onSelect={() => props.onOpenHarnessHere?.(harness.id, props.location!.project.workingRoot)}><HarnessMark id={harness.id} />Open {harness.label} here</ContextMenuItem>}</For></Show>
           <ContextMenuItem onSelect={() => void refresh()}><Icons.Refresh />Refresh</ContextMenuItem>
           <ContextMenuItem onSelect={() => setShowHidden((value) => !value)}><Icons.Preview />{showHidden() ? "Hide hidden files" : "Show hidden files"}</ContextMenuItem>
-          <ContextMenuItem onSelect={() => props.onOpenView("terminal")}><Icons.Terminal />Terminal here</ContextMenuItem>
+          <Show when={!props.device}><ContextMenuItem onSelect={() => props.onOpenView("terminal")}><Icons.Terminal />Terminal here</ContextMenuItem></Show>
         </ContextMenuGroup></ContextMenuContent></ContextMenu>
         <Show when={props.loading || refreshing()}><BrowserLoading>Loading…</BrowserLoading></Show>
         <Show when={cursor()}><Button variant="ghost" type="button" disabled={refreshing()} onClick={() => void refresh(cursor()!)}>Load more</Button></Show>
