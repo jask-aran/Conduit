@@ -1,5 +1,5 @@
 import { createSignal, onCleanup, onMount } from "solid-js";
-import { installedClientKind, isInstalledClient } from "../platform/installed-client.ts";
+import { desktopShell, installedClientKind, isInstalledClient } from "../platform/installed-client.ts";
 import type { RuntimeProcess } from "../api/contracts";
 import { onPathChange } from "../platform/servers";
 import { eventSourceUrl } from "../api/transport";
@@ -73,6 +73,15 @@ export function createRuntimeStore() {
       (ready) => api("/v0/runtime/restart/ready", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(ready) }).then(() => {}));
   };
 
+  /** The app's own environment, for the devices' map: the node ids its companion is paired as. */
+  const locate = (connection: string) => {
+    if (!leading || !desktopShell) return;
+    void desktopShell.companion.status().then((status) => {
+      const nodes = (status.node?.pairings || []).map((pairing) => pairing.nodeId).filter((node): node is string => Boolean(node));
+      if (nodes.length) return api(`/v0/runtime/clients/${encodeURIComponent(connection)}/nodes`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ nodes }) });
+    }).catch(() => {});
+  };
+
   /** Who this stream is, for the server's list of connected clients. */
   const streamUrl = () => {
     const query = new URLSearchParams({ client: installedClientKind || "browser", build: buildLabel(clientBuild) });
@@ -90,7 +99,7 @@ export function createRuntimeStore() {
         setStale(false);
       } else if (event.type === "runtime_global_snapshot") {
         replaceAll((event.processes || []) as RuntimeProcess[]);
-        if (typeof event.connection === "string") setConnectionId(event.connection);
+        if (typeof event.connection === "string") { setConnectionId(event.connection); locate(event.connection); }
         restartPrepared = event.restartPrepared === true;
         if (restartPrepared) prepare(event.restartAttempt, event.restartTarget);
         restartAnnounced = { attempt: event.restartAttempt, target: event.restartTarget };

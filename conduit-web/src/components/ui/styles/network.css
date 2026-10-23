@@ -1,0 +1,27 @@
+/* NetworkMap: the head's device, and every other device hung from it. A device is the one outline the map draws
+   (a hairline, no fill: what groups is the machine, not a card); its parts are rows in the row's voice. */
+.ui-network { display: flex; flex-direction: column; align-items: center; margin: 0; padding: var(--space-sm) 0 var(--space-lg); }
+.ui-network-device { display: flex; min-width: var(--measure-xs); max-width: 100%; flex-direction: column; gap: var(--space-2xs); border: var(--hairline) solid var(--tint); border-radius: var(--radius-surface); padding: var(--space-md) var(--space-sm) var(--space-sm); }
+.ui-network-device > .ui-title { margin: 0; padding: 0 var(--space-sm); }
+.ui-network-device > ul { display: flex; flex-direction: column; margin: 0; padding: 0; list-style: none; }
+.ui-network-part { display: flex; min-height: var(--row-min); align-items: center; gap: var(--space-sm); padding: 0 var(--space-sm); font-size: var(--text-row); }
+.ui-network-mark { display: inline-flex; flex: none; color: var(--muted-foreground); }
+.ui-network-mark > svg { width: var(--icon); height: var(--icon); }
+.ui-network-name { flex: none; white-space: nowrap; }
+.ui-network-part[data-offline] > .ui-network-name { color: var(--muted-foreground); }
+.ui-network-head { flex: none; color: var(--foreground); font: var(--weight-strong) var(--text-caption) var(--font-data); }
+.ui-network-meta { min-width: 0; flex: 1 1 auto; overflow: hidden; color: var(--muted-foreground); font-size: var(--text-caption); text-overflow: ellipsis; white-space: nowrap; }
+.ui-network-part > .ui-status { flex: none; margin-left: auto; }
+/* The lines: a stem down from the head's device to a bus, the bus over the spokes, a drop into each. The bus sits
+   --space-md below the head; a spoke starts --space-xl below it; each spoke draws its stretch of the bus (to the next
+   one across the gap), the first from its centre, the last to its centre. */
+.ui-network-spokes { position: relative; display: flex; max-width: 100%; flex-wrap: wrap; justify-content: center; gap: var(--space-lg); padding-top: var(--space-xl); }
+.ui-network-spokes::before { position: absolute; top: 0; left: 50%; height: var(--space-md); border-left: var(--hairline) solid var(--tint); content: ""; }
+.ui-network-spoke { position: relative; display: flex; }
+.ui-network-spoke::before, .ui-network-spoke::after { position: absolute; content: ""; }
+.ui-network-spoke::before { top: calc(var(--space-md) - var(--space-xl)); right: calc(0px - var(--space-lg)); left: 0; border-top: var(--hairline) solid var(--tint); }
+.ui-network-spoke:first-child::before { left: 50%; }
+.ui-network-spoke:last-child::before { right: 50%; }
+.ui-network-spoke::after { top: calc(var(--space-md) - var(--space-xl)); left: 50%; height: calc(var(--space-xl) - var(--space-md)); border-left: var(--hairline) solid var(--tint); }
+.ui-network-spoke[data-offline]::after { border-left-style: dashed; }
+.ui-network-spoke > .ui-network-device { flex: 1; }

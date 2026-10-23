@@ -29,6 +29,7 @@
  *   header          Header, HeaderCrumb, HeaderButton, HeaderNote
  *   card, toast     Card, Notice; Toast
  *   overlay         Scrim > Overlay (Bar, List, Split, Hints, Rail, Page), Settings, Glance
+ *   network         NetworkMap: devices, their environments and clients, hung from the head's
  *   leader          Leader, Crumbs, Spotlight
  *   pill            Pill*, Aura
  *   phone-composer  PhoneComposer
@@ -68,6 +69,7 @@ import "./card.css";
 import "./identity.css";
 import "./toast.css";
 import "./overlay.css";
+import "./network.css";
 import "./leader.css";
 import "./pill.css";
 import "./phone-composer.css";

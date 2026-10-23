@@ -30,7 +30,7 @@ export class RuntimeHub {
   attach(client, peer = {}) {
     // A short id per connection, told to that connection alone, so a client
     // can find itself in the list. It lasts as long as the stream.
-    client.peer = { id: randomBytes(6).toString("hex"), kind: peer.kind || "browser", build: peer.build || "", registration: peer.registration || "", connectedAt: new Date().toISOString() };
+    client.peer = { id: randomBytes(6).toString("hex"), kind: peer.kind || "browser", build: peer.build || "", registration: peer.registration || "", platform: peer.platform || "", agent: peer.agent || "", connectedAt: new Date().toISOString() };
     this.clients.add(client);
     this.send(client, { ...this.snapshot(), connection: client.peer.id });
     return () => this.clients.delete(client);
@@ -40,6 +40,17 @@ export class RuntimeHub {
     if (!event || typeof event !== "object") return;
     const payload = JSON.stringify(event);
     for (const client of this.clients) this.write(client, payload);
+  }
+
+  /**
+   * An installed client names the environments its own companion runs as (their node ids), so the devices' map
+   * draws it as that environment, headed, rather than as a device of its own. Shown, never trusted for anything.
+   */
+  locate(id, nodes) {
+    const client = [...this.clients].find((candidate) => candidate.peer.id === id);
+    if (!client) return false;
+    client.peer.nodes = (Array.isArray(nodes) ? nodes : []).filter((node) => typeof node === "string" && node.length <= 80).slice(0, 8);
+    return true;
   }
 
   /** The live connections, as Settings and the CLI show them. */

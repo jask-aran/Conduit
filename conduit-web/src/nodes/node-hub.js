@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import net from "node:net";
+import os from "node:os";
 import path from "node:path";
 import { EventEmitter } from "node:events";
 import { WebSocketServer } from "ws";
@@ -129,7 +130,9 @@ export class NodeHub extends EventEmitter {
     return { id: record.id, deviceId: record.deviceId, name: record.name, platform: live?.platform || record.platform || null,
       online: Boolean(live), roots: live?.roots || record.roots || [], harnesses: live?.harnesses || record.harnesses || [],
       // A terminal in its home: where any folder is shared with commands (decision 27).
-      terminal: Boolean(live) && (live.roots || []).some((root) => root.shell), lastSeenAt: live ? new Date().toISOString() : record.lastSeenAt };
+      terminal: Boolean(live) && (live.roots || []).some((root) => root.shell), lastSeenAt: live ? new Date().toISOString() : record.lastSeenAt,
+      // The environment relaying it (decision 25), when it is not dialling itself.
+      via: live?.socket?.via || null };
   }
 
   deviceView(device) {
@@ -154,7 +157,10 @@ export class NodeHub extends EventEmitter {
   adoptHead({ deviceId, nodeId, name, roots, harnesses }) { this.head = { deviceId, nodeId, name, roots, harnesses }; }
 
   async headView() {
-    const platform = { win32: "Windows", darwin: "macOS" }[process.platform] || "Linux";
+    // A WSL distro is named as one: it shares its device with Windows, which pairs as its own environment.
+    // From the kernel, not WSL_DISTRO_NAME: a service started by systemd does not carry it.
+    const wsl = process.platform === "linux" && /microsoft/i.test(os.release());
+    const platform = wsl ? await distroName() : { win32: "Windows", darwin: "macOS" }[process.platform] || "Linux";
     return { id: this.head.nodeId, deviceId: this.head.deviceId, name: platform, platform: process.platform, local: true,
       // Its own terminal is the "computer" one this server always offers.
       online: true, roots: await this.head.roots(), harnesses: this.head.harnesses(), terminal: true, lastSeenAt: new Date().toISOString() };
@@ -213,6 +219,8 @@ export class NodeHub extends EventEmitter {
     };
     socket.close = (_code, reason) => { if (socket.readyState === 1) reply({ type: "relay-closed", reason: reason || "closed" }); socket.end(); };
     socket.terminate = socket.close;
+    // Which environment carries it, for the devices' map.
+    socket.via = relaying.id;
     outer.relayed.set(env, socket);
     this.attach(record, socket);
     reply({ type: "relay-opened" });
@@ -428,4 +436,11 @@ export function isTailnetOrLoopback(address = "") {
   if (plain === "::1") return true;
   if (net.isIPv4(plain)) return TAILNET_V4.check(plain, "ipv4");
   return plain.toLowerCase().startsWith("fd7a:115c:a1e0:");
+}
+
+/** A WSL distro's name (os-release's NAME: "Ubuntu"), read once. */
+let distro;
+function distroName() {
+  distro ??= fs.readFile("/etc/os-release", "utf8").then((text) => /^NAME="?([^"\n]+)"?$/m.exec(text)?.[1] || "WSL", () => "WSL");
+  return distro;
 }

@@ -71,6 +71,7 @@ import {
   ShieldCheckIcon,
   ShrinkIcon,
   SquareIcon,
+  SmartphoneIcon,
   SquareTerminalIcon,
   TerminalIcon,
   TextCursorInputIcon,
@@ -227,6 +228,8 @@ export const Settings = SettingsIcon;
 export const Share = ShareIcon;
 /** A shell command or terminal tool. */
 export const Shell = SquareTerminalIcon;
+export const Phone = SmartphoneIcon;
+export const Browser = GlobeIcon;
 /** Show or hide the left sidebar. */
 export const Sidebar = PanelLeftIcon;
 /** Show two panes or comparison columns. */
