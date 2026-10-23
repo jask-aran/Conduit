@@ -7,7 +7,7 @@ import { Section as DialogSection, Item as DialogItem } from "@/components/ui/po
 import { CardActions, CardForm, CardBody, CardRead, CardNote } from "@/components/ui/card";
 import { Button as DialogButton, Input as DialogInput, Field as DialogField } from "@/components/ui/controls";
 import { Backdrop, Button, NavBrand, NavLead, NavFolder, NavFolderRow, NavGroup, NavNote, NavNotice, NavPane, NavRail, NavRailSection, NavRow, NavSkeleton, PillSwitch, RailButton, Segmented, StatusDot } from "@/components/ui";
-import { ContextMenu, ContextMenuContent, ContextMenuTrigger, MenuRow, MenuSection } from "@/components/menus";
+import { ContextMenu, ContextMenuContent, ContextMenuTrigger, MenuRow, MenuSection, Select } from "@/components/menus";
 import { isConduitManagedProject } from "./sidebar-preferences";
 import { ServerSwitcher } from "./server-switcher";
 import { batch, createEffect, createMemo, createSignal, For, lazy, onCleanup, onMount, Show, type JSX } from "solid-js";
@@ -15,7 +15,8 @@ import { batch, createEffect, createMemo, createSignal, For, lazy, onCleanup, on
 
 import type { ChatSummary, ComputerLocation, HarnessSummary, Project, RuntimeProcess, WorkspacePolicy, WorkspaceSuggestion } from "../api/contracts";
 import type { UpdateState } from "../main";
-import { androidShell, installedClientKind } from "../platform/installed-client";
+import { androidShell, desktopShell, installedClientKind } from "../platform/installed-client";
+import { makeFolderAvailable } from "../platform/this-computer";
 import { api } from "../api/client";
 import { WorkspaceGlyph } from "../project/workspace-appearance";
 import { ChatMenuItems, MoveTo, PlaceMenuItems } from "./item-menus";
@@ -35,7 +36,9 @@ const ComputerExplorer = lazy(() => import("../dashboard/computer-dashboard").th
 
 type WorkspaceMode = "linked" | "created" | "cloned";
 type SidebarArea = "conduit" | "computer";
-type ProjectInput = { mode: string; name?: string; path?: string; directoryName?: string; cloneUrl?: string; cloneParentPath?: string; cloneDirectoryName?: string };
+/** The machine choice that makes a folder of this computer available first (the desktop app only). */
+const THIS_COMPUTER = "this-computer";
+type ProjectInput = { mode: string; name?: string; path?: string; nodeId?: string; directoryName?: string; cloneUrl?: string; cloneParentPath?: string; cloneDirectoryName?: string };
 type WorkspacePreview = { key: string; path: string; ownership: string };
 export type ChatTarget = { chat: ChatSummary; project: Project };
 export type SidebarCommand = {
@@ -349,6 +352,8 @@ export function Sidebar(props: {
   });
   const [mode, setMode] = createSignal<"managed" | WorkspaceMode>("managed");
   const [workspaceStep, setWorkspaceStep] = createSignal<"explore" | "details">("explore");
+  // Which machine a new workspace goes on: "" for the hub's own, else a client's node.
+  const [workspaceOn, setWorkspaceOn] = createSignal("");
   const [name, setName] = createSignal("");
   const [path, setPath] = createSignal("");
   const [cloneUrl, setCloneUrl] = createSignal("");
@@ -490,10 +495,11 @@ export function Sidebar(props: {
    * ones), named as their device and client ("Desktop · Ubuntu"). Asked while the Computer view shows, and again now
    * and then: a client pairing or a folder mounted changes the list under it.
    */
-  type Machine = { id: string; label: string; hub: boolean };
+  type Machine = { id: string; label: string; hub: boolean; online: boolean; folders: number };
   const [machines, setMachines] = createSignal<Machine[] | null>(null);
-  const readMachines = () => void api<{ devices: Array<{ name: string; nodes: Array<{ id: string; name: string; local?: boolean }> }> }>("/v0/nodes")
-    .then(({ devices }) => setMachines(devices.flatMap((device) => device.nodes.map((node) => ({ id: node.id, label: `${device.name} · ${node.name}`, hub: Boolean(node.local) })))))
+  const readMachines = () => void api<{ devices: Array<{ name: string; nodes: Array<{ id: string; name: string; local?: boolean; online: boolean; roots: unknown[] }> }> }>("/v0/nodes")
+    .then(({ devices }) => setMachines(devices.flatMap((device) => device.nodes.map((node) => ({ id: node.id, label: `${device.name} · ${node.name}`, hub: Boolean(node.local),
+      online: node.online, folders: node.roots.length })))))
     .catch(() => {});
   createEffect(() => {
     if (area() !== "computer") return;
@@ -583,7 +589,13 @@ export function Sidebar(props: {
     <RailButton aria-label={railProps.label} title={railProps.label} current={railProps.current} live={railProps.live} onClick={railProps.onClick}>{railProps.children}</RailButton>;
 
   const openNewDialog = (kind: "folder" | "workspace") => {
-    if (kind === "workspace") props.onWorkspaceSuggestionsNeeded();
+    if (kind === "workspace") {
+      props.onWorkspaceSuggestionsNeeded();
+      // A dialog left on a client's folders opens on the hub's again.
+      if (workspaceOn()) { setComputerPicker(null); setPath(""); }
+      setWorkspaceOn("");
+      readMachines();
+    }
     setMode(kind === "workspace" ? "linked" : "managed");
     setWorkspaceStep(kind === "workspace" ? "explore" : "details");
     setNewKind(kind);
@@ -624,7 +636,9 @@ export function Sidebar(props: {
     setComputerPickerLoading(true);
     setComputerPickerError("");
     try {
-      const location = await api<ComputerLocation>(`/v0/computer${target ? `?path=${encodeURIComponent(target)}` : ""}`);
+      const on = workspaceOn();
+      const query = target ? `?path=${encodeURIComponent(target)}` : "";
+      const location = await api<ComputerLocation>(on ? `/v0/nodes/${encodeURIComponent(on)}/computer${query}` : `/v0/computer${query}`);
       setComputerPicker(location);
       setPath(location.project.workingRoot);
       appliedDefaultWorkspacePath = "";
@@ -649,7 +663,8 @@ export function Sidebar(props: {
     const currentPath = path().trim();
     const currentDirectory = directoryName().trim();
     const key = `${currentMode}\0${currentPath}\0${currentDirectory}`;
-    const previewable = newKind() === "workspace"
+    // A client's folder is checked where it is made (the device's grants); the preview asks the hub's disk.
+    const previewable = newKind() === "workspace" && !workspaceOn()
       && ((currentMode === "linked" && currentPath) || (currentMode === "created" && currentPath && currentDirectory));
     setWorkspacePreview(null);
     setPreviewError("");
@@ -687,7 +702,8 @@ export function Sidebar(props: {
   const submitNew = async (event: Event) => {
     event.preventDefault();
     if (submitting()) return;
-    const input: ProjectInput = mode() === "managed" ? { mode: "managed", name: name().trim() }
+    const input: ProjectInput = newKind() === "workspace" && workspaceOn() ? { mode: "node", nodeId: workspaceOn(), name: name().trim() || undefined, path: path().trim() }
+      : mode() === "managed" ? { mode: "managed", name: name().trim() }
       : mode() === "linked" ? { mode: "linked", name: name().trim() || undefined, path: path().trim() }
         : mode() === "created" ? { mode: "created", name: name().trim() || undefined, path: path().trim(), directoryName: directoryName().trim() }
         : { mode: "cloned", name: name().trim() || undefined, cloneParentPath: path().trim(), cloneDirectoryName: cloneDirectoryName().trim() || undefined, cloneUrl: cloneUrl().trim() };
@@ -698,7 +714,7 @@ export function Sidebar(props: {
     if (created) closeNewDialog();
   };
   const previewReady = () => workspacePreview()?.key === previewKey();
-  const canCreate = () => !submitting() && (mode() === "managed" ? Boolean(name().trim())
+  const canCreate = () => !submitting() && (newKind() === "workspace" && workspaceOn() ? Boolean(path().trim()) : mode() === "managed" ? Boolean(name().trim())
     : mode() === "linked" || mode() === "created" ? previewReady()
       : Boolean(cloneUrl().trim() && path().trim()));
 
@@ -1084,7 +1100,34 @@ export function Sidebar(props: {
       description={newKind() === "workspace" && workspaceStep() === "details" ? `Selected location: ${path()}` : newKind() === "folder" ? "Create a separate managed working directory and chat scope." : undefined}
       onOpenChange={(open) => { if (!open) closeNewDialog(); }} close={newKind() === "workspace"} size={newKind() === "workspace" ? "large" : undefined} >
       <CardForm onSubmit={submitNew}><CardBody>
-        <Show when={newKind() === "workspace" && workspaceStep() === "explore"}><ComputerExplorer dialog projects={props.projects} location={computerPicker()} loading={computerPickerLoading()} error={computerPickerError()} onBrowse={(target) => void browseComputerPicker(target)} onPrefetch={() => {}} onMakeWorkspace={() => {}} onCreateWorkspace={() => {}} onOpenWorkspace={props.onOpenProject} onManageWorkspace={() => {}} onStartWorkspaceAction={() => {}} onOpenView={() => {}} onOpenFile={() => {}} onSelectFolder={() => { selectWorkspaceMode("linked"); setWorkspaceStep("details"); }} onCreateFolder={() => { selectWorkspaceMode("created"); setWorkspaceStep("details"); }} onCloneRepository={() => { selectWorkspaceMode("cloned"); setWorkspaceStep("details"); }} /></Show>
+        {/* Where it goes: the hub's own machine or a client's, browsed alike; a client's only inside what it makes available. */}
+        <Show when={newKind() === "workspace" && workspaceStep() === "explore" && ((machines()?.length ?? 0) > 1 || desktopShell)}>
+          <DialogField label={<>On</>}>
+            <Select aria-label="Machine" value={workspaceOn()} onChange={(event) => {
+              const select = event.currentTarget;
+              const next = select.value;
+              setComputerPicker(null); setComputerPickerError(""); setPath("");
+              if (next !== THIS_COMPUTER) { setWorkspaceOn(next); void browseComputerPicker(); return; }
+              // This computer, from its own app: paired if it is not, a folder picked, then browsed as any client's.
+              setComputerPickerLoading(true);
+              void makeFolderAvailable().then((shared) => {
+                setComputerPickerLoading(false);
+                if (!shared) { select.value = workspaceOn(); void browseComputerPicker(); return; }
+                readMachines();
+                setWorkspaceOn(shared.nodeId);
+                void browseComputerPicker(shared.path);
+              }, (error: Error) => { setComputerPickerLoading(false); setComputerPickerError(error.message); });
+            }}>
+              <For each={machines() || []}>{(machine) => <option value={machine.hub ? "" : machine.id} selected={(machine.hub ? "" : machine.id) === workspaceOn()}
+                disabled={!machine.hub && (!machine.online || !machine.folders)}>
+                {machine.label}{machine.hub ? "" : !machine.online ? " · offline" : !machine.folders ? " · shares no folders" : ""}
+              </option>}</For>
+              <Show when={desktopShell}><option value={THIS_COMPUTER}>A folder on this computer…</option></Show>
+            </Select>
+          </DialogField>
+        </Show>
+        <Show when={newKind() === "workspace" && workspaceStep() === "explore"}><ComputerExplorer dialog selectOnly={Boolean(workspaceOn())}
+          projects={props.projects.filter((project) => workspaceOn() ? project.nodeId === workspaceOn() : !project.nodeId || project.nodeId === machines()?.find((machine) => machine.hub)?.id)} location={computerPicker()} loading={computerPickerLoading()} error={computerPickerError()} onBrowse={(target) => void browseComputerPicker(target)} onPrefetch={() => {}} onMakeWorkspace={() => {}} onCreateWorkspace={() => {}} onOpenWorkspace={props.onOpenProject} onManageWorkspace={() => {}} onStartWorkspaceAction={() => {}} onOpenView={() => {}} onOpenFile={() => {}} onSelectFolder={() => { selectWorkspaceMode("linked"); setWorkspaceStep("details"); }} onCreateFolder={() => { selectWorkspaceMode("created"); setWorkspaceStep("details"); }} onCloneRepository={() => { selectWorkspaceMode("cloned"); setWorkspaceStep("details"); }} /></Show>
         <Show when={newKind() === "folder" || workspaceStep() === "details"}>
           <Show when={mode() === "cloned"}><DialogField label={<>GitHub repository or Git URL</>}><DialogInput id="folder-clone" value={cloneUrl()} disabled={submitting()} placeholder="react/react or https://github.com/org/repo.git" onInput={(event) => setCloneUrl(event.currentTarget.value)} /></DialogField></Show>
           <DialogField label={<>{mode() === "managed" ? "Display name" : "Display name (optional)"}</>}><DialogInput id="folder-name" value={name()} disabled={submitting()} placeholder={mode() === "managed" ? "Research" : "My project"} onInput={(event) => setName(event.currentTarget.value)} /></DialogField>

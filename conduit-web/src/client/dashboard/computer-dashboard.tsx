@@ -67,6 +67,8 @@ export function ComputerDashboard(props: {
   onSelectFolder?: () => void;
   onCreateFolder?: () => void;
   onCloneRepository?: () => void;
+  /** Choosing a folder only: a device's, where Conduit neither creates folders nor clones (its grants are the device's). */
+  selectOnly?: boolean;
 }) {
   const [address, setAddress] = createSignal("");
   const [entries, setEntries] = createSignal<Entry[]>([]);
@@ -160,8 +162,10 @@ export function ComputerDashboard(props: {
 
   const WorkspaceActions = () => <>
     <Button variant="ghost" type="button" disabled={!props.location || props.loading} onClick={() => props.dialog ? props.onSelectFolder?.() : props.onMakeWorkspace()}><Icons.Folder />{props.dialog ? "Select folder" : designated() ? "Open workspace" : "Make workspace"}</Button>
-    <Button variant="ghost" type="button" disabled={!props.location || props.loading} onClick={() => props.dialog ? props.onCreateFolder?.() : props.onStartWorkspaceAction("created", props.location!.project.workingRoot)}><Icons.Add />Create folder</Button>
-    <Button variant="ghost" type="button" disabled={!props.location || props.loading} onClick={() => props.dialog ? props.onCloneRepository?.() : props.onStartWorkspaceAction("cloned", props.location!.project.workingRoot)}><Icons.GitBranch />Clone repository</Button>
+    <Show when={!props.selectOnly}>
+      <Button variant="ghost" type="button" disabled={!props.location || props.loading} onClick={() => props.dialog ? props.onCreateFolder?.() : props.onStartWorkspaceAction("created", props.location!.project.workingRoot)}><Icons.Add />Create folder</Button>
+      <Button variant="ghost" type="button" disabled={!props.location || props.loading} onClick={() => props.dialog ? props.onCloneRepository?.() : props.onStartWorkspaceAction("cloned", props.location!.project.workingRoot)}><Icons.GitBranch />Clone repository</Button>
+    </Show>
   </>;
 
   return <Browser compact={props.dialog} sidebarWidth={sidebarWidth()}>
@@ -240,8 +244,8 @@ export function ComputerDashboard(props: {
           <Show when={!props.loading && !refreshing() && !visibleEntries().length}><BrowserEmpty>{query() ? "No items match this search." : "This folder is empty."}</BrowserEmpty></Show>
         </ContextMenuTrigger><ContextMenuContent><ContextMenuGroup>
           <ContextMenuItem disabled={!props.location} onSelect={() => props.dialog ? props.onSelectFolder?.() : props.onStartWorkspaceAction("created", props.location!.project.workingRoot)}><Icons.Folder />{props.dialog ? "Select this folder" : "Create workspace folder here"}</ContextMenuItem>
-          <ContextMenuItem disabled={!props.location} onSelect={() => props.dialog ? props.onCreateFolder?.() : props.onStartWorkspaceAction("cloned", props.location!.project.workingRoot)}><Icons.Add />{props.dialog ? "Create folder here" : "Clone repository here"}</ContextMenuItem>
-          <Show when={props.dialog}><ContextMenuItem disabled={!props.location} onSelect={props.onCloneRepository}><Icons.GitBranch />Clone repository here</ContextMenuItem></Show>
+          <Show when={!props.selectOnly}><ContextMenuItem disabled={!props.location} onSelect={() => props.dialog ? props.onCreateFolder?.() : props.onStartWorkspaceAction("cloned", props.location!.project.workingRoot)}><Icons.Add />{props.dialog ? "Create folder here" : "Clone repository here"}</ContextMenuItem></Show>
+          <Show when={props.dialog && !props.selectOnly}><ContextMenuItem disabled={!props.location} onSelect={props.onCloneRepository}><Icons.GitBranch />Clone repository here</ContextMenuItem></Show>
           <Show when={!props.dialog}><For each={harnesses().filter((item) => item.available)}>{(harness) => <ContextMenuItem disabled={!props.location} onSelect={() => props.onOpenHarnessHere?.(harness.id, props.location!.project.workingRoot)}><HarnessMark id={harness.id} />Open {harness.label} here</ContextMenuItem>}</For></Show>
           <ContextMenuItem onSelect={() => void refresh()}><Icons.Refresh />Refresh</ContextMenuItem>
           <ContextMenuItem onSelect={() => setShowHidden((value) => !value)}><Icons.Preview />{showHidden() ? "Hide hidden files" : "Show hidden files"}</ContextMenuItem>
