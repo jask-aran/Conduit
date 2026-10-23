@@ -705,3 +705,19 @@ which the port also answers; the tailnet route is offered only when Tailscale
 serves it. The user chose to pin the head's identity in a pairing for the
 case loopback does not cover (a node on another machine and a head with no
 trusted certificate); not built yet.
+
+### 2026-10-23: the hub, and nodes on the LAN
+
+**What is the centre of a network called?** The hub, not the head. Every
+client connects to the hub and never to another client; the hub is where
+unscoped chats live and the network is named for it (Desktop-Dev). It is a
+device like any other (decision 24); "hub" names its role. Earlier entries
+say head; read it as hub. The code and API follow (`hub` on the hub's device
+in `/v0/nodes`, `hubIds`, `adoptHub`).
+
+**Can a node dial the hub over the LAN?** Yes (decision 4 widened): a node
+may connect from loopback, the tailnet or a private LAN address, never a
+public one, and its key still decides. A machine on the network but not the
+tailnet (the laptop's Windows) pairs over the LAN; pairing hands it the
+address the request came in by -- the LAN name over HTTPS, its certificate a
+real one, or a private address over the plain HTTP the port also answers.

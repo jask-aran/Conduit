@@ -1,4 +1,4 @@
-import { capabilitiesOf, headIds } from "./place.js";
+import { capabilitiesOf, hubIds } from "./place.js";
 import { projectWorkspace } from "./workspace-host.js";
 import { convertClassicChats } from "./server/convert-classic-chats.js";
 import http from "node:http";
@@ -105,9 +105,9 @@ await terminals.load();
 // here -- so it neither publishes its network addresses nor advertises on one.
 const reachableOnNetwork = !/^(127\.\d+\.\d+\.\d+|localhost|::1|\[::1\])$/.test(config.host);
 const serverIdentity = await new ServerIdentity(config.identityFile, { port: config.port, network: reachableOnNetwork }).load();
-// The head's own device and node (decision 24), known before anything reads a project.
-const head = headIds(serverIdentity.id);
-projects.headNodeId = head.nodeId;
+// The hub's own device and node (decision 24), known before anything reads a project.
+const hub = hubIds(serverIdentity.id);
+projects.hubNodeId = hub.nodeId;
 const registry = new ChatStore(config.sessionRegistryFile, {
   defaultRuntime: {
     kind: "conduit_profile",
@@ -235,11 +235,11 @@ const publishProcessChange = (view, record, reason) => {
   else runtimeHub.publishProcessRemoved(view.id, view.chatId);
 };
 // What a workspace's place can do -- which harnesses, checkpoints, Git -- on
-// the head or a device alike (src/place.js); every refusal asks this.
+// the hub or a device alike (src/place.js); every refusal asks this.
 backends.capabilities = (project) => capabilitiesOf(project, { hub: nodeHub, backends, serverName: serverIdentity.name });
-// The head is a device like the others (decision 24): its node holds the
+// The hub is a device like the others (decision 24): its node holds the
 // folders of every workspace that is not on another device, one root each.
-nodeHub.adoptHead({ ...head, name: () => serverIdentity.name,
+nodeHub.adoptHub({ ...hub, name: () => serverIdentity.name,
   roots: async () => (await projects.list()).filter((project) => project.local)
     .map((project) => ({ id: project.place.root, label: project.workingRoot, read: true, write: true, shell: true, allow: [] })),
   harnesses: () => [...(backends.local || backends.adapters.keys())] });
@@ -452,7 +452,7 @@ if (desktopUpdateDir) {
   }));
 }
 // The installers this server hands out itself, newest of each: a server that
-// publishes its own builds (a dev head and its client) offers those rather
+// publishes its own builds (a dev hub and its client) offers those rather
 // than the public release. Empty when it publishes none.
 app.get("/v0/downloads", async (_request, response) => {
   const newest = async (suffix) => {
@@ -585,7 +585,7 @@ registerVoiceRoutes(app, { voiceSettings, voiceRuntime, voiceModel });
 registerPtyRoutes(app, { projects, terminals, nodeHub });
 registerTerminalPasteRoutes(app, { terminalPastes });
 
-registerNodeRoutes(app, { nodeHub, config });
+registerNodeRoutes(app, { nodeHub, config, lanNameMatches: (name) => lanNameMatches(name) });
 registerProjectRoutes(app, {
   nodeHub,
   backends,

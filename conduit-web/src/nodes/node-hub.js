@@ -32,7 +32,7 @@ const RELAY_ENV_MAX = 64;
 const HELLO_WAIT_MS = 30_000;
 
 export class NodeHub extends EventEmitter {
-  constructor({ dataRoot, allowRemote = isTailnetOrLoopback }) {
+  constructor({ dataRoot, allowRemote = isNodeAddress }) {
     super();
     this.file = path.join(dataRoot, "nodes.json");
     this.allowRemote = allowRemote;
@@ -59,8 +59,8 @@ export class NodeHub extends EventEmitter {
     catch (error) { if (error.code !== "ENOENT") throw error; }
     this.records = stored.nodes || [];
     this.devices = stored.devices || [];
-    // The head's device is not a record (it is never paired), so only a name given to it is kept.
-    this.headDevice = stored.headDevice || {};
+    // The hub's device is not a record (it is never paired), so only a name given to it is kept.
+    this.hubDevice = stored.hubDevice || stored.headDevice || {};
     // Version 1 had no devices: each node becomes the only node of a device of its name.
     for (const record of this.records) {
       if (record.deviceId) continue;
@@ -80,7 +80,7 @@ export class NodeHub extends EventEmitter {
   save() {
     this.saving = (this.saving || Promise.resolve()).then(async () => {
       const temporary = `${this.file}.${process.pid}.tmp`;
-      await fs.writeFile(temporary, `${JSON.stringify({ version: 2, devices: this.devices, headDevice: this.headDevice, nodes: this.records }, null, 2)}\n`, { mode: 0o600 });
+      await fs.writeFile(temporary, `${JSON.stringify({ version: 2, devices: this.devices, hubDevice: this.hubDevice, nodes: this.records }, null, 2)}\n`, { mode: 0o600 });
       await fs.rename(temporary, this.file);
     });
     const done = this.saving;
@@ -91,10 +91,10 @@ export class NodeHub extends EventEmitter {
   /** Pair a node on a device: an existing one by id, else a new one by name. */
   async pair({ name, deviceId = null, deviceName = null } = {}) {
     await this.load();
-    // The head's own device takes nodes too: on a desktop that is the head
-    // (decision 29), its Windows side pairs into the device its WSL heads.
-    const onHead = Boolean(deviceId) && deviceId === this.head?.deviceId;
-    let device = onHead ? { id: deviceId } : deviceId && this.devices.find((item) => item.id === deviceId);
+    // The hub's own device takes nodes too: on a desktop that is the hub
+    // (decision 29), its Windows side pairs into the device its WSL is the hub of.
+    const onHub = Boolean(deviceId) && deviceId === this.hub?.deviceId;
+    let device = onHub ? { id: deviceId } : deviceId && this.devices.find((item) => item.id === deviceId);
     if (deviceId && !device) throw Object.assign(new Error("No such device"), { status: 404, code: "device_not_found" });
     if (!device) {
       device = { id: `device_${crypto.randomUUID()}`, name: String(deviceName || name || "Device").trim().slice(0, 80) || "Device",
@@ -107,15 +107,15 @@ export class NodeHub extends EventEmitter {
       keyHash: hash(key), createdAt: new Date().toISOString(), lastSeenAt: null, roots: [], platform: null };
     this.records.push(record);
     await this.save();
-    return { node: this.view(record), device: onHead ? (await this.listDevices())[0] : this.deviceView(device), key };
+    return { node: this.view(record), device: onHub ? (await this.listDevices())[0] : this.deviceView(device), key };
   }
 
-  /** A device's name, as the list shows it. The head's device too. */
+  /** A device's name, as the list shows it. The hub's device too. */
   async renameDevice(id, name) {
     await this.load();
     const value = String(name || "").trim().slice(0, 80);
     if (!value) throw Object.assign(new Error("A device needs a name"), { status: 400, code: "device_name_required" });
-    if (id === this.head?.deviceId) this.headDevice = { ...this.headDevice, name: value };
+    if (id === this.hub?.deviceId) this.hubDevice = { ...this.hubDevice, name: value };
     else {
       const device = this.devices.find((item) => item.id === id);
       if (!device) throw Object.assign(new Error("No such device"), { status: 404, code: "device_not_found" });
@@ -161,27 +161,27 @@ export class NodeHub extends EventEmitter {
 
   async listDevices() {
     await this.load();
-    // The head's device is named as the machine is, until renamed; the head itself goes by the server's name.
-    const head = this.head ? [{ id: this.head.deviceId, name: this.headDevice.name || os.hostname() || this.head.name(), local: true, head: this.head.name(),
-      nodes: [await this.headView(), ...this.records.filter((record) => record.deviceId === this.head.deviceId).map((record) => this.view(record))] }] : [];
-    return [...head, ...this.devices.map((device) => this.deviceView(device))];
+    // The hub's device is named as the machine is, until renamed; the hub itself goes by the server's name.
+    const hub = this.hub ? [{ id: this.hub.deviceId, name: this.hubDevice.name || os.hostname() || this.hub.name(), local: true, hub: this.hub.name(),
+      nodes: [await this.hubView(), ...this.records.filter((record) => record.deviceId === this.hub.deviceId).map((record) => this.view(record))] }] : [];
+    return [...hub, ...this.devices.map((device) => this.deviceView(device))];
   }
 
   /**
-   * The head's own device (decision 24): listed with the others, its node's
+   * The hub's own device (decision 24): listed with the others, its node's
    * roots the folders it holds workspaces in. It is not paired and never
    * offline; its calls run in process, so it is not among `live` sockets.
    */
-  adoptHead({ deviceId, nodeId, name, roots, harnesses }) { this.head = { deviceId, nodeId, name, roots, harnesses }; }
+  adoptHub({ deviceId, nodeId, name, roots, harnesses }) { this.hub = { deviceId, nodeId, name, roots, harnesses }; }
 
-  async headView() {
+  async hubView() {
     // A WSL distro is named as one: it shares its device with Windows, which pairs as its own environment.
     // From the kernel, not WSL_DISTRO_NAME: a service started by systemd does not carry it.
     const wsl = process.platform === "linux" && /microsoft/i.test(os.release());
     const platform = wsl ? await distroName() : { win32: "Windows", darwin: "macOS" }[process.platform] || "Linux";
-    return { id: this.head.nodeId, deviceId: this.head.deviceId, name: platform, platform: process.platform, local: true,
+    return { id: this.hub.nodeId, deviceId: this.hub.deviceId, name: platform, platform: process.platform, local: true,
       // Its own terminal is the "computer" one this server always offers.
-      online: true, roots: await this.head.roots(), harnesses: this.head.harnesses(), terminal: true, lastSeenAt: new Date().toISOString() };
+      online: true, roots: await this.hub.roots(), harnesses: this.hub.harnesses(), terminal: true, lastSeenAt: new Date().toISOString() };
   }
 
   /** A root a node shares, by id, as it last said: `{ id, label, read, write, shell }`. */
@@ -445,6 +445,20 @@ export function clientAddress(request) {
   const nearest = String(forwarded).split(",").map((item) => item.trim()).filter(Boolean).at(-1) || "";
   const local = request.socket.remoteAddress || "";
   return isTailnetOrLoopback(local) && isTailnetOrLoopback(nearest) && !isLoopback(nearest) ? nearest : "";
+}
+
+// The private LAN ranges: a machine on this network that is not on the tailnet (a laptop's Windows) pairs over it.
+const PRIVATE_V4 = new net.BlockList();
+PRIVATE_V4.addSubnet("10.0.0.0", 8, "ipv4");
+PRIVATE_V4.addSubnet("172.16.0.0", 12, "ipv4");
+PRIVATE_V4.addSubnet("192.168.0.0", 16, "ipv4");
+
+/** Where a node may dial from: loopback, the tailnet, or the private LAN -- never a public address. Its key still decides. */
+export function isNodeAddress(address = "") {
+  const plain = address.replace(/^::ffff:/, "");
+  if (isTailnetOrLoopback(plain)) return true;
+  if (net.isIPv4(plain)) return PRIVATE_V4.check(plain, "ipv4");
+  return /^f[cd][0-9a-f]{2}:/i.test(plain);
 }
 
 const isLoopback = (address) => /^(::ffff:)?127\./.test(address) || address === "::1";

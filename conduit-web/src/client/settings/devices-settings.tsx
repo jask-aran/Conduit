@@ -20,17 +20,17 @@ import { desktopShell, isInstalledClient, type CompanionStatus, type DesktopShel
 type SharedRoot = { id: string; label: string; read: boolean; write: boolean; shell: boolean; allow?: string[] };
 type Node = { id: string; deviceId: string; name: string; platform: string | null; online: boolean; local?: boolean; roots: SharedRoot[]; harnesses?: string[]; terminal?: boolean; lastSeenAt: string | null; via?: string | null };
 /** A client connected to this server now (runtime-hub.js): its kind, build, and what its user agent says it runs on. */
-/** `machine`: where the server saw it connect from -- "head" (its own machine) or a tailnet machine's name. */
+/** `machine`: where the server saw it connect from -- "hub" (its own machine) or a tailnet machine's name. */
 type Client = { id: string; kind: string; build: string; registration?: string; platform?: string; agent?: string; nodes?: string[]; machine?: string };
-/** `head`: on the device the head runs on, the server's name. */
-type Device = { id: string; name: string; local?: boolean; head?: string; nodes: Node[] };
+/** `hub`: on the device the hub runs on, the server's name. */
+type Device = { id: string; name: string; local?: boolean; hub?: string; nodes: Node[] };
 /** One client as this page shows it: on the map, and as its card. */
 type Shown = { part: NetworkClient; node?: Node; mine: boolean };
 type ShownDevice = { id: string; name: string; paired: boolean; clients: Shown[] };
 type AddWorkspace = (input: { mode: "node"; nodeId: string; rootId: string }) => Promise<boolean>;
 
 const isWorkspace = (project: Project) => project.kind === "workspace" || ["linked", "created", "cloned"].includes(project.origin || "");
-/** The workspaces a client mounts: each is placed on one (an older one with no node is the head's). */
+/** The workspaces a client mounts: each is placed on one (an older one with no node is the hub's). */
 const mountedOn = (projects: Project[], node: Node) => projects.filter((project) => isWorkspace(project) && (project.nodeId ? project.nodeId === node.id : Boolean(node.local)));
 
 /**
@@ -41,7 +41,7 @@ const mountedOn = (projects: Project[], node: Node) => projects.filter((project)
  *
  * A device (a PC, a phone) holds clients: environments (its Windows, a WSL distro) whose node (`conduit-node`) mounts
  * folders on the network as workspaces, and apps or browsers driving Conduit; Windows with the app open on it is one
- * client. The head's environment mounts the server's own workspaces. A browser is a device of its own.
+ * client. The hub's environment mounts the server's own workspaces. A browser is a device of its own.
  */
 export function DevicesSettingsTile(props: { projects: Project[]; onAddWorkspace: AddWorkspace;
   /** A terminal on the device itself, in its home: this server's "computer" one, or a device's where a folder is shared with commands. */
@@ -102,13 +102,13 @@ export function DevicesSettingsTile(props: { projects: Project[]; onAddWorkspace
   const network = createMemo(() => networkOf(devices() || [], clients(), active() ? connectionId() : null, active() ? ownNode() : null, projects()));
   const thisDevice = () => network().find((device) => device.clients.some((shown) => shown.mine)) ?? null;
   const others = () => network().filter((device) => device !== thisDevice());
-  const headDevice = () => (devices() || []).find((item) => item.head);
-  const headNode = () => headDevice()?.nodes.find((item) => item.local);
-  const server = () => headDevice()?.head || "This server";
+  const hubDevice = () => (devices() || []).find((item) => item.hub);
+  const hubNode = () => hubDevice()?.nodes.find((item) => item.local);
+  const server = () => hubDevice()?.hub || "This server";
 
   const status = (shown: Shown) => !shown.node || shown.node.online || shown.part.headed ? "Connected" : shown.node.lastSeenAt
     ? `Offline since ${new Date(shown.node.lastSeenAt).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}` : "Not connected yet";
-  // What a client mounts: the head's environment the server's own workspaces, any other the ones made from its folders.
+  // What a client mounts: the hub's environment the server's own workspaces, any other the ones made from its folders.
   const mounted = (node: Node) => mountedOn(projects(), node);
   const unmounted = (node: Node) => node.local ? [] : node.roots.filter((root) => !projects().some((project) => project.nodeId === node.id && project.place?.root === root.id));
 
@@ -171,7 +171,7 @@ export function DevicesSettingsTile(props: { projects: Project[]; onAddWorkspace
     </SettingLine>
     <Show when={!readable()}><SettingNote tone="quiet">A browser can only ask the server it is on. Switch to {entry()?.name} to see its network.</SettingNote></Show>
 
-    <Show when={devices()}><NetworkMap head={{ name: server(), device: headDevice()?.name, meta: headNode() ? `on ${headNode()!.name}` : undefined }}
+    <Show when={devices()}><NetworkMap hub={{ name: server(), device: hubDevice()?.name, meta: hubNode() ? `on ${hubNode()!.name}` : undefined }}
       devices={network().map((device) => ({ id: device.id, name: device.name, clients: device.clients.map((shown) => shown.part) }))} /></Show>
 
     <Show when={active() && thisDevice()}>{(device) => <SettingGroup title="This device">
@@ -180,7 +180,7 @@ export function DevicesSettingsTile(props: { projects: Project[]; onAddWorkspace
       </Show>
       <ClientCards label={device().name}>
         <For each={device().clients}>{(shown) => card(shown, true)}</For>
-        {/* The app can bring another environment of this machine in (a WSL distro); not where the head already runs. */}
+        {/* The app can bring another environment of this machine in (a WSL distro); not where the hub already runs. */}
         <Show when={companion && device().paired && !device().clients.some((shown) => shown.node?.local)}><PairEnvironment device={device()} onPaired={refresh} /></Show>
       </ClientCards>
       <Show when={companion?.error()}><SettingNote tone="error">{companion!.error()}</SettingNote></Show>
@@ -188,7 +188,7 @@ export function DevicesSettingsTile(props: { projects: Project[]; onAddWorkspace
 
     <SettingGroup title="Server">
       <NavFolder open={open().has("server")} row={
-        <NavFolderRow open={open().has("server")} icon={<Icons.Server />} meta={headNode() ? `on ${headDevice()!.name} · ${headNode()!.name}` : undefined}
+        <NavFolderRow open={open().has("server")} icon={<Icons.Server />} meta={hubNode() ? `on ${hubDevice()!.name} · ${hubNode()!.name}` : undefined}
           link={{ onClick: () => toggle("server") }}
           toggle={{ "aria-label": `${open().has("server") ? "Close" : "Open"} ${entry()?.name || server()}`, onClick: (event: MouseEvent) => { event.stopPropagation(); toggle("server"); } }}>
           {entry()?.name || server()}
@@ -321,7 +321,7 @@ function createCompanion(devices: () => Device[] | null, refresh: () => void) {
 /**
  * The devices as the page shows them: every paired device with its environments, and every client connected now. An
  * app whose companion is one of those environments (it says so on connecting) is that environment, headed. Any other
- * client goes to the machine the server saw it connect from: the head's own device, a paired device of that name, or
+ * client goes to the machine the server saw it connect from: the hub's own device, a paired device of that name, or
  * a device named for that machine. One the server could not place is a device of its own when it is this one, and
  * listed with the other browsers when it is not.
  */
@@ -353,10 +353,10 @@ function networkOf(devices: Device[], clients: Client[], self: string | null, ow
       continue;
     }
     const shown: Shown = { mine, part: { id: client.id, name, headed: form, online: true, meta: said || undefined } };
-    const machine = client.machine === "head" ? list.find((device) => devices.find((paired) => paired.id === device.id)?.head)
+    const machine = client.machine === "hub" ? list.find((device) => devices.find((paired) => paired.id === device.id)?.hub)
       : client.machine ? list.find((device) => device.name.toLowerCase() === client.machine!.toLowerCase()) : undefined;
     if (machine) machine.clients.push(shown);
-    else if (client.machine && client.machine !== "head") list.push({ id: `machine:${client.machine}`, name: client.machine, paired: false, clients: [shown] });
+    else if (client.machine && client.machine !== "hub") list.push({ id: `machine:${client.machine}`, name: client.machine, paired: false, clients: [shown] });
     else if (form === "browser" && !mine) browsers.clients.push(shown);
     else list.push({ id: `client:${key}`, name: form === "phone" ? "Phone" : form === "browser" ? "This browser" : client.platform || "Computer", paired: false, clients: [shown] });
   }
