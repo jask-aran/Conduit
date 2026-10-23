@@ -10,7 +10,7 @@ import { encode, decode, HANDLE_METHODS, METHOD_GRANTS, NODE_PROTOCOL_VERSION, r
 import { NodeProcesses } from "./node-processes.js";
 import { keptBack, rootDeny } from "./secrets.js";
 import { Receipts } from "./receipts.js";
-import { keySecret } from "./direct.js";
+import { directAddresses, keySecret } from "./direct.js";
 import { serveDirect } from "./node-direct.js";
 import net from "node:net";
 import { claudeSession, codexRollout, findHarnesses, opencodeService, tunnelTarget } from "./node-harnesses.js";
@@ -163,7 +163,7 @@ export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: 
       way = 0;
       // Roots go by id; the path is for people to read, main never sends it back.
       send({ type: "hello", version: NODE_PROTOCOL_VERSION, name, platform: process.platform, boot: receipts.boot,
-        harnesses: Object.keys(harnesses), browse: Boolean(browse && onShare), ...(directPort ? { direct: { port: directPort } } : {}),
+        harnesses: Object.keys(harnesses), browse: Boolean(browse && onShare), ...(directPort ? { direct: { port: directPort, addresses: directAddresses(os.networkInterfaces()) } } : {}),
         roots: roots.map(({ id, path: label, read, write, shell, allow }) => ({ id, label, read, write, shell, allow })) });
       log.info?.(`[conduit-node] connected to ${mainUrl}${via === mainUrl ? "" : ` via ${via}`}`);
     });

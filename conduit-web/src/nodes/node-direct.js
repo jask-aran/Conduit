@@ -6,7 +6,7 @@ import { err, FileError } from "@earendil-works/pi-durable/env";
 import { installedClientOrigin } from "../native-auth.js";
 import { deviceHost } from "../workspace-host.js";
 import { readWorkspaceFile, readWorkspaceFileMetadata, resolveInspectorPath } from "../workspace-inspector.js";
-import { verifyGrant } from "./direct.js";
+import { directId, verifyGrant } from "./direct.js";
 import { decode, encode, HANDLE_METHODS, METHOD_GRANTS } from "./protocol.js";
 
 // A file read whole to answer one request: past this, the hub's way (which caps lower still) is no worse.
@@ -63,6 +63,8 @@ export function serveDirect({ secret, call, log = console }) {
     }
     const json = (status, body) => { response.writeHead(status, { "Content-Type": "application/json" }); response.end(JSON.stringify(body)); };
     const url = new URL(request.url || "/", "http://127.0.0.1");
+    // Which node this is, for a client choosing among its addresses; no grant needed to ask.
+    if (request.method === "GET" && url.pathname === "/health") return json(200, { ok: true, id: directId(secret) });
     if (request.method !== "GET" || url.pathname !== "/file") return json(404, { error: "not_found" });
     const grant = verifyGrant(secret, String(request.headers.authorization || "").replace(/^Bearer\s+/i, ""));
     if (!grant) return json(401, { error: "direct_grant_invalid", message: "This read needs a grant from the hub" });
@@ -102,8 +104,9 @@ export function serveDirect({ secret, call, log = console }) {
       for (const handle of held.values()) void handle.close?.(BACKGROUND_CONTEXT);
     }
   });
-  // Loopback only: the same device's app. The LAN comes later, over https.
-  const listening = new Promise((resolve) => server.listen(0, "127.0.0.1", () => resolve(server.address().port)));
+  // Every IPv4 interface: loopback for this machine's app, its networks' and tailnet's addresses for others nearby.
+  // Nothing is read without the hub's grant, whichever way it comes in.
+  const listening = new Promise((resolve) => server.listen(0, "0.0.0.0", () => resolve(server.address().port)));
   server.on("error", (error) => log.warn?.(`[conduit-node] direct reads: ${error.message}`));
   return { listening, close: () => server.close() };
 }

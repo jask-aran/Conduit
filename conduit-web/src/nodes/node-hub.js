@@ -7,7 +7,7 @@ import { EventEmitter } from "node:events";
 import { WebSocketServer } from "ws";
 import { awaitWithContext, BACKGROUND_CONTEXT, withAbortSignal } from "@earendil-works/chord/context";
 import { decode, encode, NODE_FEATURES, NODE_PROTOCOL_VERSION } from "./protocol.js";
-import { DIRECT_TTL_MS, signGrant } from "./direct.js";
+import { DIRECT_TTL_MS, directId, signGrant } from "./direct.js";
 import { FileError } from "@earendil-works/pi-durable/env";
 
 const hash = (key) => crypto.createHash("sha256").update(key).digest("hex");
@@ -220,7 +220,11 @@ export class NodeHub extends EventEmitter {
     const record = await this.get(nodeId);
     if (!node?.ready || !node.direct || !record?.keyHash || !place?.root) return null;
     const expiresAt = Date.now() + DIRECT_TTL_MS;
-    return { nodeId, url: `http://127.0.0.1:${node.direct.port}`, expiresAt,
+    const { port, addresses } = node.direct;
+    // Nearest first: its own machine's loopback (only the app beside it can use that), then its networks', its tailnet's.
+    const routes = [{ url: `http://127.0.0.1:${port}`, reach: "loopback" },
+      ...addresses.map(({ address, reach }) => ({ url: `http://${address}:${port}`, reach }))];
+    return { nodeId, id: directId(record.keyHash), routes, expiresAt,
       token: signGrant(record.keyHash, { place: { root: place.root, path: place.path || "" }, label, read: true, expires: expiresAt }) };
   }
 
@@ -350,7 +354,9 @@ export class NodeHub extends EventEmitter {
           harnesses: Array.isArray(message.harnesses) ? message.harnesses.filter((id) => typeof id === "string") : [],
           browse: message.browse === true, ready: true,
           // Where it answers reads itself on its own machine (node-direct.js).
-          direct: Number.isInteger(message.direct?.port) && message.direct.port > 0 ? { port: message.direct.port } : null });
+          direct: Number.isInteger(message.direct?.port) && message.direct.port > 0 ? { port: message.direct.port,
+            addresses: (Array.isArray(message.direct.addresses) ? message.direct.addresses : [])
+              .filter((item) => typeof item?.address === "string" && ["private", "tailnet"].includes(item.reach)).slice(0, 8) } : null });
         this.live.set(record.id, node);
         node.send({ type: "welcome", features: NODE_FEATURES });
         Object.assign(record, { roots: node.roots, platform: node.platform, harnesses: node.harnesses, browse: node.browse, lastSeenAt: new Date().toISOString() });

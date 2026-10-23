@@ -760,17 +760,32 @@ expiry, then serves the read with the same inspector code the hub runs, over
 its own disk, through its own grant and kept-back checks: a grant can never
 reach further than the hub could.
 
-Which way, best first, the client trying each with a short timeout and
-falling back to the hub on any failure:
+Which way, best first (built): the node listens on every IPv4 interface and
+its hello lists its addresses on private networks and its tailnet (never a
+public one); the hub's grant names them all with loopback first, and a
+fingerprint of the node worked out from its key hash. A client asks each
+address's `/health` at once and takes the nearest that answers with that
+fingerprint, as soon as the nearer ones have not: the app beside the node
+takes loopback, a machine on the same LAN its address there, one on the
+tailnet that. The choice is kept per node until a read through it fails, and
+"none" is asked again after two minutes (a laptop moves). Anything else goes
+through the hub, as before. The grant is fetched as a workspace's files are
+first shown and renewed in its last three minutes, so a file open never waits
+on the hub for it.
 
-1. **Same device** (built): the app's own companion is the workspace's node.
-   The node listens on loopback and says its port in its hello; the hub's
-   grant names `http://127.0.0.1:<port>`.
-2. **Same LAN** (next): the node also listens on its private addresses and
-   says them; the hub passes them on, and a client tries them. A browser on
-   an https page cannot fetch a plain-http LAN address, so browsers stay on
-   the hub until the node serves https.
-3. **Otherwise**: through the hub, as before.
+Costs taken knowingly: on a LAN the grant crosses in the clear (over the
+tailnet WireGuard carries it); it reads one place for ten minutes, no more.
+A node listening beyond loopback makes Windows ask once whether to let it on
+private networks. A browser stays on the hub: an https page may not fetch
+plain HTTP, and the node does not let a page in. A node serving https on its
+tailnet name (Tailscale issues the certificate) is the way to bring browsers
+in, next.
+
+Nearness for a server's own routes follows the same idea: the apps ask their
+own resolver what a name stands for, so `lan.example.com` at 192.168.x is
+"This network", and 100.64/10 or `*.ts.net` is "Tailscale". That orders and
+names routes; which may go over plain HTTP is still decided by the address
+text alone.
 
 Reads only, for now: writes, terminals and the agent's own tools stay on the
 hub's connection, where actions keep receipts and the agent runs.
