@@ -125,6 +125,9 @@ export function DevicesSettingsTile(props: { projects: Project[]; onAddWorkspace
         <ClientFact label={`Share with ${server()}`} title="Mounts the folders you choose on this computer in the network. It keeps running in the tray with the window closed.">
           <Switch id="device-serve" label={`Share with ${server()}`} disabled={companion!.busy() || !companion!.settings()} checked={Boolean(companion!.settings()?.serveAsDevice)} onChange={(on) => void companion!.serve(on)} />
         </ClientFact>
+        <ClientFact label={`Let ${server()} browse`} title={`${server()} can list this computer's folders and mount one you pick in New workspace, with edits and commands. Set here only.`}>
+          <Switch id="device-browse" label={`Let ${server()} browse this computer`} disabled={companion!.busy()} checked={Boolean(companion!.pairing()?.browse)} onChange={(on) => void companion!.browse(on)} />
+        </ClientFact>
         <ClientFact label="New folders can be edited"><Switch id="device-share-write" label="New folders can be edited" checked={companion!.write()} onChange={companion!.setWrite} /></ClientFact>
         <ClientFact label="New folders run commands" title="Commands start in the folder but run as you, with everything you can reach.">
           <Switch id="device-share-shell" label="New folders run commands" checked={companion!.commands()} onChange={companion!.setCommands} />
@@ -291,11 +294,12 @@ function createCompanion(devices: () => Device[] | null, refresh: () => void) {
   });
   const pair = () => act(async () => { await pairThisComputer(status()); setSettings(await shell.settings()); });
   const share = (mainUrl: string) => act(() => shell.companion.share(mainUrl, write(), commands()));
+  const browse = (on: boolean) => act(async () => { const at = pairing()?.mainUrl; if (at) await shell.companion.browse(at, on); });
   const unpair = (mainUrl: string, nodeId: string | null) => act(async () => {
     await shell.companion.unpair(mainUrl);
     if (nodeId) await api(`/v0/nodes/${nodeId}`, { method: "DELETE" });
   });
-  return { read, settings, pairing, busy, error, write, setWrite, commands, setCommands, serve, pair, share, unpair };
+  return { read, settings, pairing, busy, error, write, setWrite, commands, setCommands, serve, pair, share, browse, unpair };
 }
 
 /**

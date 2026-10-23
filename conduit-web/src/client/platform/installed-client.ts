@@ -198,7 +198,7 @@ export interface CompanionStatus {
   available: boolean;
   serving: boolean;
   running: boolean;
-  node: { name: string | null; host?: string; pairings: Array<{ mainUrl: string; nodeId: string | null; routes?: string[]; roots: CompanionRoot[] }> } | null;
+  node: { name: string | null; host?: string; pairings: Array<{ mainUrl: string; nodeId: string | null; routes?: string[]; roots: CompanionRoot[]; browse?: boolean }> } | null;
 }
 
 /**
@@ -226,6 +226,11 @@ export const desktopShell = installedClientKind !== "desktop" ? null : {
     async unshare(mainUrl: string, path: string): Promise<void> {
       const { invoke } = await import("@tauri-apps/api/core");
       await invoke("device_companion_unshare", { mainUrl, path });
+    },
+    /** Let that server browse this computer and share folders it picks (`conduit-node browse`). */
+    async browse(mainUrl: string, on: boolean): Promise<void> {
+      const { invoke } = await import("@tauri-apps/api/core");
+      await invoke("device_companion_browse", { mainUrl, on });
     },
     async unpair(mainUrl: string): Promise<void> {
       const { invoke } = await import("@tauri-apps/api/core");

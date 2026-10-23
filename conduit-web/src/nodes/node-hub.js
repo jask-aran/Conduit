@@ -6,7 +6,7 @@ import path from "node:path";
 import { EventEmitter } from "node:events";
 import { WebSocketServer } from "ws";
 import { awaitWithContext, BACKGROUND_CONTEXT, withAbortSignal } from "@earendil-works/chord/context";
-import { encode, NODE_FEATURES, NODE_PROTOCOL_VERSION } from "./protocol.js";
+import { decode, encode, NODE_FEATURES, NODE_PROTOCOL_VERSION } from "./protocol.js";
 import { FileError } from "@earendil-works/pi-durable/env";
 
 const hash = (key) => crypto.createHash("sha256").update(key).digest("hex");
@@ -146,6 +146,8 @@ export class NodeHub extends EventEmitter {
     const live = this.live.get(record.id);
     return { id: record.id, deviceId: record.deviceId, name: record.name, platform: live?.platform || record.platform || null,
       online: Boolean(live), roots: live?.roots || record.roots || [], harnesses: live?.harnesses || record.harnesses || [],
+      // The device lets this server browse it and share folders it picks (set on the device).
+      browse: live ? Boolean(live.browse) : Boolean(record.browse),
       // A terminal in its home: where any folder is shared with commands (decision 27).
       terminal: Boolean(live) && (live.roots || []).some((root) => root.shell), lastSeenAt: live ? new Date().toISOString() : record.lastSeenAt,
       // The environment relaying it (decision 25), when it is not dialling itself.
@@ -191,6 +193,27 @@ export class NodeHub extends EventEmitter {
   }
 
   async get(id) { return (await this.load()).find((record) => record.id === id) || null; }
+
+  /**
+   * The device's computer beyond its roots, where it lets this server browse: `list` a folder (home when none), or
+   * `share` one, which makes it a root and comes back as the roots it shares now. Not waited for when it is away.
+   */
+  async computer(nodeId, method, at) {
+    if (!this.live.get(nodeId)?.ready) throw Object.assign(new Error("That device is offline"), { code: "device_offline", status: 503 });
+    const context = withAbortSignal(AbortSignal.timeout(15_000), BACKGROUND_CONTEXT);
+    const result = decode(await this.call(nodeId, { target: "computer", method, args: encode([at || ""]) }, context), { FileError });
+    if (!result?.ok) throw Object.assign(new Error(result?.error?.message || "The device refused"), { code: result?.error?.code, status: result?.error?.code === "permission_denied" ? 403 : 400 });
+    if (method === "share") {
+      const roots = result.value.filter((root) => typeof root?.id === "string");
+      const node = this.live.get(nodeId);
+      const record = await this.get(nodeId);
+      if (node) node.roots = roots;
+      if (record) record.roots = roots;
+      await this.save().catch(() => {});
+      this.emit("changed");
+    }
+    return result.value;
+  }
 
   handleUpgrade(request, socket, head) {
     if (!this.allowRemote(clientAddress(request))) return socket.destroy();
@@ -299,10 +322,10 @@ export class NodeHub extends EventEmitter {
         Object.assign(node, { roots: Array.isArray(message.roots) ? message.roots : [], platform: message.platform || null,
           boot: typeof message.boot === "string" ? message.boot : null,
           harnesses: Array.isArray(message.harnesses) ? message.harnesses.filter((id) => typeof id === "string") : [],
-          ready: true });
+          browse: message.browse === true, ready: true });
         this.live.set(record.id, node);
         node.send({ type: "welcome", features: NODE_FEATURES });
-        Object.assign(record, { roots: node.roots, platform: node.platform, harnesses: node.harnesses, lastSeenAt: new Date().toISOString() });
+        Object.assign(record, { roots: node.roots, platform: node.platform, harnesses: node.harnesses, browse: node.browse, lastSeenAt: new Date().toISOString() });
         if (message.name && record.name === "Device") record.name = String(message.name).slice(0, 80);
         // Roots without ids are from a node older than root ids: it is not addressable.
         node.roots = node.roots.filter((root) => typeof root?.id === "string");

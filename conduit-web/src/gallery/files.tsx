@@ -6,7 +6,7 @@ import { FileImage, FileCard, FileBody, FileDivider, FileSwap, FileEmptySide, Fi
 import { CodeSurface, CodeHost, CodeContent, SearchBar, SearchField, SearchActions, AnnotationPopup, AnnotationInput, AnnotationButton, ComparisonCounts, TurnNavigation, Comparison, ComparisonContent, ComparisonSource, DiffShell, DiffRail, DiffBody, SplitEdge } from "@/components/ui/editor";
 import { Button, Input } from "@/components/ui/controls";
 import { PaneEmpty } from "@/components/ui/pane";
-import { Browser, BrowserLayout, BrowserSidebar, BrowserHeading, BrowserPlaces, BrowserPlace, BrowserMain, BrowserToolbar, BrowserActions, BrowserSearch, BrowserAddress, BrowserCount, BrowserSummary, BrowserSpacer, BrowserColumns, BrowserGrid, BrowserEntry, BrowserMark, BrowserDivider, BrowserEmpty, BrowserLoading, BrowserError } from "@/components/ui/browser";
+import { Browser, BrowserLayout, BrowserSidebar, BrowserHeading, BrowserPlaces, BrowserPlace, BrowserMain, BrowserToolbar, BrowserActions, BrowserSearch, BrowserAddress, BrowserCount, BrowserSummary, BrowserSpacer, BrowserColumns, BrowserGrid, BrowserEntry, BrowserMark, BrowserDivider, BrowserEmpty, BrowserLoading, BrowserError, BrowserMachine } from "@/components/ui/browser";
 import { ListIcon } from "lucide-solid";
 import type { JSX } from "solid-js";
 
@@ -222,6 +222,12 @@ import { Icons } from "@/components/ui";
     row("Browser · BrowserLayout", "places at the left (BrowserHeading over BrowserPlace rows, workspaces in BrowserPlaces), the divider that resizes them, then the main column", () => <Assembled />, { surfaces: ["ground"], code: "<Browser sidebarWidth><BrowserLayout><BrowserSidebar /><BrowserDivider /><BrowserMain /></BrowserLayout></Browser>" }),
     row("Browser compact", "the folder picker's form, inside a dialog", () => <Assembled compact />, { surfaces: ["ground"], code: "<Browser compact sidebarWidth>" }),
     row("BrowserToolbar · BrowserAddress · BrowserSearch · BrowserCount", "home and parent, the folder's path (editable), search in this folder, view and refresh, then how many items", () => <div style={box(45)}><Toolbar /></div>, { phone: true, code: "<BrowserToolbar><Button /><BrowserAddress /><BrowserSearch><Input /></BrowserSearch><BrowserCount /></BrowserToolbar>" }),
+    row("BrowserMachine", "leads the toolbar when there is more than one machine to browse: which one, opening the menu of them", () => <div style={box(45)}><BrowserToolbar>
+      <BrowserMachine type="button" aria-label="Machine"><Icons.Monitor /><span>Laptop · Windows</span><Icons.ChevronDown /></BrowserMachine>
+      <Button variant="ghost" type="button" aria-label="Home folder"><Icons.Home /></Button>
+      <Button variant="ghost" type="button" aria-label="Parent folder"><Icons.ArrowUp /></Button>
+      <BrowserAddress aria-label="Folder path" value="C:\\Users\\jask\\Projects" />
+    </BrowserToolbar></div>, { phone: true, code: "<BrowserToolbar><DropdownMenu.Trigger as={BrowserMachine}><Icon /><span /><Icons.ChevronDown /></DropdownMenu.Trigger>…</BrowserToolbar>" }),
     row("BrowserActions · BrowserSummary · BrowserSpacer", "the repository this folder is in, a spacer, then what opens here", () => <div style={box(45)}><Actions /></div>, { phone: true, code: "<BrowserActions><BrowserSummary /><BrowserSpacer /><Button /></BrowserActions>" }),
     row("BrowserGrid tiles · BrowserEntry · BrowserMark", "folders first, then files; Conduit is a workspace (the mark)", () => <Pane><Grid /></Pane>, { surfaces: ["ground"], phone: true, code: '<BrowserGrid data-view="tiles"><BrowserEntry><Icon /><span /><BrowserMark /></BrowserEntry></BrowserGrid>' }),
     row("BrowserGrid details · BrowserColumns", "the same entries with type, size and dates under column names", () => <Pane><Grid details /></Pane>, { surfaces: ["ground"], phone: true, code: '<BrowserGrid data-view="details"><BrowserColumns /><BrowserEntry>…<small /></BrowserEntry></BrowserGrid>' }),
@@ -237,7 +243,7 @@ import { Icons } from "@/components/ui";
     token("--text-caption", "caption text size"),
     token("--measure-xs", "spacing and size")
   ] }],
-  api: ["Browser", "BrowserLayout", "BrowserSidebar", "BrowserHeading", "BrowserPlace", "BrowserPlaces", "BrowserDivider", "BrowserMain", "BrowserToolbar", "Button", "BrowserAddress", "BrowserSearch", "Input", "BrowserCount", "BrowserActions", "BrowserSummary", "BrowserSpacer", "BrowserGrid", "BrowserColumns", "BrowserEntry", "BrowserMark", "BrowserEmpty", "BrowserLoading", "BrowserError"],
+  api: ["Browser", "BrowserLayout", "BrowserSidebar", "BrowserHeading", "BrowserPlace", "BrowserPlaces", "BrowserDivider", "BrowserMain", "BrowserToolbar", "BrowserMachine", "Button", "BrowserAddress", "BrowserSearch", "Input", "BrowserCount", "BrowserActions", "BrowserSummary", "BrowserSpacer", "BrowserGrid", "BrowserColumns", "BrowserEntry", "BrowserMark", "BrowserEmpty", "BrowserLoading", "BrowserError"],
 };
 
 export const filesPages = (): Page[] => [filesPage, editorPage, browserPage];

@@ -7,7 +7,31 @@ import { api } from "../api/client.ts";
 import { httpUrl } from "../api/transport.js";
 import { desktopShell, type CompanionStatus } from "./installed-client.ts";
 
-type Listed = { devices: Array<{ nodes: Array<{ id: string; online: boolean; roots: Array<{ label: string }> }> }> };
+type Listed = { devices: Array<{ nodes: Array<{ id: string; online: boolean; browse?: boolean; roots: Array<{ label: string }> }> }> };
+type ListedNode = Listed["devices"][number]["nodes"][number];
+
+const nodes = async () => (await api<Listed>("/v0/nodes")).devices.flatMap((device) => device.nodes);
+
+/** This computer's pairing with the hub in use, made if there is none, and its node serving. */
+async function paired() {
+  const app = desktopShell!;
+  const pairing = pairingWith(await app.companion.status(), (await nodes()).map((node) => node.id));
+  const target = pairing?.nodeId && pairing.mainUrl ? { nodeId: pairing.nodeId, mainUrl: pairing.mainUrl } : await pairThisComputer(await app.companion.status());
+  const settings = await app.settings();
+  if (!settings.serveAsDevice) await app.saveSettings({ ...settings, serveAsDevice: true });
+  return target;
+}
+
+/** The node restarts to take a change; its hello says when it has. Asked until `ready` says so, for a while. */
+async function until(nodeId: string, ready: (node: ListedNode) => boolean, failure: string) {
+  const end = Date.now() + 20_000;
+  while (Date.now() < end) {
+    const node = (await nodes().catch(() => [])).find((item) => item.id === nodeId);
+    if (node?.online && ready(node)) return;
+    await new Promise((resolve) => setTimeout(resolve, 700));
+  }
+  throw new Error(failure);
+}
 
 /**
  * The URL this app reaches the hub by, when a node could dial it too: this machine's, over the plain HTTP the port
@@ -50,21 +74,18 @@ export async function pairThisComputer(status: CompanionStatus | null) {
  * system's picker for the folder, then waiting for the node to say it shares it. Null when the picker was dismissed.
  */
 export async function makeFolderAvailable({ write = true, shell = true } = {}): Promise<{ nodeId: string; path: string } | null> {
-  const app = desktopShell!;
-  const nodes = async () => (await api<Listed>("/v0/nodes")).devices.flatMap((device) => device.nodes);
-  let pairing = pairingWith(await app.companion.status(), (await nodes()).map((node) => node.id));
-  const target = pairing?.nodeId && pairing.mainUrl ? { nodeId: pairing.nodeId, mainUrl: pairing.mainUrl } : await pairThisComputer(await app.companion.status());
-  const settings = await app.settings();
-  if (!settings.serveAsDevice) await app.saveSettings({ ...settings, serveAsDevice: true });
-  const path = await app.companion.share(target.mainUrl, write, shell);
+  const target = await paired();
+  const path = await desktopShell!.companion.share(target.mainUrl, write, shell);
   if (!path) return null;
-  // The companion restarts to share it; its hello says so. Asked until it does, for a while.
-  const until = Date.now() + 20_000;
   const same = (label: string) => label.replace(/[\\/]+$/, "").toLowerCase() === path.replace(/[\\/]+$/, "").toLowerCase();
-  while (Date.now() < until) {
-    const node = (await nodes().catch(() => [])).find((item) => item.id === target.nodeId);
-    if (node?.online && node.roots.some((root) => same(root.label))) return { nodeId: target.nodeId, path };
-    await new Promise((resolve) => setTimeout(resolve, 700));
-  }
-  throw new Error("This computer did not start sharing that folder. Check Settings › Devices.");
+  await until(target.nodeId, (node) => node.roots.some((root) => same(root.label)), "This computer did not start sharing that folder. Check Settings › Devices.");
+  return { nodeId: target.nodeId, path };
+}
+
+/** Let the hub browse this computer (paired first if it is not): set here, on the device, as Settings › Devices does. */
+export async function letHubBrowse(): Promise<string> {
+  const target = await paired();
+  await desktopShell!.companion.browse(target.mainUrl, true);
+  await until(target.nodeId, (node) => Boolean(node.browse), "This computer did not start letting the hub browse it. Check Settings › Devices.");
+  return target.nodeId;
 }
