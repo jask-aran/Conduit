@@ -69,6 +69,7 @@ import { registerLiveSessionRoutes } from "./server/routes/live-sessions.js";
 import { registerProjectRoutes } from "./server/routes/projects.js";
 import { registerNodeRoutes } from "./server/routes/nodes.js";
 import { NodeHub } from "./nodes/node-hub.js";
+import { lanNames } from "./nodes/lan-names.js";
 import { registerSessionRoutes } from "./server/routes/sessions.js";
 import { registerSearchRoutes } from "./server/routes/search.js";
 import { registerVoiceRoutes } from "./server/routes/voice.js";
@@ -189,7 +190,7 @@ const concurrency = new ServerConcurrency();
 // Devices dial over the tailnet (decision 4). A server whose owner lets them
 // in through its public address as well (CONDUIT_NODES_PUBLIC=1, e.g. behind a
 // Cloudflare tunnel) takes them on their pairing key alone.
-const nodeHub = lifetime.own("nodes", new NodeHub({ dataRoot: config.dataRoot,
+const nodeHub = lifetime.own("nodes", new NodeHub({ dataRoot: config.dataRoot, lanNames: lanNames(),
   ...(process.env.CONDUIT_NODES_PUBLIC === "1" ? { allowRemote: () => true } : {}) }), (owned) => owned.shutdown());
 terminals.nodeHub = nodeHub;
 // Everything a harness manifest needs to probe and build itself. Backends are

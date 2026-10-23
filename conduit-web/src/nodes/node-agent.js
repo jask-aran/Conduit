@@ -71,8 +71,7 @@ export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: 
   let socket = null;
   let served = null;
   let directPort = null;
-  let directTls = null;
-  const directInfo = () => ({ port: directPort, addresses: directAddresses(os.networkInterfaces()), ...(directTls ? { tls: directTls } : {}) });
+  const directInfo = () => ({ port: directPort, addresses: directAddresses(os.networkInterfaces()), ...(served?.secureRoute() ? { tls: served.secureRoute() } : {}) });
   let attempt = 0;
   let stopped = false;
   let timer = null;
@@ -191,6 +190,13 @@ export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: 
         return;
       }
       if (typeof message.type === "string" && message.type.startsWith("relay")) return relayFor(message.env)?.deliver(message);
+      // A name on this network from main, and the certificate for it (lan-names.js).
+      if (message.type === "lan-cert") {
+        if (served && typeof message.name === "string" && typeof message.cert === "string" && typeof message.key === "string") {
+          void served.addCertificate({ name: message.name, cert: message.cert, key: message.key }).catch((error) => log.warn?.(`[conduit-node] ${error.message}`));
+        }
+        return;
+      }
       if (message.type === "refused") {
         log.error?.(`[conduit-node] main refused this node: ${message.reason}`);
         stopped = true;
@@ -389,12 +395,8 @@ export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: 
   if (direct) {
     served = serveDirect({ secret: keySecret(key), call: envCall, log, certificate });
     void served.listening.then((port) => { directPort = port; if (!stopped) connect(); });
-    // The https route comes when its certificate does: told to main then, and in every hello after.
-    void served.secured.then((tls) => {
-      if (!tls) return;
-      directTls = tls;
-      if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: "direct", direct: directInfo() }));
-    });
+    // The https route comes when a certificate does: told to main then, and in every hello after.
+    served.onSecureChange(() => { if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: "direct", direct: directInfo() })); });
   } else connect();
   return {
     stop() {
