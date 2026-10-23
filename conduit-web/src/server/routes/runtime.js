@@ -1,5 +1,7 @@
 import { normalizeKnownServers, validKnownServers, validSidebarPins, validTerminalShortcuts, validUiPreferencePatch } from "../../preferences-store.js";
 import { manifestForImplementation } from "../../harnesses/index.js";
+import { clientAddress, isTailnetOrLoopback } from "../../nodes/node-hub.js";
+import { tailnetMachine } from "../../tailscale-share.js";
 
 const PROOF_WINDOW_MS = 10_000;
 const PROOF_LIMIT = 20;
@@ -275,6 +277,14 @@ export function registerRuntimeRoutes(app, {
     const build = typeof request.query.build === "string" ? request.query.build.slice(0, 80) : "";
     const registration = typeof request.query.registration === "string" && /^[A-Za-z0-9_-]{8,64}$/.test(request.query.registration) ? request.query.registration : "";
     const detach = runtimeHub.attach(client, { kind, build, registration, ...clientPlatform(request.headers["user-agent"]) });
+    // Which machine it is on, for grouping it with that machine's other clients: this one, from loopback; any other
+    // by the name Tailscale knows it by (a tailnet address, or a LAN one a peer connects directly from). A browser
+    // cannot say; a public tunnel hides it.
+    const address = clientAddress(request).replace(/^::ffff:/, "");
+    if (/^127\./.test(address) || address === "::1") runtimeHub.note(client.peer.id, { machine: "head" });
+    else if (address) {
+      void tailnetMachine(address, { tailnet: isTailnetOrLoopback(address) }).then((name) => { if (name) runtimeHub.note(client.peer.id, { machine: name }); });
+    }
     // A real frame, not an SSE comment: the client watches for silence to tell
     // a live stream from one that died without ever firing an error.
     const heartbeat = setInterval(() => {

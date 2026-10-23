@@ -1,6 +1,11 @@
-import { createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js";
+import { createEffect, createMemo, createSignal, For, on, onCleanup, onMount, Show } from "solid-js";
 import { api } from "../api/client.ts";
-import { httpUrl } from "../api/transport.js";
+import { buildHttpUrl, httpUrl } from "../api/transport.js";
+import { nativeBearerToken } from "../api/native-auth-client.ts";
+import { DropdownMenu, MenuContent, MenuRadioGroup, MenuRadioItem, MenuSection } from "@/components/menus";
+import { ServerControl } from "@/components/ui/connection";
+import { activeOrigin, dialOrigin, servers, switchToServer } from "../platform/servers.ts";
+import { createServerHealth, ServerFacts } from "./server-inspect.tsx";
 import type { Project } from "../api/contracts";
 import { Button, Input, Switch } from "@/components/ui/controls";
 import * as Icons from "@/components/ui/icons";
@@ -10,12 +15,13 @@ import { Reading, ReadingStat, ReadingStats } from "@/components/ui/reading";
 import { connectionId } from "../state/runtime.ts";
 import { LiveNote, SettingGroup, SettingLine, SettingNote, SettingValue } from "@/components/ui/overlay";
 import { WorkspaceGlyph } from "../project/workspace-appearance.tsx";
-import { desktopShell, type CompanionStatus, type DesktopShellSettings } from "../platform/installed-client.ts";
+import { desktopShell, isInstalledClient, type CompanionStatus, type DesktopShellSettings } from "../platform/installed-client.ts";
 
 type SharedRoot = { id: string; label: string; read: boolean; write: boolean; shell: boolean; allow?: string[] };
 type Node = { id: string; deviceId: string; name: string; platform: string | null; online: boolean; local?: boolean; roots: SharedRoot[]; harnesses?: string[]; terminal?: boolean; lastSeenAt: string | null; via?: string | null };
 /** A client connected to this server now (runtime-hub.js): its kind, build, and what its user agent says it runs on. */
-type Client = { id: string; kind: string; build: string; registration?: string; platform?: string; agent?: string; nodes?: string[] };
+/** `machine`: where the server saw it connect from -- "head" (its own machine) or a tailnet machine's name. */
+type Client = { id: string; kind: string; build: string; registration?: string; platform?: string; agent?: string; nodes?: string[]; machine?: string };
 /** `head`: on the device the head runs on, the server's name. */
 type Device = { id: string; name: string; local?: boolean; head?: string; nodes: Node[] };
 /** One client as this page shows it: on the map, and as its card. */
@@ -28,8 +34,10 @@ const isWorkspace = (project: Project) => project.kind === "workspace" || ["link
 const mountedOn = (projects: Project[], node: Node) => projects.filter((project) => isWorkspace(project) && (project.nodeId ? project.nodeId === node.id : Boolean(node.local)));
 
 /**
- * The network this server heads: its map, then this device (named here, and where its sharing is set), the server,
- * and every other device, each opening to its clients' cards.
+ * The servers this client knows, one at a time: picked at the top (each with its status), then the network it heads --
+ * its map, this device (named here, and where its sharing is set), the server (its figures and what this client knows
+ * of it) and every other device, each opening to its clients' cards. Another server is inspected, not changed: the
+ * installed apps ask it with the sign-in they keep for it; a browser can only ask its own, and offers Switch to.
  *
  * A device (a PC, a phone) holds clients: environments (its Windows, a WSL distro) whose node (`conduit-node`) mounts
  * folders on the network as workspaces, and apps or browsers driving Conduit; Windows with the app open on it is one
@@ -39,17 +47,41 @@ export function DevicesSettingsTile(props: { projects: Project[]; onAddWorkspace
   /** A terminal on the device itself, in its home: this server's "computer" one, or a device's where a folder is shared with commands. */
   onOpenTerminal: (node: { id: string; local?: boolean }) => void;
   onOpenWorkspace: (project: Project) => void }) {
+  const health = createServerHealth();
+  const [inspected, setInspected] = createSignal(activeOrigin() || "");
+  const entry = () => servers().find((item) => item.origin === inspected()) ?? null;
+  const active = () => inspected() === activeOrigin();
+  // Another server can be asked only from an installed app, with the sign-in it keeps for that server.
+  const readable = () => active() || isInstalledClient();
+  const get = async <T,>(path: string): Promise<T> => {
+    if (active()) return api<T>(path);
+    const known = entry();
+    const token = known ? await nativeBearerToken(known.origin) : null;
+    if (!known || !token) throw new Error("Not signed in to that server here.");
+    const response = await fetch(buildHttpUrl(path, dialOrigin(known.origin, known)), { headers: { authorization: `Bearer ${token}` }, cache: "no-store" });
+    if (!response.ok) throw new Error(`${known.name} answered ${response.status}.`);
+    return response.json() as Promise<T>;
+  };
   const [devices, setDevices] = createSignal<Device[] | null>(null);
   const [error, setError] = createSignal("");
   const [clients, setClients] = createSignal<Client[]>([]);
+  const [theirProjects, setTheirProjects] = createSignal<Project[]>([]);
+  const projects = () => active() ? props.projects : theirProjects();
   const [open, setOpen] = createSignal<Set<string>>(new Set());
   const refresh = () => {
-    void api<{ devices: Device[] }>("/v0/nodes")
-      .then((answer) => { setDevices(answer.devices); setError(""); })
-      .catch((cause: Error) => setError(cause.message || "The server did not list its devices."));
-    void api<{ clients?: Client[] }>("/v0/runtime/clients").then((answer) => setClients(answer.clients || [])).catch(() => {});
+    const asked = inspected();
+    if (!readable()) return;
+    const mine = (apply: () => void) => { if (inspected() === asked) apply(); };
+    void get<{ devices: Device[] }>("/v0/nodes")
+      .then((answer) => mine(() => { setDevices(answer.devices); setError(""); }))
+      .catch((cause: Error) => mine(() => setError(cause.message || "The server did not list its devices.")));
+    void get<{ clients?: Client[] }>("/v0/runtime/clients").then((answer) => mine(() => setClients(answer.clients || []))).catch(() => {});
+    if (!active()) void get<{ projects?: Project[] } | Project[]>("/v0/projects")
+      .then((answer) => mine(() => setTheirProjects(Array.isArray(answer) ? answer : answer.projects || []))).catch(() => {});
     companion?.read();
   };
+  // A server picked: its network, from nothing, so one server's devices never show under another's name.
+  createEffect(on(inspected, () => { setDevices(null); setClients([]); setTheirProjects([]); setError(""); refresh(); }, { defer: true }));
   // This app's own client: its companion, paired with this server or not.
   const companion = desktopShell ? createCompanion(devices, () => refresh()) : null;
   refresh();
@@ -67,7 +99,7 @@ export function DevicesSettingsTile(props: { projects: Project[]; onAddWorkspace
   const toggle = (id: string) => setOpen((now) => { const next = new Set(now); if (!next.delete(id)) next.add(id); return next; });
 
   const ownNode = () => companion?.pairing()?.nodeId ?? null;
-  const network = createMemo(() => networkOf(devices() || [], clients(), connectionId(), ownNode(), props.projects));
+  const network = createMemo(() => networkOf(devices() || [], clients(), active() ? connectionId() : null, active() ? ownNode() : null, projects()));
   const thisDevice = () => network().find((device) => device.clients.some((shown) => shown.mine)) ?? null;
   const others = () => network().filter((device) => device !== thisDevice());
   const headDevice = () => (devices() || []).find((item) => item.head);
@@ -77,11 +109,15 @@ export function DevicesSettingsTile(props: { projects: Project[]; onAddWorkspace
   const status = (shown: Shown) => !shown.node || shown.node.online || shown.part.headed ? "Connected" : shown.node.lastSeenAt
     ? `Offline since ${new Date(shown.node.lastSeenAt).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}` : "Not connected yet";
   // What a client mounts: the head's environment the server's own workspaces, any other the ones made from its folders.
-  const mounted = (node: Node) => mountedOn(props.projects, node);
-  const unmounted = (node: Node) => node.local ? [] : node.roots.filter((root) => !props.projects.some((project) => project.nodeId === node.id && project.place?.root === root.id));
+  const mounted = (node: Node) => mountedOn(projects(), node);
+  const unmounted = (node: Node) => node.local ? [] : node.roots.filter((root) => !projects().some((project) => project.nodeId === node.id && project.place?.root === root.id));
 
   /** A client's card. `here`: on this device, where its own settings are. */
   const card = (shown: Shown, here: boolean) => {
+    // Another server's network is inspected, not changed.
+    if (!active()) return <ClientCard client={shown.part} status={status(shown)} places={<Show when={shown.node}>{(node) =>
+      <ClientPlaces none={!mounted(node()).length}><For each={mounted(node())}>{(project) =>
+        <NavRow icon={<WorkspaceGlyph appearance={project.workspaceAppearance} />} disabled>{project.name}</NavRow>}</For></ClientPlaces>}</Show>} />;
     const own = () => here && shown.mine && companion && (!shown.node || shown.node.id === ownNode());
     return <ClientCard client={shown.part} status={status(shown)}
       facts={<Show when={own() && companion!.pairing()}>
@@ -116,10 +152,29 @@ export function DevicesSettingsTile(props: { projects: Project[]; onAddWorkspace
   };
 
   return <>
+    {/* Which server's network: each with its status, the one in use first; picking one inspects it, Switch to uses it. */}
+    <SettingLine plain label={<DropdownMenu>
+        <DropdownMenu.Trigger as={ServerControl} inline name={entry()?.name || "No server"} detail={entry() ? health.status(entry()!) : ""}
+          connectivity={entry() ? health.connectivity(entry()!) : "unknown"} aria-label={`Server: ${entry()?.name || "none"}`} />
+        <MenuContent width="md">
+          <MenuSection title="Servers">
+            <MenuRadioGroup value={inspected()} onChange={setInspected}>
+              <For each={[...servers()].sort((a, b) => Number(b.origin === activeOrigin()) - Number(a.origin === activeOrigin()))}>{(item) =>
+                <MenuRadioItem value={item.origin} meta={health.status(item)}>{item.name}</MenuRadioItem>}</For>
+            </MenuRadioGroup>
+          </MenuSection>
+        </MenuContent>
+      </DropdownMenu>}>
+      <Show when={!active() && entry()}>
+        <Button variant="ghost" size="sm" onClick={() => switchToServer(entry()!.origin, isInstalledClient())}>Switch to {entry()!.name}</Button>
+      </Show>
+    </SettingLine>
+    <Show when={!readable()}><SettingNote tone="quiet">A browser can only ask the server it is on. Switch to {entry()?.name} to see its network.</SettingNote></Show>
+
     <Show when={devices()}><NetworkMap head={{ name: server(), device: headDevice()?.name, meta: headNode() ? `on ${headNode()!.name}` : undefined }}
       devices={network().map((device) => ({ id: device.id, name: device.name, clients: device.clients.map((shown) => shown.part) }))} /></Show>
 
-    <Show when={thisDevice()}>{(device) => <SettingGroup title="This device">
+    <Show when={active() && thisDevice()}>{(device) => <SettingGroup title="This device">
       <Show when={device().paired}>
         <SettingLine label="Name"><Input aria-label="This device's name" value={device().name} onChange={(event) => rename(device(), event.currentTarget.value)} /></SettingLine>
       </Show>
@@ -135,17 +190,18 @@ export function DevicesSettingsTile(props: { projects: Project[]; onAddWorkspace
       <NavFolder open={open().has("server")} row={
         <NavFolderRow open={open().has("server")} icon={<Icons.Server />} meta={headNode() ? `on ${headDevice()!.name} · ${headNode()!.name}` : undefined}
           link={{ onClick: () => toggle("server") }}
-          toggle={{ "aria-label": `${open().has("server") ? "Close" : "Open"} ${server()}`, onClick: (event: MouseEvent) => { event.stopPropagation(); toggle("server"); } }}>
-          {server()}
+          toggle={{ "aria-label": `${open().has("server") ? "Close" : "Open"} ${entry()?.name || server()}`, onClick: (event: MouseEvent) => { event.stopPropagation(); toggle("server"); } }}>
+          {entry()?.name || server()}
         </NavFolderRow>}>
       {/* What the server holds, read at a glance: figures as the gauge's tiles. */}
-      <Reading>
+      <Show when={devices()}><Reading>
         <ReadingStats title="On the network">
           <ReadingStat label="Devices" value={network().length} />
           <ReadingStat label="Clients" value={network().reduce((sum, device) => sum + device.clients.filter((shown) => shown.part.online).length, 0)} detail="connected" />
-          <ReadingStat label="Workspaces" value={props.projects.filter(isWorkspace).length} />
+          <ReadingStat label="Workspaces" value={projects().filter(isWorkspace).length} />
         </ReadingStats>
-      </Reading>
+      </Reading></Show>
+      <Show when={entry()}>{(known) => <ServerFacts entry={known()} health={health} />}</Show>
       </NavFolder>
     </SettingGroup>
 
@@ -264,9 +320,10 @@ function createCompanion(devices: () => Device[] | null, refresh: () => void) {
 
 /**
  * The devices as the page shows them: every paired device with its environments, and every client connected now. An
- * app whose companion is one of those environments (it says so on connecting) is that environment, headed. This
- * browser is a device of its own; other browsers are listed together; any other app is a device of its own, since
- * nothing says which machine it is on.
+ * app whose companion is one of those environments (it says so on connecting) is that environment, headed. Any other
+ * client goes to the machine the server saw it connect from: the head's own device, a paired device of that name, or
+ * a device named for that machine. One the server could not place is a device of its own when it is this one, and
+ * listed with the other browsers when it is not.
  */
 function networkOf(devices: Device[], clients: Client[], self: string | null, own: string | null, projects: Project[]): ShownDevice[] {
   const names = new Map(devices.flatMap((device) => device.nodes.map((node) => [node.id, node.name] as const)));
@@ -296,7 +353,11 @@ function networkOf(devices: Device[], clients: Client[], self: string | null, ow
       continue;
     }
     const shown: Shown = { mine, part: { id: client.id, name, headed: form, online: true, meta: said || undefined } };
-    if (form === "browser" && !mine) browsers.clients.push(shown);
+    const machine = client.machine === "head" ? list.find((device) => devices.find((paired) => paired.id === device.id)?.head)
+      : client.machine ? list.find((device) => device.name.toLowerCase() === client.machine!.toLowerCase()) : undefined;
+    if (machine) machine.clients.push(shown);
+    else if (client.machine && client.machine !== "head") list.push({ id: `machine:${client.machine}`, name: client.machine, paired: false, clients: [shown] });
+    else if (form === "browser" && !mine) browsers.clients.push(shown);
     else list.push({ id: `client:${key}`, name: form === "phone" ? "Phone" : form === "browser" ? "This browser" : client.platform || "Computer", paired: false, clients: [shown] });
   }
   return browsers.clients.length ? [...list, browsers] : list;
