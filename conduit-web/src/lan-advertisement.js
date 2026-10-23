@@ -93,6 +93,10 @@ export class LanAdvertisement {
       type: SERVICE_TYPE,
       protocol: SERVICE_PROTOCOL,
       port: this.port,
+      // A name in .local of the server's own for its SRV and A records: the library would use the bare hostname,
+      // which no mDNS lookup asks for (Android's resolve asks `<target>.local` and found nothing), and the machine's
+      // own name.local is its OS's to answer -- under WSL, Windows answers for it.
+      host: `conduit-${String(this.identity.id || "server").replace(/[^a-z0-9]/gi, "").slice(0, 12).toLowerCase() || "server"}.local`,
       // No AAAA records. The responder builds its address records by walking
       // the interfaces itself, and a client only ever takes the private IPv4
       // one, so every IPv6 address it would otherwise put on the wire is a
