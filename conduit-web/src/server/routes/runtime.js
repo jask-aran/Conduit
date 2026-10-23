@@ -241,6 +241,10 @@ export function registerRuntimeRoutes(app, {
     response.json({ clients: runtimeHub.connections(), restart: runtimeHub.restartStatus() });
   });
 
+  app.post("/v0/runtime/clients/:id/nodes", (request, response) => {
+    response.status(runtimeHub.locate(request.params.id, request.body?.nodes) ? 204 : 404).end();
+  });
+
   // The launcher: a restart to this service-worker hash is coming.
   app.post("/v0/runtime/restart/prepare", (request, response) => {
     const attempt = String(request.body?.attempt || "");
@@ -270,7 +274,7 @@ export function registerRuntimeRoutes(app, {
     const kind = ["browser", "android", "desktop"].includes(request.query.client) ? request.query.client : "browser";
     const build = typeof request.query.build === "string" ? request.query.build.slice(0, 80) : "";
     const registration = typeof request.query.registration === "string" && /^[A-Za-z0-9_-]{8,64}$/.test(request.query.registration) ? request.query.registration : "";
-    const detach = runtimeHub.attach(client, { kind, build, registration });
+    const detach = runtimeHub.attach(client, { kind, build, registration, ...clientPlatform(request.headers["user-agent"]) });
     // A real frame, not an SSE comment: the client watches for silence to tell
     // a live stream from one that died without ever firing an error.
     const heartbeat = setInterval(() => {
@@ -283,4 +287,13 @@ export function registerRuntimeRoutes(app, {
       detach();
     });
   });
+}
+
+/** What a connection's user agent says it runs on, for the devices' map: the OS, and a browser's name. */
+function clientPlatform(userAgent = "") {
+  const agent = String(userAgent);
+  const platform = /Android/i.test(agent) ? "Android" : /iPhone|iPad|iPod/i.test(agent) ? "iOS" : /Windows/i.test(agent) ? "Windows"
+    : /Mac OS X|Macintosh/i.test(agent) ? "macOS" : /CrOS/i.test(agent) ? "ChromeOS" : /Linux/i.test(agent) ? "Linux" : "";
+  const browser = /Edg\//.test(agent) ? "Edge" : /Firefox\//.test(agent) ? "Firefox" : /Chrome\//.test(agent) ? "Chrome" : /Safari\//.test(agent) ? "Safari" : "";
+  return { platform, agent: browser };
 }

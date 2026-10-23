@@ -28,6 +28,7 @@ import { popoverPage } from "./pages/popover";
 import { cardPage } from "./pages/card";
 import { toastPage } from "./pages/toast";
 import { overlayPage } from "./pages/overlay";
+import { networkPage } from "./pages/network";
 import { leaderPage } from "./pages/leader";
 import { desktopComposerPage } from "./pages/desktop-composer";
 import { riderPage } from "./pages/rider";
@@ -70,6 +71,7 @@ const piecePages: Page[] = [
   cardPage,
   toastPage,
   overlayPage,
+  networkPage,
   leaderPage,
   desktopComposerPage,
   riderPage,
