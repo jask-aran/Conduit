@@ -56,3 +56,39 @@ export function NetworkMap(props: { head: NetworkHead; devices: NetworkDevice[];
     </Show>
   </figure>;
 }
+
+/** Cards of clients side by side, as many to a line as the room holds: a device's clients, opened. */
+export const ClientCards = (props: { label?: string; children: JSX.Element }) => <div class="ui-client-cards" role="list" aria-label={props.label}>{props.children}</div>;
+
+/**
+ * One client, outlined: its mark and its name in the label's voice with its dot, what it says (Conduit Dev · this
+ * app, Offline since …), its properties as facts, the workspaces it mounts on the network, then its actions along its foot.
+ */
+export function ClientCard(props: { client: NetworkClient; status: string; mark?: JSX.Element; facts?: JSX.Element; places?: JSX.Element; actions?: JSX.Element }) {
+  return <section class="ui-client-card" role="listitem" aria-label={props.client.name} data-offline={props.client.online ? undefined : ""}>
+    <header class="ui-client-head">
+      <span class="ui-client-mark" aria-hidden="true">{props.mark ?? clientMark(props.client)}</span>
+      <h4>{props.client.name}</h4>
+      <StatusDot label={props.client.online ? "Connected" : "Offline"} tone={props.client.online ? "success" : "muted"} />
+    </header>
+    <p class="ui-client-status">{[props.status, props.client.meta].filter(Boolean).join(" · ")}</p>
+    <Show when={props.facts}><dl class="ui-client-facts">{props.facts}</dl></Show>
+    <Show when={props.places}><div class="ui-client-places">{props.places}</div></Show>
+    <Show when={props.actions}><footer class="ui-client-actions">{props.actions}</footer></Show>
+  </section>;
+}
+
+/** A property of a client: its name, then its value or its control (a switch, on the device it belongs to). */
+export const ClientFact = (props: { label: string; title?: string; children: JSX.Element }) =>
+  <div class="ui-client-fact" title={props.title}><dt>{props.label}</dt><dd>{props.children}</dd></div>;
+
+/** The workspaces a client mounts, under their label; `none`: a line in their voice instead. */
+export function ClientPlaces(props: { label?: string; none?: boolean; empty?: string; children?: JSX.Element }) {
+  return <>
+    <h5>{props.label ?? "Workspaces"}</h5>
+    <Show when={!props.none} fallback={<p class="ui-client-empty">{props.empty ?? "None mounted"}</p>}>{props.children}</Show>
+  </>;
+}
+
+/** A card's room for what is not there yet (pairing an environment): a dashed outline, its content inside. */
+export const ClientAdd = (props: { children: JSX.Element }) => <section class="ui-client-card" role="listitem" data-add="">{props.children}</section>;

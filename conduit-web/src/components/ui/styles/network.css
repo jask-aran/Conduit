@@ -26,3 +26,24 @@
 .ui-network-spoke::after { top: calc(var(--space-md) - var(--space-xl)); left: 50%; height: calc(var(--space-xl) - var(--space-md)); border-left: var(--hairline) solid var(--tint); }
 .ui-network-spoke[data-offline]::after { border-left-style: dashed; }
 .ui-network-spoke > .ui-network-box { flex: 1; }
+
+/* ClientCards: outlined as the map's boxes are (a hairline, no fill: only a row's wash fills), as many to a line as
+   fit. A card: its head (mark, name in the label's voice, dot), what it says, facts, workspaces, actions at its foot. */
+.ui-client-cards { margin-block: var(--space-xs) var(--space-md); display: grid; grid-template-columns: repeat(auto-fill, minmax(var(--measure-sm), 1fr)); gap: var(--space-sm); }
+.ui-client-card { display: flex; min-width: 0; flex-direction: column; gap: var(--space-sm); border: var(--hairline) solid var(--tint); border-radius: var(--radius-surface); padding: var(--space-md); font-size: var(--text-caption); }
+.ui-client-card[data-add] { border-style: dashed; }
+.ui-client-head { display: flex; align-items: center; gap: var(--space-sm); }
+.ui-client-mark { display: inline-flex; flex: none; color: var(--muted-foreground); }
+.ui-client-mark > svg { width: var(--icon-sm); height: var(--icon-sm); }
+.ui-client-head > h4, .ui-client-card h5 { min-width: 0; flex: 1; margin: 0; overflow: hidden; color: var(--muted-foreground); font: var(--label-weight) var(--label-size)/var(--leading-row) var(--label-face); letter-spacing: var(--label-tracking); text-overflow: ellipsis; text-transform: var(--label-case); white-space: nowrap; }
+.ui-client-head > h4 { color: var(--foreground); }
+.ui-client-status { margin: 0; overflow: hidden; color: var(--muted-foreground); text-overflow: ellipsis; white-space: nowrap; }
+.ui-client-facts { display: grid; gap: var(--space-2xs); margin: 0; }
+.ui-client-fact { display: flex; min-height: var(--control-sm); align-items: center; justify-content: space-between; gap: var(--space-md); }
+.ui-client-fact > dt { min-width: 0; overflow: hidden; color: var(--foreground); text-overflow: ellipsis; white-space: nowrap; }
+.ui-client-fact > dd { display: inline-flex; flex: none; margin: 0; align-items: center; color: var(--muted-foreground); font-family: var(--font-data); }
+.ui-client-places { display: grid; margin-top: var(--space-xs); }
+.ui-client-places > h5 { margin-bottom: var(--space-2xs); }
+.ui-client-places .ui-nav-row { margin-inline: calc(-1 * var(--row-inset)); width: auto; }
+.ui-client-empty { margin: 0; color: var(--muted-foreground); }
+.ui-client-actions { display: flex; flex-wrap: wrap; gap: var(--space-xs); margin-top: auto; padding-top: var(--space-xs); margin-inline: calc(-1 * var(--space-sm)); }
