@@ -1,14 +1,19 @@
-/* NetworkMap: the head's device, and every other device hung from it. A device is the one outline the map draws
-   (a hairline, no fill: what groups is the machine, not a card); its parts are rows in the row's voice. */
+/* NetworkMap: the head, and every device hung from it. A box is the one outline the map draws (a hairline, no fill:
+   what groups is the machine, not a card); its clients are lines in the row's voice. */
 .ui-network { display: flex; flex-direction: column; align-items: center; margin: 0; padding: var(--space-sm) 0 var(--space-lg); }
-.ui-network-device { display: flex; min-width: var(--measure-xs); max-width: 100%; flex-direction: column; gap: var(--space-2xs); border: var(--hairline) solid var(--tint); border-radius: var(--radius-surface); padding: var(--space-md) var(--space-sm) var(--space-sm); }
-.ui-network-device > .ui-title { margin: 0; padding: 0 var(--space-sm); }
-.ui-network-device > ul { display: flex; flex-direction: column; margin: 0; padding: 0; list-style: none; }
-/* A part is a NavRow: rest, cursor and current are the sidebar's. The head's mark is data beside the name. */
-.ui-network-part { display: flex; }
-.ui-network-head { margin-left: var(--space-sm); color: var(--muted-foreground); font: var(--weight-rest) var(--text-label) var(--font-data); }
-.ui-network-part .ui-nav-meta { margin-left: var(--space-xs); }
-/* The lines: a stem down from the head's device to a bus, the bus over the spokes, a drop into each. The bus sits
+.ui-network-box { display: flex; min-width: var(--measure-xs); max-width: 100%; flex-direction: column; gap: var(--space-2xs); margin: 0; border: var(--hairline) solid var(--tint); border-radius: var(--radius-surface); padding: var(--space-sm); list-style: none; }
+.ui-network-box:not([data-head]) { padding-top: var(--space-md); }
+.ui-network-box > .ui-title { margin: 0; padding: 0 var(--space-sm); }
+.ui-network-box ul { display: flex; flex-direction: column; margin: 0; padding: 0; list-style: none; }
+.ui-network-line { display: flex; min-height: var(--row-min); align-items: center; gap: var(--row-gap); padding: 0 var(--space-sm); font-size: var(--text-row); }
+.ui-network-mark { display: inline-flex; flex: none; color: var(--muted-foreground); }
+.ui-network-mark > svg { width: var(--icon); height: var(--icon); }
+.ui-network-name { flex: none; white-space: nowrap; }
+.ui-network-box[data-head] .ui-network-name { font-weight: var(--weight-strong); }
+.ui-network-line[data-offline] > .ui-network-name { color: var(--muted-foreground); }
+.ui-network-meta { min-width: 0; flex: 1 1 auto; overflow: hidden; color: var(--muted-foreground); font-size: var(--text-label); text-overflow: ellipsis; white-space: nowrap; }
+.ui-network-line > .ui-status { flex: none; margin-left: auto; padding-left: var(--space-md); }
+/* The lines: a stem down from the head to a bus, the bus over the spokes, a drop into each. The bus sits
    --space-md below the head; a spoke starts --space-xl below it; each spoke draws its stretch of the bus (to the next
    one across the gap), the first from its centre, the last to its centre. */
 .ui-network-spokes { position: relative; display: flex; max-width: 100%; flex-wrap: wrap; justify-content: center; gap: var(--space-lg); padding-top: var(--space-xl); }
@@ -20,4 +25,4 @@
 .ui-network-spoke:last-child::before { right: 50%; }
 .ui-network-spoke::after { top: calc(var(--space-md) - var(--space-xl)); left: 50%; height: calc(var(--space-xl) - var(--space-md)); border-left: var(--hairline) solid var(--tint); }
 .ui-network-spoke[data-offline]::after { border-left-style: dashed; }
-.ui-network-spoke > .ui-network-device { flex: 1; }
+.ui-network-spoke > .ui-network-box { flex: 1; }

@@ -59,6 +59,8 @@ export class NodeHub extends EventEmitter {
     catch (error) { if (error.code !== "ENOENT") throw error; }
     this.records = stored.nodes || [];
     this.devices = stored.devices || [];
+    // The head's device is not a record (it is never paired), so only a name given to it is kept.
+    this.headDevice = stored.headDevice || {};
     // Version 1 had no devices: each node becomes the only node of a device of its name.
     for (const record of this.records) {
       if (record.deviceId) continue;
@@ -78,7 +80,7 @@ export class NodeHub extends EventEmitter {
   save() {
     this.saving = (this.saving || Promise.resolve()).then(async () => {
       const temporary = `${this.file}.${process.pid}.tmp`;
-      await fs.writeFile(temporary, `${JSON.stringify({ version: 2, devices: this.devices, nodes: this.records }, null, 2)}\n`, { mode: 0o600 });
+      await fs.writeFile(temporary, `${JSON.stringify({ version: 2, devices: this.devices, headDevice: this.headDevice, nodes: this.records }, null, 2)}\n`, { mode: 0o600 });
       await fs.rename(temporary, this.file);
     });
     const done = this.saving;
@@ -106,6 +108,21 @@ export class NodeHub extends EventEmitter {
     this.records.push(record);
     await this.save();
     return { node: this.view(record), device: onHead ? (await this.listDevices())[0] : this.deviceView(device), key };
+  }
+
+  /** A device's name, as the list shows it. The head's device too. */
+  async renameDevice(id, name) {
+    await this.load();
+    const value = String(name || "").trim().slice(0, 80);
+    if (!value) throw Object.assign(new Error("A device needs a name"), { status: 400, code: "device_name_required" });
+    if (id === this.head?.deviceId) this.headDevice = { ...this.headDevice, name: value };
+    else {
+      const device = this.devices.find((item) => item.id === id);
+      if (!device) throw Object.assign(new Error("No such device"), { status: 404, code: "device_not_found" });
+      device.name = value;
+    }
+    await this.save();
+    this.emit("changed");
   }
 
   async forget(id) {
@@ -144,7 +161,8 @@ export class NodeHub extends EventEmitter {
 
   async listDevices() {
     await this.load();
-    const head = this.head ? [{ id: this.head.deviceId, name: this.head.name(), local: true,
+    // The head's device is named as the machine is, until renamed; the head itself goes by the server's name.
+    const head = this.head ? [{ id: this.head.deviceId, name: this.headDevice.name || os.hostname() || this.head.name(), local: true, head: this.head.name(),
       nodes: [await this.headView(), ...this.records.filter((record) => record.deviceId === this.head.deviceId).map((record) => this.view(record))] }] : [];
     return [...head, ...this.devices.map((device) => this.deviceView(device))];
   }

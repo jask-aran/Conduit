@@ -1,58 +1,55 @@
 import { For, Show, type JSX } from "solid-js";
 import * as Icons from "./icons";
-import { NavRow, StatusDot } from "./nav";
+import { StatusDot } from "./nav";
 
 /**
- * One environment of a device: an OS, a WSL distro, a phone, a browser. Each is a client of the network: headed when
- * an app or browser there drives Conduit, headless when only its node serves. One environment runs the head.
+ * A client of the network: an environment (an OS, a WSL distro) whose node makes its folders available, an app or a
+ * browser driving Conduit, or both at once -- Windows with the app open on it is one client, headed.
  */
-export type NetworkPart = {
+export type NetworkClient = {
   id: string;
   name: string;
-  /** It runs the Conduit runtime the rest connect to. */
-  head?: boolean;
-  /** An app or a browser here drives Conduit; its form picks the mark. */
+  /** An app or a browser here drives Conduit; its form picks the mark. Headless otherwise. */
   headed?: "desktop" | "phone" | "browser";
-  /** Said muted after the name: "Conduit Dev · this app · not serving", "relayed by Windows". */
+  /** Said muted after the name: "Conduit Dev · this app", "11 workspaces". */
   meta?: string;
   online: boolean;
 };
-/** A machine: what runs on it, grouped. A web browser or a phone with no node is a device of one client. */
-export type NetworkDevice = { id: string; name: string; parts: NetworkPart[] };
+/** A machine and its clients. Browsers with no machine of their own share one. */
+export type NetworkDevice = { id: string; name: string; clients: NetworkClient[] };
+/** The head: the server the network is named for, and where it runs ("on Ubuntu"). */
+export type NetworkHead = { name: string; meta?: string };
 
-const mark = (part: NetworkPart): JSX.Element => part.head ? <Icons.Server />
-  : part.headed === "phone" ? <Icons.Phone /> : part.headed === "browser" ? <Icons.Browser /> : part.headed ? <Icons.Monitor /> : <Icons.Shell />;
+const mark = (client: NetworkClient): JSX.Element => client.headed === "phone" ? <Icons.Phone />
+  : client.headed === "browser" ? <Icons.Browser /> : client.headed ? <Icons.Monitor /> : <Icons.Shell />;
 
-type Picking = { current?: string; onPick?: (id: string) => void };
-
-/** A device's outline, its parts as rows: the sidebar's grammar, picked to show what it holds. */
-function Device(props: { device: NetworkDevice } & Picking) {
-  return <section class="ui-network-device" aria-label={props.device.name}>
-    <h4 class="ui-title">{props.device.name}</h4>
-    <ul>
-      <For each={props.device.parts}>{(part) => <li class="ui-network-part" data-offline={part.online ? undefined : ""}>
-        <NavRow icon={mark(part)} current={part.id === props.current} meta={part.meta} onClick={() => props.onPick?.(part.id)}
-          end={<StatusDot label={part.online ? "Connected" : "Offline"} tone={part.online ? "success" : "muted"} />}>
-          {part.name}<Show when={part.head}><span class="ui-network-head">head</span></Show>
-        </NavRow>
-      </li>}</For>
-    </ul>
-  </section>;
+function Line(props: { icon: JSX.Element; name: string; meta?: string; online: boolean }) {
+  return <li class="ui-network-line" data-offline={props.online ? undefined : ""}>
+    <span class="ui-network-mark" aria-hidden="true">{props.icon}</span>
+    <span class="ui-network-name">{props.name}</span>
+    <Show when={props.meta}><span class="ui-network-meta">{props.meta}</span></Show>
+    <StatusDot label={props.online ? "Connected" : "Offline"} tone={props.online ? "success" : "muted"} />
+  </li>;
 }
 
 /**
- * The network as it stands: the device holding the head, its environments and clients, and every other device hung
- * from it by a line (dashed while nothing on it is connected). Every device talks to the head, never to another
- * device, so the head's device is the root and the rest are its spokes.
+ * The network as it stands: the head at the top, every device hung from it by a line (dashed while none of its
+ * clients is connected), each device's clients inside it. Clients talk to the head, never to each other, so the head
+ * is the root and the devices its spokes -- the device the head runs on among them.
  */
-export function NetworkMap(props: { devices: NetworkDevice[]; label?: string } & Picking) {
-  const head = () => props.devices.find((device) => device.parts.some((part) => part.head)) ?? props.devices[0];
-  const others = () => props.devices.filter((device) => device.id !== head()?.id);
+export function NetworkMap(props: { head: NetworkHead; devices: NetworkDevice[]; label?: string }) {
   return <figure class="ui-network" aria-label={props.label ?? "Network"}>
-    <Show when={head()}>{(device) => <Device device={device()} current={props.current} onPick={props.onPick} />}</Show>
-    <Show when={others().length}>
+    <ul class="ui-network-box" data-head="">
+      <Line icon={<Icons.Server />} name={props.head.name} meta={props.head.meta} online />
+    </ul>
+    <Show when={props.devices.length}>
       <div class="ui-network-spokes">
-        <For each={others()}>{(device) => <div class="ui-network-spoke" data-offline={device.parts.some((part) => part.online) ? undefined : ""}><Device device={device} current={props.current} onPick={props.onPick} /></div>}</For>
+        <For each={props.devices}>{(device) => <div class="ui-network-spoke" data-offline={device.clients.some((client) => client.online) ? undefined : ""}>
+          <section class="ui-network-box" aria-label={device.name}>
+            <h4 class="ui-title">{device.name}</h4>
+            <ul><For each={device.clients}>{(client) => <Line icon={mark(client)} name={client.name} meta={client.meta} online={client.online} />}</For></ul>
+          </section>
+        </div>}</For>
       </div>
     </Show>
   </figure>;

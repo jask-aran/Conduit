@@ -32,6 +32,10 @@ export function registerNodeRoutes(app, { nodeHub, config }) {
     } catch (error) { next(error); }
   });
 
+  app.patch("/v0/devices/:id", async (request, response, next) => {
+    try { await nodeHub.renameDevice(request.params.id, request.body?.name); response.status(204).end(); } catch (error) { next(error); }
+  });
+
   app.delete("/v0/nodes/:id", async (request, response, next) => {
     try {
       if (!await nodeHub.get(request.params.id)) return response.status(404).json({ error: "node_not_found" });
