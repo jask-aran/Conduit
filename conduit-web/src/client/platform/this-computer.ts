@@ -81,11 +81,3 @@ export async function makeFolderAvailable({ write = true, shell = true } = {}): 
   await until(target.nodeId, (node) => node.roots.some((root) => same(root.label)), "This computer did not start sharing that folder. Check Settings › Devices.");
   return { nodeId: target.nodeId, path };
 }
-
-/** Let the hub browse this computer (paired first if it is not): set here, on the device, as Settings › Devices does. */
-export async function letHubBrowse(): Promise<string> {
-  const target = await paired();
-  await desktopShell!.companion.browse(target.mainUrl, true);
-  await until(target.nodeId, (node) => Boolean(node.browse), "This computer did not start letting the hub browse it. Check Settings › Devices.");
-  return target.nodeId;
-}

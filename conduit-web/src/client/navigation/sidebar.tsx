@@ -16,7 +16,7 @@ import { batch, createEffect, createMemo, createSignal, For, lazy, onCleanup, on
 import type { ChatSummary, ComputerLocation, HarnessSummary, Project, RuntimeProcess, WorkspacePolicy, WorkspaceSuggestion } from "../api/contracts";
 import type { UpdateState } from "../main";
 import { androidShell, desktopShell, installedClientKind } from "../platform/installed-client";
-import { letHubBrowse, makeFolderAvailable, pairingWith } from "../platform/this-computer";
+import { makeFolderAvailable, pairingWith } from "../platform/this-computer";
 import { BrowserMachine } from "@/components/ui/browser";
 import { PaneEmpty } from "@/components/ui/pane";
 import { api } from "../api/client";
@@ -538,21 +538,11 @@ export function Sidebar(props: {
       batch(() => { setWorkspaceOn(shared.nodeId); setPicking(""); selectWorkspaceMode("linked"); setPath(shared.path); setWorkspaceStep("details"); });
     }, (error: Error) => { setPicking("dismissed"); setComputerPickerError(error.message); });
   };
-  /** Browse this computer in Conduit instead: the hub is let browse it (set here, on this device), then it is browsed as any client. */
-  const browseThisComputer = () => {
-    setPicking("open");
-    setComputerPickerError("");
-    void letHubBrowse().then((nodeId) => {
-      readMachines();
-      batch(() => { setOwnNode(nodeId); setWorkspaceOn(nodeId); setPicking(""); });
-      void browseComputerPicker();
-    }, (error: Error) => { setPicking("dismissed"); setComputerPickerError(error.message); });
-  };
   const chooseMachine = (value: string) => {
     batch(() => { setComputerPicker(null); setComputerPickerError(""); setPath(""); setPicking(""); setWorkspaceOn(value); });
-    const machine = machines()?.find((item) => item.id === value);
-    // This computer, unless the hub may browse it: the system's picker, the only one shown.
-    if (value === THIS_COMPUTER || (value === ownNode() && !(machine?.online && machine.browse))) { pickOnThisComputer(); return; }
+    // This computer's own folders are chosen with its own picker, the only one shown; Conduit's explorer is for another
+    // machine's (and for a browser, which has none of its own to offer).
+    if (value === THIS_COMPUTER || value === ownNode()) { pickOnThisComputer(); return; }
     void browseComputerPicker();
   };
   createEffect(() => {
@@ -1176,9 +1166,8 @@ export function Sidebar(props: {
             <Icons.Folder />
             <strong>{picking() === "open" ? "Choose a folder in the window that opened" : "No folder chosen"}</strong>
             <p>{computerPickerError() || (picking() === "open" ? `It is shared with ${hubName()}, with edits and commands, and becomes the workspace.`
-              : `Pick one with this computer's own picker, or let ${hubName()} browse this computer and choose it here.`)}</p>
+              : "Choose one with this computer's picker, or another machine from the menu.")}</p>
             <Show when={picking() === "dismissed"}><CardActions>
-              <DialogButton type="button" variant="ghost" outline onClick={browseThisComputer}>Browse here instead</DialogButton>
               <DialogButton type="button" onClick={pickOnThisComputer}><Icons.Folder />Choose a folder…</DialogButton>
             </CardActions></Show>
           </div></PaneEmpty> : undefined}
