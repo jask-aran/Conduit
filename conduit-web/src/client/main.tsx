@@ -38,6 +38,7 @@ import { buildHttpUrl, loginUrl, logoutUrl, normalizeServerOrigin, transcriptUrl
 import { startPathSelection } from "./platform/path-selector";
 import { canDiscoverServers, discoverServers, type FoundServer } from "./platform/discovery";
 import { proveServer } from "./platform/server-proof";
+import { EnvironmentPage } from "./dashboard/environment-page";
 import { activeOrigin, activePath, activeServer, addServer, dialOrigin, forgetServer, learnIdentity, mergeServerDirectory, scopeOf, servers, trustedIdentities, setActiveServer, switchToServer } from "./platform/servers";
 import { publishTrustedIdentities } from "./platform/certificate-pins.ts";
 import { publishServerDirectory } from "./platform/server-directory";
@@ -87,7 +88,7 @@ import { clearCachedCatalogue, readCachedCatalogue, writeCachedCatalogue } from 
 import { createCatalogueStore } from "./state/catalogue";
 import { markChatRead } from "./state/read-receipts";
 import { createSideChat, type SideChat } from "./state/side-chat";
-import { createRuntimeStore } from "./state/runtime";
+import { createRuntimeStore, deviceLabel, deviceStates } from "./state/runtime";
 import { browserShortcutEnvironmentProvider } from "./shortcuts/shortcut-environment";
 import { ShortcutManager } from "./shortcuts/shortcut-manager";
 import { isShortcutRegion } from "./shortcuts/shortcut-types";
@@ -705,12 +706,14 @@ function App() {
   }
   const initialProjectRouteId = pathProjectId();
   const initialTerminalRoute = location.pathname === "/terminal";
-  const initialComputerRoute = location.pathname === "/computer" || location.pathname.startsWith("/computer/harness/");
+  const initialComputerRoute = location.pathname === "/computer" || location.pathname.startsWith("/computer/harness/") || location.pathname.startsWith("/computer/environment/");
   const initialDashboardRoute = location.pathname === "/";
   const [routeKind, setRouteKind] = createSignal<"chat" | "project" | "dashboard" | "terminal" | "computer">(
     initialComputerRoute ? "computer" : initialTerminalRoute ? "terminal" : initialDashboardRoute ? "dashboard" : initialProjectRouteId ? "project" : "chat",
   );
   const [computerHarness, setComputerHarness] = createSignal(decodeURIComponent(location.pathname.match(/^\/computer\/harness\/([^/]+)/)?.[1] || ""));
+  // A client environment's page (Work, under its machine), in place of the hub's: its node id.
+  const [computerEnvironment, setComputerEnvironment] = createSignal(decodeURIComponent(location.pathname.match(/^\/computer\/environment\/([^/]+)/)?.[1] || ""));
   const [terminalRouteId, setTerminalRouteId] = createSignal<string>();
   const [terminalCanReturn, setTerminalCanReturn] = createSignal(false);
   const workspacePanelScope = createMemo(() => routeKind() === "computer" ? "computer"
@@ -1579,6 +1582,12 @@ function App() {
    * of its own, sharing the folder cache; what it opens goes where pane A's
    * Computer page sends it.
    */
+  /** A client environment's page in a pane, or in the main one (Work › its machine). */
+  const renderEnvironment = (nodeId: string, slot: number | "main") => <EnvironmentPage nodeId={nodeId} projects={catalogue.projects()}
+    header={(title) => <ChatHeader title={title} tabActions={paneTabActions(slot)} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void startNewChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => {}} appDashboard alone />}
+    onOpenWorkspace={(project) => void openProjectHere(project)}
+    onMount={(path) => void addProject({ mode: "node", nodeId, path })}
+    onOpenTerminal={() => void openDeviceTerminal({ id: nodeId })} />;
   const renderPaneComputer = (slot: number) => {
     const [location, setLocation] = createSignal<ComputerLocation | null>(computerLocation());
     const [loading, setLoading] = createSignal(false);
@@ -1666,7 +1675,9 @@ function App() {
   // Threads started in a pane beside A run as hidden chats that end when the
   // pane lets go of them.
   const paneThreads = new Map<number, string>();
-  const openComputer = async (historyMode: "push" | "none" = "push") => {
+  // `environment`: a client environment's page instead of the hub's, set with the rest (never "" first: the view
+  // would read as the hub's for a moment, and following it would open that).
+  const openComputer = async (historyMode: "push" | "none" = "push", environment = "") => {
     if (!(await leaveHarnessThread())) return;
     leaveChat(historyMode === "none");
     chat.reset();
@@ -1674,13 +1685,14 @@ function App() {
     if (chatRoot) catalogue.selectProject(chatRoot);
     setMobileSidebarOpen(false);
     setWorkspaceViewRequest(null);
-    setRouteKind("computer");
-    setComputerHarness("");
+    batch(() => { setRouteKind("computer"); setComputerHarness(""); setComputerEnvironment(environment); });
     setRouteBootstrapError("");
     setRouteBootstrap("ready");
-    if (!computerLocation()) void browseComputer();
-    if (historyMode === "push") history.pushState({}, "", "/computer");
+    if (!environment && !computerLocation()) void browseComputer();
+    if (historyMode === "push") history.pushState({}, "", environment ? `/computer/environment/${encodeURIComponent(environment)}` : "/computer");
   };
+  /** A client environment's page: its files, its workspaces, a terminal there. */
+  const openEnvironment = (nodeId: string, historyMode: "push" | "none" = "push") => openComputer(historyMode, nodeId);
   // A harness's page, scoped to one of the folders it ran in or to all of
   // them, and under it each thread Conduit does not keep, at an address of its
   // own.
@@ -1719,6 +1731,7 @@ function App() {
     setWorkspaceViewRequest(null);
     setRouteKind("computer");
     setComputerHarness(id);
+    setComputerEnvironment("");
     setHarnessScope(cwd || null);
     setRouteBootstrapError("");
     setRouteBootstrap("ready");
@@ -1869,6 +1882,7 @@ function App() {
       ? { harnessId, path: cwd, id: "", chatId: threadId.slice(2), title: "" }
       : { harnessId, path: cwd, id: threadId, title: "" }, "none");
     else if (harnessId) await openComputerHarness(harnessId, "none", cwd);
+    else if (location.pathname.startsWith("/computer/environment/")) await openEnvironment(decodeURIComponent(location.pathname.slice("/computer/environment/".length)), "none");
     else await openComputer("none");
   };
   const harnessProfile = (id: string) => profiles().find((profile) => profile.id === id) || null;
@@ -3231,6 +3245,7 @@ function App() {
   const openDashboardHere = () => openInFocusedPane("page:dashboard", () => openDashboard());
   const openComputerHere = () => openInFocusedPane("page:computer", () => openComputer());
   const openHarnessHere = (id: string) => openInFocusedPane(`page:harness:${encodeURIComponent(id)}`, () => openComputerHarness(id));
+  const openEnvironmentHere = (id: string) => openInFocusedPane(`page:environment:${encodeURIComponent(id)}`, () => openEnvironment(id));
   const openChatFromPage = async (target: ChatSummary, project: Project) => {
     if (altActivation()) await openChatBeside(target, project); else await openChatHere(target, project);
   };
@@ -3307,7 +3322,7 @@ function App() {
     await setSlotView(pane.index, `chat:${id}`);
     await side.chat.send();
   };
-  const openPageBeside = async (page: "dashboard" | "computer" | `project:${string}` | `harness:${string}`) => { if (!isMobileLayout()) await openBeside(`page:${page}`, false); };
+  const openPageBeside = async (page: "dashboard" | "computer" | `project:${string}` | `harness:${string}` | `environment:${string}`) => { if (!isMobileLayout()) await openBeside(`page:${page}`, false); };
   // The same chat in two panes is one chat: pane A taking it closes the other.
   createEffect(() => { const id = mainChatId(); if (swappingPanes) return; for (const slot of shownSlots()) if (id && slotChatId(slot) === id) setSlotView(slot, null); });
   /*
@@ -3367,6 +3382,7 @@ function App() {
   function paneARouteView(): SplitView | null {
     if (routeKind() === "chat" && catalogue.selectedId()) return `chat:${catalogue.selectedId()}`;
     if (routeKind() === "dashboard") return "page:dashboard";
+    if (routeKind() === "computer" && computerEnvironment() && !computerHarness()) return `page:environment:${encodeURIComponent(computerEnvironment())}`;
     if (routeKind() === "computer" && !computerHarness()) return "page:computer";
     if (routeKind() === "computer" && !harnessThread()) return `page:harness:${encodeURIComponent(computerHarness())}`;
     if (routeKind() === "project" && selectedProject()) return `page:project:${selectedProject()!.id}`;
@@ -3375,6 +3391,7 @@ function App() {
   const openInPaneA = async (view: SplitView) => {
     if (view === "page:dashboard") return await openDashboard();
     if (view === "page:computer") return await openComputer();
+    if (view.startsWith("page:environment:")) return await openEnvironment(decodeURIComponent(view.slice("page:environment:".length)));
     if (view.startsWith("page:harness:")) return await openComputerHarness(decodeURIComponent(view.slice("page:harness:".length)));
     if (view.startsWith("page:project:")) {
       const project = catalogue.projects().find((item) => item.id === view.slice("page:project:".length));
@@ -3546,7 +3563,8 @@ function App() {
       return found?.title || "New chat";
     }
     if (view === "page:dashboard") return "Conduit Dashboard";
-    if (view === "page:computer") return "Computer";
+    if (view === "page:computer") return activeServer()?.name || "Hub";
+    if (view.startsWith("page:environment:")) { const state = deviceStates().get(decodeURIComponent(view.slice("page:environment:".length))); return state ? deviceLabel(state) : "Environment"; }
     if (view.startsWith("page:harness:")) { const id = decodeURIComponent(view.slice("page:harness:".length)); return harnessLabelFor(id) || id; }
     if (view.startsWith("page:project:")) return catalogue.projects().find((item) => item.id === view.slice("page:project:".length))?.name || "Project";
     const files = parseFileView(view);
@@ -4145,7 +4163,10 @@ function App() {
         <Show when={page()?.startsWith("harness:")}>
           <SheetFill tabIndex={-1} onPointerDown={focusChatSurface}>{attachInput()}{renderPaneHarness(pane, decodeURIComponent(page()!.slice("harness:".length)))}</SheetFill>
         </Show>
-        <Show when={page() && page() !== "computer" && !page()!.startsWith("harness:")}>
+        <Show when={page()?.startsWith("environment:")}>
+          <SheetFill tabIndex={-1} onPointerDown={focusChatSurface}>{renderEnvironment(decodeURIComponent(page()!.slice("environment:".length)), slot)}</SheetFill>
+        </Show>
+        <Show when={page() && page() !== "computer" && !page()!.startsWith("harness:") && !page()!.startsWith("environment:")}>
           <SheetFill tabIndex={-1} onPointerDown={focusChatSurface}>
             {attachInput()}
             <Show when={page() === "dashboard"} fallback={<Show when={slotPageProject(slot)}>{(project) =>
@@ -5035,7 +5056,7 @@ function App() {
           await openDashboard("none");
           return;
         }
-        if (location.pathname === "/computer" || location.pathname.startsWith("/computer/harness/")) {
+        if (location.pathname === "/computer" || location.pathname.startsWith("/computer/harness/") || location.pathname.startsWith("/computer/environment/")) {
           await openComputerRoute();
           return;
         }
@@ -5363,7 +5384,10 @@ function App() {
         });
       }}
       onOpenComputer={async () => { if (altActivation()) await openPageBeside("computer"); else void openComputerHere(); }}
-      onOpenHarness={async (id) => { if (altActivation()) await openPageBeside(`harness:${encodeURIComponent(id)}`); else void openHarnessHere(id); }} selectedHarness={paneAOverride() ? undefined : computerHarness()}
+      onOpenHarness={async (id) => { if (altActivation()) await openPageBeside(`harness:${encodeURIComponent(id)}`); else void openHarnessHere(id); }}
+      onOpenEnvironmentTerminal={(id) => void openDeviceTerminal({ id })}
+      onOpenEnvironment={async (id) => { if (altActivation()) await openPageBeside(`environment:${encodeURIComponent(id)}`); else void openEnvironmentHere(id); }}
+      environment={routeKind() === "computer" && !computerHarness() ? computerEnvironment() || undefined : undefined} selectedHarness={paneAOverride() ? undefined : computerHarness()}
       onOpenTerminalView={() => openTerminalRoute()}
       onOpenDashboard={async () => { if (altActivation()) await openPageBeside("dashboard"); else void openDashboardHere(); }}
       onOpenWorkspaceIdentity={openWorkspaceIdentity} onOpenSettings={openSettings} onOpenPalette={(page, initialQuery) => openPalette(page || null, initialQuery || "", page === "chat-search")}
@@ -5410,10 +5434,10 @@ function App() {
             }} />
         </Show>
         <Show when={routeKind() === "computer"}>
-          <Show when={harnessThread()} fallback={<Show when={computerHarness()} fallback={<>
+          <Show when={harnessThread()} fallback={<Show when={computerHarness()} fallback={<Show when={computerEnvironment()} fallback={<>
             <ChatHeader title={activeServer()?.name || "Hub"} tabActions={paneTabActions("main")} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void startNewChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => {}} appDashboard alone />
             <ComputerDashboard projects={catalogue.projects()} location={computerLocation()} loading={computerLoading()} error={computerError()} onOpenHarnessHere={openComputerHarnessHere} onOpenHarness={(id) => void openHarnessHere(id)} onBrowse={(path) => void browseComputer(path)} onPrefetch={prefetchComputerFolder} onMakeWorkspace={() => void designateComputerWorkspace()} onCreateWorkspace={(path) => void createComputerWorkspace(path)} onOpenWorkspace={(project) => void openProject(project)} onManageWorkspace={(action, project) => { if (action === "rename") runSidebar("rename-folder", { project }); else if (action === "identity") openWorkspaceIdentity(project); else runSidebar("delete-project", { project }); }} onStartWorkspaceAction={(action, path) => runSidebar(action === "created" ? "new-workspace-created" : "new-workspace-cloned", { path })} onOpenView={openWorkspaceView} onOpenTerminalView={() => openTerminalRoute()} onOpenTerminalHere={() => void openComputerTerminalHere()} onOpenFile={async (path) => { setComputerFile({ path }); await openWorkspaceView("files"); }} />
-          </>}>{(harnessId) => <>
+          </>}>{(nodeId) => renderEnvironment(nodeId(), "main")}</Show>}>{(harnessId) => <>
             <ChatHeader title={harnessLabelFor(harnessId()) || harnessId()} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void startNewChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => {}} appDashboard alone />
             <HarnessDashboard harnessId={harnessId()} projects={catalogue.projects()} runtime={runtime} scope={harnessScope()} onScope={scopeHarness} home={computerLocation()?.home || ""}
               composer={(input) => {

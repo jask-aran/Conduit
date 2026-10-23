@@ -152,6 +152,11 @@ export function Sidebar(props: {
   onOpenDashboard: () => void;
   onOpenComputer: () => void;
   onOpenHarness: (id: string) => void;
+  /** A client environment's page; `environment`: the one shown. */
+  onOpenEnvironment: (id: string) => void;
+  /** A terminal in a client environment's home, filling the window. */
+  onOpenEnvironmentTerminal: (id: string) => void;
+  environment?: string;
   selectedHarness?: string;
   // A file or tool covers pane A: its route stays selected but is not shown.
   routeCovered?: boolean;
@@ -497,14 +502,14 @@ export function Sidebar(props: {
    * ones), named as their device and client ("Desktop · Ubuntu"). Asked while the Computer view shows, and again now
    * and then: a client pairing or a folder mounted changes the list under it.
    */
-  type Machine = { id: string; label: string; hub: boolean; online: boolean; folders: number; browse: boolean };
+  type Machine = { id: string; label: string; hub: boolean; online: boolean; folders: number; browse: boolean; terminal: boolean };
   const [machines, setMachines] = createSignal<Machine[] | null>(null);
   const [hubName, setHubName] = createSignal("the hub");
-  const readMachines = () => void api<{ devices: Array<{ name: string; hub?: string; nodes: Array<{ id: string; name: string; local?: boolean; online: boolean; browse?: boolean; roots: unknown[] }> }> }>("/v0/nodes")
+  const readMachines = () => void api<{ devices: Array<{ name: string; hub?: string; nodes: Array<{ id: string; name: string; local?: boolean; online: boolean; browse?: boolean; terminal?: boolean; roots: unknown[] }> }> }>("/v0/nodes")
     .then(({ devices }) => {
       setHubName(devices.find((device) => device.hub)?.hub || "the hub");
       setMachines(devices.flatMap((device) => device.nodes.map((node) => ({ id: node.id, label: `${device.name} · ${node.name}`, hub: Boolean(node.local),
-        online: node.online, folders: node.roots.length, browse: Boolean(node.browse) }))));
+        online: node.online, folders: node.roots.length, browse: Boolean(node.browse), terminal: Boolean(node.local || node.terminal) }))));
     })
     .catch(() => {});
   // This app's own node, when it is paired with this hub; and the system's picker, open or dismissed, choosing on it.
@@ -990,9 +995,27 @@ export function Sidebar(props: {
   // (the hub stops it when its machine is back).
   const terminalAway = (terminal: Pty) => deviceStates().get(machineOfTerminal(terminal))?.online === false;
   /** The hub's own page: its harnesses and its files. A dot when a harness needs attention (signing in). */
-  const hubRow = () => <NavRow icon={<Icons.Server />} draggable="true" data-doc-view="page:computer" current={(props.computer || Boolean(props.selectedHarness)) && !props.terminal}
-    meta="Hub" end={harnesses().some((harness) => harness.status === "authentication_required") ? <StatusDot label="A harness needs signing in" tone="warn" /> : undefined}
-    onClick={() => { closeMobile(); props.onOpenComputer(); enterPane(); }}>{hubName() === "the hub" ? "Hub" : hubName()}</NavRow>;
+  // Right-click: its page, or a terminal there filling the window (the hub's is /terminal, as it was).
+  const hubRow = () => <ContextMenu placement={menuPlacement()}>
+    <ContextMenuTrigger as={NavRow} icon={<Icons.Server />} draggable="true" data-doc-view="page:computer" current={(props.computer || Boolean(props.selectedHarness) || props.terminal) && !props.environment}
+      meta="Hub" end={harnesses().some((harness) => harness.status === "authentication_required") ? <StatusDot label="A harness needs signing in" tone="warn" /> : undefined}
+      onClick={() => { closeMobile(); props.onOpenComputer(); enterPane(); }}>{hubName() === "the hub" ? "Hub" : hubName()}</ContextMenuTrigger>
+    <ContextMenuContent>
+      <MenuRow icon={<Icons.Server />} onSelect={() => { closeMobile(); props.onOpenComputer(); enterPane(); }}>Open</MenuRow>
+      <MenuRow icon={<Icons.Terminal />} onSelect={() => { closeMobile(); props.onOpenTerminalView(); }}>Terminal View</MenuRow>
+    </ContextMenuContent>
+  </ContextMenu>;
+  /** A client environment's own page: its files, its workspaces, a terminal there. */
+  const environmentRow = (machine: Machine) => <ContextMenu placement={menuPlacement()}>
+    <ContextMenuTrigger as={NavRow} icon={<Icons.Monitor />} draggable="true" data-doc-view={`page:environment:${encodeURIComponent(machine.id)}`}
+      current={props.environment === machine.id} meta={machine.online ? undefined : "Offline"}
+      onClick={() => { closeMobile(); props.onOpenEnvironment(machine.id); enterPane(); }}>{machine.label.split(" · ").at(-1)}</ContextMenuTrigger>
+    <ContextMenuContent>
+      <MenuRow icon={<Icons.Monitor />} onSelect={() => { closeMobile(); props.onOpenEnvironment(machine.id); enterPane(); }}>Open</MenuRow>
+      {/* A shell in its home: only where it lets commands run (a folder shared with them, the node's own rule). */}
+      <MenuRow icon={<Icons.Terminal />} disabled={!machine.online || !machine.terminal} onSelect={() => { closeMobile(); props.onOpenEnvironmentTerminal(machine.id); }}>Terminal View</MenuRow>
+    </ContextMenuContent>
+  </ContextMenu>;
   const TerminalRow = (rowProps: { terminal: Pty }) => <ContextMenu placement={menuPlacement()}>
     <ContextMenuTrigger as={NavRow} icon={<StatusDot label={terminalAway(rowProps.terminal) ? "Offline" : "Running"} tone={terminalAway(rowProps.terminal) ? "muted" : "success"} />}
       detail={<>{terminalScope(rowProps.terminal)} · {rowProps.terminal.currentCommand || "shell"} · {terminalActivity(rowProps.terminal)}</>}
@@ -1086,7 +1109,6 @@ export function Sidebar(props: {
         <Show when={area() === "computer"}>
           <RailAction label={hubName() === "the hub" ? "Hub" : hubName()} current={props.computer || Boolean(props.selectedHarness)} onClick={() => { setArea("computer"); closeMobile(); props.onOpenComputer(); enterPane(); }}><Icons.Server /></RailAction>
           <RailAction label="New workspace" onClick={() => openNewDialog("workspace")}><Icons.NewFolder /></RailAction>
-          <RailAction label="Terminal View" current={props.terminal} onClick={() => { setArea("computer"); closeMobile(); props.onOpenTerminalView(); }}><Icons.Terminal /></RailAction>
           <Show when={railWorkspaces().length}>
             <NavRailSection>
               <For each={railWorkspaces()}>{(project) => <RailAction
@@ -1132,7 +1154,6 @@ export function Sidebar(props: {
       </Show>
       <Show when={area() === "computer"}>
         <NavRow icon={<Icons.NewFolder />} onClick={() => openNewDialog("workspace")}>New workspace</NavRow>
-        <NavRow icon={<Icons.Terminal />} end={<Icons.ExternalLink />} current={props.terminal} onClick={() => { closeMobile(); props.onOpenTerminalView(); }}>Terminal View</NavRow>
         {/* By machine once the server has said which it has; until then, as one list. */}
         <Show when={machines()?.length} fallback={<>
           {hubRow()}
@@ -1144,10 +1165,10 @@ export function Sidebar(props: {
         </>}>
           <For each={byMachine()}>{(group) => <NavGroup label={group.machine.label} away={awayNote(group.machine)}>
             {/* The hub's machine is a client like any other, and the hub besides: its page (its harnesses, its files) first. */}
-            <Show when={group.machine.hub}>{hubRow()}</Show>
+            <Show when={group.machine.hub} fallback={environmentRow(group.machine)}>{hubRow()}</Show>
             <For each={group.workspaces}>{(project) => <ProjectBlock project={project} workspace />}</For>
             <For each={group.terminals}>{(terminal) => <TerminalRow terminal={terminal} />}</For>
-            <Show when={!group.machine.hub && !group.workspaces.length && !group.terminals.length}><NavNote>No workspaces</NavNote></Show>
+
           </NavGroup>}</For>
         </Show>
       </Show>
