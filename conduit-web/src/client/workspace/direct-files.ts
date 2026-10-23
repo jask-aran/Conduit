@@ -40,7 +40,7 @@ async function grantFor(projectId: string): Promise<Grant | null> {
 export const prefetchDirect = (projectId: string) => { void grantFor(projectId).then((grant) => grant && routeFor(grant)); };
 
 function ask(projectId: string): Promise<Grant | null> {
-  const asked: Promise<Grant | null> = api<Grant>(`/v0/projects/${encodeURIComponent(projectId)}/direct`).catch((error: { error?: string }) => {
+  const asked: Promise<Grant | null> = api<Grant>(`/v0/projects/${encodeURIComponent(projectId)}/direct?origin=${encodeURIComponent(location.origin)}`).catch((error: { error?: string }) => {
     // Not on a node at all is for good; the node being away or not answering reads is asked again in a while.
     if (error?.error === "direct_not_on_node") notOnNode.add(projectId);
     else setTimeout(() => { if (grants.get(projectId) === asked) grants.delete(projectId); }, 30_000);
