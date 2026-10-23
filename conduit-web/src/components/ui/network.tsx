@@ -17,8 +17,8 @@ export type NetworkClient = {
 };
 /** A machine and its clients. Browsers with no machine of their own share one. */
 export type NetworkDevice = { id: string; name: string; clients: NetworkClient[] };
-/** The head: the server the network is named for, the device it runs on (its box's title), and the client ("on Ubuntu"). */
-export type NetworkHead = { name: string; device?: string; meta?: string };
+/** The hub: the server the network is named for, the device it runs on (its box's title), and the client ("on Ubuntu"). */
+export type NetworkHub = { name: string; device?: string; meta?: string };
 
 /** A client's mark: its form when headed, a shell when not. */
 export const clientMark = (client: NetworkClient): JSX.Element => client.headed === "phone" ? <Icons.Phone />
@@ -34,15 +34,15 @@ function Line(props: { icon: JSX.Element; name: string; meta?: string; online: b
 }
 
 /**
- * The network as it stands: the head at the top, every device hung from it by a line (dashed while none of its
- * clients is connected), each device's clients inside it. Clients talk to the head, never to each other, so the head
- * is the root and the devices its spokes -- the device the head runs on among them.
+ * The network as it stands: the hub at the top, every device hung from it by a line (dashed while none of its
+ * clients is connected), each device's clients inside it. Clients talk to the hub, never to each other, so the hub
+ * is the root and the devices its spokes -- the device the hub runs on among them.
  */
-export function NetworkMap(props: { head: NetworkHead; devices: NetworkDevice[]; label?: string }) {
+export function NetworkMap(props: { hub: NetworkHub; devices: NetworkDevice[]; label?: string }) {
   return <figure class="ui-network" aria-label={props.label ?? "Network"}>
-    <section class="ui-network-box" data-head="" aria-label={props.head.name}>
-      <Show when={props.head.device}><h4 class="ui-title">{props.head.device}</h4></Show>
-      <ul><Line icon={<Icons.Server />} name={props.head.name} meta={props.head.meta} online /></ul>
+    <section class="ui-network-box" data-hub="" aria-label={props.hub.name}>
+      <Show when={props.hub.device}><h4 class="ui-title">{props.hub.device}</h4></Show>
+      <ul><Line icon={<Icons.Server />} name={props.hub.name} meta={props.hub.meta} online /></ul>
     </section>
     <Show when={props.devices.length}>
       <div class="ui-network-spokes">

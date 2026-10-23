@@ -490,10 +490,10 @@ export function Sidebar(props: {
    * ones), named as their device and client ("Desktop · Ubuntu"). Asked while the Computer view shows, and again now
    * and then: a client pairing or a folder mounted changes the list under it.
    */
-  type Machine = { id: string; label: string; head: boolean };
+  type Machine = { id: string; label: string; hub: boolean };
   const [machines, setMachines] = createSignal<Machine[] | null>(null);
   const readMachines = () => void api<{ devices: Array<{ name: string; nodes: Array<{ id: string; name: string; local?: boolean }> }> }>("/v0/nodes")
-    .then(({ devices }) => setMachines(devices.flatMap((device) => device.nodes.map((node) => ({ id: node.id, label: `${device.name} · ${node.name}`, head: Boolean(node.local) })))))
+    .then(({ devices }) => setMachines(devices.flatMap((device) => device.nodes.map((node) => ({ id: node.id, label: `${device.name} · ${node.name}`, hub: Boolean(node.local) })))))
     .catch(() => {});
   createEffect(() => {
     if (area() !== "computer") return;
@@ -501,18 +501,18 @@ export function Sidebar(props: {
     const timer = setInterval(readMachines, 30_000);
     onCleanup(() => clearInterval(timer));
   });
-  const headMachine = () => machines()?.find((machine) => machine.head)?.id ?? "";
+  const hubMachine = () => machines()?.find((machine) => machine.hub)?.id ?? "";
   // A workspace is placed on one machine; a terminal is in a workspace, a device's home, or the server's own.
-  const machineOfProject = (project: Project) => project.nodeId || headMachine();
+  const machineOfProject = (project: Project) => project.nodeId || hubMachine();
   const machineOfTerminal = (terminal: Pty) => terminal.projectId.startsWith("device:") ? terminal.projectId.slice("device:".length)
-    : terminal.projectId === "computer" || terminal.projectId.startsWith("computer:") ? headMachine()
+    : terminal.projectId === "computer" || terminal.projectId.startsWith("computer:") ? hubMachine()
     : machineOfProject(props.projects.find((project) => project.id === terminal.projectId) || ({ nodeId: null } as Project));
-  // The head's machine always, then any other holding a workspace or a terminal.
+  // The hub's machine always, then any other holding a workspace or a terminal.
   const byMachine = createMemo(() => (machines() || []).map((machine) => ({ machine,
     workspaces: workspaces().filter((project) => machineOfProject(project) === machine.id),
     terminals: terminals().filter((terminal) => machineOfTerminal(terminal) === machine.id) }))
-    .filter((group) => group.machine.head || group.workspaces.length || group.terminals.length)
-    .sort((a, b) => Number(b.machine.head) - Number(a.machine.head)));
+    .filter((group) => group.machine.hub || group.workspaces.length || group.terminals.length)
+    .sort((a, b) => Number(b.machine.hub) - Number(a.machine.hub)));
   // A device's home terminal names its device after its folder ("~ on Desktop"); its section already does.
   const terminalScope = (terminal: Pty) => props.projects.find((project) => project.id === terminal.projectId)?.name || ((terminal.projectId === "computer" || terminal.projectId.startsWith("computer:") || terminal.projectId.startsWith("device:")) ? (terminal.cwd || "Computer").replace(/ on .+$/, "") : "Unknown workspace");
   const selectedTargets = createMemo<ChatTarget[]>(() => props.projects.flatMap((project) =>

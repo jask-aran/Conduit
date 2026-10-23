@@ -2,7 +2,7 @@ import crypto from "node:crypto";
 
 /**
  * Where a workspace's work happens (plan › Architecture, "Making it
- * general"): a device, and a place on it. The head is a device like any
+ * general"): a device, and a place on it. The hub is a device like any
  * other (decision 24) -- it is listed with the rest, its folders are its
  * node's roots, unscoped chats live on it -- and differs only in transport:
  * its own folders are reached in process (`local`), every other device's
@@ -10,15 +10,15 @@ import crypto from "node:crypto";
  * ask how it is reached, through `remoteNode`.
  */
 
-/** The head's own device and node, named from the server's identity so they stay put. */
-export const headIds = (serverId) => ({ deviceId: `device_${serverId}`, nodeId: `node_${serverId}` });
+/** The hub's own device and node, named from the server's identity so they stay put. */
+export const hubIds = (serverId) => ({ deviceId: `device_${serverId}`, nodeId: `node_${serverId}` });
 
-/** A root of the head's node: one per folder it holds a workspace in, named from the path. */
+/** A root of the hub's node: one per folder it holds a workspace in, named from the path. */
 export const headRootId = (folder) => `r_${crypto.createHash("sha256").update(String(folder)).digest("base64url").slice(0, 12)}`;
 
 /**
  * The node a project's place is reached through over the network, or null
- * when it is reached in process: the head's own folders (a project view says
+ * when it is reached in process: the hub's own folders (a project view says
  * `local`), or a stored record that names no node.
  */
 export const remoteNode = (project) => (project?.nodeId && project.local !== true ? project.nodeId : null);
@@ -31,9 +31,9 @@ export function placeOf(project) {
 
 /**
  * What can be done at a project's place, and on which device:
- * - `harnesses`: implementations a chat there can use. On the head, what is
+ * - `harnesses`: implementations a chat there can use. On the hub, what is
  *   installed here; on a device, what it runs (a harness adapter starts it
- *   there) and whatever runs on the head acting through the device (the
+ *   there) and whatever runs on the hub acting through the device (the
  *   Conduit durable agent).
  * - `checkpoints`: turn snapshots, for Chat review. On a device only a Git
  *   workspace with the shell grant: Git names the changed files, where a

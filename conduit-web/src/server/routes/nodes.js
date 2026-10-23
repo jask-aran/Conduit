@@ -8,7 +8,7 @@
  */
 import { servedMagicDnsOrigin } from "../../tailscale-share.js";
 
-export function registerNodeRoutes(app, { nodeHub, config }) {
+export function registerNodeRoutes(app, { nodeHub, config, lanNameMatches = () => false }) {
   app.get("/v0/nodes", async (_request, response, next) => {
     try { response.json({ devices: await nodeHub.listDevices() }); } catch (error) { next(error); }
   });
@@ -17,14 +17,19 @@ export function registerNodeRoutes(app, { nodeHub, config }) {
     try {
       const { node, device, key } = await nodeHub.pair({ name: request.body?.name,
         deviceId: request.body?.deviceId || null, deviceName: request.body?.deviceName || null });
-      // Devices reach main over the tailnet (decision 4): its MagicDNS name when
+      // Devices reach main over the tailnet or this LAN (decision 4, widened 2026-10-23): its MagicDNS name when
       // Tailscale serves it; else its public address, when devices may use it;
       // else this machine, for a node on the same one.
       const publicUrl = process.env.CONDUIT_NODES_PUBLIC === "1" && process.env.CONDUIT_PUBLIC_URL
         ? (/^https?:\/\//.test(process.env.CONDUIT_PUBLIC_URL) ? process.env.CONDUIT_PUBLIC_URL : `https://${process.env.CONDUIT_PUBLIC_URL}`) : null;
       const tailnet = await servedMagicDnsOrigin().catch(() => null);
+      // The LAN address this request came in by, for a device on this network but not the tailnet: the LAN name over
+      // HTTPS (its certificate is a real one), or a private address over the plain HTTP the same port answers.
+      const host = String(request.hostname || "");
+      const lan = lanNameMatches(host) ? `https://${request.headers.host}`
+        : /^(10|192\.168|172\.(1[6-9]|2\d|3[01]))\./.test(host) ? `http://${host}:${config.port}` : null;
       // Every way a device may dial, best first; the first is the pairing's name.
-      const routes = [...new Set([request.body?.mainUrl, tailnet, publicUrl].filter(Boolean).map(String))];
+      const routes = [...new Set([request.body?.mainUrl, tailnet, lan, publicUrl].filter(Boolean).map(String))];
       if (!routes.length) routes.push(`http://127.0.0.1:${config.port}`);
       const main = routes[0];
       const via = routes.slice(1).map((route) => ` --via ${route}`).join("");

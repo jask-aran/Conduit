@@ -281,7 +281,7 @@ export function registerRuntimeRoutes(app, {
     // by the name Tailscale knows it by (a tailnet address, or a LAN one a peer connects directly from). A browser
     // cannot say; a public tunnel hides it.
     const address = clientAddress(request).replace(/^::ffff:/, "");
-    if (/^127\./.test(address) || address === "::1") runtimeHub.note(client.peer.id, { machine: "head" });
+    if (/^127\./.test(address) || address === "::1") runtimeHub.note(client.peer.id, { machine: "hub" });
     else if (address) {
       void tailnetMachine(address, { tailnet: isTailnetOrLoopback(address) }).then((name) => { if (name) runtimeHub.note(client.peer.id, { machine: name }); });
     }

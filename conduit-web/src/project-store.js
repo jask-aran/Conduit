@@ -220,7 +220,7 @@ export class ProjectStore {
       externalPath: project.externalPath || null,
       // The device's node that holds it, and where on it: `{ root, path }`.
       // The head's own folders are its node's roots, one per folder.
-      nodeId: remote || this.headNodeId || null,
+      nodeId: remote || this.hubNodeId || null,
       place: remote ? { root: project.rootId, path: project.subpath || "" } : { root: headRootId(projectPath), path: "" },
       // Reached in process (the head's own folder) rather than over a node's socket.
       local: !remote,
