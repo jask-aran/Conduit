@@ -1,11 +1,12 @@
 import { HarnessMark } from "@/components/ui";
 import { Icons } from "@/components/ui";
-import { Button as LibraryButton, Captions, Completion, ComposerField, DesktopComposer, PhoneComposer, Picker, PillButton, PillField, PillWave, Rider, Spinner, StopGlyph, TextArea, Toolbar, VoiceRider } from "@/components/ui";
+import { Button as LibraryButton, Captions, Completion, ComposerField, DesktopComposer, Line, Lines, PhoneComposer, Picker, PillButton, PillField, PillWave, Rider, RiderTitle, Spinner, StopGlyph, TextArea, Toolbar, VoiceRider } from "@/components/ui";
+import { awayDevice, deviceLabel } from "../state/runtime";
 import { latestAway, scrollToLatest } from "./latest-away";
 import { createEffect, createMemo, createSignal, For, lazy, on, onCleanup, onMount, Show, type JSX } from "solid-js";
 
 import { DropdownMenu, MenuContent } from "@/components/menus";
-import type { BooleanCapability, Template } from "../api/contracts";
+import type { BooleanCapability, Project, Template } from "../api/contracts";
 import type { ActiveChatStore } from "../state/active-chat";
 import { filesFromDataTransfer } from "../state/attachments";
 import type { ComposerAttachments } from "./composer-attachments";
@@ -87,6 +88,8 @@ export function Composer(props: {
   place?: PlaceOptions;
   /** A harness thread's folder, in the place button's slot. */
   folder?: FolderOptions;
+  /** The workspace a page's unsent chat goes to, when no place is chosen in it (a workspace's page): what the composer says of its machine. */
+  workspace?: Project;
   supports?: (capability: BooleanCapability) => boolean;
 }) {
   let input!: HTMLTextAreaElement;
@@ -747,6 +750,11 @@ export function Composer(props: {
     <Show when={slashOpen() && slashCommand()}>{(item) => <Completion typed={props.chat.draft()} rest={item().command.slice(props.chat.draft().length)} detail={item().description} />}</Show>
   </>;
   const riders = () => <>
+    {/* The machine this chat's workspace is on is away: what is said still goes, and its tools there wait for it. */}
+    <Show when={awayDevice(props.place?.current ?? props.workspace)}>{(away) => <Rider label="Workspace offline">
+      <RiderTitle>Offline</RiderTitle>
+      <Lines><Line text={`${deviceLabel(away())} is offline: sends still go, and its tools wait for it.`} /></Lines>
+    </Rider>}</Show>
     <QueuedMessages messages={props.chat.pendingMessages()} busy={busy()} canInterrupt={supports("cancel")} onInterruptAndSend={() => void props.chat.interruptAndSend()} onEdit={props.chat.editQueued} onDiscard={props.chat.discardQueued} />
     <Show when={comments().length}><Rider label="File references"><ReviewCommentCards items={comments()} chatId={props.chat.loadedId() ?? ""} label="File references" onRemove={(comment) => removeReviewComment(comment.id)} onUpdate={(comment, note) => updateReviewComment(comment.id, note)} /></Rider></Show>
     <Show when={props.attachmentsSupported !== false}>

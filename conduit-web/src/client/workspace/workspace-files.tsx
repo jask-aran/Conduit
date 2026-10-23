@@ -85,6 +85,11 @@ export function createFiles(options: {
   const elements: { host?: HTMLElement; tree?: HTMLElement; filter?: HTMLInputElement; upload?: HTMLInputElement } = {};
   let treeScrollRaf = 0;
   onCleanup(() => { if (treeScrollRaf) cancelAnimationFrame(treeScrollRaf); });
+  // A listing that failed (its machine away, most often) is read again when a machine comes back.
+  let unread = false;
+  const back = () => { if (unread) void refreshFiles(); };
+  window.addEventListener("conduit:device-online", back);
+  onCleanup(() => window.removeEventListener("conduit:device-online", back));
   const filesLoading = () => requests.hasPendingPrefix("directory:");
 
   const loadDirectory = async (directory = "", background = false, more = false) => {
@@ -116,6 +121,7 @@ export function createFiles(options: {
       });
       return changed;
     } catch (cause) {
+      if (!wasAborted(cause)) unread = true;
       if (requests.owns(request) && !background && !wasAborted(cause)) reportError((cause as Error).message);
     } finally {
       requests.finish(request);
@@ -402,6 +408,7 @@ export function createFiles(options: {
     }
   };
   const refreshFiles = async () => {
+    unread = false;
     const loaded = Object.keys(directories());
     for (const directory of loaded.length ? loaded : [""]) await loadDirectory(directory, true);
     await Promise.all(openSlotHandles().map((handle) => handle.reload()));

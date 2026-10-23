@@ -24,7 +24,7 @@ import { WorkspaceGlyph } from "../project/workspace-appearance";
 import { ChatMenuItems, MoveTo, PlaceMenuItems } from "./item-menus";
 import { PlaceGlyph } from "../chat/place-picker";
 import type { Pty } from "../remotes/terminal-pane";
-import type { RuntimeStore } from "../state/runtime";
+import { deviceStates, type RuntimeStore } from "../state/runtime";
 import { focusFirst, isMobileLayout, MOBILE_LAYOUT_QUERY, restoreFocus } from "./mobile-layout";
 import { ProjectActivityIndicator, RuntimeIndicator } from "./runtime-indicator";
 import { dispatchPanelGeometryMotion } from "../panel-motion";
@@ -548,10 +548,17 @@ export function Sidebar(props: {
   createEffect(() => {
     if (area() !== "computer") return;
     readMachines();
-    const timer = setInterval(readMachines, 30_000);
-    onCleanup(() => clearInterval(timer));
+    // A client coming or going is told on the runtime stream; its section follows at once.
+    window.addEventListener("conduit:devices-changed", readMachines);
+    onCleanup(() => window.removeEventListener("conduit:devices-changed", readMachines));
   });
   const hubMachine = () => machines()?.find((machine) => machine.hub)?.id ?? "";
+  /** A client's section while it is away: since when, as the stream last saw it. */
+  const awayNote = (machine: Machine) => {
+    if (machine.hub || machine.online) return undefined;
+    const since = deviceStates().get(machine.id)?.lastSeenAt;
+    return since ? `Offline since ${new Date(since).toLocaleString(undefined, { hour: "numeric", minute: "2-digit", ...(Date.now() - Date.parse(since) > 86_400_000 ? { day: "numeric", month: "short" } : {}) })}` : "Offline";
+  };
   // A workspace is placed on one machine; a terminal is in a workspace, a device's home, or the server's own.
   const machineOfProject = (project: Project) => project.nodeId || hubMachine();
   const machineOfTerminal = (terminal: Pty) => terminal.projectId.startsWith("device:") ? terminal.projectId.slice("device:".length)
@@ -1128,7 +1135,7 @@ export function Sidebar(props: {
             <Show when={!terminals().length}><NavNote>No live terminals</NavNote></Show>
           </NavGroup>
         </>}>
-          <For each={byMachine()}>{(group) => <NavGroup label={group.machine.label}>
+          <For each={byMachine()}>{(group) => <NavGroup label={group.machine.label} away={awayNote(group.machine)}>
             <For each={group.workspaces}>{(project) => <ProjectBlock project={project} workspace />}</For>
             <For each={group.terminals}>{(terminal) => <TerminalRow terminal={terminal} />}</For>
             <Show when={!group.workspaces.length && !group.terminals.length}><NavNote>No workspaces</NavNote></Show>

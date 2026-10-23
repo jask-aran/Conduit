@@ -161,6 +161,17 @@ export class NodeHub extends EventEmitter {
 
   async list() { return (await this.load()).map((record) => this.view(record)); }
 
+  /**
+   * Which paired environments are there now, for every client to know as it happens (the runtime stream): the hub's
+   * own is never offline, so it is not among them. Synchronous: what is loaded, which is everything once one has connected.
+   */
+  availability() {
+    const deviceName = (id) => (this.devices || []).find((device) => device.id === id)?.name
+      || (this.hub && id === this.hub.deviceId ? this.hubDevice.name || os.hostname() : null);
+    return (this.records || []).map((record) => ({ id: record.id, name: record.name, device: deviceName(record.deviceId),
+      online: Boolean(this.live.get(record.id)?.ready), lastSeenAt: record.lastSeenAt || null }));
+  }
+
   async listDevices() {
     await this.load();
     // The hub's device is named as the machine is, until renamed; the hub itself goes by the server's name.
