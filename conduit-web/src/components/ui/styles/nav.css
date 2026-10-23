@@ -39,6 +39,11 @@
 /* A row. A folder's row is a row holding its link and its chevron. */
 .ui-nav-row { display: flex; width: 100%; min-width: 0; min-height: var(--row-min); align-items: center; gap: var(--row-gap); border: 0; border-radius: var(--radius-control); background: transparent; padding: var(--space-2xs) var(--row-inset); color: color-mix(in oklch, var(--foreground), transparent var(--tone-rest)); font-size: var(--text-row); line-height: var(--leading-text); text-align: left; }
 .ui-nav-row[data-indent] { padding-left: var(--nav-indent); }
+/* The second level's icon sits where the first level's text starts. */
+.ui-nav-row[data-indent="2"] { padding-left: calc(var(--nav-indent) + var(--icon) + var(--row-gap)); }
+/* A NavLine's controls: at its end, a field at a column's width. */
+.ui-nav-controls { display: inline-flex; flex: none; align-items: center; gap: var(--space-xs); margin-left: var(--space-md); }
+.ui-nav-controls > input.ui-input { width: var(--measure-sm); }
 .ui-nav-icon { display: inline-grid; width: var(--icon); height: var(--icon); flex: none; place-items: center; color: var(--muted-foreground); }
 .ui-nav-icon > * { width: 100%; height: 100%; }
 .ui-nav-text { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

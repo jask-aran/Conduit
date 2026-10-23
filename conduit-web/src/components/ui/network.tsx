@@ -20,7 +20,8 @@ export type NetworkDevice = { id: string; name: string; clients: NetworkClient[]
 /** The head: the server the network is named for, the device it runs on (its box's title), and the client ("on Ubuntu"). */
 export type NetworkHead = { name: string; device?: string; meta?: string };
 
-const mark = (client: NetworkClient): JSX.Element => client.headed === "phone" ? <Icons.Phone />
+/** A client's mark: its form when headed, a shell when not. */
+export const clientMark = (client: NetworkClient): JSX.Element => client.headed === "phone" ? <Icons.Phone />
   : client.headed === "browser" ? <Icons.Browser /> : client.headed ? <Icons.Monitor /> : <Icons.Shell />;
 
 function Line(props: { icon: JSX.Element; name: string; meta?: string; online: boolean }) {
@@ -48,7 +49,7 @@ export function NetworkMap(props: { head: NetworkHead; devices: NetworkDevice[];
         <For each={props.devices}>{(device) => <div class="ui-network-spoke" data-offline={device.clients.some((client) => client.online) ? undefined : ""}>
           <section class="ui-network-box" aria-label={device.name}>
             <h4 class="ui-title">{device.name}</h4>
-            <ul><For each={device.clients}>{(client) => <Line icon={mark(client)} name={client.name} meta={client.meta} online={client.online} />}</For></ul>
+            <ul><For each={device.clients}>{(client) => <Line icon={clientMark(client)} name={client.name} meta={client.meta} online={client.online} />}</For></ul>
           </section>
         </div>}</For>
       </div>

@@ -43,8 +43,8 @@ export function NavGroup(props: { label?: string; children: JSX.Element }) {
 
 type RowState = {
   icon?: JSX.Element;
-  /** Under the row it belongs to (a chat under its folder). */
-  indent?: boolean;
+  /** Under the row it belongs to (a chat under its folder); 2: under one of those (a folder under a device's client). */
+  indent?: boolean | 2;
   /** Where you are. */
   current?: boolean;
   /** Holds where you are (a folder holding the open chat): drawn as current. */
@@ -63,7 +63,7 @@ type RowState = {
   quiet?: boolean;
 };
 const rowData = (props: RowState) => ({
-  "data-indent": props.indent ? "" : undefined, "aria-current": props.current ? "page" as const : undefined, "data-within": props.within ? "" : undefined,
+  "data-indent": props.indent === 2 ? "2" : props.indent ? "" : undefined, "aria-current": props.current ? "page" as const : undefined, "data-within": props.within ? "" : undefined,
   "data-open": props.open ? "" : undefined, "data-selected": props.selected ? "" : undefined, "data-quiet": props.quiet ? "" : undefined,
 });
 const ROW_PARTS = ["icon", "indent", "current", "within", "open", "selected", "detail", "meta", "end", "quiet", "children", "class"] as const;
@@ -79,6 +79,18 @@ export function NavRow(props: JSX.ButtonHTMLAttributes<HTMLButtonElement> & RowS
     <Show when={local.meta}><small class="ui-nav-meta">{local.meta}</small></Show>
     <Show when={local.end}><span class="ui-nav-end">{local.end}</span></Show>
   </button>;
+}
+
+/** A row that is not a button, so it can hold controls of its own at its end: a device's client with its actions,
+ *  a setting inside a tree. Laid out as a NavRow, the controls where its end mark would be. */
+export function NavLine(props: JSX.HTMLAttributes<HTMLDivElement> & RowState) {
+  const [local, rest] = splitProps(props, ROW_PARTS);
+  return <div {...rest} class="ui-nav-row ui-nav-line" {...rowData(local)}>
+    <Show when={local.icon}><span class="ui-nav-icon">{local.icon}</span></Show>
+    <span class="ui-nav-text">{local.children}</span>
+    <Show when={local.meta}><small class="ui-nav-meta">{local.meta}</small></Show>
+    <Show when={local.end}><span class="ui-nav-controls">{local.end}</span></Show>
+  </div>;
 }
 
 /** A folder's row: its link (icon, a mark such as unread, the name, a muted meta such as "Cloning…") and the chevron
