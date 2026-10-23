@@ -35,6 +35,9 @@
 .ui-nav-group { display: flex; flex-direction: column; gap: var(--hairline); }
 .ui-nav-list > .ui-nav-group { margin-top: var(--space-lg); }
 .ui-nav-label { align-self: flex-start; padding: var(--nav-label-pad); }
+.ui-nav-away { margin-left: var(--space-sm); text-transform: none; letter-spacing: normal; }
+.ui-nav-away::before { margin-right: var(--space-sm); content: "·"; }
+.ui-nav-group[data-away] > :not(.ui-nav-label) { opacity: var(--opacity-muted); }
 
 /* A row. A folder's row is a row holding its link and its chevron. */
 .ui-nav-row { display: flex; width: 100%; min-width: 0; min-height: var(--row-min); align-items: center; gap: var(--row-gap); border: 0; border-radius: var(--radius-control); background: transparent; padding: var(--space-2xs) var(--row-inset); color: color-mix(in oklch, var(--foreground), transparent var(--tone-rest)); font-size: var(--text-row); line-height: var(--leading-text); text-align: left; }

@@ -6,8 +6,10 @@ import { randomBytes } from "node:crypto";
  */
 
 export class RuntimeHub {
-  constructor({ listViews } = {}) {
+  constructor({ listViews, listDevices } = {}) {
     this.listViews = listViews || (() => []);
+    // Paired environments and whether each is there: workspaces on one come and go with it.
+    this.listDevices = listDevices || (() => []);
     this.clients = new Set();
     /** The restart being prepared: who it waits for, and who is ready. */
     this.restart = null;
@@ -17,6 +19,7 @@ export class RuntimeHub {
     return {
       type: "runtime_global_snapshot",
       processes: this.listViews(),
+      devices: this.listDevices(),
       ...(this.restart ? { restartPrepared: true, restartAttempt: this.restart.attempt, restartTarget: this.restart.target } : {}),
       at: new Date().toISOString(),
     };
@@ -112,6 +115,10 @@ export class RuntimeHub {
       chatId,
       at: new Date().toISOString(),
     });
+  }
+
+  publishDevices() {
+    this.publish({ type: "devices_changed", devices: this.listDevices(), at: new Date().toISOString() });
   }
 
   publishTerminal(view, reason = "update") {

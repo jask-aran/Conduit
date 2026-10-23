@@ -27,7 +27,7 @@ import type { SidebarCommand } from "../navigation/sidebar";
 import { COMMAND_IDS, commandLabel } from "../commands/command-registry";
 import { SplitCounts, SplitDashboard, SplitEmpty, SplitGroup, SplitHeader, SplitRow, SplitQuickActions } from "../dashboard/primitives/split";
 import type { Pty } from "../remotes/terminal-pane";
-import type { RuntimeStore } from "../state/runtime";
+import { awayDevice, type RuntimeStore } from "../state/runtime";
 import { compareChatsBySort, saveChatSort, useChatSort } from "../preferences/chat-sort";
 import { WorkspaceGlyph } from "./workspace-appearance";
 import { WorkspaceAppearanceEditor } from "./workspace-appearance-editor";
@@ -57,7 +57,7 @@ function workspaceProject(project: Project) {
 function kindLabel(project: Project) {
   if (project.origin === "cloned") return "Cloned workspace";
   if (project.origin === "created") return "Created workspace";
-  if (project.capabilities && !project.capabilities.device.local) return `On ${project.capabilities.device.name}`;
+  if (project.capabilities && !project.capabilities.device.local) return `On ${project.capabilities.device.name}${awayDevice(project) ? " · offline" : ""}`;
   if (workspaceProject(project)) return "Linked workspace";
   return "Project";
 }
@@ -116,6 +116,12 @@ export function ProjectDashboard(props: {
   const [error, setError] = createSignal("");
   const [copied, setCopied] = createSignal(false);
   const [refreshVersion, setRefreshVersion] = createSignal(0);
+  // Its machine back: what could not be read while it was away (files, threads there) is read again.
+  onMount(() => {
+    const back = (event: Event) => { if ((event as CustomEvent<string>).detail === props.project.nodeId) setRefreshVersion((version) => version + 1); };
+    window.addEventListener("conduit:device-online", back);
+    onCleanup(() => window.removeEventListener("conduit:device-online", back));
+  });
   const [now, setNow] = createSignal(Date.now());
   const [operation, setOperation] = createSignal<WorkspaceOperation | null>(null);
   const [cancellingClone, setCancellingClone] = createSignal(false);

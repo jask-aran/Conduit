@@ -37,8 +37,15 @@ export const NavBrand = (props: JSX.ButtonHTMLAttributes<HTMLButtonElement> & { 
 };
 
 /** A group of nav rows (the sidebar's), with its label. */
-export function NavGroup(props: { label?: string; children: JSX.Element }) {
-  return <section class="ui-nav-group"><Show when={props.label}><div class="ui-nav-label">{props.label}</div></Show>{props.children}</section>;
+/**
+ * A titled run of rows. `away`: what they are on is not there now (a client offline): said after the label, the rows
+ * faint but still open (a chat's history is the hub's), as `away` names it ("Offline since 14:02").
+ */
+export function NavGroup(props: { label?: string; away?: string; children: JSX.Element }) {
+  return <section class="ui-nav-group" data-away={props.away ? "" : undefined}>
+    <Show when={props.label}><div class="ui-nav-label">{props.label}<Show when={props.away}><span class="ui-nav-away">{props.away}</span></Show></div></Show>
+    {props.children}
+  </section>;
 }
 
 type RowState = {

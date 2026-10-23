@@ -13,6 +13,30 @@ import { buildLabel, clientBuild } from "../platform/build-info";
 const [connectionId, setConnectionId] = createSignal("");
 export { connectionId };
 
+/** A paired environment and whether it is there now, as the runtime stream says (the hub's own is never away). */
+export type DeviceState = { id: string; name: string; device: string | null; online: boolean; lastSeenAt: string | null };
+const [deviceStates, setDeviceStates] = createSignal(new Map<string, DeviceState>());
+export { deviceStates };
+/**
+ * The device a project's work runs on, when it is away: its files, terminals and the tools of its chats wait for it.
+ * Null on the hub, or while it is there.
+ */
+export const awayDevice = (project?: { nodeId?: string | null } | null) => {
+  const state = project?.nodeId ? deviceStates().get(project.nodeId) : undefined;
+  return state && !state.online ? state : null;
+};
+/** "Jask · Windows": a device's environment as people know it. */
+export const deviceLabel = (state: DeviceState) => state.device ? `${state.device} · ${state.name}` : state.name;
+const takeDevices = (list: unknown) => {
+  if (!Array.isArray(list)) return;
+  const before = deviceStates();
+  const next = new Map((list as DeviceState[]).map((item) => [item.id, item]));
+  setDeviceStates(next);
+  window.dispatchEvent(new Event("conduit:devices-changed"));
+  // Back: what waited on it (a file tree, a diff) reads again.
+  for (const [id, state] of next) if (state.online && before.get(id)?.online === false) window.dispatchEvent(new CustomEvent("conduit:device-online", { detail: id }));
+};
+
 export type Connectivity = "connecting" | "online" | "reconnecting" | "offline";
 
 export function createRuntimeStore() {
@@ -99,6 +123,7 @@ export function createRuntimeStore() {
         setStale(false);
       } else if (event.type === "runtime_global_snapshot") {
         replaceAll((event.processes || []) as RuntimeProcess[]);
+        takeDevices(event.devices);
         if (typeof event.connection === "string") { setConnectionId(event.connection); locate(event.connection); }
         restartPrepared = event.restartPrepared === true;
         if (restartPrepared) prepare(event.restartAttempt, event.restartTarget);
@@ -112,6 +137,8 @@ export function createRuntimeStore() {
         remove(event.id as string | undefined, event.chatId as string | undefined);
       } else if (event.type === "chat_changed" && event.chat) {
         window.dispatchEvent(new CustomEvent("conduit:chat-changed", { detail: event.chat }));
+      } else if (event.type === "devices_changed") {
+        takeDevices(event.devices);
       } else if (event.type === "terminal_changed" || event.type === "terminal_removed") {
         window.dispatchEvent(new Event("conduit:ptys-changed"));
       } else if (event.type === "pwa_restart_prepared") {

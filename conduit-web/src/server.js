@@ -224,7 +224,12 @@ const requireChatgptWeb = () => {
   if (!chatgptWeb) throw Object.assign(new Error("ChatGPT Web is not installed"), { code: "backend_unavailable", status: 409 });
   return chatgptWeb;
 };
-const runtimeHub = lifetime.own("runtime hub", new RuntimeHub({ listViews: () => backends.list() }), (owned) => owned.close());
+const runtimeHub = lifetime.own("runtime hub", new RuntimeHub({ listViews: () => backends.list(), listDevices: () => nodeHub.availability() }), (owned) => owned.close());
+// A device coming or going is every client's to know at once: its workspaces and their chats come and go with it.
+{
+  let pending = null;
+  nodeHub.on("changed", () => { pending ??= setTimeout(() => { pending = null; runtimeHub.publishDevices(); }, 150); });
+}
 // The snapshot hides records that are stopped or on their way out; so must
 // every incremental update, or a teardown emit re-advertises a process the
 // removal already retired and the pill comes back to life.
