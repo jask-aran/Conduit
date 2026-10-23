@@ -214,6 +214,14 @@ pub async fn device_companion_unshare<R: Runtime>(app: AppHandle<R>, main_url: S
     Ok(())
 }
 
+/// Let one server browse this computer and share the folders it picks, or stop it.
+#[tauri::command]
+pub async fn device_companion_browse<R: Runtime>(app: AppHandle<R>, main_url: String, on: bool) -> Result<(), String> {
+    run_cli(&app, &["browse", if on { "on" } else { "off" }, "--server", &main_url])?;
+    restart(&app);
+    Ok(())
+}
+
 #[tauri::command]
 pub async fn device_companion_unpair<R: Runtime>(app: AppHandle<R>, main_url: String) -> Result<(), String> {
     run_cli(&app, &["unpair", &main_url])?;

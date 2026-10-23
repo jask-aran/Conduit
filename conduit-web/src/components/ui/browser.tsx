@@ -24,4 +24,6 @@ export const BrowserDivider = (props: JSX.HTMLAttributes<HTMLDivElement>) => <di
 export const BrowserGrid = (props: JSX.HTMLAttributes<HTMLDivElement>) => <div {...props} class="ui-browser-grid" />;
 export const BrowserEntry = (props: JSX.ButtonHTMLAttributes<HTMLButtonElement>) => <Button {...props} class="ui-browser-entry" variant="ghost" />;
 export const BrowserPlace = (props: JSX.ButtonHTMLAttributes<HTMLButtonElement>) => <Button {...props} class="ui-browser-place" variant="ghost" />;
+/** The machine being browsed, leading the toolbar: its mark, its name, the chevron of the menu it opens (the hub's or a client's). */
+export const BrowserMachine = (props: JSX.ButtonHTMLAttributes<HTMLButtonElement>) => <Button {...props} class="ui-browser-machine" variant="ghost" />;
 export const BrowserAddress = (props: JSX.InputHTMLAttributes<HTMLInputElement>) => <Input {...props} class="ui-browser-address" />;

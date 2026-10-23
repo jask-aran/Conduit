@@ -95,6 +95,7 @@ pub fn run() {
             node_companion::device_companion_pair,
             node_companion::device_companion_share,
             node_companion::device_companion_unshare,
+            node_companion::device_companion_browse,
             node_companion::device_companion_unpair
         ])
         .build(tauri::generate_context!())

@@ -170,6 +170,14 @@ export function registerProjectRoutes(app, {
       const node = nodeHub && (await nodeHub.list()).find((item) => item.id === request.params.id);
       if (!node) return response.status(404).json({ error: "node_not_found" });
       if (!node.online) return response.status(503).json({ error: "device_offline", message: `${node.name} is offline` });
+      if (node.browse) {
+        // It lets this server browse it: any folder its user can list, by name and kind.
+        const seen = await nodeHub.computer(node.id, "list", String(request.query.path || ""));
+        const name = seen.path.split(/[\\/]/).filter(Boolean).at(-1) || seen.path;
+        const project = { id: `device:${node.id}`, slug: `device-${node.id}`, name, workingRoot: seen.path, nodeId: node.id, kind: "workspace", sessions: [] };
+        return response.json({ project, home: seen.home, parent: seen.parent ?? seen.path, repository: false, repositoryRoot: null,
+          listing: { entries: seen.entries, cursor: null } });
+      }
       if (!node.roots.length) return response.status(409).json({ error: "root_not_shared", message: `${node.name} makes no folders available yet` });
       const place = placeOnDevice(node.roots, request.query.path === undefined || request.query.path === "" ? node.roots[0].label : request.query.path);
       if (!place) return response.status(400).json({ error: "root_not_shared", message: `That folder is not one ${node.name} makes available` });
@@ -298,8 +306,12 @@ export function registerProjectRoutes(app, {
         const nodeId = String(request.body?.nodeId || "");
         if (!nodeHub || !await nodeHub.get(nodeId)) return response.status(404).json({ error: "node_not_found" });
         // A root by id and a path inside it, or (from New workspace) the device's own path to the folder.
-        const located = request.body?.rootId ? null
-          : placeOnDevice((await nodeHub.list()).find((item) => item.id === nodeId)?.roots || [], String(request.body?.path || ""));
+        const listed = (await nodeHub.list()).find((item) => item.id === nodeId);
+        let located = request.body?.rootId ? null : placeOnDevice(listed?.roots || [], String(request.body?.path || ""));
+        // Outside what it shares, on a device that lets this server browse it: it is asked to share the folder first.
+        if (!request.body?.rootId && !located && listed?.browse && request.body?.path) {
+          located = placeOnDevice(await nodeHub.computer(nodeId, "share", String(request.body.path)), String(request.body.path));
+        }
         const root = located ? located.root : await nodeHub.root(nodeId, String(request.body?.rootId || ""));
         if (!root) return response.status(400).json({ error: "root_not_shared", message: "That folder is not shared by the device" });
         const subpath = located ? located.sub : String(request.body?.path || "").replace(/\\/g, "/").split("/").filter((part) => part && part !== ".");

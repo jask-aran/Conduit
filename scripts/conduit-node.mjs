@@ -33,6 +33,10 @@ function printHelp() {
                                               are kept back from file access; --allow lets one
                                               through, --deny keeps back more. Patterns match a
                                               name, * as a wildcard, a trailing / for a folder.
+  conduit-node browse on|off [--server <main-url>]
+                                              Let a server see this computer's folders and
+                                              share one it picks (read, write, shell), as
+                                              \`share --write --shell\` would. Off by default.
   conduit-node unshare <path> [--server <main-url>]
                                               Stop sharing a folder (with every server, unless
                                               one is named).
@@ -74,6 +78,15 @@ const write = (settings) => {
 };
 
 const [command, ...args] = process.argv.slice(2);
+
+/** A folder a browsing server asked for, kept with its pairing as `share` keeps one (read fresh: the CLI may have changed it). */
+const keepShare = (mainUrl) => (root) => {
+  const now = read();
+  const pairing = now.pairings.find((item) => item.mainUrl === mainUrl);
+  if (!pairing) return;
+  pairing.roots = [...pairing.roots.filter((item) => item.path !== root.path), root];
+  write(now);
+};
 const settings = read();
 
 // `--flag value` options (repeatable ones collected), and the bare arguments.
@@ -167,6 +180,15 @@ if (command === "pair") {
   if (root.shell) console.warn(`--shell: commands start in ${root.path} but run as ${os.userInfo().username}, with everything that user can reach.`);
   console.log(`Sharing ${root.path} with ${pairing.mainUrl}: ${["read", root.write && "write", root.shell && "shell"].filter(Boolean).join(", ")}. Restart \`conduit-node run\` to offer it.`);
   console.log(`Kept back from file access: ${[...DEFAULT_DENY, ...root.deny].join(" ")}${root.allow.length ? `, except ${root.allow.join(" ")}` : ""}.`);
+} else if (command === "browse") {
+  const given = options(args, [], ["server"]);
+  const value = given.bare[0];
+  if (value !== "on" && value !== "off") { printHelp(); process.exit(2); }
+  const pairing = pairingFor(given.server);
+  pairing.browse = value === "on";
+  write(settings);
+  console.log(value === "on" ? `${pairing.mainUrl} may browse this computer and share folders it picks. Restart \`conduit-node run\` to apply.`
+    : `${pairing.mainUrl} sees only the folders shared with it. Restart \`conduit-node run\` to apply.`);
 } else if (command === "unshare") {
   const given = options(args, [], ["server"]);
   const target = path.resolve(given.bare[0] || "");
@@ -177,14 +199,14 @@ if (command === "pair") {
   console.log(`No longer sharing ${target}${given.server ? ` with ${origin(given.server)}` : ""}.`);
 } else if (command === "status") {
   console.log(JSON.stringify({ name: settings.name || null, host: os.hostname(),
-    pairings: settings.pairings.map(({ mainUrl, nodeId, routes, roots, relays, relayed }) => ({ mainUrl, nodeId: nodeId || null, routes: routes || [], roots,
-      relays: relays || [], relayed: Boolean(relayed) })) }, null, 2));
+    pairings: settings.pairings.map(({ mainUrl, nodeId, routes, roots, relays, relayed, browse }) => ({ mainUrl, nodeId: nodeId || null, routes: routes || [], roots,
+      relays: relays || [], relayed: Boolean(relayed), browse: Boolean(browse) })) }, null, 2));
 } else if (command === "run" && args.includes("--stdio")) {
   // stdout carries the relay's frames: everything said goes to stderr.
   console.log = console.info = console.warn = console.error;
   const pairing = pairingFor(options(args, [], ["server"]).server);
   const agent = startNodeAgent({ mainUrl: pairing.mainUrl, key: pairing.key, name: settings.name || os.hostname(), roots: pairing.roots,
-    shellEnv: buildManagedToolEnvironment(process.env), dial: stdioDialer() });
+    shellEnv: buildManagedToolEnvironment(process.env), dial: stdioDialer(), browse: Boolean(pairing.browse), onShare: keepShare(pairing.mainUrl) });
   for (const signal of ["SIGINT", "SIGTERM"]) process.on(signal, () => { agent.stop(); process.exit(0); });
 } else if (command === "run") {
   write(settings);
@@ -195,6 +217,7 @@ if (command === "pair") {
   const agents = settings.pairings.filter((pairing) => !pairing.relayed).map((pairing) => {
     if (!pairing.roots.length) console.warn(`Nothing is shared with ${pairing.mainUrl} yet; it will see this device with no folders.`);
     return startNodeAgent({ mainUrl: pairing.mainUrl, routes: pairing.routes, key: pairing.key, name: settings.name || os.hostname(), roots: pairing.roots, shellEnv,
+      browse: Boolean(pairing.browse), onShare: keepShare(pairing.mainUrl),
       relays: (pairing.relays || []).map(({ env, command: relayed }) => relayEnvironment({ env, command: relayed })) });
   });
   for (const signal of ["SIGINT", "SIGTERM"]) process.on(signal, () => { for (const agent of agents) agent.stop(); process.exit(0); });

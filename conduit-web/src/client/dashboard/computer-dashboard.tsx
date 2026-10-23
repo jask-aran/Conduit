@@ -3,7 +3,7 @@ import { FileTypeIcon } from "@/components/ui/file-marks";
 import { Icons } from "@/components/ui";
 import { Browser, BrowserLayout, BrowserSidebar, BrowserHeading, BrowserPlaces, BrowserMain, BrowserToolbar, BrowserActions, BrowserSearch, BrowserCount, BrowserSummary, BrowserSpacer, BrowserColumns, BrowserMark, BrowserEmpty, BrowserLoading, BrowserError, BrowserDivider, BrowserGrid, BrowserEntry, BrowserPlace, BrowserAddress } from "@/components/ui/browser";
 import { Button, Input } from "@/components/ui/controls";
-import { createEffect, createMemo, createSignal, For, onCleanup, Show } from "solid-js";
+import { createEffect, createMemo, createSignal, For, onCleanup, Show, type JSX } from "solid-js";
 import { Grid2X2Icon, ListIcon, UnlinkIcon } from "lucide-solid";
 import { Select } from "@/components/menus";
 import { ContextMenu, ContextMenuContent, ContextMenuGroup, ContextMenuItem, ContextMenuTrigger, DropdownMenu, MenuContent, MenuGroup, MenuItem, MenuTrigger } from "@/components/menus";
@@ -69,6 +69,10 @@ export function ComputerDashboard(props: {
   onCloneRepository?: () => void;
   /** Choosing a folder only: a device's, where Conduit neither creates folders nor clones (its grants are the device's). */
   selectOnly?: boolean;
+  /** Leads the toolbar: which machine is browsed, and the menu of the others (New workspace). */
+  machine?: JSX.Element;
+  /** In place of the folder: what the dialog is waiting on instead (the system's picker on this computer). */
+  waiting?: JSX.Element;
 }) {
   const [address, setAddress] = createSignal("");
   const [entries, setEntries] = createSignal<Entry[]>([]);
@@ -121,11 +125,14 @@ export function ComputerDashboard(props: {
     const value = address().trim();
     if (!value || value === "~") props.onBrowse();
     else if (value.startsWith("~/")) props.onBrowse(`${props.location?.home}/${value.slice(2)}`);
-    else props.onBrowse(value.startsWith("/") ? value : `${props.location?.project.workingRoot}/${value}`);
+    // Absolute as a path on Linux or macOS, or on Windows (C:\, \\server), whichever machine is browsed.
+    else props.onBrowse(/^(\/|[a-z]:[\\/]|\\\\)/i.test(value) ? value : `${props.location?.project.workingRoot}/${value}`);
   };
   const refresh = async (after?: string) => {
     const location = props.location;
     if (!location || !controller) return;
+    // A device's folder is no project of this server's: it is browsed again.
+    if (location.project.id.startsWith("device:")) { props.onBrowse(location.project.workingRoot); return; }
     setRefreshing(true);
     setListingError("");
     try {
@@ -191,6 +198,8 @@ export function ComputerDashboard(props: {
 
       <BrowserMain>
         <BrowserToolbar>
+          {props.machine}
+          <Show when={!props.waiting}>
           <Button variant="ghost" type="button" aria-label="Home folder" title="Home folder" disabled={props.loading} onClick={() => props.onBrowse()}><Icons.Home /></Button>
           <Button variant="ghost" type="button" aria-label="Parent folder" title="Parent folder" disabled={props.loading || !props.location || props.location.parent === props.location.project.workingRoot} onClick={() => props.onBrowse(props.location!.parent)}><Icons.ArrowUp /></Button>
           <BrowserAddress aria-label="Folder path" value={address()} onInput={(event) => setAddress(event.currentTarget.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); go(); } }} />
@@ -200,7 +209,9 @@ export function ComputerDashboard(props: {
           <Button variant="ghost" type="button" aria-label="Refresh folder" title="Refresh folder" disabled={refreshing()} onClick={() => void refresh()}><Icons.Refresh /></Button>
           <Button variant="ghost" type="button" aria-label={showHidden() ? "Hide hidden files" : "Show hidden files"} title={showHidden() ? "Hide hidden files" : "Show hidden files"} aria-pressed={showHidden()} onClick={() => setShowHidden((value) => !value)}><Show when={showHidden()} fallback={<Icons.Hide />}><Icons.Preview /></Show></Button>
           <BrowserCount>{visibleEntries().length} items</BrowserCount>
+          </Show>
         </BrowserToolbar>
+        <Show when={!props.waiting} fallback={props.waiting}>
         <BrowserActions>
           <Show when={props.location?.repositoryRoot}><BrowserSummary title={props.location?.repositoryRoot || ""}><Icons.GitBranch />{props.location?.repositoryRoot?.split("/").at(-1)}</BrowserSummary></Show>
           <BrowserSpacer />
@@ -253,6 +264,7 @@ export function ComputerDashboard(props: {
         </ContextMenuGroup></ContextMenuContent></ContextMenu>
         <Show when={props.loading || refreshing()}><BrowserLoading>Loading…</BrowserLoading></Show>
         <Show when={cursor()}><Button variant="ghost" type="button" disabled={refreshing()} onClick={() => void refresh(cursor()!)}>Load more</Button></Show>
+        </Show>
       </BrowserMain>
     </BrowserLayout>
   </Browser>;

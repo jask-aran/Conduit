@@ -36,12 +36,17 @@ const HEARTBEAT_MS = 30_000;
  * it or the socket drops. A dropped socket aborts the calls in flight: main
  * reports them interrupted rather than this device running work nobody waits
  * for.
+ *
+ * `browse` lets this server see the computer beyond those roots: list any folder
+ * this user can, and make one a root (read, write and shell) by asking. It is
+ * set here, on the device, never by main; `onShare` keeps what it was asked to
+ * share, as `conduit-node share` would have.
  */
 export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: shared, shellEnv = process.env, log = console,
   // How main is reached: a WebSocket, or a relay's stdin/stdout (node-relay.js).
   dial = (url, { key: bearer }) => new WebSocket(url, { headers: { authorization: `Bearer ${bearer}` } }),
   // Environments this one carries on its socket (decision 25): relayEnvironment()s.
-  relays = [] }) {
+  relays = [], browse = false, onShare = null }) {
   // Every way main can be reached, best first (its tailnet name, then a public
   // tunnel): a failed attempt tries the next, and a dropped connection starts again at the best.
   const ways = [...new Set([mainUrl, ...routes].filter(Boolean))];
@@ -114,7 +119,7 @@ export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: 
       way = 0;
       // Roots go by id; the path is for people to read, main never sends it back.
       send({ type: "hello", version: NODE_PROTOCOL_VERSION, name, platform: process.platform, boot: receipts.boot,
-        harnesses: Object.keys(harnesses),
+        harnesses: Object.keys(harnesses), browse: Boolean(browse && onShare),
         roots: roots.map(({ id, path: label, read, write, shell, allow }) => ({ id, label, read, write, shell, allow })) });
       log.info?.(`[conduit-node] connected to ${mainUrl}${via === mainUrl ? "" : ` via ${via}`}`);
     });
@@ -262,11 +267,44 @@ export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: 
       });
     }
 
+    /*
+     * The computer beyond its roots, where browsing is allowed: a folder's entries, by name and kind only (contents
+     * stay behind the roots' checks), and sharing a folder main chose -- the same root `conduit-node share --write
+     * --shell` makes. Anything else, or browsing not allowed, is refused.
+     */
+    async function computer(method, [at, ...rest]) {
+      if (!browse || !onShare) return err(new FileError("permission_denied", "This device does not let Conduit browse it"));
+      const folder = at ? realish(String(at)) : os.homedir();
+      const stat = folder && fs.statSync(folder, { throwIfNoEntry: false });
+      if (!stat?.isDirectory()) return err(new FileError("not_found", `${at || "Home"} is not a folder here`, at || undefined));
+      if (method === "list") {
+        let dirents;
+        try { dirents = await fs.promises.readdir(folder, { withFileTypes: true }); }
+        catch (error) { return err(new FileError("permission_denied", `${folder} could not be read: ${error.code || error.message}`, folder)); }
+        const entries = dirents.map((item) => ({ name: item.name, path: item.name, type: item.isDirectory() ? "directory" : item.isFile() ? "file" : "other" }));
+        const parent = path.dirname(folder);
+        return { ok: true, value: { home: os.homedir(), path: folder, parent: parent === folder ? null : parent, separator: path.sep, entries } };
+      }
+      if (method === "share") {
+        // Home or a drive is the whole computer, not a workspace: as main refuses its own.
+        if (folder === os.homedir() || path.dirname(folder) === folder) return err(new FileError("permission_denied", `${folder} is too broad to share; choose a folder inside it`, folder));
+        const held = roots.find((root) => root.path === folder);
+        if (!held) {
+          const root = { id: `r_${crypto.randomBytes(9).toString("base64url")}`, path: folder, read: true, write: true, shell: true, allow: [], deny: [] };
+          await onShare(root, rest[0]);
+          roots.push(view(root));
+        }
+        return { ok: true, value: roots.map(({ id, path: label, read, write, shell, allow }) => ({ id, label, read, write, shell, allow })) };
+      }
+      return err(new FileError("not_supported", `${method} is not served by this node`));
+    }
+
     async function run({ target, method, args = [], cwd }, context, emit) {
       const decoded = decode(args, { FileError, ExecutionError });
       if (target === "proc") return runProcess(method, decoded);
       // What a harness saved here, for the sessions main runs on it.
       if (target === "tunnel" && method === "open") return openTunnel(decoded[0], decoded[1]);
+      if (target === "computer") return computer(method, decoded);
       if (target === "harness") {
         if (method === "claudeSession" && harnesses["claude-code"]) return { ok: true, value: await claudeSession(decoded[0]) };
         if (method === "codexRollout" && harnesses.codex) return { ok: true, value: await codexRollout(decoded[0]) };
