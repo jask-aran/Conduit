@@ -38,7 +38,6 @@ import { buildHttpUrl, loginUrl, logoutUrl, normalizeServerOrigin, transcriptUrl
 import { startPathSelection } from "./platform/path-selector";
 import { canDiscoverServers, discoverServers, type FoundServer } from "./platform/discovery";
 import { proveServer } from "./platform/server-proof";
-import { EnvironmentPage } from "./dashboard/environment-page";
 import { activeOrigin, activePath, activeServer, addServer, dialOrigin, forgetServer, learnIdentity, mergeServerDirectory, scopeOf, servers, trustedIdentities, setActiveServer, switchToServer } from "./platform/servers";
 import { publishTrustedIdentities } from "./platform/certificate-pins.ts";
 import { publishServerDirectory } from "./platform/server-directory";
@@ -178,6 +177,7 @@ const WorkspacePanel = lazy(() => import("./workspace/workspace-panel"));
 const FileViewer = lazy(() => import("./workspace/workspace-file-viewer"));
 const FileTypeIcon = lazy(() => import("@/components/ui/file-marks").then((module) => ({ default: module.FileTypeIcon })));
 const ComputerDashboard = lazy(() => import("./dashboard/computer-dashboard").then((module) => ({ default: module.ComputerDashboard })));
+const EnvironmentPage = lazy(() => import("./dashboard/environment-page").then((module) => ({ default: module.EnvironmentPage })));
 const ProjectDashboard = lazy(() => import("./project/dashboard"));
 const HarnessDashboard = lazy(() => import("./dashboard/harness-dashboard"));
 const TerminalPane = lazy(() => import("./remotes/terminal-pane").then((module) => ({ default: module.TerminalPane })));
