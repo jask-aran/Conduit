@@ -17,8 +17,8 @@ export type NetworkClient = {
 };
 /** A machine and its clients. Browsers with no machine of their own share one. */
 export type NetworkDevice = { id: string; name: string; clients: NetworkClient[] };
-/** The head: the server the network is named for, and where it runs ("on Ubuntu"). */
-export type NetworkHead = { name: string; meta?: string };
+/** The head: the server the network is named for, the device it runs on (its box's title), and the client ("on Ubuntu"). */
+export type NetworkHead = { name: string; device?: string; meta?: string };
 
 const mark = (client: NetworkClient): JSX.Element => client.headed === "phone" ? <Icons.Phone />
   : client.headed === "browser" ? <Icons.Browser /> : client.headed ? <Icons.Monitor /> : <Icons.Shell />;
@@ -39,9 +39,10 @@ function Line(props: { icon: JSX.Element; name: string; meta?: string; online: b
  */
 export function NetworkMap(props: { head: NetworkHead; devices: NetworkDevice[]; label?: string }) {
   return <figure class="ui-network" aria-label={props.label ?? "Network"}>
-    <ul class="ui-network-box" data-head="">
-      <Line icon={<Icons.Server />} name={props.head.name} meta={props.head.meta} online />
-    </ul>
+    <section class="ui-network-box" data-head="" aria-label={props.head.name}>
+      <Show when={props.head.device}><h4 class="ui-title">{props.head.device}</h4></Show>
+      <ul><Line icon={<Icons.Server />} name={props.head.name} meta={props.head.meta} online /></ul>
+    </section>
     <Show when={props.devices.length}>
       <div class="ui-network-spokes">
         <For each={props.devices}>{(device) => <div class="ui-network-spoke" data-offline={device.clients.some((client) => client.online) ? undefined : ""}>
