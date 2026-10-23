@@ -134,6 +134,9 @@ export default defineConfig(({ mode }) => {
             /^\/healthz(?:\?.*)?$/,
             /^\/login(?:\?.*)?$/,
             /^\/gallery(?:\/|(?:\?.*)?$)/,
+            // Files the server hands out itself: an installer opened from Download is the file, not the app.
+            /^\/desktop-updates\//,
+            /^\/client-bundle\//,
           ],
         },
         devOptions: { enabled: false },
