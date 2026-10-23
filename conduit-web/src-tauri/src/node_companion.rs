@@ -222,6 +222,21 @@ pub async fn device_companion_browse<R: Runtime>(app: AppHandle<R>, main_url: St
     Ok(())
 }
 
+/// What folders shared with one server may do: those mounted from the app, and those it shares by browsing. The node
+/// reads it as it shares one, so it needs no restart.
+#[tauri::command]
+pub async fn device_companion_new_folders<R: Runtime>(app: AppHandle<R>, main_url: String, write: bool, shell: bool) -> Result<(), String> {
+    let mut args = vec!["new-folders", "--server", main_url.as_str()];
+    if write {
+        args.push("--write");
+    }
+    if shell {
+        args.push("--shell");
+    }
+    run_cli(&app, &args)?;
+    Ok(())
+}
+
 #[tauri::command]
 pub async fn device_companion_unpair<R: Runtime>(app: AppHandle<R>, main_url: String) -> Result<(), String> {
     run_cli(&app, &["unpair", &main_url])?;
