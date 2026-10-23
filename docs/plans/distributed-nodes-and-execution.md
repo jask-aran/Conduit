@@ -773,13 +773,22 @@ through the hub, as before. The grant is fetched as a workspace's files are
 first shown and renewed in its last three minutes, so a file open never waits
 on the hub for it.
 
+A home network is trusted, so a browser there reads from nodes directly
+too, over https under a name a certificate covers (built): its tailnet name,
+from Tailscale (`tailscale cert`, renewed daily), and a name on this network
+from the hub, `n-<id>.lan.example.com`, a DNS-only record the hub points at
+the node's private address through the `cf` CLI, covered by the wildcard
+certificate `scripts/lan-cert/issue.sh` keeps beside the hub's own and the hub
+sends the node. One https port; the name asked for picks the certificate.
+The grant names the page that asked, and only that origin may read the
+answer. Every LAN node holds the one wildcard key: a node could present
+another's name, but not answer that node's challenge, so it never gets the
+other's grant. Only a public network leaves reads on the hub.
+
 Costs taken knowingly: on a LAN the grant crosses in the clear (over the
 tailnet WireGuard carries it); it reads one place for ten minutes, no more.
 A node listening beyond loopback makes Windows ask once whether to let it on
-private networks. A browser stays on the hub: an https page may not fetch
-plain HTTP, and the node does not let a page in. A node serving https on its
-tailnet name (Tailscale issues the certificate) is the way to bring browsers
-in, next.
+private networks. A browser on an https page uses only the https routes above.
 
 Nearness for a server's own routes follows the same idea: the apps ask their
 own resolver what a name stands for, so `lan.example.com` at 192.168.x is

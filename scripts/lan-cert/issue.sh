@@ -9,12 +9,18 @@ here="$(cd "$(dirname "$0")" && pwd)"
 name="${LAN_CERT_NAME:-lan.jask-aran.com}"
 dir="${LAN_CERT_DIR:-$HOME/.conduit/tls}"
 mkdir -p "$dir"
-uvx certbot certonly --non-interactive --agree-tos --register-unsafely-without-email \
-  --config-dir "$dir/letsencrypt" --work-dir "$dir/work" --logs-dir "$dir/logs" \
-  --manual --preferred-challenges dns \
-  --manual-auth-hook "$here/dns-auth.sh" --manual-cleanup-hook "$here/dns-cleanup.sh" \
-  --keep-until-expiring -d "$name"
-live="$dir/letsencrypt/live/$name"
-ln -sf "$live/fullchain.pem" "$dir/lan-cert.pem"
-ln -sf "$live/privkey.pem" "$dir/lan-key.pem"
-echo "LAN certificate: $dir/lan-cert.pem (key $dir/lan-key.pem)"
+issue() { # <domain> <lineage> <link prefix>
+  uvx certbot certonly --non-interactive --agree-tos --register-unsafely-without-email \
+    --config-dir "$dir/letsencrypt" --work-dir "$dir/work" --logs-dir "$dir/logs" \
+    --manual --preferred-challenges dns \
+    --manual-auth-hook "$here/dns-auth.sh" --manual-cleanup-hook "$here/dns-cleanup.sh" \
+    --keep-until-expiring --cert-name "$2" -d "$1"
+  local live="$dir/letsencrypt/live/$2"
+  ln -sf "$live/fullchain.pem" "$dir/$3-cert.pem"
+  ln -sf "$live/privkey.pem" "$dir/$3-key.pem"
+  echo "Certificate for $1: $dir/$3-cert.pem (key $dir/$3-key.pem)"
+}
+issue "$name" "$name" lan
+# And one for every name under it, which the hub hands its nodes so a browser on this network reads from them
+# directly (docs/plans/distributed-nodes-and-execution.md, "files take the shortest way").
+issue "*.$name" "nodes.$name" nodes

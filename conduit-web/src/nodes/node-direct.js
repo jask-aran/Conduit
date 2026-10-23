@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import http from "node:http";
 import https from "node:https";
+import tls from "node:tls";
 import path from "node:path";
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import { err, FileError } from "@earendil-works/pi-durable/env";
@@ -139,22 +140,35 @@ export function serveDirect({ secret, call, log = console, certificate = null })
   // hub's grant whichever way it comes in.
   const listening = new Promise((resolve) => server.listen(0, "0.0.0.0", () => resolve(server.address().port)));
   server.on("error", (error) => log.warn?.(`[conduit-node] direct reads: ${error.message}`));
-  // And over https where this machine has a certificate a browser trusts (its tailnet name), for pages, which may not
-  // read plain HTTP: the same answers on a port of its own. Renewed daily; resolves to { name, port } or null.
+  // And over https, for pages (which may not read plain HTTP), under any name this machine has a certificate a browser
+  // trusts for: its tailnet name, from Tailscale (renewed daily), and its name on this network, from the hub
+  // (lan-names.js). One port; the name a client asks for picks the certificate.
+  const contexts = new Map();
   let secure = null;
-  let renew = null;
-  const secured = (async () => {
-    const first = await certificate?.().catch(() => null);
-    if (!first) return null;
-    secure = https.createServer({ cert: first.cert, key: first.key }, answer);
-    secure.on("error", (error) => log.warn?.(`[conduit-node] direct reads over https: ${error.message}`));
-    renew = setInterval(async () => {
-      const next = await certificate().catch(() => null);
-      if (next) secure.setSecureContext({ cert: next.cert, key: next.key });
-    }, 24 * 3600_000);
-    renew.unref?.();
-    const port = await new Promise((resolve) => secure.listen(0, "0.0.0.0", () => resolve(secure.address().port)));
-    return { name: first.name, port };
-  })();
-  return { listening, secured, close: () => { server.close(); secure?.close(); clearInterval(renew); } };
+  let securePort = null;
+  let changed = () => {};
+  const startSecure = () => {
+    if (secure) return secure.port;
+    const server = https.createServer({ SNICallback: (name, done) => done(null, contexts.get(String(name).toLowerCase()) ?? null) }, answer);
+    server.on("error", (error) => log.warn?.(`[conduit-node] direct reads over https: ${error.message}`));
+    secure = { server, port: new Promise((resolve) => server.listen(0, "0.0.0.0", () => resolve(server.address().port))) };
+    return secure.port;
+  };
+  const addCertificate = async ({ name, cert, key }) => {
+    contexts.set(String(name).toLowerCase(), tls.createSecureContext({ cert, key }));
+    securePort = await startSecure();
+    changed();
+  };
+  const tailnet = async () => { const found = await certificate?.().catch(() => null); if (found) await addCertificate(found); };
+  void tailnet();
+  const renew = setInterval(() => void tailnet(), 24 * 3600_000);
+  renew.unref?.();
+  return {
+    listening,
+    addCertificate,
+    /** Where it answers over https, and under which names: null until it has a certificate. */
+    secureRoute: () => (securePort && contexts.size ? { port: securePort, names: [...contexts.keys()] } : null),
+    onSecureChange: (fn) => { changed = fn; },
+    close: () => { server.close(); secure?.server?.close(); clearInterval(renew); },
+  };
 }
