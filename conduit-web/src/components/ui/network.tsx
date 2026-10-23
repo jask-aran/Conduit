@@ -1,6 +1,6 @@
 import { For, Show, type JSX } from "solid-js";
 import * as Icons from "./icons";
-import { StatusDot } from "./nav";
+import { NavRow, StatusDot } from "./nav";
 
 /**
  * One environment of a device: an OS, a WSL distro, a phone, a browser. Each is a client of the network: headed when
@@ -23,16 +23,18 @@ export type NetworkDevice = { id: string; name: string; parts: NetworkPart[] };
 const mark = (part: NetworkPart): JSX.Element => part.head ? <Icons.Server />
   : part.headed === "phone" ? <Icons.Phone /> : part.headed === "browser" ? <Icons.Browser /> : part.headed ? <Icons.Monitor /> : <Icons.Shell />;
 
-function Device(props: { device: NetworkDevice }) {
+type Picking = { current?: string; onPick?: (id: string) => void };
+
+/** A device's outline, its parts as rows: the sidebar's grammar, picked to show what it holds. */
+function Device(props: { device: NetworkDevice } & Picking) {
   return <section class="ui-network-device" aria-label={props.device.name}>
     <h4 class="ui-title">{props.device.name}</h4>
     <ul>
       <For each={props.device.parts}>{(part) => <li class="ui-network-part" data-offline={part.online ? undefined : ""}>
-        <span class="ui-network-mark" aria-hidden="true">{mark(part)}</span>
-        <span class="ui-network-name">{part.name}</span>
-        <Show when={part.head}><span class="ui-network-head">head</span></Show>
-        <span class="ui-network-meta">{part.meta}</span>
-        <StatusDot label={part.online ? "Connected" : "Offline"} tone={part.online ? "success" : "muted"} />
+        <NavRow icon={mark(part)} current={part.id === props.current} meta={part.meta} onClick={() => props.onPick?.(part.id)}
+          end={<StatusDot label={part.online ? "Connected" : "Offline"} tone={part.online ? "success" : "muted"} />}>
+          {part.name}<Show when={part.head}><span class="ui-network-head">head</span></Show>
+        </NavRow>
       </li>}</For>
     </ul>
   </section>;
@@ -43,14 +45,14 @@ function Device(props: { device: NetworkDevice }) {
  * from it by a line (dashed while nothing on it is connected). Every device talks to the head, never to another
  * device, so the head's device is the root and the rest are its spokes.
  */
-export function NetworkMap(props: { devices: NetworkDevice[]; label?: string }) {
+export function NetworkMap(props: { devices: NetworkDevice[]; label?: string } & Picking) {
   const head = () => props.devices.find((device) => device.parts.some((part) => part.head)) ?? props.devices[0];
   const others = () => props.devices.filter((device) => device.id !== head()?.id);
   return <figure class="ui-network" aria-label={props.label ?? "Network"}>
-    <Show when={head()}>{(device) => <Device device={device()} />}</Show>
+    <Show when={head()}>{(device) => <Device device={device()} current={props.current} onPick={props.onPick} />}</Show>
     <Show when={others().length}>
       <div class="ui-network-spokes">
-        <For each={others()}>{(device) => <div class="ui-network-spoke" data-offline={device.parts.some((part) => part.online) ? undefined : ""}><Device device={device} /></div>}</For>
+        <For each={others()}>{(device) => <div class="ui-network-spoke" data-offline={device.parts.some((part) => part.online) ? undefined : ""}><Device device={device} current={props.current} onPick={props.onPick} /></div>}</For>
       </div>
     </Show>
   </figure>;

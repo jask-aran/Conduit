@@ -81,37 +81,61 @@ export function DevicesSettingsTile(props: { onAddWorkspace: (input: { mode: "no
   // Secrets are kept back by default (src/nodes/secrets.js); only a root's exceptions are worth saying.
   const grants = (root: SharedRoot) => ["Read", root.write && "write", root.shell && "commands (full user access)"].filter(Boolean).join(", ")
     + (root.allow?.length ? ` · shares ${root.allow.join(", ")}` : "");
-  const seen = (node: Node) => node.online ? "Connected" : node.lastSeenAt ? `Offline · last seen ${new Date(node.lastSeenAt).toLocaleString()}` : "Not connected yet";
+  const seen = (node: Node) => node.online ? "Connected" : node.lastSeenAt
+    ? `Offline since ${new Date(node.lastSeenAt).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}` : "Not connected yet";
   const network = createMemo(() => networkOf(devices() || [], clients(), connectionId(), companion()));
+  // This app's environment, when its companion is paired with this server (found by the node id the server gave).
+  const ownNode = () => (companion()?.node?.pairings || []).map((pairing) => pairing.nodeId).find((id) => id && (devices() || []).some((device) => device.nodes.some((node) => node.id === id))) || null;
+  // What the page shows under the map: a part picked there, else this app's environment, else the head.
+  const [picked, setPicked] = createSignal<string | null>(null);
+  const parts = () => network().flatMap((device) => device.parts.map((part) => ({ device, part })));
+  const current = () => parts().find(({ part }) => part.id === picked()) ?? parts().find(({ part }) => part.id === ownNode())
+    ?? parts().find(({ part }) => part.head) ?? null;
+  const nodeOf = (id: string) => (devices() || []).flatMap((device) => device.nodes.map((node) => ({ device, node }))).find(({ node }) => node.id === id) ?? null;
 
   return <>
-    <Show when={devices()}><NetworkMap devices={network()} /></Show>
-    <ThisComputerTile devices={devices} refresh={refresh} />
-    {/* The head is listed like any device (plan decision 24); its folders are already its workspaces, and it is not unpaired. */}
-    <For each={devices() || []}>{(device) => <SettingGroup title={device.local ? `${device.name} · this server` : device.name}>
-      <For each={device.nodes}>{(node) => <>
-        <SettingLine label={node.name} state={[seen(node), node.platform,
-          node.harnesses?.length ? `runs ${node.harnesses.map((id) => HARNESS_LABELS[id] || id).join(", ")}` : null].filter(Boolean).join(" · ")} plain>
-          <StatusDot label={seen(node)} tone={node.online ? "success" : "muted"} />
-          <Show when={node.online && (node.local || node.terminal)}>
-            <Button variant="ghost" size="sm" aria-label={`Open a terminal on ${device.name}`} onClick={() => props.onOpenTerminal(node)}><TerminalIcon /> Terminal</Button>
-          </Show>
-          <Show when={!node.local}>
-            <Button variant="ghost" size="sm" aria-label={`Unpair ${node.name} on ${device.name}`} onClick={() => void forget(node)}><Trash2Icon /> Unpair</Button>
-          </Show>
+    <Show when={devices()}><NetworkMap devices={network()} current={current()?.part.id} onPick={setPicked} /></Show>
+    <Show when={current()}>{(shown) => <Show when={nodeOf(shown().part.id)} fallback={
+      // A client with no environment here: a browser, a phone, or this app before it serves this computer.
+      <SettingGroup title={shown().device.name}>
+        <SettingLine label={shown().part.name} state={shown().part.meta ? `Connected · ${shown().part.meta}` : "Connected"} plain>
+          <StatusDot label="Connected" tone="success" />
         </SettingLine>
-        <Show when={node.local}>
-          <SettingLine label="Workspaces" state={`${node.roots.length} on this server`} plain />
-        </Show>
-        <For each={node.local ? [] : node.roots} fallback={<Show when={!node.local}><SettingNote tone="quiet">{node.name} shares no folders yet.</SettingNote></Show>}>{(root) =>
-          <SettingLine label={root.label} state={node.local ? "Workspace" : grants(root)} plain>
-            <Show when={!node.local}>
-              <Button variant="ghost" size="sm" aria-label={`Add ${root.label} on ${node.name} as a workspace`}
-                onClick={() => void props.onAddWorkspace({ mode: "node", nodeId: node.id, rootId: root.id })}><FolderPlusIcon /> Add workspace</Button>
-            </Show>
-          </SettingLine>}</For>
-      </>}</For>
-    </SettingGroup>}</For>
+        <Show when={shown().part.id === connectionId()}><ThisComputer devices={devices} node={null} refresh={refresh} onAddWorkspace={props.onAddWorkspace} /></Show>
+      </SettingGroup>}>{(found) => {
+        const node = () => found().node;
+        const own = () => node().id === ownNode();
+        return <SettingGroup title={`${found().device.name} · ${node().name}`}>
+          {/* An app is connected there but its node is off: the environment is not serving, not offline. */}
+          <SettingLine label="Status" state={!node().online && shown().part.headed ? "Not serving" : seen(node())} plain>
+            <StatusDot label={seen(node())} tone={node().online ? "success" : "muted"} />
+          </SettingLine>
+          <Show when={node().harnesses?.length}>
+            <SettingLine label="Runs" state={node().harnesses!.map((id) => HARNESS_LABELS[id] || id).join(", ")} plain />
+          </Show>
+          {/* The head's folders are already its workspaces (plan decision 24); it is not unpaired. */}
+          <Show when={node().local}><SettingLine label="Workspaces" state={`${node().roots.length} here`} plain /></Show>
+          <Show when={own()} fallback={<Show when={!node().local}>
+            <For each={node().roots} fallback={<SettingNote tone="quiet">{node().name} shares no folders yet.</SettingNote>}>{(root) =>
+              <SettingLine label={root.label} state={grants(root)} plain>
+                <Button variant="ghost" size="sm" aria-label={`Add ${root.label} on ${node().name} as a workspace`}
+                  onClick={() => void props.onAddWorkspace({ mode: "node", nodeId: node().id, rootId: root.id })}><FolderPlusIcon /> Add workspace</Button>
+              </SettingLine>}</For>
+          </Show>}>
+            <ThisComputer devices={devices} node={node()} refresh={refresh} onAddWorkspace={props.onAddWorkspace} />
+          </Show>
+          <Show when={(node().online && (node().local || node().terminal)) || (!node().local && !own())}>
+            <SettingLine label="" plain>
+              <Show when={node().online && (node().local || node().terminal)}>
+                <Button variant="ghost" size="sm" aria-label={`Open a terminal on ${node().name}`} onClick={() => props.onOpenTerminal(node())}><TerminalIcon /> Terminal</Button>
+              </Show>
+              <Show when={!node().local && !own()}>
+                <Button variant="ghost" size="sm" aria-label={`Unpair ${node().name} on ${found().device.name}`} onClick={() => void forget(node())}><Trash2Icon /> Unpair</Button>
+              </Show>
+            </SettingLine>
+          </Show>
+        </SettingGroup>;
+      }}</Show>}</Show>
     <SettingGroup title="Pair a device">
       <SettingLine label="Device" title="A device already paired, for another environment on it, or a new device.">
         <Select aria-label="Device" value={deviceId()} onChange={(event) => setDeviceId(event.currentTarget.value)}>
@@ -162,13 +186,13 @@ function dialableServer(): string | undefined {
 const thisPlatform = () => /Windows/i.test(navigator.userAgent) ? "Windows" : /Mac/i.test(navigator.userAgent) ? "macOS" : "Linux";
 
 /**
- * This computer as a device of the server this app is pointed at, in the
- * desktop app only: the background node the shell runs (node_companion.rs),
- * paired with this server in one step -- the server hands out a key, the
- * shell's node takes it -- and the folders shared with it, picked with the
- * system's folder picker. What a folder allows is chosen when it is shared.
+ * This app's own environment, in the desktop app only: the background node the shell runs (node_companion.rs),
+ * paired with this server in one step -- the server hands out a key, the shell's node takes it -- and the folders
+ * shared with it, picked with the system's folder picker. What a folder allows is chosen when it is shared. Its
+ * lines sit in the environment's group (or, before it is paired, this client's).
  */
-function ThisComputerTile(props: { devices: () => Device[] | null; refresh: () => void }) {
+function ThisComputer(props: { devices: () => Device[] | null; node: Node | null; refresh: () => void;
+  onAddWorkspace: (input: { mode: "node"; nodeId: string; rootId: string }) => Promise<boolean> }) {
   if (!desktopShell) return null;
   const shell = desktopShell;
   const [settings, setSettings] = createSignal<DesktopShellSettings | null>(null);
@@ -186,6 +210,8 @@ function ThisComputerTile(props: { devices: () => Device[] | null; refresh: () =
   // This server's pairing, found by the node id it gave: the URL a pairing dials may not be the one this app uses.
   const serverNodes = () => (props.devices() || []).flatMap((device) => device.nodes);
   const pairing = () => status()?.node?.pairings.find((item) => item.nodeId && serverNodes().some((node) => node.id === item.nodeId)) || null;
+  // The server's record of a shared folder, for making it a workspace: the same path the companion shares.
+  const served = (path: string) => props.node?.roots.find((root) => root.label === path) ?? null;
   const act = async (work: () => Promise<unknown>) => {
     setBusy(true);
     setError("");
@@ -214,36 +240,37 @@ function ThisComputerTile(props: { devices: () => Device[] | null; refresh: () =
     if (nodeId) await api(`/v0/nodes/${nodeId}`, { method: "DELETE" });
   });
 
-  return <SettingGroup title="This computer">
-    <Show when={status()?.available !== false} fallback={<SettingNote tone="quiet">This build of Conduit does not include the device companion.</SettingNote>}>
-      <SettingLine label="Serve this computer" state={status()?.running ? "Running" : settings()?.serveAsDevice ? "Starting…" : "Off"}
-        title="Lets this server work in folders you share from this computer. It keeps running in the tray with the window closed, and starts at sign-in when Launch at sign-in is on.">
-        <Switch id="device-serve" label="Serve this computer" disabled={busy() || !settings()} checked={Boolean(settings()?.serveAsDevice)} onChange={(on) => void serve(on)} />
-      </SettingLine>
-      <Show when={pairing()} fallback={
-        <SettingLine label="Pairing" state="Not paired with this server" plain>
-          <Button variant="ghost" size="sm" disabled={busy()} onClick={() => void pair()}>Add this computer</Button>
-        </SettingLine>}>
-        {(paired) => <>
-          <For each={paired().roots} fallback={<SettingNote tone="quiet">No folders shared with this server yet.</SettingNote>}>{(root) =>
-            <SettingLine label={root.path} state={["Read", root.write && "edit", root.shell && "commands (full user access)"].filter(Boolean).join(", ")} plain>
-              <Button variant="ghost" size="sm" disabled={busy()} aria-label={`Stop sharing ${root.path}`} onClick={() => void unshare(paired().mainUrl, root.path)}><Trash2Icon /> Stop sharing</Button>
-            </SettingLine>}</For>
-          <SettingLine label="Let Conduit edit files">
-            <Switch id="device-share-write" label="Let Conduit edit files" checked={write()} onChange={setWrite} />
-          </SettingLine>
-          <SettingLine label="Let Conduit run commands" title="Commands start in the folder but run as you, with everything you can reach.">
-            <Switch id="device-share-shell" label="Let Conduit run commands" checked={commands()} onChange={setCommands} />
-          </SettingLine>
-          <SettingLine label="Folders" plain>
-            <Button variant="ghost" size="sm" disabled={busy()} onClick={() => void share(paired().mainUrl)}><FolderPlusIcon /> Share a folder…</Button>
-            <Button variant="ghost" size="sm" disabled={busy()} onClick={() => void unpair(paired().mainUrl, paired().nodeId)}>Unpair</Button>
-          </SettingLine>
-        </>}
-      </Show>
+  return <Show when={status()?.available !== false} fallback={<SettingNote tone="quiet">This build of Conduit does not include the device companion.</SettingNote>}>
+    <SettingLine label="Serve this computer" state={status()?.running ? "Running" : settings()?.serveAsDevice ? "Starting…" : "Off"}
+      title="Lets this server work in folders you share from this computer. It keeps running in the tray with the window closed, and starts at sign-in when Launch at sign-in is on.">
+      <Switch id="device-serve" label="Serve this computer" disabled={busy() || !settings()} checked={Boolean(settings()?.serveAsDevice)} onChange={(on) => void serve(on)} />
+    </SettingLine>
+    <Show when={pairing()} fallback={
+      <SettingLine label="Pairing" state="Not paired with this server" plain>
+        <Button variant="ghost" size="sm" disabled={busy()} onClick={() => void pair()}>Add this computer</Button>
+      </SettingLine>}>
+      {(paired) => <>
+        <For each={paired().roots} fallback={<SettingNote tone="quiet">No folders shared with this server yet.</SettingNote>}>{(root) =>
+          <SettingLine label={root.path} state={["Read", root.write && "edit", root.shell && "commands (full user access)"].filter(Boolean).join(", ")} plain>
+            <Show when={served(root.path)}>{(record) =>
+              <Button variant="ghost" size="sm" aria-label={`Add ${root.path} as a workspace`}
+                onClick={() => void props.onAddWorkspace({ mode: "node", nodeId: props.node!.id, rootId: record().id })}><FolderPlusIcon /> Add workspace</Button>}</Show>
+            <Button variant="ghost" size="sm" disabled={busy()} aria-label={`Stop sharing ${root.path}`} onClick={() => void unshare(paired().mainUrl, root.path)}><Trash2Icon /> Stop sharing</Button>
+          </SettingLine>}</For>
+        <SettingLine label="Let Conduit edit files">
+          <Switch id="device-share-write" label="Let Conduit edit files" checked={write()} onChange={setWrite} />
+        </SettingLine>
+        <SettingLine label="Let Conduit run commands" title="Commands start in the folder but run as you, with everything you can reach.">
+          <Switch id="device-share-shell" label="Let Conduit run commands" checked={commands()} onChange={setCommands} />
+        </SettingLine>
+        <SettingLine label="" plain>
+          <Button variant="ghost" size="sm" disabled={busy()} onClick={() => void share(paired().mainUrl)}><FolderPlusIcon /> Share a folder…</Button>
+          <Button variant="ghost" size="sm" disabled={busy()} onClick={() => void unpair(paired().mainUrl, paired().nodeId)}><Trash2Icon /> Unpair</Button>
+        </SettingLine>
+      </>}
     </Show>
     <Show when={error()}><SettingNote tone="error">{error()}</SettingNote></Show>
-  </SettingGroup>;
+  </Show>;
 }
 
 /**
