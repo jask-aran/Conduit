@@ -31,7 +31,8 @@ body {
   overflow: hidden;
   background: var(--frame);
 }
-button, textarea, input, select { font: inherit; }
+/* Layered, so it loses to any unlayered rule: a v2 control's own size (:where(.ui-button), zero specificity) wins over it. */
+@layer reset { button, textarea, input, select { font: inherit; } }
 #root {
   display: flex;
   width: 100%;
