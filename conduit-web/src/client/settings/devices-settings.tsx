@@ -63,7 +63,7 @@ export function DevicesSettingsTile(props: { onAddWorkspace: (input: { mode: "no
   const head = () => {
     const device = (devices() || []).find((item) => item.head);
     const node = device?.nodes.find((item) => item.local);
-    return { name: device?.head || "This server", meta: node ? `on ${node.name}` : undefined };
+    return { name: device?.head || "This server", device: device?.name, meta: node ? `on ${node.name}` : undefined };
   };
   // Secrets are kept back by default (src/nodes/secrets.js); only a root's exceptions are worth saying.
   const grants = (root: SharedRoot) => ["Read", root.write && "write", root.shell && "commands (full user access)"].filter(Boolean).join(", ")

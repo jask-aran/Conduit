@@ -1,8 +1,8 @@
-// Props: head (NetworkHead: name, meta), devices (NetworkDevice: id, name, clients of NetworkClient: id, name, headed desktop | phone | browser, meta, online), label.
+// Props: head (NetworkHead: name, device, meta), devices (NetworkDevice: id, name, clients of NetworkClient: id, name, headed desktop | phone | browser, meta, online), label.
 import { NetworkMap, type NetworkDevice, type NetworkHead } from "@/components/ui";
 import { row, token, type Page } from "../model";
 
-const head: NetworkHead = { name: "Desktop-Dev", meta: "on Ubuntu" };
+const head: NetworkHead = { name: "Desktop-Dev", device: "Desktop", meta: "on Ubuntu" };
 const desktop = (sharing: boolean): NetworkDevice => ({ id: "desk", name: "Desktop", clients: [
   { id: "ubuntu", name: "Ubuntu", meta: "11 workspaces", online: true },
   { id: "windows", name: "Windows", headed: "desktop", meta: sharing ? "Conduit Dev · this app · 1 folder" : "Conduit Dev · this app · not sharing", online: true },
@@ -20,7 +20,7 @@ export const networkPage: Page = {
   preview: () => <NetworkMap head={head} devices={[desktop(false), browsers]} />,
   usage: `import { NetworkMap } from "@/components/ui";
 
-<NetworkMap head={{ name: "Desktop-Dev", meta: "on Ubuntu" }} devices={[{ id: "desk", name: "Desktop", clients: [
+<NetworkMap head={{ name: "Desktop-Dev", device: "Desktop", meta: "on Ubuntu" }} devices={[{ id: "desk", name: "Desktop", clients: [
   { id: "ubuntu", name: "Ubuntu", meta: "11 workspaces", online: true },
   { id: "windows", name: "Windows", headed: "desktop", meta: "Conduit Dev · this app", online: true },
 ] }]} />`,

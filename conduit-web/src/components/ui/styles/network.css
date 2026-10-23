@@ -2,7 +2,7 @@
    what groups is the machine, not a card); its clients are lines in the row's voice. */
 .ui-network { display: flex; flex-direction: column; align-items: center; margin: 0; padding: var(--space-sm) 0 var(--space-lg); }
 .ui-network-box { display: flex; min-width: var(--measure-xs); max-width: 100%; flex-direction: column; gap: var(--space-2xs); margin: 0; border: var(--hairline) solid var(--tint); border-radius: var(--radius-surface); padding: var(--space-sm); list-style: none; }
-.ui-network-box:not([data-head]) { padding-top: var(--space-md); }
+.ui-network-box:has(> .ui-title) { padding-top: var(--space-md); }
 .ui-network-box > .ui-title { margin: 0; padding: 0 var(--space-sm); }
 .ui-network-box ul { display: flex; flex-direction: column; margin: 0; padding: 0; list-style: none; }
 .ui-network-line { display: flex; min-height: var(--row-min); align-items: center; gap: var(--row-gap); padding: 0 var(--space-sm); font-size: var(--text-row); }
