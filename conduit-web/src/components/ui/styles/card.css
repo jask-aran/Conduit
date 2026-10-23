@@ -37,7 +37,7 @@
 /* Shared dialog parts: content supplies state and handlers, never surface CSS. */
 .ui-card { min-height: 0; max-height: 100%; overflow-y: auto; color: var(--foreground); font-size: var(--text-row); }
 /* Split: two flows side by side, each one QR wide (--measure-sm), a rule between; they stack (auto-fit) when the card cannot hold both, the rule then above the second. */
-.ui-card[data-size="split"] { width: min(100%, calc(2 * var(--measure-sm) + 2 * var(--card-edge) + 2 * var(--space-2xl) + 4 * var(--hairline))); }
+.ui-card[data-size="split"] { width: min(100%, calc(2 * var(--measure-md) + 2 * var(--card-edge) + 2 * var(--space-2xl) + 4 * var(--hairline))); }
 .ui-card-columns { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--measure-sm)), 1fr)); gap: var(--card-gap) calc(2 * var(--space-2xl)); }
 .ui-card-column { display: flex; min-width: 0; flex-direction: column; gap: var(--card-pair); }
 .ui-card-column + .ui-card-column { position: relative; }

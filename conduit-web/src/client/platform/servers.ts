@@ -101,7 +101,8 @@ export const sharedByDefault = (origin: string) => !isDirectOrigin(origin);
 
 export function normalizeServerOrigin(value: unknown): string {
   const input = String(value || "").trim();
-  const candidate = input.includes("://") ? input : `https://${input}`;
+  // This machine's server answers plain HTTP; its HTTPS has a certificate the app cannot check by address.
+  const candidate = input.includes("://") ? input : `${/^(127\.\d+\.\d+\.\d+|localhost|\[::1\])(:\d+)?$/i.test(input) ? "http" : "https"}://${input}`;
   let url: URL;
   try { url = new URL(candidate); }
   catch { throw new Error("Enter a complete HTTPS server address."); }
