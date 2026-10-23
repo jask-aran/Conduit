@@ -1,6 +1,6 @@
 import { remoteNode } from "../../place.js";
 import os from "node:os";
-import { projectWorkspace } from "../../workspace-host.js";
+import { deviceHost, projectWorkspace } from "../../workspace-host.js";
 import { readWorkspaceComparison } from "../../workspace-comparison.js";
 import { computerContext, findComputerGitRoot, resolveComputerContext } from "../../computer-context.js";
 import path from "node:path";
@@ -24,6 +24,29 @@ import {
   stopSessionProcesses,
   moveDurableChat,
 } from "../../session-operations.js";
+
+/**
+ * Where a path on a device falls among the folders it makes available: the root whose path holds it, and the parts
+ * under that root. Either separator is taken (a browser joins Windows paths with "/"); a Windows root matches
+ * whatever the case. Null when no root holds it.
+ */
+function placeOnDevice(roots, devicePath) {
+  const parts = (value) => String(value || "").split(/[\\/]+/).filter(Boolean);
+  const wanted = parts(devicePath);
+  for (const root of [...roots].sort((a, b) => parts(b.label).length - parts(a.label).length)) {
+    const base = parts(root.label);
+    const windows = /^[a-z]:/i.test(base[0] || "");
+    const same = (a, b) => windows ? a.toLowerCase() === b.toLowerCase() : a === b;
+    if (base.length <= wanted.length && base.every((part, index) => same(part, wanted[index]))) {
+      const sub = wanted.slice(base.length);
+      if (sub.includes("..")) return null;
+      const separator = root.label.includes("\\") && !root.label.includes("/") ? "\\" : "/";
+      const absolute = (list) => `${root.label.startsWith("/") ? "/" : ""}${list.join(separator)}`;
+      return { root, sub, separator, path: absolute([...base, ...sub]), parent: sub.length ? absolute([...base, ...sub.slice(0, -1)]) : null };
+    }
+  }
+  return null;
+}
 
 function resolveProjectDefaultTemplateId(config, requested, fallback = null) {
   if (requested == null || requested === "") return fallback;
@@ -134,6 +157,27 @@ export function registerProjectRoutes(app, {
     try {
       const project = await computerContext(request.query.path === undefined ? os.homedir() : request.query.path);
       response.json(await readComputerLocation(project));
+    } catch (error) { next(error); }
+  });
+
+  /*
+   * A device's folders as Computer shows the server's, for choosing where a workspace goes: only inside the folders
+   * it makes available (their grants are set on the device), so its first is home and nothing above a root is
+   * listed. Same shape as /v0/computer, its project standing for the place.
+   */
+  app.get("/v0/nodes/:id/computer", async (request, response, next) => {
+    try {
+      const node = nodeHub && (await nodeHub.list()).find((item) => item.id === request.params.id);
+      if (!node) return response.status(404).json({ error: "node_not_found" });
+      if (!node.online) return response.status(503).json({ error: "device_offline", message: `${node.name} is offline` });
+      if (!node.roots.length) return response.status(409).json({ error: "root_not_shared", message: `${node.name} makes no folders available yet` });
+      const place = placeOnDevice(node.roots, request.query.path === undefined || request.query.path === "" ? node.roots[0].label : request.query.path);
+      if (!place) return response.status(400).json({ error: "root_not_shared", message: `That folder is not one ${node.name} makes available` });
+      const host = deviceHost({ hub: nodeHub, nodeId: node.id, place: { root: place.root.id, path: place.sub.join("/") }, label: place.path });
+      const listing = await listWorkspaceDirectory(host);
+      const project = { id: `device:${node.id}`, slug: `device-${node.id}`, name: place.sub.at(-1) || place.root.label, workingRoot: place.path,
+        nodeId: node.id, place: { root: place.root.id, path: place.sub.join("/") }, kind: "workspace", sessions: [] };
+      response.json({ project, home: node.roots[0].label, parent: place.parent ?? place.path, repository: false, repositoryRoot: null, listing });
     } catch (error) { next(error); }
   });
 
@@ -253,9 +297,12 @@ export function registerProjectRoutes(app, {
         // A folder a paired node shares: a root by id, and optionally a folder inside it.
         const nodeId = String(request.body?.nodeId || "");
         if (!nodeHub || !await nodeHub.get(nodeId)) return response.status(404).json({ error: "node_not_found" });
-        const root = await nodeHub.root(nodeId, String(request.body?.rootId || ""));
+        // A root by id and a path inside it, or (from New workspace) the device's own path to the folder.
+        const located = request.body?.rootId ? null
+          : placeOnDevice((await nodeHub.list()).find((item) => item.id === nodeId)?.roots || [], String(request.body?.path || ""));
+        const root = located ? located.root : await nodeHub.root(nodeId, String(request.body?.rootId || ""));
         if (!root) return response.status(400).json({ error: "root_not_shared", message: "That folder is not shared by the device" });
-        const subpath = String(request.body?.path || "").replace(/\\/g, "/").split("/").filter((part) => part && part !== ".");
+        const subpath = located ? located.sub : String(request.body?.path || "").replace(/\\/g, "/").split("/").filter((part) => part && part !== ".");
         if (subpath.includes("..")) return response.status(400).json({ error: "invalid_workspace_path" });
         const separator = root.label.includes("\\") && !root.label.includes("/") ? "\\" : "/";
         const created = await projects.createOnNode({ name: name || undefined, nodeId, rootId: root.id, subpath: subpath.join("/"),

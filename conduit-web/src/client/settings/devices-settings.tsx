@@ -1,6 +1,6 @@
 import { createEffect, createMemo, createSignal, For, on, onCleanup, onMount, Show } from "solid-js";
 import { api } from "../api/client.ts";
-import { buildHttpUrl, httpUrl } from "../api/transport.js";
+import { buildHttpUrl } from "../api/transport.js";
 import { nativeBearerToken } from "../api/native-auth-client.ts";
 import { DropdownMenu, MenuContent, MenuRadioGroup, MenuRadioItem, MenuSection } from "@/components/menus";
 import { ServerControl } from "@/components/ui/connection";
@@ -16,6 +16,7 @@ import { connectionId } from "../state/runtime.ts";
 import { LiveNote, SettingGroup, SettingLine, SettingNote, SettingValue } from "@/components/ui/overlay";
 import { WorkspaceGlyph } from "../project/workspace-appearance.tsx";
 import { desktopShell, isInstalledClient, type CompanionStatus, type DesktopShellSettings } from "../platform/installed-client.ts";
+import { pairingWith, pairThisComputer } from "../platform/this-computer.ts";
 
 type SharedRoot = { id: string; label: string; read: boolean; write: boolean; shell: boolean; allow?: string[] };
 type Node = { id: string; deviceId: string; name: string; platform: string | null; online: boolean; local?: boolean; roots: SharedRoot[]; harnesses?: string[]; terminal?: boolean; lastSeenAt: string | null; via?: string | null };
@@ -259,17 +260,6 @@ function PairEnvironment(props: { device: ShownDevice; onPaired: () => void }) {
   </ClientAdd>;
 }
 
-function dialableServer(): string | undefined {
-  const url = new URL(httpUrl("/"), location.href);
-  const host = url.hostname;
-  const tailnet = /\.ts\.net$/i.test(host) || /^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(host);
-  // This machine's server answers plain HTTP on the same port, and a node cannot check the self-signed certificate
-  // its HTTPS presents (the app trusts it through the server's identity; the node has none).
-  if (["127.0.0.1", "localhost", "[::1]"].includes(host)) return `http://${url.host}`;
-  return tailnet ? url.origin : undefined;
-}
-
-const thisPlatform = () => /Windows/i.test(navigator.userAgent) ? "Windows" : /Mac/i.test(navigator.userAgent) ? "macOS" : "Linux";
 
 /**
  * This app's own client, in the desktop app only: the background node the shell runs (node_companion.rs), paired with
@@ -288,7 +278,7 @@ function createCompanion(devices: () => Device[] | null, refresh: () => void) {
   onMount(() => { void shell.settings().then(setSettings); });
 
   // This server's pairing, found by the node id it gave: the URL a pairing dials may not be the one this app uses.
-  const pairing = () => status()?.node?.pairings.find((item) => item.nodeId && (devices() || []).some((device) => device.nodes.some((node) => node.id === item.nodeId))) || null;
+  const pairing = () => pairingWith(status(), (devices() || []).flatMap((device) => device.nodes.map((node) => node.id)));
   const act = async (work: () => Promise<unknown>) => {
     setBusy(true);
     setError("");
@@ -299,17 +289,7 @@ function createCompanion(devices: () => Device[] | null, refresh: () => void) {
     const current = settings();
     if (current) setSettings(await shell.saveSettings({ ...current, serveAsDevice: on }));
   });
-  const pair = () => act(async () => {
-    const deviceName = status()?.node?.name || status()?.node?.host || "This computer";
-    const paired = await api<{ node: Node; key: string; mainUrl: string; routes?: string[] }>("/v0/nodes", {
-      method: "POST", headers: { "content-type": "application/json" },
-      body: JSON.stringify({ deviceName, name: thisPlatform(), mainUrl: dialableServer() }),
-    });
-    await shell.companion.pair(paired.mainUrl, paired.key, paired.node.id, deviceName, (paired.routes || []).slice(1));
-    const current = settings();
-    // Pairing is asking to share: the node starts with it.
-    if (current && !current.serveAsDevice) setSettings(await shell.saveSettings({ ...current, serveAsDevice: true }));
-  });
+  const pair = () => act(async () => { await pairThisComputer(status()); setSettings(await shell.settings()); });
   const share = (mainUrl: string) => act(() => shell.companion.share(mainUrl, write(), commands()));
   const unpair = (mainUrl: string, nodeId: string | null) => act(async () => {
     await shell.companion.unpair(mainUrl);
