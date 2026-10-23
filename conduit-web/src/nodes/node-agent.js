@@ -38,15 +38,18 @@ const HEARTBEAT_MS = 30_000;
  * for.
  *
  * `browse` lets this server see the computer beyond those roots: list any folder
- * this user can, and make one a root (read, write and shell) by asking. It is
- * set here, on the device, never by main; `onShare` keeps what it was asked to
- * share, as `conduit-node share` would have.
+ * this user can, and make one a root by asking. It is
+ * set here, on the device, never by main; a folder shared so gets the grants
+ * the device gives new folders (`newFolders`), and `onShare` keeps it, as
+ * `conduit-node share` would have.
  */
 export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: shared, shellEnv = process.env, log = console,
   // How main is reached: a WebSocket, or a relay's stdin/stdout (node-relay.js).
   dial = (url, { key: bearer }) => new WebSocket(url, { headers: { authorization: `Bearer ${bearer}` } }),
   // Environments this one carries on its socket (decision 25): relayEnvironment()s.
-  relays = [], browse = false, onShare = null }) {
+  relays = [], browse = false, onShare = null,
+  // The grants a folder shared by browsing gets: the device's choice for new folders, read when one is shared.
+  newFolders = () => ({ write: true, shell: true }) }) {
   // Every way main can be reached, best first (its tailnet name, then a public
   // tunnel): a failed attempt tries the next, and a dropped connection starts again at the best.
   const ways = [...new Set([mainUrl, ...routes].filter(Boolean))];
@@ -290,7 +293,8 @@ export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: 
         if (folder === os.homedir() || path.dirname(folder) === folder) return err(new FileError("permission_denied", `${folder} is too broad to share; choose a folder inside it`, folder));
         const held = roots.find((root) => root.path === folder);
         if (!held) {
-          const root = { id: `r_${crypto.randomBytes(9).toString("base64url")}`, path: folder, read: true, write: true, shell: true, allow: [], deny: [] };
+          const grants = newFolders();
+          const root = { id: `r_${crypto.randomBytes(9).toString("base64url")}`, path: folder, read: true, write: Boolean(grants.write), shell: Boolean(grants.shell), allow: [], deny: [] };
           await onShare(root, rest[0]);
           roots.push(view(root));
         }

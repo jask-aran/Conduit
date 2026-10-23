@@ -198,7 +198,7 @@ export interface CompanionStatus {
   available: boolean;
   serving: boolean;
   running: boolean;
-  node: { name: string | null; host?: string; pairings: Array<{ mainUrl: string; nodeId: string | null; routes?: string[]; roots: CompanionRoot[]; browse?: boolean }> } | null;
+  node: { name: string | null; host?: string; pairings: Array<{ mainUrl: string; nodeId: string | null; routes?: string[]; roots: CompanionRoot[]; browse?: boolean; newFolders?: { write: boolean; shell: boolean } }> } | null;
 }
 
 /**
@@ -231,6 +231,11 @@ export const desktopShell = installedClientKind !== "desktop" ? null : {
     async browse(mainUrl: string, on: boolean): Promise<void> {
       const { invoke } = await import("@tauri-apps/api/core");
       await invoke("device_companion_browse", { mainUrl, on });
+    },
+    /** What folders shared from here (Mount a folder…, or the hub browsing) may do (`conduit-node new-folders`). */
+    async newFolders(mainUrl: string, write: boolean, shell: boolean): Promise<void> {
+      const { invoke } = await import("@tauri-apps/api/core");
+      await invoke("device_companion_new_folders", { mainUrl, write, shell });
     },
     async unpair(mainUrl: string): Promise<void> {
       const { invoke } = await import("@tauri-apps/api/core");
