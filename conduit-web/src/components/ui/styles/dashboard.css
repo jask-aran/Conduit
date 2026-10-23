@@ -5,9 +5,11 @@
 /* Registered, so the app reads them back as lengths when it measures where two columns stop fitting. */
 @property --dash-aside { syntax: "<length>"; inherits: true; initial-value: 0px; }
 @property --dash-gutter { syntax: "<length>"; inherits: true; initial-value: 0px; }
-.ui-dash { --dash-aside: calc(21.875 * var(--u-space)); --dash-min: calc(29.6875 * var(--u-space)); --dash-tile: calc(2 * var(--u-icon)); --dash-glyph: clamp(var(--dash-tile), 3vw, calc(1.325 * var(--dash-tile))); --dash-folder: calc(7.1875 * var(--u-space)); --dash-tile-action: calc(3.75 * var(--u-space)); --dash-gap: calc(2.5 * var(--u-space)); --dash-gutter: calc(1.875 * var(--u-space));
+.ui-dash { --dash-aside: calc(21.875 * var(--u-space)); --dash-min: calc(29.6875 * var(--u-space)); --dash-glyph: clamp(var(--dash-tile), 3vw, calc(1.325 * var(--dash-tile))); --dash-tile-action: calc(3.75 * var(--u-space)); --dash-gap: calc(2.5 * var(--u-space)); --dash-gutter: calc(1.875 * var(--u-space));
   --dash-max: calc(var(--reading-width) + var(--dash-gap) + var(--dash-aside));
   position: relative; z-index: 1; display: flex; min-height: 0; flex: 1; flex-direction: column; overflow: auto; scrollbar-width: var(--native-scrollbar-width); }
+/* A shelf's tile sizes, wherever a shelf is (the dashboard, the hub's page). */
+:is(.ui-dash, .ui-folder-shelf) { --dash-tile: calc(2 * var(--u-icon)); --dash-folder: calc(7.1875 * var(--u-space)); }
 /* Centred when there is room; otherwise its left gutter holds and a body at its minimum runs off the right, so nothing drifts sideways. */
 .ui-dash-body { display: grid; width: min(var(--dash-max), calc(100% - 2 * var(--dash-gutter))); min-width: var(--dash-min); min-height: 0; flex: 1;
   grid-template-areas: "head head" "notice notice" "main aside"; grid-template-columns: minmax(0, var(--reading-width)) var(--dash-aside);
@@ -144,6 +146,8 @@
 .ui-folder:is(:focus-visible, [data-expanded], [data-held]) { outline: none; background: var(--border); }
 @media (hover: hover) { .ui-folder:is(:hover, :focus-visible, [data-expanded], [data-held]) { outline: none; background: var(--border); } }
 .ui-folder-mark { width: var(--dash-tile); height: var(--control-tool); }
+.ui-folder-own { display: flex; width: var(--dash-tile); height: var(--control-tool); align-items: center; }
+.ui-folder-own > * { width: var(--control-tool); height: var(--control-tool); }
 .ui-folder-mark [data-part="back"] { fill: color-mix(in oklch, var(--foreground), transparent 80%); }
 .ui-folder-mark [data-part="front"] { fill: color-mix(in oklch, var(--foreground), transparent 70%); transition: fill var(--duration-quick) var(--ease-change); }
 .ui-folder:is(:focus-visible) .ui-folder-mark [data-part="front"] { fill: color-mix(in oklch, var(--foreground), transparent 55%); }

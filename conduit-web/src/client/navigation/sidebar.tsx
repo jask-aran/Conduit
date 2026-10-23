@@ -989,6 +989,10 @@ export function Sidebar(props: {
   // A terminal on a machine that is away is not running there now as far as anyone can see; closing it still works
   // (the hub stops it when its machine is back).
   const terminalAway = (terminal: Pty) => deviceStates().get(machineOfTerminal(terminal))?.online === false;
+  /** The hub's own page: its harnesses and its files. A dot when a harness needs attention (signing in). */
+  const hubRow = () => <NavRow icon={<Icons.Server />} draggable="true" data-doc-view="page:computer" current={(props.computer || Boolean(props.selectedHarness)) && !props.terminal}
+    meta="Hub" end={harnesses().some((harness) => harness.status === "authentication_required") ? <StatusDot label="A harness needs signing in" tone="warn" /> : undefined}
+    onClick={() => { closeMobile(); props.onOpenComputer(); enterPane(); }}>{hubName() === "the hub" ? "Hub" : hubName()}</NavRow>;
   const TerminalRow = (rowProps: { terminal: Pty }) => <ContextMenu placement={menuPlacement()}>
     <ContextMenuTrigger as={NavRow} icon={<StatusDot label={terminalAway(rowProps.terminal) ? "Offline" : "Running"} tone={terminalAway(rowProps.terminal) ? "muted" : "success"} />}
       detail={<>{terminalScope(rowProps.terminal)} · {rowProps.terminal.currentCommand || "shell"} · {terminalActivity(rowProps.terminal)}</>}
@@ -1080,10 +1084,9 @@ export function Sidebar(props: {
       </>}>
       <NavRail label="Quick navigation">
         <Show when={area() === "computer"}>
-          <RailAction label="Files" current={props.computer && !props.selectedHarness} onClick={() => { setArea("computer"); closeMobile(); props.onOpenComputer(); enterPane(); }}><Icons.Monitor /></RailAction>
+          <RailAction label={hubName() === "the hub" ? "Hub" : hubName()} current={props.computer || Boolean(props.selectedHarness)} onClick={() => { setArea("computer"); closeMobile(); props.onOpenComputer(); enterPane(); }}><Icons.Server /></RailAction>
           <RailAction label="New workspace" onClick={() => openNewDialog("workspace")}><Icons.NewFolder /></RailAction>
           <RailAction label="Terminal View" current={props.terminal} onClick={() => { setArea("computer"); closeMobile(); props.onOpenTerminalView(); }}><Icons.Terminal /></RailAction>
-          <For each={harnesses()}>{(harness) => <RailAction label={`${harness.label} · ${harnessStatusLabel(harness.status)}`} current={props.selectedHarness === harness.id} onClick={() => { setArea("computer"); closeMobile(); props.onOpenHarness(harness.id); enterPane(); }}><HarnessMark id={harness.id} artwork /></RailAction>}</For>
           <Show when={railWorkspaces().length}>
             <NavRailSection>
               <For each={railWorkspaces()}>{(project) => <RailAction
@@ -1128,18 +1131,11 @@ export function Sidebar(props: {
         </>}><UpdateNotice state={props.updateState} onTake={props.onTakeUpdate} /></NavLead>
       </Show>
       <Show when={area() === "computer"}>
-        <NavRow icon={<Icons.Monitor />} draggable="true" data-doc-view="page:computer" current={props.computer && !props.selectedHarness} onClick={() => { closeMobile(); props.onOpenComputer(); enterPane(); }}>Files</NavRow>
         <NavRow icon={<Icons.NewFolder />} onClick={() => openNewDialog("workspace")}>New workspace</NavRow>
         <NavRow icon={<Icons.Terminal />} end={<Icons.ExternalLink />} current={props.terminal} onClick={() => { closeMobile(); props.onOpenTerminalView(); }}>Terminal View</NavRow>
-        {/* Each harness's page, a row as the ones above are, its mark in its own
-            colours; a dot only when it is not ready to use. */}
-        <For each={harnesses()}>{(harness) =>
-          <NavRow icon={<HarnessMark id={harness.id} artwork />} draggable="true" data-doc-view={`page:harness:${encodeURIComponent(harness.id)}`} current={props.selectedHarness === harness.id}
-            title={`${harness.label} · ${harnessStatusLabel(harness.status)}`} onClick={() => { closeMobile(); props.onOpenHarness(harness.id); enterPane(); }}
-            end={harness.status && harness.status !== "ready" ? <StatusDot label={harnessStatusLabel(harness.status)} tone={harness.status === "authentication_required" ? "warn" : "muted"} /> : undefined}>{harness.label}</NavRow>
-        }</For>
         {/* By machine once the server has said which it has; until then, as one list. */}
         <Show when={machines()?.length} fallback={<>
+          {hubRow()}
           <Group label="Workspaces" projects={workspaces()} workspace emptyLabel="No workspaces" />
           <NavGroup label="Terminals">
             <For each={terminals()}>{(terminal) => <TerminalRow terminal={terminal} />}</For>
@@ -1147,9 +1143,11 @@ export function Sidebar(props: {
           </NavGroup>
         </>}>
           <For each={byMachine()}>{(group) => <NavGroup label={group.machine.label} away={awayNote(group.machine)}>
+            {/* The hub's machine is a client like any other, and the hub besides: its page (its harnesses, its files) first. */}
+            <Show when={group.machine.hub}>{hubRow()}</Show>
             <For each={group.workspaces}>{(project) => <ProjectBlock project={project} workspace />}</For>
             <For each={group.terminals}>{(terminal) => <TerminalRow terminal={terminal} />}</For>
-            <Show when={!group.workspaces.length && !group.terminals.length}><NavNote>No workspaces</NavNote></Show>
+            <Show when={!group.machine.hub && !group.workspaces.length && !group.terminals.length}><NavNote>No workspaces</NavNote></Show>
           </NavGroup>}</For>
         </Show>
       </Show>

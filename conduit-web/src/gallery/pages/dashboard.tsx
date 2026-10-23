@@ -1,3 +1,4 @@
+import { HarnessMark } from "@/components/ui";
 import { createUniqueId } from "solid-js";
 import { GroupCompactHeading } from "@/components/ui";
 import { Icons } from "@/components/ui";
@@ -71,6 +72,7 @@ import { Icons } from "@/components/ui";
     row("DashPath · Rest", "a place's working path in its header's context: a tap copies it, and it says Copied for a moment; --font-data --text-caption · brightens on hover or focus", () => <DashPath path="~/Conduit" copied={false} onCopy={() => {}} />, { phone: true, code: "<DashPath path copied onCopy />" }),
     row("DashPath · Copied", "a place's working path in its header's context: a tap copies it, and it says Copied for a moment; --font-data --text-caption · brightens on hover or focus", () => <DashPath path="~/Conduit" copied={true} onCopy={() => {}} />, { phone: true, code: "<DashPath path copied onCopy />" }),
     row("DashEmpty · DashNote", "an empty list, a note and an error", () => <div><DashEmpty>No chats</DashEmpty><DashNote>Choose a project to start.</DashNote><DashNote error>Could not load projects.</DashNote></div>, { phone: true, code: "<DashEmpty> · <DashNote error>" }),
+    row("FolderTile · mark", "a thing's own mark in its colours in place of the folder: the hub's harnesses", () => <FolderShelf all><FolderTile name="Codex" meta="Ready" mark={<HarnessMark id="codex" artwork />} /><FolderTile name="Claude Code" meta="Ready" mark={<HarnessMark id="claude-code" artwork />} /><FolderTile name="ChatGPT Web" meta="Sign-in required" mark={<HarnessMark id="chatgpt-web" artwork />} /></FolderShelf>, { code: '<FolderTile name="Codex" meta="Ready" mark={<HarnessMark id="codex" artwork />} />' }),
     row("FolderShelf · FolderTile", "four projects, one live, and a new project action", () => <FolderShelf all><FolderTile name="Conduit" meta="3 chats" live /><FolderTile name="Japan" meta="2 chats" /><FolderTile name="Website" meta="1 chat" /><FolderTile name="Notes" meta="No chats" /><FolderTile name="New project" icon={<Icons.NewFolder />} /></FolderShelf>, { phone: true, code: "<FolderShelf all> · <FolderTile name meta live icon>" }),
     row("Dashboard · a page", "dashboard/primitives/split.tsx", dashboardScene, { source: "dashboard/primitives/split.tsx", surfaces: ["ground"] }),
   ],

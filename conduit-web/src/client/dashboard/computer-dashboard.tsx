@@ -1,7 +1,9 @@
 import { HarnessMark } from "@/components/ui";
 import { FileTypeIcon } from "@/components/ui/file-marks";
 import { Icons } from "@/components/ui";
-import { Browser, BrowserLayout, BrowserSidebar, BrowserHeading, BrowserPlaces, BrowserMain, BrowserToolbar, BrowserActions, BrowserSearch, BrowserCount, BrowserSummary, BrowserSpacer, BrowserColumns, BrowserMark, BrowserEmpty, BrowserLoading, BrowserError, BrowserDivider, BrowserGrid, BrowserEntry, BrowserPlace, BrowserAddress } from "@/components/ui/browser";
+import { Browser, BrowserLayout, BrowserSidebar, BrowserHeading, BrowserPlaces, BrowserMain, BrowserToolbar, BrowserActions, BrowserSearch, BrowserCount, BrowserSummary, BrowserSpacer, BrowserColumns, BrowserMark, BrowserEmpty, BrowserLoading, BrowserError, BrowserDivider, BrowserGrid, BrowserEntry, BrowserPlace, BrowserAddress, BrowserShelf } from "@/components/ui/browser";
+import { FolderShelf, FolderTile } from "@/components/ui/dashboard";
+import { harnessStatusLabel } from "../harness-brand";
 import { Button, Input } from "@/components/ui/controls";
 import { createEffect, createMemo, createSignal, For, onCleanup, Show, type JSX } from "solid-js";
 import { Grid2X2Icon, ListIcon, UnlinkIcon } from "lucide-solid";
@@ -69,6 +71,8 @@ export function ComputerDashboard(props: {
   onCloneRepository?: () => void;
   /** Choosing a folder only: a device's, where Conduit neither creates folders nor clones (its grants are the device's). */
   selectOnly?: boolean;
+  /** The hub's page: its harnesses as tiles above its files, each opening its own page. */
+  onOpenHarness?: (id: string) => void;
   /** Leads the toolbar: which machine is browsed, and the menu of the others (New workspace). */
   machine?: JSX.Element;
   /** In place of the folder: what the dialog is waiting on instead (the system's picker on this computer). */
@@ -88,7 +92,8 @@ export function ComputerDashboard(props: {
   let controller: AbortController | undefined;
   let stopSidebarResize: (() => void) | undefined;
 
-  const workspaces = () => props.projects.filter((project) => !isConduitManagedProject(project));
+  // This machine's: a client's workspaces are browsed on its own machine, not among these files.
+  const workspaces = () => props.projects.filter((project) => !isConduitManagedProject(project) && (props.dialog || !project.capabilities || project.capabilities.device.local));
   const designated = () => workspaces().find((project) => project.workingRoot === props.location?.project.workingRoot);
   const workspaceFor = (entry: Entry) => entry.type === "directory"
     ? workspaces().find((project) => project.workingRoot === `${props.location?.project.workingRoot}/${entry.path}`)
@@ -175,7 +180,12 @@ export function ComputerDashboard(props: {
     </Show>
   </>;
 
-  return <Browser compact={props.dialog} sidebarWidth={sidebarWidth()}>
+  return <>
+  <Show when={!props.dialog && props.onOpenHarness && harnesses().length}>
+    <BrowserShelf label="Harnesses"><FolderShelf all><For each={harnesses()}>{(harness) =>
+      <FolderTile name={harness.label} meta={harnessStatusLabel(harness.status)} mark={<HarnessMark id={harness.id} artwork />} onClick={() => props.onOpenHarness!(harness.id)} />}</For></FolderShelf></BrowserShelf>
+  </Show>
+  <Browser compact={props.dialog} sidebarWidth={sidebarWidth()}>
     <BrowserLayout>
       <BrowserSidebar>
         <BrowserHeading>Locations</BrowserHeading>
@@ -267,7 +277,8 @@ export function ComputerDashboard(props: {
         </Show>
       </BrowserMain>
     </BrowserLayout>
-  </Browser>;
+  </Browser>
+  </>;
 }
 
 export const ComputerExplorer = ComputerDashboard;
