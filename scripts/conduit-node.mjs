@@ -3,6 +3,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { execFileSync } from "node:child_process";
 import { startNodeAgent } from "../conduit-web/src/nodes/node-agent.js";
 import { relayEnvironment, stdioDialer } from "../conduit-web/src/nodes/node-relay.js";
 import { DEFAULT_DENY } from "../conduit-web/src/nodes/secrets.js";
@@ -82,6 +83,29 @@ const write = (settings) => {
 };
 
 const [command, ...args] = process.argv.slice(2);
+
+/**
+ * One run of the node per home: a newer one (the app updated, or opened again) stops any older one still running,
+ * whose shares and code may be stale; two would take the pairing from each other on every reconnect.
+ */
+function takeOver() {
+  const lock = path.join(home, "run.pid");
+  let previous = 0;
+  try { previous = Number(fs.readFileSync(lock, "utf8").trim()) || 0; } catch {}
+  if (previous && previous !== process.pid && isNodeRun(previous)) {
+    try { process.kill(previous); console.warn(`[conduit-node] stopped an older run of this node (${previous})`); } catch {}
+  }
+  fs.writeFileSync(lock, `${process.pid}\n`);
+  process.on("exit", () => { try { if (Number(fs.readFileSync(lock, "utf8")) === process.pid) fs.rmSync(lock); } catch {} });
+}
+/** Whether a pid is still a node process (not one the system gave the number to since). */
+function isNodeRun(pid) {
+  try { process.kill(pid, 0); } catch { return false; }
+  try {
+    if (process.platform === "win32") return /node\.exe/i.test(execFileSync("tasklist", ["/FI", `PID eq ${pid}`, "/FO", "CSV", "/NH"], { encoding: "utf8", windowsHide: true }));
+    return /conduit-node/.test(fs.readFileSync(`/proc/${pid}/cmdline`, "utf8"));
+  } catch { return process.platform !== "linux"; }
+}
 
 /** What a new folder may do there: as set by `new-folders`, editing but no commands until then. */
 const newFoldersOf = (pairing) => ({ write: pairing?.newFolders?.write ?? true, shell: pairing?.newFolders?.shell ?? false });
@@ -225,14 +249,17 @@ if (command === "pair") {
   for (const signal of ["SIGINT", "SIGTERM"]) process.on(signal, () => { agent.stop(); process.exit(0); });
 } else if (command === "run") {
   write(settings);
+  takeOver();
   if (!settings.pairings.length) { console.error("Not paired: run `conduit-node pair <main-url> <key>` first."); process.exit(2); }
   const shellEnv = buildManagedToolEnvironment(process.env);
   // One connection per server, each with only what was shared with it, and
   // the environments relayed on it; one reached through a relay is left to it.
+  // Taken over on one pairing means another run has them all: this one ends.
+  const replaced = () => { for (const agent of agents) agent.stop(); process.exit(0); };
   const agents = settings.pairings.filter((pairing) => !pairing.relayed).map((pairing) => {
     if (!pairing.roots.length) console.warn(`Nothing is shared with ${pairing.mainUrl} yet; it will see this device with no folders.`);
     return startNodeAgent({ mainUrl: pairing.mainUrl, routes: pairing.routes, key: pairing.key, name: settings.name || os.hostname(), roots: pairing.roots, shellEnv,
-      browse: Boolean(pairing.browse), onShare: keepShare(pairing.mainUrl), newFolders: newFoldersFor(pairing.mainUrl),
+      browse: Boolean(pairing.browse), onShare: keepShare(pairing.mainUrl), newFolders: newFoldersFor(pairing.mainUrl), onReplaced: replaced,
       relays: (pairing.relays || []).map(({ env, command: relayed }) => relayEnvironment({ env, command: relayed })) });
   });
   for (const signal of ["SIGINT", "SIGTERM"]) process.on(signal, () => { for (const agent of agents) agent.stop(); process.exit(0); });

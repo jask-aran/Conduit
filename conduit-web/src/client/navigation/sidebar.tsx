@@ -986,12 +986,22 @@ export function Sidebar(props: {
     </ContextMenu>;
   };
 
-  const TerminalRow = (rowProps: { terminal: Pty }) => <NavRow icon={<StatusDot label="Running" tone="success" />}
-    detail={<>{terminalScope(rowProps.terminal)} · {rowProps.terminal.currentCommand || "shell"} · {terminalActivity(rowProps.terminal)}</>}
-    onClick={() => {
-      closeMobile();
-      props.onOpenPty(rowProps.terminal);
-    }}>{rowProps.terminal.title || "Shell"}</NavRow>;
+  // A terminal on a machine that is away is not running there now as far as anyone can see; closing it still works
+  // (the hub stops it when its machine is back).
+  const terminalAway = (terminal: Pty) => deviceStates().get(machineOfTerminal(terminal))?.online === false;
+  const TerminalRow = (rowProps: { terminal: Pty }) => <ContextMenu placement={menuPlacement()}>
+    <ContextMenuTrigger as={NavRow} icon={<StatusDot label={terminalAway(rowProps.terminal) ? "Offline" : "Running"} tone={terminalAway(rowProps.terminal) ? "muted" : "success"} />}
+      detail={<>{terminalScope(rowProps.terminal)} · {rowProps.terminal.currentCommand || "shell"} · {terminalActivity(rowProps.terminal)}</>}
+      onClick={() => {
+        closeMobile();
+        props.onOpenPty(rowProps.terminal);
+      }}>{rowProps.terminal.title || "Shell"}</ContextMenuTrigger>
+    <ContextMenuContent>
+      <MenuRow icon={<Icons.Terminal />} onSelect={() => { closeMobile(); props.onOpenPty(rowProps.terminal); }}>Open</MenuRow>
+      <MenuRow icon={<Icons.Edit />} onSelect={() => { setRename({ type: "terminal", terminal: rowProps.terminal }); setRenameValue(rowProps.terminal.title || "Shell"); }}>Rename</MenuRow>
+      <MenuRow icon={<Icons.Close />} destructive onSelect={() => setDeleting({ type: "terminal", terminal: rowProps.terminal })}>Close terminal</MenuRow>
+    </ContextMenuContent>
+  </ContextMenu>;
 
   const Group = (groupProps: { label: string; projects: Project[]; chatRoot?: Project; workspace?: boolean; emptyLabel?: string }) => {
     const allChats = () => sortChats(groupProps.chatRoot?.sessions.filter((chat) => chat.status !== "draft" || chat.id !== props.selectedId || chat.pinned || Boolean(props.runtime.getProcess(chat.id))) || [], chatSort());

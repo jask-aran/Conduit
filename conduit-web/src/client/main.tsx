@@ -993,6 +993,15 @@ function App() {
     const ordinary = templates().filter((item) => item.defaultable !== false);
     return [...ordinary, ...externalProfiles()];
   });
+  /**
+   * The profiles a chat in a place can use: on a client, only harnesses that run there (the server says which: the
+   * Conduit runtime, whose tools reach the device, and what the device runs itself). Conduit's own profiles name no
+   * harness of their own.
+   */
+  const profilesAt = (project?: Project | null) => {
+    const allowed = project?.capabilities && !project.capabilities.device.local ? project.capabilities.harnesses : null;
+    return allowed ? profiles().filter((profile) => allowed.includes(profile.implementation || "conduit-runtime")) : profiles();
+  };
   // The main pane's chat, and everything it drives (state/chat-session.ts).
   const session = createChatSession({
     catalogue,
@@ -5194,7 +5203,7 @@ function App() {
       models={current.models}
       permissions={current.capability("permissionModes") ? current.permissions : undefined}
       serviceLevels={current.manifest()?.serviceLevels?.length ? current.serviceLevels : undefined}
-      profiles={profiles()}
+      profiles={profilesAt(props.place?.current ?? props.workspace)}
       activeProfile={current.activeProfile()}
      
       serverOnline={serverReachable()}
@@ -5314,7 +5323,7 @@ function App() {
       {props.notice}
       <Conversation chat={surfaceChat} busy={surfaceChat.presentation().kind === "opening_live"} empty={props.empty} sending={props.sending} opening={props.opening} stackRef={props.stackRef}
         transcript={<Transcript chat={surfaceChat} supports={current.capability} markdownRenderer={markdownRenderer()} profileLabel={current.activeProfile()?.label || current.activeProfile()?.id || surfaceChat.templateId() || undefined} projectId={props.project?.id} />}
-        composer={<Composer chat={surfaceChat} opening={props.opening} place={props.place} supports={current.capability} attachments={current.attachments} attachmentsSupported={current.capability("attachments", true)} models={current.models} permissions={current.capability("permissionModes") ? current.permissions : undefined} serviceLevels={current.manifest()?.serviceLevels?.length ? current.serviceLevels : undefined} profiles={profiles()} activeProfile={current.activeProfile()} onOpenModelSelector={props.modelSelector ? openModelSelector : undefined} modelSelectorShortcut={props.modelSelector ? shortcutManager.formatEffectiveBinding(COMMAND_IDS.openModelSelector) : undefined} serverOnline={serverReachable()} voiceSettings={voiceSettings()} keyboardOwner={props.keyboardOwner} onChooseProfile={(id) => void current.switchProfile(id).catch(showError)} onOpenSettings={openSettings} onOpenAttachments={current.openAttachments} onStatusChange={current.setComposerStatus} />} />
+        composer={<Composer chat={surfaceChat} opening={props.opening} place={props.place} supports={current.capability} attachments={current.attachments} attachmentsSupported={current.capability("attachments", true)} models={current.models} permissions={current.capability("permissionModes") ? current.permissions : undefined} serviceLevels={current.manifest()?.serviceLevels?.length ? current.serviceLevels : undefined} profiles={profilesAt(props.place?.current)} activeProfile={current.activeProfile()} onOpenModelSelector={props.modelSelector ? openModelSelector : undefined} modelSelectorShortcut={props.modelSelector ? shortcutManager.formatEffectiveBinding(COMMAND_IDS.openModelSelector) : undefined} serverOnline={serverReachable()} voiceSettings={voiceSettings()} keyboardOwner={props.keyboardOwner} onChooseProfile={(id) => void current.switchProfile(id).catch(showError)} onOpenSettings={openSettings} onOpenAttachments={current.openAttachments} onStatusChange={current.setComposerStatus} />} />
     </>;
   };
 
