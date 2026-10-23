@@ -272,7 +272,8 @@ function safeSegments(relativePath = "") {
   const value = String(relativePath).replaceAll("\\", "/");
   if (!value) return [];
   const segments = value.split("/");
-  if (path.posix.isAbsolute(value) || segments.some((segment) => !segment || segment === "." || segment === "..")) {
+  // A segment like `C:` is a drive on a Windows device: another folder, not one inside this.
+  if (path.posix.isAbsolute(value) || segments.some((segment) => !segment || segment === "." || segment === ".." || /^[a-z]:/i.test(segment))) {
     throw inspectorError("invalid_workspace_path", "The requested path is invalid");
   }
   if (segments[0] === ".conduit") throw inspectorError("hidden_workspace_path", "Conduit internals are not available");

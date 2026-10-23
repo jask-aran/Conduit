@@ -6,11 +6,13 @@ import { err, FileError } from "@earendil-works/pi-durable/env";
 import { installedClientOrigin } from "../native-auth.js";
 import { deviceHost } from "../workspace-host.js";
 import { readWorkspaceFile, readWorkspaceFileMetadata, resolveInspectorPath } from "../workspace-inspector.js";
-import { directId, verifyGrant } from "./direct.js";
+import os from "node:os";
+import { directAddresses, proofKey, proofOf, verifyGrant } from "./direct.js";
 import { decode, encode, HANDLE_METHODS, METHOD_GRANTS } from "./protocol.js";
 
-// A file read whole to answer one request: past this, the hub's way (which caps lower still) is no worse.
-const MAX_DIRECT_BYTES = 256 * 1024 * 1024;
+// A file read whole to answer one request, and how many are read at once: past either, the hub's way.
+const MAX_DIRECT_BYTES = 64 * 1024 * 1024;
+const MAX_READING = 4;
 const STATUS = { path_not_found: 404, ENOENT: 404, permission_denied: 403, file_too_large: 413 };
 
 /**
@@ -32,9 +34,9 @@ export function serveDirect({ secret, call, log = console }) {
         if (method === "close") held.delete(target);
         return encode(value);
       }
-      // A grant is to read: nothing that writes, runs or watches is reached this way.
+      // A grant is to read: nothing that writes, runs or watches is reached this way, and nothing outside its place.
       if (METHOD_GRANTS[method]?.grant !== "read" || method === "watch") return encode(err(new FileError("permission_denied", `${method} is not a read`)));
-      const value = await call(method, decode(args, { FileError }), cwd, context, () => {});
+      const value = await call(method, decode(args, { FileError }), cwd, context, () => {}, { confine: true });
       if (value?.ok && value.value && typeof value.value.close === "function") {
         const id = `h_${crypto.randomUUID()}`;
         held.set(id, value.value);
@@ -44,7 +46,17 @@ export function serveDirect({ secret, call, log = console }) {
     },
   });
 
+  // Answered on loopback and the addresses offered (its networks', its tailnet's) only: never on a public one. Read
+  // as each request comes, since a laptop's addresses change, and kept a moment.
+  let offered = { at: 0, addresses: new Set() };
+  const isOffered = (address) => {
+    if (Date.now() - offered.at > 10_000) offered = { at: Date.now(), addresses: new Set(directAddresses(os.networkInterfaces()).map((item) => item.address)) };
+    return offered.addresses.has(address);
+  };
+  let reading = 0;
   const server = http.createServer(async (request, response) => {
+    const arrivedAt = String(request.socket.localAddress || "").replace(/^::ffff:/, "");
+    if (!/^127\./.test(arrivedAt) && arrivedAt !== "::1" && !isOffered(arrivedAt)) return request.socket.destroy();
     const origin = installedClientOrigin(request.headers.origin);
     if (origin) {
       response.setHeader("Access-Control-Allow-Origin", origin);
@@ -63,13 +75,21 @@ export function serveDirect({ secret, call, log = console }) {
     }
     const json = (status, body) => { response.writeHead(status, { "Content-Type": "application/json" }); response.end(JSON.stringify(body)); };
     const url = new URL(request.url || "/", "http://127.0.0.1");
-    // Which node this is, for a client choosing among its addresses; no grant needed to ask.
-    if (request.method === "GET" && url.pathname === "/health") return json(200, { ok: true, id: directId(secret) });
+    // Whether this is the node a grant was for: its answer to the client's challenge, with the grant's nonce. Says
+    // nothing about the node to anyone without the hub's word for it.
+    if (request.method === "GET" && url.pathname === "/health") {
+      const nonce = url.searchParams.get("n");
+      const challenge = url.searchParams.get("c");
+      if (!nonce || !challenge || nonce.length > 64 || challenge.length > 128) return json(200, { ok: true });
+      return json(200, { ok: true, proof: proofOf(proofKey(secret, nonce), challenge) });
+    }
     if (request.method !== "GET" || url.pathname !== "/file") return json(404, { error: "not_found" });
     const grant = verifyGrant(secret, String(request.headers.authorization || "").replace(/^Bearer\s+/i, ""));
     if (!grant) return json(401, { error: "direct_grant_invalid", message: "This read needs a grant from the hub" });
     const relative = url.searchParams.get("path");
     if (!relative) return json(400, { error: "workspace_path_required" });
+    if (reading >= MAX_READING) return json(503, { error: "direct_busy", message: "This device is busy; read through the hub" });
+    reading += 1;
     const held = new Map();
     try {
       const root = deviceHost({ hub: local(held), nodeId: "self", place: grant.place, label: grant.label || "" });
@@ -80,7 +100,8 @@ export function serveDirect({ secret, call, log = console }) {
         const etag = `"${metadata.revision}"`;
         if (request.headers["if-none-match"] === etag) { response.writeHead(304, { ETag: etag }); return response.end(); }
         if (metadata.size > MAX_DIRECT_BYTES) return json(413, { error: "file_too_large", message: "That file is too large to open here" });
-        const content = await resolved.host.read(resolved.relativePath);
+        const content = await resolved.host.read(resolved.relativePath, MAX_DIRECT_BYTES + 1);
+        if (content.length > MAX_DIRECT_BYTES) return json(413, { error: "file_too_large", message: "That file is too large to open here" });
         const name = encodeURIComponent(path.basename(resolved.relativePath));
         response.writeHead(200, {
           "Content-Type": metadata.mime, "Content-Length": content.length, ETag: etag, "Cache-Control": "private, no-cache",
@@ -101,11 +122,12 @@ export function serveDirect({ secret, call, log = console }) {
       });
       else response.destroy();
     } finally {
+      reading -= 1;
       for (const handle of held.values()) void handle.close?.(BACKGROUND_CONTEXT);
     }
   });
-  // Every IPv4 interface: loopback for this machine's app, its networks' and tailnet's addresses for others nearby.
-  // Nothing is read without the hub's grant, whichever way it comes in.
+  // Every IPv4 interface, answered only on loopback and the addresses offered (above); nothing is read without the
+  // hub's grant whichever way it comes in.
   const listening = new Promise((resolve) => server.listen(0, "0.0.0.0", () => resolve(server.address().port)));
   server.on("error", (error) => log.warn?.(`[conduit-node] direct reads: ${error.message}`));
   return { listening, close: () => server.close() };

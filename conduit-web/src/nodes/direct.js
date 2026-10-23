@@ -8,19 +8,24 @@ import crypto from "node:crypto";
 export const DIRECT_TTL_MS = 10 * 60_000;
 
 /**
- * What a node answering reads is known by, to a client that has found something at one of its addresses: worked out
- * from the key's hash by both the node and the hub, so the hub can say what to expect and the node can say it is so
- * (nothing else; it is not a secret, and a grant still decides what may be read).
+ * How a client knows it has found the node and not whatever answers at an address it was given (another machine on
+ * that address now, something on the port after a restart), before it hands over a grant: the hub gives the client a
+ * key derived from the node's secret and the grant's nonce, the client sends a challenge, and only the node can answer
+ * it with that key. Nothing in the answer is any use to anyone else.
  */
-export const directId = (secret) => crypto.createHash("sha256").update(`direct:${secret}`).digest("hex").slice(0, 16);
+export const proofKey = (secret, nonce) => mac(secret, `direct-proof:${nonce}`);
+export const proofOf = (key, challenge) => crypto.createHmac("sha256", key).update(String(challenge)).digest("hex");
 
 // The kinds of address a node offers for reads: never one on the internet, where the grant would cross in the clear.
 const PRIVATE = /^(10(\.\d{1,3}){3}|172\.(1[6-9]|2\d|3[01])(\.\d{1,3}){2}|192\.168(\.\d{1,3}){2})$/;
 const TAILNET = /^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])(\.\d{1,3}){2}$/;
 /** This machine's addresses a client could read from, nearest kind first: its networks', then its tailnet's. */
+// Adapters only this machine can reach (Hyper-V's and WSL's switch, containers' bridges): their private addresses
+// often repeat on every machine, so offering them would only send clients to someone else's.
+const VIRTUAL = /^(vEthernet|docker|br-|veth|virbr|lxc|cni|podman)/i;
 export function directAddresses(interfaces) {
   const found = [];
-  for (const list of Object.values(interfaces)) for (const item of list || []) {
+  for (const [name, list] of Object.entries(interfaces)) for (const item of VIRTUAL.test(name) ? [] : list || []) {
     if (item.internal || (item.family !== "IPv4" && item.family !== 4)) continue;
     const reach = PRIVATE.test(item.address) ? "private" : TAILNET.test(item.address) ? "tailnet" : null;
     if (reach && !found.some((known) => known.address === item.address)) found.push({ address: item.address, reach });

@@ -34,7 +34,7 @@ sha2 = "0.10"
 [target.'cfg(windows)'.dependencies]
 keyring = { version = "3", features = ["windows-native"] }
 # Only for the caption colour: the title bar is native, and stays native.
-windows = { version = "0.61", features = ["Win32_Foundation", "Win32_Graphics_Dwm", "Win32_UI_WindowsAndMessaging", "Win32_UI_Shell"] }
+windows = { version = "0.61", features = ["Win32_Foundation", "Win32_Graphics_Dwm", "Win32_UI_WindowsAndMessaging", "Win32_UI_Shell", "Win32_Security", "Win32_System_JobObjects"] }
 # WebView2's certificate-error event, at the version wry already links.
 webview2-com = "0.38"
 
