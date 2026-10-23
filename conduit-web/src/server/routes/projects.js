@@ -406,7 +406,9 @@ export function registerProjectRoutes(app, {
       if (!project) return response.status(404).json({ error: "project_not_found" });
       const nodeId = remoteNode(project);
       if (!nodeId) return response.status(404).json({ error: "direct_not_on_node" });
-      const grant = await nodeHub.directGrant(nodeId, project.place, project.workingRoot);
+      // A page asking is named in the grant, so the node lets it read the answer; the apps' origins it knows already.
+      const origin = typeof request.headers.origin === "string" && /^https?:\/\/[^/]+$/.test(request.headers.origin) ? request.headers.origin : "";
+      const grant = await nodeHub.directGrant(nodeId, project.place, project.workingRoot, origin);
       if (!grant) return response.status(404).json({ error: "direct_unavailable" });
       response.setHeader("Cache-Control", "no-store");
       response.json(grant);

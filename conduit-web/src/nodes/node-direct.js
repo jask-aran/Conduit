@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import http from "node:http";
+import https from "node:https";
 import path from "node:path";
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import { err, FileError } from "@earendil-works/pi-durable/env";
@@ -21,7 +22,7 @@ const STATUS = { path_not_found: 404, ENOENT: 404, permission_denied: 403, file_
  * agent's own guarded environment call, so a grant reaches no further than the hub's calls do: the place must be a
  * shared root, the path inside it, and kept-back files stay kept back.
  */
-export function serveDirect({ secret, call, log = console }) {
+export function serveDirect({ secret, call, log = console, certificate = null }) {
   // The agent's calls, as the hub's execution environment would make them over the socket; readers opened for one
   // request are that request's, and closed with it.
   const local = (held) => ({
@@ -54,17 +55,22 @@ export function serveDirect({ secret, call, log = console }) {
     return offered.addresses.has(address);
   };
   let reading = 0;
-  const server = http.createServer(async (request, response) => {
+  const answer = async (request, response) => {
     const arrivedAt = String(request.socket.localAddress || "").replace(/^::ffff:/, "");
     if (!/^127\./.test(arrivedAt) && arrivedAt !== "::1" && !isOffered(arrivedAt)) return request.socket.destroy();
-    const origin = installedClientOrigin(request.headers.origin);
-    if (origin) {
+    // The apps' origins are let in; a page's only with a grant that names it (below), and to the challenge.
+    const asked = typeof request.headers.origin === "string" ? request.headers.origin : "";
+    const letIn = (origin) => {
+      if (!origin) return;
       response.setHeader("Access-Control-Allow-Origin", origin);
       response.setHeader("Vary", "Origin");
       response.setHeader("Access-Control-Expose-Headers", "ETag");
-    }
+    };
+    letIn(installedClientOrigin(asked));
     if (request.method === "OPTIONS") {
-      response.writeHead(origin ? 204 : 403, {
+      // Asked before any grant is shown: what the GET may send. Whether it may read the answer is the GET's to say.
+      if (asked && !response.hasHeader("Access-Control-Allow-Origin")) letIn(asked);
+      response.writeHead(asked ? 204 : 403, {
         "Access-Control-Allow-Methods": "GET",
         "Access-Control-Allow-Headers": "authorization, if-none-match",
         // A page reaching loopback is asked about first (Private Network Access).
@@ -80,12 +86,14 @@ export function serveDirect({ secret, call, log = console }) {
     if (request.method === "GET" && url.pathname === "/health") {
       const nonce = url.searchParams.get("n");
       const challenge = url.searchParams.get("c");
+      if (asked && !response.hasHeader("Access-Control-Allow-Origin")) letIn(asked);
       if (!nonce || !challenge || nonce.length > 64 || challenge.length > 128) return json(200, { ok: true });
       return json(200, { ok: true, proof: proofOf(proofKey(secret, nonce), challenge) });
     }
     if (request.method !== "GET" || url.pathname !== "/file") return json(404, { error: "not_found" });
     const grant = verifyGrant(secret, String(request.headers.authorization || "").replace(/^Bearer\s+/i, ""));
     if (!grant) return json(401, { error: "direct_grant_invalid", message: "This read needs a grant from the hub" });
+    if (asked && grant.origin === asked && !response.hasHeader("Access-Control-Allow-Origin")) letIn(asked);
     const relative = url.searchParams.get("path");
     if (!relative) return json(400, { error: "workspace_path_required" });
     if (reading >= MAX_READING) return json(503, { error: "direct_busy", message: "This device is busy; read through the hub" });
@@ -125,10 +133,28 @@ export function serveDirect({ secret, call, log = console }) {
       reading -= 1;
       for (const handle of held.values()) void handle.close?.(BACKGROUND_CONTEXT);
     }
-  });
+  };
+  const server = http.createServer(answer);
   // Every IPv4 interface, answered only on loopback and the addresses offered (above); nothing is read without the
   // hub's grant whichever way it comes in.
   const listening = new Promise((resolve) => server.listen(0, "0.0.0.0", () => resolve(server.address().port)));
   server.on("error", (error) => log.warn?.(`[conduit-node] direct reads: ${error.message}`));
-  return { listening, close: () => server.close() };
+  // And over https where this machine has a certificate a browser trusts (its tailnet name), for pages, which may not
+  // read plain HTTP: the same answers on a port of its own. Renewed daily; resolves to { name, port } or null.
+  let secure = null;
+  let renew = null;
+  const secured = (async () => {
+    const first = await certificate?.().catch(() => null);
+    if (!first) return null;
+    secure = https.createServer({ cert: first.cert, key: first.key }, answer);
+    secure.on("error", (error) => log.warn?.(`[conduit-node] direct reads over https: ${error.message}`));
+    renew = setInterval(async () => {
+      const next = await certificate().catch(() => null);
+      if (next) secure.setSecureContext({ cert: next.cert, key: next.key });
+    }, 24 * 3600_000);
+    renew.unref?.();
+    const port = await new Promise((resolve) => secure.listen(0, "0.0.0.0", () => resolve(secure.address().port)));
+    return { name: first.name, port };
+  })();
+  return { listening, secured, close: () => { server.close(); secure?.close(); clearInterval(renew); } };
 }

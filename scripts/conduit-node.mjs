@@ -5,6 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { startNodeAgent } from "../conduit-web/src/nodes/node-agent.js";
+import { tailnetCert } from "../conduit-web/src/nodes/tailnet-cert.js";
 import { relayEnvironment, stdioDialer } from "../conduit-web/src/nodes/node-relay.js";
 import { DEFAULT_DENY } from "../conduit-web/src/nodes/secrets.js";
 import { buildManagedToolEnvironment } from "./pi-runtime.mjs";
@@ -259,7 +260,7 @@ if (command === "pair") {
   const agents = settings.pairings.filter((pairing) => !pairing.relayed).map((pairing) => {
     if (!pairing.roots.length) console.warn(`Nothing is shared with ${pairing.mainUrl} yet; it will see this device with no folders.`);
     return startNodeAgent({ mainUrl: pairing.mainUrl, routes: pairing.routes, key: pairing.key, name: settings.name || os.hostname(), roots: pairing.roots, shellEnv,
-      browse: Boolean(pairing.browse), onShare: keepShare(pairing.mainUrl), newFolders: newFoldersFor(pairing.mainUrl), onReplaced: replaced, direct: true,
+      browse: Boolean(pairing.browse), onShare: keepShare(pairing.mainUrl), newFolders: newFoldersFor(pairing.mainUrl), onReplaced: replaced, direct: true, certificate: () => tailnetCert(home),
       relays: (pairing.relays || []).map(({ env, command: relayed }) => relayEnvironment({ env, command: relayed })) });
   });
   for (const signal of ["SIGINT", "SIGTERM"]) process.on(signal, () => { for (const agent of agents) agent.stop(); process.exit(0); });

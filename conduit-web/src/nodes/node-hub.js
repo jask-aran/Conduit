@@ -32,6 +32,16 @@ const RELAYS_PER_SOCKET = 8;
 const RELAY_ENV_MAX = 64;
 const HELLO_WAIT_MS = 30_000;
 
+/** Where a node says it answers reads itself (node-direct.js), as far as it can be taken at its word. */
+function directOf(direct) {
+  if (!Number.isInteger(direct?.port) || direct.port <= 0) return null;
+  const addresses = (Array.isArray(direct.addresses) ? direct.addresses : [])
+    .filter((item) => typeof item?.address === "string" && /^[\d.]+$/.test(item.address) && ["private", "tailnet"].includes(item.reach)).slice(0, 8);
+  const tls = typeof direct.tls?.name === "string" && /^[a-z0-9-]+(\.[a-z0-9-]+)*\.ts\.net$/i.test(direct.tls.name) && Number.isInteger(direct.tls.port)
+    ? { name: direct.tls.name.toLowerCase(), port: direct.tls.port } : null;
+  return { port: direct.port, addresses, tls };
+}
+
 export class NodeHub extends EventEmitter {
   constructor({ dataRoot, allowRemote = isNodeAddress }) {
     super();
@@ -218,18 +228,23 @@ export class NodeHub extends EventEmitter {
    * (node-direct.js): its loopback address and the token, signed with the key hash the node can work out. Null when
    * it is away or does not.
    */
-  async directGrant(nodeId, place, label = "") {
+  async directGrant(nodeId, place, label = "", origin = "") {
     const node = this.live.get(nodeId);
     const record = await this.get(nodeId);
     if (!node?.ready || !node.direct || !record?.keyHash || !place?.root) return null;
     const expiresAt = Date.now() + DIRECT_TTL_MS;
     const { port, addresses } = node.direct;
     // Nearest first: its own machine's loopback (only the app beside it can use that), then its networks', its tailnet's.
+    const { tls } = node.direct;
     const routes = [{ url: `http://127.0.0.1:${port}`, reach: "loopback" },
-      ...addresses.map(({ address, reach }) => ({ url: `http://${address}:${port}`, reach }))];
+      ...addresses.map(({ address, reach }) => ({ url: `http://${address}:${port}`, reach })),
+      // A browser can use only this one: https, under a name its certificate covers.
+      ...(tls ? [{ url: `https://${tls.name}:${tls.port}`, reach: "tailnet" }] : [])];
     const nonce = crypto.randomBytes(12).toString("base64url");
     return { nodeId, routes, expiresAt, nonce, proof: proofKey(record.keyHash, nonce),
-      token: signGrant(record.keyHash, { place: { root: place.root, path: place.path || "" }, label, read: true, expires: expiresAt, nonce }) };
+      // The page it is for, when one asked: the node lets that origin read the answer.
+      token: signGrant(record.keyHash, { place: { root: place.root, path: place.path || "" }, label, read: true, expires: expiresAt, nonce,
+        ...(origin ? { origin } : {}) }) };
   }
 
   async computer(nodeId, method, at) {
@@ -371,9 +386,7 @@ export class NodeHub extends EventEmitter {
           harnesses: Array.isArray(message.harnesses) ? message.harnesses.filter((id) => typeof id === "string") : [],
           browse: message.browse === true, ready: true,
           // Where it answers reads itself on its own machine (node-direct.js).
-          direct: Number.isInteger(message.direct?.port) && message.direct.port > 0 ? { port: message.direct.port,
-            addresses: (Array.isArray(message.direct.addresses) ? message.direct.addresses : [])
-              .filter((item) => typeof item?.address === "string" && ["private", "tailnet"].includes(item.reach)).slice(0, 8) } : null });
+          direct: directOf(message.direct) });
         this.live.set(record.id, node);
         node.send({ type: "welcome", features: NODE_FEATURES });
         Object.assign(record, { roots: node.roots, platform: node.platform, harnesses: node.harnesses, browse: node.browse, lastSeenAt: new Date().toISOString() });
@@ -400,6 +413,8 @@ export class NodeHub extends EventEmitter {
         }
         return;
       }
+      // Where it answers reads, again: an https route found after its hello (a certificate takes a moment).
+      if (message.type === "direct") { if (node.ready) node.direct = directOf(message.direct); return; }
       if (message.type === "proc") return this.following.get(`${record.id} ${message.proc}`)?.deliver(message);
       if (message.type === "tunnel") return this.tunnels.get(`${record.id} ${message.tunnel}`)?.deliver(message);
       if (message.type === "event" && node.watchers.has(message.id)) return node.watchers.get(message.id).onEvent(message);
