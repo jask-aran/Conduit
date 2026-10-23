@@ -53,6 +53,12 @@ export class RuntimeHub {
     return true;
   }
 
+  /** What else is known of a connection once it is asked (the machine it is on, from its address). Shown, never trusted. */
+  note(id, fields) {
+    const client = [...this.clients].find((candidate) => candidate.peer.id === id);
+    if (client) Object.assign(client.peer, fields);
+  }
+
   /** The live connections, as Settings and the CLI show them. */
   connections() {
     return [...this.clients].map((client) => ({ ...client.peer }));

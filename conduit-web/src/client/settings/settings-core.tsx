@@ -2,9 +2,8 @@ import { Icons } from "@/components/ui";
 import { createDecisionScope } from "@/components/decision-dialog";
 import { createEffect, createMemo, createSignal, For, lazy, on, onCleanup, onMount, Show } from "solid-js";
 import { BotIcon, LaptopIcon, Mic2Icon } from "lucide-solid";
-import { CableIcon, CloudIcon, HandIcon, MicOffIcon, RepeatIcon } from "lucide-solid";
+import { CloudIcon, HandIcon, MicOffIcon, RepeatIcon } from "lucide-solid";
 import { AboutSettingsFooter } from "./about-settings";
-import { ServersSettingsTile } from "./servers-settings";
 import { DesktopSettingsTile } from "./desktop-settings";
 import { DevicesSettingsTile } from "./devices-settings";
 import { toast } from "@/components/notifications";
@@ -53,7 +52,7 @@ import { uiPreferenceSaves } from "../preferences/ui-preferences";
 const sectionGroups = [
   { label: "Personal", sections: [{ id: "ui", label: "Appearance", icon: Icons.Monitor }, { id: "shortcuts", label: "Shortcuts", icon: Icons.Keyboard }] },
   { label: "AI", sections: [{ id: "models", label: "Models & accounts", icon: BotIcon }, { id: "prompts", label: "Prompts", icon: Icons.FileText }] },
-  { label: "System", sections: [{ id: "runtime", label: "Runtime", icon: Icons.Runtime }, { id: "servers", label: "Servers", icon: CableIcon }, { id: "devices", label: "Devices", icon: LaptopIcon }] },
+  { label: "System", sections: [{ id: "runtime", label: "Runtime", icon: Icons.Runtime }, { id: "devices", label: "Devices", icon: LaptopIcon }] },
   { label: "Services", sections: [{ id: "voice", label: "Voice", icon: Mic2Icon }, { id: "search", label: "Web search", icon: Icons.Search }] },
 ] as const;
 type VisibleSection = typeof sectionGroups[number]["sections"][number]["id"];
@@ -64,7 +63,6 @@ const sectionLabels: Record<Section, string> = {
   models: "Models & accounts",
   prompts: "Prompts",
   runtime: "Runtime",
-  servers: "Servers",
   devices: "Devices",
   workspaces: "Workspace profile",
   voice: "Voice",
@@ -1221,7 +1219,6 @@ export function Settings(props: {
               </SettingGroup>
             </>
           </Show>
-          <Show when={section() === "servers"}><ServersSettingsTile /></Show>
           <Show when={section() === "devices"}><DevicesSettingsTile projects={props.projects} onAddWorkspace={props.onAddWorkspace} onOpenTerminal={props.onOpenDeviceTerminal} onOpenWorkspace={props.onOpenWorkspace} /></Show>
           <Show when={section() === "shortcuts"}><ShortcutsSettings manager={props.shortcuts} /></Show>
           <Show when={section() === "runtime"}>
