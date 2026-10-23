@@ -49,15 +49,18 @@ function ask(projectId: string): Promise<Grant | null> {
   return asked;
 }
 
-// Per node: the address that answered as it, or that none did (asked again after a while: a laptop moves).
+// Per node and the addresses it gave (a node restarted listens elsewhere): the one that answered as it, or that none
+// did, asked again after a while (a laptop moves).
 const routes = new Map<string, Promise<string | null>>();
 const NO_ROUTE_MS = 2 * 60_000;
+const routeKey = (grant: Grant) => `${grant.nodeId} ${grant.routes.map((route) => route.url).join(" ")}`;
 function routeFor(grant: Grant): Promise<string | null> {
-  let found = routes.get(grant.nodeId);
+  const key = routeKey(grant);
+  let found = routes.get(key);
   if (!found) {
     found = nearest(grant);
-    routes.set(grant.nodeId, found);
-    void found.then((url) => { if (!url) setTimeout(() => { if (routes.get(grant.nodeId) === found) routes.delete(grant.nodeId); }, NO_ROUTE_MS); });
+    routes.set(key, found);
+    void found.then((url) => { if (!url) setTimeout(() => { if (routes.get(key) === found) routes.delete(key); }, NO_ROUTE_MS); });
   }
   return found;
 }
@@ -83,8 +86,9 @@ async function fromNode(projectId: string, query: string, init: RequestInit): Pr
     grants.delete(projectId);
   } catch (error) {
     if (init.signal?.aborted) throw error;
-    // Gone from that address: found again next time.
-    routes.delete(grant.nodeId);
+    // Gone from that address (moved, or restarted elsewhere): a fresh grant and its addresses next time.
+    routes.delete(routeKey(grant));
+    grants.delete(projectId);
   }
   return null;
 }
