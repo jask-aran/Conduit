@@ -168,8 +168,8 @@ export function AppDashboard(props: {
         { value: "unread", label: "Unread", count: unread() },
       ]} />
       <Segmented arrows label="Where" value={side()} onChange={(value) => chooseSide(value as "conduit" | "computer")} options={[
-        { value: "conduit", label: "Conduit", count: conduitChats().length },
-        { value: "computer", label: "Computer", count: computerChats().length },
+        { value: "conduit", label: "Chat", count: conduitChats().length },
+        { value: "computer", label: "Work", count: computerChats().length },
       ]} />
     </GroupSwitches>}
     actions={<FilterBar choices={[
@@ -177,7 +177,7 @@ export function AppDashboard(props: {
       profileChoice(props.profiles, new Set(allChats().map(({ chat }) => profileOf(props.profiles, chat))), profile(), (id) => { setProfile(id); setLimit(CHAT_PAGE); }),
       sortChoice(chatSort(), saveChatSort),
     ]}><ListSearch label="Search chats" onClick={() => props.onSearchChats("all")} /></FilterBar>}
-    compactHeading={<CompactHeading label={unreadOnly() ? "Unread" : "Recent chats"} count={chats().length} where={computer() ? "Computer" : "Conduit"} />}
+    compactHeading={<CompactHeading label={unreadOnly() ? "Unread" : "Recent chats"} count={chats().length} where={computer() ? "Work" : "Chat"} />}
     compactActions={<>
       <FiltersMenu choices={[
         { label: "Show", value: unreadOnly() ? "unread" : "all", onChange: (value) => { setUnreadOnly(value === "unread"); setLimit(CHAT_PAGE); }, options: [
@@ -185,8 +185,8 @@ export function AppDashboard(props: {
           { value: "unread", label: "Unread", detail: unread() },
         ] },
         { label: "Where", value: side(), onChange: (value) => chooseSide(value as "conduit" | "computer"), options: [
-          { value: "conduit", label: "Conduit", detail: conduitChats().length },
-          { value: "computer", label: "Computer", detail: computerChats().length },
+          { value: "conduit", label: "Chat", detail: conduitChats().length },
+          { value: "computer", label: "Work", detail: computerChats().length },
         ] },
         placeChoice(computer() ? "Workspace" : "Project", computer() ? "All workspaces" : "All projects", places(), place(), (id) => { setPlace(id); setLimit(CHAT_PAGE); }),
         profileChoice(props.profiles, new Set(allChats().map(({ chat }) => profileOf(props.profiles, chat))), profile(), (id) => { setProfile(id); setLimit(CHAT_PAGE); }),
