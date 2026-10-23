@@ -7,7 +7,7 @@ import { EventEmitter } from "node:events";
 import { WebSocketServer } from "ws";
 import { awaitWithContext, BACKGROUND_CONTEXT, withAbortSignal } from "@earendil-works/chord/context";
 import { decode, encode, NODE_FEATURES, NODE_PROTOCOL_VERSION } from "./protocol.js";
-import { DIRECT_TTL_MS, directId, signGrant } from "./direct.js";
+import { DIRECT_TTL_MS, proofKey, signGrant } from "./direct.js";
 import { FileError } from "@earendil-works/pi-durable/env";
 
 const hash = (key) => crypto.createHash("sha256").update(key).digest("hex");
@@ -42,6 +42,8 @@ export class NodeHub extends EventEmitter {
     // are two nodes on one device.
     this.records = null;
     this.devices = null;
+    // Per node, the runs (by `boot`) a newer run has replaced: refused from then on.
+    this.retired = new Map();
     this.live = new Map();
     // Device processes main follows, by `${nodeId} ${procId}`: they outlive a
     // socket, so a reconnect resumes each from the last byte it had.
@@ -127,6 +129,7 @@ export class NodeHub extends EventEmitter {
   }
 
   async forget(id) {
+    this.retired.delete(id);
     await this.load();
     const gone = this.records.find((record) => record.id === id);
     this.records = this.records.filter((record) => record.id !== id);
@@ -224,8 +227,9 @@ export class NodeHub extends EventEmitter {
     // Nearest first: its own machine's loopback (only the app beside it can use that), then its networks', its tailnet's.
     const routes = [{ url: `http://127.0.0.1:${port}`, reach: "loopback" },
       ...addresses.map(({ address, reach }) => ({ url: `http://${address}:${port}`, reach }))];
-    return { nodeId, id: directId(record.keyHash), routes, expiresAt,
-      token: signGrant(record.keyHash, { place: { root: place.root, path: place.path || "" }, label, read: true, expires: expiresAt }) };
+    const nonce = crypto.randomBytes(12).toString("base64url");
+    return { nodeId, routes, expiresAt, nonce, proof: proofKey(record.keyHash, nonce),
+      token: signGrant(record.keyHash, { place: { root: place.root, path: place.path || "" }, label, read: true, expires: expiresAt, nonce }) };
   }
 
   async computer(nodeId, method, at) {
@@ -346,8 +350,21 @@ export class NodeHub extends EventEmitter {
           node.send({ type: "refused", reason: `main speaks node protocol ${NODE_PROTOCOL_VERSION}, this node ${message.version}` });
           return ws.close();
         }
-        // A device reconnecting replaces its old socket.
-        this.live.get(record.id)?.socket.close(4000, "replaced");
+        // A device reconnecting replaces its old socket. A run replaced by a newer one never takes the pairing back: a
+        // node left running by an app that was closed or updated would otherwise trade it with its successor for good.
+        const boot = typeof message.boot === "string" ? message.boot : null;
+        const retired = this.retired.get(record.id) || new Set();
+        if (boot && retired.has(boot)) {
+          node.send({ type: "refused", reason: "a newer run of this node has the pairing", replaced: true });
+          return ws.close();
+        }
+        const previous = this.live.get(record.id);
+        if (previous?.boot && previous.boot !== boot) {
+          retired.add(previous.boot);
+          if (retired.size > 16) retired.delete(retired.values().next().value);
+          this.retired.set(record.id, retired);
+        }
+        previous?.socket.close(4000, "replaced");
         // `boot` names this run of the node; a node without one keeps no receipts.
         Object.assign(node, { roots: Array.isArray(message.roots) ? message.roots : [], platform: message.platform || null,
           boot: typeof message.boot === "string" ? message.boot : null,

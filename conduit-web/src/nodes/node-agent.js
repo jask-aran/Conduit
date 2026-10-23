@@ -98,7 +98,7 @@ export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: 
    * A call on this device's files or processes at a place, by the grants of the folder it falls in: what main asks over
    * the socket, and what direct reads (node-direct.js) ask here.
    */
-  async function envCall(method, decoded, cwd, context, emit) {
+  async function envCall(method, decoded, cwd, context, emit, { confine = false } = {}) {
     const rule = METHOD_GRANTS[method];
     if (!rule) return err(new FileError("not_supported", `${method} is not served by this node`));
     const home = placeOf(cwd);
@@ -106,8 +106,12 @@ export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: 
     if (!home) return refuse(method, "that folder");
     for (const at of rule.paths) {
       if (typeof decoded[at] !== "string") continue;
+      // On Windows a colon is a drive (another folder entirely) or a file's hidden stream: never part of a path asked for.
+      if (process.platform === "win32" && decoded[at].includes(":")) return refuse(method, decoded[at]);
       const target = realish(path.resolve(home, decoded[at]));
       if (!allowed(target, rule.grant)) return refuse(method, decoded[at]);
+      // A direct read's grant is for its place, not every folder shared.
+      if (confine && target !== home && !target.startsWith(home.endsWith(path.sep) ? home : home + path.sep)) return refuse(method, decoded[at]);
       if (rule.contents && keptBack(rootFor(roots, target, rule.grant), target)) {
         return err(new FileError("permission_denied", `${decoded[at]} is kept private on this device`, decoded[at]));
       }
@@ -185,7 +189,16 @@ export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: 
         return;
       }
       if (typeof message.type === "string" && message.type.startsWith("relay")) return relayFor(message.env)?.deliver(message);
-      if (message.type === "refused") { log.error?.(`[conduit-node] main refused this node: ${message.reason}`); stopped = true; return ws.close(); }
+      if (message.type === "refused") {
+        log.error?.(`[conduit-node] main refused this node: ${message.reason}`);
+        stopped = true;
+        // Grants main gave before no longer stand.
+        served?.close();
+        ws.close();
+        // Replaced by a newer run of it: as when main takes the connection over.
+        if (message.replaced === true) onReplaced?.();
+        return;
+      }
       if (message.type !== "call") return;
       if (typeof message.action === "string" && message.target === "env") {
         let finished = false;

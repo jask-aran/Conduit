@@ -11,7 +11,7 @@ import { isInstalledClient } from "../platform/installed-client.ts";
  * fetch plain HTTP from an https page, nor is it let in.
  */
 type Route = { url: string; reach: "loopback" | "private" | "tailnet" };
-type Grant = { nodeId: string; id: string; routes: Route[]; token: string; expiresAt: number };
+type Grant = { nodeId: string; routes: Route[]; token: string; expiresAt: number; nonce: string; proof: string };
 
 const hubPath = (projectId: string, query: string) => `/v0/projects/${encodeURIComponent(projectId)}/file?${query}`;
 
@@ -64,14 +64,27 @@ function routeFor(grant: Grant): Promise<string | null> {
   }
   return found;
 }
-/** Every address asked at once, the nearest that answers as this node taken as soon as the nearer ones have not. */
+/**
+ * Every address asked at once, the nearest that proves it is this node taken as soon as the nearer ones have not: a
+ * challenge only the node can answer with the hub's key for this grant (nodes/direct.js), so the grant is never
+ * handed to whatever else answers there.
+ */
 async function nearest(grant: Grant): Promise<string | null> {
-  const asked = grant.routes.map((route) => fetch(`${route.url}/health`, { signal: AbortSignal.timeout(1500), cache: "no-store" })
-    .then((response) => response.ok ? response.json() as Promise<{ id?: string }> : null)
-    .then((body) => body?.id === grant.id, () => false));
+  const challenge = [...crypto.getRandomValues(new Uint8Array(16))].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+  const expected = await proofOf(grant.proof, challenge).catch(() => null);
+  if (!expected) return null;
+  const asked = grant.routes.map((route) => fetch(`${route.url}/health?n=${encodeURIComponent(grant.nonce)}&c=${challenge}`, { signal: AbortSignal.timeout(1500), cache: "no-store" })
+    .then((response) => response.ok ? response.json() as Promise<{ proof?: string }> : null)
+    .then((body) => body?.proof === expected, () => false));
   for (const [index, answered] of asked.entries()) if (await answered) return grant.routes[index]!.url;
   return null;
 }
+
+const proofOf = async (key: string, challenge: string) => {
+  const secret = await crypto.subtle.importKey("raw", new TextEncoder().encode(key), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const signed = new Uint8Array(await crypto.subtle.sign("HMAC", secret, new TextEncoder().encode(challenge)));
+  return [...signed].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+};
 
 /** The node's own answer, or null for the hub's way. */
 async function fromNode(projectId: string, query: string, init: RequestInit): Promise<Response | null> {
@@ -82,7 +95,8 @@ async function fromNode(projectId: string, query: string, init: RequestInit): Pr
     const headers = new Headers(init.headers);
     headers.set("authorization", `Bearer ${grant.token}`);
     const response = await fetch(`${url}/file?${query}`, { ...init, headers });
-    if (response.status !== 401) return response;
+    if (response.status !== 401 && response.status < 500) return response;
+    // Not let in (a grant it no longer takes), or busy or failing: through the hub this time.
     grants.delete(projectId);
   } catch (error) {
     if (init.signal?.aborted) throw error;

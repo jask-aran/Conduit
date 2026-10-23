@@ -70,12 +70,49 @@ fn spawn_node<R: Runtime>(app: &AppHandle<R>) -> Result<Child, String> {
     fs::create_dir_all(&home).map_err(|error| error.to_string())?;
     let log = OpenOptions::new().create(true).append(true).open(home.join("node.log")).map_err(|error| error.to_string())?;
     let errors = log.try_clone().map_err(|error| error.to_string())?;
-    command(app, &["run"])?
+    let child = command(app, &["run"])?
         .stdin(Stdio::null())
         .stdout(log)
         .stderr(errors)
         .spawn()
-        .map_err(|error| error.to_string())
+        .map_err(|error| error.to_string())?;
+    #[cfg(windows)]
+    hold_with_app(&child);
+    Ok(child)
+}
+
+/// The node, and everything it starts, ends with the app: Windows does not end
+/// a process's children with it, so a node outlived an app that was closed or
+/// updated and kept taking the pairing back from its successor's. A job that
+/// kills what it holds when its last handle closes -- the app's, as it exits
+/// however it exits -- holds the node from the moment it starts.
+#[cfg(windows)]
+fn hold_with_app(child: &Child) {
+    use std::os::windows::io::AsRawHandle;
+    use std::sync::OnceLock;
+    use windows::core::PCWSTR;
+    use windows::Win32::Foundation::HANDLE;
+    use windows::Win32::System::JobObjects::{
+        AssignProcessToJobObject, CreateJobObjectW, JobObjectExtendedLimitInformation, SetInformationJobObject,
+        JOBOBJECT_EXTENDED_LIMIT_INFORMATION, JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
+    };
+    // One job for the app's life, kept as an integer (a handle is not Send).
+    static JOB: OnceLock<isize> = OnceLock::new();
+    let job = *JOB.get_or_init(|| unsafe {
+        let Ok(job) = CreateJobObjectW(None, PCWSTR::null()) else { return 0 };
+        let mut limits = JOBOBJECT_EXTENDED_LIMIT_INFORMATION::default();
+        limits.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+        let size = std::mem::size_of::<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>() as u32;
+        if SetInformationJobObject(job, JobObjectExtendedLimitInformation, &limits as *const _ as *const _, size).is_err() {
+            return 0;
+        }
+        job.0 as isize
+    });
+    if job != 0 {
+        unsafe {
+            let _ = AssignProcessToJobObject(HANDLE(job as *mut _), HANDLE(child.as_raw_handle() as *mut _));
+        }
+    }
 }
 
 /// The node and everything it started: a command left running after the node
