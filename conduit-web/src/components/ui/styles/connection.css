@@ -1,8 +1,8 @@
-.ui-connection { display: grid; width: 100%; max-width: var(--measure-xl); gap: var(--space-md); color: var(--foreground); }
+.ui-connection { display: grid; grid-template-columns: minmax(0, 1fr); width: 100%; max-width: var(--measure-xl); gap: var(--space-md); color: var(--foreground); }
 .ui-connection-heading { display: grid; gap: var(--space-lg); }
 .ui-connection-heading > :first-child { width: var(--control-lg); height: var(--control); }
 .ui-connection-heading h1 { margin: 0; font-size: var(--text-heading); font-weight: var(--weight-strong); line-height: var(--leading-tight); }
-.ui-connection-choices { display: grid; gap: var(--space-2xs); margin: 0; padding: 0; list-style: none; }
+.ui-connection-choices { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-2xs); margin: 0; padding: 0; list-style: none; }
 .ui-connection-choice { width: 100%; height: auto; min-height: var(--control); text-align: left; justify-content: start; }
 .ui-connection-choice > span:nth-child(2) { flex: 1; }
 .ui-connection-icon { display: grid; width: var(--icon); height: var(--icon); flex: none; place-items: center; }
