@@ -49,7 +49,9 @@ export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: 
   // Environments this one carries on its socket (decision 25): relayEnvironment()s.
   relays = [], browse = false, onShare = null,
   // The grants a folder shared by browsing gets: the device's choice for new folders, read when one is shared.
-  newFolders = () => ({ write: true, shell: true }) }) {
+  newFolders = () => ({ write: true, shell: true }),
+  // Told when another run of this node took the pairing over (main replaced this connection).
+  onReplaced = null }) {
   // Every way main can be reached, best first (its tailnet name, then a public
   // tunnel): a failed attempt tries the next, and a dropped connection starts again at the best.
   const ways = [...new Set([mainUrl, ...routes].filter(Boolean))];
@@ -176,8 +178,11 @@ export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: 
         calls.delete(message.id);
       }
     });
-    ws.on("close", () => {
+    ws.on("close", (code) => {
       clearInterval(beat);
+      // Main took another connection of this node over the one in use: another run of it (an app updated or
+      // opened twice) has the pairing now. Redialling would only take it back, and back again.
+      if (code === 4000 && socket === ws) { stopped = true; log.warn?.(`[conduit-node] another run of this node took over ${mainUrl}; stopping this one`); onReplaced?.(); }
       for (const relay of relays) relay.detach();
       for (const detach of following.values()) detach();
       following.clear();

@@ -52,6 +52,8 @@ export async function capabilitiesOf(project, { hub = null, backends, serverName
   const node = await hub?.get(at.nodeId);
   const live = hub?.live.get(at.nodeId);
   const onDevice = new Set(live?.harnesses || node?.harnesses || []);
+  // Codex's app-server daemon is Unix-only: a Windows node that still offers it (an older one) cannot run it.
+  if ((live?.platform || node?.platform) === "win32") onDevice.delete("codex");
   const harnesses = [...backends.adapters.keys()].filter((implementation) => {
     const adapter = backends.adapters.get(implementation);
     if (!adapter?.runsOnDevices) return false;

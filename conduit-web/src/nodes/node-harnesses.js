@@ -29,6 +29,8 @@ function onPath(command) {
 
 export function findHarnesses() {
   return Object.fromEntries(Object.entries(COMMANDS)
+    // Codex's app-server daemon is Unix-only (it lives behind a Unix socket): on Windows it is not offered.
+    .filter(([id]) => !(id === "codex" && process.platform === "win32"))
     .map(([id, names]) => [id, names.map(onPath).find(Boolean)]).filter(([, found]) => found));
 }
 
