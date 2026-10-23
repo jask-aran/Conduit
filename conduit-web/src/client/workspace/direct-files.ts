@@ -7,8 +7,8 @@ import { isInstalledClient } from "../platform/installed-client.ts";
  * A workspace's files read the shortest way (plan: "files take the shortest way"). The hub grants the read and says
  * where the workspace's node answers: its own machine's loopback, its networks', its tailnet's. The nearest of those
  * that answers as that node is used -- this machine for a workspace on it, the LAN or Tailscale for one nearby -- and
- * anything else, or any failure, goes through the hub as before. A page in a browser stays with the hub: it may not
- * fetch plain HTTP from an https page, nor is it let in.
+ * anything else, or any failure, goes through the hub as before. A page in a browser can use only a node's https route
+ * (its tailnet name, where Tailscale gives it a certificate), and is let in by the origin the grant names.
  */
 type Route = { url: string; reach: "loopback" | "private" | "tailnet" };
 type Grant = { nodeId: string; routes: Route[]; token: string; expiresAt: number; nonce: string; proof: string };
@@ -21,7 +21,7 @@ const notOnNode = new Set<string>();
 const renewing = new Set<string>();
 const RENEW_MS = 3 * 60_000;
 async function grantFor(projectId: string): Promise<Grant | null> {
-  if (!isInstalledClient() || notOnNode.has(projectId)) return null;
+  if (notOnNode.has(projectId)) return null;
   const held = await grants.get(projectId);
   if (held && held.expiresAt - 60_000 > Date.now()) {
     // Renewed while still good, so no read waits on the hub for it.
@@ -73,10 +73,12 @@ async function nearest(grant: Grant): Promise<string | null> {
   const challenge = [...crypto.getRandomValues(new Uint8Array(16))].map((byte) => byte.toString(16).padStart(2, "0")).join("");
   const expected = await proofOf(grant.proof, challenge).catch(() => null);
   if (!expected) return null;
-  const asked = grant.routes.map((route) => fetch(`${route.url}/health?n=${encodeURIComponent(grant.nonce)}&c=${challenge}`, { signal: AbortSignal.timeout(1500), cache: "no-store" })
+  // A page on https may fetch only https (the node's tailnet name); the apps and a plain-HTTP page, any of them.
+  const routes = isInstalledClient() || location.protocol !== "https:" ? grant.routes : grant.routes.filter((route) => route.url.startsWith("https:"));
+  const asked = routes.map((route) => fetch(`${route.url}/health?n=${encodeURIComponent(grant.nonce)}&c=${challenge}`, { signal: AbortSignal.timeout(1500), cache: "no-store" })
     .then((response) => response.ok ? response.json() as Promise<{ proof?: string }> : null)
     .then((body) => body?.proof === expected, () => false));
-  for (const [index, answered] of asked.entries()) if (await answered) return grant.routes[index]!.url;
+  for (const [index, answered] of asked.entries()) if (await answered) return routes[index]!.url;
   return null;
 }
 

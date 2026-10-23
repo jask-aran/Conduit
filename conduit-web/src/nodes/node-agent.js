@@ -54,8 +54,8 @@ export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: 
   newFolders = () => ({ write: true, shell: true }),
   // Told when another run of this node took the pairing over (main replaced this connection).
   onReplaced = null,
-  // Answer reads on loopback for clients holding the hub's grant (node-direct.js): the same device's app.
-  direct = false }) {
+  // Answer reads for clients holding the hub's grant (node-direct.js), and over https with `certificate()`'s.
+  direct = false, certificate = null }) {
   // Every way main can be reached, best first (its tailnet name, then a public
   // tunnel): a failed attempt tries the next, and a dropped connection starts again at the best.
   const ways = [...new Set([mainUrl, ...routes].filter(Boolean))];
@@ -71,6 +71,8 @@ export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: 
   let socket = null;
   let served = null;
   let directPort = null;
+  let directTls = null;
+  const directInfo = () => ({ port: directPort, addresses: directAddresses(os.networkInterfaces()), ...(directTls ? { tls: directTls } : {}) });
   let attempt = 0;
   let stopped = false;
   let timer = null;
@@ -167,7 +169,7 @@ export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: 
       way = 0;
       // Roots go by id; the path is for people to read, main never sends it back.
       send({ type: "hello", version: NODE_PROTOCOL_VERSION, name, platform: process.platform, boot: receipts.boot,
-        harnesses: Object.keys(harnesses), browse: Boolean(browse && onShare), ...(directPort ? { direct: { port: directPort, addresses: directAddresses(os.networkInterfaces()) } } : {}),
+        harnesses: Object.keys(harnesses), browse: Boolean(browse && onShare), ...(directPort ? { direct: directInfo() } : {}),
         roots: roots.map(({ id, path: label, read, write, shell, allow }) => ({ id, label, read, write, shell, allow })) });
       log.info?.(`[conduit-node] connected to ${mainUrl}${via === mainUrl ? "" : ` via ${via}`}`);
     });
@@ -385,8 +387,14 @@ export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: 
 
   // Listening first, so the first hello can say where.
   if (direct) {
-    served = serveDirect({ secret: keySecret(key), call: envCall, log });
+    served = serveDirect({ secret: keySecret(key), call: envCall, log, certificate });
     void served.listening.then((port) => { directPort = port; if (!stopped) connect(); });
+    // The https route comes when its certificate does: told to main then, and in every hello after.
+    void served.secured.then((tls) => {
+      if (!tls) return;
+      directTls = tls;
+      if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: "direct", direct: directInfo() }));
+    });
   } else connect();
   return {
     stop() {
