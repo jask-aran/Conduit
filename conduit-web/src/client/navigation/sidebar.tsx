@@ -573,8 +573,8 @@ export function Sidebar(props: {
   const byMachine = createMemo(() => (machines() || []).map((machine) => ({ machine,
     workspaces: workspaces().filter((project) => machineOfProject(project) === machine.id),
     terminals: terminals().filter((terminal) => machineOfTerminal(terminal) === machine.id) }))
-    .filter((group) => group.machine.hub || group.workspaces.length || group.terminals.length)
-    .sort((a, b) => Number(b.machine.hub) - Number(a.machine.hub)));
+    // Every environment on the network, with workspaces or not, here or away: the hub first, then those online.
+    .sort((a, b) => Number(b.machine.hub) - Number(a.machine.hub) || Number(b.machine.online) - Number(a.machine.online)));
   // A device's home terminal names its device after its folder ("~ on Desktop"); its section already does.
   const terminalScope = (terminal: Pty) => props.projects.find((project) => project.id === terminal.projectId)?.name || ((terminal.projectId === "computer" || terminal.projectId.startsWith("computer:") || terminal.projectId.startsWith("device:")) ? (terminal.cwd || "Computer").replace(/ on .+$/, "") : "Unknown workspace");
   const selectedTargets = createMemo<ChatTarget[]>(() => props.projects.flatMap((project) =>
