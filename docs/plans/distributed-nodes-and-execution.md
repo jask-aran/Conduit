@@ -721,3 +721,26 @@ public one, and its key still decides. A machine on the network but not the
 tailnet (the laptop's Windows) pairs over the LAN; pairing hands it the
 address the request came in by -- the LAN name over HTTPS, its certificate a
 real one, or a private address over the plain HTTP the port also answers.
+
+### 2026-10-23: browsing a client, coming and going, and the phone
+
+A client may let the hub browse it (`conduit-node browse on`, or "Let <hub>
+browse" on This device; set there only): the hub lists any folder by name and
+kind, and mounting one asks the device to share it with the grants the device
+gives new folders (`conduit-node new-folders`), which Mount a folder… uses
+too. Home and drives are refused, as the hub refuses its own. A native client
+chooses its own folders with its own picker; Conduit's explorer is for a
+browser and for another machine's folders.
+
+Availability is pushed: the runtime stream carries every paired environment's
+presence and `devices_changed` as it changes. While one is away its workspaces
+stay open (their chats are the hub's), the sidebar and the workspace's page say
+so, a chat there says sends still go and its tools wait (decision 21), and what
+could not be read is read again when it is back.
+
+The phone, decided and parked: a native node in the Android app (the node
+protocol in Kotlin, or Node itself embedded with nodejs-mobile to keep the
+agent's code), serving while Share is on as a foreground service, its first
+sources the media store (read only, by album), folders granted through
+Android's picker, and files shared in to Conduit. No shell: Android gives apps
+none.
