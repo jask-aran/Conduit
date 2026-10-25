@@ -206,8 +206,40 @@ pub struct CompanionStatus {
 #[tauri::command]
 pub fn device_companion_status<R: Runtime>(app: AppHandle<R>, companion: State<'_, Companion>) -> CompanionStatus {
     let running = companion.child.lock().expect("companion lock").as_mut().is_some_and(|child| matches!(child.try_wait(), Ok(None)));
-    let node = run_cli(&app, &["status"]).ok().and_then(|text| serde_json::from_str(&text).ok());
+    let node = node_status(&app);
     CompanionStatus { available: bundle_dir(&app).is_some(), serving: companion.wanted.load(Ordering::SeqCst), running, node }
+}
+
+/// What `conduit-node status` says, read straight from the node's settings (scripts/conduit-node.mjs `status`, the
+/// same shape, its keys left out): running the CLI for it took ~300 ms on the window's own thread, which froze the
+/// window while it ran, and the sidebar and Settings ask for it often.
+fn node_status<R: Runtime>(app: &AppHandle<R>) -> Option<serde_json::Value> {
+    use serde_json::{json, Value};
+    let home = node_home(app)?;
+    let settings: Value = fs::read_to_string(home.join("node.json")).ok().and_then(|text| serde_json::from_str(&text).ok()).unwrap_or_else(|| json!({}));
+    // Version 1 held one server at the top.
+    let pairings = match settings.get("pairings").and_then(Value::as_array) {
+        Some(list) => list.clone(),
+        None if settings.get("mainUrl").is_some() => vec![json!({ "mainUrl": settings["mainUrl"], "roots": settings.get("roots").cloned().unwrap_or_else(|| json!([])) })],
+        None => Vec::new(),
+    };
+    let flag = |pairing: &Value, key: &str| pairing.get(key).and_then(Value::as_bool).unwrap_or(false);
+    let pairings: Vec<Value> = pairings.iter().map(|pairing| {
+        let new_folders = pairing.get("newFolders");
+        let grant = |key: &str, otherwise: bool| new_folders.and_then(|value| value.get(key)).and_then(Value::as_bool).unwrap_or(otherwise);
+        json!({
+            "mainUrl": pairing.get("mainUrl").cloned().unwrap_or(Value::Null),
+            "nodeId": pairing.get("nodeId").cloned().unwrap_or(Value::Null),
+            "routes": pairing.get("routes").cloned().unwrap_or_else(|| json!([])),
+            "roots": pairing.get("roots").cloned().unwrap_or_else(|| json!([])),
+            "relays": pairing.get("relays").cloned().unwrap_or_else(|| json!([])),
+            "relayed": flag(pairing, "relayed"),
+            "browse": flag(pairing, "browse"),
+            "newFolders": { "write": grant("write", true), "shell": grant("shell", false) },
+        })
+    }).collect();
+    let host = std::env::var("COMPUTERNAME").or_else(|_| std::env::var("HOSTNAME")).unwrap_or_default();
+    Some(json!({ "name": settings.get("name").cloned().unwrap_or(Value::Null), "host": host, "pairings": pairings }))
 }
 
 /// Pair with a server, given the key it handed out and the node id it made.
