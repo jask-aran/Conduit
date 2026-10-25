@@ -47,7 +47,10 @@ const HEARTBEAT_MS = 30_000;
  */
 export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: shared, shellEnv = process.env, log = console,
   // How main is reached: a WebSocket, or a relay's stdin/stdout (node-relay.js).
-  dial = (url, { key: bearer }) => new WebSocket(url, { headers: { authorization: `Bearer ${bearer}` } }),
+  // A way that does not answer is given up in seconds, not the system's connect timeout; one found by its
+  // advertisement is pinned to the certificate its identity attested (find-hub.js), whatever its name.
+  dial = (url, { key: bearer, ca }) => new WebSocket(url, { headers: { authorization: `Bearer ${bearer}` }, handshakeTimeout: 8000,
+    ...(ca ? { ca, checkServerIdentity: () => undefined } : {}) }),
   // Environments this one carries on its socket (decision 25): relayEnvironment()s.
   relays = [], browse = false, onShare = null,
   // The grants a folder shared by browsing gets: the device's choice for new folders, read when one is shared.
@@ -55,11 +58,23 @@ export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: 
   // Told when another run of this node took the pairing over (main replaced this connection).
   onReplaced = null,
   // Answer reads for clients holding the hub's grant (node-direct.js), and over https with `certificate()`'s.
-  direct = false, certificate = null }) {
-  // Every way main can be reached, best first (its tailnet name, then a public
-  // tunnel): a failed attempt tries the next, and a dropped connection starts again at the best.
-  const ways = [...new Set([mainUrl, ...routes].filter(Boolean))];
+  direct = false, certificate = null,
+  // The hub's identity `{ id, key }` as it last said it, and where to keep what it says (its routes, its identity);
+  // `findHub(hub)` looks for it on this network when no way reaches it (find-hub.js).
+  hub = null, onRoutes = null, findHub = null }) {
+  // Every way main can be reached, best first (the address it was paired by, then those it has told this node of):
+  // a failed attempt tries the next; the one that worked is tried first again after a drop, and a whole round failing
+  // looks for the hub by its advertisement before backing off (it may have moved to another address).
+  const ways = [...new Set([mainUrl, ...routes].filter(Boolean))].map((url) => ({ url }));
   let way = 0;
+  let tried = 0;
+  let pinned = hub;
+  let lookedAt = 0;
+  const addWay = (found, first = false) => {
+    const at = ways.findIndex((item) => item.url === found.url);
+    if (at >= 0) ways.splice(at, 1);
+    if (first) ways.unshift(found); else ways.push(found);
+  };
   const roots = shared.map(view);
   const envs = new Map();
   // Processes outlive any one socket (decision 18): they are the device's.
@@ -139,10 +154,10 @@ export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: 
   }
 
   const connect = () => {
-    const via = ways[way % ways.length];
+    const { url: via, ca } = ways[way % ways.length];
     const url = new URL("/v0/nodes/connect", via);
     url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
-    const ws = dial(url, { key });
+    const ws = dial(url, { key, ca });
     socket = ws;
     const calls = new Map();
     // Handle ids are never reused, on this socket or the next: a reader main
@@ -171,7 +186,7 @@ export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: 
       }, HEARTBEAT_MS);
       beat.unref?.();
       attempt = 0;
-      way = 0;
+      tried = 0;
       // Roots go by id; the path is for people to read, main never sends it back.
       send({ type: "hello", version: NODE_PROTOCOL_VERSION, name, platform: process.platform, boot: receipts.boot,
         harnesses: Object.keys(harnesses), browse: Boolean(browse && onShare), ...(directPort ? { direct: JSON.parse(toldDirect = JSON.stringify(directInfo())) } : {}),
@@ -193,6 +208,20 @@ export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: 
         const features = Array.isArray(message.features) ? message.features : [];
         if (features.includes("relay")) for (const relay of relays) relay.attach(send);
         else if (relays.length) log.warn?.(`[conduit-node] ${mainUrl} does not relay; ${relays.map((relay) => relay.env).join(", ")} not carried`);
+        return;
+      }
+      // Every way the hub can be reached now, and who it is: kept, so this node still finds it once the address it
+      // was paired by stops answering. Only what a node may dial: https anywhere, plain http on this machine or a LAN.
+      if (message.type === "routes") {
+        const told = (Array.isArray(message.routes) ? message.routes : []).map(String).slice(0, 8).filter((route) => {
+          try {
+            const { protocol, hostname, pathname } = new URL(route);
+            return pathname === "/" && (protocol === "https:" || (protocol === "http:" && /^(127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|localhost$)/.test(hostname)));
+          } catch { return false; }
+        });
+        for (const route of told) if (!ways.some((item) => item.url === route)) addWay({ url: route });
+        if (typeof message.hub?.id === "string" && typeof message.hub?.key === "string") pinned = { id: message.hub.id, key: message.hub.key };
+        onRoutes?.({ routes: told, hub: pinned });
         return;
       }
       if (typeof message.type === "string" && message.type.startsWith("relay")) return relayFor(message.env)?.deliver(message);
@@ -260,8 +289,23 @@ export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: 
       handles.clear();
       if (socket === ws) socket = null;
       if (stopped) return;
-      // Not reached this way: the next one at once, and only a full round backs off.
-      if (!opened && ++way % ways.length !== 0) { timer = setTimeout(connect, 0); return; }
+      // Not reached this way: the next one at once. After a drop, the same way again first.
+      if (!opened) {
+        way = (way + 1) % ways.length;
+        if (++tried < ways.length) { timer = setTimeout(connect, 0); return; }
+        tried = 0;
+        // None answered: the hub may be on this network at another address. Looked for at most once a minute.
+        if (findHub && pinned && Date.now() - lookedAt > 60_000) {
+          lookedAt = Date.now();
+          void findHub(pinned).catch(() => []).then((found) => {
+            if (stopped) return;
+            for (const item of [...found].reverse()) addWay(item, true);
+            if (found.length) { way = 0; log.info?.(`[conduit-node] found ${mainUrl} at ${found[0].url}`); connect(); }
+            else timer = setTimeout(connect, RETRY_MS[Math.min(attempt++, RETRY_MS.length - 1)]);
+          });
+          return;
+        }
+      }
       const wait = RETRY_MS[Math.min(attempt++, RETRY_MS.length - 1)];
       timer = setTimeout(connect, wait);
     });

@@ -6,6 +6,7 @@ import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { startNodeAgent } from "../conduit-web/src/nodes/node-agent.js";
 import { tailnetCert } from "../conduit-web/src/nodes/tailnet-cert.js";
+import { findHub } from "../conduit-web/src/nodes/find-hub.js";
 import { relayEnvironment, stdioDialer } from "../conduit-web/src/nodes/node-relay.js";
 import { DEFAULT_DENY } from "../conduit-web/src/nodes/secrets.js";
 import { buildManagedToolEnvironment } from "./pi-runtime.mjs";
@@ -112,6 +113,17 @@ function isNodeRun(pid) {
 const newFoldersOf = (pairing) => ({ write: pairing?.newFolders?.write ?? true, shell: pairing?.newFolders?.shell ?? false });
 /** Read when a folder is shared, so a change from the app needs no restart. */
 const newFoldersFor = (mainUrl) => () => newFoldersOf(read().pairings.find((item) => item.mainUrl === mainUrl));
+
+/** What the hub said on connecting -- every way to reach it and its identity -- kept with its pairing (read fresh). */
+const keepRoutes = (mainUrl) => ({ routes: told, hub }) => {
+  const now = read();
+  const pairing = now.pairings.find((item) => item.mainUrl === mainUrl);
+  if (!pairing) return;
+  const routes = [...new Set([...(pairing.routes || []), ...told])].filter((route) => route !== mainUrl);
+  if (JSON.stringify(routes) === JSON.stringify(pairing.routes || []) && JSON.stringify(hub) === JSON.stringify(pairing.hub)) return;
+  Object.assign(pairing, { routes, ...(hub ? { hub } : {}) });
+  write(now);
+};
 
 /** A folder a browsing server asked for, kept with its pairing as `share` keeps one (read fresh: the CLI may have changed it). */
 const keepShare = (mainUrl) => (root) => {
@@ -261,6 +273,7 @@ if (command === "pair") {
     if (!pairing.roots.length) console.warn(`Nothing is shared with ${pairing.mainUrl} yet; it will see this device with no folders.`);
     return startNodeAgent({ mainUrl: pairing.mainUrl, routes: pairing.routes, key: pairing.key, name: settings.name || os.hostname(), roots: pairing.roots, shellEnv,
       browse: Boolean(pairing.browse), onShare: keepShare(pairing.mainUrl), newFolders: newFoldersFor(pairing.mainUrl), onReplaced: replaced, direct: true, certificate: () => tailnetCert(home),
+      hub: pairing.hub || null, onRoutes: keepRoutes(pairing.mainUrl), findHub,
       relays: (pairing.relays || []).map(({ env, command: relayed }) => relayEnvironment({ env, command: relayed })) });
   });
   for (const signal of ["SIGINT", "SIGTERM"]) process.on(signal, () => { for (const agent of agents) agent.stop(); process.exit(0); });

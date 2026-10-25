@@ -67,7 +67,7 @@ import { createHarnessModelCatalogue } from "./harnesses/model-catalogue.js";
 import { rememberedModel } from "./profile-model-memory.js";
 import { registerLiveSessionRoutes } from "./server/routes/live-sessions.js";
 import { registerProjectRoutes } from "./server/routes/projects.js";
-import { registerNodeRoutes } from "./server/routes/nodes.js";
+import { hubRoutes, registerNodeRoutes } from "./server/routes/nodes.js";
 import { NodeHub } from "./nodes/node-hub.js";
 import { lanNames } from "./nodes/lan-names.js";
 import { registerSessionRoutes } from "./server/routes/sessions.js";
@@ -190,7 +190,11 @@ const concurrency = new ServerConcurrency();
 // Devices dial over the tailnet (decision 4). A server whose owner lets them
 // in through its public address as well (CONDUIT_NODES_PUBLIC=1, e.g. behind a
 // Cloudflare tunnel) takes them on their pairing key alone.
+// The hub's LAN names (its own certificate's, loaded below): routes for nodes, never its nodes' names.
+const hubLanNames = () => (lanTls?.names || []).filter((name) => !name.startsWith("*."));
 const nodeHub = lifetime.own("nodes", new NodeHub({ dataRoot: config.dataRoot, lanNames: lanNames(),
+  identity: { id: serverIdentity.id, key: serverIdentity.publicKeyValue() },
+  routes: () => hubRoutes({ config, lanNames: hubLanNames }),
   ...(process.env.CONDUIT_NODES_PUBLIC === "1" ? { allowRemote: () => true } : {}) }), (owned) => owned.shutdown());
 terminals.nodeHub = nodeHub;
 // Everything a harness manifest needs to probe and build itself. Backends are
@@ -591,7 +595,7 @@ registerVoiceRoutes(app, { voiceSettings, voiceRuntime, voiceModel });
 registerPtyRoutes(app, { projects, terminals, nodeHub });
 registerTerminalPasteRoutes(app, { terminalPastes });
 
-registerNodeRoutes(app, { nodeHub, config, lanNameMatches: (name) => lanNameMatches(name) });
+registerNodeRoutes(app, { nodeHub, config, lanNameMatches: (name) => lanNameMatches(name), lanNames: hubLanNames });
 registerProjectRoutes(app, {
   nodeHub,
   backends,

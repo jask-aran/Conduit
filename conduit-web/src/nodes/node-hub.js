@@ -45,11 +45,15 @@ function directOf(direct, lanName = null) {
 }
 
 export class NodeHub extends EventEmitter {
-  constructor({ dataRoot, allowRemote = isNodeAddress, lanNames = null }) {
+  constructor({ dataRoot, allowRemote = isNodeAddress, lanNames = null, identity = null, routes = null }) {
     super();
     this.file = path.join(dataRoot, "nodes.json");
     this.allowRemote = allowRemote;
     this.lanNames = lanNames;
+    // Who this hub is (`{ id, key }`) and every way a node may reach it, told to each node as it connects
+    // (node-agent.js "routes"): a node paired by one address still finds the hub when that one stops answering.
+    this.identity = identity;
+    this.routes = routes;
     // The name on this network each node was given, kept across its reconnects.
     this.lanNameOf = new Map();
     // Nodes (one per paired environment, each with its own key) and the
@@ -411,6 +415,11 @@ export class NodeHub extends EventEmitter {
         void this.offerLanName(node, record);
         this.live.set(record.id, node);
         node.send({ type: "welcome", features: NODE_FEATURES });
+        if (this.routes || this.identity) {
+          void Promise.resolve(this.routes?.()).catch(() => []).then((routes) => {
+            if (this.live.get(record.id) === node) node.send({ type: "routes", routes: routes || [], ...(this.identity ? { hub: this.identity } : {}) });
+          });
+        }
         Object.assign(record, { roots: node.roots, platform: node.platform, harnesses: node.harnesses, browse: node.browse, lastSeenAt: new Date().toISOString() });
         if (message.name && record.name === "Device") record.name = String(message.name).slice(0, 80);
         // Roots without ids are from a node older than root ids: it is not addressable.

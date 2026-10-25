@@ -798,3 +798,26 @@ text alone.
 
 Reads only, for now: writes, terminals and the agent's own tools stay on the
 hub's connection, where actions keep receipts and the agent runs.
+
+### 2026-10-26: a node finds its hub after the hub moves
+
+The desktop hub moved to another network, and the laptop's node, paired by
+the hub's old LAN address, had no other way to it. A hub's address is not a
+pairing's identity:
+
+- On every connection the hub tells the node every way to reach it now (its
+  MagicDNS name, its LAN names over https, its public address where devices
+  may use it) and its identity (id and Ed25519 public half). The node keeps
+  both with its pairing. Only https routes, or plain http on loopback or a
+  private network, are taken.
+- The node tries first the way that worked last, gives a dead one up in
+  eight seconds (not the system's connect timeout), and when a whole round
+  fails looks for the hub by its mDNS advertisement (at most once a minute).
+  An advertisement proves nothing, so a candidate counts only when the
+  certificate it presents carries the kept identity's attestation, and the
+  node dials it pinned to exactly that certificate: its key never goes to an
+  impostor on the LAN.
+- Pointing a personal DNS name (`lan.example.com`) at the hub's machine is
+  the owner's business, not the hub's: Conduit uses such a name as a route
+  when its certificate is the hub's LAN certificate, and leaves the record
+  alone. The nodes' own `n-<id>` names stay the hub's to keep.

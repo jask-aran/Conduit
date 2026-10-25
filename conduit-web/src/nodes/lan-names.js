@@ -40,24 +40,30 @@ export function lanNames({ dir = path.join(os.homedir(), ".conduit", "tls"), cf 
     if (rows[0]?.id) await run(["dns", "records", "edit", rows[0].id, "-q", "-z", zone, "--body", body]);
     else await run(["dns", "records", "create", "-q", "-z", zone, "--body", body]);
   }
+  /**
+   * Point `name` at `address`, once per change: whether it now does. `zone` is the Cloudflare zone holding it, by
+   * default the name less its first label (the hub's `lan.example.com` is in `example.com`).
+   */
+  async function point(name, address, zone = name.slice(name.indexOf(".") + 1)) {
+    const known = published.get(name);
+    if (known?.address === address) return known.pending.then(() => true, () => false);
+    const pending = publish(name, address, zone);
+    published.set(name, { address, pending });
+    try { await pending; return true; } catch (error) {
+      published.delete(name);
+      log.warn?.(`Conduit could not point ${name} at ${address}: ${error.message}`);
+      return false;
+    }
+  }
   return {
+    point,
     /** A node's name here and the certificate for it, pointed at `address` first; null when there is none to give. */
     async forNode(nodeId, address) {
       const found = await certificate();
       if (!found) return null;
       const name = `n-${String(nodeId).replace(/^node_/, "").replace(/[^a-z0-9]/gi, "").slice(0, 8).toLowerCase()}.${found.domain}`;
-      const known = published.get(name);
-      if (known?.address !== address) {
-        const zone = found.domain.slice(found.domain.indexOf(".") + 1);
-        const pending = publish(name, address, zone);
-        published.set(name, { address, pending });
-        try { await pending; } catch (error) {
-          published.delete(name);
-          log.warn?.(`Conduit could not point ${name} at ${address}: ${error.message}`);
-          return null;
-        }
-      } else await known.pending;
-      return { name, cert: found.cert, key: found.key };
+      // In the zone the LAN name is in: `n-…lan.example.com` is in `example.com`.
+      return (await point(name, address, found.domain.slice(found.domain.indexOf(".") + 1))) ? { name, cert: found.cert, key: found.key } : null;
     },
   };
 }
