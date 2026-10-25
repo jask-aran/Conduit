@@ -159,16 +159,23 @@ export function serveDirect({ secret, call, log = console, certificate = null })
     securePort = await startSecure();
     changed();
   };
-  const tailnet = async () => { const found = await certificate?.().catch(() => null); if (found) await addCertificate(found); };
+  // Asked again daily once it has one, and every ten minutes until then: Tailscale may come up after the node does
+  // (a machine just started), or its HTTPS setting be turned on later.
+  let renew = null;
+  const tailnet = async () => {
+    const found = await certificate?.().catch(() => null);
+    if (found) await addCertificate(found).catch((error) => log.warn?.(`[conduit-node] ${error.message}`));
+    if (!certificate) return;
+    renew = setTimeout(() => void tailnet(), found ? 24 * 3600_000 : 10 * 60_000);
+    renew.unref?.();
+  };
   void tailnet();
-  const renew = setInterval(() => void tailnet(), 24 * 3600_000);
-  renew.unref?.();
   return {
     listening,
     addCertificate,
     /** Where it answers over https, and under which names: null until it has a certificate. */
     secureRoute: () => (securePort && contexts.size ? { port: securePort, names: [...contexts.keys()] } : null),
     onSecureChange: (fn) => { changed = fn; },
-    close: () => { server.close(); secure?.server?.close(); clearInterval(renew); },
+    close: () => { server.close(); secure?.server?.close(); clearTimeout(renew); },
   };
 }

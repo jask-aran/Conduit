@@ -71,6 +71,12 @@ export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: 
   let socket = null;
   let served = null;
   let directPort = null;
+  let toldDirect = "";
+  const tellDirect = () => {
+    if (socket?.readyState !== WebSocket.OPEN) return;
+    toldDirect = JSON.stringify(directInfo());
+    socket.send(JSON.stringify({ type: "direct", direct: JSON.parse(toldDirect) }));
+  };
   const directInfo = () => ({ port: directPort, addresses: directAddresses(os.networkInterfaces()), ...(served?.secureRoute() ? { tls: served.secureRoute() } : {}) });
   let attempt = 0;
   let stopped = false;
@@ -168,7 +174,7 @@ export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: 
       way = 0;
       // Roots go by id; the path is for people to read, main never sends it back.
       send({ type: "hello", version: NODE_PROTOCOL_VERSION, name, platform: process.platform, boot: receipts.boot,
-        harnesses: Object.keys(harnesses), browse: Boolean(browse && onShare), ...(directPort ? { direct: directInfo() } : {}),
+        harnesses: Object.keys(harnesses), browse: Boolean(browse && onShare), ...(directPort ? { direct: JSON.parse(toldDirect = JSON.stringify(directInfo())) } : {}),
         roots: roots.map(({ id, path: label, read, write, shell, allow }) => ({ id, label, read, write, shell, allow })) });
       log.info?.(`[conduit-node] connected to ${mainUrl}${via === mainUrl ? "" : ` via ${via}`}`);
     });
@@ -396,7 +402,11 @@ export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: 
     served = serveDirect({ secret: keySecret(key), call: envCall, log, certificate });
     void served.listening.then((port) => { directPort = port; if (!stopped) connect(); });
     // The https route comes when a certificate does: told to main then, and in every hello after.
-    served.onSecureChange(() => { if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: "direct", direct: directInfo() })); });
+    served.onSecureChange(tellDirect);
+    // Its addresses change without its connection doing so (a laptop joins another network, Tailscale comes up after
+    // the node): looked at every half minute, and told to main when they differ from what it last said.
+    const watching = setInterval(() => { if (JSON.stringify(directInfo()) !== toldDirect) tellDirect(); }, 30_000);
+    watching.unref?.();
   } else connect();
   return {
     stop() {
