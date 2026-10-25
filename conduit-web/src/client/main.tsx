@@ -2573,7 +2573,9 @@ function App() {
     if (slotView(slot) !== previous) return;
     const element = paneSlot(slot).host();
     const index = shownSlots().indexOf(slot);
-    const close = async () => { if ((await setSlotView(slot, null)) && focus) focusChatPane(); };
+    // After an eased close, focus moves on the next frame: focusing in the task that unmounts the pane forced its
+    // layout there (~8 ms over budget), where the frame lays it out anyway.
+    const close = async (later = false) => { if ((await setSlotView(slot, null)) && focus) later ? requestAnimationFrame(focusChatPane) : focusChatPane(); };
     if (!element || index < 0 || !animatePanes()) return await close();
     // It fades out, then the panes left ease into its room. The shares are
     // pinned as it starts to fade, so the ease can begin the moment it ends.
@@ -2586,7 +2588,7 @@ function App() {
       // Unmounting it is a long task (a transcript's worth of nodes): after
       // the last frame of the ease is drawn, where it moves nothing.
       easePaneWeights(normalized(target), () => window.setTimeout(() => {
-        batch(() => { close(); setWeightOverride(null); setPaneMotion(null); });
+        batch(() => { void close(true); setWeightOverride(null); setPaneMotion(null); });
         fade.cancel();
       }));
     });

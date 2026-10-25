@@ -32,6 +32,8 @@
 .ui-sheet[data-under] { margin-inline: 0; pointer-events: none; }
 /* What is drawn on the ground, under everything the sheet holds. */
 .ui-sheet-backdrop { position: absolute; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; }
+/* The meteor field launches and lands spans every few frames: laid out on its own, so none of that dirties the page. */
+.ui-sheet-backdrop .solid-meteor-shower { contain: strict; }
 /* A split pane moved into the dock fills it in place of the tools (their state kept). */
 .ui-sheet[data-docked] { height: auto; min-height: 0; flex: 1; margin: 0; border-radius: inherit; }
 .ui-sheet[data-docked="hidden"] { display: none; }
