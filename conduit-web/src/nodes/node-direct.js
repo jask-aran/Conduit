@@ -3,7 +3,7 @@ import http from "node:http";
 import https from "node:https";
 import tls from "node:tls";
 import path from "node:path";
-import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
+import { BACKGROUND_CONTEXT, withAbortSignal } from "@earendil-works/chord/context";
 import { err, FileError } from "@earendil-works/pi-durable/env";
 import { installedClientOrigin } from "../native-auth.js";
 import { deviceHost } from "../workspace-host.js";
@@ -12,8 +12,9 @@ import os from "node:os";
 import { directAddresses, proofKey, proofOf, verifyGrant } from "./direct.js";
 import { decode, encode, HANDLE_METHODS, METHOD_GRANTS } from "./protocol.js";
 
-// A file read whole to answer one request, and how many are read at once: past either, the hub's way.
-const MAX_DIRECT_BYTES = 64 * 1024 * 1024;
+// The largest file sent, a chunk at a time, and how many are read at once: past either, the hub's way.
+const MAX_DIRECT_BYTES = 512 * 1024 * 1024;
+const CHUNK_BYTES = 1024 * 1024;
 const MAX_READING = 4;
 const STATUS = { path_not_found: 404, ENOENT: 404, permission_denied: 403, file_too_large: 413 };
 
@@ -109,15 +110,38 @@ export function serveDirect({ secret, call, log = console, certificate = null })
         const etag = `"${metadata.revision}"`;
         if (request.headers["if-none-match"] === etag) { response.writeHead(304, { ETag: etag }); return response.end(); }
         if (metadata.size > MAX_DIRECT_BYTES) return json(413, { error: "file_too_large", message: "That file is too large to open here" });
-        const content = await resolved.host.read(resolved.relativePath, MAX_DIRECT_BYTES + 1);
-        if (content.length > MAX_DIRECT_BYTES) return json(413, { error: "file_too_large", message: "That file is too large to open here" });
+        // Sent a chunk at a time through the node's own guarded reader, confined to the grant's place: the node holds
+        // a chunk per read, not the file, and the first bytes go out as soon as they are read.
+        const stop = new AbortController();
+        request.on("close", () => { if (!response.writableEnded) stop.abort(); });
+        const context = withAbortSignal(stop.signal, BACKGROUND_CONTEXT);
+        const opened = await call("openBinaryReader", [resolved.relativePath, {}], grant.place, context, () => {}, { confine: true });
+        if (!opened?.ok) throw Object.assign(new Error(opened?.error?.message || "That file could not be read"), { code: opened?.error?.code || "permission_denied" });
         const name = encodeURIComponent(path.basename(resolved.relativePath));
-        response.writeHead(200, {
-          "Content-Type": metadata.mime, "Content-Length": content.length, ETag: etag, "Cache-Control": "private, no-cache",
-          "X-Content-Type-Options": "nosniff", "Content-Disposition": `${download ? "attachment" : "inline"}; filename*=UTF-8''${name}`,
-          ...(metadata.mime === "image/svg+xml" ? { "Content-Security-Policy": "sandbox" } : {}),
-        });
-        return response.end(content);
+        let sent = 0;
+        try {
+          response.writeHead(200, {
+            "Content-Type": metadata.mime, "Content-Length": metadata.size, ETag: etag, "Cache-Control": "private, no-cache",
+            "X-Content-Type-Options": "nosniff", "Content-Disposition": `${download ? "attachment" : "inline"}; filename*=UTF-8''${name}`,
+            ...(metadata.mime === "image/svg+xml" ? { "Content-Security-Policy": "sandbox" } : {}),
+          });
+          while (sent < metadata.size && !stop.signal.aborted) {
+            const chunk = await opened.value.read(sent, Math.min(CHUNK_BYTES, metadata.size - sent), context);
+            if (!chunk.ok || !chunk.value.length) break;
+            if (!response.write(Buffer.from(chunk.value.buffer, chunk.value.byteOffset, chunk.value.length))) {
+              await new Promise((resolve) => {
+                const done = () => { response.off("drain", done); response.off("close", done); resolve(); };
+                response.on("drain", done);
+                response.on("close", done);
+              });
+            }
+            sent += chunk.value.length;
+          }
+        } finally {
+          await opened.value.close?.(BACKGROUND_CONTEXT);
+        }
+        // Shorter than it said (changed as it was read): the client sees a broken response, never a short file.
+        return sent < metadata.size ? response.destroy() : response.end();
       }
       if (url.searchParams.get("metadata") === "1") return json(200, await readWorkspaceFileMetadata(root, relative));
       return json(200, await readWorkspaceFile(root, relative, {
