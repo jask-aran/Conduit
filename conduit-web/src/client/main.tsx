@@ -2435,7 +2435,9 @@ function App() {
   const weightsFor = (count: number) => count === 3 ? splitRatios3() : count === 2 ? [1 - splitRatio(), splitRatio()] : [1];
   // While a pane opens or closes, the shares ease through an override.
   const [weightOverride, setWeightOverride] = createSignal<number[] | null>(null);
-  const [paneMotion, setPaneMotion] = createSignal<{ slot: PaneKey; phase: "arriving" | "leaving"; collapsed?: boolean } | null>(null);
+  // `width`: the document's own width while its pane eases, laid out once (the width it lands at, or leaves from) and
+  // carried by the pane's moving edge (shell.css [data-moving]).
+  const [paneMotion, setPaneMotion] = createSignal<{ slot: PaneKey; phase: "arriving" | "leaving"; collapsed?: boolean; width?: number } | null>(null);
   const paneWeights = () => weightOverride() ?? weightsFor(renderSlots().length + 1);
   // The file beside is the dock's, so leaving it asks the dock first: an
   // unsaved edit, or the file moving into the dock's Files.
@@ -2577,21 +2579,20 @@ function App() {
     // layout there (~8 ms over budget), where the frame lays it out anyway.
     const close = async (later = false) => { if ((await setSlotView(slot, null)) && focus) later ? requestAnimationFrame(focusChatPane) : focusChatPane(); };
     if (!element || index < 0 || !animatePanes()) return await close();
-    // It fades out, then the panes left ease into its room. The shares are
-    // pinned as it starts to fade, so the ease can begin the moment it ends.
+    // The panes left ease into its room at once, its document keeping its width and riding the moving edge out as it
+    // fades over the ease's first half (the pane's ground closes with it).
     setWeightOverride(paneShares());
-    setPaneMotion({ slot, phase: "leaving" });
-    const fade = element.animate([{ opacity: 1 }, { opacity: 0 }], { duration: duration("--duration-follow"), easing: easing("--ease-arrive"), fill: "forwards" });
-    void fade.finished.then(() => {
-      const target = weightsFor(shownSlots().length);
-      target.splice(index + 1, 0, 0);
-      // Unmounting it is a long task (a transcript's worth of nodes): after
-      // the last frame of the ease is drawn, where it moves nothing.
-      easePaneWeights(normalized(target), () => window.setTimeout(() => {
-        batch(() => { void close(true); setWeightOverride(null); setPaneMotion(null); });
-        fade.cancel();
-      }));
-    });
+    setPaneMotion({ slot, phase: "leaving", width: element.getBoundingClientRect().width });
+    const fade = documentsOf(element).map((part) => part.animate([{ opacity: 1 }, { opacity: 0 }],
+      { duration: duration("--duration-fold") * 0.55, easing: easing("--ease-leave"), fill: "forwards" }));
+    const target = weightsFor(shownSlots().length);
+    target.splice(index + 1, 0, 0);
+    // Unmounting it is a long task (a transcript's worth of nodes): after the last frame of the ease is drawn, where
+    // it moves nothing.
+    easePaneWeights(normalized(target), () => window.setTimeout(() => {
+      batch(() => { void close(true); setWeightOverride(null); setPaneMotion(null); });
+      for (const animation of fade) animation.cancel();
+    }));
   };
   // The dock's own close: the pane holding its tool.
   const closeSplit = async (focus = true) => toolInPaneA() ? void setPaneAOverride(null) : (await closeSlot(toolSlot(), focus));
@@ -4090,11 +4091,14 @@ function App() {
     // then, unseen, it takes the next pane's document at that pane's width and
     // fades in once it has loaded.
     setWeightOverride(paneShares());
-    setPaneMotion({ slot: "main", phase: "leaving" });
-    void element.animate([{ opacity: 1 }, { opacity: 0 }], { duration: duration("--duration-follow"), easing: easing("--ease-arrive") }).finished.then(() => {
+    // It fades as the others ease into its room, its document keeping its width against its moving (right) edge.
+    setPaneMotion({ slot: "main", phase: "leaving", width: element.getBoundingClientRect().width });
+    const leaving = element.animate([{ opacity: 1 }, { opacity: 0 }], { duration: duration("--duration-fold") * 0.55, easing: easing("--ease-leave"), fill: "forwards" });
+    void Promise.resolve().then(() => {
       const target = weightsFor(shownSlots().length);
       target.unshift(0);
       easePaneWeights(normalized(target), async () => {
+        leaving.cancel();
         const next = shownSlots()[0]!;
         const view = slotView(next);
         const beside = paneSlot(next).host();
@@ -4154,7 +4158,8 @@ function App() {
         heldSlots.set(slot, hold);
         onCleanup(() => { if (heldSlots.get(slot) === hold) heldSlots.delete(slot); });
       }
-      return <Sheet ref={(element) => { pane.setHost(element); onCleanup(() => { if (pane.host() === element) pane.setHost(undefined); }); }} class="main-split" docked={docked ? (dockSlot() !== slot ? "hidden" : true) : false} backdrop={<Show when={!docked && meteorField() && (revealing() || arrived()) && Boolean(slotChatId(slot) || page() === "dashboard" || slotPageProject(slot))}><meteors.Window /></Show>} data-pane-slot={slot} data-region={slotChatId(slot) ? "chat" : page() ? "dashboard" : "workspace-panel"} aria-label={docked ? "Docked pane" : position() === 0 ? "Pane B" : "Pane C"} style={docked ? undefined : { flex: `${paneWeights()[position() + 1] ?? 0.5} 1 0`, "min-width": paneMotion()?.slot === slot ? "0px" : `${paneMinWidth(slot)}px`, ...(paneMotion()?.slot === slot ? { opacity: 0, overflow: "hidden" } : {}), ...(paneMotion()?.slot === slot && paneMotion()!.collapsed ? { "margin-right": "0px" } : {}) }}>
+      return <Sheet ref={(element) => { pane.setHost(element); onCleanup(() => { if (pane.host() === element) pane.setHost(undefined); }); }} class="main-split" docked={docked ? (dockSlot() !== slot ? "hidden" : true) : false} backdrop={<Show when={!docked && meteorField() && (revealing() || arrived()) && Boolean(slotChatId(slot) || page() === "dashboard" || slotPageProject(slot))}><meteors.Window /></Show>} data-pane-slot={slot} data-region={slotChatId(slot) ? "chat" : page() ? "dashboard" : "workspace-panel"} aria-label={docked ? "Docked pane" : position() === 0 ? "Pane B" : "Pane C"} style={docked ? undefined : { flex: `${paneWeights()[position() + 1] ?? 0.5} 1 0`, "min-width": paneMotion()?.slot === slot ? "0px" : `${paneMinWidth(slot)}px`, ...(paneMotion()?.slot === slot ? { overflow: "hidden", ...(paneMotion()!.width ? { "--pane-document-width": `${paneMotion()!.width}px` } : {}) } : {}), ...(paneMotion()?.slot === slot && paneMotion()!.collapsed ? { "margin-right": "0px" } : {}) }}
+        data-moving={paneMotion()?.slot === slot ? paneMotion()!.phase : undefined}>
         <Show when={!docked}><PaneEdge aria-label="Resize panes" onPointerDown={(event) => startSplitResize(event, position() + 1)} /></Show>
         <Show when={!held()}>
         <Show when={parseFileView(slotView(slot))}>{renderFileViewer(slot)}</Show>
@@ -4389,6 +4394,18 @@ function App() {
   const paneShares = () => normalized(panesShown().map((pane) => paneElement(pane)?.getBoundingClientRect().width ?? 0));
   // The panes' shares easing (body.panes-settling for the terminal's fit; the shell eases the sheets).
   const [panesSettling, setPanesSettling] = createSignal(false);
+  // What a pane holds besides its drag edge and its ground: the documents that keep one width while it eases.
+  const documentsOf = (element: HTMLElement) => [...element.children]
+    .filter((child): child is HTMLElement => child instanceof HTMLElement && !child.matches(".ui-pane-edge, .ui-sheet-backdrop"));
+  // The width a pane arriving at `index` of the row lands at, from the shares it eases to: the room the row's panes
+  // have now (with whatever margin the arriving one has yet), less the gutter it lands with.
+  const landingWidth = (target: number[], index: number, arriving: HTMLElement | undefined) => {
+    const panes = panesShown().map((pane) => paneElement(pane)).filter((element): element is HTMLElement => Boolean(element));
+    const room = panes.reduce((sum, element) => sum + element.getBoundingClientRect().width, 0)
+      + (arriving ? parseFloat(getComputedStyle(arriving).marginRight) || 0 : 0);
+    const gutter = parseFloat(getComputedStyle(panes[0] ?? document.body).marginRight) || 0;
+    return Math.max(0, Math.round((room - gutter) * (target[index] ?? 0)));
+  };
   const easePaneWeights = (to: number[], done: () => void) => {
     splitMotionId += 1;
     announceSplit("begin", besideWidth());
@@ -4419,25 +4436,29 @@ function App() {
     const index = now.indexOf(slot);
     const start = weightsFor(before.length + 1).slice();
     start.splice(index + 1, 0, 0);
+    const target = normalized(weightsFor(now.length + 1));
     setWeightOverride(normalized(start));
-    setPaneMotion({ slot, phase: "arriving", collapsed: true });
-    requestAnimationFrame(() => requestAnimationFrame(() => easePaneWeights(normalized(weightsFor(now.length + 1)), () => {
-      setWeightOverride(null);
-      // Its document mounts once the ease's last frame is drawn, at its own width, and fades in once drawn: a frame on
-      // for the transcript's first render.
-      window.setTimeout(() => {
+    // Its document is laid out once, at the width it lands at, and rides the pane's moving edge in, fading in over
+    // the ease's later part: mounted a frame before anything moves (its long task moves nothing), and the ease waits
+    // a moment for a chat to have loaded, so nothing renders mid-motion.
+    setPaneMotion({ slot, phase: "arriving", collapsed: true, width: landingWidth(target, index + 1, paneSlot(slot).host()) });
+    requestAnimationFrame(() => {
+      heldSlots.get(slot)?.release();
+      requestAnimationFrame(() => {
         const element = paneSlot(slot).host();
-        heldSlots.get(slot)?.release();
-        if (!element) return void setPaneMotion(null);
         const id = slotChatId(slot);
-        requestAnimationFrame(() => void waitFor(() => !id || (paneSlot(slot).session.chat.loadedId() === id && Boolean(element.querySelector(".ui-chat-column"))), 600).then(() => {
-          if (paneSlot(slot).host() !== element) return void setPaneMotion(null);
-          element.style.opacity = "0";
-          setPaneMotion(null);
-          void element.animate([{ opacity: 0 }, { opacity: 1 }], { duration: duration("--duration-follow"), easing: easing("--ease-arrive") }).finished.finally(() => { element.style.opacity = ""; });
-        }));
+        void waitFor(() => !id || paneSlot(slot).session.chat.loadedId() === id, 150).then(() => {
+          if (paneMotion()?.slot !== slot) return;
+          if (!element || paneSlot(slot).host() !== element) return void batch(() => { setWeightOverride(null); setPaneMotion(null); });
+          const fade = documentsOf(element).map((part) => part.animate([{ opacity: 0 }, { opacity: 1 }],
+            { delay: duration("--duration-fold") * 0.3, duration: duration("--duration-fold") * 0.7, easing: easing("--ease-arrive"), fill: "both" }));
+          easePaneWeights(target, () => {
+            batch(() => { setWeightOverride(null); setPaneMotion(null); });
+            for (const animation of fade) animation.cancel();
+          });
+        });
       });
-    })));
+    });
   }, { defer: true }));
   // A share preset from the rail (Equalise is the even one): the panes ease to
   // it, each still held at its document's minimum.
@@ -5407,7 +5428,7 @@ function App() {
       }} />
     } /></Show>
     <AppShell class="workspace-layout" settling={panesSettling()} ref={(element) => { meteors.observe(element); const observer = new ResizeObserver(() => setLayoutWidth(element.clientWidth)); observer.observe(element); onCleanup(() => observer.disconnect()); }}>
-    <Sheet as="main" lead under={workspaceExpanded()} backdrop={<Show when={!paneAOverride() && routeBootstrap() === "ready" && ["chat", "dashboard", "project"].includes(routeKind()) && meteorField() && (revealing() || arrived())}><meteors.Window /></Show>} data-slot="sidebar-inset" data-region={paneAOverride() ? "workspace-panel" : routeKind() === "chat" || harnessThread() ? "chat" : routeKind() === "terminal" ? "terminal" : "dashboard"} tabIndex={-1} onPointerDown={focusChatSurface} onKeyDown={paneKeydown} class="chat-main" style={{ ...(splitShown() ? { flex: `${paneWeights()[0]} 1 0`, "min-width": paneMotion()?.slot === "main" ? "0px" : `${paneMinWidth("main")}px` } : {}), ...(paneMotion()?.slot === "main" ? { opacity: 0 } : {}), ...(paneMotion()?.slot === "main" && paneMotion()!.collapsed ? { "margin-left": "0px", "margin-right": "0px" } : {}) }} {...mainDropHandlers}>
+    <Sheet as="main" lead under={workspaceExpanded()} data-moving={paneMotion()?.slot === "main" ? paneMotion()!.phase : undefined} backdrop={<Show when={!paneAOverride() && routeBootstrap() === "ready" && ["chat", "dashboard", "project"].includes(routeKind()) && meteorField() && (revealing() || arrived())}><meteors.Window /></Show>} data-slot="sidebar-inset" data-region={paneAOverride() ? "workspace-panel" : routeKind() === "chat" || harnessThread() ? "chat" : routeKind() === "terminal" ? "terminal" : "dashboard"} tabIndex={-1} onPointerDown={focusChatSurface} onKeyDown={paneKeydown} class="chat-main" style={{ ...(splitShown() ? { flex: `${paneWeights()[0]} 1 0`, "min-width": paneMotion()?.slot === "main" ? "0px" : `${paneMinWidth("main")}px` } : {}), ...(paneMotion()?.slot === "main" ? { opacity: 0, ...(paneMotion()!.width ? { "--pane-document-width": `${paneMotion()!.width}px` } : {}) } : {}), ...(paneMotion()?.slot === "main" && paneMotion()!.collapsed ? { "margin-left": "0px", "margin-right": "0px" } : {}) }} {...mainDropHandlers}>
       <Show when={splitDropActive()}><DropWash within /></Show>
       {/* Pane A holding a file viewer or a tool, over its route (5f). */}
       <Show when={parseFileView(paneAOverride())}>{renderFileViewer("main")}</Show>

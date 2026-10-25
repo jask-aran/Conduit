@@ -38,6 +38,11 @@
 .ui-sheet[data-docked] { height: auto; min-height: 0; flex: 1; margin: 0; border-radius: inherit; }
 .ui-sheet[data-docked="hidden"] { display: none; }
 .ui-sheet:not([data-lead]) > div:not(.ui-pane-edge) { display: flex; min-width: 0; min-height: 0; flex: 1; flex-direction: column; overflow: hidden; border-radius: inherit; }
+/* A pane easing open or shut: what it holds keeps one width (the one it lands at, or leaves from) against the
+   pane's moving edge -- a beside pane's left, pane A's right -- and the pane clips it, so nothing reflows mid-motion
+   and the document travels with the edge. */
+.ui-sheet[data-moving] > :not(.ui-pane-edge, .ui-sheet-backdrop) { width: var(--pane-document-width, auto); max-width: none; align-self: flex-start; }
+.ui-sheet[data-moving][data-lead] > :not(.ui-pane-edge, .ui-sheet-backdrop) { align-self: flex-end; }
 /* The panes' shares easing: each sheet's room and margins move with them. */
 .ui-shell[data-settling] > .ui-sheet { transition: flex-grow var(--duration-fold) var(--ease-settle), margin var(--duration-fold) var(--ease-settle); }
 
