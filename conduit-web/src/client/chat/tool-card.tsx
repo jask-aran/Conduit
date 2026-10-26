@@ -24,11 +24,11 @@ function stringify(value: unknown) {
    it runs, past once it has -- and what it acted on in mono beside it. */
 export const KIND_ICONS: Record<ToolKind, Component<{ class?: string }>> = {
   command: Icons.Shell, read: Icons.FileText, edit: Icons.WriteFile,
-  search: Icons.Search, fetch: Icons.Fetch, script: Icons.Code, other: Icons.Tool,
+  search: Icons.Search, fetch: Icons.Fetch, script: Icons.Code, agent: Icons.Agent, other: Icons.Tool,
 };
 export const VERBS: Record<ToolKind, [string, string]> = {
   command: ["Running", "Ran"], read: ["Reading", "Read"], edit: ["Editing", "Edited"],
-  search: ["Searching", "Searched"], fetch: ["Fetching", "Fetched"], script: ["Scripting tools", "Scripted tools"], other: ["Using", "Used"],
+  search: ["Searching", "Searched"], fetch: ["Fetching", "Fetched"], script: ["Scripting tools", "Scripted tools"], agent: ["Delegating", "Delegated"], other: ["Using", "Used"],
 };
 
 /* How long a step took: milliseconds under a second, tenths under ten

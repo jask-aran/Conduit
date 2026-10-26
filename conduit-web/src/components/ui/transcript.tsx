@@ -65,7 +65,11 @@ export function Failure(props: { time?: string; dateTime?: string; facts?: strin
 }
 /** A prompt the harness sent on its own (a background task finishing): one muted line at the right, a bell before
  *  it, no bubble and no actions. */
-export const HarnessPrompt = (props: { children: JSX.Element }) => <p class="ui-harness-prompt"><Icons.Notification aria-hidden="true" /><span>{props.children}</span></p>;
+export const HarnessPrompt = (props: { onOpen?: () => void; children: JSX.Element }) => <p class="ui-harness-prompt">
+  <Show when={props.onOpen} fallback={<><Icons.Notification aria-hidden="true" /><span>{props.children}</span></>}>
+    <button type="button" class="ui-harness-prompt-open" onClick={() => props.onOpen?.()}><Icons.Agent aria-hidden="true" /><span>{props.children}</span><Icons.ChevronRight aria-hidden="true" /></button>
+  </Show>
+</p>;
 /** What a turn changed, as counts in the data's colours (+added, −removed, mono); opens the changes. In a foot. */
 export const Changes = (props: { added: number; removed: number; title?: string; label?: string; onOpen?: () => void }) =>
   <button type="button" class="ui-changes" title={props.title} aria-label={props.label} onClick={() => props.onOpen?.()}><span data-change="added">+{props.added}</span><span data-change="removed">−{props.removed}</span></button>;

@@ -1,6 +1,6 @@
 import type { Accessor } from "solid-js";
 import type { TurnArtifactSummary } from "../api/live-events";
-import type { ChatCapabilities, Message, ToolItem } from "../api/contracts";
+import type { AgentSummary, ChatCapabilities, Message, ToolItem } from "../api/contracts";
 import type { ActiveGenerationView, LiveGenerationChange } from "../turn-rows";
 
 /**
@@ -29,6 +29,9 @@ export interface TranscriptSource {
   cancelEdit: () => void;
   regenerate: (userMessageId: string) => Promise<unknown> | void;
   loadOlder: () => Promise<boolean | undefined>;
+  /** The chat's subagents, and a stop for a background one (a Conduit chat's; a harness thread has none). */
+  agents?: Accessor<AgentSummary[]>;
+  stopAgent?: (id: string) => Promise<unknown> | void;
   /** The chat's turn summaries, from a request its open already started when it has one. */
   turnArtifactTimeline?: (projectId: string, chatId: string) => Promise<TurnArtifactSummary[]>;
 }

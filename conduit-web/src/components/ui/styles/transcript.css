@@ -24,6 +24,13 @@
 /* The harness's own prompt: a muted Row line at the right, the bell an icon-sm before it. */
 .ui-harness-prompt { display: flex; justify-content: flex-end; align-items: center; gap: var(--row-gap); margin: 0; color: var(--muted-foreground); font-size: var(--text-row); }
 .ui-harness-prompt > svg { width: var(--icon-sm); height: var(--icon-sm); flex: none; }
+/* A report from a subagent opens its transcript: the line is a button, its chevron on the cursor. */
+.ui-harness-prompt-open { display: inline-flex; min-width: 0; align-items: center; gap: var(--row-gap); margin-right: calc(-1 * var(--space-sm)); border: 0; border-radius: var(--radius-control); background: transparent; padding: var(--space-2xs) var(--space-sm); color: inherit; font: inherit; cursor: pointer; }
+.ui-harness-prompt-open > svg { width: var(--icon-sm); height: var(--icon-sm); flex: none; }
+.ui-harness-prompt-open > svg:last-child { opacity: 0; transition: opacity var(--duration-quick) var(--ease-change); }
+.ui-harness-prompt-open:focus-visible { outline: none; background: var(--tint); }
+.ui-harness-prompt-open:focus-visible > svg:last-child { opacity: 1; }
+@media (hover: hover) { .ui-harness-prompt-open:hover { background: var(--tint); color: var(--foreground); } .ui-harness-prompt-open:hover > svg:last-child { opacity: 1; } }
 /* A turn's changes: the counts in the data face, added in --status-success and removed in --destructive (data, kept
    on the glyphs); a ghost control's wash on hover. */
 .ui-changes { display: inline-flex; height: var(--control-xs); align-items: center; gap: var(--space-xs); border: 0; border-radius: var(--radius-control); background: transparent; padding: 0 var(--space-xs); font: var(--text-caption) var(--font-data); font-variant-numeric: tabular-nums; cursor: pointer; }

@@ -27,7 +27,7 @@ type ChatGlance = { prompt: string; answer: string; answerMath: string | null; o
 
 const WORK_WORDS: Record<ToolKind, [string, string]> = {
   command: ["command", "commands"], read: ["read", "reads"], edit: ["edit", "edits"],
-  search: ["search", "searches"], fetch: ["fetch", "fetches"], script: ["script", "scripts"], other: ["tool", "tools"],
+  search: ["search", "searches"], fetch: ["fetch", "fetches"], script: ["script", "scripts"], agent: ["agent", "agents"], other: ["tool", "tools"],
 };
 const cache = new Map<string, ChatGlance>();
 

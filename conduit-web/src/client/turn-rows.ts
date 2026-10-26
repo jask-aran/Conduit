@@ -345,11 +345,12 @@ export function buildLiveToolSegment(
 ): Extract<TraceSegment, { kind: "tool" }> {
   const execution = generation.toolExecutions[block.toolCallId || ""] || {};
   const toolCallId = block.toolCallId || block.identity;
+  const held = tools.find((tool) => tool.toolCallId === toolCallId);
   return {
     kind: "tool",
     id: `tool:${toolCallId}`,
-    tool: buildLiveToolItem(toolCallId, execution, { name: block.name, kind: block.toolKind, subject: block.subject, input: block.input,
-      calls: tools.find((tool) => tool.toolCallId === toolCallId)?.calls }),
+    tool: buildLiveToolItem(toolCallId, execution, { name: block.name, kind: block.toolKind, subject: held?.agent ? held.subject : block.subject, input: block.input,
+      calls: held?.calls, agent: held?.agent }),
   };
 }
 
@@ -375,11 +376,12 @@ function buildLiveErrorSegment(
 export function buildLiveToolItem(
   toolCallId: string,
   execution: ActiveGenerationView["toolExecutions"][string] = {},
-  fallback: { name?: string; kind?: ToolKind; subject?: string; input?: unknown; calls?: ToolItem["calls"] } = {},
+  fallback: { name?: string; kind?: ToolKind; subject?: string; input?: unknown; calls?: ToolItem["calls"]; agent?: ToolItem["agent"] } = {},
 ): ToolItem {
   return {
-    // A script's calls are stated as transcript ops, not generation events.
+    // A script's calls and a subagent's reference are stated as transcript ops, not generation events.
     ...(fallback.calls ? { calls: fallback.calls } : {}),
+    ...(fallback.agent ? { agent: fallback.agent } : {}),
     toolCallId,
     name: execution.name || fallback.name || "tool",
     kind: execution.kind || fallback.kind || "other",
