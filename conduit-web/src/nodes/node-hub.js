@@ -45,7 +45,7 @@ function directOf(direct, lanName = null) {
   // (node-direct.js), as a v0.8.7 node does neither; and the key this run of it signs grants with, given only over a
   // link nobody else reads (node-agent.js).
   const grantKey = typeof direct.grantKey === "string" && /^[A-Za-z0-9_-]{32,128}$/.test(direct.grantKey) ? direct.grantKey : null;
-  return { port: direct.port, addresses, tls, bound: Boolean(direct.pty), pty: direct.pty === "sealed", grantKey };
+  return { port: direct.port, addresses, tls, bound: Boolean(direct.pty), pty: direct.pty === "sealed", reads: direct.reads === "sealed", grantKey };
 }
 
 export class NodeHub extends EventEmitter {
@@ -263,7 +263,10 @@ export class NodeHub extends EventEmitter {
 
   async directGrant(nodeId, place, label = "", origin = "") {
     if (!place?.root) return null;
-    return this.signDirect(nodeId, { place: { root: place.root, path: place.path || "" }, label, read: true }, DIRECT_TTL_MS, origin);
+    const grant = await this.signDirect(nodeId, { place: { root: place.root, path: place.path || "" }, label, read: true }, DIRECT_TTL_MS, origin);
+    // And the key that seals a read over a LAN in plain HTTP (node-direct.js), where the node seals them.
+    const direct = this.live.get(nodeId)?.direct;
+    return grant && direct?.reads && direct.grantKey ? { ...grant, channel: channelKey(direct.grantKey, grant.nonce, "read") } : grant;
   }
 
   /**

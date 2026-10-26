@@ -11,13 +11,17 @@ import { readWorkspaceFile, readWorkspaceFileMetadata, resolveInspectorPath } fr
 import os from "node:os";
 import { WebSocketServer } from "ws";
 import { PtyOutputBatcher } from "../pty-output-batcher.js";
-import { boundProofOf, channelKey, directAddresses, nodeChannel, proofKey, proofOf, verifyGrant } from "./direct.js";
+import { boundProofOf, channelKey, directAddresses, nodeChannel, openSealed, proofKey, proofOf, readAnswerKey, readRequestKey, SEAL_TO_CLIENT,
+  SEAL_TO_NODE, sealFrame, verifyGrant } from "./direct.js";
 import { decode, encode, HANDLE_METHODS, METHOD_GRANTS } from "./protocol.js";
 
 // The largest file sent, a chunk at a time, and how many are read at once: past either, the hub's way.
 const MAX_DIRECT_BYTES = 512 * 1024 * 1024;
 const CHUNK_BYTES = 1024 * 1024;
 const MAX_READING = 4;
+// A sealed read's request: the grant, the query and the revision held, sealed.
+const MAX_SEALED_REQUEST = 16 * 1024;
+const [HEAD, BODY, END] = [0, 1, 2];
 const STATUS = { path_not_found: 404, ENOENT: 404, permission_denied: 403, file_too_large: 413 };
 // A terminal's input frame and unsent output, as the hub's terminal socket bounds them (pty-manager.js,
 // terminal-stream.js).
@@ -34,7 +38,59 @@ const dimension = (value, fallback) => {
  * agent's own guarded environment call, so a grant reaches no further than the hub's calls do: the place must be a
  * shared root, the path inside it, and kept-back files stay kept back.
  */
-export function serveDirect({ secret, ptySecret = null, call, log = console, certificate = null, shells = null }) {
+// How a read's answer is written: as it is, or sealed a frame at a time (below). `write` says whether to keep going.
+const plainOut = (response) => ({
+  response,
+  get headersSent() { return response.headersSent; },
+  head: (status, headers) => response.writeHead(status, headers),
+  write: (chunk) => response.write(chunk),
+  end: () => response.end(),
+  json(status, body) { response.writeHead(status, { "Content-Type": "application/json" }); response.end(JSON.stringify(body)); },
+});
+function sealedOut(response, key) {
+  let count = 0;
+  let headersSent = false;
+  const frame = (kind, body) => {
+    const sealed = sealFrame(key, SEAL_TO_CLIENT, count++, kind, body);
+    const length = Buffer.alloc(4);
+    length.writeUInt32BE(sealed.length);
+    response.write(length);
+    return response.write(sealed);
+  };
+  const out = {
+    response,
+    get headersSent() { return headersSent; },
+    head(status, headers) {
+      headersSent = true;
+      frame(HEAD, Buffer.from(JSON.stringify({ status, headers: Object.fromEntries(Object.entries(headers).map(([name, value]) => [name.toLowerCase(), String(value)])) })));
+    },
+    write: (chunk) => frame(BODY, chunk),
+    end() { frame(END, Buffer.alloc(0)); response.end(); },
+    json(status, body) { out.head(status, { "Content-Type": "application/json" }); out.write(Buffer.from(JSON.stringify(body))); out.end(); },
+  };
+  return out;
+}
+const bodyOf = (request, limit) => new Promise((resolve, reject) => {
+  const chunks = [];
+  let size = 0;
+  request.on("data", (chunk) => {
+    size += chunk.length;
+    if (size > limit) { reject(new Error("too large")); request.destroy(); } else chunks.push(chunk);
+  });
+  request.on("end", () => resolve(Buffer.concat(chunks)));
+  request.on("error", reject);
+});
+
+/*
+ * Reads are sealed where their route is a LAN in plain HTTP (plan: sealed reads), as terminals are: `POST /sealed`
+ * carries `[nonce length][the grant's nonce][a 16-byte id][the request sealed]`, the request being `{ grant, query,
+ * ifNoneMatch }`; the answer is `[a 16-byte salt]` then frames, `[length][sealed]` each, a head (`{ status, headers }`)
+ * first, body bytes, and an end, so a cut-short answer never looks whole. Keys: direct.js `readRequestKey` and
+ * `readAnswerKey` under the grant's channel key. Over loopback, https or the tailnet, `GET /file` as it is.
+ * `runSecret()` is the key this run of the node gave the hub over a link nobody else reads; with none, nothing is
+ * sealed and reads go as they did.
+ */
+export function serveDirect({ secret, runSecret = null, call, log = console, certificate = null, shells = null }) {
   // The agent's calls, as the hub's execution environment would make them over the socket; readers opened for one
   // request are that request's, and closed with it.
   const local = (held) => ({
@@ -68,6 +124,8 @@ export function serveDirect({ secret, ptySecret = null, call, log = console, cer
   };
   const isOffered = (address) => Boolean(reachOf(address));
   let reading = 0;
+  // Sealed reads' ids, until their grant runs out: one replayed is refused, not answered again.
+  const spentReads = new Map();
   const answer = async (request, response) => {
     const arrivedAt = String(request.socket.localAddress || "").replace(/^::ffff:/, "");
     if (!/^127\./.test(arrivedAt) && arrivedAt !== "::1" && !isOffered(arrivedAt)) return request.socket.destroy();
@@ -84,8 +142,8 @@ export function serveDirect({ secret, ptySecret = null, call, log = console, cer
       // Asked before any grant is shown: what the GET may send. Whether it may read the answer is the GET's to say.
       if (asked && !response.hasHeader("Access-Control-Allow-Origin")) letIn(asked);
       response.writeHead(asked ? 204 : 403, {
-        "Access-Control-Allow-Methods": "GET",
-        "Access-Control-Allow-Headers": "authorization, if-none-match",
+        "Access-Control-Allow-Methods": "GET, POST",
+        "Access-Control-Allow-Headers": "authorization, if-none-match, content-type",
         // A page reaching loopback is asked about first (Private Network Access).
         "Access-Control-Allow-Private-Network": "true",
         "Access-Control-Max-Age": "600",
@@ -106,35 +164,77 @@ export function serveDirect({ secret, ptySecret = null, call, log = console, cer
       const where = `${request.socket.encrypted ? String(request.socket.servername || "").toLowerCase() : arrivedAt}:${request.socket.localPort}`;
       return json(200, { ok: true, proof: proofOf(key, challenge), bound: boundProofOf(key, challenge, where) });
     }
+    const refused = { error: "direct_grant_invalid", message: "This read needs a grant from the hub" };
+    if (request.method === "POST" && url.pathname === "/sealed") {
+      const read = await openRead(request).catch(() => null);
+      if (!read) return json(401, refused);
+      if (asked && read.grant.origin === asked && !response.hasHeader("Access-Control-Allow-Origin")) letIn(asked);
+      const salt = crypto.randomBytes(16);
+      response.writeHead(200, { "Content-Type": "application/octet-stream", "Cache-Control": "no-store" });
+      response.write(salt);
+      return serveRead(read.grant, read.query, read.ifNoneMatch, sealedOut(response, readAnswerKey(read.channel, read.id, salt.toString("base64url"))));
+    }
     if (request.method !== "GET" || url.pathname !== "/file") return json(404, { error: "not_found" });
+    // What crosses a LAN in plain HTTP is anyone's on it, the grant included: there a read is sealed (above) by a node
+    // that can. Loopback, https and the tailnet are private already.
+    if (runSecret?.() && !request.socket.encrypted && reachOf(arrivedAt) === "private") {
+      return json(401, { error: "direct_seal_required", message: "Reads over this network are sealed" });
+    }
     const grant = verifyGrant(secret(), String(request.headers.authorization || "").replace(/^Bearer\s+/i, ""));
-    if (!grant) return json(401, { error: "direct_grant_invalid", message: "This read needs a grant from the hub" });
+    if (!grant) return json(401, refused);
     if (asked && grant.origin === asked && !response.hasHeader("Access-Control-Allow-Origin")) letIn(asked);
-    const relative = url.searchParams.get("path");
-    if (!relative) return json(400, { error: "workspace_path_required" });
-    if (reading >= MAX_READING) return json(503, { error: "direct_busy", message: "This device is busy; read through the hub" });
+    return serveRead(grant, url.searchParams, request.headers["if-none-match"], plainOut(response));
+  };
+  // A sealed read's request opened (see above), or null: the grant must be for the nonce its key came from, and each
+  // id is read once.
+  const openRead = async (request) => {
+    const key = runSecret?.();
+    if (!key) return null;
+    const body = await bodyOf(request, MAX_SEALED_REQUEST);
+    const length = body[0] ?? 0;
+    const nonce = body.subarray(1, 1 + length).toString("latin1");
+    const id = body.subarray(1 + length, 17 + length).toString("base64url");
+    if (!/^[A-Za-z0-9_-]{8,64}$/.test(nonce) || body.length < 17 + length) return null;
+    const channel = channelKey(key, nonce, "read");
+    const plain = openSealed(readRequestKey(channel, id), SEAL_TO_NODE, 0, body.subarray(17 + length));
+    let asked = null;
+    try { asked = plain && JSON.parse(plain.toString("utf8")); } catch { return null; }
+    const grant = typeof asked?.query === "string" ? verifyGrant(key, asked.grant, Date.now(), "read") : null;
+    if (!grant || grant.nonce !== nonce) return null;
+    const now = Date.now();
+    for (const [used, expires] of spentReads) if (expires <= now) spentReads.delete(used);
+    if (spentReads.has(id)) return null;
+    spentReads.set(id, grant.expires);
+    return { grant, channel, id, query: new URLSearchParams(asked.query), ifNoneMatch: typeof asked.ifNoneMatch === "string" ? asked.ifNoneMatch : undefined };
+  };
+  // What the hub's `GET /v0/projects/:id/file` answers, written through `out`: as it is, or sealed.
+  const serveRead = async (grant, params, ifNoneMatch, out) => {
+    const { response } = out;
+    const relative = params.get("path");
+    if (!relative) return out.json(400, { error: "workspace_path_required" });
+    if (reading >= MAX_READING) return out.json(503, { error: "direct_busy", message: "This device is busy; read through the hub" });
     reading += 1;
     const held = new Map();
     try {
       const root = deviceHost({ hub: local(held), nodeId: "self", place: grant.place, label: grant.label || "" });
-      const download = url.searchParams.get("download") === "1";
-      if (download || url.searchParams.get("inline") === "1") {
+      const download = params.get("download") === "1";
+      if (download || params.get("inline") === "1") {
         const resolved = await resolveInspectorPath(root, relative, { kind: "file" });
         const metadata = await readWorkspaceFileMetadata(root, relative);
         const etag = `"${metadata.revision}"`;
-        if (request.headers["if-none-match"] === etag) { response.writeHead(304, { ETag: etag }); return response.end(); }
-        if (metadata.size > MAX_DIRECT_BYTES) return json(413, { error: "file_too_large", message: "That file is too large to open here" });
+        if (ifNoneMatch === etag) { out.head(304, { ETag: etag }); return out.end(); }
+        if (metadata.size > MAX_DIRECT_BYTES) return out.json(413, { error: "file_too_large", message: "That file is too large to open here" });
         // Sent a chunk at a time through the node's own guarded reader, confined to the grant's place: the node holds
         // a chunk per read, not the file, and the first bytes go out as soon as they are read.
         const stop = new AbortController();
-        request.on("close", () => { if (!response.writableEnded) stop.abort(); });
+        response.on("close", () => { if (!response.writableFinished) stop.abort(); });
         const context = withAbortSignal(stop.signal, BACKGROUND_CONTEXT);
         const opened = await call("openBinaryReader", [resolved.relativePath, {}], grant.place, context, () => {}, { confine: true });
         if (!opened?.ok) throw Object.assign(new Error(opened?.error?.message || "That file could not be read"), { code: opened?.error?.code || "permission_denied" });
         const name = encodeURIComponent(path.basename(resolved.relativePath));
         let sent = 0;
         try {
-          response.writeHead(200, {
+          out.head(200, {
             "Content-Type": metadata.mime, "Content-Length": metadata.size, ETag: etag, "Cache-Control": "private, no-cache",
             "X-Content-Type-Options": "nosniff", "Content-Disposition": `${download ? "attachment" : "inline"}; filename*=UTF-8''${name}`,
             ...(metadata.mime === "image/svg+xml" ? { "Content-Security-Policy": "sandbox" } : {}),
@@ -142,7 +242,7 @@ export function serveDirect({ secret, ptySecret = null, call, log = console, cer
           while (sent < metadata.size && !stop.signal.aborted) {
             const chunk = await opened.value.read(sent, Math.min(CHUNK_BYTES, metadata.size - sent), context);
             if (!chunk.ok || !chunk.value.length) break;
-            if (!response.write(Buffer.from(chunk.value.buffer, chunk.value.byteOffset, chunk.value.length))) {
+            if (!out.write(Buffer.from(chunk.value.buffer, chunk.value.byteOffset, chunk.value.length))) {
               await new Promise((resolve) => {
                 const done = () => { response.off("drain", done); response.off("close", done); resolve(); };
                 response.on("drain", done);
@@ -155,15 +255,15 @@ export function serveDirect({ secret, ptySecret = null, call, log = console, cer
           await opened.value.close?.(BACKGROUND_CONTEXT);
         }
         // Shorter than it said (changed as it was read): the client sees a broken response, never a short file.
-        return sent < metadata.size ? response.destroy() : response.end();
+        return sent < metadata.size ? response.destroy() : out.end();
       }
-      if (url.searchParams.get("metadata") === "1") return json(200, await readWorkspaceFileMetadata(root, relative));
-      return json(200, await readWorkspaceFile(root, relative, {
-        forceText: url.searchParams.get("force") === "text", preview: url.searchParams.get("preview") === "1",
+      if (params.get("metadata") === "1") return out.json(200, await readWorkspaceFileMetadata(root, relative));
+      return out.json(200, await readWorkspaceFile(root, relative, {
+        forceText: params.get("force") === "text", preview: params.get("preview") === "1",
       }));
     } catch (error) {
       // The hub's error body, so a client cannot tell which way answered.
-      if (!response.headersSent) json(error.status || STATUS[error.code] || (error.code ? 400 : 500), {
+      if (!out.headersSent) out.json(error.status || STATUS[error.code] || (error.code ? 400 : 500), {
         error: error.code || "runtime_error", message: error.message, path: error.path, kind: error.kind, mime: error.mime,
         size: error.size, modifiedAt: error.modifiedAt, revision: error.revision, maxBytes: error.maxBytes,
       });
@@ -180,7 +280,7 @@ export function serveDirect({ secret, ptySecret = null, call, log = console, cer
    * network between them, or passing the frames on, can neither read nor change them; a frame that does not open ends
    * the socket. Inside, it speaks what the hub's terminal socket speaks (terminal-stream.js), so a client cannot tell
    * which way it is attached. `shells` keeps who holds each terminal, the hub's clients included (node-agent.js).
-   * Keys come from `ptySecret()`, the one this run of the node gave the hub over a link nobody else reads; none, and
+   * Keys come from `runSecret()`, the one this run of the node gave the hub over a link nobody else reads; none, and
    * no terminal is attached here.
    */
   const sockets = shells ? new WebSocketServer({ noServer: true, maxPayload: MAX_INPUT_BYTES + 64 }) : null;
@@ -219,7 +319,7 @@ export function serveDirect({ secret, ptySecret = null, call, log = console, cer
         // The nonce in the clear (it is no secret; the key it names is): from here on, only sealed frames.
         let frame = null;
         try { frame = isBinary || data.length > 1024 ? null : JSON.parse(String(data)); } catch {}
-        const key = ptySecret?.();
+        const key = runSecret?.();
         nonce = typeof frame?.nonce === "string" && /^[A-Za-z0-9_-]{8,64}$/.test(frame.nonce) ? frame.nonce : "";
         if (frame?.type !== "seal" || !nonce || !key) return ws.close(4001, "direct_grant_invalid");
         channel = nodeChannel(channelKey(key, nonce));
@@ -231,7 +331,7 @@ export function serveDirect({ secret, ptySecret = null, call, log = console, cer
         settle();
         let attach = null;
         try { attach = opened.kind === JSON_FRAME && opened.body.length <= 8192 ? JSON.parse(String(opened.body)) : null; } catch {}
-        const grant = attach?.type === "attach" ? verifyGrant(ptySecret(), attach.grant, Date.now(), "pty") : null;
+        const grant = attach?.type === "attach" ? verifyGrant(runSecret(), attach.grant, Date.now(), "pty") : null;
         // The key is the grant's own: a sealed channel for one grant never carries another. A page only by the origin
         // the grant names (nothing like CORS holds a WebSocket back); the apps by theirs.
         // Nothing is sealed to a socket before it has spent the grant: its sealed attach opens on any socket that

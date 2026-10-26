@@ -141,7 +141,7 @@ export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: 
     toldDirect = JSON.stringify(directInfo());
     socket.send(JSON.stringify({ type: "direct", direct: JSON.parse(toldDirect) }));
   };
-  const directInfo = () => ({ port: directPort, addresses: directAddresses(os.networkInterfaces()), pty: "sealed",
+  const directInfo = () => ({ port: directPort, addresses: directAddresses(os.networkInterfaces()), pty: "sealed", reads: "sealed",
     ...(granting ? { grantKey } : {}), ...(served?.secureRoute() ? { tls: served.secureRoute() } : {}) });
   let attempt = 0;
   let stopped = false;
@@ -519,7 +519,7 @@ export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: 
   // Listening first, so the first hello can say where.
   if (direct) {
     const legacy = keySecret(key);
-    served = serveDirect({ secret: () => (granting ? grantKey : legacy), ptySecret: () => (granting ? grantKey : null),
+    served = serveDirect({ secret: () => (granting ? grantKey : legacy), runSecret: () => (granting ? grantKey : null),
       call: envCall, log, certificate, shells: directShells });
     void served.listening.then((port) => { directPort = port; if (!stopped) connect(); });
     // The https route comes when a certificate does: told to main then, and in every hello after.
