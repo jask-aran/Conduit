@@ -37,6 +37,12 @@ async function grantFor(projectId: string): Promise<Grant | null> {
   return asked;
 }
 
+/** Whether this workspace's files can be read from its node itself from here (a grant, and a route that answered). */
+export async function directAvailable(projectId: string): Promise<boolean> {
+  const grant = await grantFor(projectId);
+  return Boolean(grant && await directRoute(grant));
+}
+
 /** Asked for as a workspace's files are first shown, so its first file opens without asking, its route found too. */
 export const prefetchDirect = (projectId: string) => { void grantFor(projectId).then((grant) => grant && directRoute(grant)); };
 
