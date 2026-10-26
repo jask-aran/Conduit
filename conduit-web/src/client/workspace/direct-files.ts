@@ -12,7 +12,7 @@ import { isInstalledClient } from "../platform/installed-client.ts";
  */
 type Route = { url: string; reach: "loopback" | "private" | "tailnet" };
 // `bound`: the node binds its proof to the address it was reached at, and nothing less is taken from it.
-export type Grant = { nodeId: string; routes: Route[]; token: string; expiresAt: number; nonce: string; proof: string; bound?: boolean };
+export type Grant = { nodeId: string; routes: Route[]; token: string; expiresAt: number; nonce: string; proof: string; bound?: boolean; channel?: string };
 
 const hubPath = (projectId: string, query: string) => `/v0/projects/${encodeURIComponent(projectId)}/file?${query}`;
 
@@ -105,12 +105,136 @@ const proofOf = async (key: string, challenge: string) => {
   return [...signed].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 };
 
+const ivFor = (direction: number, count: number) => {
+  const iv = new DataView(new ArrayBuffer(12));
+  iv.setUint32(0, direction);
+  iv.setBigUint64(4, BigInt(count));
+  return iv.buffer;
+};
+
+async function sealedRead(url: string, grant: Grant, channel: string, query: string, init: RequestInit): Promise<Response | null> {
+  const raw = Uint8Array.from(atob(channel.replace(/-/g, "+").replace(/_/g, "/")), (char) => char.charCodeAt(0));
+  if (raw.length !== 32) throw new Error("Invalid read channel");
+  const secret = await crypto.subtle.importKey("raw", raw, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const utf8 = new TextEncoder();
+  const b64url = (bytes: Uint8Array) => btoa(String.fromCharCode(...bytes)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  const keyFor = async (label: string) => crypto.subtle.importKey("raw",
+    await crypto.subtle.sign("HMAC", secret, utf8.encode(label)), "AES-GCM", false, ["encrypt", "decrypt"]);
+  const id = crypto.getRandomValues(new Uint8Array(16));
+  const ifNoneMatch = new Headers(init.headers).get("if-none-match") ?? undefined;
+  const sealed = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv: ivFor(1, 0) },
+    await keyFor(`read-request:${b64url(id)}`), utf8.encode(JSON.stringify({ grant: grant.token, query, ifNoneMatch }))));
+  const nonce = utf8.encode(grant.nonce);
+  if (nonce.length > 255 || nonce.some((byte) => byte > 127)) throw new Error("Invalid read nonce");
+  const body = new Uint8Array(1 + nonce.length + id.length + sealed.length);
+  body[0] = nonce.length;
+  body.set(nonce, 1);
+  body.set(id, 1 + nonce.length);
+  body.set(sealed, 1 + nonce.length + id.length);
+  const response = await fetch(`${url}/sealed`, { method: "POST", body, signal: init.signal, cache: "no-store",
+    headers: { "content-type": "application/octet-stream" } });
+  if (response.status !== 200) return null;
+  if (!response.body) throw new Error("Missing sealed read body");
+  const reader = response.body.getReader();
+  let buffered: Uint8Array = new Uint8Array(0);
+  let offset = 0;
+  const take = async (length: number) => {
+    const bytes = new Uint8Array(length);
+    let filled = 0;
+    while (filled < length) {
+      init.signal?.throwIfAborted();
+      if (offset === buffered.length) {
+        const chunk = await reader.read();
+        if (chunk.done) throw new Error("Sealed read ended before end frame");
+        buffered = chunk.value;
+        offset = 0;
+      }
+      const size = Math.min(length - filled, buffered.length - offset);
+      bytes.set(buffered.subarray(offset, offset + size), filled);
+      filled += size;
+      offset += size;
+    }
+    init.signal?.throwIfAborted();
+    return bytes;
+  };
+  const cancel = () => { void reader.cancel().catch(() => {}); };
+  try {
+    const salt = await take(16);
+    const key = await keyFor(`read-response:${b64url(id)}:${b64url(salt)}`);
+    let count = 0;
+    const frame = async () => {
+      const length = new DataView((await take(4)).buffer).getUint32(0);
+      const plain = new Uint8Array(await crypto.subtle.decrypt({ name: "AES-GCM", iv: ivFor(2, count++) }, key, await take(length)));
+      init.signal?.throwIfAborted();
+      return plain;
+    };
+    const first = await frame();
+    if (first[0] !== 0) throw new Error("Missing sealed read head");
+    const head: unknown = JSON.parse(new TextDecoder().decode(first.subarray(1)));
+    if (!head || typeof head !== "object" || !("status" in head) || typeof head.status !== "number"
+      || !Number.isInteger(head.status) || head.status < 200 || head.status > 599
+      || !("headers" in head) || !head.headers || typeof head.headers !== "object" || Array.isArray(head.headers)) {
+      throw new Error("Invalid sealed read head");
+    }
+    const headers = new Headers();
+    for (const [name, value] of Object.entries(head.headers)) {
+      if (typeof value !== "string") throw new Error("Invalid sealed read header");
+      headers.set(name, value);
+    }
+    const options = { status: head.status, headers };
+    if (head.status === 204 || head.status === 205 || head.status === 304) {
+      cancel();
+      return new Response(null, options);
+    }
+    let finished = false;
+    let abort: () => void;
+    const finish = () => {
+      finished = true;
+      init.signal?.removeEventListener("abort", abort);
+      cancel();
+    };
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        abort = () => {
+          if (finished) return;
+          finish();
+          controller.error(init.signal?.reason ?? new DOMException("Read aborted", "AbortError"));
+        };
+        init.signal?.addEventListener("abort", abort, { once: true });
+        if (init.signal?.aborted) abort();
+      },
+      async pull(controller) {
+        try {
+          const plain = await frame();
+          if (finished) return;
+          if (plain[0] === 1) controller.enqueue(plain.subarray(1));
+          else if (plain[0] === 2 && plain.length === 1) { finish(); controller.close(); }
+          else throw new Error("Invalid sealed read frame");
+        } catch (error) {
+          if (!finished) { finish(); controller.error(error); }
+        }
+      },
+      cancel() { finish(); },
+    });
+    return new Response(stream, options);
+  } catch (error) {
+    cancel();
+    throw error;
+  }
+}
+
 /** The node's own answer, or null for the hub's way. */
 async function fromNode(projectId: string, query: string, init: RequestInit): Promise<Response | null> {
   const grant = await grantFor(projectId);
   const url = grant && await directRoute(grant);
   if (!grant || !url) return null;
   try {
+    const reach = grant.routes.find((route) => route.url === url)?.reach;
+    if (url.startsWith("http:") && reach === "private" && grant.channel) {
+      const response = await sealedRead(url, grant, grant.channel, query, init);
+      if (!response) grants.delete(projectId);
+      return response;
+    }
     const headers = new Headers(init.headers);
     headers.set("authorization", `Bearer ${grant.token}`);
     const response = await fetch(`${url}/file?${query}`, { ...init, headers });

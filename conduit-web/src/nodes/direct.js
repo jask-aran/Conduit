@@ -51,38 +51,59 @@ export function directAddresses(interfaces) {
  * is AES-256-GCM under it, its nonce the direction and a count of frames, so a frame cannot be read, changed, replayed
  * or moved. A route need not be private for a shell then, only reachable.
  */
-export const channelKey = (secret, nonce) => crypto.createHmac("sha256", secret).update(`pty-channel:${nonce}`).digest("base64url");
-const SEAL_TO_NODE = 1;
-const SEAL_TO_CLIENT = 2;
+export const channelKey = (secret, nonce, kind = "pty") => crypto.createHmac("sha256", secret).update(`${kind}-channel:${nonce}`).digest("base64url");
+export const SEAL_TO_NODE = 1;
+export const SEAL_TO_CLIENT = 2;
 const ivFor = (direction, count) => {
   const iv = Buffer.alloc(12);
   iv.writeUInt32BE(direction, 0);
   iv.writeBigUInt64BE(BigInt(count), 4);
   return iv;
 };
+/** One frame sealed: its kind (a byte) and body, AES-256-GCM under `key` with the tag after. */
+export function sealFrame(key, direction, count, kind, body) {
+  const cipher = crypto.createCipheriv("aes-256-gcm", key, ivFor(direction, count));
+  const sealed = Buffer.concat([cipher.update(Buffer.from([kind])), cipher.update(body), cipher.final()]);
+  return Buffer.concat([sealed, cipher.getAuthTag()]);
+}
+/** What was sealed, or null when it was not sealed as `count` that way under `key`. */
+export function openSealed(key, direction, count, sealed) {
+  if (sealed.length < 17) return null;
+  try {
+    const decipher = crypto.createDecipheriv("aes-256-gcm", key, ivFor(direction, count));
+    decipher.setAuthTag(sealed.subarray(sealed.length - 16));
+    return Buffer.concat([decipher.update(sealed.subarray(0, sealed.length - 16)), decipher.final()]);
+  } catch { return null; }
+}
+/** A frame opened: its kind and body. */
+export function openFrame(key, direction, count, frame) {
+  const plain = openSealed(key, direction, count, frame);
+  return plain?.length ? { kind: plain[0], body: plain.subarray(1) } : null;
+}
 /** The node's end of a sealed channel: `seal` a frame for the client, `open` the client's next one (null if it is not). */
 export function nodeChannel(key) {
   const raw = Buffer.from(key, "base64url");
   let sent = 0;
   let received = 0;
   return {
-    seal(kind, body) {
-      const cipher = crypto.createCipheriv("aes-256-gcm", raw, ivFor(SEAL_TO_CLIENT, sent++));
-      const sealed = Buffer.concat([cipher.update(Buffer.concat([Buffer.from([kind]), body])), cipher.final()]);
-      return Buffer.concat([sealed, cipher.getAuthTag()]);
-    },
+    seal: (kind, body) => sealFrame(raw, SEAL_TO_CLIENT, sent++, kind, body),
     open(frame) {
-      if (frame.length < 17) return null;
-      try {
-        const decipher = crypto.createDecipheriv("aes-256-gcm", raw, ivFor(SEAL_TO_NODE, received));
-        decipher.setAuthTag(frame.subarray(frame.length - 16));
-        const plain = Buffer.concat([decipher.update(frame.subarray(0, frame.length - 16)), decipher.final()]);
-        received += 1;
-        return { kind: plain[0], body: plain.subarray(1) };
-      } catch { return null; }
+      const opened = openFrame(raw, SEAL_TO_NODE, received, frame);
+      if (opened) received += 1;
+      return opened;
     },
   };
 }
+
+/**
+ * A read sealed the same way where its route is a LAN in plain HTTP (plan: sealed reads), under the read grant's own
+ * channel key (`channelKey(secret, nonce, "read")`). A read grant serves many reads, so each has keys of its own: the
+ * request's from an id the client picks, the answer's from that and a salt the node picks, so no answer is ever
+ * sealed twice under one key, a replayed request's included.
+ */
+const subkey = (channel, label) => crypto.createHmac("sha256", Buffer.from(channel, "base64url")).update(label).digest();
+export const readRequestKey = (channel, id) => subkey(channel, `read-request:${id}`);
+export const readAnswerKey = (channel, id, salt) => subkey(channel, `read-response:${id}:${salt}`);
 
 /** The node key's hash: the hub keeps it, the node works it out from its key. */
 export const keySecret = (key) => crypto.createHash("sha256").update(key).digest("hex");

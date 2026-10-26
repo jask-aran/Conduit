@@ -913,3 +913,25 @@ shell as the device's user):
   compromised LAN node could stand in for another's LAN name over https
   (one certificate per node would end it); and a terminal attached directly
   stays attached after its client signs out, as one through the hub does.
+
+### 2026-10-26: reads are sealed over a plain LAN too
+
+Terminals sealed, reads were the one thing left crossing a LAN in plain HTTP:
+the file and the grant, which another reader on that network could reuse for
+ten minutes. Trusting a network (task: trusted networks, next) was not the
+answer for the apps: sealing costs a keystroke 5-20 µs and a megabyte 1-2.5
+ms (Node and WebCrypto measured), well under what a LAN takes to carry them.
+
+- A read over a plain-HTTP LAN route is `POST /sealed`: the grant's nonce and
+  an id the client picks, then `{ grant, query, ifNoneMatch }` sealed. The
+  answer is a salt the node picks and frames: a head (`{ status, headers }`),
+  body chunks, an end, so an answer cut short never reads as whole. A grant
+  serves many reads, so each has keys of its own (`readRequestKey` from the id,
+  `readAnswerKey` from the id and the salt under the grant's read channel
+  key): no answer is ever sealed twice under one key, and an id is read once.
+- Loopback, https and the tailnet stay plain `GET /file`: they are private
+  already, and a file on the client's own machine pays nothing for sealing.
+- A node that seals refuses an unsealed read on a plain LAN route
+  (`direct_seal_required`), so a v0.8.7 client reads such a node through the
+  hub. A node with no run key (a plain-HTTP link to its hub) cannot seal, and
+  reads plainly as in v0.8.7; trusted networks are for that case.
