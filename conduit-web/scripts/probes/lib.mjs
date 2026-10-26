@@ -78,7 +78,14 @@ export async function open({ windows = flag("--windows"), width = 1800, height =
   const context = await browser.newContext({ storageState, viewport: { width, height } });
   const page = await context.newPage();
   const cdp = await context.newCDPSession(page);
-  return { browser, context, page, cdp, windows, close: () => browser.close().catch(() => {}) };
+  // The server keeps the 20 sessions seen last: a probe that left its own
+  // behind pushed real devices' sign-ins out, a run at a time.
+  const close = async () => {
+    await context.request.post(`${origin}/v0/auth/logout`).catch(() => {});
+    await browser.close().catch(() => {});
+    await fs.rm(scratch, { recursive: true, force: true }).catch(() => {});
+  };
+  return { browser, context, page, cdp, windows, close };
 }
 
 /** The ids of the most recent chats, for probes that need some to open. */
