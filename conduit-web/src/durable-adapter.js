@@ -8,7 +8,8 @@ import { EventEmitter } from "node:events";
 import { getSupportedThinkingLevels } from "@earendil-works/pi-ai";
 import { watchEvents } from "@earendil-works/pi-durable";
 import { SessionRecords } from "./harnesses/session-records.js";
-import { messageClose, messageOpen, toolClose, toolKind, toolOpen, toolSubject, turnSettle } from "./harnesses/transcript-ops.js";
+import { messageClose, messageOpen, toolCalls, toolClose, toolKind, toolOpen, toolSubject, turnSettle } from "./harnesses/transcript-ops.js";
+import { callsSubject, createScriptCalls, settledCalls } from "./harnesses/script-calls.js";
 import { applyTranscriptOps } from "./transcript-fold.js";
 import { reduceActiveGeneration, snapshotActiveGeneration } from "./active-generation.js";
 import { unsupported } from "./harnesses/unsupported.js";
@@ -63,13 +64,30 @@ const STOPPED_NOTE = "The user stopped your previous response before it finished
 const TOOL_KINDS = {
   bash: "command", read: "read", write: "edit", edit: "edit", ask_user: "other",
   web_search: "search", source_check: "search", fetch_content: "fetch", get_search_content: "fetch",
+  codemode: "script",
 };
 const subjectOf = (name, args = {}) => toolSubject(
-  name === "bash" ? args.command
+  name === "codemode" ? null
+    : name === "bash" ? args.command
     : name === "web_search" ? args.queries || args.query
       : name === "fetch_content" ? args.urls || args.url
         : name === "source_check" ? args.claim || args.query
           : args.path);
+const SCRIPT_TOOLS = {
+  kindOf: (name) => toolKind(TOOL_KINDS, name),
+  subjectOf: (name, input) => subjectOf(name, input || {}),
+};
+
+/** Codemode records nested calls only in its result's details, with JSON argument previews. */
+function codemodeResult(name, details) {
+  if (name !== "codemode" || !Array.isArray(details?.calls)) return {};
+  const calls = details.calls.map((call) => {
+    let input = call.args;
+    if (typeof input === "string") try { input = JSON.parse(input); } catch { input = null; }
+    return { name: call.name, input, isError: call.status === "error", durationMs: call.durationMs };
+  });
+  return { calls: settledCalls(calls, SCRIPT_TOOLS), subject: callsSubject(calls) };
+}
 // pi-durable's default: past contextWindow minus this, the next request waits for a compaction.
 const COMPACTION_RESERVE = 16384;
 const STOP_REASONS = new Set(["stop", "toolUse", "length", "error", "aborted"]);
@@ -175,6 +193,7 @@ export function entriesToOps(entries, ids = {}) {
       if (!result || !calls.has(result.toolCallId)) continue;
       const cancelled = abortedResult(entry);
       ops.push(toolClose({ toolCallId: result.toolCallId, output: textOf(result.content), isError: Boolean(result.isError) && !cancelled, cancelled,
+        ...codemodeResult(calls.get(result.toolCallId).name, result.details),
         completedAt: result.timestamp ? new Date(result.timestamp).toISOString() : undefined }));
     }
   }
@@ -643,13 +662,24 @@ export class DurableAdapter extends EventEmitter {
 
   toolStarted(record, event) {
     const turn = record.turn;
-    if (!turn || event.parentToolCallId) return;
+    if (!turn) return;
+    if (event.parentToolCallId) {
+      const parent = turn.tools.get(event.parentToolCallId);
+      if (parent?.name !== "codemode" || !parent.opened) return;
+      parent.scriptCalls ||= createScriptCalls(SCRIPT_TOOLS);
+      const calls = parent.scriptCalls.start(event.parentToolCallId, event.toolCallId, event.toolName, event.args);
+      this.publish(record, toolCalls({ toolCallId: event.parentToolCallId, calls, generationId: turn.generationId }));
+      return;
+    }
     const known = turn.tools.get(event.toolCallId) || { messageId: null, name: event.toolName, input: event.args };
     const kind = toolKind(TOOL_KINDS, event.toolName);
     const subject = subjectOf(event.toolName, event.args);
-    turn.tools.set(event.toolCallId, { ...known, opened: true, output: "" });
+    const scriptCalls = event.toolName === "codemode" ? createScriptCalls(SCRIPT_TOOLS) : null;
+    turn.tools.set(event.toolCallId, { ...known, opened: true, output: "", ...(scriptCalls ? { scriptCalls } : {}) });
     this.publish(record, toolOpen({ toolCallId: event.toolCallId, name: event.toolName, kind, subject, input: event.args,
       messageId: known.messageId, generationId: turn.generationId }));
+    const plan = scriptCalls?.open(event.toolCallId, event.args?.code);
+    if (plan) this.publish(record, toolCalls({ toolCallId: event.toolCallId, calls: plan, generationId: turn.generationId }));
     this.publish(record, { type: "tool_activity", phase: "start", generationId: turn.generationId, seq: ++record.generationSeq,
       toolCallId: event.toolCallId, name: event.toolName, kind, ...(subject ? { subject } : {}), input: event.args });
   }
@@ -665,6 +695,13 @@ export class DurableAdapter extends EventEmitter {
 
   toolEnded(record, event) {
     const turn = record.turn;
+    if (event.parentToolCallId) {
+      const parent = turn?.tools.get(event.parentToolCallId);
+      if (parent?.name !== "codemode" || !parent.opened) return;
+      const calls = parent.scriptCalls?.end(event.parentToolCallId, event.toolCallId, event.result?.isError ?? true);
+      if (calls) this.publish(record, toolCalls({ toolCallId: event.parentToolCallId, calls, generationId: turn.generationId }));
+      return;
+    }
     const result = event.entry?.model?.[0];
     // A call the last process started ends here: its row was opened then, and closes now.
     const tool = turn?.tools.get(event.toolCallId) || (turn && result && !event.parentToolCallId ? { opened: true, output: "" } : null);
@@ -673,9 +710,11 @@ export class DurableAdapter extends EventEmitter {
     const cancelled = (record.stopping && !result) || abortedResult(event.entry);
     const isError = !cancelled && (result ? Boolean(result.isError) : true);
     tool.opened = false;
+    tool.scriptCalls?.close(event.toolCallId);
     this.publish(record, { type: "tool_activity", phase: "end", generationId: turn.generationId, seq: ++record.generationSeq,
       toolCallId: event.toolCallId, name: event.toolName, output, isError });
-    this.publish(record, toolClose({ toolCallId: event.toolCallId, output, isError, cancelled, generationId: turn.generationId }));
+    this.publish(record, toolClose({ toolCallId: event.toolCallId, output, isError, cancelled, generationId: turn.generationId,
+      ...codemodeResult(event.toolName, result?.details) }));
   }
 
   finish(record) {
