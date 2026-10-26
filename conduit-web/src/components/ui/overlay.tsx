@@ -1,9 +1,9 @@
 import { Frost } from "./frost";
 import * as Icons from "./icons";
-import { For, Show, splitProps, type JSX } from "solid-js";
+import { createSignal, For, Show, splitProps, type JSX } from "solid-js";
 
 import { cn } from "@/lib/utils";
-import { Button, Keycap, Spinner } from "./controls";
+import { Button, Input, Keycap, Spinner } from "./controls";
 import { type Density, type Motion, motionOf, moveCursor } from "./shared";
 
 /*
@@ -153,6 +153,57 @@ export const SettingLine = (props: { label: JSX.Element; state?: JSX.Element; pl
   const inner = () => <><span>{props.label}<Show when={props.state}><small>{props.state}</small></Show></span><span class="ui-setting-control">{props.children}</span></>;
   return props.plain ? <div class="ui-setting-line" title={props.title}>{inner()}</div> : <label class="ui-setting-line" title={props.title}>{inner()}</label>;
 };
+/**
+ * A credential: its name and how it is held (state), then its actions: the caller's own first (actions: Sign in),
+ * Add or Replace (stored), Remove (onRemove). Add or Replace opens the secret's field in their place, with Save and
+ * Cancel (Esc), and what goes with the secret (fields: an account ID) a line each under it. Saving keeps the field
+ * open if onSave throws, so the caller's error shows beside what was typed. editable false: held elsewhere (the
+ * server's environment), nothing to enter here.
+ */
+export function SettingCredential(props: {
+  label: string; state?: JSX.Element; title?: string; stored?: boolean; editable?: boolean; busy?: boolean;
+  add?: string; placeholder?: string; actions?: JSX.Element;
+  fields?: Array<{ name: string; label: string; placeholder?: string; title?: string }>;
+  onSave: (secret: string, fields: Record<string, string>) => unknown | Promise<unknown>; onRemove?: () => void;
+}) {
+  const [open, setOpen] = createSignal(false);
+  const [secret, setSecret] = createSignal("");
+  const [fields, setFields] = createSignal<Record<string, string>>({});
+  const [saving, setSaving] = createSignal(false);
+  const close = () => { setOpen(false); setSecret(""); setFields({}); };
+  const save = async () => {
+    if (!secret().trim() || saving()) return;
+    setSaving(true);
+    try { await props.onSave(secret().trim(), fields()); close(); }
+    catch { /* the caller says why; the field stays open with what was typed */ }
+    finally { setSaving(false); }
+  };
+  const keys = (event: KeyboardEvent) => {
+    if (event.key === "Enter") void save();
+    if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); close(); }
+  };
+  return <>
+    <SettingLine plain label={props.label} state={props.state} title={props.title}>
+      <Show when={open()} fallback={<>
+        {props.actions}
+        <Show when={props.editable !== false}><Button variant="ghost" size="sm" disabled={props.busy} onClick={() => setOpen(true)}>{props.stored ? "Replace" : props.add || "Add key"}</Button></Show>
+        <Show when={props.stored && props.onRemove}><Button variant="ghost" size="sm" disabled={props.busy} onClick={() => props.onRemove?.()}>Remove</Button></Show>
+      </>}>
+        <Input data-credential="" aria-label={props.label} type="password" autocomplete="new-password" data-1p-ignore data-lpignore="true" data-bwignore
+          ref={(element: HTMLInputElement) => queueMicrotask(() => element.focus())} placeholder={props.placeholder || "API key"}
+          value={secret()} onInput={(event) => setSecret(event.currentTarget.value)} onKeyDown={keys} />
+        <Button size="sm" disabled={saving() || !secret().trim()} onClick={() => void save()}>{saving() ? <Spinner /> : null}Save</Button>
+        <Button variant="ghost" size="sm" disabled={saving()} onClick={close}>Cancel</Button>
+      </Show>
+    </SettingLine>
+    <Show when={open()}><For each={props.fields || []}>{(field) =>
+      <SettingLine label={field.label} title={field.title}>
+        <Input data-credential="" value={fields()[field.name] || ""} placeholder={field.placeholder} onKeyDown={keys}
+          onInput={(event) => setFields({ ...fields(), [field.name]: event.currentTarget.value })} />
+      </SettingLine>
+    }</For></Show>
+  </>;
+}
 /** A setting's value that is read, not set; mono for ids, addresses and versions. */
 export const SettingValue = (props: { mono?: boolean; children: JSX.Element }) => <span class="ui-setting-value" data-mono={props.mono ? "" : undefined}>{props.children}</span>;
 /** A link out, as a setting's control: Docs, Open sign-in. */

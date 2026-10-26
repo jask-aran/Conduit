@@ -45,7 +45,7 @@ import { Button, Input, TextArea, Spinner, Segmented, Switch } from "@/component
 import { Select } from "@/components/menus";
 import { combineSaveStates, createAutosave, type SaveState } from "./autosave";
 import { OverlayDialog } from "@/components/dialog";
-import { NavGroup, NavRow, OverlayPage, OverlayRail, SettingGroup, SettingLine, SettingValue, SettingLink, SettingNote, SettingDetails, SettingWide, SettingLoading } from "@/components/ui";
+import { NavGroup, NavRow, OverlayPage, OverlayRail, SettingGroup, SettingLine, SettingValue, SettingLink, SettingNote, SettingDetails, SettingWide, SettingLoading, SettingCredential } from "@/components/ui";
 import { isMobileLayout } from "../navigation/mobile-layout";
 import { uiPreferenceSaves } from "../preferences/ui-preferences";
 
@@ -337,25 +337,19 @@ export function Settings(props: {
   const [workspaceId, setWorkspaceId] = createSignal<string | null>(null);
   const [authProviders, setAuthProviders] = createSignal<PiAuthProvider[]>([]);
   const [authAttempt, setAuthAttempt] = createSignal<PiAuthAttempt | null>(null);
-  // The provider chosen to add (not connected yet), and the one whose key form is open.
+  // The provider chosen to add (not connected yet).
   const [addingAccount, setAddingAccount] = createSignal("");
-  const [accountKeyFor, setAccountKeyFor] = createSignal("");
-  const [apiKey, setApiKey] = createSignal("");
-  const [apiKeyFields, setApiKeyFields] = createSignal<Record<string, string>>({});
   const [authResponse, setAuthResponse] = createSignal("");
   const [authLoading, setAuthLoading] = createSignal(false);
   const [authError, setAuthError] = createSignal("");
   const [authUnavailable, setAuthUnavailable] = createSignal(false);
   const [chatGptStatus, setChatGptStatus] = createSignal<ChatGptWebStatus | null>(null);
-  const [chatGptCookie, setChatGptCookie] = createSignal("");
   const [chatGptBusy, setChatGptBusy] = createSignal(false);
   const [chatGptError, setChatGptError] = createSignal("");
   const [searchSettings, setSearchSettings] = createSignal<SearchSettings | null>(null);
   const [searchStatus, setSearchStatus] = createSignal<"idle" | "loading" | "ready" | "error">("idle");
   const [searchError, setSearchError] = createSignal("");
   // A provider's key being entered, in its row; one row at a time.
-  const [keyFor, setKeyFor] = createSignal<string | null>(null);
-  const [searchKey, setSearchKey] = createSignal("");
   const [searchSaving, setSearchSaving] = createSignal(false);
   // Each answer is the whole page; only the latest edit's is shown, so an
   // older answer never undoes a toggle made since.
@@ -367,7 +361,6 @@ export function Settings(props: {
   const [voiceServerSettings, setVoiceServerSettings] = createSignal<VoiceServerSettings | null>(null);
   const [voiceStatus, setVoiceStatus] = createSignal<"idle" | "loading" | "ready" | "error">("idle");
   const [voiceError, setVoiceError] = createSignal("");
-  const [voiceSecret, setVoiceSecret] = createSignal("");
   const [voiceBusy, setVoiceBusy] = createSignal(false);
   const [voiceLicenseAccepted, setVoiceLicenseAccepted] = createSignal(false);
   const [voiceTestResult, setVoiceTestResult] = createSignal("");
@@ -457,10 +450,10 @@ export function Settings(props: {
       event.preventDefault();
       return;
     }
+    // A secret being entered in its row: its own Escape puts the row back, Settings stays.
+    if (target?.closest("[data-credential]")) return;
     event.preventDefault();
     event.stopPropagation();
-    // A key being entered in its row: Escape puts the row back, Settings stays.
-    if (keyFor() && target?.closest('[id^="search-key-"]')) return closeKey();
     props.onOpenChange(false);
   };
   const navigateSettingsTabs = (event: KeyboardEvent) => {
@@ -485,10 +478,7 @@ export function Settings(props: {
       audioInputSession?.dispose();
       audioInputSession = null;
       setAudioInputBusy(false);
-      setApiKey("");
       setAuthResponse("");
-      setSearchKey("");
-      setVoiceSecret("");
       setVoiceTestResult("");
       audioInputWaveform.reset();
       clearAudioInputTest();
@@ -632,13 +622,12 @@ export function Settings(props: {
     try { setChatGptStatus(await api<ChatGptWebStatus>("/v0/chatgpt-web/status")); setChatGptError(""); }
     catch (error) { setChatGptError((error as Error).message); }
   };
-  const saveChatGptCookie = async () => {
+  const saveChatGptCookie = async (cookie: string) => {
     setChatGptBusy(true);
     try {
-      setChatGptStatus(await api<ChatGptWebStatus>("/v0/chatgpt-web/credential", { method: "PUT", body: JSON.stringify({ cookie: chatGptCookie() }) }));
-      setChatGptCookie("");
+      setChatGptStatus(await api<ChatGptWebStatus>("/v0/chatgpt-web/credential", { method: "PUT", body: JSON.stringify({ cookie }) }));
       setChatGptError("");
-    } catch (error) { setChatGptError((error as Error).message); }
+    } catch (error) { setChatGptError((error as Error).message); throw error; }
     finally { setChatGptBusy(false); }
   };
   const removeChatGptCookie = async () => {
@@ -685,20 +674,13 @@ export function Settings(props: {
     try { await api("/v0/pi-auth/attempt/cancel", { method: "POST" }); await loadPiAuth(); }
     catch (error) { setAuthError((error as Error).message); }
   };
-  const openAccountKey = (providerId: string) => { setApiKey(""); setApiKeyFields({}); setAccountKeyFor(providerId); };
-  const closeAccountKey = () => { setApiKey(""); setApiKeyFields({}); setAccountKeyFor(""); };
-  const saveApiKey = async () => {
-    const providerId = accountKeyFor();
-    if (!providerId || !apiKey().trim()) return;
-    setAuthLoading(true);
+  const saveApiKey = async (providerId: string, key: string, env: Record<string, string>) => {
     setAuthError("");
     try {
-      await api("/v0/pi-auth/api-key", { method: "PUT", body: JSON.stringify({ providerId, key: apiKey(), env: apiKeyFields() }) });
-      closeAccountKey();
+      await api("/v0/pi-auth/api-key", { method: "PUT", body: JSON.stringify({ providerId, key, env }) });
       await loadPiAuth();
       if (section() === "search") void loadSearchSettings();
-    } catch (error) { setAuthError((error as Error).message); }
-    finally { setAuthLoading(false); }
+    } catch (error) { setAuthError((error as Error).message); throw error; }
   };
   const removePiAuth = async (providerId: string) => {
     setAuthLoading(true);
@@ -716,33 +698,21 @@ export function Settings(props: {
    * shown in Models & accounts and, for what search runs on, in Web search.
    */
   const accountLine = (provider: PiAuthProvider, options: { label?: string; title?: string; pending?: boolean } = {}) => {
-    const editing = () => accountKeyFor() === provider.id;
     const attempt = () => authAttempt()?.owned && authAttempt()!.providerId === provider.id ? authAttempt()! : null;
     const configured = () => provider.auth.configured;
     const signedIn = () => provider.auth.kind === "oauth";
     const state = () => provider.auth.kind ? (signedIn() ? "signed in" : "key stored") : ACCOUNT_SOURCES[provider.auth.source || "none"];
     return <>
-      <SettingLine plain label={options.label || provider.label} title={options.title} state={<>{state()}</>}>
-        <Show when={editing()} fallback={<>
+      <SettingCredential label={options.label || provider.label} title={options.title} state={<>{state()}</>} busy={authLoading()}
+        stored={provider.auth.removable && !signedIn()} editable={provider.auth.source !== "environment" && !signedIn()} add={provider.oauth ? "Use a key" : "Add key"}
+        fields={(provider.fields || []).map((field) => ({ ...field, placeholder: provider.auth.kind === "key" ? "Unchanged" : "",
+          title: `${field.name}, stored with the key. Left empty, the one stored before stays, or the server's own ${field.name} is used.` }))}
+        onSave={(key, env) => saveApiKey(provider.id, key, env)} onRemove={provider.auth.removable ? () => void removePiAuth(provider.id) : undefined}
+        actions={<>
           <Show when={provider.oauth && (!configured() || signedIn())}><Button variant="ghost" size="sm" disabled={authLoading() || Boolean(authAttempt()?.active)} onClick={() => void startOAuth(provider.id)}>{signedIn() ? "Sign in again" : "Sign in"}</Button></Show>
-          <Show when={provider.auth.source !== "environment" && !signedIn()}><Button variant="ghost" size="sm" disabled={authLoading()} onClick={() => openAccountKey(provider.id)}>{provider.auth.removable ? "Replace" : provider.oauth ? "Use a key" : "Add key"}</Button></Show>
-          <Show when={provider.auth.removable}><Button variant="ghost" size="sm" disabled={authLoading()} onClick={() => void removePiAuth(provider.id)}>Remove</Button></Show>
+          <Show when={signedIn() && provider.auth.removable}><Button variant="ghost" size="sm" disabled={authLoading()} onClick={() => void removePiAuth(provider.id)}>Remove</Button></Show>
           <Show when={options.pending}><Button variant="ghost" size="sm" onClick={() => setAddingAccount("")}>Cancel</Button></Show>
-        </>}>
-          <Input id={`pi-api-key-${provider.id}`} aria-label={`${provider.label} API key`} type="password" autocomplete="new-password" data-1p-ignore data-lpignore="true" data-bwignore
-            ref={(element: HTMLInputElement) => queueMicrotask(() => element.focus())}
-            value={apiKey()} onInput={(event) => setApiKey(event.currentTarget.value)} placeholder="API key"
-            onKeyDown={(event) => { if (event.key === "Enter") void saveApiKey(); if (event.key === "Escape") { event.stopPropagation(); closeAccountKey(); } }} />
-          <Button size="sm" disabled={authLoading() || !apiKey().trim()} onClick={() => void saveApiKey()}>{authLoading() ? <Spinner /> : null}Save</Button>
-          <Button variant="ghost" size="sm" disabled={authLoading()} onClick={closeAccountKey}>Cancel</Button>
-        </Show>
-      </SettingLine>
-      <Show when={editing()}><For each={provider.fields || []}>{(field) =>
-        <SettingLine plain label={field.label} title={`${field.name}, stored with the key. Left empty, the one stored before stays, or the server's own ${field.name} is used.`}>
-          <Input id={`pi-api-key-${provider.id}-${field.name}`} aria-label={`${provider.label} ${field.label}`} value={apiKeyFields()[field.name] || ""} placeholder={provider.auth.kind === "key" ? "Unchanged" : ""}
-            onInput={(event) => setApiKeyFields({ ...apiKeyFields(), [field.name]: event.currentTarget.value })} onKeyDown={(event) => { if (event.key === "Enter") void saveApiKey(); }} />
-        </SettingLine>
-      }</For></Show>
+        </>} />
       <Show when={attempt()}>{(current) => <>
         <SettingLine plain label="Sign-in" state={<>{current().message}</>}>
           <Show when={current().authUrl}><SettingLink href={current().authUrl!}>Open sign-in</SettingLink></Show>
@@ -789,18 +759,11 @@ export function Settings(props: {
     const source = searchProvider(first)?.source;
     return source ? SEARCH_SOURCE_LABELS[source] : "not set up";
   };
-  const openKey = (id: string) => { setSearchError(""); setSearchKey(""); setKeyFor(id); };
-  const closeKey = () => { setKeyFor(null); setSearchKey(""); };
-  const saveSearchKey = async () => {
-    const id = keyFor();
-    const key = searchKey().trim();
-    if (!id || !key) return;
+  const saveSearchKey = async (id: string, key: string) => {
     setSearchSaving(true);
     setSearchError("");
-    try {
-      setSearchSettings(await api<SearchSettings>(`/v0/search/providers/${encodeURIComponent(id)}`, { method: "PUT", body: JSON.stringify({ key }) }));
-      closeKey();
-    } catch (error) { setSearchError((error as Error).message); }
+    try { setSearchSettings(await api<SearchSettings>(`/v0/search/providers/${encodeURIComponent(id)}`, { method: "PUT", body: JSON.stringify({ key }) })); }
+    catch (error) { setSearchError((error as Error).message); throw error; }
     finally { setSearchSaving(false); }
   };
   const removeSearchKey = async (id: string) => {
@@ -1035,9 +998,7 @@ export function Settings(props: {
   };
   // A key is a credential, so it is saved by its own button (or Enter), not
   // as it is typed; what else is waiting is sent first.
-  const saveVoiceSecret = async () => {
-    const secret = voiceSecret().trim();
-    if (!secret) return;
+  const saveVoiceSecret = async (secret: string) => {
     setVoiceBusy(true);
     setVoiceError("");
     setVoiceTestResult("");
@@ -1047,12 +1008,10 @@ export function Settings(props: {
       if (!settings) return;
       setVoiceServerSettings(await persistVoiceServer(settings, secret));
       setVoiceServerEdited(false);
-      setVoiceSecret("");
-    } catch (error) { setVoiceError((error as Error).message); }
+    } catch (error) { setVoiceError((error as Error).message); throw error; }
     finally { setVoiceBusy(false); }
   };
   const testVoiceServer = async () => {
-    if (voiceSecret().trim()) await saveVoiceSecret();
     const settings = voiceServerSettings();
     if (!settings) return;
     setVoiceBusy(true);
@@ -1390,7 +1349,6 @@ export function Settings(props: {
                   <Show when={voiceServerSettings()!.mode === "remote"}>
                     <SettingLine label="Provider"><Select id="voice-provider" disabled={voiceBusy()} value={voiceServerSettings()!.provider} onChange={(event) => {
                       const provider = voiceServerSettings()!.providers.find((candidate) => candidate.id === event.currentTarget.value)!;
-                      setVoiceSecret("");
                       editVoiceServer((current) => ({ ...current, provider: provider.id, adapter: provider.adapter, endpoint: provider.endpoint, model: provider.models[0]?.id || "", auth: { ...current.auth, type: provider.id === "custom" ? current.auth.type : "bearer", configured: Boolean(provider.configured), source: provider.configured ? "stored" : null, removable: Boolean(provider.configured) } }));
                     }}><For each={voiceServerSettings()!.providers}>{(provider) => <option value={provider.id}>{provider.label}</option>}</For></Select></SettingLine>
                     <Show when={selectedVoiceProvider()?.models.length}>
@@ -1415,11 +1373,9 @@ export function Settings(props: {
                       </Show>
                     </Show>
                     <Show when={voiceServerSettings()!.provider !== "custom" || voiceServerSettings()!.auth.type !== "none"}>
-                      <SettingLine plain label={selectedVoiceProvider()?.authLabel || "Key"} state={<>{voiceServerSettings()!.auth.configured ? "stored" : "not set"}</>}>
-                          <Input id="voice-secret" aria-label={selectedVoiceProvider()?.authLabel || "Key"} type="password" autocomplete="new-password" data-1p-ignore data-lpignore="true" data-bwignore disabled={voiceBusy()} value={voiceSecret()} onInput={(event) => setVoiceSecret(event.currentTarget.value)} onKeyDown={(event) => { if (event.key === "Enter") void saveVoiceSecret(); }} placeholder={voiceServerSettings()!.auth.configured ? "Replace" : "Paste key"} />
-                          <Show when={voiceSecret().trim()}><Button size="sm" disabled={voiceBusy()} onClick={() => void saveVoiceSecret()}>Save</Button></Show>
-                          <Show when={!voiceSecret().trim() && voiceServerSettings()!.auth.removable}><Button variant="ghost" size="sm" disabled={voiceBusy()} onClick={() => void removeVoiceCredential()}>Remove</Button></Show>
-                      </SettingLine>
+                      <SettingCredential label={selectedVoiceProvider()?.authLabel || "Key"} state={<>{voiceServerSettings()!.auth.configured ? "stored" : "not set"}</>}
+                        busy={voiceBusy()} stored={voiceServerSettings()!.auth.configured} placeholder={selectedVoiceProvider()?.authLabel || "Key"}
+                        onSave={(secret) => saveVoiceSecret(secret)} onRemove={voiceServerSettings()!.auth.removable ? () => void removeVoiceCredential() : undefined} />
                     </Show>
                     <SettingLine plain label="Connection" state={<>{voiceTestResult() || (cloudTiming().label === "Live" ? "live" : "after you stop")}</>}>
                       <Button variant="ghost" size="sm" disabled={voiceBusy()} onClick={() => void testVoiceServer()}>{voiceBusy() ? <Spinner /> : null}Test</Button>
@@ -1529,19 +1485,9 @@ export function Settings(props: {
                 </SettingGroup>
                 <SettingGroup title="Providers">
                   <For each={settings().providers}>{(provider) =>
-                    <SettingLine plain label={provider.label} title={provider.description} state={<>{provider.source ? SEARCH_SOURCE_LABELS[provider.source] : "not set"}</>}>
-                      <Show when={keyFor() === provider.id} fallback={<>
-                        <Show when={provider.source !== "environment"}><Button variant="ghost" size="sm" disabled={searchSaving()} onClick={() => openKey(provider.id)}>{provider.stored ? "Replace" : "Add key"}</Button></Show>
-                        <Show when={provider.removable}><Button variant="ghost" size="sm" disabled={searchSaving()} onClick={() => void removeSearchKey(provider.id)}>Remove</Button></Show>
-                      </>}>
-                        <Input id={`search-key-${provider.id}`} aria-label={`${provider.label} API key`} type="password" autocomplete="new-password" data-1p-ignore data-lpignore="true" data-bwignore
-                          ref={(element: HTMLInputElement) => queueMicrotask(() => element.focus())}
-                          value={searchKey()} onInput={(event) => setSearchKey(event.currentTarget.value)} placeholder="API key"
-                          onKeyDown={(event) => { if (event.key === "Enter") void saveSearchKey(); }} />
-                        <Button size="sm" disabled={searchSaving() || !searchKey().trim()} onClick={() => void saveSearchKey()}>{searchSaving() ? <Spinner /> : null}Save</Button>
-                        <Button variant="ghost" size="sm" disabled={searchSaving()} onClick={closeKey}>Cancel</Button>
-                      </Show>
-                    </SettingLine>
+                    <SettingCredential label={provider.label} title={provider.description} state={<>{provider.source ? SEARCH_SOURCE_LABELS[provider.source] : "not set"}</>}
+                      busy={searchSaving()} stored={provider.stored} editable={provider.source !== "environment"}
+                      onSave={(key) => saveSearchKey(provider.id, key)} onRemove={provider.removable ? () => void removeSearchKey(provider.id) : undefined} />
                   }</For>
                   <Show when={authProviders().find((provider) => provider.id === "cloudflare-workers-ai")}>{(provider) => accountLine(provider(), {
                     title: "Checks routed results are on-topic (Clef) and reads values off pages (Clairic), on your Cloudflare account. The same account as in Models & accounts.",
@@ -1572,17 +1518,16 @@ export function Settings(props: {
               <SettingLine plain label="Models" state={<>{props.models.enabledModels().length} enabled</>}><Button variant="ghost" size="sm" onClick={props.onOpenModelSelector}>Manage</Button></SettingLine>
             </SettingGroup>
             <SettingGroup title="ChatGPT Web">
-              <SettingLine plain label="Cookies" state={<>{chatGptStatus()?.auth === "configured" ? "connected" : "not connected"}</>} title={chatGptStatus() ? `Transport: curl_cffi ${chatGptStatus()!.curlCffiVersion}, ${chatGptStatus()!.impersonate}. Stored cookie names: ${chatGptStatus()!.cookieNames.join(", ") || "none"}.` : undefined}>
-                  <Input id="chatgpt-web-cookie" aria-label="Cookies" type="password" autocomplete="off" data-1p-ignore data-lpignore="true" data-bwignore value={chatGptCookie()} onInput={(event) => setChatGptCookie(event.currentTarget.value)} placeholder={chatGptStatus()?.auth === "configured" ? "Replace" : "Paste the Cookie header"} onKeyDown={(event) => { if (event.key === "Enter" && chatGptCookie().trim()) void saveChatGptCookie(); }} />
-                  <Show when={chatGptCookie().trim()}><Button size="sm" disabled={chatGptBusy()} onClick={() => void saveChatGptCookie()}>{chatGptBusy() ? <Spinner /> : null}Save</Button></Show>
-                  <Show when={!chatGptCookie().trim() && chatGptStatus()?.auth === "configured"}><Button variant="ghost" size="sm" disabled={chatGptBusy()} onClick={() => void removeChatGptCookie()}>Remove</Button></Show>
-              </SettingLine>
+              <SettingCredential label="Cookies" state={<>{chatGptStatus()?.auth === "configured" ? "connected" : "not connected"}</>}
+                title={chatGptStatus() ? `Transport: curl_cffi ${chatGptStatus()!.curlCffiVersion}, ${chatGptStatus()!.impersonate}. Stored cookie names: ${chatGptStatus()!.cookieNames.join(", ") || "none"}.` : undefined}
+                busy={chatGptBusy()} stored={chatGptStatus()?.auth === "configured"} add="Add cookies" placeholder="Cookie header"
+                onSave={(cookie) => saveChatGptCookie(cookie)} onRemove={() => void removeChatGptCookie()} />
               <SettingDetails summary="Where to find them">
                 <ol>
                   <li>Sign in at <SettingLink href="https://chatgpt.com">chatgpt.com</SettingLink>.</li>
                   <li>Open browser developer tools, select Network, then reload ChatGPT.</li>
                   <li>Select a request to <code>chatgpt.com</code>. In Request Headers, copy the complete <code>Cookie</code> value.</li>
-                  <li>Paste it above. It must include <code>__Secure-next-auth.session-token</code>, whole or split into numbered parts such as <code>.0</code> and <code>.1</code>.</li>
+                  <li>Add it above. It must include <code>__Secure-next-auth.session-token</code>, whole or split into numbered parts such as <code>.0</code> and <code>.1</code>.</li>
                 </ol>
                 <SettingNote>Conduit stores it on this server and never returns its values. Treat it like a password: do not paste it into a chat, issue, or log.</SettingNote>
               </SettingDetails>
@@ -1596,7 +1541,7 @@ export function Settings(props: {
                 <Show when={authProviders().find((provider) => provider.id === addingAccount() && !provider.auth.configured)}>{(provider) => accountLine(provider(), { pending: true })}</Show>
                 <Show when={authProviders().some((provider) => !provider.auth.configured && provider.id !== addingAccount())}>
                   <SettingLine label="Add an account" title="A model provider's sign-in or API key, kept by the Conduit durable agent on this server.">
-                    <Select id="pi-auth-provider" aria-label="Add an account" search="Search providers" value="" onChange={(event) => { setAddingAccount(event.currentTarget.value); closeAccountKey(); }}>
+                    <Select id="pi-auth-provider" aria-label="Add an account" search="Search providers" value="" onChange={(event) => setAddingAccount(event.currentTarget.value)}>
                       <option value="">Choose a provider</option>
                       <For each={authProviders().filter((provider) => !provider.auth.configured && provider.id !== addingAccount())}>{(provider) => <option value={provider.id}>{provider.label}</option>}</For>
                     </Select>
