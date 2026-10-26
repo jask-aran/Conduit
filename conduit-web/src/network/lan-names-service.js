@@ -92,13 +92,14 @@ export function lanNamesService({ dataRoot, tlsDir = path.join(os.homedir(), ".c
   }
   async function run(force) {
     try {
-      state = "issuing";
-      error = undefined;
-      step = "Checking Cloudflare";
       const targets = [["nodes", `*.${config.domain}`], ...(config.hubName ? [["lan", config.domain]] : [])];
       const due = [];
       for (const target of targets) if (force || await needsCertificate(...target)) due.push(target);
+      // A check that finds nothing due is not setting anything up, and says so only if it fails.
       if (due.length) {
+        state = "issuing";
+        error = undefined;
+        step = "Checking Cloudflare";
         await currentProvider.check();
         if (!config.accountKey) {
           config.accountKey = crypto.generateKeyPairSync("ec", { namedCurve: "prime256v1" }).privateKey.export({ type: "pkcs8", format: "pem" });
