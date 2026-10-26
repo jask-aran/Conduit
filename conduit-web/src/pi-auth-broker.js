@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import fs from "node:fs/promises";
+import { readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 const ATTEMPT_TTL_MS = 10 * 60 * 1000;
@@ -62,6 +63,21 @@ export class PiAuthBroker {
     this.onCredentialsChanged = onCredentialsChanged;
     this.now = now;
     this.attempt = null;
+  }
+
+  /**
+   * This installation's device ID, as a provider's sign-in asks for one (Sign in with ChatGPT names the agent host by
+   * it): made on first use beside the auth file, the same on every later sign-in.
+   */
+  deviceId() {
+    const file = path.join(path.dirname(this.authFile || "."), "conduit-device-id");
+    try {
+      const saved = readFileSync(file, "utf8").trim();
+      if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(saved)) return saved;
+    } catch { /* made below */ }
+    const id = crypto.randomUUID();
+    writeFileSync(file, `${id}\n`, { mode: 0o600 });
+    return id;
   }
 
   /** What each stored credential is, a sign-in or a key, so its account offers the matching action. */
@@ -261,7 +277,7 @@ export class PiAuthBroker {
               attempt.message = event.message;
             }
           },
-        });
+        }, { getDeviceId: () => this.deviceId(), agentName: "Conduit" });
       } else {
         await this.authStorage.login(attempt.providerId, callbacks);
       }
