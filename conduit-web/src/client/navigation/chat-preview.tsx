@@ -13,6 +13,7 @@ import { harnessLabelFor } from "../harness-brand";
 import { PLAIN_SPHERE, SPUTTERING_SPHERE } from "../chat/orb-frames";
 import { settledOrbRate, ThinkingOrb } from "../chat/thinking-orb";
 import { inlineDollarClose } from "../chat/inline-dollar";
+import { elapsed } from "../chat/tool-card";
 
 /*
  * Chat search's preview column: the highlighted chat's last prompt, the start
@@ -92,9 +93,7 @@ async function mathAnswer(raw: string): Promise<string | null> {
 function took(from?: string, to?: string) {
   const ms = from && to ? Date.parse(to) - Date.parse(from) : NaN;
   if (!Number.isFinite(ms) || ms < 0) return "";
-  if (ms < 1000) return `${Math.floor(ms)}ms`;
-  const seconds = Math.round(ms / 1000);
-  return seconds < 60 ? `${String(seconds).padStart(2, "0")}s` : `${Math.floor(seconds / 60)}m ${String(seconds % 60).padStart(2, "0")}s`;
+  return elapsed(ms);
 }
 
 async function glance(detail: TranscriptDetail): Promise<ChatGlance> {
