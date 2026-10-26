@@ -17,6 +17,13 @@ export const DIRECT_PTY_TTL_MS = 60_000;
  */
 export const proofKey = (secret, nonce) => mac(secret, `direct-proof:${nonce}`);
 export const proofOf = (key, challenge) => crypto.createHmac("sha256", key).update(String(challenge)).digest("hex");
+/**
+ * The same answer bound to where the node was reached, as it saw it (`address:port`, or `name:port` over https): the
+ * client checks it against what it dialled, so something passing the challenge on to the node from another address
+ * (a process listening on the client's own loopback at the node's port) is caught. `proofOf` alone is still answered
+ * for v0.8.7 clients' reads.
+ */
+export const boundProofOf = (key, challenge, where) => proofOf(key, `${challenge}|${where}`);
 
 // The kinds of address a node offers for reads: never one on the internet, where the grant would cross in the clear.
 const PRIVATE = /^(10(\.\d{1,3}){3}|172\.(1[6-9]|2\d|3[01])(\.\d{1,3}){2}|192\.168(\.\d{1,3}){2})$/;
@@ -25,11 +32,14 @@ const TAILNET = /^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])(\.\d{1,3}){2}$/;
 // Adapters only this machine can reach (Hyper-V's and WSL's switch, containers' bridges): their private addresses
 // often repeat on every machine, so offering them would only send clients to someone else's.
 const VIRTUAL = /^(vEthernet|docker|br-|veth|virbr|lxc|cni|podman)/i;
+// Tailscale's own adapter (Windows, Linux), or a utun on macOS: 100.64/10 elsewhere is a carrier's shared address
+// space, and a stream over it is anyone's on that network.
+const TAILSCALE_ADAPTER = /tailscale|^utun/i;
 export function directAddresses(interfaces) {
   const found = [];
   for (const [name, list] of Object.entries(interfaces)) for (const item of VIRTUAL.test(name) ? [] : list || []) {
     if (item.internal || (item.family !== "IPv4" && item.family !== 4)) continue;
-    const reach = PRIVATE.test(item.address) ? "private" : TAILNET.test(item.address) ? "tailnet" : null;
+    const reach = PRIVATE.test(item.address) ? "private" : TAILNET.test(item.address) && TAILSCALE_ADAPTER.test(name) ? "tailnet" : null;
     if (reach && !found.some((known) => known.address === item.address)) found.push({ address: item.address, reach });
   }
   return found.sort((left, right) => (left.reach === right.reach ? 0 : left.reach === "private" ? -1 : 1));
