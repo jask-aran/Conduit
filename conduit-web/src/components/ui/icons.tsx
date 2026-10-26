@@ -1,6 +1,8 @@
 import {
   ActivityIcon,
   BotIcon,
+  CornerDownRightIcon,
+  ListEndIcon,
   ArrowDownIcon,
   ArrowLeftIcon,
   ArrowLeftRightIcon,
@@ -109,6 +111,9 @@ export const Notification = BellIcon;
 export const Boxes = BoxesIcon;
 /** A subagent: work an agent handed to another. */
 export const Agent = BotIcon;
+/** A message waiting to steer the running turn; one waiting its turn after it. */
+export const Steer = CornerDownRightIcon;
+export const Queued = ListEndIcon;
 /** Capture a photo attachment. */
 export const Camera = CameraIcon;
 /** A chat or its messages. */

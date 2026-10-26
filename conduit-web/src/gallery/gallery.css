@@ -90,7 +90,7 @@ html, body { background: var(--frame, #08090a); color: var(--foreground); }
 .g-state-table tbody th { text-align: left; font-weight: 500; } .g-state-table thead th { color: var(--muted-foreground); font-weight: 500; }
 .g-anatomy :is(.ui-composer-field, .ui-toolbar, .ui-rider) { outline: 1px dashed #d99a2299; outline-offset: -1px; }
 .g-anatomy :is(.ui-toolbar-start, .ui-toolbar-end) { outline: 1px dotted #7aa2f799; outline-offset: -2px; }
-.g-anatomy :is(.ui-lines, .ui-rider-actions, .ui-rider > .ui-title-text) { outline: 1px dotted #7aa2f799; outline-offset: 1px; }
+.g-anatomy :is(.ui-lines, .ui-rider-actions, .ui-rider > .ui-rider-mark) { outline: 1px dotted #7aa2f799; outline-offset: 1px; }
 /* A frost-free part, alone: its bounds dashed, on the cell's ground. */
 .g-part { outline: 1px dashed #ffffff33; outline-offset: 2px; border-radius: 4px; }
 .g-overlay-demo { width: 100%; max-width: 640px; }

@@ -24,8 +24,7 @@ const STRIP: { id: string; title: string; state: AgentState; time: string }[] = 
   { id: "sa-4", title: "Compare ryokan cancellation policies", state: "failed", time: "9s" },
 ];
 const strip = (chips: typeof STRIP) => {
-  const running = () => chips.filter((chip) => chip.state === "running").length;
-  return <div class="g-composer"><AgentStrip title={running() ? `Agents · ${running()}` : "Agents"}>
+  return <div class="g-composer"><AgentStrip>
     <For each={chips}>{(chip) => <AgentChip {...chip} onOpen={() => {}} onStop={() => {}} />}</For>
   </AgentStrip></div>;
 };
@@ -43,7 +42,7 @@ export const agentsPage: Page = { title: "Agents", summary: "Work an agent hande
   <AgentRow title="Research pricing" state="running" activity="reading booking.com/…" time="12s" onOpen={open} />
 </AgentRows>
 
-<AgentStrip title="Agents · 1">
+<AgentStrip>
   <AgentChip id="sa-1" title="Research pricing" state="running" time="1m 12s" onOpen={open} onStop={stop} />
 </AgentStrip>`,
   anatomy: { scene: () => turn(ROWS.slice(0, 1)), parts: [
@@ -53,7 +52,7 @@ export const agentsPage: Page = { title: "Agents", summary: "Work an agent hande
     { selector: ".ui-agent-time", name: "Time", does: "how long it has run", from: "time" }] },
   examples: [
     row("AgentRow states", "a turn's own (no id) and background ones (an id, and Stop while they work); finished, failed, stopped", () => turn(ROWS), { source: "components/ui/agents.tsx", surfaces: ["ground"], phone: true }),
-    row("AgentStrip", "a chat's background agents on its composer; the title counts those still working; chips scroll sideways once they outgrow it", () => strip(STRIP), { source: "components/ui/agents.tsx", surfaces: ["ground"], phone: true }),
+    row("AgentStrip", "a chat's background agents on its composer, no title: chips scroll sideways once they outgrow it", () => strip(STRIP), { source: "components/ui/agents.tsx", surfaces: ["ground"], phone: true }),
     row("AgentStrip · one", "a single agent", () => strip(STRIP.slice(0, 1)), { surfaces: ["ground"] }),
     row("Beside the queued rider", "riders stack on the composer; the strip sits above what waits to be sent", () => <div class="g-stack">{strip(STRIP.slice(0, 2))}<div class="g-composer">{queued()}</div></div>, { surfaces: ["ground"] }),
   ],
