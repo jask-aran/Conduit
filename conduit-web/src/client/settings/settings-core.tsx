@@ -95,6 +95,8 @@ interface PiAuthProvider {
   label: string;
   oauth: boolean;
   usesCallbackServer: boolean;
+  /** What its key goes with (Cloudflare's account ID), asked for beside it. */
+  fields?: Array<{ name: string; label: string }>;
   auth: { configured: boolean; source: "stored" | "environment" | "managed" | null; removable: boolean };
 }
 
@@ -133,12 +135,15 @@ interface SearchProvider {
 }
 
 type SearchTool = "webSearch" | "fetchContent" | "sourceCheck" | "getSearchContent";
-type SearchFetching = "github" | "video" | "pdf";
+type SearchFetching = "github" | "video" | "pdf" | "extract";
 interface SearchSettings {
   workflow: "none" | "managed";
-  route: { first: string; fallback: boolean; useCurrentModel: boolean };
+  /** timeoutMs: a routed search's whole time (null: none); offTopic: answers judged off-topic go on down the route. */
+  route: { first: string; fallback: boolean; useCurrentModel: boolean; timeoutMs: number | null; offTopic: boolean };
   tools: Record<SearchTool, boolean>;
   fetching: Record<SearchFetching, boolean>;
+  /** Whether Pi can call Cloudflare Workers AI, which extract mode and the off-topic check run on. */
+  cloudflare: boolean;
   providers: SearchProvider[];
 }
 type SearchEdit = { route?: Partial<SearchSettings["route"]>; tools?: Partial<SearchSettings["tools"]>; fetching?: Partial<SearchSettings["fetching"]> };
@@ -157,6 +162,10 @@ const SEARCH_FETCHING: Array<{ key: SearchFetching; label: string; title: string
   { key: "video", label: "YouTube and video", title: "Transcripts, what is on screen and frames, for YouTube and local video files." },
   { key: "pdf", label: "PDFs", title: "Reads a PDF's text instead of returning the file." },
 ];
+const SEARCH_TIME_LIMITS: Array<{ ms: number | null; label: string }> = [
+  { ms: null, label: "None" }, { ms: 15_000, label: "15 s" }, { ms: 30_000, label: "30 s" }, { ms: 60_000, label: "1 min" }, { ms: 120_000, label: "2 min" },
+];
+const CLOUDFLARE_NEEDED = "Needs Cloudflare Workers AI: add its API key and account ID under Providers, or give the server CLOUDFLARE_API_KEY and CLOUDFLARE_ACCOUNT_ID.";
 
 const voiceSelectionFromProfile = (profile: VoiceExecutionProfile): VoiceLocalSelection => ({
   modelId: profile.modelId,
@@ -326,6 +335,8 @@ export function Settings(props: {
   const [authAttempt, setAuthAttempt] = createSignal<PiAuthAttempt | null>(null);
   const [authProviderId, setAuthProviderId] = createSignal("");
   const [apiKey, setApiKey] = createSignal("");
+  const [apiKeyFields, setApiKeyFields] = createSignal<Record<string, string>>({});
+  const keyFields = () => authProviders().find((provider) => provider.id === authProviderId())?.fields || [];
   const [authResponse, setAuthResponse] = createSignal("");
   const [authLoading, setAuthLoading] = createSignal(false);
   const [authError, setAuthError] = createSignal("");
@@ -674,8 +685,9 @@ export function Settings(props: {
     setAuthLoading(true);
     setAuthError("");
     try {
-      await api("/v0/pi-auth/api-key", { method: "PUT", body: JSON.stringify({ providerId: authProviderId(), key: apiKey() }) });
+      await api("/v0/pi-auth/api-key", { method: "PUT", body: JSON.stringify({ providerId: authProviderId(), key: apiKey(), env: apiKeyFields() }) });
       setApiKey("");
+      setApiKeyFields({});
       await loadPiAuth();
     } catch (error) { setAuthError((error as Error).message); }
     finally { setAuthLoading(false); }
@@ -1416,8 +1428,20 @@ export function Settings(props: {
                     </Select>
                   </SettingLine>
                   <Show when={settings().route.first !== "auto"}>
-                    <SettingLine label="Fall back to the others" title="When it fails or is out of quota, the search goes on to every other provider that can search, in the order below.">
+                    <SettingLine label="Fall back to the others" title="When it fails, is out of quota, or finds nothing (or nothing on the sites asked for), the search goes on to every other provider that can search, in the order below. If they all find nothing, the first answer is kept.">
                       <Switch label="Fall back to the others" checked={settings().route.fallback} onChange={(fallback) => editSearch({ route: { fallback } })} />
+                    </SettingLine>
+                    <Show when={settings().route.fallback}>
+                      <SettingLine label="Skip off-topic results" title={settings().cloudflare
+                        ? "Each answer is checked against the query by Cloudflare's Clef classifier on your Cloudflare account (the query, answer and snippets are sent to it); one about something else goes on to the next provider."
+                        : CLOUDFLARE_NEEDED}>
+                        <Switch label="Skip off-topic results" disabled={!settings().cloudflare && !settings().route.offTopic} checked={settings().route.offTopic} onChange={(offTopic) => editSearch({ route: { offTopic } })} />
+                      </SettingLine>
+                    </Show>
+                    <SettingLine label="Time limit" title="The most one search may take across every provider it tries; when it runs out, the best answer so far is kept.">
+                      <Select id="search-time-limit" value={String(settings().route.timeoutMs ?? "")} onChange={(event) => editSearch({ route: { timeoutMs: event.currentTarget.value ? Number(event.currentTarget.value) : null } })}>
+                        <For each={SEARCH_TIME_LIMITS}>{(limit) => <option value={limit.ms === null ? "" : String(limit.ms)}>{limit.label}</option>}</For>
+                      </Select>
                     </SettingLine>
                     <SettingLine label="Match the chat's model" title="A GPT model on OpenAI's own endpoints searches with its own hosted search; any other model goes on down the route.">
                       <Switch label="Match the chat's model" checked={settings().route.useCurrentModel} onChange={(useCurrentModel) => editSearch({ route: { useCurrentModel } })} />
@@ -1438,6 +1462,12 @@ export function Settings(props: {
                       <Switch label={item.label} checked={settings().fetching[item.key]} onChange={(on) => editSearch({ fetching: { [item.key]: on } })} />
                     </SettingLine>
                   }</For>
+                  <SettingLine label="Read values off pages" title={settings().cloudflare
+                    ? "fetch_content's extract mode: a price, a date or a limit as a typed value, with the line it came from, or said not to be there. Read by Cloudflare's Clairic model on your Cloudflare account; the page text is sent to Cloudflare."
+                    : CLOUDFLARE_NEEDED}>
+                    <Switch label="Read values off pages" disabled={!settings().cloudflare && !settings().fetching.extract} checked={settings().fetching.extract} onChange={(extract) => editSearch({ fetching: { extract } })} />
+                  </SettingLine>
+                  <Show when={!settings().cloudflare}><SettingNote>{CLOUDFLARE_NEEDED}</SettingNote></Show>
                 </SettingGroup>
                 <SettingGroup title="Providers">
                   <For each={settings().providers}>{(provider) =>
@@ -1508,6 +1538,11 @@ export function Settings(props: {
                     <Input id="pi-api-key" aria-label="API key" type="password" autocomplete="new-password" data-1p-ignore data-lpignore="true" data-bwignore value={apiKey()} onInput={(event) => setApiKey(event.currentTarget.value)} placeholder="Stored in the Conduit durable agent" onKeyDown={(event) => { if (event.key === "Enter" && apiKey()) void saveApiKey(); }} />
                     <Show when={apiKey()}><Button size="sm" disabled={authLoading()} onClick={() => void saveApiKey()}>{authLoading() ? <Spinner /> : null}Save</Button></Show>
                 </SettingLine>
+                <For each={keyFields()}>{(field) =>
+                  <SettingLine plain label={field.label} title={`${field.name}, stored with the key; the server's own ${field.name} is used when this is empty.`}>
+                    <Input id={`pi-api-key-${field.name}`} aria-label={field.label} value={apiKeyFields()[field.name] || ""} onInput={(event) => setApiKeyFields({ ...apiKeyFields(), [field.name]: event.currentTarget.value })} onKeyDown={(event) => { if (event.key === "Enter" && apiKey()) void saveApiKey(); }} />
+                  </SettingLine>
+                }</For>
                 <Show when={authAttempt()?.owned}>
                   <SettingLine plain label={authAttempt()!.providerLabel} state={<>{authAttempt()!.message}</>}>
                       <Show when={authAttempt()!.authUrl}><SettingLink href={authAttempt()!.authUrl!}>Open sign-in</SettingLink></Show>
