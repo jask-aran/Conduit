@@ -41,6 +41,27 @@ export function readAhead(urls: string[], cache?: RequestCache) {
 
 const resourceOf = (url: string) => (url.split("?")[0] ?? "").split("/").slice(0, 4).join("/");
 
+// Reads several parts of the app make of one document as they mount, by URL.
+const shared = new Map<string, { at: number; read: Promise<unknown> }>();
+
+/**
+ * One read of `url` for every part of the app that asks within two seconds
+ * of it, each given its own copy: the app's look, the terminal's shortcuts
+ * and Settings each read /v0/preferences as they mount. A write to its
+ * resource drops it, as it drops read-aheads.
+ */
+export function readShared<T>(url: string): Promise<T> {
+  let held = shared.get(url);
+  if (!held || Date.now() - held.at > 2_000) {
+    const read = apiWhenServed<unknown>(url);
+    held = { at: Date.now(), read };
+    shared.set(url, held);
+    const entry = held;
+    read.catch(() => { if (shared.get(url) === entry) shared.delete(url); });
+  }
+  return held.read.then((value) => structuredClone(value) as T);
+}
+
 function takeAhead(url: string, options: RequestInit) {
   if (options.method || Object.keys(options).some((key) => key !== "cache")) return null;
   const key = readKey(url, options.cache);
@@ -62,6 +83,7 @@ export async function api<T>(url: string, options: RequestInit = {}): Promise<T>
     if (options.method && !["GET", "HEAD"].includes(options.method.toUpperCase())) {
       const resource = resourceOf(url);
       for (const key of [...ahead.keys()]) if (resourceOf(key.slice(key.indexOf(" ") + 1)) === resource) ahead.delete(key);
+      for (const key of [...shared.keys()]) if (resourceOf(key) === resource) shared.delete(key);
     }
     response = await readOf(url, { ...options, headers });
   }

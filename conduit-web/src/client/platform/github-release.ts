@@ -35,7 +35,14 @@ export function isNewerVersion(candidate: string, current: string): boolean {
  * Where the Download buttons lead: the installers the server publishes itself
  * when it has any (a dev head and its client), else the public release.
  */
-export async function installerDownloads(): Promise<Pick<PublishedRelease, "windowsUrl" | "apkUrl">> {
+// Asked by each Download button as it mounts: one answer serves them all for ten seconds.
+let downloadsAsked: { at: number; answer: Promise<Pick<PublishedRelease, "windowsUrl" | "apkUrl">> } | null = null;
+export function installerDownloads(): Promise<Pick<PublishedRelease, "windowsUrl" | "apkUrl">> {
+  if (!downloadsAsked || Date.now() - downloadsAsked.at > 10_000) downloadsAsked = { at: Date.now(), answer: askDownloads() };
+  return downloadsAsked.answer;
+}
+
+async function askDownloads(): Promise<Pick<PublishedRelease, "windowsUrl" | "apkUrl">> {
   const { api } = await import("../api/client.ts");
   const { httpUrl } = await import("../api/transport.js");
   const own = await api<{ windowsUrl: string | null; apkUrl: string | null }>("/v0/downloads").catch(() => null);

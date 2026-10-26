@@ -50,33 +50,63 @@ export function createModelSettings(
     if (selection?.thinkingLevel) setEffort(selection.thinkingLevel);
   };
 
-  const applySettings = (settings: ModelState, catalog?: ModelState) => {
+  const applySettings = (settings: ModelState) => {
     const nextAll = asList<ModelOption>(settings.models);
     const enabled = asList<string>(settings.enabledModels);
     const fallback = enabled.includes(settings.defaultModel || "") ? settings.defaultModel! : enabled[0] || "";
     setAllModels(nextAll);
     setEnabledModels(enabled);
     setSettingsDefaultModel(fallback);
-    if (catalog) setNotice(catalog.requiresAuthentication ? "Authenticate this harness, then run /login." : "");
+  };
+  // The catalogue is the enabled scope, its models and default the settings'
+  // own (pi-model-catalog.js list and getSettings): all a composer needs.
+  const applyCatalog = (catalog: ModelState) => {
+    const enabled = asList<ModelOption>(catalog.models).map((item) => item.spec);
+    setEnabledModels(enabled);
+    setSettingsDefaultModel(enabled.includes(catalog.defaultModel || "") ? catalog.defaultModel! : enabled[0] || "");
+    setNotice(catalog.requiresAuthentication ? "Authenticate this harness, then run /login." : "");
+  };
+
+  /*
+   * Every model the harness has (535 through OpenRouter, ~115 KB) is for
+   * choosing the scope: the palette's model page and Settings. It is asked
+   * for when one of them first reads it, not on every open, and asked again
+   * with each reload after that.
+   */
+  let allFor = "";
+  const loadAll = async (projectId: string) => {
+    try {
+      const settings = await apiWhenServed<ModelState>(`/v0/settings?projectId=${encodeURIComponent(projectId)}`);
+      if (activeProjectId === projectId && allFor === projectId) applySettings(settings);
+    } catch (error) { if (allFor === projectId) allFor = ""; onError(error); }
+  };
+  const allModelsWanted = () => {
+    if (activeProjectId && allFor !== activeProjectId) {
+      allFor = activeProjectId;
+      void loadAll(activeProjectId);
+    }
+    return allModels();
   };
 
   const reload = async (projectId = activeProjectId, refreshCatalog = false) => {
     if (!projectId) return;
+    if (activeProjectId !== projectId && allFor) {
+      allFor = "";
+      setAllModels([]);
+    }
     activeProjectId = projectId;
     setSettingsLoading(true);
     setSettingsError("");
     try {
       const refresh = initialCatalogRefresh || refreshCatalog;
-      const [settings, catalog] = await Promise.all([
-        apiWhenServed<ModelState>(`/v0/settings?projectId=${encodeURIComponent(projectId)}`),
-        apiWhenServed<ModelState>(`/v0/models?projectId=${encodeURIComponent(projectId)}`),
-      ]);
-      if (activeProjectId === projectId) applySettings(settings, catalog);
+      const catalog = await apiWhenServed<ModelState>(`/v0/models?projectId=${encodeURIComponent(projectId)}`);
+      if (activeProjectId === projectId) applyCatalog(catalog);
+      if (allFor === projectId) void loadAll(projectId);
       if (refresh) void (async () => {
         const refreshedCatalog = await apiWhenServed<ModelState>(`/v0/models?projectId=${encodeURIComponent(projectId)}&refresh=true`);
-        const refreshedSettings = await apiWhenServed<ModelState>(`/v0/settings?projectId=${encodeURIComponent(projectId)}`);
         initialCatalogRefresh = false;
-        if (activeProjectId === projectId) applySettings(refreshedSettings, refreshedCatalog);
+        if (activeProjectId === projectId) applyCatalog(refreshedCatalog);
+        if (allFor === projectId) await loadAll(projectId);
       })().catch(onError);
     } catch (error) { setSettingsError((error as Error).message); onError(error); }
     finally { if (activeProjectId === projectId) setSettingsLoading(false); }
@@ -237,7 +267,7 @@ export function createModelSettings(
   };
 
   return {
-    allModels, enabledModels, models, settingsDefaultModel, model, effort, profile: activeProfile, modelThinkingLevels, notice, settingsError, settingsLoading, chatLoading, saving,
+    allModels: allModelsWanted, enabledModels, models, settingsDefaultModel, model, effort, profile: activeProfile, modelThinkingLevels, notice, settingsError, settingsLoading, chatLoading, saving,
     select, reload, reloadChat, saveScope, chooseModel, chooseEffort,
   };
 }

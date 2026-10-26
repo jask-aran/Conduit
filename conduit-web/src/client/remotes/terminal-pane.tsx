@@ -12,7 +12,7 @@ import { toast } from "@/components/notifications";
 import { DropdownMenu, MenuContent, MenuControl, MenuSection, MenuRow, MenuSub, MenuSubTrigger, MenuSubContent } from "@/components/menus";
 import { Rule, MenuNote } from "@/components/ui/popover";
 import { Spinner } from "@/components/ui/controls";
-import { api } from "../api/client";
+import { api, readShared } from "../api/client";
 import type { Connectivity } from "../state/runtime";
 import { onPathChange } from "../platform/servers";
 import { terminalSocketUrl } from "../api/transport";
@@ -969,7 +969,7 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
       void refreshSessions(activeProjectId).catch(() => {});
     };
     window.addEventListener("conduit:ptys-changed", ptyChangeListener);
-    void api<{ terminalShortcuts?: unknown }>("/v0/preferences")
+    void readShared<{ terminalShortcuts?: unknown }>("/v0/preferences")
       .then(async (saved) => {
         const persisted = normalizeTerminalShortcuts(saved.terminalShortcuts);
         const legacy = persisted.length ? [] : readLegacyTerminalShortcuts();
