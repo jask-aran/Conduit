@@ -386,7 +386,7 @@ function scheduleWorkspaceWatchClose(record) {
  * (3s for this repository's ~22k directories, node_modules included), and
  * every request waits on the event loop meanwhile. Here the walk runs on a
  * worker thread and changes come back as messages. `ready` settles once the
- * watch is live, so the first version is taken after it, as with fs.watch.
+ * watch is live; versions asked before then compare the visible paths.
  */
 const WATCH_WORKER_SOURCE = `
 const { parentPort, workerData } = require("node:worker_threads");
@@ -442,6 +442,7 @@ function startWorkspaceWatch(record) {
       watcher.handle = handle;
       if (watcher.closed) handle.close();
       record.polling = false;
+      watcher.live = true;
     }, lost);
     record.watcher = watcher;
     noteWorkspaceChange(record);
@@ -459,6 +460,9 @@ function startWorkspaceWatch(record) {
       noteWorkspaceChange(record);
     });
     record.watcher.unref();
+    const watcher = record.watcher;
+    if (watcher.ready) void watcher.ready.then(() => { watcher.live = true; });
+    else watcher.live = true;
   } catch {
     record.fallback = true;
   }
@@ -498,8 +502,15 @@ export async function readWorkspaceVersion(root, { paths = [], watchImpl = watch
   record.closeTimer = null;
   try {
     startWorkspaceWatch(record);
-    await record.watcher?.ready;
-    if (record.fallback || record.polling || (!record.host.local && !record.watcher)) await scanWorkspacePaths(record, paths);
+    // Until the watch is live (a recursive watch of a large tree takes
+    // seconds to walk), the visible paths are compared instead of waiting,
+    // and once more after, for a change made while it came up.
+    const watcher = record.watcher;
+    if (record.fallback || record.polling || !watcher?.checked) {
+      const live = watcher?.live;
+      await scanWorkspacePaths(record, paths);
+      if (live) watcher.checked = true;
+    }
     const changedPaths = record.fullRefresh || record.changedPaths === null ? null : [...record.changedPaths];
     if (record.fullRefresh) {
       record.fullRefresh = false;
