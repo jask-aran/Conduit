@@ -13,10 +13,11 @@ import type { FileEntry } from "./file-documents";
 import type { ComparisonPayload } from "./workspace-comparison";
 import WorkspaceFileSlot, { type FileSlotHandle, type FileSummary } from "./workspace-file-slot";
 import { reportError } from "./workspace-shared";
-import type { DiffPayload, GitChangedFile } from "./workspace-types";
+import type { DiffPayload, GitChangedFile, WorkspaceVersion } from "./workspace-types";
 
 const WorkspaceComparison = lazy(() => import("./workspace-comparison"));
 const POLL_INTERVAL_MS = 1_500;
+const TOLD_POLL_INTERVAL_MS = 10_000;
 const entryKey = (entry: FileEntry) => `${entry.projectId}:${entry.path}`;
 const hasUnstaged = (file?: GitChangedFile) => Boolean(file && (file.status === "??" || file.status[1] !== " "));
 const hasStaged = (file?: GitChangedFile) => Boolean(file && file.status[0] !== " " && file.status[0] !== "?");
@@ -92,12 +93,22 @@ export default function FileViewer(props: {
     const entries = props.entries;
     const timers: number[] = [];
     let cancelled = false;
+    const listeners: Array<(event: Event) => void> = [];
     for (const [projectId, paths] of places) {
       let version: number | null = null;
+      // As the panel's poll (workspace-poll.ts): at once when the server says
+      // this place changed, and slower while it says it will.
+      let told = false;
+      let probing = false;
+      let again = false;
+      let timer = 0;
       const probe = async () => {
+        window.clearTimeout(timer);
+        if (probing) { again = true; return; }
+        probing = true;
         try {
           const query = new URLSearchParams({ paths: JSON.stringify(paths) });
-          const payload = await api<{ version: number; changedPaths: string[] | null }>(`/v0/projects/${encodeURIComponent(projectId)}/workspace/version?${query}`);
+          const payload = await api<WorkspaceVersion>(`/v0/projects/${encodeURIComponent(projectId)}/workspace/version?${query}`);
           if (cancelled) return;
           if (version !== null && version !== payload.version) {
             entries.forEach((entry, index) => {
@@ -106,12 +117,23 @@ export default function FileViewer(props: {
             void loadStatus(projectId);
           }
           version = payload.version;
-        } catch {}
-        if (!cancelled) timers.push(window.setTimeout(probe, POLL_INTERVAL_MS));
+          told = payload.told === true;
+        } catch {} finally { probing = false; }
+        if (cancelled) return;
+        if (again) { again = false; return void probe(); }
+        timer = window.setTimeout(probe, told ? TOLD_POLL_INTERVAL_MS : POLL_INTERVAL_MS);
+        timers.push(timer);
       };
+      const onChanged = (event: Event) => { if ((event as CustomEvent<string[]>).detail?.includes(projectId)) void probe(); };
+      window.addEventListener("conduit:workspace-changed", onChanged);
+      listeners.push(onChanged);
       void probe();
     }
-    onCleanup(() => { cancelled = true; timers.forEach((timer) => window.clearTimeout(timer)); });
+    onCleanup(() => {
+      cancelled = true;
+      timers.forEach((timer) => window.clearTimeout(timer));
+      listeners.forEach((listener) => window.removeEventListener("conduit:workspace-changed", listener));
+    });
   });
   // A header that no longer fits drops the actions its context menu also
   // has, then gathers the rest into its overflow menu, before the file's name
