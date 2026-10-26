@@ -1095,33 +1095,74 @@ export class DurableAdapter extends EventEmitter {
   }
 
   /**
-   * The chat's history as a tree: its conversation and every branch it left,
-   * merged by message id. Branches share what came before their fork, so a
-   * message seen in several is one node, and each branch's messages chain from
-   * it. The leaf is the chat's own last message.
+   * The chat's history as a tree, merged by original entry identity so a
+   * fork shares tools and context boundaries as well as messages.
    */
   async readHistory(options) {
+    const { formatHistoryTool } = await import("./harnesses/history-tool.js");
     const record = options.liveSessionId ? this.get(options.liveSessionId) : null;
     const current = record?.conversationId ?? Number(options.opaqueSession);
     const branches = Number.isInteger(current) ? await this.branchesOf(current) : [];
     const nodes = new Map();
     const roots = [];
     let leafId = null;
+    if (!Number.isInteger(current)) return { mode: "linear", leafId, tree: roots };
+    const harness = await this.runtime.open();
     for (const conversationId of [...branches, current]) {
-      const { messages } = conversationId === current
-        ? await this.readTranscript(options) : await this.readTranscript({ opaqueSession: conversationId });
+      const conversation = conversationId === current && record?.conversation
+        || await harness.conversation(conversationId, this.context);
+      if (!conversation) continue;
+      const entries = await this.entries(conversation);
+      const ids = (await harness.snapshot(ConduitIds, conversationId, this.context))?.messages || {};
+      // Only message text is needed here; do not fold large tool outputs again.
+      const { messages } = applyTranscriptOps({}, entriesToOps(entries.filter((entry) => entry.kind === USER_ENTRY || entry.kind === "pi.assistant"), ids));
+      const byId = new Map(messages.map((message) => [message.id, message]));
+      const calls = new Map();
+      const results = new Set(entries.filter((entry) => entry.kind === "pi.tool-result").map((entry) => entry.model?.[0]?.toolCallId));
       let parent = null;
-      for (const message of messages) {
-        let node = nodes.get(message.id);
+      const append = (entry) => {
+        let node = nodes.get(entry.id);
         if (!node) {
-          node = { entry: { id: message.id, parentId: parent?.entry.id || null, timestamp: message.timestamp || null, type: "message",
-            display: `${message.role}: ${String(message.content || "").replace(/\s+/g, " ").trim().slice(0, 240)}`,
-            kind: message.role, hidden: false, forkable: message.role === "user", regeneratable: message.role === "user" },
-          children: [] };
-          nodes.set(message.id, node);
+          node = { entry: { parentId: parent?.entry.id || null, timestamp: "", type: "message",
+            hidden: false, forkable: false, regeneratable: false, ...entry }, children: [] };
+          nodes.set(entry.id, node);
           (parent ? parent.children : roots).push(node);
         }
         parent = node;
+      };
+      for (const entry of entries) {
+        const raw = entry.model?.[0];
+        const id = `entry:${entry.conversationId}:${entry.id}`;
+        if (entry.kind === USER_ENTRY || entry.kind === "pi.assistant") {
+          const messageId = entry.kind === USER_ENTRY ? entry.data?.messageId || `u${entry.conversationId}-${entry.id}`
+            : ids[entry.id] || `a${entry.conversationId}-${entry.id}`;
+          const message = byId.get(messageId);
+          if (!message || message.streaming) continue;
+          const text = String(message.content || "").replace(/\s+/g, " ").trim();
+          append({ id: message.id, timestamp: message.timestamp || null,
+            display: `${message.role}: ${text.slice(0, 240)}`, kind: message.role,
+            hidden: message.role === "assistant" && !text && !message.errorMessage,
+            forkable: message.role === "user", regeneratable: message.role === "user" });
+          for (const part of Array.isArray(raw?.content) ? raw.content : []) {
+            if (part.type !== "toolCall") continue;
+            calls.set(part.id, part);
+            // A call without a result is still a step, including a stopped call.
+            if (!results.has(part.id)) append({ id: `${id}:tool:${part.id}`, kind: "tool",
+              display: formatHistoryTool(part.name, part.arguments) });
+          }
+        } else if (entry.kind === "pi.tool-result") {
+          const call = calls.get(raw?.toolCallId);
+          const timestamp = raw?.timestamp ? new Date(raw.timestamp) : null;
+          append({ id, kind: "tool", display: formatHistoryTool(call?.name || raw?.toolName || "tool", call?.arguments),
+            timestamp: timestamp && Number.isFinite(timestamp.getTime()) ? timestamp.toISOString() : "" });
+        } else if (entry.kind === "pi.compaction") {
+          append({ id, type: "compaction", kind: "system", display: "[compaction]" });
+        } else if (entry.kind === "pi.reset") {
+          const text = (typeof raw?.content === "string" ? raw.content : textOf(raw?.content)).replace(/\s+/g, " ").trim().slice(0, 240);
+          append({ id, type: "reset", kind: "system", display: text ? `[handoff]: ${text}` : "[reset]" });
+        } else if (entry.kind === "pi.system") {
+          append({ id, type: "system", kind: "system", display: "", hidden: true });
+        }
       }
       if (conversationId === current) leafId = parent?.entry.id || null;
     }
