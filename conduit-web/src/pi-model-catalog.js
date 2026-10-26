@@ -13,6 +13,7 @@ import path from "node:path";
 // on the main thread), so it runs when one of these changed, or a minute on.
 const REFRESH_FILES = ["models.json", "models-store.json", "auth.json"];
 const REFRESH_AT_MOST_MS = 60_000;
+const NETWORK_REFRESH_EVERY_MS = 5 * 60_000;
 
 export function resolveThinkingLevel(level, supportedLevels = [], fallbackLevel = "") {
   const levels = Array.isArray(supportedLevels)
@@ -82,12 +83,27 @@ export class PiModelCatalog {
 
   async refreshFromNetwork({ providers, force = false, timeoutMs = 15_000 } = {}) {
     await this.ready();
-    return this.modelRegistry.refresh({
+    const run = () => this.modelRegistry.refresh({
       allowNetwork: true,
       force,
       ...(providers?.length ? { providers } : {}),
       signal: AbortSignal.timeout(timeoutMs),
     });
+    if (force || providers?.length) return run();
+    // Every client's first open asks for this, and each one asked every
+    // provider again (~1 s, ~100 ms of CPU, the store rewritten). One serves
+    // five minutes, unless a sign-in has changed auth.json since.
+    const authNow = () => fs.stat(this.authFile).then((stat) => `${stat.ino}:${stat.size}:${stat.mtimeMs}`, () => "-");
+    const auth = await authNow();
+    const last = this.networkRefresh;
+    if (last && last.auth === auth && (!last.at || Date.now() - last.at < NETWORK_REFRESH_EVERY_MS)) return last.result;
+    const result = run();
+    const current = { auth, at: 0, result };
+    this.networkRefresh = current;
+    // Taken again after: the refresh itself may renew a sign-in's token.
+    result.then(async () => { current.auth = await authNow(); current.at = Date.now(); },
+      () => { if (this.networkRefresh === current) this.networkRefresh = null; });
+    return result;
   }
 
   async snapshot(cwd) {
