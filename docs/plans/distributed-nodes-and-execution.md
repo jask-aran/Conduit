@@ -846,17 +846,28 @@ and kills terminals; only typing and output move.
 - The hub signs a grant for one terminal (`{ pty, nonce, expires, origin }`,
   the same HMAC on the node's key hash as a read), good for a minute and spent
   on its first use. A read grant does not pass for it, nor it for a read.
-- The client finds the node as for reads (the challenge on `/health`), opens
-  `/pty` there and sends the grant as its first frame, never in the address.
-  From then the frames are the hub's terminal protocol, so a client cannot
-  tell which way it is attached. Any failure before the terminal answers, or
-  a node that does not offer it (one older than this), goes through the hub.
-- **A shell never crosses a network in the clear.** The hub offers only this
-  machine, the tailnet (WireGuard) and https names (a LAN name with the
-  hub's certificate, the tailnet name): what is typed into a shell is a
-  password as often as a command, and a stream anyone on the network can
-  change is a shell for them. A file read may cross a LAN in plain HTTP; a
-  terminal on a LAN without a LAN name goes through the hub.
+- The client finds the node as for reads (the challenge on `/health`) and
+  opens `/pty` there. Inside, the frames are the hub's terminal protocol, so a
+  client cannot tell which way it is attached. Any failure before the
+  terminal answers, or a node that does not offer it (one older than this),
+  goes through the hub.
+- **The channel is sealed end to end** (amended the same day; the first build
+  offered terminals only over loopback, the tailnet and https, and a terminal
+  on a LAN without a LAN name went through the hub -- not acceptable with the
+  hub on a VPS). The hub hands the client a key with the grant, over the
+  client's own connection to it; the node works the same key out from the
+  grant's nonce and its run key (`channelKey`). The client's first frame names
+  the nonce; every frame after, both ways, the grant included, is AES-256-GCM
+  under that key, its nonce the direction and a count of frames, so nothing
+  between them can read, change, replay or move a frame, and one that does
+  not open ends the socket. Any route that reaches the node will do, a LAN in
+  plain HTTP included; a relay passes on only what it cannot open. What is
+  left to the network is stopping it, and then the hub's way still works.
+  Sealing is WebCrypto's in the client, which the apps and any https or
+  localhost page have; a page on a plain-HTTP hub has none and goes through
+  the hub (which is on its LAN then). A page on an https hub cannot open
+  `ws://` to a LAN address at all (mixed content), so it uses a node's https
+  name: its LAN name where the hub gives them, its tailnet name.
 - **The node keeps who holds a terminal**, since both ways end there: the
   hub's client claims it (`claim`, refused while a direct client holds it
   unless taking over) and a direct client attaches by its grant (refused while
@@ -875,9 +886,8 @@ shell as the device's user):
   asked for over https), and the client checks it against what it dialled.
   Before, a process on the client's machine listening on the node's port
   could pass the challenge through to the real node and collect the grant.
-  A terminal's socket also proves itself on that connection before the grant
-  is sent: a route proved a minute ago says nothing about the socket opened
-  now. A v0.8.7 node's unbound proof is still taken for reads only; the hub
+  A terminal's socket proves itself by its seal: only the node opens what the
+  client sends and seals what it answers. A v0.8.7 node's unbound proof is still taken for reads only; the hub
   says which a grant expects, so a relay cannot strip the bound one.
 - **Grants are signed with a key each run of the node makes**, given to the
   hub only over https or loopback, never kept on disk. The pairing key may
@@ -889,10 +899,10 @@ shell as the device's user):
   node restarted is nothing.
 - **The tailnet is Tailscale's own adapter**, not any 100.64/10 address: that
   range is also carriers' shared address space.
-- **The node enforces the transport itself**: `/pty` over plain HTTP only on
-  loopback or the tailnet. Sockets not yet attached are at most 16, five
-  seconds, 8 KB a frame. A client that stops answering pings lets go of its
-  terminal within forty seconds.
+- **The node bounds what it gives anyone who reaches the port**: sockets not
+  yet attached are at most 16, five seconds, 1 KB for the opening frame and
+  8 KB for the sealed attach. A client that stops answering pings lets go of
+  its terminal within forty seconds.
 - Taken knowingly: every LAN node holds the one wildcard certificate key, so a
   compromised LAN node could stand in for another's LAN name over https
   (one certificate per node would end it); and a terminal attached directly

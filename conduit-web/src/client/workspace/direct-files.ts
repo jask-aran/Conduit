@@ -91,10 +91,10 @@ async function nearest(grant: Grant): Promise<string | null> {
   return null;
 }
 
-export const newChallenge = () => [...crypto.getRandomValues(new Uint8Array(16))].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+const newChallenge = () => [...crypto.getRandomValues(new Uint8Array(16))].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 
 /** The node's answer to `challenge` bound to `url`'s host and port, as it saw them (nodes/direct.js `boundProofOf`). */
-export function boundProof(key: string, challenge: string, url: string) {
+function boundProof(key: string, challenge: string, url: string) {
   const { protocol, hostname, port } = new URL(url);
   return proofOf(key, `${challenge}|${hostname.toLowerCase()}:${port || (protocol === "https:" || protocol === "wss:" ? "443" : "80")}`);
 }

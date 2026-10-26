@@ -141,7 +141,7 @@ export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: 
     toldDirect = JSON.stringify(directInfo());
     socket.send(JSON.stringify({ type: "direct", direct: JSON.parse(toldDirect) }));
   };
-  const directInfo = () => ({ port: directPort, addresses: directAddresses(os.networkInterfaces()), pty: true,
+  const directInfo = () => ({ port: directPort, addresses: directAddresses(os.networkInterfaces()), pty: "sealed",
     ...(granting ? { grantKey } : {}), ...(served?.secureRoute() ? { tls: served.secureRoute() } : {}) });
   let attempt = 0;
   let stopped = false;

@@ -11,7 +11,7 @@ import { readWorkspaceFile, readWorkspaceFileMetadata, resolveInspectorPath } fr
 import os from "node:os";
 import { WebSocketServer } from "ws";
 import { PtyOutputBatcher } from "../pty-output-batcher.js";
-import { boundProofOf, directAddresses, proofKey, proofOf, verifyGrant } from "./direct.js";
+import { boundProofOf, channelKey, directAddresses, nodeChannel, proofKey, proofOf, verifyGrant } from "./direct.js";
 import { decode, encode, HANDLE_METHODS, METHOD_GRANTS } from "./protocol.js";
 
 // The largest file sent, a chunk at a time, and how many are read at once: past either, the hub's way.
@@ -174,26 +174,31 @@ export function serveDirect({ secret, ptySecret = null, call, log = console, cer
     }
   };
   /*
-   * Terminals attached here directly (plan: direct terminals): a WebSocket at `/pty`. The client first has this node
-   * prove itself on that very connection, bound to where it was reached (a challenge answered on `/health` says
-   * nothing about a socket opened later); only then does it send the hub's grant for one terminal, never in the
-   * address. From then it speaks what the hub's terminal socket speaks (terminal-stream.js), so a client cannot tell
+   * Terminals attached here directly (plan: direct terminals): a WebSocket at `/pty`, sealed end to end. The client's
+   * first frame names the grant's nonce; from then every frame both ways is sealed under the key the hub gave the
+   * client and this node works out from that nonce (direct.js `nodeChannel`), the grant itself included. Someone on the
+   * network between them, or passing the frames on, can neither read nor change them; a frame that does not open ends
+   * the socket. Inside, it speaks what the hub's terminal socket speaks (terminal-stream.js), so a client cannot tell
    * which way it is attached. `shells` keeps who holds each terminal, the hub's clients included (node-agent.js).
-   * A grant is checked against `ptySecret()`, the key this run of the node gave the hub over a link nobody else reads;
-   * none, and no terminal is attached here.
+   * Keys come from `ptySecret()`, the one this run of the node gave the hub over a link nobody else reads; none, and
+   * no terminal is attached here.
    */
-  const sockets = shells ? new WebSocketServer({ noServer: true, maxPayload: MAX_INPUT_BYTES }) : null;
+  const sockets = shells ? new WebSocketServer({ noServer: true, maxPayload: MAX_INPUT_BYTES + 64 }) : null;
   // A grant attaches once: its nonce is kept until it would have run out anyway.
   const spent = new Map();
   // Sockets not yet attached: few, small and brief, since anyone who reaches the port may open one.
   let unattached = 0;
-  const attachHere = (ws, origin, where) => {
-    const send = (message) => { if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(message)); };
+  const JSON_FRAME = 0;
+  const BYTES_FRAME = 1;
+  const attachHere = (ws, origin) => {
+    let channel = null;
+    let nonce = "";
+    const send = (message) => { if (channel && ws.readyState === ws.OPEN) ws.send(channel.seal(JSON_FRAME, Buffer.from(JSON.stringify(message)))); };
     const refuse = (code, message, close) => { send({ type: "client_error", code, message }); ws.close(close, code); };
     const output = new PtyOutputBatcher((_id, bytes) => {
       if (ws.readyState !== ws.OPEN) return;
       if (ws.bufferedAmount > PENDING_LIMIT) return ws.close(1013, "Terminal client is too slow");
-      ws.send(bytes, { binary: true });
+      ws.send(channel.seal(BYTES_FRAME, bytes));
     });
     // A client that stops answering (a laptop asleep, a network gone) lets go of the terminal within a minute.
     let answered = true;
@@ -205,34 +210,38 @@ export function serveDirect({ secret, ptySecret = null, call, log = console, cer
     }, 20_000);
     beat.unref?.();
     let shell = null;
-    let proved = false;
     let waiting = true;
     unattached += 1;
     const settle = () => { if (waiting) { waiting = false; unattached -= 1; clearTimeout(timer); } };
     const timer = setTimeout(() => ws.close(1008, "attach_expected"), 5000);
     ws.on("message", (data, isBinary) => {
-      if (waiting) {
+      if (!channel) {
+        // The nonce in the clear (it is no secret; the key it names is): from here on, only sealed frames.
         let frame = null;
-        try { frame = isBinary || data.length > 8192 ? null : JSON.parse(String(data)); } catch {}
+        try { frame = isBinary || data.length > 1024 ? null : JSON.parse(String(data)); } catch {}
         const key = ptySecret?.();
-        if (!proved) {
-          const nonce = typeof frame?.nonce === "string" && frame.nonce.length <= 64 ? frame.nonce : "";
-          const challenge = typeof frame?.challenge === "string" && frame.challenge.length <= 128 ? frame.challenge : "";
-          if (frame?.type !== "prove" || !nonce || !challenge || !key) return refuse("direct_grant_invalid", "This terminal needs a grant from the hub", 4001);
-          proved = true;
-          return send({ type: "proof", proof: boundProofOf(proofKey(key, nonce), challenge, where) });
-        }
+        nonce = typeof frame?.nonce === "string" && /^[A-Za-z0-9_-]{8,64}$/.test(frame.nonce) ? frame.nonce : "";
+        if (frame?.type !== "seal" || !nonce || !key) return ws.close(4001, "direct_grant_invalid");
+        channel = nodeChannel(channelKey(key, nonce));
+        return;
+      }
+      const opened = isBinary ? channel.open(Buffer.isBuffer(data) ? data : Buffer.from(data)) : null;
+      if (!opened) return ws.close(4001, "unsealed");
+      if (waiting) {
         settle();
-        const grant = frame?.type === "attach" && key ? verifyGrant(key, frame.grant, Date.now(), "pty") : null;
-        // A page only by the origin the grant names (nothing like CORS holds a WebSocket back); the apps by theirs.
-        if (!grant || (origin && !installedClientOrigin(origin) && grant.origin !== origin)) {
+        let attach = null;
+        try { attach = opened.kind === JSON_FRAME && opened.body.length <= 8192 ? JSON.parse(String(opened.body)) : null; } catch {}
+        const grant = attach?.type === "attach" ? verifyGrant(ptySecret(), attach.grant, Date.now(), "pty") : null;
+        // The key is the grant's own: a sealed channel for one grant never carries another. A page only by the origin
+        // the grant names (nothing like CORS holds a WebSocket back); the apps by theirs.
+        if (!grant || grant.nonce !== nonce || (origin && !installedClientOrigin(origin) && grant.origin !== origin)) {
           return refuse("direct_grant_invalid", "This terminal needs a grant from the hub", 4001);
         }
         const now = Date.now();
-        for (const [nonce, expires] of spent) if (expires <= now) spent.delete(nonce);
+        for (const [used, expires] of spent) if (expires <= now) spent.delete(used);
         if (spent.has(grant.nonce)) return refuse("direct_grant_invalid", "That grant was already used", 4001);
         spent.set(grant.nonce, grant.expires);
-        const attached = shells.attach(grant.pty, { takeover: frame.takeover === true, cols: dimension(frame.cols, 80), rows: dimension(frame.rows, 24) }, (event) => {
+        const attached = shells.attach(grant.pty, { takeover: attach.takeover === true, cols: dimension(attach.cols, 80), rows: dimension(attach.rows, 24) }, (event) => {
           if (event.kind === "data") return output.append("pty", event.bytes);
           output.flushAll();
           if (event.kind === "exit") {
@@ -253,8 +262,8 @@ export function serveDirect({ secret, ptySecret = null, call, log = console, cer
       try {
         // Output so far goes out before input that may change the screen, as on the hub.
         output.flushAll();
-        if (isBinary) return shell.write(Buffer.isBuffer(data) ? data : Buffer.from(data));
-        const command = JSON.parse(String(data));
+        if (opened.kind === BYTES_FRAME) return shell.write(opened.body);
+        const command = JSON.parse(String(opened.body));
         if (command.type !== "resize") throw Object.assign(new Error("Unknown terminal control frame"), { code: "pty_control_invalid" });
         shell.resize(dimension(command.cols, 80), dimension(command.rows, 24));
       } catch (error) {
@@ -264,19 +273,15 @@ export function serveDirect({ secret, ptySecret = null, call, log = console, cer
     ws.on("close", () => { settle(); clearInterval(beat); output.flushAll(); shell?.detach(); });
     ws.on("error", () => {});
   };
-  // Over plain HTTP only on this machine or the tailnet (WireGuard); on its networks only over https. What is typed
-  // into a shell never crosses a network anyone else can read or change.
+  // On loopback and the addresses offered (its networks', its tailnet's), over http or https: the channel is sealed
+  // whichever way it comes.
   const upgrade = (request, socket, head) => {
     const arrivedAt = String(request.socket.localAddress || "").replace(/^::ffff:/, "");
-    const local = /^127\./.test(arrivedAt) || arrivedAt === "::1";
-    if (!local && !isOffered(arrivedAt)) return socket.destroy();
+    if (!/^127\./.test(arrivedAt) && arrivedAt !== "::1" && !isOffered(arrivedAt)) return socket.destroy();
     if (!sockets || new URL(request.url || "/", "http://127.0.0.1").pathname !== "/pty") return socket.destroy();
-    const secure = Boolean(request.socket.encrypted);
-    if (!secure && !local && reachOf(arrivedAt) !== "tailnet") return socket.destroy();
     if (unattached >= 16) return socket.destroy();
     const origin = typeof request.headers.origin === "string" ? request.headers.origin : "";
-    const where = `${secure ? String(request.socket.servername || "").toLowerCase() : arrivedAt}:${request.socket.localPort}`;
-    sockets.handleUpgrade(request, socket, head, (ws) => attachHere(ws, origin, where));
+    sockets.handleUpgrade(request, socket, head, (ws) => attachHere(ws, origin));
   };
 
   const server = http.createServer(answer);
