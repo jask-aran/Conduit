@@ -14,7 +14,7 @@ import { placeProcesses } from "../nodes/place-processes.js";
  * The same tool names as the coding tools, so a conversation selects one
  * extension or the other, never both.
  */
-export function DeviceTools(runtime) {
+export function DeviceTools(runtime, coding = CodingTools) {
   const devices = defineTool({
     name: "devices",
     description: "List the devices you can work on: each one's name, whether it is online, and the folders it shares "
@@ -40,7 +40,7 @@ export function DeviceTools(runtime) {
       ? tool.execute(args, { ...api, env: await runtime.envOn(api.conversationId, device, folder) }, context)
       : tool.execute(args, api, context)),
   });
-  return defineExtension({ name: "device-tools", tools: [devices, ...CodingTools.tools.map(placed)] });
+  return defineExtension({ name: "device-tools", tools: [devices, ...coding.tools.map(placed)] });
 }
 
 /** A device's shared folder as an environment: this server's own disk, or the device's node. */

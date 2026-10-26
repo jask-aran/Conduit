@@ -7,6 +7,7 @@ import { withConduitNote } from "./attachment-envelope.js";
 import { EventEmitter } from "node:events";
 import { getSupportedThinkingLevels } from "@earendil-works/pi-ai";
 import { watchEvents } from "@earendil-works/pi-durable";
+import { DEFAULT_IMAGE_LIMITS } from "@earendil-works/pi-durable/tools";
 import { SessionRecords } from "./harnesses/session-records.js";
 import { messageClose, messageOpen, toolCalls, toolClose, toolKind, toolOpen, toolSubject, turnSettle } from "./harnesses/transcript-ops.js";
 import { callsSubject, createScriptCalls, settledCalls } from "./harnesses/script-calls.js";
@@ -103,13 +104,17 @@ const attachmentSummary = (attachments = []) => attachments.map((item) => ({
  * to read. On a device the tools cannot reach this server's files, so a
  * text file is given inline and anything else is said to be out of reach.
  */
-async function promptInput(message, attachments = [], { onDevice = false } = {}) {
+async function promptInput(message, attachments = [], { onDevice = false, processor = null } = {}) {
   const images = [];
   const files = [];
   for (const attachment of attachments) {
     const type = String(attachment.mimeType || attachment.type || "");
     if (type.startsWith("image/") && type !== "image/svg+xml") {
-      images.push({ type: "image", data: await fs.readFile(attachment.path, "base64"), mimeType: type });
+      // Fitted to the model as `read` fits one (the runtime's processor):
+      // sent as it was, a large screenshot was refused by the provider.
+      const bytes = await fs.readFile(attachment.path);
+      const prepared = processor ? await processor.prepare(new Uint8Array(bytes), type, DEFAULT_IMAGE_LIMITS).catch(() => undefined) : undefined;
+      images.push({ type: "image", data: prepared?.data ?? bytes.toString("base64"), mimeType: prepared?.mimeType ?? type });
     } else if (!onDevice) {
       files.push(`Attached file: ${attachment.path}`);
     } else {
@@ -504,7 +509,7 @@ export class DurableAdapter extends EventEmitter {
     if (!whenBusy) record.stoppedByUser = false;
     const said = afterStop ? withConduitNote(STOPPED_NOTE, this.expandSkill(record, text)) : this.expandSkill(record, text);
     const submission = await record.conversation.submit({
-      type: "input", content: await promptInput(said, attachments, { onDevice: Boolean(record.nodeId) }), requestId: messageId, ...(whenBusy ? { whenBusy } : {}),
+      type: "input", content: await promptInput(said, attachments, { onDevice: Boolean(record.nodeId), processor: this.runtime.images }), requestId: messageId, ...(whenBusy ? { whenBusy } : {}),
       entry: { kind: USER_ENTRY, data: { messageId, text, timestamp: new Date().toISOString(),
         ...(summary.length ? { attachments: summary } : {}) } },
     }, this.context);
