@@ -14,10 +14,10 @@ function boundedDimension(value, fallback) {
   return Number.isInteger(next) && next >= 1 && next <= 500 ? next : fallback;
 }
 
-export function createTerminalStream({ terminals }) {
+export function createTerminalStream({ terminals, perMessageDeflate = false }) {
   // Keep terminal payload limits isolated from chat/dictation WebSockets. ws
   // rejects oversized terminal frames before buffering them for application code.
-  const wss = new WebSocketServer({ noServer: true, maxPayload: PTY_MAX_INPUT_BYTES });
+  const wss = new WebSocketServer({ noServer: true, maxPayload: PTY_MAX_INPUT_BYTES, perMessageDeflate });
   let shuttingDown = false;
 
   // One browser owns one terminal id at a time. There is deliberately no

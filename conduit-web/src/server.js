@@ -798,12 +798,20 @@ lifetime.own("listener", null, async () => {
   secureServer?.closeAllConnections?.();
   await closed;
 });
-const wss = lifetime.own("browser sockets", new WebSocketServer({ noServer: true }), (owned) => {
+// A streamed answer is a frame per few characters, each carrying the same
+// keys and ids (~224 bytes for a 4-byte delta): compressed with the context
+// kept across frames, ~11 bytes. Level 1 at memLevel 7 keeps the cost per
+// socket and per frame small; frames under 64 bytes are sent as they are.
+const socketDeflate = { threshold: 64, zlibDeflateOptions: { level: 1, memLevel: 7 } };
+const closeOnRestart = (owned) => {
   for (const socket of owned.clients) socket.close(1012, "Conduit is restarting");
-});
-const terminalStream = lifetime.own("terminal streams", createTerminalStream({ terminals, wss }), (owned) => owned.shutdown?.({ timeoutMs: 1_000 }));
+};
+const wss = lifetime.own("browser sockets", new WebSocketServer({ noServer: true, perMessageDeflate: socketDeflate }), closeOnRestart);
+const terminalStream = lifetime.own("terminal streams", createTerminalStream({ terminals, perMessageDeflate: socketDeflate }), (owned) => owned.shutdown?.({ timeoutMs: 1_000 }));
+// Dictation sends audio, which deflate only spends time on.
+const dictationSockets = lifetime.own("dictation sockets", new WebSocketServer({ noServer: true }), closeOnRestart);
 const dictationStream = createDictationStream({
-  wss,
+  wss: dictationSockets,
   voiceRuntime,
   recordingStore: voiceRecordingStore,
   limits: {
