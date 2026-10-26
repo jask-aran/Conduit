@@ -194,10 +194,12 @@ export class SearchSettingsStore {
       // and whether the rest of the route catches its failures.
       route: {
         first: typeof config.provider === "string" ? config.provider : order[0] || "auto",
-        fallback: !config.provider && order.length > 1,
+        // Falling back is the route's failure kinds, not its length: one provider can search now, more may come.
+        fallback: !config.provider && Array.isArray(routing?.fallbackOn) && routing.fallbackOn.includes("unsupported"),
         useCurrentModel: routing?.useCurrentModel === true,
         timeoutMs: Number.isInteger(routing?.timeoutMs) ? routing.timeoutMs : null,
-        offTopic: Array.isArray(routing?.fallbackOn) && routing.fallbackOn.includes("off-topic"),
+        // The choice is kept (its classifier named) while fallback is off; it only runs while fallback is on.
+        offTopic: typeof routing?.offTopicModel === "string",
       },
       tools: Object.fromEntries(SEARCH_TOOLS.map((key) => [key, enabled(key)])),
       fetching: {
@@ -224,13 +226,15 @@ export class SearchSettingsStore {
       if (timeoutMs !== null && !(Number.isInteger(timeoutMs) && timeoutMs >= 1 && timeoutMs <= MAX_ROUTE_TIMEOUT_MS)) {
         throw storeError("search_setting_invalid", `A search time limit is 1 to ${MAX_ROUTE_TIMEOUT_MS} milliseconds`);
       }
-      const offTopic = (typeof input.route.offTopic === "boolean" ? input.route.offTopic : view.route.offTopic) && fallback;
+      const offTopic = typeof input.route.offTopic === "boolean" ? input.route.offTopic : view.route.offTopic;
       delete config.provider;
       delete config.searchProvider;
       if (first === "auto") delete config.searchRouting;
       else {
         if (!SEARCH_PROVIDERS.some((provider) => provider.id === first)) throw storeError("search_provider_unknown", `Unknown search provider: ${first}`);
         const rest = view.providers.filter((provider) => provider.ready && provider.id !== first).map((provider) => provider.id);
+        // pi-web-access needs the route named to judge answers or time it; Conduit names every provider that can
+        // search now, in its automatic order, and names them again whenever a key comes or goes (reroute).
         config.searchRouting = {
           providers: fallback ? [first, ...rest] : [first],
           fallbackOn: fallback ? [...FALLBACK_ALL, ...(offTopic ? ["off-topic"] : [])] : FALLBACK_DEFAULT,
@@ -269,7 +273,13 @@ export class SearchSettingsStore {
     const config = await this.read();
     config[provider.configKey] = literalCredential(key);
     await writeJson(this.filePath, config);
-    return this.publicView();
+    return this.reroute();
+  }
+
+  /** A provider that can search now joins a falling-back route (one that cannot, leaves it), its choices kept. */
+  async reroute() {
+    const config = await this.read();
+    return isObject(config.searchRouting) && !config.provider ? this.update({ route: {} }) : this.publicView();
   }
 
   async removeProvider(id) {
@@ -278,6 +288,6 @@ export class SearchSettingsStore {
     const removed = Object.hasOwn(config, provider.configKey);
     delete config[provider.configKey];
     if (removed) await writeJson(this.filePath, config);
-    return { removed, settings: await this.publicView() };
+    return { removed, settings: await this.reroute() };
   }
 }
