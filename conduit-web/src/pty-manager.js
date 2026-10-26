@@ -42,6 +42,8 @@ function view(record, metadata = {}) {
     templateId: record.templateId,
     title: record.title,
     cwd: record.cwd || null,
+    // A device's terminal names its node, so a client may attach to it there directly (nodes/node-direct.js).
+    nodeId: record.nodeId || null,
     status: record.status,
     createdAt: record.createdAt,
     updatedAt: record.updatedAt,
@@ -225,6 +227,18 @@ export class PtyManager extends EventEmitter {
   list() { return [...this.records.values()].map((record) => view(record, this.metadata.get(record.id))).sort((a, b) => b.createdAt.localeCompare(a.createdAt)); }
   get(id) { const record = this.records.get(id); return record ? view(record, this.metadata.get(id)) : null; }
 
+  /** The device process behind a running device terminal, for a grant to attach to it directly. */
+  deviceShell(id) {
+    const record = this.records.get(id);
+    return record?.status === "running" && record.nodeId && record.procId ? { nodeId: record.nodeId, procId: record.procId } : null;
+  }
+
+  /** A device's shell ended while nothing here followed it (a client had it directly, or none had it open). */
+  deviceProcessExited({ nodeId, procId, code = null, signal = null }) {
+    const record = [...this.records.values()].find((item) => item.nodeId === nodeId && item.procId === procId);
+    if (record) void this.deviceExited(record, { exitCode: code, signal });
+  }
+
   async listTmuxMetadata() {
     await this.ensureTmux();
     const result = await this.invokeTmux([
@@ -339,12 +353,12 @@ export class PtyManager extends EventEmitter {
     return view(record, this.metadata.get(id));
   }
 
-  async attach(id, { cols = 80, rows = 24 } = {}) {
+  async attach(id, { cols = 80, rows = 24, takeover = false } = {}) {
     const record = this.records.get(id);
     if (!record) throw failure("pty_not_found", "Terminal was not found");
     if (record.status !== "running") throw failure("pty_not_running", "Terminal is not running");
     if (this.attachments.has(id)) throw failure("pty_in_use", "Terminal is attached in another Conduit client");
-    if (record.nodeId) return this.attachOnDevice(record, { cols, rows });
+    if (record.nodeId) return this.attachOnDevice(record, { cols, rows, takeover });
 
     // Reserve before any asynchronous tmux work. This closes the attach/attach
     // race without introducing a global streaming lease.
@@ -498,15 +512,17 @@ export class PtyManager extends EventEmitter {
     return view(record, this.metadata.get(id));
   }
 
-  async attachOnDevice(record, { cols, rows }) {
+  async attachOnDevice(record, { cols, rows, takeover = false }) {
     const lease = { state: "attaching", handle: null, cancelled: false };
     this.attachments.set(record.id, lease);
     let shell;
     try {
       // From the device's first buffered byte: the screen is repainted as tmux would.
-      shell = await placeProcesses(this.nodeHub, { nodeId: record.nodeId }).shells.reattach(record.procId);
+      // Claimed for this client: a client attached on the device directly may hold it (nodes/node-direct.js).
+      shell = await placeProcesses(this.nodeHub, { nodeId: record.nodeId }).shells.reattach(record.procId, { claim: true, takeover });
     } catch (error) {
       this.attachments.delete(record.id);
+      if (error.code === "pty_in_use") throw failure("pty_in_use", "Terminal is attached in another Conduit client");
       // The node's word for a process it no longer has (it restarted, or the exit was long ago).
       if (/No such process/.test(error.message)) {
         await this.deviceExited(record, { exitCode: null, signal: "device_process_gone" });
@@ -522,6 +538,8 @@ export class PtyManager extends EventEmitter {
     return {
       onData: (listener) => { const subscription = shell.onData((text) => listener(text)); return () => subscription.dispose(); },
       onExit: (listener) => { const subscription = shell.onExit(listener); return () => subscription.dispose(); },
+      // A client attached on the device directly took it over; the shell goes on.
+      onTaken: (listener) => { const subscription = shell.onTaken(() => { release(); listener(); }); return () => subscription.dispose(); },
       write: (bytes) => {
         const value = Buffer.isBuffer(bytes) ? bytes : Buffer.from(bytes);
         if (value.length > PTY_MAX_INPUT_BYTES) throw failure("pty_input_too_large", `Terminal input exceeds ${PTY_MAX_INPUT_BYTES} bytes`);

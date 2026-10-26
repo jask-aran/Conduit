@@ -198,6 +198,7 @@ const nodeHub = lifetime.own("nodes", new NodeHub({ dataRoot: config.dataRoot, l
   routes: () => hubRoutes({ config, lanNames: hubLanNames }),
   ...(process.env.CONDUIT_NODES_PUBLIC === "1" ? { allowRemote: () => true } : {}) }), (owned) => owned.shutdown());
 terminals.nodeHub = nodeHub;
+nodeHub.on("procExit", (event) => terminals.deviceProcessExited(event));
 // Everything a harness manifest needs to probe and build itself. Backends are
 // no longer named here: they come from MANIFESTS, and detection runs in
 // parallel so four three-second timeouts cost three seconds, not twelve.

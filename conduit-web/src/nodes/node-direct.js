@@ -9,6 +9,9 @@ import { installedClientOrigin } from "../native-auth.js";
 import { deviceHost } from "../workspace-host.js";
 import { readWorkspaceFile, readWorkspaceFileMetadata, resolveInspectorPath } from "../workspace-inspector.js";
 import os from "node:os";
+import { WebSocketServer } from "ws";
+import { PtyOutputBatcher } from "../pty-output-batcher.js";
+import { startWebSocketKeepalive } from "../server/ws-keepalive.js";
 import { directAddresses, proofKey, proofOf, verifyGrant } from "./direct.js";
 import { decode, encode, HANDLE_METHODS, METHOD_GRANTS } from "./protocol.js";
 
@@ -17,6 +20,14 @@ const MAX_DIRECT_BYTES = 512 * 1024 * 1024;
 const CHUNK_BYTES = 1024 * 1024;
 const MAX_READING = 4;
 const STATUS = { path_not_found: 404, ENOENT: 404, permission_denied: 403, file_too_large: 413 };
+// A terminal's input frame and unsent output, as the hub's terminal socket bounds them (pty-manager.js,
+// terminal-stream.js).
+const MAX_INPUT_BYTES = 4 * 1024 * 1024;
+const PENDING_LIMIT = 1024 * 1024;
+const dimension = (value, fallback) => {
+  const next = Math.trunc(Number(value));
+  return Number.isInteger(next) && next >= 1 && next <= 500 ? next : fallback;
+};
 
 /**
  * A node answering reads itself, on loopback: what the hub's `GET /v0/projects/:id/file` answers, for a client holding
@@ -24,7 +35,7 @@ const STATUS = { path_not_found: 404, ENOENT: 404, permission_denied: 403, file_
  * agent's own guarded environment call, so a grant reaches no further than the hub's calls do: the place must be a
  * shared root, the path inside it, and kept-back files stay kept back.
  */
-export function serveDirect({ secret, call, log = console, certificate = null }) {
+export function serveDirect({ secret, call, log = console, certificate = null, shells = null }) {
   // The agent's calls, as the hub's execution environment would make them over the socket; readers opened for one
   // request are that request's, and closed with it.
   const local = (held) => ({
@@ -159,7 +170,84 @@ export function serveDirect({ secret, call, log = console, certificate = null })
       for (const handle of held.values()) void handle.close?.(BACKGROUND_CONTEXT);
     }
   };
+  /*
+   * Terminals attached here directly (plan: direct terminals): a WebSocket at `/pty`, let in by the hub's grant for one
+   * terminal, sent as its first frame rather than in the address. From then it speaks what the hub's terminal socket
+   * speaks (terminal-stream.js), so a client cannot tell which way it is attached. `shells` keeps who holds each
+   * terminal, the hub's clients included (node-agent.js).
+   */
+  const sockets = shells ? new WebSocketServer({ noServer: true, maxPayload: MAX_INPUT_BYTES }) : null;
+  // A grant attaches once: its nonce is kept until it would have run out anyway.
+  const spent = new Map();
+  const attachHere = (ws, origin) => {
+    startWebSocketKeepalive(ws);
+    const send = (message) => { if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(message)); };
+    const refuse = (code, message, close) => { send({ type: "client_error", code, message }); ws.close(close, code); };
+    const output = new PtyOutputBatcher((_id, bytes) => {
+      if (ws.readyState !== ws.OPEN) return;
+      if (ws.bufferedAmount > PENDING_LIMIT) return ws.close(1013, "Terminal client is too slow");
+      ws.send(bytes, { binary: true });
+    });
+    let shell = null;
+    let asked = false;
+    const waiting = setTimeout(() => ws.close(1008, "attach_expected"), 10_000);
+    ws.on("message", (data, isBinary) => {
+      if (!asked) {
+        asked = true;
+        clearTimeout(waiting);
+        let attach = null;
+        try { attach = isBinary ? null : JSON.parse(String(data)); } catch {}
+        const grant = attach?.type === "attach" ? verifyGrant(secret, attach.grant, Date.now(), "pty") : null;
+        // A page only by the origin the grant names (nothing like CORS holds a WebSocket back); the apps by theirs.
+        if (!grant || (origin && !installedClientOrigin(origin) && grant.origin !== origin)) {
+          return refuse("direct_grant_invalid", "This terminal needs a grant from the hub", 4001);
+        }
+        const now = Date.now();
+        for (const [nonce, expires] of spent) if (expires <= now) spent.delete(nonce);
+        if (spent.has(grant.nonce)) return refuse("direct_grant_invalid", "That grant was already used", 4001);
+        spent.set(grant.nonce, grant.expires);
+        const attached = shells.attach(grant.pty, { takeover: attach.takeover === true, cols: dimension(attach.cols, 80), rows: dimension(attach.rows, 24) }, (event) => {
+          if (event.kind === "data") return output.append("pty", event.bytes);
+          output.flushAll();
+          if (event.kind === "exit") {
+            send({ type: "status", status: "exited", exitCode: event.code ?? null, signal: event.signal ?? null });
+            send({ type: "control", writable: false });
+            return ws.close(1000, "Terminal exited");
+          }
+          if (event.kind === "taken") refuse("pty_taken_over", "Another Conduit client took control of this terminal", 4010);
+        });
+        if (attached.error) return refuse(attached.error, attached.message, attached.error === "pty_in_use" ? 4009 : 1011);
+        shell = attached;
+        if (ws.readyState !== ws.OPEN) return shell.detach();
+        send({ type: "status", status: "running", exitCode: null, signal: null });
+        send({ type: "control", writable: true });
+        return;
+      }
+      if (!shell) return;
+      try {
+        // Output so far goes out before input that may change the screen, as on the hub.
+        output.flushAll();
+        if (isBinary) return shell.write(Buffer.isBuffer(data) ? data : Buffer.from(data));
+        const command = JSON.parse(String(data));
+        if (command.type !== "resize") throw Object.assign(new Error("Unknown terminal control frame"), { code: "pty_control_invalid" });
+        shell.resize(dimension(command.cols, 80), dimension(command.rows, 24));
+      } catch (error) {
+        send({ type: "client_error", code: error.code || "pty_control_invalid", message: error.message || "Terminal control failed" });
+      }
+    });
+    ws.on("close", () => { clearTimeout(waiting); output.flushAll(); shell?.detach(); });
+    ws.on("error", () => {});
+  };
+  const upgrade = (request, socket, head) => {
+    const arrivedAt = String(request.socket.localAddress || "").replace(/^::ffff:/, "");
+    if (!/^127\./.test(arrivedAt) && arrivedAt !== "::1" && !isOffered(arrivedAt)) return socket.destroy();
+    if (!sockets || new URL(request.url || "/", "http://127.0.0.1").pathname !== "/pty") return socket.destroy();
+    const origin = typeof request.headers.origin === "string" ? request.headers.origin : "";
+    sockets.handleUpgrade(request, socket, head, (ws) => attachHere(ws, origin));
+  };
+
   const server = http.createServer(answer);
+  server.on("upgrade", upgrade);
   // Every IPv4 interface, answered only on loopback and the addresses offered (above); nothing is read without the
   // hub's grant whichever way it comes in.
   const listening = new Promise((resolve) => server.listen(0, "0.0.0.0", () => resolve(server.address().port)));
@@ -174,6 +262,7 @@ export function serveDirect({ secret, call, log = console, certificate = null })
   const startSecure = () => {
     if (secure) return secure.port;
     const server = https.createServer({ SNICallback: (name, done) => done(null, contexts.get(String(name).toLowerCase()) ?? null) }, answer);
+    server.on("upgrade", upgrade);
     server.on("error", (error) => log.warn?.(`[conduit-node] direct reads over https: ${error.message}`));
     secure = { server, port: new Promise((resolve) => server.listen(0, "0.0.0.0", () => resolve(server.address().port))) };
     return secure.port;
@@ -200,6 +289,6 @@ export function serveDirect({ secret, call, log = console, certificate = null })
     /** Where it answers over https, and under which names: null until it has a certificate. */
     secureRoute: () => (securePort && contexts.size ? { port: securePort, names: [...contexts.keys()] } : null),
     onSecureChange: (fn) => { changed = fn; },
-    close: () => { server.close(); secure?.server?.close(); clearTimeout(renew); },
+    close: () => { server.close(); secure?.server?.close(); sockets?.close(); clearTimeout(renew); },
   };
 }

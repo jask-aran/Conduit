@@ -84,7 +84,7 @@ export function placeProcesses(hub, { nodeId = null, place = null } = {}) {
     env: ({ cwd, onWait, excuse }) => new RemoteExecutionEnv({ hub, nodeId, place, cwd, onWait, excuse }),
     shells: {
       start: ({ cols, rows }) => RemoteProcess.spawn(hub, nodeId, { shell: true, cwd: place, pty: { cols, rows } }),
-      reattach: (procId) => RemoteProcess.reattach(hub, nodeId, procId),
+      reattach: (procId, options) => RemoteProcess.reattach(hub, nodeId, procId, options),
       kill(procId) {
         if (!hub?.live.get(nodeId)?.ready) return void hub?.killLater(nodeId, procId);
         const shell = new RemoteProcess(hub, nodeId, { id: procId });

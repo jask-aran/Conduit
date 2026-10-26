@@ -5295,6 +5295,7 @@ function App() {
     />;
   };
   const openTerminalFromPage = async (terminal: { id: string; projectId: string; cwd?: string | null }, maximized: boolean) => {
+    if (terminal.projectId.startsWith("device:")) return openTerminalRoute("push", terminal.id);
     if ((terminal.projectId === "computer" || terminal.projectId.startsWith("computer:")) && terminal.cwd) {
       await openComputer();
       void browseComputer(terminal.cwd).then(async () => { await openWorkspaceView("terminal", terminal.id); if (maximized) setWorkspaceExpanded(true); });
@@ -5423,7 +5424,8 @@ function App() {
       onStopProcess={(target) => stopChatProcess(target.id)}
       onOpenTerminal={async (target, project) => { await openChat(target, project); if (!harnessThread() && catalogue.selectedId() === target.id) await openWorkspaceView("terminal"); }}
       onOpenPty={async (terminal) => {
-        if (terminal.projectId.startsWith("computer:")) {
+        // A device's own terminal, in its home: no workspace holds it, so it opens as /terminal does.
+        if (terminal.projectId.startsWith("computer:") || terminal.projectId.startsWith("device:")) {
           await openTerminalRoute("push", terminal.id);
           return;
         }

@@ -33,6 +33,8 @@ export class NodeProcesses {
   constructor({ shellEnv = process.env, scope = "" } = {}) {
     this.shellEnv = shellEnv;
     this.processes = new Map();
+    // Told of every exit, so one nothing follows (a terminal no client has open) is still said to main.
+    this.onExit = null;
     this.tmux = findTmux(scope);
     if (this.tmux) this.recover();
   }
@@ -125,6 +127,7 @@ export class NodeProcesses {
     if (record.exit) return;
     record.exit = { code, signal, at: Date.now() };
     for (const listener of record.listeners) listener({ kind: "exit", ...record.exit, end: record.end });
+    this.onExit?.(this.view(record));
     record.timer = setTimeout(() => this.processes.delete(record.id), KEEP_EXITED_MS);
     record.timer.unref?.();
   }
@@ -191,6 +194,8 @@ export class NodeProcesses {
   }
 
   list() { return [...this.processes.values()].map((record) => this.view(record)); }
+
+  get(id) { const record = this.processes.get(id); return record ? this.view(record) : null; }
 
   /** This node stopping: shells in tmux are let go of, to be taken up by the next; the rest end. */
   stopAll() {

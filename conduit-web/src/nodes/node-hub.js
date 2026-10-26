@@ -7,7 +7,7 @@ import { EventEmitter } from "node:events";
 import { WebSocketServer } from "ws";
 import { awaitWithContext, BACKGROUND_CONTEXT, withAbortSignal } from "@earendil-works/chord/context";
 import { decode, encode, NODE_FEATURES, NODE_PROTOCOL_VERSION } from "./protocol.js";
-import { DIRECT_TTL_MS, proofKey, signGrant } from "./direct.js";
+import { DIRECT_PTY_TTL_MS, DIRECT_TTL_MS, proofKey, signGrant } from "./direct.js";
 import { FileError } from "@earendil-works/pi-durable/env";
 
 const hash = (key) => crypto.createHash("sha256").update(key).digest("hex");
@@ -41,7 +41,8 @@ function directOf(direct, lanName = null) {
   const names = (Array.isArray(direct.tls?.names) ? direct.tls.names : []).map((name) => String(name).toLowerCase())
     .filter((name) => /^[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(name) && (name.endsWith(".ts.net") || name === lanName)).slice(0, 4);
   const tls = Number.isInteger(direct.tls?.port) && direct.tls.port > 0 && names.length ? { port: direct.tls.port, names } : null;
-  return { port: direct.port, addresses, tls };
+  // Whether it also lets a client attach to its terminals itself (node-direct.js), as a v0.8.7 node does not.
+  return { port: direct.port, addresses, tls, pty: direct.pty === true };
 }
 
 export class NodeHub extends EventEmitter {
@@ -258,10 +259,28 @@ export class NodeHub extends EventEmitter {
   }
 
   async directGrant(nodeId, place, label = "", origin = "") {
+    if (!place?.root) return null;
+    return this.signDirect(nodeId, { place: { root: place.root, path: place.path || "" }, label, read: true }, DIRECT_TTL_MS, origin);
+  }
+
+  /**
+   * A grant to attach to one of a node's terminals without passing through here (node-direct.js), where it allows
+   * that. Only over a way nobody else on the network can read or change: its own machine, its tailnet (WireGuard),
+   * or https. A file may cross a LAN in the clear; what is typed into a shell, or into it, never does.
+   */
+  async directPtyGrant(nodeId, procId, origin = "") {
+    if (!this.live.get(nodeId)?.direct?.pty || typeof procId !== "string") return null;
+    const grant = await this.signDirect(nodeId, { pty: procId }, DIRECT_PTY_TTL_MS, origin);
+    if (!grant) return null;
+    const routes = grant.routes.filter((route) => route.reach === "loopback" || route.reach === "tailnet" || route.url.startsWith("https:"));
+    return routes.length ? { ...grant, routes } : null;
+  }
+
+  async signDirect(nodeId, claims, ttl, origin) {
     const node = this.live.get(nodeId);
     const record = await this.get(nodeId);
-    if (!node?.ready || !node.direct || !record?.keyHash || !place?.root) return null;
-    const expiresAt = Date.now() + DIRECT_TTL_MS;
+    if (!node?.ready || !node.direct || !record?.keyHash) return null;
+    const expiresAt = Date.now() + ttl;
     const { port, addresses } = node.direct;
     // Nearest first: its own machine's loopback (only the app beside it can use that), then its networks', its tailnet's.
     const { tls } = node.direct;
@@ -273,8 +292,7 @@ export class NodeHub extends EventEmitter {
     const nonce = crypto.randomBytes(12).toString("base64url");
     return { nodeId, routes, expiresAt, nonce, proof: proofKey(record.keyHash, nonce),
       // The page it is for, when one asked: the node lets that origin read the answer.
-      token: signGrant(record.keyHash, { place: { root: place.root, path: place.path || "" }, label, read: true, expires: expiresAt, nonce,
-        ...(origin ? { origin } : {}) }) };
+      token: signGrant(record.keyHash, { ...claims, expires: expiresAt, nonce, ...(origin ? { origin } : {}) }) };
   }
 
   async computer(nodeId, method, at) {
@@ -456,7 +474,14 @@ export class NodeHub extends EventEmitter {
         if (node.ready) { node.direct = directOf(message.direct, this.lanNameOf.get(record.id)); void this.offerLanName(node, record); }
         return;
       }
-      if (message.type === "proc") return this.following.get(`${record.id} ${message.proc}`)?.deliver(message);
+      if (message.type === "proc") {
+        const follower = this.following.get(`${record.id} ${message.proc}`);
+        if (follower) return follower.deliver(message);
+        // A shell that ended while nothing here followed it (a client attached to it directly, or none): said, so a
+        // terminal is not listed as running when it is gone.
+        if (message.kind === "exit") this.emit("procExit", { nodeId: record.id, procId: message.proc, code: message.code ?? null, signal: message.signal ?? null });
+        return;
+      }
       if (message.type === "tunnel") return this.tunnels.get(`${record.id} ${message.tunnel}`)?.deliver(message);
       if (message.type === "event" && node.watchers.has(message.id)) return node.watchers.get(message.id).onEvent(message);
       const pending = node.calls.get(message.id);

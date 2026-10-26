@@ -61,6 +61,21 @@ export function registerPtyRoutes(app, { projects, terminals, nodeHub = null }) 
     catch (error) { next(error); }
   });
 
+  // A grant to attach to a device's terminal on the device itself, the shortest way (nodes/node-direct.js).
+  app.get("/v0/ptys/:id/direct", async (request, response, next) => {
+    try {
+      const shell = terminals.deviceShell(request.params.id);
+      if (!shell) return response.status(404).json({ error: terminals.get(request.params.id) ? "direct_not_on_node" : "pty_not_found" });
+      // The page asking is named, so the node lets that origin attach (the apps' it knows already).
+      const named = String(request.query.origin || request.headers.origin || "");
+      const origin = /^https?:\/\/[a-z0-9.-]+(:\d+)?$/i.test(named) ? named.toLowerCase() : "";
+      const grant = await nodeHub?.directPtyGrant(shell.nodeId, shell.procId, origin);
+      if (!grant) return response.status(404).json({ error: "direct_unavailable" });
+      response.setHeader("Cache-Control", "no-store");
+      response.json(grant);
+    } catch (error) { next(error); }
+  });
+
   app.post("/v0/ptys/:id/rename", async (request, response, next) => {
     try { const record = await terminals.rename(request.params.id, request.body?.title); if (!record) return response.status(404).json({ error: "pty_not_found" }); response.json(record); }
     catch (error) { next(error); }

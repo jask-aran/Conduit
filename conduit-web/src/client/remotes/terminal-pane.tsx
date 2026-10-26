@@ -16,6 +16,7 @@ import { api, readShared } from "../api/client";
 import type { Connectivity } from "../state/runtime";
 import { onPathChange } from "../platform/servers";
 import { terminalSocketUrl } from "../api/transport";
+import { directTerminalFailed, directTerminalSocket } from "./direct-terminal";
 import { pwaUpdateImpending } from "../pwa-update";
 import { clipboardPasteText, createTerminalRenderer, type TerminalPasteFiles, type TerminalRenderer } from "./terminal-renderer";
 import { terminalRecoveryView, type TerminalConnectionState, type TerminalRecoveryView } from "./terminal-recovery";
@@ -23,6 +24,7 @@ import { LEGACY_TERMINAL_SHORTCUTS_STORAGE_KEY, normalizeTerminalShortcuts, read
 
 export type Pty = {
   id: string;
+  nodeId?: string | null;
   projectId: string;
   templateId?: string;
   title?: string;
@@ -364,7 +366,7 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
 
   const connect = async (
     record: Pty,
-    { freshRenderer = false, retrying = false, takeover = false, initialInput }: { freshRenderer?: boolean; retrying?: boolean; takeover?: boolean; initialInput?: string } = {},
+    { freshRenderer = false, retrying = false, takeover = false, initialInput, viaHub = false }: { freshRenderer?: boolean; retrying?: boolean; takeover?: boolean; initialInput?: string; viaHub?: boolean } = {},
   ) => {
     const generation = ++connectionGeneration;
     closeConnection();
@@ -382,11 +384,22 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
     const initialCols = activeTerminal.cols();
     const initialRows = activeTerminal.rows();
     const startedAt = performance.now();
-    const url = new URL(await terminalSocketUrl(record.id));
-    url.searchParams.set("cols", String(initialCols));
-    url.searchParams.set("rows", String(initialRows));
-    if (takeover) url.searchParams.set("takeover", "1");
-    const connection = new WebSocket(url);
+    const direct = viaHub ? null : await directTerminalSocket(record, { cols: initialCols, rows: initialRows, takeover });
+    if (generation !== connectionGeneration) {
+      direct?.socket.close();
+      return;
+    }
+    let connection: WebSocket;
+    if (direct) connection = direct.socket;
+    else {
+      const url = new URL(await terminalSocketUrl(record.id));
+      if (generation !== connectionGeneration) return;
+      url.searchParams.set("cols", String(initialCols));
+      url.searchParams.set("rows", String(initialRows));
+      if (takeover) url.searchParams.set("takeover", "1");
+      connection = new WebSocket(url);
+    }
+    if (host) host.dataset.terminalPath = direct ? "direct" : "hub";
     socket = connection;
     connection.binaryType = "arraybuffer";
     let firstOutput = true;
@@ -394,6 +407,15 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
     let lastSentCols = initialCols;
     let lastSentRows = initialRows;
     let pendingInitialInput = initialInput;
+    let receivedControl = false;
+
+    const failoverToHub = () => {
+      if (!direct || generation !== connectionGeneration || intentionallyClosed || connectionState() === "conflict" || connectionState() === "stopped") return false;
+      directTerminalFailed(record.id, direct.grant);
+      if (receivedControl) return false;
+      void connect(record, { retrying: true, takeover, initialInput: pendingInitialInput, viaHub: true });
+      return true;
+    };
 
     const sendResize = () => {
       if (generation !== connectionGeneration || !writable() || connection.readyState !== WebSocket.OPEN) return;
@@ -412,6 +434,7 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
         try {
           const message = JSON.parse(event.data);
           if (message.type === "control") {
+            receivedControl = true;
             setWritable(message.writable === true);
             if (host) host.dataset.terminalReady = "true";
             reconnectAttempts = 0;
@@ -510,6 +533,7 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
     const removeResize = activeTerminal.onResize(() => sendResize());
 
     connection.onerror = () => {
+      if (failoverToHub()) return;
       if (generation === connectionGeneration && connectionState() !== "stopped" && connectionState() !== "conflict") {
         setConnectionState("reconnecting");
         setError("Terminal connection failed.");
@@ -527,6 +551,7 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
           : "Another Conduit client took control of this terminal.");
         return;
       }
+      if (failoverToHub()) return;
       if (pty()?.status === "exited") {
         setConnectionState("stopped");
         return;

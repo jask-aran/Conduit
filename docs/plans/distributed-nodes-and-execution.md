@@ -24,7 +24,7 @@ Windows over loopback), and prod, whose hub is the VPS (device Desktop:
 Windows, and WSL relayed by it). A node on another machine reaches a hub that
 has only its self-signed certificate over plain HTTP on a private network, or
 by that certificate once the hub's identity has attested it (2026-10-26).
-Next: terminals take the shortest way too (direct terminals).
+Terminals take the shortest way too (direct terminals, 2026-10-26).
 
 ## Names
 
@@ -835,3 +835,34 @@ pairing's identity:
   the owner's business, not the hub's: Conduit uses such a name as a route
   when its certificate is the hub's LAN certificate, and leaves the record
   alone. The nodes' own `n-<id>` names stay the hub's to keep.
+
+### 2026-10-26: terminals take the shortest way too (direct terminals)
+
+Reads came first; a terminal is where the long way hurts most. With the hub
+on the VPS, every keystroke in a terminal on a laptop workspace, typed on that
+laptop, crossed the internet and back. The hub still creates, lists, renames
+and kills terminals; only typing and output move.
+
+- The hub signs a grant for one terminal (`{ pty, nonce, expires, origin }`,
+  the same HMAC on the node's key hash as a read), good for a minute and spent
+  on its first use. A read grant does not pass for it, nor it for a read.
+- The client finds the node as for reads (the challenge on `/health`), opens
+  `/pty` there and sends the grant as its first frame, never in the address.
+  From then the frames are the hub's terminal protocol, so a client cannot
+  tell which way it is attached. Any failure before the terminal answers, or
+  a node that does not offer it (one older than this), goes through the hub.
+- **A shell never crosses a network in the clear.** The hub offers only this
+  machine, the tailnet (WireGuard) and https names (a LAN name with the
+  hub's certificate, the tailnet name): what is typed into a shell is a
+  password as often as a command, and a stream anyone on the network can
+  change is a shell for them. A file read may cross a LAN in plain HTTP; a
+  terminal on a LAN without a LAN name goes through the hub.
+- **The node keeps who holds a terminal**, since both ways end there: the
+  hub's client claims it (`claim`, refused while a direct client holds it
+  unless taking over) and a direct client attaches by its grant (refused while
+  anyone holds it unless taking over). Taking over tells the other way's
+  client, as the hub always did (4009 in use, 4010 taken over). A hub that
+  started over holds nothing; its clients claim again.
+- A terminal that ends while the hub does not follow it is said to the hub,
+  so it is not listed as running (this was true before for terminals nobody
+  had open).

@@ -28,8 +28,17 @@ export class RemoteProcess {
     return process;
   }
 
-  /** A process main already started, e.g. a terminal from before a restart. */
-  static async reattach(hub, nodeId, procId) {
+  /**
+   * A process main already started, e.g. a terminal from before a restart. `claim` makes it the terminal a client
+   * here is typing into: the node refuses while a client attached to it directly holds it (`pty_in_use`), unless
+   * `takeover`. A node older than direct terminals has nothing to claim.
+   */
+  static async reattach(hub, nodeId, procId, { claim = false, takeover = false } = {}) {
+    if (claim) {
+      await call(hub, nodeId, "claim", [procId, Boolean(takeover)]).catch((error) => {
+        if (error.code !== "not_supported") throw error;
+      });
+    }
     const process = new RemoteProcess(hub, nodeId, { id: procId, pid: null });
     await process.resume();
     return process;
@@ -44,6 +53,7 @@ export class RemoteProcess {
     this.exitEvent = null;
     this.dataListeners = new Set();
     this.exitListeners = new Set();
+    this.takenListeners = new Set();
     this.early = [];
     // Per stream, so a character split between two chunks is not mangled.
     this.decoders = { out: new StringDecoder("utf8"), err: new StringDecoder("utf8") };
@@ -53,6 +63,8 @@ export class RemoteProcess {
   async resume() {
     if (this.exitEvent) return;
     const view = await call(this.hub, this.nodeId, "attach", [this.procId, this.offset]);
+    // A client attached on the device directly holds it: told, not followed.
+    if (view.taken) return this.deliver({ kind: "taken" });
     // The device started again and took the process up (a shell kept in
     // tmux): its bytes start over, so it is followed again from its start.
     if (view.behind) { this.offset = view.start || 0; return this.resume(); }
@@ -79,7 +91,18 @@ export class RemoteProcess {
       this.exitEvent = { exitCode: message.code, signal: message.signal };
       for (const listener of this.exitListeners) listener(this.exitEvent);
       this.hub.unfollow(this);
+    } else if (message.kind === "taken") {
+      // A client attached to the terminal directly took it over: this no longer follows it; it goes on running.
+      this.taken = true;
+      this.hub.unfollow(this);
+      for (const listener of this.takenListeners) listener();
     }
+  }
+
+  onTaken(listener) {
+    this.takenListeners.add(listener);
+    if (this.taken) queueMicrotask(() => { if (this.takenListeners.has(listener)) listener(); });
+    return { dispose: () => this.takenListeners.delete(listener) };
   }
 
   emitData(text, stream) {
