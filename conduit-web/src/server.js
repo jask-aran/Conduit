@@ -71,6 +71,9 @@ import { registerProjectRoutes } from "./server/routes/projects.js";
 import { hubRoutes, registerNodeRoutes } from "./server/routes/nodes.js";
 import { NodeHub } from "./nodes/node-hub.js";
 import { lanNames } from "./nodes/lan-names.js";
+import { directAddresses } from "./nodes/direct.js";
+import { lanNamesService } from "./network/lan-names-service.js";
+import { registerNetworkRoutes } from "./server/routes/network.js";
 import { registerSessionRoutes } from "./server/routes/sessions.js";
 import { registerSearchRoutes } from "./server/routes/search.js";
 import { registerVoiceRoutes } from "./server/routes/voice.js";
@@ -193,7 +196,17 @@ const concurrency = new ServerConcurrency();
 // Cloudflare tunnel) takes them on their pairing key alone.
 // The hub's LAN names (its own certificate's, loaded below): routes for nodes, never its nodes' names.
 const hubLanNames = () => (lanTls?.names || []).filter((name) => !name.startsWith("*."));
-const nodeHub = lifetime.own("nodes", new NodeHub({ dataRoot: config.dataRoot, lanNames: lanNames(),
+const networkLanNames = lifetime.own("LAN names", lanNamesService({
+  dataRoot: config.dataRoot,
+  hubAddress: () => directAddresses(os.networkInterfaces()).find((item) => item.reach === "private")?.address || null,
+  onCertificates: async () => {
+    await loadLanTls();
+    lanNamesForNodes.reload();
+    await nodeHub.reofferLanNames();
+  },
+}), (owned) => owned.stop());
+const lanNamesForNodes = lanNames({ provider: () => networkLanNames.provider() });
+const nodeHub = lifetime.own("nodes", new NodeHub({ dataRoot: config.dataRoot, lanNames: lanNamesForNodes,
   identity: { id: serverIdentity.id, key: serverIdentity.publicKeyValue() },
   routes: () => hubRoutes({ config, lanNames: hubLanNames }),
   ...(process.env.CONDUIT_NODES_PUBLIC === "1" ? { allowRemote: () => true } : {}) }), (owned) => owned.shutdown());
@@ -609,6 +622,7 @@ registerPtyRoutes(app, { projects, terminals, nodeHub });
 registerTerminalPasteRoutes(app, { terminalPastes });
 
 registerNodeRoutes(app, { nodeHub, config, lanNameMatches: (name) => lanNameMatches(name), lanNames: hubLanNames });
+registerNetworkRoutes(app, { lanNames: networkLanNames });
 registerProjectRoutes(app, {
   nodeHub,
   backends,
@@ -966,6 +980,7 @@ async function loadLanTls() {
   }
 }
 await loadLanTls();
+networkLanNames.start();
 const lanNameMatches = (servername) => {
   const name = String(servername || "").toLowerCase();
   const parent = name.split(".").slice(1).join(".");

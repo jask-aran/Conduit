@@ -114,23 +114,30 @@ PWA to a secure context, and a plain `http://192.168.x.x:4310` is not one.
 The shells verify the server's attested leaf themselves; a browser needs a
 certificate it already trusts. So a LAN name gets a real one:
 
-- A DNS-only A record (`lan.jask-aran.com` → the server's LAN address) in
-  Cloudflare. It resolves anywhere but only connects on that LAN.
-- `scripts/lan-cert/issue.sh` obtains a Let's Encrypt certificate for it by
-  DNS-01 through the signed-in `cf` CLI (nothing exposed to the internet) into
-  `~/.conduit/tls/`. Rerunning renews only when due; the user timer
-  `conduit-lan-cert.timer` runs it weekly.
-- The server presents it on its usual port to a ClientHello naming that host
-  (`CONDUIT_LAN_TLS_CERT` / `CONDUIT_LAN_TLS_KEY` override the paths) and the
-  attested leaf to everything else, and rereads it hourly.
+Settings › Devices › Network sets this up (LAN names), with a Cloudflare API
+token (Zone > DNS > Edit for one zone) or the hub machine's signed-in `cf` CLI
+(`CONDUIT_CF_CLI` overrides the command). Use a name below the zone, such as
+`lan.example.com` in `example.com`. The wildcard key goes to every node, so
+the zone itself is not allowed.
 
-A hub that is not on a LAN (a VPS) still gives its nodes LAN names, so a
-browser near a node reads from it and attaches to its terminals directly:
-only the nodes' wildcard is issued there (`LAN_CERT_HUB=0`; its own name would
-point at another machine), the `cf` CLI publishes their records
-(`CONDUIT_CF_CLI` names it), and a Cloudflare API token limited to that
-zone's DNS edit, `CLOUDFLARE_API_TOKEN` in `conduit.env`, stands in for a
-signed-in `cf`.
+The hub obtains separate Let's Encrypt certificates for the nodes' wildcard
+and, when enabled, its own name through DNS-01. Nothing needs to accept
+connections from the internet. It stores the certificates in `~/.conduit/tls/`,
+checks every six hours, and renews within 30 days of expiry. New certificates
+load without a restart and are sent again to connected nodes. The token and
+ACME account key stay in the hub's private network config.
+
+The optional hub name has a DNS-only A record pointing at the hub's private
+address. Disable it on a VPS; the nodes can still use their LAN names. The
+server presents its own certificate on its usual port for that host name
+(`CONDUIT_LAN_TLS_CERT` / `CONDUIT_LAN_TLS_KEY` override the read paths) and
+its attested leaf for other names. Nodes receive only the wildcard certificate.
+
+`scripts/lan-cert/issue.sh` and its DNS hooks remain available for hubs set up
+by hand with certbot and the `cf` CLI. Their certificates still load from disk,
+and the CLI still publishes node records without a saved network config.
+For those hubs, `LAN_CERT_HUB=0` skips the hub certificate, and an existing
+`conduit-lan-cert.timer` can continue to renew certificates.
 
 Routers with DNS rebinding protection return nothing for a public name that
 points at a private address. Allow the domain in the router, or point the
