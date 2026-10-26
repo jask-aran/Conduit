@@ -16,6 +16,9 @@ const execFileAsync = promisify(execFileCallback);
 
 export const PTY_MAX_SESSIONS = 32;
 export const PTY_MAX_INPUT_BYTES = 4 * 1024 * 1024;
+// How long a terminal that ended is still listed, so a tab left open on it can
+// say it exited. Every client lists only running ones.
+const PTY_ENDED_KEPT_MS = 24 * 60 * 60 * 1000;
 export const PTY_TMUX_MIN_VERSION = [3, 3];
 const TMUX_METADATA_SEPARATOR = "__CONDUIT_FIELD__";
 
@@ -602,6 +605,13 @@ export class PtyManager extends EventEmitter {
   }
 
   persist() {
+    const forgetBefore = new Date(Date.now() - PTY_ENDED_KEPT_MS).toISOString();
+    for (const [id, record] of this.records) {
+      if (record.status === "exited" && String(record.updatedAt || record.createdAt) < forgetBefore && !this.attachments.has(id)) {
+        this.records.delete(id);
+        this.metadata.delete(id);
+      }
+    }
     const payload = JSON.stringify({ version: 2, sessions: [...this.records.values()] }, null, 2) + "\n";
     const write = async () => {
       await fs.mkdir(path.dirname(this.filePath), { recursive: true });
