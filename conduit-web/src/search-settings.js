@@ -13,7 +13,7 @@ const MAX_KEY_LENGTH = 16 * 1024;
  * web-search.json directly.
  */
 export const SEARCH_PROVIDERS = [
-  { id: "openai", label: "OpenAI", configKey: "openaiApiKey", environmentKey: "OPENAI_API_KEY", signIn: "openai-codex",
+  { id: "openai", label: "OpenAI", configKey: "openaiApiKey", environmentKey: "OPENAI_API_KEY", signIn: ["openai", "openai-codex"],
     description: "Hosted web search on the hub's ChatGPT sign-in, or an API key.", docsUrl: "https://platform.openai.com/api-keys" },
   { id: "exa", label: "Exa", configKey: "exaApiKey", environmentKey: "EXA_API_KEY", keyless: true,
     description: "Neural search; works without a key through Exa's public MCP.", docsUrl: "https://dashboard.exa.ai/" },
@@ -164,12 +164,13 @@ export class SearchSettingsStore {
 
   async publicView() {
     const config = await this.read();
-    const signedIn = await this.signedIn();
+    const auth = await this.auth();
     const providers = SEARCH_PROVIDERS.map((provider) => {
       const stored = Boolean(configuredValue(config, provider));
       const environment = typeof this.environment[provider.environmentKey] === "string"
         && this.environment[provider.environmentKey].trim().length > 0;
-      const signIn = Boolean(provider.signIn && signedIn.has(provider.signIn));
+      // A sign-in, not a key, under one of the providers it searches through (pi-web-access's openaiSearchProviders).
+      const signIn = (provider.signIn || []).some((id) => auth[id]?.type === "oauth");
       return {
         id: provider.id,
         label: provider.label,

@@ -31,7 +31,9 @@ export type AddressState = "checking" | "found" | "missing";
 export function ConnectionAddress(props: JSX.InputHTMLAttributes<HTMLInputElement> & { state?: AddressState }) {
   const [local, rest] = splitProps(props, ["state"]);
   return <div class="ui-connection-address" data-state={local.state}>
-    <Input {...rest} type="text" inputMode="url" autocomplete="url" autocapitalize="none" spellcheck={false} aria-invalid={local.state === "missing" ? "true" : undefined} />
+    {/* Not the browser's to fill: its saved entries (Edge's "Saved info", tab completion) are half-typed addresses. */}
+    <Input {...rest} type="text" inputMode="url" name="conduit-server-address" autocomplete="off" aria-autocomplete="none" autocorrect="off" autocapitalize="none" spellcheck={false}
+      data-1p-ignore data-lpignore="true" data-bwignore data-form-type="other" aria-invalid={local.state === "missing" ? "true" : undefined} />
     <span class="ui-connection-address-mark" aria-hidden="true"><Show when={local.state === "found"}><Icons.Check /></Show></span>
   </div>;
 }
