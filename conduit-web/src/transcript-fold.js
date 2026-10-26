@@ -106,6 +106,9 @@ export function applyTranscriptOp(messages, event) {
   if (event.op === "turn.settle") {
     return messages.map((message) => (message.id === event.promptId ? { ...message, outcome: event.outcome } : message));
   }
+  if (event.op === "turn.time") {
+    return messages.map((message) => (message.id === event.promptId ? { ...message, timing: event.timing } : message));
+  }
   if (event.op === "message.drop" && event.messageId) {
     // Where the history now ends, or one row taken back. `keep` is a regenerate:
     // the prompt stands and its answers go, so the row the reader is looking at

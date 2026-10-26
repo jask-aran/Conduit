@@ -132,6 +132,9 @@ export function assertTranscriptOp(event) {
   } else if (event.op === "turn.settle") {
     if (!text(event.promptId)) bad("no prompt id");
     if (!OUTCOMES.has(event.outcome)) bad(`outcome ${JSON.stringify(event.outcome)}`);
+  } else if (event.op === "turn.time") {
+    if (!text(event.promptId)) bad("no prompt id");
+    if (!event.timing || typeof event.timing !== "object") bad("timing must be stated");
   } else bad("unknown op");
   return event;
 }
@@ -273,6 +276,16 @@ export const toolClose = ({ toolCallId, output, isError = false, cancelled = fal
  * it says: `complete`, `interrupted` or `failed`. Everything that shows a
  * turn's ending reads this and nothing else.
  */
+/**
+ * How long a turn took, as Conduit measured it (server/turn-timings.js),
+ * stated once on the prompt it answers when the turn ends.
+ */
+export const turnTime = ({ promptId, timing, generationId = null }) =>
+  assertTranscriptOp({
+    type: "transcript_op", op: "turn.time", promptId, timing,
+    ...(generationId ? { generationId } : {}),
+  });
+
 export const turnSettle = ({ promptId, outcome, generationId = null }) =>
   assertTranscriptOp({
     type: "transcript_op", op: "turn.settle", promptId, outcome,

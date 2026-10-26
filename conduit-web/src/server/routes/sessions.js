@@ -111,6 +111,7 @@ export function registerSessionRoutes(app, {
         before: request.query.before,
       });
       projection.messages = await attachments.decorateMessages(context.project, context.chat.id, projection.messages);
+      if (chatLogs?.timings) projection.messages = await chatLogs.timings.decorate(context.chat.id, projection.messages);
       response.json({ ...chatView(context.chat), turnOpen: turnOpen(context.chat.id),
         ...upToDate(context, projection, projection.page, request.query.before), attachments: [],
         page: projection.page || { before: null } });

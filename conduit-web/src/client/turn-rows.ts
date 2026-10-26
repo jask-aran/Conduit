@@ -475,7 +475,7 @@ function liveRows(generation: ActiveGenerationView, owner: Message | null, tools
       : generation.status === "failed" ? "failed"
       : generation.status === "complete" ? "complete"
       : executingTool ? "executing_tool" : "thinking";
-    rows.push({ key: `trace:${owner ? owner.id : `live:${generation.id}`}`, type: "trace", value: { active: running, status, segments, ...turnTime(owner?.timestamp, running ? undefined : generation.assistantMessages.at(-1)?.timestamp) }, precedingUserId: owner?.id, answerless: answers.length === 0, timestamp: generation.assistantMessages.at(-1)?.timestamp || undefined });
+    rows.push({ key: `trace:${owner ? owner.id : `live:${generation.id}`}`, type: "trace", value: { active: running, status, segments, ...turnTime(owner?.timestamp, running ? undefined : owner?.timing?.endedAt || generation.assistantMessages.at(-1)?.timestamp) }, precedingUserId: owner?.id, answerless: answers.length === 0, timestamp: generation.assistantMessages.at(-1)?.timestamp || undefined });
   }
   rows.push(...answers);
   // Held only until something of the turn shows: its trace, once it has one,
@@ -573,7 +573,7 @@ function persistedRowsForTurn(turn: PersistedTurn, toolById: Map<string, ToolIte
     rows.push({
       key: `trace:${turn.userMessage ? turn.userMessage.id : turn.assistants[0]!.id}`,
       type: "trace",
-      value: { active: false, status: outcome || "complete", segments, ...turnTime(turn.userMessage?.timestamp, finalAssistant?.timestamp) },
+      value: { active: false, status: outcome || "complete", segments, ...turnTime(turn.userMessage?.timestamp, turn.userMessage?.timing?.endedAt || finalAssistant?.timestamp) },
       precedingUserId: turn.userMessage?.id,
       answerless: !hasAnswerRow,
       timestamp: finalAssistant?.timestamp || undefined,

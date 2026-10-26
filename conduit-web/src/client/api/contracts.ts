@@ -252,6 +252,27 @@ export interface ContentBlock {
 }
 
 export type TurnOutcome = "complete" | "interrupted" | "failed";
+/**
+ * How long a turn took, as Conduit measured it whichever harness answered
+ * (server/turn-timings.js). Times are ISO; tokens are estimated from the
+ * characters streamed, four to a token.
+ */
+export interface TurnTiming {
+  startedAt: string;
+  firstOutputAt: string | null;
+  firstAnswerAt: string | null;
+  lastOutputAt: string | null;
+  endedAt: string;
+  ttftMs: number | null;
+  ttfaMs: number | null;
+  durationMs: number | null;
+  thinkingChars: number;
+  answerChars: number;
+  tokens: number;
+  tokensEstimated: boolean;
+  tokensPerSecond: number | null;
+  tools: Array<{ name: string; kind: string; startedAt: string; endedAt: string | null; ms: number | null; failed?: boolean; cancelled?: boolean }>;
+}
 /** What a tool did, stated by the harness adapter from its own tool names. */
 export type ToolKind = "command" | "read" | "edit" | "search" | "fetch" | "script" | "other";
 
@@ -292,6 +313,8 @@ export interface Message {
    * working it out from how the turn's messages happen to be shaped.
    */
   outcome?: TurnOutcome;
+  /** How long the turn this prompt started took, stated with its ending. */
+  timing?: TurnTiming;
   /**
    * The turn talking as it works, rather than answering: stated by the server
    * when it finished the message, so the split between the trace and the answer

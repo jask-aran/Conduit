@@ -454,6 +454,8 @@ export type TranscriptOpEvent = EventBase & { type: "transcript_op" } & (
    * turn that did not say, the same way it refuses a message without `answers`.
    */
   | { op: "turn.settle"; promptId: string; outcome: "complete" | "interrupted" | "failed" }
+  /** How long the turn took, as Conduit measured it (server/turn-timings.js). */
+  | { op: "turn.time"; promptId: string; timing: Record<string, unknown> }
 );
 
 /**

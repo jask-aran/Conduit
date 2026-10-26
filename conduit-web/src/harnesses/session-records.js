@@ -202,6 +202,10 @@ export class SessionRecords {
     this.remember(record, stamped);
     this.onPublish?.(record, stamped);
     for (const socket of record.clients) this.delivery.send(socket, stamped);
+    // Timed here, where every harness's events pass (server/turn-timings.js);
+    // a turn that has just ended is stated after its ending.
+    const timed = this.logs?.timings?.observe(record, stamped);
+    if (timed) this.publish(record, timed);
     return stamped;
   }
 

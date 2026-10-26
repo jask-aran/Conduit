@@ -245,7 +245,11 @@ export class ChatLog {
  * process goes on numbering where the last one stopped.
  */
 export class ChatLogs {
-  constructor() { this.logs = new Map(); }
+  /** `timings`: each turn's timing, which every harness publishing here feeds (turn-timings.js). */
+  constructor({ timings = null } = {}) {
+    this.logs = new Map();
+    this.timings = timings;
+  }
 
   /** The chat's log, made on first use. Nothing without a chat has one. */
   get(chatId) {
