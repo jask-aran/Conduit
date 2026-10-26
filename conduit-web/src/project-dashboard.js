@@ -41,19 +41,40 @@ const opaqueThreadId = (chat) => typeof chat.backend?.opaqueSession === "string"
   ? chat.backend.opaqueSession
   : chat.backend?.opaqueSession?.threadId || null;
 
-async function recentChatView(chat, project, process, readTranscript, backendSessions) {
+// A chat's preview, kept while its last message and update stay the same:
+// reading ten transcripts on every open cost more than the rest of the page.
+const previews = new Map();
+const previewKey = (chat) => `${chat.lastMessageAt || ""}|${chat.updatedAt || chat.createdAt || ""}`;
+
+async function chatPreview(chat, project, readTranscript, backendSessions) {
+  const key = previewKey(chat);
+  const kept = previews.get(chat.id);
+  if (kept?.key === key) return kept;
   let lastMessagePreview = backendSessions.get(opaqueThreadId(chat))?.preview || "";
   let lastMessageAt = chat.updatedAt || chat.createdAt || null;
+  let read = Boolean(lastMessagePreview);
   if (!lastMessagePreview && readTranscript) {
     try {
       const projection = await readTranscript(chat, project);
       const messages = (projection?.messages || []).filter((item) => ["user", "assistant"].includes(item.role) && item.content?.trim());
       lastMessagePreview = previewText(messages);
       lastMessageAt = messages.at(-1)?.timestamp || lastMessageAt;
+      read = true;
     } catch (error) {
       if (error?.code !== "ENOENT") console.warn("Could not read recent chat preview", chat.id, error);
     }
   }
+  const preview = { key, lastMessagePreview, lastMessageAt };
+  if (read) {
+    previews.delete(chat.id);
+    previews.set(chat.id, preview);
+    if (previews.size > 1000) previews.delete(previews.keys().next().value);
+  }
+  return preview;
+}
+
+async function recentChatView(chat, project, process, readTranscript, backendSessions) {
+  const { lastMessagePreview, lastMessageAt } = await chatPreview(chat, project, readTranscript, backendSessions);
   return {
     id: chat.id,
     projectId: chat.projectId,
@@ -93,7 +114,8 @@ export async function buildProjectDashboard({
       .localeCompare(String(left.updatedAt || left.createdAt || "")))
     .slice(0, RECENT_CHAT_LIMIT);
   const backendSessions = new Map();
-  const implementations = [...new Set(recent.map((chat) => chat.backend?.implementation).filter(Boolean))];
+  const unknown = recent.filter((chat) => previews.get(chat.id)?.key !== previewKey(chat));
+  const implementations = [...new Set(unknown.map((chat) => chat.backend?.implementation).filter(Boolean))];
   await Promise.all(implementations.map(async (implementation) => {
     const sessions = await listBackendSessions?.(implementation, project.workingRoot).catch(() => []) || [];
     for (const session of sessions) backendSessions.set(session.id, session);
