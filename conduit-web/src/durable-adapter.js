@@ -90,7 +90,7 @@ function codemodeResult(name, details) {
   return { calls: settledCalls(calls, SCRIPT_TOOLS), subject: callsSubject(calls) };
 }
 // pi-durable's default: past contextWindow minus this, the next request waits for a compaction.
-const COMPACTION_RESERVE = 16384;
+const DEFAULT_COMPACTION_RESERVE = 16384;
 const STOP_REASONS = new Set(["stop", "toolUse", "length", "error", "aborted"]);
 
 /** What the transcript keeps about an attachment. */
@@ -961,10 +961,10 @@ export class DurableAdapter extends EventEmitter {
     return { model: record?.model || "", thinkingLevel: record?.thinkingLevel || "" };
   }
 
-  async compact(id) {
+  async compact(id, instructions) {
     const record = this.get(id);
     if (!record) throw failure("No Conduit runtime session", "backend_unavailable", 404);
-    const taskId = await record.conversation.compact(undefined, this.context);
+    const taskId = await record.conversation.compact(instructions, this.context);
     const { outcome } = (await this.runtime.harness.waitForTask(taskId, this.context)).state;
     return { compacted: outcome?.status === "completed" };
   }
@@ -993,7 +993,9 @@ export class DurableAdapter extends EventEmitter {
         cacheRead: message.usage.cacheRead || 0, cacheWrite: message.usage.cacheWrite || 0 });
     }
     const contextWindow = model ? this.runtime.models.getModel(model.provider, model.id)?.contextWindow || null : null;
-    const compactAt = contextWindow && contextWindow > COMPACTION_RESERVE ? contextWindow - COMPACTION_RESERVE : null;
+    const configuredReserve = this.runtime.piSettings().compaction?.reserveTokens;
+    const reserve = Number.isFinite(configuredReserve) && configuredReserve >= 0 ? configuredReserve : DEFAULT_COMPACTION_RESERVE;
+    const compactAt = contextWindow && contextWindow > reserve ? contextWindow - reserve : null;
     return usageFromRequests(requests, { model: model ? `${model.provider}/${model.id}` : null, contextWindow, cost, compactAt });
   }
 

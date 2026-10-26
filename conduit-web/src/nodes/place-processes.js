@@ -55,7 +55,14 @@ export function placeProcesses(hub, { nodeId = null, place = null } = {}) {
       read: async (method, ...args) => (HARNESS_READS[method] ? HARNESS_READS[method](...args) : null),
       ready: () => true,
       require: () => {},
-      env: ({ cwd, shellEnv }) => new NodeExecutionEnv({ cwd: cwd || process.cwd(), shellEnv }),
+      env: ({ cwd, shellEnv, shellSettings = {} }) => {
+        const shellPath = typeof shellSettings.shellPath === "string" && shellSettings.shellPath.trim() ? shellSettings.shellPath : undefined;
+        const prefix = typeof shellSettings.shellCommandPrefix === "string" ? shellSettings.shellCommandPrefix : "";
+        const env = new NodeExecutionEnv({ cwd: cwd || process.cwd(), shellEnv, shellPath });
+        const exec = env.exec.bind(env);
+        env.exec = (command, options, context) => exec(typeof command === "string" && prefix ? `${prefix}\n${command}` : command, options, context);
+        return env;
+      },
       shells: null,
     };
   }

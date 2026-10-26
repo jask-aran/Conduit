@@ -234,14 +234,34 @@ export class DurableRuntime {
           const { nodeId, place } = (await read.snapshot(ConduitWorkspace, conversationId, context)) || {};
           // A conversation on a node never falls back to this machine's disk.
           if (nodeId && (!place || !this.nodeHub)) throw new Error("This conversation's device folder is not known; open it from its workspace again");
-          return placeProcesses(this.nodeHub, { nodeId, place }).env({ cwd, shellEnv,
+          return placeProcesses(this.nodeHub, { nodeId, place }).env({ cwd, shellEnv, shellSettings: this.piSettings(),
             onWait: (device) => this.emitWaiting(conversationId, device), excuse: nodeId ? this.excuseFor(conversationId, nodeId) : null });
         },
-        settings: {
+        settings: ((runtime) => ({
+          get retry() {
+            const retry = runtime.piSettings().retry;
+            return Object.fromEntries([["enabled", retry?.enabled], ["maxRetries", retry?.maxRetries],
+              ["baseDelayMs", retry?.baseDelayMs], ["maxAgentDelayMs", retry?.maxDelayMs]]
+              .filter(([key, value]) => key === "enabled" ? typeof value === "boolean" : Number.isFinite(value) && value >= 0));
+          },
+          get compaction() {
+            const compaction = runtime.piSettings().compaction;
+            return Object.fromEntries([["enabled", compaction?.enabled], ["reserveTokens", compaction?.reserveTokens],
+              ["keepRecentTokens", compaction?.keepRecentTokens]]
+              .filter(([key, value]) => key === "enabled" ? typeof value === "boolean" : Number.isFinite(value) && value >= 0));
+          },
+          get steeringMode() {
+            const mode = runtime.piSettings().steeringMode;
+            return mode === "all" || mode === "one-at-a-time" ? mode : undefined;
+          },
+          get followUpMode() {
+            const mode = runtime.piSettings().followUpMode;
+            return mode === "all" || mode === "one-at-a-time" ? mode : undefined;
+          },
           // A partial is committed, and so drawn, this often. The default 100ms
           // reads as a stutter; a frame at 30Hz is as often as is worth a write.
           progress: { partialIntervalMs: 33, outputIntervalMs: 100 },
-        },
+        }))(this),
         onReport: (error) => console.warn("[conduit-runtime]", error?.message || error),
       }, this.context);
       this.harness.closed.then((end) => {
@@ -403,6 +423,24 @@ export class DurableRuntime {
       console.warn("[conduit-runtime] images will not be resized:", error?.message || error);
       return null;
     });
+  }
+
+  piSettings() {
+    try {
+      const file = path.join(this.piAgentDir, "settings.json");
+      const mtime = fs.statSync(file).mtimeMs;
+      if (this.piSettingsCache?.mtime === mtime) return this.piSettingsCache.settings;
+      let settings = {};
+      try {
+        const parsed = JSON.parse(fs.readFileSync(file, "utf8"));
+        if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) settings = parsed;
+      } catch {}
+      this.piSettingsCache = { mtime, settings };
+      return settings;
+    } catch {
+      this.piSettingsCache = null;
+      return {};
+    }
   }
 
   async defaultModel() {
