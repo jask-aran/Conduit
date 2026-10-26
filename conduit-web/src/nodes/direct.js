@@ -6,6 +6,8 @@ import crypto from "node:crypto";
  * it alone. It names the place and how long it holds; what is inside the place is still the node's own rules.
  */
 export const DIRECT_TTL_MS = 10 * 60_000;
+// A grant to attach to a terminal is spent on its first use, and must be used at once: what it opens is a shell.
+export const DIRECT_PTY_TTL_MS = 60_000;
 
 /**
  * How a client knows it has found the node and not whatever answers at an address it was given (another machine on
@@ -42,8 +44,11 @@ export function signGrant(secret, grant) {
   return `${body}.${mac(secret, body)}`;
 }
 
-/** The grant a token carries, or null when it is not this node's, is malformed or has run out. */
-export function verifyGrant(secret, token, now = Date.now()) {
+/**
+ * The grant a token carries, or null when it is not this node's, is malformed, has run out, or is not of `kind`: a
+ * read of a place (`read`), or attaching to one terminal (`pty`). Neither passes for the other.
+ */
+export function verifyGrant(secret, token, now = Date.now(), kind = "read") {
   const [body, signature, extra] = String(token || "").split(".");
   if (!body || !signature || extra !== undefined) return null;
   const expected = Buffer.from(mac(secret, body));
@@ -51,7 +56,8 @@ export function verifyGrant(secret, token, now = Date.now()) {
   if (expected.length !== given.length || !crypto.timingSafeEqual(expected, given)) return null;
   let grant;
   try { grant = JSON.parse(Buffer.from(body, "base64url").toString("utf8")); } catch { return null; }
-  if (!grant || typeof grant !== "object" || !(Number(grant.expires) > now) || grant.read !== true) return null;
-  if (!grant.place || typeof grant.place.root !== "string") return null;
+  if (!grant || typeof grant !== "object" || !(Number(grant.expires) > now)) return null;
+  if (kind === "pty") return typeof grant.pty === "string" && grant.read === undefined && typeof grant.nonce === "string" ? grant : null;
+  if (grant.read !== true || grant.pty !== undefined || !grant.place || typeof grant.place.root !== "string") return null;
   return grant;
 }

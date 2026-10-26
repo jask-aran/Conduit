@@ -97,6 +97,7 @@ export function createTerminalStream({ terminals, perMessageDeflate = false }) {
     let disposed = false;
     let removeData = () => {};
     let removeExit = () => {};
+    let removeTaken = () => {};
     const output = new PtyOutputBatcher((_id, bytes) => sendOutput(ws, bytes));
     const initialCols = boundedDimension(requestUrl.searchParams.get("cols"), 80);
     const initialRows = boundedDimension(requestUrl.searchParams.get("rows"), 24);
@@ -107,6 +108,7 @@ export function createTerminalStream({ terminals, perMessageDeflate = false }) {
       output.flushAll();
       removeData();
       removeExit();
+      removeTaken();
       try {
         if (attachment) attachment.kill();
         else terminals.killAttachment(id);
@@ -149,13 +151,20 @@ export function createTerminalStream({ terminals, perMessageDeflate = false }) {
 
     void (async () => {
       try {
-        attachment = await terminals.attach(id, { cols: initialCols, rows: initialRows });
+        attachment = await terminals.attach(id, { cols: initialCols, rows: initialRows, takeover });
         if (disposed || ws.readyState !== ws.OPEN || terminalClients.get(id) !== ws) {
           attachment.kill();
           attachment = undefined;
           return;
         }
         removeData = attachment.onData((value) => output.append(id, Buffer.from(value)));
+        // A device's terminal taken over by a client attached on the device directly (nodes/node-direct.js).
+        removeTaken = attachment.onTaken?.(() => {
+          output.flushAll();
+          detachClient(id, ws);
+          sendClientError(ws, Object.assign(new Error("Another Conduit client took control of this terminal"), { code: "pty_taken_over" }));
+          ws.close(PTY_TAKEN_OVER_CLOSE_CODE, "pty_taken_over");
+        }) || (() => {});
         removeExit = attachment.onExit(() => {
           output.flushAll();
           if (disposed || ws.readyState !== ws.OPEN) return;

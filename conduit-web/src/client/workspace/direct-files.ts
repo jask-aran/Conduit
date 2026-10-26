@@ -11,7 +11,7 @@ import { isInstalledClient } from "../platform/installed-client.ts";
  * (its tailnet name, where Tailscale gives it a certificate), and is let in by the origin the grant names.
  */
 type Route = { url: string; reach: "loopback" | "private" | "tailnet" };
-type Grant = { nodeId: string; routes: Route[]; token: string; expiresAt: number; nonce: string; proof: string };
+export type Grant = { nodeId: string; routes: Route[]; token: string; expiresAt: number; nonce: string; proof: string };
 
 const hubPath = (projectId: string, query: string) => `/v0/projects/${encodeURIComponent(projectId)}/file?${query}`;
 
@@ -37,7 +37,7 @@ async function grantFor(projectId: string): Promise<Grant | null> {
 }
 
 /** Asked for as a workspace's files are first shown, so its first file opens without asking, its route found too. */
-export const prefetchDirect = (projectId: string) => { void grantFor(projectId).then((grant) => grant && routeFor(grant)); };
+export const prefetchDirect = (projectId: string) => { void grantFor(projectId).then((grant) => grant && directRoute(grant)); };
 
 function ask(projectId: string): Promise<Grant | null> {
   const asked: Promise<Grant | null> = api<Grant>(`/v0/projects/${encodeURIComponent(projectId)}/direct?origin=${encodeURIComponent(location.origin)}`).catch((error: { error?: string }) => {
@@ -54,7 +54,7 @@ function ask(projectId: string): Promise<Grant | null> {
 const routes = new Map<string, Promise<string | null>>();
 const NO_ROUTE_MS = 2 * 60_000;
 const routeKey = (grant: Grant) => `${grant.nodeId} ${grant.routes.map((route) => route.url).join(" ")}`;
-function routeFor(grant: Grant): Promise<string | null> {
+export function directRoute(grant: Grant): Promise<string | null> {
   const key = routeKey(grant);
   let found = routes.get(key);
   if (!found) {
@@ -64,6 +64,11 @@ function routeFor(grant: Grant): Promise<string | null> {
   }
   return found;
 }
+
+export function forgetRoute(grant: Grant) {
+  routes.delete(routeKey(grant));
+}
+
 /**
  * Every address asked at once, the nearest that proves it is this node taken as soon as the nearer ones have not: a
  * challenge only the node can answer with the hub's key for this grant (nodes/direct.js), so the grant is never
@@ -91,7 +96,7 @@ const proofOf = async (key: string, challenge: string) => {
 /** The node's own answer, or null for the hub's way. */
 async function fromNode(projectId: string, query: string, init: RequestInit): Promise<Response | null> {
   const grant = await grantFor(projectId);
-  const url = grant && await routeFor(grant);
+  const url = grant && await directRoute(grant);
   if (!grant || !url) return null;
   try {
     const headers = new Headers(init.headers);
@@ -103,7 +108,7 @@ async function fromNode(projectId: string, query: string, init: RequestInit): Pr
   } catch (error) {
     if (init.signal?.aborted) throw error;
     // Gone from that address (moved, or restarted elsewhere): a fresh grant and its addresses next time.
-    routes.delete(routeKey(grant));
+    forgetRoute(grant);
     grants.delete(projectId);
   }
   return null;
