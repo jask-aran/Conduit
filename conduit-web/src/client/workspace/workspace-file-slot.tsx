@@ -364,7 +364,8 @@ export default function WorkspaceFileSlot(props: {
       }
       clear();
       if (code === "path_not_found") props.onRemoved(path, false);
-      else if (!background) props.onError((cause as Error).message);
+      // A device away is the workspace's state, shown on it; the tab loads again when the device is back.
+      else if (!background && code !== "device_offline") props.onError((cause as Error).message);
     }
   };
 
