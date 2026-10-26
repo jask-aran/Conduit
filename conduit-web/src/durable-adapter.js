@@ -6,8 +6,8 @@ import { attachmentForDevice } from "./nodes/device-attachments.js";
 import { withConduitNote } from "./attachment-envelope.js";
 import { EventEmitter } from "node:events";
 import { getSupportedThinkingLevels } from "@earendil-works/pi-ai";
-import { UsageDoc, watchEvents } from "@earendil-works/pi-durable";
-import { backgroundSubagents, stopBackgroundSubagents } from "./server/subagents.js";
+import { UsageDoc, LiveDoc, watchEvents } from "@earendil-works/pi-durable";
+import { backgroundSubagents, stopBackgroundSubagent, stopBackgroundSubagents, subagentTitle } from "./server/subagents.js";
 import { DEFAULT_IMAGE_LIMITS } from "@earendil-works/pi-durable/tools";
 import { SessionRecords } from "./harnesses/session-records.js";
 import { messageClose, messageOpen, toolCalls, toolClose, toolKind, toolOpen, toolSubject, turnSettle } from "./harnesses/transcript-ops.js";
@@ -66,15 +66,33 @@ const STOPPED_NOTE = "The user stopped your previous response before it finished
 const TOOL_KINDS = {
   bash: "command", read: "read", write: "edit", edit: "edit", ask_user: "other",
   web_search: "search", source_check: "search", fetch_content: "fetch", get_search_content: "fetch",
-  codemode: "script",
+  codemode: "script", subagent: "agent",
 };
 const subjectOf = (name, args = {}) => toolSubject(
-  name === "codemode" ? null
+  name === "subagent" ? (args.action === "list" ? "Background agents" : args.id || subagentTitle(args.task))
+    : name === "codemode" ? null
     : name === "bash" ? args.command
     : name === "web_search" ? args.queries || args.query
       : name === "fetch_content" ? args.urls || args.url
         : name === "source_check" ? args.claim || args.query
           : args.path);
+// Every subagent action is an agent step; only a spawn names the agent it made (its id once it runs in the background,
+// its conversation once it has one), which the browser pins under the turn. Listing or messaging agents does not.
+const agentFields = (name, input, details = {}) => name === "subagent" ? {
+  kind: "agent", subject: input?.action === "list" ? "Background agents"
+    : input?.id ? `${input.id}: ${details?.title || subagentTitle(input.task) || "Background agents"}`
+      : details?.title || subagentTitle(input?.task) || "Background agents",
+  ...(!input?.action || input.action === "spawn"
+    ? { agent: { id: details?.subagentId ?? null, conversationId: details?.conversationId ?? null } } : {}),
+} : {};
+const agentStep = (event) => {
+  if (event.type === "message_update" && event.changes?.some((change) => change.type.startsWith("text_"))) return "answering";
+  if (event.type !== "tool_execution_start") return null;
+  const verb = { read: "reading", command: "running", search: "searching", edit: "writing", fetch: "fetching", script: "running" }[toolKind(TOOL_KINDS, event.toolName)] || "working";
+  const subject = subjectOf(event.toolName, event.args);
+  return `${verb}${subject ? ` ${subject}` : ""}`;
+};
+
 const SCRIPT_TOOLS = {
   kindOf: (name) => toolKind(TOOL_KINDS, name),
   subjectOf: (name, input) => subjectOf(name, input || {}),
@@ -161,9 +179,13 @@ function assistantClose(message, messageId, generationId = null) {
  * answer the process died before naming is called after its entry. A prompt
  * is settled by what came after it: answered, cut off by a stop, or failed.
  */
-export function entriesToOps(entries, ids = {}) {
+export function entriesToOps(entries, ids = {}, runningTools = []) {
   const ops = [];
   const calls = new Map();
+  const details = new Map(entries.filter((entry) => entry.kind === "pi.tool-result")
+    .map((entry) => [entry.model?.[0]?.toolCallId, entry.model?.[0]?.details]));
+  for (const slot of runningTools) if (slot.details && !details.get(slot.callId)) details.set(slot.callId, slot.details);
+  const children = new Map([...details.values()].filter((detail) => detail?.subagentId).map((detail) => [detail.subagentId, detail]));
   let prompt = null;
   let last = null;
   const settle = () => {
@@ -179,7 +201,7 @@ export function entriesToOps(entries, ids = {}) {
       prompt = data.messageId || `u${entry.conversationId}-${entry.id}`;
       last = null;
       ops.push(messageOpen({ id: prompt, role: "user", content: entry.kind === "conduit.subagent-report" ? `${data.subagentId} ${data.status}: ${data.title}` : data.text || textOf(entry.model?.[0]?.content),
-        ...(entry.kind === "conduit.subagent-report" ? { origin: "harness" } : {}),
+        ...(entry.kind === "conduit.subagent-report" ? { origin: "harness", agent: { id: data.subagentId, conversationId: data.conversationId ?? children.get(data.subagentId)?.conversationId ?? null } } : {}),
         ...(data.timestamp ? { timestamp: data.timestamp } : {}),
         ...(data.attachments?.length ? { attachments: data.attachments } : {}) }));
     } else if (entry.kind === "pi.assistant") {
@@ -192,7 +214,7 @@ export function entriesToOps(entries, ids = {}) {
         if (block.kind !== "tool_call") continue;
         calls.set(block.toolCallId, block);
         ops.push(toolOpen({ toolCallId: block.toolCallId, name: block.name, kind: toolKind(TOOL_KINDS, block.name),
-          subject: subjectOf(block.name, block.input), input: block.input, messageId }));
+          subject: subjectOf(block.name, block.input), ...agentFields(block.name, block.input, details.get(block.toolCallId)), input: block.input, messageId }));
       }
       last = message;
     } else if (entry.kind === "pi.tool-result") {
@@ -201,6 +223,7 @@ export function entriesToOps(entries, ids = {}) {
       const cancelled = abortedResult(entry);
       ops.push(toolClose({ toolCallId: result.toolCallId, output: textOf(result.content), isError: Boolean(result.isError) && !cancelled, cancelled,
         ...codemodeResult(calls.get(result.toolCallId).name, result.details),
+        ...agentFields(calls.get(result.toolCallId).name, calls.get(result.toolCallId).input, result.details),
         completedAt: result.timestamp ? new Date(result.timestamp).toISOString() : undefined }));
     }
   }
@@ -215,6 +238,21 @@ export class DurableAdapter extends EventEmitter {
   constructor({ runtime, logs = null } = {}) {
     super();
     this.runtime = runtime;
+    runtime.subagentStep = agentStep;
+    runtime.subagentsChanged = (conversationId, change) => {
+      this.agentHeartbeats ||= new Map();
+      this.agentStates ||= new Map();
+      if (change === true) {
+        if (Date.now() - (this.agentHeartbeats.get(conversationId) || 0) < 2000) return;
+      } else {
+        const key = `${conversationId}:${change.conversationId}`;
+        if (this.agentStates.get(key) === change.status) return;
+        this.agentStates.set(key, change.status);
+      }
+      this.agentHeartbeats.set(conversationId, Date.now());
+      const record = [...this.records.values()].find((record) => record.conversationId === conversationId);
+      if (record) this.publish(record, { type: "agents_changed" });
+    };
     this.sessions = new SessionRecords({
       capabilities: DURABLE_CAPABILITIES,
       backend: { protocol: "native_api", implementation: "conduit-runtime", installationId: "conduit-runtime" },
@@ -243,9 +281,10 @@ export class DurableAdapter extends EventEmitter {
     const harness = this.runtime.harness;
     const { submissions } = await harness.inspect(this.context);
     for (const conversationId of new Set(submissions.map((submission) => submission.conversationId))) {
-      const chatId = (await harness.snapshot(ConduitIds, conversationId, this.context))?.chatId;
+      const identity = await harness.snapshot(ConduitIds, conversationId, this.context);
+      const chatId = identity?.chatId;
       const conversation = chatId && !this.getByChatId(chatId) ? await harness.conversation(conversationId, this.context) : null;
-      if (conversation) await this.start(conversation, { chatId }).catch((error) => console.warn("[conduit-runtime] could not reattach", chatId, error?.message || error));
+      if (conversation) await this.start(conversation, { chatId, readOnly: Boolean(identity?.subagent), parentChatId: identity?.parentChatId }).catch((error) => console.warn("[conduit-runtime] could not reattach", chatId, error?.message || error));
     }
   }
 
@@ -258,6 +297,18 @@ export class DurableAdapter extends EventEmitter {
     }, this.context);
   }
 
+  assertWritable(record) {
+    if (record?.readOnly) throw failure("subagent_read_only", "subagent_read_only", 409);
+  }
+
+  async assertConversationWritable(conversationId) {
+    if (!Number.isInteger(conversationId) || conversationId <= 0) return;
+    const harness = await this.runtime.open();
+    if ((await harness.snapshot(ConduitIds, conversationId, this.context))?.subagent) {
+      throw failure("subagent_read_only", "subagent_read_only", 409);
+    }
+  }
+
   async launch(context, { model = "", thinkingLevel = "", forceModel = false } = {}) {
     const selected = (forceModel ? String(model).trim() : "") || String(context.chat.backend.model || "").trim();
     const level = (forceModel ? String(thinkingLevel).trim() : "")
@@ -265,11 +316,11 @@ export class DurableAdapter extends EventEmitter {
     // The chat's profile is a Conduit template (Assistant when it names none).
     const options = { chatId: context.chat.id, project: context.project, model: selected, thinkingLevel: level,
       templateId: context.chat.templateId || context.chat.backend?.profileId || null,
-      roaming: context.chat.backend?.roaming === true };
+      roaming: context.chat.backend?.roaming === true, readOnly: context.chat.status === "subagent", parentChatId: context.chat.backend?.parentChatId };
     await this.runtime.freshModels();
     const live = context.chat.backend.opaqueSession
       ? await this.restore(context.chat.backend.opaqueSession, options) : await this.create(options);
-    const modelRecovery = await this.recoverModel(live);
+    const modelRecovery = options.readOnly ? null : await this.recoverModel(live);
     return {
       live,
       mapping: {
@@ -324,6 +375,7 @@ export class DurableAdapter extends EventEmitter {
     if ((await harness.snapshot(ConduitIds, conversation.id, this.context))?.chatId !== options.chatId) {
       await this.remember(conversation, options.chatId);
     }
+    if (options.readOnly) return this.start(conversation, options);
     // The template as it is now: its tools, extensions and prompt (as edited in Settings).
     const roaming = options.roaming || Boolean((await harness.snapshot(ConduitWorkspace, conversation.id, this.context))?.roaming);
     await conversation.configure(await this.runtime.agentFor(options.templateId, { roaming }), this.context);
@@ -338,11 +390,14 @@ export class DurableAdapter extends EventEmitter {
     return record;
   }
 
-  async start(conversation, { chatId, project, templateId = null }) {
+  async start(conversation, { chatId, project, templateId = null, readOnly = false, parentChatId = null }) {
     const existing = this.getByChatId(chatId);
-    if (existing) return existing;
+    if (existing) {
+      if (readOnly) { existing.readOnly = true; existing.parentChatId = parentChatId || existing.parentChatId; }
+      return existing;
+    }
     const record = this.sessions.add({
-      id: crypto.randomUUID(), chatId, projectId: project?.id || null, nodeId: remoteNode(project), conversationId: conversation.id, conversation, templateId,
+      id: crypto.randomUUID(), chatId, readOnly, parentChatId, projectId: project?.id || null, nodeId: remoteNode(project), conversationId: conversation.id, conversation, templateId,
       status: "running", activity: "idle", active: false, stopping: false, generation: null, generationSeq: 0,
       clients: new Set(), events: [], hostUiRequests: [], activeGeneration: null,
       model: "", modelId: "", provider: "", thinkingLevel: "", contextWindow: 0,
@@ -412,6 +467,7 @@ export class DurableAdapter extends EventEmitter {
    */
   async fork(id, { nodeId } = {}) {
     const record = this.get(id);
+    this.assertWritable(record);
     if (!record) throw failure("No Conduit runtime session", "backend_unavailable", 404);
     if (record.active) throw failure("Stop the running turn before editing history", "generation_limit", 409);
     const harness = this.runtime.harness;
@@ -484,8 +540,10 @@ export class DurableAdapter extends EventEmitter {
     turn.prompts = await this.promptIdsFor(record, snapshot.run.inputs);
     turn.answers = turn.prompts.at(-1) || null;
     turn.opened = new Set(turn.prompts);
+    const calls = snapshot.entries.flatMap((entry) => Array.isArray(entry.model?.[0]?.content) ? entry.model[0].content : []).filter((part) => part.type === "toolCall");
     for (const slot of snapshot.tools || []) {
-      if (slot.callId && slot.status !== "done") turn.tools.set(slot.callId, { messageId: null, name: slot.name, input: {}, opened: true, output: slot.output || "" });
+      if (slot.callId && slot.status !== "done") turn.tools.set(slot.callId, { messageId: null, name: slot.name,
+        input: calls.find((call) => call.id === slot.callId)?.arguments || {}, details: slot.details, opened: true, output: slot.output || "" });
     }
     this.publish(record, { type: "status", generationId: turn.generationId, phase: "started", seq: ++record.generationSeq,
       status: "working", activity: "working", detail: null });
@@ -503,6 +561,7 @@ export class DurableAdapter extends EventEmitter {
 
   async prompt(id, message, options = {}) {
     const record = this.get(id);
+    this.assertWritable(record);
     if (!record) throw failure("No Conduit runtime session", "backend_unavailable", 404);
     if (record.active) throw failure("Conduit runtime session is busy", "generation_limit", 409);
     const messageId = options.clientUserMessageId || crypto.randomUUID();
@@ -530,6 +589,7 @@ export class DurableAdapter extends EventEmitter {
   }
 
   async submit(record, text, messageId, whenBusy, attachments = []) {
+    this.assertWritable(record);
     const summary = attachmentSummary(attachments);
     // A fresh prompt after a stop says so; a steer or follow-up joins the turn it lands in.
     const afterStop = record.stoppedByUser && !whenBusy;
@@ -587,7 +647,7 @@ export class DurableAdapter extends EventEmitter {
       case "message_end":
         await this.placed(record, event.entry);
         break;
-      case "tool_execution_start": this.toolStarted(record, event); break;
+      case "tool_execution_start": await this.toolStarted(record, event); break;
       case "tool_execution_update": this.toolProgress(record, event); break;
       case "tool_execution_end": this.toolEnded(record, event); break;
       case "inbox_update": this.publishQueue(record, event.items); break;
@@ -625,7 +685,8 @@ export class DurableAdapter extends EventEmitter {
       const data = entry.data || {};
       // Reports have no browser prompt; open their short harness line at placement.
       const id = data.messageId || `u${entry.conversationId}-${entry.id}`;
-      this.publish(record, messageOpen({ id, role: "user", origin: "harness",
+      const child = data.conversationId ?? (await backgroundSubagents(this.runtime.harness, record.conversationId, this.context)).find((item) => item.id === data.subagentId)?.child ?? null;
+      this.publish(record, messageOpen({ id, role: "user", origin: "harness", agent: { id: data.subagentId, conversationId: child },
         content: `${data.subagentId} ${data.status}: ${data.title}` }));
       return;
     }
@@ -702,7 +763,7 @@ export class DurableAdapter extends EventEmitter {
     }
   }
 
-  toolStarted(record, event) {
+  async toolStarted(record, event) {
     const turn = record.turn;
     if (!turn) return;
     if (event.parentToolCallId) {
@@ -713,12 +774,19 @@ export class DurableAdapter extends EventEmitter {
       this.publish(record, toolCalls({ toolCallId: event.parentToolCallId, calls, generationId: turn.generationId }));
       return;
     }
-    const known = turn.tools.get(event.toolCallId) || { messageId: null, name: event.toolName, input: event.args };
+    const known = { ...(turn.tools.get(event.toolCallId) || { messageId: null }), name: event.toolName, input: event.args };
+    let details = null;
+    if (event.toolName === "subagent" && event.args?.id) {
+      const child = (await backgroundSubagents(this.runtime.harness, record.conversationId, this.context)).find((item) => item.id === event.args.id);
+      if (child) details = { subagentId: child.id, conversationId: child.child, title: child.title };
+      if (record.turn !== turn) return;
+    }
     const kind = toolKind(TOOL_KINDS, event.toolName);
     const subject = subjectOf(event.toolName, event.args);
     const scriptCalls = event.toolName === "codemode" ? createScriptCalls(SCRIPT_TOOLS) : null;
-    turn.tools.set(event.toolCallId, { ...known, opened: true, output: "", ...(scriptCalls ? { scriptCalls } : {}) });
-    this.publish(record, toolOpen({ toolCallId: event.toolCallId, name: event.toolName, kind, subject, input: event.args,
+    turn.tools.set(event.toolCallId, { ...known, details, timestamp: new Date().toISOString(), opened: true, output: "", ...(scriptCalls ? { scriptCalls } : {}) });
+    // A spawn opens at once, its agent's conversation stated again when the child has one (toolProgress).
+    this.publish(record, toolOpen({ toolCallId: event.toolCallId, name: event.toolName, kind, subject, ...agentFields(event.toolName, event.args, details || {}), input: event.args,
       messageId: known.messageId, generationId: turn.generationId }));
     const plan = scriptCalls?.open(event.toolCallId, event.args?.code);
     if (plan) this.publish(record, toolCalls({ toolCallId: event.toolCallId, calls: plan, generationId: turn.generationId }));
@@ -728,7 +796,14 @@ export class DurableAdapter extends EventEmitter {
 
   toolProgress(record, event) {
     const tool = record.turn?.tools.get(event.toolCallId);
-    if (!tool || !event.output) return;
+    if (!tool) return;
+    if (event.details) {
+      tool.details = event.details;
+      if (tool.name === "subagent") this.publish(record, toolOpen({ toolCallId: event.toolCallId, name: tool.name,
+        input: tool.input, messageId: tool.messageId, timestamp: tool.timestamp, generationId: record.turn.generationId,
+        ...agentFields(tool.name, tool.input, tool.details) }));
+    }
+    if (!event.output) return;
     if ("set" in event.output) tool.output = event.output.set;
     else tool.output = tool.output.slice(event.output.trimStart || 0) + (event.output.append || "");
     this.publish(record, { type: "tool_activity", phase: "update", generationId: record.turn.generationId, seq: ++record.generationSeq,
@@ -751,12 +826,22 @@ export class DurableAdapter extends EventEmitter {
     const output = result ? textOf(result.content) : tool.output || "";
     const cancelled = (record.stopping && !result) || abortedResult(event.entry);
     const isError = !cancelled && (result ? Boolean(result.isError) : true);
+    const details = result?.details || tool.details;
+    if (event.toolName === "subagent" && details?.conversationId && !tool.input?.background
+      && (!tool.input?.action || tool.input.action === "spawn")) {
+      this.runtime.subagentsChanged?.(record.conversationId, { conversationId: details.conversationId,
+        status: cancelled ? "stopped" : details.status || (isError ? "failed" : "finished") });
+    }
+    if (event.toolName === "subagent") this.publish(record, toolOpen({ toolCallId: event.toolCallId, name: event.toolName,
+      input: tool.input, messageId: tool.messageId, timestamp: tool.timestamp, generationId: turn.generationId,
+      ...agentFields(event.toolName, tool.input, result?.details || tool.details || {}) }));
     tool.opened = false;
     tool.scriptCalls?.close(event.toolCallId);
     this.publish(record, { type: "tool_activity", phase: "end", generationId: turn.generationId, seq: ++record.generationSeq,
       toolCallId: event.toolCallId, name: event.toolName, output, isError });
     this.publish(record, toolClose({ toolCallId: event.toolCallId, output, isError, cancelled, generationId: turn.generationId,
-      ...codemodeResult(event.toolName, result?.details) }));
+      ...codemodeResult(event.toolName, result?.details),
+      ...agentFields(event.toolName, tool.input, result?.details || tool.details) }));
   }
 
   finish(record) {
@@ -769,7 +854,11 @@ export class DurableAdapter extends EventEmitter {
       turn.messageId = null;
     }
     for (const [toolCallId, tool] of turn.tools) {
-      if (tool.opened) this.publish(record, toolClose({ toolCallId, output: tool.output || "", cancelled: true, generationId: turn.generationId }));
+      if (tool.opened && tool.name === "subagent" && tool.details?.conversationId && !tool.input?.background
+        && (!tool.input?.action || tool.input.action === "spawn")) {
+        this.runtime.subagentsChanged?.(record.conversationId, { conversationId: tool.details.conversationId, status: "stopped" });
+      }
+      if (tool.opened) this.publish(record, toolClose({ toolCallId, output: tool.output || "", cancelled: true, generationId: turn.generationId, ...agentFields(tool.name, tool.input, tool.details) }));
     }
     const stopped = record.stopping || turn.last?.stopReason === "aborted";
     const outcome = stopped ? "interrupted" : turn.last?.stopReason === "error" || !turn.last ? "failed" : "complete";
@@ -784,7 +873,7 @@ export class DurableAdapter extends EventEmitter {
     this.publish(record, { type: "status", generationId: turn.generationId, seq: ++record.generationSeq,
       phase: stopped ? "stopped" : "settled", status: "idle", activity: "idle", detail: null });
     void this.publishUsage(record);
-    this.emit("settled", { record, completed: outcome === "complete" });
+    if (!record.readOnly) this.emit("settled", { record, completed: outcome === "complete" });
   }
 
   /**
@@ -837,6 +926,7 @@ export class DurableAdapter extends EventEmitter {
 
   async respondHostUi(id, response) {
     const record = this.get(id);
+    this.assertWritable(record);
     if (!record) throw failure("No Conduit runtime session", "backend_unavailable", 404);
     const requestId = response?.id || response?.requestId;
     if (!requestId) throw failure("Host UI response requires id", "host_ui_id_required", 400);
@@ -866,6 +956,7 @@ export class DurableAdapter extends EventEmitter {
 
   async cancel(id, generationId = null) {
     const record = this.get(id);
+    this.assertWritable(record);
     if (!record?.active) return null;
     // A Stop for a turn that has already ended (from another tab, say) leaves the next one alone.
     if (generationId && record.generation?.id && generationId !== record.generation.id) return null;
@@ -882,6 +973,7 @@ export class DurableAdapter extends EventEmitter {
 
   async queue(id, type, message, options = {}) {
     const record = this.get(id);
+    this.assertWritable(record);
     if (!record) throw failure("No Conduit runtime session", "backend_unavailable", 404);
     const messageId = options.messageId || crypto.randomUUID();
     await this.submit(record, message, messageId, type === "steer" ? "steer" : "followUp", options.attachments || []);
@@ -890,6 +982,7 @@ export class DurableAdapter extends EventEmitter {
 
   async clearQueue(id) {
     const record = this.get(id);
+    this.assertWritable(record);
     if (!record) throw failure("No Conduit runtime session", "backend_unavailable", 404);
     const harness = this.runtime.harness;
     const steering = [];
@@ -923,7 +1016,22 @@ export class DurableAdapter extends EventEmitter {
   async discard(chat) {
     const conversationId = Number(chat.backend?.opaqueSession);
     if (!Number.isInteger(conversationId) || !this.runtime.exists()) return;
-    await stopBackgroundSubagents(await this.runtime.open(), conversationId, this.context);
+    const harness = await this.runtime.open();
+    if (chat.backend?.parentChatId) return;
+    for (const id of [...await this.branchesOf(conversationId), conversationId]) {
+      await stopBackgroundSubagents(harness, id, this.context);
+      await (await harness.conversation(id, this.context))?.abort(this.context);
+    }
+    for (const id of [...await this.branchesOf(conversationId), conversationId]) {
+      this.agentHeartbeats?.delete(id);
+      for (const key of this.agentStates?.keys() || []) if (key.startsWith(`${id}:`)) this.agentStates.delete(key);
+    }
+    for (const record of [...this.records.values()]) {
+      if (record.readOnly && record.parentChatId === chat.id) {
+        await Promise.all([...(this.runtime.subagentObservers?.get(record.conversationId) || [])].map((stop) => stop()));
+        await this.close(record.id);
+      }
+    }
   }
 
   async close(id) {
@@ -1013,6 +1121,7 @@ export class DurableAdapter extends EventEmitter {
 
   async setModel(id, model) {
     const record = this.get(id);
+    this.assertWritable(record);
     const spec = splitSpec(model);
     if (!record || !spec) return record?.model || "";
     await record.conversation.configure({ model: spec }, this.context);
@@ -1022,6 +1131,7 @@ export class DurableAdapter extends EventEmitter {
 
   async setThinkingLevel(id, level) {
     const record = this.get(id);
+    this.assertWritable(record);
     if (!record) return "";
     await record.conversation.configure({ thinkingLevel: String(level || "") || null }, this.context);
     await this.readAgent(record);
@@ -1035,6 +1145,7 @@ export class DurableAdapter extends EventEmitter {
 
   async compact(id, instructions) {
     const record = this.get(id);
+    this.assertWritable(record);
     if (!record) throw failure("No Conduit runtime session", "backend_unavailable", 404);
     const taskId = await record.conversation.compact(instructions, this.context);
     const { outcome } = (await this.runtime.harness.waitForTask(taskId, this.context)).state;
@@ -1103,10 +1214,67 @@ export class DurableAdapter extends EventEmitter {
     const conversation = record?.conversation || await harness.conversation(conversationId, this.context);
     if (!conversation) return { messages: [], tools: [], page: { before: null } };
     const entries = await this.entries(conversation);
-    const ids = (await harness.snapshot(ConduitIds, conversationId, this.context))?.messages || {};
-    const { messages, tools } = applyTranscriptOps({}, entriesToOps(entries, ids));
+    const identity = await harness.snapshot(ConduitIds, conversationId, this.context);
+    const ids = identity?.messages || {};
+    const live = await harness.snapshot(LiveDoc, conversationId, this.context);
+    const ops = entriesToOps(entries, ids, live?.tools || []);
+    const { messages, tools } = applyTranscriptOps({}, ops);
     // An answer still being written is the live stream's, not the reload's.
-    return { messages: messages.filter((message) => !message.streaming), tools, page: { before: null } };
+    return { messages: messages.filter((message) => !message.streaming), tools, page: { before: null },
+      ...(identity?.subagent ? { turnOpen: Boolean(live?.run) } : {}) };
+  }
+
+  /** Browser roster: foreground calls and the persistent background roster, each counted from its own ledger. */
+  async agents(chat) {
+    const conversationId = Number(chat.backend?.opaqueSession);
+    if (!Number.isInteger(conversationId) || !conversationId) return [];
+    const harness = await this.runtime.open();
+    const conversation = await harness.conversation(conversationId, this.context);
+    if (!conversation) return [];
+    const entries = await this.entries(conversation);
+    const live = await harness.snapshot(LiveDoc, conversationId, this.context);
+    const results = new Map(entries.filter((entry) => entry.kind === "pi.tool-result")
+      .map((entry) => [entry.model?.[0]?.toolCallId, entry]));
+    const agents = [];
+    for (const item of await backgroundSubagents(harness, conversationId, this.context)) {
+      const task = item.reporter ? await harness.getTask(item.reporter, this.context) : null;
+      const failed = task?.state.status === "terminal" && task.state.outcome.status !== "completed";
+      agents.push({ id: item.id, conversationId: item.child, title: item.title, mode: "background",
+        status: item.status === "running" && failed ? "failed" : item.status,
+        startedAt: item.startedAt || (task?.startedAt ? new Date(task.startedAt).toISOString() : null),
+        endedAt: item.endedAt || (task?.endedAt ? new Date(task.endedAt).toISOString() : null) });
+    }
+    for (const entry of entries) {
+      if (entry.kind !== "pi.assistant") continue;
+      for (const call of entry.model?.[0]?.content || []) {
+        if (call.type !== "toolCall" || call.name !== "subagent" || call.arguments?.background
+          || (call.arguments?.action && call.arguments.action !== "spawn")) continue;
+        const resultEntry = results.get(call.id);
+        const result = resultEntry?.model?.[0];
+        const slot = live?.tools?.find((slot) => slot.callId === call.id);
+        const details = result?.details || slot?.details;
+        if (!details?.conversationId) continue;
+        const running = slot && slot.status !== "done";
+        agents.push({ id: null, conversationId: details.conversationId, title: details?.title || subagentTitle(call.arguments?.task),
+          mode: "foreground", status: running ? "running" : abortedResult(resultEntry) ? "stopped" : details.status || (result?.isError || !result ? "failed" : "finished"),
+          startedAt: details.startedAt || (entry.model?.[0]?.timestamp ? new Date(entry.model[0].timestamp).toISOString() : null),
+          endedAt: running ? null : details.endedAt || (result?.timestamp ? new Date(result.timestamp).toISOString() : null) });
+      }
+    }
+    for (const agent of agents) {
+      const child = await this.runtime.ensureSubagent?.(conversationId, agent);
+      agent.chatId = child?.id || null;
+      const ledger = await harness.snapshot(UsageDoc, agent.conversationId, this.context);
+      const spent = [...Object.values(ledger?.models || {}), ...Object.values(ledger?.tools || {})];
+      agent.usage = { tokens: spent.reduce((sum, usage) => sum + (Number(usage.totalTokens) || 0), 0),
+        cost: spent.reduce((sum, usage) => sum + (Number(usage.cost?.total) || 0), 0) };
+      agent.activity = agent.status === "running" ? this.runtime.subagentActivity?.get(agent.conversationId) || null : null;
+    }
+    return agents.sort((a, b) => String(a.startedAt || "").localeCompare(String(b.startedAt || "")) || a.conversationId - b.conversationId);
+  }
+
+  async stopAgent(chat, id) {
+    return stopBackgroundSubagent(await this.runtime.open(), Number(chat.backend?.opaqueSession), id, this.context);
   }
 
   /**
@@ -1142,11 +1310,23 @@ export class DurableAdapter extends EventEmitter {
    * chat's live session is closed first by the caller and reopens in place.
    */
   async relocate({ opaqueSession, project }) {
+    await this.assertConversationWritable(Number(opaqueSession));
     const current = Number(opaqueSession);
     if (!Number.isInteger(current)) return;
     const harness = await this.runtime.open();
     const nodeId = remoteNode(project);
-    for (const conversationId of [...await this.branchesOf(current), current]) {
+    const conversations = [...await this.branchesOf(current), current];
+    for (const id of [...conversations]) {
+      const parent = await harness.conversation(id, this.context);
+      if (!parent) continue;
+      let cursor;
+      do {
+        const page = await parent.commit((tx) => tx.scanConversations({ ownerConversationId: id }, 200, cursor), this.context);
+        conversations.push(...page.items.map((child) => child.id));
+        cursor = page.next;
+      } while (cursor);
+    }
+    for (const conversationId of conversations) {
       const conversation = await harness.conversation(conversationId, this.context);
       if (!conversation) continue;
       await conversation.commit(async (tx) => {
@@ -1164,6 +1344,7 @@ export class DurableAdapter extends EventEmitter {
    * everything. While a turn runs it waits for the next boundary.
    */
   async reset({ liveSessionId, opaqueSession, handoff }) {
+    await this.assertConversationWritable(this.get(liveSessionId)?.conversationId ?? Number(opaqueSession));
     const record = liveSessionId ? this.get(liveSessionId) : null;
     const harness = await this.runtime.open();
     const conversation = record?.conversation || await harness.conversation(Number(opaqueSession), this.context);
@@ -1285,8 +1466,9 @@ export class DurableAdapter extends EventEmitter {
   setFrameInterval(_id, socket, ms) { return this.sessions.setFrameInterval(socket, ms); }
   get(id) { return this.sessions.get(id); }
   getByChatId(chatId) { return this.sessions.getByChatId(chatId); }
-  rawRecords() { return this.sessions.rawRecords(); }
-  list() { return this.sessions.list(); }
+  // Child readers are not independent processes or generation-cap slots.
+  rawRecords() { return [...this.sessions.rawRecords()].filter((record) => !record.readOnly); }
+  list() { return this.sessions.list().filter((view) => !this.get(view.id)?.readOnly); }
   track(id, chatId) { return this.sessions.reassign(id, chatId); }
   /**
    * Stop a chat's process. A turn here outlives its session -- it is durable,
@@ -1294,12 +1476,15 @@ export class DurableAdapter extends EventEmitter {
    * turn too, as ending another harness's process does.
    */
   async stopProcess(id) {
-    if (this.get(id)?.active) await this.cancel(id).catch(() => {});
+    if (this.get(id)?.active && !this.get(id)?.readOnly) await this.cancel(id).catch(() => {});
     await this.close(id);
   }
 
   stop(id) { void this.stopProcess(id); return Boolean(this.get(id)); }
-  async shutdownResources() { await this.runtime.close(); }
+  async shutdownResources() {
+    for (const record of [...this.records.values()]) if (record.readOnly) await this.close(record.id);
+    await this.runtime.close();
+  }
 }
 
 /** `provider/model`, where the model id may itself contain slashes. */

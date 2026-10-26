@@ -87,6 +87,8 @@ export type LiveEvent = EventBase & (
   | { type: "queue_state"; queue: QueueState }
   | { type: "permission_request"; request: HostUiRequest | null }
   | { type: "permission_resolved"; requestId: string }
+  // The chat's subagents changed (one started or ended, or a running one's heartbeat): read them again.
+  | { type: "agents_changed" }
   // A Pi extension's `ctx.ui.notify`: said once, as a toast, never kept in the transcript.
   | { type: "extension_notice"; message: string; level: "info" | "warning" | "error" }
   | { type: "history_truncated"; beforeMessageId: string | null; afterMessageId: string | null }
@@ -346,6 +348,7 @@ function normalizeLiveEventBody(value: unknown): LiveEvent {
       return { ...source, type: "permission_request", generationId, request } as LiveEvent;
     }
     case "permission_resolved": return { type: "permission_resolved", generationId, requestId: text(source.requestId) };
+    case "agents_changed": return { type: "agents_changed", generationId };
     case "extension_notice": {
       const message = text(source.message);
       if (!message) return { type: "unknown", sourceType, generationId };

@@ -1,5 +1,5 @@
 import { Type } from "@earendil-works/pi-ai";
-import { configure, defineDoc, defineExtension, defineTask, defineTool, UsageDoc } from "@earendil-works/pi-durable";
+import { configure, defineDoc, defineExtension, defineTask, defineTool, UsageDoc, watchEvents } from "@earendil-works/pi-durable";
 
 const SubagentRoster = defineDoc({
   kind: "conduit.subagents", version: 1, scope: "conversation", history: "latest", fork: "initial",
@@ -14,6 +14,7 @@ const addUsage = (total, usage) => {
   for (const key of Object.keys(total.cost)) total.cost[key] += usage.cost?.[key] || 0;
   return total;
 };
+export const subagentTitle = (task) => String(task || "").trim().split(/\r?\n/)[0].trim().replace(/\s+/g, " ").slice(0, 80);
 const totalUsage = (state) => [...Object.values(state?.models || {}), ...Object.values(state?.tools || {})]
   .reduce((total, usage) => addUsage(total, usage), emptyUsage());
 const textResult = (text) => ({ output: [{ type: "text", text }] });
@@ -29,8 +30,18 @@ export async function backgroundSubagents(harness, conversationId, context) {
 /** Stop a conversation's background subagents: its chat is going, and a late report would start a turn no one sees. */
 export async function stopBackgroundSubagents(harness, conversationId, context) {
   for (const item of await backgroundSubagents(harness, conversationId, context)) {
-    if (item.status !== "stopped") await harness.abortTask(item.anchor, context).catch(() => {});
+    await harness.abortTask(item.anchor, context).catch(() => {});
+    await harness.waitForTask(item.anchor, context).catch(() => {});
   }
+}
+
+/** The HTTP stop and the tool use the same durable anchor cancellation. */
+export async function stopBackgroundSubagent(harness, conversationId, id, context) {
+  const item = (await backgroundSubagents(harness, conversationId, context)).find((item) => item.id === id);
+  if (!item || item.status !== "running") return false;
+  await harness.abortTask(item.anchor, context);
+  await harness.waitForTask(item.anchor, context);
+  return true;
 }
 
 /**
@@ -56,6 +67,65 @@ export async function stopBackgroundSubagents(harness, conversationId, context) 
  * the chat's totals add (`backgroundSubagents`): pi-durable's ledger is its own.
  */
 export function Subagents(runtime) {
+  const observe = async (parent, child, api, context, foreground = false) => {
+    const signal = context.abortSignal;
+    const stream = await watchEvents(runtime.harness, child, context);
+    runtime.subagentObservers ||= new Map();
+    const observers = runtime.subagentObservers.get(child) || new Set();
+    runtime.subagentObservers.set(child, observers);
+    let stopped = null;
+    let last = 0;
+    let previous = null;
+    let pending = null;
+    let flush = null;
+    const output = () => {
+      flush = null;
+      if (signal?.aborted || pending.key === previous) return;
+      api.output(`${pending.line}\n`);
+      previous = pending.key;
+      last = Date.now();
+    };
+    const step = (event) => {
+      if (stopped || signal?.aborted) return;
+      const line = runtime.subagentStep?.(event);
+      if (!line) return;
+      runtime.subagentActivity ||= new Map();
+      runtime.subagentActivity.set(child, line);
+      const key = event.type === "tool_execution_start" ? event.toolCallId || line : line;
+      if (foreground && key !== previous) {
+        pending = { key, line };
+        if (Date.now() - last >= 500) { clearTimeout(flush); output(); }
+        else if (!flush) flush = setTimeout(output, 500 - (Date.now() - last));
+      }
+    };
+    const calls = stream.snapshot.entries.flatMap((entry) => Array.isArray(entry.model?.[0]?.content) ? entry.model[0].content : []).filter((part) => part.type === "toolCall");
+    for (const tool of stream.snapshot.tools) if (tool.status !== "done") {
+      step({ type: "tool_execution_start", toolName: tool.name, args: calls.find((call) => call.id === tool.callId)?.arguments || {} });
+    }
+    if (stream.snapshot.generation?.message) step({ type: "message_update", changes: [{ type: "text_delta" }] });
+    stream.start(async (events) => { for (const event of events) step(event); });
+    const timer = setInterval(() => runtime.subagentsChanged?.(parent, true), 2000);
+    timer.unref?.();
+    if (foreground) runtime.subagentsChanged?.(parent, { conversationId: child, status: "running" });
+    const unobserve = () => {
+      if (stopped) return stopped;
+      clearInterval(timer);
+      clearTimeout(flush);
+      signal?.removeEventListener("abort", onAbort);
+      observers.delete(unobserve);
+      if (!observers.size) {
+        runtime.subagentObservers.delete(child);
+        runtime.subagentActivity?.delete(child);
+      }
+      stopped = stream.stop();
+      return stopped;
+    };
+    const onAbort = () => { void unobserve().catch(() => {}); };
+    observers.add(unobserve);
+    signal?.addEventListener("abort", onAbort, { once: true });
+    if (signal?.aborted) onAbort();
+    return unobserve;
+  };
   const resetSince = async (conversation, sinceEntry, context) => {
     if (!conversation) return true;
     let cursor;
@@ -87,8 +157,11 @@ export function Subagents(runtime) {
       await api.commit(async (tx) => {
         const item = (await tx.doc(SubagentRoster, api.conversationId)).children[task.input.id];
         item.status = "stopped";
+        item.endedAt = new Date().toISOString();
         return { status: "terminal", outcome: { status: "aborted" } };
       }, context);
+      const item = (await backgroundSubagents(runtime.harness, api.conversationId, context)).find((item) => item.id === task.input.id);
+      if (item) runtime.subagentsChanged?.(api.conversationId, { conversationId: item.child, status: "stopped" });
     },
   });
   const reporter = defineTask({
@@ -97,30 +170,48 @@ export function Subagents(runtime) {
       const { id, child, title, content, mode, number } = task.input;
       const handle = await api.conversation(child, context);
       const requestId = `subagent-message:${child}:${number}`;
-      const settled = await (await handle.submit({ type: "input", content, whenBusy: mode, requestId,
-        entry: { kind: "conduit.user", data: { messageId: requestId, text: content } } }, context)).wait(context);
-      const conversation = await runtime.harness.conversation(child, context);
-      const answerEntry = settled.status === "done" ? (await conversation.entries({ minEntryId: settled.answer,
-        maxEntryId: settled.answer }, 1, undefined, context)).items[0] : null;
-      const answer = (answerEntry?.model?.[0]?.content || []).filter((part) => part.type === "text").map((part) => part.text).join("")
-        || (settled.status === "done" ? "(The subagent finished without a reply.)" : `The subagent did not finish (${settled.status}).`);
-      // Persist the answer before submitting it, so a replay cannot pick up a later answer.
-      const report = await api.memo("report", { answer, status: settled.status === "done" ? "finished" : "failed" }, context);
-      let stopped = false;
-      await api.commit(async (tx) => {
-        const item = (await tx.doc(SubagentRoster, api.conversationId)).children[id];
-        stopped = item.status === "stopped";
-        if (!stopped && item.number === number) item.status = report.status;
-      }, context);
-      const parent = await runtime.harness.conversation(api.conversationId, context);
-      if (!stopped && !await resetSince(parent, task.input.sinceEntry || 0, context)) {
-        const requestId = `subagent-report:${child}:${number}`;
-        const handle = await api.conversation(api.conversationId, context);
-        await handle.submit({ type: "input", whenBusy: "followUp", requestId,
-          content: report.answer, entry: { kind: "conduit.subagent-report",
-            data: { subagentId: id, title, status: report.status, messageId: requestId } } }, context);
-      }
-      await api.commit(() => ({ status: "terminal", outcome: { status: "completed", result: report } }), context);
+      let unobserve = async () => {};
+      try {
+        unobserve = await observe(api.conversationId, child, api, context);
+        const settled = await (await handle.submit({ type: "input", content, whenBusy: mode, requestId,
+          entry: { kind: "conduit.user", data: { messageId: requestId, text: content, timestamp: new Date().toISOString() } } }, context)).wait(context);
+        const conversation = await runtime.harness.conversation(child, context);
+        const answerEntry = settled.status === "done" ? (await conversation.entries({ minEntryId: settled.answer,
+          maxEntryId: settled.answer }, 1, undefined, context)).items[0] : null;
+        const answer = (answerEntry?.model?.[0]?.content || []).filter((part) => part.type === "text").map((part) => part.text).join("")
+          || (settled.status === "done" ? "(The subagent finished without a reply.)" : `The subagent did not finish (${settled.status}).`);
+        // Persist the answer before submitting it, so a replay cannot pick up a later answer.
+        const report = await api.memo("report", { answer, status: settled.status === "done" ? "finished" : "failed" }, context);
+        let stopped = false;
+        let changed = false;
+        await api.commit(async (tx) => {
+          const item = (await tx.doc(SubagentRoster, api.conversationId)).children[id];
+          stopped = item.status === "stopped";
+          if (!stopped && item.number === number) { changed = item.status !== report.status; item.status = report.status; item.endedAt = new Date().toISOString(); }
+        }, context);
+        if (changed) runtime.subagentsChanged?.(api.conversationId, { conversationId: child, status: report.status });
+        const parent = await runtime.harness.conversation(api.conversationId, context);
+        if (!stopped && !await resetSince(parent, task.input.sinceEntry || 0, context)) {
+          const requestId = `subagent-report:${child}:${number}`;
+          const handle = await api.conversation(api.conversationId, context);
+          await handle.submit({ type: "input", whenBusy: "followUp", requestId,
+            content: report.answer, entry: { kind: "conduit.subagent-report",
+              data: { subagentId: id, conversationId: child, title, status: report.status, messageId: requestId } } }, context);
+        }
+        await api.commit(() => ({ status: "terminal", outcome: { status: "completed", result: report } }), context);
+      } catch (error) {
+        let changed = false;
+        if (!api.signal.aborted) await api.commit(async (tx) => {
+          const item = (await tx.doc(SubagentRoster, api.conversationId)).children[id];
+          if (item.number === number && item.status !== "stopped") {
+            changed = item.status !== "failed";
+            item.status = "failed";
+            item.endedAt = new Date().toISOString();
+          }
+        }, context);
+        if (changed) runtime.subagentsChanged?.(api.conversationId, { conversationId: child, status: "failed" });
+        throw error;
+      } finally { await unobserve(); }
     } },
     abort: aborted,
   });
@@ -158,17 +249,26 @@ export function Subagents(runtime) {
           await stripTools(tx, created.id);
           return created.id;
         }, context);
-        await api.details({ conversationId: child }, context);
-        const handle = await api.conversation(child, context);
-        const requestId = `subagent:${api.taskId}`;
-        const settled = await (await handle.submit({ type: "input", content: task, requestId,
-          entry: { kind: "conduit.user", data: { messageId: requestId, text: task, timestamp: new Date().toISOString() } } }, context)).wait(context);
-        const answer = await runtime.lastAnswer(child);
-        const usage = totalUsage(await api.snapshot(UsageDoc, child, context));
-        if (settled.status !== "done" && !answer) {
-          return { ...textResult(`The subagent did not finish (${settled.status}).`), isError: true, usage };
-        }
-        return { ...textResult(answer || "(The subagent finished without a reply.)"), usage };
+        const title = subagentTitle(task);
+        const startedAt = await api.memo("startedAt", new Date().toISOString(), context);
+        await api.details({ conversationId: child, subagentId: null, title, startedAt }, context);
+        await runtime.ensureSubagent?.(api.conversationId, { conversationId: child, id: null, title });
+        const unobserve = await observe(api.conversationId, child, api, context, true);
+        try {
+          const handle = await api.conversation(child, context);
+          const requestId = `subagent:${api.taskId}`;
+          const settled = await (await handle.submit({ type: "input", content: task, requestId,
+            entry: { kind: "conduit.user", data: { messageId: requestId, text: task, timestamp: new Date().toISOString() } } }, context)).wait(context);
+          await api.details({ conversationId: child, subagentId: null, title, startedAt,
+            status: settled.status === "done" ? "finished" : settled.reason === "aborted" ? "stopped" : "failed",
+            endedAt: new Date().toISOString() }, context);
+          const answer = await runtime.lastAnswer(child);
+          const usage = totalUsage(await api.snapshot(UsageDoc, child, context));
+          if (settled.status !== "done" && !answer) {
+            return { ...textResult(`The subagent did not finish (${settled.status}).`), isError: true, usage };
+          }
+          return { ...textResult(answer || "(The subagent finished without a reply.)"), usage };
+        } finally { await unobserve(); }
       }
       const item = await api.commit(async (tx) => {
         const roster = await tx.doc(SubagentRoster, api.conversationId);
@@ -176,17 +276,17 @@ export function Subagents(runtime) {
           const existing = Object.values(roster.children).find((value) => value.spawn === api.taskId);
           if (existing) return JSON.parse(JSON.stringify(existing));
           id = `sa-${roster.next++}`;
-          const title = task.trim().replace(/\s+/g, " ").slice(0, 80);
+          const title = subagentTitle(task);
           const sinceEntry = (await tx.scanEntries({ conversationId: api.conversationId }, 1)).items[0]?.id || 0;
           const owner = await tx.createTask(anchor, { id, sinceEntry }, { ownership: { kind: "conversation" }, background: true });
           const child = await tx.createConversation({ ownership: { kind: "task", taskId: owner } });
           await stripTools(tx, child.id);
           roster.children[id] = { id, title, sinceEntry, child: child.id, anchor: owner, spawn: api.taskId, number: 0,
-            status: "running", deliveries: {} };
+            status: "running", startedAt: new Date().toISOString(), endedAt: null, deliveries: {} };
         }
         const held = Object.hasOwn(roster.children, id) ? roster.children[id] : null;
         if (!held) throw new Error(`Unknown background subagent: ${id}`);
-        if (action === "stop") held.status = "stopped";
+        if (action === "stop") { held.status = "stopped"; held.endedAt = new Date().toISOString(); }
         if (action === "spawn" || action === "message") {
           if (held.status === "stopped") throw new Error(`Subagent ${id} is stopped.`);
           if (!held.deliveries[api.taskId]) {
@@ -195,11 +295,17 @@ export function Subagents(runtime) {
             held.deliveries[api.taskId] = delivery;
             held.reporter = delivery;
             held.status = "running";
+            held.startedAt ||= new Date().toISOString();
+            held.endedAt = null;
           }
         }
         return JSON.parse(JSON.stringify(held));
       }, context);
-      await api.details({ conversationId: item.child, subagentId: item.id }, context);
+      if (["spawn", "message", "stop"].includes(action)) {
+        runtime.subagentsChanged?.(api.conversationId, { conversationId: item.child, status: item.status });
+      }
+      await api.details({ conversationId: item.child, subagentId: item.id, title: item.title }, context);
+      await runtime.ensureSubagent?.(api.conversationId, { conversationId: item.child, id: item.id, title: item.title });
       if (action === "stop") {
         await runtime.harness.abortTask(item.anchor, context);
         await api.waitForTask(item.anchor, context);
