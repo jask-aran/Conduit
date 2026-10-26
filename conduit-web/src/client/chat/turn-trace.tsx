@@ -3,7 +3,7 @@ import { createEffect, createMemo, createSignal, Index, Match, onCleanup, Suspen
 
 import type { Message, ToolItem, ToolKind } from "../api/contracts";
 import type { TraceSegment, TurnTraceData } from "../turn-rows";
-import { KIND_ICONS, stepDuration, ToolStep, VERBS } from "./tool-card";
+import { elapsed, KIND_ICONS, stepDuration, ToolStep, VERBS } from "./tool-card";
 import { Orb, Step, StepProse, Trace, TraceError as LibraryTraceError, Trail } from "@/components/ui";
 import { Dynamic } from "solid-js/web";
 import { ORBITS_TRAILED, PLAIN_SPHERE, SPUTTERING_SPHERE } from "./orb-frames";
@@ -258,13 +258,16 @@ function previewOf(trace: TurnTraceData, writing: boolean): { status: ReturnType
   return { status: statusOf(trace, writing), work: workOf(tools), detail: trace.active ? latest : thought || latest };
 }
 
-/* `01s` to `59s`, then `1m 02s` -- one format, live and settled, except a
-   settled turn that took under a second, which is in milliseconds. */
+/* Live, a count each second at one width: `01s` to `59s`, then `1m 02s`.
+   Settled, the measured time to a tenth: `352ms` under a second, `5.3s`,
+   then `1m 02.4s`. */
 function duration(ms: number, settled: boolean): string {
-  if (settled && ms < 1000) return `${Math.max(0, Math.floor(ms))}ms`;
-  const seconds = Math.max(0, Math.floor(ms / 1000));
   const pad = (value: number) => String(value).padStart(2, "0");
-  return seconds < 60 ? `${pad(seconds)}s` : `${Math.floor(seconds / 60)}m ${pad(seconds % 60)}s`;
+  if (!settled) {
+    const seconds = Math.max(0, Math.floor(ms / 1000));
+    return seconds < 60 ? `${pad(seconds)}s` : `${Math.floor(seconds / 60)}m ${pad(seconds % 60)}s`;
+  }
+  return elapsed(ms);
 }
 
 /* A live turn counts up from its prompt each second; a settled one is the time

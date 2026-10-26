@@ -33,15 +33,18 @@ export const VERBS: Record<ToolKind, [string, string]> = {
 
 /* How long a step took: milliseconds under a second, tenths under ten
    seconds, whole seconds under a minute, then minutes and seconds. */
+/** A measured time, one format everywhere it is shown: `352ms`, `5.3s`, `1m 02.4s`. */
+export function elapsed(ms: number): string {
+  if (ms < 1000) return `${Math.max(0, Math.floor(ms))}ms`;
+  const tenths = Math.round(ms / 100);
+  if (tenths < 600) return `${(tenths / 10).toFixed(1)}s`;
+  return `${Math.floor(tenths / 600)}m ${((tenths % 600) / 10).toFixed(1).padStart(4, "0")}s`;
+}
+
 export function stepDuration(from?: string, to?: string): string {
   const ms = from && to ? Date.parse(to) - Date.parse(from) : NaN;
   if (!Number.isFinite(ms) || ms < 0) return "";
-  if (ms < 1000) return `${Math.floor(ms)}ms`;
-  const seconds = ms / 1000;
-  if (seconds < 10) return `${seconds.toFixed(1)}s`;
-  if (seconds < 60) return `${Math.round(seconds)}s`;
-  const whole = Math.round(seconds);
-  return `${Math.floor(whole / 60)}m ${String(whole % 60).padStart(2, "0")}s`;
+  return elapsed(ms);
 }
 
 /* A tool step: the library's Step, StepOutput, a code-mode script's calls as a Trail of quiet Steps. `open`,

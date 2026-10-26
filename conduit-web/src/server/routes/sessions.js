@@ -242,6 +242,7 @@ export function registerSessionRoutes(app, {
           // chat deleted with something unsent left its text and its
           // attachments held for as long as the store kept them.
           await Promise.all(relatedChats.map((chat) => drafts.dropChat(chat.id)));
+          await Promise.all(relatedChats.map((chat) => chatLogs?.timings?.forget(chat.id)));
           return true;
         });
       });

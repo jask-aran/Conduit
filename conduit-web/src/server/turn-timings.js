@@ -88,6 +88,15 @@ export class TurnTimings {
     return next;
   }
 
+  /** A chat deleted takes its timings with it. */
+  async forget(chatId) {
+    this.live.delete(chatId);
+    this.held.delete(chatId);
+    await (this.writes.get(chatId) || Promise.resolve());
+    this.writes.delete(chatId);
+    await fs.rm(this.fileFor(chatId), { force: true });
+  }
+
   /** The kept timing on each prompt that has one. */
   async decorate(chatId, messages = []) {
     if (!chatId || !messages.some((message) => message?.role === "user")) return messages;
