@@ -274,6 +274,11 @@ export function Select(props: JSX.SelectHTMLAttributes<HTMLSelectElement> & { ba
   const [label, setLabel] = createSignal("");
   const [options, setOptions] = createSignal<Array<{ value: string; label: string; disabled: boolean }>>([]);
   const read = () => {
+    // A value given before its options existed (options drawn by a <For>) did
+    // not take: the native select fell back to its first option. Put it back
+    // once the option is there.
+    const wanted = rest.value == null ? null : String(rest.value);
+    if (wanted !== null && select.value !== wanted && Array.from(select.options).some((option) => option.value === wanted)) select.value = wanted;
     setValue(select.value);
     setLabel(select.selectedOptions[0]?.textContent || "");
     setOptions(Array.from(select.options, (option) => ({ value: option.value, label: option.textContent || "", disabled: option.disabled })));
