@@ -65,7 +65,7 @@ export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: 
   // `findHub(hub)` looks for it on this network when no way reaches it (find-hub.js).
   hub = null, onRoutes = null, findHub = null,
   // Whether the way main is reached is one nobody else can read: https, or this machine. A relayed environment's is
-  // its relay's, which this side cannot see, so it says no.
+  // its relay's, which this side cannot see: the relay says, and is trusted to (decision 25).
   confidential = (url) => url.protocol === "wss:" || (url.protocol === "ws:" && /^(127\.|localhost$|\[::1\]$)/.test(url.hostname)) }) {
   // Every way main can be reached, best first (the address it was paired by, then those it has told this node of):
   // a failed attempt tries the next; the one that worked is tried first again after a drop, and a whole round failing
@@ -207,7 +207,7 @@ export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: 
     const { url: via, ca } = ways[way % ways.length];
     const url = new URL("/v0/nodes/connect", via);
     url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
-    const secret = confidential(url);
+
     const ws = dial(url, { key, ca });
     socket = ws;
     const calls = new Map();
@@ -241,7 +241,7 @@ export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: 
       tried = 0;
       // Main follows again what its clients still hold; a main that started over holds nothing.
       link = here;
-      granting = secret;
+      granting = confidential(url, ws);
       for (const [procId, held] of holders) if (held === HUB) holders.delete(procId);
       // Roots go by id; the path is for people to read, main never sends it back.
       send({ type: "hello", version: NODE_PROTOCOL_VERSION, name, platform: process.platform, boot: receipts.boot,
@@ -262,7 +262,7 @@ export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: 
       // What main offers (decision 30): environments are carried only where it relays them.
       if (message.type === "welcome") {
         const features = Array.isArray(message.features) ? message.features : [];
-        if (features.includes("relay")) for (const relay of relays) relay.attach(send);
+        if (features.includes("relay")) for (const relay of relays) relay.attach(send, { confidential: granting });
         else if (relays.length) log.warn?.(`[conduit-node] ${mainUrl} does not relay; ${relays.map((relay) => relay.env).join(", ")} not carried`);
         return;
       }
