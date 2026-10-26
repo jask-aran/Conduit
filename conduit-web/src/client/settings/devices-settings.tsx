@@ -17,6 +17,7 @@ import { LiveNote, SettingActions, SettingColumn, SettingColumns, SettingGroup, 
 import { WorkspaceGlyph } from "../project/workspace-appearance.tsx";
 import { desktopShell, isInstalledClient, type CompanionStatus, type DesktopShellSettings } from "../platform/installed-client.ts";
 import { pairingWith, pairThisComputer } from "../platform/this-computer.ts";
+import { NetworkSettings } from "./network-settings.tsx";
 
 type SharedRoot = { id: string; label: string; read: boolean; write: boolean; shell: boolean; allow?: string[] };
 type Node = { id: string; deviceId: string; name: string; platform: string | null; online: boolean; local?: boolean; roots: SharedRoot[]; harnesses?: string[]; terminal?: boolean; lastSeenAt: string | null; via?: string | null };
@@ -238,6 +239,9 @@ export function DevicesSettingsTile(props: { projects: Project[]; onAddWorkspace
       <Show when={entry()}>{(known) => <ServerFacts entry={known()} health={health} />}</Show>
       </NavFolder>
     </SettingGroup>
+
+    {/* The network's own settings, the server in use's: another is switched to first. */}
+    <Show when={active()}><NetworkSettings /></Show>
 
     <Show when={others().length}>
       <SettingGroup title="Devices">

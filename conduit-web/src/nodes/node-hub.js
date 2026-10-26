@@ -250,15 +250,23 @@ export class NodeHub extends EventEmitter {
    * A name on this network for a node with an address on one, and the certificate for it, sent to the node; once it
    * serves https under it, its next `direct` says so (lan-names.js). Nothing where the hub has no such names to give.
    */
-  async offerLanName(node, record) {
+  async offerLanName(node, record, { renewed = false } = {}) {
     const address = node.direct?.addresses.find((item) => item.reach === "private")?.address;
     if (!this.lanNames || !address) return;
     const lan = await this.lanNames.forNode(record.id, address).catch(() => null);
     if (!lan || !node.ready || this.live.get(record.id) !== node) return;
     this.lanNameOf.set(record.id, lan.name);
     // Already serving it, and the record already points here (forNode saw to that): nothing to send.
-    if (node.direct?.tls?.names.includes(lan.name)) return;
+    if (!renewed && node.direct?.tls?.names.includes(lan.name)) return;
     node.send({ type: "lan-cert", name: lan.name, cert: lan.cert, key: lan.key });
+  }
+
+  async reofferLanNames() {
+    for (const [id, node] of this.live) {
+      if (!node.ready) continue;
+      const record = await this.get(id);
+      if (record) await this.offerLanName(node, record, { renewed: true });
+    }
   }
 
   async directGrant(nodeId, place, label = "", origin = "") {
