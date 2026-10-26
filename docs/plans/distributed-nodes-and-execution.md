@@ -4,21 +4,27 @@ Nodes, remote workspaces, and durable execution: one server acts on every
 device, and any client controls it. Its agent is the **Conduit durable
 agent** (below, under Names).
 
-Status (2026-10-23, on main since v0.8.5, PR #66): milestones 1, 3 and 5
-built, and the node track (a)-(d): the node role (`scripts/conduit-node.mjs`,
-the Windows app's companion), device workspaces acting through one host
-(files, Git, dashboard, terminals, checkpoints, watching), harness CLIs on
-devices through their adapters, the ownership record, environments of one
-device relayed (decision 25), tmux wherever it exists (decision 28) and the
-head's feature list (decision 30). Milestone 2's backend is built (roaming
+Status (2026-10-26, v0.8.7): milestones 1, 3 and 5 built, and the node
+track (a)-(d): the node role (`scripts/conduit-node.mjs`, the Windows app's
+companion), device workspaces acting through one host (files, Git, dashboard,
+terminals, checkpoints, watching), harness CLIs on devices through their
+adapters, the ownership record, environments of one device relayed (decision
+25), tmux wherever it exists (decision 28) and the hub's feature list
+(decision 30). Since v0.8.5: the head became the hub, an ordinary device
+(2026-10-23); a client may let the hub browse it and mount its folders;
+availability is pushed; nodes may pair over a private LAN; files are read
+from the nearest node directly (v0.8.7); and a node finds a hub that has moved
+by its identity (2026-10-26). Milestone 2's backend is built (roaming
 conversations, subagents, bounded context); its product is not designed.
-Milestone 4 is deferred (device features are later), as are further harnesses
-on devices. Two networks run (decision 29): dev, headed by the desktop's WSL
-(device Desktop-Dev: Linux, the head, and Windows over loopback), and prod,
-headed by the VPS (device Desktop: Windows, and WSL relayed by it). Not yet:
-a node on another machine reaching a head that serves only its self-signed
-HTTPS (a LAN laptop on the dev network) -- it has no way to check that
-certificate; pinning the head's identity in the pairing would.
+Milestone 4 is deferred (device features are later). Parked: further harness
+work on devices (2026-10-22), the Windows app managing a relayed
+environment's folders, and the Android node. Two networks run (decision 29):
+dev, whose hub is the desktop's WSL (device Desktop-Dev: Linux, the hub, and
+Windows over loopback), and prod, whose hub is the VPS (device Desktop:
+Windows, and WSL relayed by it). A node on another machine reaches a hub that
+has only its self-signed certificate over plain HTTP on a private network, or
+by that certificate once the hub's identity has attested it (2026-10-26).
+Next: terminals take the shortest way too (direct terminals).
 
 ## Names
 
@@ -71,7 +77,8 @@ environments.
    network; put it on the most persistent device. Federation is out of scope.
 4. **Tailnet for nodes.** Nodes reach main only over Tailscale, authenticated
    by tailnet identity plus a pairing key. The public tunnel stays for UI
-   clients reaching main.
+   clients reaching main. *(Widened 2026-10-23: loopback, the tailnet or a
+   private LAN address, never a public one; the key decides.)*
 5. **Harnesses run where they are installed** (revised 2026-10-21). A
    pi-durable conversation's `env` is built from its thread's device: main's
    own machine is the zero-network path, another device's calls go over the
@@ -148,6 +155,8 @@ environments.
     adapter onto it. Device capabilities, action ids/reattach and Conduit's
     file browser/viewer share the same protocol. Remote browsing is
     **read-only** in v1; editor writes, git panel and terminals come later.
+    *(Done: since node track (a) a device workspace edits, uses Git and opens
+    terminals like the hub's own.)*
 18. **Remote shell survives disconnects.** The node keeps the process and
     buffered output; on reconnect the tool reattaches by action id. If the
     node itself restarted, the call is reported interrupted.
@@ -161,8 +170,9 @@ environments.
     which acts on the desktop.
 21. **A thread is owned by a device.** A thread belongs to its workspace's
     device, whoever typed (a chat in a desktop folder is the desktop's, even
-    from the phone); a chat outside any workspace belongs to the device it
-    was started on. Its tool calls and capabilities default there, and it
+    from the phone); a chat outside any workspace belongs to the hub, where
+    unscoped chats live (amended 2026-10-23; first decided as the device it
+    was started on). Its tool calls and capabilities default there, and it
     knows that owner durably (a record beside the conversation, not agent
     context). A persistent assistant instead picks a device per call. A
     thread whose device is unreachable waits ("Waiting for Laptop") and any
@@ -226,7 +236,8 @@ environments.
 
 ## Architecture
 
-As built on `distributed-nodes`, and where it is going (agreed 2026-10-21).
+As built (on main since v0.8.5), and where it is going (agreed 2026-10-21).
+Read "head" in this section as the hub (2026-10-23).
 Nothing changes for anyone until a device shares a folder that becomes a
 workspace; from then a chat there must feel exactly like a chat anywhere
 else. That is the test every piece below is held to.
@@ -294,17 +305,20 @@ translation into Conduit's internal representation exist once. A Claude
 Code chat on a device is the same Claude Code adapter; only its process
 starts elsewhere.
 
-### Where a device workspace still differs (to remove)
+### Where a device workspace still differs
 
-| Where | Difference | Cause |
+The 2026-10-21 table of differences was removed by the steps under Making it
+general (profile default, turn checkpoints, chat moves, watching, adapters).
+What is left is on purpose:
+
+| Where | Difference | Why |
 |---|---|---|
-| chats.js (profile default) | forced to pi-durable | Pi 1.3.0 runs on the head only (ends at milestone 5) |
-| projects.js turn-artifact | no turn checkpoints, so no Chat review of a turn | checkpoints snapshot the head's disk |
-| sessions.js move | chat moves into/out of a device workspace refused | no ownership record yet |
-| dashboard menu | no "delete workspace and files" | safety rule, kept |
-| live-session-launcher, chats.js | "harness not on this device" | right outcome, written as a device check |
-| file watching | a device folder is polled | no watch call in the protocol |
-| adapters | `nodeId` threaded through each one | remote spawn added per adapter |
+| dashboard menu | no "delete workspace and files" | safety rule |
+| `capabilities(place)` | a harness the device lacks is not offered | true of the device, asked as a capability |
+| checkpoints | only on a Git workspace with the shell grant | a plain folder's snapshot would read all of it over the link |
+| file watching | polled while its device is away | watched on the device otherwise |
+| transport | the hub's own folders are reached in process | no socket to itself |
+| reads | from the node directly when near, else through the hub | 2026-10-23, files take the shortest way |
 
 ### Making it general
 
