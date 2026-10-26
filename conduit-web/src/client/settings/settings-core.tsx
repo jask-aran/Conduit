@@ -97,7 +97,8 @@ interface PiAuthProvider {
   usesCallbackServer: boolean;
   /** What its key goes with (Cloudflare's account ID), asked for beside it. */
   fields?: Array<{ name: string; label: string }>;
-  auth: { configured: boolean; source: "stored" | "environment" | "managed" | null; removable: boolean };
+  /** kind: a stored credential's, a sign-in or a key. */
+  auth: { configured: boolean; source: "stored" | "environment" | "managed" | null; kind?: "oauth" | "key" | null; removable: boolean };
 }
 
 interface PiAuthAttempt {
@@ -162,10 +163,13 @@ const SEARCH_FETCHING: Array<{ key: SearchFetching; label: string; title: string
   { key: "video", label: "YouTube and video", title: "Transcripts, what is on screen and frames, for YouTube and local video files." },
   { key: "pdf", label: "PDFs", title: "Reads a PDF's text instead of returning the file." },
 ];
+const ACCOUNT_SOURCES: Record<NonNullable<PiAuthProvider["auth"]["source"]> | "none", string> = {
+  stored: "connected", environment: "key from the server", managed: "agent settings", none: "not connected",
+};
 const SEARCH_TIME_LIMITS: Array<{ ms: number | null; label: string }> = [
   { ms: null, label: "None" }, { ms: 15_000, label: "15 s" }, { ms: 30_000, label: "30 s" }, { ms: 60_000, label: "1 min" }, { ms: 120_000, label: "2 min" },
 ];
-const CLOUDFLARE_NEEDED = "Needs Cloudflare Workers AI: add its API key and account ID in Models & accounts, or give the server CLOUDFLARE_API_KEY and CLOUDFLARE_ACCOUNT_ID.";
+const CLOUDFLARE_NEEDED = "Needs a Cloudflare Workers AI key and account ID: add them under Providers below.";
 
 const voiceSelectionFromProfile = (profile: VoiceExecutionProfile): VoiceLocalSelection => ({
   modelId: profile.modelId,
@@ -333,10 +337,11 @@ export function Settings(props: {
   const [workspaceId, setWorkspaceId] = createSignal<string | null>(null);
   const [authProviders, setAuthProviders] = createSignal<PiAuthProvider[]>([]);
   const [authAttempt, setAuthAttempt] = createSignal<PiAuthAttempt | null>(null);
-  const [authProviderId, setAuthProviderId] = createSignal("");
+  // The provider chosen to add (not connected yet), and the one whose key form is open.
+  const [addingAccount, setAddingAccount] = createSignal("");
+  const [accountKeyFor, setAccountKeyFor] = createSignal("");
   const [apiKey, setApiKey] = createSignal("");
   const [apiKeyFields, setApiKeyFields] = createSignal<Record<string, string>>({});
-  const keyFields = () => authProviders().find((provider) => provider.id === authProviderId())?.fields || [];
   const [authResponse, setAuthResponse] = createSignal("");
   const [authLoading, setAuthLoading] = createSignal(false);
   const [authError, setAuthError] = createSignal("");
@@ -612,7 +617,7 @@ export function Settings(props: {
       ]);
       applyAuthProviders(status.providers);
       setAuthAttempt(attempt.attempt);
-      if (!authProviderId()) setAuthProviderId(status.providers[0]?.id || "");
+      if (status.providers.some((provider) => provider.id === addingAccount() && provider.auth.configured)) setAddingAccount("");
       setAuthError("");
       setAuthUnavailable(false);
     } catch (error) {
@@ -621,7 +626,8 @@ export function Settings(props: {
       setAuthError(response.message);
     } finally { setAuthLoading(false); }
   };
-  createEffect(() => { if (props.open && section() === "models") void loadPiAuth(); });
+  // Search shows Cloudflare Workers AI's account too (its off-topic check and extract mode run on it).
+  createEffect(() => { if (props.open && (section() === "models" || section() === "search")) void loadPiAuth(); });
   const loadChatGptStatus = async () => {
     try { setChatGptStatus(await api<ChatGptWebStatus>("/v0/chatgpt-web/status")); setChatGptError(""); }
     catch (error) { setChatGptError((error as Error).message); }
@@ -656,12 +662,11 @@ export function Settings(props: {
     onCleanup(() => window.clearInterval(timer));
   });
 
-  const startOAuth = async () => {
-    if (!authProviderId()) return;
+  const startOAuth = async (providerId: string) => {
     setAuthLoading(true);
     setAuthError("");
     try {
-      const result = await api<{ attempt: PiAuthAttempt }>("/v0/pi-auth/oauth", { method: "POST", body: JSON.stringify({ providerId: authProviderId() }) });
+      const result = await api<{ attempt: PiAuthAttempt }>("/v0/pi-auth/oauth", { method: "POST", body: JSON.stringify({ providerId }) });
       setAuthAttempt(result.attempt);
     } catch (error) { setAuthError((error as Error).message); }
     finally { setAuthLoading(false); }
@@ -680,23 +685,76 @@ export function Settings(props: {
     try { await api("/v0/pi-auth/attempt/cancel", { method: "POST" }); await loadPiAuth(); }
     catch (error) { setAuthError((error as Error).message); }
   };
+  const openAccountKey = (providerId: string) => { setApiKey(""); setApiKeyFields({}); setAccountKeyFor(providerId); };
+  const closeAccountKey = () => { setApiKey(""); setApiKeyFields({}); setAccountKeyFor(""); };
   const saveApiKey = async () => {
-    if (!authProviderId() || !apiKey()) return;
+    const providerId = accountKeyFor();
+    if (!providerId || !apiKey().trim()) return;
     setAuthLoading(true);
     setAuthError("");
     try {
-      await api("/v0/pi-auth/api-key", { method: "PUT", body: JSON.stringify({ providerId: authProviderId(), key: apiKey(), env: apiKeyFields() }) });
-      setApiKey("");
-      setApiKeyFields({});
+      await api("/v0/pi-auth/api-key", { method: "PUT", body: JSON.stringify({ providerId, key: apiKey(), env: apiKeyFields() }) });
+      closeAccountKey();
       await loadPiAuth();
+      if (section() === "search") void loadSearchSettings();
     } catch (error) { setAuthError((error as Error).message); }
     finally { setAuthLoading(false); }
   };
   const removePiAuth = async (providerId: string) => {
     setAuthLoading(true);
-    try { await api(`/v0/pi-auth/${encodeURIComponent(providerId)}`, { method: "DELETE" }); await loadPiAuth(); }
+    try {
+      await api(`/v0/pi-auth/${encodeURIComponent(providerId)}`, { method: "DELETE" });
+      await loadPiAuth();
+      if (section() === "search") void loadSearchSettings();
+    }
     catch (error) { setAuthError((error as Error).message); }
     finally { setAuthLoading(false); }
+  };
+  /**
+   * A provider account's line: how it is connected and its own actions (sign in, a key, remove), its key form in
+   * place of them while open, the fields that go with the key and a sign-in under way below it. One credential,
+   * shown in Models & accounts and, for what search runs on, in Web search.
+   */
+  const accountLine = (provider: PiAuthProvider, options: { label?: string; title?: string; pending?: boolean } = {}) => {
+    const editing = () => accountKeyFor() === provider.id;
+    const attempt = () => authAttempt()?.owned && authAttempt()!.providerId === provider.id ? authAttempt()! : null;
+    const configured = () => provider.auth.configured;
+    const signedIn = () => provider.auth.kind === "oauth";
+    const state = () => provider.auth.kind ? (signedIn() ? "signed in" : "key stored") : ACCOUNT_SOURCES[provider.auth.source || "none"];
+    return <>
+      <SettingLine plain label={options.label || provider.label} title={options.title} state={<>{state()}</>}>
+        <Show when={editing()} fallback={<>
+          <Show when={provider.oauth && (!configured() || signedIn())}><Button variant="ghost" size="sm" disabled={authLoading() || Boolean(authAttempt()?.active)} onClick={() => void startOAuth(provider.id)}>{signedIn() ? "Sign in again" : "Sign in"}</Button></Show>
+          <Show when={provider.auth.source !== "environment" && !signedIn()}><Button variant="ghost" size="sm" disabled={authLoading()} onClick={() => openAccountKey(provider.id)}>{provider.auth.removable ? "Replace" : provider.oauth ? "Use a key" : "Add key"}</Button></Show>
+          <Show when={provider.auth.removable}><Button variant="ghost" size="sm" disabled={authLoading()} onClick={() => void removePiAuth(provider.id)}>Remove</Button></Show>
+          <Show when={options.pending}><Button variant="ghost" size="sm" onClick={() => setAddingAccount("")}>Cancel</Button></Show>
+        </>}>
+          <Input id={`pi-api-key-${provider.id}`} aria-label={`${provider.label} API key`} type="password" autocomplete="new-password" data-1p-ignore data-lpignore="true" data-bwignore
+            ref={(element: HTMLInputElement) => queueMicrotask(() => element.focus())}
+            value={apiKey()} onInput={(event) => setApiKey(event.currentTarget.value)} placeholder="API key"
+            onKeyDown={(event) => { if (event.key === "Enter") void saveApiKey(); if (event.key === "Escape") { event.stopPropagation(); closeAccountKey(); } }} />
+          <Button size="sm" disabled={authLoading() || !apiKey().trim()} onClick={() => void saveApiKey()}>{authLoading() ? <Spinner /> : null}Save</Button>
+          <Button variant="ghost" size="sm" disabled={authLoading()} onClick={closeAccountKey}>Cancel</Button>
+        </Show>
+      </SettingLine>
+      <Show when={editing()}><For each={provider.fields || []}>{(field) =>
+        <SettingLine plain label={field.label} title={`${field.name}, stored with the key. Left empty, the one stored before stays, or the server's own ${field.name} is used.`}>
+          <Input id={`pi-api-key-${provider.id}-${field.name}`} aria-label={`${provider.label} ${field.label}`} value={apiKeyFields()[field.name] || ""} placeholder={provider.auth.kind === "key" ? "Unchanged" : ""}
+            onInput={(event) => setApiKeyFields({ ...apiKeyFields(), [field.name]: event.currentTarget.value })} onKeyDown={(event) => { if (event.key === "Enter") void saveApiKey(); }} />
+        </SettingLine>
+      }</For></Show>
+      <Show when={attempt()}>{(current) => <>
+        <SettingLine plain label="Sign-in" state={<>{current().message}</>}>
+          <Show when={current().authUrl}><SettingLink href={current().authUrl!}>Open sign-in</SettingLink></Show>
+          <Show when={current().active}><Button variant="ghost" size="sm" onClick={() => void cancelOAuth()}>Cancel</Button></Show>
+        </SettingLine>
+        <Show when={current().authUrl && current().instructions}><SettingNote tone="quiet">{current().instructions}</SettingNote></Show>
+        <Show when={current().deviceCode}><SettingLine plain label="Code" state={<><code>{current().deviceCode!.userCode}</code></>}><SettingLink href={current().deviceCode!.verificationUri}>Open verification page</SettingLink></SettingLine></Show>
+        <Show when={current().prompt?.type === "select"}><SettingLine plain label={current().prompt!.message}><For each={current().prompt!.options || []}>{(option) => <Button variant="ghost" size="sm" disabled={authLoading()} onClick={() => void answerAuthPrompt(option.id)}>{option.label}</Button>}</For></SettingLine></Show>
+        <Show when={current().prompt && current().prompt!.type !== "select"}><SettingLine plain label={current().prompt!.message}><Input id="pi-auth-response" aria-label={current().prompt!.message} type="text" autocomplete="off" value={authResponse()} onInput={(event) => setAuthResponse(event.currentTarget.value)} placeholder={current().prompt!.placeholder || ""} onKeyDown={(event) => { if (event.key === "Enter") void answerAuthPrompt(authResponse()); }} /><Button size="sm" disabled={authLoading() || !authResponse().trim()} onClick={() => void answerAuthPrompt(authResponse())}>Continue</Button></SettingLine></Show>
+        <Show when={current().error}><SettingNote tone="error">{current().error}</SettingNote></Show>
+      </>}</Show>
+    </>;
   };
 
   const loadSearchSettings = async () => {
@@ -1485,7 +1543,11 @@ export function Settings(props: {
                       </Show>
                     </SettingLine>
                   }</For>
+                  <Show when={authProviders().find((provider) => provider.id === "cloudflare-workers-ai")}>{(provider) => accountLine(provider(), {
+                    title: "Checks routed results are on-topic (Clef) and reads values off pages (Clairic), on your Cloudflare account. The same account as in Models & accounts.",
+                  })}</Show>
                   <Show when={searchError()}><SettingNote tone="error">{searchError()}</SettingNote></Show>
+                  <Show when={authError() && !authUnavailable()}><SettingNote tone="error">{authError()}</SettingNote></Show>
                   <SettingNote>pi-web-access knows about forty more providers, set in its web-search.json. <SettingLink href="https://github.com/nicobailon/pi-web-access#configuration">Docs</SettingLink></SettingNote>
                 </SettingGroup>
               </>}
@@ -1530,34 +1592,17 @@ export function Settings(props: {
               <Show when={authUnavailable()}><SettingNote tone="error">Set a Conduit password with <code>node scripts/conduit-auth.mjs set-password</code>, then sign in to manage agent credentials here.</SettingNote></Show>
               <Show when={authError() && !authUnavailable()}><SettingNote tone="error">{authError()}</SettingNote></Show>
               <Show when={!authUnavailable() && authLoading() && !authProviders().length} fallback={<Show when={!authUnavailable()}>
-                <SettingLine label="Provider" title="Credentials are stored only in Conduit durable agent."><Select id="pi-auth-provider" aria-label="Model provider" value={authProviderId()} onChange={(event) => setAuthProviderId(event.currentTarget.value)}><For each={authProviders()}>{(provider) => <option value={provider.id}>{provider.label}</option>}</For></Select></SettingLine>
-                <Show when={authProviders().find((provider) => provider.id === authProviderId())?.oauth}>
-                  <SettingLine plain label="Sign in"><Button variant="ghost" size="sm" disabled={authLoading() || Boolean(authAttempt()?.active)} onClick={() => void startOAuth()}>{authLoading() ? <Spinner /> : null}Sign in with browser</Button></SettingLine>
-                </Show>
-                <SettingLine plain label="API key">
-                    <Input id="pi-api-key" aria-label="API key" type="password" autocomplete="new-password" data-1p-ignore data-lpignore="true" data-bwignore value={apiKey()} onInput={(event) => setApiKey(event.currentTarget.value)} placeholder="Stored in the Conduit durable agent" onKeyDown={(event) => { if (event.key === "Enter" && apiKey()) void saveApiKey(); }} />
-                    <Show when={apiKey()}><Button size="sm" disabled={authLoading()} onClick={() => void saveApiKey()}>{authLoading() ? <Spinner /> : null}Save</Button></Show>
-                </SettingLine>
-                <For each={keyFields()}>{(field) =>
-                  <SettingLine plain label={field.label} title={`${field.name}, stored with the key; the server's own ${field.name} is used when this is empty.`}>
-                    <Input id={`pi-api-key-${field.name}`} aria-label={field.label} value={apiKeyFields()[field.name] || ""} onInput={(event) => setApiKeyFields({ ...apiKeyFields(), [field.name]: event.currentTarget.value })} onKeyDown={(event) => { if (event.key === "Enter" && apiKey()) void saveApiKey(); }} />
+                <For each={authProviders().filter((provider) => provider.auth.configured)}>{(provider) => accountLine(provider)}</For>
+                <Show when={authProviders().find((provider) => provider.id === addingAccount() && !provider.auth.configured)}>{(provider) => accountLine(provider(), { pending: true })}</Show>
+                <Show when={authProviders().some((provider) => !provider.auth.configured && provider.id !== addingAccount())}>
+                  <SettingLine label="Add an account" title="A model provider's sign-in or API key, kept by the Conduit durable agent on this server.">
+                    <Select id="pi-auth-provider" aria-label="Add an account" value="" onChange={(event) => { setAddingAccount(event.currentTarget.value); closeAccountKey(); }}>
+                      <option value="">Choose a provider</option>
+                      <For each={authProviders().filter((provider) => !provider.auth.configured && provider.id !== addingAccount())}>{(provider) => <option value={provider.id}>{provider.label}</option>}</For>
+                    </Select>
                   </SettingLine>
-                }</For>
-                <Show when={authAttempt()?.owned}>
-                  <SettingLine plain label={authAttempt()!.providerLabel} state={<>{authAttempt()!.message}</>}>
-                      <Show when={authAttempt()!.authUrl}><SettingLink href={authAttempt()!.authUrl!}>Open sign-in</SettingLink></Show>
-                      <Show when={authAttempt()!.active}><Button variant="ghost" size="sm" onClick={() => void cancelOAuth()}>Cancel</Button></Show>
-                  </SettingLine>
-                  <Show when={authAttempt()!.authUrl && authAttempt()!.instructions}><SettingNote tone="quiet">{authAttempt()!.instructions}</SettingNote></Show>
-                  <Show when={authAttempt()!.deviceCode}><SettingLine plain label="Code" state={<><code>{authAttempt()!.deviceCode!.userCode}</code></>}><SettingLink href={authAttempt()!.deviceCode!.verificationUri}>Open verification page</SettingLink></SettingLine></Show>
-                  <Show when={authAttempt()!.prompt?.type === "select"}><SettingLine plain label={authAttempt()!.prompt!.message}><For each={authAttempt()!.prompt!.options || []}>{(option) => <Button variant="ghost" size="sm" disabled={authLoading()} onClick={() => void answerAuthPrompt(option.id)}>{option.label}</Button>}</For></SettingLine></Show>
-                  <Show when={authAttempt()!.prompt && authAttempt()!.prompt!.type !== "select"}><SettingLine plain label={authAttempt()!.prompt!.message}><Input id="pi-auth-response" aria-label={authAttempt()!.prompt!.message} type="text" autocomplete="off" value={authResponse()} onInput={(event) => setAuthResponse(event.currentTarget.value)} placeholder={authAttempt()!.prompt!.placeholder || ""} onKeyDown={(event) => { if (event.key === "Enter") void answerAuthPrompt(authResponse()); }} /><Button size="sm" disabled={authLoading() || !authResponse().trim()} onClick={() => void answerAuthPrompt(authResponse())}>Continue</Button></SettingLine></Show>
-                  <Show when={authAttempt()!.error}><SettingNote tone="error">{authAttempt()!.error}</SettingNote></Show>
                 </Show>
-                <For each={authProviders().filter((provider) => provider.auth.configured)}>{(provider) => <SettingLine plain label={provider.label} state={<>{provider.auth.source === "stored" ? "stored" : provider.auth.source === "environment" ? "environment" : "Agent settings"}</>} title={provider.auth.source === "stored" ? "Credential stored for the Conduit durable agent" : provider.auth.source === "environment" ? "Credential available from the server environment" : "Credential managed by the agent settings"}>
-                  <Show when={provider.auth.removable} fallback={<span />}><Button variant="ghost" size="sm" disabled={authLoading()} onClick={() => void removePiAuth(provider.id)}>Remove</Button></Show>
-                </SettingLine>}</For>
-              </Show>}><SettingLine plain label="Provider" state={<>loading…</>}><span /></SettingLine></Show>
+              </Show>}><SettingLine plain label="Accounts" state={<>loading…</>}><span /></SettingLine></Show>
             </SettingGroup>
           </></Show>
       </OverlayPage>
