@@ -1596,7 +1596,7 @@ export function Settings(props: {
                 <Show when={authProviders().find((provider) => provider.id === addingAccount() && !provider.auth.configured)}>{(provider) => accountLine(provider(), { pending: true })}</Show>
                 <Show when={authProviders().some((provider) => !provider.auth.configured && provider.id !== addingAccount())}>
                   <SettingLine label="Add an account" title="A model provider's sign-in or API key, kept by the Conduit durable agent on this server.">
-                    <Select id="pi-auth-provider" aria-label="Add an account" value="" onChange={(event) => { setAddingAccount(event.currentTarget.value); closeAccountKey(); }}>
+                    <Select id="pi-auth-provider" aria-label="Add an account" search="Search providers" value="" onChange={(event) => { setAddingAccount(event.currentTarget.value); closeAccountKey(); }}>
                       <option value="">Choose a provider</option>
                       <For each={authProviders().filter((provider) => !provider.auth.configured && provider.id !== addingAccount())}>{(provider) => <option value={provider.id}>{provider.label}</option>}</For>
                     </Select>
