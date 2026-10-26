@@ -224,13 +224,15 @@ test("PTY manager only tolerates known missing-session tmux failures", async () 
 test("PTY manager recovers recorded tmux sessions and removes untracked shells on restart", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-pty-load-"));
   const filePath = path.join(root, "remotes.json");
+  // Ended within the day a terminal that ended stays listed.
+  const ended = new Date(Date.now() - 60_000).toISOString();
   await fs.writeFile(filePath, JSON.stringify({
     version: 2,
     sessions: [
       { id: "old", projectId: "project-a", templateId: "shell", title: "Old", status: "running", createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-01T00:00:00.000Z", tmuxSession: "c_old" },
       { id: "new", projectId: "project-a", templateId: "shell", title: "New", status: "running", createdAt: "2026-01-02T00:00:00.000Z", updatedAt: "2026-01-02T00:00:00.000Z", tmuxSession: "c_new" },
       { id: "other", projectId: "project-b", templateId: "shell", title: "Other", status: "running", createdAt: "2026-01-03T00:00:00.000Z", updatedAt: "2026-01-03T00:00:00.000Z", tmuxSession: "c_other" },
-      { id: "exited", projectId: "project-a", templateId: "shell", title: "Exited", status: "exited", createdAt: "2025-12-31T00:00:00.000Z", updatedAt: "2026-01-01T12:00:00.000Z", exitCode: 7, signal: "tmux_session_ended", tmuxSession: "c_exited" },
+      { id: "exited", projectId: "project-a", templateId: "shell", title: "Exited", status: "exited", createdAt: "2025-12-31T00:00:00.000Z", updatedAt: ended, exitCode: 7, signal: "tmux_session_ended", tmuxSession: "c_exited" },
     ],
   }));
   const pty = fakePty();
@@ -244,7 +246,7 @@ test("PTY manager recovers recorded tmux sessions and removes untracked shells o
   assert.deepEqual(manager.list().map((item) => item.id).sort(), ["exited", "new", "old", "other"]);
   assert.equal(manager.get("exited").exitCode, 7);
   assert.equal(manager.get("exited").signal, "tmux_session_ended");
-  assert.equal(manager.get("exited").updatedAt, "2026-01-01T12:00:00.000Z");
+  assert.equal(manager.get("exited").updatedAt, ended);
   assert.equal(manager.get("old").status, "running");
   assert.equal(manager.get("other").status, "running");
   assert.equal(manager.get("new").status, "exited");
