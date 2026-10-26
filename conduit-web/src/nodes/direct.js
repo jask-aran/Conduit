@@ -45,6 +45,45 @@ export function directAddresses(interfaces) {
   return found.sort((left, right) => (left.reach === right.reach ? 0 : left.reach === "private" ? -1 : 1));
 }
 
+/**
+ * A terminal attached directly is sealed end to end (plan: direct terminals): the hub hands the client this key with
+ * the grant, the node works it out from the grant's nonce, and nobody on the network between them has it. Every frame
+ * is AES-256-GCM under it, its nonce the direction and a count of frames, so a frame cannot be read, changed, replayed
+ * or moved. A route need not be private for a shell then, only reachable.
+ */
+export const channelKey = (secret, nonce) => crypto.createHmac("sha256", secret).update(`pty-channel:${nonce}`).digest("base64url");
+const SEAL_TO_NODE = 1;
+const SEAL_TO_CLIENT = 2;
+const ivFor = (direction, count) => {
+  const iv = Buffer.alloc(12);
+  iv.writeUInt32BE(direction, 0);
+  iv.writeBigUInt64BE(BigInt(count), 4);
+  return iv;
+};
+/** The node's end of a sealed channel: `seal` a frame for the client, `open` the client's next one (null if it is not). */
+export function nodeChannel(key) {
+  const raw = Buffer.from(key, "base64url");
+  let sent = 0;
+  let received = 0;
+  return {
+    seal(kind, body) {
+      const cipher = crypto.createCipheriv("aes-256-gcm", raw, ivFor(SEAL_TO_CLIENT, sent++));
+      const sealed = Buffer.concat([cipher.update(Buffer.concat([Buffer.from([kind]), body])), cipher.final()]);
+      return Buffer.concat([sealed, cipher.getAuthTag()]);
+    },
+    open(frame) {
+      if (frame.length < 17) return null;
+      try {
+        const decipher = crypto.createDecipheriv("aes-256-gcm", raw, ivFor(SEAL_TO_NODE, received));
+        decipher.setAuthTag(frame.subarray(frame.length - 16));
+        const plain = Buffer.concat([decipher.update(frame.subarray(0, frame.length - 16)), decipher.final()]);
+        received += 1;
+        return { kind: plain[0], body: plain.subarray(1) };
+      } catch { return null; }
+    },
+  };
+}
+
 /** The node key's hash: the hub keeps it, the node works it out from its key. */
 export const keySecret = (key) => crypto.createHash("sha256").update(key).digest("hex");
 const mac = (secret, body) => crypto.createHmac("sha256", secret).update(body).digest("base64url");
