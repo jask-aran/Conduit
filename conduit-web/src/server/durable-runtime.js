@@ -10,7 +10,8 @@ import { Type } from "@earendil-works/pi-ai";
 import { createRegistry, defineDoc, defineExtension, defineTool, Harness, section } from "@earendil-works/pi-durable";
 import { answerTo, isDismissal, questionRequest } from "../harnesses/questions.js";
 import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node";
-import { CodingTools } from "@earendil-works/pi-durable/tools";
+import { CodingTools, createCodingTools } from "@earendil-works/pi-durable/tools";
+import { createNodePhotonImages } from "@earendil-works/pi-durable/images/node";
 import { createCodemodeExtension } from "@earendil-works/pi-durable/codemode";
 import { CodemodeSandbox } from "@earendil-works/pi-codemode";
 import { ModelRuntime, resolveModelScopeWithDiagnostics } from "@earendil-works/pi-coding-agent";
@@ -209,8 +210,13 @@ export class DurableRuntime {
       this.extensions = new Map();
       const install = (extension) => { registry.install(extension); this.extensions.set(extension.name, extension); };
       install(Conduit(this));
-      install(CodingTools);
-      install(DeviceTools(this));
+      // Images read or attached are resized and converted to fit the model
+      // (pi-durable's Photon processor, in a worker), unless Pi's settings turn
+      // autoResize off: without it a large screenshot was refused outright.
+      this.images = await this.imageProcessor();
+      const coding = this.images ? createCodingTools({ images: this.images }) : CodingTools;
+      install(coding);
+      install(DeviceTools(this, coding));
       install(Subagents(this));
       install(Handoff);
       const web = await this.webTools();
@@ -362,6 +368,17 @@ export class DurableRuntime {
     if (!patterns.length) return available;
     const { scopedModels } = await resolveModelScopeWithDiagnostics(patterns, this.models);
     return scopedModels.map(({ model }) => model);
+  }
+
+  async imageProcessor() {
+    try {
+      const settings = JSON.parse(fs.readFileSync(path.join(this.piAgentDir, "settings.json"), "utf8"));
+      if (settings.images?.autoResize === false) return null;
+    } catch {}
+    return createNodePhotonImages().catch((error) => {
+      console.warn("[conduit-runtime] images will not be resized:", error?.message || error);
+      return null;
+    });
   }
 
   async defaultModel() {
