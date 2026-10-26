@@ -322,7 +322,24 @@ export function ServerConnectForm(props: { adding?: boolean; onDone: (origin: st
     }
   };
 
-  onMount(() => {
+  /*
+   * What is offered before anything is typed: this computer's server, and
+   * what is on this network. Looked for when the form opens, and again when
+   * Change server leaves the server it opened on: signed out, it opens on that
+   * one, and while it is held it is neither offered nor listed, so a look
+   * taken only then finds nothing once it has been let go.
+   */
+  let lookRun = 0;
+  const look = () => {
+    const run = ++lookRun;
+    setLocalServer(null);
+    setFound([]);
+    lookForLocalServer(run);
+    lookOnNetwork(run);
+  };
+  onMount(look);
+
+  const lookForLocalServer = (run: number) => {
     if (verifiedOrigin() || servers().some((entry) => entry.origin === LOCAL_SERVER_ORIGIN)) return;
     // A browser cannot ask: Conduit answers a cross-origin request only for
     // the two shells it ships, so the probe would be refused rather than
@@ -333,33 +350,35 @@ export function ServerConnectForm(props: { adding?: boolean; onDone: (origin: st
     if (recordOnly) return setLocalServer(LOCAL_SERVER_ORIGIN);
     void fetch(buildHttpUrl("/healthz", LOCAL_SERVER_ORIGIN), { cache: "no-store" })
       .then((response) => response.ok ? response.json() as Promise<{ ok?: boolean }> : null)
-      .then((health) => { if (health?.ok) setLocalServer(LOCAL_SERVER_ORIGIN); })
+      .then((health) => { if (health?.ok && run === lookRun) setLocalServer(LOCAL_SERVER_ORIGIN); })
       .catch(() => { /* nothing is listening, so nothing is offered */ });
-  });
+  };
 
   /*
-   * What is on this network, asked once when the form opens.
+   * What is on this network.
    *
    * A server already held is not offered as though it were new, and that is
    * matched on identity rather than address: the same machine found at
    * 192.168.0.128 having been added by its tunnel name is a route this client
    * already has, not a server it is missing.
    */
-  onMount(() => {
+  const lookOnNetwork = (run: number) => {
     if (!canDiscoverServers()) return;
     const heldOrigins = new Set(servers().map((entry) => entry.origin));
     const heldIds = new Set(servers().map((entry) => entry.id).filter(Boolean));
+    setSearching(true);
     // Rows arrive as servers resolve and keep their place: a server seen
     // again at another address updates its row rather than moving it.
     void discoverServers({
       onFound: (server) => {
+        if (run !== lookRun) return;
         if (heldIds.has(server.id) || server.candidates.some((origin) => heldOrigins.has(origin))) return;
         setFound((list) => list.some((item) => item.id === server.id)
           ? list.map((item) => item.id === server.id ? server : item)
           : [...list, server]);
       },
-    }).finally(() => setSearching(false));
-  });
+    }).finally(() => { if (run === lookRun) setSearching(false); });
+  };
 
   /*
    * Take a found address as far as the password, and no further.
@@ -469,6 +488,7 @@ export function ServerConnectForm(props: { adding?: boolean; onDone: (origin: st
         setAddress("");
         setPassword("");
         setError("");
+        look();
       });
     }}>Change server</ConnectionButton></Show>
   </ConnectionForm>;
