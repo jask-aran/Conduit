@@ -116,7 +116,7 @@ export async function loadPiExtensionTools(entry, { models, replaySafe = [], env
   await scoped(() => factory(piApi(tools, { handlers, append: (customType, data) => store.append(customType, data) })));
   const registry = new ModelRegistry(models);
   // One session, as far as the extension can tell, holding what it filed before.
-  const session = { getBranch: () => store.entries(), getEntries: () => store.entries() };
+  const session = { getBranch: () => store.entries(), getEntries: () => store.entries(), getSessionId: () => "conduit" };
   for (const [event, handler] of handlers) {
     if (event !== "session_start") continue;
     const ctx = new Proxy({ cwd: process.cwd(), hasUI: false, ui: quiet, modelRegistry: registry, sessionManager: session,
@@ -138,6 +138,10 @@ export async function loadPiExtensionTools(entry, { models, replaySafe = [], env
         ui: quiet,
         model: agent.model ? models.getModel(agent.model.provider, agent.model.modelId) : undefined,
         modelRegistry: registry,
+        // Every available model is in scope (an empty scope says so), and the
+        // session is the one its entries were replayed from.
+        scopedModels: [],
+        sessionManager: session,
         isProjectTrusted: () => true,
       }, { get: (target, key) => (key in target ? target[key] : undefined) });
       const onUpdate = (partial) => {
