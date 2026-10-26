@@ -47,7 +47,8 @@ async function listFiles(root, directory = root) {
   for (const item of await fs.readdir(directory, { withFileTypes: true })) {
     const full = path.join(directory, item.name);
     if (item.isDirectory()) files.push(...await listFiles(root, full));
-    else if (item.isFile()) files.push(full);
+    // Not the copies precompress.mjs made for the server to send: the app inflates its own.
+    else if (item.isFile() && !/\.(br|gz)$/.test(item.name)) files.push(full);
   }
   return files;
 }

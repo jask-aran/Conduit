@@ -237,7 +237,7 @@ setup() {
 build() {
   require_dependencies
   echo "Building the production Conduit client."
-  (cd "$WEB_DIR" && npm run build)
+  (cd "$WEB_DIR" && npm run build && node scripts/precompress.mjs)
 }
 
 build_if_needed() {

@@ -698,6 +698,28 @@ app.use("/gallery", express.static(galleryDist, {
   },
 }));
 
+// A built asset compressed at build time (scripts/precompress.mjs) goes out as
+// it is, to a client that takes the encoding, instead of compressed again on
+// every request. Names are content hashes, so a copy never goes stale.
+app.get(/^\/assets\/[\w.-]+$/, (request, response, next) => {
+  const accepts = String(request.headers["accept-encoding"] || "");
+  const encoding = /\bbr\b/.test(accepts) ? "br" : /\bgzip\b/.test(accepts) ? "gzip" : null;
+  if (!encoding) return next();
+  const file = path.join(dist, request.path);
+  const copy = `${file}.${encoding === "br" ? "br" : "gz"}`;
+  response.setHeader("Vary", "Accept-Encoding");
+  response.type(path.extname(file));
+  response.sendFile(copy, {
+    dotfiles: "deny",
+    headers: { "Content-Encoding": encoding, "Cache-Control": "public, max-age=31536000, immutable" },
+  }, (error) => {
+    if (!error) return;
+    if (response.headersSent) return next(error);
+    response.removeHeader("Content-Encoding");
+    response.removeHeader("Content-Type");
+    next();
+  });
+});
 app.use(express.static(dist, {
   setHeaders(response, file) {
     if (WORKER_SCRIPTS.test(path.basename(file))) response.setHeader("Cache-Control", "no-store, must-revalidate");
