@@ -10,7 +10,7 @@ test("search settings API stores Brave credentials without returning them", asyn
     const initialResponse = await fetch(`${server.origin}/v0/search/settings`);
     assert.equal(initialResponse.status, 200);
     const initial = await initialResponse.json();
-    assert.equal(initial.providers.find((provider) => provider.id === "brave").configured, false);
+    assert.equal(initial.providers.find((provider) => provider.id === "brave").ready, false);
     assert.equal("configPath" in initial, false);
 
     const saveResponse = await fetch(`${server.origin}/v0/search/providers/brave`, {
@@ -20,7 +20,7 @@ test("search settings API stores Brave credentials without returning them", asyn
     });
     assert.equal(saveResponse.status, 200);
     const saved = await saveResponse.json();
-    assert.equal(saved.providers.find((provider) => provider.id === "brave").configured, true);
+    assert.equal(saved.providers.find((provider) => provider.id === "brave").ready, true);
     assert.equal(JSON.stringify(saved).includes("BSA-test-secret"), false);
 
     const config = JSON.parse(await fs.readFile(path.join(server.root, "pi", "web-search.json"), "utf8"));

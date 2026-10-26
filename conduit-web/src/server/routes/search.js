@@ -9,6 +9,14 @@ export function registerSearchRoutes(app, { searchSettings }) {
     } catch (error) { next(error); }
   });
 
+  app.patch("/v0/search/settings", async (request, response, next) => {
+    try {
+      const settings = await searchSettings.update(request.body || {});
+      noStore(response);
+      response.json(settings);
+    } catch (error) { next(error); }
+  });
+
   app.put("/v0/search/providers/:providerId", async (request, response, next) => {
     try {
       const settings = await searchSettings.setProvider(request.params.providerId, request.body?.key);

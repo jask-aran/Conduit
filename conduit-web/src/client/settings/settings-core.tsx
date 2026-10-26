@@ -125,18 +125,38 @@ interface SearchProvider {
   label: string;
   description: string;
   docsUrl: string;
-  enabled: boolean;
-  editable: boolean;
-  configured: boolean;
+  /** How it can search now: its own key (stored, or the server's environment), the hub's sign-in, or no key at all. */
+  source: "stored" | "environment" | "sign-in" | "keyless" | null;
+  ready: boolean;
   stored: boolean;
-  source: "stored" | "environment" | null;
   removable: boolean;
 }
 
+type SearchTool = "webSearch" | "fetchContent" | "sourceCheck" | "getSearchContent";
+type SearchFetching = "github" | "video" | "pdf";
 interface SearchSettings {
   workflow: "none" | "managed";
+  route: { first: string; fallback: boolean; useCurrentModel: boolean };
+  tools: Record<SearchTool, boolean>;
+  fetching: Record<SearchFetching, boolean>;
   providers: SearchProvider[];
 }
+type SearchEdit = { route?: Partial<SearchSettings["route"]>; tools?: Partial<SearchSettings["tools"]>; fetching?: Partial<SearchSettings["fetching"]> };
+
+const SEARCH_SOURCE_LABELS: Record<NonNullable<SearchProvider["source"]>, string> = {
+  stored: "key stored", environment: "key from the server", "sign-in": "ChatGPT sign-in", keyless: "no key needed",
+};
+const SEARCH_TOOLS: Array<{ key: SearchTool; label: string; title: string }> = [
+  { key: "webSearch", label: "Search the web", title: "web_search: searches with the providers below and keeps the results for paging." },
+  { key: "fetchContent", label: "Read pages", title: "fetch_content: reads a page, PDF, video or repository by its address." },
+  { key: "sourceCheck", label: "Check sources", title: "source_check: gathers sources for a claim with passage-level citations." },
+  { key: "getSearchContent", label: "Page stored results", title: "get_search_content: pages through a search's or a fetch's full stored results." },
+];
+const SEARCH_FETCHING: Array<{ key: SearchFetching; label: string; title: string }> = [
+  { key: "github", label: "GitHub repositories", title: "Clones a repository to read its files, instead of scraping its pages." },
+  { key: "video", label: "YouTube and video", title: "Transcripts, what is on screen and frames, for YouTube and local video files." },
+  { key: "pdf", label: "PDFs", title: "Reads a PDF's text instead of returning the file." },
+];
 
 const voiceSelectionFromProfile = (profile: VoiceExecutionProfile): VoiceLocalSelection => ({
   modelId: profile.modelId,
@@ -317,8 +337,17 @@ export function Settings(props: {
   const [searchSettings, setSearchSettings] = createSignal<SearchSettings | null>(null);
   const [searchStatus, setSearchStatus] = createSignal<"idle" | "loading" | "ready" | "error">("idle");
   const [searchError, setSearchError] = createSignal("");
+  // A provider's key being entered, in its row; one row at a time.
+  const [keyFor, setKeyFor] = createSignal<string | null>(null);
   const [searchKey, setSearchKey] = createSignal("");
   const [searchSaving, setSearchSaving] = createSignal(false);
+  // Each answer is the whole page; only the latest edit's is shown, so an
+  // older answer never undoes a toggle made since.
+  let searchSaved: SearchSettings | null = null;
+  const searchAutosave = createAutosave<SearchEdit>({
+    save: async (edit) => { searchSaved = await api<SearchSettings>("/v0/search/settings", { method: "PATCH", body: JSON.stringify(edit) }); return edit; },
+    onSaved: () => { if (searchSaved) setSearchSettings(searchSaved); },
+  });
   const [voiceServerSettings, setVoiceServerSettings] = createSignal<VoiceServerSettings | null>(null);
   const [voiceStatus, setVoiceStatus] = createSignal<"idle" | "loading" | "ready" | "error">("idle");
   const [voiceError, setVoiceError] = createSignal("");
@@ -414,6 +443,8 @@ export function Settings(props: {
     }
     event.preventDefault();
     event.stopPropagation();
+    // A key being entered in its row: Escape puts the row back, Settings stays.
+    if (keyFor() && target?.closest('[id^="search-key-"]')) return closeKey();
     props.onOpenChange(false);
   };
   const navigateSettingsTabs = (event: KeyboardEvent) => {
@@ -673,26 +704,40 @@ export function Settings(props: {
   };
   createEffect(() => { if (props.open && section() === "search") void loadSearchSettings(); });
 
-  const brave = () => searchSettings()?.providers.find((provider) => provider.id === "brave");
+  /** A change shown at once and saved straight after; the header says how it stands. */
+  const editSearch = (edit: SearchEdit) => {
+    const current = searchSettings();
+    if (!current) return;
+    setSearchSettings({ ...current, route: { ...current.route, ...edit.route }, tools: { ...current.tools, ...edit.tools }, fetching: { ...current.fetching, ...edit.fetching } });
+    searchAutosave.edit(edit, "now");
+  };
+  const searchProvider = (id: string) => searchSettings()?.providers.find((provider) => provider.id === id);
+  // What the route stands on, muted after its name.
+  const routeState = () => {
+    const first = searchSettings()?.route.first;
+    if (!first || first === "auto") return "OpenAI on ChatGPT models, else Exa";
+    const source = searchProvider(first)?.source;
+    return source ? SEARCH_SOURCE_LABELS[source] : "not set up";
+  };
+  const openKey = (id: string) => { setSearchError(""); setSearchKey(""); setKeyFor(id); };
+  const closeKey = () => { setKeyFor(null); setSearchKey(""); };
   const saveSearchKey = async () => {
+    const id = keyFor();
     const key = searchKey().trim();
-    if (!key) return;
+    if (!id || !key) return;
     setSearchSaving(true);
     setSearchError("");
     try {
-      await api<SearchSettings>("/v0/search/providers/brave", { method: "PUT", body: JSON.stringify({ key }) });
-      setSearchKey("");
-      await loadSearchSettings();
+      setSearchSettings(await api<SearchSettings>(`/v0/search/providers/${encodeURIComponent(id)}`, { method: "PUT", body: JSON.stringify({ key }) }));
+      closeKey();
     } catch (error) { setSearchError((error as Error).message); }
     finally { setSearchSaving(false); }
   };
-
-  const removeSearchKey = async () => {
+  const removeSearchKey = async (id: string) => {
     setSearchSaving(true);
     setSearchError("");
     try {
-      await api("/v0/search/providers/brave", { method: "DELETE" });
-      await loadSearchSettings();
+      setSearchSettings((await api<{ settings: SearchSettings }>(`/v0/search/providers/${encodeURIComponent(id)}`, { method: "DELETE" })).settings);
     } catch (error) { setSearchError((error as Error).message); }
     finally { setSearchSaving(false); }
   };
@@ -1069,6 +1114,7 @@ export function Settings(props: {
     prompts: { label: "Prompt", saves: [promptAutosave] },
     voice: { label: "Voice settings", saves: [voiceAutosave, voiceDraftAutosave] },
     models: { label: "Model defaults", saves: [defaultProfileAutosave, namingAutosave] },
+    search: { label: "Web search", saves: [searchAutosave] },
     ui: { label: "Appearance", saves: [uiPreferenceSaves] },
     shortcuts: { label: "Shortcuts", saves: [uiPreferenceSaves] },
   };
@@ -1360,23 +1406,59 @@ export function Settings(props: {
           </Show>
           <Show when={section() === "search"}>
             <Show when={searchStatus() === "ready" && searchSettings()} fallback={<Show when={searchStatus() === "error"} fallback={<SettingLoading>Loading search settings…</SettingLoading>}><SettingNote tone="error"><span>{searchError() || "Search settings could not be loaded."}</span><Button variant="secondary" size="sm" onClick={() => void loadSearchSettings()}>Retry</Button></SettingNote></Show>}>
-              <>
-                <SettingGroup title="Brave Search">
-                  <SettingLine plain label="API key" state={<>{brave()?.source === "environment" ? "from the server environment" : brave()?.stored ? "stored" : "not set"}</>}>
-                      <Input id="brave-search-api-key" aria-label="API key" type="password" autocomplete="new-password" data-1p-ignore data-lpignore="true" data-bwignore value={searchKey()} onInput={(event) => setSearchKey(event.currentTarget.value)} placeholder={brave()?.configured ? "Replace" : "BSA_…"} onKeyDown={(event) => { if (event.key === "Enter") void saveSearchKey(); }} />
-                      <Show when={searchKey().trim()}><Button size="sm" disabled={searchSaving()} onClick={() => void saveSearchKey()}>{searchSaving() ? <Spinner /> : null}Save</Button></Show>
-                      <Show when={!searchKey().trim() && brave()?.removable}><Button variant="ghost" size="sm" disabled={searchSaving()} onClick={() => void removeSearchKey()}>Remove</Button></Show>
+              {(settings) => <>
+                <SettingGroup title="Search">
+                  <SettingLine label="Search with" title="Automatic is pi-web-access's own order: on a ChatGPT model, OpenAI on that sign-in first; otherwise Exa, then every other provider that can search."
+                    state={<>{routeState()}</>}>
+                    <Select id="search-route" value={settings().route.first} onChange={(event) => editSearch({ route: { first: event.currentTarget.value } })}>
+                      <option value="auto">Automatic</option>
+                      <For each={settings().providers.filter((provider) => provider.ready || provider.id === settings().route.first)}>{(provider) => <option value={provider.id}>{provider.label}</option>}</For>
+                    </Select>
                   </SettingLine>
-                  <Show when={searchError()}><SettingNote tone="error">{searchError()}</SettingNote></Show>
+                  <Show when={settings().route.first !== "auto"}>
+                    <SettingLine label="Fall back to the others" title="When it fails or is out of quota, the search goes on to every other provider that can search, in the order below.">
+                      <Switch label="Fall back to the others" checked={settings().route.fallback} onChange={(fallback) => editSearch({ route: { fallback } })} />
+                    </SettingLine>
+                    <SettingLine label="Match the chat's model" title="A GPT model on OpenAI's own endpoints searches with its own hosted search; any other model goes on down the route.">
+                      <Switch label="Match the chat's model" checked={settings().route.useCurrentModel} onChange={(useCurrentModel) => editSearch({ route: { useCurrentModel } })} />
+                    </SettingLine>
+                  </Show>
                 </SettingGroup>
-                <Show when={searchSettings()!.providers.some((provider) => !provider.enabled)}>
-                  <SettingGroup title="Coming later">
-                    <For each={searchSettings()!.providers.filter((provider) => !provider.enabled)}>{(provider) =>
-                      <SettingLine plain label={provider.label} title={provider.description}><SettingLink href={provider.docsUrl}>Docs</SettingLink></SettingLine>
-                    }</For>
-                  </SettingGroup>
-                </Show>
-              </>
+                <SettingGroup title="Tools">
+                  <For each={SEARCH_TOOLS}>{(tool) =>
+                    <SettingLine label={tool.label} title={tool.title}>
+                      <Switch label={tool.label} checked={settings().tools[tool.key]} onChange={(on) => editSearch({ tools: { [tool.key]: on } })} />
+                    </SettingLine>
+                  }</For>
+                  <SettingNote>Chats pick up tool changes when Conduit next restarts.</SettingNote>
+                </SettingGroup>
+                <SettingGroup title="Reading pages">
+                  <For each={SEARCH_FETCHING}>{(item) =>
+                    <SettingLine label={item.label} title={item.title}>
+                      <Switch label={item.label} checked={settings().fetching[item.key]} onChange={(on) => editSearch({ fetching: { [item.key]: on } })} />
+                    </SettingLine>
+                  }</For>
+                </SettingGroup>
+                <SettingGroup title="Providers">
+                  <For each={settings().providers}>{(provider) =>
+                    <SettingLine plain label={provider.label} title={provider.description} state={<>{provider.source ? SEARCH_SOURCE_LABELS[provider.source] : "not set"}</>}>
+                      <Show when={keyFor() === provider.id} fallback={<>
+                        <Show when={provider.source !== "environment"}><Button variant="ghost" size="sm" disabled={searchSaving()} onClick={() => openKey(provider.id)}>{provider.stored ? "Replace" : "Add key"}</Button></Show>
+                        <Show when={provider.removable}><Button variant="ghost" size="sm" disabled={searchSaving()} onClick={() => void removeSearchKey(provider.id)}>Remove</Button></Show>
+                      </>}>
+                        <Input id={`search-key-${provider.id}`} aria-label={`${provider.label} API key`} type="password" autocomplete="new-password" data-1p-ignore data-lpignore="true" data-bwignore
+                          ref={(element: HTMLInputElement) => queueMicrotask(() => element.focus())}
+                          value={searchKey()} onInput={(event) => setSearchKey(event.currentTarget.value)} placeholder="API key"
+                          onKeyDown={(event) => { if (event.key === "Enter") void saveSearchKey(); }} />
+                        <Button size="sm" disabled={searchSaving() || !searchKey().trim()} onClick={() => void saveSearchKey()}>{searchSaving() ? <Spinner /> : null}Save</Button>
+                        <Button variant="ghost" size="sm" disabled={searchSaving()} onClick={closeKey}>Cancel</Button>
+                      </Show>
+                    </SettingLine>
+                  }</For>
+                  <Show when={searchError()}><SettingNote tone="error">{searchError()}</SettingNote></Show>
+                  <SettingNote>pi-web-access knows about forty more providers, set in its web-search.json. <SettingLink href="https://github.com/nicobailon/pi-web-access#configuration">Docs</SettingLink></SettingNote>
+                </SettingGroup>
+              </>}
             </Show>
           </Show>
           <Show when={section() === "models"}><>
