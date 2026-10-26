@@ -1,4 +1,4 @@
-import type { CacheStats, ChatCapabilities, ChatSummary, ContextUsage, HostUiRequest, Question, QueueState, RetryState, SessionStats, ToolCallStep, ToolKind, TurnOutcome } from "./contracts";
+import type { CacheStats, ChatCapabilities, ChatSummary, ContextUsage, HostUiRequest, Question, QueueState, RetryState, SessionStats, ToolCallStep, ToolKind, TurnOutcome, TurnTiming } from "./contracts";
 import type { ProtocolMessage } from "../timeline-order";
 
 type UnknownRecord = Record<string, unknown>;
@@ -101,6 +101,7 @@ export type LiveEvent = EventBase & (
   | { type: "transcript_op"; op: "tool.close"; toolCallId: string; output: unknown; isError: boolean; cancelled?: boolean; kind?: ToolKind; subject?: string; calls?: ToolCallStep[]; completedAt?: string }
   | { type: "transcript_op"; op: "tool.calls"; toolCallId: string; calls: ToolCallStep[] }
   | { type: "transcript_op"; op: "turn.settle"; promptId: string; outcome: TurnOutcome }
+  | { type: "transcript_op"; op: "turn.time"; promptId: string; timing: TurnTiming }
   | { type: "log_state"; log: LogStamp }
   | { type: "log_reset" }
   | StructuredGenerationEvent
@@ -114,7 +115,7 @@ const text = (value: unknown) => value == null ? "" : String(value);
 const optionalText = (value: unknown) => value == null || value === "" ? null : String(value);
 const list = (value: unknown) => Array.isArray(value) ? value : [];
 const number = (value: unknown) => Number.isFinite(Number(value)) ? Number(value) : undefined;
-const TRANSCRIPT_OPS = new Set(["message.open", "message.close", "message.drop", "tool.open", "tool.close", "tool.calls", "turn.settle"]);
+const TRANSCRIPT_OPS = new Set(["message.open", "message.close", "message.drop", "tool.open", "tool.close", "tool.calls", "turn.settle", "turn.time"]);
 /**
  * The phases each generation event is allowed to arrive in.
  *

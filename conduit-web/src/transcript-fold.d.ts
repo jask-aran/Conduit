@@ -28,6 +28,7 @@ export interface TranscriptOp {
   kind?: ToolKind;
   subject?: string;
   input?: unknown;
+  timing?: unknown;
   output?: unknown;
   isError?: boolean;
   timestamp?: string;

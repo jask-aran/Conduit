@@ -17,6 +17,7 @@ import { TerminalPasteStore } from "./terminal-paste-store.js";
 import { PiModelCatalog, resolveThinkingLevel } from "./pi-model-catalog.js";
 import { ProjectStore } from "./project-store.js";
 import { ChatLogs } from "./server/chat-log.js";
+import { TurnTimings } from "./server/turn-timings.js";
 import { manifestForImplementation } from "./harnesses/index.js";
 import { ChatStore, chatView, isChatId } from "./chat-store.js";
 import { resolveComputerContext } from "./computer-context.js";
@@ -184,7 +185,7 @@ if (startupViolation) {
 }
 // One order per chat, shared by everything that publishes into a chat: the
 // harness process, and the command handlers above it.
-const chatLogs = new ChatLogs();
+const chatLogs = new ChatLogs({ timings: new TurnTimings(path.join(config.dataRoot, "turn-timings")) });
 const concurrency = new ServerConcurrency();
 // Devices paired with this server, whose shared folders the Conduit runtime can work in.
 // Devices dial over the tailnet (decision 4). A server whose owner lets them

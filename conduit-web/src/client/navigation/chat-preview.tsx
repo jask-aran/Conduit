@@ -114,7 +114,7 @@ async function glance(detail: TranscriptDetail): Promise<ChatGlance> {
   }
   const work = [...counts].sort((a, b) => b[1] - a[1]).map(([kind, n]) => `${n} ${WORK_WORDS[kind][n === 1 ? 0 : 1]}`).join(", ");
   const answerMath = answer && !answer.errorMessage ? await mathAnswer(rawOf(answer)).catch(() => null) : null;
-  return { prompt: textOf(prompt), answer: answer?.errorMessage ? plain(answer.errorMessage) : textOf(answer), answerMath, outcome, took: took(prompt?.timestamp, answers.at(-1)?.timestamp), work };
+  return { prompt: textOf(prompt), answer: answer?.errorMessage ? plain(answer.errorMessage) : textOf(answer), answerMath, outcome, took: took(prompt?.timestamp, prompt?.timing?.endedAt || answers.at(-1)?.timestamp), work };
 }
 
 const dateOf = (value?: string | null) => {
