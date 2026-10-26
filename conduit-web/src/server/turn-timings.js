@@ -124,6 +124,20 @@ export class TurnTimings {
     const ended = !turn || turn.endedAt;
     if (event.type === "transcript_op" && event.op === "message.open" && event.message?.role === "user") {
       if (ended) begin();
+      // A prompt taken mid-run (a steer, a follow-up, a subagent's report) is opened as it is taken, and the
+      // answer after it is its own: the prompt before it is timed to here, and this one from here. Prompts
+      // opened together before any output share one span, held by the last, which the answer follows.
+      else if (turn.promptId && turn.promptId !== event.message.id) {
+        if (!turn.firstOutputAt) { turn.promptId = event.message.id; return null; }
+        const before = turn;
+        before.endedAt = now;
+        const timing = summary(before);
+        void this.keep(chatId, before.promptId, timing);
+        begin();
+        turn.generationId = before.generationId;
+        turn.promptId = event.message.id;
+        return turnTime({ promptId: before.promptId, timing, generationId: before.generationId });
+      }
       turn.promptId ??= event.message.id;
       return null;
     }
