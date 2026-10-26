@@ -12,6 +12,7 @@ import { keptBack, rootDeny } from "./secrets.js";
 import { Receipts } from "./receipts.js";
 import { directAddresses, keySecret } from "./direct.js";
 import { serveDirect } from "./node-direct.js";
+import { attestedLeaf } from "./find-hub.js";
 import net from "node:net";
 import { claudeSession, codexRollout, findHarnesses, opencodeService, tunnelTarget } from "./node-harnesses.js";
 
@@ -63,7 +64,7 @@ export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: 
   direct = false, certificate = null,
   // The hub's identity `{ id, key }` as it last said it, and where to keep what it says (its routes, its identity);
   // `findHub(hub)` looks for it on this network when no way reaches it (find-hub.js).
-  hub = null, onRoutes = null, findHub = null,
+  hub = null, onRoutes = null, findHub = null, attest = attestedLeaf,
   // Whether the way main is reached is one nobody else can read: https, or this machine. A relayed environment's is
   // its relay's, which this side cannot see: the relay says, and is trusted to (decision 25).
   confidential = (url) => url.protocol === "wss:" || (url.protocol === "ws:" && /^(127\.|localhost$|\[::1\]$)/.test(url.hostname)) }) {
@@ -203,8 +204,19 @@ export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: 
     return env[method](...decoded, context);
   }
 
+  // A plain-HTTP way to the hub at an address is tried over TLS first, pinned to the certificate the hub's identity
+  // attests (find-hub.js): its port answers both, and a link nobody else reads carries this run's grant key, so direct
+  // reads and terminals work on a LAN with no name or certificate of the user's. Plain still where the hub does not
+  // answer so, or this node has not learnt who it is yet (the first run after pairing).
   const connect = () => {
-    const { url: via, ca } = ways[way % ways.length];
+    const chosen = ways[way % ways.length];
+    const plain = new URL(chosen.url);
+    if (!attest || chosen.ca || !pinned || plain.protocol !== "http:" || !net.isIP(plain.hostname) || /^127\./.test(plain.hostname)) return dialWay(chosen);
+    void attest(plain.hostname, Number(plain.port) || 80, pinned, 2000).catch(() => null).then((ca) => {
+      if (!stopped) dialWay(ca ? { url: `https://${plain.host}`, ca } : chosen);
+    });
+  };
+  const dialWay = ({ url: via, ca }) => {
     const url = new URL("/v0/nodes/connect", via);
     url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
 
