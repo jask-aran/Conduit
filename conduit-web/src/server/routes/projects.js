@@ -21,7 +21,7 @@ import {
 import {
   findDeletableSession,
   stopProjectProcesses,
-  stopSessionProcesses,
+  discardSession,
   moveDurableChat,
 } from "../../session-operations.js";
 
@@ -649,7 +649,7 @@ export function registerProjectRoutes(app, {
       for (const { id } of chats) {
         await lifecycle.run(id, async () => {
           const chat = registry.metadata(id);
-          if (chat?.projectId === project.id) await stopSessionProcesses(backends, chat);
+          if (chat?.projectId === project.id) await discardSession(backends, chat);
         });
       }
       await stopProjectProcesses(backends, project.id);

@@ -6,7 +6,8 @@ import { attachmentForDevice } from "./nodes/device-attachments.js";
 import { withConduitNote } from "./attachment-envelope.js";
 import { EventEmitter } from "node:events";
 import { getSupportedThinkingLevels } from "@earendil-works/pi-ai";
-import { watchEvents } from "@earendil-works/pi-durable";
+import { UsageDoc, watchEvents } from "@earendil-works/pi-durable";
+import { backgroundSubagents, stopBackgroundSubagents } from "./server/subagents.js";
 import { DEFAULT_IMAGE_LIMITS } from "@earendil-works/pi-durable/tools";
 import { SessionRecords } from "./harnesses/session-records.js";
 import { messageClose, messageOpen, toolCalls, toolClose, toolKind, toolOpen, toolSubject, turnSettle } from "./harnesses/transcript-ops.js";
@@ -172,12 +173,13 @@ export function entriesToOps(entries, ids = {}) {
     prompt = null;
   };
   for (const entry of entries) {
-    if (entry.kind === USER_ENTRY) {
+    if (entry.kind === USER_ENTRY || entry.kind === "conduit.subagent-report") {
       settle();
       const data = entry.data || {};
       prompt = data.messageId || `u${entry.conversationId}-${entry.id}`;
       last = null;
-      ops.push(messageOpen({ id: prompt, role: "user", content: data.text || textOf(entry.model?.[0]?.content),
+      ops.push(messageOpen({ id: prompt, role: "user", content: entry.kind === "conduit.subagent-report" ? `${data.subagentId} ${data.status}: ${data.title}` : data.text || textOf(entry.model?.[0]?.content),
+        ...(entry.kind === "conduit.subagent-report" ? { origin: "harness" } : {}),
         ...(data.timestamp ? { timestamp: data.timestamp } : {}),
         ...(data.attachments?.length ? { attachments: data.attachments } : {}) }));
     } else if (entry.kind === "pi.assistant") {
@@ -619,6 +621,14 @@ export class DurableAdapter extends EventEmitter {
 
   /** A prompt entering the transcript mid-run is a steer or a follow-up the run took. */
   async placed(record, entry) {
+    if (entry?.kind === "conduit.subagent-report") {
+      const data = entry.data || {};
+      // Reports have no browser prompt; open their short harness line at placement.
+      const id = data.messageId || `u${entry.conversationId}-${entry.id}`;
+      this.publish(record, messageOpen({ id, role: "user", origin: "harness",
+        content: `${data.subagentId} ${data.status}: ${data.title}` }));
+      return;
+    }
     if (entry?.kind === USER_ENTRY) {
       const turn = record.turn;
       const messageId = entry.data?.messageId;
@@ -909,6 +919,13 @@ export class DurableAdapter extends EventEmitter {
       followUp: record.queue.filter((item) => item.mode !== "steer").map((item) => item.text) };
   }
 
+  /** The chat is being deleted: its background subagents stop rather than report into a conversation no one sees. */
+  async discard(chat) {
+    const conversationId = Number(chat.backend?.opaqueSession);
+    if (!Number.isInteger(conversationId) || !this.runtime.exists()) return;
+    await stopBackgroundSubagents(await this.runtime.open(), conversationId, this.context);
+  }
+
   async close(id) {
     const record = this.get(id);
     if (!record) return null;
@@ -1028,8 +1045,7 @@ export class DurableAdapter extends EventEmitter {
 
   /**
    * What the conversation has spent and how full its context is, read from
-   * its entries as Conduit reads a Pi session's: every request's usage, with a
-   * compaction resetting the cache prefix.
+   * pi.usage ledger; entries still supply current context and cache efficiency.
    */
   async contextFromHistory({ conversation = null, opaqueSession = null } = {}) {
     const harness = await this.runtime.open();
@@ -1037,13 +1053,11 @@ export class DurableAdapter extends EventEmitter {
     if (!held) return null;
     const requests = [];
     let model = null;
-    let cost = 0;
     for (const entry of await this.entries(held)) {
       if (entry.kind === "pi.compaction") { requests.push(null); continue; }
       const message = entry.kind === "pi.assistant" ? entry.model?.[0] : null;
       if (!message?.usage) continue;
       if (message.provider && message.model) model = { provider: message.provider, id: message.model };
-      cost += Number(message.usage.cost?.total) || 0;
       requests.push({ input: message.usage.input || 0, output: message.usage.output || 0,
         cacheRead: message.usage.cacheRead || 0, cacheWrite: message.usage.cacheWrite || 0 });
     }
@@ -1051,7 +1065,21 @@ export class DurableAdapter extends EventEmitter {
     const configuredReserve = this.runtime.piSettings().compaction?.reserveTokens;
     const reserve = Number.isFinite(configuredReserve) && configuredReserve >= 0 ? configuredReserve : DEFAULT_COMPACTION_RESERVE;
     const compactAt = contextWindow && contextWindow > reserve ? contextWindow - reserve : null;
-    return usageFromRequests(requests, { model: model ? `${model.provider}/${model.id}` : null, contextWindow, cost, compactAt });
+    // Spend from pi-durable's ledger (failed attempts, summaries and tools count), the chat's own and its
+    // background subagents'; a foreground subagent's is already the chat's, as its call's usage.
+    const ledgers = [await harness.snapshot(UsageDoc, held.id, this.context)];
+    for (const item of await backgroundSubagents(harness, held.id, this.context)) ledgers.push(await harness.snapshot(UsageDoc, item.child, this.context));
+    const spent = ledgers.flatMap((ledger) => [...Object.values(ledger?.models || {}), ...Object.values(ledger?.tools || {})]);
+    const tokens = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 };
+    let cost = 0;
+    for (const usage of spent) {
+      for (const key of ["input", "output", "cacheRead", "cacheWrite"]) tokens[key] += Number(usage[key]) || 0;
+      cost += Number(usage.cost?.total) || 0;
+    }
+    tokens.total = tokens.input + tokens.output + tokens.cacheRead + tokens.cacheWrite;
+    const history = usageFromRequests(requests, { model: model ? `${model.provider}/${model.id}` : null, contextWindow, cost, compactAt });
+    if (!history && !spent.length) return null;
+    return { ...(history || { contextUsage: null, cacheStats: null }), sessionStats: { tokens, cost } };
   }
 
   async publishUsage(record) {

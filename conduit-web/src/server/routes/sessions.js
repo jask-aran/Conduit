@@ -12,7 +12,7 @@ import {
   moveDurableChat,
   sessionDirectoryForChat,
   sessionDirectoryRootForChat,
-  stopSessionProcesses,
+  discardSession,
 } from "../../session-operations.js";
 
 export function registerSessionRoutes(app, {
@@ -259,7 +259,7 @@ export function registerSessionRoutes(app, {
             foreign = true;
             console.warn("Chat deleted; its transcript is outside this installation and was left in place", { chatId: context.chat.id, file: session.file });
           }
-          await stopSessionProcesses(backends, context.chat);
+          await discardSession(backends, context.chat);
           if (session && !foreign) await removeSessionFamily(session.file, context.project, sessionOptions);
           // A converted chat's classic session goes too: left behind, startup
           // recovers it as a lost session and the chat comes back.
