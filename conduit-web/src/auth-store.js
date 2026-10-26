@@ -111,6 +111,18 @@ function revisionFor(content) {
   return crypto.createHash("sha256").update(content).digest("base64");
 }
 
+// What the file looks like from outside: another process (the CLI) writing it
+// renames a new file in, so the inode, size or mtime moves.
+async function fileSignature(filePath) {
+  try {
+    const stat = await fs.stat(filePath);
+    return `${stat.ino}:${stat.size}:${stat.mtimeMs}`;
+  } catch (error) {
+    if (error.code === "ENOENT") return null;
+    throw error;
+  }
+}
+
 async function diskRevision(filePath) {
   try {
     return revisionFor(await fs.readFile(filePath, "utf8"));
@@ -232,12 +244,18 @@ export class AuthStore {
     this.data = null;
     this.lastReadMs = 0;
     this.revision = null;
+    this.signature = undefined;
     this.transition = Promise.resolve();
     this.afterRevisionCheck = afterRevisionCheck;
   }
 
   async load({ force = false } = {}) {
-    if (!force && this.data) return this.data;
+    // A stat per call instead of a read: the copy in memory stands until the
+    // file changes under it. Taken before the read, so a write landing between
+    // the two only costs one more read.
+    const signature = await fileSignature(this.filePath);
+    if (!force && this.data && signature === this.signature) return this.data;
+    this.signature = signature;
     try {
       const content = await fs.readFile(this.filePath, "utf8");
       const raw = JSON.parse(content);
@@ -320,6 +338,7 @@ export class AuthStore {
     await fs.chmod(temporary, 0o600);
     await fs.rename(temporary, this.filePath);
     this.revision = revisionFor(content);
+    this.signature = await fileSignature(this.filePath);
     this.lastReadMs = Date.now();
   }
 
@@ -415,6 +434,10 @@ export class AuthStore {
 
   async touchSession(session, now = new Date()) {
     if (!session?.tokenHash) return false;
+    // The throttle first reads the copy in hand, without the lock: lastSeenAt
+    // only moves forward, so an old copy can only refresh early, never late.
+    const seen = session.lastSeenAt ? new Date(session.lastSeenAt).getTime() : 0;
+    if (now.getTime() - seen < LAST_SEEN_REFRESH_MS) return false;
     return this._mutate((data) => {
       const current = data.sessions.find((item) => timingSafeEqualString(item.tokenHash, session.tokenHash));
       if (!current) return { changed: false, result: false };
