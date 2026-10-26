@@ -125,6 +125,7 @@ buffer and the chat's log. When a record's buffer is full, paint is evicted befo
 | `generation_replay` | neither | The whole reduced generation, sent once on attach. |
 | `runtime_state` | neither | Adapter capabilities, queue, usage and what the session is busy with. Session state, not a turn transition. |
 | `permission_request` / `permission_resolved` | neither | A blocking host request and its resolution, stated flat. |
+| `extension_notice` | neither | `{ message, level }`: a Pi extension's `ui.notify`, a toast in the open chat, never kept. |
 | `usage`, `queue_state`, `compaction`, `retry` | neither | Optional capability state. |
 
 ### The chat's log
@@ -280,7 +281,19 @@ once its entry commits. A restart resumes unfinished work on boot -- a tool
 that is not replay-safe reaches the model as interrupted -- and the adapter
 reattaches every chat with work in flight. Its `history` is linear because an
 edit or a regenerate forks the conversation before the prompt and the chat
-moves to the fork; the old branch stays in the store.
+moves to the fork; the old branch stays in the store. Its history tree merges
+those branches and holds tool steps, compactions and resets as well as
+messages, and its Markdown export carries tool calls and output.
+
+It honours the Pi agent directory's `settings.json` as classic Pi did (retry,
+compaction, queue modes, `shellPath`/`shellCommandPrefix` on this server), read
+live. A template's Pi extensions are loaded once and shared: their tools run as
+pi-durable tools, their slash commands and the template's prompt templates are
+listed with its skills, and a typed command runs on the server instead of
+reaching the model. An extension's `ui.select/confirm/input/editor` is the
+chat's question card; `ui.notify` is `extension_notice`. Tools see
+`hasUI: false`, commands `true` (pi-web-access opens its curator in a browser on
+the server's machine when it is true).
 
 ChatGPT Web declares least because the conversation lives in somebody else's
 account and Conduit follows it by cursor. The client hides what is not there,
