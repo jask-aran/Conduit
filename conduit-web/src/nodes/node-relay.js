@@ -23,7 +23,11 @@ import readline from "node:readline";
  *                   { t: "msg", d }      a frame for main
  *                   { t: "pong" }        answer to a ping
  *                   { t: "close" }       hang up
- *   relay -> child  { t: "opened" }      main took the key
+ *   relay -> child  { t: "opened", confidential }
+ *                                        main took the key; whether the relay's
+ *                                        own link to main is one nobody else
+ *                                        reads (https, loopback), which the
+ *                                        child cannot see and takes its word for
  *                   { t: "msg", d }      a frame from main
  *                   { t: "ping" }        main checking the child itself is alive
  *                   { t: "closed", reason }
@@ -46,6 +50,7 @@ const OPEN_WAIT_MS = 30_000;
 export function relayEnvironment({ env, command, log = console }) {
   let child = null;
   let up = null; // send to main, while the relay's socket is up
+  let confidential = false; // whether that socket is one nobody else reads
   let wantsOpen = null; // the child's dial, waiting for the relay's socket
   let opening = null; // sent to main, not yet answered: its give-up timer
   let open = false;
@@ -98,7 +103,7 @@ export function relayEnvironment({ env, command, log = console }) {
 
   return {
     env,
-    attach(send) { up = send; dial(); },
+    attach(send, link = {}) { up = send; confidential = link.confidential === true; dial(); },
     detach() {
       up = null;
       hangUp("relay disconnected");
@@ -109,7 +114,7 @@ export function relayEnvironment({ env, command, log = console }) {
         clearTimeout(opening);
         opening = null;
         open = true;
-        down({ t: "opened" });
+        down({ t: "opened", confidential });
       } else if (message.type === "relay-closed") hangUp(message.reason || "closed");
       else if (message.type === "relay" && open) down({ t: "msg", d: message.d });
       else if (message.type === "relay-ping" && open) down({ t: "ping" });
@@ -129,7 +134,7 @@ export function stdioDialer({ input = process.stdin, output = process.stdout } =
     let line;
     try { line = JSON.parse(raw); } catch { return; }
     if (!current) return;
-    if (line.t === "opened") { current.readyState = 1; current.emit("open"); }
+    if (line.t === "opened") { current.readyState = 1; current.confidential = line.confidential === true; current.emit("open"); }
     else if (line.t === "msg") current.emit("message", line.d);
     // Answered by this process's own loop: one that hangs does not answer.
     else if (line.t === "ping") write({ t: "pong" });

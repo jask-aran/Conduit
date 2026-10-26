@@ -896,8 +896,11 @@ shell as the device's user):
   hub only over https or loopback, never kept on disk. The pairing key may
   cross a LAN in plain HTTP (a node paired by a private address), and grants
   signed with its hash were anyone's who saw it once; the hub's data at rest
-  could sign them too. A node whose link to the hub is plain HTTP (or is
-  relayed) gives no key: its reads are checked with the pairing key's hash
+  could sign them too. A relayed environment's link is its relay's: the
+  relay says whether that is one nobody else reads, and is trusted to
+  (decision 25), so WSL relayed by a Windows app on https or loopback gets
+  direct reads and terminals like the app. A node whose link to the hub is
+  plain HTTP gives no key: its reads are checked with the pairing key's hash
   as in v0.8.7, and it attaches no terminal directly. A grant from before a
   node restarted is nothing.
 - **The tailnet is Tailscale's own adapter**, not any 100.64/10 address: that
