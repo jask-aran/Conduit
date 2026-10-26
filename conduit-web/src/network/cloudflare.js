@@ -74,6 +74,7 @@ export function cloudflareCli({ command = "cf" } = {}) {
     async records(zone, { type, name }) { return rows(await run(["dns", "records", "list", "-z", zone.id, "--type", type, "--name", name])); },
     create: (zone, record) => run(["dns", "records", "create", "-q", "-z", zone.id, "--body", JSON.stringify(record)]),
     update: (zone, id, record) => run(["dns", "records", "edit", id, "-q", "-z", zone.id, "--body", JSON.stringify(record)]),
-    remove: (zone, id) => run(["dns", "records", "delete", id, "-z", zone.id]),
+    // -f: it asks first otherwise, and with nobody to answer deletes nothing and says nothing of it.
+    remove: (zone, id) => run(["dns", "records", "delete", id, "-q", "-f", "-z", zone.id]),
   };
 }
