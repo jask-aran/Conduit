@@ -42,7 +42,7 @@ import {
   validateSession,
 } from "./auth-middleware.js";
 import { SocketTicketStore, installedClientOrigin } from "./native-auth.js";
-import { listWorkspaceDirectory, readWorkspaceCommit, readWorkspaceDiff, readWorkspaceFile, readWorkspaceFileMetadata, readWorkspaceVersion, runWorkspaceGitAction } from "./workspace-inspector.js";
+import { listWorkspaceDirectory, onWorkspaceChange, readWorkspaceCommit, readWorkspaceDiff, readWorkspaceFile, readWorkspaceFileMetadata, readWorkspaceVersion, runWorkspaceGitAction } from "./workspace-inspector.js";
 import { currentMagicDnsOrigin } from "./tailscale-share.js";
 import { buildProjectDashboard } from "./project-dashboard.js";
 import { PtyManager } from "./pty-manager.js";
@@ -257,6 +257,8 @@ nodeHub.adoptHub({ ...hub, name: () => serverIdentity.name,
 // classic Pi are converted once, before anything can open them.
 await convertClassicChats({ registry, projects, backends, config });
 
+// A watched workspace changed: the clients showing it ask what, now, instead of on their next poll.
+onWorkspaceChange((projectIds) => runtimeHub.publish({ type: "workspace_changed", projectIds }));
 terminals.on("created", (record) => runtimeHub.publishTerminal(record, "created"));
 terminals.on("updated", (record) => runtimeHub.publishTerminal(record, "updated"));
 terminals.on("exit", (record) => runtimeHub.publishTerminal(record, "exit"));

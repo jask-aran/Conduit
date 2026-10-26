@@ -4,7 +4,7 @@
 export interface TreeEntry { name: string; path: string; type: "directory" | "file" | "other"; }
 export interface DirectoryListing { entries: TreeEntry[]; truncated: boolean; cursor?: string | null; total?: number | null; oversize?: boolean; }
 export interface FileWriteResult { path: string; size: number; modifiedAt: number; revision: string; }
-export interface WorkspaceVersion { version: number; changedPaths: string[] | null; }
+export interface WorkspaceVersion { version: number; changedPaths: string[] | null; told?: boolean; }
 export interface MovedEntry { path: string; destination: string; type: TreeEntry["type"]; }
 export interface GitActionResult { ok: true; output?: string; }
 export interface GitCommit { graph: string; hash: string; shortHash: string; subject: string; author: string; authoredAt: string; }

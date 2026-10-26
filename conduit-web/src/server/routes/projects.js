@@ -395,7 +395,7 @@ export function registerProjectRoutes(app, {
     try {
       const project = await inspectionContext(request.params.id);
       if (!project) return response.status(404).json({ error: "project_not_found" });
-      response.json(await readWorkspaceVersion(rootOf(project), { paths: workspaceVersionPaths(request.query.paths) }));
+      response.json(await readWorkspaceVersion(rootOf(project), { paths: workspaceVersionPaths(request.query.paths), tag: request.params.id }));
     } catch (error) { next(error); }
   });
 

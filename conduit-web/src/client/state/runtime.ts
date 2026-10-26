@@ -139,6 +139,8 @@ export function createRuntimeStore() {
         window.dispatchEvent(new CustomEvent("conduit:chat-changed", { detail: event.chat }));
       } else if (event.type === "devices_changed") {
         takeDevices(event.devices);
+      } else if (event.type === "workspace_changed" && Array.isArray(event.projectIds)) {
+        window.dispatchEvent(new CustomEvent("conduit:workspace-changed", { detail: event.projectIds }));
       } else if (event.type === "terminal_changed" || event.type === "terminal_removed") {
         window.dispatchEvent(new Event("conduit:ptys-changed"));
       } else if (event.type === "pwa_restart_prepared") {
