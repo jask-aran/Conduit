@@ -24,8 +24,9 @@ const readKey = (url: string, cache?: RequestCache) => `${cache || ""} ${url}`;
  * before them (the chat a first open waits on, then the page drawing it)
  * instead of after it. Each is taken by the first `api()` GET of the same
  * URL with no options but the same cache mode. One nobody takes within five
- * seconds is dropped, and any write drops them all, so none is older than
- * what it was asked for after.
+ * seconds is dropped, and a write drops those of its resource (the path to
+ * its third segment: `/v0/chats/<id>`, `/v0/settings`), so none is older
+ * than a change it was asked for after.
  */
 export function readAhead(urls: string[], cache?: RequestCache) {
   for (const url of urls) {
@@ -37,6 +38,8 @@ export function readAhead(urls: string[], cache?: RequestCache) {
     setTimeout(() => { if (ahead.get(key) === read) ahead.delete(key); }, 5_000);
   }
 }
+
+const resourceOf = (url: string) => (url.split("?")[0] ?? "").split("/").slice(0, 4).join("/");
 
 function takeAhead(url: string, options: RequestInit) {
   if (options.method || Object.keys(options).some((key) => key !== "cache")) return null;
@@ -56,7 +59,10 @@ export async function api<T>(url: string, options: RequestInit = {}): Promise<T>
     if (options.body && !headers.has("content-type") && !(options.body instanceof FormData)) {
       headers.set("content-type", "application/json");
     }
-    if (options.method && !["GET", "HEAD"].includes(options.method.toUpperCase())) ahead.clear();
+    if (options.method && !["GET", "HEAD"].includes(options.method.toUpperCase())) {
+      const resource = resourceOf(url);
+      for (const key of [...ahead.keys()]) if (resourceOf(key.slice(key.indexOf(" ") + 1)) === resource) ahead.delete(key);
+    }
     response = await readOf(url, { ...options, headers });
   }
   if (response.status === 401 && !isInstalledClient()) {
