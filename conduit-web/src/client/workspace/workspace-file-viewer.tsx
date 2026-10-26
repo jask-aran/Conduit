@@ -18,6 +18,8 @@ import type { DiffPayload, GitChangedFile, WorkspaceVersion } from "./workspace-
 const WorkspaceComparison = lazy(() => import("./workspace-comparison"));
 const POLL_INTERVAL_MS = 1_500;
 const TOLD_POLL_INTERVAL_MS = 10_000;
+// A device away is waited for (conduit:device-online), and asked about this often meanwhile (as workspace-poll.ts).
+const DEVICE_AWAY_POLL_MS = 30_000;
 const entryKey = (entry: FileEntry) => `${entry.projectId}:${entry.path}`;
 const hasUnstaged = (file?: GitChangedFile) => Boolean(file && (file.status === "??" || file.status[1] !== " "));
 const hasStaged = (file?: GitChangedFile) => Boolean(file && file.status[0] !== " " && file.status[0] !== "?");
@@ -99,6 +101,7 @@ export default function FileViewer(props: {
       // As the panel's poll (workspace-poll.ts): at once when the server says
       // this place changed, and slower while it says it will.
       let told = false;
+      let away = false;
       let probing = false;
       let again = false;
       let timer = 0;
@@ -110,29 +113,34 @@ export default function FileViewer(props: {
           const query = new URLSearchParams({ paths: JSON.stringify(paths) });
           const payload = await api<WorkspaceVersion>(`/v0/projects/${encodeURIComponent(projectId)}/workspace/version?${query}`);
           if (cancelled) return;
-          if (version !== null && version !== payload.version) {
+          if (away || (version !== null && version !== payload.version)) {
             entries.forEach((entry, index) => {
-              if (entry.projectId === projectId && (payload.changedPaths === null || payload.changedPaths.includes(entry.path))) void handles[index]?.reload();
+              if (entry.projectId === projectId && (away || payload.changedPaths === null || payload.changedPaths.includes(entry.path))) void handles[index]?.reload();
             });
             void loadStatus(projectId);
           }
           version = payload.version;
           told = payload.told === true;
-        } catch {} finally { probing = false; }
+          away = false;
+        } catch (cause) {
+          away = (cause as { error?: string } | null)?.error === "device_offline";
+        } finally { probing = false; }
         if (cancelled) return;
         if (again) { again = false; return void probe(); }
-        timer = window.setTimeout(probe, told ? TOLD_POLL_INTERVAL_MS : POLL_INTERVAL_MS);
+        timer = window.setTimeout(probe, away ? DEVICE_AWAY_POLL_MS : told ? TOLD_POLL_INTERVAL_MS : POLL_INTERVAL_MS);
         timers.push(timer);
       };
       const onChanged = (event: Event) => { if ((event as CustomEvent<string[]>).detail?.includes(projectId)) void probe(); };
+      const onDeviceOnline = () => { if (away) void probe(); };
       window.addEventListener("conduit:workspace-changed", onChanged);
-      listeners.push(onChanged);
+      window.addEventListener("conduit:device-online", onDeviceOnline);
+      listeners.push(onChanged, onDeviceOnline);
       void probe();
     }
     onCleanup(() => {
       cancelled = true;
       timers.forEach((timer) => window.clearTimeout(timer));
-      listeners.forEach((listener) => window.removeEventListener("conduit:workspace-changed", listener));
+      listeners.forEach((listener) => { window.removeEventListener("conduit:workspace-changed", listener); window.removeEventListener("conduit:device-online", listener); });
     });
   });
   // A header that no longer fits drops the actions its context menu also
