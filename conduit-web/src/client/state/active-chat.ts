@@ -34,6 +34,7 @@ import type { RuntimeStore } from "./runtime";
 import { createClientActiveGenerationStore } from "./active-generation-store.js";
 import { markChatRead } from "./read-receipts";
 import { clearReviewComments, parseReviewComments, projectReviewComments, restoreReviewComments, reviewComments } from "../chat/review-comments";
+import { toast } from "@/components/notifications";
 
 type UnknownRecord = Record<string, unknown>;
 type ErrorHandler = (error: unknown) => void;
@@ -647,6 +648,9 @@ export function createActiveChat(options: ActiveChatOptions) {
       case "permission_resolved":
         setHostUiRequests((current) => current.filter((item) => item.id !== event.requestId));
         break;
+      case "extension_notice":
+        toast[event.level](event.message);
+        break;
       case "session_checkpoint":
         // The socket is the one channel the open chat is guaranteed to have,
         // so the row it carries updates the catalogue exactly like the global
@@ -1090,6 +1094,8 @@ export function createActiveChat(options: ActiveChatOptions) {
     if (options.runtime.connectivity() !== "online") return onError("Server unavailable");
     const prepared = prepareOutboundMessage();
     if (!prepared.hasContent) return;
+    if (/^\/compact\s+\S/.test(prepared.text) && supports("compaction")) {
+      if (!streaming() && !compacting()) try { await requireAgent("compact"); if (selectedId() !== prepared.chatId) return; session.send({ type: "compact", instructions: prepared.text.slice(8).trim().slice(0, 2000).trim() }); if (draft().trim() === prepared.text) setDraft(""); } catch (error) { onError(error); } return; }
     const busy = streaming();
     const messageId = newMessageId();
     const local: Message = { id: messageId, role: "user", content: prepared.message, timestamp: new Date().toISOString(), attachments: prepared.sentAttachments, local: true };

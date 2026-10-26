@@ -402,7 +402,7 @@ export function createLiveSessionStream({
       return null;
     }
     if (command.type === "refresh_context") return adapter.refreshContext(record.id);
-    if (command.type === "compact") return adapter.compact(record.id);
+    if (command.type === "compact") return adapter.compact(record.id, typeof command.instructions === "string" ? command.instructions.trim().slice(0, 2000).trim() || undefined : undefined);
     throw Object.assign(new Error(`Unknown live-session command: ${String(command.type || "")}`), {
       code: "invalid_request", status: 400,
     });

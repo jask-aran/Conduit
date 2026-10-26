@@ -87,6 +87,8 @@ export type LiveEvent = EventBase & (
   | { type: "queue_state"; queue: QueueState }
   | { type: "permission_request"; request: HostUiRequest | null }
   | { type: "permission_resolved"; requestId: string }
+  // A Pi extension's `ctx.ui.notify`: said once, as a toast, never kept in the transcript.
+  | { type: "extension_notice"; message: string; level: "info" | "warning" | "error" }
   | { type: "history_truncated"; beforeMessageId: string | null; afterMessageId: string | null }
   | { type: "session_checkpoint"; chatId: string; title: string | null; chat: ChatSummary | null; artifacts: TurnArtifactSummary[] | null }
   | { type: "transcript_sync"; messages: unknown[]; tools: unknown[]; replace?: boolean }
@@ -344,6 +346,11 @@ function normalizeLiveEventBody(value: unknown): LiveEvent {
       return { ...source, type: "permission_request", generationId, request } as LiveEvent;
     }
     case "permission_resolved": return { type: "permission_resolved", generationId, requestId: text(source.requestId) };
+    case "extension_notice": {
+      const message = text(source.message);
+      if (!message) return { type: "unknown", sourceType, generationId };
+      return { type: "extension_notice", generationId, message, level: source.level === "warning" || source.level === "error" ? source.level : "info" };
+    }
     case "usage": return { type: "usage", generationId, contextUsage: contextUsage(source.contextUsage), sessionStats: sessionStats(source.sessionStats), cacheStats: cacheStats(source.cacheStats) };
     case "queue_state": return { type: "queue_state", generationId, queue: queue(source.queue) || { steering: [], followUp: [] } };
     case "compaction": return { type: "compaction", generationId, active: Boolean(source.active) };

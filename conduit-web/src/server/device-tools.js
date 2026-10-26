@@ -55,6 +55,6 @@ export async function deviceEnv(runtime, conversationId, name, folder) {
     : device.roots[0];
   if (!root) throw new Error(folder ? `${device.name} shares no folder ${JSON.stringify(folder)}` : `${device.name} shares no folders`);
   return placeProcesses(runtime.nodeHub, device.local ? {} : { nodeId: device.nodeId, place: { root: root.id, path: "" } })
-    .env({ cwd: root.path || root.label, shellEnv: runtime.shellEnv,
+    .env({ cwd: root.path || root.label, shellEnv: runtime.shellEnv, shellSettings: runtime.piSettings(),
       onWait: (waiting) => runtime.emitWaiting(conversationId, waiting), excuse: runtime.excuseFor(conversationId, device.nodeId) });
 }
