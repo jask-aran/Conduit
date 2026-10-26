@@ -64,6 +64,12 @@ export class PiAuthBroker {
     this.attempt = null;
   }
 
+  /** What each stored credential is, a sign-in or a key, so its account offers the matching action. */
+  async storedKinds() {
+    const stored = this.authFile ? await readAuthFile(this.authFile) : {};
+    return Object.fromEntries(Object.entries(stored).map(([id, credential]) => [id, credential?.type === "oauth" ? "oauth" : "key"]));
+  }
+
   providers() {
     if (this.modelRuntime) {
       const providers = this.modelRuntime.getProviders()
@@ -310,8 +316,10 @@ export class PiAuthBroker {
       if (!provider || !this.authFile) throw error("api_key_provider_unknown", "Choose a provider known to the Conduit durable agent");
       const value = String(key || "");
       if (!value.trim()) throw error("api_key_required", "API key cannot be empty");
-      const fields = Object.fromEntries((KEY_FIELDS[providerId] || []).map((field) => [field.name, String(env?.[field.name] || "").trim()]).filter(([, given]) => given));
       const auth = await readAuthFile(this.authFile);
+      // A field left empty keeps what was stored with the key before (a new key, the same account).
+      const fields = Object.fromEntries((KEY_FIELDS[providerId] || [])
+        .map((field) => [field.name, String(env?.[field.name] || "").trim() || auth[providerId]?.env?.[field.name] || ""]).filter(([, given]) => given));
       auth[providerId] = { type: "api_key", key: literalApiKey(value), ...(Object.keys(fields).length ? { env: fields } : {}) };
       await writeAuthFile(this.authFile, auth);
       await this.modelRuntime.refresh({ allowNetwork: false });
