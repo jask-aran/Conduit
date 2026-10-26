@@ -8,17 +8,61 @@ export interface ApiRequestMetadata {
   status: number;
 }
 
-export async function api<T>(url: string, options: RequestInit = {}): Promise<T> {
-  const headers = new Headers(options.headers);
-  if (options.body && !headers.has("content-type") && !(options.body instanceof FormData)) {
-    headers.set("content-type", "application/json");
+type Read = { status: number; ok: boolean; text: string };
+
+const readOf = async (url: string, init: RequestInit): Promise<Read> => {
+  const response = await authorizedFetch(httpUrl(url), init);
+  return { status: response.status, ok: response.ok, text: await response.text() };
+};
+
+// Reads begun before anything asks for them, each taken by the first ask.
+const ahead = new Map<string, Promise<Read>>();
+const readKey = (url: string, cache?: RequestCache) => `${cache || ""} ${url}`;
+
+/**
+ * Start reads the page is about to make, so they run alongside what comes
+ * before them (the chat a first open waits on, then the page drawing it)
+ * instead of after it. Each is taken by the first `api()` GET of the same
+ * URL with no options but the same cache mode. One nobody takes within five
+ * seconds is dropped, and any write drops them all, so none is older than
+ * what it was asked for after.
+ */
+export function readAhead(urls: string[], cache?: RequestCache) {
+  for (const url of urls) {
+    const key = readKey(url, cache);
+    if (ahead.has(key)) continue;
+    const read = readOf(url, cache ? { cache } : {});
+    read.catch(() => {});
+    ahead.set(key, read);
+    setTimeout(() => { if (ahead.get(key) === read) ahead.delete(key); }, 5_000);
   }
+}
+
+function takeAhead(url: string, options: RequestInit) {
+  if (options.method || Object.keys(options).some((key) => key !== "cache")) return null;
+  const key = readKey(url, options.cache);
+  const read = ahead.get(key);
+  if (read) ahead.delete(key);
+  return read || null;
+}
+
+export async function api<T>(url: string, options: RequestInit = {}): Promise<T> {
   const requestUrl = httpUrl(url);
-  const response = await authorizedFetch(requestUrl, { ...options, headers });
+  const early = takeAhead(url, options);
+  let response: Read;
+  if (early) response = await early;
+  else {
+    const headers = new Headers(options.headers);
+    if (options.body && !headers.has("content-type") && !(options.body instanceof FormData)) {
+      headers.set("content-type", "application/json");
+    }
+    if (options.method && !["GET", "HEAD"].includes(options.method.toUpperCase())) ahead.clear();
+    response = await readOf(url, { ...options, headers });
+  }
   if (response.status === 401 && !isInstalledClient()) {
     location.href = loginUrl(location.pathname + location.search);
   }
-  const text = await response.text();
+  const text = response.text;
   let body: unknown = {};
   if (text) {
     try { body = JSON.parse(text); } catch { body = text; }

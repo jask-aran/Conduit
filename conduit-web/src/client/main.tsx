@@ -33,7 +33,7 @@ import { FileHead } from "@/components/ui/file";
 import { FileEmpty, FileEmptySide } from "@/components/ui/viewer";
 import { DragPill, DropWash, PaneAction, PaneActions, PaneEdge, PaneTab, TabPlace, PaneTabRow, PaneTabs } from "@/components/ui/pane";
 import { ChatHeader, Conversation } from "./chat/chat-screen";
-import { api, apiWhenServed, asList, pathChatId, pathProjectId, projectMatchesPath, projectPath } from "./api/client";
+import { api, apiWhenServed, asList, pathChatId, pathProjectId, projectMatchesPath, projectPath, readAhead } from "./api/client";
 import { buildHttpUrl, loginUrl, logoutUrl, normalizeServerOrigin, transcriptUrl } from "./api/transport";
 import { startPathSelection } from "./platform/path-selector";
 import { canDiscoverServers, discoverServers, type FoundServer } from "./platform/discovery";
@@ -697,6 +697,18 @@ function App() {
     apiWhenServed<TranscriptDetail>(`/v0/sessions/${encodeURIComponent(initialRouteId)}`, true),
   ]) : null;
   selectedChatRequest?.catch(() => {});
+  // What its composer and turn summaries ask for once they mount, a round
+  // trip or two later: asked now, with the chat, and the project's once the
+  // chat says which it is.
+  if (initialRouteId) {
+    const chatPath = `/v0/chats/${encodeURIComponent(initialRouteId)}`;
+    readAhead([`${chatPath}/models`, `${chatPath}/permission-profiles`, `${chatPath}/service-levels`, `${chatPath}/attachments`]);
+    selectedChatRequest?.then(([summary]) => {
+      const projectId = encodeURIComponent(summary.projectId);
+      readAhead([`/v0/settings?projectId=${projectId}`, `/v0/models?projectId=${projectId}`]);
+      readAhead([`/v0/projects/${projectId}/turn-artifact?${new URLSearchParams({ chatId: initialRouteId, timeline: "1" })}`], "no-store");
+    }, () => {});
+  }
   // Its transcript is drawn by a renderer loaded on demand, in a chain each
   // link of which was only found once the one before it ran: two round trips
   // after the transcript itself had arrived. Asked for now, all at once.
