@@ -124,6 +124,14 @@ certificate it already trusts. So a LAN name gets a real one:
   (`CONDUIT_LAN_TLS_CERT` / `CONDUIT_LAN_TLS_KEY` override the paths) and the
   attested leaf to everything else, and rereads it hourly.
 
+A hub that is not on a LAN (a VPS) still gives its nodes LAN names, so a
+browser near a node reads from it and attaches to its terminals directly:
+only the nodes' wildcard is issued there (`LAN_CERT_HUB=0`; its own name would
+point at another machine), the `cf` CLI publishes their records
+(`CONDUIT_CF_CLI` names it), and a Cloudflare API token limited to that
+zone's DNS edit, `CLOUDFLARE_API_TOKEN` in `conduit.env`, stands in for a
+signed-in `cf`.
+
 Routers with DNS rebinding protection return nothing for a public name that
 points at a private address. Allow the domain in the router, or point the
 device at a resolver that does not filter (Android Private DNS

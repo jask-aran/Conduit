@@ -4,13 +4,17 @@
 # reachable from the internet. Safe to rerun: certbot renews only when due.
 #   LAN_CERT_NAME   default lan.jask-aran.com
 #   LAN_CERT_DIR    default ~/.conduit/tls
+#   LAN_CERT_HUB    0 to skip the hub's own name and issue only the nodes' wildcard
+#                   (a hub that is not on the LAN, such as a VPS: its own
+#                   name there would point at another machine)
+# certbot is the system's where installed, else uvx's.
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 name="${LAN_CERT_NAME:-lan.jask-aran.com}"
 dir="${LAN_CERT_DIR:-$HOME/.conduit/tls}"
 mkdir -p "$dir"
 issue() { # <domain> <lineage> <link prefix>
-  uvx certbot certonly --non-interactive --agree-tos --register-unsafely-without-email \
+  $certbot certonly --non-interactive --agree-tos --register-unsafely-without-email \
     --config-dir "$dir/letsencrypt" --work-dir "$dir/work" --logs-dir "$dir/logs" \
     --manual --preferred-challenges dns \
     --manual-auth-hook "$here/dns-auth.sh" --manual-cleanup-hook "$here/dns-cleanup.sh" \
@@ -20,7 +24,9 @@ issue() { # <domain> <lineage> <link prefix>
   ln -sf "$live/privkey.pem" "$dir/$3-key.pem"
   echo "Certificate for $1: $dir/$3-cert.pem (key $dir/$3-key.pem)"
 }
-issue "$name" "$name" lan
+certbot="certbot"
+command -v certbot >/dev/null 2>&1 || certbot="uvx certbot"
+[[ "${LAN_CERT_HUB:-1}" == 0 ]] || issue "$name" "$name" lan
 # And one for every name under it, which the hub hands its nodes so a browser on this network reads from them
 # directly (docs/plans/distributed-nodes-and-execution.md, "files take the shortest way").
 issue "*.$name" "nodes.$name" nodes
