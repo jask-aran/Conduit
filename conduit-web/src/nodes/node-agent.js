@@ -49,7 +49,9 @@ export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: 
   // How main is reached: a WebSocket, or a relay's stdin/stdout (node-relay.js).
   // A way that does not answer is given up in seconds, not the system's connect timeout; one found by its
   // advertisement is pinned to the certificate its identity attested (find-hub.js), whatever its name.
+  // Deflate, when the hub takes it (a node it reaches over the tailnet), as cheaply as it comes.
   dial = (url, { key: bearer, ca }) => new WebSocket(url, { headers: { authorization: `Bearer ${bearer}` }, handshakeTimeout: 8000,
+    perMessageDeflate: { threshold: 1024, zlibDeflateOptions: { level: 1, memLevel: 7 } },
     ...(ca ? { ca, checkServerIdentity: () => undefined } : {}) }),
   // Environments this one carries on its socket (decision 25): relayEnvironment()s.
   relays = [], browse = false, onShare = null,
