@@ -84,11 +84,10 @@ export function NetworkSettings() {
   };
 
   return <Show when={shown()}>{(status) => <SettingGroup title="Network">
-    <SettingLine plain label="LAN names" state={state()}
+    <SettingLine plain label="LAN names" state={status().state !== "issuing" && (status().configured || status().certificates.nodes) ? `${state()} · ${until(status().certificates.nodes)}` : state()}
       title="Gives every device an https name on this network, so a browser tab here reaches it directly rather than through this server. Needs a domain on Cloudflare.">
       <Show when={status().state === "issuing"}><StatusDot label="Setting up" spinning /></Show>
       <Show when={status().state !== "issuing" && (status().configured || status().certificates.nodes)}>
-        <SettingValue>{until(status().certificates.nodes)}</SettingValue>
         <StatusDot label={status().state === "failed" ? "Failed" : "Ready"} tone={status().state === "failed" ? "danger" : "success"} />
       </Show>
       <Show when={!editing() && status().state !== "issuing"}>
@@ -100,8 +99,8 @@ export function NetworkSettings() {
       <SettingNote tone="error">{status().error?.message || "The names could not be set up."} <Button variant="ghost" size="sm" disabled={busy()} onClick={retry}>Try again</Button></SettingNote>
     </Show>
     <Show when={!editing() && status().hubName && status().certificates.hub}>
-      <SettingLine plain label="This server" state={status().domain}>
-        <SettingValue mono>{status().hubAddress || ""}</SettingValue><SettingValue>{until(status().certificates.hub)}</SettingValue>
+      <SettingLine plain label="This server" state={`${status().domain} · ${until(status().certificates.hub)}`}>
+        <SettingValue mono>{status().hubAddress || ""}</SettingValue>
       </SettingLine>
     </Show>
 
