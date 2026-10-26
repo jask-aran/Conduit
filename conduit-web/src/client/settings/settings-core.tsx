@@ -18,6 +18,7 @@ import { VoiceWaveform } from "@/components/ui/voice";
 import { ModelSelector } from "../chat/model-selector";
 import { saveTabFrost, tabFrost } from "../preferences/tab-frost";
 import { saveTranscriptFont, TRANSCRIPT_FONT_OPTIONS, transcriptFont, type TranscriptFont } from "../preferences/transcript-font";
+import { saveTranscriptScale, TRANSCRIPT_SCALE_OPTIONS, transcriptScale, type TranscriptScale } from "../preferences/transcript-scale";
 import { saveTerminalFont, TERMINAL_FONT_OPTIONS, terminalFont, type TerminalFont } from "../preferences/terminal-font";
 import { saveStreamFade, saveStreamMathFade, STREAM_FADE_OPTIONS, streamFadeMs, streamMathFade } from "../preferences/stream-fade";
 import type { Project, Template, VoiceExecutionCatalogueView, VoiceExecutionProfile, VoiceLocalSelection, VoiceServerSettings } from "../api/contracts";
@@ -45,7 +46,7 @@ import { Button, Input, TextArea, Spinner, Segmented, Switch } from "@/component
 import { Select } from "@/components/menus";
 import { combineSaveStates, createAutosave, type SaveState } from "./autosave";
 import { OverlayDialog } from "@/components/dialog";
-import { NavGroup, NavRow, OverlayPage, OverlayRail, SettingGroup, SettingLine, SettingValue, SettingLink, SettingNote, SettingDetails, SettingWide, SettingLoading, SettingCredential } from "@/components/ui";
+import { NavGroup, NavRow, OverlayPage, OverlayRail, SettingGroup, SettingLine, SettingValue, SettingLink, SettingNote, SettingDetails, SettingWide, SettingLoading, SettingCredential, SettingRecorder, Keycap } from "@/components/ui";
 import { isMobileLayout } from "../navigation/mobile-layout";
 import { uiPreferenceSaves } from "../preferences/ui-preferences";
 
@@ -199,6 +200,24 @@ const sameVoiceSelection = (left: VoiceLocalSelection | null | undefined, right:
 // them in (runtime-settings.js), which it would otherwise clamp to silently.
 type RuntimeDraft = { live: string; generating: string };
 const RUNTIME_LIMITS = { live: [1, 32], generating: [1, 8] } as const;
+// A count chosen from steps, the current one kept among them when it is not one (set elsewhere).
+const countSteps = (steps: number[], current: number | string) => [...new Set([...steps, Number(current)])].filter(Number.isFinite).sort((a, b) => a - b);
+/** Whether this browser draws on the graphics card: a software renderer (SwiftShader, llvmpipe) says it does not. */
+const gpuRendering = (() => {
+  let known: boolean | null | undefined;
+  return () => {
+    if (known !== undefined) return known;
+    try {
+      const gl = document.createElement("canvas").getContext("webgl");
+      const info = gl?.getExtension("WEBGL_debug_renderer_info");
+      const renderer = gl && info ? String(gl.getParameter(info.UNMASKED_RENDERER_WEBGL)) : "";
+      known = !gl ? false : renderer ? !/swiftshader|llvmpipe|softpipe|software|basic render/i.test(renderer) : null;
+    } catch { known = null; }
+    return known;
+  };
+})();
+const SIDEBAR_CHAT_STEPS = [5, 10, 15, 20, 30, 50, 75, 100];
+const RUNTIME_STEPS = { live: [1, 2, 4, 6, 8, 12, 16, 24, 32], generating: [1, 2, 3, 4, 5, 6, 7, 8] } as const;
 const runtimeDraftOf = (settings: RuntimeSettings): RuntimeDraft => ({
   live: String(settings.maxLiveProcesses),
   generating: String(settings.maxGeneratingProcesses),
@@ -274,6 +293,7 @@ export function Settings(props: {
   const { confirm: confirmDialog } = createDecisionScope(() => props.open ? promptId() : null);
   const [section, setSection] = createSignal<Section>(props.initialSection || "ui");
   const [frosted, setFrosted] = createSignal(tabFrost());
+  const [transcriptScaleChoice, setTranscriptScaleChoice] = createSignal(transcriptScale());
   const [transcriptFontChoice, setTranscriptFontChoice] = createSignal(transcriptFont());
   const [terminalFontChoice, setTerminalFontChoice] = createSignal(terminalFont());
   const [fadeMs, setFadeMs] = createSignal(streamFadeMs());
@@ -337,8 +357,9 @@ export function Settings(props: {
   const [workspaceId, setWorkspaceId] = createSignal<string | null>(null);
   const [authProviders, setAuthProviders] = createSignal<PiAuthProvider[]>([]);
   const [authAttempt, setAuthAttempt] = createSignal<PiAuthAttempt | null>(null);
-  // The provider chosen to add (not connected yet).
+  // The provider chosen to add (not connected yet), and the search provider chosen to add.
   const [addingAccount, setAddingAccount] = createSignal("");
+  const [addingSearch, setAddingSearch] = createSignal("");
   const [authResponse, setAuthResponse] = createSignal("");
   const [authLoading, setAuthLoading] = createSignal(false);
   const [authError, setAuthError] = createSignal("");
@@ -362,6 +383,8 @@ export function Settings(props: {
   const [voiceStatus, setVoiceStatus] = createSignal<"idle" | "loading" | "ready" | "error">("idle");
   const [voiceError, setVoiceError] = createSignal("");
   const [voiceBusy, setVoiceBusy] = createSignal(false);
+  const [recordingVoiceKeys, setRecordingVoiceKeys] = createSignal(false);
+  const [voiceKeys, setVoiceKeys] = createSignal("");
   const [voiceLicenseAccepted, setVoiceLicenseAccepted] = createSignal(false);
   const [voiceTestResult, setVoiceTestResult] = createSignal("");
   const [voiceDraft, setVoiceDraft] = createSignal<VoiceDictationSettings>({ ...props.voiceSettings });
@@ -450,8 +473,8 @@ export function Settings(props: {
       event.preventDefault();
       return;
     }
-    // A secret being entered in its row: its own Escape puts the row back, Settings stays.
-    if (target?.closest("[data-credential]")) return;
+    // A secret being entered in its row, or keys being recorded: their own Escape puts the row back, Settings stays.
+    if (target?.closest("[data-credential], .ui-setting-recorder")) return;
     event.preventDefault();
     event.stopPropagation();
     props.onOpenChange(false);
@@ -1214,21 +1237,54 @@ export function Settings(props: {
                       <For each={UI_SCALE_OPTIONS}>{(scale) => <option value={scale}>{Math.round(scale * 100)}%</option>}</For>
                     </Select>
                   </SettingLine>
-                  <SettingLine label="Transcript font">
-                    <Select id="transcript-font" aria-label="Transcript font" value={transcriptFontChoice()} onChange={(event) => setTranscriptFontChoice(saveTranscriptFont(event.currentTarget.value as TranscriptFont))}>
-                      <For each={TRANSCRIPT_FONT_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
-                    </Select>
-                  </SettingLine>
                   <SettingLine label="Terminal font">
                     <Select id="terminal-font" aria-label="Terminal font" value={terminalFontChoice()} onChange={(event) => setTerminalFontChoice(saveTerminalFont(event.currentTarget.value as TerminalFont))}>
                       <For each={TERMINAL_FONT_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
                     </Select>
                   </SettingLine>
                   <SettingLine label="Sidebar chats">
-                    <Input id="sidebar-chat-limit" type="number" min={MIN_SIDEBAR_CHAT_LIMIT} max={MAX_SIDEBAR_CHAT_LIMIT} step="1" value={props.sidebarChatLimit} onChange={(event) => props.onSidebarChatLimitChange(Number(event.currentTarget.value))} onBlur={(event) => props.onSidebarChatLimitChange(Number(event.currentTarget.value))} />
+                    <Select id="sidebar-chat-limit" aria-label="Sidebar chats" value={String(props.sidebarChatLimit)} onChange={(event) => props.onSidebarChatLimitChange(Number(event.currentTarget.value))}>
+                      <For each={countSteps(SIDEBAR_CHAT_STEPS, props.sidebarChatLimit).filter((count) => count >= MIN_SIDEBAR_CHAT_LIMIT && count <= MAX_SIDEBAR_CHAT_LIMIT)}>{(count) => <option value={String(count)}>{count}</option>}</For>
+                    </Select>
                   </SettingLine>
                   <SettingLine label="Tab row">
                     <Switch id="tab-frost" label="Frosted tab row" checked={frosted()} onChange={(on) => setFrosted(saveTabFrost(on))} />
+                  </SettingLine>
+                  <SettingLine label="Panel drag">
+                    <Select id="panel-motion" aria-label="Panel drag" title={PANEL_MOTION_OPTIONS.find((option) => option.value === props.panelMotion)?.label} value={props.panelMotion} onChange={(event) => props.onPanelMotionChange(event.currentTarget.value as PanelMotionMode)}>
+                      <For each={PANEL_MOTION_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
+                    </Select>
+                  </SettingLine>
+                  <SettingLine label="Meteor field">
+                    <Switch id="meteor-field" label="Ambient meteor field" checked={props.meteorField} onChange={props.onMeteorFieldChange} />
+                  </SettingLine>
+              </SettingGroup>
+              <DesktopSettingsTile />
+              <SettingGroup title="Reading">
+                  <SettingLine label="Transcript size" title="Messages and answers, on top of the Interface size; the chrome around them keeps its size.">
+                    <Select id="transcript-scale" aria-label="Transcript size" value={String(transcriptScaleChoice())} onChange={(event) => setTranscriptScaleChoice(saveTranscriptScale(Number(event.currentTarget.value) as TranscriptScale))}>
+                      <For each={TRANSCRIPT_SCALE_OPTIONS}>{(scale) => <option value={String(scale)}>{scale === 1 ? "As the interface" : `${Math.round(scale * 100)}%`}</option>}</For>
+                    </Select>
+                  </SettingLine>
+                  <SettingLine label="Transcript font">
+                    <Select id="transcript-font" aria-label="Transcript font" value={transcriptFontChoice()} onChange={(event) => setTranscriptFontChoice(saveTranscriptFont(event.currentTarget.value as TranscriptFont))}>
+                      <For each={TRANSCRIPT_FONT_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
+                    </Select>
+                  </SettingLine>
+                  <SettingLine label="Transcript width">
+                    <Select id="transcript-width" aria-label="Transcript width" value={props.transcriptWidth} onChange={(event) => props.onTranscriptWidthChange(event.currentTarget.value as TranscriptWidthMode)}>
+                      <For each={TRANSCRIPT_WIDTH_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
+                    </Select>
+                  </SettingLine>
+                  <SettingLine label="Wide blocks">
+                    <Select id="transcript-wide-blocks" aria-label="Wide blocks" value={props.transcriptWideBlocks} onChange={(event) => props.onTranscriptWideBlocksChange(event.currentTarget.value as TranscriptWideBlocksMode)}>
+                      <For each={TRANSCRIPT_WIDE_BLOCKS_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
+                    </Select>
+                  </SettingLine>
+                  <SettingLine label="Code width">
+                    <Select id="code-block-width" aria-label="Code block width" value={props.codeBlockWidth} onChange={(event) => props.onCodeBlockWidthChange(event.currentTarget.value as CodeBlockWidthMode)}>
+                      <For each={CODE_BLOCK_WIDTH_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
+                    </Select>
                   </SettingLine>
                   <SettingLine label="Markdown">
                     <Select id="markdown-renderer" aria-label="Markdown renderer" title={MARKDOWN_RENDERER_OPTIONS.find((option) => option.value === props.markdownRenderer)?.description} value={props.markdownRenderer} onChange={(event) => props.onMarkdownRendererChange(event.currentTarget.value as MarkdownRendererId)}>
@@ -1245,32 +1301,6 @@ export function Settings(props: {
                       <Switch id="stream-math-fade" label="Fade formulas in when complete" checked={streamMathFade()} onChange={saveStreamMathFade} />
                     </SettingLine>
                   </Show>
-                  <SettingLine label="Meteor field">
-                    <Switch id="meteor-field" label="Ambient meteor field" checked={props.meteorField} onChange={props.onMeteorFieldChange} />
-                  </SettingLine>
-              </SettingGroup>
-              <DesktopSettingsTile />
-              <SettingGroup title="Reading">
-                  <SettingLine label="Transcript width">
-                    <Select id="transcript-width" aria-label="Transcript width" value={props.transcriptWidth} onChange={(event) => props.onTranscriptWidthChange(event.currentTarget.value as TranscriptWidthMode)}>
-                      <For each={TRANSCRIPT_WIDTH_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
-                    </Select>
-                  </SettingLine>
-                  <SettingLine label="Wide blocks">
-                    <Select id="transcript-wide-blocks" aria-label="Wide blocks" value={props.transcriptWideBlocks} onChange={(event) => props.onTranscriptWideBlocksChange(event.currentTarget.value as TranscriptWideBlocksMode)}>
-                      <For each={TRANSCRIPT_WIDE_BLOCKS_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
-                    </Select>
-                  </SettingLine>
-                  <SettingLine label="Code width">
-                    <Select id="code-block-width" aria-label="Code block width" value={props.codeBlockWidth} onChange={(event) => props.onCodeBlockWidthChange(event.currentTarget.value as CodeBlockWidthMode)}>
-                      <For each={CODE_BLOCK_WIDTH_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
-                    </Select>
-                  </SettingLine>
-                  <SettingLine label="Panel drag">
-                    <Select id="panel-motion" aria-label="Panel drag" title={PANEL_MOTION_OPTIONS.find((option) => option.value === props.panelMotion)?.label} value={props.panelMotion} onChange={(event) => props.onPanelMotionChange(event.currentTarget.value as PanelMotionMode)}>
-                      <For each={PANEL_MOTION_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
-                    </Select>
-                  </SettingLine>
               </SettingGroup>
               <SettingGroup title="Collapse">
                   <SettingLine label="Code blocks">
@@ -1290,7 +1320,8 @@ export function Settings(props: {
                   </SettingLine>
               </SettingGroup>
               <SettingGroup title="Graphics">
-                <SettingLine plain label="Hardware acceleration" title="For smooth animations, backdrop blur and high-refresh-rate rendering, turn on “Use graphics acceleration when available” in your browser settings, then relaunch the browser."><SettingValue>Turn on in browser</SettingValue></SettingLine>
+                <SettingLine plain label="Hardware acceleration"><SettingValue>{gpuRendering() === false ? "Off" : gpuRendering() ? "On" : "Unknown"}</SettingValue></SettingLine>
+                <Show when={gpuRendering() === false}><SettingNote>This browser draws without the graphics card, so motion and blur run slowly. Turn on “Use graphics acceleration when available” in its settings, then relaunch it.</SettingNote></Show>
               </SettingGroup>
             </>
           </Show>
@@ -1300,8 +1331,12 @@ export function Settings(props: {
             <>
               <Show when={runtimeStatus() === "ready" && runtime()} fallback={<Show when={runtimeStatus() === "error"} fallback={<SettingLoading>Loading runtime settings…</SettingLoading>}><SettingNote tone="error"><span>{runtimeError() || "Runtime settings could not be loaded."}</span><Button variant="secondary" size="sm" onClick={() => void loadRuntime()}>Retry</Button></SettingNote></Show>}>
                 <SettingGroup title="Agent processes">
-                  <SettingLine label="Warm processes" state={<><Show when={runtimeFieldError(runtimeDraft(), "live")} fallback={<>{runtime()!.liveCount || 0} live</>}>{(message) => message()}</Show></>}><Input id="warm-processes" type="number" inputMode="numeric" value={runtimeDraft().live} aria-invalid={Boolean(runtimeFieldError(runtimeDraft(), "live")) || undefined} onInput={(event) => editRuntime("live", event.currentTarget.value)} /></SettingLine>
-                  <SettingLine label="Concurrent generations" state={<><Show when={runtimeFieldError(runtimeDraft(), "generating")} fallback={<>{runtime()!.generatingCount || 0} generating</>}>{(message) => message()}</Show></>}><Input id="generations" type="number" inputMode="numeric" value={runtimeDraft().generating} aria-invalid={Boolean(runtimeFieldError(runtimeDraft(), "generating")) || undefined} onInput={(event) => editRuntime("generating", event.currentTarget.value)} /></SettingLine>
+                  <SettingLine label="Warm processes" state={<><Show when={runtimeFieldError(runtimeDraft(), "live")} fallback={<>{runtime()!.liveCount || 0} live</>}>{(message) => message()}</Show></>}><Select id="warm-processes" aria-label="Warm processes" value={runtimeDraft().live} onChange={(event) => editRuntime("live", event.currentTarget.value)}>
+                    <For each={countSteps([...RUNTIME_STEPS.live], runtimeDraft().live)}>{(count) => <option value={String(count)}>{count}</option>}</For>
+                  </Select></SettingLine>
+                  <SettingLine label="Concurrent generations" state={<><Show when={runtimeFieldError(runtimeDraft(), "generating")} fallback={<>{runtime()!.generatingCount || 0} generating</>}>{(message) => message()}</Show></>}><Select id="generations" aria-label="Concurrent generations" value={runtimeDraft().generating} onChange={(event) => editRuntime("generating", event.currentTarget.value)}>
+                    <For each={countSteps([...RUNTIME_STEPS.generating], runtimeDraft().generating)}>{(count) => <option value={String(count)}>{count}</option>}</For>
+                  </Select></SettingLine>
                 </SettingGroup>
               </Show>
             </>
@@ -1405,14 +1440,23 @@ export function Settings(props: {
                       { value: "processed", label: "Processed" },
                     ]} />
                   </SettingLine>
-                  <SettingLine label="Shortcut" title="Focus and press a shortcut"><Input id="dictation-shortcut" title="Focus and press a shortcut" value={voiceDraft().shortcut} readOnly onKeyDown={(event) => {
-                    // Tab and Esc still leave the field; every other key is recorded.
-                    if (event.key === "Tab" || event.key === "Escape") return;
-                    event.preventDefault();
-                    event.stopPropagation();
-                    const shortcut = shortcutFromKeyboardEvent(event);
-                    if (shortcut) updateVoiceDraft({ shortcut });
-                  }} /></SettingLine>
+                  {/* As on the Shortcuts page: its keys, which open a recorder under the line. */}
+                  <SettingLine plain label="Shortcut" title="Hold or press to dictate">
+                    <Keycap label={`the dictation shortcut, ${voiceDraft().shortcut}`} onClick={() => { setVoiceKeys(""); setRecordingVoiceKeys(true); }}>{voiceDraft().shortcut}</Keycap>
+                  </SettingLine>
+                  <Show when={recordingVoiceKeys()}>
+                    <SettingRecorder ref={(element) => queueMicrotask(() => element.focus())} label="Record the dictation shortcut" keys={voiceKeys() ? [voiceKeys()] : undefined}
+                      onKeyDown={(event) => {
+                        if (event.key === "Tab") return;
+                        event.preventDefault();
+                        event.stopPropagation();
+                        if (event.key === "Escape") return setRecordingVoiceKeys(false);
+                        if (event.key === "Backspace") return setVoiceKeys("");
+                        const shortcut = shortcutFromKeyboardEvent(event);
+                        if (shortcut) setVoiceKeys(shortcut);
+                      }}
+                      onSave={() => { updateVoiceDraft({ shortcut: voiceKeys() }); setRecordingVoiceKeys(false); }} onCancel={() => setRecordingVoiceKeys(false)} />
+                  </Show>
                   <SettingLine plain label="Activation">
                     <Segmented arrows label="Activation" value={voiceDraft().activation} onChange={(activation) => updateVoiceDraft({ activation })} options={[
                       { value: "push_to_talk", label: "Hold", icon: <HandIcon /> },
@@ -1484,14 +1528,24 @@ export function Settings(props: {
                   <Show when={!settings().cloudflare}><SettingNote>{CLOUDFLARE_NEEDED}</SettingNote></Show>
                 </SettingGroup>
                 <SettingGroup title="Providers">
-                  <For each={settings().providers}>{(provider) =>
+                  {/* Those that can search now, then the one being added; the rest are a search away. */}
+                  <For each={settings().providers.filter((provider) => provider.ready || provider.id === addingSearch())}>{(provider) =>
                     <SettingCredential label={provider.label} title={provider.description} state={<>{provider.source ? SEARCH_SOURCE_LABELS[provider.source] : "not set"}</>}
                       busy={searchSaving()} stored={provider.stored} editable={provider.source !== "environment"}
-                      onSave={(key) => saveSearchKey(provider.id, key)} onRemove={provider.removable ? () => void removeSearchKey(provider.id) : undefined} />
+                      actions={<Show when={!provider.ready}><Button variant="ghost" size="sm" onClick={() => setAddingSearch("")}>Cancel</Button></Show>}
+                      onSave={async (key) => { await saveSearchKey(provider.id, key); setAddingSearch(""); }} onRemove={provider.removable ? () => void removeSearchKey(provider.id) : undefined} />
                   }</For>
                   <Show when={authProviders().find((provider) => provider.id === "cloudflare-workers-ai")}>{(provider) => accountLine(provider(), {
                     title: "Checks routed results are on-topic (Clef) and reads values off pages (Clairic), on your Cloudflare account. The same account as in Models & accounts.",
                   })}</Show>
+                  <Show when={settings().providers.some((provider) => !provider.ready && provider.id !== addingSearch())}>
+                    <SettingLine label="Add a provider" title="A search provider's API key, kept in pi-web-access's web-search.json on this server.">
+                      <Select id="search-add-provider" aria-label="Add a provider" search="Search providers" value="" onChange={(event) => setAddingSearch(event.currentTarget.value)}>
+                        <option value="">Choose a provider</option>
+                        <For each={settings().providers.filter((provider) => !provider.ready && provider.id !== addingSearch())}>{(provider) => <option value={provider.id}>{provider.label}</option>}</For>
+                      </Select>
+                    </SettingLine>
+                  </Show>
                   <Show when={searchError()}><SettingNote tone="error">{searchError()}</SettingNote></Show>
                   <Show when={authError() && !authUnavailable()}><SettingNote tone="error">{authError()}</SettingNote></Show>
                   <SettingNote>pi-web-access knows about forty more providers, set in its web-search.json. <SettingLink href="https://github.com/nicobailon/pi-web-access#configuration">Docs</SettingLink></SettingNote>

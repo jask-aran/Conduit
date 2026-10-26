@@ -104,6 +104,7 @@ import { minMainPaneWidth, minSplitPaneWidth } from "./layout-geometry";
 import { dispatchPanelGeometryMotion } from "./panel-motion";
 import { publishUiPreference, queueUiPreferenceSave, uiPreferenceSaves, UI_PREFERENCE_CHANGE_EVENT, type UiPreferenceKey, type UiPreferences } from "./preferences/ui-preferences";
 import { applyUiScale, selectedUiScale } from "./preferences/ui-scale";
+import { applyTranscriptScale } from "./preferences/transcript-scale";
 import { harnessLabelFor } from "./harness-brand";
 import { OutsideThreadChip } from "./chat/outside-thread-chip";
 import { SubagentNote } from "./chat/subagent-note";
@@ -146,6 +147,7 @@ if (desktopShell) {
 
 const nativeApp = isInstalledClient();
 applyUiScale(selectedUiScale(), true);
+applyTranscriptScale();
 // Stamp the reading-surface presets before first paint so the transcript is
 // never laid out at the default width and then reflowed to the chosen one.
 applyTranscriptAppearance({

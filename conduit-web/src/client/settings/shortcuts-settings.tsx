@@ -3,7 +3,7 @@ import {
   createEffect, createMemo, createSignal, For, onCleanup, Show,
 } from "solid-js";
 
-import { Button, Input, Keycap, LiveNote, SettingGroup, SettingLine, SettingNote, SettingRecorder, SettingValue } from "@/components/ui";
+import { Button, Input, Keycap, Switch, LiveNote, SettingGroup, SettingLine, SettingNote, SettingRecorder, SettingValue } from "@/components/ui";
 import { Select } from "@/components/menus";
 import { desktopShell } from "../platform/installed-client";
 import { shortcutConflicts } from "../shortcuts/shortcut-conflicts";
@@ -20,7 +20,7 @@ import { LEADER_MENU_OPTIONS, leaderMenu, saveLeaderMenu, type LeaderMenuMode } 
 const GROUP_LABELS: Record<string, string> = {
   commands: "Application",
   "chat-management": "Chat search",
-  danger: "Danger zone",
+  danger: "Sign out and delete",
   desktop: "System-wide",
   navigation: "Navigation",
   "workspace-panel": "Workspace panel",
@@ -81,9 +81,13 @@ export function ShortcutsSettings(props: { manager: ShortcutManager }) {
       ].join(" ").toLocaleLowerCase().includes(normalized);
     });
   });
+  // Most commands have no keys; "Assigned only" shows the ones that do.
+  const [assignedOnly, setAssignedOnly] = createSignal(false);
   const groups = createMemo(() => {
+    revision();
     const grouped = new Map<string, ShortcutCommandDefinition[]>();
     for (const command of commands()) {
+      if (assignedOnly() && !props.manager.effectiveBindings(command.id).length) continue;
       const items = grouped.get(command.group) || [];
       items.push(command);
       grouped.set(command.group, items);
@@ -241,11 +245,13 @@ export function ShortcutsSettings(props: { manager: ShortcutManager }) {
           <For each={LEADER_MENU_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
         </Select>
       </SettingLine>
-      <Input type="search" aria-label="Search shortcuts" placeholder="Search commands, contexts, or keys…" value={query()} onInput={(event) => setQuery(event.currentTarget.value)} />
+      <SettingLine label="Find"><Input type="search" aria-label="Search shortcuts" placeholder="Commands, contexts or keys" value={query()} onInput={(event) => setQuery(event.currentTarget.value)} /></SettingLine>
+      <SettingLine label="Assigned only"><Switch label="Assigned only" checked={assignedOnly()} onChange={setAssignedOnly} /></SettingLine>
+      {/* Inside the group: between groups it would part their hairline. */}
+      <LiveNote>{status()}</LiveNote>
     </SettingGroup>
 
-    <LiveNote>{status()}</LiveNote>
-    <Show when={groups().length} fallback={<SettingNote tone="quiet">No shortcuts match “{query()}”.</SettingNote>}>
+    <Show when={groups().length} fallback={<SettingNote tone="quiet">{query().trim() ? `No shortcuts match “${query()}”.` : "No shortcuts assigned."}</SettingNote>}>
       <For each={groups()}>{([group, items]) => <SettingGroup title={GROUP_LABELS[group] || contextLabel(group)}>
         <For each={items}>{(command) => {
           const bindings = () => {
@@ -255,15 +261,14 @@ export function ShortcutsSettings(props: { manager: ShortcutManager }) {
           const isRecording = () => recording()?.commandId === command.id;
           // Where it applies is a description, so it is the row's title.
           return <>
-            <SettingLine plain label={command.label} state={overridden(command.id) ? "custom" : undefined} title={command.contexts.map(contextLabel).join(" · ")}>
+            {/* A changed command says so after its name, its reset beside that, so every row's keys keep one column. */}
+            <SettingLine plain label={command.label} title={command.contexts.map(contextLabel).join(" · ")} state={overridden(command.id) ? <>custom
+              <Button variant="ghost" size="icon-sm" aria-label={`Reset ${command.label} to its defaults`} title="Reset to default" onClick={() => resetCommand(command)}><Icons.Reset /></Button></> : undefined}>
               <Show when={bindings().length} fallback={<SettingValue>Not assigned</SettingValue>}>
                 <For each={bindings()}>{(binding, index) => <Keycap label={`${formatShortcutBinding(binding, props.manager.environment)} for ${command.label}`}
                   onClick={() => beginRecording(command.id, index())} onRemove={() => clearBinding(command, index())}>{formatShortcutBinding(binding, props.manager.environment)}</Keycap>}</For>
               </Show>
               <Button variant="ghost" size="icon-sm" aria-label={`Add a shortcut for ${command.label}`} title="Add a shortcut" onClick={() => beginRecording(command.id, null)}><Icons.Add /></Button>
-              <Show when={overridden(command.id)}>
-                <Button variant="ghost" size="icon-sm" aria-label={`Reset ${command.label} to its defaults`} title="Reset to default" onClick={() => resetCommand(command)}><Icons.Reset /></Button>
-              </Show>
             </SettingLine>
 
             <Show when={isRecording()}>
