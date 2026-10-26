@@ -72,6 +72,11 @@ export class NodeHub extends EventEmitter {
     // Every socket of a node, by node id, from connect: unpairing closes them all.
     this.attached = new Map();
     this.wss = new WebSocketServer({ noServer: true, maxPayload: 64 * 1024 * 1024 });
+    // A node on the tailnet may be across the internet, where its process
+    // output, listings and files (JSON, base64 for bytes) are worth deflating;
+    // one on loopback or the LAN is not worth the time.
+    this.deflated = new WebSocketServer({ noServer: true, maxPayload: 64 * 1024 * 1024,
+      perMessageDeflate: { threshold: 1024, zlibDeflateOptions: { level: 1, memLevel: 7 } } });
   }
 
   async load() {
@@ -290,11 +295,13 @@ export class NodeHub extends EventEmitter {
   }
 
   handleUpgrade(request, socket, head) {
-    if (!this.allowRemote(clientAddress(request))) return socket.destroy();
+    const address = clientAddress(request);
+    if (!this.allowRemote(address)) return socket.destroy();
+    const sockets = isTailnetOrLoopback(address) && !isLoopback(address) ? this.deflated : this.wss;
     const key = String(request.headers.authorization || "").replace(/^Bearer\s+/i, "");
     void this.byKey(key).then((record) => {
       if (!record) return socket.destroy();
-      this.wss.handleUpgrade(request, socket, head, (ws) => this.attach(record, ws));
+      sockets.handleUpgrade(request, socket, head, (ws) => this.attach(record, ws));
     }, () => socket.destroy());
   }
 
@@ -544,6 +551,7 @@ export class NodeHub extends EventEmitter {
   shutdown() {
     for (const node of this.live.values()) node.socket.close(1001, "server stopping");
     this.wss.close();
+    this.deflated.close();
   }
 }
 
