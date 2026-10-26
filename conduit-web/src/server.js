@@ -464,6 +464,9 @@ if (desktopUpdateDir) {
 // The installers this server hands out itself, newest of each: a server that
 // publishes its own builds (a dev hub and its client) offers those rather
 // than the public release. Empty when it publishes none.
+// The folder is on the Windows drive, where a listing costs ~30 ms, so one
+// listing serves for ten seconds.
+let downloadsListed = null;
 app.get("/v0/downloads", async (_request, response) => {
   const newest = async (suffix) => {
     if (!desktopUpdateDir) return null;
@@ -472,7 +475,13 @@ app.get("/v0/downloads", async (_request, response) => {
     const found = dated.sort((left, right) => right.at - left.at)[0];
     return found ? `/desktop-updates/${encodeURIComponent(found.name)}` : null;
   };
-  response.set("Cache-Control", "no-store").json({ windowsUrl: await newest("-setup.exe"), apkUrl: await newest(".apk") });
+  if (!downloadsListed || Date.now() - downloadsListed.at > 10_000) {
+    const listed = { at: Date.now(), urls: Promise.all([newest("-setup.exe"), newest(".apk")]) };
+    listed.urls.catch(() => { if (downloadsListed === listed) downloadsListed = null; });
+    downloadsListed = listed;
+  }
+  const [windowsUrl, apkUrl] = await downloadsListed.urls;
+  response.set("Cache-Control", "no-store").json({ windowsUrl, apkUrl });
 });
 
 // The interface as one download, for an installed client's live update. Ahead
