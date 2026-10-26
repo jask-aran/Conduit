@@ -46,6 +46,13 @@ function messageFor(errorValue) {
   return errorValue instanceof Error ? errorValue.message : String(errorValue || "Authentication failed");
 }
 
+// What a provider's API key goes with, asked for beside it (Pi's own login prompts for these), stored on the credential's
+// `env`; the server's environment fills any left empty.
+const KEY_FIELDS = {
+  "cloudflare-workers-ai": [{ name: "CLOUDFLARE_ACCOUNT_ID", label: "Account ID" }],
+  "cloudflare-ai-gateway": [{ name: "CLOUDFLARE_ACCOUNT_ID", label: "Account ID" }, { name: "CLOUDFLARE_GATEWAY_ID", label: "Gateway ID" }],
+};
+
 export class PiAuthBroker {
   constructor({ authStorage, modelRegistry, modelRuntime = null, authFile = "", onCredentialsChanged = async () => {}, now = () => Date.now() }) {
     this.authStorage = authStorage;
@@ -76,6 +83,7 @@ export class PiAuthBroker {
             label: provider.name || provider.id,
             oauth: Boolean(oauth),
             usesCallbackServer: false,
+            fields: KEY_FIELDS[provider.id] || [],
             auth: {
               configured: status.configured === true,
               source,
@@ -296,14 +304,15 @@ export class PiAuthBroker {
     return true;
   }
 
-  async setApiKey(providerId, key) {
+  async setApiKey(providerId, key, env = {}) {
     if (this.modelRuntime) {
       const provider = this.modelRuntime.getProvider(providerId);
       if (!provider || !this.authFile) throw error("api_key_provider_unknown", "Choose a provider known to the Conduit durable agent");
       const value = String(key || "");
       if (!value.trim()) throw error("api_key_required", "API key cannot be empty");
+      const fields = Object.fromEntries((KEY_FIELDS[providerId] || []).map((field) => [field.name, String(env?.[field.name] || "").trim()]).filter(([, given]) => given));
       const auth = await readAuthFile(this.authFile);
-      auth[providerId] = { type: "api_key", key: literalApiKey(value) };
+      auth[providerId] = { type: "api_key", key: literalApiKey(value), ...(Object.keys(fields).length ? { env: fields } : {}) };
       await writeAuthFile(this.authFile, auth);
       await this.modelRuntime.refresh({ allowNetwork: false });
       await this.onCredentialsChanged(providerId);

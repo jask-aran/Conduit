@@ -55,7 +55,7 @@ export function registerPiAuthRoutes(app, { piAuth }) {
   app.put("/v0/pi-auth/api-key", async (request, response, next) => {
     try {
       piAuthOwner(request);
-      await piAuth.setApiKey(String(request.body?.providerId || ""), request.body?.key);
+      await piAuth.setApiKey(String(request.body?.providerId || ""), request.body?.key, request.body?.env);
       noStore(response);
       response.status(204).end();
     } catch (error) { next(error); }
