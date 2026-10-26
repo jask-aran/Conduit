@@ -21,7 +21,7 @@ trap 'rm -rf "$(dirname "$STAGE")"' EXIT
 
 # Stamp the interface and server from the same release, never reuse a dev bundle.
 export CONDUIT_RELEASE_TAG="$VERSION"
-(cd "$ROOT/conduit-web" && npm run build >&2)
+(cd "$ROOT/conduit-web" && npm run build >&2 && node scripts/precompress.mjs --best >&2)
 pty="$ROOT/conduit-web/node_modules/node-pty/build/Release"
 [[ -f "$pty/pty.node" ]] || { echo "node-pty is not built here; run npm ci in conduit-web" >&2; exit 1; }
 
