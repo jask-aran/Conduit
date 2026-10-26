@@ -560,6 +560,36 @@ export function Settings(props: {
     }
   };
   createEffect(() => { if (props.open && section() === "runtime") void loadRuntime(); });
+  // The processes running now, each named by its chat; read again every few seconds while the page is open.
+  type LiveProcess = { id: string; chatId: string; status: string; activity?: string; generation?: unknown; model?: string; createdAt?: string };
+  const [processes, setProcesses] = createSignal<LiveProcess[]>([]);
+  const chatTitles = new Map<string, string>();
+  const [titlesSeen, setTitlesSeen] = createSignal(0);
+  const loadProcesses = async () => {
+    try {
+      const { sessions } = await api<{ sessions: LiveProcess[] }>("/v0/live-sessions");
+      const live = sessions.filter((session) => session.status !== "stopped");
+      setProcesses(live);
+      const unknown = live.filter((session) => !chatTitles.has(session.chatId));
+      await Promise.all(unknown.map(async (session) => {
+        const chat = await api<{ title?: string; status?: string }>(`/v0/chats/${encodeURIComponent(session.chatId)}`).catch(() => null);
+        // An empty draft is a new chat started ahead, so the next one opens at once.
+        chatTitles.set(session.chatId, chat?.title || (chat?.status === "draft" ? "New chat, started ahead" : "Untitled chat"));
+      }));
+      if (unknown.length) setTitlesSeen((count) => count + 1);
+    } catch { /* the counts above still say how many */ }
+  };
+  createEffect(() => {
+    if (!props.open || section() !== "runtime") return;
+    void loadProcesses();
+    const timer = window.setInterval(() => void loadProcesses(), 5000);
+    onCleanup(() => window.clearInterval(timer));
+  });
+  const stopProcess = async (id: string) => {
+    try { await api(`/v0/live-sessions/${encodeURIComponent(id)}/process`, { method: "DELETE" }); }
+    catch (error) { setRuntimeError((error as Error).message); }
+    await Promise.all([loadProcesses(), loadRuntime()]);
+  };
 
   const choosePrompt = (id: string, items = prompts()) => {
     if (id !== promptId()) void promptAutosave.flush();
@@ -1337,6 +1367,14 @@ export function Settings(props: {
                   <SettingLine label="Concurrent generations" state={<><Show when={runtimeFieldError(runtimeDraft(), "generating")} fallback={<>{runtime()!.generatingCount || 0} generating</>}>{(message) => message()}</Show></>}><Select id="generations" aria-label="Concurrent generations" value={runtimeDraft().generating} onChange={(event) => editRuntime("generating", event.currentTarget.value)}>
                     <For each={countSteps([...RUNTIME_STEPS.generating], runtimeDraft().generating)}>{(count) => <option value={String(count)}>{count}</option>}</For>
                   </Select></SettingLine>
+                </SettingGroup>
+                <SettingGroup title="Running now">
+                  <For each={processes()} fallback={<SettingNote>No agent processes are running.</SettingNote>}>{(process) =>
+                    <SettingLine plain label={(titlesSeen(), chatTitles.get(process.chatId) || "…")} title={`${process.model || ""}${process.createdAt ? ` · since ${new Date(process.createdAt).toLocaleString()}` : ""}`}
+                      state={<>{process.generation || (process.activity && process.activity !== "idle") ? "working" : "idle"}{process.model ? ` · ${process.model.split("/").at(-1)}` : ""}</>}>
+                      <Button variant="ghost" size="sm" onClick={() => void stopProcess(process.id)}>Stop</Button>
+                    </SettingLine>
+                  }</For>
                 </SettingGroup>
               </Show>
             </>
