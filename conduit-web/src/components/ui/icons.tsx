@@ -1,5 +1,6 @@
 import {
   ActivityIcon,
+  BotIcon,
   ArrowDownIcon,
   ArrowLeftIcon,
   ArrowLeftRightIcon,
@@ -106,6 +107,8 @@ export const Backspace = DeleteIcon;
 export const Notification = BellIcon;
 /** A collection or grouped identity. */
 export const Boxes = BoxesIcon;
+/** A subagent: work an agent handed to another. */
+export const Agent = BotIcon;
 /** Capture a photo attachment. */
 export const Camera = CameraIcon;
 /** A chat or its messages. */
