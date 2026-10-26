@@ -126,7 +126,7 @@ interface ActiveChatOptions {
   attachments: ChatAttachments;
   drafts?: DraftsStore;
   onError: ErrorHandler;
-  onModelRecovered: (details: { from: string; to: string }) => void;
+  onModelRecovered: (details: { from: string; to: string; reason?: string }) => void;
   defaultTemplateId: () => string;
   saveWorkspaceDefault: (workspaceId: string, templateId: string | null) => Promise<unknown>;
 }

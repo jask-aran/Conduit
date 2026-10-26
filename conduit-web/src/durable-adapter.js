@@ -266,14 +266,36 @@ export class DurableAdapter extends EventEmitter {
       roaming: context.chat.backend?.roaming === true };
     const live = context.chat.backend.opaqueSession
       ? await this.restore(context.chat.backend.opaqueSession, options) : await this.create(options);
+    const modelRecovery = await this.recoverModel(live);
     return {
       live,
       mapping: {
         backend: { ...context.chat.backend, model: live.model, opaqueSession: String(live.conversationId) },
         ...(live.thinkingLevel ? { modelThinkingLevels: { ...(context.chat.modelThinkingLevels || {}), [live.model]: live.thinkingLevel } } : {}),
       },
-      modelRecovery: null,
+      modelRecovery,
     };
+  }
+
+  /**
+   * A chat whose model has gone (its provider dropped it, its sign-in went,
+   * it left the scope) is moved to one that is here, as classic Pi did: the
+   * default where it is available, else the first, at the nearest thinking
+   * level it has. pi-durable refuses a turn on a model it cannot resolve.
+   */
+  async recoverModel(record) {
+    const from = record?.model;
+    const available = from ? await this.runtime.availableModels().catch(() => null) : null;
+    if (!available?.length || available.some((model) => `${model.provider}/${model.id}` === from)) return null;
+    const preferred = await this.runtime.defaultModel().catch(() => null);
+    const to = available.find((model) => model.provider === preferred?.provider && model.id === preferred?.modelId) || available[0];
+    await this.setModel(record.id, `${to.provider}/${to.id}`);
+    const levels = getSupportedThinkingLevels(to);
+    if (levels.length && !levels.includes(record.thinkingLevel)) {
+      const level = [record.thinkingLevel, preferred?.thinkingLevel, "medium"].find((item) => item && levels.includes(item)) || levels[0];
+      await this.setThinkingLevel(record.id, level);
+    }
+    return { from, to: record.model, reason: "unavailable" };
   }
 
   async create(options) {

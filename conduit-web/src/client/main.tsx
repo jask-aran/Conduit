@@ -1057,7 +1057,7 @@ function App() {
         duration: 6_000,
       });
     },
-    onModelRecovered: ({ from, to }) => toast.warning(`This chat's previous model ${from} is no longer scoped. It resumed with ${to}.`, {
+    onModelRecovered: ({ from, to, reason }) => toast.warning(`This chat's previous model ${from} is ${reason === "unavailable" ? "no longer available" : "no longer scoped"}. It resumed with ${to}.`, {
       id: "model-scope-recovery",
       duration: 6_000,
     }),
