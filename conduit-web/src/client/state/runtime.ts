@@ -164,6 +164,7 @@ export function createRuntimeStore() {
   const snapshot = () => JSON.stringify({
     type: "runtime_global_snapshot",
     processes: [...processes().values()],
+    devices: [...deviceStates().values()],
     connection: connectionId(),
     restartPrepared,
     restartAttempt: restartAnnounced.attempt,

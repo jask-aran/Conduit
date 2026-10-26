@@ -12,7 +12,7 @@ import { isMobileLayout, MOBILE_LAYOUT_QUERY } from "../../navigation/mobile-lay
 // composer with the threads list under it on the left and what is live and
 // what changed on the right. The pane's width, not the window's, decides
 // when the two columns become one, so opening the workspace panel reflows it
-// the way a narrow window does. The Conduit dashboard still uses ./dashboard.
+// the way a narrow window does. The Conduit and harness dashboards use it too.
 
 // A phone. Groups read it to trade their heading for a compact one and to
 // fold; on desktop a narrow pane only stacks its columns (dashboard.css).

@@ -14,7 +14,7 @@ import { activityLabel } from "../../activity.js";
 
 import type { Pty } from "../remotes/terminal-pane";
 import { WorkspaceGlyph } from "../project/workspace-appearance";
-import type { RuntimeStore } from "../state/runtime";
+import { awayDevice, type RuntimeStore } from "../state/runtime";
 import type { SidebarCommand } from "../navigation/sidebar";
 import { COMMAND_IDS, commandLabel } from "../commands/command-registry";
 import { compareChatsBySort, saveChatSort, useChatSort } from "../preferences/chat-sort";
@@ -229,12 +229,15 @@ export function AppDashboard(props: {
     </FolderShelf>
   </SplitGroup>;
 
+  // Where a workspace on another device is, and whether that device is there.
+  const placeNote = (project: Project) => project.capabilities && !project.capabilities.device.local
+    ? ` · ${project.capabilities.device.name}${awayDevice(project) ? " · offline" : ""}` : "";
   const workspacesGroup = () => <SplitGroup id="app-dashboard-workspaces" label="Workspaces" count={props.projects.filter(isWorkspace).length} actions={<GroupAction onClick={() => props.onContextAction("new-workspace", {})}>New</GroupAction>}>
     <Show when={workspaces().length} fallback={<SplitEmpty>Nothing here yet.</SplitEmpty>}>
       <For each={workspaces()}>{(project) =>
         <MenuHost><MenuTrigger as={SplitRow} element="a" href={projectPath(project)} onPointerEnter={() => props.onPrefetchProject(project)} onFocus={() => props.onPrefetchProject(project)} onClick={(event: MouseEvent) => openProject(event, project)}
             lead={<WorkspaceGlyph appearance={project.workspaceAppearance} />} primary={project.name}
-            context={<Show when={folderLive(project)} fallback={`${project.sessions.filter((chat) => chat.status === "active").length} chats`}>Running</Show>}
+            context={<Show when={folderLive(project)} fallback={`${project.sessions.filter((chat) => chat.status === "active").length} chats${placeNote(project)}`}>Running</Show>}
             trailing={shortAge(latestActivity(project), now())} />{projectMenu(project)}</MenuHost>}
       </For>
     </Show>

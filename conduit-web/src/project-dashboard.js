@@ -7,7 +7,8 @@ const RECENT_FILE_LIMIT = 8;
 
 // The folder's own files, newest first. Only the top level: a project folder
 // is where an agent writes its results, and a walk of a large tree would cost
-// the dashboard more than the list is worth.
+// the dashboard more than the list is worth. Null when the folder could not be
+// read (its device away, say), which is not the same as an empty one.
 async function listRecentFiles(root) {
   try {
     const { entries } = await listWorkspaceDirectory(root);
@@ -16,7 +17,7 @@ async function listRecentFiles(root) {
       .map((entry) => ({ name: entry.name, modifiedAt: new Date(entry.modifiedAt).toISOString() }))
       .sort((left, right) => right.modifiedAt.localeCompare(left.modifiedAt)).slice(0, RECENT_FILE_LIMIT);
   } catch {
-    return [];
+    return null;
   }
 }
 
