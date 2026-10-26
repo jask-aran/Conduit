@@ -264,6 +264,7 @@ export class DurableAdapter extends EventEmitter {
     const options = { chatId: context.chat.id, project: context.project, model: selected, thinkingLevel: level,
       templateId: context.chat.templateId || context.chat.backend?.profileId || null,
       roaming: context.chat.backend?.roaming === true };
+    await this.runtime.freshModels();
     const live = context.chat.backend.opaqueSession
       ? await this.restore(context.chat.backend.opaqueSession, options) : await this.create(options);
     const modelRecovery = await this.recoverModel(live);

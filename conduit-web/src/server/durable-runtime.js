@@ -202,6 +202,7 @@ export class DurableRuntime {
     return this.opening ??= (async () => {
       fs.mkdirSync(path.dirname(this.file), { recursive: true, mode: 0o700 });
       const agent = (name) => path.join(this.piAgentDir, name);
+      this.modelsSignature = await this.modelFilesSignature();
       this.models = await ModelRuntime.create({
         authPath: agent("auth.json"), modelsPath: agent("models.json"), modelsStorePath: agent("models-store.json"),
       });
@@ -356,8 +357,31 @@ export class DurableRuntime {
    * list when it has one, else the templates' own `models`, else every model
    * with credentials. Patterns resolve as Pi resolves them (globs included).
    */
-  async availableModels() {
+  async modelFilesSignature() {
+    return (await Promise.all(["models.json", "models-store.json", "auth.json"].map((name) => fs.promises.stat(path.join(this.piAgentDir, name))
+      .then((stat) => `${stat.ino}:${stat.size}:${stat.mtimeMs}`, () => "-")))).join("|");
+  }
+
+  /**
+   * The model registry as its files are now. models.json (providers and
+   * overrides), auth.json and the store were read once at open, so an edit
+   * reached durable chats only after a restart; one changed (by inode, size
+   * or mtime, as the settings catalogue checks) is read again here, into the
+   * same registry the harness holds.
+   */
+  async freshModels() {
     await this.open();
+    const signature = await this.modelFilesSignature();
+    if (signature !== this.modelsSignature) {
+      this.modelsSignature = signature;
+      this.modelsRefresh ||= this.models.refresh({ allowNetwork: false }).finally(() => { this.modelsRefresh = null; });
+      await this.modelsRefresh;
+    }
+    return this.models;
+  }
+
+  async availableModels() {
+    await this.freshModels();
     const available = await this.models.getAvailable();
     let patterns = null;
     try {
