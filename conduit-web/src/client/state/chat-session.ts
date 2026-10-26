@@ -34,7 +34,7 @@ export function createChatSession(options: {
   saveWorkspaceDefault: (workspaceId: string, templateId: string | null) => Promise<unknown>;
   onError: (error: unknown) => void;
   onThinkingLevelRecovered?: (details: { from: string; to: string }) => void;
-  onModelRecovered?: (details: { from: string; to: string }) => void;
+  onModelRecovered?: (details: { from: string; to: string; reason?: string }) => void;
 }) {
   const models = createModelSettings(options.onError, options.onThinkingLevelRecovered ?? (() => {}), notifyModelFallback);
   const permissions = createPermissionSettings(options.onError);

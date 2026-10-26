@@ -618,7 +618,7 @@ export interface LiveRecord {
   modelRecovery?: {
     from: string;
     to: string;
-    reason: "outside_scope";
+    reason: "outside_scope" | "unavailable";
   };
   capabilities?: ChatCapabilities;
 }
