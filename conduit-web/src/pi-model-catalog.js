@@ -6,7 +6,13 @@ import {
   SettingsManager,
 } from "@earendil-works/pi-coding-agent";
 import { clampThinkingLevel, getSupportedThinkingLevels } from "@earendil-works/pi-ai";
+import fs from "node:fs/promises";
 import path from "node:path";
+
+// What a local refresh reads. It re-parses models-store.json (hundreds of KB,
+// on the main thread), so it runs when one of these changed, or a minute on.
+const REFRESH_FILES = ["models.json", "models-store.json", "auth.json"];
+const REFRESH_AT_MOST_MS = 60_000;
 
 export function resolveThinkingLevel(level, supportedLevels = [], fallbackLevel = "") {
   const levels = Array.isArray(supportedLevels)
@@ -63,6 +69,17 @@ export class PiModelCatalog {
     return this;
   }
 
+  async refreshLocal() {
+    const signature = (await Promise.all(REFRESH_FILES.map((name) => fs.stat(path.join(this.agentDir, name))
+      .then((stat) => `${stat.ino}:${stat.size}:${stat.mtimeMs}`, () => "-")))).join("|");
+    if (signature === this.refreshedSignature && Date.now() - this.refreshedAt < REFRESH_AT_MOST_MS) return;
+    this.refreshing ||= this.modelRuntime.refresh({ allowNetwork: false }).finally(() => { this.refreshing = null; });
+    await this.refreshing;
+    this.refreshedSignature = signature;
+    this.refreshedAt = Date.now();
+    this.scoped = null;
+  }
+
   async refreshFromNetwork({ providers, force = false, timeoutMs = 15_000 } = {}) {
     await this.ready();
     return this.modelRegistry.refresh({
@@ -77,15 +94,23 @@ export class PiModelCatalog {
     await this.ready();
     const settings = this.settingsFactory(cwd);
     this.authStorage?.reload();
-    if (this.modelRuntime) await this.modelRuntime.refresh({ allowNetwork: false });
+    if (this.modelRuntime) await this.refreshLocal();
     else await this.modelRegistry.refresh();
 
     const configuredModels = settings.getEnabledModels?.();
     const modelPatterns = Array.isArray(configuredModels) ? configuredModels : this.modelPatterns;
     const modelSource = this.modelRuntime || this.modelRegistry;
-    const scope = modelPatterns.length
-      ? await resolveModelScopeWithDiagnostics(modelPatterns, modelSource)
-      : { scopedModels: [], diagnostics: [] };
+    // The scope moves only with the patterns or a refresh (which clears it).
+    const scopeKey = JSON.stringify(modelPatterns);
+    if (this.scoped?.key !== scopeKey || !this.modelRuntime) {
+      this.scoped = {
+        key: scopeKey,
+        scope: modelPatterns.length
+          ? await resolveModelScopeWithDiagnostics(modelPatterns, modelSource)
+          : { scopedModels: [], diagnostics: [] },
+      };
+    }
+    const { scope } = this.scoped;
     const availableModels = this.modelRuntime
       ? this.modelRuntime.getAvailableSnapshot()
       : this.modelRegistry.getAvailable();
