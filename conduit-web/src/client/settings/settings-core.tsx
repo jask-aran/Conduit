@@ -7,7 +7,7 @@ import { AboutSettingsFooter } from "./about-settings";
 import { DesktopSettingsTile } from "./desktop-settings";
 import { DevicesSettingsTile } from "./devices-settings";
 import { toast } from "@/components/notifications";
-import { api } from "../api/client";
+import { api, readShared } from "../api/client";
 import { MARKDOWN_RENDERER_OPTIONS, type MarkdownRendererId } from "../chat/markdown-settings";
 import { formatMicrophoneError, hasAudioSignal, rematchInputDevice, isUnavailableAudioInputError, listAudioInputDevices, MAX_AUDIO_INPUT_TEST_DURATION_MS, revokeAudioInputRecording, startAudioInputTest as beginAudioInputTest, type AudioInputDevice, type AudioInputTestResult, type AudioInputTestSession, } from "../chat/voice-audio";
 import { shortcutFromKeyboardEvent } from "../chat/voice-dictation";
@@ -1022,7 +1022,7 @@ export function Settings(props: {
   const loadGeneralPreferences = async () => {
     setGeneralLoading(true);
     try {
-      const loaded = await api<GeneralPreferences>("/v0/preferences");
+      const loaded = await readShared<GeneralPreferences>("/v0/preferences");
       const model = loaded.sessionNameModel;
       const levels = namingModels().find((item) => item.spec === model)?.thinkingLevels || ["off"];
       setSessionNameModel(model);

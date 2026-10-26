@@ -33,7 +33,7 @@ import { FileHead } from "@/components/ui/file";
 import { FileEmpty, FileEmptySide } from "@/components/ui/viewer";
 import { DragPill, DropWash, PaneAction, PaneActions, PaneEdge, PaneTab, TabPlace, PaneTabRow, PaneTabs } from "@/components/ui/pane";
 import { ChatHeader, Conversation } from "./chat/chat-screen";
-import { api, apiWhenServed, asList, pathChatId, pathProjectId, projectMatchesPath, projectPath, readAhead } from "./api/client";
+import { api, apiWhenServed, asList, pathChatId, pathProjectId, projectMatchesPath, projectPath, readAhead, readShared } from "./api/client";
 import { buildHttpUrl, loginUrl, logoutUrl, normalizeServerOrigin, transcriptUrl } from "./api/transport";
 import { startPathSelection } from "./platform/path-selector";
 import { canDiscoverServers, discoverServers, type FoundServer } from "./platform/discovery";
@@ -705,7 +705,7 @@ function App() {
     readAhead([`${chatPath}/models`, `${chatPath}/permission-profiles`, `${chatPath}/service-levels`, `${chatPath}/attachments`]);
     selectedChatRequest?.then(([summary]) => {
       const projectId = encodeURIComponent(summary.projectId);
-      readAhead([`/v0/settings?projectId=${projectId}`, `/v0/models?projectId=${projectId}`]);
+      readAhead([`/v0/models?projectId=${projectId}`]);
       readAhead([`/v0/projects/${projectId}/turn-artifact?${new URLSearchParams({ chatId: initialRouteId, timeline: "1" })}`], "no-store");
     }, () => {});
   }
@@ -4943,7 +4943,7 @@ function App() {
       }
       window.dispatchEvent(new CustomEvent(UI_PREFERENCE_CHANGE_EVENT, { detail: { key, value } }));
     };
-    void apiWhenServed<UiPreferences & { knownServers?: Array<{ origin?: unknown; name?: unknown }> }>("/v0/preferences").then(async (serverPreferences) => {
+    void readShared<UiPreferences & { knownServers?: Array<{ origin?: unknown; name?: unknown }> }>("/v0/preferences").then(async (serverPreferences) => {
       setSidebarPins(Array.isArray(serverPreferences.sidebarPins) ? serverPreferences.sidebarPins : []);
       // Every server keeps the directory, and every client that reaches one
       // both reads it and tops it up. Two addresses for the same machine share
