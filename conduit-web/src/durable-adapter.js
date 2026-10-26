@@ -354,7 +354,7 @@ export class DurableAdapter extends EventEmitter {
       // follow-up waits for the next one.
       modes: new Map(),
     });
-    record.scope.defer(() => { record.stream?.stop(); record.unasked?.(); record.unwaited?.(); });
+    record.scope.defer(() => { record.stream?.stop(); record.unasked?.(); record.unwaited?.(); record.unnoticed?.(); });
     await this.follow(record, conversation);
     return record;
   }
@@ -372,6 +372,8 @@ export class DurableAdapter extends EventEmitter {
     record.unasked = this.runtime.answerFor(conversation.id, (request) => this.askUser(record, request));
     record.unwaited?.();
     record.unwaited = this.runtime.waitFor(conversation.id, (device) => this.waitingForDevice(record, device));
+    record.unnoticed?.();
+    record.unnoticed = this.runtime.noticesFor(conversation.id, ({ message, level }) => this.publish(record, { type: "extension_notice", message, level }));
     const stream = await watchEvents(this.runtime.harness, conversation.id, this.context);
     record.stream = stream;
     // A run the last process left going is still going; this is where it is picked up.
@@ -530,7 +532,9 @@ export class DurableAdapter extends EventEmitter {
     // A fresh prompt after a stop says so; a steer or follow-up joins the turn it lands in.
     const afterStop = record.stoppedByUser && !whenBusy;
     if (!whenBusy) record.stoppedByUser = false;
-    const said = afterStop ? withConduitNote(STOPPED_NOTE, this.expandSkill(record, text)) : this.expandSkill(record, text);
+    const expanded = await this.expandInput(record, text, { messageId, whenBusy, summary });
+    if (expanded === null) return null;
+    const said = afterStop ? withConduitNote(STOPPED_NOTE, expanded) : expanded;
     const submission = await record.conversation.submit({
       type: "input", content: await promptInput(said, attachments, { onDevice: Boolean(record.nodeId), processor: this.runtime.images }), requestId: messageId, ...(whenBusy ? { whenBusy } : {}),
       entry: { kind: USER_ENTRY, data: { messageId, text, timestamp: new Date().toISOString(),
@@ -923,17 +927,68 @@ export class DurableAdapter extends EventEmitter {
   }
 
   listModels() { return this.listAvailableModels(); }
-  // A template's skills, as `/skill:<name>`, as classic Pi offered them.
-  listCommands(id) { return Promise.resolve(this.skillCommands(this.get(id)?.templateId)); }
-  listAvailableCommands({ template } = {}) { return Promise.resolve(this.skillCommands(template?.id)); }
-  skillCommands(templateId) {
-    return this.runtime.skillsFor(templateId).map((skill) => ({ name: `skill:${skill.name}`, description: skill.description, source: "skill" }));
+  // Commands and prompts precede the template's skills, as in classic Pi.
+  listCommands(id) { return this.skillCommands(this.get(id)?.templateId); }
+  listAvailableCommands({ template } = {}) { return this.skillCommands(template?.id); }
+  async skillCommands(templateId) {
+    return [
+      ...(await this.runtime.commandsFor(templateId)).map(({ name, description, source }) => ({ name, description, source })),
+      ...this.runtime.skillsFor(templateId).map((skill) => ({ name: `skill:${skill.name}`, description: skill.description, source: "skill" })),
+    ];
   }
 
-  /** `/skill:<name> args` as the model reads it: the skill, then the args (Pi's expansion). The transcript keeps what was typed. */
-  expandSkill(record, text) {
-    const match = /^\/skill:(\S+)(?:\s+([\s\S]*))?$/.exec(String(text || ""));
-    const skill = match && this.runtime.skillsFor(record.templateId).find((item) => item.name === match[1]);
+  /** Expand model input while the transcript keeps the text the user typed. Commands consume the input. */
+  async expandInput(record, text, { messageId, whenBusy, summary } = {}) {
+    const match = /^\/([^\s]+)(?:\s+([\s\S]*))?$/.exec(String(text || ""));
+    if (!match) return text;
+    const turn = record.turn;
+    const command = (await this.runtime.commandsFor(record.templateId)).find((item) => item.name === match[1]);
+    if (record.turn !== turn) return null;
+    if (command?.source === "prompt") return command.expand(text);
+    if (command?.source === "extension") {
+      const { withCancel } = await import("@earendil-works/chord/context");
+      if (record.turn !== turn) return null;
+      const invocation = withCancel(this.context);
+      const stopped = ({ record: settled, completed }) => { if (settled === record && !completed) invocation.cancel(); };
+      this.on("settled", stopped);
+      const prompts = [];
+      try {
+        await record.conversation.commit((tx) => tx.appendEntry(record.conversation.id, {
+          kind: USER_ENTRY, data: { messageId, text, timestamp: new Date().toISOString(),
+            ...(summary?.length ? { attachments: summary } : {}) },
+        }), invocation.context);
+        const agent = await record.conversation.agent(invocation.context);
+        await command.run(match[2] || "", { conversationId: record.conversation.id, agent,
+          send: (content, options) => prompts.push({ content, options }),
+        }, invocation.context);
+        this.off("settled", stopped);
+        for (const [index, { content, options }] of prompts.entries()) {
+          const id = crypto.randomUUID();
+          // Input blocks from sendUserMessage stay blocks; submit() handles typed text only.
+          const submission = await record.conversation.submit({ type: "input", content, requestId: id,
+            entry: { kind: USER_ENTRY, data: { messageId: id, text: typeof content === "string" ? content : textOf(content),
+              timestamp: new Date().toISOString() } },
+            ...((index || whenBusy) ? { whenBusy: options?.deliverAs === "steer" ? "steer" : whenBusy || "followUp" } : {}) }, invocation.context);
+          record.prompts.set(submission.id, id);
+        }
+        if (!prompts.length && !whenBusy && record.turn === turn && turn) {
+          turn.last = { stopReason: "stop" };
+          this.finish(record);
+        }
+      } catch (error) {
+        if (!invocation.context.abortSignal?.aborted && record.turn === turn && turn) {
+          this.publish(record, { type: "error", generationId: turn.generationId, scope: "runtime",
+            error: { code: error?.code || "backend_unavailable", message: error?.message || String(error) } });
+          turn.last = { stopReason: "error" };
+          this.finish(record);
+        }
+      } finally {
+        this.off("settled", stopped);
+        invocation.cancel();
+      }
+      return null;
+    }
+    const skill = match[1].startsWith("skill:") && this.runtime.skillsFor(record.templateId).find((item) => `skill:${item.name}` === match[1]);
     if (!skill) return text;
     const block = `<skill name="${skill.name}">\n${skill.body}\n</skill>`;
     return match[2]?.trim() ? `${block}\n\n${match[2].trim()}` : block;
