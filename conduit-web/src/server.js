@@ -751,7 +751,6 @@ app.get("*", (request, response, next) => {
   response.sendFile(path.join(dist, "index.html"));
 });
 app.use((error, _request, response, _next) => {
-  console.error(error);
   let status = error.status || 500;
   if (["reserved_project", "workspace_already_linked", "clone_target_reserved", "clone_reservation_lost", "workspace_cloning"].includes(error.code)) status = 409;
   if (error.code === "workspace_identity_changed") status = 409;
@@ -809,6 +808,10 @@ app.use((error, _request, response, _next) => {
       "model_profile_search_config_invalid",
     ].includes(error.code)
     || error.message?.includes("Project names")) status = 400;
+  // A stack for what went wrong here; an answer the request was meant to get (not text, not found, its device
+  // away) is the client's to show, and only a line here.
+  if (status >= 500 && error.code !== "device_offline") console.error(error);
+  else console.warn(`[conduit] ${status} ${error.code || "error"}: ${error.message}`);
   response.status(status).json({
     error: error.code || "runtime_error",
     message: error.message,

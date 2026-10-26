@@ -13,7 +13,7 @@ import { api } from "../api/client";
 import { httpUrl } from "../api/transport";
 
 import { isInstalledClient } from "../platform/installed-client.ts";
-import { workspaceFileJson, workspaceFileResponse } from "./direct-files";
+import { directAvailable, workspaceFileJson, workspaceFileResponse } from "./direct-files";
 import type { WorkspaceEditorHandle } from "./workspace-editor";
 import { addReviewComment, reviewComments } from "../chat/review-comments";
 import type { ReviewNavigationRequest } from "../chat/review-navigation";
@@ -224,7 +224,9 @@ export default function WorkspaceFileSlot(props: {
 
   const loadMedia = async (metadata: FileMetadata & { kind: Exclude<FileKind, "text">; mime: string }, projectId: string, owns: () => boolean) => {
     const path = metadata.path;
-    if (!isInstalledClient()) {
+    // A page shows the hub's own files by address; a device's it reads from the device when it can, as the apps do.
+    if (!isInstalledClient() && !(await directAvailable(projectId))) {
+      if (!owns()) return;
       const url = httpUrl(`/v0/projects/${encodeURIComponent(projectId)}/file?path=${encodeURIComponent(path)}&inline=1&revision=${encodeURIComponent(metadata.revision || "")}`);
       if (asset()?.url !== url) {
         releaseAsset();
