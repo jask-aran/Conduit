@@ -7,12 +7,17 @@ import type { SourceControl } from "./workspace-source-control";
 import type { WorkspaceVersion } from "./workspace-types";
 
 const FILE_POLL_INTERVAL_MS = 1_500;
+// While the server's watch tells each change as it happens (runtime.ts,
+// `conduit:workspace-changed`), asking is only the fallback for a lost stream.
+const TOLD_POLL_INTERVAL_MS = 10_000;
 
 /**
  * Asks the server what changed in the project while a view that shows it is
  * open, and refreshes only that: the loaded folders and open files a change
- * touched, and Git status while it is on screen. Failures back off, and two in
- * a row mark the views "Not updating" until a retry.
+ * touched, and Git status while it is on screen. Asks at once when the server
+ * says the project changed, and otherwise every 1.5 s, or every 10 s while the
+ * server tells changes itself. Failures back off, and two in a row mark the
+ * views "Not updating" until a retry.
  */
 export function createWorkspacePoll(options: {
   projectId: Accessor<string>;
@@ -45,6 +50,9 @@ export function createWorkspacePoll(options: {
   });
 
   let polling = false;
+  // Told of a change while a poll was already out: ask again once it is back.
+  let askAgain = false;
+  let told = false;
   let failures = 0;
   let versionProjectId = "";
   let version: number | null = null;
@@ -79,6 +87,7 @@ export function createWorkspacePoll(options: {
       const initialProbe = version === null;
       const changed = version !== payload.version;
       version = payload.version;
+      told = payload.told === true;
       if ((!initialProbe || (!options.hasInitialDirectory && (files.hasContent() || sourceControl.diff()))) && changed) {
         await refreshChanged(payload.changedPaths, projectId);
       }
@@ -109,15 +118,28 @@ export function createWorkspacePoll(options: {
     let cancelled = false;
     let timer = 0;
     const schedule = (delay: number) => {
+      window.clearTimeout(timer);
       timer = window.setTimeout(async () => {
         const success = await poll();
-        if (!cancelled) schedule(success ? FILE_POLL_INTERVAL_MS : Math.min(30_000, FILE_POLL_INTERVAL_MS * 2 ** failures));
+        if (cancelled) return;
+        if (askAgain && success) {
+          askAgain = false;
+          return schedule(0);
+        }
+        schedule(success ? (told ? TOLD_POLL_INTERVAL_MS : FILE_POLL_INTERVAL_MS) : Math.min(30_000, FILE_POLL_INTERVAL_MS * 2 ** failures));
       }, delay);
     };
+    const onChanged = (event: Event) => {
+      if (!(event as CustomEvent<string[]>).detail?.includes(projectId)) return;
+      if (polling) askAgain = true;
+      else schedule(0);
+    };
+    window.addEventListener("conduit:workspace-changed", onChanged);
     schedule(0);
     onCleanup(() => {
       cancelled = true;
       window.clearTimeout(timer);
+      window.removeEventListener("conduit:workspace-changed", onChanged);
     });
   });
 

@@ -23,6 +23,34 @@ const MAX_CHANGED_WORKSPACE_PATHS = 1_000;
 const gitSlots = { active: 0, waiters: [] };
 const inspections = new Map();
 const workspaceWatches = new Map();
+// Who hears that a watched workspace changed (server.js tells the clients), by
+// the tags its version readers gave it (their project ids). The first change
+// is told at once, then at most one more each quarter second while changes
+// keep coming, so an install's thousand writes are a few.
+const workspaceListeners = new Set();
+const WORKSPACE_TELL_MS = 250;
+
+export function onWorkspaceChange(listener) {
+  workspaceListeners.add(listener);
+  return () => workspaceListeners.delete(listener);
+}
+
+function tellWorkspaceChange(record) {
+  if (!record.tags?.size) return;
+  if (record.telling) {
+    record.tellAgain = true;
+    return;
+  }
+  for (const listener of workspaceListeners) listener([...record.tags]);
+  record.telling = setTimeout(() => {
+    record.telling = null;
+    if (record.tellAgain) {
+      record.tellAgain = false;
+      tellWorkspaceChange(record);
+    }
+  }, WORKSPACE_TELL_MS);
+  record.telling.unref?.();
+}
 
 const EXTENSION_TYPES = new Map([
   ["png", { kind: "image", mime: "image/png" }],
@@ -354,6 +382,7 @@ function ignoredWorkspaceWatchPath(relativePath) {
 function noteWorkspaceChange(record, relativePath = null) {
   if (relativePath && ignoredWorkspaceWatchPath(relativePath)) return;
   record.version += 1;
+  tellWorkspaceChange(record);
   if (record.changedPaths === null || !relativePath) {
     if (!relativePath) {
       record.changedPaths = null;
@@ -368,6 +397,8 @@ function noteWorkspaceChange(record, relativePath = null) {
 function closeWorkspaceWatch(record) {
   clearTimeout(record.closeTimer);
   record.closeTimer = null;
+  clearTimeout(record.telling);
+  record.telling = null;
   record.watcher?.close();
   record.watcher = null;
   workspaceWatches.delete(record.key);
@@ -489,14 +520,15 @@ async function scanWorkspacePaths(record, paths) {
 }
 
 /** Return one shared workspace-change version for the currently visible paths. */
-export async function readWorkspaceVersion(root, { paths = [], watchImpl = watchOffThread } = {}) {
+export async function readWorkspaceVersion(root, { paths = [], watchImpl = watchOffThread, tag = null } = {}) {
   const resolved = await resolveInspectorPath(root, "", { kind: "directory" });
   const key = resolved.host.key;
   let record = workspaceWatches.get(key);
   if (!record) {
-    record = { root: resolved.path, key, host: resolved.host, watchImpl, watcher: null, fallback: false, references: 0, closeTimer: null, version: 0, changedPaths: new Set(), fullRefresh: false, pathStats: null };
+    record = { root: resolved.path, key, host: resolved.host, watchImpl, watcher: null, fallback: false, references: 0, closeTimer: null, version: 0, changedPaths: new Set(), fullRefresh: false, pathStats: null, tags: new Set() };
     workspaceWatches.set(key, record);
   }
+  if (tag) record.tags.add(tag);
   record.references += 1;
   clearTimeout(record.closeTimer);
   record.closeTimer = null;
@@ -516,7 +548,10 @@ export async function readWorkspaceVersion(root, { paths = [], watchImpl = watch
       record.fullRefresh = false;
       record.changedPaths = new Set();
     }
-    return { version: record.version, changedPaths };
+    // Whether a change is told as it happens (onWorkspaceChange), or only
+    // found by asking again: the reader can ask less often while it is.
+    const told = Boolean(record.watcher?.checked) && !record.polling && !record.fallback;
+    return { version: record.version, changedPaths, told };
   } finally {
     record.references -= 1;
     scheduleWorkspaceWatchClose(record);
