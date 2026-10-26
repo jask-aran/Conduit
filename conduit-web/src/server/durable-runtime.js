@@ -257,7 +257,8 @@ export class DurableRuntime {
     try {
       // Its configuration is the Conduit Pi agent's, named only while its tools run.
       const tools = await loadPiExtensionTools(WEB_ACCESS, { models: this.models, replaySafe: WEB_REPLAY_SAFE,
-        env: { PI_CODING_AGENT_DIR: process.env.PI_CODING_AGENT_DIR || this.piAgentDir } });
+        env: { PI_CODING_AGENT_DIR: process.env.PI_CODING_AGENT_DIR || this.piAgentDir },
+        entries: path.join(this.piAgentDir || path.dirname(this.file), "extension-entries", "web.jsonl") });
       return defineExtension({ name: "web", tools, sections: [section("web", () => WEB_PROMPT, { tag: false })] });
     } catch (error) {
       console.warn("[conduit-runtime] web tools unavailable:", error?.message || error);
