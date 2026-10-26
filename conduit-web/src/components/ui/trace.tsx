@@ -23,12 +23,14 @@ export function TraceHeader(props: { orb?: JSX.Element; status: string; time?: s
  * Trail of Steps) unfolds under it as a Disclosure's body does. With no children there is nothing to open. A turn
  * not yet started is a Trace with status "Starting", a connecting Orb and live. motion and since: its entrance
  * (entering fades it in), and how far into it it already is. opens: the trail is drawn only once opened (foldBody).
+ * pinned: what the fold never hides, between the head and the trail (a turn's subagents, AgentRows).
  */
-export function Trace(props: Parameters<typeof TraceHeader>[0] & { motion?: Motion; since?: number; children?: JSX.Element }) {
+export function Trace(props: Parameters<typeof TraceHeader>[0] & { motion?: Motion; since?: number; pinned?: JSX.Element; children?: JSX.Element }) {
   const [head, local] = splitProps(props, ["orb", "status", "time", "work", "latest", "live", "tone", "open", "onToggle"]);
   const { body, opens } = foldBody({ get opens() { return local.opens; }, get open() { return head.open; }, get children() { return local.children; } });
   return <div class="ui-disclosure ui-trace-fold" data-open={head.open && opens() ? "true" : "false"} data-live={head.live ? "" : undefined} {...motionOf(local.motion)} style={sinceOf(local.since)}>
     <TraceHeader {...head} opens={opens()} />
+    {local.pinned}
     <div class="ui-disclosure-body" aria-hidden={!head.open}>{body()}</div>
   </div>;
 }
