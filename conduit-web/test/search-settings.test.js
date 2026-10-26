@@ -18,14 +18,15 @@ test("SearchSettingsStore creates safe defaults and never returns credentials", 
     await fixture.store.initialize();
     const config = JSON.parse(await fs.readFile(fixture.filePath, "utf8"));
     assert.equal(config.workflow, "none");
-    assert.deepEqual(config.searchRouting.providers, ["openai", "brave", "exa", "parallel", "tavily", "perplexity"]);
+    // No route is seeded: Automatic is pi-web-access's own chain.
+    assert.equal(config.searchRouting, undefined);
     assert.equal((await fs.stat(fixture.filePath)).mode & 0o777, 0o600);
 
     await fixture.store.setProvider("brave", "BSA-test-key");
     const view = await fixture.store.publicView();
     const brave = view.providers.find((provider) => provider.id === "brave");
-    assert.deepEqual({ configured: brave.configured, stored: brave.stored, source: brave.source, removable: brave.removable }, {
-      configured: true,
+    assert.deepEqual({ ready: brave.ready, stored: brave.stored, source: brave.source, removable: brave.removable }, {
+      ready: true,
       stored: true,
       source: "environment",
       removable: true,
@@ -46,17 +47,16 @@ test("SearchSettingsStore removes stored keys while preserving environment fallb
 
     const result = await fixture.store.removeProvider("brave");
     assert.equal(result.removed, true);
-    assert.equal((await fixture.store.publicView()).providers.find((provider) => provider.id === "brave").configured, false);
+    assert.equal((await fixture.store.publicView()).providers.find((provider) => provider.id === "brave").ready, false);
   } finally {
     await fs.rm(fixture.root, { recursive: true, force: true });
   }
 });
 
-test("SearchSettingsStore rejects disabled providers and invalid keys", async () => {
+test("SearchSettingsStore rejects unknown providers and invalid keys", async () => {
   const fixture = await temporaryStore();
   try {
     await fixture.store.initialize();
-    await assert.rejects(fixture.store.setProvider("exa", "key"), { code: "search_provider_locked" });
     await assert.rejects(fixture.store.setProvider("brave", ""), { code: "search_key_invalid" });
     await assert.rejects(fixture.store.setProvider("missing", "key"), { code: "search_provider_unknown" });
   } finally {
