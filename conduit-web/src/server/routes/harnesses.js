@@ -87,6 +87,7 @@ export function registerHarnessRoutes(app, { backends, harnessModels, preference
       if (!adapter?.health) return row;
       try {
         const health = await healthOf(item.id, adapter);
+        if (!health) return row;
         return { ...row, status: health.configured ? "ready" : "authentication_required",
           version: health.transportVersion || row.version || null };
       } catch {
