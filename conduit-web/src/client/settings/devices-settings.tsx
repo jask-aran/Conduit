@@ -31,6 +31,19 @@ type Shown = { part: NetworkClient; node?: Node; mine: boolean };
 type ShownDevice = { id: string; name: string; paired: boolean; clients: Shown[] };
 type AddWorkspace = (input: { mode: "node"; nodeId: string; rootId: string }) => Promise<boolean>;
 
+/** Clients told apart by nothing but their number are one line: two tabs of Chrome on Windows, "Windows · 2 tabs". */
+const together = (clients: Shown[]): Shown[] => {
+  const lines = new Map<string, { shown: Shown; count: number }>();
+  for (const shown of clients) {
+    const key = shown.node || shown.mine ? `own:${lines.size}` : `${shown.part.headed}|${shown.part.name}|${shown.part.meta}|${shown.part.online}`;
+    const line = lines.get(key);
+    if (line) line.count += 1; else lines.set(key, { shown, count: 1 });
+  }
+  return [...lines.values()].map(({ shown, count }) => count < 2 ? shown
+    : { ...shown, part: { ...shown.part, meta: [shown.part.meta, shown.part.headed === "browser" ? `${count} tabs` : `×${count}`].filter(Boolean).join(" · ") } });
+};
+/** A shared folder's name: the last part of its path (the whole path is its title). */
+const folderName = (label: string) => label.split(/[\\/]/).filter(Boolean).at(-1) || label;
 const isWorkspace = (project: Project) => project.kind === "workspace" || ["linked", "created", "cloned"].includes(project.origin || "");
 /** The workspaces a client mounts: each is placed on one (an older one with no node is the hub's). */
 const mountedOn = (projects: Project[], node: Node) => projects.filter((project) => isWorkspace(project) && (project.nodeId ? project.nodeId === node.id : Boolean(node.local)));
@@ -136,8 +149,8 @@ export function DevicesSettingsTile(props: { projects: Project[]; onAddWorkspace
     <For each={mounted(node)}>{(project) =>
       <NavRow icon={<WorkspaceGlyph appearance={project.workspaceAppearance} />} meta={named ? node.name : undefined} onClick={() => props.onOpenWorkspace(project)}>{project.name}</NavRow>}</For>
     <For each={unmounted(node)}>{(root) =>
-      <NavRow icon={<Icons.Folder />} meta="Mount" title={`Mount ${root.label} as a workspace`}
-        onClick={() => void props.onAddWorkspace({ mode: "node", nodeId: node.id, rootId: root.id })}>{root.label}</NavRow>}</For>
+      <NavRow icon={<Icons.Folder />} meta="Add as workspace" title={`${root.label}: shared, not a workspace yet. Add it as one.`}
+        onClick={() => void props.onAddWorkspace({ mode: "node", nodeId: node.id, rootId: root.id })}>{folderName(root.label)}</NavRow>}</For>
   </>;
 
   /**
@@ -151,7 +164,7 @@ export function DevicesSettingsTile(props: { projects: Project[]; onAddWorkspace
     return <>
       <SettingColumns>
         <SettingColumn title="Clients">
-          <For each={device.clients}>{(shown) => <SettingLine label={<>{shown.part.name}<Show when={shown.part.meta}><small>{shown.part.meta}</small></Show></>}>
+          <For each={together(device.clients)}>{(shown) => <SettingLine label={<>{shown.part.name}<Show when={shown.part.meta}><small>{shown.part.meta}</small></Show></>}>
             <StatusDot label={status(shown)} tone={shown.part.online ? "success" : "muted"} />
           </SettingLine>}</For>
           <Show when={companion && paired()}>
@@ -212,7 +225,7 @@ export function DevicesSettingsTile(props: { projects: Project[]; onAddWorkspace
     <Show when={!readable()}><SettingNote tone="quiet">A browser can only ask the server it is on. Switch to {entry()?.name} to see its network.</SettingNote></Show>
 
     <Show when={devices()}><NetworkMap hub={{ name: server(), device: hubDevice()?.name, meta: hubNode() ? `on ${hubNode()!.name}` : undefined }}
-      devices={network().map((device) => ({ id: device.id, name: device.name, clients: device.clients.map((shown) => shown.part) }))} /></Show>
+      devices={network().map((device) => ({ id: device.id, name: device.name, clients: together(device.clients).map((shown) => shown.part) }))} /></Show>
 
     <Show when={active() && thisDevice()}>{(device) => <SettingGroup title="This device">
       {/* Its name, large: what the network calls this device, renamed here only. */}
