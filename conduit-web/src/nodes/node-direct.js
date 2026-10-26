@@ -234,12 +234,15 @@ export function serveDirect({ secret, ptySecret = null, call, log = console, cer
         const grant = attach?.type === "attach" ? verifyGrant(ptySecret(), attach.grant, Date.now(), "pty") : null;
         // The key is the grant's own: a sealed channel for one grant never carries another. A page only by the origin
         // the grant names (nothing like CORS holds a WebSocket back); the apps by theirs.
+        // Nothing is sealed to a socket before it has spent the grant: its sealed attach opens on any socket that
+        // names its nonce (a replay), and two sockets sealing under one key would count from the same nonce. Only the
+        // socket that spends it is ever sealed to; the rest are closed with a code.
         if (!grant || grant.nonce !== nonce || (origin && !installedClientOrigin(origin) && grant.origin !== origin)) {
-          return refuse("direct_grant_invalid", "This terminal needs a grant from the hub", 4001);
+          return ws.close(4001, "direct_grant_invalid");
         }
         const now = Date.now();
         for (const [used, expires] of spent) if (expires <= now) spent.delete(used);
-        if (spent.has(grant.nonce)) return refuse("direct_grant_invalid", "That grant was already used", 4001);
+        if (spent.has(grant.nonce)) return ws.close(4001, "direct_grant_invalid");
         spent.set(grant.nonce, grant.expires);
         const attached = shells.attach(grant.pty, { takeover: attach.takeover === true, cols: dimension(attach.cols, 80), rows: dimension(attach.rows, 24) }, (event) => {
           if (event.kind === "data") return output.append("pty", event.bytes);

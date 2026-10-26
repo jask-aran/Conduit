@@ -860,7 +860,10 @@ and kills terminals; only typing and output move.
   the nonce; every frame after, both ways, the grant included, is AES-256-GCM
   under that key, its nonce the direction and a count of frames, so nothing
   between them can read, change, replay or move a frame, and one that does
-  not open ends the socket. Any route that reaches the node will do, a LAN in
+  not open ends the socket. The node seals nothing to a socket until it has
+  spent the grant there: a replayed attach opens on any socket that names its
+  nonce, and two sockets sealed to under one key would count from the same
+  nonce. Any route that reaches the node will do, a LAN in
   plain HTTP included; a relay passes on only what it cannot open. What is
   left to the network is stopping it, and then the hub's way still works.
   Sealing is WebCrypto's in the client, which the apps and any https or
