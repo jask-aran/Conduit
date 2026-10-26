@@ -899,8 +899,11 @@ shell as the device's user):
   could sign them too. A relayed environment's link is its relay's: the
   relay says whether that is one nobody else reads, and is trusted to
   (decision 25), so WSL relayed by a Windows app on https or loopback gets
-  direct reads and terminals like the app. A node whose link to the hub is
-  plain HTTP gives no key: its reads are checked with the pairing key's hash
+  direct reads and terminals like the app. A node paired by the hub's
+  address in plain HTTP reaches it over TLS on the same port once it knows
+  the hub's identity, pinned to the certificate that identity attests
+  (find-hub.js; its first run learns it), so its link is confidential too.
+  A node whose link to the hub is still plain HTTP gives no key: its reads are checked with the pairing key's hash
   as in v0.8.7, and it attaches no terminal directly. A grant from before a
   node restarted is nothing.
 - **The tailnet is Tailscale's own adapter**, not any 100.64/10 address: that
@@ -934,4 +937,6 @@ ms (Node and WebCrypto measured), well under what a LAN takes to carry them.
 - A node that seals refuses an unsealed read on a plain LAN route
   (`direct_seal_required`), so a v0.8.7 client reads such a node through the
   hub. A node with no run key (a plain-HTTP link to its hub) cannot seal, and
-  reads plainly as in v0.8.7; trusted networks are for that case.
+  reads plainly as in v0.8.7. That is now only a node's first run after
+  pairing by a plain address, before it knows its hub's identity: so
+  nothing is left for a "trusted network" to switch off, and none was built.
