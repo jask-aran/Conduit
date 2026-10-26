@@ -295,6 +295,12 @@ chat's question card; `ui.notify` is `extension_notice`. Tools see
 `hasUI: false`, commands `true` (pi-web-access opens its curator in a browser on
 the server's machine when it is true).
 
+A `subagent` call in the background leaves a child the parent's Esc does not
+reach; its answer comes back as a follow-up the conversation takes, drawn as a
+user row with `origin: "harness"` ("sa-1 finished: …"). Deleting the chat stops
+its background children (`discard`). The chat's spend is pi-durable's usage
+ledger, its own and its background children's.
+
 ChatGPT Web declares least because the conversation lives in somebody else's
 account and Conduit follows it by cursor. The client hides what is not there,
 so that profile simply has no fork, no steer and no tool rows.
