@@ -282,8 +282,18 @@ export class OpenCodeAdapter extends EventEmitter {
     return whole ? result : result?.data ?? result;
   }
 
-  health() {
-    return this.request("GET", "/info", { start: false, timeout: 3000 }).then((info) => ({ configured: true, transportVersion: info.version || null }));
+  /**
+   * Its service runs on demand (connect() starts it for a chat), so one not
+   * running yet is not a fault: null, and what detection found stands.
+   */
+  async health() {
+    try {
+      const info = await this.request("GET", "/info", { start: false, timeout: 3000 });
+      return { configured: true, transportVersion: info.version || null };
+    } catch (error) {
+      if (/service is not running/.test(error?.message || "")) return null;
+      throw error;
+    }
   }
 
   async launch(context, { model = "", thinkingLevel = "", forceModel = false } = {}) {
@@ -649,7 +659,15 @@ export class OpenCodeAdapter extends EventEmitter {
   }
 
   syncMessages(record, rows) {
+    const answered = rows.some((row) => row.type === "assistant" && Number(row.time?.created || 0) >= record.promptStartedAt);
     for (const row of [...rows].reverse()) {
+      // A turn that failed before any answer (a provider's sign-in refused)
+      // leaves only its ending, carrying the error: that is the answer shown.
+      if (row.type === "idle" && !answered && errorOf(row) && Number(row.time?.created || 0) >= record.promptStartedAt) {
+        const state = this.liveMessage(record, row.id, row.time?.created);
+        if (!state.closed) this.closeLiveMessage(record, { ...row, content: [] }, state, "error");
+        continue;
+      }
       if (row.type !== "assistant" || Number(row.time?.created || 0) < record.promptStartedAt) continue;
       const state = this.liveMessage(record, row.id, row.time?.created);
       if (state.closed) continue;
@@ -922,6 +940,15 @@ export class OpenCodeAdapter extends EventEmitter {
         messages.push({ id: lastUser, role: "user", content, timestamp: iso(row.time?.created) });
         continue;
       }
+      // A turn that failed before any answer leaves only its ending, with the
+      // error on it (syncMessages shows it so while live).
+      if (row.type === "idle" && errorOf(row) && lastUser
+        && !messages.some((message) => message.answers === lastUser && message.role === "assistant")) {
+        messages.push({ id: row.id, role: "assistant", content: "", blocks: [], answers: lastUser,
+          stopReason: "error", interim: false, timestamp: iso(row.time?.created), provider: null, model: null,
+          errorMessage: errorOf(row) });
+        continue;
+      }
       if (row.type !== "assistant") continue;
       const blocks = blocksOf(row);
       const stopReason = stopReasonOf(row);
@@ -997,26 +1024,34 @@ export class OpenCodeAdapter extends EventEmitter {
     return { mode: "linear", leafId, tree: child ? [child] : [] };
   }
 
-  /** The models starred in OpenCode's TUI, in its order; the API has no route for them. */
-  async favouriteModels() {
+  /**
+   * What OpenCode's own model list leads with, kept by its TUI (the API has no
+   * route for it): the models starred there, the recent ones, each in its
+   * order, and the variant last used with each model.
+   */
+  async modelMemory() {
     try {
       const state = JSON.parse(await fs.readFile(path.join(stateRoot(), "opencode", "model.json"), "utf8"));
-      return (Array.isArray(state.favorite) ? state.favorite : []).map(modelSpec).filter(Boolean);
-    } catch { return []; }
+      const specs = (list) => (Array.isArray(list) ? list : []).map(modelSpec).filter(Boolean);
+      const variants = state.variant && typeof state.variant === "object" ? state.variant : {};
+      return { favourites: specs(state.favorite), recent: specs(state.recent), variants };
+    } catch { return { favourites: [], recent: [], variants: {} }; }
   }
 
   async listAvailableModels(cwd) {
-    const [all, favourites] = await Promise.all([this.request("GET", "/model", { directory: cwd }), this.favouriteModels()]);
-    // Favourites are the catalogue when there are any; otherwise every model.
-    const models = favourites.length
-      ? favourites.map((spec) => (all || []).find((model) => modelSpec(model) === spec)).filter(Boolean)
-      : all;
-    return (models || []).map((model) => {
+    const [all, memory] = await Promise.all([this.request("GET", "/model", { directory: cwd }), this.modelMemory()]);
+    // OpenCode can reach hundreds of models; its picker leads with the starred
+    // and recent ones, and so does Conduit's, offering only those. Every model
+    // only while there are none it still has.
+    const led = [...new Set([...memory.favourites, ...memory.recent])]
+      .map((spec) => (all || []).find((model) => modelSpec(model) === spec)).filter(Boolean);
+    return (led.length ? led : all || []).map((model) => {
       const spec = modelSpec(model);
       const thinkingLevels = (Array.isArray(model.variants) ? model.variants : []).map((variant) => variant?.id).filter(Boolean);
+      const remembered = thinkingLevels.includes(memory.variants[spec]) ? memory.variants[spec] : "";
       return { provider: model.providerID || "opencode", id: model.id || model.modelID, spec,
         label: model.name || spec, reasoning: thinkingLevels.length > 0,
-        thinkingLevels, defaultThinkingLevel: model.variant || thinkingLevels[0] || "" };
+        thinkingLevels, defaultThinkingLevel: remembered || model.variant || thinkingLevels[0] || "" };
     }).filter((model) => model.spec);
   }
 
