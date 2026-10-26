@@ -165,7 +165,7 @@ const SEARCH_FETCHING: Array<{ key: SearchFetching; label: string; title: string
 const SEARCH_TIME_LIMITS: Array<{ ms: number | null; label: string }> = [
   { ms: null, label: "None" }, { ms: 15_000, label: "15 s" }, { ms: 30_000, label: "30 s" }, { ms: 60_000, label: "1 min" }, { ms: 120_000, label: "2 min" },
 ];
-const CLOUDFLARE_NEEDED = "Needs Cloudflare Workers AI: add its API key and account ID under Providers, or give the server CLOUDFLARE_API_KEY and CLOUDFLARE_ACCOUNT_ID.";
+const CLOUDFLARE_NEEDED = "Needs Cloudflare Workers AI: add its API key and account ID in Models & accounts, or give the server CLOUDFLARE_API_KEY and CLOUDFLARE_ACCOUNT_ID.";
 
 const voiceSelectionFromProfile = (profile: VoiceExecutionProfile): VoiceLocalSelection => ({
   modelId: profile.modelId,
