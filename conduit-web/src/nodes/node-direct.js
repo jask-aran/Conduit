@@ -11,8 +11,7 @@ import { readWorkspaceFile, readWorkspaceFileMetadata, resolveInspectorPath } fr
 import os from "node:os";
 import { WebSocketServer } from "ws";
 import { PtyOutputBatcher } from "../pty-output-batcher.js";
-import { startWebSocketKeepalive } from "../server/ws-keepalive.js";
-import { directAddresses, proofKey, proofOf, verifyGrant } from "./direct.js";
+import { boundProofOf, directAddresses, proofKey, proofOf, verifyGrant } from "./direct.js";
 import { decode, encode, HANDLE_METHODS, METHOD_GRANTS } from "./protocol.js";
 
 // The largest file sent, a chunk at a time, and how many are read at once: past either, the hub's way.
@@ -35,7 +34,7 @@ const dimension = (value, fallback) => {
  * agent's own guarded environment call, so a grant reaches no further than the hub's calls do: the place must be a
  * shared root, the path inside it, and kept-back files stay kept back.
  */
-export function serveDirect({ secret, call, log = console, certificate = null, shells = null }) {
+export function serveDirect({ secret, ptySecret = null, call, log = console, certificate = null, shells = null }) {
   // The agent's calls, as the hub's execution environment would make them over the socket; readers opened for one
   // request are that request's, and closed with it.
   const local = (held) => ({
@@ -62,11 +61,12 @@ export function serveDirect({ secret, call, log = console, certificate = null, s
 
   // Answered on loopback and the addresses offered (its networks', its tailnet's) only: never on a public one. Read
   // as each request comes, since a laptop's addresses change, and kept a moment.
-  let offered = { at: 0, addresses: new Set() };
-  const isOffered = (address) => {
-    if (Date.now() - offered.at > 10_000) offered = { at: Date.now(), addresses: new Set(directAddresses(os.networkInterfaces()).map((item) => item.address)) };
-    return offered.addresses.has(address);
+  let offered = { at: 0, addresses: new Map() };
+  const reachOf = (address) => {
+    if (Date.now() - offered.at > 10_000) offered = { at: Date.now(), addresses: new Map(directAddresses(os.networkInterfaces()).map((item) => [item.address, item.reach])) };
+    return offered.addresses.get(address) || null;
   };
+  const isOffered = (address) => Boolean(reachOf(address));
   let reading = 0;
   const answer = async (request, response) => {
     const arrivedAt = String(request.socket.localAddress || "").replace(/^::ffff:/, "");
@@ -101,10 +101,13 @@ export function serveDirect({ secret, call, log = console, certificate = null, s
       const challenge = url.searchParams.get("c");
       if (asked && !response.hasHeader("Access-Control-Allow-Origin")) letIn(asked);
       if (!nonce || !challenge || nonce.length > 64 || challenge.length > 128) return json(200, { ok: true });
-      return json(200, { ok: true, proof: proofOf(proofKey(secret, nonce), challenge) });
+      // Bound to where it was reached, as the client checks it; unbound as well, for v0.8.7 clients' reads.
+      const key = proofKey(secret(), nonce);
+      const where = `${request.socket.encrypted ? String(request.socket.servername || "").toLowerCase() : arrivedAt}:${request.socket.localPort}`;
+      return json(200, { ok: true, proof: proofOf(key, challenge), bound: boundProofOf(key, challenge, where) });
     }
     if (request.method !== "GET" || url.pathname !== "/file") return json(404, { error: "not_found" });
-    const grant = verifyGrant(secret, String(request.headers.authorization || "").replace(/^Bearer\s+/i, ""));
+    const grant = verifyGrant(secret(), String(request.headers.authorization || "").replace(/^Bearer\s+/i, ""));
     if (!grant) return json(401, { error: "direct_grant_invalid", message: "This read needs a grant from the hub" });
     if (asked && grant.origin === asked && !response.hasHeader("Access-Control-Allow-Origin")) letIn(asked);
     const relative = url.searchParams.get("path");
@@ -171,16 +174,20 @@ export function serveDirect({ secret, call, log = console, certificate = null, s
     }
   };
   /*
-   * Terminals attached here directly (plan: direct terminals): a WebSocket at `/pty`, let in by the hub's grant for one
-   * terminal, sent as its first frame rather than in the address. From then it speaks what the hub's terminal socket
-   * speaks (terminal-stream.js), so a client cannot tell which way it is attached. `shells` keeps who holds each
-   * terminal, the hub's clients included (node-agent.js).
+   * Terminals attached here directly (plan: direct terminals): a WebSocket at `/pty`. The client first has this node
+   * prove itself on that very connection, bound to where it was reached (a challenge answered on `/health` says
+   * nothing about a socket opened later); only then does it send the hub's grant for one terminal, never in the
+   * address. From then it speaks what the hub's terminal socket speaks (terminal-stream.js), so a client cannot tell
+   * which way it is attached. `shells` keeps who holds each terminal, the hub's clients included (node-agent.js).
+   * A grant is checked against `ptySecret()`, the key this run of the node gave the hub over a link nobody else reads;
+   * none, and no terminal is attached here.
    */
   const sockets = shells ? new WebSocketServer({ noServer: true, maxPayload: MAX_INPUT_BYTES }) : null;
   // A grant attaches once: its nonce is kept until it would have run out anyway.
   const spent = new Map();
-  const attachHere = (ws, origin) => {
-    startWebSocketKeepalive(ws);
+  // Sockets not yet attached: few, small and brief, since anyone who reaches the port may open one.
+  let unattached = 0;
+  const attachHere = (ws, origin, where) => {
     const send = (message) => { if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(message)); };
     const refuse = (code, message, close) => { send({ type: "client_error", code, message }); ws.close(close, code); };
     const output = new PtyOutputBatcher((_id, bytes) => {
@@ -188,16 +195,35 @@ export function serveDirect({ secret, call, log = console, certificate = null, s
       if (ws.bufferedAmount > PENDING_LIMIT) return ws.close(1013, "Terminal client is too slow");
       ws.send(bytes, { binary: true });
     });
+    // A client that stops answering (a laptop asleep, a network gone) lets go of the terminal within a minute.
+    let answered = true;
+    ws.on("pong", () => { answered = true; });
+    const beat = setInterval(() => {
+      if (!answered) return ws.terminate();
+      answered = false;
+      try { ws.ping(); } catch {}
+    }, 20_000);
+    beat.unref?.();
     let shell = null;
-    let asked = false;
-    const waiting = setTimeout(() => ws.close(1008, "attach_expected"), 10_000);
+    let proved = false;
+    let waiting = true;
+    unattached += 1;
+    const settle = () => { if (waiting) { waiting = false; unattached -= 1; clearTimeout(timer); } };
+    const timer = setTimeout(() => ws.close(1008, "attach_expected"), 5000);
     ws.on("message", (data, isBinary) => {
-      if (!asked) {
-        asked = true;
-        clearTimeout(waiting);
-        let attach = null;
-        try { attach = isBinary ? null : JSON.parse(String(data)); } catch {}
-        const grant = attach?.type === "attach" ? verifyGrant(secret, attach.grant, Date.now(), "pty") : null;
+      if (waiting) {
+        let frame = null;
+        try { frame = isBinary || data.length > 8192 ? null : JSON.parse(String(data)); } catch {}
+        const key = ptySecret?.();
+        if (!proved) {
+          const nonce = typeof frame?.nonce === "string" && frame.nonce.length <= 64 ? frame.nonce : "";
+          const challenge = typeof frame?.challenge === "string" && frame.challenge.length <= 128 ? frame.challenge : "";
+          if (frame?.type !== "prove" || !nonce || !challenge || !key) return refuse("direct_grant_invalid", "This terminal needs a grant from the hub", 4001);
+          proved = true;
+          return send({ type: "proof", proof: boundProofOf(proofKey(key, nonce), challenge, where) });
+        }
+        settle();
+        const grant = frame?.type === "attach" && key ? verifyGrant(key, frame.grant, Date.now(), "pty") : null;
         // A page only by the origin the grant names (nothing like CORS holds a WebSocket back); the apps by theirs.
         if (!grant || (origin && !installedClientOrigin(origin) && grant.origin !== origin)) {
           return refuse("direct_grant_invalid", "This terminal needs a grant from the hub", 4001);
@@ -206,7 +232,7 @@ export function serveDirect({ secret, call, log = console, certificate = null, s
         for (const [nonce, expires] of spent) if (expires <= now) spent.delete(nonce);
         if (spent.has(grant.nonce)) return refuse("direct_grant_invalid", "That grant was already used", 4001);
         spent.set(grant.nonce, grant.expires);
-        const attached = shells.attach(grant.pty, { takeover: attach.takeover === true, cols: dimension(attach.cols, 80), rows: dimension(attach.rows, 24) }, (event) => {
+        const attached = shells.attach(grant.pty, { takeover: frame.takeover === true, cols: dimension(frame.cols, 80), rows: dimension(frame.rows, 24) }, (event) => {
           if (event.kind === "data") return output.append("pty", event.bytes);
           output.flushAll();
           if (event.kind === "exit") {
@@ -235,15 +261,22 @@ export function serveDirect({ secret, call, log = console, certificate = null, s
         send({ type: "client_error", code: error.code || "pty_control_invalid", message: error.message || "Terminal control failed" });
       }
     });
-    ws.on("close", () => { clearTimeout(waiting); output.flushAll(); shell?.detach(); });
+    ws.on("close", () => { settle(); clearInterval(beat); output.flushAll(); shell?.detach(); });
     ws.on("error", () => {});
   };
+  // Over plain HTTP only on this machine or the tailnet (WireGuard); on its networks only over https. What is typed
+  // into a shell never crosses a network anyone else can read or change.
   const upgrade = (request, socket, head) => {
     const arrivedAt = String(request.socket.localAddress || "").replace(/^::ffff:/, "");
-    if (!/^127\./.test(arrivedAt) && arrivedAt !== "::1" && !isOffered(arrivedAt)) return socket.destroy();
+    const local = /^127\./.test(arrivedAt) || arrivedAt === "::1";
+    if (!local && !isOffered(arrivedAt)) return socket.destroy();
     if (!sockets || new URL(request.url || "/", "http://127.0.0.1").pathname !== "/pty") return socket.destroy();
+    const secure = Boolean(request.socket.encrypted);
+    if (!secure && !local && reachOf(arrivedAt) !== "tailnet") return socket.destroy();
+    if (unattached >= 16) return socket.destroy();
     const origin = typeof request.headers.origin === "string" ? request.headers.origin : "";
-    sockets.handleUpgrade(request, socket, head, (ws) => attachHere(ws, origin));
+    const where = `${secure ? String(request.socket.servername || "").toLowerCase() : arrivedAt}:${request.socket.localPort}`;
+    sockets.handleUpgrade(request, socket, head, (ws) => attachHere(ws, origin, where));
   };
 
   const server = http.createServer(answer);

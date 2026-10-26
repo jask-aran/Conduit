@@ -63,7 +63,10 @@ export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: 
   direct = false, certificate = null,
   // The hub's identity `{ id, key }` as it last said it, and where to keep what it says (its routes, its identity);
   // `findHub(hub)` looks for it on this network when no way reaches it (find-hub.js).
-  hub = null, onRoutes = null, findHub = null }) {
+  hub = null, onRoutes = null, findHub = null,
+  // Whether the way main is reached is one nobody else can read: https, or this machine. A relayed environment's is
+  // its relay's, which this side cannot see, so it says no.
+  confidential = (url) => url.protocol === "wss:" || (url.protocol === "ws:" && /^(127\.|localhost$|\[::1\]$)/.test(url.hostname)) }) {
   // Every way main can be reached, best first (the address it was paired by, then those it has told this node of):
   // a failed attempt tries the next; the one that worked is tried first again after a drop, and a whole round failing
   // looks for the hub by its advertisement before backing off (it may have moved to another address).
@@ -83,6 +86,12 @@ export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: 
   const processes = new NodeProcesses({ shellEnv, scope: mainUrl });
   // Writes and commands by action id: they outlive a socket, and are never done twice.
   const receipts = new Receipts();
+  // The key direct grants are checked with, made afresh by each run (so a grant from before a restart is nothing) and
+  // given to main only over a confidential link: the pairing key may have crossed a LAN in plain HTTP, and what it
+  // could sign would then be anyone's. Without it reads use the pairing key's hash as v0.8.7 did, and no terminal is
+  // attached here directly.
+  const grantKey = crypto.randomBytes(32).toString("base64url");
+  let granting = false;
   // Who is typing into each terminal: main, for a client of its own, or a client attached here directly
   // (node-direct.js). One at a time, as main keeps it among its own clients; a newcomer takes over only when asked.
   // Main's hold is per terminal, not per socket: its clients outlive a dropped connection, and follow again after.
@@ -133,7 +142,7 @@ export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: 
     socket.send(JSON.stringify({ type: "direct", direct: JSON.parse(toldDirect) }));
   };
   const directInfo = () => ({ port: directPort, addresses: directAddresses(os.networkInterfaces()), pty: true,
-    ...(served?.secureRoute() ? { tls: served.secureRoute() } : {}) });
+    ...(granting ? { grantKey } : {}), ...(served?.secureRoute() ? { tls: served.secureRoute() } : {}) });
   let attempt = 0;
   let stopped = false;
   let timer = null;
@@ -198,6 +207,7 @@ export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: 
     const { url: via, ca } = ways[way % ways.length];
     const url = new URL("/v0/nodes/connect", via);
     url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
+    const secret = confidential(url);
     const ws = dial(url, { key, ca });
     socket = ws;
     const calls = new Map();
@@ -231,6 +241,7 @@ export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: 
       tried = 0;
       // Main follows again what its clients still hold; a main that started over holds nothing.
       link = here;
+      granting = secret;
       for (const [procId, held] of holders) if (held === HUB) holders.delete(procId);
       // Roots go by id; the path is for people to read, main never sends it back.
       send({ type: "hello", version: NODE_PROTOCOL_VERSION, name, platform: process.platform, boot: receipts.boot,
@@ -507,7 +518,9 @@ export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: 
 
   // Listening first, so the first hello can say where.
   if (direct) {
-    served = serveDirect({ secret: keySecret(key), call: envCall, log, certificate, shells: directShells });
+    const legacy = keySecret(key);
+    served = serveDirect({ secret: () => (granting ? grantKey : legacy), ptySecret: () => (granting ? grantKey : null),
+      call: envCall, log, certificate, shells: directShells });
     void served.listening.then((port) => { directPort = port; if (!stopped) connect(); });
     // The https route comes when a certificate does: told to main then, and in every hello after.
     served.onSecureChange(tellDirect);

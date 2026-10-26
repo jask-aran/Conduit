@@ -41,8 +41,10 @@ function directOf(direct, lanName = null) {
   const names = (Array.isArray(direct.tls?.names) ? direct.tls.names : []).map((name) => String(name).toLowerCase())
     .filter((name) => /^[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(name) && (name.endsWith(".ts.net") || name === lanName)).slice(0, 4);
   const tls = Number.isInteger(direct.tls?.port) && direct.tls.port > 0 && names.length ? { port: direct.tls.port, names } : null;
-  // Whether it also lets a client attach to its terminals itself (node-direct.js), as a v0.8.7 node does not.
-  return { port: direct.port, addresses, tls, pty: direct.pty === true };
+  // Whether it also lets a client attach to its terminals itself (node-direct.js), as a v0.8.7 node does not, and the
+  // key this run of it signs grants with, given only over a link nobody else reads (node-agent.js).
+  const grantKey = typeof direct.grantKey === "string" && /^[A-Za-z0-9_-]{32,128}$/.test(direct.grantKey) ? direct.grantKey : null;
+  return { port: direct.port, addresses, tls, pty: direct.pty === true, grantKey };
 }
 
 export class NodeHub extends EventEmitter {
@@ -269,7 +271,8 @@ export class NodeHub extends EventEmitter {
    * or https. A file may cross a LAN in the clear; what is typed into a shell, or into it, never does.
    */
   async directPtyGrant(nodeId, procId, origin = "") {
-    if (!this.live.get(nodeId)?.direct?.pty || typeof procId !== "string") return null;
+    const direct = this.live.get(nodeId)?.direct;
+    if (!direct?.pty || !direct.grantKey || typeof procId !== "string") return null;
     const grant = await this.signDirect(nodeId, { pty: procId }, DIRECT_PTY_TTL_MS, origin);
     if (!grant) return null;
     const routes = grant.routes.filter((route) => route.reach === "loopback" || route.reach === "tailnet" || route.url.startsWith("https:"));
@@ -280,6 +283,9 @@ export class NodeHub extends EventEmitter {
     const node = this.live.get(nodeId);
     const record = await this.get(nodeId);
     if (!node?.ready || !node.direct || !record?.keyHash) return null;
+    // The run's own key where it gave one; a v0.8.7 node, or one reached over plain HTTP, checks reads with its
+    // pairing key's hash.
+    const secret = node.direct.grantKey || record.keyHash;
     const expiresAt = Date.now() + ttl;
     const { port, addresses } = node.direct;
     // Nearest first: its own machine's loopback (only the app beside it can use that), then its networks', its tailnet's.
@@ -290,9 +296,11 @@ export class NodeHub extends EventEmitter {
     const routes = [{ url: `http://127.0.0.1:${port}`, reach: "loopback" },
       ...addresses.map(({ address, reach }) => ({ url: `http://${address}:${port}`, reach })), ...secure];
     const nonce = crypto.randomBytes(12).toString("base64url");
-    return { nodeId, routes, expiresAt, nonce, proof: proofKey(record.keyHash, nonce),
+    return { nodeId, routes, expiresAt, nonce, proof: proofKey(secret, nonce),
+      // Whether its proof is bound to the address it was reached at (direct.js): a client then takes nothing else.
+      bound: node.direct.pty,
       // The page it is for, when one asked: the node lets that origin read the answer.
-      token: signGrant(record.keyHash, { ...claims, expires: expiresAt, nonce, ...(origin ? { origin } : {}) }) };
+      token: signGrant(secret, { ...claims, expires: expiresAt, nonce, ...(origin ? { origin } : {}) }) };
   }
 
   async computer(nodeId, method, at) {

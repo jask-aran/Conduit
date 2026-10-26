@@ -866,3 +866,34 @@ and kills terminals; only typing and output move.
 - A terminal that ends while the hub does not follow it is said to the hub,
   so it is not listed as running (this was true before for terminals nobody
   had open).
+
+From the security review of the first build (a grant to a terminal is a
+shell as the device's user):
+
+- **Proofs are bound to where the node was reached.** The node answers the
+  challenge over the address and port it was reached on (or the name it was
+  asked for over https), and the client checks it against what it dialled.
+  Before, a process on the client's machine listening on the node's port
+  could pass the challenge through to the real node and collect the grant.
+  A terminal's socket also proves itself on that connection before the grant
+  is sent: a route proved a minute ago says nothing about the socket opened
+  now. A v0.8.7 node's unbound proof is still taken for reads only; the hub
+  says which a grant expects, so a relay cannot strip the bound one.
+- **Grants are signed with a key each run of the node makes**, given to the
+  hub only over https or loopback, never kept on disk. The pairing key may
+  cross a LAN in plain HTTP (a node paired by a private address), and grants
+  signed with its hash were anyone's who saw it once; the hub's data at rest
+  could sign them too. A node whose link to the hub is plain HTTP (or is
+  relayed) gives no key: its reads are checked with the pairing key's hash
+  as in v0.8.7, and it attaches no terminal directly. A grant from before a
+  node restarted is nothing.
+- **The tailnet is Tailscale's own adapter**, not any 100.64/10 address: that
+  range is also carriers' shared address space.
+- **The node enforces the transport itself**: `/pty` over plain HTTP only on
+  loopback or the tailnet. Sockets not yet attached are at most 16, five
+  seconds, 8 KB a frame. A client that stops answering pings lets go of its
+  terminal within forty seconds.
+- Taken knowingly: every LAN node holds the one wildcard certificate key, so a
+  compromised LAN node could stand in for another's LAN name over https
+  (one certificate per node would end it); and a terminal attached directly
+  stays attached after its client signs out, as one through the hub does.

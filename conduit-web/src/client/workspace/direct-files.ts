@@ -11,7 +11,8 @@ import { isInstalledClient } from "../platform/installed-client.ts";
  * (its tailnet name, where Tailscale gives it a certificate), and is let in by the origin the grant names.
  */
 type Route = { url: string; reach: "loopback" | "private" | "tailnet" };
-export type Grant = { nodeId: string; routes: Route[]; token: string; expiresAt: number; nonce: string; proof: string };
+// `bound`: the node binds its proof to the address it was reached at, and nothing less is taken from it.
+export type Grant = { nodeId: string; routes: Route[]; token: string; expiresAt: number; nonce: string; proof: string; bound?: boolean };
 
 const hubPath = (projectId: string, query: string) => `/v0/projects/${encodeURIComponent(projectId)}/file?${query}`;
 
@@ -71,20 +72,31 @@ export function forgetRoute(grant: Grant) {
 
 /**
  * Every address asked at once, the nearest that proves it is this node taken as soon as the nearer ones have not: a
- * challenge only the node can answer with the hub's key for this grant (nodes/direct.js), so the grant is never
- * handed to whatever else answers there.
+ * challenge only the node can answer with the hub's key for this grant (nodes/direct.js), bound to the address it
+ * was reached at -- so something on this machine passing the challenge on to the node from its own port is caught,
+ * and the grant is never handed to whatever else answers there.
  */
 async function nearest(grant: Grant): Promise<string | null> {
-  const challenge = [...crypto.getRandomValues(new Uint8Array(16))].map((byte) => byte.toString(16).padStart(2, "0")).join("");
-  const expected = await proofOf(grant.proof, challenge).catch(() => null);
-  if (!expected) return null;
+  const challenge = newChallenge();
   // A page on https may fetch only https (the node's tailnet name); the apps and a plain-HTTP page, any of them.
   const routes = isInstalledClient() || location.protocol !== "https:" ? grant.routes : grant.routes.filter((route) => route.url.startsWith("https:"));
-  const asked = routes.map((route) => fetch(`${route.url}/health?n=${encodeURIComponent(grant.nonce)}&c=${challenge}`, { signal: AbortSignal.timeout(1500), cache: "no-store" })
-    .then((response) => response.ok ? response.json() as Promise<{ proof?: string }> : null)
-    .then((body) => body?.proof === expected, () => false));
+  const asked = routes.map(async (route) => {
+    const expected = await (grant.bound ? boundProof(grant.proof, challenge, route.url) : proofOf(grant.proof, challenge)).catch(() => null);
+    if (!expected) return false;
+    return fetch(`${route.url}/health?n=${encodeURIComponent(grant.nonce)}&c=${challenge}`, { signal: AbortSignal.timeout(1500), cache: "no-store" })
+      .then((response) => response.ok ? response.json() as Promise<{ proof?: string; bound?: string }> : null)
+      .then((body) => (grant.bound ? body?.bound : body?.proof) === expected, () => false);
+  });
   for (const [index, answered] of asked.entries()) if (await answered) return routes[index]!.url;
   return null;
+}
+
+export const newChallenge = () => [...crypto.getRandomValues(new Uint8Array(16))].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+
+/** The node's answer to `challenge` bound to `url`'s host and port, as it saw them (nodes/direct.js `boundProofOf`). */
+export function boundProof(key: string, challenge: string, url: string) {
+  const { protocol, hostname, port } = new URL(url);
+  return proofOf(key, `${challenge}|${hostname.toLowerCase()}:${port || (protocol === "https:" || protocol === "wss:" ? "443" : "80")}`);
 }
 
 const proofOf = async (key: string, challenge: string) => {

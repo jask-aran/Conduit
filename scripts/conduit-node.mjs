@@ -258,7 +258,7 @@ if (command === "pair") {
   console.log = console.info = console.warn = console.error;
   const pairing = pairingFor(options(args, [], ["server"]).server);
   const agent = startNodeAgent({ mainUrl: pairing.mainUrl, key: pairing.key, name: settings.name || os.hostname(), roots: pairing.roots,
-    shellEnv: buildManagedToolEnvironment(process.env), dial: stdioDialer(), browse: Boolean(pairing.browse), onShare: keepShare(pairing.mainUrl), newFolders: newFoldersFor(pairing.mainUrl) });
+    shellEnv: buildManagedToolEnvironment(process.env), dial: stdioDialer(), confidential: () => false, browse: Boolean(pairing.browse), onShare: keepShare(pairing.mainUrl), newFolders: newFoldersFor(pairing.mainUrl) });
   for (const signal of ["SIGINT", "SIGTERM"]) process.on(signal, () => { agent.stop(); process.exit(0); });
 } else if (command === "run") {
   write(settings);
