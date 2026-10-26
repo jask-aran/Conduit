@@ -61,9 +61,23 @@ export function registerHarnessRoutes(app, { backends, harnessModels, preference
     return request;
   };
 
+  // A health check can spawn the harness's CLI (OpenCode's `service status`
+  // when its service is down, ~100 ms), so an answer serves for 15 seconds.
+  const healthAnswers = new Map();
+  const healthOf = (id, adapter) => {
+    const kept = healthAnswers.get(id);
+    if (kept && Date.now() - kept.at < 15_000) return kept.health;
+    const health = Promise.resolve().then(() => adapter.health());
+    healthAnswers.set(id, { at: Date.now(), health });
+    return health;
+  };
+
   // `?refresh=1` re-probes, so installing a harness does not need a restart.
   app.get("/v0/harnesses", async (request, response) => {
-    if (request.query.refresh) await backends.refreshDetection?.();
+    if (request.query.refresh) {
+      healthAnswers.clear();
+      await backends.refreshDetection?.();
+    }
     const harnesses = await Promise.all(harnessCatalog(backends).map(async (item) => {
       // Detection already answered installed / version / signed-in for every
       // harness; only a backend that can report live health refines it.
@@ -72,7 +86,7 @@ export function registerHarnessRoutes(app, { backends, harnessModels, preference
       const adapter = item.available ? backends.adapters.get(item.id) : null;
       if (!adapter?.health) return row;
       try {
-        const health = await adapter.health();
+        const health = await healthOf(item.id, adapter);
         return { ...row, status: health.configured ? "ready" : "authentication_required",
           version: health.transportVersion || row.version || null };
       } catch {
