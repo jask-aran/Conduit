@@ -117,7 +117,8 @@ export class TurnTimings {
     let turn = this.live.get(chatId);
     const begin = () => {
       turn = { promptId: null, generationId: event.generationId || null, startedAt: now, firstOutputAt: null,
-        firstAnswerAt: null, lastOutputAt: null, endedAt: null, thinkingChars: 0, answerChars: 0, tools: new Map() };
+        firstAnswerAt: null, lastOutputAt: null, endedAt: null, thinkingChars: 0, answerChars: 0, tools: new Map(),
+        streamed: new Set() };
       this.live.set(chatId, turn);
     };
     const ended = !turn || turn.endedAt;
@@ -133,6 +134,7 @@ export class TurnTimings {
     }
     if (ended) return null;
     if (event.type === "assistant_content" && event.phase === "delta" && event.delta) {
+      if (event.messageId) turn.streamed.add(event.messageId);
       turn.firstOutputAt ??= now;
       turn.lastOutputAt = now;
       if (event.blockKind === "thinking") turn.thinkingChars += event.delta.length;
@@ -140,6 +142,14 @@ export class TurnTimings {
         turn.answerChars += event.delta.length;
         turn.firstAnswerAt ??= now;
       }
+    } else if (event.type === "transcript_op" && event.op === "message.close" && event.content && event.messageId !== turn.promptId && !turn.streamed.has(event.messageId)) {
+      // An answer that arrived whole, with nothing painted before it: its
+      // output came now.
+      turn.streamed.add(event.messageId);
+      turn.firstOutputAt ??= now;
+      turn.firstAnswerAt ??= now;
+      turn.lastOutputAt = now;
+      turn.answerChars += event.content.length;
     } else if (event.type === "transcript_op" && event.op === "tool.open" && event.toolCallId && !turn.tools.has(event.toolCallId)) {
       turn.tools.set(event.toolCallId, { name: event.name || "tool", kind: event.kind || "other", startedAt: now, endedAt: null });
     } else if (event.type === "transcript_op" && event.op === "tool.close" && turn.tools.has(event.toolCallId)) {
