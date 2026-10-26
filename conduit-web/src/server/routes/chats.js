@@ -1,3 +1,4 @@
+import { ConduitIds } from "../durable-runtime.js";
 import fs from "node:fs/promises";
 import { resolveTemplate } from "../../config.js";
 import { rememberModel } from "../../profile-model-memory.js";
@@ -15,7 +16,7 @@ export function projectBackendSessions({ chats, sessions, projectId, implementat
   const backendChats = chats.filter((chat) => chat.backend?.implementation === implementation);
   const trackedIds = new Set(backendChats.map(opaqueSessionId).filter(Boolean));
   return {
-    tracked: backendChats.filter((chat) => chat.projectId === projectId).map(chatView),
+    tracked: backendChats.filter((chat) => chat.projectId === projectId && chat.status !== "subagent").map(chatView),
     adoptable: sessions.filter((session) => !trackedIds.has(session.id)),
   };
 }
@@ -45,6 +46,60 @@ export function registerChatRoutes(app, {
   runtimeFor,
   templateForChat,
 }) {
+  const durable = backends.adapters?.get("conduit-runtime");
+  if (durable) durable.runtime.ensureSubagent = async (parentConversationId, agent) => {
+    const harness = await durable.runtime.open();
+    const identity = await harness.snapshot(ConduitIds, parentConversationId, durable.context);
+    const parent = identity?.chatId && await findChatContext(identity.chatId);
+    if (!parent) return null;
+    const child = await registry.ensureSubagent(parent.project, parent.chat, agent);
+    const conversation = await harness.conversation(Number(agent.conversationId), durable.context);
+    if (conversation) {
+      const saved = await harness.snapshot(ConduitIds, conversation.id, durable.context);
+      if (saved?.chatId !== child.id || !saved?.subagent || saved?.parentChatId !== parent.chat.id) await conversation.commit(async (tx) => {
+        Object.assign(await tx.doc(ConduitIds, conversation.id), { chatId: child.id, subagent: true, parentChatId: parent.chat.id });
+      }, durable.context);
+    }
+    // Its reader starts when the chat is opened (launch), as any chat's does.
+    return child;
+  };
+
+  // Param guards also cover upload and draft routes registered before these routes.
+  const childWrite = (request, response, next, id) => {
+    if (/^\/v0\/(?:chats|sessions|runs)\//.test(request.originalUrl)
+      && !["GET", "HEAD"].includes(request.method) && registry?.metadata(id)?.status === "subagent") {
+      return response.status(409).json({ error: "subagent_read_only" });
+    }
+    next();
+  };
+  app.param("chatId", childWrite);
+  app.param("id", childWrite);
+
+  app.get("/v0/chats/:chatId/agents", async (request, response, next) => {
+    try {
+      await lifecycle.run(request.params.chatId, async () => {
+        const context = await findChatContext(request.params.chatId);
+        if (!context) return response.status(404).json({ error: "chat_not_found" });
+        const adapter = backends.forChat(context.chat);
+        response.json({ agents: typeof adapter.agents === "function" ? await adapter.agents(context.chat) : [] });
+      });
+    } catch (error) { next(error); }
+  });
+
+  app.post("/v0/chats/:chatId/agents/:id/stop", async (request, response, next) => {
+    try {
+      await lifecycle.run(request.params.chatId, async () => {
+        const context = await findChatContext(request.params.chatId);
+        if (!context) return response.status(404).json({ error: "chat_not_found" });
+        const adapter = backends.forChat(context.chat);
+        if (!adapter.stopAgent || !await adapter.stopAgent(context.chat, request.params.id)) {
+          return response.status(409).json({ error: "agent_not_running" });
+        }
+        response.status(204).end();
+      });
+    } catch (error) { next(error); }
+  });
+
   const discoverable = discoverableFrom(backends);
   const defaultDiscovery = () => backends.where((manifest) => manifest.discovery !== "none")
     .filter((implementation) => (backends.local || backends.adapters).has(implementation))[0] || "";

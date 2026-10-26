@@ -57,7 +57,7 @@ const text = (value) => typeof value === "string" && value.length > 0;
  * names to these, and the browser never guesses from a name. A tool the table
  * does not know is `other`, which is still counted, just not named.
  */
-export const TOOL_KINDS = new Set(["command", "read", "edit", "search", "fetch", "script", "other"]);
+export const TOOL_KINDS = new Set(["command", "read", "edit", "search", "fetch", "script", "agent", "other"]);
 export const toolKind = (table, name) => (Object.hasOwn(table, name) ? table[name] : "other");
 
 /**
@@ -102,6 +102,9 @@ export const toolSubject = (value) => {
 export function assertTranscriptOp(event) {
   const bad = (reason) => { throw new Error(`invalid ${event?.op || "transcript"} op: ${reason}`); };
   if (event?.type !== "transcript_op") bad("not a transcript_op");
+  const agent = event.agent || event.message?.agent;
+  if (agent && ((agent.id !== null && !text(agent.id))
+    || (agent.conversationId !== null && !Number.isInteger(agent.conversationId) && !text(agent.conversationId)))) bad("invalid agent reference");
   if (event.op === "message.open") {
     if (!text(event.message?.id)) bad("no message id");
     if (!ROLES.has(event.message?.role)) bad(`role ${JSON.stringify(event.message?.role)}`);
@@ -228,13 +231,14 @@ export const messageDrop = ({ messageId, inclusive = false, keep = false, genera
  * a replay restores them with it.
  */
 export const toolOpen = ({ toolCallId, name, kind = "other", subject = null, input, messageId = null, generationId = null,
-  timestamp = new Date().toISOString() }) =>
+  timestamp = new Date().toISOString(), agent = null }) =>
   assertTranscriptOp({
     // When it started and, on the close, when it finished -- stamped as they
     // happen, so a replay says how long a step took rather than when the
     // replay ran.
     type: "transcript_op", op: "tool.open", toolCallId, name: name || "tool", kind, input, timestamp,
     ...(subject ? { subject } : {}),
+    ...(agent ? { agent } : {}),
     ...(messageId ? { messageId } : {}),
     ...(generationId ? { generationId } : {}),
   });
@@ -254,13 +258,14 @@ export const toolCalls = ({ toolCallId, calls, generationId = null }) =>
  * Their `kind` and `subject` are restated here and replace what the open said.
  */
 export const toolClose = ({ toolCallId, output, isError = false, cancelled = false, generationId = null,
-  kind = undefined, subject = null, calls = null, completedAt = new Date().toISOString() }) =>
+  kind = undefined, subject = null, calls = null, completedAt = new Date().toISOString(), agent = null }) =>
   assertTranscriptOp({
     type: "transcript_op", op: "tool.close", toolCallId, output, completedAt,
     isError: Boolean(isError) && !cancelled,
     ...(cancelled ? { cancelled: true } : {}),
     ...(kind ? { kind } : {}),
     ...(subject ? { subject } : {}),
+    ...(agent ? { agent } : {}),
     ...(calls?.length ? { calls } : {}),
     ...(generationId ? { generationId } : {}),
   });

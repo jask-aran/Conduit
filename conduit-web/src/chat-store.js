@@ -42,7 +42,7 @@ export const laterOf = (left, right) => (at(right) > at(left) ? right : left) ||
 // Unread is a comparison, not a stored flag: has the assistant finished
 // something since this chat was last read. Nothing has to transition it, so a
 // duplicate, late or missing event cannot leave it wrong.
-export const chatIsUnread = (chat) => at(chat?.lastAssistantCompletedAt) > at(chat?.lastReadAt);
+export const chatIsUnread = (chat) => chat?.status !== "subagent" && at(chat?.lastAssistantCompletedAt) > at(chat?.lastReadAt);
 
 export function chatView(chat) {
   if (!chat) return null;
@@ -199,7 +199,7 @@ export class ChatStore {
       const chat = {
         id,
         projectId: project.id,
-        status: active ? "active" : "draft",
+        status: item.status === "subagent" ? "subagent" : active ? "active" : "draft",
         title: String(item.title ?? "New chat"),
         templateId: typeof item.templateId === "string" && item.templateId.trim() ? item.templateId.trim() : null,
         templateVersion: typeof item.templateVersion === "string" && item.templateVersion.trim()
@@ -339,7 +339,7 @@ export class ChatStore {
   list({ includeHidden = false, includeUntracked = includeHidden } = {}) {
     return [...this.chats]
       .filter((chat) => includeUntracked || !chat.untracked)
-      .filter((chat) => includeHidden || chat.status === "active" || this.visibleDrafts.has(chat.id))
+      .filter((chat) => includeHidden || chat.status === "active" || (chat.status !== "subagent" && this.visibleDrafts.has(chat.id)))
       // Creation order is stable: rename/title edits bump mtime/updatedAt and must not reshuffle the sidebar.
       .sort((a, b) => {
         const byCreated = String(b.createdAt || "").localeCompare(String(a.createdAt || ""));
@@ -348,7 +348,7 @@ export class ChatStore {
   }
 
   listProject(projectId, options) {
-    return this.list(options).filter((chat) => chat.projectId === projectId);
+    return this.list(options).filter((chat) => chat.projectId === projectId && chat.status !== "subagent");
   }
 
   async migrateTemplateIds(normalize) {
@@ -383,14 +383,14 @@ export class ChatStore {
     catch (error) { if (error.code === "ENOENT") return null; throw error; }
   }
 
-  async create(project, { templateId = null, templateVersion = null, runtime = null, backend = null, untracked = false, run = false } = {}) {
+  async create(project, { templateId = null, templateVersion = null, runtime = null, backend = null, untracked = false, run = false, subagent = null } = {}) {
     const timestamp = new Date(this.now()).toISOString();
     const selectedBackend = backend || templateBackend({ id: templateId || "assistant", version: templateVersion });
     const chat = {
       id: crypto.randomUUID(),
       projectId: project.id,
-      status: "draft",
-      title: "",
+      status: subagent ? "subagent" : "draft",
+      title: subagent?.title || "",
       templateId: typeof templateId === "string" && templateId.trim() ? templateId.trim() : null,
       templateVersion: typeof templateVersion === "string" && templateVersion.trim()
         ? templateVersion.trim()
@@ -416,6 +416,23 @@ export class ChatStore {
     this.chats.push(chat);
     await this.flush();
     return chat;
+  }
+
+  /** Reserve before any await: concurrent roster reads must share one child chat. */
+  ensureSubagent(project, parent, { conversationId, id, title }) {
+    const key = String(conversationId);
+    const existing = this.chats.find((chat) => chat.status === "subagent"
+      && chat.backend?.implementation === parent.backend.implementation && String(chat.backend?.opaqueSession) === key);
+    if (existing) return Promise.resolve(existing);
+    this.subagentChats ||= new Map();
+    if (!this.subagentChats.has(key)) {
+      const pending = this.create(project, { subagent: { title }, templateId: parent.templateId, backend: {
+        ...parent.backend, opaqueSession: key, parentChatId: parent.id, subagentId: id,
+      } });
+      this.subagentChats.set(key, pending);
+      void pending.finally(() => this.subagentChats.delete(key)).catch(() => {});
+    }
+    return this.subagentChats.get(key);
   }
 
   async commitSession(chatId, session) {
@@ -491,7 +508,7 @@ export class ChatStore {
       chat.runtime.profileVersion = chat.templateVersion;
     }
     if (chat.runtime) chat.runtime = this.runtimeFor(chat, chat.templateId, chat.templateVersion);
-    if (patch.status === "draft" || patch.status === "active") chat.status = patch.status;
+    if (chat.status !== "subagent" && (patch.status === "draft" || patch.status === "active")) chat.status = patch.status;
     if (!patch.updatedAt) chat.updatedAt = new Date(this.now()).toISOString();
     await this.flush();
     return chat;
@@ -549,6 +566,9 @@ export class ChatStore {
     chat.projectId = targetProject.id;
     chat.owner = placeOf(targetProject).device;
     chat.updatedAt = new Date(this.now()).toISOString();
+    for (const child of this.chats.filter((item) => item.backend?.parentChatId === chatId)) {
+      await this.move(child.id, sourceProject, targetProject);
+    }
     await this.flush();
     return chat;
   }

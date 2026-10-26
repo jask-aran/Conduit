@@ -125,6 +125,7 @@ buffer and the chat's log. When a record's buffer is full, paint is evicted befo
 | `generation_replay` | neither | The whole reduced generation, sent once on attach. |
 | `runtime_state` | neither | Adapter capabilities, queue, usage and what the session is busy with. Session state, not a turn transition. |
 | `permission_request` / `permission_resolved` | neither | A blocking host request and its resolution, stated flat. |
+| `agents_changed` | neither | An agent started or ended, or a two-second running heartbeat; refetch `GET /v0/chats/:chatId/agents`. |
 | `extension_notice` | neither | `{ message, level }`: a Pi extension's `ui.notify`, a toast in the open chat, never kept. |
 | `usage`, `queue_state`, `compaction`, `retry` | neither | Optional capability state. |
 
@@ -300,6 +301,8 @@ reach; its answer comes back as a follow-up the conversation takes, drawn as a
 user row with `origin: "harness"` ("sa-1 finished: …"). Deleting the chat stops
 its background children (`discard`). The chat's spend is pi-durable's usage
 ledger, its own and its background children's.
+
+Subagent tools use `kind: "agent"`; a spawn also carries `agent: { id, conversationId }` on open and close (id once it runs in the background, conversationId once the child exists; the open is stated again when either arrives), which the browser pins under the turn. Listing, messaging, waiting on or stopping agents carries no reference. Report user rows carry the same reference. Foreground output gives child activity at most once per 500 ms, then closes with the child's answer. Each child has one hidden registry chat (`status: "subagent"`) in the parent's project, with its parent and subagent ids in the backend. Its transcript and live stream are readable; prompts, steering, history changes, compaction, model and profile changes, renames, uploads, direct deletion, and moves return `409 subagent_read_only`. Deleting the parent removes its child registry entries. `GET /v0/chats/:chatId/agents` returns foreground calls and the background roster, oldest first, with child chat ids, status, times, current activity and usage from each child's ledger. `POST /v0/chats/:chatId/agents/:id/stop` stops a running background agent (204), or returns `409 agent_not_running`; stop the parent turn to stop a foreground agent. `agents_changed` tells the parent stream to refetch the roster on transitions and every two seconds during work.
 
 ChatGPT Web declares least because the conversation lives in somebody else's
 account and Conduit follows it by cursor. The client hides what is not there,

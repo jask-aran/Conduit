@@ -74,6 +74,8 @@ export function applyTranscriptOp(messages, event) {
         timestamp: incoming.timestamp || new Date().toISOString(),
         // A prompt the harness made itself, not the user's words.
         ...(incoming.origin === "harness" ? { origin: "harness" } : {}),
+        // A subagent's report: the agent it is from, whose transcript it opens.
+        ...(incoming.agent ? { agent: incoming.agent } : {}),
       },
     event.after ?? null);
   }
@@ -136,6 +138,7 @@ export function applyToolOp(tools, event) {
     const incoming = {
       toolCallId: event.toolCallId, name: event.name || "tool", kind: event.kind || "other",
       ...(event.subject ? { subject: event.subject } : {}), input: event.input,
+      ...(event.agent ? { agent: event.agent } : {}),
       done: false, isError: false, timestamp: event.timestamp || new Date().toISOString(),
       seq: held >= 0 ? tools[held].seq : tools.length,
     };
@@ -153,6 +156,7 @@ export function applyToolOp(tools, event) {
       ? { ...tool, output: event.output, isError: Boolean(event.isError), cancelled: event.cancelled === true, done: true,
         ...(event.kind ? { kind: event.kind } : {}),
         ...(event.subject ? { subject: event.subject } : {}),
+        ...(event.agent ? { agent: event.agent } : {}),
         ...(event.calls ? { calls: event.calls } : {}),
         ...(event.completedAt ? { completedAt: event.completedAt } : {}) }
       : tool));

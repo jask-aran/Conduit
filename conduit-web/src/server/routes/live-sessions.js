@@ -55,6 +55,10 @@ export function registerLiveSessionRoutes(app, {
     try {
       const chatId = request.body?.chatId || request.body?.resumeSessionId;
       const intent = request.body?.intent || "open";
+      if (registry.metadata(chatId)?.status === "subagent"
+        && (intent !== "open" || request.body?.model || request.body?.thinkingLevel)) {
+        return response.status(409).json({ error: "subagent_read_only" });
+      }
       // A launch that keeps somebody waiting says so, with the chat and intent
       // that asked for it, so a slow open can be read from the log instead of
       // reproduced.
@@ -146,6 +150,10 @@ export function registerLiveSessionRoutes(app, {
 
   app.patch("/v0/live-sessions/:id/models", async (request, response, next) => {
     try {
+      const child = backends.get(request.params.id);
+      if (child && (child.readOnly || registry.metadata(child.chatId)?.status === "subagent")) {
+        return response.status(409).json({ error: "subagent_read_only" });
+      }
       const live = backends.get(request.params.id);
       if (!live) return response.status(404).json({ error: "live_session_not_found" });
       const adapter = backends.adapterForRecord(live);
@@ -171,6 +179,10 @@ export function registerLiveSessionRoutes(app, {
 
   app.delete("/v0/live-sessions/:id/process", async (request, response, next) => {
     try {
+      const child = backends.get(request.params.id);
+      if (child && (child.readOnly || registry.metadata(child.chatId)?.status === "subagent")) {
+        return response.status(409).json({ error: "subagent_read_only" });
+      }
       const stopped = await backends.stop(request.params.id);
       response.status(stopped ? 202 : 404).json({ stopped });
     } catch (error) { next(error); }
