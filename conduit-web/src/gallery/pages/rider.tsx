@@ -39,17 +39,17 @@ function RiderButtonMotion(props: { hidden?: boolean; initialAway: boolean }) {
 
 export const riderPage: Page = { title: "Rider", summary: "Resting frost at a composer, either composer's: a row or a strip on its top edge (queued messages, attachments), or a card that takes over its slot in its material (the question: the composer takeover).", rail: "Blocks",
   preview: () => <div class="g-composer">{queued()}</div>,
-  usage: `import { Rider, RiderTitle, Lines, Line, RiderActions, Button, Icons } from "@/components/ui";
+  usage: `import { Rider, RiderMark, Lines, Line, RiderActions, Button, Icons } from "@/components/ui";
 
 <Rider label="Messages waiting for the agent">
-  <RiderTitle>Steering</RiderTitle>
+  <RiderMark icon={<Icons.Steer />} label="Steering" />
   <Lines><Line text="Make the second paragraph shorter" /></Lines>
   <RiderActions>
     <Button variant="ghost" size="icon-sm" aria-label="Interrupt and send now" onClick={sendNow}><Icons.Send /></Button>
     <Button variant="ghost" size="icon-sm" aria-label="Discard" onClick={discard}><Icons.Close /></Button>
   </RiderActions>
 </Rider>`,
-  anatomy: { scene: () => <div class="g-composer">{queued()}</div>, parts: [{ selector: ".ui-rider > .ui-title-text", name: "Title", does: "what it holds", from: "RiderTitle" },
+  anatomy: { scene: () => <div class="g-composer">{queued()}</div>, parts: [{ selector: ".ui-rider > .ui-rider-mark", name: "Mark", does: "what it holds, as an icon; its word on hover", from: "RiderMark" },
     { selector: ".ui-lines", name: "Body", does: "what waits: lines, chips or choices", from: "Lines · Chips · Choices", side: "above" },
     { selector: ".ui-rider-actions", name: "Actions", does: "ghost icon buttons for it", from: "RiderActions", side: "below" }] },
   examples: [
@@ -98,5 +98,5 @@ export const riderPage: Page = { title: "Rider", summary: "Resting frost at a co
     token("--tint", "surface wash and lines"),
     token("--space-xs", "small gaps")
   ] }],
-  api: ["Rider", "RiderTop", "RiderTitle", "Tabs", "Tab", "ChoicesPage", "Prompt", "Choices", "Choice", "ChoiceInput", "TextArea", "Preview", "Summary", "RiderFoot", "Hints", "Lines", "Line", "RiderActions", "Button", "Chips", "Chip", "References", "Reference", "RiderButton"],
+  api: ["Rider", "RiderMark", "RiderTop", "RiderTitle", "Tabs", "Tab", "ChoicesPage", "Prompt", "Choices", "Choice", "ChoiceInput", "TextArea", "Preview", "Summary", "RiderFoot", "Hints", "Lines", "Line", "RiderActions", "Button", "Chips", "Chip", "References", "Reference", "RiderButton"],
 };

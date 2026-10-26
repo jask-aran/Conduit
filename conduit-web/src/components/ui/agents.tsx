@@ -1,7 +1,7 @@
 import * as Icons from "./icons";
 import { Show, type JSX } from "solid-js";
 import { Button, Spinner } from "./controls";
-import { Chips, Rider, RiderTitle } from "./rider";
+import { Chips, Rider } from "./rider";
 import { type Motion, motionOf, moveCursor } from "./shared";
 
 /*
@@ -44,11 +44,10 @@ export function AgentRow(props: { id?: string; title: string; state: AgentState;
   </li>;
 }
 
-/** A chat's background agents on its composer: a chip each, scrolling sideways when they outgrow it. title: the
- *  rider's own word (Agents), with a count of those still working. */
-export function AgentStrip(props: { title?: string; motion?: Motion; children: JSX.Element }) {
+/** A chat's background agents on its composer: a chip each, scrolling sideways when they outgrow it. No title: each
+ *  chip carries the agent's mark, so the strip's width is all theirs. */
+export function AgentStrip(props: { motion?: Motion; children: JSX.Element }) {
   return <Rider layout="strip" class="ui-agent-strip" label="Background agents" motion={props.motion}>
-    <RiderTitle>{props.title ?? "Agents"}</RiderTitle>
     <Chips>{props.children}</Chips>
   </Rider>;
 }

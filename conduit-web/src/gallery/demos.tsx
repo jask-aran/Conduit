@@ -4,7 +4,7 @@ import { ConnectionForm, ConnectionChoices, ConnectionChoice, ConnectionGroup, C
 import { CardNote } from "@/components/ui/card";
 import { createSignal, For, onCleanup, onMount, Show, type JSX } from "solid-js";
 import { SquarePenIcon } from "lucide-solid";
-import { type Motion, Meter, Orb, settledOrbRate, PLAIN_SPHERE, SPUTTERING_SPHERE, SettingRecorder, Crumbs, Match, OverlayBar, OverlayHints, OverlayList, OverlayPage, OverlayRail, OverlayFacts, OverlayFact, OverlaySplit, Glance, GlanceHead, GlancePrompt, GlanceTurn, GlanceAnswer, Overlay, SettingGroup, SettingLine, SettingValue, SettingLink, SettingNote, SettingDetails, SettingWide, SettingLoading, Progress, Keycap, NavGroup, NavRow, Segmented, SelectTrigger, Button, Chip, Line, TextArea, Rider, RiderActions, RiderTitle, Input, Item, Section, Slider, Switch, Chips, Lines, Read } from "@/components/ui";
+import { type Motion, Meter, Orb, settledOrbRate, PLAIN_SPHERE, SPUTTERING_SPHERE, SettingRecorder, Crumbs, Match, OverlayBar, OverlayHints, OverlayList, OverlayPage, OverlayRail, OverlayFacts, OverlayFact, OverlaySplit, Glance, GlanceHead, GlancePrompt, GlanceTurn, GlanceAnswer, Overlay, SettingGroup, SettingLine, SettingValue, SettingLink, SettingNote, SettingDetails, SettingWide, SettingLoading, Progress, Keycap, NavGroup, NavRow, Segmented, SelectTrigger, Button, Chip, Line, TextArea, Rider, RiderActions, RiderMark, Input, Item, Section, Slider, Switch, Chips, Lines, Read } from "@/components/ui";
 import { scaleOf, setScale } from "./foundations";
 import { NotebookTextIcon } from "lucide-solid";
 import { px } from "./specs";
@@ -58,7 +58,7 @@ export const thumb = "data:image/svg+xml," + encodeURIComponent('<svg xmlns="htt
 /** The app's riders, as components v2 builds them. */
 export const attachments = (motion?: Motion) => <Rider label="Attachments" layout="strip" motion={motion}><Chips><Chip name="photo.png" image={thumb} /><Chip name="notes.txt" detail="2.1 KB" icon={<Icons.FileText />} /><Chip name="lorem_ipsum.txt" detail="412 bytes" icon={<Icons.FileText />} status="uploading" progress={60} /></Chips>
   <RiderActions stack>{ghost("Show all attachments", <Icons.Maximize />)}{ghost("Remove all attachments", <Icons.Delete />)}</RiderActions></Rider>;
-export const queued = (motion?: Motion) => <Rider label="Queued" motion={motion}><RiderTitle>Steering</RiderTitle><Lines><Line text="and make the second paragraph shorter" /><Line text="then rename the file to lorem.txt, and add a heading at the top that says what it is" clipped /></Lines>
+export const queued = (motion?: Motion) => <Rider label="Queued" motion={motion}><RiderMark icon={<Icons.Steer />} label="Steering" title="Steering: sent when the current step finishes" /><Lines><Line text="and make the second paragraph shorter" /><Line text="then rename the file to lorem.txt, and add a heading at the top that says what it is" clipped /></Lines>
   <RiderActions>{ghost("Interrupt and send now", <Icons.Send />)}{ghost("Edit", <Icons.Edit />)}{ghost("Discard", <Icons.Close />)}</RiderActions></Rider>;
 // Overlay: the app's large surfaces, drawn from the library's pieces.
 // The command prompt's ">" is a mark like search's, drawn the same.

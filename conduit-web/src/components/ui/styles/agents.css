@@ -22,9 +22,9 @@
 @media (hover: hover) { .ui-agent-open:hover .ui-agent-chevron { opacity: 1; } }
 .ui-agent-stop { flex: none; color: var(--muted-foreground); }
 
-/* The strip: the rider's title, then the chips scrolling under the composer's own edge fade. */
-.ui-frost.ui-rider.ui-agent-strip { padding: 0 0 0 var(--space-lg); gap: 0; }
-.ui-agent-strip > .ui-chips { padding: var(--space-sm) var(--space-sm) var(--space-sm) var(--space-md); }
+/* The strip: the chips alone, scrolling under its edge fades. */
+.ui-frost.ui-rider.ui-agent-strip { padding: 0; gap: 0; }
+.ui-agent-strip > .ui-chips { padding: var(--space-sm); }
 .ui-agent-chip { position: relative; display: flex; flex: none; align-items: center; border-radius: var(--radius-control); background: var(--tint); scroll-snap-align: start; }
 .ui-agent-chip[data-entering] { animation: ui-rise var(--duration-gentle) var(--ease-arrive) backwards; }
 .ui-agent-chip[data-leaving] { animation: ui-fade-out var(--duration-quick) var(--ease-leave) forwards; pointer-events: none; }

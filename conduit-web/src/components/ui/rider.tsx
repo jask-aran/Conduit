@@ -15,8 +15,12 @@ export function Rider(props: JSX.HTMLAttributes<HTMLDivElement> & { label?: stri
   const [local, rest] = splitProps(props, ["label", "layout", "motion", "class", "children"]);
   return <Frost role="group" {...rest} class={cn("ui-rider", local.class)} data-layout={local.layout ?? "row"} aria-label={local.label} {...motionOf(local.motion)}>{local.children}</Frost>;
 }
-/** A rider's title; title: what it means, on hover. */
+/** A card rider's title (RiderTop); title: what it means, on hover. */
 export const RiderTitle = (props: { title?: string; children: JSX.Element }) => <span class="ui-title-text" title={props.title}>{props.children}</span>;
+/** A row rider's mark: what it holds as an icon, its word on hover and to a reader, so the row keeps its width for
+ *  what it holds (a word in Paper Mono took a column of it). */
+export const RiderMark = (props: { icon: JSX.Element; label: string; title?: string }) =>
+  <span class="ui-rider-mark" role="img" aria-label={props.label} title={props.title ?? props.label}>{props.icon}</span>;
 /** A button riding over the transcript just above the composer: scroll to latest (an icon alone), cancel an edit
  *  (an icon and its words). Resting frost at the surface radius. hidden: kept where it rides but faded out and out of
  *  reach, so it fades back in rather than being drawn again. */
