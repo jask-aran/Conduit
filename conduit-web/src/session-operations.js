@@ -7,6 +7,14 @@ export async function stopSessionProcesses(backends, session) {
   await Promise.all(matching.map((record) => backends.adapterForRecord(record).close(record.id)));
 }
 
+/** A chat being deleted: its processes stop, and so does work it left running in the background (a harness's own). */
+export async function discardSession(backends, chat) {
+  // A harness that is not loaded has nothing running here to stop.
+  const adapter = (() => { try { return backends.forChat(chat); } catch { return null; } })();
+  await adapter?.discard?.(chat);
+  await stopSessionProcesses(backends, chat);
+}
+
 export async function stopProjectProcesses(backends, projectId) {
   await Promise.all(backends.rawRecords().filter((record) => record.projectId === projectId)
     .map((record) => backends.adapterForRecord(record).close(record.id)));
