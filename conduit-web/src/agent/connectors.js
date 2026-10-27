@@ -85,7 +85,8 @@ export class Connectors {
         client.onClose(() => { if (entry.client === client && entry.authorized) { entry.status = "error"; entry.error = "Connector connection closed"; } });
         this.agent.runtime.refreshConnectors?.();
         if (old) await old.close().catch(() => {});
-      } catch {
+      } catch (error) {
+        console.error(`[agent] connector ${entry.info.id} could not connect: ${error?.name}: ${error?.message}`);
         await client?.close().catch(() => {});
         if (entry.authorized) { entry.status = "error"; entry.error = "Connector connection failed"; }
       }
@@ -97,7 +98,10 @@ export class Connectors {
     const state = randomBytes(32).toString("hex");
     const redirectUrl = `${origin}/v0/agent/connectors/${id}/callback`;
     let data = await this.read(entry).catch(() => undefined);
-    data = { ...(data || {}), serverUrl: entry.info.url, oauthState: state };
+    // Sign-in comes back to the hub at the address the person's client uses (another machine's is another address).
+    // A client registered for a different one would be refused there: register again for this one.
+    const { clientInformation, ...rest } = data || {};
+    data = { ...rest, ...(clientInformation && data.redirectUrl === redirectUrl ? { clientInformation } : {}), serverUrl: entry.info.url, oauthState: state };
     const store = { load: () => data, save: (next) => { data = next; } };
     let authorizationUrl;
     const provider = this.provider(entry, redirectUrl, store, (url) => { authorizationUrl = String(url); });
@@ -107,7 +111,8 @@ export class Connectors {
     this.pending.set(state, { id, provider, data: () => data, redirectUrl, returnTo, expires: Date.now() + 600000 });
     return authorizationUrl;
   }
-  async finish(id, state, code) {
+  /** iss: the authorization response's issuer (RFC 9207), checked against the server's when it says it sends one. */
+  async finish(id, state, code, iss) {
     const pending = this.pending.get(state);
     if (!pending || pending.id !== id || pending.expires <= Date.now() || typeof code !== "string" || !code) {
       if (pending?.expires <= Date.now()) this.pending.delete(state);
@@ -115,7 +120,8 @@ export class Connectors {
     }
     this.pending.delete(state);
     const entry = this.entry(id);
-    await authorizeMcp(pending.provider, { serverUrl: entry.info.url, authorizationCode: code, signal: AbortSignal.timeout(15000) });
+    await authorizeMcp(pending.provider, { serverUrl: entry.info.url, authorizationCode: code, iss: typeof iss === "string" ? iss : undefined,
+      resourceMetadataUrl: new URL(entry.info.resourceMetadata), signal: AbortSignal.timeout(15000) });
     await this.write(entry, { ...pending.data(), redirectUrl: pending.redirectUrl });
     await this.connect(entry);
     return pending.returnTo;
