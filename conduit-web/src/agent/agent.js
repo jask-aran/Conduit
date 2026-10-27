@@ -94,6 +94,7 @@ export class PersistentAgent {
   /** Change agent.json; an invalid value is refused whole. */
   async saveSettings(patch = {}) {
     const next = { ...(this.cached || {}) };
+    const before = this.settings().name;
     const fail = (message) => { throw Object.assign(new Error(message), { code: "invalid_agent_settings", status: 400 }); };
     if (patch.name !== undefined) {
       const name = String(patch.name).trim();
@@ -126,6 +127,9 @@ export class PersistentAgent {
     await fs.writeFile(path.join(this.folder, "agent.json"), `${JSON.stringify(next, null, 2)}\n`);
     this.cached = next;
     if (next.name && this.project?.name !== next.name) this.project = await this.projects.rename(this.project.id, next.name).catch(() => this.project) || this.project;
+    // The home thread is titled with the name until the person retitles it.
+    const home = (await this.state()).home?.chatId;
+    if (next.name && next.name !== before && home && this.registry.metadata(home)?.title === before) await this.registry.update(home, { title: next.name }).catch(() => {});
     for (const listener of this.settingsListeners) await listener(this.settings());
     return this.settings();
   }

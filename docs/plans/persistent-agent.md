@@ -118,8 +118,17 @@ service and the service worker. What reaches a device: a report the interruption
 and an approval waiting on the person. A morning brief is asked for, so it
 reaches the person whatever the setting unless it says NOTHING.
 
-Next: the agent's own page (Needs you, Working on, memory and schedules beside
-its home thread), then connectors, then outside sources.
+Built (2026-10-27): its page, `/agent` (a pane document `page:agent`), under the
+Conduit Dashboard in Chat's sidebar with how many things wait on the person. On
+the dashboards' layout: the composer talks to it in its home thread; its threads;
+Needs you (questions, memory to keep or discard, notices, dismissed with
+`DELETE /v0/agent/notices/:id`), Working on, Schedules, Watching and Recent runs,
+each opening its transcript; Run a task and New thread. Renaming it retitles the
+home thread.
+
+Next: settings on the page (dial, budget, brief, heartbeat), memory itself
+(its files, not only proposals), what a push shows and offers (Allow/Don't on an
+approval), then connectors, then outside sources.
 
 ## Open
 
