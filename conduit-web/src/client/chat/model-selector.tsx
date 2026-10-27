@@ -61,6 +61,8 @@ export function ModelSelector(props: {
   onSearchModels?: () => void;
   searchShortcut?: string | null;
   onManageModels?: () => void;
+  /** What the trigger says beside the model in place of its effort ("" for nothing): a choice that has none. */
+  quiet?: string;
 }) {
   const selected = createMemo(() => props.models.find((item) => item.spec === props.model));
   const label = createMemo(() => selected()?.label || props.model);
@@ -71,7 +73,7 @@ export function ModelSelector(props: {
 
   return <DropdownMenu>
     <DropdownMenu.Trigger as={Picker} subject={Boolean(props.onSearchModels)} aria-label={pending() ? "Connecting to model" : `${label() || "Model"} ${props.thinkingLevel || "off"}`} disabled={props.disabled || pending()}
-      icon={pending() ? <Spinner /> : undefined} value={pending() ? "Connecting…" : label() || "Model"} quiet={pending() ? undefined : props.thinkingLevel || "off"} />
+      icon={pending() ? <Spinner /> : undefined} value={pending() ? "Connecting…" : label() || "Model"} quiet={pending() ? undefined : props.quiet ?? (props.thinkingLevel || "off")} />
     <MenuContent><ModelMenuItems {...props} /></MenuContent>
   </DropdownMenu>;
 }

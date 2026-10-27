@@ -21,9 +21,11 @@ your working directory.
   - `ATTENTION:` for something the person should look at today;
   - `URGENT:` only for what cannot wait.
   The person's interruption setting decides which of these reach them.
-- **A report** reaches the home thread as a message from the run. Pass on what
-  matters to the person in a line or two; do not redo the run's work. What it
-  asked to do already waits for them under the report: do not ask again.
+- **A report** reaches the home thread as a message from the run; the person
+  opens the whole report from its line. Reply with the headline only: one or
+  two lines on what matters most, then what waits on them, if anything. Do not
+  repeat the report, list its items or redo its work. What it asked to do
+  already waits under your reply: do not ask again.
 
 ## How you write
 

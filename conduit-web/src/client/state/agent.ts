@@ -8,6 +8,9 @@ import { api } from "../api/client";
  */
 
 export type AgentDial = "quiet" | "normal" | "chatty";
+/** The model and effort a kind of background run uses; null is the home thread's. */
+export type AgentWork = { model: string; thinkingLevel: string };
+export type AgentWorkKind = "brief" | "heartbeat" | "other";
 export type AgentRunKind = "manual" | "schedule" | "checkback" | "brief" | "heartbeat" | "webhook" | "event" | string;
 export interface AgentRun { id: string; title: string; kind: AgentRunKind; startedAt?: string; endedAt?: string; status?: string; level?: string | null; conversationId: number }
 export interface AgentSchedule { id: string; title: string; kind: "once" | "daily" | "every" | string; at?: string; everyMinutes?: number; nextAt?: string | null; lastAt?: string | null; system?: boolean }
@@ -21,7 +24,7 @@ export interface AgentView {
   enabled: boolean;
   /** Its workspace: its folder, holding its memory files. */
   projectId?: string;
-  settings?: { name: string; dial: AgentDial; budgetUsdPerDay: number; timezone: string; brief: { enabled: boolean; at: string }; heartbeat: { enabled: boolean; everyMinutes: number } };
+  settings?: { name: string; dial: AgentDial; budgetUsdPerDay: number; timezone: string; brief: { enabled: boolean; at: string }; heartbeat: { enabled: boolean; everyMinutes: number }; work: Record<AgentWorkKind, AgentWork | null> };
   home?: { chatId: string; conversationId: number } | null;
   sides?: Array<{ chatId: string; title: string; updatedAt?: string }>;
   spentToday?: number;
