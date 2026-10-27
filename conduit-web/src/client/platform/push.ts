@@ -1,3 +1,4 @@
+import { Capacitor } from "@capacitor/core";
 import { createSignal } from "solid-js";
 import { api } from "../api/client.ts";
 import { installedClientKind } from "./installed-client.ts";
@@ -33,8 +34,11 @@ const PATH_KEY = "conduit.push.path";
 let plugin: Promise<PushPlugin> | null = null;
 const native = () => plugin ??= import("@capacitor/core").then(({ registerPlugin }) => registerPlugin<PushPlugin>("ConduitPush"));
 
-/** Which way in this device has: none in the desktop app yet (WebView2 has no push service), nor in a page without the worker. */
-export const pushWay = (): PushWay => installedClientKind === "android" ? "android"
+/**
+ * Which way in this device has: none in the desktop app yet (WebView2 has no push service), nor in a page without the
+ * worker, nor in an Android app installed before its native half existed (its interface updates live, its code does not).
+ */
+export const pushWay = (): PushWay => installedClientKind === "android" ? Capacitor.isPluginAvailable("ConduitPush") ? "android" : null
   : installedClientKind === "browser" && "serviceWorker" in navigator && "PushManager" in window && window.isSecureContext ? "browser" : null;
 
 /** The hub this device registered with: its identity where the app knows it, else the page's own origin. */
