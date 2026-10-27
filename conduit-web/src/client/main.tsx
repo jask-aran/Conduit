@@ -910,6 +910,15 @@ function App() {
     // waits for Wi-Fi, which can be hours, and a spinner that long is a lie.
     if (quiet) quietCheck = true;
     else setPwaUpdating(true);
+    // A step that never answers would leave the spinner up for good: each gets half a minute (a download, half a
+    // minute without progress), then the check gives up and says where it stopped.
+    let step = "updating the interface";
+    let timer = 0;
+    let stalled = (): Promise<never> => new Promise(() => {});
+    const touch = () => { if (quiet) return; clearTimeout(timer); timer = window.setTimeout(giveUp, 30_000); };
+    let giveUp = () => {};
+    if (!quiet) stalled = () => new Promise<never>((_, reject) => { giveUp = () => reject(new Error(`The update check stopped while ${step}.`)); touch(); });
+    const bounded = <T,>(work: Promise<T>) => Promise.race([work, stalled()]);
     try {
       // A development Android client takes the connected server's interface:
       // a few MB from a server it is already talking to, then a reload.
@@ -917,25 +926,30 @@ function App() {
         const live = liveUpdateNow();
         if (live) {
           setUpdateState({ kind: "working", label: "Updating Conduit…" });
-          const outcome = await live;
+          const outcome = await bounded(live);
           if (outcome === "unreachable") { setUpdateState({ kind: "idle" }); toast.error("Could not reach the server to update."); return; }
-          if (outcome !== "current") return;
+          // Applied: the page reloads from the new interface, which ends this check. One that does not reload is stuck.
+          if (outcome === "applying") { step = "reloading the new interface"; await bounded(new Promise(() => {})); }
           // The interface is current; a native change comes as a new APK, which this server may also have published.
           setUpdateState({ kind: "checking" });
         }
       }
       // The answer is in the sidebar row; a newer version downloads there with
       // its progress, and the row offers it once it is ready.
-      const result = await shell.prepareUpdate((progress) => {
+      step = "looking for a newer app";
+      const result = await bounded(shell.prepareUpdate((progress) => {
         if (quiet) return;
+        step = `downloading ${progress.version}`;
+        touch();
         const share = progress.total ? Math.round((progress.downloaded / progress.total) * 100) : 0;
         setUpdateState({ kind: "working", label: `Downloading ${progress.version}… ${share}%` });
-      }, quiet);
+      }, quiet));
       if (result.kind === "ready") setUpdateState({ kind: "ready" });
       else if (!quiet) sayUpToDate();
     } catch (error) {
       if (!quiet) { setUpdateState({ kind: "idle" }); showError(error); }
     } finally {
+      clearTimeout(timer);
       if (quiet) quietCheck = false;
     }
   };
