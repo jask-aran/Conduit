@@ -1041,7 +1041,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
             const chatId = () => props.chat.loadedId();
             const artifact = () => item.answerless && item.precedingUserId ? artifactSummaries().get(item.precedingUserId) : undefined;
             const arrive = arrivalOf(lastArrivedId);
-            return <TranscriptRow ref={traceRow} data-slot="message-scroller-item"><Turn><TurnTrace since={arrive} trace={item.value} gathering={props.conversational} orb={!props.conversational || Boolean(item.orb)} agents={props.chat.agents?.()} onStopAgent={props.chat.stopAgent ? (id) => void props.chat.stopAgent!(id) : undefined} writing={item.answerless === false} renderer={markdownRenderer()} profileLabel={props.profileLabel} initialOpen={itemExpanded(chatId(), item.key)} onOpenChange={(open) => setItemExpanded(chatId(), item.key, open)} toolOpen={(id) => itemExpanded(chatId(), `tool:${id}`)} onToolOpenChange={(id, open) => setItemExpanded(chatId(), `tool:${id}`, open)} onRendered={() => settleAfterMarkdown(traceRow)} />
+            return <TranscriptRow ref={traceRow} data-slot="message-scroller-item" turn={props.conversational && item.continues}><Turn><TurnTrace since={arrive} trace={item.value} gathering={props.conversational} orb={!props.conversational || Boolean(item.orb)} agents={props.chat.agents?.()} onStopAgent={props.chat.stopAgent ? (id) => void props.chat.stopAgent!(id) : undefined} writing={item.answerless === false} renderer={markdownRenderer()} profileLabel={props.profileLabel} initialOpen={itemExpanded(chatId(), item.key)} onOpenChange={(open) => setItemExpanded(chatId(), item.key, open)} toolOpen={(id) => itemExpanded(chatId(), `tool:${id}`)} onToolOpenChange={(id, open) => setItemExpanded(chatId(), `tool:${id}`, open)} onRendered={() => settleAfterMarkdown(traceRow)} />
               {/* A turn that ended without an answer -- stopped under a tool, or
                   one that only ran commands -- still offers to try again. */}
               <Show when={item.answerless && !item.value.active}>
@@ -1104,7 +1104,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
           return <TranscriptRow ref={row} data-slot="message-scroller-item" data-message-id={message().id} turn={!user() && item.traced}>
             <Show when={user()} fallback={<Turn orb={props.conversational && item.orb ? <AnswerOrb state={item.orb} /> : undefined}>
               <Show when={message().content || (message().stopped && !item.traced && !failed())}>
-                <Answer copied={copied()}>
+                <Answer copied={copied()} interim={props.conversational && !item.orb}>
                   <Show when={message().content} fallback={<StopLine detail="before answering" />}>
                     <Suspense fallback={<div class="markdown-skeleton" />}>
                       <ChatMarkdown renderer={markdownRenderer()} streaming={live()} streamVersion={item.streamVersion} onRendered={() => settleAfterMarkdown(row)} onSettled={() => setSettled(true)}>{message().content || ""}</ChatMarkdown>

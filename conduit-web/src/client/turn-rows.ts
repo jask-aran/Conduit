@@ -103,7 +103,8 @@ export type TurnRow =
   // while it runs the row where it is working, settled its last answer -- and how the turn is.
   | { key: string; type: "message"; value: Message; live?: boolean; streamVersion?: number; displayKey?: string; precedingUserId?: string; traced?: boolean; orb?: TurnOrbState }
   // `timestamp` is the turn's last reply's, for a trace with no answer row to carry it.
-  | { key: string; type: "trace"; value: TurnTraceData; precedingUserId?: string; answerless?: boolean; unstated?: boolean; timestamp?: string; orb?: TurnOrbState }
+  // `continues`: a conversational turn's work after its first row, drawn close to what came before it.
+  | { key: string; type: "trace"; value: TurnTraceData; precedingUserId?: string; answerless?: boolean; unstated?: boolean; timestamp?: string; orb?: TurnOrbState; continues?: boolean }
   // Where the answer will be, from the start of a live turn until its text does.
   | { key: string; type: "pending"; value: null; precedingUserId?: string; startedAt?: string };
 
@@ -117,7 +118,8 @@ function placeTurnOrb(rows: TurnRow[], state: TurnOrbState) {
       ? rows.findLastIndex((row) => row.type === "message" && row.value.role !== "user") : rows.findLastIndex(own);
   const row = rows[index];
   if (row && row.type !== "pending") rows[index] = { ...row, orb: state };
-  return rows;
+  const first = rows.findIndex(own);
+  return rows.map((item, at) => item.type === "trace" && at > first ? { ...item, continues: true } : item);
 }
 
 interface PersistedTurn {

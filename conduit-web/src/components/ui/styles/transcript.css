@@ -14,6 +14,8 @@
 .ui-transcript-row { min-width: 0; }
 .ui-loading-earlier { display: flex; justify-content: center; }
 .ui-transcript-row[data-turn] { margin-top: calc(var(--space-md) - var(--space-3xl)); }
+/* What a turn says on its way to its answer: the answer's prose, quieter and a row's size, so the answer stands out. */
+.ui-answer[data-interim] { color: var(--muted-foreground); font-size: var(--text-row); }
 /* A failed request: its head in destructive, its facts in the data face, what the provider said in a code box. */
 .ui-failure { display: grid; gap: var(--space-xs); font-size: var(--text-row); }
 .ui-failure-head { display: flex; align-items: center; gap: var(--row-gap); color: var(--destructive); }
