@@ -243,7 +243,7 @@ export class DurableRuntime {
       const web = await this.webTools();
       if (web) install(web);
       install(createCodemodeExtension({ sandbox: new CodemodeSandbox(), namespaces: [{ name: "executor", prefix: "mcp__executor__", description: "Executor: the person’s connected accounts (mail, calendar, docs…)",
-        instructions: "Find actions with search, read their signatures with describe, then run them with call. A call whose actions only read (get, list, search…) goes ahead; one that sends, creates, changes or deletes asks the person first, so batch reads together and keep each write its own call, saying what it will do. execute runs a whole program and always asks: use it only when one result must feed the next and call cannot do it." }] }));
+        instructions: "Find actions with search, read their signatures with describe, then run them with call: one action, or an array of independent ones. Anything that only reads (get, list, search…) goes ahead; anything that sends, creates, changes or deletes asks the person first, so batch reads together and keep each write its own call. Use execute only when one result must feed the next; name each action directly in it (tools.<path>(…) or tools[\"<path>\"](…), never a computed name), or it asks before running." }] }));
       this.refreshConnectors = () => {
         const tools = this.agent?.connectors.tools() || [];
         install(defineExtension({ name: "connectors", tools }));

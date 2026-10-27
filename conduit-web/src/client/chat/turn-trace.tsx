@@ -204,7 +204,7 @@ function statusOf(trace: TurnTraceData, writing: boolean): Mark & { verb: string
   if (!tool) return writing ? { verb: "Writing", orb: "composing" } : { verb: "Thinking", orb: "working" };
   if (unnamed(tool)) return { verb: "Calling a tool", orb: "solving" };
   const kind = tool.kind || "other";
-  return { verb: kind === "other" ? `Using ${tool.name || "a tool"}` : KIND_VERBS[kind], ...KIND_ORBS[kind] };
+  return { verb: kind === "other" ? `Using ${toolName(tool.name) || "a tool"}` : KIND_VERBS[kind], ...KIND_ORBS[kind] };
 }
 
 /* A tool's line: what it acted on, a search's in quotes, a long path from its
@@ -224,6 +224,8 @@ function toolLine(tool: ToolItem): string {
    step. Discarded text is that one step's loss, not the turn's, so it is
    passed over. */
 type Detail = { text: string; markdown: boolean };
+/* A connector's tool by its service: `mcp__executor__call` is "Executor call". */
+const toolName = (name?: string) => { const match = /^mcp__([^_]+(?:_[^_]+)*)__(.+)$/.exec(name || ""); return match ? `${match[1]![0]!.toUpperCase()}${match[1]!.slice(1)} ${match[2]}` : name; };
 function stepLine(tool: ToolItem, live: boolean): string {
   // A running script is the tool it is running now, else the last it ran.
   if (live && !tool.done && tool.kind === "script") {
@@ -233,13 +235,13 @@ function stepLine(tool: ToolItem, live: boolean): string {
     const kind = call.kind || "other";
     const verb = VERBS[kind][call.done === false ? 0 : 1];
     const line = toolLine({ toolCallId: "", kind, subject: call.subject });
-    return kind === "other" ? [verb, call.name, line].filter(Boolean).join(" ") : `${verb} ${line || call.name}`.trim();
+    return kind === "other" ? [verb, toolName(call.name), line].filter(Boolean).join(" ") : `${verb} ${line || call.name}`.trim();
   }
   const subject = toolLine(tool);
   if (live && !tool.done) return subject;
   const kind = tool.kind || "other";
   const verb = VERBS[kind][1];
-  if (kind === "other") return [verb, tool.name, subject].filter(Boolean).join(" ");
+  if (kind === "other") return [verb, toolName(tool.name), subject].filter(Boolean).join(" ");
   return `${verb} ${subject || tool.name || ""}`.trim();
 }
 function previewOf(trace: TurnTraceData, writing: boolean): { status: ReturnType<typeof statusOf>; work: string; detail: Detail | null } {
@@ -339,7 +341,7 @@ function sourceOf(tool: ToolItem): string {
   if (tool.kind === "search") return `\u201c${subject}\u201d`;
   if (tool.kind === "fetch") { try { return new URL(subject).hostname.replace(/^www\./, ""); } catch { return subject; } }
   if (tool.kind === "read" || tool.kind === "edit") return subject.split("/").filter(Boolean).at(-1) || subject;
-  return subject || tool.name || "";
+  return /^mcp__/.test(tool.name || "") ? (toolName(tool.name) || "").split(" ")[0]! : subject || tool.name || "";
 }
 function sourcesOf(segments: TraceSegment[]): string {
   const seen = new Set<string>();
@@ -374,7 +376,7 @@ export function TurnTrace(props: { trace: TurnTraceData; agents?: AgentSummary[]
   const latest = () => { const detail = preview().detail; return detail ? detail.markdown ? thinking : detail.text : undefined; };
   const looked = () => props.gathering && !props.trace.active && !unfinished();
   const sources = createMemo(() => looked() ? sourcesOf(props.trace.segments) : "");
-  return <Show when={!looked() || props.trace.segments.length > 0}><Trace motion={props.since != null ? "entering" : undefined} since={props.since} orb={<Orb state={preview().status.orb} frame={preview().status.frame} tint={unfinished() ? "var(--destructive)" : undefined} rate={props.trace.active ? undefined : settledOrbRate(unfinished())} />}
+  return <Show when={!looked() || props.trace.segments.some((segment) => segment.kind === "tool" || segment.kind === "error")}><Trace motion={props.since != null ? "entering" : undefined} since={props.since} orb={<Orb state={preview().status.orb} frame={preview().status.frame} tint={unfinished() ? "var(--destructive)" : undefined} rate={props.trace.active ? undefined : settledOrbRate(unfinished())} />}
       status={looked() ? (sources() ? "Looked at" : "Worked") : preview().status.verb} time={looked() ? undefined : time() || undefined} work={preview().work || undefined}
       latest={looked() ? sources() || latest() : latest()} live={props.trace.active} tone={unfinished() ? "failed" : undefined}
       pinned={<TurnAgents tools={spawns()} agents={props.agents ?? []} onStop={props.onStopAgent} />}
