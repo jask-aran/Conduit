@@ -62,6 +62,11 @@ import { registerDraftRoutes } from "./server/routes/drafts.js";
 import { registerRuntimeRoutes } from "./server/routes/runtime.js";
 import { registerChatRoutes } from "./server/routes/chats.js";
 import { registerRunRoutes } from "./server/routes/runs.js";
+import { registerAgentRoutes } from "./server/routes/agent.js";
+import { PersistentAgent } from "./agent/agent.js";
+import { createChatHost } from "./agent/chat-host.js";
+import { startEvents } from "./agent/events.js";
+import { seedSchedules } from "./agent/schedule.js";
 import { createHostUi } from "./server/host-ui.js";
 import { registerHarnessRoutes } from "./server/routes/harnesses.js";
 import { createHarnessModelCatalogue } from "./harnesses/model-catalogue.js";
@@ -685,6 +690,20 @@ registerRunRoutes(app, {
   submitPrompt: (...args) => liveSessionStream.submitPrompt(...args),
   stopGeneration: (...args) => liveSessionStream.stopGeneration(...args),
 });
+// The hub's persistent agent (docs/plans/persistent-agent.md): nothing until it is enabled, then its threads,
+// clocks and events. Its chat tools reach the person's chats through the same paths a browser's do.
+const durableAdapter = backends.adapters.get("conduit-runtime") || null;
+const persistentAgent = durableAdapter ? new PersistentAgent({ runtime: durableAdapter.runtime, registry, projects, launchLiveSession, findChatContext }) : null;
+if (persistentAgent) {
+  persistentAgent.chatHost = createChatHost({ registry, projects, backends, chatLogs, findChatContext, launchLiveSession,
+    submitPrompt: (...args) => liveSessionStream.submitPrompt(...args) });
+  persistentAgent.settingsListeners.add(() => seedSchedules(persistentAgent));
+  registerAgentRoutes(app, { agent: persistentAgent, backends });
+  const stopEvents = startEvents(persistentAgent, { nodeHub, runtimeHub, backends, registry, chatLogs, onWorkspaceChange });
+  lifetime.own("persistent agent events", { stop: stopEvents }, (owned) => owned.stop());
+  void persistentAgent.load().then((project) => project && seedSchedules(persistentAgent))
+    .catch((error) => console.error("[agent] could not load", error));
+}
 registerSessionRoutes(app, {
   attachments,
   backends,

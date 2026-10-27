@@ -84,7 +84,7 @@ export function harnessCapabilities() {
 export function agentProfiles(templates, { available = null } = {}) {
   const usable = (manifest) => !available || implementationsOf(manifest).some((implementation) => available.has(implementation));
   return [
-    ...templates.map((template) => ({
+    ...templates.filter((template) => !template.internal).map((template) => ({
       id: template.id,
       label: template.label,
       management: "conduit",

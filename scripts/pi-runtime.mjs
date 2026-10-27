@@ -53,6 +53,8 @@ export function loadPiTemplate(file) {
       : formatPosture(tools),
     defaultable: template.defaultable !== false,
     special: template.special === true,
+    // Run by Conduit itself (the persistent agent), never offered as a profile to pick.
+    internal: template.internal === true,
     templateFile,
     systemPrompt: path.resolve(directory, template.systemPrompt || "SYSTEM.md"),
     tools,

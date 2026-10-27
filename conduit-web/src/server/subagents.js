@@ -1,5 +1,6 @@
 import { Type } from "@earendil-works/pi-ai";
 import { configure, defineDoc, defineExtension, defineTask, defineTool, UsageDoc, watchEvents } from "@earendil-works/pi-durable";
+import { AgentDoc } from "../agent/agent-doc.js";
 
 const SubagentRoster = defineDoc({
   kind: "conduit.subagents", version: 1, scope: "conversation", history: "latest", fork: "initial",
@@ -18,6 +19,18 @@ export const subagentTitle = (task) => String(task || "").trim().split(/\r?\n/)[
 const totalUsage = (state) => [...Object.values(state?.models || {}), ...Object.values(state?.tools || {})]
   .reduce((total, usage) => addUsage(total, usage), emptyUsage());
 const textResult = (text) => ({ output: [{ type: "text", text }] });
+/**
+ * How much a run's report matters, from its answer's first word (templates/agent/SYSTEM.md): NOTHING (or OpenClaw's
+ * HEARTBEAT_OK) is none, then FYI, ATTENTION and URGENT; an answer that says none of them is ATTENTION.
+ */
+export const reportLevel = (answer) => {
+  const word = String(answer || "").trim().match(/^\W*([A-Z_]+)/)?.[1] || "";
+  return word === "NOTHING" || word === "HEARTBEAT_OK" ? "none" : word === "FYI" ? "fyi" : word === "URGENT" ? "urgent" : "attention";
+};
+const LEVELS = ["none", "fyi", "attention", "urgent"];
+/** The least a report must matter to reach the person, by their interruption setting. */
+const THRESHOLD = { quiet: "urgent", normal: "attention", chatty: "fyi" };
+export const reaches = (level, dial = "normal") => LEVELS.indexOf(level) >= LEVELS.indexOf(THRESHOLD[dial] || "attention");
 const aborted = async (task, api, context) => {
   await api.commit(() => ({ status: "terminal", outcome: { status: "aborted" } }), context);
 };
@@ -190,13 +203,32 @@ export function Subagents(runtime) {
           if (!stopped && item.number === number) { changed = item.status !== report.status; item.status = report.status; item.endedAt = new Date().toISOString(); }
         }, context);
         if (changed) runtime.subagentsChanged?.(api.conversationId, { conversationId: child, status: report.status });
+        // The agent's runs: what they spent counts toward its day, and a report reaches the home thread only when it
+        // matters enough for the person's interruption setting (a heartbeat's all clear never does).
+        const level = task.input.gate ? reportLevel(report.answer) : null;
+        if (task.input.gate) {
+          const spent = totalUsage(await api.snapshot(UsageDoc, child, context)).cost.total;
+          const day = await api.memo("day", runtime.agentDay?.() || new Date().toISOString().slice(0, 10), context);
+          await api.commit(async (tx) => {
+            const item = (await tx.doc(SubagentRoster, api.conversationId)).children[id];
+            if (item.counted?.includes(number)) return;
+            item.counted = [...(item.counted || []), number];
+            item.level = level;
+            const doc = await tx.doc(AgentDoc);
+            doc.spend[day] = (doc.spend[day] || 0) + spent;
+          }, context);
+        }
+        const heard = !task.input.gate || reaches(level, runtime.agentDial?.());
         const parent = await runtime.harness.conversation(api.conversationId, context);
-        if (!stopped && !await resetSince(parent, task.input.sinceEntry || 0, context)) {
+        if (heard && !stopped && !await resetSince(parent, task.input.sinceEntry || 0, context)) {
           const requestId = `subagent-report:${child}:${number}`;
           const handle = await api.conversation(api.conversationId, context);
           await handle.submit({ type: "input", whenBusy: "followUp", requestId,
             content: report.answer, entry: { kind: "conduit.subagent-report",
-              data: { subagentId: id, conversationId: child, title, status: report.status, messageId: requestId } } }, context);
+              data: { subagentId: id, conversationId: child, title, status: report.status, messageId: requestId,
+                ...(task.input.origin ? { origin: task.input.origin, level } : {}) } } }, context);
+          // The parent may have no live chat (an agent's home thread nobody has open): the report's turn is followed.
+          runtime.wakeChat?.(api.conversationId);
         }
         await api.commit(() => ({ status: "terminal", outcome: { status: "completed", result: report } }), context);
       } catch (error) {
@@ -318,6 +350,28 @@ export function Subagents(runtime) {
       return textResult(`${action === "spawn" ? "Started" : "Messaged"} subagent ${item.id}: ${item.title}`);
     },
   });
+  /**
+   * Start a background subagent from outside a tool call: the persistent agent's runs (a schedule, an event, a
+   * webhook). In the caller's commit on the parent conversation (`tx.createTask()` defaults to it); `key` makes it
+   * idempotent, as a spawning call's task id does. `gate`: its report is a run's, weighed before it reaches the
+   * parent, and its spend counts toward the agent's day. Returns the roster item, `{ id, child, anchor, ... }`.
+   */
+  runtime.spawnBackground = async (tx, conversationId, { key, task, title = subagentTitle(task), origin = null, gate = false, mode = "followUp" }) => {
+    const roster = await tx.doc(SubagentRoster, conversationId);
+    const existing = Object.values(roster.children).find((value) => value.spawn === key);
+    if (existing) return JSON.parse(JSON.stringify(existing));
+    const id = `sa-${roster.next++}`;
+    const sinceEntry = (await tx.scanEntries({ conversationId }, 1)).items[0]?.id || 0;
+    const owner = await tx.createTask(anchor, { id, sinceEntry }, { ownership: { kind: "conversation" }, background: true });
+    const child = await tx.createConversation({ ownership: { kind: "task", taskId: owner } });
+    await stripTools(tx, child.id);
+    const delivery = await tx.createTask(reporter, { id, child: child.id, title, content: task, mode, number: 1, sinceEntry,
+      gate, ...(origin ? { origin } : {}) }, { ownership: { kind: "task", taskId: owner } });
+    roster.children[id] = { id, title, sinceEntry, child: child.id, anchor: owner, spawn: key, number: 1,
+      status: "running", startedAt: new Date().toISOString(), endedAt: null, deliveries: { [key]: delivery }, reporter: delivery,
+      ...(origin ? { origin } : {}) };
+    return JSON.parse(JSON.stringify(roster.children[id]));
+  };
   const extension = defineExtension({ name: "subagents", tools: [subagent], tasks: [anchor, reporter] });
   return extension;
 }
