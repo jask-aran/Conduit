@@ -5412,7 +5412,7 @@ function App() {
         current.chat.setDraft(prompt);
         await current.chat.send();
       }} /></Show>}
-      conversation={ready() ? { messages: () => current.chat.messages(), working: () => current.chat.streaming(), onOpen: () => {
+      conversation={ready() ? { transcript: <Transcript chat={current.chat} supports={current.capability} markdownRenderer={markdownRenderer()} profileLabel={current.activeProfile()?.label || undefined} projectId={agentView()?.projectId} conversational />, onOpen: () => {
         const id = agentView()?.home?.chatId;
         if (id) void agentChat(id).then((target) => openChatFromPage(target.chat, target.project)).catch(showError);
       } } : undefined}

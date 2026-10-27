@@ -741,7 +741,9 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
     onCleanup(() => setLatestScroller(null));
     window.addEventListener("conduit:voice-captions", scheduleLatestButtonAnchor);
     onCleanup(() => window.removeEventListener("conduit:voice-captions", scheduleLatestButtonAnchor));
-    const composerStack = transcriptRoot.closest<HTMLElement>(".ui-chat")?.querySelector<HTMLElement>(".ui-composer-dock");
+    // In a page's conversation (DashConversation) the composer is under the transcript, not over it: nothing to clear.
+    const composerStack = transcriptRoot.closest(".ui-dash-conversation") ? null
+      : transcriptRoot.closest<HTMLElement>(".ui-chat")?.querySelector<HTMLElement>(".ui-composer-dock");
     // The composer floats over the bottom of the transcript, so the thread has
     // to reserve its height itself. A fixed reservation only ever matched the
     // resting composer: a multi-line draft, attachments, or the queued-message

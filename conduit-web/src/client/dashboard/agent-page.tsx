@@ -1,13 +1,11 @@
-import { createEffect, createMemo, createSignal, For, on, onCleanup, onMount, Show, Suspense, type JSX } from "solid-js";
-import { Answer, Icons, Message as UserMessage, StatusDot, Turn } from "@/components/ui";
+import { createEffect, createMemo, createSignal, For, on, onCleanup, onMount, Show, type JSX } from "solid-js";
+import { Icons, StatusDot } from "@/components/ui";
 import { Button, TextArea } from "@/components/ui/controls";
 import { DashConversation, DashIconButton, DashNote } from "@/components/ui/dashboard";
 import { Dialog } from "@/components/dialog";
 import { MenuRow } from "@/components/menus";
 import { api } from "../api/client";
-import type { AgentSummary, ChatSummary, Message } from "../api/contracts";
-import { ChatMarkdown } from "../chat/lazy-markdown";
-import { TraceStarting } from "../chat/turn-trace";
+import type { AgentSummary, ChatSummary } from "../api/contracts";
 import { agentNeeds, agentView, refreshAgent, type AgentRun, type AgentSchedule } from "../state/agent";
 import { SplitDashboard, SplitEmpty, SplitGroup, SplitHeader, SplitQuickActions, SplitRow } from "./primitives/split";
 
@@ -47,8 +45,8 @@ export function AgentPage(props: {
   header: (title: string) => JSX.Element;
   /** The composer: what is sent goes to the agent's home thread, and its answer comes in over it. */
   composer?: JSX.Element;
-  /** Its home thread, loaded: the page shows its latest over the composer, and opens the whole of it. */
-  conversation?: { messages: () => Message[]; working: () => boolean; onOpen: () => void };
+  /** Its home thread, loaded: the page shows it over the composer (transcript: the app's), and opens the whole of it. */
+  conversation?: { transcript: JSX.Element; onOpen: () => void };
   /** Opens one of its chats (a thread, a run's transcript, a question's thread), as a dashboard row opens a chat. */
   onOpenChat: (chatId: string, event?: MouseEvent) => void;
   /** Opens one of its memory files (a path in its folder) in the file viewer. */
@@ -177,7 +175,7 @@ export function AgentPage(props: {
 
   // Its threads: home, where it talks to the person, then the side threads it or they started.
   const threads = createMemo(() => [...(view()?.sides || [])].sort((left, right) => Date.parse(right.updatedAt || "") - Date.parse(left.updatedAt || "")));
-  const threadsGroup = () => <SplitGroup id="agent-threads" label="Threads" order="list" count={threads().length + (view()?.home ? 1 : 0)}>
+  const threadsGroup = () => <SplitGroup id="agent-threads" label="Threads" count={threads().length + (view()?.home ? 1 : 0)}>
     <Show when={view()?.home}>{(home) =>
       <SplitRow element="button" onClick={(event: MouseEvent) => props.onOpenChat(home().chatId, event)} lead={<Icons.Home />} primary="Home" context="Where it talks to you" />}
     </Show>
@@ -186,21 +184,9 @@ export function AgentPage(props: {
     </For>
   </SplitGroup>;
 
-  // The latest of its home thread: what you said and what it said, each message it wrote; a line while it works.
-  // Its runs' reports and its work stay in the thread, a tap away.
-  const recent = createMemo(() => (props.conversation?.messages() ?? []).filter((message) =>
-    (message.role === "user" || message.role === "assistant") && !message.agent && (message.content || "").trim()
-    && !(message as { discarded?: boolean }).discarded && message.stopReason !== "error").slice(-24));
+  // Its home thread over the composer, drawn as the thread is (the app's transcript), the whole of it a tap away.
   const conversation = () => <Show when={props.conversation}>{(thread) =>
-    <DashConversation label={`${name()}'s home thread`} open={{ label: "Open thread", onOpen: thread().onOpen }}>
-      <Show when={recent().length} fallback={<SplitEmpty>Say something to {name()}.</SplitEmpty>}>
-        <For each={recent()}>{(message) => message.role === "user"
-          ? <UserMessage>{message.content}</UserMessage>
-          : <Answer><Suspense fallback={message.content}><ChatMarkdown>{message.content}</ChatMarkdown></Suspense></Answer>}
-        </For>
-      </Show>
-      <Show when={thread().working()}><Turn><TraceStarting label="Working" /></Turn></Show>
-    </DashConversation>}
+    <DashConversation label={`${name()}'s home thread`} scrolls open={{ label: "Open thread", onOpen: thread().onOpen }}>{thread().transcript}</DashConversation>}
   </Show>;
 
   const spent = () => {
@@ -222,8 +208,7 @@ export function AgentPage(props: {
           notice={error() ? <DashNote error>{error()}</DashNote> : undefined}
           conversation={conversation()}
           composer={props.composer}
-          list={threadsGroup()}
-          aside={<>{needsGroup()}{workingGroup()}{schedulesGroup()}{watchesGroup()}{rulesGroup()}{memoryGroup()}{recentGroup()}</>} />
+          aside={<>{needsGroup()}{threadsGroup()}{workingGroup()}{schedulesGroup()}{watchesGroup()}{rulesGroup()}{memoryGroup()}{recentGroup()}</>} />
       </Show>
     </Show>
 
