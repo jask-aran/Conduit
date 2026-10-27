@@ -85,11 +85,15 @@ export function registerAgentRoutes(app, { agent, backends }) {
   app.get("/v0/agent/connectors/:id/callback", async (request, response, next) => {
     try {
       if (!agent.enabled()) return response.status(400).send("Invalid authorization state");
-      const returnTo = await agent.connectors.finish(request.params.id, request.query.state, request.query.code);
+      const returnTo = await agent.connectors.finish(request.params.id, request.query.state, request.query.code, request.query.iss);
       if (agent.connectors.entry(request.params.id).status !== "on") return response.status(502).send("Connector connection failed");
       if (returnTo) return response.redirect(303, safeRedirectTarget(returnTo));
       response.type("html").send("<!doctype html><title>Connected</title><p>Executor is connected. You can close this tab.</p>");
-    } catch (error) { response.status(error.status === 400 ? 400 : 502).send(error.status === 400 ? "Invalid authorization state" : "Connector authorization failed"); }
+    } catch (error) {
+      // The reason, never the code or a token: OAuth errors name what failed, not the secrets.
+      if (error.status !== 400) console.error(`[agent] connector ${request.params.id} authorization failed: ${error.name}: ${error.message}`);
+      response.status(error.status === 400 ? 400 : 502).send(error.status === 400 ? "Invalid authorization state" : `Connector authorization failed: ${error.message}`);
+    }
   });
 
   app.delete("/v0/agent/connectors/:id", async (request, response, next) => {
