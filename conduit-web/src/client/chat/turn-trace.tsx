@@ -5,7 +5,7 @@ import type { AgentSummary, Message, ToolItem, ToolKind } from "../api/contracts
 import { spawned, TurnAgents } from "./agents";
 import type { TraceSegment, TurnTraceData } from "../turn-rows";
 import { elapsed, KIND_ICONS, stepDuration, toolName, ToolStep, VERBS } from "./tool-card";
-import { Orb, Step, StepProse, Trace, TraceError as LibraryTraceError, Trail } from "@/components/ui";
+import { Orb, ServiceIcon, Step, StepProse, Trace, TraceError as LibraryTraceError, Trail } from "@/components/ui";
 import { Dynamic } from "solid-js/web";
 import { ORBITS_TRAILED, PLAIN_SPHERE, SPUTTERING_SPHERE } from "./orb-frames";
 import { type ModeFrame, type OrbState, settledOrbRate } from "./thinking-orb";
@@ -333,24 +333,57 @@ function TrailLine(props: RowProps & { item: TrailItem; arriving?: boolean }) {
 /* What a settled piece of the persistent agent's work looked at, for its "Looked at" line: a file by its name, a
    search by its query, a page by its site, its own tools by what they are about. A script's calls count as its own. */
 const OWN_SOURCES: Record<string, string> = { memory: "its memory", chats: "your chats", schedule: "its schedules", watch: "its watches" };
-function sourceOf(tool: ToolItem): string {
+/** What one step looked at: a file by its name, a search by its query, a page by its site, its own tools by what they
+ *  are about, a connector's call by each service it reached (the hub names them); none for a connector's own tools. */
+function sourcesOfTool(tool: ToolItem): string[] {
   const subject = tool.subject || "";
-  if (OWN_SOURCES[tool.name || ""]) return OWN_SOURCES[tool.name || ""]!;
-  if (tool.kind === "search") return `\u201c${subject}\u201d`;
-  if (tool.kind === "fetch") { try { return new URL(subject).hostname.replace(/^www\./, ""); } catch { return subject; } }
-  if (tool.kind === "read" || tool.kind === "edit") return subject.split("/").filter(Boolean).at(-1) || subject;
-  return /^mcp__/.test(tool.name || "") ? (toolName(tool.name) || "").split(" ")[0]! : subject || tool.name || "";
+  if (OWN_SOURCES[tool.name || ""]) return [OWN_SOURCES[tool.name || ""]!];
+  if (/^mcp__/.test(tool.name || "")) return subject ? subject.split(", ") : [];
+  if (tool.kind === "search") return [`\u201c${subject}\u201d`];
+  if (tool.kind === "fetch") { try { return [new URL(subject).hostname.replace(/^www\./, "")]; } catch { return subject ? [subject] : []; } }
+  if (tool.kind === "read" || tool.kind === "edit") return [subject.split("/").filter(Boolean).at(-1) || subject];
+  const name = subject || toolName(tool.name) || "";
+  return name ? [name] : [];
 }
-function sourcesOf(segments: TraceSegment[]): string {
-  const seen = new Set<string>();
+/** A settled piece of work by what it looked at: one line a source, with the steps that reached it; a script's calls
+ *  count as its own. A piece that only used a connector's own tools is that connector. */
+type SourceLine = { source: string; kind: ToolKind; service?: boolean; steps: ToolItem[] };
+function sourceLines(segments: TraceSegment[]): SourceLine[] {
+  const lines = new Map<string, SourceLine>();
+  let connector = "";
   for (const segment of segments) {
     if (segment.kind !== "tool" || spawned(segment.tool)) continue;
-    const calls = segment.tool.kind === "script" ? (segment.tool.calls || []).filter((call) => !call.planned && !call.earlier)
-      .map((call) => ({ toolCallId: "", name: call.name, kind: call.kind, subject: call.subject }) as ToolItem) : [segment.tool];
-    for (const tool of calls) { const source = sourceOf(tool); if (source) seen.add(source); }
+    const step = segment.tool;
+    const calls = step.kind === "script" ? (step.calls || []).filter((call) => !call.planned && !call.earlier)
+      .map((call) => ({ toolCallId: "", name: call.name, kind: call.kind, subject: call.subject }) as ToolItem) : [step];
+    for (const tool of calls) {
+      if (/^mcp__/.test(tool.name || "")) connector ||= (toolName(tool.name) || "").split(" ")[0]!;
+      for (const source of sourcesOfTool(tool)) {
+        const service = /^mcp__/.test(tool.name || "");
+        const line = lines.get(source) ?? { source, kind: service ? "fetch" : tool.kind || "other", service, steps: [] };
+        if (!line.steps.includes(step)) line.steps.push(step);
+        lines.set(source, line);
+      }
+    }
   }
-  const all = [...seen];
+  if (!lines.size && connector) {
+    const steps = segments.flatMap((segment) => segment.kind === "tool" ? [segment.tool] : []);
+    lines.set(connector, { source: connector, kind: "fetch", steps });
+  }
+  return [...lines.values()];
+}
+const sourcesText = (lines: SourceLine[]) => {
+  const all = lines.map((line) => line.source);
   return all.length > 4 ? `${all.slice(0, 4).join(", ")} +${all.length - 4}` : all.join(", ");
+};
+/* A settled piece's line for one source: what it looked at, opening to the steps that reached it. */
+function SourceStep(props: RowProps & { line: SourceLine }) {
+  const fold = useFold(() => `source:${props.line.source}:${props.line.steps[0]?.toolCallId || ""}`, props);
+  const kindIcon = <Dynamic component={KIND_ICONS[props.line.kind] || KIND_ICONS.other} />;
+  return <Step icon={props.line.service ? <ServiceIcon service={props.line.source} fallback={kindIcon} /> : kindIcon} verb={props.line.source} opens open={fold.open()} onToggle={fold.toggle}>
+    <Trail nested="group"><Index each={props.line.steps}>{(tool) => { const inner = useFold(() => tool().toolCallId, props);
+      return <ToolStep tool={tool()} settled={props.settled} open={inner.open()} onToggle={inner.toggle} />; }}</Index></Trail>
+  </Step>;
 }
 const LATEST_CHARS = 240;
 /** since: how far into a sent message's entrance the turn arrives, so it fades in with it. */
@@ -375,13 +408,15 @@ export function TurnTrace(props: { trace: TurnTraceData; agents?: AgentSummary[]
   const thinking = <Suspense fallback={text()}><ChatMarkdown inline renderer={props.renderer}>{text() || "…"}</ChatMarkdown></Suspense>;
   const latest = () => { const detail = preview().detail; return detail ? detail.markdown ? thinking : detail.text : undefined; };
   const looked = () => props.gathering && !props.trace.active && !unfinished();
-  const sources = createMemo(() => looked() ? sourcesOf(props.trace.segments) : "");
+  const lines = createMemo(() => looked() ? sourceLines(props.trace.segments) : []);
+  const sources = () => sourcesText(lines());
   return <Show when={!looked() || props.trace.segments.some((segment) => segment.kind === "tool" || segment.kind === "error")}><Trace motion={props.since != null ? "entering" : undefined} since={props.since} orb={props.orb === false ? undefined : <Orb state={preview().status.orb} frame={preview().status.frame} tint={unfinished() ? "var(--destructive)" : undefined} rate={props.trace.active ? undefined : settledOrbRate(unfinished())} />}
-      status={looked() ? (sources() ? `Looked at ${sources()}` : "Worked") : preview().status.verb} time={looked() ? undefined : time() || undefined} work={preview().work || undefined}
+      status={looked() ? (sources() ? `Looked at ${sources()}` : "Worked") : preview().status.verb} quiet={looked()} time={looked() ? undefined : time() || undefined} work={preview().work || undefined}
       latest={looked() ? undefined : latest()} live={props.trace.active} tone={unfinished() ? "failed" : undefined}
       pinned={<TurnAgents tools={spawns()} agents={props.agents ?? []} onStop={props.onStopAgent} />}
       opens={trail().length > 0} open={open()} onToggle={() => { const next = !open(); setOpen(next); props.onOpenChange?.(next); }}>
-      {(() => { opened = trail().length; return <Trail><Index each={trail()}>{(item, index) =>
+      {looked() && lines().length ? <Trail><Index each={lines()}>{(line) => <SourceStep line={line()} settled renderer={props.renderer} profileLabel={props.profileLabel} toolOpen={props.toolOpen} onToolOpenChange={props.onToolOpenChange} onRendered={props.onRendered} />}</Index></Trail>
+      : (() => { opened = trail().length; return <Trail><Index each={trail()}>{(item, index) =>
         <TrailLine item={item()} arriving={index >= opened} settled={!props.trace.active} renderer={props.renderer} profileLabel={props.profileLabel} toolOpen={props.toolOpen} onToolOpenChange={props.onToolOpenChange} onRendered={props.onRendered} />}</Index></Trail>; })()}
     </Trace></Show>;
 }

@@ -28,15 +28,28 @@ const MAX_SHOWN = 40;
 const literal = (node) => node?.type === "Literal" && typeof node.value === "string" ? node.value
   : node?.type === "TemplateLiteral" && !node.expressions.length ? node.quasis[0]?.value.cooked ?? null : null;
 
-/* The input a call states literally: `{ command: "ls" }` reads as itself, a
-   field built at runtime is left out. */
-function literalInput(node) {
+/* The input a call states literally: `{ command: "ls" }` reads as itself, and
+   so do objects and arrays of literals inside it (a gateway's `{ calls: [{ path:
+   "…" }] }`); a field built at runtime is left out. */
+const literalValue = (node, depth) => {
+  const text = literal(node);
+  if (text != null) return text;
+  if (node?.type === "Literal" && (typeof node.value === "number" || typeof node.value === "boolean")) return node.value;
+  if (depth >= 4) return undefined;
+  if (node?.type === "ObjectExpression") return literalInput(node, depth + 1);
+  if (node?.type === "ArrayExpression") {
+    const items = node.elements.map((element) => literalValue(element, depth + 1)).filter((value) => value !== undefined);
+    return items;
+  }
+  return undefined;
+};
+function literalInput(node, depth = 0) {
   if (node?.type !== "ObjectExpression") return null;
   const input = {};
   for (const property of node.properties) {
     if (property.type !== "Property" || property.computed) continue;
     const key = property.key.type === "Identifier" ? property.key.name : literal(property.key);
-    const value = literal(property.value);
+    const value = literalValue(property.value, depth);
     if (key && value != null) input[key] = value;
   }
   return input;
