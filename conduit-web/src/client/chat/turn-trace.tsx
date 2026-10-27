@@ -4,7 +4,7 @@ import { createEffect, createMemo, createSignal, Index, Match, onCleanup, Show, 
 import type { AgentSummary, Message, ToolItem, ToolKind } from "../api/contracts";
 import { spawned, TurnAgents } from "./agents";
 import type { TraceSegment, TurnTraceData } from "../turn-rows";
-import { elapsed, KIND_ICONS, stepDuration, ToolStep, VERBS } from "./tool-card";
+import { elapsed, KIND_ICONS, stepDuration, toolName, ToolStep, VERBS } from "./tool-card";
 import { Orb, Step, StepProse, Trace, TraceError as LibraryTraceError, Trail } from "@/components/ui";
 import { Dynamic } from "solid-js/web";
 import { ORBITS_TRAILED, PLAIN_SPHERE, SPUTTERING_SPHERE } from "./orb-frames";
@@ -224,8 +224,6 @@ function toolLine(tool: ToolItem): string {
    step. Discarded text is that one step's loss, not the turn's, so it is
    passed over. */
 type Detail = { text: string; markdown: boolean };
-/* A connector's tool by its service: `mcp__executor__call` is "Executor call". */
-const toolName = (name?: string) => { const match = /^mcp__([^_]+(?:_[^_]+)*)__(.+)$/.exec(name || ""); return match ? `${match[1]![0]!.toUpperCase()}${match[1]!.slice(1)} ${match[2]}` : name; };
 function stepLine(tool: ToolItem, live: boolean): string {
   // A running script is the tool it is running now, else the last it ran.
   if (live && !tool.done && tool.kind === "script") {
@@ -379,8 +377,8 @@ export function TurnTrace(props: { trace: TurnTraceData; agents?: AgentSummary[]
   const looked = () => props.gathering && !props.trace.active && !unfinished();
   const sources = createMemo(() => looked() ? sourcesOf(props.trace.segments) : "");
   return <Show when={!looked() || props.trace.segments.some((segment) => segment.kind === "tool" || segment.kind === "error")}><Trace motion={props.since != null ? "entering" : undefined} since={props.since} orb={props.orb === false ? undefined : <Orb state={preview().status.orb} frame={preview().status.frame} tint={unfinished() ? "var(--destructive)" : undefined} rate={props.trace.active ? undefined : settledOrbRate(unfinished())} />}
-      status={looked() ? (sources() ? "Looked at" : "Worked") : preview().status.verb} time={looked() ? undefined : time() || undefined} work={preview().work || undefined}
-      latest={looked() ? sources() || latest() : latest()} live={props.trace.active} tone={unfinished() ? "failed" : undefined}
+      status={looked() ? (sources() ? `Looked at ${sources()}` : "Worked") : preview().status.verb} time={looked() ? undefined : time() || undefined} work={preview().work || undefined}
+      latest={looked() ? undefined : latest()} live={props.trace.active} tone={unfinished() ? "failed" : undefined}
       pinned={<TurnAgents tools={spawns()} agents={props.agents ?? []} onStop={props.onStopAgent} />}
       opens={trail().length > 0} open={open()} onToggle={() => { const next = !open(); setOpen(next); props.onOpenChange?.(next); }}>
       {(() => { opened = trail().length; return <Trail><Index each={trail()}>{(item, index) =>

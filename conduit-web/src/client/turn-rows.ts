@@ -318,6 +318,10 @@ export function buildLiveProjectionIndex(
   };
 }
 
+/* What a conversational turn says: its text, and the text other chats fold into the trace as narration (said between
+   tool calls), so a live turn has the same answers, in the same rows, as the turn it settles into. */
+const spoken = (block: { kind: string }) => block.kind === "text" || block.kind === "narration";
+
 /** Where each block of a conversational live turn is drawn: `conversationalLiveRows`' walk, without building rows. */
 function conversationalLiveIndex(generation: ActiveGenerationView, messages: Message[]): LiveProjectionIndex {
   const owner = liveOwner(messages, generation);
@@ -331,10 +335,10 @@ function conversationalLiveIndex(generation: ActiveGenerationView, messages: Mes
   let answers = 0;
   let segmentIndex = 0;
   for (const assistant of generation.assistantMessages) {
-    const texts = assistant.blocks.filter((block) => block.kind === "text");
+    const texts = assistant.blocks.filter(spoken);
     let answered = false;
     for (const block of assistant.blocks) {
-      if (block.kind === "text") {
+      if (spoken(block)) {
         if (answered) continue;
         answered = true;
         const rowKey = answerDisplayKey(owner, answers, `live:${generation.id}`);
@@ -374,7 +378,7 @@ function conversationalLiveRows(generation: ActiveGenerationView, owner: Message
       precedingUserId: owner?.id, answerless: last, timestamp: generation.assistantMessages.at(-1)?.timestamp || undefined });
   };
   for (const assistant of generation.assistantMessages) {
-    const text = assistant.blocks.filter((block) => block.kind === "text").map((block) => block.text || "").join("\n");
+    const text = assistant.blocks.filter(spoken).map((block) => block.text || "").join("\n");
     const terminalError = generation.status === "failed" && assistant.stopReason === "error" && generation.assistantMessages.at(-1) === assistant;
     let answered = false;
     const answer = () => {
@@ -389,12 +393,11 @@ function conversationalLiveRows(generation: ActiveGenerationView, owner: Message
       answers += 1; group += 1; segments = [];
     };
     for (const block of assistant.blocks) {
-      if (block.kind === "text") answer();
+      if (spoken(block)) answer();
       else if (block.kind === "thinking") {
         segments.push({ kind: "thinking", id: block.identity, text: block.text || "", live: block.status === "streaming",
           ...(block.redacted && !block.text ? { hidden: true } : {}) });
-      } else if (block.kind === "narration") segments.push({ kind: "narration", id: block.identity, text: block.text || "", live: block.status === "streaming" });
-      else if (block.kind === "tool_call") segments.push(buildLiveToolSegment(generation, block, tools));
+      } else if (block.kind === "tool_call") segments.push(buildLiveToolSegment(generation, block, tools));
     }
     if (assistant.stopReason === "error" && generation.assistantMessages.at(-1) !== assistant) segments.push(buildLiveErrorSegment(assistant));
     answer();

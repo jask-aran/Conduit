@@ -1115,7 +1115,10 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
                   facts={[message().model && `Model: ${message().model}`, message().provider && `Provider: ${message().provider}`, props.profileLabel && `Profile: ${props.profileLabel}`].filter(Boolean) as string[]} />
               </Show>
               {/* Held empty while it streams, so the foot arriving moves nothing. */}
-              <Show when={actionsShown()} fallback={<MessageFoot />}><AnswerFoot message={message()} precedingUserId={precedingUserId()} chat={props.chat} supports={props.supports} artifact={artifact()} traced={item.traced} reveal={streamed()} copied={copied()} onCopy={() => void copy()} /></Show>
+              {/* A turn that speaks more than once has one foot, under the message that carries its orb. */}
+              <Show when={!props.conversational || item.orb}>
+                <Show when={actionsShown()} fallback={<MessageFoot />}><AnswerFoot message={message()} precedingUserId={precedingUserId()} chat={props.chat} supports={props.supports} artifact={artifact()} traced={item.traced} reveal={streamed()} copied={copied()} onCopy={() => void copy()} /></Show>
+              </Show>
             </Turn>}>
               <UserMessage message={message()} text={review().text} editing={props.chat.editingEntryId() === message().id}
                 editable={!message().pending && props.supports("fork")} since={arrive} onEdit={() => { props.chat.edit(message()); focusComposerSoon(); }}
