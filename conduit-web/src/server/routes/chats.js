@@ -64,6 +64,15 @@ export function registerChatRoutes(app, {
     return child;
   };
 
+  // Work submitted to a conversation from the server (a background run's report to the agent's home thread) is
+  // followed by its chat, as `reattach` does at startup, so it reaches the chat's log and anyone who opens it.
+  if (durable) durable.runtime.wakeChat = (conversationId) => void (async () => {
+    const harness = await durable.runtime.open();
+    const chatId = (await harness.snapshot(ConduitIds, conversationId, durable.context))?.chatId;
+    if (!chatId || backends.getByChatId(chatId) || !registry.metadata(chatId)) return;
+    await launchLiveSession({ chatId });
+  })().catch((error) => { if (error?.code !== "live_process_limit") console.warn("[conduit-runtime] could not follow", conversationId, error?.message || error); });
+
   // Param guards also cover upload and draft routes registered before these routes.
   const childWrite = (request, response, next, id) => {
     if (/^\/v0\/(?:chats|sessions|runs)\//.test(request.originalUrl)

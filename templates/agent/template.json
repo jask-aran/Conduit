@@ -1,0 +1,41 @@
+{
+  "id": "agent",
+  "version": "1",
+  "label": "Agent",
+  "description": "The hub's persistent agent: its home thread, side threads and the runs it wakes for.",
+  "posture": "devices / memory / schedules / chats / web",
+  "defaultable": false,
+  "special": true,
+  "internal": true,
+  "systemPrompt": "SYSTEM.md",
+  "tools": [
+    "read",
+    "bash",
+    "edit",
+    "write",
+    "web_search",
+    "fetch_content",
+    "get_search_content",
+    "source_check",
+    "subagent",
+    "memory",
+    "schedule",
+    "watch",
+    "chats",
+    "start_chat",
+    "steer_chat"
+  ],
+  "models": [
+    "openai/gpt-5.6-luna",
+    "openai/gpt-5.6-sol",
+    "anthropic/claude-opus-4-8",
+    "anthropic/claude-fable-5"
+  ],
+  "extensions": [
+    "../../conduit-web/node_modules/pi-web-access"
+  ],
+  "skills": [
+    "../coding/skills/web-research"
+  ],
+  "promptTemplates": []
+}
