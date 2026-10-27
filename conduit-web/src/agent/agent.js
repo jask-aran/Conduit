@@ -238,7 +238,8 @@ export class PersistentAgent {
     const state = await this.state();
     if (state.home?.conversationId === conversationId) return { role: "home", chatId: state.home.chatId };
     const record = await harness.commit(async (tx) => tx.conversation(conversationId), this.context);
-    if (record?.ownership?.kind === "task") return { role: "run", chatId: null };
+    // A run's conversation is a task's (pi-durable's record names that `owner`); a thread's has none.
+    if (record?.owner) return { role: "run", chatId: null };
     const chat = this.registry.list({ includeHidden: true }).find((item) => item.backend?.agentThread
       && String(item.backend?.opaqueSession) === String(conversationId));
     return chat ? { role: chat.backend.agentThread, chatId: chat.id } : null;
@@ -296,5 +297,5 @@ export const runBrief = (kind, task) => [
   String(task || "").trim(),
   "",
   "Begin your final answer with NOTHING, FYI:, ATTENTION: or URGENT: as described in your instructions. "
-    + "If something needs the person's approval, say exactly what, and do not do it.",
+    + "An outward call you make is asked, not done: the person approves it under your report.",
 ].join("\n");

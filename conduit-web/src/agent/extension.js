@@ -2,7 +2,7 @@ import { defineExtension } from "@earendil-works/pi-durable";
 import { ChatTools } from "./chat-tools.js";
 import { EventTools } from "./events.js";
 import { MemoryTools } from "./memory.js";
-import { policyWraps } from "./policy.js";
+import { ApprovedTool, policyWraps } from "./policy.js";
 import { ScheduleTools } from "./schedule.js";
 
 /**
@@ -16,13 +16,15 @@ import { ScheduleTools } from "./schedule.js";
  */
 export function AgentExtension(runtime, installed) {
   const parts = [MemoryTools(runtime), ScheduleTools(runtime), EventTools(runtime), ChatTools(runtime)];
-  const tools = parts.flatMap((part) => part.tools || []);
+  const own = parts.flatMap((part) => part.tools || []);
+  // `approved` runs what an ask holds with the tool as installed: the policy has already been answered.
+  const tools = [...own, ApprovedTool(runtime, [...installed, ...own])];
   return defineExtension({
     name: "agent",
     tools,
     tasks: parts.flatMap((part) => part.tasks || []),
     sections: parts.flatMap((part) => part.sections || []),
     // The device tools are another extension's; the agent's own outward tools are its own.
-    wraps: policyWraps(runtime, [...installed, ...tools]),
+    wraps: policyWraps(runtime, [...installed, ...own]),
   });
 }

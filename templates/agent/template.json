@@ -24,7 +24,8 @@
     "watch",
     "chats",
     "start_chat",
-    "steer_chat"
+    "steer_chat",
+    "approved"
   ],
   "models": [
     "openai/gpt-5.6-luna",

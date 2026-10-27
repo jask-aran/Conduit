@@ -220,7 +220,10 @@ export function Subagents(runtime) {
         }
         // A morning brief is asked for, not volunteered: it reaches the person whatever the setting, unless it is empty.
         const asked = task.input.origin?.kind === "brief" && level !== "none";
-        const heard = !task.input.gate || asked || reaches(level, runtime.agentDial?.());
+        // A run that left something to approve is heard whatever the setting: its asks show under its report.
+        const waiting = task.input.gate ? await api.memo("waiting", Object.values((await api.snapshot(AgentDoc, context))?.asks || {})
+          .filter((ask) => ask.status === "pending" && String(ask.sourceConversationId) === String(child)).length, context) : 0;
+        const heard = !task.input.gate || asked || waiting > 0 || reaches(level, runtime.agentDial?.());
         const parent = await runtime.harness.conversation(api.conversationId, context);
         if (heard && !stopped && !await resetSince(parent, task.input.sinceEntry || 0, context)) {
           const requestId = `subagent-report:${child}:${number}`;
@@ -234,7 +237,7 @@ export function Subagents(runtime) {
           // And the person's devices hear of it, once: marked before sending, so a replay does not push it again.
           if (task.input.gate && await api.memo("pushed", context) === undefined) {
             await api.memo("pushed", true, context);
-            runtime.notify?.({ kind: "report", conversationId: api.conversationId, title, text: report.answer, level, key: `${child}-${number}` });
+            runtime.notify?.({ kind: "report", conversationId: api.conversationId, title, text: report.answer, level, key: `${child}-${number}`, waiting });
           }
         }
         await api.commit(() => ({ status: "terminal", outcome: { status: "completed", result: report } }), context);

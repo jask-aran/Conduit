@@ -4,7 +4,8 @@ const HOUR24 = 86400_000;
 const statusAt = (ask, now) => ask.status === "pending" && Date.parse(ask.expiresAt) <= now ? "expired" : ask.status;
 export function askView(ask, now = Date.now()) {
   const { id, chatId, toolCallId, parentCallId, title, service, lines, createdAt, expiresAt, decidedAt, choice } = ask;
-  return { id, chatId, toolCallId, parentCallId, title, service, lines, createdAt, expiresAt,
+  // A run's ask: the run's conversation, whose report it shows under.
+  return { id, chatId, toolCallId, parentCallId, run: ask.run ? String(ask.sourceConversationId) : null, title, service, lines, createdAt, expiresAt,
     status: statusAt(ask, now), ...(decidedAt ? { decidedAt } : {}), ...(choice ? { choice } : {}) };
 }
 export function listAsks(state) {
@@ -33,7 +34,7 @@ export async function decide(agent, id, choice) {
   if (outcome.error) throw Object.assign(new Error(outcome.error === 404 ? "Ask not found" : "Ask already decided or expired"), { status: outcome.error });
   const ask = outcome.ask;
   const message = choice === "deny" ? `[Approval] Not allowed: ${ask.title} (ask ${ask.id}). Do not do it; say so if it matters.`
-    : `[Approval] Allowed: ${ask.title} (ask ${ask.id}). Make the call again now, exactly as before.`;
+    : `[Approval] Allowed: ${ask.title} (ask ${ask.id}). Do it now: call \`approved\` with ask ${ask.id}.`;
   // The decision stands even if the thread cannot be told now: an allowed call still goes through when it is made.
   try { await agent.chatHost.deliverApproval(ask.chatId, message); }
   catch (error) { console.warn(`[agent] could not tell its thread about ask ${ask.id}: ${error?.message || error}`); }
