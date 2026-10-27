@@ -50,13 +50,14 @@ export function Dashboard(props: {
 }
 
 /**
- * DashConversation: a page's own thread in an inset, its latest messages (children: the transcript's Message and
- * Answer) scrolling on their own, held at the newest while you are there; open: the whole thread, at its foot.
+ * DashConversation: a page's own thread in an inset over its composer, held at the newest while you are there; open:
+ * the whole thread, at its foot. children: its messages, scrolled here; or (scrolls) a transcript that scrolls itself.
  */
-export function DashConversation(props: { label: string; open?: { label: string; onOpen: () => void }; children: JSX.Element }) {
+export function DashConversation(props: { label: string; open?: { label: string; onOpen: () => void }; scrolls?: boolean; children: JSX.Element }) {
   let scroller!: HTMLDivElement;
   let pinned = true;
   onMount(() => {
+    if (props.scrolls) return;
     const follow = () => { if (pinned) scroller.scrollTop = scroller.scrollHeight; };
     const sizes = new ResizeObserver(follow);
     const watch = () => { sizes.disconnect(); sizes.observe(scroller); for (const child of scroller.children) sizes.observe(child); follow(); };
@@ -66,7 +67,7 @@ export function DashConversation(props: { label: string; open?: { label: string;
     onCleanup(() => { sizes.disconnect(); tree.disconnect(); });
   });
   return <section class="ui-dash-conversation" aria-label={props.label}>
-    <div ref={scroller} class="ui-dash-conversation-scroll" role="log" onScroll={() => { pinned = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 8; }}>{props.children}</div>
+    <div ref={scroller} class="ui-dash-conversation-scroll" data-scrolls={props.scrolls ? "" : undefined} role={props.scrolls ? undefined : "log"} onScroll={() => { pinned = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 8; }}>{props.children}</div>
     <Show when={props.open}>{(open) => <button type="button" class="ui-dash-conversation-open" onClick={() => open().onOpen()}>{open().label}<Icons.ChevronRight /></button>}</Show>
   </section>;
 }
