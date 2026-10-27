@@ -3,7 +3,6 @@
 
 /* A turn's subagents sit under its head, outside the fold, at the trail's left edge: rows, no box round them. */
 .ui-agent-rows { display: flex; flex-direction: column; gap: var(--space-2xs); margin: var(--space-xs) 0 0; padding: 0; list-style: none; }
-.ui-trace-fold > .ui-agent-rows { padding-left: calc(var(--icon-xl) + var(--row-gap)); }
 .ui-agent-row { display: flex; min-width: 0; align-items: center; gap: var(--space-2xs); }
 .ui-agent-row[data-entering] { animation: ui-fade-in var(--duration-gentle) var(--ease-arrive) backwards; }
 .ui-agent-open { display: flex; width: calc(100% + var(--space-sm)); min-width: 0; flex: 1; align-items: center; gap: var(--row-gap); margin-left: calc(-1 * var(--space-sm)); border: 0; border-radius: var(--radius-control); background: transparent; padding: var(--space-xs) var(--space-sm); color: inherit; font: inherit; text-align: left; cursor: pointer; }
