@@ -48,6 +48,17 @@
   position: relative; display: grid; min-width: 0; gap: var(--space-md); padding-inline-start: var(--turn-step); }
 .ui-turn-orb { position: absolute; top: 0; left: calc(var(--turn-step) - var(--turn-orb-reach)); display: grid; width: var(--icon-xl); height: var(--icon-xl); }
 .ui-turn-orb > * { width: 100%; height: 100%; }
+/* A phone has no gutter, and stepping every turn in to make one costs each answer a sixth of its width: there the turn
+   keeps the full column, a trace's orb sits in its own row beside its status (trace.css), and a turn whose orb is its
+   own (an answer that ends a turn) takes a smaller orb at its first line. */
+@media (--conduit-phone-layout) {
+  .ui-turn:not([data-density="desktop"] *) { --turn-step: 0px; }
+  .ui-turn:not([data-density="desktop"] *):has(> .ui-turn-orb) { --turn-orb-reach: calc(var(--icon-lg) + var(--row-gap)); padding-inline-start: var(--turn-orb-reach); }
+  .ui-turn:not([data-density="desktop"] *) > .ui-turn-orb { left: 0; width: var(--icon-lg); height: var(--icon-lg); }
+}
+[data-density="phone"] .ui-turn { --turn-step: 0px; }
+[data-density="phone"] .ui-turn:has(> .ui-turn-orb) { --turn-orb-reach: calc(var(--icon-lg) + var(--row-gap)); padding-inline-start: var(--turn-orb-reach); }
+[data-density="phone"] .ui-turn > .ui-turn-orb { left: 0; width: var(--icon-lg); height: var(--icon-lg); }
 .ui-message { display: grid; min-width: 0; justify-items: end; gap: var(--space-xs); }
 /* The foot: the time first, muted and tabular, then icon buttons; under a user's message, at the right. */
 .ui-message-foot { display: flex; min-height: var(--control-xs); align-items: center; gap: var(--space-2xs); color: var(--muted-foreground); font: var(--weight-rest) var(--text-caption) var(--font-sans); }
