@@ -187,7 +187,7 @@ export function DevicesSettingsTile(props: { projects: Project[]; onAddWorkspace
           </Show>
           <Show when={notifications.way}>
             <SettingLine label="Notifications" title={notifications.way === "android"
-              ? "The agent's reports and approvals reach this phone, through a UnifiedPush app such as ntfy."
+              ? "The agent's reports and approvals reach this phone, even with the app closed."
               : "The agent's reports and approvals reach this browser, even with the page closed."}>
               <Switch id="device-notifications" label="Notifications" disabled={notifications.busy()} checked={notifications.on()}
                 onChange={(on) => void (on ? notifications.enable(device.name) : notifications.disable())} />

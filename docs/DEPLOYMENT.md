@@ -81,6 +81,7 @@ that interface; build a new client. Run these commands from `conduit-web/`:
 | Windows development installer | `npm run desktop:build:win -- --dev` |
 | Windows release-shaped local installer | `npm run desktop:build:win` |
 | Android development APK | `npm run android:build` |
+| Android development APK, offered to dev apps as an update | `bash conduit-web/scripts/build-android-dev.sh` |
 
 Windows builds require the Windows toolchain, invoked from WSL. Installers go
 to `C:\Users\<user>\conduit-desktop-target[-dev]\release\bundle\nsis\`.

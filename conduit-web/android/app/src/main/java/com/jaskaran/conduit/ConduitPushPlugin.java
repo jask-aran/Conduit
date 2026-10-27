@@ -77,7 +77,9 @@ public class ConduitPushPlugin extends Plugin {
         PackageManager pm = getContext().getPackageManager();
         for (String id : UnifiedPush.getDistributors(getContext())) {
             try {
-                String label = pm.getApplicationLabel(pm.getApplicationInfo(id, 0)).toString();
+                // This app is listed when its built-in distributor can reach Play services.
+                String label = id.equals(getContext().getPackageName()) ? "Google Play services"
+                    : pm.getApplicationLabel(pm.getApplicationInfo(id, 0)).toString();
                 distributors.put(new JSObject().put("id", id).put("label", label));
             } catch (PackageManager.NameNotFoundException ignored) {}
         }
@@ -125,6 +127,13 @@ public class ConduitPushPlugin extends Plugin {
         if (vapid == null || !vapid.matches("[A-Za-z0-9_-]{87}")) {
             call.reject("Invalid VAPID key", "bad_vapid");
             return;
+        }
+        // Nothing chosen yet: Google's push service, built in, when Play services is there. Another distributor (ntfy) is
+        // used only when picked.
+        Context context = getContext();
+        if (UnifiedPush.getAckDistributor(context) == null && UnifiedPush.getSavedDistributor(context) == null
+            && UnifiedPush.getDistributors(context).contains(context.getPackageName())) {
+            UnifiedPush.saveDistributor(context, context.getPackageName());
         }
         if (UnifiedPush.getAckDistributor(getContext()) != null || UnifiedPush.getSavedDistributor(getContext()) != null) {
             registerWithDistributor(call, instance, label, vapid);

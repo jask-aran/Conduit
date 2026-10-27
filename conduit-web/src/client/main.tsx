@@ -918,9 +918,10 @@ function App() {
         if (live) {
           setUpdateState({ kind: "working", label: "Updating Conduit…" });
           const outcome = await live;
-          if (outcome === "current") sayUpToDate();
-          else if (outcome === "unreachable") { setUpdateState({ kind: "idle" }); toast.error("Could not reach the server to update."); }
-          return;
+          if (outcome === "unreachable") { setUpdateState({ kind: "idle" }); toast.error("Could not reach the server to update."); return; }
+          if (outcome !== "current") return;
+          // The interface is current; a native change comes as a new APK, which this server may also have published.
+          setUpdateState({ kind: "checking" });
         }
       }
       // The answer is in the sidebar row; a newer version downloads there with

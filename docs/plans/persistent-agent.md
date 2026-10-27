@@ -111,14 +111,15 @@ Backend loop end to end, minimal UI:
 
 Built (2026-10-27): the slice above, then push. The hub sends standard Web Push
 (RFC 8291/8292, no third party of its own) to every device that turned on
-Notifications in Settings › Devices: the Android app through a UnifiedPush
-distributor (ntfy), a browser through its own push service and the service
-worker. What reaches a device: a report the interruption setting lets through,
+Notifications in Settings › Devices: the Android app through UnifiedPush, with
+Google's push service built in as its distributor (no Firebase project, no other
+app; ntfy where there is no Play services), a browser through its own push
+service and the service worker. What reaches a device: a report the interruption setting lets through,
 and an approval waiting on the person. A morning brief is asked for, so it
 reaches the person whatever the setting unless it says NOTHING.
 
-Next: connectors, then outside sources; FCM through a relay only if a phone
-without a distributor needs it.
+Next: the agent's own page (Needs you, Working on, memory and schedules beside
+its home thread), then connectors, then outside sources.
 
 ## Open
 

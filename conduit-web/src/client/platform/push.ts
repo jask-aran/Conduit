@@ -6,8 +6,8 @@ import { activeServer, servers, switchToServer } from "./servers.ts";
 
 /**
  * Notifications from the hub on this device (docs/plans/persistent-agent.md, "Reaching you"). One protocol, Web Push,
- * two ways in: the Android app through a UnifiedPush distributor (ntfy and the like), a browser through its own push
- * service and the service worker. The hub keeps the subscriptions; this remembers which one is this device's, per hub.
+ * two ways in: the Android app through a UnifiedPush distributor (Google's push service built in, or ntfy and the like
+ * where there is no Play services), a browser through its own push service and the service worker. The hub keeps the subscriptions; this remembers which one is this device's, per hub.
  */
 
 type Permission = "granted" | "denied" | "prompt";
@@ -149,7 +149,7 @@ export function createPushControl() {
       await push.register({ instance, vapid: publicKey, label: `Conduit · ${activeServer()?.name || location.host}` });
     } catch (error) {
       const code = (error as { code?: string }).code;
-      if (code === "no_distributor") throw new Error("Install a UnifiedPush app such as ntfy, then turn this on.");
+      if (code === "no_distributor") throw new Error("This phone has no Google Play services: install a UnifiedPush app such as ntfy, then turn this on.");
       if (code === "choose_distributor") {
         setProblem({ text: "Choose which app delivers Conduit's notifications.", distributors: (await push.status()).distributors });
         return;
