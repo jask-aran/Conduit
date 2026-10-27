@@ -366,7 +366,7 @@ export function Subagents(runtime) {
    * idempotent, as a spawning call's task id does. `gate`: its report is a run's, weighed before it reaches the
    * parent, and its spend counts toward the agent's day. Returns the roster item, `{ id, child, anchor, ... }`.
    */
-  runtime.spawnBackground = async (tx, conversationId, { key, task, title = subagentTitle(task), origin = null, gate = false, mode = "followUp" }) => {
+  runtime.spawnBackground = async (tx, conversationId, { key, task, title = subagentTitle(task), origin = null, gate = false, mode = "followUp", model = null, thinkingLevel = null }) => {
     const roster = await tx.doc(SubagentRoster, conversationId);
     const existing = Object.values(roster.children).find((value) => value.spawn === key);
     if (existing) return JSON.parse(JSON.stringify(existing));
@@ -375,6 +375,11 @@ export function Subagents(runtime) {
     const owner = await tx.createTask(anchor, { id, sinceEntry }, { ownership: { kind: "conversation" }, background: true });
     const child = await tx.createConversation({ ownership: { kind: "task", taskId: owner } });
     await stripTools(tx, child.id);
+    // A run may use its own model and effort (the agent's `work` settings); otherwise it has its thread's.
+    if (model) {
+      const slash = model.indexOf("/");
+      await configure(tx, child.id, { model: { provider: model.slice(0, slash), modelId: model.slice(slash + 1) }, ...(thinkingLevel ? { thinkingLevel } : {}) });
+    }
     const delivery = await tx.createTask(reporter, { id, child: child.id, title, content: task, mode, number: 1, sinceEntry,
       gate, ...(origin ? { origin } : {}) }, { ownership: { kind: "task", taskId: owner } });
     roster.children[id] = { id, title, sinceEntry, child: child.id, anchor: owner, spawn: key, number: 1,

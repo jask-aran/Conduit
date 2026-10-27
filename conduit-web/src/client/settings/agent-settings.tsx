@@ -3,7 +3,9 @@ import { Button, Input, Segmented, Switch } from "@/components/ui/controls";
 import { Select } from "@/components/menus";
 import { SettingGroup, SettingLine, SettingNote } from "@/components/ui/overlay";
 import { api } from "../api/client";
-import { agentView, refreshAgent, type AgentView } from "../state/agent";
+import { agentView, refreshAgent, type AgentView, type AgentWorkKind } from "../state/agent";
+import type { ModelOption } from "../api/contracts";
+import { ModelSelector } from "../chat/model-selector";
 import { createAutosave } from "./autosave";
 
 /**
@@ -23,7 +25,10 @@ const HEARTBEATS = [30, 60, 120, 240, 480, 1440];
 const every = (minutes: number) => minutes < 60 ? `${minutes} min` : minutes === 1440 ? "Once a day" : `${minutes / 60} h`;
 const zones = (() => { try { return Intl.supportedValuesOf("timeZone"); } catch { return [] as string[]; } })();
 
-export function createAgentSettings() {
+/* "Same as jbot": the home thread's model, whatever it is when the run starts. */
+const SAME = (name: string): ModelOption => ({ provider: "", id: "", spec: "", label: `Same as ${name}`, thinkingLevels: [] });
+
+export function createAgentSettings(options: { models: () => ModelOption[]; onManageModels?: () => void }) {
   const [draft, setDraft] = createSignal<Draft>({ name: "", budget: "" });
   const [enabling, setEnabling] = createSignal(false);
   const settings = () => agentView()?.settings;
@@ -42,6 +47,23 @@ export function createAgentSettings() {
   const editName = (name: string) => { setDraft({ ...draft(), name }); if (nameError()) return autosave.hold(); autosave.edit({ name: name.trim() }); };
   const editBudget = (budget: string) => { setDraft({ ...draft(), budget }); if (budgetError()) return autosave.hold(); autosave.edit({ budgetUsdPerDay: Number(budget) }); };
   const set = (patch: Partial<Settings>) => autosave.edit(patch, "now");
+  // The model and effort one kind of background run uses; "Same as jbot" stores nothing.
+  const Work = (line: { kind: AgentWorkKind; label: string; title: string }) => {
+    const current = () => settings()!;
+    const choice = () => current().work?.[line.kind] ?? null;
+    const levels = (spec: string) => options.models().find((model) => model.spec === spec)?.thinkingLevels || ["off"];
+    const choose = (spec: string) => {
+      if (!spec) return set({ work: { ...current().work, [line.kind]: null } });
+      const keep = choice()?.thinkingLevel;
+      const allowed = levels(spec);
+      set({ work: { ...current().work, [line.kind]: { model: spec, thinkingLevel: keep && allowed.includes(keep) ? keep : allowed.includes("medium") ? "medium" : allowed[0] || "off" } } });
+    };
+    return <SettingLine plain label={line.label} title={line.title}>
+      <ModelSelector models={[SAME(current().name), ...options.models()]} model={choice()?.model ?? ""} thinkingLevel={choice()?.thinkingLevel ?? ""}
+        quiet={choice() ? undefined : ""} onModelChange={choose} onManageModels={options.onManageModels}
+        onThinkingLevelChange={(thinkingLevel) => choice() && set({ work: { ...current().work, [line.kind]: { ...choice()!, thinkingLevel } } })} />
+    </SettingLine>;
+  };
 
   const enable = async () => {
     setEnabling(true);
@@ -78,6 +100,7 @@ export function createAgentSettings() {
           <SettingLine label="Brief at">
             <Input id="agent-brief-at" type="time" value={current().brief.at} onChange={(event) => { if (/^\d\d:\d\d$/.test(event.currentTarget.value)) set({ brief: { ...current().brief, at: event.currentTarget.value } }); }} />
           </SettingLine>
+          <Work kind="brief" label="Brief model" title="Reads your mail, calendar and chats and prepares first steps: worth a capable model." />
         </Show>
         <SettingLine label="Heartbeat" title="It wakes on its own to check on things (HEARTBEAT.md in its memory says what), and speaks up only when something is worth it.">
           <Switch label="Heartbeat" checked={current().heartbeat.enabled} onChange={(enabled) => set({ heartbeat: { ...current().heartbeat, enabled } })} />
@@ -88,7 +111,9 @@ export function createAgentSettings() {
               <For each={HEARTBEATS.includes(current().heartbeat.everyMinutes) ? HEARTBEATS : [current().heartbeat.everyMinutes, ...HEARTBEATS]}>{(minutes) => <option value={String(minutes)}>{every(minutes)}</option>}</For>
             </Select>
           </SettingLine>
+          <Work kind="heartbeat" label="Heartbeat model" title="Runs often and usually finds nothing: a quick, cheap model fits." />
         </Show>
+        <Work kind="other" label="Other runs" title="The model for check-backs it schedules, events, webhooks and tasks you run by hand." />
       </SettingGroup>
     </>}</Show>
   </Show>;

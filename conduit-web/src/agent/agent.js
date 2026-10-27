@@ -25,7 +25,12 @@ export const DEFAULT_SETTINGS = Object.freeze({
   timezone: null,
   brief: { enabled: true, at: "08:00" },
   heartbeat: { enabled: true, everyMinutes: 120 },
+  // The model and effort each kind of background run uses ({ model: "provider/id", thinkingLevel }); null is the
+  // home thread's. `other`: check-backs, events, webhooks and runs started by hand.
+  work: { brief: null, heartbeat: null, other: null },
 });
+const LEVELS = new Set(["off", "minimal", "low", "medium", "high", "xhigh"]);
+const WORK = ["brief", "heartbeat", "other"];
 
 /**
  * The hub's persistent agent (docs/plans/persistent-agent.md): one per hub, the
@@ -86,6 +91,7 @@ export class PersistentAgent {
       timezone: saved.timezone && validZone(saved.timezone) ? saved.timezone : hostZone(),
       brief: { ...DEFAULT_SETTINGS.brief, ...(saved.brief || {}) },
       heartbeat: { ...DEFAULT_SETTINGS.heartbeat, ...(saved.heartbeat || {}) },
+      work: { ...DEFAULT_SETTINGS.work, ...(saved.work || {}) },
     };
   }
 
@@ -127,6 +133,17 @@ export class PersistentAgent {
         fail("heartbeat is { enabled, everyMinutes: 15 to 1440 }");
       }
       next.heartbeat = { enabled: heartbeat.enabled, everyMinutes: every };
+    }
+    if (patch.work !== undefined) {
+      const work = { ...this.settings().work };
+      for (const [kind, choice] of Object.entries(patch.work || {})) {
+        if (!WORK.includes(kind)) fail(`work is { ${WORK.join(", ")} }`);
+        if (choice !== null && !(typeof choice?.model === "string" && /^[^/\s]+\/\S+$/.test(choice.model) && LEVELS.has(choice.thinkingLevel))) {
+          fail("each work choice is null or { model: \"provider/id\", thinkingLevel }");
+        }
+        work[kind] = choice && { model: choice.model, thinkingLevel: choice.thinkingLevel };
+      }
+      next.work = work;
     }
     await fs.writeFile(path.join(this.folder, "agent.json"), `${JSON.stringify(next, null, 2)}\n`);
     this.cached = next;
@@ -266,8 +283,9 @@ export class PersistentAgent {
   /** The same, inside a commit on the home conversation (a clock task's): `tx.createTask()` defaults to it. */
   spawnRun(tx, conversationId, { key, kind, title, task }) {
     if (!this.runtime.spawnBackground) throw new Error("Background subagents are not installed");
+    const work = this.settings().work[kind === "brief" || kind === "heartbeat" ? kind : "other"];
     return this.runtime.spawnBackground(tx, conversationId, { key, task: runBrief(kind, task), title: title || kind,
-      origin: { kind, key }, gate: true });
+      origin: { kind, key }, gate: true, ...(work ? { model: work.model, thinkingLevel: work.thinkingLevel } : {}) });
   }
 
   /** The agent as the API shows it. */
