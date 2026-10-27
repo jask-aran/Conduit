@@ -1,6 +1,6 @@
 {
   "id": "assistant",
-  "version": "10",
+  "version": "11",
   "label": "Assistant",
   "description": "General-purpose Pi with file, shell, and model-agnostic web research tools.",
   "posture": "read / write / edit / shell / web search / source fetch",
