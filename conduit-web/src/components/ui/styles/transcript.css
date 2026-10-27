@@ -23,11 +23,12 @@
 .ui-failure-head time { margin-left: auto; color: var(--muted-foreground); font-size: var(--text-caption); }
 .ui-failure-facts { display: flex; flex-wrap: wrap; gap: var(--space-xs) var(--space-md); color: var(--muted-foreground); font: var(--text-caption) var(--font-data); }
 .ui-failure pre { margin: 0; overflow: auto; border: var(--hairline) solid var(--tint); border-radius: var(--radius-control); padding: var(--space-sm) var(--space-lg); white-space: pre-wrap; font: var(--text-caption)/var(--leading-code) var(--font-code); }
-/* The harness's own prompt: a muted Row line at the right, the bell an icon-sm before it. */
-.ui-harness-prompt { display: flex; justify-content: flex-end; align-items: center; gap: var(--row-gap); margin: 0; color: var(--muted-foreground); font-size: var(--text-row); }
+/* The harness's own prompt (a subagent's report): a muted Row line on the agent's side, at the left, the icon-sm
+   before it. */
+.ui-harness-prompt { display: flex; justify-content: flex-start; align-items: center; gap: var(--row-gap); margin: 0; color: var(--muted-foreground); font-size: var(--text-row); }
 .ui-harness-prompt > svg { width: var(--icon-sm); height: var(--icon-sm); flex: none; }
 /* A report from a subagent opens its transcript: the line is a button, its chevron on the cursor. */
-.ui-harness-prompt-open { display: inline-flex; min-width: 0; align-items: center; gap: var(--row-gap); margin-right: calc(-1 * var(--space-sm)); border: 0; border-radius: var(--radius-control); background: transparent; padding: var(--space-2xs) var(--space-sm); color: inherit; font: inherit; cursor: pointer; }
+.ui-harness-prompt-open { display: inline-flex; min-width: 0; align-items: center; gap: var(--row-gap); margin-left: calc(-1 * var(--space-sm)); border: 0; border-radius: var(--radius-control); background: transparent; padding: var(--space-2xs) var(--space-sm); color: inherit; font: inherit; cursor: pointer; }
 .ui-harness-prompt-open > svg { width: var(--icon-sm); height: var(--icon-sm); flex: none; }
 .ui-harness-prompt-open > svg:last-child { opacity: 0; transition: opacity var(--duration-quick) var(--ease-change); }
 .ui-harness-prompt-open:focus-visible { outline: none; background: var(--tint); }

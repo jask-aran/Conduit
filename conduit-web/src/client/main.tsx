@@ -5403,6 +5403,11 @@ function App() {
         if (active) setReady(true);
       }).catch(showError);
     }));
+    // Made once the thread is loaded, not on every read: a transcript made again is a new one, drawn from scratch.
+    const conversation = createMemo(() => ready() ? untrack(() => ({ transcript: <Transcript chat={current.chat} supports={current.capability} markdownRenderer={markdownRenderer()} profileLabel={current.activeProfile()?.label || undefined} projectId={agentView()?.projectId} conversational />, onOpen: () => {
+        const id = agentView()?.home?.chatId;
+        if (id) void agentChat(id).then((target) => openChatFromPage(target.chat, target.project)).catch(showError);
+      } })) : undefined);
     return <AgentPage
       header={(title) => <ChatHeader title={title} tabActions={paneTabActions(slot)} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void startNewChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => {}} appDashboard alone />}
       composer={<Show when={ready() && agentView()?.settings && agentView()?.home?.chatId}><PageComposer session={current} keyboardOwner={() => slot === "main" ? !sideHasKeyboard() : keyboardPane() === slot} onSendDraft={async (prompt) => {
@@ -5412,10 +5417,7 @@ function App() {
         current.chat.setDraft(prompt);
         await current.chat.send();
       }} /></Show>}
-      conversation={ready() ? { transcript: <Transcript chat={current.chat} supports={current.capability} markdownRenderer={markdownRenderer()} profileLabel={current.activeProfile()?.label || undefined} projectId={agentView()?.projectId} conversational />, onOpen: () => {
-        const id = agentView()?.home?.chatId;
-        if (id) void agentChat(id).then((target) => openChatFromPage(target.chat, target.project)).catch(showError);
-      } } : undefined}
+      conversation={conversation()}
       onOpenFile={(path) => { const projectId = agentView()?.projectId; if (projectId) void openFileDocument({ projectId, path }, { beside: altActivation(), edit: false }); }}
       onOpenSettings={() => openSettings("agent")}
       onOpenChat={(id, event) => {
