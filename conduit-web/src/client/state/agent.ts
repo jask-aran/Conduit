@@ -24,6 +24,7 @@ export interface AgentView {
   home?: { chatId: string; conversationId: number } | null;
   sides?: Array<{ chatId: string; title: string; updatedAt?: string }>;
   spentToday?: number;
+  rules?: Array<{ id: string; tool: string; target: string; label: string; createdAt: string }>;
   attention?: {
     working: { runs: AgentRun[]; recent: AgentRun[]; schedules: AgentSchedule[]; watches: AgentWatch[] };
     needsYou: { questions: AgentQuestion[]; proposals: AgentProposal[]; notices: AgentNotice[] };

@@ -278,6 +278,7 @@ export class PersistentAgent {
         .filter((chat) => chat.backend?.agentThread === "side" && chat.projectId === this.project.id)
         .map((chat) => ({ chatId: chat.id, title: chat.title || "", updatedAt: chat.updatedAt })),
       spentToday: state.spend[this.today()] || 0,
+      rules: Object.values(state.rules || {}).reverse().sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
     };
   }
 }

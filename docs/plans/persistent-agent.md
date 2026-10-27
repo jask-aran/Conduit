@@ -98,6 +98,8 @@ timers: the hub schedules wake-ups and submits them with a request id per slot.
 
 ## Its thread (decided 2026-10-27)
 
+Built: approval cards and Android push offer Allow once, Always and Don't; saved rules are listed and removable through the agent API.
+
 jbot is still a chat thread, with one curated profile and no profile picker,
 but its turns read differently. Taken from Duet, Grok Bot, Muse and Open Duet
 (research notes in the session of that date):

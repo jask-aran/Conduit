@@ -463,6 +463,7 @@ values use the provider format and are never returned by the API.
   unanswered for `hostUiTimeoutMs` (given at creation, default ten minutes) is
   cancelled, as a dismissed card would be. Runs are not auto-named unless
   created with `autoName: true`.
+- `GET /v0/agent` includes saved approval rules; `DELETE /v0/agent/rules/:id` removes one.
 - `GET /v0/push` returns the hub's VAPID public key and its push subscriptions
   (host of each endpoint only: an endpoint is a capability). `POST
   /v0/push/subscriptions` `{ endpoint, keys: { p256dh, auth }, kind, label }`

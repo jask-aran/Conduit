@@ -87,7 +87,7 @@ public class ConduitPushService extends PushService {
                 .setCategory(NotificationCompat.CATEGORY_MESSAGE).setContentIntent(pending);
             JSONObject answer = payload.optJSONObject("answer");
             if (answer != null && answer.optString("token").matches("[A-Za-z0-9_-]{43}")) {
-                for (String choice : new String[] { "allow", "deny" }) {
+                for (String choice : new String[] { "allow", "always", "deny" }) {
                     Intent action = new Intent(this, ConduitPushAnswerReceiver.class)
                         .setData(new Uri.Builder().scheme("conduit-answer").appendPath(notificationTag).appendPath(choice).build())
                         .putExtra("instance", instance).putExtra("token", answer.optString("token"))
@@ -95,7 +95,9 @@ public class ConduitPushService extends PushService {
                         .putExtra("channel", channel);
                     PendingIntent actionIntent = PendingIntent.getBroadcast(this, (notificationTag + choice).hashCode(), action,
                         PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
-                    notification.addAction(0, answer.optString(choice, choice.equals("allow") ? "Allow" : "Don't"), actionIntent);
+                    // Allowing needs the phone unlocked (Android 12+): from a locked phone, anyone holding it could tap it.
+                    notification.addAction(new NotificationCompat.Action.Builder(0, answer.optString(choice, choice.equals("allow") ? "Allow" : choice.equals("always") ? "Always" : "Don't"), actionIntent)
+                        .setAuthenticationRequired(!"deny".equals(choice)).build());
                 }
             }
             manager.notify(notificationTag, 0, notification.build());

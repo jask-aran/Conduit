@@ -12,13 +12,14 @@ import { defineDoc } from "@earendil-works/pi-durable";
  * - `spend`: `YYYY-MM-DD` (the agent's time zone) → USD its runs spent (subagents.js reporter).
  * - `notices`: what the attention list says beside the work itself, newest last, at most 20 (agent.js).
  * - `tainted`: conversation id → true once it read private data (policy.js).
+ * - `rules`: id → saved outward approval (policy.js).
  * - `next`: the counter every part numbers its ids from (`sc-3`, `w-4`, `p-5`).
  */
 export const AgentDoc = defineDoc({
   kind: "conduit.agent",
   version: 1,
   scope: "session",
-  initial: () => ({ home: null, schedules: {}, watches: {}, hooks: {}, proposals: {}, spend: {}, notices: [], tainted: {}, next: 1 }),
+  initial: () => ({ home: null, schedules: {}, watches: {}, hooks: {}, proposals: {}, spend: {}, notices: [], tainted: {}, rules: {}, next: 1 }),
 });
 
 /** A new id for one part of the agent's document: `${prefix}-${n}`. Call inside the commit that stores it. */
