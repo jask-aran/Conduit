@@ -1,5 +1,5 @@
 import { createEffect, createMemo, createSignal, For, on, onCleanup, onMount, Show, Suspense, type JSX } from "solid-js";
-import { Answer, Icons, Message as UserMessage, StatusDot } from "@/components/ui";
+import { Answer, Icons, Message as UserMessage, StatusDot, Turn } from "@/components/ui";
 import { Button, TextArea } from "@/components/ui/controls";
 import { DashConversation, DashIconButton, DashNote } from "@/components/ui/dashboard";
 import { Dialog } from "@/components/dialog";
@@ -199,7 +199,7 @@ export function AgentPage(props: {
           : <Answer><Suspense fallback={message.content}><ChatMarkdown>{message.content}</ChatMarkdown></Suspense></Answer>}
         </For>
       </Show>
-      <Show when={thread().working()}><TraceStarting label="Working" /></Show>
+      <Show when={thread().working()}><Turn><TraceStarting label="Working" /></Turn></Show>
     </DashConversation>}
   </Show>;
 

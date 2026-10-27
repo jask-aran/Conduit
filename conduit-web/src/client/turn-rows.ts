@@ -99,11 +99,26 @@ export type TurnRow =
   // per assistant row, which is quadratic in a long chat.
   // `traced` is whether a trace above this answer already speaks for its turn,
   // so a stopped turn says "Interrupted" once, on whichever row comes first.
-  | { key: string; type: "message"; value: Message; live?: boolean; streamVersion?: number; displayKey?: string; precedingUserId?: string; traced?: boolean }
+  // `orb`: in a turn that speaks more than once (TurnLayout conversational) the one row that carries the turn's orb --
+  // while it runs the row where it is working, settled its last answer -- and how the turn is.
+  | { key: string; type: "message"; value: Message; live?: boolean; streamVersion?: number; displayKey?: string; precedingUserId?: string; traced?: boolean; orb?: TurnOrbState }
   // `timestamp` is the turn's last reply's, for a trace with no answer row to carry it.
-  | { key: string; type: "trace"; value: TurnTraceData; precedingUserId?: string; answerless?: boolean; unstated?: boolean; timestamp?: string }
+  | { key: string; type: "trace"; value: TurnTraceData; precedingUserId?: string; answerless?: boolean; unstated?: boolean; timestamp?: string; orb?: TurnOrbState }
   // Where the answer will be, from the start of a live turn until its text does.
   | { key: string; type: "pending"; value: null; precedingUserId?: string; startedAt?: string };
+
+export type TurnOrbState = "live" | "settled" | "failed";
+/** Gives a conversational turn's orb to one row: the last row while it runs, else its last answer (its last trace
+ *  when it has none). */
+function placeTurnOrb(rows: TurnRow[], state: TurnOrbState) {
+  const own = (row: TurnRow) => row.type === "trace" || (row.type === "message" && row.value.role !== "user");
+  const index = state === "live" ? rows.findLastIndex(own)
+    : rows.findLastIndex((row) => row.type === "message" && row.value.role !== "user") >= 0
+      ? rows.findLastIndex((row) => row.type === "message" && row.value.role !== "user") : rows.findLastIndex(own);
+  const row = rows[index];
+  if (row && row.type !== "pending") rows[index] = { ...row, orb: state };
+  return rows;
+}
 
 interface PersistedTurn {
   userMessage: Message | null;
@@ -399,7 +414,7 @@ function conversationalLiveRows(generation: ActiveGenerationView, owner: Message
     rows.push({ key: `pending:${owner ? owner.id : generation.id}`, type: "pending", value: null, precedingUserId: owner?.id,
       ...(owner?.timestamp ? { startedAt: owner.timestamp } : {}) });
   }
-  return rows;
+  return placeTurnOrb(rows, running ? "live" : endedEarly ? "failed" : "settled");
 }
 
 export function buildLiveAnswerRow(
@@ -760,7 +775,7 @@ function conversationalRowsForTurn(turn: PersistedTurn, toolById: Map<string, To
     const last = rows[index];
     if (last?.type === "trace") rows[index] = { ...last, value: { ...last.value, status: outcome } };
   }
-  return rows;
+  return placeTurnOrb(rows, endedEarly ? "failed" : "settled");
 }
 
 export function projectPersistedTurns(

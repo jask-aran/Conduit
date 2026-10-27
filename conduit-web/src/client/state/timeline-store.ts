@@ -44,6 +44,7 @@ function stableProjection(previous: TurnRow[], projected: TurnRow[]): TurnRow[] 
         && prior.streamVersion === row.streamVersion
         && prior.displayKey === row.displayKey
         && prior.precedingUserId === row.precedingUserId
+        && prior.orb === row.orb
         ? prior : row;
     }
     if (row.type === "trace" && prior.type === "trace") {
@@ -51,6 +52,7 @@ function stableProjection(previous: TurnRow[], projected: TurnRow[]): TurnRow[] 
       const right = row.value;
       return left.active === right.active
         && prior.answerless === row.answerless
+        && prior.orb === row.orb
         && prior.timestamp === row.timestamp
         && left.status === right.status
         && left.startedAt === right.startedAt

@@ -360,7 +360,9 @@ const LATEST_CHARS = 240;
 /** gathering: a piece of the persistent agent's work between the things it says (turn-rows.ts TurnLayout). Live it is
  *  the usual head, what it is doing now; settled it says what it looked at, and the time is the turn's, so it is not
  *  repeated; a settled piece with no work draws nothing. */
-export function TurnTrace(props: { trace: TurnTraceData; agents?: AgentSummary[]; onStopAgent?: (id: string) => void; writing?: boolean; renderer?: MarkdownRendererId; profileLabel?: string; initialOpen?: boolean; onOpenChange?: (open: boolean) => void; toolOpen?: (id: string) => boolean; onToolOpenChange?: (id: string, open: boolean) => void; onRendered?: () => void; since?: number; gathering?: boolean }) {
+export function TurnTrace(props: { trace: TurnTraceData; agents?: AgentSummary[]; onStopAgent?: (id: string) => void; writing?: boolean; renderer?: MarkdownRendererId; profileLabel?: string; initialOpen?: boolean; onOpenChange?: (open: boolean) => void; toolOpen?: (id: string) => boolean; onToolOpenChange?: (id: string, open: boolean) => void; onRendered?: () => void; since?: number; gathering?: boolean;
+  /** Whether this trace carries its turn's orb; a conversational turn gives its one orb to one row (turn-rows.ts). */
+  orb?: boolean }) {
   const preview = createMemo(() => previewOf(props.trace, Boolean(props.writing)));
   const time = turnTime(() => props.trace);
   const unfinished = () => !props.trace.active && (props.trace.status === "failed" || props.trace.status === "interrupted");
@@ -376,7 +378,7 @@ export function TurnTrace(props: { trace: TurnTraceData; agents?: AgentSummary[]
   const latest = () => { const detail = preview().detail; return detail ? detail.markdown ? thinking : detail.text : undefined; };
   const looked = () => props.gathering && !props.trace.active && !unfinished();
   const sources = createMemo(() => looked() ? sourcesOf(props.trace.segments) : "");
-  return <Show when={!looked() || props.trace.segments.some((segment) => segment.kind === "tool" || segment.kind === "error")}><Trace motion={props.since != null ? "entering" : undefined} since={props.since} orb={<Orb state={preview().status.orb} frame={preview().status.frame} tint={unfinished() ? "var(--destructive)" : undefined} rate={props.trace.active ? undefined : settledOrbRate(unfinished())} />}
+  return <Show when={!looked() || props.trace.segments.some((segment) => segment.kind === "tool" || segment.kind === "error")}><Trace motion={props.since != null ? "entering" : undefined} since={props.since} orb={props.orb === false ? undefined : <Orb state={preview().status.orb} frame={preview().status.frame} tint={unfinished() ? "var(--destructive)" : undefined} rate={props.trace.active ? undefined : settledOrbRate(unfinished())} />}
       status={looked() ? (sources() ? "Looked at" : "Worked") : preview().status.verb} time={looked() ? undefined : time() || undefined} work={preview().work || undefined}
       latest={looked() ? sources() || latest() : latest()} live={props.trace.active} tone={unfinished() ? "failed" : undefined}
       pinned={<TurnAgents tools={spawns()} agents={props.agents ?? []} onStop={props.onStopAgent} />}
@@ -384,6 +386,13 @@ export function TurnTrace(props: { trace: TurnTraceData; agents?: AgentSummary[]
       {(() => { opened = trail().length; return <Trail><Index each={trail()}>{(item, index) =>
         <TrailLine item={item()} arriving={index >= opened} settled={!props.trace.active} renderer={props.renderer} profileLabel={props.profileLabel} toolOpen={props.toolOpen} onToolOpenChange={props.onToolOpenChange} onRendered={props.onRendered} />}</Index></Trail>; })()}
     </Trace></Show>;
+}
+
+/** A conversational turn's orb by its answer (TurnLayout conversational): writing while it streams, the settled
+ *  sphere once done, sputtering when the turn did not finish. */
+export function AnswerOrb(props: { state: "live" | "settled" | "failed" }) {
+  return <Orb state={props.state === "live" ? "composing" : "working"} frame={props.state === "live" ? undefined : props.state === "failed" ? SPUTTERING_SPHERE : PLAIN_SPHERE}
+    tint={props.state === "failed" ? "var(--destructive)" : undefined} rate={props.state === "live" ? undefined : settledOrbRate(props.state === "failed")} />;
 }
 
 /* A turn before anything of it has shown: the header it will become, its orb
