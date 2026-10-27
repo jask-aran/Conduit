@@ -58,6 +58,18 @@ a follow-up (example 23, used for background subagents); request ids so a
 restart never repeats a submission; a live task graph. It has no wall-clock
 timers: the hub schedules wake-ups and submits them with a request id per slot.
 
+### Its own machine: sandboxed
+
+Its local file tools are limited to its folder (paths canonicalised, so `..` and links cannot leave it). Its bash
+runs through a small helper (`conduit-web/src/agent/sandbox/landlock.c`, built on first use with `cc`) that applies
+Landlock: its folder writable, system and tool directories read-only, nothing else under the home directory (not
+`~/.conduit`, `~/.ssh`, the person's code), HOME its folder and an environment without secrets. A seccomp filter in
+the same helper refuses unix-domain sockets, io_uring and foreign-ABI syscalls, since Landlock does not govern
+connecting to a socket by path (the session bus would otherwise let `systemd-run --user` escape). Reading another
+process's `/proc/<pid>/environ` is denied by Landlock's ptrace scoping. About 1 ms per command. It fails closed: no
+helper, no bash. Not covered: outbound network, including services on loopback (a browser's debugging port, say);
+closing that needs a network namespace. To work elsewhere it uses a device and folder, which asks first.
+
 ## Decisions (2026-10-27)
 
 1. **One agent per hub.** Dev and prod each have their own agent, memory and

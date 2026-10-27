@@ -39,7 +39,7 @@ export function registerAgentRoutes(app, { agent, backends }) {
    * and its clocks. Needs you: a question or approval waiting in one of its
    * threads, memory its runs proposed, and notices (a budget reached).
    */
-  const attention = async (view) => {
+  const attention = async (view, state) => {
     const harness = await agent.runtime.open();
     const runs = view.home?.conversationId ? await backgroundSubagents(harness, view.home.conversationId, agent.context) : [];
     const threads = [view.home?.chatId, ...view.sides.map((side) => side.chatId)].filter(Boolean);
@@ -50,7 +50,6 @@ export function registerAgentRoutes(app, { agent, backends }) {
       const thread = await agent.describe(conversationId);
       if (thread?.chatId && !waiting.some((item) => item.chatId === thread.chatId)) waiting.push({ kind: "question", chatId: thread.chatId, requestId: null, title: "A question" });
     }
-    const state = await agent.state();
     return {
       working: {
         runs: runs.filter((run) => run.origin && run.status === "running")
@@ -120,8 +119,9 @@ export function registerAgentRoutes(app, { agent, backends }) {
 
   app.get("/v0/agent", async (request, response, next) => {
     try {
-      const view = await agent.view();
-      response.json(view.enabled ? { ...view, attention: await attention(view) } : view);
+      const state = agent.enabled() ? await agent.state() : null;
+      const view = await agent.view(state);
+      response.json(view.enabled ? { ...view, attention: await attention(view, state) } : view);
     } catch (error) { next(error); }
   });
 
