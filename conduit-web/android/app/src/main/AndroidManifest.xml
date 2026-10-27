@@ -25,6 +25,12 @@
 
         </activity>
 
+        <service android:name=".ConduitPushService" android:exported="false">
+            <intent-filter>
+                <action android:name="org.unifiedpush.android.connector.PUSH_EVENT" />
+            </intent-filter>
+        </service>
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"
@@ -39,6 +45,7 @@
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- Dictation: the WebView asks for the microphone, and Capacitor can only
          pass that on to Android for permissions declared here. -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />

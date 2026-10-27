@@ -463,6 +463,14 @@ values use the provider format and are never returned by the API.
   unanswered for `hostUiTimeoutMs` (given at creation, default ten minutes) is
   cancelled, as a dismissed card would be. Runs are not auto-named unless
   created with `autoName: true`.
+- `GET /v0/push` returns the hub's VAPID public key and its push subscriptions
+  (host of each endpoint only: an endpoint is a capability). `POST
+  /v0/push/subscriptions` `{ endpoint, keys: { p256dh, auth }, kind, label }`
+  adds or refreshes one (`kind` is `unifiedpush` or `webpush`); `DELETE
+  /v0/push/subscriptions/:id` removes it; `POST /v0/push/test` `{ id? }` sends a
+  test. The hub sends Web Push (RFC 8291 encryption, RFC 8292 VAPID) to every
+  subscription; a push service's 404 or 410 drops it. The keys and
+  subscriptions live in `push.json` in the data root.
 - `GET /v0/host-ui` lists every approval or question any live agent is waiting
   on, with its chat, project and whether it belongs to a run;
   `POST /v0/chats/:chatId/host-ui/:requestId` answers one with

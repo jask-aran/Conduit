@@ -218,7 +218,9 @@ export function Subagents(runtime) {
             doc.spend[day] = (doc.spend[day] || 0) + spent;
           }, context);
         }
-        const heard = !task.input.gate || reaches(level, runtime.agentDial?.());
+        // A morning brief is asked for, not volunteered: it reaches the person whatever the setting, unless it is empty.
+        const asked = task.input.origin?.kind === "brief" && level !== "none";
+        const heard = !task.input.gate || asked || reaches(level, runtime.agentDial?.());
         const parent = await runtime.harness.conversation(api.conversationId, context);
         if (heard && !stopped && !await resetSince(parent, task.input.sinceEntry || 0, context)) {
           const requestId = `subagent-report:${child}:${number}`;
@@ -229,6 +231,11 @@ export function Subagents(runtime) {
                 ...(task.input.origin ? { origin: task.input.origin, level } : {}) } } }, context);
           // The parent may have no live chat (an agent's home thread nobody has open): the report's turn is followed.
           runtime.wakeChat?.(api.conversationId);
+          // And the person's devices hear of it, once: marked before sending, so a replay does not push it again.
+          if (task.input.gate && await api.memo("pushed", context) === undefined) {
+            await api.memo("pushed", true, context);
+            runtime.notify?.({ kind: "report", conversationId: api.conversationId, title, text: report.answer, level, key: `${child}-${number}` });
+          }
         }
         await api.commit(() => ({ status: "terminal", outcome: { status: "completed", result: report } }), context);
       } catch (error) {
