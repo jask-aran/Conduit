@@ -30,7 +30,7 @@ public class ConduitPushAnswerReceiver extends BroadcastReceiver {
                 String origin = context.getSharedPreferences(ConduitPushPlugin.PREFS, Context.MODE_PRIVATE)
                     .getString("origin." + instance, null);
                 if (origin == null || token == null || !token.matches("[A-Za-z0-9_-]{43}")
-                    || !("allow".equals(choice) || "deny".equals(choice))) throw new IllegalStateException();
+                    || !("allow".equals(choice) || "always".equals(choice) || "deny".equals(choice))) throw new IllegalStateException();
                 connection = (HttpURLConnection) new URL(origin + "/v0/push/answer/" + token).openConnection();
                 if (connection instanceof javax.net.ssl.HttpsURLConnection)
                     ConduitWebViewClient.trustPaired((javax.net.ssl.HttpsURLConnection) connection);
@@ -54,7 +54,7 @@ public class ConduitPushAnswerReceiver extends BroadcastReceiver {
                         .putExtra(ConduitPushPlugin.INSTANCE, instance).putExtra(ConduitPushPlugin.PATH, path);
                     PendingIntent pending = PendingIntent.getActivity(context, tag.hashCode(), open,
                         PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
-                    String text = success ? ("allow".equals(choice) ? "Allowed" : "Not allowed") : "Couldn't answer — open Conduit";
+                    String text = success ? ("allow".equals(choice) ? "Allowed" : "always".equals(choice) ? "Always allowed" : "Not allowed") : "Couldn't answer — open Conduit";
                     NotificationCompat.Builder notification = new NotificationCompat.Builder(context, channel)
                         .setSmallIcon(R.drawable.ic_stat_conduit)
                         .setColor(androidx.core.content.ContextCompat.getColor(context, R.color.conduit_frame))

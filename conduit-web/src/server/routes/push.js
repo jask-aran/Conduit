@@ -30,7 +30,7 @@ export function registerPushRoutes(app, { push, hubId, backends, hostUi, lifecyc
   app.post("/v0/push/answer/:token", async (request, response, next) => {
     try {
       const { choice } = request.body || {};
-      if (choice !== "allow" && choice !== "deny") return response.status(400).end();
+      if (choice !== "allow" && choice !== "always" && choice !== "deny") return response.status(400).end();
       const entry = takeAnswerToken(request.params.token);
       if (!entry) return response.status(404).end();
       const status = await answerApproval(entry, choice);

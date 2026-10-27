@@ -147,6 +147,17 @@ export function AgentPage(props: {
     </SplitGroup>
   </Show>;
 
+  // What it may do without asking: each rule an Always on an approval saved, removable here.
+  const rulesGroup = () => <Show when={view()?.rules?.length}>
+    <SplitGroup id="agent-rules" label="Allowed" count={view()?.rules?.length}>
+      <For each={view()?.rules}>{(rule) =>
+        <SplitRow lead={<Icons.Permissions />} primary={rule.label} title={rule.label} context={age(rule.createdAt, now())}
+          trailing={<DashIconButton aria-label="Stop allowing" title="Stop allowing" disabled={busy() !== null}
+            onClick={() => act(rule.id, () => api(`/v0/agent/rules/${encodeURIComponent(rule.id)}`, { method: "DELETE" }))}><Icons.Close /></DashIconButton>} />}
+      </For>
+    </SplitGroup>
+  </Show>;
+
   // Its memory is files in its folder, read and edited where any file is.
   const memoryGroup = () => <SplitGroup id="agent-memory" label="Memory">
     <For each={MEMORY}>{(file) =>
@@ -190,7 +201,7 @@ export function AgentPage(props: {
           notice={error() ? <DashNote error>{error()}</DashNote> : undefined}
           composer={props.composer}
           list={threadsGroup()}
-          aside={<>{needsGroup()}{workingGroup()}{schedulesGroup()}{watchesGroup()}{memoryGroup()}{recentGroup()}</>} />
+          aside={<>{needsGroup()}{workingGroup()}{schedulesGroup()}{watchesGroup()}{rulesGroup()}{memoryGroup()}{recentGroup()}</>} />
       </Show>
     </Show>
 

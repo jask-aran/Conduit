@@ -28,7 +28,7 @@ export function agentNotifier({ agent, push, hubId }) {
       path: `/chat/${thread.chatId}`,
       tag,
       hub: hubId(),
-      ...(approval ? { answer: { token: mintAnswerToken(thread.chatId, key), allow: "Allow", deny: "Don't" } } : {}),
+      ...(approval ? { answer: { token: mintAnswerToken(thread.chatId, key), allow: "Allow", always: "Always", deny: "Don't" } } : {}),
       urgency: urgent || approval ? "high" : "normal",
     }, { urgency: urgent || approval ? "high" : "normal", topic: tag, ttl: approval ? 86400 : 43200 });
   })().catch((error) => console.warn("[agent] push:", error?.message || error));
