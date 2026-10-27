@@ -19,7 +19,7 @@ export const AgentDoc = defineDoc({
   kind: "conduit.agent",
   version: 1,
   scope: "session",
-  initial: () => ({ home: null, schedules: {}, watches: {}, hooks: {}, proposals: {}, spend: {}, notices: [], tainted: {}, rules: {}, next: 1 }),
+  initial: () => ({ home: null, schedules: {}, watches: {}, hooks: {}, proposals: {}, spend: {}, notices: [], tainted: {}, rules: {}, asks: {}, next: 1 }),
 });
 
 /** A new id for one part of the agent's document: `${prefix}-${n}`. Call inside the commit that stores it. */

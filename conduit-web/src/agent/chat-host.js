@@ -144,6 +144,19 @@ export function createChatHost({ registry, projects, backends, chatLogs, findCha
       return { chatId: chat.id, title: registry.metadata(chat.id)?.title || "", workspace: project.name };
     },
 
+    async deliverApproval(chatId, text) {
+      const context = await findChatContext(chatId);
+      if (!context?.chat?.backend?.agentThread) throw new Error("Agent thread not found");
+      if (!backends.getByChatId(chatId)) await launchLiveSession({ chatId, requestedProject: context.project.id });
+      const record = backends.getByChatId(chatId);
+      if (!record) throw new Error("This chat has no live agent process");
+      if (isGeneratingRecord(record)) {
+        const adapter = backends.forChat(context.chat);
+        if (!adapter.getCapabilities().steer) throw new Error("This harness cannot steer a busy chat");
+        await adapter.queue(record.id, "steer", text);
+      } else await submitPrompt(chatId, text);
+    },
+
     async steerChat(chatId, message, { from } = {}) {
       required(message, "message");
       const context = await contextFor(chatId);

@@ -100,7 +100,7 @@ timers: the hub schedules wake-ups and submits them with a request id per slot.
 
 Built: **Connectors.** Executor connects the person’s accounts over MCP. The agent calls its tools from codemode; outward calls need approval.
 
-Built: approval cards and Android push offer Allow once, Always and Don't; saved rules are listed and removable through the agent API.
+Built: **Asynchronous approvals.** Outward calls return at once with a saved ask. The person can answer in the thread, on the agent page or through Android push. The decision reaches the owning thread as a message; an allowed call must be made again with the same arguments. Runs send their asks to the home thread. Saved rules remain listed and removable through the agent API.
 
 jbot is still a chat thread, with one curated profile and no profile picker,
 but its turns read differently. Taken from Duet, Grok Bot, Muse and Open Duet
@@ -120,8 +120,6 @@ but its turns read differently. Taken from Duet, Grok Bot, Muse and Open Duet
   report comes back as one line. Built on the agents rows chats already have.
 - **Approvals: Allow once, Always, Don't.** Always saves a rule, listed on its
   page and removable there. A card raised by a run expires and says so.
-- **Approvals don't block** (next): unanswered, it finishes the rest of the task
-  and brings the question back later.
 - **A brief with actions** (next): each item in the morning brief carries its
   prepared first step, with Approve / Not now in place.
 

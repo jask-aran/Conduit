@@ -701,11 +701,11 @@ registerRunRoutes(app, {
 const push = new PushService({ file: path.join(config.dataRoot, "push.json"),
   subject: process.env.CONDUIT_PUSH_SUBJECT || "mailto:conduit@localhost" });
 await push.load();
-registerPushRoutes(app, { push, hubId: () => serverIdentity.id, backends, hostUi, lifecycle, launchLiveSession });
 // The hub's persistent agent (docs/plans/persistent-agent.md): nothing until it is enabled, then its threads,
 // clocks and events. Its chat tools reach the person's chats through the same paths a browser's do.
 const durableAdapter = backends.adapters.get("conduit-runtime") || null;
 const persistentAgent = durableAdapter ? new PersistentAgent({ runtime: durableAdapter.runtime, registry, projects, launchLiveSession, findChatContext }) : null;
+registerPushRoutes(app, { push, hubId: () => serverIdentity.id, agent: persistentAgent });
 if (persistentAgent) {
   persistentAgent.chatHost = createChatHost({ registry, projects, backends, chatLogs, findChatContext, launchLiveSession,
     submitPrompt: (...args) => liveSessionStream.submitPrompt(...args) });

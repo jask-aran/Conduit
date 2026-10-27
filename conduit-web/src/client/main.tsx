@@ -1059,6 +1059,16 @@ function App() {
    * harness of their own.
    */
   // jbot's threads keep the one profile it is made with: no profile to choose.
+  // A jbot thread's approvals: the agent's asks for it, answered here (POST /v0/agent/asks/:id).
+  const approvalsFor = (chatId: string | null) => chatId && agentThread(chatId) ? {
+    asks: () => (agentView()?.asks ?? []).filter((ask) => ask.chatId === chatId),
+    answer: async (id: string, choice: "allow" | "always" | "deny") => {
+      try { await api(`/v0/agent/asks/${encodeURIComponent(id)}`, { method: "POST", body: JSON.stringify({ choice }) }); }
+      catch (error) { showError(error); }
+      await refreshAgent();
+    },
+    refresh: () => void refreshAgent(),
+  } : undefined;
   const agentThread = (id: string | null | undefined) => { const view = agentView(); return Boolean(id && (view?.home?.chatId === id || view?.sides?.some((side) => side.chatId === id))); };
   const profilesAt = (project?: Project | null) => {
     const allowed = project?.capabilities && !project.capabilities.device.local ? project.capabilities.harnesses : null;
@@ -5407,7 +5417,7 @@ function App() {
       }).catch(showError);
     }));
     // Made once the thread is loaded, not on every read: a transcript made again is a new one, drawn from scratch.
-    const conversation = createMemo(() => ready() ? untrack(() => ({ transcript: <Transcript chat={current.chat} supports={current.capability} markdownRenderer={markdownRenderer()} profileLabel={current.activeProfile()?.label || undefined} projectId={agentView()?.projectId} conversational />, onOpen: () => {
+    const conversation = createMemo(() => ready() ? untrack(() => ({ transcript: <Transcript chat={current.chat} supports={current.capability} markdownRenderer={markdownRenderer()} profileLabel={current.activeProfile()?.label || undefined} projectId={agentView()?.projectId} conversational approvals={approvalsFor(current.chat.loadedId())} />, onOpen: () => {
         const id = agentView()?.home?.chatId;
         if (id) void agentChat(id).then((target) => openChatFromPage(target.chat, target.project)).catch(showError);
       } })) : undefined);
@@ -5541,7 +5551,7 @@ function App() {
       <ChatHeader project={props.project} onOpenPlace={openPlace} badge={<Show when={subagent()}><SubagentNote parent={parent().title} onOpenParent={parent().open} /></Show>} title={surfaceChat.title() || (surfaceChat.status() === "draft" ? "New chat" : "Untitled chat")} profile={current.activeProfile()} runtime={surfaceChat.runtimeIdentity()} live={surfaceChat.live() as unknown as Record<string, unknown>} chat={surfaceChat} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void startNewChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={props.onShare} onRename={props.onRename} onDelete={props.onDelete} actions={props.actions} tabActions={props.tabActions} tabs={props.tabs} />
       {props.notice}
       <Conversation chat={surfaceChat} busy={surfaceChat.presentation().kind === "opening_live"} empty={props.empty} sending={props.sending} opening={props.opening} stackRef={props.stackRef}
-        transcript={<Transcript chat={surfaceChat} supports={current.capability} markdownRenderer={markdownRenderer()} profileLabel={current.activeProfile()?.label || current.activeProfile()?.id || surfaceChat.templateId() || undefined} projectId={props.project?.id} conversational={agentThread(surfaceChat.loadedId())} />}
+        transcript={<Transcript chat={surfaceChat} supports={current.capability} markdownRenderer={markdownRenderer()} profileLabel={current.activeProfile()?.label || current.activeProfile()?.id || surfaceChat.templateId() || undefined} projectId={props.project?.id} conversational={agentThread(surfaceChat.loadedId())} approvals={approvalsFor(surfaceChat.loadedId())} />}
         composer={<Show when={!subagent()}><Composer chat={surfaceChat} opening={props.opening} place={props.place} supports={current.capability} attachments={current.attachments} attachmentsSupported={current.capability("attachments", true)} models={current.models} permissions={current.capability("permissionModes") ? current.permissions : undefined} serviceLevels={current.manifest()?.serviceLevels?.length ? current.serviceLevels : undefined} profiles={agentThread(current.chat.loadedId()) ? [] : profilesAt(props.place?.current)} activeProfile={current.activeProfile()} onOpenModelSelector={props.modelSelector ? openModelSelector : undefined} modelSelectorShortcut={props.modelSelector ? shortcutManager.formatEffectiveBinding(COMMAND_IDS.openModelSelector) : undefined} serverOnline={serverReachable()} voiceSettings={voiceSettings()} keyboardOwner={props.keyboardOwner} onChooseProfile={(id) => void current.switchProfile(id).catch(showError)} onOpenSettings={openSettings} onOpenAttachments={current.openAttachments} onStatusChange={current.setComposerStatus} /></Show>} />
     </>;
   };
@@ -5669,7 +5679,7 @@ function App() {
               {/* The same conversation a chat page has; only moving it to another
                   place is missing, since the thread's folder is where it ran. */}
               <Conversation chat={chat} busy={openingLiveChat()} empty={routeKind() === "chat" && emptyLayout()} sending={routeKind() === "chat" && emptyChat() && !emptyLayout()} opening={routeKind() === "chat" && withheldLiveChat()} stackRef={(element) => { chatComposerStack = element; }}
-                transcript={<Transcript chat={chat} supports={chatCapability} markdownRenderer={markdownRenderer()} profileLabel={label()} projectId={catalogue.projectId()} conversational={agentThread(chat.loadedId())} />}
+                transcript={<Transcript chat={chat} supports={chatCapability} markdownRenderer={markdownRenderer()} profileLabel={label()} projectId={catalogue.projectId()} conversational={agentThread(chat.loadedId())} approvals={approvalsFor(chat.loadedId())} />}
                 composer={<Composer chat={chat} supports={chatCapability} attachments={attachments} attachmentsSupported={chatCapability("attachments", true)} models={models} permissions={chatCapability("permissionModes") ? permissions : undefined} serviceLevels={chatManifest()?.serviceLevels?.length ? serviceLevels : undefined} profiles={profiles()} activeProfile={activeProfile()} onOpenModelSelector={openModelSelector} modelSelectorShortcut={shortcutManager.formatEffectiveBinding(COMMAND_IDS.openModelSelector)} serverOnline={serverReachable()} voiceSettings={voiceSettings()} onChooseProfile={() => {}} onOpenSettings={openSettings} onOpenAttachments={session.openAttachments} onStatusChange={setComposerStatus} />} />
             </>;
           }}</Show>

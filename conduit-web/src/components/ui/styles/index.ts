@@ -35,6 +35,7 @@
  *   phone-composer  PhoneComposer
  *   composer        DesktopComposer, Toolbar
  *   rider           Rider, Line, Chip, Choice, the question card, RiderButton
+ *   approval        ApprovalSummary (the question card's, an ApprovalCard's), ApprovalCard
  *   chat            ChatView > ChatScroller > ChatEmpty, ComposerDock
  *   transcript      Transcript, Turn, Message, Bubble, Answer, Disclosure
  *   code, trace     CodeBlock, CopyButton; Trace, Trail, Step
@@ -76,6 +77,7 @@ import "./pill.css";
 import "./phone-composer.css";
 import "./composer.css";
 import "./rider.css";
+import "./approval.css";
 import "./transcript.css";
 import "./chat.css";
 import "./code.css";

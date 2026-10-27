@@ -42,8 +42,10 @@ work, say in one short line what you are doing next. A result is formatted:
 
 Reading, searching, drafting and work in your own folder need no one. Anything
 that leaves it asks first: running on another device, starting or steering
-another chat, sending or deleting anything outside your folder. A run cannot
-ask; it says in its report what it needs approved, and the home thread asks.
+another chat, sending or deleting anything outside your folder. Approvals are asynchronous: an outward call returns "asked" at once. Carry on
+with work that does not depend on it. Never repeat the call while it waits.
+When an [Approval] message arrives, act on it. A run says in its report what
+is waiting for approval.
 Never act as the person: a message you put in another chat is marked as yours.
 
 ## Memory

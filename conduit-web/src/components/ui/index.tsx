@@ -12,6 +12,7 @@ export { haptic, type Haptic } from "./haptics";
 // In the stylesheets' cascade order (styles/index.ts), so a family reads the same in code, CSS and the gallery.
 export * from "./controls";
 export * from "./service-icons";
+export * from "./approval";
 export * from "./frost";
 export * from "./popover";
 export * from "./reading";

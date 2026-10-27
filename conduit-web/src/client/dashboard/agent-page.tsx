@@ -1,5 +1,5 @@
 import { createEffect, createMemo, createSignal, For, on, onCleanup, onMount, Show, type JSX } from "solid-js";
-import { Icons, StatusDot } from "@/components/ui";
+import { Icons, ServiceIcon, StatusDot } from "@/components/ui";
 import { Button, TextArea } from "@/components/ui/controls";
 import { DashConversation, DashIconButton, DashNote } from "@/components/ui/dashboard";
 import { Dialog } from "@/components/dialog";
@@ -107,6 +107,15 @@ export function AgentPage(props: {
 
   const needsGroup = () => <SplitGroup id="agent-needs" label="Needs you" count={agentNeeds() || null} order="first">
     <Show when={agentNeeds()} fallback={<SplitEmpty>Nothing waits on you.</SplitEmpty>}>
+      <For each={needs()?.asks}>{(ask) =>
+        <SplitRow element="button" onClick={(event: MouseEvent) => props.onOpenChat(ask.chatId, event)}
+          lead={<ServiceIcon service={ask.service || ""} fallback={<Icons.Permissions />} />} primary={ask.title} title={ask.lines.join("\n")}
+          context="Waiting for your approval"
+          trailing={<>
+            <DashIconButton aria-label="Allow" title="Allow" disabled={busy() !== null} onClick={(event: MouseEvent) => { event.stopPropagation(); void act(ask.id, () => api(`/v0/agent/asks/${encodeURIComponent(ask.id)}`, { method: "POST", body: JSON.stringify({ choice: "allow" }) })); }}><Icons.Check /></DashIconButton>
+            <DashIconButton aria-label="Don't" title="Don't" disabled={busy() !== null} onClick={(event: MouseEvent) => { event.stopPropagation(); void act(ask.id, () => api(`/v0/agent/asks/${encodeURIComponent(ask.id)}`, { method: "POST", body: JSON.stringify({ choice: "deny" }) })); }}><Icons.Close /></DashIconButton>
+          </>} />}
+      </For>
       <For each={needs()?.questions}>{(question) =>
         <SplitRow element="button" onClick={(event: MouseEvent) => props.onOpenChat(question.chatId, event)}
           lead={<StatusDot label="Waiting" tone="warn" />} primary={question.title} context="Waiting for your answer" />}

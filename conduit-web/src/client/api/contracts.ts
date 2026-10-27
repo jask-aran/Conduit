@@ -583,6 +583,8 @@ export interface Question {
   required: boolean;
   options: QuestionOption[];
   freeform: false | { placeholder?: string; multiline?: boolean; numeric?: boolean; initial?: string };
+  /** An approval: drawn as one (ApprovalSummary) in the prompt's place. */
+  approval?: { title: string; service?: string | null; lines?: string[] };
 }
 
 export interface QuestionOption {

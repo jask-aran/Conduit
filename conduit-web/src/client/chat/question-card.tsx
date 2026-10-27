@@ -2,7 +2,7 @@ import { Icons } from "@/components/ui";
 import { createMemo, createSignal, For, onMount, Show } from "solid-js";
 import { createStore } from "solid-js/store";
 
-import { Button, Choice, ChoiceInput, Choices, ChoicesPage, Hints, Input, Preview, Prompt, Rider, RiderFoot, RiderTop, RiderTitle, Summary, Tab, Tabs, TextArea } from "@/components/ui";
+import { ApprovalSummary, Button, Choice, ChoiceInput, Choices, ChoicesPage, Hints, Input, Preview, Prompt, Rider, RiderFoot, RiderTop, RiderTitle, Summary, Tab, Tabs, TextArea } from "@/components/ui";
 import type { HostUiRequest, Question, QuestionAnswer } from "../api/contracts";
 
 export type QuestionResponse = { id: string; cancelled?: boolean; answers?: QuestionAnswer[] };
@@ -143,7 +143,9 @@ export function QuestionCard(props: { request: HostUiRequest; dismissLabel?: str
     <Show when={current()} keyed fallback={<Summary rows={questions().map((question, index) => ({ label: question.header || question.prompt,
       value: answered(draft(question)) ? answerText(question) : question.required ? "Needs an answer" : "Not answered", empty: !answered(draft(question)), onOpen: () => go(index) }))} />}>
       {(question) => <ChoicesPage>
-        <Prompt multi={question.multiSelect}>{question.prompt}</Prompt>
+        <Show when={question.approval} fallback={<Prompt multi={question.multiSelect}>{question.prompt}</Prompt>}>{(approval) =>
+          <ApprovalSummary title={approval().title} service={approval().service} lines={approval().lines} />}
+        </Show>
         <Choices multi={question.multiSelect}>
           <For each={question.options}>{(option, index) => <Choice n={index() + 1} label={option.label} detail={option.description || undefined} title={option.description || undefined}
             chosen={draft(question).optionIds.includes(option.id)} active={cursor() === index()} multi={question.multiSelect} onPoint={() => setCursor(index())} onPick={() => choose(question, index())} />}</For>
