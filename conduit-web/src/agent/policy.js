@@ -41,20 +41,81 @@ const connectorCalls = (name, args) => {
   const calls = Array.isArray(args?.calls) ? args.calls : args?.calls ? [args.calls] : [];
   return calls.map((call) => String(call?.path || "").replace(/^tools\./, ""));
 };
-const connectorRead = (name, args) => { const paths = connectorCalls(name, args); return Boolean(paths?.length && paths.every(isReadAction)); };
+/*
+ * The actions a program (`execute`) names, read off its source: every use of `tools` must call a literal path
+ * (`tools.gmail.api.users.messagesList(…)`, `tools["tools.google…eventsList"](…)`), and nothing may reach for them
+ * another way (a computed name, globalThis, eval, a constructor…). null when that cannot be told before it runs.
+ */
+const OPAQUE = /\b(?:globalThis|self|window|this|eval|Function|import|require|Reflect|Proxy|constructor|prototype|__proto__|with|arguments)\b/;
+const KEYWORDS = new Set(["return", "typeof", "await", "yield", "in", "of", "case", "void", "delete", "throw", "new", "else", "do"]);
+const STRING = /(["'`])(?:\\.|(?!\1)[^\\])*\1/g;
+/** An index by anything but a number or a plain string (`x[i]`, `x["con" + "structor"]`) could reach for anything. */
+function computedIndex(code) {
+  const strings = [];
+  const blank = code.replace(STRING, (literal) => { strings.push(literal); return `"${strings.length - 1}"`; });
+  for (const match of blank.matchAll(/\[/g)) {
+    const before = blank.slice(0, match.index).trimEnd();
+    const word = /[\w$]+$/.exec(before)?.[0];
+    const member = /[\w$)\]]$/.test(before) && !(word && KEYWORDS.has(word));
+    if (!member) continue; // an array literal
+    const index = /^\[\s*(\d+|"(\d+)")\s*\]/.exec(blank.slice(match.index));
+    if (!index) return true;
+    if (index[2] != null) {
+      const text = strings[Number(index[2])].slice(1, -1);
+      if (strings[Number(index[2])][0] === "`" || /^(?:constructor|prototype|__proto__)$/.test(text)) return true;
+    }
+  }
+  return false;
+}
+function programPaths(code) {
+  if (typeof code !== "string" || !code.trim()) return null;
+  const literal = /\btools\s*\[\s*(["'])([^"'`$\\]+)\1\s*\]\s*\(|\btools((?:\s*\.\s*[A-Za-z_$][\w$]*)+)\s*\(/g;
+  const paths = [];
+  let rest = code;
+  for (const match of code.matchAll(literal)) {
+    paths.push((match[2] ?? match[3].replace(/\s/g, "").slice(1)).replace(/^tools\./, ""));
+    rest = rest.replace(match[0], "(");
+  }
+  // Whatever is left may not touch `tools`, name a way around it, or index by a computed value.
+  const code_ = rest.replace(STRING, '""');
+  return /\btools\b/.test(code_) || OPAQUE.test(code_) || computedIndex(rest) ? null : paths;
+}
+const programOf = (args) => args?.code ?? args?.source ?? args?.program;
+/** The actions a connector tool's call will take: a gateway call's, or a program's; null when not knowable. */
+const connectorActions = (name, args) => connectorCalls(name, args) ?? (connectorTool(name) === "execute" ? programPaths(programOf(args)) : null);
+const connectorRead = (name, args) => { const paths = connectorActions(name, args); return Boolean(paths?.length && paths.every(isReadAction)); };
 const connectorName = (name) => { const connector = name.split("__")[1] || ""; return `${connector[0]?.toUpperCase() ?? ""}${connector.slice(1)}`; };
+/** An action as words: `gmail.send` → "Gmail · send", `google.api.calendar.events.calendarEventsInsert` → "Google · calendar events insert". */
+function actionWords(path) {
+  const parts = String(path).split(".").filter((part) => part !== "api");
+  const app = parts[0] || "";
+  const words = wordsOf(parts.at(-1) || "");
+  const tail = words.filter((word, index) => word !== words[index - 1]);
+  return `${app[0]?.toUpperCase() ?? ""}${app.slice(1)} · ${tail.join(" ") || parts.slice(1).join(" ")}`;
+}
 const mcpLabel = (name, args) => {
-  const paths = connectorCalls(name, args);
-  if (paths) return `use ${connectorName(name)}: ${[...new Set(paths)].join(", ") || "an action"}`;
-  return connectorTool(name) === "execute" ? `run a program on ${connectorName(name)}` : `use ${connectorName(name)}: ${connectorTool(name)}`;
+  const paths = connectorActions(name, args);
+  const listed = [...new Set(paths || [])].map(actionWords).join(", ");
+  if (connectorTool(name) === "execute") return `run a script in ${connectorName(name)}${listed ? `: ${listed}` : ""}`;
+  return paths ? `use ${connectorName(name)}: ${listed || "an action"}` : `use ${connectorName(name)}: ${connectorTool(name)}`;
 };
 const preview = (value) => { try { return JSON.stringify(value).slice(0, 300); } catch { return ""; } };
 const summary = (name, args) => {
   if (name.startsWith("mcp__")) {
+    // What it will do, one action a line with what it sends; a script that cannot be read ahead says so.
     const calls = connectorCalls(name, args);
-    const detail = calls ? preview((Array.isArray(args.calls) ? args.calls : [args.calls]).map((call) => call?.input))
-      : connectorTool(name) === "execute" ? String(args?.code ?? args?.source ?? preview(args)).slice(0, 300) : preview(args);
-    return `${mcpLabel(name, args)}${detail ? `\n\n${detail}` : ""}`;
+    const service = connectorName(name);
+    if (calls) {
+      const items = Array.isArray(args.calls) ? args.calls : [args.calls];
+      const lines = items.map((call) => { const input = preview(call?.input?.input ?? call?.input); return `• ${actionWords(String(call?.path || "").replace(/^tools\./, ""))}${input && input !== "{}" ? ` — ${input.slice(0, 160)}` : ""}`; });
+      return `do this in ${service}:\n${lines.join("\n")}`;
+    }
+    if (connectorTool(name) === "execute") {
+      const paths = programPaths(programOf(args));
+      return paths?.length ? `run a script in ${service} that will:\n${[...new Set(paths)].map((path) => `• ${actionWords(path)}`).join("\n")}`
+        : `run a script in ${service} whose actions can't be read before it runs.`;
+    }
+    return mcpLabel(name, args);
   }
   if (ALWAYS_OUTWARD[name]) {
     const what = name === "steer_chat" ? `${args.chatId || "a chat"}: ${String(args.message || "").slice(0, 200)}`
