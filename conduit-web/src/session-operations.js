@@ -5,7 +5,7 @@ export async function stopSessionProcesses(backends, session) {
   const chatId = session.chatId || session.id;
   const matching = backends.rawRecords().filter((record) => record.chatId === chatId);
   const resident = backends.getByChatId?.(chatId);
-  if (resident && !matching.includes(resident)) matching.push(resident);
+  if (resident && resident.status !== "stopped" && !matching.includes(resident)) matching.push(resident);
   await Promise.all(matching.map((record) => backends.adapterForRecord(record).close(record.id)));
 }
 
