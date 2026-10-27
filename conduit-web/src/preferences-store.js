@@ -292,10 +292,16 @@ export class PreferencesStore {
 
   async save(patch = {}) {
     this.preferences = normalizePreferences({ ...this.preferences, ...patch }, this.preferences, this.knownTemplateIds);
-    await fs.mkdir(path.dirname(this.filePath), { recursive: true });
-    const temp = `${this.filePath}.${process.pid}.tmp`;
-    await fs.writeFile(temp, `${JSON.stringify(this.preferences, null, 2)}\n`, "utf8");
-    await fs.rename(temp, this.filePath);
+    // One write at a time, each of the state as it then is: two saves at once shared the temporary file, and the
+    // second rename found it gone.
+    const write = (this.writing || Promise.resolve()).then(async () => {
+      await fs.mkdir(path.dirname(this.filePath), { recursive: true });
+      const temp = `${this.filePath}.${process.pid}.tmp`;
+      await fs.writeFile(temp, `${JSON.stringify(this.preferences, null, 2)}\n`, "utf8");
+      await fs.rename(temp, this.filePath);
+    });
+    this.writing = write.catch(() => {});
+    await write;
     return this.get();
   }
 }

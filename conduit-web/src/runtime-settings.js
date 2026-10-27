@@ -48,10 +48,15 @@ export class RuntimeSettingsStore {
 
   async save(patch = {}) {
     this.settings = normalizeRuntimeSettings({ ...this.settings, ...patch }, this.settings);
-    await fs.mkdir(path.dirname(this.filePath), { recursive: true });
-    const temp = `${this.filePath}.${process.pid}.tmp`;
-    await fs.writeFile(temp, `${JSON.stringify(this.settings, null, 2)}\n`, "utf8");
-    await fs.rename(temp, this.filePath);
+    // One write at a time, each of the state as it then is (two at once shared the temporary file).
+    const write = (this.writing || Promise.resolve()).then(async () => {
+      await fs.mkdir(path.dirname(this.filePath), { recursive: true });
+      const temp = `${this.filePath}.${process.pid}.tmp`;
+      await fs.writeFile(temp, `${JSON.stringify(this.settings, null, 2)}\n`, "utf8");
+      await fs.rename(temp, this.filePath);
+    });
+    this.writing = write.catch(() => {});
+    await write;
     return this.get();
   }
 }

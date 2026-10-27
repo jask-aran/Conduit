@@ -55,9 +55,14 @@ export class PromptStore {
     if (content === await fs.readFile(this.prompt(id).defaultPath, "utf8").catch(() => null)) return this.reset(id);
     await fs.mkdir(this.root, { recursive: true });
     const target = this.overridePath(id);
-    const temporary = `${target}.${process.pid}.tmp`;
-    await fs.writeFile(temporary, content, "utf8");
-    await fs.rename(temporary, target);
+    // Saved as typed, so saves overlap: one write at a time (two at once shared the temporary file).
+    const write = (this.writing || Promise.resolve()).then(async () => {
+      const temporary = `${target}.${process.pid}.tmp`;
+      await fs.writeFile(temporary, content, "utf8");
+      await fs.rename(temporary, target);
+    });
+    this.writing = write.catch(() => {});
+    await write;
     return this.read(id);
   }
 
