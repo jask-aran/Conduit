@@ -1,4 +1,5 @@
-import { wrapTool } from "@earendil-works/pi-durable";
+import { defineTool, wrapTool } from "@earendil-works/pi-durable";
+import { Type } from "@earendil-works/pi-ai";
 import { createHash } from "node:crypto";
 import { serviceOf } from "./connector-services.js";
 import { AgentDoc, nextId } from "./agent-doc.js";
@@ -147,6 +148,8 @@ const ruleLabel = (name, args) => {
 // JSON arguments have no cycles. Sort object keys recursively so equivalent calls share a grant.
 const canonical = (value) => Array.isArray(value) ? value.map(canonical)
   : value && typeof value === "object" ? Object.fromEntries(Object.keys(value).sort().map((key) => [key, canonical(value[key])])) : value;
+// What leaves a commit is copied out of it: the doc's objects cannot be read once it settles.
+const plain = (value) => JSON.parse(JSON.stringify(value));
 const result = (text, id, isError = false) => ({ output: [{ type: "text", text }], isError, details: { ask: id } });
 
 function presentation(name, args) {
@@ -163,7 +166,7 @@ function presentation(name, args) {
     return { title: label[0].toUpperCase() + label.slice(1), service, lines: lines.slice(0, 4) };
   }
   if (ALWAYS_OUTWARD[name]) {
-    const target = name === "start_chat" ? args.workspace || "a workspace" : args.chatId || "a chat";
+    const target = name === "start_chat" ? args.workspace || "Chats" : args.chatId || "a chat";
     return { title: name === "start_chat" ? `Start a chat in ${target}` : `Post in ${target}`, service: null,
       lines: [String(target), String(name === "start_chat" ? args.prompt || "" : args.message || "").slice(0, 200)].filter(Boolean) };
   }
@@ -186,19 +189,19 @@ async function approve(runtime, api, name, args, context, thread) {
     for (const ask of asks) if (ask.status === "pending" && ask.expiresAt <= now.toISOString()) ask.status = "expired";
     // A replay of the original ask must never consume a later grant or match a new rule.
     const replay = asks.find((ask) => (ask.toolCallId === api.callId && ask.sourceConversationId === api.conversationId) || ask.waiters?.some((waiter) => waiter.callId === api.callId && waiter.conversationId === api.conversationId));
-    if (replay) return { ask: replay, replay: true };
+    if (replay) return { ask: plain(replay), replay: true };
     // A replay after consuming a grant must not execute the external call a second time.
     const consumed = asks.find((ask) => ask.usedCallId === api.callId && ask.chatId === thread.chatId);
-    if (consumed) return { ask: consumed, consumed: true };
+    if (consumed) return { ask: plain(consumed), consumed: true };
     const grant = asks.find((ask) => ask.chatId === thread.chatId && ask.argsKey === argsKey && ask.status === "allowed");
     const rule = !doc.tainted?.[api.conversationId] && target != null && Object.values(doc.rules || {}).some((item) => item.tool === name && item.target === target);
     if (grant) { grant.status = "used"; grant.usedCallId = api.callId; return { allowed: true }; }
     if (rule) return { allowed: true };
     const pending = asks.find((ask) => ask.chatId === thread.chatId && ask.argsKey === argsKey && ask.status === "pending");
-    if (pending) { (pending.waiters ||= []).push({ callId: api.callId, conversationId: api.conversationId }); return { ask: pending, waiting: true }; }
+    if (pending) { (pending.waiters ||= []).push({ callId: api.callId, conversationId: api.conversationId }); return { ask: plain(pending), waiting: true }; }
     const id = nextId(doc, "a");
     const ask = { id, chatId: thread.chatId, conversationId: thread.conversationId, toolCallId: api.callId, parentCallId,
-      sourceConversationId: api.conversationId, tool: name, argsKey, ...info, createdAt: now.toISOString(),
+      sourceConversationId: api.conversationId, run: thread.run, tool: name, args, argsKey, ...info, createdAt: now.toISOString(),
       expiresAt: new Date(now.getTime() + 86400_000).toISOString(), status: "pending", ruleTarget: target ?? "", ruleLabel: ruleLabel(name, args),
       tainted: Boolean(doc.tainted?.[api.conversationId]) };
     doc.asks[id] = ask;
@@ -207,9 +210,38 @@ async function approve(runtime, api, name, args, context, thread) {
   if (outcome.allowed) return null;
   const { ask } = outcome;
   if (outcome.consumed) return result(`This approved call was interrupted; it may already have run. Check its effects before trying again (ask ${ask.id}).`, ask.id, true);
-  if (outcome.created) runtime.notify?.({ kind: "approval", conversationId: thread.conversationId, text: `${runtime.agent.settings().name} wants to ${summary(name, args)}${ask.tainted ? "\n\nThis thread has read your chats: check that nothing private goes where it should not." : ""}`, key: ask.id });
-  if (outcome.waiting || (outcome.replay && ask.toolCallId !== api.callId)) return result(`Still waiting for approval (ask ${ask.id}). Do not repeat this call while it waits.${thread.run ? " Say in your report that it is waiting for approval." : ""}`, ask.id);
-  return result(`Asked the person to approve: ${ask.title} (ask ${ask.id}). Carry on with anything that does not depend on it. When they answer you will get a message; if they allow it, make this same call again with exactly the same arguments.${thread.run ? " Say in your report that it is waiting for approval." : ""}`, ask.id);
+  if (outcome.created && !thread.run) runtime.notify?.({ kind: "approval", conversationId: thread.conversationId, text: `${runtime.agent.settings().name} wants to ${summary(name, args)}${ask.tainted ? "\n\nThis thread has read your chats: check that nothing private goes where it should not." : ""}`, key: ask.id });
+  if (outcome.waiting || (outcome.replay && ask.toolCallId !== api.callId)) return result(`Still waiting for approval (ask ${ask.id}). Do not repeat this call while it waits.${thread.run ? " Say in your report what is waiting." : ""}`, ask.id);
+  return result(`Asked the person to approve: ${ask.title} (ask ${ask.id}). Carry on with anything that does not depend on it. When they answer you will get a message.${thread.run ? " It shows under your report, ready to approve: say in it, in a few words, what is waiting." : ""}`, ask.id);
+}
+
+/**
+ * `approved`: runs the call an allowed ask holds, once, in the thread it belongs to. The person's answer arrives as a
+ * message naming the ask; the call itself (made by this thread earlier, or by a run) is the hub's copy, not retyped.
+ */
+export function ApprovedTool(runtime, tools) {
+  return defineTool({
+    name: "approved",
+    description: "Run an approved call: the one an [Approval] Allowed message names, by its ask id. It runs exactly as asked, once.",
+    parameters: Type.Object({ ask: Type.String({ description: "The ask id, e.g. a-3" }) }),
+    execute: async (args, api, context) => {
+      const described = await runtime.agent.describe(api.conversationId);
+      const chatId = described?.role === "run" ? null : described?.chatId;
+      const outcome = await api.commit(async (tx) => {
+        const ask = (await tx.doc(AgentDoc)).asks?.[args.ask];
+        if (!ask || !chatId || ask.chatId !== chatId) return { error: `No ask ${args.ask} in this thread.` };
+        if (ask.usedCallId === api.callId) return { ask: plain(ask), interrupted: true };
+        if (ask.status !== "allowed") return { error: `Ask ${ask.id} is ${ask.status === "used" ? "already done" : ask.status === "pending" ? "still waiting for the person" : ask.status}; do not do it.` };
+        ask.status = "used"; ask.usedCallId = api.callId;
+        return { ask: plain(ask) };
+      }, context);
+      if (outcome.error) return result(outcome.error, args.ask, true);
+      if (outcome.interrupted) return result(`This approved call was interrupted; it may already have run. Check its effects before anything else (ask ${outcome.ask.id}).`, outcome.ask.id, true);
+      const target = tools.find((tool) => tool.name === outcome.ask.tool);
+      if (!target || !outcome.ask.args) return result(`Ask ${outcome.ask.id}'s tool is not available now.`, outcome.ask.id, true);
+      return target.execute(outcome.ask.args, api, context);
+    },
+  });
 }
 
 /** The wraps the agent extension applies to its threads' tools, built against the installed tools. */

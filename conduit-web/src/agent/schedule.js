@@ -2,7 +2,11 @@ import { defineTask, defineTool } from "@earendil-works/pi-durable";
 import { Type } from "@earendil-works/pi-ai";
 import { AgentDoc, nextId } from "./agent-doc.js";
 
-const BRIEF = "Morning brief. Look at what changed since the last brief: the person's chats (the `chats` tool), devices, your diary and schedules. Tell the person in a few lines what matters today. Begin with FYI: or ATTENTION:.";
+const BRIEF = "Morning brief. Look at what changed since the last brief: the person's calendar and mail if connected, "
+  + "their chats (the `chats` tool), devices, your diary and schedules. Tell the person in a short list what matters today. "
+  + "Where an item has an obvious next step outside your folder (a reply to send, an invite to answer, a chat to start on "
+  + "something), prepare it in full and make the call: it is asked, not done, and the person approves it under your brief. "
+  + "Prepare at most three, only ones they would likely want; mark those items in the list. Begin with FYI: or ATTENTION:.";
 const HEARTBEAT = "Heartbeat. Read HEARTBEAT.md in your folder and check each item. Answer NOTHING when all is clear; otherwise say what needs the person.";
 const terminal = () => ({ status: "terminal", outcome: { status: "completed" } });
 const result = (text, isError = false) => ({ output: [{ type: "text", text }], ...(isError ? { isError: true } : {}) });

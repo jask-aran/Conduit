@@ -120,8 +120,13 @@ but its turns read differently. Taken from Duet, Grok Bot, Muse and Open Duet
   report comes back as one line. Built on the agents rows chats already have.
 - **Approvals: Allow once, Always, Don't.** Always saves a rule, listed on its
   page and removable there. A card raised by a run expires and says so.
-- **A brief with actions** (next): each item in the morning brief carries its
-  prepared first step, with Approve / Not now in place.
+- **A brief with actions.** The brief prepares at most three first steps (a
+  reply, an invite answer, a chat to start) by making the call, which is asked,
+  not done. A run's asks are not pushed one by one: its report reaches the
+  person whatever the setting, its push says how many wait, and in the home
+  thread its cards sit under the agent's reply to the report. Allowed, the
+  thread runs the hub's copy of the call with `approved` (an ask id), once,
+  whoever made it. Built 2026-10-27.
 
 ## First slice
 

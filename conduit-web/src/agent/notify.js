@@ -13,7 +13,7 @@ const line = (text, max) => {
 
 /** `runtime.notify` for the durable runtime: called by the reporter and by approvals, never awaited by them. */
 export function agentNotifier({ agent, push, hubId }) {
-  return ({ kind, conversationId, title, text, level, key }) => void (async () => {
+  return ({ kind, conversationId, title, text, level, key, waiting = 0 }) => void (async () => {
     if (!agent.enabled()) return;
     const thread = await agent.describe(conversationId);
     if (!thread?.chatId || thread.role === "run") return;
@@ -23,7 +23,7 @@ export function agentNotifier({ agent, push, hubId }) {
     const tag = String(key || `${kind}-${conversationId}`);
     await push.send({
       v: 1,
-      title: approval ? `${name} needs your approval` : title ? `${name}: ${line(title, 60)}` : name,
+      title: approval ? `${name} needs your approval` : `${title ? `${name}: ${line(title, 60)}` : name}${waiting ? ` · ${waiting} to approve` : ""}`,
       body: line(text, 240),
       path: `/chat/${thread.chatId}`,
       tag,

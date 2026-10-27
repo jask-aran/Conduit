@@ -131,7 +131,7 @@ function AnswerFoot(props: { message: Message; precedingUserId?: string; chat: T
 const focusComposerSoon = () => requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>("textarea[data-composer-input]:not([disabled])")?.focus({ preventScroll: true }));
 
 /** An approval as the thread draws it (GET /v0/agent `asks`). */
-export type TranscriptAsk = { id: string; toolCallId: string; parentCallId: string | null; title: string; service: string | null; lines: string[]; expiresAt: string; status: ApprovalState };
+export type TranscriptAsk = { id: string; toolCallId: string; parentCallId: string | null; run?: string | null; title: string; service: string | null; lines: string[]; expiresAt: string; status: ApprovalState };
 const APPROVAL_NOTE = "[Approval] ";
 /* Waits for how long, as the card's meta: "23 h", "40 min". */
 const waitsFor = (expiresAt: string) => { const minutes = Math.max(0, Math.round((Date.parse(expiresAt) - Date.now()) / 60_000)); return minutes >= 90 ? `${Math.round(minutes / 60)} h left` : `${minutes} min left`; };
@@ -270,7 +270,18 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
     const rowOf = new Map<string, string>();
     for (const row of timeline) if (row.type === "trace") for (const segment of row.value.segments) if (segment.kind === "tool") rowOf.set(segment.tool.toolCallId, row.key);
     const unplaced: TranscriptAsk[] = [];
+    // A run's asks: under the agent's reply to its report (which says what waits), or the report until it replies;
+    // nowhere before the report is in (Needs you on the page has them).
+    let report: string | null = null;
+    for (const row of timeline) {
+      if (row.type !== "message") continue;
+      const agent = row.value.origin === "harness" ? row.value.agent : undefined;
+      if (agent?.conversationId != null) { report = `run:${agent.conversationId}`; rowOf.set(report, report); }
+      else if (row.value.role === "user") report = null;
+      else if (report) rowOf.set(report, row.key);
+    }
     for (const ask of [...asks].reverse()) {
+      if (ask.run) { const key = rowOf.get(`run:${ask.run}`); if (key) placed.set(key, [...(placed.get(key) ?? []), ask]); continue; }
       const key = rowOf.get(ask.toolCallId) ?? (ask.parentCallId ? rowOf.get(ask.parentCallId) : undefined);
       if (key) placed.set(key, [...(placed.get(key) ?? []), ask]);
       else if (ask.status === "pending") unplaced.push(ask);
@@ -278,8 +289,8 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
     return { placed, unplaced };
   });
   const asksAt = (key: string) => askRows().placed.get(key) ?? [];
-  // A new call may have asked: the list is read again as the thread's calls change.
-  createEffect(on(() => props.approvals ? props.chat.tools().length : 0, (count) => { if (count) props.approvals?.refresh(); }, { defer: true }));
+  // A new call may have asked, or a run's report come in with its asks: the list is read again as the thread grows.
+  createEffect(on(() => props.approvals ? props.chat.tools().length + props.chat.messages().length : 0, (count) => { if (count) props.approvals?.refresh(); }, { defer: true }));
   const unplacedAsks = () => askRows().unplaced;
   const empty = createMemo(() => !timeline.length && !isChatContentActivity(props.chat.activity()));
   // A message of ours the server has not answered with any row of its turn.
@@ -1124,14 +1135,13 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
           // Read once: the fade is timed from when the row was built, and a
           // later update must not shift it.
           const arrive = untrack(() => user() ? arrival(message()) : undefined);
-          // The hub telling the agent how an approval was answered: a quiet line, as a report is, not the person's bubble.
-          if (props.conversational && user() && (message().content || "").startsWith(APPROVAL_NOTE)) {
-            return <TranscriptRow ref={row} data-slot="message-scroller-item" data-message-id={message().id}><HarnessPrompt>{(message().content || "").slice(APPROVAL_NOTE.length).replace(/ \(ask [^)]+\)\..*$/, "")}</HarnessPrompt></TranscriptRow>;
-          }
           if (user() && message().origin === "harness") {
             // A subagent's report opens its transcript, once the chat's agents say which chat that is.
             const child = () => { const ref = message().agent; return ref ? props.chat.agents?.().find((agent) => ref.id ? agent.id === ref.id : String(agent.conversationId) === String(ref.conversationId))?.chatId : null; };
-            return <TranscriptRow ref={row} data-slot="message-scroller-item" data-message-id={message().id}><HarnessPrompt onOpen={child() ? () => openAgentChat(child()!) : undefined}>{message().content}</HarnessPrompt></TranscriptRow>;
+            return <TranscriptRow ref={row} data-slot="message-scroller-item" data-message-id={message().id}><HarnessPrompt onOpen={child() ? () => openAgentChat(child()!) : undefined}>{props.conversational ? (message().content || "").replace(/^sa-\d+ finished: /, "") : message().content}</HarnessPrompt>
+              <Show when={message().agent?.conversationId != null && asksAt(`run:${message().agent!.conversationId}`).length}>
+                <Turn><For each={asksAt(`run:${message().agent!.conversationId}`)}>{(ask) => <AskCard ask={ask} answer={props.approvals!.answer} />}</For></Turn>
+              </Show></TranscriptRow>;
           }
           // Copied: Copy turns to a check, and the answer takes the copied wash, for a moment.
           const [copied, setCopied] = createSignal(false);
@@ -1155,18 +1165,23 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
                 <Failure time={message().timestamp ? fullDateTime(message().timestamp) : undefined} dateTime={message().timestamp || undefined} message={message().errorMessage || "The model request failed."}
                   facts={[message().model && `Model: ${message().model}`, message().provider && `Provider: ${message().provider}`, props.profileLabel && `Profile: ${props.profileLabel}`].filter(Boolean) as string[]} />
               </Show>
+              <For each={asksAt(item.key)}>{(ask) => <AskCard ask={ask} answer={props.approvals!.answer} />}</For>
               {/* Held empty while it streams, so the foot arriving moves nothing. */}
               {/* A turn that speaks more than once has one foot, under the message that carries its orb. */}
               <Show when={!props.conversational || item.orb}>
                 <Show when={actionsShown()} fallback={<MessageFoot />}><AnswerFoot message={message()} precedingUserId={precedingUserId()} chat={props.chat} supports={props.supports} artifact={artifact()} traced={item.traced} reveal={streamed()} copied={copied()} onCopy={() => void copy()} /></Show>
               </Show>
             </Turn>}>
-              <UserMessage message={message()} text={review().text} editing={props.chat.editingEntryId() === message().id}
+              {/* The hub telling the agent how an approval was answered: a quiet line, as a report is, not the person's
+                  bubble. Read as the text arrives: a row is built before its message has any. */}
+              <Show when={props.conversational && (message().content || "").startsWith(APPROVAL_NOTE)} fallback={<UserMessage message={message()} text={review().text} editing={props.chat.editingEntryId() === message().id}
                 editable={!message().pending && props.supports("fork")} since={arrive} onEdit={() => { props.chat.edit(message()); focusComposerSoon(); }}
                 under={<>
                   <Show when={message().attachments?.length}><AttachmentCards items={message().attachments!} chatId={props.chat.loadedId()} label="Message attachments" /></Show>
                   <Show when={review().comments.length}><ReviewCommentCards items={review().comments} chatId={props.chat.loadedId() ?? ""} label="Code references" /></Show>
-                </>} />
+                </>} />}>
+                <HarnessPrompt>{(message().content || "").slice(APPROVAL_NOTE.length).replace(/ \(ask [^)]+\)\..*$/, "")}</HarnessPrompt>
+              </Show>
             </Show>
           </TranscriptRow>;
         }}</For>
