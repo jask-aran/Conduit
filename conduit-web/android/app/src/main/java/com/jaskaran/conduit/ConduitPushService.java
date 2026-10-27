@@ -80,7 +80,9 @@ public class ConduitPushService extends PushService {
                 PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
             String channel = "high".equals(payload.optString("urgency")) ? "agent_urgent" : "agent";
             NotificationCompat.Builder notification = new NotificationCompat.Builder(this, channel)
-                .setSmallIcon(R.drawable.ic_stat_conduit).setContentTitle((String) title).setContentText(body)
+                .setSmallIcon(R.drawable.ic_stat_conduit)
+                // Conduit's black behind the mark; unset, Samsung fills it with the system accent (blue).
+                .setColor(androidx.core.content.ContextCompat.getColor(this, R.color.conduit_frame)).setContentTitle((String) title).setContentText(body)
                 .setStyle(new NotificationCompat.BigTextStyle().bigText(body)).setAutoCancel(true)
                 .setCategory(NotificationCompat.CATEGORY_MESSAGE).setContentIntent(pending);
             manager.notify(notificationTag, 0, notification.build());
