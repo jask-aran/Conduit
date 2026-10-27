@@ -19,6 +19,7 @@ import { backgroundSubagents } from "../subagents.js";
  * DELETE /v0/agent/notices/:id      a notice read (it leaves the attention list)
  * DELETE /v0/agent/rules/:id        remove a saved approval rule
  * GET  /v0/agent/connectors         connector status
+ * GET  /v0/agent/connectors/:id/tools  what a connected one offers (name, description, read-only)
  * POST /v0/agent/connectors/:id/connect  start OAuth
  * GET  /v0/agent/connectors/:id/callback  finish OAuth (no session; state is the secret)
  * DELETE /v0/agent/connectors/:id    disconnect
@@ -70,6 +71,12 @@ export function registerAgentRoutes(app, { agent, backends }) {
     response.json(agent.connectors.list());
   });
 
+  app.get("/v0/agent/connectors/:id/tools", (request, response) => {
+    if (!enabled(response)) return;
+    try { response.json(agent.connectors.describe(request.params.id)); }
+    catch (error) { response.status(error.status === 404 ? 404 : 500).json({ error: error.status === 404 ? "connector_not_found" : "connector_failed" }); }
+  });
+
   app.post("/v0/agent/connectors/:id/connect", async (request, response, next) => {
     try {
       if (!enabled(response)) return;
@@ -88,7 +95,11 @@ export function registerAgentRoutes(app, { agent, backends }) {
       const returnTo = await agent.connectors.finish(request.params.id, request.query.state, request.query.code, request.query.iss);
       if (agent.connectors.entry(request.params.id).status !== "on") return response.status(502).send("Connector connection failed");
       if (returnTo) return response.redirect(303, safeRedirectTarget(returnTo));
-      response.type("html").send("<!doctype html><title>Connected</title><p>Executor is connected. You can close this tab.</p>");
+      // The tab Settings opened closes itself; one a native app handed to the system browser cannot, and says so.
+      const label = agent.connectors.entry(request.params.id).info.label;
+      response.type("html").send(`<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${label} connected</title>
+<style>:root{color-scheme:light dark}body{margin:0;min-height:100vh;display:grid;place-items:center;font:15px/1.5 system-ui,sans-serif;background:#111;color:#e8e8e8}@media (prefers-color-scheme:light){body{background:#f6f6f4;color:#1a1a1a}}p{margin:0;text-align:center}small{display:block;opacity:.6;margin-top:4px}</style>
+<p>${label} is connected to Conduit.<small>You can close this tab.</small></p><script>window.close()</script>`);
     } catch (error) {
       // The reason, never the code or a token: OAuth errors name what failed, not the secrets.
       if (error.status !== 400) console.error(`[agent] connector ${request.params.id} authorization failed: ${error.name}: ${error.message}`);
