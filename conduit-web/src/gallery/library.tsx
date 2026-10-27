@@ -32,6 +32,7 @@ import { networkPage } from "./pages/network";
 import { leaderPage } from "./pages/leader";
 import { desktopComposerPage } from "./pages/desktop-composer";
 import { riderPage } from "./pages/rider";
+import { approvalPage } from "./pages/approval";
 import { pillPage } from "./pages/pill";
 import { phoneComposerPage } from "./pages/phone-composer";
 import { voicePage } from "./pages/voice";
@@ -76,6 +77,7 @@ const piecePages: Page[] = [
   leaderPage,
   desktopComposerPage,
   riderPage,
+  approvalPage,
   pillPage,
   phoneComposerPage,
   voicePage,
