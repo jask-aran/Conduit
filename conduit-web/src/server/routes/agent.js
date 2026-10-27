@@ -1,4 +1,6 @@
 import crypto from "node:crypto";
+import { safeRedirectTarget } from "../../auth-middleware.js";
+import { originOfRequest } from "../../server-identity.js";
 import { chatView } from "../../chat-store.js";
 import { listWatches, webhook } from "../../agent/events.js";
 import { acceptProposal, listProposals, rejectProposal } from "../../agent/memory.js";
@@ -16,6 +18,10 @@ import { backgroundSubagents } from "../subagents.js";
  * POST /v0/agent/proposals/:id/{accept,reject}
  * DELETE /v0/agent/notices/:id      a notice read (it leaves the attention list)
  * DELETE /v0/agent/rules/:id        remove a saved approval rule
+ * GET  /v0/agent/connectors         connector status
+ * POST /v0/agent/connectors/:id/connect  start OAuth
+ * GET  /v0/agent/connectors/:id/callback  finish OAuth (no session; state is the secret)
+ * DELETE /v0/agent/connectors/:id    disconnect
  * POST /v0/agent/hooks/:token        a webhook: wakes it with the request's body (no session; the token is the secret)
  */
 export function registerAgentRoutes(app, { agent, backends }) {
@@ -58,6 +64,41 @@ export function registerAgentRoutes(app, { agent, backends }) {
       },
     };
   };
+
+  app.get("/v0/agent/connectors", (request, response) => {
+    if (!enabled(response)) return;
+    response.json(agent.connectors.list());
+  });
+
+  app.post("/v0/agent/connectors/:id/connect", async (request, response, next) => {
+    try {
+      if (!enabled(response)) return;
+      // The person's browser comes back to the address it used (behind a TLS front, its forwarded scheme).
+      const origin = originOfRequest(request);
+      if (!origin) return response.status(400).json({ error: "bad_origin" });
+      const returnTo = typeof request.body?.returnTo === "string" ? safeRedirectTarget(request.body.returnTo) : null;
+      const authorizationUrl = await agent.connectors.begin(request.params.id, origin, returnTo);
+      response.json({ authorizationUrl });
+    } catch (error) { if (error.status === 404) return response.status(404).json({ error: "connector_not_found" }); response.status(502).json({ error: "connector_authorization_failed" }); }
+  });
+
+  app.get("/v0/agent/connectors/:id/callback", async (request, response, next) => {
+    try {
+      if (!agent.enabled()) return response.status(400).send("Invalid authorization state");
+      const returnTo = await agent.connectors.finish(request.params.id, request.query.state, request.query.code);
+      if (agent.connectors.entry(request.params.id).status !== "on") return response.status(502).send("Connector connection failed");
+      if (returnTo) return response.redirect(303, safeRedirectTarget(returnTo));
+      response.type("html").send("<!doctype html><title>Connected</title><p>Executor is connected. You can close this tab.</p>");
+    } catch (error) { response.status(error.status === 400 ? 400 : 502).send(error.status === 400 ? "Invalid authorization state" : "Connector authorization failed"); }
+  });
+
+  app.delete("/v0/agent/connectors/:id", async (request, response, next) => {
+    try {
+      if (!enabled(response)) return;
+      await agent.connectors.disconnect(request.params.id);
+      response.status(204).end();
+    } catch (error) { next(error); }
+  });
 
   app.get("/v0/agent", async (request, response, next) => {
     try {

@@ -20,7 +20,10 @@ const ALWAYS_OUTWARD = { start_chat: "start a chat", steer_chat: "post in one of
 /** Calls that read the person's own data, which taint the conversation. */
 const PRIVATE_READS = { chats: (args) => ["read", "search"].includes(args?.action) };
 
+// A connector's tool: `mcp__<connector>__<tool>`.
+const mcpLabel = (name) => { const [, connector = "", ...tool] = name.split("__"); return `use ${connector[0]?.toUpperCase() ?? ""}${connector.slice(1)}: ${tool.join("__")}`; };
 const summary = (name, args) => {
+  if (name.startsWith("mcp__")) return mcpLabel(name);
   if (ALWAYS_OUTWARD[name]) {
     const what = name === "steer_chat" ? `${args.chatId || "a chat"}: ${String(args.message || "").slice(0, 200)}`
       : `${args.workspace || "a workspace"}${args.profile ? ` (${args.profile})` : ""}: ${String(args.prompt || "").slice(0, 200)}`;
@@ -34,6 +37,7 @@ const outward = (name, args) => Boolean(ALWAYS_OUTWARD[name] || (PLACED.includes
 const refused = (text) => ({ output: [{ type: "text", text }], isError: true });
 
 async function ruleTarget(runtime, name, args) {
+  if (name.startsWith("mcp__")) return name;
   if (name === "start_chat") {
     if (typeof args.workspace !== "string" || !args.workspace.trim()) return null;
     const workspace = args.workspace.trim();
@@ -47,6 +51,7 @@ async function ruleTarget(runtime, name, args) {
 }
 
 const ruleLabel = (name, args) => {
+  if (name.startsWith("mcp__")) return mcpLabel(name);
   if (name === "start_chat") return `start a chat, ${args.workspace || "a workspace"}`;
   if (name === "steer_chat") return `post in one of your chats, ${args.chatId || "a chat"}`;
   const target = `${args.device}${args.folder ? ` · ${args.folder}` : ""}`;
@@ -83,9 +88,9 @@ async function approve(runtime, api, name, args, context) {
 
 /** The wraps the agent extension applies to its threads' tools, built against the installed tools. */
 export function policyWraps(runtime, tools) {
-  return tools.filter((tool) => PLACED.includes(tool.name) || ALWAYS_OUTWARD[tool.name] || PRIVATE_READS[tool.name]).map((target) =>
+  return tools.filter((tool) => PLACED.includes(tool.name) || ALWAYS_OUTWARD[tool.name] || PRIVATE_READS[tool.name] || (tool.name.startsWith("mcp__") && !tool.connectorReadOnly)).map((target) =>
     wrapTool(target, (tool) => ({ ...tool, execute: async (args, api, context) => {
-      if (outward(tool.name, args)) {
+      if (tool.name.startsWith("mcp__") || outward(tool.name, args)) {
         const role = (await runtime.agent?.describe(api.conversationId))?.role;
         if (role === "run") {
           return refused(`Not done: this needs the person's approval (${summary(tool.name, args)}). `

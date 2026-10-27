@@ -463,6 +463,10 @@ values use the provider format and are never returned by the API.
   unanswered for `hostUiTimeoutMs` (given at creation, default ten minutes) is
   cancelled, as a dismissed card would be. Runs are not auto-named unless
   created with `autoName: true`.
+- `GET /v0/agent/connectors` lists connector status.
+- `POST /v0/agent/connectors/:id/connect` starts OAuth.
+- `GET /v0/agent/connectors/:id/callback` completes OAuth with a single-use state.
+- `DELETE /v0/agent/connectors/:id` disconnects a connector.
 - `GET /v0/agent` includes saved approval rules; `DELETE /v0/agent/rules/:id` removes one.
 - `GET /v0/push` returns the hub's VAPID public key and its push subscriptions
   (host of each endpoint only: an endpoint is a capability). `POST

@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { templateBackend } from "../chat-backend.js";
+import { Connectors } from "./connectors.js";
 import { AgentDoc } from "./agent-doc.js";
 
 const SEED = fileURLToPath(new URL("../../../templates/agent/seed/", import.meta.url));
@@ -45,6 +46,7 @@ export const DEFAULT_SETTINGS = Object.freeze({
 export class PersistentAgent {
   constructor({ runtime, registry, projects, launchLiveSession = null, findChatContext = null }) {
     this.runtime = runtime;
+    this.connectors = new Connectors(this);
     this.registry = registry;
     this.projects = projects;
     this.launchLiveSession = launchLiveSession;
@@ -69,6 +71,7 @@ export class PersistentAgent {
     if (!project) return null;
     this.project = project;
     await this.readSettings();
+    await this.connectors.start();
     return project;
   }
 
@@ -181,6 +184,7 @@ export class PersistentAgent {
       });
     }
     await this.readSettings();
+    await this.connectors.start();
     if (name && !this.cached.name) await this.saveSettings({ name });
     else if (!this.cached.name) await this.saveSettings({ name: this.project.name });
     await this.home();

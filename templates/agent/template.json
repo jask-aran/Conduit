@@ -9,6 +9,7 @@
   "internal": true,
   "systemPrompt": "SYSTEM.md",
   "tools": [
+    "codemode",
     "read",
     "bash",
     "edit",

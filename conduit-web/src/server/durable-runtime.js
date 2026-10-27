@@ -133,6 +133,7 @@ export class DurableRuntime {
     // The profiles (Assistant, Coding, Runtime) this agent runs: Conduit's templates.
     this.templates = templates;
     this.promptStore = promptStore;
+    this.dataRoot = dataRoot;
     this.file = path.join(dataRoot, "runtime", "conduit-runtime.sqlite");
     this.piAgentDir = piAgentDir;
     this.context = BACKGROUND_CONTEXT;
@@ -241,9 +242,13 @@ export class DurableRuntime {
       install(Handoff);
       const web = await this.webTools();
       if (web) install(web);
-      install(createCodemodeExtension({ sandbox: new CodemodeSandbox() }));
-      // The persistent agent's tools and approval policy, selected by its threads (templates/agent).
-      install(AgentExtension(this, this.extensions.get("device-tools").tools));
+      install(createCodemodeExtension({ sandbox: new CodemodeSandbox(), namespaces: [{ name: "executor", prefix: "mcp__executor__", description: "Executor: the person’s connected accounts (mail, calendar, docs…)" }] }));
+      this.refreshConnectors = () => {
+        const tools = this.agent?.connectors.tools() || [];
+        install(defineExtension({ name: "connectors", tools }));
+        install(AgentExtension(this, [...this.extensions.get("device-tools").tools, ...tools]));
+      };
+      this.refreshConnectors();
       // Bash finds Conduit's managed Python first, as it does for Conduit Pi.
       const shellEnv = this.shellEnv = buildManagedToolEnvironment(process.env);
       this.harness = await Harness.open(await openNodeSqliteStorage(this.file), {
@@ -390,20 +395,22 @@ export class DurableRuntime {
     // A conversation with no home device picks one per call: the same tools, placed.
     // Delegation comes with the persistent shape (decision 9), or a template that lists `subagent`.
     const delegates = roaming || template.tools.includes("subagent");
+    const isAgent = template.internal && template.id === "agent";
     const extensions = ["conduit", roaming ? "device-tools" : "coding-tools", ...template.extensions.map(named).filter(Boolean),
-      ...(delegates ? ["subagents"] : []), ...(roaming ? ["handoff"] : []), ...(template.internal && template.id === "agent" ? ["agent"] : [])]
+      ...(delegates ? ["subagents"] : []), ...(roaming ? ["handoff"] : []), ...(isAgent ? ["codemode", "connectors", "agent"] : [])]
       .map((name) => this.extensions.get(name)).filter(Boolean);
     const wanted = new Set([...ALWAYS, ...template.tools, ...(roaming ? ["devices", "handoff"] : []), ...(delegates ? ["subagent"] : [])]);
     // Codemode's own helpers (`pi.codemode.*`) come with it: its scripts call them.
     const tools = extensions.flatMap((extension) => extension.tools || [])
-      .filter((tool) => wanted.has(tool.name) || (wanted.has("codemode") && tool.name.startsWith("pi.codemode.")));
+      .filter((tool) => wanted.has(tool.name) || (wanted.has("codemode") && tool.name.startsWith("pi.codemode.")) || (isAgent && tool.name.startsWith("mcp__")));
     // Pi's "codemode only": the model is offered codemode (and the question card); scripts call the rest.
     const codemodeOnly = template.extensions.some((file) => CODEMODE_ONLY.test(file));
     const prompt = this.promptStore ? (await this.promptStore.read(template.id)).content : fs.readFileSync(template.systemPrompt, "utf8");
     const skills = this.skillsFor(template.id).map((skill) => `## Skill: ${skill.name}\n\n${skill.body}`);
     return {
       extensions, tools,
-      modelTools: codemodeOnly ? tools.filter((tool) => tool.name === "codemode" || ALWAYS.includes(tool.name)) : null,
+      modelTools: codemodeOnly ? tools.filter((tool) => tool.name === "codemode" || ALWAYS.includes(tool.name))
+        : isAgent ? tools.filter((tool) => !tool.name.startsWith("mcp__")) : null,
       instructions: [prompt.trim(), ...(skills.length ? ["# Skills", ...skills] : [])].join("\n\n"),
     };
   }
