@@ -131,13 +131,13 @@ function AnswerFoot(props: { message: Message; precedingUserId?: string; chat: T
 const focusComposerSoon = () => requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>("textarea[data-composer-input]:not([disabled])")?.focus({ preventScroll: true }));
 
 /** An approval as the thread draws it (GET /v0/agent `asks`). */
-export type TranscriptAsk = { id: string; toolCallId: string; parentCallId: string | null; run?: string | null; title: string; service: string | null; lines: string[]; expiresAt: string; status: ApprovalState };
+export type TranscriptAsk = { id: string; toolCallId: string; parentCallId: string | null; run?: string | null; always?: string | null; title: string; service: string | null; lines: string[]; expiresAt: string; status: ApprovalState };
 const APPROVAL_NOTE = "[Approval] ";
 /* Waits for how long, as the card's meta: "23 h", "40 min". */
 const waitsFor = (expiresAt: string) => { const minutes = Math.max(0, Math.round((Date.parse(expiresAt) - Date.now()) / 60_000)); return minutes >= 90 ? `${Math.round(minutes / 60)} h left` : `${minutes} min left`; };
 function AskCard(props: { ask: TranscriptAsk; answer: (id: string, choice: ApprovalChoice) => Promise<void> }) {
   const [busy, setBusy] = createSignal(false);
-  return <ApprovalCard title={props.ask.title} service={props.ask.service} lines={props.ask.lines} state={props.ask.status} busy={busy()}
+  return <ApprovalCard title={props.ask.title} service={props.ask.service} lines={props.ask.lines} state={props.ask.status} busy={busy()} always={props.ask.always ?? null}
     meta={props.ask.status === "pending" ? waitsFor(props.ask.expiresAt) : undefined}
     onChoose={(choice) => { setBusy(true); void props.answer(props.ask.id, choice).finally(() => setBusy(false)); }} />;
 }
@@ -262,11 +262,8 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
     props.chat.activeGenerationChange,
     () => Boolean(props.conversational),
   );
-  // Approvals by the row whose work asked: the call's own id, or the script it was called from.
-  const askRows = createMemo(() => {
-    const asks = props.approvals?.asks() ?? [];
-    const placed = new Map<string, TranscriptAsk[]>();
-    if (!asks.length) return { placed, unplaced: [] as TranscriptAsk[] };
+  // Declared before the memo below, which runs as it is made.
+  const placeAsks = (asks: TranscriptAsk[], placed: Map<string, TranscriptAsk[]>) => {
     const rowOf = new Map<string, string>();
     for (const row of timeline) if (row.type === "trace") for (const segment of row.value.segments) if (segment.kind === "tool") rowOf.set(segment.tool.toolCallId, row.key);
     const unplaced: TranscriptAsk[] = [];
@@ -278,7 +275,8 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
       const agent = row.value.origin === "harness" ? row.value.agent : undefined;
       if (agent?.conversationId != null) { report = `run:${agent.conversationId}`; rowOf.set(report, report); }
       else if (row.value.role === "user") report = null;
-      else if (report) rowOf.set(report, row.key);
+      // The reply that answers it: its turn's messages up to the one with the orb (the turn's last).
+      else if (report) { rowOf.set(report, row.key); if (row.orb) report = null; }
     }
     for (const ask of [...asks].reverse()) {
       if (ask.run) { const key = rowOf.get(`run:${ask.run}`); if (key) placed.set(key, [...(placed.get(key) ?? []), ask]); continue; }
@@ -287,6 +285,16 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
       else if (ask.status === "pending") unplaced.push(ask);
     }
     return { placed, unplaced };
+  };
+  // Approvals by the row whose work asked: the call's own id, or the script it was called from.
+  const askRows = createMemo(() => {
+    const asks = props.approvals?.asks() ?? [];
+    const placed = new Map<string, TranscriptAsk[]>();
+    if (!asks.length) return { placed, unplaced: [] as TranscriptAsk[] };
+    // Placed again as asks or rows come and go, not on every streamed change to a row: an ask's call is in its row
+    // well before the ask is read (asks are read again as calls appear).
+    timeline.length;
+    return untrack(() => placeAsks(asks, placed));
   });
   const asksAt = (key: string) => askRows().placed.get(key) ?? [];
   // A new call may have asked, or a run's report come in with its asks: the list is read again as the thread grows.

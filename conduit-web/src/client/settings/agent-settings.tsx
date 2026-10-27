@@ -26,14 +26,16 @@ const every = (minutes: number) => minutes < 60 ? `${minutes} min` : minutes ===
 const zones = (() => { try { return Intl.supportedValuesOf("timeZone"); } catch { return [] as string[]; } })();
 
 /* "Same as jbot": the home thread's model, whatever it is when the run starts. */
-const SAME = (name: string): ModelOption => ({ provider: "", id: "", spec: "", label: `Same as ${name}`, thinkingLevels: [] });
+const SAME = (name: string): ModelOption => ({ provider: `${name}'s thread`, id: "", spec: "", label: `Same as ${name}`, thinkingLevels: [] });
 
 export function createAgentSettings(options: { models: () => ModelOption[]; onManageModels?: () => void }) {
   const [draft, setDraft] = createSignal<Draft>({ name: "", budget: "" });
   const [enabling, setEnabling] = createSignal(false);
   const settings = () => agentView()?.settings;
+  // Edits made before a save goes out travel together (a name typed, then a budget): the autosave keeps only its latest.
+  let gathered: Partial<Settings> = {};
   const autosave = createAutosave<Partial<Settings>>({
-    save: async (patch) => (await api<AgentView>("/v0/agent", { method: "PATCH", body: JSON.stringify(patch) })).settings!,
+    save: async (patch) => { gathered = {}; return (await api<AgentView>("/v0/agent", { method: "PATCH", body: JSON.stringify(patch) })).settings!; },
     onSaved: () => void refreshAgent(),
   });
   // The fields follow what is stored until they are being typed in.
@@ -44,24 +46,30 @@ export function createAgentSettings(options: { models: () => ModelOption[]; onMa
 
   const nameError = () => { const name = draft().name.trim(); return !name ? "A name is needed." : name.length > 60 ? "At most 60 characters." : ""; };
   const budgetError = () => { const value = Number(draft().budget); return draft().budget.trim() === "" || !Number.isFinite(value) || value < 0 || value > 1000 ? "A dollar amount from 0 to 1000." : ""; };
-  const editName = (name: string) => { setDraft({ ...draft(), name }); if (nameError()) return autosave.hold(); autosave.edit({ name: name.trim() }); };
-  const editBudget = (budget: string) => { setDraft({ ...draft(), budget }); if (budgetError()) return autosave.hold(); autosave.edit({ budgetUsdPerDay: Number(budget) }); };
-  const set = (patch: Partial<Settings>) => autosave.edit(patch, "now");
+  const edit = (patch: Partial<Settings>, when?: "now") => {
+    gathered = { ...gathered, ...patch, ...(patch.work ? { work: { ...gathered.work, ...patch.work } as Settings["work"] } : {}) };
+    autosave.edit(gathered, when);
+  };
+  const editName = (name: string) => { setDraft({ ...draft(), name }); if (nameError()) return autosave.hold(); edit({ name: name.trim() }); };
+  const editBudget = (budget: string) => { setDraft({ ...draft(), budget }); if (budgetError()) return autosave.hold(); edit({ budgetUsdPerDay: Number(budget) }); };
+  const set = (patch: Partial<Settings>) => edit(patch, "now");
   // The model and effort one kind of background run uses; "Same as jbot" stores nothing.
   const Work = (line: { kind: AgentWorkKind; label: string; title: string }) => {
     const current = () => settings()!;
     const choice = () => current().work?.[line.kind] ?? null;
+    // Only this kind is sent (the hub merges it): two choices made in a row cannot undo each other.
+    const setWork = (value: { model: string; thinkingLevel: string } | null) => set({ work: { [line.kind]: value } as Settings["work"] });
     const levels = (spec: string) => options.models().find((model) => model.spec === spec)?.thinkingLevels || ["off"];
     const choose = (spec: string) => {
-      if (!spec) return set({ work: { ...current().work, [line.kind]: null } });
+      if (!spec) return setWork(null);
       const keep = choice()?.thinkingLevel;
       const allowed = levels(spec);
-      set({ work: { ...current().work, [line.kind]: { model: spec, thinkingLevel: keep && allowed.includes(keep) ? keep : allowed.includes("medium") ? "medium" : allowed[0] || "off" } } });
+      setWork({ model: spec, thinkingLevel: keep && allowed.includes(keep) ? keep : allowed.includes("medium") ? "medium" : allowed[0] || "off" });
     };
     return <SettingLine plain label={line.label} title={line.title}>
       <ModelSelector models={[SAME(current().name), ...options.models()]} model={choice()?.model ?? ""} thinkingLevel={choice()?.thinkingLevel ?? ""}
         quiet={choice() ? undefined : ""} onModelChange={choose} onManageModels={options.onManageModels}
-        onThinkingLevelChange={(thinkingLevel) => choice() && set({ work: { ...current().work, [line.kind]: { ...choice()!, thinkingLevel } } })} />
+        onThinkingLevelChange={(thinkingLevel) => choice() && setWork({ ...choice()!, thinkingLevel })} />
     </SettingLine>;
   };
 
@@ -83,7 +91,7 @@ export function createAgentSettings(options: { models: () => ModelOption[]; onMa
         <SettingLine label="Speaks up" title={DIALS.find((dial) => dial.value === current().dial)?.title}>
           <Segmented label="Speaks up" value={current().dial} options={DIALS.map(({ value, label }) => ({ value, label }))} onChange={(dial) => set({ dial })} />
         </SettingLine>
-        <SettingLine label="Daily budget" title="The most its background work may spend in a day, in dollars. Past it, scheduled work waits for tomorrow and says so." state={budgetError() || undefined}>
+        <SettingLine label="Daily budget" title="The most its background work may spend in a day, in dollars; 0 is no limit. Past it, scheduled work waits for tomorrow and says so." state={budgetError() || undefined}>
           <Input id="agent-budget" inputMode="decimal" value={draft().budget} onInput={(event) => editBudget(event.currentTarget.value)} />
         </SettingLine>
         <SettingLine label="Time zone" title="Where its day, its brief and its budget are counted.">

@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createSignal, For, on, onCleanup, onMount, Show, type JSX } from "solid-js";
+import { createEffect, createMemo, createSignal, For, on, onCleanup, onMount, Show, type JSX, untrack } from "solid-js";
 import { Icons, ServiceIcon, StatusDot } from "@/components/ui";
 import { Button, TextArea } from "@/components/ui/controls";
 import { DashConversation, DashIconButton, DashNote } from "@/components/ui/dashboard";
@@ -72,7 +72,9 @@ export function AgentPage(props: {
   const working = () => view()?.attention?.working;
   const needs = () => view()?.attention?.needsYou;
   // A run is a subagent of the home thread, with a transcript of its own: its chat comes from the home thread's list.
-  createEffect(on(() => [view()?.home?.chatId, working()?.runs.length, working()?.recent[0]?.id] as const, ([home]) => {
+  const runsKey = createMemo(() => `${view()?.home?.chatId ?? ""}|${working()?.runs.length ?? 0}|${working()?.recent[0]?.id ?? ""}`);
+  createEffect(on(runsKey, () => {
+    const home = untrack(() => view()?.home?.chatId);
     if (!home) return;
     void api<{ agents: AgentSummary[] }>(`/v0/chats/${encodeURIComponent(home)}/agents`)
       .then(({ agents }) => setRunChats(new Map(agents.filter((agent) => agent.id && agent.chatId).map((agent) => [agent.id!, agent.chatId!]))))
@@ -110,9 +112,8 @@ export function AgentPage(props: {
       <For each={needs()?.asks}>{(ask) =>
         <SplitRow element="button" onClick={(event: MouseEvent) => props.onOpenChat(ask.chatId, event)}
           lead={<ServiceIcon service={ask.service || ""} fallback={<Icons.Permissions />} />} primary={ask.title} title={ask.lines.join("\n")}
-          context="Waiting for your approval"
+          context="Waiting for your approval · open to see it all"
           trailing={<>
-            <DashIconButton aria-label="Allow" title="Allow" disabled={busy() !== null} onClick={(event: MouseEvent) => { event.stopPropagation(); void act(ask.id, () => api(`/v0/agent/asks/${encodeURIComponent(ask.id)}`, { method: "POST", body: JSON.stringify({ choice: "allow" }) })); }}><Icons.Check /></DashIconButton>
             <DashIconButton aria-label="Don't" title="Don't" disabled={busy() !== null} onClick={(event: MouseEvent) => { event.stopPropagation(); void act(ask.id, () => api(`/v0/agent/asks/${encodeURIComponent(ask.id)}`, { method: "POST", body: JSON.stringify({ choice: "deny" }) })); }}><Icons.Close /></DashIconButton>
           </>} />}
       </For>

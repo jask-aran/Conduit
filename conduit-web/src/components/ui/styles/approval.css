@@ -7,7 +7,8 @@
 .ui-approval-icon > svg { width: 100%; height: 100%; }
 .ui-approval-meta { margin-left: auto; flex: none; color: var(--muted-foreground); font-size: var(--text-row); font-variant-numeric: tabular-nums; }
 .ui-approval-lines { display: grid; gap: var(--space-2xs); margin: 0; padding: 0 0 0 calc(var(--icon) + var(--row-gap)); color: var(--muted-foreground); font-size: var(--text-row); list-style: none; }
-.ui-approval-lines > li { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Every line in full, wrapped: what is approved is never cut off. */
+.ui-approval-lines > li { min-width: 0; overflow-wrap: anywhere; }
 
 /* In the thread: the summary on frost, its answers under it at the left (Allow the one action waiting). */
 .ui-approval { display: grid; width: min(100%, var(--measure-lg)); gap: var(--space-lg); border-radius: var(--radius-surface); padding: var(--space-lg); }

@@ -18,6 +18,19 @@
 .ui-trace[data-quiet] .ui-trace-line > b { color: inherit; font-weight: inherit; }
 
 .ui-trace-latest { min-width: 0; grid-area: 2 / 1 / 3 / 3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* No gutter (a phone, transcript.css): the orb is the header's first column, beside its status and latest line. */
+@media (--conduit-phone-layout) {
+  .ui-trace[data-orb]:not([data-density="desktop"] *) { grid-template-columns: var(--icon-xl) minmax(0, 1fr) auto; }
+  .ui-trace[data-orb]:not([data-density="desktop"] *) > .ui-trace-orb { position: static; grid-area: 1 / 1 / 3 / 2; translate: none; }
+  .ui-trace[data-orb]:not([data-density="desktop"] *) .ui-trace-line { grid-area: 1 / 2; }
+  .ui-trace[data-orb]:not([data-density="desktop"] *) > .ui-disclosure-chevron { grid-area: 1 / 3; }
+  .ui-trace[data-orb]:not([data-density="desktop"] *) .ui-trace-latest { grid-area: 2 / 2 / 3 / 4; }
+}
+[data-density="phone"] .ui-trace[data-orb] { grid-template-columns: var(--icon-xl) minmax(0, 1fr) auto; }
+[data-density="phone"] .ui-trace[data-orb] > .ui-trace-orb { position: static; grid-area: 1 / 1 / 3 / 2; translate: none; }
+[data-density="phone"] .ui-trace[data-orb] .ui-trace-line { grid-area: 1 / 2; }
+[data-density="phone"] .ui-trace[data-orb] > .ui-disclosure-chevron { grid-area: 1 / 3; }
+[data-density="phone"] .ui-trace[data-orb] .ui-trace-latest { grid-area: 2 / 2 / 3 / 4; }
 
 /* The trail: one light line per step, no boxes, under the header's text; a step under the answer's size. A step's
    row washes on the cursor and opens in place (a Disclosure: its body unfolds gentle, folds quick); what it opens

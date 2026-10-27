@@ -361,7 +361,8 @@ function sourceLines(segments: TraceSegment[]): SourceLine[] {
       for (const source of sourcesOfTool(tool)) {
         const service = /^mcp__/.test(tool.name || "");
         const line = lines.get(source) ?? { source, kind: service ? "fetch" : tool.kind || "other", service, steps: [] };
-        if (!line.steps.includes(step)) line.steps.push(step);
+        // A step's sources come together: the last one pushed is the only one it could repeat.
+        if (line.steps.at(-1) !== step) line.steps.push(step);
         lines.set(source, line);
       }
     }
