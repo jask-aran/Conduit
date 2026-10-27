@@ -93,6 +93,7 @@ export function isAllowlistedPath(method, pathname) {
   // answered.
   // A webhook that wakes the persistent agent is called by other services: its token (32+ random bytes, made by the
   // agent's `watch` tool) is the secret, and the route answers an unknown one as a missing route.
+  if (method === "GET" && /^\/v0\/agent\/connectors\/[A-Za-z0-9_-]+\/callback$/.test(pathname)) return true;
   if (method === "POST" && /^\/v0\/agent\/hooks\/[A-Za-z0-9_-]{43,}$/.test(pathname)) return true;
   if (method === "POST" && /^\/v0\/push\/answer\/[A-Za-z0-9_-]{43}$/.test(pathname)) return true;
   if (method !== "GET") return method === "POST" && ["/v0/auth/login", "/v0/auth/native-login", "/v0/auth/native-pair", "/v0/server/prove"].includes(pathname);

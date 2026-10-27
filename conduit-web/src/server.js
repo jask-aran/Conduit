@@ -713,6 +713,7 @@ if (persistentAgent) {
   durableAdapter.runtime.notify = agentNotifier({ agent: persistentAgent, push, hubId: () => serverIdentity.id });
   registerAgentRoutes(app, { agent: persistentAgent, backends });
   const stopEvents = startEvents(persistentAgent, { nodeHub, runtimeHub, backends, registry, chatLogs, onWorkspaceChange });
+  lifetime.own("persistent agent connectors", persistentAgent.connectors, (owned) => owned.stop());
   lifetime.own("persistent agent events", { stop: stopEvents }, (owned) => owned.stop());
   void persistentAgent.load().then((project) => project && seedSchedules(persistentAgent))
     .catch((error) => console.error("[agent] could not load", error));

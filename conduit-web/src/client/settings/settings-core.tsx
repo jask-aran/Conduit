@@ -7,6 +7,7 @@ import { AboutSettingsFooter } from "./about-settings";
 import { DesktopSettingsTile } from "./desktop-settings";
 import { DevicesSettingsTile } from "./devices-settings";
 import { createAgentSettings } from "./agent-settings";
+import { ConnectorsGroup } from "./connectors-settings";
 import { agentView } from "../state/agent";
 import { toast } from "@/components/notifications";
 import { api, readShared } from "../api/client";
@@ -1647,6 +1648,7 @@ export function Settings(props: {
                 </Show>
               </Show>}><SettingLine plain label="Accounts" state={<>loading…</>}><span /></SettingLine></Show>
             </SettingGroup>
+            <ConnectorsGroup />
           </></Show>
       </OverlayPage>
     </Show>
