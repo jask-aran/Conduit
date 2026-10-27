@@ -53,6 +53,7 @@ function stableProjection(previous: TurnRow[], projected: TurnRow[]): TurnRow[] 
       return left.active === right.active
         && prior.answerless === row.answerless
         && prior.orb === row.orb
+        && prior.continues === row.continues
         && prior.timestamp === row.timestamp
         && left.status === right.status
         && left.startedAt === right.startedAt
