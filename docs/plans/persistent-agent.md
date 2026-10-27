@@ -96,6 +96,31 @@ timers: the hub schedules wake-ups and submits them with a request id per slot.
 12. **Proactivity:** an interruption dial (quiet, normal, chatty) and a daily
     budget for background work, after which it waits for you.
 
+## Its thread (decided 2026-10-27)
+
+jbot is still a chat thread, with one curated profile and no profile picker,
+but its turns read differently. Taken from Duet, Grok Bot, Muse and Open Duet
+(research notes in the session of that date):
+
+- **All its text shows.** Other chats fold the text an answer writes between
+  tool calls into the trace and show only the last message as the answer. A
+  persistent agent talks as it works -- between gathering, handoffs and
+  approvals -- so in its threads every text block is drawn, in order, with the
+  work between them.
+- **Gathering: a live line, then sources.** While it works, one line under its
+  name says what it is doing now ("Reading your Japan chats · 3 of 5") and opens
+  into the steps. Settled, it becomes a quiet row of what it looked at (chats,
+  memory, pages, files), each openable; claims in the answer link to them.
+- **Delegation: rows in the thread.** Each handoff is a row where it happened
+  ("→ Comparing flights · running · 2m"), opening the run's own thread; the
+  report comes back as one line. Built on the agents rows chats already have.
+- **Approvals: Allow once, Always, Don't.** Always saves a rule, listed on its
+  page and removable there. A card raised by a run expires and says so.
+- **Approvals don't block** (next): unanswered, it finishes the rest of the task
+  and brings the question back later.
+- **A brief with actions** (next): each item in the morning brief carries its
+  prepared first step, with Approve / Not now in place.
+
 ## First slice
 
 Backend loop end to end, minimal UI:
