@@ -26,7 +26,7 @@ const CONTROLS = ".ui-dash-group-head :is(button, a[href])";
 const INPUT = ":is(.ui-dash-composer, [data-dash-dock]) :is(textarea, [contenteditable='true'])";
 
 export type SplitSection = "composer" | "chats" | "projects" | "workspaces" | "terminals" | "changes" | "files" | "folders";
-export type SplitPage = "Dashboard" | "Project" | "Workspace" | "Harness";
+export type SplitPage = "Dashboard" | "Project" | "Workspace" | "Harness" | "Agent";
 
 const visible = (element: Element) => typeof element.checkVisibility === "function"
   ? element.checkVisibility({ visibilityProperty: true })

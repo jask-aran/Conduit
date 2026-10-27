@@ -14,6 +14,7 @@ import { backgroundSubagents } from "../subagents.js";
  * POST /v0/agent/threads             a side thread { title? }
  * POST /v0/agent/wake                a run now { task, title? }
  * POST /v0/agent/proposals/:id/{accept,reject}
+ * DELETE /v0/agent/notices/:id      a notice read (it leaves the attention list)
  * POST /v0/agent/hooks/:token        a webhook: wakes it with the request's body (no session; the token is the secret)
  */
 export function registerAgentRoutes(app, { agent, backends }) {
@@ -105,6 +106,18 @@ export function registerAgentRoutes(app, { agent, backends }) {
       } catch (error) { next(error); }
     });
   }
+
+  app.delete("/v0/agent/notices/:id", async (request, response, next) => {
+    try {
+      if (!enabled(response)) return;
+      let found = false;
+      await agent.update((doc) => {
+        const index = doc.notices.findIndex((notice) => notice.id === request.params.id);
+        if (index >= 0) { doc.notices.splice(index, 1); found = true; }
+      });
+      response.status(found ? 204 : 404).end();
+    } catch (error) { next(error); }
+  });
 
   app.post("/v0/agent/hooks/:token", async (request, response, next) => {
     try {

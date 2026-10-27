@@ -110,6 +110,7 @@ import { harnessLabelFor } from "./harness-brand";
 import { OutsideThreadChip } from "./chat/outside-thread-chip";
 import { SubagentNote } from "./chat/subagent-note";
 import { OPEN_AGENT_EVENT } from "./chat/agents";
+import { agentView, refreshAgent } from "./state/agent";
 import type { HarnessChoices, HarnessThreadTarget } from "./dashboard/harness-dashboard";
 import {
   applyTranscriptAppearance,
@@ -182,6 +183,7 @@ const WorkspacePanel = lazy(() => import("./workspace/workspace-panel"));
 const FileViewer = lazy(() => import("./workspace/workspace-file-viewer"));
 const FileTypeIcon = lazy(() => import("@/components/ui/file-marks").then((module) => ({ default: module.FileTypeIcon })));
 const ComputerDashboard = lazy(() => import("./dashboard/computer-dashboard").then((module) => ({ default: module.ComputerDashboard })));
+const AgentPage = lazy(() => import("./dashboard/agent-page").then((module) => ({ default: module.AgentPage })));
 const EnvironmentPage = lazy(() => import("./dashboard/environment-page").then((module) => ({ default: module.EnvironmentPage })));
 const ProjectDashboard = lazy(() => import("./project/dashboard"));
 const HarnessDashboard = lazy(() => import("./dashboard/harness-dashboard"));
@@ -745,8 +747,9 @@ function App() {
   const initialTerminalRoute = location.pathname === "/terminal";
   const initialComputerRoute = location.pathname === "/computer" || location.pathname.startsWith("/computer/harness/") || location.pathname.startsWith("/computer/environment/");
   const initialDashboardRoute = location.pathname === "/";
-  const [routeKind, setRouteKind] = createSignal<"chat" | "project" | "dashboard" | "terminal" | "computer">(
-    initialComputerRoute ? "computer" : initialTerminalRoute ? "terminal" : initialDashboardRoute ? "dashboard" : initialProjectRouteId ? "project" : "chat",
+  const initialAgentRoute = location.pathname === "/agent";
+  const [routeKind, setRouteKind] = createSignal<"chat" | "project" | "dashboard" | "terminal" | "computer" | "agent">(
+    initialAgentRoute ? "agent" : initialComputerRoute ? "computer" : initialTerminalRoute ? "terminal" : initialDashboardRoute ? "dashboard" : initialProjectRouteId ? "project" : "chat",
   );
   const [computerHarness, setComputerHarness] = createSignal(decodeURIComponent(location.pathname.match(/^\/computer\/harness\/([^/]+)/)?.[1] || ""));
   // A client environment's page (Work, under its machine), in place of the hub's: its node id.
@@ -815,7 +818,7 @@ function App() {
       // Only a transcript renders in passes. A dashboard or project page is
       // laid out in one, and three still frames on a phone still busy with
       // the rest of the open were close to half a second of nothing.
-      const settled = () => ["dashboard", "project"].includes(routeKind()) && shownSlots().length <= 1
+      const settled = () => ["dashboard", "project", "agent"].includes(routeKind()) && shownSlots().length <= 1
         ? new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
         : waitForStill();
       if (routeBootstrap() !== "loading" && panesLoaded()) void layoutReady.then(settled).then(arrive);
@@ -1414,7 +1417,7 @@ function App() {
     if (!project) return null;
     const requestEpoch = ++newChatRequestEpoch;
     const replacedDraftId = currentDraftId();
-    const fromDashboard = routeKind() === "project" || routeKind() === "dashboard" || routeKind() === "computer";
+    const fromDashboard = routeKind() === "project" || routeKind() === "dashboard" || routeKind() === "computer" || routeKind() === "agent";
     const profileId = launch.templateId || projectProfile(project);
     discardDraftImmediately(replacedDraftId);
     chat.reset(profileId);
@@ -1526,6 +1529,18 @@ function App() {
     setRouteBootstrap("ready");
     if (historyMode === "push") history.pushState({}, "", "/");
     else if (historyMode === "replace") history.replaceState({}, "", "/");
+  };
+
+  const openAgent = async (historyMode: "push" | "none" = "push") => {
+    if (!(await leaveHarnessThread())) return;
+    leaveChat(historyMode === "none");
+    chat.reset();
+    setMobileSidebarOpen(false);
+    setWorkspaceViewRequest(null);
+    setRouteKind("agent");
+    setRouteBootstrapError("");
+    setRouteBootstrap("ready");
+    if (historyMode === "push") history.pushState({}, "", "/agent");
   };
 
   let computerRequest = 0;
@@ -3244,6 +3259,17 @@ function App() {
       await openChatBeside(summary, project);
     } catch (error) { showError(error); }
   };
+  const agentChat = async (id: string) => {
+    const cached = hiddenChats().get(id);
+    if (cached) return cached;
+    const summary = await api<ChatSummary>(`/v0/chats/${encodeURIComponent(id)}`);
+    const project = catalogue.projects().find((item) => item.id === summary.projectId)
+      || (await catalogue.refresh()).find((item) => item.id === summary.projectId);
+    if (!project) throw new Error("Agent chat project not found");
+    const found = { chat: summary, project };
+    setHiddenChats((current) => new Map(current).set(id, found));
+    return found;
+  };
   const openSubagentFromEvent = (event: Event) => { const chatId = (event as CustomEvent<{ chatId?: string }>).detail?.chatId; if (chatId) void openSubagentChat(chatId); };
   window.addEventListener(OPEN_AGENT_EVENT, openSubagentFromEvent);
   onCleanup(() => window.removeEventListener(OPEN_AGENT_EVENT, openSubagentFromEvent));
@@ -3322,6 +3348,7 @@ function App() {
   const openDashboardHere = () => openInFocusedPane("page:dashboard", () => openDashboard());
   const openComputerHere = () => openInFocusedPane("page:computer", () => openComputer());
   const openHarnessHere = (id: string) => openInFocusedPane(`page:harness:${encodeURIComponent(id)}`, () => openComputerHarness(id));
+  const openAgentHere = () => openInFocusedPane("page:agent", () => openAgent());
   const openEnvironmentHere = (id: string) => openInFocusedPane(`page:environment:${encodeURIComponent(id)}`, () => openEnvironment(id));
   const openChatFromPage = async (target: ChatSummary, project: Project) => {
     if (altActivation()) await openChatBeside(target, project); else await openChatHere(target, project);
@@ -3362,7 +3389,7 @@ function App() {
      */
     createEffect(on(() => [slotPage(slot), catalogue.loaded(), templatesLoading(), shownSlots().includes(slot)] as const, ([page, loaded, loading, shown]) => {
       // A page giving way to a chat: the chat is already opening in the session, so the draft goes without closing it.
-      if (!page || page === "computer" || page.startsWith("harness:")) return discardPaneDraft(pane, Boolean(untrack(() => slotChatId(slot))));
+      if (!page || page === "computer" || page === "agent" || page.startsWith("harness:")) return discardPaneDraft(pane, Boolean(untrack(() => slotChatId(slot))));
       if (!loaded || loading || !shown) return;
       const project = untrack(() => slotPageProject(slot));
       if (!project) return void setSlotView(slot, null);
@@ -3399,7 +3426,7 @@ function App() {
     await setSlotView(pane.index, `chat:${id}`);
     await side.chat.send();
   };
-  const openPageBeside = async (page: "dashboard" | "computer" | `project:${string}` | `harness:${string}` | `environment:${string}`) => { if (!isMobileLayout()) await openBeside(`page:${page}`, false); };
+  const openPageBeside = async (page: "dashboard" | "agent" | "computer" | `project:${string}` | `harness:${string}` | `environment:${string}`) => { if (!isMobileLayout()) await openBeside(`page:${page}`, false); };
   // The same chat in two panes is one chat: pane A taking it closes the other.
   createEffect(() => { const id = mainChatId(); if (swappingPanes) return; for (const slot of shownSlots()) if (id && slotChatId(slot) === id) setSlotView(slot, null); });
   /*
@@ -3459,6 +3486,7 @@ function App() {
   function paneARouteView(): SplitView | null {
     if (routeKind() === "chat" && catalogue.selectedId()) return `chat:${catalogue.selectedId()}`;
     if (routeKind() === "dashboard") return "page:dashboard";
+    if (routeKind() === "agent") return "page:agent";
     if (routeKind() === "computer" && computerEnvironment() && !computerHarness()) return `page:environment:${encodeURIComponent(computerEnvironment())}`;
     if (routeKind() === "computer" && !computerHarness()) return "page:computer";
     if (routeKind() === "computer" && !harnessThread()) return `page:harness:${encodeURIComponent(computerHarness())}`;
@@ -3467,6 +3495,7 @@ function App() {
   };
   const openInPaneA = async (view: SplitView) => {
     if (view === "page:dashboard") return await openDashboard();
+    if (view === "page:agent") return await openAgent();
     if (view === "page:computer") return await openComputer();
     if (view.startsWith("page:environment:")) return await openEnvironment(decodeURIComponent(view.slice("page:environment:".length)));
     if (view.startsWith("page:harness:")) return await openComputerHarness(decodeURIComponent(view.slice("page:harness:".length)));
@@ -3475,6 +3504,8 @@ function App() {
       return project ? (await openProject(project)) : undefined;
     }
     const id = view.slice("chat:".length);
+    const hidden = hiddenChats().get(id);
+    if (hidden) return await openChat(hidden.chat, hidden.project);
     for (const project of catalogue.projects()) {
       const found = project.sessions.find((item) => item.id === id);
       if (found) return await openChat(found, project);
@@ -3640,6 +3671,7 @@ function App() {
       return found?.title || "New chat";
     }
     if (view === "page:dashboard") return "Conduit Dashboard";
+    if (view === "page:agent") return agentView()?.settings?.name || "Agent";
     if (view === "page:computer") return activeServer()?.name || "Hub";
     if (view.startsWith("page:environment:")) { const state = deviceStates().get(decodeURIComponent(view.slice("page:environment:".length))); return state ? deviceLabel(state) : "Environment"; }
     if (view.startsWith("page:harness:")) { const id = decodeURIComponent(view.slice("page:harness:".length)); return harnessLabelFor(id) || id; }
@@ -4244,10 +4276,13 @@ function App() {
         <Show when={page()?.startsWith("harness:")}>
           <SheetFill tabIndex={-1} onPointerDown={focusChatSurface}>{attachInput()}{renderPaneHarness(pane, decodeURIComponent(page()!.slice("harness:".length)))}</SheetFill>
         </Show>
+        <Show when={page() === "agent"}>
+          <SheetFill tabIndex={-1} onPointerDown={focusChatSurface}>{attachInput()}{renderAgent(slot)}</SheetFill>
+        </Show>
         <Show when={page()?.startsWith("environment:")}>
           <SheetFill tabIndex={-1} onPointerDown={focusChatSurface}>{renderEnvironment(decodeURIComponent(page()!.slice("environment:".length)), slot)}</SheetFill>
         </Show>
-        <Show when={page() && page() !== "computer" && !page()!.startsWith("harness:") && !page()!.startsWith("environment:")}>
+        <Show when={page() && page() !== "computer" && page() !== "agent" && !page()!.startsWith("harness:") && !page()!.startsWith("environment:")}>
           <SheetFill tabIndex={-1} onPointerDown={focusChatSurface}>
             {attachInput()}
             <Show when={page() === "dashboard"} fallback={<Show when={slotPageProject(slot)}>{(project) =>
@@ -5153,6 +5188,10 @@ function App() {
           await openDashboard("none");
           return;
         }
+        if (location.pathname === "/agent") {
+          await openAgent("none");
+          return;
+        }
         if (location.pathname === "/computer" || location.pathname.startsWith("/computer/harness/") || location.pathname.startsWith("/computer/environment/")) {
           await openComputerRoute();
           return;
@@ -5174,8 +5213,11 @@ function App() {
         let owner = catalogue.projects().find((project) => project.sessions.some((item) => item.id === chatId));
         if (!owner) owner = (await catalogue.refresh()).find((project) => project.sessions.some((item) => item.id === chatId));
         const target = owner?.sessions.find((item) => item.id === chatId);
-        if (!owner || !target) throw new Error("Chat not found");
-        await chat.select(target, owner, {
+        const hidden = !owner || !target ? await agentChat(chatId) : null;
+        if (hidden) { owner = hidden.project; }
+        const resolvedTarget = target || hidden?.chat;
+        if (!owner || !resolvedTarget) throw new Error("Chat not found");
+        await chat.select(resolvedTarget, owner, {
           history: "none",
           onCommit: () => {
             setRouteKind("chat");
@@ -5249,6 +5291,9 @@ function App() {
         if (!project) throw new Error("Project not found");
         catalogue.selectProject(project);
         setRouteKind("project");
+        setRouteBootstrap("ready");
+      } else if (initialAgentRoute) {
+        setRouteKind("agent");
         setRouteBootstrap("ready");
       } else if (initialComputerRoute) {
         await openComputerRoute();
@@ -5335,6 +5380,45 @@ function App() {
       onStatusChange={current.setComposerStatus}
       onSendDraft={props.onSendDraft}
     />;
+  };
+  const renderAgent = (slot: number | "main") => {
+    const current = slot === "main" ? session : paneSlot(slot).session;
+    const [ready, setReady] = createSignal(false);
+    onMount(() => { void refreshAgent(); });
+    createEffect(on(() => agentView()?.settings ? agentView()?.home?.chatId : undefined, (id) => {
+      setReady(false);
+      if (!id) return;
+      let active = true;
+      onCleanup(() => { active = false; });
+      void agentChat(id).then(async (target) => {
+        if (!active || (slot === "main" ? routeKind() !== "agent" || paneAOverride() : slotPage(slot) !== "agent")) return;
+        await current.chat.initialize(target.chat, target.project);
+        if (active) setReady(true);
+      }).catch(showError);
+    }));
+    return <AgentPage
+      header={(title) => <ChatHeader title={title} tabActions={paneTabActions(slot)} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void startNewChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => {}} appDashboard alone />}
+      composer={<Show when={ready() && agentView()?.settings && agentView()?.home?.chatId}><PageComposer session={current} keyboardOwner={() => slot === "main" ? !sideHasKeyboard() : keyboardPane() === slot} onSendDraft={async (prompt) => {
+        const id = agentView()?.home?.chatId;
+        if (!id || current.chat.loadedId() !== id) return;
+        current.chat.setDraft(prompt);
+        if (slot === "main") {
+          history.pushState({}, "", `/chat/${id}`);
+          await sendFromDashboard();
+        } else {
+          await setSlotView(slot, `chat:${id}`);
+          await current.chat.send();
+        }
+      }} /></Show>}
+      onOpenChat={(id, event) => {
+        const beside = Boolean(event?.altKey);
+        const tab = Boolean(event && (event.ctrlKey || event.metaKey));
+        void agentChat(id).then(async (target) => {
+          if (beside) await openChatBeside(target.chat, target.project);
+          else if (tab && !isMobileLayout() && await openChatAsTab(target.chat, target.project)) return;
+          else await openChatFromPage(target.chat, target.project);
+        }).catch(showError);
+      }} />;
   };
   const openTerminalFromPage = async (terminal: { id: string; projectId: string; cwd?: string | null }, maximized: boolean) => {
     if (terminal.projectId.startsWith("device:")) return openTerminalRoute("push", terminal.id);
@@ -5457,7 +5541,7 @@ function App() {
         <Show when={workspaceIdentityProject()}>{(project) => <WorkspaceAppearanceEditor compact value={project().workspaceAppearance} saving={workspaceIdentitySaving()} onSave={(appearance) => void saveWorkspaceIdentity(appearance)} />}</Show>
     </Dialog>
     <Show when={routeKind() !== "terminal"}>
-    <Sidebar projects={sidebarFilled() ? catalogue.projects() : []} catalogueLoaded={sidebarFilled() && catalogue.loaded()} projectId={catalogue.projectId()} selectedId={catalogue.selectedId()} focusedId={keyboardSlot() !== null ? slotChatId(keyboardSlot()!) : null} openIds={openChatIds()} onOpenChatBeside={isMobileLayout() ? undefined : openChatBeside} navigatingId={chat.navigatingId()} dashboard={routeKind() === "dashboard" && !paneAOverride()} project={routeKind() === "project"} computer={routeKind() === "computer" && !paneAOverride()} routeCovered={paneAOverride() !== null} terminal={false} runtime={runtime} chatLimit={sidebarChatLimit()}
+    <Sidebar projects={sidebarFilled() ? catalogue.projects() : []} catalogueLoaded={sidebarFilled() && catalogue.loaded()} projectId={catalogue.projectId()} selectedId={catalogue.selectedId()} focusedId={keyboardSlot() !== null ? slotChatId(keyboardSlot()!) : null} openIds={openChatIds()} onOpenChatBeside={isMobileLayout() ? undefined : openChatBeside} navigatingId={chat.navigatingId()} dashboard={routeKind() === "dashboard" && !paneAOverride()} agent={routeKind() === "agent" && !paneAOverride()} project={routeKind() === "project"} computer={routeKind() === "computer" && !paneAOverride()} routeCovered={paneAOverride() !== null} terminal={false} runtime={runtime} chatLimit={sidebarChatLimit()}
       connectivity={runtime.connectivity()} workspaceSuggestions={workspaceSuggestions()} workspacePolicy={workspacePolicy()} command={sidebarCommand()}
       sidebarPins={sidebarPins()} onTogglePin={toggleSidebarPin}
       mobileOpen={mobileSidebarOpen()} onMobileOpenChange={setMobileSidebar}
@@ -5491,6 +5575,7 @@ function App() {
       onOpenEnvironment={async (id) => { if (altActivation()) await openPageBeside(`environment:${encodeURIComponent(id)}`); else void openEnvironmentHere(id); }}
       environment={routeKind() === "computer" && !computerHarness() ? computerEnvironment() || undefined : undefined} selectedHarness={paneAOverride() ? undefined : computerHarness()}
       onOpenTerminalView={() => openTerminalRoute()}
+      onOpenAgent={async () => { if (altActivation()) await openPageBeside("agent"); else void openAgentHere(); }}
       onOpenDashboard={async () => { if (altActivation()) await openPageBeside("dashboard"); else void openDashboardHere(); }}
       onOpenWorkspaceIdentity={openWorkspaceIdentity} onOpenSettings={openSettings} onOpenPalette={(page, initialQuery) => openPalette(page || null, initialQuery || "", page === "chat-search")}
       onUpdatePwa={() => void runPwaUpdate()} pwaUpdating={pwaUpdating()}
@@ -5507,7 +5592,7 @@ function App() {
       }} />
     } /></Show>
     <AppShell class="workspace-layout" settling={panesSettling()} ref={(element) => { meteors.observe(element); const observer = new ResizeObserver(() => setLayoutWidth(element.clientWidth)); observer.observe(element); onCleanup(() => observer.disconnect()); }}>
-    <Sheet as="main" lead under={workspaceExpanded()} data-moving={paneMotion()?.slot === "main" ? paneMotion()!.phase : undefined} backdrop={<Show when={!paneAOverride() && routeBootstrap() === "ready" && ["chat", "dashboard", "project"].includes(routeKind()) && meteorField() && (revealing() || arrived())}><meteors.Window /></Show>} data-slot="sidebar-inset" data-region={paneAOverride() ? "workspace-panel" : routeKind() === "chat" || harnessThread() ? "chat" : routeKind() === "terminal" ? "terminal" : "dashboard"} tabIndex={-1} onPointerDown={focusChatSurface} onKeyDown={paneKeydown} class="chat-main" style={{ ...(splitShown() ? { flex: `${paneWeights()[0]} 1 0`, "min-width": paneMotion()?.slot === "main" ? "0px" : `${paneMinWidth("main")}px` } : {}), ...(paneMotion()?.slot === "main" ? { opacity: 0, ...(paneMotion()!.width ? { "--pane-document-width": `${paneMotion()!.width}px` } : {}) } : {}), ...(paneMotion()?.slot === "main" && paneMotion()!.collapsed ? { "margin-left": "0px", "margin-right": "0px" } : {}) }} {...mainDropHandlers}>
+    <Sheet as="main" lead under={workspaceExpanded()} data-moving={paneMotion()?.slot === "main" ? paneMotion()!.phase : undefined} backdrop={<Show when={!paneAOverride() && routeBootstrap() === "ready" && ["chat", "dashboard", "project", "agent"].includes(routeKind()) && meteorField() && (revealing() || arrived())}><meteors.Window /></Show>} data-slot="sidebar-inset" data-region={paneAOverride() ? "workspace-panel" : routeKind() === "chat" || harnessThread() ? "chat" : routeKind() === "terminal" ? "terminal" : "dashboard"} tabIndex={-1} onPointerDown={focusChatSurface} onKeyDown={paneKeydown} class="chat-main" style={{ ...(splitShown() ? { flex: `${paneWeights()[0]} 1 0`, "min-width": paneMotion()?.slot === "main" ? "0px" : `${paneMinWidth("main")}px` } : {}), ...(paneMotion()?.slot === "main" ? { opacity: 0, ...(paneMotion()!.width ? { "--pane-document-width": `${paneMotion()!.width}px` } : {}) } : {}), ...(paneMotion()?.slot === "main" && paneMotion()!.collapsed ? { "margin-left": "0px", "margin-right": "0px" } : {}) }} {...mainDropHandlers}>
       <Show when={splitDropActive()}><DropWash within /></Show>
       {/* Pane A holding a file viewer or a tool, over its route (5f). */}
       <Show when={parseFileView(paneAOverride())}>{renderFileViewer("main")}</Show>
@@ -5515,7 +5600,7 @@ function App() {
       <Show when={toolInPaneA()}><SheetFill ref={(element) => { setPaneAToolHost(element); onCleanup(() => setPaneAToolHost(undefined)); }} class="pane-a-tool-host" /></Show>
       <Show when={!paneAOverride() && routeBootstrap() === "ready"} fallback={paneAOverride() ? null : <PaneEmpty role={routeBootstrap() === "error" ? "alert" : "status"}>{routeBootstrap() === "error"
         ? routeBootstrapError() || (routeKind() === "project" ? "This project could not be loaded." : "This chat could not be loaded.")
-        : routeKind() === "project" ? "Loading project…" : routeKind() === "dashboard" ? "Loading Conduit…" : "Loading chat…"}</PaneEmpty>}>
+        : routeKind() === "project" ? "Loading project…" : routeKind() === "dashboard" ? "Loading Conduit…" : routeKind() === "agent" ? "Loading…" : "Loading chat…"}</PaneEmpty>}>
         <Show when={routeKind() === "dashboard"}>
           <AppDashboardPage session={session} place={chatPlace()} tabActions={paneTabActions("main")} keyboardOwner={() => !sideHasKeyboard()} onOpenChat={(target, project) => void openChatFromPage(target, project)}
             onSendDraft={async (prompt) => {
@@ -5535,6 +5620,7 @@ function App() {
               await sendFromDashboard();
             }} />
         </Show>
+        <Show when={routeKind() === "agent"}>{renderAgent("main")}</Show>
         <Show when={routeKind() === "computer"}>
           <Show when={harnessThread()} fallback={<Show when={computerHarness()} fallback={<Show when={computerEnvironment()} fallback={<>
             <ChatHeader title={activeServer()?.name || "Hub"} tabActions={paneTabActions("main")} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void startNewChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => {}} appDashboard alone />
@@ -5575,7 +5661,7 @@ function App() {
             </>;
           }}</Show>
         </Show>
-        <Show when={routeKind() !== "dashboard" && routeKind() !== "computer"}>
+        <Show when={routeKind() !== "dashboard" && routeKind() !== "computer" && routeKind() !== "agent"}>
         <Show when={routeKind() === "project" && selectedProject()} fallback={<>
           <Show when={dropActive()}><DropOverlay>Drop files to attach</DropOverlay></Show>
           <ChatSurface session={session} opening={withheldLiveChat()} empty={routeKind() === "chat" && emptyLayout()} sending={routeKind() === "chat" && emptyChat() && !emptyLayout()} project={selectedProject()} tabActions={paneTabActions("main")} {...paneTabRow("main")} keyboardOwner={() => !sideHasKeyboard()} place={chatPlace()} modelSelector stackRef={(element) => { chatComposerStack = element; }}

@@ -32,6 +32,7 @@ import { compareChatsBySort, sortChats, useChatSort } from "../preferences/chat-
 import { publishUiPreference, UI_PREFERENCE_CHANGE_EVENT } from "../preferences/ui-preferences";
 import { COMMAND_IDS, commandLabel } from "../commands/command-registry";
 import { harnessStatusLabel } from "../harness-brand";
+import { agentView, agentNeeds, refreshAgent } from "../state/agent";
 import { installSidebarCursor } from "./sidebar-cursor";
 
 const ComputerExplorer = lazy(() => import("../dashboard/computer-dashboard").then((module) => ({ default: module.ComputerExplorer })));
@@ -122,6 +123,7 @@ export function Sidebar(props: {
   onOpenChatBeside?: (chat: ChatSummary, project: Project) => void;
   navigatingId?: string | null;
   dashboard: boolean;
+  agent: boolean;
   project: boolean;
   computer: boolean;
   terminal: boolean;
@@ -150,6 +152,7 @@ export function Sidebar(props: {
   onOpenTerminal: (chat: ChatSummary, project: Project) => void;
   onOpenPty: (terminal: Pty) => void;
   onOpenDashboard: () => void;
+  onOpenAgent: () => void;
   onOpenComputer: () => void;
   onOpenHarness: (id: string) => void;
   /** A client environment's page; `environment`: the one shown. */
@@ -181,6 +184,7 @@ export function Sidebar(props: {
   onMobileOpenChange: (open: boolean) => void;
   command?: SidebarCommand | null;
 }) {
+  onMount(() => { void refreshAgent(); });
   const [collapsed, setCollapsed] = createSignal(localStorage.getItem("conduit.sidebar") === "collapsed");
   const [visualCollapsed, setVisualCollapsed] = createSignal(collapsed());
   // The edge moves at once (reduced motion, a preference from elsewhere) instead of with the panel's motion.
@@ -1122,6 +1126,7 @@ export function Sidebar(props: {
         </Show>
         <Show when={area() === "conduit"}>
           <RailAction label="Conduit Dashboard" current={props.dashboard} onClick={() => { setArea("conduit"); closeMobile(); props.onOpenDashboard(); enterPane(); }}><Icons.Dashboard /></RailAction>
+          <Show when={agentView()?.enabled}><RailAction label={agentView()?.settings?.name || "Agent"} current={props.agent} onClick={() => { setArea("conduit"); closeMobile(); props.onOpenAgent(); enterPane(); }}><Icons.Agent /></RailAction></Show>
           <RailAction label="New project" onClick={() => openNewDialog("folder")}><Icons.NewFolder /></RailAction>
           <Show when={railFolders().length}>
             <NavRailSection>
@@ -1174,6 +1179,7 @@ export function Sidebar(props: {
       </Show>
       <Show when={area() === "conduit"}>
         <NavRow icon={<Icons.Dashboard />} draggable="true" data-doc-view="page:dashboard" current={props.dashboard} onClick={() => { closeMobile(); props.onOpenDashboard(); enterPane(); }}>Conduit Dashboard</NavRow>
+        <Show when={agentView()?.enabled}><NavRow icon={<Icons.Agent />} draggable="true" data-doc-view="page:agent" current={props.agent} meta={agentNeeds() || undefined} onClick={() => { closeMobile(); props.onOpenAgent(); enterPane(); }}>{agentView()?.settings?.name || "Agent"}</NavRow></Show>
         <NavRow icon={<Icons.NewFolder />} onClick={() => openNewDialog("folder")}>New project</NavRow>
         <Show when={pinnedItems().length}>
           <NavGroup label="Pinned"><For each={pinnedItems()}>{(item) => <PinnedRow item={item} />}</For></NavGroup>
