@@ -121,8 +121,9 @@ interface UpdaterPlugin {
   install(options: { version: string }): Promise<{ needsPermission?: boolean }>;
   addListener(event: "progress", listener: (progress: { downloaded: number; total: number }) => void): Promise<{ remove(): Promise<void> }>;
 }
-let androidUpdater: Promise<UpdaterPlugin> | null = null;
-const updater = () => androidUpdater ??= import("@capacitor/core").then(({ registerPlugin }) => registerPlugin<UpdaterPlugin>("ConduitUpdater"));
+// Held in an object: a plugin has a `then` (any name is a native method), so a promise resolving to one never settles.
+let androidUpdater: Promise<{ plugin: UpdaterPlugin }> | null = null;
+const updater = () => androidUpdater ??= import("@capacitor/core").then(({ registerPlugin }) => ({ plugin: registerPlugin<UpdaterPlugin>("ConduitUpdater") }));
 let readyAndroidVersion: string | null = null;
 
 /**
@@ -163,7 +164,7 @@ export const androidShell = installedClientKind !== "android" ? null : {
     if (readyAndroidVersion) return { kind: "ready", version: readyAndroidVersion };
     const release = await androidRelease();
     if (!release) return { kind: "current" };
-    const plugin = await updater();
+    const { plugin } = await updater();
     const listener = await plugin.addListener("progress", (progress) => onProgress?.({ version: release.version, ...progress }));
     // Says the download began: the first progress event comes only after half a megabyte.
     onProgress?.({ version: release.version, downloaded: 0, total: 0 });
@@ -179,7 +180,7 @@ export const androidShell = installedClientKind !== "android" ? null : {
   /** Opens the system installer, which asks before replacing the app. */
   async installPreparedUpdate(): Promise<boolean> {
     if (!readyAndroidVersion) return false;
-    const { needsPermission } = await (await updater()).install({ version: readyAndroidVersion });
+    const { needsPermission } = await (await updater()).plugin.install({ version: readyAndroidVersion });
     // Sent to the "install unknown apps" grant; the update stays ready.
     if (needsPermission) throw new Error("Allow Conduit to install updates, then take the update again.");
     return true;
