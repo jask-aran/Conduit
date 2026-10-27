@@ -1,3 +1,5 @@
+import { takeAnswerToken } from "../../agent/answer-tokens.js";
+
 /**
  * Web Push subscriptions and delivery.
  *
@@ -6,7 +8,36 @@
  * DELETE /v0/push/subscriptions/:id     remove a subscription
  * POST   /v0/push/test                  send a test notification
  */
-export function registerPushRoutes(app, { push, hubId }) {
+export function registerPushRoutes(app, { push, hubId, backends, hostUi, lifecycle, launchLiveSession }) {
+  async function answerApproval({ chatId, requestId }, choice) {
+    const cold = !backends.getByChatId(chatId);
+    if (cold) {
+      try { await launchLiveSession({ chatId }); } catch { return 409; }
+    }
+    const open = () => hostUi.pending().some((item) => item.chatId === chatId && item.request.id === requestId);
+    // A waiting durable ask resumes after the adapter registers its asker: its card comes back within moments.
+    for (let waited = 0; cold && !open() && waited < 5000; waited += 100) await new Promise((resolve) => setTimeout(resolve, 100));
+    return lifecycle.run(chatId, async () => {
+      const record = backends.getByChatId(chatId);
+      if (!record || !open()) return cold ? 409 : 404;
+      await backends.adapterForRecord(record).respondHostUi(record.id, {
+        id: requestId, answers: [{ questionId: "q1", optionIds: [choice] }],
+      });
+      return 204;
+    });
+  }
+
+  app.post("/v0/push/answer/:token", async (request, response, next) => {
+    try {
+      const { choice } = request.body || {};
+      if (choice !== "allow" && choice !== "deny") return response.status(400).end();
+      const entry = takeAnswerToken(request.params.token);
+      if (!entry) return response.status(404).end();
+      const status = await answerApproval(entry, choice);
+      return response.status(status).end();
+    } catch (error) { next(error); }
+  });
+
   app.get("/v0/push", (request, response, next) => {
     try { response.json({ publicKey: push.publicKey(), subscriptions: push.list() }); }
     catch (error) { next(error); }

@@ -468,7 +468,7 @@ values use the provider format and are never returned by the API.
   /v0/push/subscriptions` `{ endpoint, keys: { p256dh, auth }, kind, label }`
   adds or refreshes one (`kind` is `unifiedpush` or `webpush`); `DELETE
   /v0/push/subscriptions/:id` removes it; `POST /v0/push/test` `{ id? }` sends a
-  test. The hub sends Web Push (RFC 8291 encryption, RFC 8292 VAPID) to every
+  test. `POST /v0/push/answer/:token` answers an approval with `{ choice }`. The hub sends Web Push (RFC 8291 encryption, RFC 8292 VAPID) to every
   subscription; a push service's 404 or 410 drops it. The keys and
   subscriptions live in `push.json` in the data root.
 - `GET /v0/host-ui` lists every approval or question any live agent is waiting
