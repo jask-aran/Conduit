@@ -1,5 +1,5 @@
 import { Icons } from "@/components/ui";
-import { createEffect, createMemo, createSignal, Index, Match, onCleanup, Suspense, Switch } from "solid-js";
+import { createEffect, createMemo, createSignal, Index, Match, onCleanup, Show, Suspense, Switch } from "solid-js";
 
 import type { AgentSummary, Message, ToolItem, ToolKind } from "../api/contracts";
 import { spawned, TurnAgents } from "./agents";
@@ -330,10 +330,35 @@ function TrailLine(props: RowProps & { item: TrailItem; arriving?: boolean }) {
     }}</Match>
   </Switch>;
 }
+/* What a settled piece of the persistent agent's work looked at, for its "Looked at" line: a file by its name, a
+   search by its query, a page by its site, its own tools by what they are about. A script's calls count as its own. */
+const OWN_SOURCES: Record<string, string> = { memory: "its memory", chats: "your chats", schedule: "its schedules", watch: "its watches" };
+function sourceOf(tool: ToolItem): string {
+  const subject = tool.subject || "";
+  if (OWN_SOURCES[tool.name || ""]) return OWN_SOURCES[tool.name || ""]!;
+  if (tool.kind === "search") return `\u201c${subject}\u201d`;
+  if (tool.kind === "fetch") { try { return new URL(subject).hostname.replace(/^www\./, ""); } catch { return subject; } }
+  if (tool.kind === "read" || tool.kind === "edit") return subject.split("/").filter(Boolean).at(-1) || subject;
+  return subject || tool.name || "";
+}
+function sourcesOf(segments: TraceSegment[]): string {
+  const seen = new Set<string>();
+  for (const segment of segments) {
+    if (segment.kind !== "tool" || spawned(segment.tool)) continue;
+    const calls = segment.tool.kind === "script" ? (segment.tool.calls || []).filter((call) => !call.planned && !call.earlier)
+      .map((call) => ({ toolCallId: "", name: call.name, kind: call.kind, subject: call.subject }) as ToolItem) : [segment.tool];
+    for (const tool of calls) { const source = sourceOf(tool); if (source) seen.add(source); }
+  }
+  const all = [...seen];
+  return all.length > 4 ? `${all.slice(0, 4).join(", ")} +${all.length - 4}` : all.join(", ");
+}
 const LATEST_CHARS = 240;
 /** since: how far into a sent message's entrance the turn arrives, so it fades in with it. */
 /** agents: the chat's (its background ones' state); onStopAgent: stops a background one. */
-export function TurnTrace(props: { trace: TurnTraceData; agents?: AgentSummary[]; onStopAgent?: (id: string) => void; writing?: boolean; renderer?: MarkdownRendererId; profileLabel?: string; initialOpen?: boolean; onOpenChange?: (open: boolean) => void; toolOpen?: (id: string) => boolean; onToolOpenChange?: (id: string, open: boolean) => void; onRendered?: () => void; since?: number }) {
+/** gathering: a piece of the persistent agent's work between the things it says (turn-rows.ts TurnLayout). Live it is
+ *  the usual head, what it is doing now; settled it says what it looked at, and the time is the turn's, so it is not
+ *  repeated; a settled piece with no work draws nothing. */
+export function TurnTrace(props: { trace: TurnTraceData; agents?: AgentSummary[]; onStopAgent?: (id: string) => void; writing?: boolean; renderer?: MarkdownRendererId; profileLabel?: string; initialOpen?: boolean; onOpenChange?: (open: boolean) => void; toolOpen?: (id: string) => boolean; onToolOpenChange?: (id: string, open: boolean) => void; onRendered?: () => void; since?: number; gathering?: boolean }) {
   const preview = createMemo(() => previewOf(props.trace, Boolean(props.writing)));
   const time = turnTime(() => props.trace);
   const unfinished = () => !props.trace.active && (props.trace.status === "failed" || props.trace.status === "interrupted");
@@ -347,13 +372,16 @@ export function TurnTrace(props: { trace: TurnTraceData; agents?: AgentSummary[]
   const text = () => { const full = preview().detail?.text ?? ""; return full.length > LATEST_CHARS ? `${full.slice(0, LATEST_CHARS)}\u2026` : full; };
   const thinking = <Suspense fallback={text()}><ChatMarkdown inline renderer={props.renderer}>{text() || "…"}</ChatMarkdown></Suspense>;
   const latest = () => { const detail = preview().detail; return detail ? detail.markdown ? thinking : detail.text : undefined; };
-  return <Trace motion={props.since != null ? "entering" : undefined} since={props.since} orb={<Orb state={preview().status.orb} frame={preview().status.frame} tint={unfinished() ? "var(--destructive)" : undefined} rate={props.trace.active ? undefined : settledOrbRate(unfinished())} />}
-      status={preview().status.verb} time={time() || undefined} work={preview().work || undefined} latest={latest()} live={props.trace.active} tone={unfinished() ? "failed" : undefined}
+  const looked = () => props.gathering && !props.trace.active && !unfinished();
+  const sources = createMemo(() => looked() ? sourcesOf(props.trace.segments) : "");
+  return <Show when={!looked() || props.trace.segments.length > 0}><Trace motion={props.since != null ? "entering" : undefined} since={props.since} orb={<Orb state={preview().status.orb} frame={preview().status.frame} tint={unfinished() ? "var(--destructive)" : undefined} rate={props.trace.active ? undefined : settledOrbRate(unfinished())} />}
+      status={looked() ? (sources() ? "Looked at" : "Worked") : preview().status.verb} time={looked() ? undefined : time() || undefined} work={preview().work || undefined}
+      latest={looked() ? sources() || latest() : latest()} live={props.trace.active} tone={unfinished() ? "failed" : undefined}
       pinned={<TurnAgents tools={spawns()} agents={props.agents ?? []} onStop={props.onStopAgent} />}
       opens={trail().length > 0} open={open()} onToggle={() => { const next = !open(); setOpen(next); props.onOpenChange?.(next); }}>
       {(() => { opened = trail().length; return <Trail><Index each={trail()}>{(item, index) =>
         <TrailLine item={item()} arriving={index >= opened} settled={!props.trace.active} renderer={props.renderer} profileLabel={props.profileLabel} toolOpen={props.toolOpen} onToolOpenChange={props.onToolOpenChange} onRendered={props.onRendered} />}</Index></Trail>; })()}
-    </Trace>;
+    </Trace></Show>;
 }
 
 /* A turn before anything of it has shown: the header it will become, its orb
