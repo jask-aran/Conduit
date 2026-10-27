@@ -130,7 +130,9 @@ function AnswerFoot(props: { message: Message; precedingUserId?: string; chat: T
    caret there once the draft has been swapped in. */
 const focusComposerSoon = () => requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>("textarea[data-composer-input]:not([disabled])")?.focus({ preventScroll: true }));
 
-export function Transcript(props: { chat: TranscriptSource; supports: (capability: BooleanCapability) => boolean; markdownRenderer: MarkdownRendererId; profileLabel?: string; projectId?: string }) {
+export function Transcript(props: { chat: TranscriptSource; supports: (capability: BooleanCapability) => boolean; markdownRenderer: MarkdownRendererId; profileLabel?: string; projectId?: string;
+  /** The persistent agent's thread: every message it writes is drawn, with its work between (turn-rows.ts `TurnLayout`). */
+  conversational?: boolean }) {
   let transcriptRoot!: HTMLDivElement;
   let motionShell!: HTMLDivElement;
   let viewport!: HTMLDivElement;
@@ -243,6 +245,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
     props.chat.tools,
     props.chat.activeGeneration,
     props.chat.activeGenerationChange,
+    () => Boolean(props.conversational),
   );
   const empty = createMemo(() => !timeline.length && !isChatContentActivity(props.chat.activity()));
   // A message of ours the server has not answered with any row of its turn.
