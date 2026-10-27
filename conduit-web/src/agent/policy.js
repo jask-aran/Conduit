@@ -3,6 +3,7 @@ import { Type } from "@earendil-works/pi-ai";
 import { createHash } from "node:crypto";
 import { serviceOf } from "./connector-services.js";
 import { AgentDoc, nextId } from "./agent-doc.js";
+import { sandboxHelper, sandboxedEnv } from "./sandbox.js";
 
 /** Outward calls need an asynchronous approval; private reads taint the conversation. */
 /** Tools that leave the folder only when given a device; and tools that always leave it. */
@@ -44,6 +45,7 @@ const STRING = /(["'`])(?:\\.|(?!\1)[^\\])*\1/g;
 function computedIndex(code) {
   const strings = [];
   const blank = code.replace(STRING, (literal) => { strings.push(literal); return `"${strings.length - 1}"`; });
+  if (strings.some((literal) => literal[0] === "`" && literal.includes("${"))) return true;
   for (const match of blank.matchAll(/\[/g)) {
     const before = blank.slice(0, match.index).trimEnd();
     const word = /[\w$]+$/.exec(before)?.[0];
@@ -60,6 +62,7 @@ function computedIndex(code) {
 }
 function programPaths(code) {
   if (typeof code !== "string" || !code.trim()) return null;
+  if ([...code.matchAll(STRING)].some(([literal]) => literal[0] === "`" && literal.includes("${"))) return null;
   const literal = /\btools\s*\[\s*(["'])([^"'`$\\]+)\1\s*\]\s*\(|\btools((?:\s*\.\s*[A-Za-z_$][\w$]*)+)\s*\(/g;
   const paths = [];
   let rest = code;
@@ -90,7 +93,7 @@ const mcpLabel = (name, args) => {
   if (connectorTool(name) === "execute") return `run a script in ${connectorName(name)}${listed ? `: ${listed}` : ""}`;
   return paths ? `use ${connectorName(name)}: ${listed || "an action"}` : `use ${connectorName(name)}: ${connectorTool(name)}`;
 };
-const preview = (value) => { try { return JSON.stringify(value).slice(0, 300); } catch { return ""; } };
+const preview = (value) => { try { return JSON.stringify(value).slice(0, 400); } catch { return ""; } };
 const summary = (name, args) => {
   if (name.startsWith("mcp__")) {
     // What it will do, one action a line with what it sends; a script that cannot be read ahead says so.
@@ -133,16 +136,16 @@ async function ruleTarget(runtime, name, args) {
       || projects.find((item) => item.name === workspace))?.id ?? null;
   }
   if (name === "steer_chat") return args.chatId;
-  if (name === "bash") return JSON.stringify([args.device, args.command]);
+  if (name === "bash") return JSON.stringify([args.device, args.folder ?? null, args.command]);
   return JSON.stringify([args.device, args.folder ?? null]);
 }
 
 const ruleLabel = (name, args) => {
-  if (name.startsWith("mcp__")) return mcpLabel(name, args);
+  if (name.startsWith("mcp__")) return `${[...new Set(connectorActions(name, args) || [])].map(actionWords).join(", ") || mcpLabel(name, args)}, any input`;
   if (name === "start_chat") return `start a chat, ${args.workspace || "a workspace"}`;
   if (name === "steer_chat") return `post in one of your chats, ${args.chatId || "a chat"}`;
   const target = `${args.device}${args.folder ? ` · ${args.folder}` : ""}`;
-  return name === "bash" ? `run on ${args.device}: ${String(args.command || "").slice(0, 200)}` : `${name} on ${target}`;
+  return name === "bash" ? `run on ${target}: ${String(args.command || "").slice(0, 200)}` : `${name} on ${target}`;
 };
 
 // JSON arguments have no cycles. Sort object keys recursively so equivalent calls share a grant.
@@ -158,12 +161,14 @@ function presentation(name, args) {
     const service = serviceOf(paths[0]);
     const calls = connectorCalls(name, args);
     const items = Array.isArray(args.calls) ? args.calls : args.calls ? [args.calls] : [];
-    const lines = calls ? calls.map((path, i) => {
-      const input = preview(items[i]?.input?.input ?? items[i]?.input).slice(0, 160);
+    let lines = calls ? calls.map((path, i) => {
+      const input = preview(items[i]?.input?.input ?? items[i]?.input);
       return `${actionWords(path)}${input && input !== "{}" ? ` — ${input}` : ""}`;
-    }) : paths.map(actionWords);
+    }) : [...new Set(paths)].map(actionWords);
+    if (lines.length > 12) lines = [...lines.slice(0, 11), `+ ${lines.length - 11} more actions`];
+    if (connectorTool(name) === "execute") lines.push(`Script: ${String(programOf(args) ?? "").replace(/\s+/g, " ").slice(0, 400)}`);
     const label = mcpLabel(name, args);
-    return { title: label[0].toUpperCase() + label.slice(1), service, lines: lines.slice(0, 4) };
+    return { title: label[0].toUpperCase() + label.slice(1), service, lines };
   }
   if (ALWAYS_OUTWARD[name]) {
     const target = name === "start_chat" ? args.workspace || "Chats" : args.chatId || "a chat";
@@ -185,6 +190,9 @@ async function approve(runtime, api, name, args, context, thread) {
   const now = new Date();
   const outcome = await api.commit(async (tx) => {
     const doc = await tx.doc(AgentDoc);
+    for (const [id, ask] of Object.entries(doc.asks ||= {})) {
+      if (["declined", "expired", "used"].includes(ask.status) && Date.parse(ask.decidedAt || ask.createdAt) < now.getTime() - 7 * 86400_000) delete doc.asks[id];
+    }
     const asks = Object.values(doc.asks ||= {});
     for (const ask of asks) if (ask.status === "pending" && ask.expiresAt <= now.toISOString()) ask.status = "expired";
     // A replay of the original ask must never consume a later grant or match a new rule.
@@ -246,6 +254,7 @@ export function ApprovedTool(runtime, tools) {
 
 /** The wraps the agent extension applies to its threads' tools, built against the installed tools. */
 export function policyWraps(runtime, tools) {
+  let helper;
   return tools.filter((tool) => PLACED.includes(tool.name) || ALWAYS_OUTWARD[tool.name] || PRIVATE_READS[tool.name] || (tool.name.startsWith("mcp__") && !tool.connectorReadOnly)).map((target) =>
     wrapTool(target, (tool) => ({ ...tool, execute: async (args, api, context) => {
       if ((tool.name.startsWith("mcp__") && !connectorRead(tool.name, args)) || outward(tool.name, args)) {
@@ -257,7 +266,9 @@ export function policyWraps(runtime, tools) {
         const waiting = await approve(runtime, api, tool.name, args, context, thread);
         if (waiting) return waiting;
       }
-      const result = await tool.execute(args, api, context);
+      const local = PLACED.includes(tool.name) && !args?.device;
+      const env = local ? sandboxedEnv(api.env, { folder: runtime.agent.folder, dataRoot: runtime.dataRoot, shellEnv: runtime.shellEnv, helper: () => helper ||= sandboxHelper(runtime.dataRoot) }) : api.env;
+      const result = await tool.execute(args, local ? { ...api, env } : api, context);
       if (privateRead(tool.name, args) && !result?.isError) {
         await api.commit(async (tx) => { (await tx.doc(AgentDoc)).tainted[api.conversationId] = true; }, context);
       }

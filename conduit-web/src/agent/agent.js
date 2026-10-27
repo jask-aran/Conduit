@@ -289,9 +289,9 @@ export class PersistentAgent {
   }
 
   /** The agent as the API shows it. */
-  async view() {
+  async view(state) {
     if (!this.enabled()) return { enabled: false };
-    const state = await this.state();
+    state ||= await this.state();
     return {
       enabled: true,
       settings: this.settings(),

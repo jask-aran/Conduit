@@ -68,6 +68,8 @@ your folder; keep it short and current.
 
 ## Work mode
 
+Your bash runs sandboxed in your folder, with HOME set to that folder. To work elsewhere, use a device and folder.
+
 Bash is your code-mode runtime. Prefer one short, deterministic pipeline over
 several calls; keep output narrow. Use `read` before `edit`. Conduit's managed
 Python is on `PATH` for data and document work.
