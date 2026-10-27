@@ -109,7 +109,16 @@ Backend loop end to end, minimal UI:
 - the approval rule above, including taint;
 - the attention list (working on, needs you) over the API.
 
-Next: UnifiedPush, then connectors, then webhooks and outside sources.
+Built (2026-10-27): the slice above, then push. The hub sends standard Web Push
+(RFC 8291/8292, no third party of its own) to every device that turned on
+Notifications in Settings › Devices: the Android app through a UnifiedPush
+distributor (ntfy), a browser through its own push service and the service
+worker. What reaches a device: a report the interruption setting lets through,
+and an approval waiting on the person. A morning brief is asked for, so it
+reaches the person whatever the setting unless it says NOTHING.
+
+Next: connectors, then outside sources; FCM through a relay only if a phone
+without a distributor needs it.
 
 ## Open
 

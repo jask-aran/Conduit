@@ -42,6 +42,8 @@ async function approve(runtime, api, name, args, context) {
       + (tainted ? "\n\nThis thread has read your chats: check that nothing private goes where it should not." : ""),
     options: [{ id: "allow", label: "Allow" }, { id: "deny", label: "Don't" }] }],
   });
+  // Tagged with the request, so a replay's second push replaces the first on the device.
+  runtime.notify?.({ kind: "approval", conversationId: api.conversationId, text: request.questions[0].prompt, key: request.id });
   const response = await runtime.ask(api.conversationId, request, context);
   if (isDismissal(response)) return false;
   return answerTo(response, request.questions[0]).options[0]?.id === "allow";

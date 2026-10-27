@@ -67,6 +67,9 @@ import { PersistentAgent } from "./agent/agent.js";
 import { createChatHost } from "./agent/chat-host.js";
 import { startEvents } from "./agent/events.js";
 import { seedSchedules } from "./agent/schedule.js";
+import { agentNotifier } from "./agent/notify.js";
+import { PushService } from "./push/push-service.js";
+import { registerPushRoutes } from "./server/routes/push.js";
 import { createHostUi } from "./server/host-ui.js";
 import { registerHarnessRoutes } from "./server/routes/harnesses.js";
 import { createHarnessModelCatalogue } from "./harnesses/model-catalogue.js";
@@ -690,6 +693,12 @@ registerRunRoutes(app, {
   submitPrompt: (...args) => liveSessionStream.submitPrompt(...args),
   stopGeneration: (...args) => liveSessionStream.stopGeneration(...args),
 });
+// Push to the person's devices (Web Push: UnifiedPush on Android, push subscriptions in browsers). The hub's own
+// key pair signs every message, so the file is the hub's alone.
+const push = new PushService({ file: path.join(config.dataRoot, "push.json"),
+  subject: process.env.CONDUIT_PUSH_SUBJECT || "mailto:conduit@localhost" });
+await push.load();
+registerPushRoutes(app, { push, hubId: () => serverIdentity.id });
 // The hub's persistent agent (docs/plans/persistent-agent.md): nothing until it is enabled, then its threads,
 // clocks and events. Its chat tools reach the person's chats through the same paths a browser's do.
 const durableAdapter = backends.adapters.get("conduit-runtime") || null;
@@ -698,6 +707,7 @@ if (persistentAgent) {
   persistentAgent.chatHost = createChatHost({ registry, projects, backends, chatLogs, findChatContext, launchLiveSession,
     submitPrompt: (...args) => liveSessionStream.submitPrompt(...args) });
   persistentAgent.settingsListeners.add(() => seedSchedules(persistentAgent));
+  durableAdapter.runtime.notify = agentNotifier({ agent: persistentAgent, push, hubId: () => serverIdentity.id });
   registerAgentRoutes(app, { agent: persistentAgent, backends });
   const stopEvents = startEvents(persistentAgent, { nodeHub, runtimeHub, backends, registry, chatLogs, onWorkspaceChange });
   lifetime.own("persistent agent events", { stop: stopEvents }, (owned) => owned.stop());

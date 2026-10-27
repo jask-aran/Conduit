@@ -19,6 +19,7 @@ import { batch, createEffect, createMemo, createRenderEffect, createSignal, Erro
 import { Portal, render } from "solid-js/web";
 import { androidShell, desktopShell, isInstalledClient } from "./platform/installed-client.ts";
 import { liveUpdateNow, startLiveUpdate } from "./platform/live-update.ts";
+import { startPush } from "./platform/push.ts";
 // The clients that stage a downloaded update and install it on request.
 const updateShell = desktopShell ?? androidShell;
 import { PanelTopIcon } from "lucide-solid";
@@ -5642,6 +5643,7 @@ window.addEventListener("vite:preloadError", (event) => {
 // A development Android client takes the interface its server serves, in
 // the background (platform/live-update.ts).
 void startLiveUpdate(() => { const path = activePath(); return path ? dialOrigin(path) : null; }).catch(() => {});
+void startPush().catch(() => {});
 
 render(() => <ErrorBoundary fallback={(error) => { dismissLaunchMark(); return <ConnectionRecovery title="Conduit hit a UI error" error={error instanceof Error ? error.message : "Unknown interface error"} onRetry={() => location.reload()} retryLabel="Reload Conduit" />; }}>
   {nativeApp ? <NativeRoot /> : <App />}

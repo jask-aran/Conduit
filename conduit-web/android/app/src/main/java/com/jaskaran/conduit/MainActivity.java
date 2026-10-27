@@ -1,6 +1,7 @@
 package com.jaskaran.conduit;
 
 import android.os.Bundle;
+import android.content.Intent;
 
 import android.webkit.WebView;
 
@@ -62,6 +63,8 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(ConduitKeyboardPlugin.class);
         registerPlugin(ConduitTlsPlugin.class);
         registerPlugin(ConduitUpdaterPlugin.class);
+        registerPlugin(ConduitPushPlugin.class);
+        ConduitPushPlugin.handleIntent(this, getIntent());
         super.onCreate(savedInstanceState);
         /*
          * Take the window out of legacy soft-input handling.
@@ -109,5 +112,11 @@ public class MainActivity extends BridgeActivity {
                 ConduitWebViewClient.trust(identities);
             }
         }
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        ConduitPushPlugin.handleIntent(this, intent);
     }
 }
