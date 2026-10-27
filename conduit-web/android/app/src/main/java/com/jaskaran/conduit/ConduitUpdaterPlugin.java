@@ -80,6 +80,8 @@ public class ConduitUpdaterPlugin extends Plugin {
             HttpURLConnection connection = null;
             try {
                 connection = (HttpURLConnection) new URL(url).openConnection();
+                // A dev APK comes from the paired hub, which may answer with its own certificate.
+                if (connection instanceof javax.net.ssl.HttpsURLConnection) ConduitWebViewClient.trustPaired((javax.net.ssl.HttpsURLConnection) connection);
                 connection.setInstanceFollowRedirects(true);
                 connection.setConnectTimeout(15_000);
                 connection.setReadTimeout(30_000);

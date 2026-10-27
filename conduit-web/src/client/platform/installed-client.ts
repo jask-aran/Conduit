@@ -165,6 +165,8 @@ export const androidShell = installedClientKind !== "android" ? null : {
     if (!release) return { kind: "current" };
     const plugin = await updater();
     const listener = await plugin.addListener("progress", (progress) => onProgress?.({ version: release.version, ...progress }));
+    // Says the download began: the first progress event comes only after half a megabyte.
+    onProgress?.({ version: release.version, downloaded: 0, total: 0 });
     try {
       const { ready } = await plugin.download({ url: release.apkUrl, version: release.version, unmeteredOnly: quiet });
       if (!ready) return { kind: "current" };
