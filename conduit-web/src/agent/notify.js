@@ -1,3 +1,5 @@
+import { mintAnswerToken } from "./answer-tokens.js";
+
 /**
  * What of the agent reaches the person's devices (docs/plans/persistent-agent.md, "Reaching you"): a run's report
  * that their interruption setting lets through, and a question waiting on their approval. Each goes to every device
@@ -26,6 +28,7 @@ export function agentNotifier({ agent, push, hubId }) {
       path: `/chat/${thread.chatId}`,
       tag,
       hub: hubId(),
+      ...(approval ? { answer: { token: mintAnswerToken(thread.chatId, key), allow: "Allow", deny: "Don't" } } : {}),
       urgency: urgent || approval ? "high" : "normal",
     }, { urgency: urgent || approval ? "high" : "normal", topic: tag, ttl: approval ? 86400 : 43200 });
   })().catch((error) => console.warn("[agent] push:", error?.message || error));

@@ -85,6 +85,19 @@ public class ConduitPushService extends PushService {
                 .setColor(androidx.core.content.ContextCompat.getColor(this, R.color.conduit_frame)).setContentTitle((String) title).setContentText(body)
                 .setStyle(new NotificationCompat.BigTextStyle().bigText(body)).setAutoCancel(true)
                 .setCategory(NotificationCompat.CATEGORY_MESSAGE).setContentIntent(pending);
+            JSONObject answer = payload.optJSONObject("answer");
+            if (answer != null && answer.optString("token").matches("[A-Za-z0-9_-]{43}")) {
+                for (String choice : new String[] { "allow", "deny" }) {
+                    Intent action = new Intent(this, ConduitPushAnswerReceiver.class)
+                        .setData(new Uri.Builder().scheme("conduit-answer").appendPath(notificationTag).appendPath(choice).build())
+                        .putExtra("instance", instance).putExtra("token", answer.optString("token"))
+                        .putExtra("choice", choice).putExtra("tag", notificationTag).putExtra("path", path)
+                        .putExtra("channel", channel);
+                    PendingIntent actionIntent = PendingIntent.getBroadcast(this, (notificationTag + choice).hashCode(), action,
+                        PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
+                    notification.addAction(0, answer.optString(choice, choice.equals("allow") ? "Allow" : "Don't"), actionIntent);
+                }
+            }
             manager.notify(notificationTag, 0, notification.build());
         } catch (JSONException e) {
             Log.d("ConduitPush", "Invalid notification payload", e);

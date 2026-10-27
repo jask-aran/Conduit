@@ -120,6 +120,7 @@ public class ConduitPushPlugin extends Plugin {
         String instance = call.getString("instance");
         String vapid = call.getString("vapid");
         String label = call.getString("label");
+        String origin = call.getString("origin");
         if (instance == null || instance.isEmpty()) {
             call.reject("Instance is required");
             return;
@@ -128,6 +129,7 @@ public class ConduitPushPlugin extends Plugin {
             call.reject("Invalid VAPID key", "bad_vapid");
             return;
         }
+        if (origin != null) getContext().getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString("origin." + instance, origin).apply();
         // Nothing chosen yet: Google's push service, built in, when Play services is there. Another distributor (ntfy) is
         // used only when picked.
         Context context = getContext();
@@ -161,6 +163,18 @@ public class ConduitPushPlugin extends Plugin {
                 throw new RuntimeException(e);
             }
         }
+    }
+
+    @PluginMethod
+    public void setOrigin(PluginCall call) {
+        String instance = call.getString("instance");
+        String origin = call.getString("origin");
+        if (instance == null || instance.isEmpty() || origin == null || origin.isEmpty()) {
+            call.reject("Instance and origin are required");
+            return;
+        }
+        getContext().getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString("origin." + instance, origin).apply();
+        call.resolve(new JSObject());
     }
 
     @PluginMethod

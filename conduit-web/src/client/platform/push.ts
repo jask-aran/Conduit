@@ -1,6 +1,7 @@
 import { Capacitor, registerPlugin } from "@capacitor/core";
 import { createSignal } from "solid-js";
 import { api } from "../api/client.ts";
+import { httpUrl } from "../api/transport.js";
 import { installedClientKind } from "./installed-client.ts";
 import { activeServer, servers, switchToServer } from "./servers.ts";
 
@@ -18,7 +19,8 @@ type PushPlugin = {
   status(): Promise<{ distributors: Distributor[]; distributor: string | null; permission: Permission }>;
   requestPermission(): Promise<{ permission: Permission }>;
   useDistributor(options: { id: string }): Promise<void>;
-  register(options: { instance: string; vapid: string; label: string }): Promise<void>;
+  register(options: { instance: string; vapid: string; label: string; origin: string }): Promise<void>;
+  setOrigin(options: { instance: string; origin: string }): Promise<void>;
   unregister(options: { instance: string }): Promise<void>;
   endpoints(): Promise<{ endpoints: Endpoint[] }>;
   consumeOpened(): Promise<{ instance: string | null; path: string | null }>;
@@ -96,6 +98,7 @@ export async function startPush() {
   }
   if (way !== "android") return;
   const push = native();
+  void push.setOrigin({ instance: hubKey(), origin: new URL(httpUrl("/")).origin }).catch(() => undefined);
   const consume = async () => { const tap = await push.consumeOpened(); if (tap.path) open(tap.instance, tap.path); };
   await push.addListener("opened", () => void consume());
   await push.addListener("endpoint", (endpoint: Endpoint) => void sync(endpoint));
@@ -152,7 +155,7 @@ export function createPushControl() {
       }).then((handle) => { listener = handle; });
     });
     try {
-      await within("registering with the push service", push.register({ instance, vapid: publicKey, label: `Conduit · ${activeServer()?.name || location.host}` }));
+      await within("registering with the push service", push.register({ instance, vapid: publicKey, origin: new URL(httpUrl("/")).origin, label: `Conduit · ${activeServer()?.name || location.host}` }));
     } catch (error) {
       const code = (error as { code?: string }).code;
       if (code === "no_distributor") throw new Error("This phone has no Google Play services: install a UnifiedPush app such as ntfy, then turn this on.");
