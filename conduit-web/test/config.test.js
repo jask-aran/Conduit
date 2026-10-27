@@ -12,8 +12,8 @@ test("default runtime paths are owned by the repository root", () => {
   assert.equal(config.piTemplate.label, "Assistant");
   assert.deepEqual(config.piTemplate.tools, ["read", "bash", "edit", "write", "web_search", "fetch_content", "get_search_content", "source_check"]);
   assert.deepEqual(config.piTemplate.models, [
-    "openai-codex/gpt-5.6-luna",
-    "openai-codex/gpt-5.6-sol",
+    "openai/gpt-5.6-luna",
+    "openai/gpt-5.6-sol",
     "anthropic/claude-opus-4-8",
     "anthropic/claude-fable-5",
   ]);
