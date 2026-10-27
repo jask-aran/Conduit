@@ -756,7 +756,9 @@ function App() {
   const [computerEnvironment, setComputerEnvironment] = createSignal(decodeURIComponent(location.pathname.match(/^\/computer\/environment\/([^/]+)/)?.[1] || ""));
   const [terminalRouteId, setTerminalRouteId] = createSignal<string>();
   const [terminalCanReturn, setTerminalCanReturn] = createSignal(false);
+  // jbot's page works in its folder: the dock's tools and the panes beside it are its workspace's.
   const workspacePanelScope = createMemo(() => routeKind() === "computer" ? "computer"
+    : routeKind() === "agent" ? (agentView()?.projectId ? `project:${agentView()!.projectId}` : null)
     : ["chat", "project", "dashboard"].includes(routeKind()) && catalogue.projectId() ? `project:${catalogue.projectId()}`
       : null);
   const [routeBootstrap, setRouteBootstrap] = createSignal<"loading" | "ready" | "error">("loading");
@@ -1056,6 +1058,8 @@ function App() {
    * Conduit runtime, whose tools reach the device, and what the device runs itself). Conduit's own profiles name no
    * harness of their own.
    */
+  // jbot's threads keep the one profile it is made with: no profile to choose.
+  const agentThread = (id: string | null | undefined) => { const view = agentView(); return Boolean(id && (view?.home?.chatId === id || view?.sides?.some((side) => side.chatId === id))); };
   const profilesAt = (project?: Project | null) => {
     const allowed = project?.capabilities && !project.capabilities.device.local ? project.capabilities.harnesses : null;
     return allowed ? profiles().filter((profile) => allowed.includes(profile.implementation || "conduit-runtime")) : profiles();
@@ -2449,7 +2453,7 @@ function App() {
     if (isMobileLayout()) setMobileSidebarOpen(false);
     setPanelOpenForChat(true);
   };
-  const dockAvailable = () => routeKind() === "computer" ? Boolean(computerLocation()) : ["chat", "project", "dashboard"].includes(routeKind()) && Boolean(selectedProject()) && Boolean(workspacePanelScope());
+  const dockAvailable = () => routeKind() === "computer" ? Boolean(computerLocation()) : routeKind() === "agent" ? Boolean(workspacePanelScope()) : ["chat", "project", "dashboard"].includes(routeKind()) && Boolean(selectedProject()) && Boolean(workspacePanelScope());
   /*
    * The panes beside pane A (docs/design/panes-and-rail.md, 6b): up to two,
    * B and C, each a slot with its own view, session and host, shown left to
@@ -5366,7 +5370,7 @@ function App() {
       models={current.models}
       permissions={current.capability("permissionModes") ? current.permissions : undefined}
       serviceLevels={current.manifest()?.serviceLevels?.length ? current.serviceLevels : undefined}
-      profiles={profilesAt(props.place?.current ?? props.workspace)}
+      profiles={agentThread(current.chat.loadedId()) ? [] : profilesAt(props.place?.current ?? props.workspace)}
       activeProfile={current.activeProfile()}
      
       serverOnline={serverReachable()}
@@ -5410,6 +5414,8 @@ function App() {
           await current.chat.send();
         }
       }} /></Show>}
+      onOpenFile={(path) => { const projectId = agentView()?.projectId; if (projectId) void openFileDocument({ projectId, path }, { beside: altActivation(), edit: false }); }}
+      onOpenSettings={() => openSettings("agent")}
       onOpenChat={(id, event) => {
         const beside = Boolean(event?.altKey);
         const tab = Boolean(event && (event.ctrlKey || event.metaKey));
@@ -5529,7 +5535,7 @@ function App() {
       {props.notice}
       <Conversation chat={surfaceChat} busy={surfaceChat.presentation().kind === "opening_live"} empty={props.empty} sending={props.sending} opening={props.opening} stackRef={props.stackRef}
         transcript={<Transcript chat={surfaceChat} supports={current.capability} markdownRenderer={markdownRenderer()} profileLabel={current.activeProfile()?.label || current.activeProfile()?.id || surfaceChat.templateId() || undefined} projectId={props.project?.id} />}
-        composer={<Show when={!subagent()}><Composer chat={surfaceChat} opening={props.opening} place={props.place} supports={current.capability} attachments={current.attachments} attachmentsSupported={current.capability("attachments", true)} models={current.models} permissions={current.capability("permissionModes") ? current.permissions : undefined} serviceLevels={current.manifest()?.serviceLevels?.length ? current.serviceLevels : undefined} profiles={profilesAt(props.place?.current)} activeProfile={current.activeProfile()} onOpenModelSelector={props.modelSelector ? openModelSelector : undefined} modelSelectorShortcut={props.modelSelector ? shortcutManager.formatEffectiveBinding(COMMAND_IDS.openModelSelector) : undefined} serverOnline={serverReachable()} voiceSettings={voiceSettings()} keyboardOwner={props.keyboardOwner} onChooseProfile={(id) => void current.switchProfile(id).catch(showError)} onOpenSettings={openSettings} onOpenAttachments={current.openAttachments} onStatusChange={current.setComposerStatus} /></Show>} />
+        composer={<Show when={!subagent()}><Composer chat={surfaceChat} opening={props.opening} place={props.place} supports={current.capability} attachments={current.attachments} attachmentsSupported={current.capability("attachments", true)} models={current.models} permissions={current.capability("permissionModes") ? current.permissions : undefined} serviceLevels={current.manifest()?.serviceLevels?.length ? current.serviceLevels : undefined} profiles={agentThread(current.chat.loadedId()) ? [] : profilesAt(props.place?.current)} activeProfile={current.activeProfile()} onOpenModelSelector={props.modelSelector ? openModelSelector : undefined} modelSelectorShortcut={props.modelSelector ? shortcutManager.formatEffectiveBinding(COMMAND_IDS.openModelSelector) : undefined} serverOnline={serverReachable()} voiceSettings={voiceSettings()} keyboardOwner={props.keyboardOwner} onChooseProfile={(id) => void current.switchProfile(id).catch(showError)} onOpenSettings={openSettings} onOpenAttachments={current.openAttachments} onStatusChange={current.setComposerStatus} /></Show>} />
     </>;
   };
 

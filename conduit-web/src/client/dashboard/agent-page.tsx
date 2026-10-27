@@ -3,6 +3,7 @@ import { Icons, StatusDot } from "@/components/ui";
 import { Button, TextArea } from "@/components/ui/controls";
 import { DashIconButton, DashNote } from "@/components/ui/dashboard";
 import { Dialog } from "@/components/dialog";
+import { MenuRow } from "@/components/menus";
 import { api } from "../api/client";
 import type { AgentSummary, ChatSummary } from "../api/contracts";
 import { agentNeeds, agentView, refreshAgent, type AgentRun, type AgentSchedule } from "../state/agent";
@@ -19,6 +20,12 @@ const RUN_KIND: Record<string, string> = {
 };
 /** How a finished run's report was read: what it told the person. */
 const LEVEL: Record<string, string> = { urgent: "Urgent", attention: "Told you", fyi: "FYI", none: "Nothing to say" };
+const MEMORY = [
+  { path: "MEMORY.md", label: "Memory", context: "What it keeps between conversations" },
+  { path: "USER.md", label: "About you", context: "What it knows about you" },
+  { path: "IDENTITY.md", label: "Identity", context: "Who it is and how it works" },
+  { path: "HEARTBEAT.md", label: "Heartbeat", context: "What it checks when it wakes" },
+];
 const DIAL: Record<string, string> = { quiet: "Quiet", normal: "Normal", chatty: "Chatty" };
 
 function age(value: string | null | undefined, now: number) {
@@ -40,6 +47,9 @@ export function AgentPage(props: {
   composer?: JSX.Element;
   /** Opens one of its chats (a thread, a run's transcript, a question's thread), as a dashboard row opens a chat. */
   onOpenChat: (chatId: string, event?: MouseEvent) => void;
+  /** Opens one of its memory files (a path in its folder) in the file viewer. */
+  onOpenFile: (path: string) => void;
+  onOpenSettings: () => void;
 }) {
   const [now, setNow] = createSignal(Date.now());
   const [runChats, setRunChats] = createSignal(new Map<string, string>());
@@ -137,6 +147,13 @@ export function AgentPage(props: {
     </SplitGroup>
   </Show>;
 
+  // Its memory is files in its folder, read and edited where any file is.
+  const memoryGroup = () => <SplitGroup id="agent-memory" label="Memory">
+    <For each={MEMORY}>{(file) =>
+      <SplitRow element="button" onClick={() => props.onOpenFile(file.path)} lead={<Icons.FileText />} primary={file.label} context={file.context} />}
+    </For>
+  </SplitGroup>;
+
   const recentGroup = () => <SplitGroup id="agent-recent" label="Recent" count={working()?.recent.length || null}>
     <Show when={working()?.recent.length} fallback={<SplitEmpty>Nothing here yet.</SplitEmpty>}>
       <For each={working()?.recent}>{(run) => runRow(run, false)}</For>
@@ -169,11 +186,11 @@ export function AgentPage(props: {
           quickActions={<SplitQuickActions items={[
             { icon: <Icons.Play />, label: "Run a task", onClick: () => setAsking(true) },
             { icon: <Icons.NewChat />, label: "New thread", onClick: () => void newThread() },
-          ]} />}
+          ]} manage={() => <MenuRow icon={<Icons.Settings />} onSelect={props.onOpenSettings}>Settings</MenuRow>} />}
           notice={error() ? <DashNote error>{error()}</DashNote> : undefined}
           composer={props.composer}
           list={threadsGroup()}
-          aside={<>{needsGroup()}{workingGroup()}{schedulesGroup()}{watchesGroup()}{recentGroup()}</>} />
+          aside={<>{needsGroup()}{workingGroup()}{schedulesGroup()}{watchesGroup()}{memoryGroup()}{recentGroup()}</>} />
       </Show>
     </Show>
 
