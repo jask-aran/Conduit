@@ -5,6 +5,7 @@ import { chatView } from "../../chat-store.js";
 import { listWatches, webhook } from "../../agent/events.js";
 import { acceptProposal, listProposals, rejectProposal } from "../../agent/memory.js";
 import { listSchedules } from "../../agent/schedule.js";
+import { decide } from "../../agent/asks.js";
 import { backgroundSubagents } from "../subagents.js";
 
 /**
@@ -13,6 +14,7 @@ import { backgroundSubagents } from "../subagents.js";
  * GET  /v0/agent                     the agent, its threads and its attention list
  * POST /v0/agent                     give this hub its agent { name? }
  * PATCH /v0/agent                    its settings (name, dial, budgetUsdPerDay, timezone, brief, heartbeat)
+ * POST /v0/agent/asks/:id            decide an approval { choice }
  * POST /v0/agent/threads             a side thread { title? }
  * POST /v0/agent/wake                a run now { task, title? }
  * POST /v0/agent/proposals/:id/{accept,reject}
@@ -60,6 +62,7 @@ export function registerAgentRoutes(app, { agent, backends }) {
       },
       needsYou: {
         questions: waiting,
+        asks: view.asks.filter((ask) => ask.status === "pending"),
         proposals: await listProposals(agent),
         notices: state.notices,
       },
@@ -135,6 +138,16 @@ export function registerAgentRoutes(app, { agent, backends }) {
       await agent.saveSettings(request.body || {});
       response.json(await agent.view());
     } catch (error) { next(error); }
+  });
+
+  app.post("/v0/agent/asks/:id", async (request, response, next) => {
+    try {
+      if (!enabled(response)) return;
+      response.json(await decide(agent, request.params.id, request.body?.choice));
+    } catch (error) {
+      if ([400, 404, 409].includes(error.status)) return response.status(error.status).json({ error: error.message });
+      next(error);
+    }
   });
 
   app.post("/v0/agent/threads", async (request, response, next) => {

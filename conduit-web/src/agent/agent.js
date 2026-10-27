@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { templateBackend } from "../chat-backend.js";
 import { Connectors } from "./connectors.js";
 import { AgentDoc } from "./agent-doc.js";
+import { listAsks } from "./asks.js";
 
 const SEED = fileURLToPath(new URL("../../../templates/agent/seed/", import.meta.url));
 const TEMPLATE_ID = "agent";
@@ -282,6 +283,7 @@ export class PersistentAgent {
         .filter((chat) => chat.backend?.agentThread === "side" && chat.projectId === this.project.id)
         .map((chat) => ({ chatId: chat.id, title: chat.title || "", updatedAt: chat.updatedAt })),
       spentToday: state.spend[this.today()] || 0,
+      asks: listAsks(state),
       rules: Object.values(state.rules || {}).reverse().sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
     };
   }

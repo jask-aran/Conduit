@@ -47,7 +47,7 @@ import {
 import { captureTranscriptAnchor, restoreTranscriptAnchor } from "./transcript-anchor";
 import { api } from "../api/client";
 import { requestTurnArtifactNavigation } from "./turn-artifact-navigation";
-import { ChatEmpty, ChatScroller, Welcome, Answer, Button as LibraryButton, Changes, CopyButton, Failure, HarnessPrompt, LoadingEarlier, Message as LibraryMessage, MessageFoot, RiderButton, StopLine, Transcript as LibraryTranscript, TranscriptRow, Turn } from "@/components/ui";
+import { ApprovalCard, type ApprovalChoice, type ApprovalState, ChatEmpty, ChatScroller, Welcome, Answer, Button as LibraryButton, Changes, CopyButton, Failure, HarnessPrompt, LoadingEarlier, Message as LibraryMessage, MessageFoot, RiderButton, StopLine, Transcript as LibraryTranscript, TranscriptRow, Turn } from "@/components/ui";
 import { ChatMarkdown } from "./lazy-markdown";
 import { fullDateTime } from "./full-date-time";
 
@@ -130,9 +130,24 @@ function AnswerFoot(props: { message: Message; precedingUserId?: string; chat: T
    caret there once the draft has been swapped in. */
 const focusComposerSoon = () => requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>("textarea[data-composer-input]:not([disabled])")?.focus({ preventScroll: true }));
 
+/** An approval as the thread draws it (GET /v0/agent `asks`). */
+export type TranscriptAsk = { id: string; toolCallId: string; parentCallId: string | null; title: string; service: string | null; lines: string[]; expiresAt: string; status: ApprovalState };
+const APPROVAL_NOTE = "[Approval] ";
+/* Waits for how long, as the card's meta: "23 h", "40 min". */
+const waitsFor = (expiresAt: string) => { const minutes = Math.max(0, Math.round((Date.parse(expiresAt) - Date.now()) / 60_000)); return minutes >= 90 ? `${Math.round(minutes / 60)} h left` : `${minutes} min left`; };
+function AskCard(props: { ask: TranscriptAsk; answer: (id: string, choice: ApprovalChoice) => Promise<void> }) {
+  const [busy, setBusy] = createSignal(false);
+  return <ApprovalCard title={props.ask.title} service={props.ask.service} lines={props.ask.lines} state={props.ask.status} busy={busy()}
+    meta={props.ask.status === "pending" ? waitsFor(props.ask.expiresAt) : undefined}
+    onChoose={(choice) => { setBusy(true); void props.answer(props.ask.id, choice).finally(() => setBusy(false)); }} />;
+}
+
 export function Transcript(props: { chat: TranscriptSource; supports: (capability: BooleanCapability) => boolean; markdownRenderer: MarkdownRendererId; profileLabel?: string; projectId?: string;
   /** The persistent agent's thread: every message it writes is drawn, with its work between (turn-rows.ts `TurnLayout`). */
-  conversational?: boolean }) {
+  conversational?: boolean;
+  /** The thread's approvals waiting on the person or lately answered (async: the agent carried on): each drawn under
+   *  the work that asked (its call, or the script it was called from), one not found there at the thread's foot. */
+  approvals?: { asks: () => TranscriptAsk[]; answer: (id: string, choice: ApprovalChoice) => Promise<void>; refresh: () => void } }) {
   let transcriptRoot!: HTMLDivElement;
   let motionShell!: HTMLDivElement;
   let viewport!: HTMLDivElement;
@@ -247,6 +262,25 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
     props.chat.activeGenerationChange,
     () => Boolean(props.conversational),
   );
+  // Approvals by the row whose work asked: the call's own id, or the script it was called from.
+  const askRows = createMemo(() => {
+    const asks = props.approvals?.asks() ?? [];
+    const placed = new Map<string, TranscriptAsk[]>();
+    if (!asks.length) return { placed, unplaced: [] as TranscriptAsk[] };
+    const rowOf = new Map<string, string>();
+    for (const row of timeline) if (row.type === "trace") for (const segment of row.value.segments) if (segment.kind === "tool") rowOf.set(segment.tool.toolCallId, row.key);
+    const unplaced: TranscriptAsk[] = [];
+    for (const ask of [...asks].reverse()) {
+      const key = rowOf.get(ask.toolCallId) ?? (ask.parentCallId ? rowOf.get(ask.parentCallId) : undefined);
+      if (key) placed.set(key, [...(placed.get(key) ?? []), ask]);
+      else if (ask.status === "pending") unplaced.push(ask);
+    }
+    return { placed, unplaced };
+  });
+  const asksAt = (key: string) => askRows().placed.get(key) ?? [];
+  // A new call may have asked: the list is read again as the thread's calls change.
+  createEffect(on(() => props.approvals ? props.chat.tools().length : 0, (count) => { if (count) props.approvals?.refresh(); }, { defer: true }));
+  const unplacedAsks = () => askRows().unplaced;
   const empty = createMemo(() => !timeline.length && !isChatContentActivity(props.chat.activity()));
   // A message of ours the server has not answered with any row of its turn.
   const awaitingTurn = createMemo(() => {
@@ -1042,6 +1076,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
             const artifact = () => item.answerless && item.precedingUserId ? artifactSummaries().get(item.precedingUserId) : undefined;
             const arrive = arrivalOf(lastArrivedId);
             return <TranscriptRow ref={traceRow} data-slot="message-scroller-item" turn={props.conversational && item.continues}><Turn><TurnTrace since={arrive} trace={item.value} gathering={props.conversational} orb={!props.conversational || Boolean(item.orb)} agents={props.chat.agents?.()} onStopAgent={props.chat.stopAgent ? (id) => void props.chat.stopAgent!(id) : undefined} writing={item.answerless === false} renderer={markdownRenderer()} profileLabel={props.profileLabel} initialOpen={itemExpanded(chatId(), item.key)} onOpenChange={(open) => setItemExpanded(chatId(), item.key, open)} toolOpen={(id) => itemExpanded(chatId(), `tool:${id}`)} onToolOpenChange={(id, open) => setItemExpanded(chatId(), `tool:${id}`, open)} onRendered={() => settleAfterMarkdown(traceRow)} />
+              <For each={asksAt(item.key)}>{(ask) => <AskCard ask={ask} answer={props.approvals!.answer} />}</For>
               {/* A turn that ended without an answer -- stopped under a tool, or
                   one that only ran commands -- still offers to try again. */}
               <Show when={item.answerless && !item.value.active}>
@@ -1089,6 +1124,10 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
           // Read once: the fade is timed from when the row was built, and a
           // later update must not shift it.
           const arrive = untrack(() => user() ? arrival(message()) : undefined);
+          // The hub telling the agent how an approval was answered: a quiet line, as a report is, not the person's bubble.
+          if (props.conversational && user() && (message().content || "").startsWith(APPROVAL_NOTE)) {
+            return <TranscriptRow ref={row} data-slot="message-scroller-item" data-message-id={message().id}><HarnessPrompt>{(message().content || "").slice(APPROVAL_NOTE.length).replace(/ \(ask [^)]+\)\..*$/, "")}</HarnessPrompt></TranscriptRow>;
+          }
           if (user() && message().origin === "harness") {
             // A subagent's report opens its transcript, once the chat's agents say which chat that is.
             const child = () => { const ref = message().agent; return ref ? props.chat.agents?.().find((agent) => ref.id ? agent.id === ref.id : String(agent.conversationId) === String(ref.conversationId))?.chatId : null; };
@@ -1131,6 +1170,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
             </Show>
           </TranscriptRow>;
         }}</For>
+        <Show when={unplacedAsks().length}><TranscriptRow data-slot="message-scroller-item"><Turn><For each={unplacedAsks()}>{(ask) => <AskCard ask={ask} answer={props.approvals!.answer} />}</For></Turn></TranscriptRow></Show>
         {/* Sent, and the server has not started the turn yet: its starting
             header shows with the message, fading in beside it, so the turn's
             own header later takes the same spot instead of pushing in. */}

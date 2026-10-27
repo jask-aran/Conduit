@@ -16,6 +16,7 @@ export interface AgentQuestion { kind: "question"; chatId: string; requestId: st
 /** A change to its memory a run proposed, waiting for the person (memory.js). */
 export interface AgentProposal { id: string; file: string; op: "add" | "remove" | string; text: string; by?: string; chatId?: string | null; at: string }
 export interface AgentNotice { id: string; kind: string; text: string; at: string }
+export interface AgentAsk { id: string; chatId: string; toolCallId: string; parentCallId: string | null; title: string; service: string | null; lines: string[]; createdAt: string; expiresAt: string; status: "pending" | "allowed" | "declined" | "expired" | "used"; decidedAt?: string; choice?: "allow" | "always" | "deny" }
 export interface AgentView {
   enabled: boolean;
   /** Its workspace: its folder, holding its memory files. */
@@ -24,10 +25,11 @@ export interface AgentView {
   home?: { chatId: string; conversationId: number } | null;
   sides?: Array<{ chatId: string; title: string; updatedAt?: string }>;
   spentToday?: number;
+  asks?: AgentAsk[];
   rules?: Array<{ id: string; tool: string; target: string; label: string; createdAt: string }>;
   attention?: {
     working: { runs: AgentRun[]; recent: AgentRun[]; schedules: AgentSchedule[]; watches: AgentWatch[] };
-    needsYou: { questions: AgentQuestion[]; proposals: AgentProposal[]; notices: AgentNotice[] };
+    needsYou: { asks: AgentAsk[]; questions: AgentQuestion[]; proposals: AgentProposal[]; notices: AgentNotice[] };
   };
 }
 
@@ -52,5 +54,5 @@ export const refreshAgent = store.refresh;
 /** How many things wait on the person: questions, memory to review and notices. */
 export const agentNeeds = (view = agentView()) => {
   const needs = view?.attention?.needsYou;
-  return needs ? needs.questions.length + needs.proposals.length + needs.notices.length : 0;
+  return needs ? (needs.asks?.length || 0) + needs.questions.length + needs.proposals.length + needs.notices.length : 0;
 };

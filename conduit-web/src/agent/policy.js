@@ -1,19 +1,9 @@
 import { wrapTool } from "@earendil-works/pi-durable";
-import { answerTo, isDismissal, questionRequest } from "../harnesses/questions.js";
+import { createHash } from "node:crypto";
+import { serviceOf } from "./connector-services.js";
 import { AgentDoc, nextId } from "./agent-doc.js";
 
-/**
- * What the agent may do alone (plan decision 7). Reading, drafting and work in
- * its own folder need no one. A call that leaves the folder is outward: one
- * placed on a device (`device` given), starting or steering another chat. In a
- * thread the person is in, an outward call asks first, on the question card;
- * a run never approves itself, so there it is refused with what it needed,
- * for its report to carry to the home thread.
- *
- * A conversation that has read the person's private data (their chats) is
- * tainted: its approval card says so, since what it sends may carry that data.
- */
-
+/** Outward calls need an asynchronous approval; private reads taint the conversation. */
 /** Tools that leave the folder only when given a device; and tools that always leave it. */
 const PLACED = ["read", "write", "edit", "bash"];
 const ALWAYS_OUTWARD = { start_chat: "start a chat", steer_chat: "post in one of your chats" };
@@ -127,7 +117,6 @@ const summary = (name, args) => {
   return `${name} ${args.path || ""} on ${target}`;
 };
 const outward = (name, args) => Boolean(ALWAYS_OUTWARD[name] || (PLACED.includes(name) && args?.device));
-const refused = (text) => ({ output: [{ type: "text", text }], isError: true });
 
 async function ruleTarget(runtime, name, args) {
   if (name.startsWith("mcp__")) {
@@ -155,32 +144,72 @@ const ruleLabel = (name, args) => {
   return name === "bash" ? `run on ${args.device}: ${String(args.command || "").slice(0, 200)}` : `${name} on ${target}`;
 };
 
-/** Ask the person on the question card whether one outward call may go ahead. */
-async function approve(runtime, api, name, args, context) {
-  const state = await api.snapshot?.(AgentDoc, context);
-  const tainted = Boolean(state?.tainted?.[api.conversationId]);
-  const target = await ruleTarget(runtime, name, args);
-  // A tainted conversation must ask even when a saved rule matches.
-  if (!tainted && target != null && Object.values(state?.rules || {}).some((rule) => rule.tool === name && rule.target === target)) return true;
-  const request = questionRequest({
-    id: `approve-${api.callId}`, title: "Allow this?",
-    questions: [{ id: "q1", header: "Approval", prompt: `${runtime.agent?.settings().name || "The agent"} wants to ${summary(name, args)}`
-      + (tainted ? "\n\nThis thread has read your chats: check that nothing private goes where it should not." : ""),
-    options: [{ id: "allow", label: "Allow once" }, { id: "always", label: "Always allow" }, { id: "deny", label: "Don't" }] }],
-  });
-  // Tagged with the request, so a replay's second push replaces the first on the device.
-  runtime.notify?.({ kind: "approval", conversationId: api.conversationId, text: request.questions[0].prompt, key: request.id });
-  const response = await runtime.ask(api.conversationId, request, context);
-  if (isDismissal(response)) return false;
-  const choice = answerTo(response, request.questions[0]).options[0]?.id;
-  if (choice === "always") {
-    await api.commit(async (tx) => {
-      const doc = await tx.doc(AgentDoc);
-      const id = nextId(doc, "r");
-      (doc.rules ||= {})[id] = { id, tool: name, target: target ?? "", label: ruleLabel(name, args), createdAt: new Date().toISOString() };
-    }, context);
+// JSON arguments have no cycles. Sort object keys recursively so equivalent calls share a grant.
+const canonical = (value) => Array.isArray(value) ? value.map(canonical)
+  : value && typeof value === "object" ? Object.fromEntries(Object.keys(value).sort().map((key) => [key, canonical(value[key])])) : value;
+const result = (text, id, isError = false) => ({ output: [{ type: "text", text }], isError, details: { ask: id } });
+
+function presentation(name, args) {
+  if (name.startsWith("mcp__")) {
+    const paths = connectorActions(name, args) || [];
+    const service = serviceOf(paths[0]);
+    const calls = connectorCalls(name, args);
+    const items = Array.isArray(args.calls) ? args.calls : args.calls ? [args.calls] : [];
+    const lines = calls ? calls.map((path, i) => {
+      const input = preview(items[i]?.input?.input ?? items[i]?.input).slice(0, 160);
+      return `${actionWords(path)}${input && input !== "{}" ? ` — ${input}` : ""}`;
+    }) : paths.map(actionWords);
+    const label = mcpLabel(name, args);
+    return { title: label[0].toUpperCase() + label.slice(1), service, lines: lines.slice(0, 4) };
   }
-  return choice === "allow" || choice === "always";
+  if (ALWAYS_OUTWARD[name]) {
+    const target = name === "start_chat" ? args.workspace || "a workspace" : args.chatId || "a chat";
+    return { title: name === "start_chat" ? `Start a chat in ${target}` : `Post in ${target}`, service: null,
+      lines: [String(target), String(name === "start_chat" ? args.prompt || "" : args.message || "").slice(0, 200)].filter(Boolean) };
+  }
+  const target = `${args.device}${args.folder ? ` · ${args.folder}` : ""}`;
+  return { title: name === "bash" ? `Run \`${String(args.command || "").slice(0, 80)}\` on ${args.device}` : `${name[0].toUpperCase() + name.slice(1)} on ${args.device}`,
+    service: null, lines: [target, String(name === "bash" ? args.command || "" : args.path || "").slice(0, 200)].filter(Boolean) };
+}
+
+/** Create an ask or consume one exact, single-use grant in the tool's commit. */
+async function approve(runtime, api, name, args, context, thread) {
+  const target = await ruleTarget(runtime, name, args);
+  const argsKey = createHash("sha256").update(JSON.stringify(canonical([name, args]))).digest("hex");
+  const task = await api.getTask(api.taskId, context);
+  const parentCallId = task?.input?.kind === "nested" ? task.input.parentCallId : null;
+  const info = presentation(name, args);
+  const now = new Date();
+  const outcome = await api.commit(async (tx) => {
+    const doc = await tx.doc(AgentDoc);
+    const asks = Object.values(doc.asks ||= {});
+    for (const ask of asks) if (ask.status === "pending" && ask.expiresAt <= now.toISOString()) ask.status = "expired";
+    // A replay of the original ask must never consume a later grant or match a new rule.
+    const replay = asks.find((ask) => (ask.toolCallId === api.callId && ask.sourceConversationId === api.conversationId) || ask.waiters?.some((waiter) => waiter.callId === api.callId && waiter.conversationId === api.conversationId));
+    if (replay) return { ask: replay, replay: true };
+    // A replay after consuming a grant must not execute the external call a second time.
+    const consumed = asks.find((ask) => ask.usedCallId === api.callId && ask.chatId === thread.chatId);
+    if (consumed) return { ask: consumed, consumed: true };
+    const grant = asks.find((ask) => ask.chatId === thread.chatId && ask.argsKey === argsKey && ask.status === "allowed");
+    const rule = !doc.tainted?.[api.conversationId] && target != null && Object.values(doc.rules || {}).some((item) => item.tool === name && item.target === target);
+    if (grant) { grant.status = "used"; grant.usedCallId = api.callId; return { allowed: true }; }
+    if (rule) return { allowed: true };
+    const pending = asks.find((ask) => ask.chatId === thread.chatId && ask.argsKey === argsKey && ask.status === "pending");
+    if (pending) { (pending.waiters ||= []).push({ callId: api.callId, conversationId: api.conversationId }); return { ask: pending, waiting: true }; }
+    const id = nextId(doc, "a");
+    const ask = { id, chatId: thread.chatId, conversationId: thread.conversationId, toolCallId: api.callId, parentCallId,
+      sourceConversationId: api.conversationId, tool: name, argsKey, ...info, createdAt: now.toISOString(),
+      expiresAt: new Date(now.getTime() + 86400_000).toISOString(), status: "pending", ruleTarget: target ?? "", ruleLabel: ruleLabel(name, args),
+      tainted: Boolean(doc.tainted?.[api.conversationId]) };
+    doc.asks[id] = ask;
+    return { ask, created: true };
+  }, context);
+  if (outcome.allowed) return null;
+  const { ask } = outcome;
+  if (outcome.consumed) return result(`This approved call was interrupted; it may already have run. Check its effects before trying again (ask ${ask.id}).`, ask.id, true);
+  if (outcome.created) runtime.notify?.({ kind: "approval", conversationId: thread.conversationId, text: `${runtime.agent.settings().name} wants to ${summary(name, args)}${ask.tainted ? "\n\nThis thread has read your chats: check that nothing private goes where it should not." : ""}`, key: ask.id });
+  if (outcome.waiting || (outcome.replay && ask.toolCallId !== api.callId)) return result(`Still waiting for approval (ask ${ask.id}). Do not repeat this call while it waits.${thread.run ? " Say in your report that it is waiting for approval." : ""}`, ask.id);
+  return result(`Asked the person to approve: ${ask.title} (ask ${ask.id}). Carry on with anything that does not depend on it. When they answer you will get a message; if they allow it, make this same call again with exactly the same arguments.${thread.run ? " Say in your report that it is waiting for approval." : ""}`, ask.id);
 }
 
 /** The wraps the agent extension applies to its threads' tools, built against the installed tools. */
@@ -188,12 +217,13 @@ export function policyWraps(runtime, tools) {
   return tools.filter((tool) => PLACED.includes(tool.name) || ALWAYS_OUTWARD[tool.name] || PRIVATE_READS[tool.name] || (tool.name.startsWith("mcp__") && !tool.connectorReadOnly)).map((target) =>
     wrapTool(target, (tool) => ({ ...tool, execute: async (args, api, context) => {
       if ((tool.name.startsWith("mcp__") && !connectorRead(tool.name, args)) || outward(tool.name, args)) {
-        const role = (await runtime.agent?.describe(api.conversationId))?.role;
-        if (role === "run") {
-          return refused(`Not done: this needs the person's approval (${summary(tool.name, args)}). `
-            + "A run cannot approve itself; say in your report exactly what to approve.");
-        }
-        if (!await approve(runtime, api, tool.name, args, context)) return refused("The person did not allow this; it was not done.");
+        const described = await runtime.agent.describe(api.conversationId);
+        const run = described?.role === "run";
+        const home = run ? await runtime.agent.home() : null;
+        const thread = { chatId: run ? home.chat.id : described?.chatId, conversationId: run ? home.conversationId : api.conversationId, run };
+        if (!thread.chatId) throw new Error("Agent thread not found");
+        const waiting = await approve(runtime, api, tool.name, args, context, thread);
+        if (waiting) return waiting;
       }
       const result = await tool.execute(args, api, context);
       if (privateRead(tool.name, args) && !result?.isError) {

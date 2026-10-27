@@ -467,7 +467,7 @@ values use the provider format and are never returned by the API.
 - `POST /v0/agent/connectors/:id/connect` starts OAuth.
 - `GET /v0/agent/connectors/:id/callback` completes OAuth with a single-use state.
 - `DELETE /v0/agent/connectors/:id` disconnects a connector.
-- `GET /v0/agent` includes saved approval rules; `DELETE /v0/agent/rules/:id` removes one.
+- `GET /v0/agent` includes asks and saved approval rules; `POST /v0/agent/asks/:id` decides an ask (`allow`, `always`, `deny`); `DELETE /v0/agent/rules/:id` removes one.
 - `GET /v0/push` returns the hub's VAPID public key and its push subscriptions
   (host of each endpoint only: an endpoint is a capability). `POST
   /v0/push/subscriptions` `{ endpoint, keys: { p256dh, auth }, kind, label }`
