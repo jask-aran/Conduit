@@ -1,4 +1,4 @@
-import { Capacitor } from "@capacitor/core";
+import { Capacitor, registerPlugin } from "@capacitor/core";
 import { createSignal } from "solid-js";
 import { api } from "../api/client.ts";
 import { installedClientKind } from "./installed-client.ts";
@@ -31,8 +31,9 @@ export type PushWay = "android" | "browser" | null;
 export type PushProblem = { text: string; distributors?: Distributor[] };
 
 const PATH_KEY = "conduit.push.path";
-let plugin: Promise<PushPlugin> | null = null;
-const native = () => plugin ??= import("@capacitor/core").then(({ registerPlugin }) => registerPlugin<PushPlugin>("ConduitPush"));
+let plugin: PushPlugin | null = null;
+// Never through a promise: a plugin has a `then` (any name is a native method), so a promise of one never settles.
+const native = () => plugin ??= registerPlugin<PushPlugin>("ConduitPush");
 
 /**
  * Which way in this device has: none in the desktop app yet (WebView2 has no push service), nor in a page without the
@@ -46,6 +47,10 @@ const hubKey = () => activeServer()?.id || location.origin;
 const storageKey = () => `conduit.push.${hubKey()}`;
 const read = (): Saved | null => { try { return JSON.parse(localStorage.getItem(storageKey()) || "null"); } catch { return null; } };
 const write = (saved: Saved | null) => { try { saved ? localStorage.setItem(storageKey(), JSON.stringify(saved)) : localStorage.removeItem(storageKey()); } catch { /* private window */ } };
+
+/** A native step that never answers fails, naming itself, instead of leaving the switch disabled for good. */
+const within = <T,>(step: string, work: Promise<T>, seconds = 15) => Promise.race([work,
+  new Promise<never>((_, reject) => setTimeout(() => reject(new Error(`Notifications: no answer while ${step}.`)), seconds * 1000))]);
 
 const bytes = (base64url: string) => Uint8Array.from(atob(base64url.replace(/-/g, "+").replace(/_/g, "/")), (c) => c.charCodeAt(0));
 
@@ -90,7 +95,7 @@ export async function startPush() {
     return;
   }
   if (way !== "android") return;
-  const push = await native();
+  const push = native();
   const consume = async () => { const tap = await push.consumeOpened(); if (tap.path) open(tap.instance, tap.path); };
   await push.addListener("opened", () => void consume());
   await push.addListener("endpoint", (endpoint: Endpoint) => void sync(endpoint));
@@ -131,9 +136,10 @@ export function createPushControl() {
   };
 
   const enableAndroid = async (publicKey: string, label: string) => {
-    const push = await native();
-    let { permission } = await push.status();
-    if (permission !== "granted") ({ permission } = await push.requestPermission());
+    const push = native();
+    let { permission } = await within("reading the app's state", push.status());
+    // Android's own prompt: as long as the person takes.
+    if (permission !== "granted") ({ permission } = await within("asking Android for permission", push.requestPermission(), 120));
     if (permission !== "granted") throw new Error("Notifications are off for Conduit in Android's settings.");
     const instance = hubKey();
     // The distributor answers on its own time; the endpoint event is the answer, the saved list a fallback.
@@ -146,7 +152,7 @@ export function createPushControl() {
       }).then((handle) => { listener = handle; });
     });
     try {
-      await push.register({ instance, vapid: publicKey, label: `Conduit · ${activeServer()?.name || location.host}` });
+      await within("registering with the push service", push.register({ instance, vapid: publicKey, label: `Conduit · ${activeServer()?.name || location.host}` }));
     } catch (error) {
       const code = (error as { code?: string }).code;
       if (code === "no_distributor") throw new Error("This phone has no Google Play services: install a UnifiedPush app such as ntfy, then turn this on.");
@@ -156,8 +162,8 @@ export function createPushControl() {
       }
       throw error;
     }
-    const endpoint = await arrived ?? (await push.endpoints()).endpoints.find((item) => item.instance === instance) ?? null;
-    if (!endpoint?.pubKey || !endpoint.auth) throw new Error("The distributor did not answer. Open it, check it is running, and try again.");
+    const endpoint = await arrived ?? (await within("reading endpoints", push.endpoints())).endpoints.find((item) => item.instance === instance) ?? null;
+    if (!endpoint?.pubKey || !endpoint.auth) throw new Error(`The push service did not answer (${(await push.status().catch(() => null))?.distributor || "no distributor"}).`);
     await remember(endpoint.url, { p256dh: endpoint.pubKey, auth: endpoint.auth }, "unifiedpush", label);
   };
 
@@ -182,17 +188,17 @@ export function createPushControl() {
   return {
     way, on, busy, problem, refresh,
     enable: (label: string) => run(async () => {
-      const { publicKey } = await api<HubPush>("/v0/push");
+      const { publicKey } = await within("asking the hub for its key", api<HubPush>("/v0/push"));
       if (way === "android") await enableAndroid(publicKey, label);
       else if (way === "browser") await enableBrowser(publicKey, label);
     }),
     disable: () => run(async () => {
-      if (way === "android") await (await native()).unregister({ instance: hubKey() });
+      if (way === "android") native().unregister({ instance: hubKey() });
       if (way === "browser") await (await (await navigator.serviceWorker.getRegistration())?.pushManager.getSubscription())?.unsubscribe();
       await forget();
     }),
     choose: (id: string, label: string) => run(async () => {
-      await (await native()).useDistributor({ id });
+      native().useDistributor({ id });
       const { publicKey } = await api<HubPush>("/v0/push");
       await enableAndroid(publicKey, label);
     }),
