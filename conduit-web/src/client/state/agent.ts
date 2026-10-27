@@ -18,6 +18,8 @@ export interface AgentProposal { id: string; file: string; op: "add" | "remove" 
 export interface AgentNotice { id: string; kind: string; text: string; at: string }
 export interface AgentView {
   enabled: boolean;
+  /** Its workspace: its folder, holding its memory files. */
+  projectId?: string;
   settings?: { name: string; dial: AgentDial; budgetUsdPerDay: number; timezone: string; brief: { enabled: boolean; at: string }; heartbeat: { enabled: boolean; everyMinutes: number } };
   home?: { chatId: string; conversationId: number } | null;
   sides?: Array<{ chatId: string; title: string; updatedAt?: string }>;
