@@ -5396,7 +5396,10 @@ function App() {
       onCleanup(() => { active = false; });
       void agentChat(id).then(async (target) => {
         if (!active || (slot === "main" ? routeKind() !== "agent" || paneAOverride() : slotPage(slot) !== "agent")) return;
-        await current.chat.initialize(target.chat, target.project);
+        // With its history: the page shows the thread's latest over its composer.
+        const detail = await api<TranscriptDetail>(`/v0/sessions/${encodeURIComponent(id)}`).catch(() => undefined);
+        if (!active) return;
+        await current.chat.initialize(target.chat, target.project, detail);
         if (active) setReady(true);
       }).catch(showError);
     }));
@@ -5405,15 +5408,14 @@ function App() {
       composer={<Show when={ready() && agentView()?.settings && agentView()?.home?.chatId}><PageComposer session={current} keyboardOwner={() => slot === "main" ? !sideHasKeyboard() : keyboardPane() === slot} onSendDraft={async (prompt) => {
         const id = agentView()?.home?.chatId;
         if (!id || current.chat.loadedId() !== id) return;
+        // Sent from the page, answered on it: the thread is a tap away (Open thread).
         current.chat.setDraft(prompt);
-        if (slot === "main") {
-          history.pushState({}, "", `/chat/${id}`);
-          await sendFromDashboard();
-        } else {
-          await setSlotView(slot, `chat:${id}`);
-          await current.chat.send();
-        }
+        await current.chat.send();
       }} /></Show>}
+      conversation={ready() ? { messages: () => current.chat.messages(), working: () => current.chat.streaming(), onOpen: () => {
+        const id = agentView()?.home?.chatId;
+        if (id) void agentChat(id).then((target) => openChatFromPage(target.chat, target.project)).catch(showError);
+      } } : undefined}
       onOpenFile={(path) => { const projectId = agentView()?.projectId; if (projectId) void openFileDocument({ projectId, path }, { beside: altActivation(), edit: false }); }}
       onOpenSettings={() => openSettings("agent")}
       onOpenChat={(id, event) => {
