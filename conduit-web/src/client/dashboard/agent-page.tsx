@@ -1,11 +1,13 @@
-import { createEffect, createMemo, createSignal, For, on, onCleanup, onMount, Show, type JSX } from "solid-js";
-import { Icons, StatusDot } from "@/components/ui";
+import { createEffect, createMemo, createSignal, For, on, onCleanup, onMount, Show, Suspense, type JSX } from "solid-js";
+import { Answer, Icons, Message as UserMessage, StatusDot } from "@/components/ui";
 import { Button, TextArea } from "@/components/ui/controls";
-import { DashIconButton, DashNote } from "@/components/ui/dashboard";
+import { DashConversation, DashIconButton, DashNote } from "@/components/ui/dashboard";
 import { Dialog } from "@/components/dialog";
 import { MenuRow } from "@/components/menus";
 import { api } from "../api/client";
-import type { AgentSummary, ChatSummary } from "../api/contracts";
+import type { AgentSummary, ChatSummary, Message } from "../api/contracts";
+import { ChatMarkdown } from "../chat/lazy-markdown";
+import { TraceStarting } from "../chat/turn-trace";
 import { agentNeeds, agentView, refreshAgent, type AgentRun, type AgentSchedule } from "../state/agent";
 import { SplitDashboard, SplitEmpty, SplitGroup, SplitHeader, SplitQuickActions, SplitRow } from "./primitives/split";
 
@@ -43,8 +45,10 @@ const when = (schedule: AgentSchedule) => schedule.kind === "daily" ? `Daily ${s
 export function AgentPage(props: {
   /** The page's header in its pane, titled with the agent's name. */
   header: (title: string) => JSX.Element;
-  /** The composer: what is sent goes to the agent's home thread. */
+  /** The composer: what is sent goes to the agent's home thread, and its answer comes in over it. */
   composer?: JSX.Element;
+  /** Its home thread, loaded: the page shows its latest over the composer, and opens the whole of it. */
+  conversation?: { messages: () => Message[]; working: () => boolean; onOpen: () => void };
   /** Opens one of its chats (a thread, a run's transcript, a question's thread), as a dashboard row opens a chat. */
   onOpenChat: (chatId: string, event?: MouseEvent) => void;
   /** Opens one of its memory files (a path in its folder) in the file viewer. */
@@ -182,6 +186,23 @@ export function AgentPage(props: {
     </For>
   </SplitGroup>;
 
+  // The latest of its home thread: what you said and what it said, each message it wrote; a line while it works.
+  // Its runs' reports and its work stay in the thread, a tap away.
+  const recent = createMemo(() => (props.conversation?.messages() ?? []).filter((message) =>
+    (message.role === "user" || message.role === "assistant") && !message.agent && (message.content || "").trim()
+    && !(message as { discarded?: boolean }).discarded && message.stopReason !== "error").slice(-24));
+  const conversation = () => <Show when={props.conversation}>{(thread) =>
+    <DashConversation label={`${name()}'s home thread`} open={{ label: "Open thread", onOpen: thread().onOpen }}>
+      <Show when={recent().length} fallback={<SplitEmpty>Say something to {name()}.</SplitEmpty>}>
+        <For each={recent()}>{(message) => message.role === "user"
+          ? <UserMessage>{message.content}</UserMessage>
+          : <Answer><Suspense fallback={message.content}><ChatMarkdown>{message.content}</ChatMarkdown></Suspense></Answer>}
+        </For>
+      </Show>
+      <Show when={thread().working()}><TraceStarting label="Working" /></Show>
+    </DashConversation>}
+  </Show>;
+
   const spent = () => {
     const settings = view()?.settings;
     return settings ? `$${(view()?.spentToday || 0).toFixed(2)} of $${settings.budgetUsdPerDay.toFixed(2)} today` : null;
@@ -199,6 +220,7 @@ export function AgentPage(props: {
             { icon: <Icons.NewChat />, label: "New thread", onClick: () => void newThread() },
           ]} manage={() => <MenuRow icon={<Icons.Settings />} onSelect={props.onOpenSettings}>Settings</MenuRow>} />}
           notice={error() ? <DashNote error>{error()}</DashNote> : undefined}
+          conversation={conversation()}
           composer={props.composer}
           list={threadsGroup()}
           aside={<>{needsGroup()}{workingGroup()}{schedulesGroup()}{watchesGroup()}{rulesGroup()}{memoryGroup()}{recentGroup()}</>} />
