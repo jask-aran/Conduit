@@ -85,6 +85,8 @@ export function createTimelineStore(
   tools: Accessor<ToolItem[]>,
   activeGeneration: Accessor<ActiveGenerationView | null>,
   activeGenerationChange: Accessor<LiveGenerationChange | null> = () => null,
+  /** The persistent agent's threads draw every message it writes (turn-rows.ts `TurnLayout`). */
+  conversational: Accessor<boolean> = () => false,
 ) {
   const [rows, setRows] = createStore<TimelineRow[]>([]);
   /*
@@ -202,9 +204,13 @@ export function createTimelineStore(
     return location.rowKey;
   };
 
+  let laidOutConversational = false;
   createEffect(() => {
     const inputMessages = messages();
     const inputTools = tools();
+    const layout = { conversational: conversational() };
+    // A chat changing layout is laid out again whole.
+    if (layout.conversational !== laidOutConversational) { laidOutConversational = layout.conversational; persistedTurns = []; persistedMessages = null; }
     const inputGeneration = activeGeneration();
     const change = activeGenerationChange();
     const canNarrow = Boolean(inputGeneration && change && change.generationId === inputGeneration.id
@@ -225,7 +231,7 @@ export function createTimelineStore(
       || settledPrefixChanged(persistedMessages, inputMessages)
     );
     if (mustRefreshPersisted) {
-      const projection = projectPersistedTurns(inputMessages, inputTools, persistedTurns);
+      const projection = projectPersistedTurns(inputMessages, inputTools, persistedTurns, layout);
       persistedRows = projection.rows;
       persistedTurns = projection.turns;
       persistedMessages = inputMessages;
@@ -234,14 +240,14 @@ export function createTimelineStore(
     // A turn that ended without saying how is stated by the server, so every
     // finished turn arrives here with its outcome.
     const projected = stableProjection(previousProjectedRows, inputGeneration
-      ? projectLiveTurn(persistedRows, inputMessages, inputGeneration, inputTools)
+      ? projectLiveTurn(persistedRows, inputMessages, inputGeneration, inputTools, layout)
       : persistedRows);
     setRows(reconcile(owned(projected), { key: "key" }));
     previousProjectedRows = projected;
     previousMessages = inputMessages;
     previousTools = inputTools;
     rowIndexes = new Map(projected.map((row, index) => [row.key, index]));
-    liveIndex = inputGeneration ? buildLiveProjectionIndex(inputGeneration, inputMessages) : null;
+    liveIndex = inputGeneration ? buildLiveProjectionIndex(inputGeneration, inputMessages, layout) : null;
   });
   return rows;
 }
