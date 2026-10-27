@@ -35,7 +35,8 @@ const store = createRoot(() => {
   const [view, setView] = createSignal<AgentView | null>(null);
   let asking: Promise<AgentView | null> | null = null;
   const refresh = () => asking ??= api<AgentView>("/v0/agent")
-    .then((next) => { setView(next); return next; })
+    // Unchanged, the same object stays: a new one each poll redrew everything drawn from it.
+    .then((next) => { if (JSON.stringify(next) !== JSON.stringify(view())) setView(next); return view(); })
     .catch(() => view())
     .finally(() => { asking = null; });
   // Quiet enough to leave running: what waits on the person shows in the sidebar within a minute, and at once on return.

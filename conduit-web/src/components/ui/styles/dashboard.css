@@ -56,7 +56,8 @@
   mask-image: linear-gradient(transparent, #000 var(--space-xl)); }
 .ui-dash-conversation-scroll > * + * { margin-top: var(--space-lg); }
 /* A transcript here has no header over it and its composer under it, not over it: nothing to clear at either end. */
-.ui-dash-conversation-scroll[data-scrolls] { --header-height: 0px; --transcript-composer-inset: var(--space-md); display: flex; overflow: hidden; flex-direction: column; padding: 0; }
+/* No mask over one: a masked box round a scroller that composites on its own flickers as the page animates behind it. */
+.ui-dash-conversation-scroll[data-scrolls] { --header-height: 0px; --transcript-composer-inset: var(--space-md); display: flex; overflow: hidden; flex-direction: column; padding: 0; mask-image: none; }
 .ui-dash-conversation-scroll[data-scrolls] > * { min-height: 0; flex: 1; }
 .ui-dash-conversation-open { display: inline-flex; align-self: flex-end; align-items: center; gap: var(--space-2xs); border: 0; background: none; padding: var(--space-2xs) 0;
   color: var(--muted-foreground); font: inherit; font-size: var(--text-row); cursor: pointer; }

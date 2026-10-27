@@ -5389,7 +5389,10 @@ function App() {
     const current = slot === "main" ? session : paneSlot(slot).session;
     const [ready, setReady] = createSignal(false);
     onMount(() => { void refreshAgent(); });
-    createEffect(on(() => agentView()?.settings ? agentView()?.home?.chatId : undefined, (id) => {
+    // By its id, compared: every refresh of the agent's state is a new object, and re-entering the thread for each
+    // one reset the chat every 10 s (the page flashed).
+    const homeId = createMemo(() => agentView()?.settings ? agentView()?.home?.chatId : undefined);
+    createEffect(on(homeId, (id) => {
       setReady(false);
       if (!id) return;
       let active = true;
