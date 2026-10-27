@@ -1,4 +1,5 @@
 import { remoteNode } from "./place.js";
+import { connectorSubject } from "./agent/connector-services.js";
 import crypto from "node:crypto";
 import { answerTo, isDismissal, questionRequest } from "./harnesses/questions.js";
 import fs from "node:fs/promises";
@@ -71,6 +72,7 @@ const TOOL_KINDS = {
 const subjectOf = (name, args = {}) => toolSubject(
   name === "subagent" ? (args.action === "list" ? "Background agents" : args.id || subagentTitle(args.task))
     : name === "codemode" ? null
+    : name.startsWith("mcp__") ? connectorSubject(name, args)
     : name === "bash" ? args.command
     : name === "web_search" ? args.queries || args.query
       : name === "fetch_content" ? args.urls || args.url
@@ -103,7 +105,8 @@ function codemodeResult(name, details) {
   if (name !== "codemode" || !Array.isArray(details?.calls)) return {};
   const calls = details.calls.map((call) => {
     let input = call.args;
-    if (typeof input === "string") try { input = JSON.parse(input); } catch { input = null; }
+    // A preview cut short does not parse: what it shows is kept for what can be read off it (a connector's paths).
+    if (typeof input === "string") try { input = JSON.parse(input); } catch { input = { preview: input }; }
     return { name: call.name, input, isError: call.status === "error", durationMs: call.durationMs };
   });
   return { calls: settledCalls(calls, SCRIPT_TOOLS), subject: callsSubject(calls) };
