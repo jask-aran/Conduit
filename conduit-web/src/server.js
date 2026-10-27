@@ -498,15 +498,18 @@ app.get("/v0/downloads", async (_request, response) => {
     const names = (await fs.readdir(desktopUpdateDir).catch(() => [])).filter((name) => name.endsWith(suffix));
     const dated = await Promise.all(names.map(async (name) => ({ name, at: (await fs.stat(path.join(desktopUpdateDir, name))).mtimeMs })));
     const found = dated.sort((left, right) => right.at - left.at)[0];
-    return found ? `/desktop-updates/${encodeURIComponent(found.name)}` : null;
+    return found ? { url: `/desktop-updates/${encodeURIComponent(found.name)}`, name: found.name } : null;
   };
   if (!downloadsListed || Date.now() - downloadsListed.at > 10_000) {
     const listed = { at: Date.now(), urls: Promise.all([newest("-setup.exe"), newest(".apk")]) };
     listed.urls.catch(() => { if (downloadsListed === listed) downloadsListed = null; });
     downloadsListed = listed;
   }
-  const [windowsUrl, apkUrl] = await downloadsListed.urls;
-  response.set("Cache-Control", "no-store").json({ windowsUrl, apkUrl });
+  const [windows, apk] = await downloadsListed.urls;
+  // A dev APK is named for the version it was stamped with (scripts/build-android-dev.sh): the dev app's updater
+  // compares that with its own.
+  const apkVersion = apk?.name.match(/^Conduit Dev_(.+)\.apk$/)?.[1] || null;
+  response.set("Cache-Control", "no-store").json({ windowsUrl: windows?.url || null, apkUrl: apk?.url || null, apkVersion });
 });
 
 // The interface as one download, for an installed client's live update. Ahead

@@ -125,6 +125,27 @@ let androidUpdater: Promise<UpdaterPlugin> | null = null;
 const updater = () => androidUpdater ??= import("@capacitor/core").then(({ registerPlugin }) => registerPlugin<UpdaterPlugin>("ConduitUpdater"));
 let readyAndroidVersion: string | null = null;
 
+/**
+ * The APK newer than this app, if there is one. A released app takes GitHub's latest release. The development app
+ * takes the newest development APK the server it uses publishes (scripts/build-android-dev.sh), by the build stamp in
+ * its version: so a native change reaches the phone as an update here rather than a side-load.
+ */
+async function androidRelease(): Promise<{ version: string; apkUrl: string } | null> {
+  const { App } = await import("@capacitor/app");
+  const app = await App.getInfo();
+  if (!app.id.endsWith(".dev")) {
+    const { isNewerVersion, latestRelease } = await import("./github-release.ts");
+    const release = await latestRelease();
+    return release?.apkUrl && isNewerVersion(release.version, app.version) ? { version: release.version, apkUrl: release.apkUrl } : null;
+  }
+  const [{ api }, { httpUrl }] = await Promise.all([import("../api/client.ts"), import("../api/transport.js")]);
+  const own = await api<{ apkUrl: string | null; apkVersion: string | null }>("/v0/downloads").catch(() => null);
+  // An app built without a stamp (before this) is older than any stamped build.
+  const stamp = (version: string) => version.match(/-dev\.(\d{14})\./)?.[1] ?? "";
+  if (!own?.apkUrl || !own.apkVersion || stamp(own.apkVersion) <= stamp(app.version)) return null;
+  return { version: own.apkVersion, apkUrl: new URL(httpUrl(own.apkUrl), location.href).href };
+}
+
 export const androidShell = installedClientKind !== "android" ? null : {
   async version(): Promise<string | null> {
     try {
@@ -140,11 +161,8 @@ export const androidShell = installedClientKind !== "android" ? null : {
    */
   async prepareUpdate(onProgress?: (update: UpdateProgress) => void, quiet = false): Promise<PreparedDesktopUpdate> {
     if (readyAndroidVersion) return { kind: "ready", version: readyAndroidVersion };
-    const { isNewerVersion, latestRelease } = await import("./github-release.ts");
-    const release = await latestRelease();
-    if (!release?.apkUrl) return { kind: "current" };
-    const { App } = await import("@capacitor/app");
-    if (!isNewerVersion(release.version, (await App.getInfo()).version)) return { kind: "current" };
+    const release = await androidRelease();
+    if (!release) return { kind: "current" };
     const plugin = await updater();
     const listener = await plugin.addListener("progress", (progress) => onProgress?.({ version: release.version, ...progress }));
     try {
