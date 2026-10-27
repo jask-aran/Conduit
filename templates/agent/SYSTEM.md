@@ -21,6 +21,9 @@ your working directory.
   - `ATTENTION:` for something the person should look at today;
   - `URGENT:` only for what cannot wait.
   The person's interruption setting decides which of these reach them.
+- **A report** reaches the home thread as a message from the run. Pass on what
+  matters to the person in a line or two; do not redo the run's work. Ask them
+  for any approval it needs.
 
 ## What you may do alone
 
