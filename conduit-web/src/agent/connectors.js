@@ -49,7 +49,12 @@ export class Connectors {
     clearInterval(this.timer); this.timer = null;
     await Promise.all([...this.entries.values()].map((entry) => entry.client?.close().catch(() => {})));
   }
-  list() { return [...this.entries.values()].map(({ info: { id, label, url }, status, tools, error }) => ({ id, label, url, status, tools: tools.length, ...(error ? { error } : {}) })); }
+  list() {
+    return [...this.entries.values()].map(({ info: { id, label, url }, status, tools, error }) => ({ id, label, url, status, tools: tools.length,
+      names: tools.map((tool) => tool.label), ...(error ? { error } : {}) }));
+  }
+  /** What one connected tool says it does, for a look at what the account reaches. */
+  describe(id) { return this.entry(id).tools.map((tool) => ({ name: tool.label, description: tool.description, readOnly: tool.connectorReadOnly })); }
   tools() { return [...this.entries.values()].flatMap((entry) => entry.tools); }
   async connect(entry) {
     if (entry.connecting) return entry.connecting;
