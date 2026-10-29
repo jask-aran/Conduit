@@ -78,7 +78,17 @@ Built (2026-10-29): **the gated heartbeat.** It ticks every 30 minutes outside q
 sweep is due (`heartbeat.everyMinutes`, shown as Checklist every; `heartbeatSweptAt` records the last). Its task
 names what it found. A beat that tells no one but handled entries or set check-backs leaves a quiet line in the
 home thread, a display entry (`conduit.agent-beat`, "Heartbeat · 2 handled · 1 check-back set") that opens its run
-and starts no turn. Not yet: feeds, open loops, night upkeep.
+and starts no turn.
+
+Built (2026-10-29): **feeds** (`conduit-web/src/agent/feeds.js`). A feed is a schedule item with a `feed`: a
+read-only Executor program (checked: literal tool paths, read actions only), a script in jbot's sandboxed folder,
+or a model run for what needs judgement. The hub runs a program or script on the feed's clock without a model; the
+output is a JSON list of `{ id, title, detail?, at?, level?, url? }`. Ids seen are kept (500); the first run only
+learns what is there; later runs put what is new in one inbox entry a tick (its lines in the entry's body). jbot
+adds feeds with the `feed` tool (list, test, add), and adding one asks the person (a card with the program, no
+Always); the person adds and removes them over `/v0/agent/feeds`. The page lists them under Feeds. First feed:
+Email, every 30 minutes, the inbox's last two days without promotions and social. Not yet: an urgent feed entry
+waking jbot at once (it waits for the next beat), open loops, night upkeep.
 
 **It asks only when it needs something.** No small-talk check-ins: a task or open loop that needs your input
 asks, batched, never in quiet hours.

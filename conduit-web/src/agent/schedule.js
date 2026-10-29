@@ -1,6 +1,7 @@
 import { defineTask, defineTool } from "@earendil-works/pi-durable";
 import { Type } from "@earendil-works/pi-ai";
 import { AgentDoc, nextId } from "./agent-doc.js";
+import { applyOutcome, runSource } from "./feeds.js";
 import { heartbeatPlan, heartbeatTask } from "./inbox.js";
 
 const BRIEF = "Morning brief. Look at what changed since the last brief: the person's calendar and mail if connected, "
@@ -101,15 +102,20 @@ function makeClock(runtime) {
         const beat = schedule.id === "heartbeat" && schedule.system;
         const plan = beat && !missed ? await api.memo(`plan:${slot}`, await heartbeatPlan(agent, await api.snapshot(AgentDoc, context), api.now()), context) : null;
         const idle = beat && !plan;
-        const overBudget = !missed && !idle && await agent.overBudget();
+        // A feed that reads (a program, a script) runs here, without a model; a run feed is a run like any other.
+        const direct = schedule.feed && schedule.feed.source.kind !== "run";
+        const outcome = direct && !missed ? await api.memo(`feed:${slot}`, await runSource(agent, schedule.feed.source), context) : null;
+        const overBudget = !missed && !idle && !direct && await agent.overBudget();
         if (overBudget) await agent.notice("budget", `Skipped ${schedule.title}: today's budget of $${agent.settings().budgetUsdPerDay} is spent.`);
         await api.commit(async (tx) => {
           const doc = await tx.doc(AgentDoc);
           const current = doc.schedules[task.input.scheduleId];
           if (!current || current.cancelling || current.clock !== task.id) return terminal();
-          if (!missed && !idle && !overBudget) {
+          if (direct) { if (outcome) applyOutcome(doc, current, outcome, slot); }
+          else if (!missed && !idle && !overBudget) {
             await agent.spawnRun(tx, api.conversationId, {
-              key: `${current.id}:${slot}`, kind: current.system ? current.id : "checkback", title: current.title, task: plan ? heartbeatTask(plan) : current.task,
+              key: `${current.id}:${slot}`, kind: current.feed ? "feed" : current.system ? current.id : "checkback", title: current.title,
+              task: plan ? heartbeatTask(plan) : current.feed ? current.feed.source.task : current.task,
             });
             if (plan?.sweep) doc.heartbeatSweptAt = slot;
             if (plan?.newest) doc.heartbeatSeenAt = plan.newest;
@@ -123,6 +129,20 @@ function makeClock(runtime) {
     },
     abort: async (task, api, context) => { await api.commit(() => ({ status: "terminal", outcome: { status: "aborted" } }), context); },
   });
+}
+
+/**
+ * Add a schedule item with its clock, in a commit on the home conversation: a feed's (feeds.js), from jbot or the
+ * person. A feed's first run comes a minute later, so it learns what is there before anything new arrives.
+ */
+export function clockAdder(runtime) {
+  const clock = makeClock(runtime);
+  return async (tx, doc, item, conversationId) => {
+    const zone = runtime.agent.settings().timezone;
+    item.clock = await tx.createTask(clock, { scheduleId: item.id }, clockOptions(conversationId));
+    item.nextAt = new Date(item.feed ? Date.now() + 60_000 : nextTime(item, zone, Date.now())).toISOString();
+    doc.schedules[item.id] = { lastAt: null, system: false, createdAt: new Date().toISOString(), zone, ...item };
+  };
 }
 
 /** Tools and clocks resolve the agent only when they run. */
@@ -220,7 +240,7 @@ export function ScheduleTools(runtime) {
       return result(`Scheduled ${item.id}: ${item.title}`);
     },
   });
-  return { tools: [schedule], tasks: [clock] };
+  return { tools: [schedule], tasks: [clock], addClocked: clockAdder(runtime) };
 }
 
 const seeding = new WeakMap();
@@ -276,6 +296,24 @@ export async function seedSchedules(agent) {
   try { await work; } finally { if (seeding.get(agent) === work) seeding.delete(agent); }
 }
 
+/** Remove a schedule or a feed the person or the agent made (not a settings-owned one): its clock first. */
+export async function cancelSchedule(agent, id) {
+  const marked = await agent.update((doc) => {
+    const item = Object.hasOwn(doc.schedules, id) ? doc.schedules[id] : null;
+    if (!item || item.system) return null;
+    item.cancelling = true;
+    return { clock: item.clock };
+  });
+  if (!marked) return false;
+  const harness = await agent.runtime.open();
+  if (marked.clock) {
+    await harness.abortTask(marked.clock, agent.context).catch(() => {});
+    await harness.waitForTask(marked.clock, agent.context).catch(() => {});
+  }
+  await agent.update((doc) => { if (doc.schedules[id]?.clock === marked.clock) delete doc.schedules[id]; });
+  return true;
+}
+
 export async function listSchedules(agent) {
   if (!agent?.enabled()) return [];
   const zone = agent.settings().timezone;
@@ -283,7 +321,8 @@ export async function listSchedules(agent) {
   return Object.values((await agent.state()).schedules).map((item) => {
     const { id, title, kind, at, everyMinutes, lastAt, system } = item;
     const nextAt = item.nextAt || new Date(nextTime(item, zone, now)).toISOString();
-    return { id, title, kind, at, everyMinutes, nextAt, lastAt, system };
+    const feed = item.feed && { source: item.feed.source.kind, lastRunAt: item.feed.lastRunAt, lastCount: item.feed.lastCount, lastError: item.feed.lastError, primed: item.feed.primed };
+    return { id, title, kind, at, everyMinutes, nextAt, lastAt, system, ...(feed ? { feed } : {}) };
   })
     .sort((a, b) => (a.nextAt || "9999").localeCompare(b.nextAt || "9999"));
 }

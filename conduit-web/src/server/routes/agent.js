@@ -4,8 +4,10 @@ import { originOfRequest } from "../../server-identity.js";
 import { chatView } from "../../chat-store.js";
 import { listWatches, webhook } from "../../agent/events.js";
 import { acceptProposal, listProposals, rejectProposal } from "../../agent/memory.js";
-import { listSchedules } from "../../agent/schedule.js";
+import { cancelSchedule, clockAdder, listSchedules } from "../../agent/schedule.js";
+import { feedItem, feedProblem, runSource, sourceProblem } from "../../agent/feeds.js";
 import { decide } from "../../agent/asks.js";
+import { AgentDoc } from "../../agent/agent-doc.js";
 import { backgroundSubagents } from "../subagents.js";
 
 /**
@@ -17,6 +19,9 @@ import { backgroundSubagents } from "../subagents.js";
  * POST /v0/agent/asks/:id            decide an approval { choice }
  * POST /v0/agent/threads             a side thread { title? }
  * POST /v0/agent/wake                a run now { task, title? }
+ * POST /v0/agent/feeds               add a feed { title, everyMinutes, source, level? } (feeds.js)
+ * POST /v0/agent/feeds/test          run a source once { source }: { items, error? }; saves nothing
+ * DELETE /v0/agent/feeds/:id         remove a feed
  * POST /v0/agent/proposals/:id/{accept,reject}
  * DELETE /v0/agent/notices/:id      a notice read (it leaves the attention list)
  * DELETE /v0/agent/rules/:id        remove a saved approval rule
@@ -164,6 +169,45 @@ export function registerAgentRoutes(app, { agent, backends }) {
       if (!task) return response.status(400).json({ error: "invalid_task" });
       const run = await agent.wake({ key: `manual:${crypto.randomUUID()}`, kind: "manual", title: String(request.body?.title || "").trim() || undefined, task });
       response.status(run ? 202 : 409).json(run ? { id: run.id, conversationId: run.child } : { error: "agent_over_budget" });
+    } catch (error) { next(error); }
+  });
+
+  // The person adds a feed directly: they are who jbot's feeds would ask.
+  let addClocked = null;
+  app.post("/v0/agent/feeds", async (request, response, next) => {
+    try {
+      if (!enabled(response)) return;
+      const body = { title: request.body?.title, everyMinutes: Number(request.body?.everyMinutes), source: request.body?.source, level: request.body?.level };
+      const problem = feedProblem(body);
+      if (problem) return response.status(400).json({ error: "invalid_feed", message: problem });
+      const { conversationId } = await agent.home();
+      const harness = await agent.runtime.open();
+      const conversation = await harness.conversation(conversationId, agent.context);
+      addClocked ||= clockAdder(agent.runtime);
+      const id = await conversation.commit(async (tx) => {
+        const doc = await tx.doc(AgentDoc);
+        const item = feedItem(doc, body, "person");
+        await addClocked(tx, doc, item, conversationId);
+        return item.id;
+      }, agent.context);
+      response.status(201).json({ id });
+    } catch (error) { next(error); }
+  });
+  app.post("/v0/agent/feeds/test", async (request, response, next) => {
+    try {
+      if (!enabled(response)) return;
+      const problem = sourceProblem(request.body?.source);
+      if (problem) return response.status(400).json({ error: "invalid_source", message: problem });
+      response.json(await runSource(agent, request.body.source));
+    } catch (error) { next(error); }
+  });
+  app.delete("/v0/agent/feeds/:id", async (request, response, next) => {
+    try {
+      if (!enabled(response)) return;
+      const item = (await agent.state()).schedules[request.params.id];
+      if (!item?.feed) return response.status(404).json({ error: "feed_not_found" });
+      await cancelSchedule(agent, request.params.id);
+      response.status(204).end();
     } catch (error) { next(error); }
   });
 
