@@ -64,23 +64,27 @@ export function inQuietHours(settings, now = Date.now()) {
 }
 
 /**
- * What a heartbeat tick has to decide, or null when nothing: no model call (Block II's gated tick). It reads the
- * unhandled inbox every tick and goes through HEARTBEAT.md once its interval (`heartbeat.everyMinutes`) has passed
- * since the last sweep; neither in quiet hours.
+ * What a heartbeat tick has to decide, or null when nothing: no model call (Block II's gated tick). It looks at the
+ * inbox every tick but runs only for entries that came in since the last beat that saw it (`heartbeatSeenAt`): one
+ * left unhandled is not decided again each tick; the home thread still shows it. It goes through HEARTBEAT.md once
+ * its interval (`heartbeat.everyMinutes`) has passed since the last sweep. Neither in quiet hours.
  */
 export async function heartbeatPlan(agent, state, now = Date.now()) {
   const settings = agent.settings();
   if (inQuietHours(settings, now)) return null;
-  const inbox = listInbox(state, { unhandled: true }).length;
+  const waiting = listInbox(state, { unhandled: true });
+  const seen = Date.parse(state?.heartbeatSeenAt || "") || 0;
+  const fresh = waiting.filter((item) => Date.parse(item.at) > seen);
+  const inbox = fresh.length;
   const due = now - (Date.parse(state?.heartbeatSweptAt || "") || 0) >= settings.heartbeat.everyMinutes * 60000;
   const sweep = due && (await fs.readFile(path.join(agent.folder, "HEARTBEAT.md"), "utf8").catch(() => ""))
     .replace(/<!--[\s\S]*?-->/g, "").split(/\r?\n/).some((row) => /^\s*(?:[-*+]|\d+[.)])\s+\S/.test(row));
-  return inbox || sweep ? { inbox, sweep } : null;
+  return inbox || sweep ? { inbox, waiting: waiting.length, newest: fresh[0]?.at ?? null, sweep } : null;
 }
 
 /** A heartbeat run's task, for what its tick found. */
-export const heartbeatTask = ({ inbox, sweep }) => ["Heartbeat.",
-  inbox ? `Your inbox has ${inbox} unhandled ${inbox === 1 ? "entry" : "entries"}: read them (inbox list; inbox read for a `
+export const heartbeatTask = ({ inbox, waiting = inbox, sweep }) => ["Heartbeat.",
+  inbox ? `${inbox} new ${inbox === 1 ? "entry" : "entries"} in your inbox (${waiting} unhandled in all): read them (inbox list; inbox read for a `
     + "whole report). For each decide: nothing to do, act (a check-back with schedule, a chat to start), or tell the person; "
     + "then mark it with inbox handle and what you did." : "",
   sweep ? "Go through HEARTBEAT.md in your folder and check each item." : "",

@@ -5,7 +5,31 @@ import { defineTool, section } from "@earendil-works/pi-durable";
 import { Type } from "@earendil-works/pi-ai";
 import { AgentDoc, nextId } from "./agent-doc.js";
 
-const FILES = { identity: "IDENTITY.md", user: "USER.md", memory: "MEMORY.md", heartbeat: "HEARTBEAT.md" };
+const FILES = { soul: "SOUL.md", user: "USER.md", memory: "MEMORY.md", heartbeat: "HEARTBEAT.md" };
+
+/** The persona was IDENTITY.md until it took the name the products use (SOUL.md); an agent made before moves on. */
+export async function migrateSoul(folder) {
+  if (!folder) return;
+  const from = path.join(folder, "IDENTITY.md");
+  const to = path.join(folder, "SOUL.md");
+  if (await fs.stat(to).catch(() => null)) return;
+  await fs.rename(from, to).catch((error) => { if (error.code !== "ENOENT") throw error; });
+}
+
+/** Where an added line goes: under `## section` (made at the end if missing), after its last line; else the end. */
+function addUnder(content, section, text) {
+  if (!section) return `${content}${text}\n`;
+  const lines = linesOf(content);
+  const heading = lines.findIndex((line) => lineText(line).replace(/^##\s+/, "").trim().toLowerCase() === section.trim().toLowerCase() && /^##\s/.test(line));
+  if (heading < 0) return `${content}${content.endsWith("\n\n") || !content ? "" : "\n"}## ${section.trim()}\n${text}\n`;
+  let end = heading + 1;
+  while (end < lines.length && !/^#{1,2}\s/.test(lines[end])) end++;
+  // After the section's last line with text, so a blank line before the next heading stays.
+  let at = end;
+  while (at > heading + 1 && !lineText(lines[at - 1]).trim()) at--;
+  lines.splice(at, 0, `${text}\n`);
+  return lines.join("");
+}
 const locks = new Map();
 const provenance = / <!-- conduit by:(home|side|run|agent) chat:([^\s]+) call:([^\s]+) at:(\d{4}-\d\d-\d\dT[^\s]+)(?: accepted:(\d{4}-\d\d-\d\d))? -->$/;
 const result = (text, isError = false) => ({ output: [{ type: "text", text }], ...(isError ? { isError: true } : {}) });
@@ -89,7 +113,7 @@ async function edit(agent, file, date, op, text, attribution) {
       if (file === "diary" && !content) content = `# ${date} ${comment}\n`;
       if (content && !content.endsWith("\n")) content += "\n";
       const time = file === "diary" ? `${new Intl.DateTimeFormat("en-GB", { timeZone: agent.settings().timezone, hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(new Date(attribution.at))} ` : "";
-      content += `- ${time}${text} ${comment}\n`;
+      content = addUnder(content, file === "diary" ? null : attribution.section, `- ${time}${text} ${comment}`);
     }
     await write(target, content);
   });
@@ -151,10 +175,10 @@ async function search(agent, query) {
 
 async function render(agent) {
   const today = agent.today();
-  const [identity, user, memory, diary] = await Promise.all(["identity", "user", "memory", "diary"].map(async (file) => read(await filePath(agent, file, today))));
+  const [soul, user, memory, diary] = await Promise.all(["soul", "user", "memory", "diary"].map(async (file) => read(await filePath(agent, file, today))));
   const diaryLines = linesOf(diary);
   const memoryLines = linesOf(memory);
-  const build = () => `Your name is ${agent.settings().name}.\n# Identity\n${compact(identity)}\n# About the person\n${compact(user)}\n# Memory\n${compact(memoryLines.join(""))}\n# Today\n${compact(diaryLines.join(""))}`;
+  const build = () => `Your name is ${agent.settings().name}.\n# Soul\n${compact(soul)}\n# About the person\n${compact(user)}\n# Memory\n${compact(memoryLines.join(""))}\n# Today\n${compact(diaryLines.join(""))}`;
   let output = build();
   for (const lines of [diaryLines, memoryLines]) {
     for (let i = 0; output.length > 16000 && i < lines.length;) {
@@ -173,7 +197,8 @@ export function MemoryTools(runtime) {
     replay: "unsafe",
     parameters: Type.Object({
       action: Type.Union([Type.Literal("read"), Type.Literal("add"), Type.Literal("remove"), Type.Literal("search")]),
-      file: Type.Optional(Type.Union([Type.Literal("identity"), Type.Literal("user"), Type.Literal("memory"), Type.Literal("heartbeat"), Type.Literal("diary")])),
+      file: Type.Optional(Type.Union([Type.Literal("soul"), Type.Literal("user"), Type.Literal("memory"), Type.Literal("heartbeat"), Type.Literal("diary")])),
+      section: Type.Optional(Type.String({ description: "For add: the ## heading in the file to put the line under, e.g. People or Commitments." })),
       text: Type.Optional(Type.String()), query: Type.Optional(Type.String()), date: Type.Optional(Type.String()),
     }),
     execute: async (args, api, context) => {
@@ -186,7 +211,7 @@ export function MemoryTools(runtime) {
         const date = args.date === undefined ? agent.today() : args.date;
         if (file === "diary" && !/^\d{4}-\d{2}-\d{2}$/.test(date)) return result("Date must be YYYY-MM-DD.", true);
         if (args.action === "read") return result(compact(await read(await filePath(agent, file, date))));
-        if (file === "identity") return result("Identity belongs to the person.", true);
+        if (file === "soul") return result("Your soul belongs to the person: suggest the change to them instead.", true);
         if (!args.text || !args.text.trim() || /[\r\n]/.test(args.text)) return result("Provide one non-empty line of text.", true);
         const origin = await agent.describe(api.conversationId);
         const by = origin?.role || "agent";
@@ -196,11 +221,11 @@ export function MemoryTools(runtime) {
             const doc = await tx.doc(AgentDoc);
             if (Object.values(doc.proposals).some((proposal) => proposal.callId === api.callId && proposal.conversationId === api.conversationId)) return;
             const id = nextId(doc, "p");
-            doc.proposals[id] = { id, file, op: args.action, text: args.text, by, chatId: origin?.chatId || null, conversationId: api.conversationId, callId: api.callId, at };
+            doc.proposals[id] = { id, file, op: args.action, text: args.text, ...(args.section ? { section: args.section } : {}), by, chatId: origin?.chatId || null, conversationId: api.conversationId, callId: api.callId, at };
           }, context);
           return result("Proposed; the person will accept or reject it.");
         }
-        await edit(agent, file, date, args.action, args.text, { by, chatId: origin?.chatId, callId: api.callId, at });
+        await edit(agent, file, date, args.action, args.text, { by, chatId: origin?.chatId, callId: api.callId, at, section: args.section });
         return result(args.action === "add" ? "Added." : "Removed.");
       } catch (error) { return result(error.message || "Memory operation failed.", true); }
     },

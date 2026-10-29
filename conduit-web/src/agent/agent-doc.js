@@ -13,7 +13,8 @@ import { defineDoc } from "@earendil-works/pi-durable";
  * - `notices`: what the attention list says beside the work itself, newest last, at most 20 (agent.js).
  * - `tainted`: conversation id → true once it read private data (policy.js).
  * - `rules`: id → saved outward approval (policy.js).
- * - `inbox`: id → what a run reported, waiting for the heartbeat or the person (inbox.js).
+ * - `inbox`: id → what a run reported, waiting for the heartbeat or the person (inbox.js); `heartbeatSeenAt` the
+ *   newest entry a beat has looked at, `heartbeatSweptAt` its last pass over HEARTBEAT.md (schedule.js).
  * - `next`: the counter every part numbers its ids from (`sc-3`, `w-4`, `p-5`).
  */
 export const AgentDoc = defineDoc({

@@ -6,6 +6,7 @@ import { Connectors } from "./connectors.js";
 import { AgentDoc } from "./agent-doc.js";
 import { listAsks } from "./asks.js";
 import { listInbox } from "./inbox.js";
+import { migrateSoul } from "./memory.js";
 
 const SEED = fileURLToPath(new URL("../../../templates/agent/seed/", import.meta.url));
 const TEMPLATE_ID = "agent";
@@ -80,6 +81,7 @@ export class PersistentAgent {
     const project = (await this.projects.list()).find((item) => item.slug === "conduit-agent");
     if (!project) return null;
     this.project = project;
+    await migrateSoul(this.folder);
     await this.readSettings();
     await this.connectors.start();
     return project;
@@ -208,6 +210,7 @@ export class PersistentAgent {
       this.project = await this.projects.ensure({ slug: "conduit-agent", name: name || DEFAULT_SETTINGS.name, kind: "workspace", origin: "managed" });
     }
     await fs.mkdir(path.join(this.folder, "diary"), { recursive: true });
+    await migrateSoul(this.folder);
     for (const file of await fs.readdir(SEED)) {
       await fs.copyFile(path.join(SEED, file), path.join(this.folder, file), fs.constants.COPYFILE_EXCL).catch((error) => {
         if (error.code !== "EEXIST") throw error;
