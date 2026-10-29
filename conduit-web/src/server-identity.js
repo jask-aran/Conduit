@@ -209,7 +209,10 @@ export class ServerIdentity {
     const seen = new Set();
     const rows = [];
     const local = localPaths(this.port).filter((origin) => this.network || scopeForHost(new URL(origin).hostname) !== PATH_SCOPES.private);
-    for (const origin of [...local, ...this.observed.keys()]) {
+    // Its LAN names (lan-names-service.js) follow the machine to a new address, where every address above is only
+    // what it holds today: a client that saved one still has a way back after the router hands out another.
+    const named = this.network ? (this.names?.() || []).map((name) => `https://${name}:${this.port}`) : [];
+    for (const origin of [...local, ...named, ...this.observed.keys()]) {
       if (seen.has(origin)) continue;
       seen.add(origin);
       rows.push({ origin, scope: scopeForHost(new URL(origin).hostname) });
