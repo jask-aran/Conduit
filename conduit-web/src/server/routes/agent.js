@@ -21,6 +21,7 @@ import { backgroundSubagents } from "../subagents.js";
  * POST /v0/agent/wake                a run now { task, title? }
  * POST /v0/agent/feeds               add a feed { title, everyMinutes, source, level? } (feeds.js)
  * POST /v0/agent/feeds/test          run a source once { source }: { items, error? }; saves nothing
+ * POST /v0/agent/feeds/:id/forget    forget items it has seen { ids? } (all without): its next check reports them as new
  * DELETE /v0/agent/feeds/:id         remove a feed
  * POST /v0/agent/proposals/:id/{accept,reject}
  * DELETE /v0/agent/notices/:id      a notice read (it leaves the attention list)
@@ -199,6 +200,21 @@ export function registerAgentRoutes(app, { agent, backends }) {
       const problem = sourceProblem(request.body?.source);
       if (problem) return response.status(400).json({ error: "invalid_source", message: problem });
       response.json(await runSource(agent, request.body.source));
+    } catch (error) { next(error); }
+  });
+  app.post("/v0/agent/feeds/:id/forget", async (request, response, next) => {
+    try {
+      if (!enabled(response)) return;
+      const ids = Array.isArray(request.body?.ids) ? new Set(request.body.ids.map(String)) : null;
+      const forgot = await agent.update((doc) => {
+        const feed = doc.schedules[request.params.id]?.feed;
+        if (!feed) return null;
+        const before = feed.seen.length;
+        feed.seen = ids ? feed.seen.filter((id) => !ids.has(id)) : [];
+        return before - feed.seen.length;
+      });
+      if (forgot === null) return response.status(404).json({ error: "feed_not_found" });
+      response.json({ forgot });
     } catch (error) { next(error); }
   });
   app.delete("/v0/agent/feeds/:id", async (request, response, next) => {
