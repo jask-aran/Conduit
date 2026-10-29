@@ -22,6 +22,7 @@ import { backgroundSubagents } from "../subagents.js";
  * POST /v0/agent/feeds               add a feed { title, everyMinutes, source, level? } (feeds.js)
  * POST /v0/agent/feeds/test          run a source once { source }: { items, error? }; saves nothing
  * POST /v0/agent/feeds/:id/forget    forget items it has seen { ids? } (all without): its next check reports them as new
+ * PATCH /v0/agent/feeds/:id          change its { title?, everyMinutes?, source?, level? }, keeping what it has seen
  * DELETE /v0/agent/feeds/:id         remove a feed
  * POST /v0/agent/proposals/:id/{accept,reject}
  * DELETE /v0/agent/notices/:id      a notice read (it leaves the attention list)
@@ -215,6 +216,28 @@ export function registerAgentRoutes(app, { agent, backends }) {
       });
       if (forgot === null) return response.status(404).json({ error: "feed_not_found" });
       response.json({ forgot });
+    } catch (error) { next(error); }
+  });
+  app.patch("/v0/agent/feeds/:id", async (request, response, next) => {
+    try {
+      if (!enabled(response)) return;
+      const { title, everyMinutes, source, level } = request.body || {};
+      const changed = await agent.update((doc) => {
+        const item = doc.schedules[request.params.id];
+        if (!item?.feed) return null;
+        const next = { title: title ?? item.title, everyMinutes: everyMinutes ?? item.everyMinutes, source: source ?? item.feed.source };
+        const problem = feedProblem(next);
+        if (problem) return { problem };
+        item.title = String(next.title).slice(0, 80);
+        item.everyMinutes = next.everyMinutes;
+        item.feed.source = next.source;
+        if (["fyi", "attention", "urgent"].includes(level)) item.feed.level = level;
+        item.feed.lastError = null;
+        return { ok: true };
+      });
+      if (!changed) return response.status(404).json({ error: "feed_not_found" });
+      if (changed.problem) return response.status(400).json({ error: changed.problem });
+      response.json({ ok: true });
     } catch (error) { next(error); }
   });
   app.delete("/v0/agent/feeds/:id", async (request, response, next) => {

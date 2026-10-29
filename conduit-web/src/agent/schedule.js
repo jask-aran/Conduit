@@ -104,7 +104,7 @@ function makeClock(runtime) {
         const idle = beat && !plan;
         // A feed that reads (a program, a script) runs here, without a model; a run feed is a run like any other.
         const direct = schedule.feed && schedule.feed.source.kind !== "run";
-        const outcome = direct && !missed ? await api.memo(`feed:${slot}`, await runSource(agent, schedule.feed.source), context) : null;
+        const outcome = direct && !missed ? await api.memo(`feed:${slot}`, await runSource(agent, schedule.feed.source, { seen: schedule.feed.seen || [] }), context) : null;
         const overBudget = !missed && !idle && !direct && await agent.overBudget();
         if (overBudget) await agent.notice("budget", `Skipped ${schedule.title}: today's budget of $${agent.settings().budgetUsdPerDay} is spent.`);
         await api.commit(async (tx) => {
