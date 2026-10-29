@@ -1,4 +1,5 @@
 import { createRoot, createSignal } from "solid-js";
+import type { ApprovalLine } from "@/components/ui";
 import { api } from "../api/client";
 
 /**
@@ -19,7 +20,7 @@ export interface AgentQuestion { kind: "question"; chatId: string; requestId: st
 /** A change to its memory a run proposed, waiting for the person (memory.js). */
 export interface AgentProposal { id: string; file: string; op: "add" | "remove" | string; text: string; by?: string; chatId?: string | null; at: string }
 export interface AgentNotice { id: string; kind: string; text: string; at: string }
-export interface AgentAsk { id: string; chatId: string; toolCallId: string; parentCallId: string | null; title: string; service: string | null; lines: string[]; createdAt: string; expiresAt: string; status: "pending" | "allowed" | "declined" | "expired" | "used"; decidedAt?: string; choice?: "allow" | "always" | "deny" }
+export interface AgentAsk { id: string; chatId: string; toolCallId: string; parentCallId: string | null; title: string; service: string | null; lines: ApprovalLine[]; createdAt: string; expiresAt: string; status: "pending" | "allowed" | "declined" | "expired" | "used"; decidedAt?: string; choice?: "allow" | "always" | "deny" }
 export interface AgentView {
   enabled: boolean;
   /** Its workspace: its folder, holding its memory files. */

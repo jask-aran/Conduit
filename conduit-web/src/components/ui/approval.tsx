@@ -13,15 +13,36 @@ import { type Motion, motionOf } from "./shared";
  * on (async) -- so an approval reads the same wherever it is answered.
  */
 
+/**
+ * A detail line: plain text, or an action with what it sends as labelled fields ("To", "Subject"), and a command or
+ * script as it will run, in a block of its own.
+ */
+export type ApprovalLine = string | { text?: string; fields?: { label: string; value: string }[]; code?: string };
+
+/** A line as plain text: for a tooltip or a notification. */
+export const approvalLineText = (line: ApprovalLine) => typeof line === "string" ? line
+  : [line.text, ...(line.fields || []).map((field) => `${field.label}: ${field.value}`), line.code].filter(Boolean).join("\n");
+
+function Line(props: { line: ApprovalLine }) {
+  const line = () => typeof props.line === "string" ? { text: props.line } : props.line;
+  return <li>
+    <Show when={line().text}><span>{line().text}</span></Show>
+    <Show when={line().fields?.length}>
+      <dl class="ui-approval-fields"><For each={line().fields}>{(field) => <><dt>{field.label}</dt><dd>{field.value}</dd></>}</For></dl>
+    </Show>
+    <Show when={line().code}><pre class="ui-approval-code">{line().code}</pre></Show>
+  </li>;
+}
+
 /** What is asked: the service's mark (or the shield), a short title, a few detail lines; meta at the right (expiry). */
-export function ApprovalSummary(props: { title: string; service?: string | null; lines?: string[]; meta?: string }) {
+export function ApprovalSummary(props: { title: string; service?: string | null; lines?: ApprovalLine[]; meta?: string }) {
   return <div class="ui-approval-summary">
     <div class="ui-approval-head">
       <span class="ui-approval-icon"><ServiceIcon service={props.service || ""} fallback={<Icons.Permissions />} /></span>
       <b>{props.title}</b>
       <Show when={props.meta}><span class="ui-approval-meta">{props.meta}</span></Show>
     </div>
-    <Show when={props.lines?.length}><ul class="ui-approval-lines"><For each={props.lines}>{(line) => <li>{line}</li>}</For></ul></Show>
+    <Show when={props.lines?.length}><ul class="ui-approval-lines"><For each={props.lines}>{(line) => <Line line={line} />}</For></ul></Show>
   </div>;
 }
 
@@ -32,7 +53,7 @@ export type ApprovalChoice = "allow" | "always" | "deny";
  * ApprovalCard: an approval in the thread. Pending, the summary over Allow / Always / Don't (Allow the one action
  * waiting); answered, one quiet line of what became of it. busy: an answer on its way.
  */
-export function ApprovalCard(props: { title: string; service?: string | null; lines?: string[]; meta?: string; state: ApprovalState; busy?: boolean; motion?: Motion;
+export function ApprovalCard(props: { title: string; service?: string | null; lines?: ApprovalLine[]; meta?: string; state: ApprovalState; busy?: boolean; motion?: Motion;
   /** What Always would allow from now on ("Gmail · send, any input"); null: no lasting rule fits, so no Always. */
   always?: string | null; onChoose?: (choice: ApprovalChoice) => void }) {
   return <Switch>

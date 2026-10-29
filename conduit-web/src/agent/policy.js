@@ -1,6 +1,7 @@
 import { defineTool, wrapTool } from "@earendil-works/pi-durable";
 import { Type } from "@earendil-works/pi-ai";
 import { createHash } from "node:crypto";
+import { fieldsOf, fieldsText } from "./approval-fields.js";
 import { serviceOf } from "./connector-services.js";
 import { AgentDoc, nextId } from "./agent-doc.js";
 import { sandboxHelper, sandboxedEnv } from "./sandbox.js";
@@ -93,7 +94,6 @@ const mcpLabel = (name, args) => {
   if (connectorTool(name) === "execute") return `run a script in ${connectorName(name)}${listed ? `: ${listed}` : ""}`;
   return paths ? `use ${connectorName(name)}: ${listed || "an action"}` : `use ${connectorName(name)}: ${connectorTool(name)}`;
 };
-const preview = (value) => { try { return JSON.stringify(value).slice(0, 400); } catch { return ""; } };
 const summary = (name, args) => {
   if (name.startsWith("mcp__")) {
     // What it will do, one action a line with what it sends; a script that cannot be read ahead says so.
@@ -101,7 +101,7 @@ const summary = (name, args) => {
     const service = connectorName(name);
     if (calls) {
       const items = Array.isArray(args.calls) ? args.calls : [args.calls];
-      const lines = items.map((call) => { const input = preview(call?.input?.input ?? call?.input); return `• ${actionWords(String(call?.path || "").replace(/^tools\./, ""))}${input && input !== "{}" ? ` — ${input.slice(0, 160)}` : ""}`; });
+      const lines = items.map((call) => { const input = fieldsText(fieldsOf(call?.input), 160); return `• ${actionWords(String(call?.path || "").replace(/^tools\./, ""))}${input ? ` — ${input}` : ""}`; });
       return `do this in ${service}:\n${lines.join("\n")}`;
     }
     if (connectorTool(name) === "execute") {
@@ -155,29 +155,38 @@ const canonical = (value) => Array.isArray(value) ? value.map(canonical)
 const plain = (value) => JSON.parse(JSON.stringify(value));
 const result = (text, id, isError = false) => ({ output: [{ type: "text", text }], isError, details: { ask: id } });
 
+/*
+ * What the approval card shows: a title, and lines that are plain text or `{ text?, fields?, code? }` -- an action
+ * with what it sends as labelled fields, or a command or script as it will run (approval.tsx draws them).
+ */
+const CODE_MAX = 2000;
+const codeOf = (text) => { const code = String(text ?? ""); return code.length > CODE_MAX ? `${code.slice(0, CODE_MAX)}\n… ${code.length - CODE_MAX} more characters` : code; };
 function presentation(name, args) {
   if (name.startsWith("mcp__")) {
     const paths = connectorActions(name, args) || [];
     const service = serviceOf(paths[0]);
     const calls = connectorCalls(name, args);
     const items = Array.isArray(args.calls) ? args.calls : args.calls ? [args.calls] : [];
+    // One call is named by the title already: only what it sends is left to show.
     let lines = calls ? calls.map((path, i) => {
-      const input = preview(items[i]?.input?.input ?? items[i]?.input);
-      return `${actionWords(path)}${input && input !== "{}" ? ` — ${input}` : ""}`;
-    }) : [...new Set(paths)].map(actionWords);
+      const fields = fieldsOf(items[i]?.input);
+      return calls.length === 1 ? fields.length ? { fields } : null : fields.length ? { text: actionWords(path), fields } : actionWords(path);
+    }).filter(Boolean) : [...new Set(paths)].map(actionWords);
     if (lines.length > 12) lines = [...lines.slice(0, 11), `+ ${lines.length - 11} more actions`];
-    if (connectorTool(name) === "execute") lines.push(`Script: ${String(programOf(args) ?? "").replace(/\s+/g, " ").slice(0, 400)}`);
+    if (connectorTool(name) === "execute") lines.push({ text: "Script", code: codeOf(programOf(args)) });
+    else if (!calls) { const fields = fieldsOf(args); if (fields.length) lines.push({ fields }); }
     const label = mcpLabel(name, args);
     return { title: label[0].toUpperCase() + label.slice(1), service, lines };
   }
-  if (ALWAYS_OUTWARD[name]) {
-    const target = name === "start_chat" ? args.workspace || "Chats" : args.chatId || "a chat";
-    return { title: name === "start_chat" ? `Start a chat in ${target}` : `Post in ${target}`, service: null,
-      lines: [String(target), String(name === "start_chat" ? args.prompt || "" : args.message || "").slice(0, 200)].filter(Boolean) };
+  if (name === "start_chat") {
+    return { title: `Start a chat in ${args.workspace || "Chats"}`, service: null,
+      lines: [{ fields: [...args.title ? [{ label: "Title", value: String(args.title) }] : [], { label: "Message", value: String(args.prompt || "") }] }] };
   }
+  if (name === "steer_chat") return { title: `Post in ${args.chatId || "a chat"}`, service: null, lines: [{ fields: [{ label: "Message", value: String(args.message || "") }] }] };
   const target = `${args.device}${args.folder ? ` · ${args.folder}` : ""}`;
-  return { title: name === "bash" ? `Run \`${String(args.command || "").slice(0, 80)}\` on ${args.device}` : `${name[0].toUpperCase() + name.slice(1)} on ${args.device}`,
-    service: null, lines: [target, String(name === "bash" ? args.command || "" : args.path || "").slice(0, 200)].filter(Boolean) };
+  if (name === "bash") return { title: `Run \`${String(args.command || "").slice(0, 80)}\` on ${args.device}`, service: null, lines: [{ text: target, code: codeOf(args.command) }] };
+  return { title: `${name[0].toUpperCase() + name.slice(1)} on ${args.device}`, service: null,
+    lines: [target, ...args.path ? [String(args.path)] : [], ...name === "write" && args.content ? [{ code: codeOf(args.content) }] : []] };
 }
 
 /** Create an ask or consume one exact, single-use grant in the tool's commit. */
