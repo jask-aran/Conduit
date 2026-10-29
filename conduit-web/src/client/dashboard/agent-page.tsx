@@ -6,7 +6,7 @@ import { Dialog } from "@/components/dialog";
 import { MenuRow } from "@/components/menus";
 import { api } from "../api/client";
 import type { AgentSummary, ChatSummary } from "../api/contracts";
-import { agentNeeds, agentView, refreshAgent, type AgentRun, type AgentSchedule } from "../state/agent";
+import { agentNeeds, agentView, refreshAgent, type AgentInboxEntry, type AgentRun, type AgentSchedule } from "../state/agent";
 import { SplitDashboard, SplitEmpty, SplitGroup, SplitHeader, SplitQuickActions, SplitRow } from "./primitives/split";
 
 /**
@@ -19,7 +19,7 @@ const RUN_KIND: Record<string, string> = {
   manual: "Asked", schedule: "Scheduled", checkback: "Check-back", brief: "Morning brief", heartbeat: "Heartbeat", webhook: "Webhook", event: "Event",
 };
 /** How a finished run's report was read: what it told the person. */
-const LEVEL: Record<string, string> = { urgent: "Urgent", attention: "Told you", fyi: "FYI", none: "Nothing to say" };
+const LEVEL: Record<string, string> = { urgent: "Urgent", attention: "Attention", fyi: "FYI", failed: "Failed", none: "Nothing to say" };
 const MEMORY = [
   { path: "MEMORY.md", label: "Memory", context: "What it keeps between conversations" },
   { path: "USER.md", label: "About you", context: "What it knows about you" },
@@ -136,6 +136,24 @@ export function AgentPage(props: {
     </Show>
   </SplitGroup>;
 
+  // What runs reported: waiting for the heartbeat (or for the person to talk first), then what became of the rest.
+  const inbox = createMemo(() => [...(view()?.inbox || [])].sort((a, b) => Number(a.status === "handled") - Number(b.status === "handled")));
+  const unhandled = () => inbox().filter((entry) => entry.status === "unhandled").length;
+  const entryRow = (entry: AgentInboxEntry) => {
+    const chatId = () => runChats().get(entry.subagentId);
+    const waiting = entry.status === "unhandled";
+    return <SplitRow element="button" disabled={!chatId()} onClick={(event: MouseEvent) => chatId() && props.onOpenChat(chatId()!, event)}
+      lead={waiting ? <StatusDot label="Waiting" tone={entry.level === "urgent" || entry.level === "failed" ? "warn" : "unread"} /> : <Icons.Check />}
+      primary={entry.headline || entry.title} title={entry.headline}
+      context={[entry.title, LEVEL[entry.level] || entry.level, waiting ? "Waiting for the heartbeat" : entry.outcome].filter(Boolean).join(" · ")}
+      trailing={age(entry.at, now())} />;
+  };
+  const inboxGroup = () => <SplitGroup id="agent-inbox" label="Inbox" count={unhandled() || null}>
+    <Show when={inbox().length} fallback={<SplitEmpty>Nothing has come in this week.</SplitEmpty>}>
+      <For each={inbox()}>{entryRow}</For>
+    </Show>
+  </SplitGroup>;
+
   const workingGroup = () => <SplitGroup id="agent-working" label="Working on" count={working()?.runs.length || null}>
     <Show when={working()?.runs.length} fallback={<SplitEmpty>Nothing running.</SplitEmpty>}>
       <For each={working()?.runs}>{(run) => runRow(run, true)}</For>
@@ -218,7 +236,7 @@ export function AgentPage(props: {
           notice={error() ? <DashNote error>{error()}</DashNote> : undefined}
           conversation={conversation()}
           composer={props.composer}
-          aside={<>{needsGroup()}{threadsGroup()}{workingGroup()}{schedulesGroup()}{watchesGroup()}{rulesGroup()}{memoryGroup()}{recentGroup()}</>} />
+          aside={<>{needsGroup()}{inboxGroup()}{threadsGroup()}{workingGroup()}{schedulesGroup()}{watchesGroup()}{rulesGroup()}{memoryGroup()}{recentGroup()}</>} />
       </Show>
     </Show>
 

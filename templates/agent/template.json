@@ -25,7 +25,10 @@
     "chats",
     "start_chat",
     "steer_chat",
-    "approved"
+    "approved",
+    "inbox",
+    "nothing_to_report",
+    "run_failed"
   ],
   "models": [
     "openai/gpt-5.6-luna",
