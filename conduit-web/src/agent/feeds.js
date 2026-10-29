@@ -18,7 +18,8 @@ import { sandboxHelper, sandboxedEnv } from "./sandbox.js";
  *
  * An executor program or a script prints (returns) JSON: an array of items, or `{ items }`, each
  * `{ id, title, detail?, at?, level?, url? }`. The hub keeps the ids it has seen (the last 500) and puts what is new
- * into one inbox entry per tick; the first run only learns what is already there. jbot adds a feed through the
+ * into one inbox entry per tick; the first run only learns what is already there. An executor program is handed those
+ * ids as `seen` (a Set), so it can skip fetching the details of what was already reported. jbot adds a feed through the
  * `feed` tool, which asks the person (policy.js): it runs on its own from then on, so a program may only read.
  */
 const MAX_ITEMS = 100;
@@ -77,12 +78,13 @@ export function itemsOf(output) {
 }
 
 /** Run a feed's source once: `{ items }` or `{ items: [], error }`. Never throws. */
-export async function runSource(agent, source, { signal } = {}) {
+export async function runSource(agent, source, { signal, seen = [] } = {}) {
   try {
     if (source.kind === "executor") {
       const tool = agent.connectors.tools().find((item) => item.name === "mcp__executor__execute");
       if (!tool) return { items: [], error: "Executor is not connected." };
-      const result = await tool.execute({ code: source.code }, { signal: signal || AbortSignal.timeout(90_000) });
+      const code = `const seen = new Set(${JSON.stringify(seen)});\n${source.code}`;
+      const result = await tool.execute({ code }, { signal: signal || AbortSignal.timeout(90_000) });
       const output = (result.output || []).filter((part) => part.type === "text").map((part) => part.text).join("");
       if (result.isError) return { items: [], error: text(output || "The program failed.", 300) };
       return { items: itemsOf(output) };
