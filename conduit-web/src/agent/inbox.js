@@ -86,7 +86,8 @@ export async function heartbeatPlan(agent, state, now = Date.now()) {
 export const heartbeatTask = ({ inbox, waiting = inbox, sweep }) => ["Heartbeat.",
   inbox ? `${inbox} new ${inbox === 1 ? "entry" : "entries"} in your inbox (${waiting} unhandled in all): read them (inbox list; inbox read for a `
     + "whole report). For each decide: nothing to do, act (a check-back with schedule, a chat to start), or tell the person; "
-    + "then mark it with inbox handle and what you did." : "",
+    + "then mark it with inbox handle and what you did. Decide from what the entries say: go to the source (mail, a "
+    + "calendar) only when an entry is unclear and might matter, not to restate what it already says." : "",
   sweep ? "Go through HEARTBEAT.md in your folder and check each item." : "",
   "When nothing needs the person, call nothing_to_report; otherwise report only what needs them."].filter(Boolean).join(" ");
 
