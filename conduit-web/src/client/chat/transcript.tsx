@@ -1146,7 +1146,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
           if (user() && message().origin === "harness") {
             // A subagent's report opens its transcript, once the chat's agents say which chat that is.
             const child = () => { const ref = message().agent; return ref ? props.chat.agents?.().find((agent) => ref.id ? agent.id === ref.id : String(agent.conversationId) === String(ref.conversationId))?.chatId : null; };
-            return <TranscriptRow ref={row} data-slot="message-scroller-item" data-message-id={message().id}><HarnessPrompt onOpen={child() ? () => openAgentChat(child()!) : undefined}>{props.conversational ? (message().content || "").replace(/^sa-\d+ finished: /, "") : message().content}</HarnessPrompt>
+            return <TranscriptRow ref={row} data-slot="message-scroller-item" data-message-id={message().id}><HarnessPrompt onOpen={child() ? () => openAgentChat(child()!) : undefined} icon={message().id.startsWith("beat:") ? <Icons.Heartbeat aria-hidden="true" /> : undefined}>{props.conversational ? (message().content || "").replace(/^sa-\d+ finished: /, "") : message().content}</HarnessPrompt>
               <Show when={message().agent?.conversationId != null && asksAt(`run:${message().agent!.conversationId}`).length}>
                 <Turn><For each={asksAt(`run:${message().agent!.conversationId}`)}>{(ask) => <AskCard ask={ask} answer={props.approvals!.answer} />}</For></Turn>
               </Show></TranscriptRow>;

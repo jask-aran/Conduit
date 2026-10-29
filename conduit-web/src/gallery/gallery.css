@@ -347,3 +347,4 @@ html, body { background: var(--frame, #08090a); color: var(--foreground); }
 .g-anatomy > .g-page { width: 560px; }
 /* Shell page: the window row at a fraction of its height, on the frame. */
 .g-shell { display: flex; width: 100%; overflow: hidden; border-radius: 10px; background: var(--frame); }
+.g-aside { width: 360px; max-width: 100%; }
