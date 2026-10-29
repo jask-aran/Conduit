@@ -204,6 +204,7 @@ const concurrency = new ServerConcurrency();
 // Cloudflare tunnel) takes them on their pairing key alone.
 // The hub's LAN names (its own certificate's, loaded below): routes for nodes, never its nodes' names.
 const hubLanNames = () => (lanTls?.names || []).filter((name) => !name.startsWith("*."));
+serverIdentity.names = hubLanNames;
 const networkLanNames = lifetime.own("LAN names", lanNamesService({
   dataRoot: config.dataRoot,
   hubAddress: () => directAddresses(os.networkInterfaces()).find((item) => item.reach === "private")?.address || null,
