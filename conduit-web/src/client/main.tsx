@@ -1007,6 +1007,8 @@ function App() {
     if (runtime.connectivity() !== "online") return;
     if (hasConnected) void checkForPwaUpdate().catch(() => {});
     hasConnected = true;
+    // Asked while the app was still connecting, it failed and the sidebar lost jbot's row until the next poll.
+    void refreshAgent();
   });
   // The composer takes the server as there until a connection has failed.
   // The first open is shown before the stream's first frame, and saying

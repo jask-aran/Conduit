@@ -88,7 +88,9 @@ function makeClock(runtime) {
           waiting = true;
         }, context);
         if (!waiting) return;
-        await api.sleep(next, context);
+        // In steps against the wall clock: a timer does not count time the machine sleeps, so one long wait set at
+        // night fired hours late after the computer woke.
+        while (api.now() < next) await api.sleep(Math.min(next, api.now() + 60_000), context);
         await api.commit(() => ({ status: "running", checkpoint: { phase: "fire", slot } }), context);
       },
       fire: async (task, api, context) => {
@@ -111,8 +113,10 @@ function makeClock(runtime) {
           const doc = await tx.doc(AgentDoc);
           const current = doc.schedules[task.input.scheduleId];
           if (!current || current.cancelling || current.clock !== task.id) return terminal();
+          // Taken already: run by hand while it was due (POST /v0/agent/schedules/:id/run).
+          const taken = current.lastAt && Date.parse(current.lastAt) >= Date.parse(slot);
           if (direct) { if (outcome) applyOutcome(doc, current, outcome, slot); }
-          else if (!missed && !idle && !overBudget) {
+          else if (!missed && !idle && !overBudget && !taken) {
             await agent.spawnRun(tx, api.conversationId, {
               key: `${current.id}:${slot}`, kind: current.feed ? "feed" : current.system ? current.id : "checkback", title: current.title,
               task: plan ? heartbeatTask(plan) : current.feed ? current.feed.source.task : current.task,
