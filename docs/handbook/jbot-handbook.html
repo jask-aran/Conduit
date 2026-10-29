@@ -1,0 +1,776 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>jbot Operations Handbook</title>
+<style>
+  /* Paper Mono throughout: one face, weights do the work. */
+  @font-face { font-family: "Paper Mono"; src: url("../../conduit-web/src/components/ui/fonts/PaperMono-Variable.woff2") format("woff2"); font-weight: 100 900; }
+
+  @page { size: A4; margin: 0; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: #8d8d89; }
+  body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  @media print { html, body { background: none; } }
+
+  :root {
+    --ink: #111111;
+    --spot: #ff4f00;    /* Block II: what is planned, not built */
+    --paper: #fbfbf8;
+    --hair: 0.3pt;
+    --mono: "Paper Mono", ui-monospace, monospace;
+  }
+  @media print { :root { --paper: #ffffff; } }
+
+  .page {
+    position: relative; width: 210mm; height: 297mm; margin: 0 auto 6mm; padding: 10mm 15mm 0 16mm;
+    background: var(--paper); color: var(--ink); font-family: var(--mono); font-size: 7.3pt; line-height: 1.45;
+    font-weight: 400; overflow: hidden; page-break-after: always;
+  }
+  .page:last-child { page-break-after: auto; }
+
+  /* running head: three cells and a rule */
+  .head { display: grid; grid-template-columns: 1fr auto 1fr; align-items: baseline; font-size: 6.6pt; letter-spacing: 0.1em; }
+  .head .doc { font-weight: 600; }
+  .head .title { font-weight: 650; letter-spacing: 0.16em; }
+  .head .part { text-align: right; }
+  .rule { border-top: 1pt solid var(--ink); margin-top: 1.6mm; }
+
+  .foot { position: absolute; left: 16mm; right: 15mm; bottom: 9mm; font-size: 6.6pt; letter-spacing: 0.06em; }
+  .foot .rule { margin: 0 0 1.8mm; border-top-width: 0.6pt; }
+  .foot .line { display: grid; grid-template-columns: 1fr auto; align-items: baseline; }
+  .foot .dates { display: flex; gap: 6mm; }
+  .foot b { font-weight: 600; }
+
+  /* section opener */
+  .opener { margin: 6mm 0 4mm; display: grid; grid-template-columns: 15mm 1fr; align-items: end; }
+  .opener .sec { font-size: 26pt; line-height: 0.9; font-weight: 300; }
+  .opener .name { font-size: 13pt; line-height: 1.1; font-weight: 600; letter-spacing: 0.04em; }
+  .opener .kicker { font-size: 6.6pt; letter-spacing: 0.14em; margin-bottom: 1.2mm; }
+
+  /* numbered paragraphs */
+  .para { display: grid; grid-template-columns: 15mm 1fr; position: relative; margin-top: 2.2mm; }
+  .para .num { font-weight: 600; letter-spacing: 0.04em; }
+  .para h2, .para h3 { margin: 0 0 0.6mm; font: inherit; font-weight: 600; letter-spacing: 0.1em; }
+  .para h3 { letter-spacing: 0.02em; text-decoration: underline; text-underline-offset: 1.6pt; text-decoration-thickness: 0.5pt; }
+  .para p { margin: 0 0 1mm; }
+  .changebar { position: absolute; left: -8mm; width: 1.2mm; background: var(--spot); }
+  .ii { color: var(--spot); }
+  code { font: inherit; font-weight: 500; }
+
+  /* figures: SVG units are millimetres; 180 wide fills the 179 mm column */
+  figure { margin: 3mm 0 0; }
+  figure svg { display: block; width: 100%; height: auto; overflow: visible; }
+  figcaption { margin-top: 1mm; font-size: 6.8pt; letter-spacing: 0.04em; display: grid; grid-template-columns: 15mm 1fr; }
+  figcaption .n { font-weight: 600; }
+
+  svg text { font-family: var(--mono); fill: var(--ink); font-weight: 450; letter-spacing: 0.02px; }
+  svg .lbl   { font-size: 2.15px; }
+  svg .lbl-s { font-size: 1.85px; }
+  svg .lbl-b { font-size: 2.6px; font-weight: 600; }
+  svg .code  { font-size: 2.1px; font-weight: 600; }
+  svg .spot  { fill: var(--spot); }
+  svg .box   { fill: var(--paper); stroke: var(--ink); stroke-width: 0.4; }
+  svg .box2  { fill: var(--paper); stroke: var(--spot); stroke-width: 0.4; stroke-dasharray: 1.4 0.8; }
+  svg .panel { fill: none; stroke: var(--ink); stroke-width: 0.22; stroke-dasharray: 2 1; }
+  svg .w     { fill: none; stroke: var(--ink); stroke-width: 0.3; stroke-linejoin: round; }
+  svg .wa    { fill: none; stroke: var(--ink); stroke-width: 0.3; stroke-linejoin: round; marker-end: url(#a); }
+  svg .wa2   { fill: none; stroke: var(--spot); stroke-width: 0.3; stroke-linejoin: round; marker-end: url(#a2); }
+  svg .w2    { fill: none; stroke: var(--spot); stroke-width: 0.3; stroke-linejoin: round; }
+  svg .t     { fill: none; stroke: var(--ink); stroke-width: 0.16; }
+  svg .life  { fill: none; stroke: var(--ink); stroke-width: 0.16; stroke-dasharray: 0.8 0.6; }
+  svg .dot   { fill: var(--ink); }
+  svg .dot2  { fill: var(--spot); }
+  svg .hatch { fill: url(#h); stroke: var(--ink); stroke-width: 0.3; }
+  svg .solid { fill: var(--ink); }
+
+  /* lower band: table beside a notice and a card */
+  .lower { display: grid; grid-template-columns: 1fr 62mm; column-gap: 7mm; margin-top: 4mm; }
+  .tcap { font-size: 6.8pt; letter-spacing: 0.04em; margin: 0 0 1mm; }
+  .tcap .n { font-weight: 600; margin-right: 3mm; }
+  table { width: 100%; border-collapse: collapse; font-size: 6.7pt; line-height: 1.3; }
+  th, td { padding: 0.5mm 1.2mm 0.5mm 0; text-align: left; vertical-align: top; font-weight: 400; border-bottom: var(--hair) solid var(--ink); }
+  thead th { font-weight: 600; letter-spacing: 0.1em; border-bottom: 0.8pt solid var(--ink); border-top: 0.8pt solid var(--ink); }
+  tbody tr:last-child td { border-bottom: 0.8pt solid var(--ink); }
+  td.v { white-space: nowrap; }
+
+  .notice { border-left: 1.2mm solid var(--ink); padding: 0.4mm 0 0.4mm 2.4mm; margin-bottom: 3mm; }
+    .notice .tag { display: block; font-weight: 700; letter-spacing: 0.22em; font-size: 6.8pt; margin-bottom: 0.6mm; }
+  .notice p { margin: 0; font-size: 6.7pt; line-height: 1.38; }
+
+  .card { border: 0.8pt solid var(--ink); font-size: 6.5pt; line-height: 1.42; }
+  .card .bar { background: var(--ink); color: var(--paper); font-weight: 600; letter-spacing: 0.08em; padding: 0.6mm 1.8mm; display: flex; justify-content: space-between; }
+  .card ol { list-style: none; margin: 0; padding: 1mm 1.8mm 1.2mm; }
+  .card li { display: grid; grid-template-columns: 3.4mm 1fr; white-space: pre; }
+  .card li.v { padding-left: 3.4mm; }
+
+  .tab { position: absolute; right: 0; top: 118mm; width: 8mm; height: 18mm; background: var(--ink); color: var(--paper);
+    font-size: 6.8pt; font-weight: 600; letter-spacing: 0.12em; display: flex; align-items: center; justify-content: center; writing-mode: vertical-rl; }
+  .tab.p2 { top: 140mm; } .tab.p3 { top: 162mm; } .tab.p4 { top: 184mm; }
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <marker id="a" viewBox="0 0 6 4" refX="5.6" refY="2" markerWidth="2.2" markerHeight="1.2" markerUnits="userSpaceOnUse" orient="auto" preserveAspectRatio="none"><path d="M0,0 L6,2 L0,4 Z" fill="#111"/></marker>
+    <marker id="a2" viewBox="0 0 6 4" refX="5.6" refY="2" markerWidth="2.2" markerHeight="1.2" markerUnits="userSpaceOnUse" orient="auto" preserveAspectRatio="none"><path d="M0,0 L6,2 L0,4 Z" fill="#ff4f00"/></marker>
+    <pattern id="h" width="1.1" height="1.1" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="1.1" stroke="#111" stroke-width="0.2"/></pattern>
+  </defs>
+</svg>
+
+<!-- ======================================================================= PAGE 1 -->
+<div class="page">
+  <header class="head">
+    <div class="doc">JB2A-03-BLOCK I/II-(1)</div>
+    <div class="title">JBOT OPERATIONS HANDBOOK</div>
+    <div class="part">SYSTEMS DATA</div>
+  </header>
+  <div class="rule"></div>
+  <div class="tab">SYS</div>
+
+  <div class="body">
+  <div class="opener">
+    <div class="sec">1</div>
+    <div><div class="kicker">SECTION 1 &middot; CONDUIT HUB &middot; PERSISTENT AGENT</div><div class="name">SYSTEM OVERVIEW</div></div>
+  </div>
+
+  <section class="para">
+    <div class="num">1.1</div>
+    <div>
+      <h2>INTRODUCTION.</h2>
+      <p>jbot is the Conduit durable agent (pi-durable) running as one always-on agent per hub. Underneath, it is a harness thread in a loop with tools, like any chat. What makes it an assistant is the set of parts around that loop, which decide when it runs, what it knows and what reaches the person (figure 1-1).</p>
+    </div>
+  </section>
+
+  <figure>
+    <svg viewBox="0 0 180 78" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Hub functional block diagram">
+      <!-- panels -->
+      <rect class="panel" x="1" y="4" width="37" height="71"/><text class="lbl-s" x="3" y="7.4">SOURCES</text>
+      <rect class="panel" x="43" y="4" width="102" height="71"/><text class="lbl-s" x="45" y="7.4">HUB</text>
+      <rect class="panel" x="150" y="4" width="29" height="71"/><text class="lbl-s" x="152" y="7.4">YOU</text>
+
+      <!-- sources -->
+      <rect class="box" x="4" y="10" width="31" height="10"/><text class="lbl" x="19.5" y="14.3" text-anchor="middle">EXECUTOR</text><text class="lbl-s" x="19.5" y="17.6" text-anchor="middle">MAIL, CALENDAR</text>
+      <rect class="box" x="4" y="25" width="31" height="10"/><text class="lbl" x="19.5" y="29.3" text-anchor="middle">CONDUIT EVENTS</text><text class="lbl-s" x="19.5" y="32.6" text-anchor="middle">CHATS, DEVICES</text>
+      <rect class="box" x="4" y="40" width="31" height="10"/><text class="lbl" x="19.5" y="44.3" text-anchor="middle">WEBHOOKS</text><text class="lbl-s" x="19.5" y="47.6" text-anchor="middle">ONE URL PER WATCH</text>
+      <rect class="box" x="4" y="55" width="31" height="10"/><text class="lbl" x="19.5" y="59.3" text-anchor="middle">CLOCK</text><text class="lbl-s" x="19.5" y="62.6" text-anchor="middle">BRIEF, CHECK-BACKS</text>
+
+      <!-- hub: feeds and inbox (Block II) -->
+      <rect class="box2" x="47" y="10" width="25" height="10"/><text class="lbl spot" x="59.5" y="14.3" text-anchor="middle">FEEDS</text><text class="lbl-s spot" x="59.5" y="17.6" text-anchor="middle">SCRIPTS, NO MODEL</text>
+      <path class="box2" d="M47,33 v10 a12.5,1.6 0 0 0 25,0 v-10 a12.5,1.6 0 0 0 -25,0 a12.5,1.6 0 0 0 25,0"/>
+      <text class="lbl spot" x="59.5" y="38.6" text-anchor="middle">INBOX</text><text class="lbl-s spot" x="59.5" y="41.8" text-anchor="middle">APPEND-ONLY</text>
+
+      <!-- heartbeat, runs, policy -->
+      <rect class="box" x="80" y="10" width="28" height="10"/><text class="lbl" x="94" y="14.3" text-anchor="middle">HEARTBEAT</text><text class="lbl-s spot" x="94" y="17.6" text-anchor="middle">MODEL IF NEEDED</text>
+      <rect class="box" x="82.4" y="34.4" width="28" height="12"/>
+      <rect class="box" x="81.2" y="33.2" width="28" height="12"/>
+      <rect class="box" x="80" y="32" width="28" height="12"/><text class="lbl" x="94" y="37" text-anchor="middle">RUN (N)</text><text class="lbl-s" x="94" y="40.4" text-anchor="middle">OWN CONVERSATION</text>
+      <rect class="box" x="80" y="56" width="28" height="11"/><text class="lbl" x="94" y="60.6" text-anchor="middle">POLICY</text><text class="lbl-s" x="94" y="64" text-anchor="middle">ASKS FIRST</text>
+
+      <!-- home thread and folder -->
+      <rect class="box" x="119.5" y="10" width="21.5" height="36" style="stroke-width:0.6"/>
+      <text class="lbl-b" x="130.25" y="21" text-anchor="middle">HOME</text><text class="lbl-b" x="130.25" y="24.4" text-anchor="middle">THREAD</text>
+      <text class="lbl-s" x="130.25" y="29.6" text-anchor="middle">ONE CONVERSATION</text><text class="lbl-s" x="130.25" y="32.2" text-anchor="middle">FOR GOOD</text>
+      <text class="lbl-s" x="130.25" y="36.4" text-anchor="middle">PLANS,</text><text class="lbl-s" x="130.25" y="39" text-anchor="middle">DELEGATES,</text><text class="lbl-s" x="130.25" y="41.6" text-anchor="middle">TELLS YOU</text>
+      <path class="box" d="M115,57.6 v9.4 a14,1.6 0 0 0 28,0 v-9.4 a14,1.6 0 0 0 -28,0 a14,1.6 0 0 0 28,0"/>
+      <text class="lbl" x="129" y="62.6" text-anchor="middle">JBOT FOLDER</text><text class="lbl-s" x="129" y="65.8" text-anchor="middle">MEMORY, SANDBOXED</text>
+
+      <!-- you -->
+      <rect class="box" x="152.5" y="10" width="24" height="10"/><text class="lbl" x="164.5" y="14.3" text-anchor="middle">PHONE</text><text class="lbl-s" x="164.5" y="17.6" text-anchor="middle">PUSH</text>
+      <rect class="box" x="152.5" y="26" width="24" height="10"/><text class="lbl" x="164.5" y="30.3" text-anchor="middle">AGENT PAGE</text><text class="lbl-s" x="164.5" y="33.6" text-anchor="middle">/AGENT</text>
+      <rect class="box" x="152.5" y="58" width="24" height="10"/><text class="lbl" x="164.5" y="62.3" text-anchor="middle">YOUR CHATS</text><text class="lbl-s" x="164.5" y="65.6" text-anchor="middle">START, STEER</text>
+
+      <!-- Block II wires -->
+      <path class="wa2" d="M35,15 H46.6"/>
+      <path class="w2" d="M35,30 H40.5 V38"/><path class="wa2" d="M35,45 H40.5 V38 H46.6"/><circle class="dot2" cx="40.5" cy="38" r="0.5"/>
+      <path class="wa2" d="M59.5,20 V30.9"/>
+      <path class="wa2" d="M72,38 H74.5 V13 H79.6"/>
+      <!-- clock -->
+      <path class="wa" d="M35,60 H41.5 V51 H77.5 V17 H79.6"/><path class="wa" d="M77.5,40 H79.6"/><circle class="dot" cx="77.5" cy="40" r="0.5"/>
+      <!-- act, tell, report, task -->
+      <path class="wa" d="M94,20 V31.6"/><text class="lbl-s" x="95.4" y="26.6">ACT</text>
+      <path class="wa" d="M108,15 H119.1"/><text class="lbl-s" x="108.6" y="13.9">TELL</text>
+      <path class="wa" d="M110.6,38 H119.1"/><text class="lbl-s" x="110.9" y="36.9">REPORT</text>
+      <path class="wa" d="M119.5,42.2 H110.9"/><text class="lbl-s" x="111.4" y="45.2">TASK</text>
+      <!-- outward, memory -->
+      <path class="wa" d="M90,46.8 V55.6"/><text class="lbl-s" x="91.2" y="52.8">OUTWARD</text>
+      <path class="wa" d="M122,46 V50 H101.5 V55.6"/>
+      <path class="wa" d="M134,46 V55.6"/><text class="lbl-s" x="135.4" y="52.6">MEMORY</text>
+      <path class="wa" d="M94,67 V72.5 H164.5 V68.4"/><text class="lbl-s" x="96" y="71.4">ALLOWED CALLS</text>
+      <!-- you -->
+      <path class="wa" d="M141,15 H152.1"/>
+      <path class="wa" d="M152.5,31 H141.4"/>
+
+      <!-- legend -->
+      <rect class="box" x="47" y="58" width="5" height="3.4"/><text class="lbl-s" x="53.6" y="60.6">BUILT, BLOCK I</text>
+      <rect class="box2" x="47" y="63.6" width="5" height="3.4"/><text class="lbl-s spot" x="53.6" y="66.2">PLANNED, BLOCK II</text>
+
+      <text class="code" x="178.6" y="77.8" text-anchor="end">SYS-501A</text>
+    </svg>
+    <figcaption><span class="n">Fig. 1-1</span><span>Hub Functional Block Diagram</span></figcaption>
+  </figure>
+
+  <section class="para">
+    <div class="num">1.2</div>
+    <div>
+      <h2>FUNCTIONAL DESCRIPTION.</h2>
+      <p>Sources reach the hub as feeds, Conduit events, webhooks and the clock. Feeds append entries to the inbox; the heartbeat reads them and stays quiet, starts runs or tells jbot. The home thread talks with the person and delegates; runs do the work in their own conversations and report back. Every call that leaves jbot's folder passes the policy, which asks the person first (figure 1-2).</p>
+    </div>
+  </section>
+  <section class="para">
+    <div class="changebar" style="top:0.4mm; height:9.2mm"></div>
+    <div class="num">1.2.1</div>
+    <div>
+      <h3>Two Blocks.</h3>
+      <p>Block I is built (27 Oct 2026): home thread, runs, schedules, watches, memory files, approvals and push. Block II is the plan of 29 Oct 2026: feeds, the inbox, a heartbeat that calls a model only when there is something to decide, and night upkeep. Block II parts are drawn dashed, in orange.</p>
+    </div>
+  </section>
+
+  <figure>
+    <svg viewBox="0 0 180 49" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Path of one email">
+      <g text-anchor="middle">
+        <text class="lbl" x="12" y="3.4">EXECUTOR</text><text class="lbl spot" x="36" y="3.4">FEED</text><text class="lbl spot" x="60" y="3.4">INBOX</text>
+        <text class="lbl" x="84" y="3.4">HEARTBEAT</text><text class="lbl" x="108" y="3.4">RUN</text><text class="lbl" x="134" y="3.4">HOME THREAD</text><text class="lbl" x="162" y="3.4">PHONE</text>
+      </g>
+      <path class="life" d="M12,5.4 V46 M36,5.4 V46 M60,5.4 V46 M84,5.4 V46 M108,5.4 V46 M134,5.4 V46 M162,5.4 V46"/>
+      <g class="lbl-s" text-anchor="middle">
+        <path class="wa2" d="M36,10 H12.4"/><text class="spot" x="24" y="9">POLL</text>
+        <path class="wa2" d="M12,14.6 H35.6"/><text class="spot" x="24" y="13.6">NEW MAIL</text>
+        <path class="wa2" d="M36,19.2 H59.6"/><text class="spot" x="48" y="18.2">ENTRY</text>
+        <path class="wa2" d="M84,23.8 H60.4"/><text class="spot" x="72" y="22.8">TICK: READ</text>
+        <path class="wa2" d="M84,28.4 H107.6"/><text class="spot" x="96" y="27.4">DRAFT A REPLY</text>
+        <path class="wa" d="M108,33 H133.6"/><text x="121" y="32">REPORT, ASK A-12</text>
+        <path class="wa" d="M134,37.6 H161.6"/><text x="148" y="36.6">PUSH: 1 TO APPROVE</text>
+        <path class="wa" d="M162,42.2 H134.4"/><text x="148" y="41.2">ALLOW</text>
+        <path class="wa" d="M134,46.8 H12.4"/><text x="121" y="45.8">APPROVED A-12: SEND</text>
+      </g>
+      <text class="code" x="178.6" y="48.6" text-anchor="end">SYS-502A</text>
+    </svg>
+    <figcaption><span class="n">Fig. 1-2</span><span>Path of One Email, From Arrival to Send</span></figcaption>
+  </figure>
+
+  <div class="lower">
+    <div>
+      <div class="tcap"><span class="n">Table 1-1</span>System Defaults</div>
+      <table>
+        <thead><tr><th>PARAMETER</th><th>VALUE</th></tr></thead>
+        <tbody>
+          <tr><td>Agents per hub</td><td class="v">1</td></tr>
+          <tr><td>Morning brief</td><td class="v">08:00 daily</td></tr>
+          <tr><td>Heartbeat, Block I</td><td class="v">every 120 min</td></tr>
+          <tr><td class="ii">Heartbeat tick, Block II</td><td class="v ii">30 min, model if needed</td></tr>
+          <tr><td>Check-back interval</td><td class="v">15 to 10,080 min</td></tr>
+          <tr><td>Daily budget</td><td class="v">US$2.00 (0 = no limit)</td></tr>
+          <tr><td>Speaks up (dial)</td><td class="v">Quiet, Normal, Chatty</td></tr>
+          <tr><td>Approval lifetime</td><td class="v">24 h</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div>
+      <div class="notice">
+        <span class="tag">NOTE</span>
+        <p>jbot remembers what the person tells it. It never digests the person's other chats on its own; it reads one only when asked to.</p>
+      </div>
+      <div class="card">
+        <div class="bar"><span>RUN A TASK</span><span>YOU</span></div>
+        <ol>
+          <li><span>1</span><span>SIDEBAR - Chat, jbot</span></li>
+          <li><span>2</span><span>RUN A TASK - select</span></li>
+          <li><span>3</span><span>TASK - type the brief</span></li>
+          <li><span>4</span><span>RUN - press (ctrl+enter)</span></li>
+          <li class="v"><span>√ Working on - shows the run</span></li>
+          <li><span>5</span><span>HOME THREAD - read report</span></li>
+        </ol>
+      </div>
+    </div>
+  </div>
+  </div>
+
+  <footer class="foot">
+    <div class="rule"></div>
+    <div class="line">
+      <span><b>SECTION 1</b> &middot; SYSTEM OVERVIEW</span>
+      <span class="dates"><span>Basic 27 Oct 2026</span><span>Change 29 Oct 2026</span><span><b>Page 1-1</b></span></span>
+    </div>
+  </footer>
+</div>
+
+<!-- ======================================================================= PAGE 2 -->
+<div class="page">
+  <header class="head">
+    <div class="doc">JB2A-03-BLOCK I/II-(1)</div>
+    <div class="title">JBOT OPERATIONS HANDBOOK</div>
+    <div class="part">SYSTEMS DATA</div>
+  </header>
+  <div class="rule"></div>
+  <div class="tab p2">RUN</div>
+
+  <div class="body">
+  <div class="opener">
+    <div class="sec">2</div>
+    <div><div class="kicker">SECTION 2 &middot; WORK DONE AWAY FROM THE CONVERSATION</div><div class="name">RUNS, ROUTINES, HEARTBEAT</div></div>
+  </div>
+
+  <section class="para">
+    <div class="num">2.1</div>
+    <div>
+      <h2>INTRODUCTION.</h2>
+      <p>Anything that is not conversation is a run: a subagent conversation with a brief, a model and effort, a tool scope and a budget, which must end by saying how much its result matters. Routines are saved triggers that start runs; the brief and the heartbeat are routines (figure 2-1).</p>
+    </div>
+  </section>
+
+  <figure>
+    <svg viewBox="0 0 180 63" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="One day of runs">
+      <!-- lane names -->
+      <g class="lbl-s">
+        <text x="0" y="7">QUIET HOURS</text>
+        <text class="spot" x="0" y="12">UPKEEP</text>
+        <text class="spot" x="0" y="17">COMPACTION</text>
+        <text class="spot" x="0" y="22">GATHER</text>
+        <text x="0" y="27">BRIEF</text>
+        <text x="0" y="32">HEARTBEAT</text>
+        <text class="spot" x="0" y="37">TICK</text>
+        <text class="spot" x="0" y="42">FEEDS</text>
+        <text x="0" y="47">RUNS</text>
+        <text x="0" y="52">YOU</text>
+      </g>
+      <path class="t" d="M22,4 V55" style="stroke-dasharray:0.5 0.5"/>
+
+      <!-- quiet hours, an example of 23:00 to 07:00 -->
+      <rect class="hatch" x="22" y="5" width="45.5" height="2.6"/><rect class="hatch" x="171.5" y="5" width="6.5" height="2.6"/>
+      <text class="lbl-s" x="70" y="7.2">SET BY YOU; 23:00 TO 07:00 SHOWN</text>
+      <!-- upkeep -->
+      <rect class="box2" x="28.5" y="10" width="26" height="2.6"/><text class="lbl-s spot" x="57" y="12.2">DREAM: REVIEW, MERGE, EXPIRE</text>
+      <!-- compaction -->
+      <path class="dot2" d="M61,17.6 l-1.3,-2.3 h2.6 Z"/><text class="lbl-s spot" x="63.4" y="17.2">HOME THREAD, AN HOUR BEFORE WAKING</text>
+      <!-- gather -->
+      <rect class="box2" x="62.6" y="20" width="9.8" height="2.6"/><text class="lbl-s spot" x="75" y="22.2">RUNS COLLECT WHAT THE BRIEF NEEDS</text>
+      <!-- brief -->
+      <path class="solid" d="M74,27.6 l-1.3,-2.3 h2.6 Z"/><text class="lbl-s" x="76.4" y="27.2">MORNING BRIEF, 08:00, ALWAYS REPORTS</text>
+      <!-- heartbeat, Block I -->
+      <g class="solid"><rect x="73.6" y="30.2" width="0.8" height="2.4"/><rect x="86.6" y="30.2" width="0.8" height="2.4"/><rect x="99.6" y="30.2" width="0.8" height="2.4"/><rect x="112.6" y="30.2" width="0.8" height="2.4"/><rect x="125.6" y="30.2" width="0.8" height="2.4"/><rect x="138.6" y="30.2" width="0.8" height="2.4"/><rect x="151.6" y="30.2" width="0.8" height="2.4"/><rect x="164.6" y="30.2" width="0.8" height="2.4"/></g>
+      <text class="lbl-s" x="24" y="32.2">EVERY 120 MIN, A MODEL CALL</text>
+      <!-- tick, Block II: every 30 min while awake; a model call only on the diamonds -->
+      <path class="w2" d="M67.5,35.2 v1.6 M70.75,35.2 v1.6 M74,35.2 v1.6 M77.25,35.2 v1.6 M80.5,35.2 v1.6 M83.75,35.2 v1.6 M87,35.2 v1.6 M90.25,35.2 v1.6 M93.5,35.2 v1.6 M96.75,35.2 v1.6 M100,35.2 v1.6 M103.25,35.2 v1.6 M106.5,35.2 v1.6 M109.75,35.2 v1.6 M113,35.2 v1.6 M116.25,35.2 v1.6 M119.5,35.2 v1.6 M122.75,35.2 v1.6 M126,35.2 v1.6 M129.25,35.2 v1.6 M132.5,35.2 v1.6 M135.75,35.2 v1.6 M139,35.2 v1.6 M142.25,35.2 v1.6 M145.5,35.2 v1.6 M148.75,35.2 v1.6 M152,35.2 v1.6 M155.25,35.2 v1.6 M158.5,35.2 v1.6 M161.75,35.2 v1.6 M165,35.2 v1.6 M168.25,35.2 v1.6 M171.5,35.2 v1.6"/>
+      <g class="dot2"><path d="M83.75,34.6 l1.2,1.4 l-1.2,1.4 l-1.2,-1.4 Z"/><path d="M106.5,34.6 l1.2,1.4 l-1.2,1.4 l-1.2,-1.4 Z"/><path d="M135.75,34.6 l1.2,1.4 l-1.2,1.4 l-1.2,-1.4 Z"/></g>
+      <text class="lbl-s spot" x="24" y="37.2">30 MIN; A MODEL ONLY AT</text><path class="dot2" d="M53.4,35 l1,1.2 l-1,1.2 l-1,-1.2 Z"/>
+      <!-- feeds, Block II: scripts on their own schedules, no model -->
+      <g class="dot2"><circle cx="24" cy="41" r="0.3"/><circle cx="30.5" cy="41" r="0.3"/><circle cx="37" cy="41" r="0.3"/><circle cx="43.5" cy="41" r="0.3"/><circle cx="50" cy="41" r="0.3"/><circle cx="56.5" cy="41" r="0.3"/><circle cx="63" cy="41" r="0.3"/><circle cx="69.5" cy="41" r="0.3"/><circle cx="76" cy="41" r="0.3"/><circle cx="82.5" cy="41" r="0.3"/><circle cx="89" cy="41" r="0.3"/><circle cx="95.5" cy="41" r="0.3"/><circle cx="102" cy="41" r="0.3"/><circle cx="108.5" cy="41" r="0.3"/><circle cx="115" cy="41" r="0.3"/><circle cx="121.5" cy="41" r="0.3"/><circle cx="128" cy="41" r="0.3"/><circle cx="134.5" cy="41" r="0.3"/><circle cx="141" cy="41" r="0.3"/><circle cx="147.5" cy="41" r="0.3"/><circle cx="154" cy="41" r="0.3"/><circle cx="160.5" cy="41" r="0.3"/><circle cx="167" cy="41" r="0.3"/><circle cx="173.5" cy="41" r="0.3"/></g>
+      <!-- runs -->
+      <rect class="box2" x="62.6" y="45" width="9.8" height="2.6"/>
+      <rect class="box" x="74" y="45" width="3.3" height="2.6"/>
+      <rect class="box" x="90.25" y="45" width="9.75" height="2.6"/>
+      <rect class="box2" x="107" y="45" width="5" height="2.6"/>
+      <rect class="box" x="119.5" y="45" width="3.25" height="2.6"/>
+      <rect class="box2" x="136.25" y="45" width="4.9" height="2.6"/>
+      <text class="lbl-s" x="24" y="47.2">ONE BOX PER RUN</text>
+      <!-- you -->
+      <g class="solid"><circle cx="81.6" cy="51.2" r="0.7"/><circle cx="103.25" cy="51.2" r="0.7"/><circle cx="145.5" cy="51.2" r="0.7"/><circle cx="162.8" cy="51.2" r="0.7"/></g>
+      <text class="lbl-s" x="24" y="52.2">A MESSAGE FROM YOU</text>
+
+      <!-- axis -->
+      <path class="w" d="M22,55 H178"/>
+      <path class="t" d="M22,55 v1.6 M35,55 v1.6 M48,55 v1.6 M61,55 v1.6 M74,55 v1.6 M87,55 v1.6 M100,55 v1.6 M113,55 v1.6 M126,55 v1.6 M139,55 v1.6 M152,55 v1.6 M165,55 v1.6 M178,55 v1.6 M28.5,55 v0.8 M41.5,55 v0.8 M54.5,55 v0.8 M67.5,55 v0.8 M80.5,55 v0.8 M93.5,55 v0.8 M106.5,55 v0.8 M119.5,55 v0.8 M132.5,55 v0.8 M145.5,55 v0.8 M158.5,55 v0.8 M171.5,55 v0.8"/>
+      <g class="lbl-s" text-anchor="middle"><text x="22" y="59">00</text><text x="35" y="59">02</text><text x="48" y="59">04</text><text x="61" y="59">06</text><text x="74" y="59">08</text><text x="87" y="59">10</text><text x="100" y="59">12</text><text x="113" y="59">14</text><text x="126" y="59">16</text><text x="139" y="59">18</text><text x="152" y="59">20</text><text x="165" y="59">22</text><text x="178" y="59">24</text></g>
+      <text class="lbl-s" x="0" y="59">LOCAL TIME, H</text>
+      <text class="code" x="178.6" y="62.8" text-anchor="end">RUN-501A</text>
+    </svg>
+    <figcaption><span class="n">Fig. 2-1</span><span>One Day: Upkeep at Night, Brief at Waking, Heartbeat While Awake (Example)</span></figcaption>
+  </figure>
+
+  <section class="para">
+    <div class="num">2.2</div>
+    <div>
+      <h2>FUNCTIONAL DESCRIPTION.</h2>
+      <p>A trigger (the clock, a Conduit event, a webhook, a check-back jbot set for itself, or the person through RUN A TASK) spawns a run as a child conversation, on the model and effort set for its kind. The run works alone; an outward call it makes becomes an ask held for the home thread. Its answer's first word says how much the result matters (figure 2-2).</p>
+    </div>
+  </section>
+  <section class="para">
+    <div class="changebar" style="top:0.4mm; height:9.2mm"></div>
+    <div class="num">2.2.1</div>
+    <div>
+      <h3>Where Results Go.</h3>
+      <p>Block I posts a report the dial lets through as one line in the home thread, gives jbot a turn on it and pushes once. Block II appends every result to the inbox instead: an urgent entry wakes jbot at once, the rest wait for the heartbeat, and a quiet run leaves only its history.</p>
+    </div>
+  </section>
+
+  <figure>
+    <svg viewBox="0 0 180 44" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Run lifecycle">
+      <!-- triggers -->
+      <g class="lbl-s">
+        <text x="0" y="5.6">CLOCK</text><text x="0" y="11.6">EVENT</text><text x="0" y="17.6">WEBHOOK</text><text x="0" y="23.6">CHECK-BACK</text><text x="0" y="29.6">YOU</text>
+      </g>
+      <path class="w" d="M13.4,5 H22 M10,11 H22 M12,17 H22 M14.5,23 H22 M5,29 H22 M22,5 V29"/>
+      <g class="dot"><circle cx="22" cy="11" r="0.45"/><circle cx="22" cy="17" r="0.45"/><circle cx="22" cy="23" r="0.45"/></g>
+      <path class="wa" d="M22,17 H27.6"/>
+      <!-- spawn, work, end -->
+      <rect class="box" x="28" y="11" width="30" height="12"/><text class="lbl" x="43" y="15.6" text-anchor="middle">SPAWN</text><text class="lbl-s" x="43" y="19" text-anchor="middle">CHILD CONVERSATION</text><text class="lbl-s" x="43" y="21.6" text-anchor="middle">MODEL BY KIND</text>
+      <path class="wa" d="M58,17 H65.6"/>
+      <rect class="box" x="66" y="11" width="30" height="12"/><text class="lbl" x="81" y="15.6" text-anchor="middle">WORK</text><text class="lbl-s" x="81" y="19" text-anchor="middle">TOOLS, MEMORY,</text><text class="lbl-s" x="81" y="21.6" text-anchor="middle">ITS FOLDER</text>
+      <path class="wa" d="M96,17 H103.6"/>
+      <rect class="box" x="104" y="11" width="20" height="12"/><text class="lbl" x="114" y="15.6" text-anchor="middle">END</text><text class="lbl-s" x="114" y="19" text-anchor="middle">FIRST WORD</text>
+      <!-- ask -->
+      <path class="wa" d="M81,23 V30.6"/><text class="lbl-s" x="82.4" y="27.6">OUTWARD</text>
+      <rect class="box" x="66" y="31" width="30" height="10"/><text class="lbl" x="81" y="35.4" text-anchor="middle">ASK A-N</text><text class="lbl-s" x="81" y="38.7" text-anchor="middle">HELD FOR HOME</text>
+      <!-- endings -->
+      <path class="w" d="M124,17 H128 M128,5 V29"/>
+      <path class="wa" d="M128,5 H131.6"/><path class="wa" d="M128,13 H131.6"/><path class="wa" d="M128,21 H131.6"/><path class="wa" d="M128,29 H131.6"/>
+      <g class="dot"><circle cx="128" cy="13" r="0.45"/><circle cx="128" cy="17" r="0.45"/><circle cx="128" cy="21" r="0.45"/></g>
+      <g class="lbl-s">
+        <text x="132.6" y="5.7"><tspan style="font-weight:600">NOTHING</tspan>  HISTORY ONLY</text>
+        <text x="132.6" y="13.7"><tspan style="font-weight:600">FYI</tspan>  HEARD IF CHATTY</text>
+        <text x="132.6" y="21.7"><tspan style="font-weight:600">ATTENTION</tspan>  IF NORMAL</text>
+        <text x="132.6" y="29.7"><tspan style="font-weight:600">URGENT</tspan>  ALWAYS HEARD</text>
+        <text x="104" y="35.4">HEARD: A LINE, A TURN, ONE PUSH</text>
+        <text class="spot" x="104" y="39.4">II: AN INBOX ENTRY; URGENT WAKES</text>
+      </g>
+      <text class="code" x="178.6" y="43.6" text-anchor="end">RUN-502A</text>
+    </svg>
+    <figcaption><span class="n">Fig. 2-2</span><span>Life of a Run, Trigger to Ending</span></figcaption>
+  </figure>
+
+  <div class="lower">
+    <div>
+      <div class="tcap"><span class="n">Table 2-1</span>What a Routine Records</div>
+      <table>
+        <thead><tr><th>FIELD</th><th>HOLDS</th></tr></thead>
+        <tbody>
+          <tr><td>Trigger</td><td class="v">daily at, every N min, once; event; webhook</td></tr>
+          <tr><td>Brief</td><td class="v">the task the run is given</td></tr>
+          <tr><td>Model, effort</td><td class="v">per kind: brief, heartbeat, other</td></tr>
+          <tr><td class="ii">Tool scope</td><td class="v ii">the tools the run may use</td></tr>
+          <tr><td class="ii">Ending</td><td class="v ii">report, quiet or failed, by a tool call</td></tr>
+          <tr><td class="ii">Made by</td><td class="v ii">you; or jbot, approved by you</td></tr>
+          <tr><td>History</td><td class="v">each run: transcript, cost, report</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div>
+      <div class="notice">
+        <span class="tag">CAUTION</span>
+        <p>The heartbeat never runs in the home thread. Checks that share the chat's conversation let unverified content into long-term memory.</p>
+      </div>
+      <div class="card">
+        <div class="bar" style="background:var(--spot)"><span>HEARTBEAT TICK</span><span>HUB</span></div>
+        <ol>
+          <li><span>1</span><span>INBOX - read unhandled</span></li>
+          <li><span>2</span><span>LOOPS - read the due ones</span></li>
+          <li class="v"><span>√ none - stop, no model</span></li>
+          <li><span>3</span><span>MODEL - decide</span></li>
+          <li><span>4</span><span>ACT - runs, check-backs</span></li>
+          <li><span>5</span><span>TELL - jbot, if it matters</span></li>
+          <li><span>6</span><span>ENTRIES - mark handled</span></li>
+        </ol>
+      </div>
+    </div>
+  </div>
+  </div>
+
+  <footer class="foot">
+    <div class="rule"></div>
+    <div class="line">
+      <span><b>SECTION 2</b> &middot; RUNS, ROUTINES, HEARTBEAT</span>
+      <span class="dates"><span>Basic 27 Oct 2026</span><span>Change 29 Oct 2026</span><span><b>Page 2-1</b></span></span>
+    </div>
+  </footer>
+</div>
+
+<!-- ======================================================================= PAGE 3 -->
+<div class="page">
+  <header class="head">
+    <div class="doc">JB2A-03-BLOCK I/II-(1)</div>
+    <div class="title">JBOT OPERATIONS HANDBOOK</div>
+    <div class="part">SYSTEMS DATA</div>
+  </header>
+  <div class="rule"></div>
+  <div class="tab p3">MEM</div>
+
+  <div class="body">
+  <div class="opener">
+    <div class="sec">3</div>
+    <div><div class="kicker">SECTION 3 &middot; WHAT IT KNOWS AND WHAT IT SEES</div><div class="name">MEMORY AND CONTEXT</div></div>
+  </div>
+
+  <section class="para">
+    <div class="num">3.1</div>
+    <div>
+      <h2>INTRODUCTION.</h2>
+      <p>jbot's memory is a set of Markdown files in its own folder, which the person can open and edit from the agent page. Each turn of the home thread starts from the same assembly: its prompt and tools, the memory files, then the conversation so far (figure 3-1).</p>
+    </div>
+  </section>
+
+  <figure>
+    <svg viewBox="0 0 180 60" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Context for one turn, and the folder">
+      <text class="lbl-s" x="30" y="2.4">ONE TURN OF THE HOME THREAD, TOP TO BOTTOM</text>
+      <rect class="box" x="30" y="4" width="68" height="5"/><text class="lbl" x="64" y="7.3" text-anchor="middle">SYSTEM PROMPT, TOOLS</text>
+      <rect class="box" x="30" y="9" width="68" height="5"/><text class="lbl" x="64" y="12.3" text-anchor="middle">IDENTITY: NAME, PERSONA</text>
+      <rect class="box" x="30" y="14" width="68" height="5"/><text class="lbl" x="64" y="17.3" text-anchor="middle">ABOUT YOU</text>
+      <rect class="box" x="30" y="19" width="68" height="5"/><text class="lbl" x="64" y="22.3" text-anchor="middle">MEMORY</text>
+      <rect class="box" x="30" y="24" width="68" height="5"/><text class="lbl" x="64" y="27.3" text-anchor="middle">TODAY'S DIARY</text>
+      <rect class="box2" x="30" y="29.6" width="68" height="4.6"/><text class="lbl spot" x="64" y="32.8" text-anchor="middle">OPEN LOOPS DUE</text>
+      <rect class="box2" x="30" y="34.8" width="68" height="4.6"/><text class="lbl spot" x="64" y="38" text-anchor="middle">UNHANDLED INBOX HEADLINES</text>
+      <rect class="hatch" x="30" y="40" width="68" height="5.4"/><rect x="45" y="41.1" width="38" height="3.2" style="fill:var(--paper)"/><text class="lbl" x="64" y="43.5" text-anchor="middle">COMPACTION SUMMARY</text>
+      <rect class="box" x="30" y="45.4" width="68" height="6"/><text class="lbl" x="64" y="49.2" text-anchor="middle">RECENT TURNS</text>
+      <rect class="box" x="30" y="51.4" width="68" height="5" style="stroke-width:0.7"/><text class="lbl" x="64" y="54.7" text-anchor="middle" style="font-weight:600">THE NEW MESSAGE</text>
+      <!-- brackets -->
+      <path class="t" d="M27.6,9.2 h-1.2 v19.6 h1.2"/><text class="lbl-s" x="0" y="17.4">LOADED EVERY</text><text class="lbl-s" x="0" y="20">TURN, CAPPED AT</text><text class="lbl-s" x="0" y="22.6">16,000 CHARS</text>
+      <path class="t" d="M27.6,29.8 h-1.2 v9.4 h1.2" style="stroke:var(--spot)"/><text class="lbl-s spot" x="0" y="34">II: ADDED</text><text class="lbl-s spot" x="0" y="36.6">EACH TURN</text>
+      <path class="t" d="M27.6,40.2 h-1.2 v11 h1.2"/><text class="lbl-s" x="0" y="45.2">PI-DURABLE</text><text class="lbl-s" x="0" y="47.8">COMPACTION</text>
+
+      <!-- folder -->
+      <text class="lbl" x="108" y="6.4" style="font-weight:600">conduit-agent/</text>
+      <text class="lbl-s" x="108" y="9.4">~/.conduit/data/chat/files/</text>
+      <path class="t" d="M109.4,11.2 V49 M109.4,14 h2 M109.4,19 h2 M109.4,24 h2 M109.4,29 h2 M109.4,34 h2 M109.4,39 h2"/>
+      <path class="t" d="M109.4,44 h2 M109.4,49 h2" style="stroke:var(--spot)"/>
+      <g class="lbl"><text x="112.6" y="14.8">IDENTITY.md</text><text x="112.6" y="19.8">USER.md</text><text x="112.6" y="24.8">MEMORY.md</text><text x="112.6" y="29.8">HEARTBEAT.md</text><text x="112.6" y="34.8">diary/</text><text x="112.6" y="39.8">agent.json</text>
+        <text class="spot" x="112.6" y="44.8">loops.md</text><text class="spot" x="112.6" y="49.8">topics/</text></g>
+      <g class="lbl-s"><text x="143" y="14.7">NAME, PERSONA</text><text x="143" y="19.7">ABOUT YOU</text><text x="143" y="24.7">WHAT IT KEEPS</text><text x="143" y="29.7">ITS CHECKLIST</text><text x="143" y="34.7">ONE FILE A DAY</text><text x="143" y="39.7">SETTINGS</text>
+        <text class="spot" x="143" y="44.7">OPEN LOOPS</text><text class="spot" x="143" y="49.7">SEARCHED, NOT LOADED</text></g>
+      <text class="lbl-s" x="108" y="55.2">TOOL: MEMORY READ, ADD, REMOVE, SEARCH</text>
+      <text class="code" x="178.6" y="59.6" text-anchor="end">MEM-501A</text>
+    </svg>
+    <figcaption><span class="n">Fig. 3-1</span><span>Context for One Turn, and the Folder It Comes From</span></figcaption>
+  </figure>
+
+  <section class="para">
+    <div class="num">3.2</div>
+    <div>
+      <h2>FUNCTIONAL DESCRIPTION.</h2>
+      <p>The home thread writes memory as it learns, a line at a time. Content from outside (mail, the web, what a run found) cannot write: it becomes a proposal under Needs you, which the person keeps or discards. Past 16,000 characters, jbot's own lines drop out first, the diary before memory; the person's lines always load (figure 3-2).</p>
+    </div>
+  </section>
+  <section class="para">
+    <div class="num">3.2.1</div>
+    <div>
+      <h3>Line Provenance.</h3>
+      <p>Every line jbot writes ends in a hidden tag naming its thread, call and time, <code>&lt;!-- conduit by:home chat:… --&gt;</code>, which the model reads as "(noted 2026-10-29)". A line with no tag is the person's.</p>
+    </div>
+  </section>
+  <section class="para">
+    <div class="num">3.2.2</div>
+    <div>
+      <h3>Other Chats.</h3>
+      <p class="flush">jbot reads the person's other chats only when asked, through its chats tool (list, read, search). Reading one marks the thread, and an approval raised after that warns that private content may be leaving.</p>
+    </div>
+  </section>
+
+  <figure>
+    <svg viewBox="0 0 180 44" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="How memory is written">
+      <rect class="box" x="2" y="3" width="36" height="8"/><text class="lbl" x="20" y="8" text-anchor="middle">YOU, IN ITS THREADS</text>
+      <rect class="box2" x="2" y="14" width="36" height="8"/><text class="lbl spot" x="20" y="19" text-anchor="middle">ITS OWN REVIEW</text>
+      <rect class="box" x="2" y="29" width="36" height="8"/><text class="lbl" x="20" y="34" text-anchor="middle">MAIL, WEB, RUNS</text>
+      <text class="lbl-s" x="2" y="1.4">TRUSTED</text><text class="lbl-s" x="2" y="27.4">FROM OUTSIDE</text>
+
+      <path class="w" d="M38,7 H42"/><path class="w2" d="M38,18 H42"/><path class="wa" d="M42,7 V18 V12.5 H47.6"/>
+      <rect class="box" x="48" y="6" width="40" height="13"/><text class="lbl" x="68" y="10.6" text-anchor="middle">WRITE NOW</text><text class="lbl-s" x="68" y="13.8" text-anchor="middle">LINE TAGGED WITH SOURCE</text><text class="lbl-s spot" x="68" y="16.8" text-anchor="middle">II: CHANGES LINE, UNDO</text>
+      <path class="wa" d="M38,33 H47.6"/>
+      <rect class="box" x="48" y="26.5" width="40" height="13"/><text class="lbl" x="68" y="31.1" text-anchor="middle">PROPOSAL</text><text class="lbl-s" x="68" y="34.3" text-anchor="middle">NEEDS YOU:</text><text class="lbl-s" x="68" y="37" text-anchor="middle">KEEP OR DISCARD</text>
+
+      <path class="wa" d="M88,12.5 H94 V18.6 H97.6"/><path class="wa" d="M88,33 H94 V25 H97.6"/><text class="lbl-s" x="89" y="31.8">KEEP</text>
+      <path class="box" d="M98,15 v13 a16,1.8 0 0 0 32,0 v-13 a16,1.8 0 0 0 -32,0 a16,1.8 0 0 0 32,0"/>
+      <text class="lbl" x="114" y="21.6" text-anchor="middle">MEMORY FILES</text><text class="lbl-s" x="114" y="25" text-anchor="middle">ITS FOLDER</text>
+
+      <rect class="box" x="140" y="16" width="38" height="11"/><text class="lbl" x="159" y="20.6" text-anchor="middle">YOU, EDITING</text><text class="lbl-s" x="159" y="24" text-anchor="middle">YOUR LINES OUTRANK</text>
+      <path class="wa" d="M140,21.5 H130.4"/>
+
+      <rect class="box2" x="98" y="35" width="32" height="7"/><text class="lbl spot" x="114" y="38.4" text-anchor="middle">NIGHT UPKEEP</text><text class="lbl-s spot" x="114" y="41.1" text-anchor="middle">MERGE, EXPIRE</text>
+      <path class="wa2" d="M114,35 V30.6"/>
+      <text class="code" x="178.6" y="43.6" text-anchor="end">MEM-502A</text>
+    </svg>
+    <figcaption><span class="n">Fig. 3-2</span><span>Who Writes Memory, and How</span></figcaption>
+  </figure>
+
+  <div class="lower">
+    <div>
+      <div class="tcap"><span class="n">Table 3-1</span>Memory Data</div>
+      <table>
+        <thead><tr><th>PARAMETER</th><th>VALUE</th></tr></thead>
+        <tbody>
+          <tr><td>Loaded each turn</td><td class="v">identity, about you, memory, today</td></tr>
+          <tr><td>Load cap</td><td class="v">16,000 characters</td></tr>
+          <tr><td>Dropped first</td><td class="v">jbot's lines: diary, then memory</td></tr>
+          <tr><td>Search covers</td><td class="v">about you, memory, 60 days of diary</td></tr>
+          <tr><td>Search returns</td><td class="v">up to 40 lines</td></tr>
+          <tr><td class="ii">Review</td><td class="v ii">its own threads, on a cheap model</td></tr>
+          <tr><td class="ii">Night upkeep</td><td class="v ii">merge, close loops, expire dated facts</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div>
+      <div class="notice">
+        <span class="tag">CAUTION</span>
+        <p>Keep passwords and keys out of memory files. They load into every turn of the home thread.</p>
+      </div>
+      <div class="card">
+        <div class="bar"><span>CORRECT A MEMORY</span><span>YOU</span></div>
+        <ol>
+          <li><span>1</span><span>SIDEBAR - Chat, jbot</span></li>
+          <li><span>2</span><span>MEMORY - select About you</span></li>
+          <li><span>3</span><span>LINE - edit or delete</span></li>
+          <li><span>4</span><span>FILE - save</span></li>
+          <li class="v"><span>√ your line - carries no tag</span></li>
+          <li><span>5</span><span>HOME THREAD - next turn reads it</span></li>
+        </ol>
+      </div>
+    </div>
+  </div>
+  </div>
+
+  <footer class="foot">
+    <div class="rule"></div>
+    <div class="line">
+      <span><b>SECTION 3</b> &middot; MEMORY AND CONTEXT</span>
+      <span class="dates"><span>Basic 27 Oct 2026</span><span>Change 29 Oct 2026</span><span><b>Page 3-1</b></span></span>
+    </div>
+  </footer>
+</div>
+
+<!-- ======================================================================= PAGE 4 -->
+<div class="page">
+  <header class="head">
+    <div class="doc">JB2A-03-BLOCK I/II-(1)</div>
+    <div class="title">JBOT OPERATIONS HANDBOOK</div>
+    <div class="part">SYSTEMS DATA</div>
+  </header>
+  <div class="rule"></div>
+  <div class="tab p4">SEC</div>
+
+  <div class="body">
+  <div class="opener">
+    <div class="sec">4</div>
+    <div><div class="kicker">SECTION 4 &middot; WHAT IT MAY DO WITHOUT ASKING</div><div class="name">APPROVALS AND CONFINEMENT</div></div>
+  </div>
+
+  <section class="para">
+    <div class="num">4.1</div>
+    <div>
+      <h2>INTRODUCTION.</h2>
+      <p>jbot works freely inside its own folder and asks before anything leaves it. An outward call does not block: it is saved as an ask and returns at once, so the work carries on while the person decides (figure 4-1).</p>
+    </div>
+  </section>
+
+  <figure>
+    <svg viewBox="0 0 180 57" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Approval path">
+      <rect class="box" x="2" y="10" width="24" height="10"/><text class="lbl" x="14" y="14.4" text-anchor="middle">TOOL CALL</text><text class="lbl-s" x="14" y="17.7" text-anchor="middle">HOME OR RUN</text>
+      <path class="wa" d="M26,15 H33.6"/>
+      <rect class="box" x="34" y="10" width="26" height="10"/><text class="lbl" x="47" y="14.4" text-anchor="middle">POLICY</text><text class="lbl-s" x="47" y="17.7" text-anchor="middle">WRAPS EVERY TOOL</text>
+      <path class="w" d="M60,15 H65 M65,6 V15"/><path class="wa" d="M65,6 H69.6"/><path class="wa" d="M65,15 H69.6"/>
+      <g class="lbl-s">
+        <text x="71" y="6.7"><tspan style="font-weight:600">READ ONLY</tspan>  RUNS NOW; THE THREAD IS MARKED TAINTED</text>
+        <text x="71" y="15.7"><tspan style="font-weight:600">IN ITS FOLDER</tspan>  RUNS NOW, INSIDE THE SANDBOX (FIG. 4-2)</text>
+        <text x="71" y="24.7"><tspan style="font-weight:600">OUTWARD</tspan>  SEND, START OR STEER A CHAT, A DEVICE, A SCRIPT</text>
+        <text x="71" y="28.7">AN ALWAYS RULE FOR THE SAME ACTIONS: RUNS NOW</text>
+      </g>
+      <path class="wa" d="M47,20 V24 H69.6"/>
+      <path class="wa" d="M47,24 V32 H15 V38.6"/>
+
+      <rect class="box" x="2" y="39" width="26" height="11"/><text class="lbl" x="15" y="43.6" text-anchor="middle">ASK A-N</text><text class="lbl-s" x="15" y="47" text-anchor="middle">SAVED; RETURNS</text>
+      <path class="wa" d="M28,44.5 H37.6"/>
+      <rect class="box" x="38" y="39" width="26" height="11"/><text class="lbl" x="51" y="43.6" text-anchor="middle">YOU ANSWER</text><text class="lbl-s" x="51" y="47" text-anchor="middle">CARD, PAGE, PUSH</text>
+      <path class="wa" d="M64,44.5 H73.6"/><text class="lbl-s" x="64.8" y="43.3">ALLOW</text>
+      <rect class="box" x="74" y="39" width="26" height="11"/><text class="lbl" x="87" y="43.6" text-anchor="middle">MESSAGE</text><text class="lbl-s" x="87" y="47" text-anchor="middle">TO ITS THREAD</text>
+      <path class="wa" d="M100,44.5 H109.6"/>
+      <rect class="box" x="110" y="39" width="30" height="11"/><text class="lbl" x="125" y="43.6" text-anchor="middle">APPROVED</text><text class="lbl-s" x="125" y="47" text-anchor="middle">{ ASK: "A-N" }</text>
+      <path class="wa" d="M140,44.5 H149.6"/>
+      <rect class="box" x="150" y="39" width="28" height="11" style="stroke-width:0.7"/><text class="lbl" x="164" y="43.6" text-anchor="middle">CALL RUNS</text><text class="lbl-s" x="164" y="47" text-anchor="middle">ONCE, AS SAVED</text>
+      <g class="lbl-s"><text x="38" y="53.6">DON'T: DECLINED</text><text x="38" y="56.2">24 H: EXPIRED</text><text x="74" y="53.6">ALWAYS: ALSO SAVES A RULE</text><text x="110" y="53.6">THE HUB'S COPY OF THE CALL,</text><text x="110" y="56.2">NOT THE MODEL'S</text></g>
+      <text class="lbl-s" x="16.4" y="36.4">OUTWARD</text>
+      <text class="code" x="178.6" y="56.6" text-anchor="end">SEC-501A</text>
+    </svg>
+    <figcaption><span class="n">Fig. 4-1</span><span>An Outward Call, From Ask to Run</span></figcaption>
+  </figure>
+
+  <section class="para">
+    <div class="num">4.2</div>
+    <div>
+      <h2>FUNCTIONAL DESCRIPTION.</h2>
+      <p>The person answers an ask on its card in the thread, on the agent page or from the phone, where Allow needs the phone unlocked. The answer reaches the thread that asked as a message; that thread calls <code>approved</code> with the ask's id and the hub runs its saved copy of the call, once. A run's asks wait under jbot's reply to the run's report.</p>
+    </div>
+  </section>
+  <section class="para">
+    <div class="num">4.2.1</div>
+    <div>
+      <h3>Its Own Machine.</h3>
+      <p class="flush">jbot's bash runs through a helper, built with cc on first use, that applies Landlock and a seccomp filter before the command starts (figure 4-2). It costs about 1 ms a command. No helper, no bash.</p>
+    </div>
+  </section>
+  <section class="para">
+    <div class="num">4.2.2</div>
+    <div>
+      <h3>Runs Never Approve Themselves.</h3>
+      <p class="flush">A run's asks go to the home thread. They are not pushed one by one: the push for the run's report says how many wait.</p>
+    </div>
+  </section>
+
+  <figure>
+    <svg viewBox="0 0 180 50" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Sandbox around jbot's bash">
+      <rect class="panel" x="2" y="2" width="104" height="42"/><text class="lbl-s" x="4" y="5.4">HOME DIRECTORY, ~/.conduit, ~/.ssh: NOT VISIBLE</text>
+      <rect class="box" x="7" y="8" width="94" height="30" style="stroke-width:0.3"/><text class="lbl-s" x="9" y="11.4">SYSTEM DIRECTORIES, CERTS, DNS: READ-ONLY</text>
+      <rect class="box" x="12" y="14" width="84" height="18" style="stroke-width:0.3"/><text class="lbl-s" x="14" y="17.4">TOOLCHAINS (MANAGED PYTHON): READ-ONLY</text>
+      <rect class="box" x="17" y="19.6" width="74" height="9" style="stroke-width:0.7"/><text class="lbl" x="54" y="23.6" text-anchor="middle" style="font-weight:600">JBOT FOLDER: READ, WRITE</text><text class="lbl-s" x="54" y="26.8" text-anchor="middle">ITS HOME AND WORKING DIRECTORY</text>
+      <path class="wa" d="M54,28.6 V48"/><text class="lbl-s" x="55.6" y="47.6">NETWORK, LOOPBACK INCLUDED: NOT CONFINED</text>
+
+      <g text-anchor="middle">
+        <rect class="box" x="118" y="2" width="60" height="6"/><text class="lbl" x="148" y="5.9">BASH, FROM JBOT</text>
+        <path class="wa" d="M148,8 V10.6"/>
+        <rect class="box" x="118" y="11" width="60" height="8"/><text class="lbl" x="148" y="14.6">CONDUIT-LANDLOCK</text><text class="lbl-s" x="148" y="17.6">HELPER, CACHED PER FOLDER</text>
+        <path class="wa" d="M148,19 V21.6"/>
+        <rect class="box" x="118" y="22" width="60" height="6"/><text class="lbl" x="148" y="25.9">LANDLOCK RULES, NO_NEW_PRIVS</text>
+        <path class="wa" d="M148,28 V30.6"/>
+        <rect class="box" x="118" y="31" width="60" height="8"/><text class="lbl" x="148" y="34.6">SECCOMP FILTER</text><text class="lbl-s" x="148" y="37.6">UNIX SOCKETS, IO_URING REFUSED</text>
+        <path class="wa" d="M148,39 V41.6"/>
+        <rect class="box" x="118" y="42" width="60" height="6" style="stroke-width:0.7"/><text class="lbl" x="148" y="45.9">THE COMMAND, ENV WITHOUT SECRETS</text>
+      </g>
+      <text class="code" x="112" y="49.6" text-anchor="end">SEC-502A</text>
+    </svg>
+    <figcaption><span class="n">Fig. 4-2</span><span>Confinement Around jbot's Own Bash</span></figcaption>
+  </figure>
+
+  <div class="lower">
+    <div>
+      <div class="tcap"><span class="n">Table 4-1</span>Approval and Sandbox Data</div>
+      <table>
+        <thead><tr><th>PARAMETER</th><th>VALUE</th></tr></thead>
+        <tbody>
+          <tr><td>Ask lifetime</td><td class="v">24 h, then expired</td></tr>
+          <tr><td>Settled asks kept</td><td class="v">7 days</td></tr>
+          <tr><td>Actions on one card</td><td class="v">12, then "+ N more"</td></tr>
+          <tr><td>Script on a card</td><td class="v">up to 2,000 characters</td></tr>
+          <tr><td>Always rule covers</td><td class="v">the same actions, any input</td></tr>
+          <tr><td>Sandbox cost</td><td class="v">4.1 ms vs 2.9 ms unconfined</td></tr>
+          <tr><td>Foreign-ABI syscalls</td><td class="v">process killed</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div>
+      <div class="notice">
+        <span class="tag">CAUTION</span>
+        <p>The sandbox does not confine the network. jbot's bash can reach services on loopback, such as a browser's debugging port. Closing this needs a network namespace.</p>
+      </div>
+      <div class="card">
+        <div class="bar"><span>ANSWER AN ASK</span><span>YOU</span></div>
+        <ol>
+          <li><span>1</span><span>PUSH - open</span></li>
+          <li><span>2</span><span>CARD - read every line</span></li>
+          <li><span>3</span><span>ALLOW - press, then unlock</span></li>
+          <li class="v"><span>√ thread - shows Allowed</span></li>
+          <li><span>4</span><span>DON'T - press to decline</span></li>
+          <li><span>5</span><span>ALWAYS - for a lasting rule</span></li>
+        </ol>
+      </div>
+    </div>
+  </div>
+  </div>
+
+  <footer class="foot">
+    <div class="rule"></div>
+    <div class="line">
+      <span><b>SECTION 4</b> &middot; APPROVALS AND CONFINEMENT</span>
+      <span class="dates"><span>Basic 27 Oct 2026</span><span>Change 29 Oct 2026</span><span><b>Page 4-1</b></span></span>
+    </div>
+  </footer>
+</div>
+
+</body>
+</html>
