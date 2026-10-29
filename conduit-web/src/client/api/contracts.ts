@@ -1,3 +1,4 @@
+import type { ApprovalLine } from "@/components/ui";
 export type RuntimeKind = "conduit_profile" | "codex";
 /** The capability flags that are a plain yes or no, so UI can be gated on one. */
 export type BooleanCapability = {
@@ -584,7 +585,7 @@ export interface Question {
   options: QuestionOption[];
   freeform: false | { placeholder?: string; multiline?: boolean; numeric?: boolean; initial?: string };
   /** An approval: drawn as one (ApprovalSummary) in the prompt's place. */
-  approval?: { title: string; service?: string | null; lines?: string[] };
+  approval?: { title: string; service?: string | null; lines?: ApprovalLine[] };
 }
 
 export interface QuestionOption {

@@ -8,7 +8,14 @@
 .ui-approval-meta { margin-left: auto; flex: none; color: var(--muted-foreground); font-size: var(--text-row); font-variant-numeric: tabular-nums; }
 .ui-approval-lines { display: grid; gap: var(--space-2xs); margin: 0; padding: 0 0 0 calc(var(--icon) + var(--row-gap)); color: var(--muted-foreground); font-size: var(--text-row); list-style: none; }
 /* Every line in full, wrapped: what is approved is never cut off. */
-.ui-approval-lines > li { min-width: 0; overflow-wrap: anywhere; }
+.ui-approval-lines > li { display: grid; min-width: 0; gap: var(--space-2xs); overflow-wrap: anywhere; }
+/* What an action sends, label and value side by side: the label quiet, the value what is approved. */
+.ui-approval-fields { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: var(--space-2xs) var(--row-gap); margin: 0; }
+.ui-approval-fields > dt { color: var(--muted-foreground); }
+.ui-approval-fields > dd { min-width: 0; margin: 0; color: var(--foreground); white-space: pre-wrap; }
+/* A command or script as it will run (the recipe of .ui-card-read): scrolls, never cut. */
+.ui-approval-code { max-height: var(--measure-xs); margin: 0; overflow: auto; padding: var(--space-sm) var(--space-md); border-radius: var(--radius-inset); background: var(--tint);
+  color: var(--foreground); font: var(--weight-rest) var(--text-caption)/var(--leading-text) var(--font-data); white-space: pre-wrap; overflow-wrap: anywhere; }
 
 /* In the thread: the summary on frost, its answers under it at the left (Allow the one action waiting). */
 .ui-approval { display: grid; width: min(100%, var(--measure-lg)); gap: var(--space-lg); border-radius: var(--radius-surface); padding: var(--space-lg); }
