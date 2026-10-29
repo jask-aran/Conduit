@@ -1,13 +1,17 @@
 import { defineTask, defineTool } from "@earendil-works/pi-durable";
 import { Type } from "@earendil-works/pi-ai";
 import { AgentDoc, nextId } from "./agent-doc.js";
+import { heartbeatHasWork } from "./inbox.js";
 
 const BRIEF = "Morning brief. Look at what changed since the last brief: the person's calendar and mail if connected, "
   + "their chats (the `chats` tool), devices, your diary and schedules. Tell the person in a short list what matters today. "
   + "Where an item has an obvious next step outside your folder (a reply to send, an invite to answer, a chat to start on "
   + "something), prepare it in full and make the call: it is asked, not done, and the person approves it under your brief. "
   + "Prepare at most three, only ones they would likely want; mark those items in the list. Begin with FYI: or ATTENTION:.";
-const HEARTBEAT = "Heartbeat. Read HEARTBEAT.md in your folder and check each item. Answer NOTHING when all is clear; otherwise say what needs the person.";
+const HEARTBEAT = "Heartbeat. Read your unhandled inbox (inbox list; read an entry for its whole report) and HEARTBEAT.md in "
+  + "your folder, and check each item. For each entry decide: nothing to do, act (start work, set a check-back), or tell "
+  + "the person; then mark it with inbox handle and what you did. When nothing needs the person, call nothing_to_report; "
+  + "otherwise report only what needs them.";
 const terminal = () => ({ status: "terminal", outcome: { status: "completed" } });
 const result = (text, isError = false) => ({ output: [{ type: "text", text }], ...(isError ? { isError: true } : {}) });
 const clockOptions = (conversationId) => ({ ownership: { kind: "conversation" }, conversationId, background: true });
@@ -95,13 +99,15 @@ function makeClock(runtime) {
         if (!schedule || schedule.cancelling || schedule.clock !== task.id) { await api.commit(() => terminal(), context); return; }
         const slot = task.state.checkpoint.slot;
         const missed = api.now() - Date.parse(slot) > 6 * 3600000;
-        const overBudget = !missed && await agent.overBudget();
+        // A heartbeat with an empty inbox and nothing on its checklist has nothing to decide: no model call.
+        const idle = !missed && schedule.id === "heartbeat" && schedule.system && !await heartbeatHasWork(agent, await api.snapshot(AgentDoc, context));
+        const overBudget = !missed && !idle && await agent.overBudget();
         if (overBudget) await agent.notice("budget", `Skipped ${schedule.title}: today's budget of $${agent.settings().budgetUsdPerDay} is spent.`);
         await api.commit(async (tx) => {
           const doc = await tx.doc(AgentDoc);
           const current = doc.schedules[task.input.scheduleId];
           if (!current || current.cancelling || current.clock !== task.id) return terminal();
-          if (!missed && !overBudget) await agent.spawnRun(tx, api.conversationId, {
+          if (!missed && !idle && !overBudget) await agent.spawnRun(tx, api.conversationId, {
             key: `${current.id}:${slot}`, kind: current.system ? current.id : "checkback", title: current.title, task: current.task,
           });
           current.lastAt = slot;

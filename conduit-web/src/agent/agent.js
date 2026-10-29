@@ -5,6 +5,7 @@ import { templateBackend } from "../chat-backend.js";
 import { Connectors } from "./connectors.js";
 import { AgentDoc } from "./agent-doc.js";
 import { listAsks } from "./asks.js";
+import { listInbox } from "./inbox.js";
 
 const SEED = fileURLToPath(new URL("../../../templates/agent/seed/", import.meta.url));
 const TEMPLATE_ID = "agent";
@@ -303,6 +304,7 @@ export class PersistentAgent {
         .map((chat) => ({ chatId: chat.id, title: chat.title || "", updatedAt: chat.updatedAt })),
       spentToday: state.spend[this.today()] || 0,
       asks: listAsks(state),
+      inbox: listInbox(state),
       rules: Object.values(state.rules || {}).reverse().sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
     };
   }
@@ -314,6 +316,7 @@ export const runBrief = (kind, task) => [
   "",
   String(task || "").trim(),
   "",
-  "Begin your final answer with NOTHING, FYI:, ATTENTION: or URGENT: as described in your instructions. "
+  "When there is nothing worth telling, call nothing_to_report and stop; when the task cannot be done, call run_failed "
+    + "with the reason. Otherwise begin your final answer with FYI:, ATTENTION: or URGENT: as described in your instructions. "
     + "An outward call you make is asked, not done: the person approves it under your report.",
 ].join("\n");

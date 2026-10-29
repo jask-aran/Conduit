@@ -1,6 +1,7 @@
 import { Type } from "@earendil-works/pi-ai";
 import { configure, defineDoc, defineExtension, defineTask, defineTool, UsageDoc, watchEvents } from "@earendil-works/pi-durable";
 import { AgentDoc } from "../agent/agent-doc.js";
+import { appendEntry, headlineOf, RunEnd } from "../agent/inbox.js";
 
 const SubagentRoster = defineDoc({
   kind: "conduit.subagents", version: 1, scope: "conversation", history: "latest", fork: "initial",
@@ -27,10 +28,13 @@ export const reportLevel = (answer) => {
   const word = String(answer || "").trim().match(/^\W*([A-Z_]+)/)?.[1] || "";
   return word === "NOTHING" || word === "HEARTBEAT_OK" ? "none" : word === "FYI" ? "fyi" : word === "URGENT" ? "urgent" : "attention";
 };
+/** A gated run's level: how it ended by tool (quiet, failed), or else its answer's first word. */
+const runLevel = (report, end) => end?.outcome === "quiet" ? "none"
+  : end?.outcome === "failed" || report.status === "failed" ? "failed" : reportLevel(report.answer);
 const LEVELS = ["none", "fyi", "attention", "urgent"];
 /** The least a report must matter to reach the person, by their interruption setting. */
 const THRESHOLD = { quiet: "urgent", normal: "attention", chatty: "fyi" };
-export const reaches = (level, dial = "normal") => LEVELS.indexOf(level) >= LEVELS.indexOf(THRESHOLD[dial] || "attention");
+export const reaches = (level, dial = "normal") => LEVELS.indexOf(level === "failed" ? "attention" : level) >= LEVELS.indexOf(THRESHOLD[dial] || "attention");
 const aborted = async (task, api, context) => {
   await api.commit(() => ({ status: "terminal", outcome: { status: "aborted" } }), context);
 };
@@ -203,9 +207,9 @@ export function Subagents(runtime) {
           if (!stopped && item.number === number) { changed = item.status !== report.status; item.status = report.status; item.endedAt = new Date().toISOString(); }
         }, context);
         if (changed) runtime.subagentsChanged?.(api.conversationId, { conversationId: child, status: report.status });
-        // The agent's runs: what they spent counts toward its day, and a report reaches the home thread only when it
-        // matters enough for the person's interruption setting (a heartbeat's all clear never does).
-        const level = task.input.gate ? reportLevel(report.answer) : null;
+        // The agent's runs: what they spent counts toward its day, and what they found goes to its inbox (inbox.js).
+        const end = task.input.gate ? await api.memo("end", (await api.snapshot(RunEnd, child, context))?.end || null, context) : null;
+        const level = task.input.gate ? runLevel(report, end) : null;
         if (task.input.gate) {
           const spent = totalUsage(await api.snapshot(UsageDoc, child, context)).cost.total;
           const day = await api.memo("day", runtime.agentDay?.() || new Date().toISOString().slice(0, 10), context);
@@ -218,12 +222,22 @@ export function Subagents(runtime) {
             doc.spend[day] = (doc.spend[day] || 0) + spent;
           }, context);
         }
-        // A morning brief is asked for, not volunteered: it reaches the person whatever the setting, unless it is empty.
-        const asked = task.input.origin?.kind === "brief" && level !== "none";
-        // A run that left something to approve is heard whatever the setting: its asks show under its report.
+        // Told at once: what was asked for (a brief, a task the person started, the heartbeat's decision), what is
+        // urgent, and a run that left something to approve, whose asks show under its report. The rest waits in the
+        // inbox for the heartbeat, or for the person to talk to jbot first.
+        const kind = task.input.origin?.kind;
+        const asked = ["brief", "manual", "heartbeat"].includes(kind) && level !== "none";
         const waiting = task.input.gate ? await api.memo("waiting", Object.values((await api.snapshot(AgentDoc, context))?.asks || {})
           .filter((ask) => ask.status === "pending" && String(ask.sourceConversationId) === String(child)).length, context) : 0;
-        const heard = !task.input.gate || asked || waiting > 0 || reaches(level, runtime.agentDial?.());
+        const heard = !task.input.gate || (level !== "none" && (asked || waiting > 0 || level === "urgent"));
+        if (task.input.gate && level !== "none" && kind !== "heartbeat") {
+          const at = await api.memo("entryAt", new Date().toISOString(), context);
+          await api.commit(async (tx) => {
+            appendEntry(await tx.doc(AgentDoc), { key: `${child}:${number}`, kind, title, subagentId: id, conversationId: child, level,
+              headline: headlineOf(level === "failed" && end?.reason ? end.reason : report.answer),
+              ...(heard ? { status: "handled", handledAt: at, outcome: "Told the person at once" } : { status: "unhandled" }) }, Date.parse(at));
+          }, context);
+        }
         const parent = await runtime.harness.conversation(api.conversationId, context);
         if (heard && !stopped && !await resetSince(parent, task.input.sinceEntry || 0, context)) {
           const requestId = `subagent-report:${child}:${number}`;
@@ -235,7 +249,7 @@ export function Subagents(runtime) {
           // The parent may have no live chat (an agent's home thread nobody has open): the report's turn is followed.
           runtime.wakeChat?.(api.conversationId);
           // And the person's devices hear of it, once: marked before sending, so a replay does not push it again.
-          if (task.input.gate && await api.memo("pushed", context) === undefined) {
+          if (task.input.gate && (asked || waiting > 0 || reaches(level, runtime.agentDial?.())) && await api.memo("pushed", context) === undefined) {
             await api.memo("pushed", true, context);
             runtime.notify?.({ kind: "report", conversationId: api.conversationId, title, text: report.answer, level, key: `${child}-${number}`, waiting });
           }

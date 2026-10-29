@@ -65,6 +65,14 @@ it wants is an approval card showing trigger, brief and budget. You can make or 
 thread, so each day starts compacted; then the built-in routines that gather context for the morning brief, then
 the brief.
 
+Built (2026-10-29): **quiet runs and the inbox** (`conduit-web/src/agent/inbox.js`). A run ends with
+`nothing_to_report` (no entry, only its history) or `run_failed` (a reason), else its first word sets the level as
+before. The reporter appends every other result to `AgentDoc.inbox`; a brief, a task the person started, the
+heartbeat's own decision, an urgent report and a run with asks waiting are told at once and land handled. The rest
+wait unhandled, shown each turn of the home thread (section `agent-inbox`) and handled with the `inbox` tool;
+the page lists them under Inbox. The heartbeat makes no model call when the inbox is empty and HEARTBEAT.md lists
+nothing. Not yet: the 30-minute gated tick, feeds, open loops, the heartbeat's quiet line in the home thread.
+
 **It asks only when it needs something.** No small-talk check-ins: a task or open loop that needs your input
 asks, batched, never in quiet hours.
 
