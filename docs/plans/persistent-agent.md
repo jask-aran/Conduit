@@ -1,12 +1,75 @@
 # Persistent agent
 
-Status: research and decisions, 2026-10-27. Target v0.8.9. Nothing built yet.
+Status: first slice built 2026-10-27; vision set 2026-10-29 (below), which supersedes decisions 6 and 8 where
+they differ. Target v0.8.9.
 
 The persistent agent is the Conduit durable agent (pi-durable) running as one
 always-on agent per hub: it keeps working between conversations, wakes itself,
 and comes to you when something needs you. It is modelled on Claude Duet, Meta
 Muse, Instinct and OpenAI Dots (one agent), not on Grok Bot or open-duet (a
 roster of named bots).
+
+## Vision (decided 2026-10-29)
+
+Under every one of these products is a harness thread in a loop with tools; what makes it an assistant is the
+parts around the loop. jbot is one agent, so it leans on one long thread, runs for discrete work, and routines.
+It remembers what you tell it; it does not mine your other chats.
+
+```
+ feeds ──▶ inbox ──▶ heartbeat ──▶ quiet │ act (runs, check-backs) │ tell jbot ──▶ you
+   ▲                    ▲                                                   ▲
+ scripts, integrations  urgent entries wake jbot at once                  home thread, push
+```
+
+**The home thread is the relationship.** One conversation for good: you talk to it there and it talks to you
+there. It plans, delegates and tells; heavy work goes to runs. The UI shows days; underneath it is continuous,
+kept bounded by compaction. A model or tool change starts a new session with a handoff, unseen in the transcript.
+
+**Memory** has four layers, files in its folder: essentials (who you are, how you work, current priorities;
+always loaded, kept small), topics (people, projects, places; searched, not loaded), a dated diary, and open
+loops (what it is tracking, what it promised, what waits on you or on someone else: Duet's running list, and what
+the heartbeat works from). What it learns from you and its own thread it writes directly, each change shown as a
+memory-changes line you can undo; what comes from outside content (mail, the web, a run's findings) is a
+proposal you keep or discard. Lines you wrote outrank its own. A memory review on a cheap model reads its own
+thread every so many turns; it never reads your other chats.
+
+**Runs are the work.** Anything that is not conversation is a run: a subagent conversation with a brief, a
+model and effort, a tool scope, a budget, and a required end: report (news), quiet (nothing to say, a tool call,
+not a phrase) or failed (with a reason). Runs never talk to you; they write to the inbox.
+
+**Feeds fill the inbox.** A feed is a source that appends entries (source, time, one-line headline, the full
+report, urgent or not). By default it watches mail and calendar (Executor), the chats it started or steered, and
+Conduit itself through a Conduit integration (devices, hub health, the network it runs on). Anything else it
+watches because you asked: a new routine, a line on the heartbeat's checklist, or a feeding run. Feeds are
+scripts first: a small script in its sandboxed folder, written by it and approved once, that the hub runs on a
+schedule with no model call (call Executor or Conduit, diff against last time, append entries). A feed that needs
+judgement ("is this mail important?") is a cheap-model run instead. Only deciding spends tokens.
+
+**The inbox is where context waits.** Append-only. An urgent entry wakes jbot at once (and may push); the rest
+waits for the heartbeat. When you talk to jbot first, its turn starts with the unhandled headlines, so it is never
+behind. Handled entries stay a week, visible on its page with what became of each.
+
+**The heartbeat decides.** It ticks every 30 minutes in your active hours, but calls a model only when the inbox
+has entries or an open loop is due: most ticks cost nothing. It reads the entries and due loops, then stays quiet,
+acts (starts runs, sets check-backs) or tells jbot something worth saying, and marks the entries handled. What it
+did shows as a quiet, collapsed line in the home thread ("Heartbeat · 4 handled · 1 run started"). It runs on a
+cheap model in its own conversation, never the home thread's (see "Mind Your HEARTBEAT").
+
+**Routines are saved triggers.** A routine is a record: trigger (schedule, event, webhook), brief, tool scope,
+model, what it may say, who made it, and its run history. The morning brief is one with an always-report end; the
+heartbeat is one too. jbot sets one-off check-backs for itself freely ("look again Friday"); a recurring routine
+it wants is an approval card showing trigger, brief and budget. You can make or change any routine yourself.
+
+**Night is upkeep ("dreaming").** Quiet hours are its maintenance window: memory review and consolidation
+(diary into topics, stale loops closed), then, about an hour before quiet hours end, compaction of the home
+thread, so each day starts compacted; then the built-in routines that gather context for the morning brief, then
+the brief.
+
+**It asks only when it needs something.** No small-talk check-ins: a task or open loop that needs your input
+asks, batched, never in quiet hours.
+
+**Budget** is cost per day across runs, feeds and the heartbeat (subscription models counted at API price);
+past it, it waits for you.
 
 ## What the products converged on
 
@@ -45,6 +108,15 @@ edge.
   memory files.
 - **Hermes Agent**: an AI reviewer for flagged commands, background delegation,
   `MEMORY.md`/`USER.md` loaded as a snapshot at session start.
+- **OpenBot** (nightly-labs, PolyForm Noncommercial: ideas only): routines run in throwaway sessions that read
+  a short handoff of the chat and leave a digest for its next turn; `routine_no_update` and
+  `routine_report_failure` tools end a run quiet or failed; memories are entries, essential ones always loaded
+  (8 KB) and the rest searched; a background memory review on a cheaper model every 20 turns or 15 idle
+  minutes; a replacement session gets a bounded handoff (32k characters) with search tools for the rest.
+- **Open Muse** (chyroc, MIT): one main session on a hosted agent service, continued into a new "chapter"
+  only when its configuration changes (earlier turns archived to memory); reminders live in `UPCOMING.md`;
+  check-ins only in waking hours, once a day, never while something waits; each message carries local time and
+  the device written from.
 - **Security:** "Mind Your HEARTBEAT" (arXiv 2603.23064): background checks in
   the same session as the user's chat let misinformation into long-term memory
   (promoted up to 91%, swaying later sessions up to 76%). Background work runs in
@@ -176,10 +248,9 @@ approval), then connectors, then outside sources.
 
 ## Open
 
-- What the heartbeat's checklist starts with, and its default interval.
-- How the attention list and side threads appear in Chat and Work (UI pass,
-  with the user, after the loop works).
-- Budget unit: tokens or cost, and per day or per rolling window.
+- What the heartbeat's checklist starts with.
+- The Conduit integration's shape (what it exposes about the hub and network).
+- How the attention list, inbox and side threads appear in Chat and Work (UI pass, with the user).
 
 Sources: claude.com/resources/articles/claude-duet; every.to/vibe-check/
 vibe-check-duet-anthropic-s-always-on-agent; testingcatalog.com/meta-introduces-
