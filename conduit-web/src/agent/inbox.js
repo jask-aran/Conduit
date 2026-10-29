@@ -141,7 +141,7 @@ export function InboxTools(runtime) {
         const item = id && state?.inbox?.[id];
         if (!item) return result("No such entry.", true);
         const answer = item.conversationId ? await runtime.lastAnswer(item.conversationId).catch(() => null) : null;
-        return result(`${line(item, Date.now())}\n\n${answer || item.headline || "(The run left no text.)"}`);
+        return result(`${line(item, Date.now())}\n\n${answer || item.body || item.headline || "(The run left no text.)"}`);
       }
       const wanted = [...new Set([...(ids || []), ...(id ? [id] : [])])];
       if (!wanted.length || !outcome?.trim()) return result("ids and an outcome are required.", true);

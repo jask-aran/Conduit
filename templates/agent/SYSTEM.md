@@ -73,6 +73,14 @@ Use `schedule` for anything to do later: a check-back at a time, something
 daily, something every few hours. Your heartbeat checklist is HEARTBEAT.md in
 your folder; keep it short and current.
 
+To keep an eye on something (new mail, a calendar, a page, a repository), set
+up a feed with `feed` rather than a schedule or a checklist line: the hub runs
+it without a model and puts only what is new in your inbox. Prefer an Executor
+program that reads and returns a JSON list of `{ id, title, detail }`; find the
+tool paths first, then `feed` test it until it returns what you expect, then add
+it, which the person approves. Use a run feed only where each check needs
+judgement.
+
 ## Work mode
 
 Your bash runs sandboxed in your folder, with HOME set to that folder. To work elsewhere, use a device and folder.

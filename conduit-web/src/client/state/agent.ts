@@ -14,13 +14,15 @@ export type AgentWork = { model: string; thinkingLevel: string };
 export type AgentWorkKind = "brief" | "heartbeat" | "other";
 export type AgentRunKind = "manual" | "schedule" | "checkback" | "brief" | "heartbeat" | "webhook" | "event" | string;
 export interface AgentRun { id: string; title: string; kind: AgentRunKind; startedAt?: string; endedAt?: string; status?: string; level?: string | null; conversationId: number }
-export interface AgentSchedule { id: string; title: string; kind: "once" | "daily" | "every" | string; at?: string; everyMinutes?: number; nextAt?: string | null; lastAt?: string | null; system?: boolean }
+export interface AgentSchedule { id: string; title: string; kind: "once" | "daily" | "every" | string; at?: string; everyMinutes?: number; nextAt?: string | null; lastAt?: string | null; system?: boolean;
+  /** A feed (feeds.js): what it reads from and how its last run went. */
+  feed?: { source: "executor" | "script" | "run"; lastRunAt: string | null; lastCount: number; lastError: string | null; primed: boolean } }
 export interface AgentWatch { id: string; kind: "watch" | "webhook"; title: string; event?: string; lastFiredAt?: string | null }
 export interface AgentQuestion { kind: "question"; chatId: string; requestId: string | null; title: string }
 /** A change to its memory a run proposed, waiting for the person (memory.js). */
 export interface AgentProposal { id: string; file: string; op: "add" | "remove" | string; text: string; by?: string; chatId?: string | null; at: string }
 /** What a run reported (inbox.js): waiting for the heartbeat or the person, or handled, kept a week. */
-export interface AgentInboxEntry { id: string; at: string; kind: AgentRunKind; title: string; subagentId: string; conversationId: number; level: "fyi" | "attention" | "urgent" | "failed"; headline: string; status: "unhandled" | "handled"; handledAt?: string; outcome?: string }
+export interface AgentInboxEntry { id: string; at: string; kind: AgentRunKind; title: string; subagentId: string; conversationId: number; level: "fyi" | "attention" | "urgent" | "failed"; headline: string; body?: string; feedId?: string; status: "unhandled" | "handled"; handledAt?: string; outcome?: string }
 export interface AgentNotice { id: string; kind: string; text: string; at: string }
 export interface AgentAsk { id: string; chatId: string; toolCallId: string; parentCallId: string | null; title: string; service: string | null; lines: ApprovalLine[]; createdAt: string; expiresAt: string; status: "pending" | "allowed" | "declined" | "expired" | "used"; decidedAt?: string; choice?: "allow" | "always" | "deny" }
 export interface AgentView {

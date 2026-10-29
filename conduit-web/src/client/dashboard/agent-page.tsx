@@ -26,6 +26,7 @@ const MEMORY = [
   { path: "SOUL.md", label: "Soul", context: "Who it is and how it works" },
   { path: "HEARTBEAT.md", label: "Heartbeat", context: "What it checks when it wakes" },
 ];
+const FEED_SOURCE: Record<string, string> = { executor: "Executor", script: "Script", run: "Model run" };
 const DIAL: Record<string, string> = { quiet: "Quiet", normal: "Normal", chatty: "Chatty" };
 
 function age(value: string | null | undefined, now: number) {
@@ -144,7 +145,7 @@ export function AgentPage(props: {
     const waiting = entry.status === "unhandled";
     return <SplitRow element="button" disabled={!chatId()} onClick={(event: MouseEvent) => chatId() && props.onOpenChat(chatId()!, event)}
       lead={waiting ? <StatusDot label="Waiting" tone={entry.level === "urgent" || entry.level === "failed" ? "warn" : "unread"} /> : <Icons.Check />}
-      primary={entry.headline || entry.title} title={entry.headline}
+      primary={entry.headline || entry.title} title={entry.body || entry.headline}
       context={[entry.title, LEVEL[entry.level] || entry.level, waiting ? "Waiting for the heartbeat" : entry.outcome].filter(Boolean).join(" · ")}
       trailing={age(entry.at, now())} />;
   };
@@ -160,9 +161,27 @@ export function AgentPage(props: {
     </Show>
   </SplitGroup>;
 
-  const schedulesGroup = () => <SplitGroup id="agent-schedules" label="Schedules" count={working()?.schedules.length || null}>
-    <Show when={working()?.schedules.length} fallback={<SplitEmpty>Nothing here yet.</SplitEmpty>}>
-      <For each={working()?.schedules}>{(schedule) =>
+  // Feeds: what fills the inbox, mostly without a model; the rest of its clocks under Schedules.
+  const feeds = () => (working()?.schedules || []).filter((schedule) => schedule.feed);
+  const schedules = () => (working()?.schedules || []).filter((schedule) => !schedule.feed);
+  const feedsGroup = () => <Show when={feeds().length}>
+    <SplitGroup id="agent-feeds" label="Feeds" count={feeds().length}>
+      <For each={feeds()}>{(schedule) => {
+        const feed = schedule.feed!;
+        const last = () => feed.lastError ? "Last check failed" : !feed.primed ? "First check soon" : feed.lastCount ? `${feed.lastCount} new last check` : "Nothing new last check";
+        return <SplitRow lead={feed.lastError ? <Icons.Warning /> : <Icons.Fetch />} primary={schedule.title} title={feed.lastError || undefined}
+          context={[FEED_SOURCE[feed.source], when(schedule), last()].join(" · ")}
+          trailing={<>
+            <span>{age(schedule.nextAt, now())}</span>
+            <DashIconButton aria-label="Remove feed" title="Remove feed" disabled={busy() !== null} onClick={() => act(schedule.id, () => api(`/v0/agent/feeds/${encodeURIComponent(schedule.id)}`, { method: "DELETE" }))}><Icons.Delete /></DashIconButton>
+          </>} />;
+      }}</For>
+    </SplitGroup>
+  </Show>;
+
+  const schedulesGroup = () => <SplitGroup id="agent-schedules" label="Schedules" count={schedules().length || null}>
+    <Show when={schedules().length} fallback={<SplitEmpty>Nothing here yet.</SplitEmpty>}>
+      <For each={schedules()}>{(schedule) =>
         <SplitRow lead={<Icons.Runtime />} primary={schedule.title} context={when(schedule)} trailing={age(schedule.nextAt, now())} />}
       </For>
     </Show>
@@ -236,7 +255,7 @@ export function AgentPage(props: {
           notice={error() ? <DashNote error>{error()}</DashNote> : undefined}
           conversation={conversation()}
           composer={props.composer}
-          aside={<>{needsGroup()}{inboxGroup()}{threadsGroup()}{workingGroup()}{schedulesGroup()}{watchesGroup()}{rulesGroup()}{memoryGroup()}{recentGroup()}</>} />
+          aside={<>{needsGroup()}{inboxGroup()}{threadsGroup()}{workingGroup()}{feedsGroup()}{schedulesGroup()}{watchesGroup()}{rulesGroup()}{memoryGroup()}{recentGroup()}</>} />
       </Show>
     </Show>
 

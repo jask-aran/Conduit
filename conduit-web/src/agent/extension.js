@@ -1,6 +1,7 @@
 import { defineExtension } from "@earendil-works/pi-durable";
 import { ChatTools } from "./chat-tools.js";
 import { EventTools } from "./events.js";
+import { FeedTools } from "./feeds.js";
 import { InboxTools } from "./inbox.js";
 import { MemoryTools } from "./memory.js";
 import { ApprovedTool, policyWraps } from "./policy.js";
@@ -16,7 +17,8 @@ import { ScheduleTools } from "./schedule.js";
  * after the runtime: a part never holds it at install.
  */
 export function AgentExtension(runtime, installed) {
-  const parts = [MemoryTools(runtime), ScheduleTools(runtime), EventTools(runtime), ChatTools(runtime), InboxTools(runtime)];
+  const schedules = ScheduleTools(runtime);
+  const parts = [MemoryTools(runtime), schedules, EventTools(runtime), ChatTools(runtime), InboxTools(runtime), FeedTools(runtime, schedules)];
   const own = parts.flatMap((part) => part.tools || []);
   // `approved` runs what an ask holds with the tool as installed: the policy has already been answered.
   const tools = [...own, ApprovedTool(runtime, [...installed, ...own])];

@@ -9,7 +9,9 @@ import { sandboxHelper, sandboxedEnv } from "./sandbox.js";
 /** Outward calls need an asynchronous approval; private reads taint the conversation. */
 /** Tools that leave the folder only when given a device; and tools that always leave it. */
 const PLACED = ["read", "write", "edit", "bash"];
-const ALWAYS_OUTWARD = { start_chat: "start a chat", steer_chat: "post in one of your chats" };
+const ALWAYS_OUTWARD = { start_chat: "start a chat", steer_chat: "post in one of your chats", feed: "add a feed" };
+/** A tool whose other actions stay in its folder: only these leave it. */
+const OUTWARD_ACTIONS = { feed: ["add"] };
 /** Calls that read the person's own data, which taint the conversation. */
 const PRIVATE_READS = { chats: (args) => ["read", "search"].includes(args?.action) };
 const privateRead = (name, args) => PRIVATE_READS[name]?.(args) || (name.startsWith("mcp__") && connectorRead(name, args));
@@ -26,7 +28,7 @@ const WRITE_WORDS = new Set(["send", "create", "insert", "update", "patch", "del
   "move", "copy", "clear", "append", "set", "put", "post", "watch", "stop", "start", "complete", "cancel", "submit", "resume",
   "connect", "disconnect", "reply", "forward", "archive", "share", "upload", "write", "add", "batchupdate", "batchmodify", "batchdelete", "empty", "run", "execute"]);
 const wordsOf = (path) => String(path).split(/[^A-Za-z0-9]+/).flatMap((part) => part.split(/(?<=[a-z0-9])(?=[A-Z])/)).map((word) => word.toLowerCase()).filter(Boolean);
-const isReadAction = (path) => { const words = wordsOf(path); return !words.some((word) => WRITE_WORDS.has(word)) && words.some((word) => READ_WORDS.has(word)); };
+export const isReadAction = (path) => { const words = wordsOf(path); return !words.some((word) => WRITE_WORDS.has(word)) && words.some((word) => READ_WORDS.has(word)); };
 const connectorTool = (name) => name.split("__").slice(2).join("__");
 /** The actions a gateway `call` names, `tools.` dropped; null for a tool that is not one. */
 const connectorCalls = (name, args) => {
@@ -61,7 +63,7 @@ function computedIndex(code) {
   }
   return false;
 }
-function programPaths(code) {
+export function programPaths(code) {
   if (typeof code !== "string" || !code.trim()) return null;
   if ([...code.matchAll(STRING)].some(([literal]) => literal[0] === "`" && literal.includes("${"))) return null;
   const literal = /\btools\s*\[\s*(["'])([^"'`$\\]+)\1\s*\]\s*\(|\btools((?:\s*\.\s*[A-Za-z_$][\w$]*)+)\s*\(/g;
@@ -111,6 +113,7 @@ const summary = (name, args) => {
     }
     return mcpLabel(name, args);
   }
+  if (name === "feed") return `add a feed, ${args.title || "untitled"}, every ${args.everyMinutes} min (${SOURCE_WORDS[args.source?.kind] || "a source"})`;
   if (ALWAYS_OUTWARD[name]) {
     const what = name === "steer_chat" ? `${args.chatId || "a chat"}: ${String(args.message || "").slice(0, 200)}`
       : `${args.workspace || "a workspace"}${args.profile ? ` (${args.profile})` : ""}: ${String(args.prompt || "").slice(0, 200)}`;
@@ -120,7 +123,9 @@ const summary = (name, args) => {
   if (name === "bash") return `run on ${target}: ${String(args.command || "").slice(0, 200)}`;
   return `${name} ${args.path || ""} on ${target}`;
 };
-const outward = (name, args) => Boolean(ALWAYS_OUTWARD[name] || (PLACED.includes(name) && args?.device));
+const outward = (name, args) => Boolean((ALWAYS_OUTWARD[name] && (!OUTWARD_ACTIONS[name] || OUTWARD_ACTIONS[name].includes(args?.action)))
+  || (PLACED.includes(name) && args?.device));
+const SOURCE_WORDS = { executor: "Executor program", script: "Script in its folder", run: "A model run" };
 
 async function ruleTarget(runtime, name, args) {
   if (name.startsWith("mcp__")) {
@@ -128,6 +133,8 @@ async function ruleTarget(runtime, name, args) {
     const paths = connectorCalls(name, args);
     return paths ? JSON.stringify([...new Set(paths)].sort()) : connectorTool(name) === "execute" ? null : name;
   }
+  // Each feed is its own decision: no lasting rule.
+  if (name === "feed") return null;
   if (name === "start_chat") {
     if (typeof args.workspace !== "string" || !args.workspace.trim()) return null;
     const workspace = args.workspace.trim();
@@ -142,6 +149,7 @@ async function ruleTarget(runtime, name, args) {
 
 const ruleLabel = (name, args) => {
   if (name.startsWith("mcp__")) return `${[...new Set(connectorActions(name, args) || [])].map(actionWords).join(", ") || mcpLabel(name, args)}, any input`;
+  if (name === "feed") return "add a feed";
   if (name === "start_chat") return `start a chat, ${args.workspace || "a workspace"}`;
   if (name === "steer_chat") return `post in one of your chats, ${args.chatId || "a chat"}`;
   const target = `${args.device}${args.folder ? ` · ${args.folder}` : ""}`;
@@ -177,6 +185,15 @@ function presentation(name, args) {
     else if (!calls) { const fields = fieldsOf(args); if (fields.length) lines.push({ fields }); }
     const label = mcpLabel(name, args);
     return { title: label[0].toUpperCase() + label.slice(1), service, lines };
+  }
+  if (name === "feed") {
+    const source = args.source || {};
+    const code = source.kind === "executor" ? source.code : source.kind === "script" ? source.command : source.task;
+    const reads = source.kind === "executor" ? [...new Set(programPaths(source.code) || [])].map(actionWords).join(", ") : "";
+    return { title: `Add a feed: ${String(args.title || "untitled").slice(0, 80)}`, service: source.kind === "executor" ? serviceOf(programPaths(source.code)?.[0]) : null,
+      lines: [{ fields: [{ label: "Every", value: `${args.everyMinutes} min` }, { label: "Source", value: SOURCE_WORDS[source.kind] || "unknown" },
+        ...reads ? [{ label: "Reads", value: reads }] : [], { label: "Runs", value: source.kind === "run" ? "a model each time, within the budget" : "without a model; new items go to the inbox" }] },
+      { text: source.kind === "run" ? "Task" : "Code", code: codeOf(code) }] };
   }
   if (name === "start_chat") {
     return { title: `Start a chat in ${args.workspace || "Chats"}`, service: null,
