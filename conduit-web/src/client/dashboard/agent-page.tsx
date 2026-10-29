@@ -23,7 +23,7 @@ const LEVEL: Record<string, string> = { urgent: "Urgent", attention: "Attention"
 const MEMORY = [
   { path: "MEMORY.md", label: "Memory", context: "What it keeps between conversations" },
   { path: "USER.md", label: "About you", context: "What it knows about you" },
-  { path: "IDENTITY.md", label: "Identity", context: "Who it is and how it works" },
+  { path: "SOUL.md", label: "Soul", context: "Who it is and how it works" },
   { path: "HEARTBEAT.md", label: "Heartbeat", context: "What it checks when it wakes" },
 ];
 const DIAL: Record<string, string> = { quiet: "Quiet", normal: "Normal", chatty: "Chatty" };

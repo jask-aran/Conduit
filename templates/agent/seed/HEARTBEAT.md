@@ -1,7 +1,9 @@
 # Heartbeat
 
-What to check each time you are woken for a heartbeat. Keep it short; remove
-what is done. Call nothing_to_report when all is clear.
+What to go through each time your checklist is due (Checklist every, in
+Settings). You read your inbox every 30 minutes anyway; that needs no line here.
+Keep this short: while it lists anything, each sweep is a model run. Something
+with a source to watch (a chat, a device, mail) is better as a watch or a
+schedule, which wake you only when it changes.
 
-- Any chat that failed or is waiting on the person since the last heartbeat.
-- Any device that went offline while a chat was working on it.
+<!-- - Any chat that failed or is waiting on the person since the last check. -->

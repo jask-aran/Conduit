@@ -112,6 +112,7 @@ function makeClock(runtime) {
               key: `${current.id}:${slot}`, kind: current.system ? current.id : "checkback", title: current.title, task: plan ? heartbeatTask(plan) : current.task,
             });
             if (plan?.sweep) doc.heartbeatSweptAt = slot;
+            if (plan?.newest) doc.heartbeatSeenAt = plan.newest;
           }
           current.lastAt = slot;
           current.nextAt = null;
