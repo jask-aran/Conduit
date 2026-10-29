@@ -12,7 +12,8 @@ import { AgentDoc, nextId } from "./agent-doc.js";
  * leaves no entry, only its history. Handled entries stay a week.
  *
  * An entry: `{ id, key, at, kind, title, subagentId, conversationId, level, headline, status, handledAt?, outcome? }`,
- * `level` one of fyi, attention, urgent, failed; `status` unhandled or handled; `key` the run delivery it records.
+ * `level` one of fyi, attention, urgent, failed; `status` unhandled or handled; `key` the run delivery it records;
+ * `handledBy` the conversation that marked it (a heartbeat's run, for its line in the home thread).
  */
 const KEPT_MS = 7 * 86400_000;
 const KEPT_MAX = 200;
@@ -54,12 +55,36 @@ const ago = (at, now) => {
 };
 const line = (item, now) => `- ${item.id} · ${LEVEL_LABEL[item.level] || item.level} · ${item.title}: ${item.headline || "(no text)"} (${item.kind}, ${ago(item.at, now)})`;
 
-/** Whether HEARTBEAT.md lists anything to check: without that, and with nothing in the inbox, a beat needs no model. */
-export async function heartbeatHasWork(agent, state) {
-  if (listInbox(state, { unhandled: true }).length) return true;
-  const text = await fs.readFile(path.join(agent.folder, "HEARTBEAT.md"), "utf8").catch(() => "");
-  return text.replace(/<!--[\s\S]*?-->/g, "").split(/\r?\n/).some((row) => /^\s*(?:[-*+]|\d+[.)])\s+\S/.test(row));
+/** Whether it is the person's quiet hours, in the agent's time zone: `{ enabled, start, end }`, wrapping midnight. */
+export function inQuietHours(settings, now = Date.now()) {
+  const quiet = settings.quietHours;
+  if (!quiet?.enabled) return false;
+  const time = new Intl.DateTimeFormat("en-GB", { timeZone: settings.timezone, hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(now);
+  return quiet.start <= quiet.end ? time >= quiet.start && time < quiet.end : time >= quiet.start || time < quiet.end;
 }
+
+/**
+ * What a heartbeat tick has to decide, or null when nothing: no model call (Block II's gated tick). It reads the
+ * unhandled inbox every tick and goes through HEARTBEAT.md once its interval (`heartbeat.everyMinutes`) has passed
+ * since the last sweep; neither in quiet hours.
+ */
+export async function heartbeatPlan(agent, state, now = Date.now()) {
+  const settings = agent.settings();
+  if (inQuietHours(settings, now)) return null;
+  const inbox = listInbox(state, { unhandled: true }).length;
+  const due = now - (Date.parse(state?.heartbeatSweptAt || "") || 0) >= settings.heartbeat.everyMinutes * 60000;
+  const sweep = due && (await fs.readFile(path.join(agent.folder, "HEARTBEAT.md"), "utf8").catch(() => ""))
+    .replace(/<!--[\s\S]*?-->/g, "").split(/\r?\n/).some((row) => /^\s*(?:[-*+]|\d+[.)])\s+\S/.test(row));
+  return inbox || sweep ? { inbox, sweep } : null;
+}
+
+/** A heartbeat run's task, for what its tick found. */
+export const heartbeatTask = ({ inbox, sweep }) => ["Heartbeat.",
+  inbox ? `Your inbox has ${inbox} unhandled ${inbox === 1 ? "entry" : "entries"}: read them (inbox list; inbox read for a `
+    + "whole report). For each decide: nothing to do, act (a check-back with schedule, a chat to start), or tell the person; "
+    + "then mark it with inbox handle and what you did." : "",
+  sweep ? "Go through HEARTBEAT.md in your folder and check each item." : "",
+  "When nothing needs the person, call nothing_to_report; otherwise report only what needs them."].filter(Boolean).join(" ");
 
 const result = (text, isError = false) => ({ output: [{ type: "text", text }], ...(isError ? { isError: true } : {}) });
 
@@ -125,6 +150,7 @@ export function InboxTools(runtime) {
           item.status = "handled";
           item.handledAt = new Date().toISOString();
           item.outcome = outcome.trim().slice(0, 200);
+          item.handledBy = api.conversationId;
           marked.push(key);
         }
         return marked;

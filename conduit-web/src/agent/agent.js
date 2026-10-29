@@ -25,7 +25,10 @@ export const DEFAULT_SETTINGS = Object.freeze({
   budgetUsdPerDay: 2,
   timezone: null,
   brief: { enabled: true, at: "08:00" },
+  // The heartbeat ticks every 30 min; `everyMinutes` is how often it goes through HEARTBEAT.md.
   heartbeat: { enabled: true, everyMinutes: 120 },
+  // No heartbeat in these hours (the agent's time zone); later, its night upkeep.
+  quietHours: { enabled: true, start: "23:00", end: "07:00" },
   // The model and effort each kind of background run uses ({ model: "provider/id", thinkingLevel }); null is the
   // home thread's. `other`: check-backs, events, webhooks and runs started by hand.
   work: { brief: null, heartbeat: null, other: null },
@@ -92,6 +95,7 @@ export class PersistentAgent {
       timezone: saved.timezone && validZone(saved.timezone) ? saved.timezone : hostZone(),
       brief: { ...DEFAULT_SETTINGS.brief, ...(saved.brief || {}) },
       heartbeat: { ...DEFAULT_SETTINGS.heartbeat, ...(saved.heartbeat || {}) },
+      quietHours: { ...DEFAULT_SETTINGS.quietHours, ...(saved.quietHours || {}) },
       work: { ...DEFAULT_SETTINGS.work, ...(saved.work || {}) },
     };
   }
@@ -134,6 +138,13 @@ export class PersistentAgent {
         fail("heartbeat is { enabled, everyMinutes: 15 to 1440 }");
       }
       next.heartbeat = { enabled: heartbeat.enabled, everyMinutes: every };
+    }
+    if (patch.quietHours !== undefined) {
+      const quiet = { ...this.settings().quietHours, ...patch.quietHours };
+      if (typeof quiet.enabled !== "boolean" || !clock(quiet.start) || !clock(quiet.end) || quiet.start === quiet.end) {
+        fail("quietHours is { enabled, start: \"HH:MM\", end: \"HH:MM\" }, start and end apart");
+      }
+      next.quietHours = { enabled: quiet.enabled, start: quiet.start, end: quiet.end };
     }
     if (patch.work !== undefined) {
       const work = { ...this.settings().work };

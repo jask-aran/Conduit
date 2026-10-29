@@ -71,7 +71,14 @@ before. The reporter appends every other result to `AgentDoc.inbox`; a brief, a 
 heartbeat's own decision, an urgent report and a run with asks waiting are told at once and land handled. The rest
 wait unhandled, shown each turn of the home thread (section `agent-inbox`) and handled with the `inbox` tool;
 the page lists them under Inbox. The heartbeat makes no model call when the inbox is empty and HEARTBEAT.md lists
-nothing. Not yet: the 30-minute gated tick, feeds, open loops, the heartbeat's quiet line in the home thread.
+nothing.
+
+Built (2026-10-29): **the gated heartbeat.** It ticks every 30 minutes outside quiet hours (a setting, default
+23:00 to 07:00, the agent's time zone) and starts a run only when the inbox has unhandled entries or the checklist
+sweep is due (`heartbeat.everyMinutes`, shown as Checklist every; `heartbeatSweptAt` records the last). Its task
+names what it found. A beat that tells no one but handled entries or set check-backs leaves a quiet line in the
+home thread, a display entry (`conduit.agent-beat`, "Heartbeat · 2 handled · 1 check-back set") that opens its run
+and starts no turn. Not yet: feeds, open loops, night upkeep.
 
 **It asks only when it needs something.** No small-talk check-ins: a task or open loop that needs your input
 asks, batched, never in quiet hours.

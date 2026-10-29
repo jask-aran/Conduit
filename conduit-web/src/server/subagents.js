@@ -238,6 +238,22 @@ export function Subagents(runtime) {
               ...(heard ? { status: "handled", handledAt: at, outcome: "Told the person at once" } : { status: "unhandled" }) }, Date.parse(at));
           }, context);
         }
+        // A heartbeat that told no one leaves a quiet line in the home thread of what it did (no turn, display only).
+        if (task.input.gate && kind === "heartbeat" && !heard) {
+          const snapshot = await api.snapshot(AgentDoc, context);
+          const counts = await api.memo("beat", {
+            handled: Object.values(snapshot?.inbox || {}).filter((item) => String(item.handledBy) === String(child)).length,
+            set: Object.values(snapshot?.schedules || {}).filter((item) => String(item.by) === String(child)).length,
+            at: new Date().toISOString(),
+          }, context);
+          if (counts.handled || counts.set) await api.commit(async (tx) => {
+            const doc = await tx.doc(AgentDoc);
+            if (doc.beatLine === child) return;
+            doc.beatLine = child;
+            await tx.appendEntry(api.conversationId, { kind: "conduit.agent-beat", data: { messageId: `beat:${child}`, subagentId: id,
+              conversationId: child, handled: counts.handled, set: counts.set, timestamp: counts.at } });
+          }, context);
+        }
         const parent = await runtime.harness.conversation(api.conversationId, context);
         if (heard && !stopped && !await resetSince(parent, task.input.sinceEntry || 0, context)) {
           const requestId = `subagent-report:${child}:${number}`;

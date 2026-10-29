@@ -1,17 +1,15 @@
 import { defineTask, defineTool } from "@earendil-works/pi-durable";
 import { Type } from "@earendil-works/pi-ai";
 import { AgentDoc, nextId } from "./agent-doc.js";
-import { heartbeatHasWork } from "./inbox.js";
+import { heartbeatPlan, heartbeatTask } from "./inbox.js";
 
 const BRIEF = "Morning brief. Look at what changed since the last brief: the person's calendar and mail if connected, "
   + "their chats (the `chats` tool), devices, your diary and schedules. Tell the person in a short list what matters today. "
   + "Where an item has an obvious next step outside your folder (a reply to send, an invite to answer, a chat to start on "
   + "something), prepare it in full and make the call: it is asked, not done, and the person approves it under your brief. "
   + "Prepare at most three, only ones they would likely want; mark those items in the list. Begin with FYI: or ATTENTION:.";
-const HEARTBEAT = "Heartbeat. Read your unhandled inbox (inbox list; read an entry for its whole report) and HEARTBEAT.md in "
-  + "your folder, and check each item. For each entry decide: nothing to do, act (start work, set a check-back), or tell "
-  + "the person; then mark it with inbox handle and what you did. When nothing needs the person, call nothing_to_report; "
-  + "otherwise report only what needs them.";
+/** The heartbeat ticks this often; most ticks find nothing and call no model (inbox.js, heartbeatPlan). */
+const TICK_MINUTES = 30;
 const terminal = () => ({ status: "terminal", outcome: { status: "completed" } });
 const result = (text, isError = false) => ({ output: [{ type: "text", text }], ...(isError ? { isError: true } : {}) });
 const clockOptions = (conversationId) => ({ ownership: { kind: "conversation" }, conversationId, background: true });
@@ -99,17 +97,22 @@ function makeClock(runtime) {
         if (!schedule || schedule.cancelling || schedule.clock !== task.id) { await api.commit(() => terminal(), context); return; }
         const slot = task.state.checkpoint.slot;
         const missed = api.now() - Date.parse(slot) > 6 * 3600000;
-        // A heartbeat with an empty inbox and nothing on its checklist has nothing to decide: no model call.
-        const idle = !missed && schedule.id === "heartbeat" && schedule.system && !await heartbeatHasWork(agent, await api.snapshot(AgentDoc, context));
+        // A heartbeat tick with nothing to decide (an empty inbox, no sweep due, quiet hours) calls no model.
+        const beat = schedule.id === "heartbeat" && schedule.system;
+        const plan = beat && !missed ? await api.memo(`plan:${slot}`, await heartbeatPlan(agent, await api.snapshot(AgentDoc, context), api.now()), context) : null;
+        const idle = beat && !plan;
         const overBudget = !missed && !idle && await agent.overBudget();
         if (overBudget) await agent.notice("budget", `Skipped ${schedule.title}: today's budget of $${agent.settings().budgetUsdPerDay} is spent.`);
         await api.commit(async (tx) => {
           const doc = await tx.doc(AgentDoc);
           const current = doc.schedules[task.input.scheduleId];
           if (!current || current.cancelling || current.clock !== task.id) return terminal();
-          if (!missed && !idle && !overBudget) await agent.spawnRun(tx, api.conversationId, {
-            key: `${current.id}:${slot}`, kind: current.system ? current.id : "checkback", title: current.title, task: current.task,
-          });
+          if (!missed && !idle && !overBudget) {
+            await agent.spawnRun(tx, api.conversationId, {
+              key: `${current.id}:${slot}`, kind: current.system ? current.id : "checkback", title: current.title, task: plan ? heartbeatTask(plan) : current.task,
+            });
+            if (plan?.sweep) doc.heartbeatSweptAt = slot;
+          }
           current.lastAt = slot;
           current.nextAt = null;
           if (current.kind === "once") { delete doc.schedules[current.id]; return terminal(); }
@@ -208,7 +211,7 @@ export function ScheduleTools(runtime) {
           const { conversationId, ...item } = intent;
           item.clock = await tx.createTask(clock, { scheduleId: item.id }, clockOptions(conversationId));
           item.nextAt = new Date(nextTime(item, agent.settings().timezone, Date.now())).toISOString();
-          doc.schedules[item.id] = { ...item, lastAt: null, system: false, callId: api.callId };
+          doc.schedules[item.id] = { ...item, lastAt: null, system: false, callId: api.callId, by: api.conversationId };
         }, context);
         await api.memo("added", true, context);
       }
@@ -235,7 +238,7 @@ export async function seedSchedules(agent) {
     const settings = agent.settings();
     const desired = {
       brief: settings.brief.enabled ? { kind: "daily", at: settings.brief.at, everyMinutes: null, title: "Morning brief", task: BRIEF } : null,
-      heartbeat: settings.heartbeat.enabled ? { kind: "every", at: null, everyMinutes: settings.heartbeat.everyMinutes, title: "Heartbeat", task: HEARTBEAT } : null,
+      heartbeat: settings.heartbeat.enabled ? { kind: "every", at: null, everyMinutes: TICK_MINUTES, title: "Heartbeat", task: "Heartbeat." } : null,
     };
     const schedules = (await agent.state()).schedules;
     const ids = new Set([...Object.keys(desired), ...Object.keys(schedules)]);
