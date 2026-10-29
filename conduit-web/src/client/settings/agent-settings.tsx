@@ -110,16 +110,27 @@ export function createAgentSettings(options: { models: () => ModelOption[]; onMa
           </SettingLine>
           <Work kind="brief" label="Brief model" title="Reads your mail, calendar and chats and prepares first steps: worth a capable model." />
         </Show>
-        <SettingLine label="Heartbeat" title="It wakes on its own to check on things (HEARTBEAT.md in its memory says what), and speaks up only when something is worth it.">
+        <SettingLine label="Heartbeat" title="Every 30 minutes it looks at its inbox, and calls a model only when something waits there or its checklist is due. It speaks up only when something is worth it.">
           <Switch label="Heartbeat" checked={current().heartbeat.enabled} onChange={(enabled) => set({ heartbeat: { ...current().heartbeat, enabled } })} />
         </SettingLine>
         <Show when={current().heartbeat.enabled}>
-          <SettingLine label="Every">
+          <SettingLine label="Checklist every" title="How often it goes through HEARTBEAT.md, the checklist in its memory.">
             <Select id="agent-heartbeat" value={String(current().heartbeat.everyMinutes)} onChange={(event) => set({ heartbeat: { ...current().heartbeat, everyMinutes: Number(event.currentTarget.value) } })}>
               <For each={HEARTBEATS.includes(current().heartbeat.everyMinutes) ? HEARTBEATS : [current().heartbeat.everyMinutes, ...HEARTBEATS]}>{(minutes) => <option value={String(minutes)}>{every(minutes)}</option>}</For>
             </Select>
           </SettingLine>
           <Work kind="heartbeat" label="Heartbeat model" title="Runs often and usually finds nothing: a quick, cheap model fits." />
+        </Show>
+        <SettingLine label="Quiet hours" title="No heartbeat in these hours. Something urgent still reaches you.">
+          <Switch label="Quiet hours" checked={current().quietHours.enabled} onChange={(enabled) => set({ quietHours: { ...current().quietHours, enabled } })} />
+        </SettingLine>
+        <Show when={current().quietHours.enabled}>
+          <SettingLine label="From">
+            <Input id="agent-quiet-start" type="time" value={current().quietHours.start} onChange={(event) => { const start = event.currentTarget.value; if (/^\d\d:\d\d$/.test(start) && start !== current().quietHours.end) set({ quietHours: { ...current().quietHours, start } }); }} />
+          </SettingLine>
+          <SettingLine label="Until">
+            <Input id="agent-quiet-end" type="time" value={current().quietHours.end} onChange={(event) => { const end = event.currentTarget.value; if (/^\d\d:\d\d$/.test(end) && end !== current().quietHours.start) set({ quietHours: { ...current().quietHours, end } }); }} />
+          </SettingLine>
         </Show>
         <Work kind="other" label="Other runs" title="The model for check-backs it schedules, events, webhooks and tasks you run by hand." />
       </SettingGroup>

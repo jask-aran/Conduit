@@ -182,6 +182,18 @@ function assistantClose(message, messageId, generationId = null) {
  * answer the process died before naming is called after its entry. A prompt
  * is settled by what came after it: answered, cut off by a stop, or failed.
  */
+/** A heartbeat's quiet line (subagents.js): what it did when it told no one, opening its run. */
+export const beatLine = (data = {}) => ["Heartbeat",
+  data.handled ? `${data.handled} handled` : null,
+  data.set ? `${data.set} check-back${data.set === 1 ? "" : "s"} set` : null].filter(Boolean).join(" · ");
+const beatOps = (entry) => {
+  const data = entry.data || {};
+  const id = data.messageId || `b${entry.conversationId}-${entry.id}`;
+  return [messageOpen({ id, role: "user", origin: "harness", content: beatLine(data),
+    agent: { id: data.subagentId, conversationId: data.conversationId ?? null }, ...(data.timestamp ? { timestamp: data.timestamp } : {}) }),
+  turnSettle({ promptId: id, outcome: "complete" })];
+};
+
 export function entriesToOps(entries, ids = {}, runningTools = []) {
   const ops = [];
   const calls = new Map();
@@ -207,6 +219,9 @@ export function entriesToOps(entries, ids = {}, runningTools = []) {
         ...(entry.kind === "conduit.subagent-report" ? { origin: "harness", agent: { id: data.subagentId, conversationId: data.conversationId ?? children.get(data.subagentId)?.conversationId ?? null } } : {}),
         ...(data.timestamp ? { timestamp: data.timestamp } : {}),
         ...(data.attachments?.length ? { attachments: data.attachments } : {}) }));
+    } else if (entry.kind === "conduit.agent-beat") {
+      // Its own settled line: not a prompt, so a turn around it goes on as it was.
+      ops.push(...beatOps(entry));
     } else if (entry.kind === "pi.assistant") {
       const message = entry.model?.[0];
       if (!message) continue;
@@ -684,6 +699,7 @@ export class DurableAdapter extends EventEmitter {
 
   /** A prompt entering the transcript mid-run is a steer or a follow-up the run took. */
   async placed(record, entry) {
+    if (entry?.kind === "conduit.agent-beat") { for (const op of beatOps(entry)) this.publish(record, op); return; }
     if (entry?.kind === "conduit.subagent-report") {
       const data = entry.data || {};
       // Reports have no browser prompt; open their short harness line at placement.
