@@ -191,8 +191,12 @@ export function AgentPage(props: {
       : `${feed.lastCount ? `${feed.lastCount} new` : "Nothing new"} ${age(feed.lastRunAt, now())}`.trim();
     return <ClockRow kind={clockKind(schedule)} title={schedule.title} cadence={when(schedule)} warn={feed?.lastError || undefined}
       status={feed ? [FEED_SOURCE[feed.source], status()].join(" · ") : quiet()} next={age(schedule.nextAt, now())}
-      actions={feed ? <DashIconButton aria-label="Remove feed" title="Remove feed" disabled={busy() !== null}
-        onClick={() => act(schedule.id, () => api(`/v0/agent/feeds/${encodeURIComponent(schedule.id)}`, { method: "DELETE" }))}><Icons.Delete /></DashIconButton> : undefined} />;
+      actions={<>
+        <DashIconButton aria-label={`Run ${schedule.title} now`} title="Run now" disabled={busy() !== null}
+          onClick={() => act(schedule.id, () => api(`/v0/agent/schedules/${encodeURIComponent(schedule.id)}/run`, { method: "POST" }))}><Icons.Play /></DashIconButton>
+        {feed ? <DashIconButton aria-label="Remove feed" title="Remove feed" disabled={busy() !== null}
+        onClick={() => act(schedule.id, () => api(`/v0/agent/feeds/${encodeURIComponent(schedule.id)}`, { method: "DELETE" }))}><Icons.Delete /></DashIconButton> : undefined}
+      </>} />;
   };
   const timedGroup = () => <SplitGroup id="agent-timed" label="Timed" count={timed().length || null}>
     {day()}

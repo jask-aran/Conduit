@@ -5,7 +5,8 @@ import { chatView } from "../../chat-store.js";
 import { listWatches, webhook } from "../../agent/events.js";
 import { acceptProposal, listProposals, rejectProposal } from "../../agent/memory.js";
 import { cancelSchedule, clockAdder, listSchedules } from "../../agent/schedule.js";
-import { feedItem, feedProblem, runSource, sourceProblem } from "../../agent/feeds.js";
+import { applyOutcome, feedItem, feedProblem, runSource, sourceProblem } from "../../agent/feeds.js";
+import { heartbeatTask, listInbox } from "../../agent/inbox.js";
 import { decide } from "../../agent/asks.js";
 import { AgentDoc } from "../../agent/agent-doc.js";
 import { backgroundSubagents } from "../subagents.js";
@@ -24,6 +25,8 @@ import { backgroundSubagents } from "../subagents.js";
  * POST /v0/agent/feeds/:id/forget    forget items it has seen { ids? } (all without): its next check reports them as new
  * PATCH /v0/agent/feeds/:id          change its { title?, everyMinutes?, source?, level? }, keeping what it has seen
  * DELETE /v0/agent/feeds/:id         remove a feed
+ * POST /v0/agent/schedules/:id/run   run one now, off its clock (testing): a feed checks, the heartbeat decides the
+ *                                    whole unhandled inbox and its checklist even in quiet hours, the rest wake a run
  * POST /v0/agent/proposals/:id/{accept,reject}
  * DELETE /v0/agent/notices/:id      a notice read (it leaves the attention list)
  * DELETE /v0/agent/rules/:id        remove a saved approval rule
@@ -238,6 +241,33 @@ export function registerAgentRoutes(app, { agent, backends }) {
       if (!changed) return response.status(404).json({ error: "feed_not_found" });
       if (changed.problem) return response.status(400).json({ error: changed.problem });
       response.json({ ok: true });
+    } catch (error) { next(error); }
+  });
+  app.post("/v0/agent/schedules/:id/run", async (request, response, next) => {
+    try {
+      if (!enabled(response)) return;
+      const state = await agent.state();
+      const schedule = state.schedules[request.params.id];
+      if (!schedule) return response.status(404).json({ error: "schedule_not_found" });
+      const key = `now:${schedule.id}:${crypto.randomUUID()}`;
+      if (schedule.feed && schedule.feed.source.kind !== "run") {
+        const outcome = await runSource(agent, schedule.feed.source, { seen: schedule.feed.seen || [] });
+        const fresh = await agent.update((doc) => {
+          const current = doc.schedules[schedule.id];
+          if (!current?.feed) return 0;
+          applyOutcome(doc, current, outcome, new Date().toISOString());
+          return outcome.error ? 0 : current.feed.lastCount;
+        });
+        return response.json({ checked: outcome.items.length, new: fresh, error: outcome.error || null });
+      }
+      const beat = schedule.system && schedule.id === "heartbeat";
+      const waiting = beat ? listInbox(state, { unhandled: true }) : [];
+      const task = beat ? heartbeatTask({ inbox: waiting.length, waiting: waiting.length, sweep: true })
+        : schedule.feed ? schedule.feed.source.task : schedule.task;
+      const kind = schedule.system ? schedule.id : schedule.feed ? "feed" : "checkback";
+      const run = await agent.wake({ key, kind, title: schedule.title, task });
+      if (run && beat) await agent.update((doc) => { doc.heartbeatSweptAt = new Date().toISOString(); if (waiting[0]) doc.heartbeatSeenAt = waiting[0].at; });
+      response.status(run ? 202 : 409).json(run ? { id: run.id, conversationId: run.child } : { error: "agent_over_budget" });
     } catch (error) { next(error); }
   });
   app.delete("/v0/agent/feeds/:id", async (request, response, next) => {
