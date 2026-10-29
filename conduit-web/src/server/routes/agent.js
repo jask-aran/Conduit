@@ -267,6 +267,11 @@ export function registerAgentRoutes(app, { agent, backends }) {
       const kind = schedule.system ? schedule.id : schedule.feed ? "feed" : "checkback";
       const run = await agent.wake({ key, kind, title: schedule.title, task });
       if (run && beat) await agent.update((doc) => { doc.heartbeatSweptAt = new Date().toISOString(); if (waiting[0]) doc.heartbeatSeenAt = waiting[0].at; });
+      // Run while it was due (its clock late): this run is that slot's, so the clock does not run it again.
+      if (run && !beat) await agent.update((doc) => {
+        const current = doc.schedules[schedule.id];
+        if (current?.nextAt && Date.parse(current.nextAt) <= Date.now()) current.lastAt = current.nextAt;
+      });
       response.status(run ? 202 : 409).json(run ? { id: run.id, conversationId: run.child } : { error: "agent_over_budget" });
     } catch (error) { next(error); }
   });
