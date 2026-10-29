@@ -4,6 +4,8 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { Type } from "@earendil-works/pi-ai";
 import { McpClient, StreamableHttpTransport, toLlmContent } from "@earendil-works/pi-mcp";
 import { McpOAuthProvider, adaptOAuthProvider, authorizeMcp } from "@earendil-works/pi-mcp/oauth";
+/** A request to a connector may be a whole program (Executor's execute reading many messages): minutes, not seconds. */
+const CALL_MS = 120_000;
 
 /** The MCP servers the agent can reach the person's accounts through. resourceMetadata: where the server says its
  *  OAuth is described (its 401's `resource_metadata`). */
@@ -67,7 +69,7 @@ export class Connectors {
         const store = { load: () => this.read(entry), save: (next) => this.write(entry, { ...next, redirectUrl: state.redirectUrl }) };
         const oauth = this.provider(entry, state.redirectUrl, store);
         client = new McpClient({ name: "Conduit", version: "1.0.0", requestTimeoutMs: 15000 });
-        await client.connect(new StreamableHttpTransport({ url: entry.info.url, authProvider: adaptOAuthProvider(oauth), fetch: (url, options) => fetch(url, { ...options, signal: options?.signal || AbortSignal.timeout(15000) }) }));
+        await client.connect(new StreamableHttpTransport({ url: entry.info.url, authProvider: adaptOAuthProvider(oauth), fetch: (url, options) => fetch(url, { ...options, signal: options?.signal || AbortSignal.timeout(CALL_MS) }) }));
         const listed = await client.listTools();
         const names = new Set();
         const tools = listed.map((tool) => {
@@ -80,9 +82,9 @@ export class Connectors {
             replay: tool.annotations?.readOnlyHint === true ? "safe" : "unsafe",
             execute: async (args, api) => {
               try {
-                const result = await client.callTool(tool.name, args, { signal: api.signal });
+                const result = await client.callTool(tool.name, args, { signal: api.signal, timeoutMs: CALL_MS });
                 return { output: toLlmContent(result), isError: result.isError === true };
-              } catch { return { output: [{ type: "text", text: "Connector call failed" }], isError: true }; }
+              } catch (error) { return { output: [{ type: "text", text: `Connector call failed: ${String(error?.message || error).slice(0, 200)}` }], isError: true }; }
             } };
         });
         if (!entry.authorized) { await client.close(); return; }

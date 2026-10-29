@@ -10,7 +10,7 @@ const BRIEF = "Morning brief. Look at what changed since the last brief: the per
   + "something), prepare it in full and make the call: it is asked, not done, and the person approves it under your brief. "
   + "Prepare at most three, only ones they would likely want; mark those items in the list. Begin with FYI: or ATTENTION:.";
 /** The heartbeat ticks this often; most ticks find nothing and call no model (inbox.js, heartbeatPlan). */
-const TICK_MINUTES = 30;
+const TICK_MINUTES = 60;
 const terminal = () => ({ status: "terminal", outcome: { status: "completed" } });
 const result = (text, isError = false) => ({ output: [{ type: "text", text }], ...(isError ? { isError: true } : {}) });
 const clockOptions = (conversationId) => ({ ownership: { kind: "conversation" }, conversationId, background: true });

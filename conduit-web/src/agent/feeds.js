@@ -17,7 +17,8 @@ import { sandboxHelper, sandboxedEnv } from "./sandbox.js";
  *         | { kind: "run", task }        a model run, for what needs judgement; it reports as a run does
  *
  * An executor program or a script prints (returns) JSON: an array of items, or `{ items }`, each
- * `{ id, title, detail?, at?, level?, url? }`. The hub keeps the ids it has seen (the last 500) and puts what is new
+ * `{ id, title, detail?, text?, at?, level?, url? }`: `detail` one line (a sender), `text` the content itself (a mail's
+ * body, cut short), so whoever reads the inbox decides without going back to the source. The hub keeps the ids it has seen (the last 500) and puts what is new
  * into one inbox entry per tick; the first run only learns what is already there. An executor program is handed those
  * ids as `seen` (a Set), so it can skip fetching the details of what was already reported. jbot adds a feed through the
  * `feed` tool, which asks the person (policy.js): it runs on its own from then on, so a program may only read.
@@ -43,6 +44,10 @@ export function sourceProblem(source) {
   return "The source kind is executor, script or run.";
 }
 
+const TEXT_MAX = 1500;
+const BODY_MAX = 30_000;
+/** Content kept as paragraphs: runs of blank lines and spaces folded, cut short. */
+const prose = (value, max) => { const kept = String(value ?? "").replace(/\r/g, "").replace(/[ \t]+/g, " ").replace(/\n\s*\n+/g, "\n\n").trim(); return kept.length > max ? `${kept.slice(0, max - 1)}…` : kept; };
 const text = (value, max) => { const flat = String(value ?? "").replace(/\s+/g, " ").trim(); return flat.length > max ? `${flat.slice(0, max - 1)}…` : flat; };
 
 /** JSON items out of a program's or script's output: an array, `{ items }`, or Executor's `{ result }` around either. */
@@ -72,7 +77,8 @@ export function itemsOf(output) {
     const title = text(raw.title ?? raw.subject ?? raw.name ?? raw.summary ?? "", 160);
     const detail = text(raw.detail ?? raw.from ?? raw.snippet ?? raw.description ?? "", 200);
     const id = text(raw.id ?? raw.key ?? raw.url ?? "", 200) || createHash("sha256").update(`${title}\n${detail}`).digest("hex").slice(0, 24);
-    return { id, title, ...(detail ? { detail } : {}), ...(raw.at ? { at: text(raw.at, 40) } : {}), ...(raw.url ? { url: text(raw.url, 300) } : {}),
+    const body = prose(raw.text ?? raw.body ?? raw.content ?? "", TEXT_MAX);
+    return { id, title, ...(detail ? { detail } : {}), ...(body ? { text: body } : {}), ...(raw.at ? { at: text(raw.at, 40) } : {}), ...(raw.url ? { url: text(raw.url, 300) } : {}),
       ...(LEVELS.includes(raw.level) ? { level: raw.level } : {}) };
   });
 }
@@ -124,7 +130,8 @@ export function applyOutcome(doc, schedule, outcome, slot) {
     appendEntry(doc, { key: `${schedule.id}:${slot}`, kind: "feed", title: schedule.title, feedId: schedule.id, subagentId: null, conversationId: null,
       level, status: "unhandled",
       headline: text(fresh.length === 1 ? line(fresh[0]) : `${fresh.length} new: ${fresh.map((item) => item.title || "(untitled)").join("; ")}`, 160),
-      body: fresh.map((item) => `- ${line(item)}${item.at ? ` (${item.at})` : ""}${item.url ? ` ${item.url}` : ""}`).join("\n").slice(0, 6000) }, Date.parse(slot));
+      body: fresh.map((item) => `- ${line(item)}${item.at ? ` (${item.at})` : ""}${item.url ? ` ${item.url}` : ""}${item.text ? `\n${item.text.replace(/^/gm, "  ")}` : ""}`)
+        .join("\n\n").slice(0, BODY_MAX) }, Date.parse(slot));
   }
   feed.primed = true;
 }
@@ -151,7 +158,7 @@ export function FeedTools(runtime, { addClocked }) {
     name: "feed",
     description: "Feeds fill your inbox on their own, mostly without a model: list them, test a source (runs it once, saves "
       + "nothing), or add one (the person approves it). A source is { kind: \"executor\", code } (a read-only Executor "
-      + "program that returns a JSON list of { id, title, detail?, at?, level?, url? }), { kind: \"script\", command } "
+      + "program that returns a JSON list of { id, title, detail?, text?, at?, level?, url? }; put the content itself in text, so the heartbeat need not fetch it again), { kind: \"script\", command } "
       + "(bash in your folder that prints that JSON) or { kind: \"run\", task } (a model run every time, for judgement). "
       + "The first run learns what is there; later runs put only new items in the inbox. Remove one with schedule cancel and its id.",
     parameters: Type.Object({
