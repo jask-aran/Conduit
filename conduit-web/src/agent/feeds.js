@@ -17,8 +17,10 @@ import { sandboxHelper, sandboxedEnv } from "./sandbox.js";
  *         | { kind: "run", task }        a model run, for what needs judgement; it reports as a run does
  *
  * An executor program or a script prints (returns) JSON: an array of items, or `{ items }`, each
- * `{ id, title, detail?, text?, at?, level?, url? }`: `detail` one line (a sender), `text` the content itself (a mail's
- * body, cut short), so whoever reads the inbox decides without going back to the source. The hub keeps the ids it has seen (the last 500) and puts what is new
+ * `{ id, title, detail?, text?, encoded?, at?, level?, url? }`: `detail` one line (a sender), `text` the content itself
+ * (a mail's body, cut short), so whoever reads the inbox decides without going back to the source. A program may hand
+ * the content over still encoded instead, `encoded: { data, mimeType }` (base64 or base64url, as Gmail gives a part):
+ * the hub decodes it and turns HTML into text, which in Executor's sandbox took a minute for one large mail. The hub keeps the ids it has seen (the last 500) and puts what is new
  * into one inbox entry per tick; the first run only learns what is already there. An executor program is handed those
  * ids as `seen` (a Set), so it can skip fetching the details of what was already reported. jbot adds a feed through the
  * `feed` tool, which asks the person (policy.js): it runs on its own from then on, so a program may only read.
@@ -48,6 +50,23 @@ const TEXT_MAX = 1500;
 const BODY_MAX = 30_000;
 /** Content kept as paragraphs: runs of blank lines and spaces folded, cut short. */
 const prose = (value, max) => { const kept = String(value ?? "").replace(/\r/g, "").replace(/[ \t]+/g, " ").replace(/\n\s*\n+/g, "\n\n").trim(); return kept.length > max ? `${kept.slice(0, max - 1)}…` : kept; };
+const ENTITIES = { nbsp: " ", amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", rsquo: "'", lsquo: "'", ldquo: '"', rdquo: '"', ndash: "-", mdash: "-", hellip: "…", copy: "©" };
+/** An encoded part as readable text: decoded, HTML reduced to its words and line breaks, a mail's padding and tracking
+ *  links dropped, quoted replies and the signature cut. */
+export function decodeContent(encoded) {
+  if (!encoded || typeof encoded.data !== "string") return "";
+  let body = Buffer.from(encoded.data.slice(0, 400_000), "base64url").toString("utf8");
+  // A "plain" part is sometimes HTML too (a newsletter's): read as HTML whatever it claims once it has tags.
+  if (/html/i.test(encoded.mimeType || "") || /<\/?(?:p|div|br|table|a|link|span)\b/i.test(body)) {
+    body = body.replace(/<(style|script|head)\b[\s\S]*?<\/\1>/gi, " ").replace(/<!--[\s\S]*?-->/g, " ")
+      .replace(/<br\s*\/?>/gi, "\n").replace(/<\/(p|div|tr|li|h\d|table)>/gi, "\n\n").replace(/<[^>]*>/g, " ").replace(/<[a-z][^>\n]*/gi, " ");
+  }
+  body = body.replace(/&#(x?)([0-9a-f]+);/gi, (_, hex, code) => { try { return String.fromCodePoint(parseInt(code, hex ? 16 : 10)); } catch { return ""; } })
+    .replace(/&(\w+);/g, (_, name) => ENTITIES[name.toLowerCase()] ?? "");
+  return body.replace(/[\u034F\u00AD\u200B-\u200F\u2060\uFEFF]/g, "").replace(/<https?:[^>]*>/g, "").replace(/https?:\/\/\S{60,}/g, "")
+    .replace(/\r/g, "").replace(/\n>.*$/gs, "").replace(/\n-- \n[\s\S]*$/, "").replace(/[ \t]+/g, " ").replace(/([^\n])\n(?!\s*\n)/g, "$1 ");
+}
+
 const text = (value, max) => { const flat = String(value ?? "").replace(/\s+/g, " ").trim(); return flat.length > max ? `${flat.slice(0, max - 1)}…` : flat; };
 
 /** JSON items out of a program's or script's output: an array, `{ items }`, or Executor's `{ result }` around either. */
@@ -77,7 +96,7 @@ export function itemsOf(output) {
     const title = text(raw.title ?? raw.subject ?? raw.name ?? raw.summary ?? "", 160);
     const detail = text(raw.detail ?? raw.from ?? raw.snippet ?? raw.description ?? "", 200);
     const id = text(raw.id ?? raw.key ?? raw.url ?? "", 200) || createHash("sha256").update(`${title}\n${detail}`).digest("hex").slice(0, 24);
-    const body = prose(raw.text ?? raw.body ?? raw.content ?? "", TEXT_MAX);
+    const body = prose(raw.encoded ? decodeContent(raw.encoded) || raw.text : raw.text ?? raw.body ?? raw.content ?? "", TEXT_MAX);
     return { id, title, ...(detail ? { detail } : {}), ...(body ? { text: body } : {}), ...(raw.at ? { at: text(raw.at, 40) } : {}), ...(raw.url ? { url: text(raw.url, 300) } : {}),
       ...(LEVELS.includes(raw.level) ? { level: raw.level } : {}) };
   });
@@ -158,7 +177,7 @@ export function FeedTools(runtime, { addClocked }) {
     name: "feed",
     description: "Feeds fill your inbox on their own, mostly without a model: list them, test a source (runs it once, saves "
       + "nothing), or add one (the person approves it). A source is { kind: \"executor\", code } (a read-only Executor "
-      + "program that returns a JSON list of { id, title, detail?, text?, at?, level?, url? }; put the content itself in text, so the heartbeat need not fetch it again), { kind: \"script\", command } "
+      + "program that returns a JSON list of { id, title, detail?, text?, encoded?, at?, level?, url? }; put the content itself in text, or a mail part still encoded as encoded: { data, mimeType } for the hub to decode (decoding in the program is slow), so the heartbeat need not fetch it again), { kind: \"script\", command } "
       + "(bash in your folder that prints that JSON) or { kind: \"run\", task } (a model run every time, for judgement). "
       + "The first run learns what is there; later runs put only new items in the inbox. Remove one with schedule cancel and its id.",
     parameters: Type.Object({
