@@ -1,5 +1,5 @@
 import { createEffect, createMemo, createSignal, For, on, onCleanup, onMount, Show, type JSX, untrack } from "solid-js";
-import { approvalLineText, Icons, ServiceIcon, StatusDot } from "@/components/ui";
+import { approvalLineText, ClockRow, DayStrip, Icons, InboxRow, LevelMark, levelWord, ServiceIcon, StatusDot, type ClockKind, type DayMark } from "@/components/ui";
 import { Button, TextArea } from "@/components/ui/controls";
 import { DashConversation, DashIconButton, DashNote } from "@/components/ui/dashboard";
 import { Dialog } from "@/components/dialog";
@@ -18,8 +18,6 @@ import { SplitDashboard, SplitEmpty, SplitGroup, SplitHeader, SplitQuickActions,
 const RUN_KIND: Record<string, string> = {
   manual: "Asked", schedule: "Scheduled", checkback: "Check-back", brief: "Morning brief", heartbeat: "Heartbeat", webhook: "Webhook", event: "Event",
 };
-/** How a finished run's report was read: what it told the person. */
-const LEVEL: Record<string, string> = { urgent: "Urgent", attention: "Attention", fyi: "FYI", failed: "Failed", none: "Nothing to say" };
 const MEMORY = [
   { path: "MEMORY.md", label: "Memory", context: "What it keeps between conversations" },
   { path: "USER.md", label: "About you", context: "What it knows about you" },
@@ -27,6 +25,14 @@ const MEMORY = [
   { path: "HEARTBEAT.md", label: "Heartbeat", context: "What it checks when it wakes" },
 ];
 const FEED_SOURCE: Record<string, string> = { executor: "Executor", script: "Script", run: "Model run" };
+const clockKind = (schedule: AgentSchedule): ClockKind => schedule.feed ? "feed"
+  : schedule.system && (schedule.id === "heartbeat" || schedule.id === "brief") ? schedule.id : schedule.kind === "once" ? "checkback" : "schedule";
+/** Minutes after midnight of a time of day ("07:30"), or of an instant in a time zone. */
+const minutesOf = (time: string) => { const [hours, minutes] = time.split(":").map(Number); return (hours || 0) * 60 + (minutes || 0); };
+const minutesIn = (at: number, timeZone?: string) => {
+  try { return minutesOf(new Intl.DateTimeFormat("en-GB", { timeZone, hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(at)); }
+  catch { const date = new Date(at); return date.getHours() * 60 + date.getMinutes(); }
+};
 const DIAL: Record<string, string> = { quiet: "Quiet", normal: "Normal", chatty: "Chatty" };
 
 function age(value: string | null | undefined, now: number) {
@@ -102,9 +108,9 @@ export function AgentPage(props: {
   const runRow = (run: AgentRun, live: boolean) => {
     const chatId = () => runChats().get(run.id);
     return <SplitRow element="button" disabled={!chatId()} onClick={(event: MouseEvent) => chatId() && props.onOpenChat(chatId()!, event)}
-      lead={live ? <StatusDot label="Running" tone="active" spinning /> : <Icons.Agent />}
+      lead={live ? <StatusDot label="Running" tone="active" spinning /> : run.status === "failed" || run.level ? <LevelMark level={run.status === "failed" ? "failed" : run.level!} /> : <Icons.Agent />}
       primary={run.title || "A run"}
-      context={[RUN_KIND[run.kind] || run.kind, !live && run.status === "failed" ? "Failed" : !live && run.level ? LEVEL[run.level] : null].filter(Boolean).join(" · ")}
+      context={[RUN_KIND[run.kind] || run.kind, !live && run.status === "failed" ? "Failed" : !live && run.level ? levelWord(run.level) : null].filter(Boolean).join(" · ")}
       trailing={age(live ? run.startedAt : run.endedAt, now())} />;
   };
 
@@ -140,14 +146,13 @@ export function AgentPage(props: {
   // What runs reported: waiting for the heartbeat (or for the person to talk first), then what became of the rest.
   const inbox = createMemo(() => [...(view()?.inbox || [])].sort((a, b) => Number(a.status === "handled") - Number(b.status === "handled")));
   const unhandled = () => inbox().filter((entry) => entry.status === "unhandled").length;
+  const [openEntry, setOpenEntry] = createSignal<string | null>(null);
   const entryRow = (entry: AgentInboxEntry) => {
     const chatId = () => runChats().get(entry.subagentId);
-    const waiting = entry.status === "unhandled";
-    return <SplitRow element="button" disabled={!chatId()} onClick={(event: MouseEvent) => chatId() && props.onOpenChat(chatId()!, event)}
-      lead={waiting ? <StatusDot label="Waiting" tone={entry.level === "urgent" || entry.level === "failed" ? "warn" : "unread"} /> : <Icons.Check />}
-      primary={entry.headline || entry.title} title={entry.body || entry.headline}
-      context={[entry.title, LEVEL[entry.level] || entry.level, waiting ? "Waiting for the heartbeat" : entry.outcome].filter(Boolean).join(" · ")}
-      trailing={age(entry.at, now())} />;
+    return <InboxRow level={entry.level} headline={entry.headline || entry.title} source={entry.title} time={age(entry.at, now())}
+      handled={entry.status === "handled"} outcome={entry.outcome} body={entry.body}
+      open={openEntry() === entry.id} onToggle={() => setOpenEntry(openEntry() === entry.id ? null : entry.id)}
+      onOpenRun={chatId() ? () => props.onOpenChat(chatId()!) : undefined} />;
   };
   const inboxGroup = () => <SplitGroup id="agent-inbox" label="Inbox" count={unhandled() || null}>
     <Show when={inbox().length} fallback={<SplitEmpty>Nothing has come in this week.</SplitEmpty>}>
@@ -161,30 +166,37 @@ export function AgentPage(props: {
     </Show>
   </SplitGroup>;
 
-  // Feeds: what fills the inbox, mostly without a model; the rest of its clocks under Schedules.
-  const feeds = () => (working()?.schedules || []).filter((schedule) => schedule.feed);
-  const schedules = () => (working()?.schedules || []).filter((schedule) => !schedule.feed);
-  const feedsGroup = () => <Show when={feeds().length}>
-    <SplitGroup id="agent-feeds" label="Feeds" count={feeds().length}>
-      <For each={feeds()}>{(schedule) => {
-        const feed = schedule.feed!;
-        const last = () => feed.lastError ? "Last check failed" : !feed.primed ? "First check soon" : feed.lastCount ? `${feed.lastCount} new last check` : "Nothing new last check";
-        return <SplitRow lead={feed.lastError ? <Icons.Warning /> : <Icons.Fetch />} primary={schedule.title} title={feed.lastError || undefined}
-          context={[FEED_SOURCE[feed.source], when(schedule), last()].join(" · ")}
-          trailing={<>
-            <span>{age(schedule.nextAt, now())}</span>
-            <DashIconButton aria-label="Remove feed" title="Remove feed" disabled={busy() !== null} onClick={() => act(schedule.id, () => api(`/v0/agent/feeds/${encodeURIComponent(schedule.id)}`, { method: "DELETE" }))}><Icons.Delete /></DashIconButton>
-          </>} />;
-      }}</For>
-    </SplitGroup>
-  </Show>;
-
-  const schedulesGroup = () => <SplitGroup id="agent-schedules" label="Schedules" count={schedules().length || null}>
-    <Show when={schedules().length} fallback={<SplitEmpty>Nothing here yet.</SplitEmpty>}>
-      <For each={schedules()}>{(schedule) =>
-        <SplitRow lead={<Icons.Runtime />} primary={schedule.title} context={when(schedule)} trailing={age(schedule.nextAt, now())} />}
-      </For>
-    </Show>
+  // What runs on its clock, next first: the heartbeat, the brief, feeds filling the inbox, check-backs; over its day.
+  const timed = createMemo(() => [...(working()?.schedules || [])].sort((a, b) => (Date.parse(a.nextAt || "") || Infinity) - (Date.parse(b.nextAt || "") || Infinity)));
+  const day = () => {
+    const settings = view()?.settings;
+    const zone = settings?.timezone;
+    const beat = timed().find((schedule) => clockKind(schedule) === "heartbeat");
+    const marks: DayMark[] = timed().filter((schedule) => schedule.kind === "daily" && schedule.at && !schedule.feed)
+      .map((schedule) => ({ at: minutesOf(schedule.at!), label: clockKind(schedule) === "brief" ? "Brief" : schedule.title, kind: clockKind(schedule) }));
+    return <DayStrip now={minutesIn(now(), zone)} marks={marks} pulse={beat?.everyMinutes ?? null}
+      quiet={settings?.quietHours?.enabled ? { start: minutesOf(settings.quietHours.start), end: minutesOf(settings.quietHours.end) } : null} />;
+  };
+  // In quiet hours the heartbeat still ticks but decides nothing until they end.
+  const quietUntil = () => {
+    const quiet = view()?.settings?.quietHours;
+    if (!quiet?.enabled) return null;
+    const at = minutesIn(now(), view()?.settings?.timezone), start = minutesOf(quiet.start), end = minutesOf(quiet.end);
+    return (start <= end ? at >= start && at < end : at >= start || at < end) ? quiet.end : null;
+  };
+  const clockRow = (schedule: AgentSchedule) => {
+    const feed = schedule.feed;
+    const quiet = () => clockKind(schedule) === "heartbeat" && quietUntil() ? `Quiet until ${quietUntil()}` : undefined;
+    const status = () => !feed ? undefined : feed.lastError ? "Last check failed" : !feed.primed ? "First check soon"
+      : `${feed.lastCount ? `${feed.lastCount} new` : "Nothing new"} ${age(feed.lastRunAt, now())}`.trim();
+    return <ClockRow kind={clockKind(schedule)} title={schedule.title} cadence={when(schedule)} warn={feed?.lastError || undefined}
+      status={feed ? [FEED_SOURCE[feed.source], status()].join(" · ") : quiet()} next={age(schedule.nextAt, now())}
+      actions={feed ? <DashIconButton aria-label="Remove feed" title="Remove feed" disabled={busy() !== null}
+        onClick={() => act(schedule.id, () => api(`/v0/agent/feeds/${encodeURIComponent(schedule.id)}`, { method: "DELETE" }))}><Icons.Delete /></DashIconButton> : undefined} />;
+  };
+  const timedGroup = () => <SplitGroup id="agent-timed" label="Timed" count={timed().length || null}>
+    {day()}
+    <For each={timed()}>{clockRow}</For>
   </SplitGroup>;
 
   const watchesGroup = () => <Show when={working()?.watches.length}>
@@ -255,7 +267,7 @@ export function AgentPage(props: {
           notice={error() ? <DashNote error>{error()}</DashNote> : undefined}
           conversation={conversation()}
           composer={props.composer}
-          aside={<>{needsGroup()}{inboxGroup()}{threadsGroup()}{workingGroup()}{feedsGroup()}{schedulesGroup()}{watchesGroup()}{rulesGroup()}{memoryGroup()}{recentGroup()}</>} />
+          aside={<>{needsGroup()}{inboxGroup()}{threadsGroup()}{workingGroup()}{timedGroup()}{watchesGroup()}{rulesGroup()}{memoryGroup()}{recentGroup()}</>} />
       </Show>
     </Show>
 

@@ -38,6 +38,7 @@ import { phoneComposerPage } from "./pages/phone-composer";
 import { voicePage } from "./pages/voice";
 import { tracePage } from "./pages/trace";
 import { agentsPage } from "./pages/agents";
+import { assistantPage } from "./pages/assistant";
 import { codeBlockPage } from "./pages/code-block";
 import { transcriptPage } from "./pages/transcript";
 import { type Page } from "./model";
@@ -83,6 +84,7 @@ const piecePages: Page[] = [
   voicePage,
   tracePage,
   agentsPage,
+  assistantPage,
   codeBlockPage,
   transcriptPage,
 ];

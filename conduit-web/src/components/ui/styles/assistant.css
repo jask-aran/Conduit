@@ -1,0 +1,44 @@
+/* Assistant: an agent that keeps going on its own. Its inbox (InboxRow under a LevelMark), what runs on its clock
+   (ClockRow), and its day (DayStrip). Rows are the dashboard's (ui-dash-row); only their parts are drawn here. */
+
+/* A report's level: a dot, coloured only by state; hollow when it had nothing to say; a check once handled. */
+.ui-level { display: grid; width: var(--icon-sm); height: var(--icon-sm); place-items: center; color: var(--foreground); }
+.ui-level > i { width: var(--icon-dot); height: var(--icon-dot); border-radius: var(--radius-round); background: currentColor; }
+.ui-level[data-level="fyi"] { color: var(--muted-foreground); }
+.ui-level[data-level="attention"] { color: var(--warn); }
+.ui-level:is([data-level="urgent"], [data-level="failed"]) { color: var(--destructive); }
+.ui-level[data-level="none"] > i { border: var(--stroke-thin) solid var(--muted-foreground); background: transparent; }
+.ui-level[data-handled] { color: var(--muted-foreground); }
+.ui-level > svg { width: 100%; height: 100%; }
+
+/* An inbox entry: the row, then its report unfolding under it, at the row's text edge. Handled ones rest quieter. */
+.ui-inbox-entry { display: flex; min-width: 0; flex-direction: column; }
+.ui-inbox-entry[data-handled] > .ui-dash-row .ui-dash-row-primary { color: var(--muted-foreground); }
+.ui-inbox-report { display: flex; flex-direction: column; gap: var(--space-xs); padding: var(--space-2xs) var(--row-inset) var(--space-sm) calc(var(--row-inset) + var(--icon) + var(--row-gap)); }
+.ui-inbox-body { max-height: var(--measure-xs); margin: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; color: var(--foreground); font-size: var(--text-caption); line-height: var(--leading-text); white-space: pre-wrap; overflow-wrap: anywhere; }
+.ui-inbox-foot { display: flex; min-width: 0; align-items: center; justify-content: space-between; gap: var(--space-sm); }
+.ui-inbox-outcome { min-width: 0; overflow: hidden; color: var(--muted-foreground); font: var(--weight-light) var(--text-caption)/var(--leading-row) var(--font-data); text-overflow: ellipsis; white-space: nowrap; }
+
+/* A clock's row: its cadence in the data face; off (its setting turned off) rests faded; a failure's warning in warn. */
+.ui-dash-row[data-clock][data-off] { opacity: var(--opacity-rest); }
+.ui-dash-row[data-clock] .ui-clock-warn { color: var(--warn); }
+.ui-clock-end { display: inline-flex; align-items: center; gap: var(--space-xs); }
+
+/* The day: labels over their ticks, a hairline track with quiet hours tinted, the hours under it in the data face. */
+.ui-day { display: grid; min-width: 0; gap: var(--space-2xs); padding: var(--space-xs) var(--row-inset) var(--space-sm); color: var(--muted-foreground); font: var(--weight-light) var(--text-label)/var(--leading-tight) var(--font-data); font-variant-numeric: tabular-nums; }
+.ui-day-marks, .ui-day-hours { position: relative; height: calc(var(--text-label) * var(--leading-tight)); }
+.ui-day-label, .ui-day-hours > span { position: absolute; top: 0; translate: -50% 0; white-space: nowrap; }
+.ui-day-label { color: var(--foreground); }
+.ui-day-hours > span:first-child { translate: 0 0; }
+.ui-day-hours > span:nth-child(5) { translate: -100% 0; }
+.ui-day-quiet-label { display: grid; place-items: center; }
+.ui-day-quiet-label > svg { width: var(--icon-xs); height: var(--icon-xs); }
+.ui-day-track { position: relative; height: var(--control-2xs); }
+.ui-day-track::before { position: absolute; inset: 50% 0 auto; border-top: var(--hairline) solid var(--tint); content: ""; }
+.ui-day-quiet { position: absolute; inset-block: 0; border-radius: var(--radius-inset); background: var(--tint); }
+.ui-day-tick, .ui-day-mark, .ui-day-now { position: absolute; translate: -50% 0; }
+.ui-day-tick { top: 50%; border-radius: var(--radius-round); background: var(--muted-foreground); width: calc(2 * var(--stroke-thin)); height: calc(2 * var(--stroke-thin)); margin-top: calc(-1 * var(--stroke-thin)); }
+.ui-day-mark { inset-block: 0; width: var(--stroke-thin); border-radius: var(--radius-round); background: var(--foreground); }
+.ui-day-tick[data-past], .ui-day-mark[data-past] { opacity: var(--opacity-muted); }
+.ui-day-now { inset-block: calc(-1 * var(--space-2xs)); width: var(--stroke-thin); background: var(--foreground); }
+.ui-day-now::before { position: absolute; top: 0; left: 50%; width: calc(3 * var(--stroke-thin)); height: calc(3 * var(--stroke-thin)); border-radius: var(--radius-round); background: var(--foreground); content: ""; translate: -50% -50%; }
