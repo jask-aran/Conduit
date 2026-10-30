@@ -260,8 +260,14 @@ export function Subagents(runtime) {
         if (heard && !stopped && !await resetSince(parent, task.input.sinceEntry || 0, context)) {
           const requestId = `subagent-report:${child}:${number}`;
           const handle = await api.conversation(api.conversationId, context);
+          // A run's report comes with the decision it asks of jbot (SYSTEM.md, When a run reports): told bare, jbot
+          // acknowledged it ("Noted. …") instead of choosing. The person sees the report's line, not this text.
+          const content = task.input.gate ? `${report.answer}\n\n---\nThat was your ${title} run's report. Decide as in "When a run reports": `
+            + (kind === "brief" ? "this is the morning brief, so write the person the day's brief, then notify."
+              : "if the person should hear it, write them a report and notify if it should reach their phone now; if not, call stay_quiet. Never just acknowledge it.")
+            : report.answer;
           await handle.submit({ type: "input", whenBusy: "followUp", requestId,
-            content: report.answer, entry: { kind: "conduit.subagent-report",
+            content, entry: { kind: "conduit.subagent-report",
               data: { subagentId: id, conversationId: child, title, status: report.status, messageId: requestId,
                 ...(task.input.origin ? { origin: task.input.origin, level } : {}) } } }, context);
           // The parent may have no live chat (an agent's home thread nobody has open): the report's turn is followed.

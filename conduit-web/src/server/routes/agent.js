@@ -22,7 +22,7 @@ import { backgroundSubagents } from "../subagents.js";
  * POST /v0/agent/wake                a run now { task, title? }
  * POST /v0/agent/feeds               add a feed { title, everyMinutes, source, level? } (feeds.js)
  * POST /v0/agent/feeds/test          run a source once { source }: { items, error? }; saves nothing
- * POST /v0/agent/feeds/:id/forget    forget items it has seen { ids? } (all without): its next check reports them as new
+ * POST /v0/agent/feeds/:id/forget    forget items it has seen { ids? | latest? } (all without): its next check reports them as new
  * PATCH /v0/agent/feeds/:id          change its { title?, everyMinutes?, source?, level? }, keeping what it has seen
  * DELETE /v0/agent/feeds/:id         remove a feed
  * POST /v0/agent/schedules/:id/run   run one now, off its clock (testing): a feed checks, the heartbeat decides the
@@ -215,7 +215,9 @@ export function registerAgentRoutes(app, { agent, backends }) {
         const feed = doc.schedules[request.params.id]?.feed;
         if (!feed) return null;
         const before = feed.seen.length;
-        feed.seen = ids ? feed.seen.filter((id) => !ids.has(id)) : [];
+        // `latest`: the newest n (seen is kept newest first), to have a feed report its last few again.
+        const latest = Number.isInteger(request.body?.latest) && request.body.latest > 0 ? request.body.latest : null;
+        feed.seen = ids ? feed.seen.filter((id) => !ids.has(id)) : latest ? feed.seen.slice(latest) : [];
         return before - feed.seen.length;
       });
       if (forgot === null) return response.status(404).json({ error: "feed_not_found" });
