@@ -5441,24 +5441,22 @@ function App() {
         if (active) setReady(true);
       }).catch(showError);
     }));
-    // Made once the thread is loaded, not on every read: a transcript made again is a new one, drawn from scratch.
-    const conversation = createMemo(() => ready() ? untrack(() => ({ transcript: <Transcript chat={current.chat} supports={current.capability} markdownRenderer={markdownRenderer()} profileLabel={current.activeProfile()?.label || undefined} projectId={agentView()?.projectId} narration={narrationOf(current.chat.loadedId())} approvals={approvalsFor(current.chat.loadedId())} />, onOpen: () => {
-        const id = agentView()?.home?.chatId;
-        if (id) void agentChat(id).then((target) => openChatFromPage(target.chat, target.project)).catch(showError);
-      } })) : undefined);
+    // The thread itself is a tap away (Open thread); the page keeps only its composer, which sends into it.
+    const openThread = () => {
+      const id = agentView()?.home?.chatId;
+      if (id) void agentChat(id).then((target) => openChatFromPage(target.chat, target.project)).catch(showError);
+    };
     return <AgentPage
       header={(title) => <ChatHeader title={title} tabActions={paneTabActions(slot)} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void startNewChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => {}} appDashboard alone />}
       composer={<Show when={ready() && agentView()?.settings && agentView()?.home?.chatId}><PageComposer session={current} keyboardOwner={() => slot === "main" ? !sideHasKeyboard() : keyboardPane() === slot} onSendDraft={async (prompt) => {
         const id = agentView()?.home?.chatId;
         if (!id || current.chat.loadedId() !== id) return;
-        // Sent from the page, answered on it: the thread is a tap away (Open thread).
         current.chat.setDraft(prompt);
         await current.chat.send();
-        // A phone shows no thread on the page, so what was sent is followed into it.
-        if (isMobileLayout()) conversation()?.onOpen();
+        // The page shows no thread, so what was sent is followed into it.
+        openThread();
       }} /></Show>}
-      // On a phone the thread is a row in Threads: a second transcript over the composer left the page no room.
-      conversation={isMobileLayout() ? undefined : conversation()}
+      onOpenThread={ready() ? openThread : undefined}
       onOpenFile={(path) => { const projectId = agentView()?.projectId; if (projectId) void openFileDocument({ projectId, path }, { beside: altActivation(), edit: false }); }}
       onOpenSettings={() => openSettings("agent")}
       onOpenChat={(id, event) => {

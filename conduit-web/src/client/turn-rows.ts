@@ -99,8 +99,8 @@ export type TurnRow =
   // per assistant row, which is quadratic in a long chat.
   // `traced` is whether a trace above this answer already speaks for its turn,
   // so a stopped turn says "Interrupted" once, on whichever row comes first.
-  // `orb`: in a turn that speaks more than once (TurnLayout `show`) the one row that carries the turn's orb --
-  // while it runs the row where it is working, settled its last answer -- and how the turn is.
+  // `orb`: the one row of a turn that can carry its orb -- while it runs the row where it is working, settled its last
+  // answer -- and how the turn is. The transcript draws only the latest turn's (the orb follows generation).
   | { key: string; type: "message"; value: Message; live?: boolean; streamVersion?: number; displayKey?: string; precedingUserId?: string; traced?: boolean; orb?: TurnOrbState }
   // `timestamp` is the turn's last reply's, for a trace with no answer row to carry it.
   // `continues`: a narrated turn's work after its first row, drawn close to what came before it.
@@ -111,7 +111,7 @@ export type TurnRow =
   | { key: string; type: "pending"; value: null; precedingUserId?: string; startedAt?: string };
 
 export type TurnOrbState = "live" | "settled" | "failed";
-/** Gives a narrated turn's orb to one row: the last row while it runs, else its last answer (its last trace
+/** Gives a turn's orb to one row: the last row while it runs, else its last answer (its last trace
  *  when it has none). */
 function placeTurnOrb(rows: TurnRow[], state: TurnOrbState) {
   const own = (row: TurnRow) => row.type === "trace" || (row.type === "message" && row.value.role !== "user");
@@ -444,6 +444,10 @@ export function buildLiveToolItem(
  * shape after it had settled.
  */
 
+// A trace's time from the start of the message after it: reasoning in the message that then speaks has no end of its
+// own, and its few milliseconds are not how long it thought -- so it says no time.
+const spanTime = (startedAt?: string | null, endedAt?: string | null) =>
+  startedAt && endedAt && Date.parse(endedAt) - Date.parse(startedAt) < 1000 ? {} : turnTime(startedAt, endedAt);
 const turnTime = (startedAt?: string | null, endedAt?: string | null) => ({
   ...(startedAt ? { startedAt } : {}),
   ...(endedAt ? { endedAt } : {}),
@@ -460,13 +464,15 @@ function liveRows(generation: ActiveGenerationView, owner: Message | null, tools
   let segments: TraceSegment[] = [];
   let group = 0;
   let count = 0;
-  const trace = (last: boolean, answerless = last) => {
+  // Narrated, each trace is timed from what was said before it to what it led to, not the turn's whole time.
+  let since = owner?.timestamp;
+  const trace = (last: boolean, answerless = last, end?: string) => {
     const latestTool = segments.findLast((segment) => segment.kind === "tool");
     const executingTool = running && latestTool?.kind === "tool" && latestTool.tool.done === false;
     const status = !last ? "complete" : generation.status === "stopped" ? "interrupted" : generation.status === "failed" ? "failed"
       : generation.status === "complete" ? "complete" : executingTool ? "executing_tool" : "thinking";
     rows.push({ key: traceGroupKey(base, group), type: "trace", value: { active: last && running, status, segments,
-      ...turnTime(owner?.timestamp, last && running ? undefined : owner?.timing?.endedAt || generation.assistantMessages.at(-1)?.timestamp) },
+      ...(show && end ? spanTime(since, end) : turnTime(show ? since : owner?.timestamp, last && running ? undefined : owner?.timing?.endedAt || generation.assistantMessages.at(-1)?.timestamp)) },
       precedingUserId: owner?.id, answerless, timestamp: generation.assistantMessages.at(-1)?.timestamp || undefined });
   };
   for (const assistant of generation.assistantMessages) {
@@ -483,10 +489,10 @@ function liveRows(generation: ActiveGenerationView, owner: Message | null, tools
         streamVersion: generation.lastSeq, precedingUserId: owner?.id, value: liveAnswerMessage(generation, assistant, content, terminalError) });
       count += 1;
       if (!show) { answers.push(row(true)); return; }
-      // Every turn opens with its trace, the turn's header, even before any work: an answer under none is not drawn.
-      if (segments.length || !rows.some((item) => item.type === "trace")) trace(false);
+      // Only work is a trace: text said first stands alone, an empty header over it said nothing.
+      if (segments.length) trace(false, false, assistant.timestamp ?? undefined);
       rows.push(row(rows.some((item) => item.type === "trace")));
-      group += 1; segments = [];
+      group += 1; segments = []; since = assistant.timestamp ?? since;
     };
     for (const block of assistant.blocks) {
       if (said.includes(block)) { if (show) answer(); }
@@ -523,7 +529,7 @@ function liveRows(generation: ActiveGenerationView, owner: Message | null, tools
     rows.push({ key: `pending:${owner ? owner.id : generation.id}`, type: "pending", value: null, precedingUserId: owner?.id,
       ...(owner?.timestamp ? { startedAt: owner.timestamp } : {}) });
   }
-  return show ? placeTurnOrb(rows, running ? "live" : endedEarly ? "failed" : "settled") : rows;
+  return placeTurnOrb(rows, running ? "live" : endedEarly ? "failed" : "settled");
 }
 
 /** Overlay one live turn onto an already projected persisted transcript. */
@@ -582,10 +588,11 @@ function persistedRowsForTurn(turn: PersistedTurn, toolById: Map<string, ToolIte
   let traced = false;
   // Folded: the messages that answer, under the turn's one trace.
   const answering: Message[] = [];
-  const trace = (last: boolean, answerless = last) => {
+  let since = owner?.timestamp;
+  const trace = (last: boolean, answerless = last, end?: string) => {
     traced = true;
     rows.push({ key: traceGroupKey(base, group), type: "trace", value: { active: false, status: last ? outcome || "complete" : "complete", segments,
-      ...turnTime(owner?.timestamp, owner?.timing?.endedAt || finalAssistant?.timestamp) }, precedingUserId: owner?.id, answerless,
+      ...(show && end ? spanTime(since, end) : turnTime(show ? since : owner?.timestamp, owner?.timing?.endedAt || finalAssistant?.timestamp)) }, precedingUserId: owner?.id, answerless,
       timestamp: finalAssistant?.timestamp || undefined,
       // Held to the contract where it always was: a turn with steps must say how it ended.
       ...(last && owner && !outcome && segments.length > 0 ? { unstated: true } : {}) });
@@ -608,10 +615,10 @@ function persistedRowsForTurn(turn: PersistedTurn, toolById: Map<string, ToolIte
       segments.push({ kind: "narration", id: `narration:${assistant.id}`, text: String(assistant.content), ...(discarded ? { discarded } : {}) });
     } else if (speaks && !show) answering.push(assistant);
     else if (speaks) {
-      if (segments.length || !traced) trace(false);
+      if (segments.length) trace(false, false, assistant.timestamp);
       const key = answerDisplayKey(owner, answers, `message:${assistant.id}`);
       rows.push({ key, displayKey: key, type: "message", value: assistant, precedingUserId: owner?.id, traced });
-      answers += 1; group += 1; segments = [];
+      answers += 1; group += 1; segments = []; since = assistant.timestamp ?? since;
     }
     for (const id of toolCallIdsOf(assistant)) {
       const tool = toolById.get(id);
@@ -633,7 +640,7 @@ function persistedRowsForTurn(turn: PersistedTurn, toolById: Map<string, ToolIte
       rows.push({ key: displayKey, displayKey, type: "message", value: answering.length === 1 ? answer : { ...answer, content: answerText },
         precedingUserId: owner?.id, traced: true });
     }
-    return rows;
+    return placeTurnOrb(rows, endedEarly ? "failed" : "settled");
   }
   if (segments.length || (endedEarly && !answers)) trace(true);
   else if (outcome && outcome !== "complete") {
