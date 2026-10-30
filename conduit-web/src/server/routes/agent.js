@@ -4,9 +4,9 @@ import { originOfRequest } from "../../server-identity.js";
 import { chatView } from "../../chat-store.js";
 import { listWatches, webhook } from "../../agent/events.js";
 import { acceptProposal, listProposals, rejectProposal } from "../../agent/memory.js";
-import { cancelSchedule, clockAdder, listSchedules } from "../../agent/schedule.js";
+import { cancelSchedule, clockAdder, listSchedules, seedSchedules } from "../../agent/schedule.js";
 import { applyOutcome, feedItem, feedProblem, runSource, sourceProblem } from "../../agent/feeds.js";
-import { heartbeatTask, listInbox } from "../../agent/inbox.js";
+import { heartbeatGuide, heartbeatTask, listInbox } from "../../agent/inbox.js";
 import { decide } from "../../agent/asks.js";
 import { AgentDoc } from "../../agent/agent-doc.js";
 import { backgroundSubagents } from "../subagents.js";
@@ -27,6 +27,7 @@ import { backgroundSubagents } from "../subagents.js";
  * DELETE /v0/agent/feeds/:id         remove a feed
  * POST /v0/agent/schedules/:id/run   run one now, off its clock (testing): a feed checks, the heartbeat decides the
  *                                    whole unhandled inbox and its checklist even in quiet hours, the rest wake a run
+ * POST /v0/agent/reset              start over: a new home thread, empty inbox; settings, memory and feeds stay
  * POST /v0/agent/proposals/:id/{accept,reject}
  * DELETE /v0/agent/notices/:id      a notice read (it leaves the attention list)
  * DELETE /v0/agent/rules/:id        remove a saved approval rule
@@ -262,7 +263,8 @@ export function registerAgentRoutes(app, { agent, backends }) {
       }
       const beat = schedule.system && schedule.id === "heartbeat";
       const waiting = beat ? listInbox(state, { unhandled: true }) : [];
-      const task = beat ? heartbeatTask({ inbox: waiting.length, waiting: waiting.length, sweep: true })
+      const task = beat ? heartbeatTask({ inbox: waiting.length, waiting: waiting.length, sweep: true, timeZone: agent.settings().timezone, guide: await heartbeatGuide(agent),
+        entries: waiting.slice(0, 25).map(({ id, at, title, level, headline, body }) => ({ id, at, title, level, headline, body: body ? String(body).slice(0, 1500) : "" })) })
         : schedule.feed ? schedule.feed.source.task : schedule.task;
       const kind = schedule.system ? schedule.id : schedule.feed ? "feed" : "checkback";
       const run = await agent.wake({ key, kind, title: schedule.title, task });
@@ -275,6 +277,32 @@ export function registerAgentRoutes(app, { agent, backends }) {
       response.status(run ? 202 : 409).json(run ? { id: run.id, conversationId: run.child } : { error: "agent_over_budget" });
     } catch (error) { next(error); }
   });
+  /**
+   * Start over: a new home thread, and an empty inbox and attention list. Its settings, memory files, feeds (with what
+   * they have seen), schedules and saved approval rules stay; their clocks move to the new thread. The old home thread is
+   * the caller's to delete (DELETE /v0/sessions/:id); its runs' chats go here.
+   */
+  app.post("/v0/agent/reset", async (request, response, next) => {
+    try {
+      if (!enabled(response)) return;
+      const previous = (await agent.state()).home;
+      await agent.update((doc) => {
+        Object.assign(doc, { home: null, inbox: {}, asks: {}, notices: [], proposals: {}, tainted: {} });
+        delete doc.beatLine; delete doc.heartbeatSeenAt; delete doc.heartbeatSweptAt;
+      });
+      const home = await agent.home();
+      await seedSchedules(agent);
+      let runs = 0;
+      // listProject leaves run chats out; they are the agent project's subagent chats under any other thread.
+      for (const chat of agent.registry.list({ includeHidden: true })) {
+        if (chat.status !== "subagent" || chat.projectId !== agent.project.id || chat.backend?.parentChatId === home.chat.id) continue;
+        await agent.registry.remove(chat.id, agent.project);
+        runs++;
+      }
+      response.json({ previous: previous?.chatId || null, home: home.chat.id, runs });
+    } catch (error) { next(error); }
+  });
+
   app.delete("/v0/agent/feeds/:id", async (request, response, next) => {
     try {
       if (!enabled(response)) return;

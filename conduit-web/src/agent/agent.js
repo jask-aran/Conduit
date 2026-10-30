@@ -299,7 +299,7 @@ export class PersistentAgent {
   spawnRun(tx, conversationId, { key, kind, title, task }) {
     if (!this.runtime.spawnBackground) throw new Error("Background subagents are not installed");
     const work = this.settings().work[kind === "brief" || kind === "heartbeat" ? kind : "other"];
-    return this.runtime.spawnBackground(tx, conversationId, { key, task: runBrief(kind, task), title: title || kind,
+    return this.runtime.spawnBackground(tx, conversationId, { key, task: runBrief(kind, task, this.settings().timezone), title: title || kind,
       origin: { kind, key }, gate: true, ...(work ? { model: work.model, thinkingLevel: work.thinkingLevel } : {}) });
   }
 
@@ -324,13 +324,23 @@ export class PersistentAgent {
   }
 }
 
-/** A run's brief: what woke it, then its task, then how its answer is read (templates/agent/SYSTEM.md, Runs). */
-export const runBrief = (kind, task) => [
-  `You were woken for a ${kind === "checkback" ? "check-back" : kind} run, at ${new Date().toISOString()}.`,
+/** What each kind of run is for, said first: a run starts with jbot's whole prompt and no history. */
+const ROLES = {
+  heartbeat: "You are jbot's heartbeat: you read what came into its inbox, gather what is missing, and report it all to jbot, "
+    + "which decides what the person hears. You do not judge what matters to them; you make sure jbot can.",
+  brief: "You are jbot's morning brief: you gather everything jbot needs for one full look at the person's day, from the "
+    + "inbox outward. jbot writes the message; your report is its material, so leave nothing out that it would need.",
+};
+
+/** A run's brief: what woke it, its role, its task, then how its answer is read (templates/agent/SYSTEM.md, If you are a run). */
+export const runBrief = (kind, task, timeZone) => [
+  `You were woken for a ${kind === "checkback" ? "check-back" : kind} run, at ${new Date().toLocaleString("en-AU", { timeZone, dateStyle: "full", timeStyle: "short" })} (${timeZone}).`,
+  ROLES[kind] || "",
   "",
   String(task || "").trim(),
   "",
-  "When there is nothing worth telling, call nothing_to_report and stop; when the task cannot be done, call run_failed "
-    + "with the reason. Otherwise begin your final answer with FYI:, ATTENTION: or URGENT: as described in your instructions. "
-    + "An outward call you make is asked, not done: the person approves it under your report.",
-].join("\n");
+  "Your final answer is your report to jbot, not a message to the person: complete and specific, begun with FYI:, "
+    + "ATTENTION: or URGENT:. When there is nothing worth reporting, call nothing_to_report and stop; when the task cannot "
+    + "be done, call run_failed with the reason. An outward call you make is asked, not done: say in the report what waits "
+    + "for the person's approval.",
+].filter((line, index) => line || index !== 1).join("\n");
