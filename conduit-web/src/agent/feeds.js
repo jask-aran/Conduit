@@ -1,3 +1,4 @@
+import { compile } from "html-to-text";
 import { defineTool } from "@earendil-works/pi-durable";
 import { NodeExecutionEnv } from "@earendil-works/pi-durable/env/node";
 import { Type } from "@earendil-works/pi-ai";
@@ -46,25 +47,62 @@ export function sourceProblem(source) {
   return "The source kind is executor, script or run.";
 }
 
-const TEXT_MAX = 1500;
+const TEXT_MAX = 2500;
 const BODY_MAX = 30_000;
 /** Content kept as paragraphs: runs of blank lines and spaces folded, cut short. */
 const prose = (value, max) => { const kept = String(value ?? "").replace(/\r/g, "").replace(/[ \t]+/g, " ").replace(/\n\s*\n+/g, "\n\n").trim(); return kept.length > max ? `${kept.slice(0, max - 1)}…` : kept; };
-const ENTITIES = { nbsp: " ", amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", rsquo: "'", lsquo: "'", ldquo: '"', rdquo: '"', ndash: "-", mdash: "-", hellip: "…", copy: "©" };
-/** An encoded part as readable text: decoded, HTML reduced to its words and line breaks, a mail's padding and tracking
- *  links dropped, quoted replies and the signature cut. */
+/** Links nobody opens a mail for. */
+const SKIP_LINK = /unsubscribe|preferences|privacy|terms|view (it )?(online|in (your )?browser)|view image|contact us|help cent|manage (your )?(email|subscription)|^https?:/i;
+const LINKS_MAX = 8;
+const altOf = (elem) => elem.attribs?.alt || (elem.children || []).map(altOf).find(Boolean) || "";
+/** An anchor as its words and a numbered reference, its address kept in the item's links (the text stays short). */
+function emailAnchor(elem, walk, builder) {
+  const href = String(elem.attribs?.href || "").trim();
+  let words = "";
+  builder.pushWordTransform((word) => { if (word) words += `${words ? " " : ""}${word}`; return word; });
+  walk(elem.children, builder);
+  builder.popWordTransform();
+  const label = (words || altOf(elem)).replace(/\s+/g, " ").trim();
+  if (!/^https?:\/\//i.test(href) || !label || SKIP_LINK.test(label)) return;
+  const links = builder.metadata.links;
+  let number = links.findIndex((link) => link.url === href) + 1;
+  if (!number && links.length < LINKS_MAX) number = links.push({ label: label.slice(0, 60), url: href.slice(0, 600) });
+  if (!number) return;
+  if (!words) builder.addInline(label);
+  builder.addInline(` [${number}]`, { noWordTransform: true });
+}
+const toText = compile({
+  wordwrap: false,
+  limits: { maxInputLength: 400_000 },
+  formatters: { emailAnchor },
+  selectors: [
+    { selector: "a", format: "emailAnchor" },
+    { selector: "img", format: "skip" },
+    // A mail's preheader: hidden text for the inbox preview, repeated or padded with invisible characters.
+    { selector: "[style*='display:none']", format: "skip" },
+    { selector: "[style*='display: none']", format: "skip" },
+    ...["h1", "h2", "h3", "h4", "h5", "h6"].map((selector) => ({ selector, options: { uppercase: false } })),
+    { selector: "table", options: { uppercaseHeaderCells: false } },
+  ],
+});
+
+/**
+ * An encoded mail part as `{ text, links }`: decoded (base64url); HTML through html-to-text, its links numbered in the
+ * text and kept in `links`; a plain part's addresses taken out the same way. Quoted replies and a signature are cut.
+ */
 export function decodeContent(encoded) {
-  if (!encoded || typeof encoded.data !== "string") return "";
-  let body = Buffer.from(encoded.data.slice(0, 400_000), "base64url").toString("utf8");
-  // A "plain" part is sometimes HTML too (a newsletter's): read as HTML whatever it claims once it has tags.
-  if (/html/i.test(encoded.mimeType || "") || /<\/?(?:p|div|br|table|a|link|span)\b/i.test(body)) {
-    body = body.replace(/<(style|script|head)\b[\s\S]*?<\/\1>/gi, " ").replace(/<!--[\s\S]*?-->/g, " ")
-      .replace(/<br\s*\/?>/gi, "\n").replace(/<\/(p|div|tr|li|h\d|table)>/gi, "\n\n").replace(/<[^>]*>/g, " ").replace(/<[a-z][^>\n]*/gi, " ");
-  }
-  body = body.replace(/&#(x?)([0-9a-f]+);/gi, (_, hex, code) => { try { return String.fromCodePoint(parseInt(code, hex ? 16 : 10)); } catch { return ""; } })
-    .replace(/&(\w+);/g, (_, name) => ENTITIES[name.toLowerCase()] ?? "");
-  return body.replace(/[\u034F\u00AD\u200B-\u200F\u2060\uFEFF]/g, "").replace(/<https?:[^>]*>/g, "").replace(/https?:\/\/\S{60,}/g, "")
-    .replace(/\r/g, "").replace(/\n>.*$/gs, "").replace(/\n-- \n[\s\S]*$/, "").replace(/[ \t]+/g, " ").replace(/([^\n])\n(?!\s*\n)/g, "$1 ");
+  if (!encoded || typeof encoded.data !== "string") return { text: "", links: [] };
+  const raw = Buffer.from(encoded.data.slice(0, 400_000), "base64url").toString("utf8");
+  const links = [];
+  let body;
+  if (/html/i.test(encoded.mimeType || "") || /<\/?(?:p|div|br|table|a|span)\b/i.test(raw)) body = toText(raw, { links });
+  else body = raw.replace(/<?(https?:\/\/[^\s<>]+)>?/g, (url, bare) => {
+    if (links.length >= LINKS_MAX) return "";
+    return ` [${links.push({ label: "Link", url: bare.slice(0, 600) })}]`;
+  });
+  const text = body.replace(/[\u034F\u00AD\u200B-\u200F\u2060\uFEFF]/g, "").replace(/\r/g, "")
+    .replace(/\n>.*$/gs, "").replace(/\n-- \n[\s\S]*$/, "").replace(/[ \t]+/g, " ").replace(/\n[ \t]+/g, "\n");
+  return { text, links };
 }
 
 const text = (value, max) => { const flat = String(value ?? "").replace(/\s+/g, " ").trim(); return flat.length > max ? `${flat.slice(0, max - 1)}…` : flat; };
@@ -96,8 +134,10 @@ export function itemsOf(output) {
     const title = text(raw.title ?? raw.subject ?? raw.name ?? raw.summary ?? "", 160);
     const detail = text(raw.detail ?? raw.from ?? raw.snippet ?? raw.description ?? "", 200);
     const id = text(raw.id ?? raw.key ?? raw.url ?? "", 200) || createHash("sha256").update(`${title}\n${detail}`).digest("hex").slice(0, 24);
-    const body = prose(raw.encoded ? decodeContent(raw.encoded) || raw.text : raw.text ?? raw.body ?? raw.content ?? "", TEXT_MAX);
-    return { id, title, ...(detail ? { detail } : {}), ...(body ? { text: body } : {}), ...(raw.at ? { at: text(raw.at, 40) } : {}), ...(raw.url ? { url: text(raw.url, 300) } : {}),
+    const decoded = raw.encoded ? decodeContent(raw.encoded) : null;
+    const body = prose(decoded?.text || (raw.text ?? raw.body ?? raw.content ?? ""), TEXT_MAX);
+    const links = decoded ? decoded.links : Array.isArray(raw.links) ? raw.links.filter((link) => link?.url).slice(0, LINKS_MAX).map((link) => ({ label: text(link.label || "Link", 60), url: text(link.url, 600) })) : [];
+    return { id, title, ...(detail ? { detail } : {}), ...(body ? { text: body } : {}), ...(links.length ? { links } : {}), ...(raw.at ? { at: text(raw.at, 40) } : {}), ...(raw.url ? { url: text(raw.url, 300) } : {}),
       ...(LEVELS.includes(raw.level) ? { level: raw.level } : {}) };
   });
 }
@@ -151,7 +191,7 @@ export function applyOutcome(doc, schedule, outcome, slot) {
     appendEntry(doc, { key: `${schedule.id}:${slot}`, kind: "feed", title: schedule.title, feedId: schedule.id, subagentId: null, conversationId: null,
       level, status: "unhandled",
       headline: text(fresh.length === 1 ? line(fresh[0]) : `${fresh.length} new: ${fresh.map((item) => item.title || "(untitled)").join("; ")}`, 160),
-      body: fresh.map((item) => `- ${line(item)}${item.at ? ` (${item.at})` : ""}${item.url ? ` ${item.url}` : ""}${item.text ? `\n${item.text.replace(/^/gm, "  ")}` : ""}`)
+      body: fresh.map((item) => `- ${line(item)}${item.at ? ` (${item.at})` : ""}${item.url ? ` ${item.url}` : ""}${item.links?.length ? `\n  Links: ${item.links.map((link, index) => `[${index + 1}] ${link.label} <${link.url}>`).join(" · ")}` : ""}${item.text ? `\n${item.text.replace(/^/gm, "  ")}` : ""}`)
         .join("\n\n").slice(0, BODY_MAX) }, Date.parse(slot));
   }
   feed.primed = true;

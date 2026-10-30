@@ -115,11 +115,13 @@ export const heartbeatTask = ({ inbox, waiting = inbox, sweep, entries = [], tim
   inbox ? `${inbox} new ${inbox === 1 ? "entry" : "entries"} came into your inbox since the last heartbeat (${waiting} unhandled in all)`
     + (entries.length ? `${entries.length < inbox ? `; the newest ${entries.length}` : ""}:\n\n${entries.map((entry) => entryText(entry, timeZone)).join("\n")}\n`
       : ": read them with inbox list.")
-    + "\nYour judgement here is context, not what the person should hear: jbot decides that. For each entry decide whether "
-    + "what it says is enough to understand it; where it is not and it might matter, gather what is missing from its source "
-    + "(open the email, check the calendar or the chat). Then report to jbot: how many came in and from where, each entry "
-    + "in a line or two of what it is (with what you found), and anything else you noticed. Mark them with inbox handle, "
-    + "outcome \"Reported to jbot\"." : "",
+    + "\nYour judgement here is context, not what the person should hear: jbot decides that. Do the legwork the person "
+    + "would otherwise do by opening the email: pull out the specifics (tracking and order numbers, what was ordered, "
+    + "amounts, due dates, who is asking and for what) and the links that matter, and go looking for the context around "
+    + "each, as the instructions above say (search the mail, check the calendar). Then report to jbot: how many came in and "
+    + "from where, then each entry under its own short heading with its facts, its links as Markdown links with their "
+    + "labels, and the context you found; a line is enough for what is not worth digging into. Mark them with inbox "
+    + "handle, outcome \"Reported to jbot\"." : "",
   sweep ? "Your checklist is due: go through each item under Checklist and report what you found." : "",
   inbox ? "" : "When the checklist turns up nothing, call nothing_to_report."].filter(Boolean).join(" ");
 

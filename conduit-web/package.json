@@ -44,6 +44,7 @@
     "compression": "^1.8.1",
     "effect": "4.0.1",
     "express": "^4.22.2",
+    "html-to-text": "^10.0.1",
     "jsqr": "^1.4.0",
     "node-pty": "1.1.0",
     "pi-web-access": "0.45.0",
