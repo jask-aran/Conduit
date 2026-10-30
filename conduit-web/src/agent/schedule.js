@@ -4,8 +4,9 @@ import { AgentDoc, nextId } from "./agent-doc.js";
 import { applyOutcome, runSource } from "./feeds.js";
 import { heartbeatPlan, heartbeatTask } from "./inbox.js";
 
-const BRIEF = "Morning brief. Look at what changed since the last brief: the person's calendar and mail if connected, "
-  + "their chats (the `chats` tool), devices, your diary and schedules. Tell the person in a short list what matters today. "
+const BRIEF = "Morning brief. Start from your inbox (the `inbox` tool): what your feeds and runs collected since the last "
+  + "brief. Then look wider: the person's calendar and mail if connected, their chats (the `chats` tool), devices, your diary "
+  + "and schedules. Tell the person in a short list what matters today, and mark the inbox entries the brief covers handled. "
   + "Where an item has an obvious next step outside your folder (a reply to send, an invite to answer, a chat to start on "
   + "something), prepare it in full and make the call: it is asked, not done, and the person approves it under your brief. "
   + "Prepare at most three, only ones they would likely want; mark those items in the list. Begin with FYI: or ATTENTION:.";
@@ -275,7 +276,14 @@ export async function seedSchedules(agent) {
       const live = task && !task.abortRequested && !["terminal", "completing"].includes(task.state.status);
       const changed = old && (!target || !live || task.conversationId !== conversationId || old.kind !== target.kind || old.at !== target.at || old.everyMinutes !== target.everyMinutes
         || (old.kind === "daily" && old.zone !== settings.timezone));
-      if (old && !changed) continue;
+      if (old && !changed) {
+        // Same clock, newer words (a built-in task's text changed in a release): take them without a new clock.
+        if (target.task !== old.task) await conversation.commit(async (tx) => {
+          const current = (await tx.doc(AgentDoc)).schedules[id];
+          if (current && current.clock === old.clock) current.task = target.task;
+        }, agent.context);
+        continue;
+      }
       if (old?.clock && task) {
         await harness.abortTask(old.clock, agent.context);
         await harness.waitForTask(old.clock, agent.context);
