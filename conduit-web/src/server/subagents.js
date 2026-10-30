@@ -266,11 +266,7 @@ export function Subagents(runtime) {
                 ...(task.input.origin ? { origin: task.input.origin, level } : {}) } } }, context);
           // The parent may have no live chat (an agent's home thread nobody has open): the report's turn is followed.
           runtime.wakeChat?.(api.conversationId);
-          // And the person's devices hear of it, once: marked before sending, so a replay does not push it again.
-          if (task.input.gate && (asked || waiting > 0 || reaches(level, runtime.agentDial?.())) && await api.memo("pushed", context) === undefined) {
-            await api.memo("pushed", true, context);
-            runtime.notify?.({ kind: "report", conversationId: api.conversationId, title, text: report.answer, level, key: `${child}-${number}`, waiting });
-          }
+          // The person's devices hear of it only if jbot decides they should (its `notify`); approvals push on their own.
         }
         await api.commit(() => ({ status: "terminal", outcome: { status: "completed", result: report } }), context);
       } catch (error) {

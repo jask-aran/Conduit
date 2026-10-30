@@ -29,6 +29,8 @@
     "inbox",
     "nothing_to_report",
     "run_failed",
+    "stay_quiet",
+    "notify",
     "feed"
   ],
   "models": [

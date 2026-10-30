@@ -77,19 +77,51 @@ export async function heartbeatPlan(agent, state, now = Date.now()) {
   const fresh = waiting.filter((item) => Date.parse(item.at) > seen);
   const inbox = fresh.length;
   const due = now - (Date.parse(state?.heartbeatSweptAt || "") || 0) >= settings.heartbeat.everyMinutes * 60000;
-  const sweep = due && (await fs.readFile(path.join(agent.folder, "HEARTBEAT.md"), "utf8").catch(() => ""))
-    .replace(/<!--[\s\S]*?-->/g, "").split(/\r?\n/).some((row) => /^\s*(?:[-*+]|\d+[.)])\s+\S/.test(row));
-  return inbox || sweep ? { inbox, waiting: waiting.length, newest: fresh[0]?.at ?? null, sweep } : null;
+  const guide = await heartbeatGuide(agent);
+  const sweep = due && checklist(guide);
+  return inbox || sweep ? { inbox, waiting: waiting.length, newest: fresh[0]?.at ?? null, sweep, timeZone: settings.timezone, guide,
+    entries: fresh.slice(0, ENTRIES_IN_TASK).map(({ id, at, title, level, headline, body }) => ({ id, at, title, level, headline, body: body ? String(body).slice(0, ENTRY_BODY) : "" })) } : null;
 }
+/**
+ * HEARTBEAT.md, the person's standing instructions to the heartbeat (what to look closer at, what to leave), without
+ * its comments. Only its Checklist section makes a sweep: lines elsewhere are how to read, not things to check.
+ */
+export async function heartbeatGuide(agent) {
+  const text = await fs.readFile(path.join(agent.folder, "HEARTBEAT.md"), "utf8").catch(() => "");
+  return text.replace(/<!--[\s\S]*?-->/g, "").replace(/\n{3,}/g, "\n\n").trim().slice(0, 4000);
+}
+const checklist = (guide) => {
+  const section = guide.split(/^## /m).find((part) => /^checklist\b/i.test(part)) || "";
+  return section.split(/\r?\n/).some((row) => /^\s*(?:[-*+]|\d+[.)])\s+\S/.test(row));
+};
 
-/** A heartbeat run's task, for what its tick found. */
-export const heartbeatTask = ({ inbox, waiting = inbox, sweep }) => ["Heartbeat.",
-  inbox ? `${inbox} new ${inbox === 1 ? "entry" : "entries"} in your inbox (${waiting} unhandled in all): read them (inbox list; inbox read for a `
-    + "whole report). For each decide: nothing to do, act (a check-back with schedule, a chat to start), or tell the person; "
-    + "then mark it with inbox handle and what you did. Decide from what the entries say: go to the source (mail, a "
-    + "calendar) only when an entry is unclear and might matter, not to restate what it already says." : "",
-  sweep ? "Go through HEARTBEAT.md in your folder and check each item." : "",
-  "When nothing needs the person, call nothing_to_report; otherwise report only what needs them."].filter(Boolean).join(" ");
+/** What of the inbox a heartbeat's task carries, so its first call is not to read what the hub already holds. */
+const ENTRIES_IN_TASK = 25;
+const DIAL_WORDS = { quiet: "notify only what cannot wait", normal: "notify what they should see today", chatty: "notify anything worth knowing" };
+const ENTRY_BODY = 1500;
+
+const entryText = (entry, timeZone) => {
+  const when = new Intl.DateTimeFormat("en-AU", { timeZone, weekday: "short", hour: "numeric", minute: "2-digit" }).format(new Date(entry.at));
+  const body = entry.body && entry.body !== entry.headline ? `\n${entry.body.split("\n").map((row) => `    ${row}`).join("\n")}` : "";
+  return `- [${entry.id}] ${when} · ${entry.title} · ${entry.level}: ${entry.headline}${body}`;
+};
+
+/**
+ * A heartbeat run's task, for what its tick found. Its judgement is context, not what the person should hear: it reads
+ * the new entries (here in the task), gathers what they leave unclear, and reports everything to jbot, which decides.
+ */
+export const heartbeatTask = ({ inbox, waiting = inbox, sweep, entries = [], timeZone, guide = "" }) => [
+  guide ? `The person's instructions for you (HEARTBEAT.md):\n\n${guide}\n` : "",
+  inbox ? `${inbox} new ${inbox === 1 ? "entry" : "entries"} came into your inbox since the last heartbeat (${waiting} unhandled in all)`
+    + (entries.length ? `${entries.length < inbox ? `; the newest ${entries.length}` : ""}:\n\n${entries.map((entry) => entryText(entry, timeZone)).join("\n")}\n`
+      : ": read them with inbox list.")
+    + "\nYour judgement here is context, not what the person should hear: jbot decides that. For each entry decide whether "
+    + "what it says is enough to understand it; where it is not and it might matter, gather what is missing from its source "
+    + "(open the email, check the calendar or the chat). Then report to jbot: how many came in and from where, each entry "
+    + "in a line or two of what it is (with what you found), and anything else you noticed. Mark them with inbox handle, "
+    + "outcome \"Reported to jbot\"." : "",
+  sweep ? "Your checklist is due: go through each item under Checklist and report what you found." : "",
+  inbox ? "" : "When the checklist turns up nothing, call nothing_to_report."].filter(Boolean).join(" ");
 
 const result = (text, isError = false) => ({ output: [{ type: "text", text }], ...(isError ? { isError: true } : {}) });
 
@@ -170,11 +202,42 @@ export function InboxTools(runtime) {
     const state = await agent.state();
     if (state.home?.conversationId !== input.conversationId) return undefined;
     const items = listInbox(state, { unhandled: true });
-    if (!items.length) return undefined;
     const now = Date.now();
-    return [`Unhandled in your inbox (${items.length}). Tell the person what matters when it fits, then mark it with inbox handle:`,
+    // Whether a report reaches the person's phone is jbot's call (`notify`), weighed against how often they want it.
+    const dial = `How often the person wants to be interrupted: ${agent.settings().dial} (${DIAL_WORDS[agent.settings().dial] || DIAL_WORDS.normal}).`;
+    if (!items.length) return dial;
+    return [dial, `Unhandled in your inbox (${items.length}). Tell the person what matters when it fits, then mark it with inbox handle:`,
       ...items.slice(0, 12).map((item) => line(item, now)),
       ...(items.length > 12 ? [`… and ${items.length - 12} more (inbox list).`] : [])].join("\n");
   });
-  return { tools: [quiet, failed, inbox], sections: [waiting] };
+  // In a thread (the home thread above all), after a run's report: jbot decides whether the person hears it now.
+  const notify = defineTool({
+    name: "notify",
+    description: "In a thread: send the person's phone and devices a notification of what you just wrote them, after a report "
+      + "they should see now. A title and one line. Not for replies to their own messages; they are already here.",
+    parameters: Type.Object({
+      title: Type.String({ description: "A few words: what it is about." }),
+      text: Type.String({ description: "One line, as the lock screen shows it." }),
+      urgent: Type.Optional(Type.Boolean({ description: "Only for what cannot wait." })),
+    }),
+    replay: "unsafe",
+    execute: async ({ title, text, urgent }, api, context) => {
+      if (await runOnly(api)) return result("A run does not notify: report, and jbot decides.", true);
+      const key = await api.memo("notify", `note-${api.conversationId}-${Date.now()}`, context);
+      runtime.notify?.({ kind: "report", conversationId: api.conversationId, title, text, level: urgent ? "urgent" : "attention", key });
+      return result("Sent to their devices.");
+    },
+  });
+  const stay = defineTool({
+    name: "stay_quiet",
+    description: "In a thread, after a run's report: the person need not hear it now. Ends your turn without a message; "
+      + "what the report held stays in your context and its line in the thread.",
+    parameters: Type.Object({}),
+    replay: "safe",
+    execute: async (_args, api) => {
+      if (await runOnly(api)) return result("Only a thread stays quiet; a run calls nothing_to_report.", true);
+      return { ...result("Quiet."), control: { terminate: true } };
+    },
+  });
+  return { tools: [quiet, failed, inbox, notify, stay], sections: [waiting] };
 }

@@ -4,12 +4,14 @@ import { AgentDoc, nextId } from "./agent-doc.js";
 import { applyOutcome, runSource } from "./feeds.js";
 import { heartbeatPlan, heartbeatTask } from "./inbox.js";
 
-const BRIEF = "Morning brief. Start from your inbox (the `inbox` tool): what your feeds and runs collected since the last "
-  + "brief. Then look wider: the person's calendar and mail if connected, their chats (the `chats` tool), devices, your diary "
-  + "and schedules. Tell the person in a short list what matters today, and mark the inbox entries the brief covers handled. "
+const BRIEF = "Morning brief: gather what jbot needs to give the person a full look at their day. Start from your inbox "
+  + "(the `inbox` tool): what feeds and runs collected since the last brief. Then look wider: their calendar for today and "
+  + "the next few days, mail and messages that need them, their chats (the `chats` tool), devices, your diary and schedules. "
+  + "Report to jbot in full, with the specifics (times, people, amounts, deadlines), under Today, Needs them, Mail and "
+  + "messages, Coming up; leave out a heading with nothing under it. Mark the inbox entries the brief covers handled. "
   + "Where an item has an obvious next step outside your folder (a reply to send, an invite to answer, a chat to start on "
-  + "something), prepare it in full and make the call: it is asked, not done, and the person approves it under your brief. "
-  + "Prepare at most three, only ones they would likely want; mark those items in the list. Begin with FYI: or ATTENTION:.";
+  + "something), prepare it in full and make the call: it is asked, not done, and the person approves it under the brief. "
+  + "Prepare at most three, only ones they would likely want, and say which. Begin with FYI: or ATTENTION:.";
 /** The heartbeat ticks this often; most ticks find nothing and call no model (inbox.js, heartbeatPlan). */
 const TICK_MINUTES = 60;
 const terminal = () => ({ status: "terminal", outcome: { status: "completed" } });
