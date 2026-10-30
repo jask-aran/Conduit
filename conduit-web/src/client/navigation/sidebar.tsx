@@ -80,7 +80,8 @@ function UpdateNotice(props: { state?: UpdateState; onTake?: () => void }) {
   };
   return <Show when={state().kind !== "idle"}>
     <NavNotice ready={state().kind === "ready"} busy={state().kind === "checking" || state().kind === "working"} icon={state().kind === "ready" ? <Icons.Download /> : <Icons.Check />}
-      action={state().kind === "ready" ? { label: androidShell ? "Install" : "Restart", onClick: () => props.onTake?.() } : undefined}>{words()}</NavNotice>
+      action={state().kind === "ready" ? { label: androidShell ? "Install" : "Restart", onClick: () => props.onTake?.() }
+        : (() => { const current = state(); return current.kind === "working" && current.onCancel ? { label: "Cancel", onClick: current.onCancel, quiet: true } : undefined; })()}>{words()}</NavNotice>
   </Show>;
 }
 
