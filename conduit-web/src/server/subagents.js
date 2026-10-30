@@ -230,12 +230,14 @@ export function Subagents(runtime) {
         const waiting = task.input.gate ? await api.memo("waiting", Object.values((await api.snapshot(AgentDoc, context))?.asks || {})
           .filter((ask) => ask.status === "pending" && String(ask.sourceConversationId) === String(child)).length, context) : 0;
         const heard = !task.input.gate || (level !== "none" && (asked || waiting > 0 || level === "urgent"));
-        if (task.input.gate && level !== "none" && kind !== "heartbeat") {
+        // Only what waits: the inbox collects for the heartbeat (and the brief), so a report the person was told at once
+        // (the brief itself, a task they started, anything urgent) goes to the home thread alone.
+        if (task.input.gate && level !== "none" && kind !== "heartbeat" && !heard) {
           const at = await api.memo("entryAt", new Date().toISOString(), context);
           await api.commit(async (tx) => {
             appendEntry(await tx.doc(AgentDoc), { key: `${child}:${number}`, kind, title, subagentId: id, conversationId: child, level,
               headline: headlineOf(level === "failed" && end?.reason ? end.reason : report.answer),
-              ...(heard ? { status: "handled", handledAt: at, outcome: "Told the person at once" } : { status: "unhandled" }) }, Date.parse(at));
+              status: "unhandled" }, Date.parse(at));
           }, context);
         }
         // A heartbeat that told no one leaves a quiet line in the home thread of what it did (no turn, display only).
