@@ -220,7 +220,8 @@ interface EventBase {
  */
 
 export type AssistantBlock =
-  | { kind: "text"; contentIndex: number; text: string }
+  /** `phase`: what the provider said the text was, where its stream says (DESIGN.md, Transcript › Turns). */
+  | { kind: "text"; contentIndex: number; text: string; phase?: "commentary" | "final_answer" }
   | { kind: "thinking"; contentIndex: number; text: string; redacted: boolean }
   | { kind: "narration"; contentIndex: number; text: string }
   | { kind: "tool_call"; contentIndex: number; toolCallId: string; name: string; input: unknown };

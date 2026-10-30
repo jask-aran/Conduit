@@ -151,10 +151,29 @@ const failure = (message, code = "backend_unavailable", status = 409) => Object.
 const textOf = (content) => (Array.isArray(content) ? content : [])
   .filter((part) => part?.type === "text").map((part) => part.text || "").join("");
 
-/** An assistant message's blocks, in Conduit's names. */
+/**
+ * What a provider said its text was, where it says (pi-ai's `TextSignatureV1`: OpenAI Responses labels each message
+ * `commentary` or `final_answer`); null where the stream carries no label (DESIGN.md, Transcript › Turns).
+ */
+function textPhase(part) {
+  if (!part?.textSignature?.startsWith("{")) return null;
+  try {
+    const signature = JSON.parse(part.textSignature);
+    return signature?.v === 1 && (signature.phase === "commentary" || signature.phase === "final_answer") ? signature.phase : null;
+  } catch { return null; }
+}
+
+/**
+ * An assistant message's blocks, in Conduit's names. Text keeps the phase its provider gave it (`commentary`,
+ * `final_answer`) for the renderer to place; an empty text part (Gemini sends one after each tool call) is nothing.
+ */
 function blocksOf(message) {
   return (message?.content || []).flatMap((part, contentIndex) => {
-    if (part.type === "text") return [{ kind: "text", contentIndex, text: part.text || "" }];
+    if (part.type === "text") {
+      if (!part.text) return [];
+      const phase = textPhase(part);
+      return [{ kind: "text", contentIndex, text: part.text, ...(phase ? { phase } : {}) }];
+    }
     if (part.type === "thinking") return [{ kind: "thinking", contentIndex, text: part.thinking || "", redacted: Boolean(part.redacted) }];
     if (part.type === "toolCall") return [{ kind: "tool_call", contentIndex, toolCallId: part.id, name: part.name, input: part.arguments || {} }];
     return [];
