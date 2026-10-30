@@ -24,6 +24,8 @@ export const DEFAULT_SETTINGS = Object.freeze({
   name: "Agent",
   // How much reaches the person: quiet (urgent only), normal (attention and up), chatty (FYI too).
   dial: "normal",
+  // In a turn the person started, edits to their own data through a connector go without an approval (policy.js).
+  youAsk: true,
   // Background runs stop for the day once they have spent this (USD); 0 is no limit.
   budgetUsdPerDay: 2,
   timezone: null,
@@ -141,6 +143,7 @@ export class PersistentAgent {
       next.name = name;
     }
     if (patch.dial !== undefined) { if (!DIALS.has(patch.dial)) fail("dial is quiet, normal or chatty"); next.dial = patch.dial; }
+    if (patch.youAsk !== undefined) { if (typeof patch.youAsk !== "boolean") fail("youAsk is true or false"); next.youAsk = patch.youAsk; }
     if (patch.budgetUsdPerDay !== undefined) {
       const budget = Number(patch.budgetUsdPerDay);
       if (!Number.isFinite(budget) || budget < 0 || budget > 1000) fail("budgetUsdPerDay is 0 to 1000");
