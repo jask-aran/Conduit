@@ -149,11 +149,12 @@ public class ConduitUpdaterPlugin extends Plugin {
     //
     // The app launches from the interface on the device; this only swaps in a
     // newer one the server offers, after it is downloaded and unpacked whole.
-    // A swapped-in interface has to say it started (confirmBundle) before the
-    // app is next launched, or MainActivity puts the bundled one back.
+    // A swapped-in interface has to say it started (confirmBundle) within two
+    // launches, or MainActivity puts the bundled one back.
 
     static final String BUNDLE_PREFS = "ConduitBundle";
     static final String PENDING = "pending";
+    static final String LAUNCHES = "pendingLaunches";
 
     private File bundles() {
         File dir = new File(getContext().getFilesDir(), "bundles");
@@ -256,7 +257,7 @@ public class ConduitUpdaterPlugin extends Plugin {
             return;
         }
         String path = target.getAbsolutePath();
-        getContext().getSharedPreferences(BUNDLE_PREFS, Context.MODE_PRIVATE).edit().putString(PENDING, path).commit();
+        getContext().getSharedPreferences(BUNDLE_PREFS, Context.MODE_PRIVATE).edit().putString(PENDING, path).remove(LAUNCHES).commit();
         getContext().getSharedPreferences(com.getcapacitor.plugin.WebView.WEBVIEW_PREFS_NAME, Context.MODE_PRIVATE)
             .edit().putString(com.getcapacitor.plugin.WebView.CAP_SERVER_PATH, path).commit();
         call.resolve(new JSObject());
@@ -266,17 +267,23 @@ public class ConduitUpdaterPlugin extends Plugin {
     /** The interface started: keep it for the next launch. */
     @PluginMethod
     public void confirmBundle(PluginCall call) {
-        getContext().getSharedPreferences(BUNDLE_PREFS, Context.MODE_PRIVATE).edit().remove(PENDING).commit();
+        getContext().getSharedPreferences(BUNDLE_PREFS, Context.MODE_PRIVATE).edit().remove(PENDING).remove(LAUNCHES).commit();
         JSObject result = new JSObject();
         try { result.put("build", currentBuild()); } catch (Exception ignored) { }
         call.resolve(result);
     }
 
-    /** Called before the bridge exists: an interface that never confirmed is dropped. */
+    /**
+     * Called before the bridge exists: an interface that started twice without confirming is dropped. One launch is
+     * not enough to judge it: one swapped in while the app was in the background, and the app killed there before the
+     * page ran, never had the chance, and dropping it put the app back on the interface its APK was built with.
+     */
     static void revertUnconfirmed(Context context) {
         SharedPreferences prefs = context.getSharedPreferences(BUNDLE_PREFS, Context.MODE_PRIVATE);
         if (prefs.getString(PENDING, null) == null) return;
-        prefs.edit().remove(PENDING).commit();
+        int launches = prefs.getInt(LAUNCHES, 0) + 1;
+        if (launches < 2) { prefs.edit().putInt(LAUNCHES, launches).commit(); return; }
+        prefs.edit().remove(PENDING).remove(LAUNCHES).commit();
         context.getSharedPreferences(com.getcapacitor.plugin.WebView.WEBVIEW_PREFS_NAME, Context.MODE_PRIVATE)
             .edit().remove(com.getcapacitor.plugin.WebView.CAP_SERVER_PATH).commit();
     }

@@ -452,6 +452,9 @@ export function Sidebar(props: {
       publishUiPreference("collapsedProjectIds", [...next]);
       return next;
     });
+    // Not into a phone's closed drawer: measured at another height (the keyboard up, a page's own), it left the list
+    // scrolled under its head when the drawer next opened.
+    if (isMobileLayout() && !props.mobileOpen) return;
     queueMicrotask(() => {
       const row = document.querySelector<HTMLElement>(`[data-chat-id="${CSS.escape(selectedId)}"]`);
       row?.scrollIntoView({ block: "nearest" });
