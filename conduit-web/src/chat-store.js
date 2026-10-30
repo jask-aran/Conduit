@@ -494,6 +494,7 @@ export class ChatStore {
       "lastMessageAt",
       "lastReadAt",
       "untracked",
+      "narration",
     ];
     for (const key of allowed) if (Object.hasOwn(patch, key)) chat[key] = patch[key];
     // The completion clock is the read watermark's other half, so it never
