@@ -49,7 +49,10 @@ labelled, and how much reasoning came with it. The probe matrix seeds the first 
    Narrated render exactly as chats and jbot do now (screenshot both before and after).
 2. The mode as a chat setting and profile default; the switch in the chat's menu.
 3. Stream traits recorded per model (durable adapter first), and the recommendation from them.
-4. DeepSeek over OpenCode: reproduce (the OpenCode key has expired), decide its default.
+4. DeepSeek over OpenCode: over OpenRouter through pi-ai (2026-10-30) DeepSeek V4.1 Flash classifies cleanly: a
+   one-sentence narration in text before each tool call (0.06-0.27 s window), reasoning on its own channel (28 chars to
+   4.8k on a bug hunt), the answer after the last tool. So the mess seen is the OpenCode side (its endpoint or the
+   OpenCode harness's part mapping, opencode-adapter.js), to reproduce there when needed.
 5. Optional, upstream: pi-ai sets `phase` on a text block when the item opens, so labelled streams fold without a
    flash.
 
