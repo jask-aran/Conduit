@@ -292,7 +292,8 @@ export interface AgentSummary {
   endedAt: string | null;
   /** What it is doing now, while it runs. */
   activity: string | null;
-  usage: { tokens: number; cost: number };
+  /** `context`: what its last request held, as a chat's context pane says; `tokens`: summed over its requests. */
+  usage: { tokens: number; context?: number | null; cost: number };
 }
 
 export interface Message {
