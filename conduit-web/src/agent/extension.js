@@ -6,6 +6,7 @@ import { InboxTools } from "./inbox.js";
 import { MemoryTools } from "./memory.js";
 import { ApprovedTool, policyWraps } from "./policy.js";
 import { ScheduleTools } from "./schedule.js";
+import { RoutineTools } from "./routines.js";
 
 /**
  * The persistent agent's extension, selected by its threads (the `agent`
@@ -18,7 +19,7 @@ import { ScheduleTools } from "./schedule.js";
  */
 export function AgentExtension(runtime, installed) {
   const schedules = ScheduleTools(runtime);
-  const parts = [MemoryTools(runtime), schedules, EventTools(runtime), ChatTools(runtime), InboxTools(runtime), FeedTools(runtime, schedules)];
+  const parts = [MemoryTools(runtime), schedules, EventTools(runtime), ChatTools(runtime), InboxTools(runtime), FeedTools(runtime, schedules), RoutineTools(runtime)];
   const own = parts.flatMap((part) => part.tools || []);
   // `approved` runs what an ask holds with the tool as installed: the policy has already been answered.
   const tools = [...own, ApprovedTool(runtime, [...installed, ...own])];

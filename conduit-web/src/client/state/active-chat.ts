@@ -257,6 +257,9 @@ export function createActiveChat(options: ActiveChatOptions) {
   // The runtime stream is the live-process authority. The catalogue carries a
   // point-in-time copy that can still say active after the process has settled.
   const chatIsLive = (chat: ChatSummary) => Boolean(options.runtime.getProcess(chat.id)?.active);
+  // A subagent's chat has no process of its own (its parent's run drives it): open, it attaches read-only so its
+  // turn shows live rather than as it was when opened.
+  const attachOnOpen = (chat: ChatSummary) => chatIsLive(chat) || chat.status === "subagent";
   const transcriptRevision = (chat: ChatSummary) => chat.updatedAt || chat.createdAt || "";
   const rememberTranscript = (chat: ChatSummary, detail: TranscriptDetail) => {
     transcriptCache.delete(chat.id);
@@ -1050,7 +1053,7 @@ export function createActiveChat(options: ActiveChatOptions) {
     await enterChat(chat, project, {
       detail,
       history: navigationOptions.history || "replace",
-      warm: chatIsLive(chat),
+      warm: attachOnOpen(chat),
       onCommit: navigationOptions.onCommit,
       onShown: navigationOptions.onShown,
     });
@@ -1096,7 +1099,7 @@ export function createActiveChat(options: ActiveChatOptions) {
     enterChat(chat, project, {
       detail,
       history: "none",
-      warm: entry.warm ?? chatIsLive(chat),
+      warm: entry.warm ?? attachOnOpen(chat),
     });
 
   const prepareOutboundMessage = () => {

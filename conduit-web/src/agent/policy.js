@@ -9,9 +9,11 @@ import { sandboxHelper, sandboxedEnv } from "./sandbox.js";
 /** Outward calls need an asynchronous approval; private reads taint the conversation. */
 /** Tools that leave the folder only when given a device; and tools that always leave it. */
 const PLACED = ["read", "write", "edit", "bash"];
-const ALWAYS_OUTWARD = { start_chat: "start a chat", steer_chat: "post in one of your chats", feed: "add a feed" };
+const ALWAYS_OUTWARD = { start_chat: "start a chat", steer_chat: "post in one of your chats", feed: "add a feed", routine: "change a routine" };
 /** A tool whose other actions stay in its folder: only these leave it. */
-const OUTWARD_ACTIONS = { feed: ["add"] };
+const OUTWARD_ACTIONS = { feed: ["add"], routine: ["save", "remove"] };
+/** Routine files change through `routine` (which asks), not a plain edit in the folder. */
+const routineFile = (name, args) => ["write", "edit"].includes(name) && !args?.device && /(^|[\\/])routines[\\/][^\\/]*$/.test(String(args?.path || ""));
 /** Calls that read the person's own data, which taint the conversation. */
 const PRIVATE_READS = { chats: (args) => ["read", "search"].includes(args?.action) };
 const privateRead = (name, args) => PRIVATE_READS[name]?.(args) || (name.startsWith("mcp__") && connectorRead(name, args));
@@ -114,6 +116,7 @@ const summary = (name, args) => {
     return mcpLabel(name, args);
   }
   if (name === "feed") return `add a feed, ${args.title || "untitled"}, every ${args.everyMinutes} min (${SOURCE_WORDS[args.source?.kind] || "a source"})`;
+  if (name === "routine") return `${args.action === "remove" ? "remove" : "save"} the routine ${args.name || ""}`;
   if (ALWAYS_OUTWARD[name]) {
     const what = name === "steer_chat" ? `${args.chatId || "a chat"}: ${String(args.message || "").slice(0, 200)}`
       : `${args.workspace || "a workspace"}${args.profile ? ` (${args.profile})` : ""}: ${String(args.prompt || "").slice(0, 200)}`;
@@ -133,8 +136,8 @@ async function ruleTarget(runtime, name, args) {
     const paths = connectorCalls(name, args);
     return paths ? JSON.stringify([...new Set(paths)].sort()) : connectorTool(name) === "execute" ? null : name;
   }
-  // Each feed is its own decision: no lasting rule.
-  if (name === "feed") return null;
+  // Each feed and routine change is its own decision: no lasting rule.
+  if (name === "feed" || name === "routine") return null;
   if (name === "start_chat") {
     if (typeof args.workspace !== "string" || !args.workspace.trim()) return null;
     const workspace = args.workspace.trim();
@@ -150,6 +153,7 @@ async function ruleTarget(runtime, name, args) {
 const ruleLabel = (name, args) => {
   if (name.startsWith("mcp__")) return `${[...new Set(connectorActions(name, args) || [])].map(actionWords).join(", ") || mcpLabel(name, args)}, any input`;
   if (name === "feed") return "add a feed";
+  if (name === "routine") return "change a routine";
   if (name === "start_chat") return `start a chat, ${args.workspace || "a workspace"}`;
   if (name === "steer_chat") return `post in one of your chats, ${args.chatId || "a chat"}`;
   const target = `${args.device}${args.folder ? ` · ${args.folder}` : ""}`;
@@ -194,6 +198,10 @@ function presentation(name, args) {
       lines: [{ fields: [{ label: "Every", value: `${args.everyMinutes} min` }, { label: "Source", value: SOURCE_WORDS[source.kind] || "unknown" },
         ...reads ? [{ label: "Reads", value: reads }] : [], { label: "Runs", value: source.kind === "run" ? "a model each time, within the budget" : "without a model; new items go to the inbox" }] },
       { text: source.kind === "run" ? "Task" : "Code", code: codeOf(code) }] };
+  }
+  if (name === "routine") {
+    if (args.action === "remove") return { title: `Remove the routine ${args.name || ""}`, service: null, lines: [] };
+    return { title: `Save the routine ${args.name || ""}`, service: null, lines: [{ text: "File", code: codeOf(args.text) }] };
   }
   if (name === "start_chat") {
     return { title: `Start a chat in ${args.workspace || "Chats"}`, service: null,
@@ -283,6 +291,9 @@ export function policyWraps(runtime, tools) {
   let helper;
   return tools.filter((tool) => PLACED.includes(tool.name) || ALWAYS_OUTWARD[tool.name] || PRIVATE_READS[tool.name] || (tool.name.startsWith("mcp__") && !tool.connectorReadOnly)).map((target) =>
     wrapTool(target, (tool) => ({ ...tool, execute: async (args, api, context) => {
+      if (routineFile(tool.name, args)) {
+        return { output: [{ type: "text", text: "Routines change through the routine tool (save), which the person approves." }], isError: true };
+      }
       if ((tool.name.startsWith("mcp__") && !connectorRead(tool.name, args)) || outward(tool.name, args)) {
         const described = await runtime.agent.describe(api.conversationId);
         const run = described?.role === "run";

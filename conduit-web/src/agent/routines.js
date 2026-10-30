@@ -2,7 +2,9 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { entryText, inQuietHours, listInbox } from "./inbox.js";
 import { fileItems, itemText, runSource, SEEN_KEPT } from "./feeds.js";
-import { listRoutines, parseRoutine, readPerson, readRoutine, renderVars, splitFrontMatter, writeRoutine } from "./routine-files.js";
+import { defineTool } from "@earendil-works/pi-durable";
+import { Type } from "@earendil-works/pi-ai";
+import { listRoutines, parseRoutine, readPerson, readRoutine, removeRoutine, renderVars, splitFrontMatter, writeRoutine } from "./routine-files.js";
 
 /**
  * Routines (docs/plans/persistent-agent.md, "Verbs and structures"): a trigger fires a routine; its tasks gather
@@ -205,4 +207,69 @@ export async function migrateToRoutines(agent, seedDir) {
     await writeRoutine(agent.folder, adjust(parseRoutine(seed, name)));
     if (name === "heartbeat") await fs.unlink(path.join(agent.folder, "HEARTBEAT.md")).catch(() => {});
   }
+}
+
+const toolResult = (text, isError = false) => ({ output: [{ type: "text", text }], ...(isError ? { isError: true } : {}) });
+const triggerWords = (trigger) => trigger.kind === "every" ? `every ${trigger.minutes} min` : trigger.kind === "at" ? `daily at ${trigger.time}` : `once at ${trigger.at}`;
+const TEST_SHOWN = 12_000;
+
+/**
+ * jbot's hand on its routines: list, read and test them freely; save (a new file or a change) and remove ask the person
+ * (policy.js). A saved routine's clock follows at once.
+ */
+export function RoutineTools(runtime) {
+  const routine = defineTool({
+    name: "routine",
+    description: "Your routines (routines/<name>.md): list, read one, test one (runs its tasks once and shows the first message "
+      + "its run would get; moves nothing), save one (the whole file: YAML front matter, then the run's instructions; the "
+      + "person approves) or remove one (the person approves). Front matter: title; trigger { every: minutes } | { at: \"HH:MM\" } "
+      + "| { once: ISO time }; tasks, each { id, kind } with kind inbox (all?: true for handled too), calendar (account, "
+      + "calendars?, days?), chats, executor (code: a read-only program returning a JSON list of { id, title, detail?, text?, "
+      + "at?, url? }) or script (command printing that JSON); gate always | when-new | never; output jbot | inbox | both; "
+      + "model?, effort?, level?, quiet?, enabled?, context? (soul, user, memory, diary).",
+    parameters: Type.Object({
+      action: Type.Union([Type.Literal("list"), Type.Literal("read"), Type.Literal("test"), Type.Literal("save"), Type.Literal("remove")]),
+      name: Type.Optional(Type.String({ description: "The file's name without .md: lowercase, digits and dashes." })),
+      text: Type.Optional(Type.String({ description: "For test and save: the whole file. Test without it tests the saved one." })),
+    }),
+    replay: "safe",
+    execute: async ({ action, name, text }, api, context) => {
+      const agent = runtime.agent;
+      if (!agent?.enabled()) return toolResult("The agent is not enabled.", true);
+      try {
+        if (action === "list") {
+          const state = await agent.state();
+          return toolResult((await listRoutines(agent.folder)).map((item) => item.error ? `${item.name}: invalid (${item.error})`
+            : `${item.name}: ${item.title} — ${triggerWords(item.trigger)}, gate ${item.gate}, to ${item.output}${item.enabled ? "" : ", off"}`
+              + `${state.routineState?.[item.name]?.lastError ? `; last failed: ${state.routineState[item.name].lastError}` : ""}`).join("\n") || "No routines.");
+        }
+        if (typeof name !== "string" || !name) return toolResult("A routine name is required.", true);
+        if (action === "read") {
+          const file = await readText(path.join(agent.folder, "routines", `${name}.md`));
+          return toolResult(file || `No routine ${name}.`, !file);
+        }
+        if (action === "remove") {
+          const removed = await removeRoutine(agent.folder, name);
+          if (removed) for (const listener of agent.settingsListeners) await listener(agent.settings());
+          return toolResult(removed ? `Removed ${name}.` : `No routine ${name}.`, !removed);
+        }
+        const parsed = typeof text === "string" ? parseRoutine(text, name) : await readRoutine(agent.folder, name);
+        if (!parsed) return toolResult(`No routine ${name}.`, true);
+        if (action === "test") {
+          const state = await agent.state();
+          const outcome = await executeRoutine(agent, parsed, { cursors: state.cursors?.[name] || {}, state, force: true });
+          const tasks = outcome.tasks.map((task) => `${task.id}: ${task.error ? `failed: ${task.error}` : `${task.fresh} new`}`).join("; ");
+          const gate = parsed.gate === "never" ? "Its gate is never: no run; new items go to the inbox."
+            : `On its clock its run would ${parsed.gate === "always" || outcome.fresh ? "fire" : "not fire (nothing new)"}.`;
+          return toolResult(`${tasks || "No tasks."}\n${gate} A stream task's first firing only learns what is there.\n\n`
+            + `${outcome.message ? outcome.message.slice(0, TEST_SHOWN) : outcome.items.map(itemText).join("\n\n").slice(0, TEST_SHOWN) || "(nothing new)"}`);
+        }
+        if (action !== "save") return toolResult("Action must be list, read, test, save or remove.", true);
+        await writeRoutine(agent.folder, parsed);
+        for (const listener of agent.settingsListeners) await listener(agent.settings());
+        return toolResult(`Saved ${name}: ${triggerWords(parsed.trigger)}${parsed.enabled ? "" : " (off)"}.`);
+      } catch (error) { return toolResult(error.message || "The routine could not be used.", true); }
+    },
+  });
+  return { tools: [routine] };
 }
