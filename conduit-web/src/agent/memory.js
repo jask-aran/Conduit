@@ -4,8 +4,10 @@ import { randomUUID } from "node:crypto";
 import { defineTool, section } from "@earendil-works/pi-durable";
 import { Type } from "@earendil-works/pi-ai";
 import { AgentDoc, nextId } from "./agent-doc.js";
+import { block } from "./routines.js";
+import { splitFrontMatter } from "./routine-files.js";
 
-const FILES = { soul: "SOUL.md", user: "USER.md", memory: "MEMORY.md", heartbeat: "HEARTBEAT.md" };
+const FILES = { soul: "SOUL.md", user: "USER.md", memory: "MEMORY.md" };
 
 /** The persona was IDENTITY.md until it took the name the products use (SOUL.md); an agent made before moves on. */
 export async function migrateSoul(folder) {
@@ -173,12 +175,14 @@ async function search(agent, query) {
   return found.join("\n") || "No matches.";
 }
 
+/** jbot's files as tagged blocks (routines.js `block`), each turn; USER.md without its front matter (the fields). */
 async function render(agent) {
   const today = agent.today();
   const [soul, user, memory, diary] = await Promise.all(["soul", "user", "memory", "diary"].map(async (file) => read(await filePath(agent, file, today))));
   const diaryLines = linesOf(diary);
   const memoryLines = linesOf(memory);
-  const build = () => `Your name is ${agent.settings().name}.\n# Soul\n${compact(soul)}\n# About the person\n${compact(user)}\n# Memory\n${compact(memoryLines.join(""))}\n# Today\n${compact(diaryLines.join(""))}`;
+  const build = () => [block("soul", {}, compact(soul)), block("user", {}, compact(splitFrontMatter(user).body)),
+    block("memory", {}, compact(memoryLines.join(""))), block("diary", { day: today }, compact(diaryLines.join("")))].join("\n\n");
   let output = build();
   for (const lines of [diaryLines, memoryLines]) {
     for (let i = 0; output.length > 16000 && i < lines.length;) {
@@ -197,7 +201,7 @@ export function MemoryTools(runtime) {
     replay: "unsafe",
     parameters: Type.Object({
       action: Type.Union([Type.Literal("read"), Type.Literal("add"), Type.Literal("remove"), Type.Literal("search")]),
-      file: Type.Optional(Type.Union([Type.Literal("soul"), Type.Literal("user"), Type.Literal("memory"), Type.Literal("heartbeat"), Type.Literal("diary")])),
+      file: Type.Optional(Type.Union([Type.Literal("soul"), Type.Literal("user"), Type.Literal("memory"), Type.Literal("diary")])),
       section: Type.Optional(Type.String({ description: "For add: the ## heading in the file to put the line under, e.g. People or Commitments." })),
       text: Type.Optional(Type.String()), query: Type.Optional(Type.String()), date: Type.Optional(Type.String()),
     }),
@@ -230,8 +234,10 @@ export function MemoryTools(runtime) {
       } catch (error) { return result(error.message || "Memory operation failed.", true); }
     },
   });
-  return { tools: [memory], sections: [section("agent-memory", async () => {
+  // jbot's threads only: a run gets RUN.md and what its routine opts into (routines.js), not the person's files.
+  return { tools: [memory], sections: [section("agent-memory", async (input) => {
     const agent = runtime.agent;
-    return agent?.enabled() ? render(agent) : undefined;
-  })] };
+    if (!agent?.enabled() || (await agent.describe(input.conversationId))?.role === "run") return undefined;
+    return render(agent);
+  }, { tag: false })] };
 }

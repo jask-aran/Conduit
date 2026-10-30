@@ -840,11 +840,19 @@ export function createActiveChat(options: ActiveChatOptions) {
     if (!chatId || chatId === agentsAsked) return;
     if (tools().some((tool) => tool.agent) || messages().some((message) => message.agent)) untrack(() => void refreshAgents());
   });
+  // A missed agents_changed (a dropped live stream, a sleeping tab) must not leave one running forever: while any shows
+  // running, read again now and then.
+  createEffect(() => {
+    if (!agents().some((agent) => agent.status === "running")) return;
+    const timer = setInterval(() => void refreshAgents(), 10_000);
+    onCleanup(() => clearInterval(timer));
+  });
   const stopAgent = async (id: string) => {
     const chatId = loadedId();
     if (!chatId) return;
+    // One that ended while this showed it running: the read below shows how it ended.
     try { await api(`/v0/chats/${encodeURIComponent(chatId)}/agents/${encodeURIComponent(id)}/stop`, { method: "POST" }); }
-    catch (error) { onError(error); }
+    catch (error) { if ((error as { error?: string })?.error !== "agent_not_running") onError(error); }
     await refreshAgents();
   };
 

@@ -2,19 +2,9 @@ import { defineTask, defineTool } from "@earendil-works/pi-durable";
 import { Type } from "@earendil-works/pi-ai";
 import { AgentDoc, nextId } from "./agent-doc.js";
 import { applyOutcome, runSource } from "./feeds.js";
-import { heartbeatPlan, heartbeatTask } from "./inbox.js";
+import { applyRoutine, executeRoutine, routineClocks } from "./routines.js";
+import { listRoutines, readRoutine, writeRoutine } from "./routine-files.js";
 
-const BRIEF = "Morning brief: gather what jbot needs to give the person a full look at their day. Start from your inbox "
-  + "(the `inbox` tool): what feeds and runs collected since the last brief. Then look wider: their calendar for today and "
-  + "the next few days, mail and messages that need them, their chats (the `chats` tool), devices, your diary and schedules. "
-  + "Report to jbot in full, with the specifics (times, people, order and tracking numbers, amounts, deadlines) and the "
-  + "links that do the next thing (as Markdown links), and the context you found around each, under Today, Needs them, Mail and "
-  + "messages, Coming up; leave out a heading with nothing under it. Mark the inbox entries the brief covers handled. "
-  + "Where an item has an obvious next step outside your folder (a reply to send, an invite to answer, a chat to start on "
-  + "something), prepare it in full and make the call: it is asked, not done, and the person approves it under the brief. "
-  + "Prepare at most three, only ones they would likely want, and say which. Begin with FYI: or ATTENTION:.";
-/** The heartbeat ticks this often; most ticks find nothing and call no model (inbox.js, heartbeatPlan). */
-const TICK_MINUTES = 60;
 const terminal = () => ({ status: "terminal", outcome: { status: "completed" } });
 const result = (text, isError = false) => ({ output: [{ type: "text", text }], ...(isError ? { isError: true } : {}) });
 const clockOptions = (conversationId) => ({ ownership: { kind: "conversation" }, conversationId, background: true });
@@ -104,14 +94,19 @@ function makeClock(runtime) {
         if (!schedule || schedule.cancelling || schedule.clock !== task.id) { await api.commit(() => terminal(), context); return; }
         const slot = task.state.checkpoint.slot;
         const missed = api.now() - Date.parse(slot) > 6 * 3600000;
-        // A heartbeat tick with nothing to decide (an empty inbox, no sweep due, quiet hours) calls no model.
-        const beat = schedule.id === "heartbeat" && schedule.system;
-        const plan = beat && !missed ? await api.memo(`plan:${slot}`, await heartbeatPlan(agent, await api.snapshot(AgentDoc, context), api.now()), context) : null;
-        const idle = beat && !plan;
+        // A routine (routines.js): its tasks gather without a model, its gate decides whether its run fires. Memoised
+        // before it is applied, so a replay does not ask Executor again.
+        const routine = schedule.routine && !missed ? await readRoutine(agent.folder, schedule.routine).catch((error) => ({ error: error.message })) : null;
+        let fired = routine && !routine.error ? await api.memo(`routine:${slot}`, context) : null;
+        if (routine && !routine.error && fired === undefined) {
+          const state = await api.snapshot(AgentDoc, context);
+          fired = await api.memo(`routine:${slot}`, await executeRoutine(agent, routine, { cursors: state?.cursors?.[routine.name] || {}, state, now: api.now() }), context);
+        }
         // A feed that reads (a program, a script) runs here, without a model; a run feed is a run like any other.
         const direct = schedule.feed && schedule.feed.source.kind !== "run";
         const outcome = direct && !missed ? await api.memo(`feed:${slot}`, await runSource(agent, schedule.feed.source, { seen: schedule.feed.seen || [] }), context) : null;
-        const overBudget = !missed && !idle && !direct && await agent.overBudget();
+        const spends = schedule.routine ? Boolean(fired?.run) : !missed && !direct;
+        const overBudget = spends && await agent.overBudget();
         if (overBudget) await agent.notice("budget", `Skipped ${schedule.title}: today's budget of $${agent.settings().budgetUsdPerDay} is spent.`);
         await api.commit(async (tx) => {
           const doc = await tx.doc(AgentDoc);
@@ -119,14 +114,14 @@ function makeClock(runtime) {
           if (!current || current.cancelling || current.clock !== task.id) return terminal();
           // Taken already: run by hand while it was due (POST /v0/agent/schedules/:id/run).
           const taken = current.lastAt && Date.parse(current.lastAt) >= Date.parse(slot);
-          if (direct) { if (outcome) applyOutcome(doc, current, outcome, slot); }
-          else if (!missed && !idle && !overBudget && !taken) {
+          if (routine?.error) { doc.routineState ||= {}; doc.routineState[schedule.routine] = { lastAt: slot, lastError: routine.error }; }
+          else if (fired && !taken) await applyRoutine(tx, doc, agent, api.conversationId, routine, overBudget ? { ...fired, run: false, items: [] } : fired, slot);
+          else if (direct) { if (outcome) applyOutcome(doc, current, outcome, slot); }
+          else if (!schedule.routine && !missed && !overBudget && !taken) {
             await agent.spawnRun(tx, api.conversationId, {
-              key: `${current.id}:${slot}`, kind: current.feed ? "feed" : current.system ? current.id : "checkback", title: current.title,
-              task: plan ? heartbeatTask(plan) : current.feed ? current.feed.source.task : current.task,
+              key: `${current.id}:${slot}`, kind: current.feed ? "feed" : "checkback", title: current.title,
+              task: current.feed ? current.feed.source.task : current.task,
             });
-            if (plan?.sweep) doc.heartbeatSweptAt = slot;
-            if (plan?.newest) doc.heartbeatSeenAt = plan.newest;
           }
           current.lastAt = slot;
           current.nextAt = null;
@@ -253,6 +248,40 @@ export function ScheduleTools(runtime) {
 
 const seeding = new WeakMap();
 
+/**
+ * From before routines, once: a feed that reads (a program, a script) becomes a routine file (its task, gate never,
+ * output inbox) and keeps what it has seen as its task's cursor; the heartbeat's place in the inbox becomes its
+ * cursor. The feed's own clock goes (the routine's replaces it).
+ */
+async function feedsToRoutines(agent, harness, conversation) {
+  const state = await agent.state();
+  for (const item of Object.values(state.schedules)) {
+    if (!item.feed || item.feed.source.kind === "run" || item.cancelling) continue;
+    const name = item.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40) || item.id;
+    if (!/^[a-z]/.test(name) || await readRoutine(agent.folder, name).catch(() => "invalid") !== null) continue;
+    const source = item.feed.source;
+    await writeRoutine(agent.folder, { name, title: item.title, trigger: { kind: "every", minutes: item.everyMinutes },
+      tasks: [source.kind === "executor" ? { id: "items", kind: "executor", code: source.code } : { id: "items", kind: "script", command: source.command }],
+      gate: "never", output: "inbox", model: null, effort: null, level: item.feed.level || "fyi", quiet: false, enabled: true, context: [], body: "" });
+    if (item.clock) {
+      await harness.abortTask(item.clock, agent.context);
+      await harness.waitForTask(item.clock, agent.context);
+    }
+    await conversation.commit(async (tx) => {
+      const doc = await tx.doc(AgentDoc);
+      // Through the doc, not the object `||=` returns: only writes through it are recorded.
+      doc.cursors ||= {};
+      doc.cursors[name] = { items: { primed: item.feed.primed, seen: item.feed.seen || [] } };
+      delete doc.schedules[item.id];
+    }, agent.context);
+  }
+  if (state.heartbeatSeenAt && !state.cursors?.heartbeat) await conversation.commit(async (tx) => {
+    const doc = await tx.doc(AgentDoc);
+    doc.cursors ||= {};
+    doc.cursors.heartbeat ||= { inbox: { since: doc.heartbeatSeenAt } };
+  }, agent.context);
+}
+
 /** Keep settings-owned clocks stable across ordinary restarts. */
 export async function seedSchedules(agent) {
   if (!agent?.enabled()) return;
@@ -265,16 +294,16 @@ export async function seedSchedules(agent) {
     const conversation = await harness.conversation(conversationId, agent.context);
     if (!conversation) return;
     const settings = agent.settings();
-    const desired = {
-      brief: settings.brief.enabled ? { kind: "daily", at: settings.brief.at, everyMinutes: null, title: "Morning brief", task: BRIEF } : null,
-      heartbeat: settings.heartbeat.enabled ? { kind: "every", at: null, everyMinutes: TICK_MINUTES, title: "Heartbeat", task: "Heartbeat." } : null,
-    };
+    await feedsToRoutines(agent, harness, conversation);
+    // The routine files are the clocks the hub owns: one `r-<name>` each. A built-in schedule from before them (the
+    // brief's, the heartbeat's) or one whose routine file went is removed.
+    const desired = await routineClocks(agent);
     const schedules = (await agent.state()).schedules;
     const ids = new Set([...Object.keys(desired), ...Object.keys(schedules)]);
     for (const id of ids) {
       const old = (await agent.state()).schedules[id];
       if (old?.cancelling) continue;
-      const target = Object.hasOwn(desired, id) ? desired[id] : old;
+      const target = Object.hasOwn(desired, id) ? desired[id] : old?.system ? null : old;
       const task = old?.clock ? await harness.getTask(old.clock, agent.context) : null;
       const live = task && !task.abortRequested && !["terminal", "completing"].includes(task.state.status);
       const changed = old && (!target || !live || task.conversationId !== conversationId || old.kind !== target.kind || old.at !== target.at || old.everyMinutes !== target.everyMinutes
@@ -333,11 +362,18 @@ export async function listSchedules(agent) {
   if (!agent?.enabled()) return [];
   const zone = agent.settings().timezone;
   const now = Date.now();
-  return Object.values((await agent.state()).schedules).map((item) => {
-    const { id, title, kind, at, everyMinutes, lastAt, system } = item;
+  const state = await agent.state();
+  // A routine that only gathers (no run) shows as a feed does: where it reads from and how its last firing went.
+  const gathers = new Map((await listRoutines(agent.folder)).filter((routine) => !routine.error && routine.gate === "never")
+    .map((routine) => [routine.name, routine.tasks[0]?.kind]));
+  return Object.values(state.schedules).map((item) => {
+    const { id, title, kind, at, everyMinutes, lastAt, system, routine } = item;
     const nextAt = item.nextAt || new Date(nextTime(item, zone, now)).toISOString();
-    const feed = item.feed && { source: item.feed.source.kind, lastRunAt: item.feed.lastRunAt, lastCount: item.feed.lastCount, lastError: item.feed.lastError, primed: item.feed.primed };
-    return { id, title, kind, at, everyMinutes, nextAt, lastAt, system, ...(feed ? { feed } : {}) };
+    const last = routine && state.routineState?.[routine];
+    const feed = item.feed ? { source: item.feed.source.kind, lastRunAt: item.feed.lastRunAt, lastCount: item.feed.lastCount, lastError: item.feed.lastError, primed: item.feed.primed }
+      : gathers.has(routine) ? { source: gathers.get(routine) === "script" ? "script" : "executor", lastRunAt: last?.lastAt || null, lastCount: last?.fresh || 0,
+        lastError: last?.lastError || null, primed: true } : null;
+    return { id, title, kind, at, everyMinutes, nextAt, lastAt, system, ...(routine ? { routine, task: item.task } : {}), ...(feed ? { feed } : {}) };
   })
     .sort((a, b) => (a.nextAt || "9999").localeCompare(b.nextAt || "9999"));
 }

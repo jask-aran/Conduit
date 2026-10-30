@@ -7,6 +7,8 @@ import { AgentDoc } from "./agent-doc.js";
 import { listAsks } from "./asks.js";
 import { listInbox } from "./inbox.js";
 import { migrateSoul } from "./memory.js";
+import { applyRoutine, executeRoutine, migrateToRoutines, promptVars, runInstructions } from "./routines.js";
+import { readRoutine, seedRoutines, writeRoutine } from "./routine-files.js";
 
 const SEED = fileURLToPath(new URL("../../../templates/agent/seed/", import.meta.url));
 const TEMPLATE_ID = "agent";
@@ -26,8 +28,8 @@ export const DEFAULT_SETTINGS = Object.freeze({
   budgetUsdPerDay: 2,
   timezone: null,
   brief: { enabled: true, at: "08:00" },
-  // The heartbeat ticks every 30 min; `everyMinutes` is how often it goes through HEARTBEAT.md.
-  heartbeat: { enabled: true, everyMinutes: 120 },
+  // Shown from (and written through to) routines/morning-brief.md and routines/heartbeat.md, which hold them.
+  heartbeat: { enabled: true, everyMinutes: 60 },
   // No heartbeat in these hours (the agent's time zone); later, its night upkeep.
   quietHours: { enabled: true, start: "23:00", end: "07:00" },
   // The model and effort each kind of background run uses ({ model: "provider/id", thinkingLevel }); null is the
@@ -69,6 +71,9 @@ export class PersistentAgent {
     runtime.agent = this;
     runtime.agentDial = () => this.settings().dial;
     runtime.agentDay = () => this.today();
+    // Prompts: jbot's {{variables}}, and RUN.md for a subagent one of its threads starts (subagents.js).
+    runtime.agentVars = () => promptVars(this);
+    runtime.agentRunPrompt = async (conversationId) => this.enabled() && await this.describe(conversationId) ? runInstructions(this) : null;
   }
 
   get context() { return this.runtime.context; }
@@ -83,11 +88,28 @@ export class PersistentAgent {
     this.project = project;
     await migrateSoul(this.folder);
     await this.readSettings();
+    await this.seedFolder();
     await this.connectors.start();
     return project;
   }
 
   enabled() { return Boolean(this.project); }
+
+  /**
+   * The seed files it lacks (never over the person's): memory files, RUN.md, the built-in routines. HEARTBEAT.md and
+   * the brief's settings from before routines become routines/heartbeat.md and routines/morning-brief.md first.
+   */
+  async seedFolder() {
+    await fs.mkdir(path.join(this.folder, "diary"), { recursive: true });
+    await migrateToRoutines(this, path.join(SEED, "routines"));
+    for (const entry of await fs.readdir(SEED, { withFileTypes: true })) {
+      if (!entry.isFile()) continue;
+      await fs.copyFile(path.join(SEED, entry.name), path.join(this.folder, entry.name), fs.constants.COPYFILE_EXCL).catch((error) => {
+        if (error.code !== "EEXIST") throw error;
+      });
+    }
+    await seedRoutines(this.folder, path.join(SEED, "routines"));
+  }
 
   /** agent.json as last read, over the defaults. */
   settings() {
@@ -161,6 +183,11 @@ export class PersistentAgent {
     }
     await fs.writeFile(path.join(this.folder, "agent.json"), `${JSON.stringify(next, null, 2)}\n`);
     this.cached = next;
+    // The brief's and heartbeat's clocks are their routine files' now: Settings writes through to them.
+    if (patch.brief) await this.adjustRoutine("morning-brief", (routine) => ({ ...routine, enabled: next.brief.enabled !== false,
+      trigger: next.brief.at ? { kind: "at", time: next.brief.at } : routine.trigger }));
+    if (patch.heartbeat) await this.adjustRoutine("heartbeat", (routine) => ({ ...routine, enabled: next.heartbeat.enabled !== false,
+      trigger: patch.heartbeat.everyMinutes ? { kind: "every", minutes: next.heartbeat.everyMinutes } : routine.trigger }));
     if (next.name && this.project?.name !== next.name) this.project = await this.projects.rename(this.project.id, next.name).catch(() => this.project) || this.project;
     // The home thread is titled with the name until the person retitles it.
     const home = (await this.state()).home?.chatId;
@@ -209,14 +236,9 @@ export class PersistentAgent {
     if (!this.project) {
       this.project = await this.projects.ensure({ slug: "conduit-agent", name: name || DEFAULT_SETTINGS.name, kind: "workspace", origin: "managed" });
     }
-    await fs.mkdir(path.join(this.folder, "diary"), { recursive: true });
     await migrateSoul(this.folder);
-    for (const file of await fs.readdir(SEED)) {
-      await fs.copyFile(path.join(SEED, file), path.join(this.folder, file), fs.constants.COPYFILE_EXCL).catch((error) => {
-        if (error.code !== "EEXIST") throw error;
-      });
-    }
     await this.readSettings();
+    await this.seedFolder();
     await this.connectors.start();
     if (name && !this.cached.name) await this.saveSettings({ name });
     else if (!this.cached.name) await this.saveSettings({ name: this.project.name });
@@ -295,21 +317,67 @@ export class PersistentAgent {
     return conversation.commit((tx) => this.spawnRun(tx, conversationId, { key, kind, title, task }), this.context);
   }
 
-  /** The same, inside a commit on the home conversation (a clock task's): `tx.createTask()` defaults to it. */
-  spawnRun(tx, conversationId, { key, kind, title, task }) {
+  /**
+   * A routine now, off its clock (Run now): its tasks gather and its run fires whatever its gate says, except a gate of
+   * never (only the tasks). Its cursors move as a firing's would; `key` keeps a retried request to one run.
+   */
+  async fireRoutine(name, key) {
+    const routine = await readRoutine(this.folder, name).catch((error) => ({ error: error.message }));
+    if (!routine) return { error: "routine_not_found", status: 404 };
+    if (routine.error) return { error: routine.error, status: 400 };
+    const state = await this.state();
+    const outcome = await executeRoutine(this, routine, { cursors: state.cursors?.[name] || {}, state, force: true });
+    if (outcome.run && await this.overBudget()) return { error: "agent_over_budget" };
+    const { conversationId } = await this.home();
+    const harness = await this.runtime.open();
+    const conversation = await harness.conversation(conversationId, this.context);
+    const slot = new Date().toISOString();
+    const run = await conversation.commit(async (tx) => {
+      const doc = await tx.doc(AgentDoc);
+      await applyRoutine(tx, doc, this, conversationId, { ...routine, name }, { ...outcome, key }, slot);
+      const current = doc.schedules[`r-${name}`];
+      // Run while it was due (its clock late): this firing is that slot's, so the clock does not fire it again.
+      if (current?.nextAt && Date.parse(current.nextAt) <= Date.now()) current.lastAt = current.nextAt;
+      return outcome.run;
+    }, this.context);
+    return { ran: run, tasks: outcome.tasks, fresh: outcome.fresh };
+  }
+
+  /**
+   * The same, inside a commit on the home conversation (a clock task's): `tx.createTask()` defaults to it. Every run's
+   * system prompt is RUN.md (routines.js), a routine's with its `<routine>` block; `raw` takes `task` as the whole
+   * first message (a routine composes its own). `output`: where its report goes (jbot, inbox, both).
+   */
+  async spawnRun(tx, conversationId, { key, kind, title, task, instructions = null, output = null, raw = false, model = null, thinkingLevel = null }) {
     if (!this.runtime.spawnBackground) throw new Error("Background subagents are not installed");
-    const work = this.settings().work[kind === "brief" || kind === "heartbeat" ? kind : "other"];
-    return this.runtime.spawnBackground(tx, conversationId, { key, task: runBrief(kind, task, this.settings().timezone), title: title || kind,
-      origin: { kind, key }, gate: true, ...(work ? { model: work.model, thinkingLevel: work.thinkingLevel } : {}) });
+    const work = this.settings().work[kind === "brief" || kind === "morning-brief" ? "brief" : kind === "heartbeat" ? "heartbeat" : "other"];
+    const chosen = model ? { model, thinkingLevel } : work ? { model: work.model, thinkingLevel: work.thinkingLevel } : {};
+    return this.runtime.spawnBackground(tx, conversationId, { key, title: title || kind,
+      task: raw ? task : runBrief(kind, task, this.settings().timezone), instructions: instructions ?? await runInstructions(this),
+      origin: { kind, key, ...(output ? { output } : {}) }, gate: true, ...chosen });
   }
 
   /** The agent as the API shows it. */
+  async adjustRoutine(name, change) {
+    const routine = await readRoutine(this.folder, name).catch(() => null);
+    if (routine) await writeRoutine(this.folder, change(routine));
+  }
+
+  /** Settings as the person sees them: the brief's and heartbeat's from their routine files. */
+  async shownSettings() {
+    const settings = this.settings();
+    const [brief, beat] = await Promise.all(["morning-brief", "heartbeat"].map((name) => readRoutine(this.folder, name).catch(() => null)));
+    if (brief) settings.brief = { enabled: brief.enabled, at: brief.trigger.kind === "at" ? brief.trigger.time : settings.brief.at };
+    if (beat) settings.heartbeat = { enabled: beat.enabled, everyMinutes: beat.trigger.kind === "every" ? beat.trigger.minutes : settings.heartbeat.everyMinutes };
+    return settings;
+  }
+
   async view(state) {
     if (!this.enabled()) return { enabled: false };
     state ||= await this.state();
     return {
       enabled: true,
-      settings: this.settings(),
+      settings: await this.shownSettings(),
       projectId: this.project.id,
       folder: this.folder,
       home: state.home,
@@ -324,23 +392,12 @@ export class PersistentAgent {
   }
 }
 
-/** What each kind of run is for, said first: a run starts with jbot's whole prompt and no history. */
-const ROLES = {
-  heartbeat: "You are jbot's heartbeat: you read what came into its inbox, gather what is missing, and report it all to jbot, "
-    + "which decides what the person hears. You do not judge what matters to them; you make sure jbot can.",
-  brief: "You are jbot's morning brief: you gather everything jbot needs for one full look at the person's day, from the "
-    + "inbox outward. jbot writes the message; your report is its material, so leave nothing out that it would need.",
-};
+const KIND_WORDS = { manual: "The person asked for this run", checkback: "A check-back you set", event: "An event woke this run",
+  webhook: "A webhook woke this run", feed: "A feed's check" };
 
-/** A run's brief: what woke it, its role, its task, then how its answer is read (templates/agent/SYSTEM.md, If you are a run). */
+/** An ad-hoc run's first message: when and why, then its task. How it reports is RUN.md's (its system prompt). */
 export const runBrief = (kind, task, timeZone) => [
-  `You were woken for a ${kind === "checkback" ? "check-back" : kind} run, at ${new Date().toLocaleString("en-AU", { timeZone, dateStyle: "full", timeStyle: "short" })} (${timeZone}).`,
-  ROLES[kind] || "",
+  `It is ${new Date().toLocaleString("en-AU", { timeZone, dateStyle: "full", timeStyle: "short" })}. ${KIND_WORDS[kind] || `A ${kind} run`}.`,
   "",
   String(task || "").trim(),
-  "",
-  "Your final answer is your report to jbot, not a message to the person: complete and specific, begun with FYI:, "
-    + "ATTENTION: or URGENT:. When there is nothing worth reporting, call nothing_to_report and stop; when the task cannot "
-    + "be done, call run_failed with the reason. An outward call you make is asked, not done: say in the report what waits "
-    + "for the person's approval.",
-].filter((line, index) => line || index !== 1).join("\n");
+].join("\n");
