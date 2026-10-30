@@ -128,6 +128,20 @@ export const ConduitWorkspace = defineDoc({
 /** A prompt as Conduit placed it: the model sees `content`, the transcript keeps the browser's id. */
 export const USER_ENTRY = "conduit.user";
 
+/**
+ * A request's output limit is pi-ai's default, the model's catalogue `maxTokens`, unless asked: OpenRouter lists 943,718
+ * for its 1M-context models and reserves credit for all of it, so a request failed (402) with a few dollars left. A
+ * turn never writes near this many; a model whose own limit is lower keeps it.
+ */
+const OUTPUT_CAP = 64_000;
+const cappedOutput = (models) => new Proxy(models, {
+  get(target, key) {
+    if (key !== "streamSimple") { const value = Reflect.get(target, key, target); return typeof value === "function" ? value.bind(target) : value; }
+    return (model, context, options = {}) => target.streamSimple(model, context,
+      { ...options, maxTokens: Math.min(options.maxTokens ?? model.maxTokens ?? OUTPUT_CAP, OUTPUT_CAP) });
+  },
+});
+
 export class DurableRuntime {
   constructor({ dataRoot, piAgentDir, nodeHub = null, templates = [], promptStore = null }) {
     this.nodeHub = nodeHub;
@@ -254,7 +268,7 @@ export class DurableRuntime {
       // Bash finds Conduit's managed Python first, as it does for Conduit Pi.
       const shellEnv = this.shellEnv = buildManagedToolEnvironment(process.env);
       this.harness = await Harness.open(await openNodeSqliteStorage(this.file), {
-        models: this.models,
+        models: cappedOutput(this.models),
         registry,
         // Each call's files and processes are the conversation's working
         // directory: the project the chat belongs to, on whichever device holds it.
