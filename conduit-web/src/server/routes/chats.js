@@ -467,6 +467,13 @@ export function registerChatRoutes(app, {
       const context = await findChatContext(request.params.chatId);
       if (!context) return response.status(404).json({ error: "chat_not_found" });
       lifecycle.assertAvailable(context.chat.id, context.project.id);
+      // How its transcript draws work between replies: fold or show, or null for its default. Not a change to the chat.
+      if (request.body && Object.hasOwn(request.body, "narration")) {
+        const narration = request.body.narration;
+        if (narration !== null && narration !== "fold" && narration !== "show") return response.status(400).json({ error: "narration is fold, show or null" });
+        await registry.update(context.chat.id, { narration, updatedAt: context.chat.updatedAt });
+        return response.json(chatView(registry.metadata(context.chat.id)));
+      }
       if (request.body?.profileId && context.chat.lastUserMessageAt) {
         return response.status(409).json({
           error: "backend_locked",

@@ -56,6 +56,8 @@ export interface RuntimeIdentity {
 
 export interface ChatSummary {
   id: string;
+  /** How its transcript draws work between replies, when set for it; else its default (chats fold, jbot shows). */
+  narration?: "fold" | "show" | null;
   projectId: string;
   status: ChatStatus;
   title: string;
