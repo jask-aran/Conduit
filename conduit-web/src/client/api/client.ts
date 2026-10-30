@@ -1,6 +1,7 @@
 import { httpUrl, loginUrl } from "./transport.js";
 import { authorizedFetch } from "./native-auth-client.ts";
 import { isInstalledClient } from "../platform/installed-client.ts";
+import { whenPathMoves } from "../platform/servers.ts";
 
 export interface ApiRequestMetadata {
   method: string;
@@ -10,9 +11,26 @@ export interface ApiRequestMetadata {
 
 type Read = { status: number; ok: boolean; text: string };
 
+/*
+ * A request on a route the client moves off is given up, not waited out: an address with nothing behind it (a hub
+ * whose LAN address changed, a phone that left home) holds a request until the OS's connect timeout, and a few of
+ * those filled the WebView's connections to that host so everything after them queued. A read is asked again on the
+ * new route; a write is not repeated, since it may have arrived.
+ */
 const readOf = async (url: string, init: RequestInit): Promise<Read> => {
-  const response = await authorizedFetch(httpUrl(url), init);
-  return { status: response.status, ok: response.ok, text: await response.text() };
+  const read = !init.method || ["GET", "HEAD"].includes(init.method.toUpperCase());
+  for (let attempt = 0; ; attempt++) {
+    const moved = new AbortController();
+    const stop = whenPathMoves(() => moved.abort(new DOMException("The route to the server changed.", "AbortError")));
+    try {
+      const response = await authorizedFetch(httpUrl(url), { ...init, signal: init.signal ? AbortSignal.any([init.signal, moved.signal]) : moved.signal });
+      return { status: response.status, ok: response.ok, text: await response.text() };
+    } catch (error) {
+      if (!moved.signal.aborted || init.signal?.aborted || !read || attempt > 0) throw error;
+    } finally {
+      stop();
+    }
+  }
 };
 
 // Reads begun before anything asks for them, each taken by the first ask.

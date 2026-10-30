@@ -5431,8 +5431,11 @@ function App() {
         // Sent from the page, answered on it: the thread is a tap away (Open thread).
         current.chat.setDraft(prompt);
         await current.chat.send();
+        // A phone shows no thread on the page, so what was sent is followed into it.
+        if (isMobileLayout()) conversation()?.onOpen();
       }} /></Show>}
-      conversation={conversation()}
+      // On a phone the thread is a row in Threads: a second transcript over the composer left the page no room.
+      conversation={isMobileLayout() ? undefined : conversation()}
       onOpenFile={(path) => { const projectId = agentView()?.projectId; if (projectId) void openFileDocument({ projectId, path }, { beside: altActivation(), edit: false }); }}
       onOpenSettings={() => openSettings("agent")}
       onOpenChat={(id, event) => {
