@@ -41,10 +41,13 @@ export class Connectors {
       clientMetadata: { client_name: "Conduit", scope: "mcp offline_access" } });
   }
   async start() {
-    for (const entry of this.entries.values()) {
-      try { if ((await this.read(entry))?.tokens) void this.connect(entry); }
-      catch { entry.status = "error"; entry.error = "Cannot read connector credentials"; }
-    }
+    this.started = (async () => {
+      for (const entry of this.entries.values()) {
+        try { if ((await this.read(entry))?.tokens) void this.connect(entry); }
+        catch { entry.status = "error"; entry.error = "Cannot read connector credentials"; }
+      }
+    })();
+    await this.started;
     if (!this.timer) { this.timer = setInterval(() => { for (const entry of this.entries.values()) if (entry.status === "error" && entry.authorized) void this.connect(entry); }, 180000); this.timer.unref(); }
   }
   async stop() {
@@ -58,6 +61,12 @@ export class Connectors {
   /** What one connected tool says it does, for a look at what the account reaches. */
   describe(id) { return this.entry(id).tools.map((tool) => ({ name: tool.label, description: tool.description, readOnly: tool.connectorReadOnly })); }
   tools() { return [...this.entries.values()].flatMap((entry) => entry.tools); }
+  /** Wait for one still coming up (the hub starting, a reconnect) before anything says it is not connected. */
+  async ready(id) {
+    await this.started;
+    const entry = this.entries.get(id);
+    if (entry?.connecting) await entry.connecting;
+  }
   async connect(entry) {
     if (entry.connecting) return entry.connecting;
     entry.authorized = true; entry.status = "connecting"; delete entry.error;

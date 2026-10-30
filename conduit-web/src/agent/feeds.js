@@ -106,6 +106,8 @@ export function itemsOf(output) {
 export async function runSource(agent, source, { signal, seen = [] } = {}) {
   try {
     if (source.kind === "executor") {
+      // A check that fires as the hub starts found Executor still connecting, and failed until the next one.
+      await agent.connectors.ready("executor");
       const tool = agent.connectors.tools().find((item) => item.name === "mcp__executor__execute");
       if (!tool) return { items: [], error: "Executor is not connected." };
       const code = `const seen = new Set(${JSON.stringify(seen)});\n${source.code}`;
