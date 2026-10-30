@@ -28,9 +28,11 @@ export async function decide(agent, id, choice) {
     ask.choice = choice;
     if (choice === "always") {
       const ruleId = nextId(doc, "r");
-      (doc.rules ||= {})[ruleId] = { id: ruleId, tool: ask.tool, target: ask.ruleTarget, label: ask.ruleLabel, createdAt: now };
+      doc.rules ||= {};
+      doc.rules[ruleId] = { id: ruleId, tool: ask.tool, target: ask.ruleTarget, label: ask.ruleLabel, createdAt: now };
     }
-    return { ask: askView(ask) };
+    // Copied out: the doc's objects (an ask's lines) cannot be read once the commit settles.
+    return { ask: JSON.parse(JSON.stringify(askView(ask))) };
   });
   if (outcome.error) throw Object.assign(new Error(outcome.error === 404 ? "Ask not found" : outcome.error === 400 ? "This approval has no reusable rule" : "Ask already decided or expired"), { status: outcome.error });
   const ask = outcome.ask;

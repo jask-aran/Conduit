@@ -54,9 +54,9 @@ export function Bubble(props: { children: JSX.Element; fold?: number; open?: boo
  */
 /** The answer: Markdown with no bubble, the Body role, one gap between blocks. html for rendered Markdown. copied: it
  *  was just copied, and takes the copied wash. A Markdown renderer marks what it draws into it with ANSWER_MARKDOWN. */
-/** interim: what a turn says on its way to its answer (a thread that talks as it works), quieter than the answer. */
-export const Answer = (props: { html?: string; copied?: boolean; interim?: boolean; children?: JSX.Element }) =>
-  <Show when={props.html !== undefined} fallback={<div class="ui-answer" data-copied={props.copied ? "" : undefined} data-interim={props.interim ? "" : undefined}>{props.children}</div>}><div class="ui-answer" data-copied={props.copied ? "" : undefined} data-interim={props.interim ? "" : undefined} innerHTML={props.html} /></Show>;
+/** What a turn says: its answer, and under Narrated what it says on the way there, drawn alike (DESIGN.md, Turns). */
+export const Answer = (props: { html?: string; copied?: boolean; children?: JSX.Element }) =>
+  <Show when={props.html !== undefined} fallback={<div class="ui-answer" data-copied={props.copied ? "" : undefined}>{props.children}</div>}><div class="ui-answer" data-copied={props.copied ? "" : undefined} innerHTML={props.html} /></Show>;
 /** A request that failed: Request failed and when, its facts (model, provider, profile), then what the provider
  *  said. In an answer's place, or in a trace's trail (TraceError). */
 export function Failure(props: { time?: string; dateTime?: string; facts?: string[]; message: string }) {
