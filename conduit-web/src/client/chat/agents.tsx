@@ -34,7 +34,7 @@ function span(from: string | null | undefined, to: string | null | undefined, no
   const seconds = Math.floor((end - start) / 1000);
   return seconds < 60 ? `${pad(seconds)}s` : `${Math.floor(seconds / 60)}m ${pad(seconds % 60)}s`;
 }
-const tokens = (count: number) => count >= 1000 ? `${(count / 1000).toFixed(1)}k tokens` : `${count} tokens`;
+const context = (count: number) => count >= 1000 ? `${(count / 1000).toFixed(1)}k context` : `${count} context`;
 const lastLine = (output: unknown) => typeof output === "string" ? output.trimEnd().split("\n").at(-1)?.trim() || undefined : undefined;
 
 /** A tool row that handed an agent its task (the adapter states it, with the agent's reference). */
@@ -56,7 +56,7 @@ function rowOf(tool: ToolItem, agents: AgentSummary[]): Row {
     title: listed?.title || (ref.id && subject.startsWith(`${ref.id}: `) ? subject.slice(ref.id.length + 2) : subject),
     activity: state === "running" ? (background ? listed?.activity : lastLine(tool.output) || listed?.activity) || undefined : undefined,
     startedAt: listed?.startedAt || tool.timestamp, endedAt: state === "running" ? null : listed?.endedAt || tool.completedAt,
-    usage: state !== "running" && listed?.usage.tokens ? tokens(listed.usage.tokens) : undefined,
+    usage: state !== "running" && listed?.usage.context ? context(listed.usage.context) : undefined,
   };
 }
 
@@ -81,7 +81,7 @@ export function BackgroundAgents(props: { agents: AgentSummary[]; onStop?: (id: 
   const shown = createMemo(() => background().filter((agent) => agent.status === "running" || (agent.endedAt && now() - Date.parse(agent.endedAt) < ENDED_SHOWN_MS)));
   return <Show when={shown().length}>
     <AgentRider><Index each={shown()}>{(agent) => <AgentRow line id={agent().id!} title={agent().title} state={agent().status} activity={agent().activity || undefined}
-      usage={agent().status !== "running" && agent().usage.tokens ? tokens(agent().usage.tokens) : undefined} time={span(agent().startedAt, agent().endedAt, now())}
+      usage={agent().status !== "running" && agent().usage.context ? context(agent().usage.context!) : undefined} time={span(agent().startedAt, agent().endedAt, now())}
       onOpen={agent().chatId ? () => openAgentChat(agent().chatId!) : undefined} onStop={props.onStop ? () => props.onStop!(agent().id!) : undefined} />}</Index></AgentRider>
   </Show>;
 }

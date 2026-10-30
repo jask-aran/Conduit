@@ -124,6 +124,9 @@ export class PushService {
         return { id: sub.id, ok: false, status };
       }));
       const removed = new Set(results.filter((result) => result.removed).map((result) => result.id));
+      // A device whose push service says it is gone (an app reinstalled, data cleared) stops getting anything until it
+      // turns notifications on again: say so, by label only (the endpoint is a capability).
+      for (const sub of this.state.subscriptions) if (removed.has(sub.id)) console.warn(`[push] ${sub.label || sub.kind || "a device"} is gone (its push service said ${results.find((result) => result.id === sub.id)?.status}); removed`);
       this.state.subscriptions = this.state.subscriptions.filter((sub) => !removed.has(sub.id));
       await this.save();
       return results;

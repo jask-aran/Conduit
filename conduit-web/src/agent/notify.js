@@ -21,6 +21,13 @@ export function agentNotifier({ agent, push, hubId }) {
     const urgent = level === "urgent";
     const approval = kind === "approval";
     const tag = String(key || `${kind}-${conversationId}`);
+    // Nowhere to send it: say so where the person will look, once a day, rather than drop it without a word.
+    if (!push.list().length) {
+      const today = agent.today();
+      if ((await agent.state()).notices.some((notice) => notice.kind === "push" && agent.today(Date.parse(notice.at)) === today)) return;
+      await agent.notice("push", "A notification reached no device: turn notifications on in Settings on your phone.");
+      return;
+    }
     await push.send({
       v: 1,
       title: approval ? `${name} needs your approval` : `${title ? `${name}: ${line(title, 60)}` : name}${waiting ? ` · ${waiting} to approve` : ""}`,

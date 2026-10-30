@@ -1285,7 +1285,12 @@ export class DurableAdapter extends EventEmitter {
       agent.chatId = child?.id || null;
       const ledger = await harness.snapshot(UsageDoc, agent.conversationId, this.context);
       const spent = [...Object.values(ledger?.models || {}), ...Object.values(ledger?.tools || {})];
+      // Its context at the end (its last request: what it held), as any chat's context pane says; a sum over its
+      // requests counts the cached prefix again each time.
+      const last = (await (await harness.conversation(agent.conversationId, this.context))?.entries({ order: "descending" }, 8, undefined, this.context))
+        ?.items.find((entry) => entry.kind === "pi.assistant" && entry.model?.[0]?.usage)?.model[0].usage;
       agent.usage = { tokens: spent.reduce((sum, usage) => sum + (Number(usage.totalTokens) || 0), 0),
+        context: last ? (last.input || 0) + (last.cacheRead || 0) + (last.cacheWrite || 0) + (last.output || 0) : null,
         cost: spent.reduce((sum, usage) => sum + (Number(usage.cost?.total) || 0), 0) };
       agent.activity = agent.status === "running" ? this.runtime.subagentActivity?.get(agent.conversationId) || null : null;
     }
