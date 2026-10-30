@@ -1164,7 +1164,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
           return <TranscriptRow ref={row} data-slot="message-scroller-item" data-message-id={message().id} turn={!user() && item.traced}>
             <Show when={user()} fallback={<Turn orb={narrated() && item.orb ? <AnswerOrb state={item.orb} /> : undefined}>
               <Show when={message().content || (message().stopped && !item.traced && !failed())}>
-                <Answer copied={copied()} interim={narrated() && !item.orb}>
+                <Answer copied={copied()}>
                   <Show when={message().content} fallback={<StopLine detail="before answering" />}>
                     <Suspense fallback={<div class="markdown-skeleton" />}>
                       <ChatMarkdown renderer={markdownRenderer()} streaming={live()} streamVersion={item.streamVersion} onRendered={() => settleAfterMarkdown(row)} onSettled={() => setSettled(true)}>{message().content || ""}</ChatMarkdown>
