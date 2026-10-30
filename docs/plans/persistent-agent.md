@@ -1,6 +1,6 @@
 # Persistent agent
 
-Status: first slice built 2026-10-27; vision set 2026-10-29 (below), which supersedes decisions 6 and 8 where
+Status: first slice built 2026-10-27; vision set 2026-10-29 and verbs and structures 2026-10-30 (below), which supersede decisions 6 and 8 where
 they differ. Target v0.8.9.
 
 The persistent agent is the Conduit durable agent (pi-durable) running as one
@@ -95,6 +95,86 @@ asks, batched, never in quiet hours.
 
 **Budget** is cost per day across runs, feeds and the heartbeat (subscription models counted at API price);
 past it, it waits for you.
+
+## Verbs and structures (decided 2026-10-30)
+
+One model for everything jbot does on its own, so every piece composes with every other. It supersedes the
+Vision's separate feeds, watches, webhooks, check-backs and "routines are saved triggers" where they differ.
+Belongs in a user-facing README with diagrams later; this is the record.
+
+```
+                ┌──────────────────────────── routine ────────────────────────────┐
+ trigger ──▶    │  tasks (no model) ──▶ gate ──▶ run (subagent) ──▶ output         │ ──▶ inbox │ jbot
+                │        │                                                         │
+                │      cursor (what it saw last time)                              │
+                └──────────────────────────────────────────────────────────────────┘
+ inbox ──▶ heartbeat (a routine) ──▶ report ──▶ jbot ──▶ notify │ stay quiet │ delegate │ propose │ handle
+```
+
+### Structures
+
+- **Routine**: any timed or triggered composition, `trigger + tasks + gate + run + output`, with a cursor.
+  Defined by one file in jbot's folder, `routines/<name>.md`: front matter holds the trigger, tasks, gate,
+  model and effort, and output; the body is the run's instructions. Built-ins: `email` (an Executor task, gate
+  never, output inbox), `heartbeat` (reads the inbox since its last firing, gate when new, output jbot; its body is
+  what HEARTBEAT.md is now) and `morning-brief` (reads the inbox since the last brief and today's calendar, gate
+  always, output jbot). Feeds, watches, webhooks and check-backs are all routines with different triggers.
+- **Trigger**: what starts a routine. Time (daily 09:00), interval (every 30 min), once (a check-back: a
+  one-shot routine jbot makes, removed after it fires), event (a webhook, a Conduit event such as a chat finishing
+  or a device going offline, something arriving in the inbox). Quiet hours hold every trigger but urgent events.
+- **Task**: a deterministic step, no model. Kinds to start: an Executor program (read-only, checked), a
+  built-in reader (inbox since the routine's last firing, today's calendar, chats finished or waiting, device and
+  hub health), a sandboxed script in jbot's folder. Each produces items or a context block.
+- **Gate**: whether the run fires after the tasks, per routine: `always` (the brief), `when new` (the tasks
+  found something the cursor had not seen: the heartbeat), `never` (Email). No expressions yet.
+- **Run**: a subagent of jbot built from one base template, `RUN.md` in jbot's folder: what a run is, that
+  it reports to jbot and never to the person, how it ends (report, `nothing_to_report`, `run_failed`), approvals.
+  Every subagent jbot starts uses it: a routine's run, Run a task, an ad-hoc "go find X". A run carries no SOUL,
+  USER, MEMORY or diary: the person is jbot's business. A routine may opt in to a context block it truly needs.
+- **Cursor**: a routine's memory between firings: when it last fired, the ids it has seen, its place in the
+  inbox. What the Email feed's `seen` and `heartbeatSeenAt` are today, made general, so "since last time" and
+  "when new" work for any routine.
+- **Context block**: the unit prompts are composed from, named and tagged with its source. Static, from
+  files: `<soul>`, `<user>`, `<memory>`, `<routine name="heartbeat">`. Dynamic, from tasks or live state:
+  `<inbox since="…">`, `<calendar day="today">`, `<interruptions>`. Small values are `{{variables}}` in prompt
+  text: `{{person.name}}`, `{{assistant.name}}`, `{{timezone}}`, `{{home}}`, `{{now}}`. Their store is the front
+  matter of USER.md, so the person (through Settings) or jbot (through memory) changes them and the UI and jbot's
+  context follow at once.
+- **Entry**: one item in the inbox: source, time, level, headline, body (the facts and numbered links), handled
+  or not. Tasks produce entries.
+- **Report**: a run's final answer to jbot: complete and specific, links included, never addressed to the
+  person, first word FYI, ATTENTION or URGENT.
+
+### How prompts are assembled
+
+- **jbot**: its system prompt (SYSTEM.md, editable in Settings with a reset to default) with `{{variables}}`
+  filled, then the blocks it gets each turn: `<soul>`, `<user>`, `<memory>`, `<inbox>`, `<interruptions>`.
+- **A routine's run**: system prompt = RUN.md, then `<routine name="…">` (the routine file's body), variables
+  filled; stable between firings, so the prompt cache holds. First message = the trigger line ("It is 9:00am Fri
+  30 Oct. Deliver the morning brief." or "1 new entry came into the inbox since the last heartbeat.") then each
+  task's output as a tagged block. No "You are jbot's heartbeat" preamble: the routine file is the role.
+- **An ad-hoc run**: RUN.md, then the task as its first message.
+
+### Verbs
+
+- jbot: **notify** (push what it just wrote you), **stay quiet** (end its turn with no message), **delegate**
+  (start a run), **propose** (a routine or a memory change, waiting for approval), **handle** (mark entries).
+- Runs: **report**, **nothing to report**, **fail**.
+- The person: approve, edit, run now, forget (have a routine's cursor forget what it saw).
+
+Runs report to jbot and jbot decides what the person hears (decided 2026-10-30): the heartbeat's judgement is
+context, not importance; it does the legwork (specifics, links, related mail, the calendar) and always reports.
+jbot writes the person a mini report, everything they would otherwise open the source for, and notifies or stays
+quiet against the interruption dial.
+
+### Authoring and Settings
+
+The person edits routines, RUN.md and jbot's prompt in Settings › jbot or the file viewer; jbot proposes new
+routines or changes, which wait for approval. Settings › jbot shows each prompt raw (editable) and assembled, with
+which blocks went in from where, and for each routine a sample first message built from its tasks' live output,
+plus fields for the USER.md front-matter values.
+
+Not now: conditions beyond the gate, routines chained into pipelines (an inbox-arrival trigger covers it).
 
 ## What the products converged on
 
