@@ -110,11 +110,11 @@ export function createAgentSettings(options: { models: () => ModelOption[]; onMa
           </SettingLine>
           <Work kind="brief" label="Brief model" title="Reads your mail, calendar and chats and prepares first steps: worth a capable model." />
         </Show>
-        <SettingLine label="Heartbeat" title="Every 30 minutes it looks at its inbox, and calls a model only when something waits there or its checklist is due. It speaks up only when something is worth it.">
+        <SettingLine label="Heartbeat" title="It looks at its inbox on this clock and calls a model only when something new came in. It speaks up only when something is worth it.">
           <Switch label="Heartbeat" checked={current().heartbeat.enabled} onChange={(enabled) => set({ heartbeat: { ...current().heartbeat, enabled } })} />
         </SettingLine>
         <Show when={current().heartbeat.enabled}>
-          <SettingLine label="Checklist every" title="How often it goes through HEARTBEAT.md, the checklist in its memory.">
+          <SettingLine label="Every" title="How often it looks at its inbox (routines/heartbeat.md).">
             <Select id="agent-heartbeat" value={String(current().heartbeat.everyMinutes)} onChange={(event) => set({ heartbeat: { ...current().heartbeat, everyMinutes: Number(event.currentTarget.value) } })}>
               <For each={HEARTBEATS.includes(current().heartbeat.everyMinutes) ? HEARTBEATS : [current().heartbeat.everyMinutes, ...HEARTBEATS]}>{(minutes) => <option value={String(minutes)}>{every(minutes)}</option>}</For>
             </Select>

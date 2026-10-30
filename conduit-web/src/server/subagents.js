@@ -226,13 +226,15 @@ export function Subagents(runtime) {
         // urgent, and a run that left something to approve, whose asks show under its report. The rest waits in the
         // inbox for the heartbeat, or for the person to talk to jbot first.
         const kind = task.input.origin?.kind;
-        const asked = ["brief", "manual", "heartbeat"].includes(kind) && level !== "none";
+        // Where its report goes: a routine says (output jbot, inbox or both); before routines, by kind.
+        const output = task.input.origin?.output;
+        const asked = (output ? output !== "inbox" : ["brief", "manual", "heartbeat"].includes(kind)) && level !== "none";
         const waiting = task.input.gate ? await api.memo("waiting", Object.values((await api.snapshot(AgentDoc, context))?.asks || {})
           .filter((ask) => ask.status === "pending" && String(ask.sourceConversationId) === String(child)).length, context) : 0;
         const heard = !task.input.gate || (level !== "none" && (asked || waiting > 0 || level === "urgent"));
         // Only what waits: the inbox collects for the heartbeat (and the brief), so a report the person was told at once
         // (the brief itself, a task they started, anything urgent) goes to the home thread alone.
-        if (task.input.gate && level !== "none" && kind !== "heartbeat" && !heard) {
+        if (task.input.gate && level !== "none" && kind !== "heartbeat" && (!heard || output === "both")) {
           const at = await api.memo("entryAt", new Date().toISOString(), context);
           await api.commit(async (tx) => {
             appendEntry(await tx.doc(AgentDoc), { key: `${child}:${number}`, kind, title, subagentId: id, conversationId: child, level,
@@ -263,7 +265,7 @@ export function Subagents(runtime) {
           // A run's report comes with the decision it asks of jbot (SYSTEM.md, When a run reports): told bare, jbot
           // acknowledged it ("Noted. …") instead of choosing. The person sees the report's line, not this text.
           const content = task.input.gate ? `${report.answer}\n\n---\nThat was your ${title} run's report. Decide as in "When a run reports": `
-            + (kind === "brief" ? "this is the morning brief, so write the person the day's brief, then notify."
+            + (kind === "brief" || kind === "morning-brief" ? "this is the morning brief, so write the person the day's brief, then notify."
               : "if the person should hear it, write them a report and notify if it should reach their phone now; if not, call stay_quiet. Never just acknowledge it.")
             : report.answer;
           await handle.submit({ type: "input", whenBusy: "followUp", requestId,
@@ -317,12 +319,16 @@ export function Subagents(runtime) {
         return textResult(Object.entries(roster?.children || {}).map(([key, item]) => `${key}: ${item.status}: ${item.title}`).join("\n") || "No background subagents.");
       }
       if ((action === "spawn" || action === "message") && typeof task !== "string") throw new Error("subagent requires task for spawn or message.");
+      // A child of the persistent agent's threads is a run like any other: RUN.md is its prompt, not jbot's.
+      const runPrompt = action !== "spawn" ? "" : await api.memo("runPrompt", context)
+        ?? await api.memo("runPrompt", (await runtime.agentRunPrompt?.(api.conversationId)) || "", context);
       if (action === "spawn" && !background) {
         const child = await api.commit(async (tx) => {
           const existing = (await tx.scanConversations({ ownerTaskId: api.taskId }, 1)).items[0];
           if (existing !== undefined) return existing.id;
           const created = await tx.createConversation({ ownership: { kind: "task", taskId: api.taskId } });
           await stripTools(tx, created.id);
+          if (runPrompt) await configure(tx, created.id, { instructions: runPrompt });
           return created.id;
         }, context);
         const title = subagentTitle(task);
@@ -357,6 +363,7 @@ export function Subagents(runtime) {
           const owner = await tx.createTask(anchor, { id, sinceEntry }, { ownership: { kind: "conversation" }, background: true });
           const child = await tx.createConversation({ ownership: { kind: "task", taskId: owner } });
           await stripTools(tx, child.id);
+          if (runPrompt) await configure(tx, child.id, { instructions: runPrompt });
           roster.children[id] = { id, title, sinceEntry, child: child.id, anchor: owner, spawn: api.taskId, number: 0,
             status: "running", startedAt: new Date().toISOString(), endedAt: null, deliveries: {} };
         }
@@ -400,7 +407,7 @@ export function Subagents(runtime) {
    * idempotent, as a spawning call's task id does. `gate`: its report is a run's, weighed before it reaches the
    * parent, and its spend counts toward the agent's day. Returns the roster item, `{ id, child, anchor, ... }`.
    */
-  runtime.spawnBackground = async (tx, conversationId, { key, task, title = subagentTitle(task), origin = null, gate = false, mode = "followUp", model = null, thinkingLevel = null }) => {
+  runtime.spawnBackground = async (tx, conversationId, { key, task, title = subagentTitle(task), origin = null, gate = false, mode = "followUp", model = null, thinkingLevel = null, instructions = null }) => {
     const roster = await tx.doc(SubagentRoster, conversationId);
     const existing = Object.values(roster.children).find((value) => value.spawn === key);
     if (existing) return JSON.parse(JSON.stringify(existing));
@@ -409,6 +416,8 @@ export function Subagents(runtime) {
     const owner = await tx.createTask(anchor, { id, sinceEntry }, { ownership: { kind: "conversation" }, background: true });
     const child = await tx.createConversation({ ownership: { kind: "task", taskId: owner } });
     await stripTools(tx, child.id);
+    // Its own system prompt (RUN.md and its routine), in place of the parent's it would otherwise inherit.
+    if (instructions) await configure(tx, child.id, { instructions });
     // A run may use its own model and effort (the agent's `work` settings); otherwise it has its thread's.
     if (model) {
       const slash = model.indexOf("/");

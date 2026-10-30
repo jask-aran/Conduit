@@ -16,17 +16,20 @@ import { SplitDashboard, SplitEmpty, SplitGroup, SplitHeader, SplitQuickActions,
  */
 
 const RUN_KIND: Record<string, string> = {
-  manual: "Asked", schedule: "Scheduled", checkback: "Check-back", brief: "Morning brief", heartbeat: "Heartbeat", webhook: "Webhook", event: "Event",
+  manual: "Asked", schedule: "Scheduled", checkback: "Check-back", brief: "Morning brief", "morning-brief": "Morning brief", heartbeat: "Heartbeat", webhook: "Webhook", event: "Event",
 };
 const MEMORY = [
   { path: "MEMORY.md", label: "Memory", context: "What it keeps between conversations" },
   { path: "USER.md", label: "About you", context: "What it knows about you" },
   { path: "SOUL.md", label: "Soul", context: "Who it is and how it works" },
-  { path: "HEARTBEAT.md", label: "Heartbeat", context: "What it checks when it wakes" },
+  { path: "routines/heartbeat.md", label: "Heartbeat", context: "What it checks when something comes in" },
+  { path: "routines/morning-brief.md", label: "Morning brief", context: "What it gathers each morning" },
+  { path: "RUN.md", label: "Runs", context: "How every run works and reports" },
 ];
 const FEED_SOURCE: Record<string, string> = { executor: "Executor", script: "Script", run: "Model run" };
 const clockKind = (schedule: AgentSchedule): ClockKind => schedule.feed ? "feed"
-  : schedule.system && (schedule.id === "heartbeat" || schedule.id === "brief") ? schedule.id : schedule.kind === "once" ? "checkback" : "schedule";
+  : schedule.routine === "heartbeat" ? "heartbeat" : schedule.routine === "morning-brief" ? "brief"
+    : schedule.routine && !schedule.task ? "feed" : schedule.kind === "once" ? "checkback" : "schedule";
 /** Minutes after midnight of a time of day ("07:30"), or of an instant in a time zone. */
 const minutesOf = (time: string) => { const [hours, minutes] = time.split(":").map(Number); return (hours || 0) * 60 + (minutes || 0); };
 const minutesIn = (at: number, timeZone?: string) => {

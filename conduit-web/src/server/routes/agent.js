@@ -4,9 +4,9 @@ import { originOfRequest } from "../../server-identity.js";
 import { chatView } from "../../chat-store.js";
 import { listWatches, webhook } from "../../agent/events.js";
 import { acceptProposal, listProposals, rejectProposal } from "../../agent/memory.js";
+import { listRoutines } from "../../agent/routine-files.js";
 import { cancelSchedule, clockAdder, listSchedules, seedSchedules } from "../../agent/schedule.js";
 import { applyOutcome, feedItem, feedProblem, runSource, sourceProblem } from "../../agent/feeds.js";
-import { heartbeatGuide, heartbeatTask, listInbox } from "../../agent/inbox.js";
 import { decide } from "../../agent/asks.js";
 import { AgentDoc } from "../../agent/agent-doc.js";
 import { backgroundSubagents } from "../subagents.js";
@@ -25,8 +25,10 @@ import { backgroundSubagents } from "../subagents.js";
  * POST /v0/agent/feeds/:id/forget    forget items it has seen { ids? | latest? } (all without): its next check reports them as new
  * PATCH /v0/agent/feeds/:id          change its { title?, everyMinutes?, source?, level? }, keeping what it has seen
  * DELETE /v0/agent/feeds/:id         remove a feed
- * POST /v0/agent/schedules/:id/run   run one now, off its clock (testing): a feed checks, the heartbeat decides the
- *                                    whole unhandled inbox and its checklist even in quiet hours, the rest wake a run
+ * POST /v0/agent/schedules/:id/run   run one now, off its clock (testing): a routine's tasks gather and its run fires
+ *                                    whatever its gate (not a gate of never), even in quiet hours; a feed checks; the rest wake a run
+ * GET  /v0/agent/routines            its routine files (routines/*.md) with their cursors and last firing
+ * POST /v0/agent/routines/:name/forget  forget what a task has seen { task, latest? } (all without): reported as new next time
  * POST /v0/agent/reset              start over: a new home thread, empty inbox; settings, memory and feeds stay
  * POST /v0/agent/proposals/:id/{accept,reject}
  * DELETE /v0/agent/notices/:id      a notice read (it leaves the attention list)
@@ -263,20 +265,43 @@ export function registerAgentRoutes(app, { agent, backends }) {
         });
         return response.json({ checked: outcome.items.length, new: fresh, error: outcome.error || null });
       }
-      const beat = schedule.system && schedule.id === "heartbeat";
-      const waiting = beat ? listInbox(state, { unhandled: true }) : [];
-      const task = beat ? heartbeatTask({ inbox: waiting.length, waiting: waiting.length, sweep: true, timeZone: agent.settings().timezone, guide: await heartbeatGuide(agent),
-        entries: waiting.slice(0, 25).map(({ id, at, title, level, headline, body }) => ({ id, at, title, level, headline, body: body ? String(body).slice(0, 1500) : "" })) })
-        : schedule.feed ? schedule.feed.source.task : schedule.task;
-      const kind = schedule.system ? schedule.id : schedule.feed ? "feed" : "checkback";
-      const run = await agent.wake({ key, kind, title: schedule.title, task });
-      if (run && beat) await agent.update((doc) => { doc.heartbeatSweptAt = new Date().toISOString(); if (waiting[0]) doc.heartbeatSeenAt = waiting[0].at; });
+      if (schedule.routine) {
+        const fired = await agent.fireRoutine(schedule.routine, key);
+        if (fired.error) return response.status(fired.status || 409).json({ error: fired.error });
+        return response.status(202).json(fired);
+      }
+      const task = schedule.feed ? schedule.feed.source.task : schedule.task;
+      const run = await agent.wake({ key, kind: schedule.feed ? "feed" : "checkback", title: schedule.title, task });
       // Run while it was due (its clock late): this run is that slot's, so the clock does not run it again.
-      if (run && !beat) await agent.update((doc) => {
+      if (run) await agent.update((doc) => {
         const current = doc.schedules[schedule.id];
         if (current?.nextAt && Date.parse(current.nextAt) <= Date.now()) current.lastAt = current.nextAt;
       });
       response.status(run ? 202 : 409).json(run ? { id: run.id, conversationId: run.child } : { error: "agent_over_budget" });
+    } catch (error) { next(error); }
+  });
+  app.get("/v0/agent/routines", async (_request, response, next) => {
+    try {
+      if (!enabled(response)) return;
+      const state = await agent.state();
+      response.json({ routines: (await listRoutines(agent.folder)).map((routine) => ({ ...routine,
+        cursors: state.cursors?.[routine.name] || {}, last: state.routineState?.[routine.name] || null,
+        schedule: state.schedules[`r-${routine.name}`] ? { nextAt: state.schedules[`r-${routine.name}`].nextAt } : null })) });
+    } catch (error) { next(error); }
+  });
+  app.post("/v0/agent/routines/:name/forget", async (request, response, next) => {
+    try {
+      if (!enabled(response)) return;
+      const { task, latest } = request.body || {};
+      if (typeof task !== "string") return response.status(400).json({ error: "task is required" });
+      const forgot = await agent.update((doc) => {
+        const cursor = doc.cursors?.[request.params.name]?.[task];
+        if (!cursor?.seen) return null;
+        const before = cursor.seen.length;
+        cursor.seen = Number.isInteger(latest) && latest > 0 ? cursor.seen.slice(latest) : [];
+        return before - cursor.seen.length;
+      });
+      response.status(forgot === null ? 404 : 200).json(forgot === null ? { error: "cursor_not_found" } : { forgot });
     } catch (error) { next(error); }
   });
   /**

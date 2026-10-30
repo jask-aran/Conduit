@@ -18,6 +18,7 @@ import { createCodemodeExtension } from "@earendil-works/pi-durable/codemode";
 import { CodemodeSandbox } from "@earendil-works/pi-codemode";
 import { ModelRuntime, resolveModelScopeWithDiagnostics } from "@earendil-works/pi-coding-agent";
 import { buildManagedToolEnvironment } from "../../../scripts/pi-runtime.mjs";
+import { renderVars } from "../agent/routine-files.js";
 
 // What the web tools are for and how to use them; a template that asks for
 // them also brings the web-research skill.
@@ -406,7 +407,9 @@ export class DurableRuntime {
       .filter((tool) => wanted.has(tool.name) || (wanted.has("codemode") && tool.name.startsWith("pi.codemode.")) || (isAgent && tool.name.startsWith("mcp__")));
     // Pi's "codemode only": the model is offered codemode (and the question card); scripts call the rest.
     const codemodeOnly = template.extensions.some((file) => CODEMODE_ONLY.test(file));
-    const prompt = this.promptStore ? (await this.promptStore.read(template.id)).content : fs.readFileSync(template.systemPrompt, "utf8");
+    const raw = this.promptStore ? (await this.promptStore.read(template.id)).content : fs.readFileSync(template.systemPrompt, "utf8");
+    // The persistent agent's prompt names the person and itself ({{person.name}}, USER.md's front matter).
+    const prompt = isAgent && this.agentVars ? renderVars(raw, await this.agentVars().catch(() => ({}))) : raw;
     const skills = this.skillsFor(template.id).map((skill) => `## Skill: ${skill.name}\n\n${skill.body}`);
     return {
       extensions, tools,

@@ -1,5 +1,3 @@
-import fs from "node:fs/promises";
-import path from "node:path";
 import { defineDoc, defineTool, section } from "@earendil-works/pi-durable";
 import { Type } from "@earendil-works/pi-ai";
 import { AgentDoc, nextId } from "./agent-doc.js";
@@ -63,67 +61,13 @@ export function inQuietHours(settings, now = Date.now()) {
   return quiet.start <= quiet.end ? time >= quiet.start && time < quiet.end : time >= quiet.start || time < quiet.end;
 }
 
-/**
- * What a heartbeat tick has to decide, or null when nothing: no model call (Block II's gated tick). It looks at the
- * inbox every tick but runs only for entries that came in since the last beat that saw it (`heartbeatSeenAt`): one
- * left unhandled is not decided again each tick; the home thread still shows it. It goes through HEARTBEAT.md once
- * its interval (`heartbeat.everyMinutes`) has passed since the last sweep. Neither in quiet hours.
- */
-export async function heartbeatPlan(agent, state, now = Date.now()) {
-  const settings = agent.settings();
-  if (inQuietHours(settings, now)) return null;
-  const waiting = listInbox(state, { unhandled: true });
-  const seen = Date.parse(state?.heartbeatSeenAt || "") || 0;
-  const fresh = waiting.filter((item) => Date.parse(item.at) > seen);
-  const inbox = fresh.length;
-  const due = now - (Date.parse(state?.heartbeatSweptAt || "") || 0) >= settings.heartbeat.everyMinutes * 60000;
-  const guide = await heartbeatGuide(agent);
-  const sweep = due && checklist(guide);
-  return inbox || sweep ? { inbox, waiting: waiting.length, newest: fresh[0]?.at ?? null, sweep, timeZone: settings.timezone, guide,
-    entries: fresh.slice(0, ENTRIES_IN_TASK).map(({ id, at, title, level, headline, body }) => ({ id, at, title, level, headline, body: body ? String(body).slice(0, ENTRY_BODY) : "" })) } : null;
-}
-/**
- * HEARTBEAT.md, the person's standing instructions to the heartbeat (what to look closer at, what to leave), without
- * its comments. Only its Checklist section makes a sweep: lines elsewhere are how to read, not things to check.
- */
-export async function heartbeatGuide(agent) {
-  const text = await fs.readFile(path.join(agent.folder, "HEARTBEAT.md"), "utf8").catch(() => "");
-  return text.replace(/<!--[\s\S]*?-->/g, "").replace(/\n{3,}/g, "\n\n").trim().slice(0, 4000);
-}
-const checklist = (guide) => {
-  const section = guide.split(/^## /m).find((part) => /^checklist\b/i.test(part)) || "";
-  return section.split(/\r?\n/).some((row) => /^\s*(?:[-*+]|\d+[.)])\s+\S/.test(row));
-};
-
-/** What of the inbox a heartbeat's task carries, so its first call is not to read what the hub already holds. */
-const ENTRIES_IN_TASK = 25;
 const DIAL_WORDS = { quiet: "notify only what cannot wait", normal: "notify what they should see today", chatty: "notify anything worth knowing" };
-const ENTRY_BODY = 1500;
 
-const entryText = (entry, timeZone) => {
+export const entryText = (entry, timeZone) => {
   const when = new Intl.DateTimeFormat("en-AU", { timeZone, weekday: "short", hour: "numeric", minute: "2-digit" }).format(new Date(entry.at));
   const body = entry.body && entry.body !== entry.headline ? `\n${entry.body.split("\n").map((row) => `    ${row}`).join("\n")}` : "";
   return `- [${entry.id}] ${when} · ${entry.title} · ${entry.level}: ${entry.headline}${body}`;
 };
-
-/**
- * A heartbeat run's task, for what its tick found. Its judgement is context, not what the person should hear: it reads
- * the new entries (here in the task), gathers what they leave unclear, and reports everything to jbot, which decides.
- */
-export const heartbeatTask = ({ inbox, waiting = inbox, sweep, entries = [], timeZone, guide = "" }) => [
-  guide ? `The person's instructions for you (HEARTBEAT.md):\n\n${guide}\n` : "",
-  inbox ? `${inbox} new ${inbox === 1 ? "entry" : "entries"} came into your inbox since the last heartbeat (${waiting} unhandled in all)`
-    + (entries.length ? `${entries.length < inbox ? `; the newest ${entries.length}` : ""}:\n\n${entries.map((entry) => entryText(entry, timeZone)).join("\n")}\n`
-      : ": read them with inbox list.")
-    + "\nYour judgement here is context, not what the person should hear: jbot decides that. Do the legwork the person "
-    + "would otherwise do by opening the email: pull out the specifics (tracking and order numbers, what was ordered, "
-    + "amounts, due dates, who is asking and for what) and the links that matter, and go looking for the context around "
-    + "each, as the instructions above say (search the mail, check the calendar). Then report to jbot: how many came in and "
-    + "from where, then each entry under its own short heading with its facts, its links as Markdown links with their "
-    + "labels, and the context you found; a line is enough for what is not worth digging into. Mark them with inbox "
-    + "handle, outcome \"Reported to jbot\"." : "",
-  sweep ? "Your checklist is due: go through each item under Checklist and report what you found." : "",
-  inbox ? "" : "When the checklist turns up nothing, call nothing_to_report."].filter(Boolean).join(" ");
 
 const result = (text, isError = false) => ({ output: [{ type: "text", text }], ...(isError ? { isError: true } : {}) });
 

@@ -27,7 +27,7 @@ import { sandboxHelper, sandboxedEnv } from "./sandbox.js";
  * `feed` tool, which asks the person (policy.js): it runs on its own from then on, so a program may only read.
  */
 const MAX_ITEMS = 100;
-const SEEN_KEPT = 500;
+export const SEEN_KEPT = 500;
 const LEVELS = ["fyi", "attention", "urgent"];
 const EVERY = { min: 15, max: 1440 };
 
@@ -185,16 +185,22 @@ export function applyOutcome(doc, schedule, outcome, slot) {
   if (outcome.error) return;
   feed.seen = [...new Set([...outcome.items.map((item) => item.id), ...(feed.seen || [])])].slice(0, SEEN_KEPT);
   feed.lastCount = feed.primed ? fresh.length : 0;
-  if (feed.primed && fresh.length) {
-    const level = fresh.reduce((top, item) => LEVELS.indexOf(item.level) > LEVELS.indexOf(top) ? item.level : top, feed.level || "fyi");
-    const line = (item) => `${item.title || "(untitled)"}${item.detail ? ` — ${item.detail}` : ""}`;
-    appendEntry(doc, { key: `${schedule.id}:${slot}`, kind: "feed", title: schedule.title, feedId: schedule.id, subagentId: null, conversationId: null,
-      level, status: "unhandled",
-      headline: text(fresh.length === 1 ? line(fresh[0]) : `${fresh.length} new: ${fresh.map((item) => item.title || "(untitled)").join("; ")}`, 160),
-      body: fresh.map((item) => `- ${line(item)}${item.at ? ` (${item.at})` : ""}${item.url ? ` ${item.url}` : ""}${item.links?.length ? `\n  Links: ${item.links.map((link, index) => `[${index + 1}] ${link.label} <${link.url}>`).join(" · ")}` : ""}${item.text ? `\n${item.text.replace(/^/gm, "  ")}` : ""}`)
-        .join("\n\n").slice(0, BODY_MAX) }, Date.parse(slot));
-  }
+  if (feed.primed && fresh.length) fileItems(doc, { key: `${schedule.id}:${slot}`, title: schedule.title, feedId: schedule.id, level: feed.level }, fresh, slot);
   feed.primed = true;
+}
+
+/** One item as the inbox and a run's task block show it: what it is, when, where, its links, then its text. */
+export const itemText = (item) => `- ${item.title || "(untitled)"}${item.detail ? ` — ${item.detail}` : ""}${item.at ? ` (${item.at})` : ""}`
+  + `${item.url ? ` ${item.url}` : ""}${item.links?.length ? `\n  Links: ${item.links.map((link, index) => `[${index + 1}] ${link.label} <${link.url}>`).join(" · ")}` : ""}`
+  + `${item.text ? `\n${item.text.replace(/^/gm, "  ")}` : ""}`;
+
+/** New items into the inbox as one entry (a feed's tick, a routine whose output is the inbox). */
+export function fileItems(doc, { key, title, feedId = null, level = "fyi" }, fresh, slot) {
+  const top = fresh.reduce((best, item) => LEVELS.indexOf(item.level) > LEVELS.indexOf(best) ? item.level : best, LEVELS.includes(level) ? level : "fyi");
+  const line = (item) => `${item.title || "(untitled)"}${item.detail ? ` — ${item.detail}` : ""}`;
+  appendEntry(doc, { key, kind: "feed", title, feedId, subagentId: null, conversationId: null, level: top, status: "unhandled",
+    headline: text(fresh.length === 1 ? line(fresh[0]) : `${fresh.length} new: ${fresh.map((item) => item.title || "(untitled)").join("; ")}`, 160),
+    body: fresh.map(itemText).join("\n\n").slice(0, BODY_MAX) }, Date.parse(slot));
 }
 
 /** A feed's schedule item, ready for `addClocked` (schedule.js). */
