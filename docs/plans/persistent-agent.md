@@ -108,7 +108,7 @@ Belongs in a user-facing README with diagrams later; this is the record.
                 │        │                                                         │
                 │      cursor (what it saw last time)                              │
                 └──────────────────────────────────────────────────────────────────┘
- inbox ──▶ heartbeat (a routine) ──▶ report ──▶ jbot ──▶ notify │ stay quiet │ delegate │ propose │ handle
+ inbox ──▶ heartbeat (a routine) ──▶ report ──▶ jbot ──▶ notify │ a line │ delegate │ propose │ handle
 ```
 
 ### Structures
@@ -157,7 +157,7 @@ Belongs in a user-facing README with diagrams later; this is the record.
 
 ### Verbs
 
-- jbot: **notify** (push what it just wrote you), **stay quiet** (end its turn with no message), **delegate**
+- jbot: **notify** (push what it just wrote you), **a line** (one short line when it is not worth a push; stay quiet was dropped 2026-10-30 so every turn ends in something the person can read), **delegate**
   (start a run), **propose** (a routine or a memory change, waiting for approval), **handle** (mark entries).
 - Runs: **report**, **nothing to report**, **fail**.
 - The person: approve, edit, run now, forget (have a routine's cursor forget what it saw).

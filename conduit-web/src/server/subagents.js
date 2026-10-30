@@ -266,7 +266,7 @@ export function Subagents(runtime) {
           // acknowledged it ("Noted. …") instead of choosing. The person sees the report's line, not this text.
           const content = task.input.gate ? `${report.answer}\n\n---\nThat was your ${title} run's report. Decide as in "When a run reports": `
             + (kind === "brief" || kind === "morning-brief" ? "this is the morning brief, so write the person the day's brief, then notify."
-              : "if the person should hear it, write them a report and notify if it should reach their phone now; if not, call stay_quiet. Never just acknowledge it.")
+              : "if the person should hear it, write them a report and notify if it should reach their phone now; if not, say in one short line what came in, without notifying. Never just acknowledge it.")
             : report.answer;
           await handle.submit({ type: "input", whenBusy: "followUp", requestId,
             content, entry: { kind: "conduit.subagent-report",

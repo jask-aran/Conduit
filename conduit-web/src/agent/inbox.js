@@ -175,16 +175,5 @@ export function InboxTools(runtime) {
       return { ...result("Sent to their devices."), control: { terminate: true } };
     },
   });
-  const stay = defineTool({
-    name: "stay_quiet",
-    description: "In a thread, after a run's report: the person need not hear it now. Ends your turn without a message; "
-      + "what the report held stays in your context and its line in the thread.",
-    parameters: Type.Object({}),
-    replay: "safe",
-    execute: async (_args, api) => {
-      if (await runOnly(api)) return result("Only a thread stays quiet; a run calls nothing_to_report.", true);
-      return { ...result("Quiet."), control: { terminate: true } };
-    },
-  });
-  return { tools: [quiet, failed, inbox, notify, stay], sections: [waiting] };
+  return { tools: [quiet, failed, inbox, notify], sections: [waiting] };
 }
