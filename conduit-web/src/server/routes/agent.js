@@ -4,7 +4,8 @@ import { originOfRequest } from "../../server-identity.js";
 import { chatView } from "../../chat-store.js";
 import { listWatches, webhook } from "../../agent/events.js";
 import { acceptProposal, listProposals, rejectProposal } from "../../agent/memory.js";
-import { listRoutines } from "../../agent/routine-files.js";
+import { listRoutines, readRoutine } from "../../agent/routine-files.js";
+import { executeRoutine } from "../../agent/routines.js";
 import { cancelSchedule, clockAdder, listSchedules, seedSchedules } from "../../agent/schedule.js";
 import { applyOutcome, feedItem, feedProblem, runSource, sourceProblem } from "../../agent/feeds.js";
 import { decide } from "../../agent/asks.js";
@@ -28,6 +29,7 @@ import { backgroundSubagents } from "../subagents.js";
  * POST /v0/agent/schedules/:id/run   run one now, off its clock (testing): a routine's tasks gather and its run fires
  *                                    whatever its gate (not a gate of never), even in quiet hours; a feed checks; the rest wake a run
  * GET  /v0/agent/routines            its routine files (routines/*.md) with their cursors and last firing
+ * POST /v0/agent/routines/:name/test    its tasks once and the run's prompt and first message; moves nothing
  * POST /v0/agent/routines/:name/forget  forget what a task has seen { task, latest? } (all without): reported as new next time
  * POST /v0/agent/reset              start over: a new home thread, empty inbox; settings, memory and feeds stay
  * POST /v0/agent/proposals/:id/{accept,reject}
@@ -287,6 +289,17 @@ export function registerAgentRoutes(app, { agent, backends }) {
       response.json({ routines: (await listRoutines(agent.folder)).map((routine) => ({ ...routine,
         cursors: state.cursors?.[routine.name] || {}, last: state.routineState?.[routine.name] || null,
         schedule: state.schedules[`r-${routine.name}`] ? { nextAt: state.schedules[`r-${routine.name}`].nextAt } : null })) });
+    } catch (error) { next(error); }
+  });
+  app.post("/v0/agent/routines/:name/test", async (request, response, next) => {
+    try {
+      if (!enabled(response)) return;
+      const routine = await readRoutine(agent.folder, request.params.name).catch((error) => ({ error: error.message }));
+      if (!routine) return response.status(404).json({ error: "routine_not_found" });
+      if (routine.error) return response.status(400).json({ error: routine.error });
+      const state = await agent.state();
+      const outcome = await executeRoutine(agent, routine, { cursors: state.cursors?.[routine.name] || {}, state, force: true });
+      response.json({ tasks: outcome.tasks, fresh: outcome.fresh, run: outcome.run, instructions: outcome.instructions || null, message: outcome.message || null });
     } catch (error) { next(error); }
   });
   app.post("/v0/agent/routines/:name/forget", async (request, response, next) => {

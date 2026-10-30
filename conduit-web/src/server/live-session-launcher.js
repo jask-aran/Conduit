@@ -140,7 +140,9 @@ export function createLiveSessionLauncher({
     // `warm: "none"` harness read the flag as "this chat can never be live",
     // which left its adapter with no record to publish into and answered a sent
     // message with "chat switched before the agent was ready".
-    if (attachOnly) throw launchError("no_live_process", "This chat has no live agent process", 409);
+    // A subagent's chat is the exception: opening it starts only a read-only watcher on its run's conversation (no
+    // process, outside the live cap), so the run shows live while its parent drives it.
+    if (attachOnly && context.chat.status !== "subagent") throw launchError("no_live_process", "This chat has no live agent process", 409);
 
     // Only admission is machine-wide: reclaiming room and reserving a slot.
     // Starting the process holds its slot, not the lock, so one cold start does
