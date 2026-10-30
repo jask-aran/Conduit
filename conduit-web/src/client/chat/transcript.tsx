@@ -266,6 +266,14 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
     () => props.narration || "fold",
   );
   // Declared before the memo below, which runs as it is made.
+  // The orb follows generation: only the latest turn shows it, on the row where it is working or its last answer.
+  const latestOrb = createMemo(() => {
+    for (let index = timeline.length - 1; index >= 0; index -= 1) {
+      const row = timeline[index]!;
+      if ((row.type === "message" || row.type === "trace") && row.orb) return row.key;
+    }
+    return null;
+  });
   const placeAsks = (asks: TranscriptAsk[], placed: Map<string, TranscriptAsk[]>) => {
     const rowOf = new Map<string, string>();
     for (const row of timeline) if (row.type === "trace") for (const segment of row.value.segments) if (segment.kind === "tool") rowOf.set(segment.tool.toolCallId, row.key);
@@ -1097,7 +1105,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
             const chatId = () => props.chat.loadedId();
             const artifact = () => item.answerless && item.precedingUserId ? artifactSummaries().get(item.precedingUserId) : undefined;
             const arrive = arrivalOf(lastArrivedId);
-            return <TranscriptRow ref={traceRow} data-slot="message-scroller-item" turn={narrated() && item.continues}><Turn><TurnTrace since={arrive} trace={item.value} gathering={narrated()} orb={!narrated() || Boolean(item.orb)} agents={props.chat.agents?.()} onStopAgent={props.chat.stopAgent ? (id) => void props.chat.stopAgent!(id) : undefined} writing={item.answerless === false} renderer={markdownRenderer()} profileLabel={props.profileLabel} initialOpen={itemExpanded(chatId(), item.key)} onOpenChange={(open) => setItemExpanded(chatId(), item.key, open)} toolOpen={(id) => itemExpanded(chatId(), `tool:${id}`)} onToolOpenChange={(id, open) => setItemExpanded(chatId(), `tool:${id}`, open)} onRendered={() => settleAfterMarkdown(traceRow)} />
+            return <TranscriptRow ref={traceRow} data-slot="message-scroller-item" turn={narrated() && item.continues}><Turn><TurnTrace since={arrive} trace={item.value} orb={item.key === latestOrb()} agents={props.chat.agents?.()} onStopAgent={props.chat.stopAgent ? (id) => void props.chat.stopAgent!(id) : undefined} writing={item.answerless === false} renderer={markdownRenderer()} profileLabel={props.profileLabel} initialOpen={itemExpanded(chatId(), item.key)} onOpenChange={(open) => setItemExpanded(chatId(), item.key, open)} toolOpen={(id) => itemExpanded(chatId(), `tool:${id}`)} onToolOpenChange={(id, open) => setItemExpanded(chatId(), `tool:${id}`, open)} onRendered={() => settleAfterMarkdown(traceRow)} />
               <For each={asksAt(item.key)}>{(ask) => <AskCard ask={ask} answer={props.approvals!.answer} />}</For>
               {/* A turn that ended without an answer -- stopped under a tool, or
                   one that only ran commands -- still offers to try again. */}
@@ -1162,7 +1170,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
             setTimeout(() => setCopied(false), COPY_FEEDBACK_MS);
           };
           return <TranscriptRow ref={row} data-slot="message-scroller-item" data-message-id={message().id} turn={!user() && item.traced}>
-            <Show when={user()} fallback={<Turn orb={narrated() && item.orb ? <AnswerOrb state={item.orb} /> : undefined}>
+            <Show when={user()} fallback={<Turn orb={item.orb && item.key === latestOrb() ? <AnswerOrb state={item.orb} /> : undefined}>
               <Show when={message().content || (message().stopped && !item.traced && !failed())}>
                 <Answer copied={copied()}>
                   <Show when={message().content} fallback={<StopLine detail="before answering" />}>

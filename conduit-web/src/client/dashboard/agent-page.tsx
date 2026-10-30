@@ -1,7 +1,7 @@
 import { createEffect, createMemo, createSignal, For, on, onCleanup, onMount, Show, type JSX, untrack } from "solid-js";
 import { approvalLineText, ClockRow, DayStrip, Icons, InboxRow, LevelMark, levelWord, ServiceIcon, StatusDot, type ClockKind, type DayMark } from "@/components/ui";
 import { Button, TextArea } from "@/components/ui/controls";
-import { DashConversation, DashIconButton, DashNote } from "@/components/ui/dashboard";
+import { DashIconButton, DashNote } from "@/components/ui/dashboard";
 import { Dialog } from "@/components/dialog";
 import { MenuRow } from "@/components/menus";
 import { api } from "../api/client";
@@ -56,7 +56,8 @@ export function AgentPage(props: {
   /** The composer: what is sent goes to the agent's home thread, and its answer comes in over it. */
   composer?: JSX.Element;
   /** Its home thread, loaded: the page shows it over the composer (transcript: the app's), and opens the whole of it. */
-  conversation?: { transcript: JSX.Element; onOpen: () => void };
+  /** Opens its home thread: the page shows none of it. */
+  onOpenThread?: () => void;
   /** Opens one of its chats (a thread, a run's transcript, a question's thread), as a dashboard row opens a chat. */
   onOpenChat: (chatId: string, event?: MouseEvent) => void;
   /** Opens one of its memory files (a path in its folder) in the file viewer. */
@@ -250,10 +251,6 @@ export function AgentPage(props: {
     </For>
   </SplitGroup>;
 
-  // Its home thread over the composer, drawn as the thread is (the app's transcript), the whole of it a tap away.
-  const conversation = () => <Show when={props.conversation}>{(thread) =>
-    <DashConversation label={`${name()}'s home thread`} scrolls open={{ label: "Open thread", onOpen: thread().onOpen }}>{thread().transcript}</DashConversation>}
-  </Show>;
 
   const spent = () => {
     const settings = view()?.settings;
@@ -268,11 +265,11 @@ export function AgentPage(props: {
         <SplitDashboard page="Agent" label={`${name()}'s page`}
           header={<SplitHeader title={name()} kind="Agent" glyph={<Icons.Agent />} context={[DIAL[view()?.settings?.dial || ""], spent(), running()]} />}
           quickActions={<SplitQuickActions items={[
+            ...(props.onOpenThread ? [{ icon: <Icons.Chat />, label: "Open thread", onClick: () => props.onOpenThread?.() }] : []),
             { icon: <Icons.Play />, label: "Run a task", onClick: () => setAsking(true) },
             { icon: <Icons.NewChat />, label: "New thread", onClick: () => void newThread() },
           ]} manage={() => <MenuRow icon={<Icons.Settings />} onSelect={props.onOpenSettings}>Settings</MenuRow>} />}
           notice={error() ? <DashNote error>{error()}</DashNote> : undefined}
-          conversation={conversation()}
           composer={props.composer}
           aside={<>{needsGroup()}{inboxGroup()}{threadsGroup()}{workingGroup()}{timedGroup()}{watchesGroup()}{rulesGroup()}{memoryGroup()}{recentGroup()}</>} />
       </Show>
