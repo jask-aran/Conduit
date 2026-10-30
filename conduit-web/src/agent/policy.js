@@ -30,6 +30,36 @@ const WRITE_WORDS = new Set(["send", "create", "insert", "update", "patch", "del
   "move", "copy", "clear", "append", "set", "put", "post", "watch", "stop", "start", "complete", "cancel", "submit", "resume",
   "connect", "disconnect", "reply", "forward", "archive", "share", "upload", "write", "add", "batchupdate", "batchmodify", "batchdelete", "empty", "run", "execute"]);
 const wordsOf = (path) => String(path).split(/[^A-Za-z0-9]+/).flatMap((part) => part.split(/(?<=[a-z0-9])(?=[A-Z])/)).map((word) => word.toLowerCase()).filter(Boolean);
+/*
+ * What the person asked for, it does: in a turn the person started (their message, or their answer to an approval),
+ * a connector call that only edits their own data goes without asking -- completing a task, moving an event, labelling
+ * mail. One that sends as them or deletes still asks, as does anything a run or the heartbeat starts on its own, and
+ * anything outside the connectors (another chat, a device, a routine). Settings › jbot turns it off.
+ */
+const SEND_WORDS = new Set(["send", "reply", "forward", "share", "post", "submit", "publish", "invite"]);
+const DELETE_WORDS = new Set(["delete", "remove", "trash", "empty", "batchdelete", "purge", "destroy", "cancel", "unsubscribe", "revoke",
+  "disconnect", "clear", "stop"]);
+const editAction = (path) => { const words = wordsOf(String(path).split(".").at(-1) || ""); return !words.some((word) => SEND_WORDS.has(word) || DELETE_WORDS.has(word)); };
+const editOnly = (name, args) => {
+  if (!name.startsWith("mcp__")) return false;
+  const paths = connectorActions(name, args);
+  return Boolean(paths?.length) && paths.every((path) => isReadAction(path) || editAction(path));
+};
+/** The prompts a turn can start from: the person's (a message, an approval's answer), a run's report, the heartbeat's line. */
+const TRIGGERS = new Set(["conduit.user", "conduit.subagent-report", "conduit.agent-beat"]);
+async function personStarted(api, context) {
+  return api.commit(async (tx) => {
+    let cursor;
+    for (let pages = 0; pages < 5; pages += 1) {
+      const page = await tx.scanEntries({ conversationId: api.conversationId }, 100, cursor);
+      const trigger = page.items.find((entry) => TRIGGERS.has(entry.kind));
+      if (trigger) return trigger.kind === "conduit.user";
+      if (!page.next) return false;
+      cursor = page.next;
+    }
+    return false;
+  }, context);
+}
 export const isReadAction = (path) => { const words = wordsOf(path); return !words.some((word) => WRITE_WORDS.has(word)) && words.some((word) => READ_WORDS.has(word)); };
 const connectorTool = (name) => name.split("__").slice(2).join("__");
 /** The actions a gateway `call` names, `tools.` dropped; null for a tool that is not one. */
@@ -300,8 +330,13 @@ export function policyWraps(runtime, tools) {
         const home = run ? await runtime.agent.home() : null;
         const thread = { chatId: run ? home.chat.id : described?.chatId, conversationId: run ? home.conversationId : api.conversationId, run };
         if (!thread.chatId) throw new Error("Agent thread not found");
-        const waiting = await approve(runtime, api, tool.name, args, context, thread);
-        if (waiting) return waiting;
+        // Decided once per call, so a replay does not decide again on a turn that has since moved on.
+        const asked = !run && runtime.agent.settings().youAsk !== false && editOnly(tool.name, args)
+          && (await api.memo("personAsked", context) ?? await api.memo("personAsked", await personStarted(api, context), context));
+        if (!asked) {
+          const waiting = await approve(runtime, api, tool.name, args, context, thread);
+          if (waiting) return waiting;
+        }
       }
       const local = PLACED.includes(tool.name) && !args?.device;
       const env = local ? sandboxedEnv(api.env, { folder: runtime.agent.folder, dataRoot: runtime.dataRoot, shellEnv: runtime.shellEnv, helper: () => helper ||= sandboxHelper(runtime.dataRoot) }) : api.env;

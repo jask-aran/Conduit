@@ -100,6 +100,11 @@ export function createAgentSettings(options: { models: () => ModelOption[]; onMa
           </Select>
         </SettingLine>
       </SettingGroup>
+      <SettingGroup title="Approvals">
+        <SettingLine label="What you ask, it does" title="When you ask it for something, edits to your own data (completing a task, moving an event, labelling mail) go ahead without an approval. Sending as you, deleting, and anything it starts on its own still ask.">
+          <Switch label="What you ask, it does" checked={current().youAsk !== false} onChange={(youAsk) => set({ youAsk })} />
+        </SettingLine>
+      </SettingGroup>
       <SettingGroup title="Routine">
         <SettingLine label="Morning brief" title="A short brief in its home thread each morning: what happened, what is coming, what waits on you.">
           <Switch label="Morning brief" checked={current().brief.enabled} onChange={(enabled) => set({ brief: { ...current().brief, enabled } })} />
