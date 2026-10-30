@@ -214,7 +214,7 @@ export function InboxTools(runtime) {
   const notify = defineTool({
     name: "notify",
     description: "In a thread: send the person's phone and devices a notification of what you just wrote them, after a report "
-      + "they should see now. A title and one line. Not for replies to their own messages; they are already here.",
+      + "they should see now. A title and one line. It ends your turn, so call it last. Not for replies to their own messages.",
     parameters: Type.Object({
       title: Type.String({ description: "A few words: what it is about." }),
       text: Type.String({ description: "One line, as the lock screen shows it." }),
@@ -225,7 +225,8 @@ export function InboxTools(runtime) {
       if (await runOnly(api)) return result("A run does not notify: report, and jbot decides.", true);
       const key = await api.memo("notify", `note-${api.conversationId}-${Date.now()}`, context);
       runtime.notify?.({ kind: "report", conversationId: api.conversationId, title, text, level: urgent ? "urgent" : "attention", key });
-      return result("Sent to their devices.");
+      // The report is written before it; another model call after it only ever produced an empty message.
+      return { ...result("Sent to their devices."), control: { terminate: true } };
     },
   });
   const stay = defineTool({
