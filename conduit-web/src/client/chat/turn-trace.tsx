@@ -393,7 +393,7 @@ const LATEST_CHARS = 240;
  *  the usual head, what it is doing now; settled it says what it looked at, and the time is the turn's, so it is not
  *  repeated; a settled piece with no work draws nothing. */
 export function TurnTrace(props: { trace: TurnTraceData; agents?: AgentSummary[]; onStopAgent?: (id: string) => void; writing?: boolean; renderer?: MarkdownRendererId; profileLabel?: string; initialOpen?: boolean; onOpenChange?: (open: boolean) => void; toolOpen?: (id: string) => boolean; onToolOpenChange?: (id: string, open: boolean) => void; onRendered?: () => void; since?: number; gathering?: boolean;
-  /** Whether this trace carries its turn's orb; a conversational turn gives its one orb to one row (turn-rows.ts). */
+  /** Whether this trace carries its turn's orb; a narrated turn gives its one orb to one row (turn-rows.ts). */
   orb?: boolean }) {
   const preview = createMemo(() => previewOf(props.trace, Boolean(props.writing)));
   const time = turnTime(() => props.trace);
@@ -422,7 +422,7 @@ export function TurnTrace(props: { trace: TurnTraceData; agents?: AgentSummary[]
     </Trace></Show>;
 }
 
-/** A conversational turn's orb by its answer (TurnLayout conversational): writing while it streams, the settled
+/** A narrated turn's orb by its answer (TurnLayout `show`): writing while it streams, the settled
  *  sphere once done, sputtering when the turn did not finish. */
 export function AnswerOrb(props: { state: "live" | "settled" | "failed" }) {
   return <Orb state={props.state === "live" ? "composing" : "working"} frame={props.state === "live" ? undefined : props.state === "failed" ? SPUTTERING_SPHERE : PLAIN_SPHERE}

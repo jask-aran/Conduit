@@ -6,6 +6,7 @@ import type {
   ActiveGenerationView,
   LiveGenerationChange,
   LiveProjectionIndex,
+  Narration,
   PersistedTurnProjection,
   TraceSegment,
   TurnRow,
@@ -88,8 +89,9 @@ export function createTimelineStore(
   tools: Accessor<ToolItem[]>,
   activeGeneration: Accessor<ActiveGenerationView | null>,
   activeGenerationChange: Accessor<LiveGenerationChange | null> = () => null,
-  /** The persistent agent's threads draw every message it writes (turn-rows.ts `TurnLayout`). */
-  conversational: Accessor<boolean> = () => false,
+  /** What the chat does with text said between tool calls (turn-rows.ts `TurnLayout`): chats fold it, the persistent
+   *  agent's threads show it. */
+  narration: Accessor<Narration> = () => "fold",
 ) {
   const [rows, setRows] = createStore<TimelineRow[]>([]);
   /*
@@ -207,13 +209,13 @@ export function createTimelineStore(
     return location.rowKey;
   };
 
-  let laidOutConversational = false;
+  let laidOutNarration: Narration = "fold";
   createEffect(() => {
     const inputMessages = messages();
     const inputTools = tools();
-    const layout = { conversational: conversational() };
+    const layout = { narration: narration() };
     // A chat changing layout is laid out again whole.
-    if (layout.conversational !== laidOutConversational) { laidOutConversational = layout.conversational; persistedTurns = []; persistedMessages = null; }
+    if (layout.narration !== laidOutNarration) { laidOutNarration = layout.narration; persistedTurns = []; persistedMessages = null; }
     const inputGeneration = activeGeneration();
     const change = activeGenerationChange();
     const canNarrow = Boolean(inputGeneration && change && change.generationId === inputGeneration.id

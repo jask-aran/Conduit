@@ -13,6 +13,7 @@ import { parseReviewComments } from "./review-comments";
 import { AnswerOrb, TraceStarting, TurnTrace } from "./turn-trace";
 import { openAgentChat } from "./agents";
 import { createTimelineStore } from "../state/timeline-store";
+import type { Narration } from "../turn-rows";
 import type { MarkdownRendererId } from "./markdown-settings";
 import { isIncremarkRenderer, selectedMarkdownRenderer } from "./markdown-settings";
 import { UI_PREFERENCE_CHANGE_EVENT } from "../preferences/ui-preferences";
@@ -143,11 +144,13 @@ function AskCard(props: { ask: TranscriptAsk; answer: (id: string, choice: Appro
 }
 
 export function Transcript(props: { chat: TranscriptSource; supports: (capability: BooleanCapability) => boolean; markdownRenderer: MarkdownRendererId; profileLabel?: string; projectId?: string;
-  /** The persistent agent's thread: every message it writes is drawn, with its work between (turn-rows.ts `TurnLayout`). */
-  conversational?: boolean;
+  /** What it does with text said between tool calls (turn-rows.ts `TurnLayout`): `fold` (chats, the default) into the
+   *  turn's trace, `show` (the persistent agent's threads) where it was written, with the work between as traces. */
+  narration?: Narration;
   /** The thread's approvals waiting on the person or lately answered (async: the agent carried on): each drawn under
    *  the work that asked (its call, or the script it was called from), one not found there at the thread's foot. */
   approvals?: { asks: () => TranscriptAsk[]; answer: (id: string, choice: ApprovalChoice) => Promise<void>; refresh: () => void } }) {
+  const narrated = () => props.narration === "show";
   let transcriptRoot!: HTMLDivElement;
   let motionShell!: HTMLDivElement;
   let viewport!: HTMLDivElement;
@@ -260,7 +263,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
     props.chat.tools,
     props.chat.activeGeneration,
     props.chat.activeGenerationChange,
-    () => Boolean(props.conversational),
+    () => props.narration || "fold",
   );
   // Declared before the memo below, which runs as it is made.
   const placeAsks = (asks: TranscriptAsk[], placed: Map<string, TranscriptAsk[]>) => {
@@ -1094,7 +1097,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
             const chatId = () => props.chat.loadedId();
             const artifact = () => item.answerless && item.precedingUserId ? artifactSummaries().get(item.precedingUserId) : undefined;
             const arrive = arrivalOf(lastArrivedId);
-            return <TranscriptRow ref={traceRow} data-slot="message-scroller-item" turn={props.conversational && item.continues}><Turn><TurnTrace since={arrive} trace={item.value} gathering={props.conversational} orb={!props.conversational || Boolean(item.orb)} agents={props.chat.agents?.()} onStopAgent={props.chat.stopAgent ? (id) => void props.chat.stopAgent!(id) : undefined} writing={item.answerless === false} renderer={markdownRenderer()} profileLabel={props.profileLabel} initialOpen={itemExpanded(chatId(), item.key)} onOpenChange={(open) => setItemExpanded(chatId(), item.key, open)} toolOpen={(id) => itemExpanded(chatId(), `tool:${id}`)} onToolOpenChange={(id, open) => setItemExpanded(chatId(), `tool:${id}`, open)} onRendered={() => settleAfterMarkdown(traceRow)} />
+            return <TranscriptRow ref={traceRow} data-slot="message-scroller-item" turn={narrated() && item.continues}><Turn><TurnTrace since={arrive} trace={item.value} gathering={narrated()} orb={!narrated() || Boolean(item.orb)} agents={props.chat.agents?.()} onStopAgent={props.chat.stopAgent ? (id) => void props.chat.stopAgent!(id) : undefined} writing={item.answerless === false} renderer={markdownRenderer()} profileLabel={props.profileLabel} initialOpen={itemExpanded(chatId(), item.key)} onOpenChange={(open) => setItemExpanded(chatId(), item.key, open)} toolOpen={(id) => itemExpanded(chatId(), `tool:${id}`)} onToolOpenChange={(id, open) => setItemExpanded(chatId(), `tool:${id}`, open)} onRendered={() => settleAfterMarkdown(traceRow)} />
               <For each={asksAt(item.key)}>{(ask) => <AskCard ask={ask} answer={props.approvals!.answer} />}</For>
               {/* A turn that ended without an answer -- stopped under a tool, or
                   one that only ran commands -- still offers to try again. */}
@@ -1146,7 +1149,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
           if (user() && message().origin === "harness") {
             // A subagent's report opens its transcript, once the chat's agents say which chat that is.
             const child = () => { const ref = message().agent; return ref ? props.chat.agents?.().find((agent) => ref.id ? agent.id === ref.id : String(agent.conversationId) === String(ref.conversationId))?.chatId : null; };
-            return <TranscriptRow ref={row} data-slot="message-scroller-item" data-message-id={message().id}><HarnessPrompt onOpen={child() ? () => openAgentChat(child()!) : undefined} icon={message().id.startsWith("beat:") ? <Icons.Heartbeat aria-hidden="true" /> : undefined}>{props.conversational ? (message().content || "").replace(/^sa-\d+ finished: /, "") : message().content}</HarnessPrompt>
+            return <TranscriptRow ref={row} data-slot="message-scroller-item" data-message-id={message().id}><HarnessPrompt onOpen={child() ? () => openAgentChat(child()!) : undefined} icon={message().id.startsWith("beat:") ? <Icons.Heartbeat aria-hidden="true" /> : undefined}>{narrated() ? (message().content || "").replace(/^sa-\d+ finished: /, "") : message().content}</HarnessPrompt>
               <Show when={message().agent?.conversationId != null && asksAt(`run:${message().agent!.conversationId}`).length}>
                 <Turn><For each={asksAt(`run:${message().agent!.conversationId}`)}>{(ask) => <AskCard ask={ask} answer={props.approvals!.answer} />}</For></Turn>
               </Show></TranscriptRow>;
@@ -1159,9 +1162,9 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
             setTimeout(() => setCopied(false), COPY_FEEDBACK_MS);
           };
           return <TranscriptRow ref={row} data-slot="message-scroller-item" data-message-id={message().id} turn={!user() && item.traced}>
-            <Show when={user()} fallback={<Turn orb={props.conversational && item.orb ? <AnswerOrb state={item.orb} /> : undefined}>
+            <Show when={user()} fallback={<Turn orb={narrated() && item.orb ? <AnswerOrb state={item.orb} /> : undefined}>
               <Show when={message().content || (message().stopped && !item.traced && !failed())}>
-                <Answer copied={copied()} interim={props.conversational && !item.orb}>
+                <Answer copied={copied()} interim={narrated() && !item.orb}>
                   <Show when={message().content} fallback={<StopLine detail="before answering" />}>
                     <Suspense fallback={<div class="markdown-skeleton" />}>
                       <ChatMarkdown renderer={markdownRenderer()} streaming={live()} streamVersion={item.streamVersion} onRendered={() => settleAfterMarkdown(row)} onSettled={() => setSettled(true)}>{message().content || ""}</ChatMarkdown>
@@ -1176,13 +1179,13 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
               <For each={asksAt(item.key)}>{(ask) => <AskCard ask={ask} answer={props.approvals!.answer} />}</For>
               {/* Held empty while it streams, so the foot arriving moves nothing. */}
               {/* A turn that speaks more than once has one foot, under the message that carries its orb. */}
-              <Show when={!props.conversational || item.orb}>
+              <Show when={!narrated() || item.orb}>
                 <Show when={actionsShown()} fallback={<MessageFoot />}><AnswerFoot message={message()} precedingUserId={precedingUserId()} chat={props.chat} supports={props.supports} artifact={artifact()} traced={item.traced} reveal={streamed()} copied={copied()} onCopy={() => void copy()} /></Show>
               </Show>
             </Turn>}>
               {/* The hub telling the agent how an approval was answered: a quiet line, as a report is, not the person's
                   bubble. Read as the text arrives: a row is built before its message has any. */}
-              <Show when={props.conversational && (message().content || "").startsWith(APPROVAL_NOTE)} fallback={<UserMessage message={message()} text={review().text} editing={props.chat.editingEntryId() === message().id}
+              <Show when={narrated() && (message().content || "").startsWith(APPROVAL_NOTE)} fallback={<UserMessage message={message()} text={review().text} editing={props.chat.editingEntryId() === message().id}
                 editable={!message().pending && props.supports("fork")} since={arrive} onEdit={() => { props.chat.edit(message()); focusComposerSoon(); }}
                 under={<>
                   <Show when={message().attachments?.length}><AttachmentCards items={message().attachments!} chatId={props.chat.loadedId()} label="Message attachments" /></Show>
