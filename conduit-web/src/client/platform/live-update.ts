@@ -13,23 +13,28 @@
  */
 import { installedClientKind } from "./installed-client.ts";
 
+/** Where a fetch of the server's interface is: asking which build it serves, then downloading it. */
+export interface BundleProgress { phase: "checking" | "downloading"; downloaded: number; total: number }
+
 interface BundlePlugin {
   stageBundle(options: { origin: string }): Promise<{ state: "current" | "staged"; build: string }>;
   applyBundle(options: { build: string }): Promise<void>;
   confirmBundle(): Promise<{ build?: string }>;
+  cancel(): Promise<void>;
+  addListener(event: "bundleProgress", listener: (progress: BundleProgress) => void): Promise<{ remove(): Promise<void> }>;
 }
 
 let staged: string | null = null;
 let checking = false;
-let now: (() => Promise<"current" | "applying" | "unreachable">) | null = null;
+let now: ((onProgress?: (progress: BundleProgress) => void) => Promise<"current" | "applying" | "unreachable" | "cancelled">) | null = null;
 
 /**
  * Check for updates, pressed by hand on a development client: take the
  * connected server's interface now (the page reloads into it) rather than at
  * the next app switch. Null when this client does not live-update.
  */
-export function liveUpdateNow() {
-  return now ? now() : null;
+export function liveUpdateNow(onProgress?: (progress: BundleProgress) => void) {
+  return now ? now(onProgress) : null;
 }
 
 export async function startLiveUpdate(origin: () => string | null): Promise<void> {
@@ -53,16 +58,19 @@ export async function startLiveUpdate(origin: () => string | null): Promise<void
       checking = false;
     }
   };
-  now = async () => {
+  now = async (onProgress) => {
     const server = origin();
     if (!server) return "unreachable";
+    const listener = onProgress ? await plugin.addListener("bundleProgress", onProgress) : null;
     try {
       const result = await plugin.stageBundle({ origin: server });
       if (result.state !== "staged") return "current";
       await plugin.applyBundle({ build: result.build });
       return "applying";
-    } catch {
-      return "unreachable";
+    } catch (error) {
+      return error instanceof Error && error.message === "Cancelled" ? "cancelled" : "unreachable";
+    } finally {
+      void listener?.remove();
     }
   };
   void check();
@@ -70,4 +78,11 @@ export async function startLiveUpdate(origin: () => string | null): Promise<void
   await App.addListener("pause", () => {
     if (staged) void plugin.applyBundle({ build: staged }).catch(() => {});
   });
+}
+
+/** Stop a download under way, of an interface or an APK (they share the native worker). */
+export async function cancelUpdateDownload(): Promise<void> {
+  if (installedClientKind !== "android") return;
+  const { registerPlugin } = await import("@capacitor/core");
+  await registerPlugin<BundlePlugin>("ConduitUpdater").cancel().catch(() => {});
 }

@@ -18,7 +18,7 @@ import type { ComputerLocation, ComputerPrefetchPayload } from "./api/contracts"
 import { batch, createEffect, createMemo, createRenderEffect, createSignal, ErrorBoundary, For, lazy, on, onCleanup, onMount, Show, untrack, type JSX } from "solid-js";
 import { Portal, render } from "solid-js/web";
 import { androidShell, desktopShell, isInstalledClient } from "./platform/installed-client.ts";
-import { liveUpdateNow, startLiveUpdate } from "./platform/live-update.ts";
+import { cancelUpdateDownload, liveUpdateNow, startLiveUpdate } from "./platform/live-update.ts";
 import { startPush } from "./platform/push.ts";
 // The clients that stage a downloaded update and install it on request.
 const updateShell = desktopShell ?? androidShell;
@@ -175,7 +175,7 @@ export type UpdateState =
   | { kind: "current" }
   | { kind: "updated" }
   | { kind: "ready" }
-  | { kind: "working"; label: string };
+  | { kind: "working"; label: string; onCancel?: () => void };
 type WorkspaceView = "files" | "diff" | "chat" | "terminal";
 const METEOR_FIELD_STORAGE_KEY = "conduit:meteor-field";
 const selectedMeteorField = () => localStorage.getItem(METEOR_FIELD_STORAGE_KEY) !== "false";
@@ -922,19 +922,31 @@ function App() {
     let stalled = (): Promise<never> => new Promise(() => {});
     const touch = () => { if (quiet) return; clearTimeout(timer); timer = window.setTimeout(giveUp, 30_000); };
     let giveUp = () => {};
+    let cancelled = false;
     if (!quiet) stalled = () => new Promise<never>((_, reject) => { giveUp = () => reject(new Error(`The update check stopped while ${step}.`)); touch(); });
     const bounded = <T,>(work: Promise<T>) => Promise.race([work, stalled()]);
     try {
       // A development Android client takes the connected server's interface:
       // a few MB from a server it is already talking to, then a reload.
+      // Each step says what it is doing, and a download can be stopped: one over a slow route sat on "Updating" with
+      // no way out.
+      const cancel = () => { cancelled = true; void cancelUpdateDownload(); giveUp(); };
+      const megabytes = (bytes: number) => `${(bytes / 1_048_576).toFixed(1)} MB`;
       if (!quiet) {
-        const live = liveUpdateNow();
+        setUpdateState({ kind: "working", label: "Checking for a new interface…", onCancel: cancel });
+        const live = liveUpdateNow((progress) => {
+          touch();
+          if (progress.phase === "checking") return;
+          step = "downloading the new interface";
+          const share = progress.total ? ` ${Math.round((progress.downloaded / progress.total) * 100)}% of ${megabytes(progress.total)}` : ` ${megabytes(progress.downloaded)}`;
+          setUpdateState({ kind: "working", label: `Downloading the new interface…${share}`, onCancel: cancel });
+        });
         if (live) {
-          setUpdateState({ kind: "working", label: "Updating Conduit…" });
           const outcome = await bounded(live);
+          if (outcome === "cancelled") { setUpdateState({ kind: "idle" }); return; }
           if (outcome === "unreachable") { setUpdateState({ kind: "idle" }); toast.error("Could not reach the server to update."); return; }
           // Applied: the page reloads from the new interface, which ends this check. One that does not reload is stuck.
-          if (outcome === "applying") { step = "reloading the new interface"; await bounded(new Promise(() => {})); }
+          if (outcome === "applying") { step = "reloading the new interface"; setUpdateState({ kind: "working", label: "Opening the new interface…" }); await bounded(new Promise(() => {})); }
           // The interface is current; a native change comes as a new APK, which this server may also have published.
           setUpdateState({ kind: "checking" });
         }
@@ -942,17 +954,18 @@ function App() {
       // The answer is in the sidebar row; a newer version downloads there with
       // its progress, and the row offers it once it is ready.
       step = "looking for a newer app";
+      if (!quiet) setUpdateState({ kind: "working", label: "Looking for a newer app…", onCancel: cancel });
       const result = await bounded(shell.prepareUpdate((progress) => {
         if (quiet) return;
         step = `downloading ${progress.version}`;
         touch();
         const share = progress.total ? Math.round((progress.downloaded / progress.total) * 100) : 0;
-        setUpdateState({ kind: "working", label: `Downloading ${progress.version}… ${share}%` });
+        setUpdateState({ kind: "working", label: `Downloading ${progress.version}… ${share}%`, onCancel: cancel });
       }, quiet));
       if (result.kind === "ready") setUpdateState({ kind: "ready" });
       else if (!quiet) sayUpToDate();
     } catch (error) {
-      if (!quiet) { setUpdateState({ kind: "idle" }); showError(error); }
+      if (!quiet) { setUpdateState({ kind: "idle" }); if (!cancelled) showError(error); }
     } finally {
       clearTimeout(timer);
       if (quiet) quietCheck = false;

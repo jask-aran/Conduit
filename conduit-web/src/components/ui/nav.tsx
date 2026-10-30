@@ -143,11 +143,11 @@ export function RailButton(props: JSX.ButtonHTMLAttributes<HTMLButtonElement> & 
 }
 
 /** A state the app is in about itself, above the foot's server (an update): an icon, a line, one action. ready: it waits on a person, so it reads at full strength. */
-export function NavNotice(props: { icon?: JSX.Element; busy?: boolean; ready?: boolean; action?: { label: string; onClick: () => void }; children: JSX.Element }) {
+export function NavNotice(props: { icon?: JSX.Element; busy?: boolean; ready?: boolean; action?: { label: string; onClick: () => void; quiet?: boolean }; children: JSX.Element }) {
   return <div class="ui-nav-notice" role="status" data-ready={props.ready ? "" : undefined}>
     <Show when={props.busy} fallback={props.icon}><Spinner /></Show>
     <span>{props.children}</span>
-    <Show when={props.action}>{(action) => <Button size="sm" onClick={() => action().onClick()}>{action().label}</Button>}</Show>
+    <Show when={props.action}>{(action) => <Button size="sm" variant={action().quiet ? "ghost" : undefined} onClick={() => action().onClick()}>{action().label}</Button>}</Show>
   </div>;
 }
 
