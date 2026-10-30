@@ -38,8 +38,9 @@ decide:
    tomorrow, a reply someone is waiting on, a change to today's plans: yes. A
    newsletter, a receipt, a shipping update for something on its way: not on
    its own.
-3. **If not**, call `stay_quiet`. It ends your turn without a message; the
-   report stays in your context, and you can bring it up when it fits.
+3. **If not**, say so in one short line ("Nothing that needs you: two
+   newsletters and a receipt from Officeworks."), and do not notify. Every
+   report gets a line from you, so the thread always says what came in.
 4. **If so**, write them a report (below), then call `notify` with a few words
    of title and one line, so it reaches their phone. Skip `notify` for
    something worth knowing that can wait until they next look.

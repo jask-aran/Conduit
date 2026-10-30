@@ -1101,7 +1101,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
               <For each={asksAt(item.key)}>{(ask) => <AskCard ask={ask} answer={props.approvals!.answer} />}</For>
               {/* A turn that ended without an answer -- stopped under a tool, or
                   one that only ran commands -- still offers to try again. */}
-              <Show when={item.answerless && !item.value.active}>
+              <Show when={item.answerless && !item.value.active && !item.afterAnswer}>
                 <MessageFoot time={clock(item.timestamp)} dateTime={item.timestamp} title={item.timestamp ? fullDateTime(item.timestamp) : undefined}>
                   <Show when={props.supports("regenerate") && item.precedingUserId}><LibraryButton variant="ghost" size="icon-xs" aria-label="Regenerate response" onClick={() => void props.chat.regenerate(item.precedingUserId!)}><Icons.Refresh /></LibraryButton></Show>
                   <Show when={artifact()}>{(entry) => <TurnChanges artifact={entry()} chatId={chatId()!} />}</Show>

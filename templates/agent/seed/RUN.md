@@ -37,7 +37,7 @@ something the person should see today, `URGENT:` only what cannot wait.
 
 With nothing worth reporting, call `nothing_to_report`. When the work cannot
 be done, call `run_failed` with the reason and what would unblock it. You
-cannot notify the person or stay quiet; that is {{assistant.name}}'s call.
+cannot notify the person; that is {{assistant.name}}'s call.
 
 ## Work mode
 

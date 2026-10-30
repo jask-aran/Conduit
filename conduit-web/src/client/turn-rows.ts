@@ -104,7 +104,9 @@ export type TurnRow =
   | { key: string; type: "message"; value: Message; live?: boolean; streamVersion?: number; displayKey?: string; precedingUserId?: string; traced?: boolean; orb?: TurnOrbState }
   // `timestamp` is the turn's last reply's, for a trace with no answer row to carry it.
   // `continues`: a narrated turn's work after its first row, drawn close to what came before it.
-  | { key: string; type: "trace"; value: TurnTraceData; precedingUserId?: string; answerless?: boolean; unstated?: boolean; timestamp?: string; orb?: TurnOrbState; continues?: boolean }
+  // `afterAnswer`: a narrated turn's work after its last answer (a notify after the brief): the answer carries the
+  // turn's foot, so this row has none.
+  | { key: string; type: "trace"; value: TurnTraceData; precedingUserId?: string; answerless?: boolean; unstated?: boolean; timestamp?: string; orb?: TurnOrbState; continues?: boolean; afterAnswer?: boolean }
   // Where the answer will be, from the start of a live turn until its text does.
   | { key: string; type: "pending"; value: null; precedingUserId?: string; startedAt?: string };
 
@@ -119,7 +121,9 @@ function placeTurnOrb(rows: TurnRow[], state: TurnOrbState) {
   const row = rows[index];
   if (row && row.type !== "pending") rows[index] = { ...row, orb: state };
   const first = rows.findIndex(own);
-  return rows.map((item, at) => item.type === "trace" && at > first ? { ...item, continues: true } : item);
+  const answered = state !== "live" && row?.type === "message" ? index : -1;
+  return rows.map((item, at) => item.type === "trace" && at > first
+    ? { ...item, continues: true, ...(answered >= 0 && at > answered ? { afterAnswer: true } : {}) } : item);
 }
 
 interface PersistedTurn {
