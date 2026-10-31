@@ -218,6 +218,8 @@ export function createClientActiveGenerationStore({ collectMetrics = false } = {
             ...(event.name ? { name: event.name, toolKind: event.toolKind } : {}),
             ...(event.subject ? { subject: event.subject } : {}),
             ...(event.toolCallId ? { toolCallId: event.toolCallId } : {}),
+            // Commentary or final answer, as its provider labelled it (DESIGN.md, Turns).
+            ...(event.textPhase ? { phase: event.textPhase } : {}),
           });
           if (!block) break;
           const field = event.blockKind === "tool_call" ? "inputText" : "text";
