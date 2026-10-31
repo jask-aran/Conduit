@@ -327,7 +327,10 @@ export function registerAgentRoutes(app, { agent, backends }) {
       if (!enabled(response)) return;
       const previous = (await agent.state()).home;
       await agent.update((doc) => {
-        Object.assign(doc, { home: null, inbox: {}, asks: {}, notices: [], proposals: {}, tainted: {} });
+        // Side threads outlive the reset, and what they read stays in them: only the old home thread's taint goes.
+        const tainted = { ...doc.tainted };
+        delete tainted[previous?.conversationId];
+        Object.assign(doc, { home: null, inbox: {}, asks: {}, notices: [], proposals: {}, tainted });
         delete doc.beatLine; delete doc.heartbeatSeenAt; delete doc.heartbeatSweptAt;
       });
       const home = await agent.home();

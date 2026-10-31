@@ -4,7 +4,7 @@ import { entryText, inQuietHours, listInbox } from "./inbox.js";
 import { fileItems, itemText, runSource, SEEN_KEPT } from "./feeds.js";
 import { defineTool } from "@earendil-works/pi-durable";
 import { Type } from "@earendil-works/pi-ai";
-import { listRoutines, parseRoutine, readPerson, readRoutine, removeRoutine, renderVars, splitFrontMatter, writeRoutine } from "./routine-files.js";
+import { listRoutines, parseRoutine, readFolderFile, readPerson, readRoutine, removeRoutine, renderVars, routineText, splitFrontMatter, writeRoutine } from "./routine-files.js";
 
 /**
  * Routines (docs/plans/persistent-agent.md, "Verbs and structures"): a trigger fires a routine; its tasks gather
@@ -41,6 +41,8 @@ export async function promptVars(agent, now = Date.now()) {
 async function readText(file) {
   return fs.readFile(file, "utf8").catch((error) => { if (error.code === "ENOENT") return ""; throw error; });
 }
+/** The agent's own folder is the agent's to change, so the hub reads it never through a link. */
+const folderText = async (agent, ...parts) => (await readFolderFile(agent.folder, ...parts)) ?? "";
 
 /**
  * A run's system prompt: RUN.md, then its routine's instructions as a `<routine>` block, then any context it opted
@@ -48,12 +50,12 @@ async function readText(file) {
  */
 export async function runInstructions(agent, routine = null, now = Date.now()) {
   const vars = await promptVars(agent, now);
-  const base = await readText(path.join(agent.folder, RUN_FILE));
+  const base = await folderText(agent, RUN_FILE);
   const parts = [renderVars(base, vars).trim()];
   if (routine?.body?.trim()) parts.push(block("routine", { name: routine.name, title: routine.title }, renderVars(routine.body, vars)));
   for (const name of routine?.context || []) {
-    if (name === "diary") parts.push(block("diary", { day: agent.today(now) }, await readText(path.join(agent.folder, "diary", `${agent.today(now)}.md`))));
-    else if (CONTEXT_FILES[name]) parts.push(block(name, {}, splitFrontMatter(await readText(path.join(agent.folder, CONTEXT_FILES[name]))).body));
+    if (name === "diary") parts.push(block("diary", { day: agent.today(now) }, await folderText(agent, "diary", `${agent.today(now)}.md`)));
+    else if (CONTEXT_FILES[name]) parts.push(block(name, {}, splitFrontMatter(await folderText(agent, CONTEXT_FILES[name])).body));
   }
   return parts.filter(Boolean).join("\n\n");
 }
@@ -245,7 +247,7 @@ export function RoutineTools(runtime) {
         }
         if (typeof name !== "string" || !name) return toolResult("A routine name is required.", true);
         if (action === "read") {
-          const file = await readText(path.join(agent.folder, "routines", `${name}.md`));
+          const file = (await routineText(agent.folder, name)) ?? "";
           return toolResult(file || `No routine ${name}.`, !file);
         }
         if (action === "remove") {

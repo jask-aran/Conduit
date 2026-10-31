@@ -1,6 +1,8 @@
+import { constants } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
 import YAML from "yaml";
+import { isReadAction, programPaths } from "./policy.js";
 
 export const ROUTINES_DIR = "routines";
 export const PERSON_FIELDS = ["name", "assistant", "timezone", "home"];
@@ -75,6 +77,13 @@ export function routineProblem(routine) {
     if (field && (typeof task[field] !== "string" || task[field].length > (field === "code" ? 8000 : 4000))) {
       return `Invalid task ${field}.`;
     }
+    // A task only gathers: what its program calls is read before it runs, as a feed's is.
+    if (task.kind === "executor") {
+      const paths = programPaths(task.code);
+      if (!paths) return `Task ${task.id}: the program must call its tools by literal path (tools.app.action(...)).`;
+      const writes = paths.filter((item) => !isReadAction(item));
+      if (writes.length) return `Task ${task.id} only reads; its program also calls ${writes.join(", ")}.`;
+    }
   }
   if (!["always", "when-new", "never"].includes(routine.gate)) return "Invalid gate.";
   if (!["jbot", "inbox", "both"].includes(routine.output)) return "Invalid output.";
@@ -147,9 +156,27 @@ function routinePath(folder, name) {
   return path.join(folder, ROUTINES_DIR, `${name}.md`);
 }
 
-async function readFile(file) {
-  try { return await fs.readFile(file, "utf8"); }
-  catch (error) { if (error.code === "ENOENT") return null; throw error; }
+/**
+ * A file of the agent's folder, read by the hub (outside the sandbox): never through a link, which the agent can make
+ * point anywhere on the hub. Null when it is not there.
+ */
+export async function readFolderFile(folder, ...parts) {
+  let handle;
+  try {
+    const file = path.join(await fs.realpath(folder), ...parts);
+    if (await fs.realpath(path.dirname(file)) !== path.dirname(file)) throw new Error(`${parts.join("/")} must not be under a link.`);
+    handle = await fs.open(file, constants.O_RDONLY | constants.O_NOFOLLOW);
+    return await handle.readFile("utf8");
+  } catch (error) {
+    if (error.code === "ENOENT") return null;
+    if (error.code === "ELOOP") throw new Error(`${parts.join("/")} must not be a link.`);
+    throw error;
+  } finally { await handle?.close(); }
+}
+
+export async function routineText(folder, name) {
+  if (typeof name !== "string" || !namePattern.test(name)) throw new Error("Invalid routine name.");
+  return readFolderFile(folder, ROUTINES_DIR, `${name}.md`);
 }
 
 /** A temporary file in the same directory makes replacement atomic. */
@@ -179,7 +206,7 @@ export async function listRoutines(folder) {
 }
 
 export async function readRoutine(folder, name) {
-  const text = await readFile(routinePath(folder, name));
+  const text = await routineText(folder, name);
   return text === null ? null : parseRoutine(text, name);
 }
 
@@ -208,14 +235,14 @@ export async function seedRoutines(folder, seedDir) {
 }
 
 export async function readPerson(folder) {
-  const text = await readFile(path.join(folder, "USER.md"));
+  const text = await readFolderFile(folder, "USER.md");
   const data = text === null ? {} : splitFrontMatter(text).data;
   return Object.fromEntries(PERSON_FIELDS.map((field) => [field, typeof data[field] === "string" ? data[field] : ""]));
 }
 
 export async function writePerson(folder, patch) {
   const file = path.join(folder, "USER.md");
-  const { data, body } = splitFrontMatter((await readFile(file)) ?? "");
+  const { data, body } = splitFrontMatter((await readFolderFile(folder, "USER.md")) ?? "");
   for (const field of PERSON_FIELDS) {
     if (!Object.hasOwn(patch, field)) continue;
     if (typeof patch[field] !== "string") throw new Error(`${field} must be a string.`);

@@ -1,6 +1,7 @@
 import { defineTool, wrapTool } from "@earendil-works/pi-durable";
 import { Type } from "@earendil-works/pi-ai";
 import { createHash } from "node:crypto";
+import path from "node:path";
 import { fieldsOf, fieldsText } from "./approval-fields.js";
 import { serviceOf } from "./connector-services.js";
 import { AgentDoc, nextId } from "./agent-doc.js";
@@ -12,10 +13,16 @@ const PLACED = ["read", "write", "edit", "bash"];
 const ALWAYS_OUTWARD = { start_chat: "start a chat", steer_chat: "post in one of your chats", feed: "add a feed", routine: "change a routine" };
 /** A tool whose other actions stay in its folder: only these leave it. */
 const OUTWARD_ACTIONS = { feed: ["add"], routine: ["save", "remove"] };
-/** Routine files change through `routine` (which asks), not a plain edit in the folder. */
-const routineFile = (name, args) => ["write", "edit"].includes(name) && !args?.device && /(^|[\\/])routines[\\/][^\\/]*$/.test(String(args?.path || ""));
-/** Calls that read the person's own data, which taint the conversation. */
-const PRIVATE_READS = { chats: (args) => ["read", "search"].includes(args?.action) };
+/** Routine files change through `routine` (which asks), not a plain edit in the folder: judged by where the path lands. */
+const routineFile = (folder, name, args) => {
+  if (!["write", "edit"].includes(name) || args?.device) return false;
+  const dir = path.resolve(folder, "routines");
+  const target = path.resolve(folder, String(args?.path || ""));
+  return target === dir || target.startsWith(`${dir}${path.sep}`);
+};
+/** Calls that read the person's own data, which taint the conversation: theirs directly, or what a source gathered of it. */
+const PRIVATE_READS = { chats: (args) => ["read", "search"].includes(args?.action), feed: (args) => args?.action === "test",
+  routine: (args) => args?.action === "test", inbox: (args) => args?.action === "read" };
 const privateRead = (name, args) => PRIVATE_READS[name]?.(args) || (name.startsWith("mcp__") && connectorRead(name, args));
 
 /*
@@ -282,7 +289,7 @@ async function approve(runtime, api, name, args, context, thread) {
   if (outcome.allowed) return null;
   const { ask } = outcome;
   if (outcome.consumed) return result(`This approved call was interrupted; it may already have run. Check its effects before trying again (ask ${ask.id}).`, ask.id, true);
-  if (outcome.created && !thread.run) runtime.notify?.({ kind: "approval", conversationId: thread.conversationId, text: `${runtime.agent.settings().name} wants to ${summary(name, args)}${ask.tainted ? "\n\nThis thread has read your chats: check that nothing private goes where it should not." : ""}`, key: ask.id });
+  if (outcome.created && !thread.run) runtime.agentNotify?.({ kind: "approval", conversationId: thread.conversationId, always: Boolean(ask.ruleTarget), text: `${runtime.agent.settings().name} wants to ${summary(name, args)}${ask.tainted ? "\n\nThis thread has read your chats: check that nothing private goes where it should not." : ""}`, key: ask.id });
   if (outcome.waiting || (outcome.replay && ask.toolCallId !== api.callId)) return result(`Still waiting for approval (ask ${ask.id}). Do not repeat this call while it waits.${thread.run ? " Say in your report what is waiting." : ""}`, ask.id);
   return result(`Asked the person to approve: ${ask.title} (ask ${ask.id}). Carry on with anything that does not depend on it. When they answer you will get a message.${thread.run ? " It shows under your report, ready to approve: say in it, in a few words, what is waiting." : ""}`, ask.id);
 }
@@ -321,7 +328,7 @@ export function policyWraps(runtime, tools) {
   let helper;
   return tools.filter((tool) => PLACED.includes(tool.name) || ALWAYS_OUTWARD[tool.name] || PRIVATE_READS[tool.name] || (tool.name.startsWith("mcp__") && !tool.connectorReadOnly)).map((target) =>
     wrapTool(target, (tool) => ({ ...tool, execute: async (args, api, context) => {
-      if (routineFile(tool.name, args)) {
+      if (routineFile(runtime.agent.folder, tool.name, args)) {
         return { output: [{ type: "text", text: "Routines change through the routine tool (save), which the person approves." }], isError: true };
       }
       if ((tool.name.startsWith("mcp__") && !connectorRead(tool.name, args)) || outward(tool.name, args)) {
