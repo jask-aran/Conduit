@@ -1086,10 +1086,10 @@ function App() {
     },
     refresh: () => void refreshAgent(),
   } : undefined;
-  /** A chat's transcript mode (DESIGN.md, Transcript › Turns): what it was set to, else chats fold and jbot's threads show. */
+  /** A chat's transcript mode (DESIGN.md, Transcript › Turns): what it was set to, else Narrated. */
   const narrationOf = (id: string | null | undefined): Narration => {
     const set = id ? catalogue.projects().flatMap((project) => project.sessions).find((chat) => chat.id === id)?.narration : null;
-    return set || (agentThread(id) ? "show" : "fold");
+    return set || "show";
   };
   const setNarration = (id: string, narration: Narration) => {
     catalogue.patchChat(id, { narration });

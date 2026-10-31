@@ -676,7 +676,8 @@ export class DurableAdapter extends EventEmitter {
         await this.placed(record, event.entry);
         break;
       case "message_start":
-        if (event.message?.role === "assistant") this.openAnswer(record);
+        // The message can start with its first words already in it: they go out as the rest of it will.
+        if (event.message?.role === "assistant") { this.openAnswer(record); this.paint(record, [{ type: "message", message: event.message }]); }
         break;
       case "message_update":
         this.paint(record, event.changes);
@@ -791,13 +792,31 @@ export class DurableAdapter extends EventEmitter {
     const turn = record.turn;
     if (!turn) return;
     const messageId = turn.messageId || this.openAnswer(record);
-    for (const change of changes) {
-      const blockKind = change.type.startsWith("thinking") ? "thinking" : change.type.startsWith("toolcall") ? "tool_call" : "text";
-      const delta = change.type.endsWith("_delta") ? change.delta
-        : change.type.endsWith("_start") ? (change.block?.text || change.block?.thinking || "") : "";
-      if (!delta) continue;
+    // How much of each block's text has gone out: pi-durable sends a block whole (`block`, or the whole `message`)
+    // when a field of it is set rather than appended -- the first words, or a signature at its end -- and only what
+    // follows what was sent is new. Dropping those lost a text's first words until the turn settled.
+    const sent = turn.sent?.messageId === messageId ? turn.sent.lengths : (turn.sent = { messageId, lengths: new Map() }).lengths;
+    const send = (contentIndex, blockKind, delta) => {
+      if (!delta) return;
+      sent.set(contentIndex, (sent.get(contentIndex) ?? 0) + delta.length);
       this.publish(record, { type: "assistant_content", generationId: turn.generationId, phase: "delta",
-        seq: ++record.generationSeq, messageId, contentIndex: change.contentIndex, blockKind, delta });
+        seq: ++record.generationSeq, messageId, contentIndex, blockKind, delta });
+    };
+    const whole = (contentIndex, block) => {
+      if (block?.type !== "text" && block?.type !== "thinking") return;
+      const text = block.type === "text" ? block.text || "" : block.thinking || "";
+      send(contentIndex, block.type, text.slice(sent.get(contentIndex) ?? 0));
+    };
+    for (const change of changes) {
+      if (change.type === "message") { (change.message?.content || []).forEach((block, index) => whole(index, block)); continue; }
+      if (change.type === "block" || change.type.endsWith("_start")) { whole(change.contentIndex, change.block); continue; }
+      const blockKind = change.type.startsWith("thinking") ? "thinking" : change.type.startsWith("toolcall") ? "tool_call" : "text";
+      if (blockKind === "tool_call") {
+        if (change.delta) this.publish(record, { type: "assistant_content", generationId: turn.generationId, phase: "delta",
+          seq: ++record.generationSeq, messageId, contentIndex: change.contentIndex, blockKind, delta: change.delta });
+        continue;
+      }
+      send(change.contentIndex, blockKind, change.delta);
     }
   }
 
