@@ -1,6 +1,6 @@
 {
   "id": "assistant",
-  "version": "11",
+  "version": "12",
   "label": "Assistant",
   "description": "General-purpose Pi with file, shell, and model-agnostic web research tools.",
   "posture": "read / write / edit / shell / web search / source fetch",
@@ -13,7 +13,8 @@
     "web_search",
     "fetch_content",
     "get_search_content",
-    "source_check"
+    "source_check",
+    "subagent"
   ],
   "models": [
     "openai/gpt-5.6-luna",
