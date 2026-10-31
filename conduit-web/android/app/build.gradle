@@ -76,7 +76,13 @@ dependencies {
     implementation project(':capacitor-android')
     // Ed25519 verification of the leaf attestation: the platform offers it
     // only on some images (ConduitWebViewClient).
-    implementation "com.google.crypto.tink:tink-android:1.15.0"
+    implementation "com.google.crypto.tink:tink-android:1.23.0"
+    implementation("org.unifiedpush.android:connector:3.3.5") {
+        exclude group: "com.google.crypto.tink", module: "tink"
+    }
+    // Google's push service as a distributor inside the app, through Play services: no Firebase project, no other app.
+    // It registers with the hub's VAPID key, so the hub sends it plain Web Push (fcm.googleapis.com).
+    implementation "org.unifiedpush.android:embedded-fcm-distributor:3.1.0"
     testImplementation "junit:junit:$junitVersion"
     androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
     androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
