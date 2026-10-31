@@ -748,7 +748,8 @@ function App() {
   const initialTerminalRoute = location.pathname === "/terminal";
   const initialComputerRoute = location.pathname === "/computer" || location.pathname.startsWith("/computer/harness/") || location.pathname.startsWith("/computer/environment/");
   const initialDashboardRoute = location.pathname === "/";
-  const initialAgentRoute = location.pathname === "/agent";
+  // jbot's page; /agent was its first path and still lands there.
+  const initialAgentRoute = location.pathname === "/jbot" || location.pathname === "/agent";
   const [routeKind, setRouteKind] = createSignal<"chat" | "project" | "dashboard" | "terminal" | "computer" | "agent">(
     initialAgentRoute ? "agent" : initialComputerRoute ? "computer" : initialTerminalRoute ? "terminal" : initialDashboardRoute ? "dashboard" : initialProjectRouteId ? "project" : "chat",
   );
@@ -1579,7 +1580,7 @@ function App() {
     setRouteKind("agent");
     setRouteBootstrapError("");
     setRouteBootstrap("ready");
-    if (historyMode === "push") history.pushState({}, "", "/agent");
+    if (historyMode === "push") history.pushState({}, "", "/jbot");
   };
 
   let computerRequest = 0;
@@ -5227,7 +5228,8 @@ function App() {
           await openDashboard("none");
           return;
         }
-        if (location.pathname === "/agent") {
+        if (location.pathname === "/jbot" || location.pathname === "/agent") {
+          if (location.pathname === "/agent") history.replaceState(history.state, "", "/jbot");
           await openAgent("none");
           return;
         }
@@ -5422,41 +5424,15 @@ function App() {
   };
   const renderAgent = (slot: number | "main") => {
     const current = slot === "main" ? session : paneSlot(slot).session;
-    const [ready, setReady] = createSignal(false);
     onMount(() => { void refreshAgent(); });
-    // By its id, compared: every refresh of the agent's state is a new object, and re-entering the thread for each
-    // one reset the chat every 10 s (the page flashed).
-    const homeId = createMemo(() => agentView()?.settings ? agentView()?.home?.chatId : undefined);
-    createEffect(on(homeId, (id) => {
-      setReady(false);
-      if (!id) return;
-      let active = true;
-      onCleanup(() => { active = false; });
-      void agentChat(id).then(async (target) => {
-        if (!active || (slot === "main" ? routeKind() !== "agent" || paneAOverride() : slotPage(slot) !== "agent")) return;
-        // With its history: the page shows the thread's latest over its composer.
-        const detail = await api<TranscriptDetail>(`/v0/sessions/${encodeURIComponent(id)}`).catch(() => undefined);
-        if (!active) return;
-        await current.chat.initialize(target.chat, target.project, detail);
-        if (active) setReady(true);
-      }).catch(showError);
-    }));
-    // The thread itself is a tap away (Open thread); the page keeps only its composer, which sends into it.
+    // The page shows none of the thread: it is a tap away (Open thread).
     const openThread = () => {
       const id = agentView()?.home?.chatId;
       if (id) void agentChat(id).then((target) => openChatFromPage(target.chat, target.project)).catch(showError);
     };
     return <AgentPage
       header={(title) => <ChatHeader title={title} tabActions={paneTabActions(slot)} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void startNewChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => {}} appDashboard alone />}
-      composer={<Show when={ready() && agentView()?.settings && agentView()?.home?.chatId}><PageComposer session={current} keyboardOwner={() => slot === "main" ? !sideHasKeyboard() : keyboardPane() === slot} onSendDraft={async (prompt) => {
-        const id = agentView()?.home?.chatId;
-        if (!id || current.chat.loadedId() !== id) return;
-        current.chat.setDraft(prompt);
-        await current.chat.send();
-        // The page shows no thread, so what was sent is followed into it.
-        openThread();
-      }} /></Show>}
-      onOpenThread={ready() ? openThread : undefined}
+      onOpenThread={agentView()?.home?.chatId ? openThread : undefined}
       onOpenFile={(path) => { const projectId = agentView()?.projectId; if (projectId) void openFileDocument({ projectId, path }, { beside: altActivation(), edit: false }); }}
       onOpenSettings={() => openSettings("agent")}
       onOpenChat={(id, event) => {

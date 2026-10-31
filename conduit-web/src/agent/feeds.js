@@ -198,7 +198,7 @@ export const itemText = (item) => `- ${item.title || "(untitled)"}${item.detail 
 export function fileItems(doc, { key, title, feedId = null, level = "fyi" }, fresh, slot) {
   const top = fresh.reduce((best, item) => LEVELS.indexOf(item.level) > LEVELS.indexOf(best) ? item.level : best, LEVELS.includes(level) ? level : "fyi");
   const line = (item) => `${item.title || "(untitled)"}${item.detail ? ` — ${item.detail}` : ""}`;
-  appendEntry(doc, { key, kind: "feed", title, feedId, subagentId: null, conversationId: null, level: top, status: "unhandled",
+  appendEntry(doc, { key, kind: "feed", title, feedId, subagentId: null, conversationId: null, level: top, status: "unhandled", count: fresh.length,
     headline: text(fresh.length === 1 ? line(fresh[0]) : `${fresh.length} new: ${fresh.map((item) => item.title || "(untitled)").join("; ")}`, 160),
     body: fresh.map(itemText).join("\n\n").slice(0, BODY_MAX) }, Date.parse(slot));
 }

@@ -1,5 +1,5 @@
 import { createEffect, createMemo, createSignal, For, on, onCleanup, onMount, Show, type JSX, untrack } from "solid-js";
-import { approvalLineText, ClockRow, DayStrip, Icons, InboxRow, LevelMark, levelWord, ServiceIcon, StatusDot, type ClockKind, type DayMark } from "@/components/ui";
+import { approvalLineText, ClockRow, DayStrip, Icons, LevelMark, levelWord, ServiceIcon, StatusDot, type ClockKind, type DayMark } from "@/components/ui";
 import { Button, TextArea } from "@/components/ui/controls";
 import { DashIconButton, DashNote } from "@/components/ui/dashboard";
 import { Dialog } from "@/components/dialog";
@@ -11,7 +11,7 @@ import { SplitDashboard, SplitEmpty, SplitGroup, SplitHeader, SplitQuickActions,
 
 /**
  * The hub's persistent agent's page (docs/plans/persistent-agent.md): what needs the person first, then what it is
- * doing and will do, beside its threads; the composer talks to it in its home thread. On the dashboards' split layout,
+ * doing and will do, beside its threads; Open thread is where it talks. On the dashboards' split layout,
  * as a place's page is.
  */
 
@@ -53,9 +53,6 @@ const when = (schedule: AgentSchedule) => schedule.kind === "daily" ? `Daily ${s
 export function AgentPage(props: {
   /** The page's header in its pane, titled with the agent's name. */
   header: (title: string) => JSX.Element;
-  /** The composer: what is sent goes to the agent's home thread, and its answer comes in over it. */
-  composer?: JSX.Element;
-  /** Its home thread, loaded: the page shows it over the composer (transcript: the app's), and opens the whole of it. */
   /** Opens its home thread: the page shows none of it. */
   onOpenThread?: () => void;
   /** Opens one of its chats (a thread, a run's transcript, a question's thread), as a dashboard row opens a chat. */
@@ -150,17 +147,22 @@ export function AgentPage(props: {
   // What runs reported: waiting for the heartbeat (or for the person to talk first), then what became of the rest.
   const inbox = createMemo(() => [...(view()?.inbox || [])].sort((a, b) => Number(a.status === "handled") - Number(b.status === "handled")));
   const unhandled = () => inbox().filter((entry) => entry.status === "unhandled").length;
-  const [openEntry, setOpenEntry] = createSignal<string | null>(null);
-  const entryRow = (entry: AgentInboxEntry) => {
-    const chatId = () => runChats().get(entry.subagentId);
-    return <InboxRow level={entry.level} headline={entry.headline || entry.title} source={entry.title} time={age(entry.at, now())}
-      handled={entry.status === "handled"} outcome={entry.outcome} body={entry.body}
-      open={openEntry() === entry.id} onToggle={() => setOpenEntry(openEntry() === entry.id ? null : entry.id)}
-      onOpenRun={chatId() ? () => props.onOpenChat(chatId()!) : undefined} />;
+  // What came in, counted by where it came from ("12 emails · 1 report"), never read out: the thread is where it is told.
+  const tally = (entries: AgentInboxEntry[]) => {
+    const counts = new Map<string, number>();
+    for (const entry of entries) {
+      const noun = entry.kind === "feed" ? (entry.title || "item").toLowerCase() : "report";
+      const count = entry.count ?? Number(/^(\d+) new:/.exec(entry.headline || "")?.[1] || 1);
+      counts.set(noun, (counts.get(noun) ?? 0) + count);
+    }
+    return [...counts].sort((a, b) => b[1] - a[1]).map(([noun, count]) => `${count} ${count === 1 || noun.endsWith("s") ? noun : `${noun}s`}`).join(" · ");
   };
+  const waiting = () => inbox().filter((entry) => entry.status === "unhandled");
+  const handled = () => inbox().filter((entry) => entry.status === "handled");
   const inboxGroup = () => <SplitGroup id="agent-inbox" label="Inbox" count={unhandled() || null}>
     <Show when={inbox().length} fallback={<SplitEmpty>Nothing has come in this week.</SplitEmpty>}>
-      <For each={inbox()}>{entryRow}</For>
+      <Show when={waiting().length}><SplitRow lead={<Icons.Inbox />} primary={tally(waiting())} context="For the next heartbeat" /></Show>
+      <Show when={handled().length}><SplitRow lead={<Icons.Check />} primary={tally(handled())} context="Handled this week" /></Show>
     </Show>
   </SplitGroup>;
 
@@ -270,8 +272,9 @@ export function AgentPage(props: {
             { icon: <Icons.NewChat />, label: "New thread", onClick: () => void newThread() },
           ]} manage={() => <MenuRow icon={<Icons.Settings />} onSelect={props.onOpenSettings}>Settings</MenuRow>} />}
           notice={error() ? <DashNote error>{error()}</DashNote> : undefined}
-          composer={props.composer}
-          aside={<>{needsGroup()}{inboxGroup()}{threadsGroup()}{workingGroup()}{timedGroup()}{watchesGroup()}{rulesGroup()}{memoryGroup()}{recentGroup()}</>} />
+          // What it is doing and what waits on the person in the main column; its threads, watches and files beside.
+          stacked list={<>{needsGroup()}{workingGroup()}{timedGroup()}{inboxGroup()}{recentGroup()}</>}
+          aside={<>{threadsGroup()}{watchesGroup()}{rulesGroup()}{memoryGroup()}</>} />
       </Show>
     </Show>
 

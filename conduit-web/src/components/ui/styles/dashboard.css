@@ -65,6 +65,11 @@
 .ui-dash-conversation-open svg { inline-size: var(--icon-sm); block-size: var(--icon-sm); }
 .ui-dash-main > .ui-dash-group { min-height: 0; flex: 1; margin-top: var(--space-xl); }
 .ui-dash-main > .ui-dash-group > .ui-dash-group-rows { min-height: 0; flex: 1; overflow-y: auto; scrollbar-width: var(--native-scrollbar-width); }
+/* Stacked: the left column's groups at their own size, ruled apart as the aside's are, the column scrolling. */
+.ui-dash[data-stacked] .ui-dash-main { overflow-y: auto; scrollbar-width: var(--native-scrollbar-width); }
+.ui-dash[data-stacked] .ui-dash-main > .ui-dash-group { flex: none; }
+.ui-dash[data-stacked] .ui-dash-main > .ui-dash-group > .ui-dash-group-rows { overflow: visible; }
+.ui-dash[data-stacked] .ui-dash-main > .ui-dash-group + .ui-dash-group { border-top: var(--hairline) solid var(--tint); padding-top: var(--space-lg); }
 .ui-dash-aside { min-width: 0; min-height: 0; grid-area: aside; overflow-y: auto; scrollbar-width: var(--native-scrollbar-width); }
 .ui-dash-aside > .ui-dash-group + .ui-dash-group { margin-top: var(--space-xl); border-top: var(--hairline) solid var(--tint); padding-top: var(--space-lg); }
 
