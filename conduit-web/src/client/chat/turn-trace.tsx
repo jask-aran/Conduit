@@ -242,7 +242,28 @@ function stepLine(tool: ToolItem, live: boolean): string {
   if (kind === "other") return [verb, toolName(tool.name), subject].filter(Boolean).join(" ");
   return `${verb} ${subject || tool.name || ""}`.trim();
 }
-function previewOf(trace: TurnTraceData, writing: boolean): { status: ReturnType<typeof statusOf>; work: string; detail: Detail | null } {
+/* Narrated, a settled piece of work is one line saying what it did -- the text either side says why -- so a script is
+   what it called ("Listed conduit-web/src/client/state, Searched “createTimelineStore”"), not "Scripted tools". */
+function scriptLine(tool: ToolItem): string {
+  const calls = (tool.calls || []).filter((call) => !call.planned && !call.earlier);
+  const lines = calls.map((call) => {
+    const kind = call.kind || "other";
+    const line = toolLine({ toolCallId: "", kind, subject: call.subject });
+    return kind === "other" ? [VERBS.other[1], toolName(call.name), line].filter(Boolean).join(" ") : `${VERBS[kind][1]} ${line || call.name}`.trim();
+  });
+  return [...new Set(lines)].join(", ") || "Ran a script";
+}
+function doneLine(trace: TurnTraceData): string {
+  const lines: string[] = [];
+  for (const segment of trace.segments) {
+    if (segment.kind !== "tool" || unnamed(segment.tool) || spawned(segment.tool)) continue;
+    const line = segment.tool.kind === "script" ? scriptLine(segment.tool) : stepLine(segment.tool, false);
+    if (line && !lines.includes(line)) lines.push(line);
+  }
+  return lines.join(", ");
+}
+const plainText = (text: string) => text.replace(/[*_`#>]/g, "").replace(/\s+/g, " ").trim();
+function previewOf(trace: TurnTraceData, writing: boolean, narrated = false): { status: ReturnType<typeof statusOf>; work: string; detail: Detail | null } {
   let latest: Detail | null = null;
   let thought: Detail | null = null;
   const tools: ToolItem[] = [];
@@ -254,7 +275,10 @@ function previewOf(trace: TurnTraceData, writing: boolean): { status: ReturnType
     let detail: Detail | null = null;
     if (segment.kind === "tool") {
       // A spawn says itself in its pinned row, under this line.
-      const line = unnamed(segment.tool) || spawned(segment.tool) ? "" : stepLine(segment.tool, trace.active);
+      const tool = segment.tool;
+      const line = unnamed(tool) || spawned(tool) ? ""
+        : narrated && tool.kind === "script" ? tool.done ? scriptLine(tool) : stepLine(tool, trace.active) || "Writing a script"
+        : stepLine(tool, trace.active);
       if (line) latest ??= { text: line, markdown: false };
       continue;
     }
@@ -394,8 +418,10 @@ const LATEST_CHARS = 240;
  *  repeated; a settled piece with no work draws nothing. */
 export function TurnTrace(props: { trace: TurnTraceData; agents?: AgentSummary[]; onStopAgent?: (id: string) => void; writing?: boolean; renderer?: MarkdownRendererId; profileLabel?: string; initialOpen?: boolean; onOpenChange?: (open: boolean) => void; toolOpen?: (id: string) => boolean; onToolOpenChange?: (id: string, open: boolean) => void; onRendered?: () => void; since?: number; gathering?: boolean;
   /** Whether this trace carries its turn's orb; a narrated turn gives its one orb to one row (turn-rows.ts). */
-  orb?: boolean }) {
-  const preview = createMemo(() => previewOf(props.trace, Boolean(props.writing)));
+  orb?: boolean;
+  /** A Narrated turn's work between texts: settled, one line of what it did (or what it thought, with no tools). */
+  narrated?: boolean }) {
+  const preview = createMemo(() => previewOf(props.trace, Boolean(props.writing), Boolean(props.narrated)));
   const time = turnTime(() => props.trace);
   const unfinished = () => !props.trace.active && (props.trace.status === "failed" || props.trace.status === "interrupted");
   const [open, setOpen] = createSignal(Boolean(props.initialOpen));
@@ -409,11 +435,15 @@ export function TurnTrace(props: { trace: TurnTraceData; agents?: AgentSummary[]
   const thinking = <Suspense fallback={text()}><ChatMarkdown inline renderer={props.renderer}>{text() || "…"}</ChatMarkdown></Suspense>;
   const latest = () => { const detail = preview().detail; return detail ? detail.markdown ? thinking : detail.text : undefined; };
   const looked = () => props.gathering && !props.trace.active && !unfinished();
+  const oneLine = () => Boolean(props.narrated) && !props.trace.active && !unfinished();
+  const did = createMemo(() => oneLine() ? doneLine(props.trace) : "");
+  const thoughtOnly = () => oneLine() && !did() && !props.trace.segments.some((segment) => segment.kind === "tool" || segment.kind === "error");
   const lines = createMemo(() => looked() ? sourceLines(props.trace.segments) : []);
   const sources = () => sourcesText(lines());
   return <Show when={!looked() || props.trace.segments.some((segment) => segment.kind === "tool" || segment.kind === "error")}><Trace motion={props.since != null ? "entering" : undefined} since={props.since} orb={props.orb === false ? undefined : <Orb state={preview().status.orb} frame={preview().status.frame} tint={unfinished() ? "var(--destructive)" : undefined} rate={props.trace.active ? undefined : settledOrbRate(unfinished())} />}
-      status={looked() ? (sources() ? `Looked at ${sources()}` : "Worked") : preview().status.verb} quiet={looked()} time={looked() ? undefined : time() || undefined} work={preview().work || undefined}
-      latest={looked() ? undefined : latest()} live={props.trace.active} tone={unfinished() ? "failed" : undefined}
+      status={looked() ? (sources() ? `Looked at ${sources()}` : "Worked") : thoughtOnly() ? "Thought" : preview().status.verb} quiet={looked()} time={looked() ? undefined : time() || undefined}
+      work={oneLine() ? did() || (thoughtOnly() ? plainText(preview().detail?.text ?? "") : preview().work) || undefined : preview().work || undefined}
+      latest={looked() || oneLine() ? undefined : latest()} live={props.trace.active} tone={unfinished() ? "failed" : undefined}
       pinned={<TurnAgents tools={spawns()} agents={props.agents ?? []} onStop={props.onStopAgent} />}
       opens={trail().length > 0} open={open()} onToggle={() => { const next = !open(); setOpen(next); props.onOpenChange?.(next); }}>
       {looked() && lines().length ? <Trail><Index each={lines()}>{(line) => <SourceStep line={line()} settled renderer={props.renderer} profileLabel={props.profileLabel} toolOpen={props.toolOpen} onToolOpenChange={props.onToolOpenChange} onRendered={props.onRendered} />}</Index></Trail>
