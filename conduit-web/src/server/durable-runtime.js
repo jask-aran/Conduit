@@ -430,12 +430,16 @@ export class DurableRuntime {
     const raw = this.promptStore ? (await this.promptStore.read(template.id)).content : fs.readFileSync(template.systemPrompt, "utf8");
     // The persistent agent's prompt names the person and itself ({{person.name}}, USER.md's front matter).
     const prompt = isAgent && this.agentVars ? renderVars(raw, await this.agentVars().catch(() => ({}))) : raw;
+    // The base it shares (the Assistant's rules for search, files, approvals), under its own prompt: the Settings copy
+    // where one was saved, else the file.
+    const base = !template.basePrompt ? "" : this.promptStore ? await this.promptStore.read("base").then((item) => item.content, () => fs.readFileSync(template.basePrompt, "utf8"))
+      : fs.readFileSync(template.basePrompt, "utf8");
     const skills = this.skillsFor(template.id).map((skill) => `## Skill: ${skill.name}\n\n${skill.body}`);
     return {
       extensions, tools,
       modelTools: codemodeOnly ? tools.filter((tool) => tool.name === "codemode" || ALWAYS.includes(tool.name))
         : connects ? tools.filter((tool) => !tool.name.startsWith("mcp__")) : null,
-      instructions: [prompt.trim(), ...(skills.length ? ["# Skills", ...skills] : [])].join("\n\n"),
+      instructions: [prompt.trim(), ...(base.trim() ? [base.trim()] : []), ...(skills.length ? ["# Skills", ...skills] : [])].join("\n\n"),
     };
   }
 

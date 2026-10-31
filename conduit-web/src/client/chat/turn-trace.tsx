@@ -4,7 +4,7 @@ import { createEffect, createMemo, createSignal, Index, Match, onCleanup, Show, 
 import type { AgentSummary, Message, ToolItem, ToolKind } from "../api/contracts";
 import { spawned, TurnAgents } from "./agents";
 import type { TraceSegment, TurnTraceData } from "../turn-rows";
-import { elapsed, KIND_ICONS, stepDuration, stepText, toolName, ToolStep, VERBS } from "./tool-card";
+import { elapsed, KIND_ICONS, scriptSaid, stepDuration, stepKind, stepText, stepVerb, toolName, ToolStep, VERBS } from "./tool-card";
 import { Orb, ServiceIcon, Step, StepProse, Trace, TraceError as LibraryTraceError, Trail } from "@/components/ui";
 import { Dynamic } from "solid-js/web";
 import { ORBITS_TRAILED, PLAIN_SPHERE, SPUTTERING_SPHERE } from "./orb-frames";
@@ -147,7 +147,7 @@ function summaryOf(text: string): string {
    is; the browser only counts them. */
 const KIND_WORDS: Record<ToolKind, [string, string]> = {
   command: ["command", "commands"],
-  message: ["notification", "notifications"],
+  message: ["message", "messages"],
   read: ["read", "reads"],
   edit: ["edit", "edits"],
   search: ["search", "searches"],
@@ -167,7 +167,14 @@ const unnamed = (tool: ToolItem) => !tool.name || tool.name === "tool";
 function workOf(tools: ToolItem[]): string {
   const counts = new Map<ToolKind, number>();
   // An agent is counted once, where it was handed its task; listing or messaging agents is not another.
-  for (const tool of tools) if (!unnamed(tool) && (tool.kind !== "agent" || spawned(tool))) counts.set(tool.kind || "other", (counts.get(tool.kind || "other") || 0) + 1);
+  const count = (kind: ToolKind) => counts.set(kind, (counts.get(kind) || 0) + 1);
+  for (const tool of tools) {
+    if (unnamed(tool) || (tool.kind === "agent" && !spawned(tool))) continue;
+    // A script is counted by what it called: "2 searches, 1 read", not "4 scripts".
+    const calls = tool.kind === "script" ? (tool.calls || []).filter((call) => !call.planned && !call.earlier) : [];
+    if (calls.length) for (const call of calls) count(call.facts?.kind || call.kind || "other");
+    else count(tool.facts?.kind || tool.kind || "other");
+  }
   return [...counts].sort((left, right) => right[1] - left[1])
     .map(([kind, count]) => plural(count, KIND_WORDS[kind])).join(", ");
 }
@@ -205,8 +212,11 @@ function statusOf(trace: TurnTraceData, writing: boolean): Mark & { verb: string
   const tool = running[0];
   if (!tool) return writing ? { verb: "Writing", orb: "composing" } : { verb: "Thinking", orb: "working" };
   if (unnamed(tool)) return { verb: "Calling a tool", orb: "solving" };
-  const kind = tool.kind || "other";
-  return { verb: kind === "other" ? `Using ${toolName(tool.name) || "a tool"}` : KIND_VERBS[kind], ...KIND_ORBS[kind] };
+  // What it is doing now: a script by the call it is on, a step the adapter put in words by its own verb.
+  const now = tool.kind === "script" ? scriptSaid(tool, true)?.call ?? tool : tool;
+  const kind = stepKind(now);
+  if (now.facts?.verb) return { verb: now.facts.verb[0], ...KIND_ORBS[kind] };
+  return { verb: kind === "other" ? `Using ${toolName(now.name) || "a tool"}` : KIND_VERBS[kind], ...KIND_ORBS[kind] };
 }
 
 /* A tool's line: what it acted on, a search's in quotes, a long path from its
@@ -228,22 +238,14 @@ function toolLine(tool: ToolItem): string {
    passed over. */
 type Detail = { text: string; markdown: boolean };
 function stepLine(tool: ToolItem, live: boolean): string {
-  // A running script is the tool it is running now, else the last it ran.
-  if (live && !tool.done && tool.kind === "script") {
-    const calls = (tool.calls || []).filter((call) => !call.planned && !call.earlier);
-    const call = calls.find((item) => item.done === false) || calls.at(-1);
-    if (!call) return "";
-    const kind = call.kind || "other";
-    const verb = VERBS[kind][call.done === false ? 0 : 1];
-    const line = toolLine({ toolCallId: "", kind, subject: call.subject });
-    return kind === "other" ? [verb, toolName(call.name), line].filter(Boolean).join(" ") : `${verb} ${line || call.name}`.trim();
-  }
-  const subject = toolLine(tool);
-  if (live && !tool.done) return subject;
-  const kind = tool.kind || "other";
-  const verb = VERBS[kind][1];
-  if (kind === "other") return [verb, toolName(tool.name), subject].filter(Boolean).join(" ");
-  return `${verb} ${subject || tool.name || ""}`.trim();
+  // A script is what it called (scriptSaid): running, the call it is on; done, its first call and how many more.
+  const said = tool.kind === "script" ? scriptSaid(tool, live && !tool.done) : null;
+  const item = said?.call ?? tool;
+  const running = live && (said ? said.call.done === false : !tool.done);
+  if (running && !said && !tool.facts?.verb) return toolLine(tool);
+  const line = item.facts?.subject ? stepText(item) : toolLine({ toolCallId: "", kind: item.kind, subject: toolName(item.subject) });
+  const verb = stepVerb(item, running);
+  return [verb, line || (item.kind === "other" ? "" : item.name), said?.more ? `and ${said.more} more` : ""].filter(Boolean).join(" ").trim();
 }
 function previewOf(trace: TurnTraceData, writing: boolean): { status: ReturnType<typeof statusOf>; work: string; detail: Detail | null } {
   let latest: Detail | null = null;

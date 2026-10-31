@@ -393,9 +393,13 @@ export interface ToolCallStep {
   done?: boolean;
   isError?: boolean;
   durationMs?: number;
+  facts?: ToolFacts;
 }
 
 export interface ToolFacts {
+  /** What it did, running and done ("Checking", "Checked"), and what kind of work it was, where its tool's own say less. */
+  verb?: [string, string];
+  kind?: ToolKind;
   subject?: string;
   aside?: string;
   added?: number;

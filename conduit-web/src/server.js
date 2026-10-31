@@ -170,6 +170,9 @@ const promptStore = new PromptStore({
   root: config.promptOverridesRoot,
   prompts: [
     ...config.piTemplates.map((template) => ({ id: template.id, label: template.label, kind: "profile", defaultPath: template.systemPrompt })),
+    // The base the Assistant and jbot share, edited once (durable-runtime agentFor draws it under each one's own).
+    ...[...new Set(config.piTemplates.map((template) => template.basePrompt).filter(Boolean))].slice(0, 1)
+      .map((defaultPath) => ({ id: "base", label: "Shared base", kind: "base", defaultPath })),
     { id: "chat-naming", label: "Chat naming", kind: "service", defaultPath: config.sessionNamePrompt },
   ],
 });

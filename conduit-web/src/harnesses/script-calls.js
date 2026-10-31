@@ -57,7 +57,9 @@ function literalInput(node, depth = 0) {
 
 const step = (tools, name, input) => {
   const subject = tools.subjectOf(name, input);
-  return { name, kind: tools.kindOf(name) || "other", ...(subject ? { subject } : {}) };
+  // What the adapter can say of the call better than its subject (ToolFacts), less a diff: a script's rows are lines.
+  const { diff, ...facts } = tools.factsOf?.(name, input) || {};
+  return { name, kind: tools.kindOf(name) || "other", ...(subject ? { subject } : {}), ...(Object.keys(facts).length ? { facts } : {}) };
 };
 
 /**

@@ -1,5 +1,5 @@
 import { remoteNode } from "./place.js";
-import { connectorSubject } from "./agent/connector-services.js";
+import { connectorFacts, connectorSubject } from "./agent/connector-services.js";
 import crypto from "node:crypto";
 import { answerTo, isDismissal, questionRequest } from "./harnesses/questions.js";
 import fs from "node:fs/promises";
@@ -85,6 +85,13 @@ const hostOf = (url) => { try { const { hostname, pathname } = new URL(url); ret
 const more = (count) => count > 0 ? `and ${count} more` : "";
 const where = (path) => { const parts = String(path || "").split("/").filter(Boolean); return { name: parts.at(-1) || path, dir: parts.slice(-3, -1).join("/") }; };
 function factsOf(name, args = {}) {
+  if (name.startsWith("mcp__")) return connectorFacts(name, args);
+  if (name === "approved") return { verb: ["Carrying out", "Carried out"], kind: "other", subject: "what you approved", ...(args.ask ? { aside: `ask ${args.ask}` } : {}) };
+  if (name === "ask_user") {
+    const questions = Array.isArray(args.questions) ? args.questions : [];
+    const first = String(questions[0]?.question || "").trim();
+    return { verb: ["Asking you", "Asked you"], kind: "other", ...(first ? { subject: first } : {}), ...(questions.length > 1 ? { aside: more(questions.length - 1) } : {}) };
+  }
   if (name === "web_search" || name === "source_check") {
     const queries = (Array.isArray(args.queries) ? args.queries : [args.query]).filter((item) => typeof item === "string" && item.trim());
     const first = String(name === "source_check" ? args.claim || queries[0] || "" : queries[0] || "");
@@ -153,6 +160,7 @@ const agentStep = (event) => {
 const SCRIPT_TOOLS = {
   kindOf: (name) => toolKind(TOOL_KINDS, name),
   subjectOf: (name, input) => subjectOf(name, input || {}),
+  factsOf: (name, input) => factsOf(name, input || {}),
 };
 
 /** Codemode records nested calls only in its result's details, with JSON argument previews. */

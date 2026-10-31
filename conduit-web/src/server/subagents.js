@@ -320,6 +320,12 @@ export function Subagents(runtime) {
         return textResult(Object.entries(roster?.children || {}).map(([key, item]) => `${key}: ${item.status}: ${item.title}`).join("\n") || "No background subagents.");
       }
       if ((action === "spawn" || action === "message") && typeof task !== "string") throw new Error("subagent requires task for spawn or message.");
+      // Spawned from inside a script, the agent is one of the script's calls: the person never sees it in the turn
+      // (its row, its stop, its transcript). A spawn is its own call, so it is refused there and the model calls it.
+      if (action === "spawn") {
+        const own = await api.getTask(api.taskId, context);
+        if (own?.input?.kind === "nested") return { output: [{ type: "text", text: "Spawn subagents with the subagent tool directly, not from a codemode script, so the person can see and stop them. Call subagent now with the same task." }], isError: true };
+      }
       // A child of the persistent agent's threads is a run like any other: RUN.md is its prompt, not jbot's.
       const runPrompt = action !== "spawn" ? "" : await api.memo("runPrompt", context)
         ?? await api.memo("runPrompt", (await runtime.agentRunPrompt?.(api.conversationId)) || "", context);

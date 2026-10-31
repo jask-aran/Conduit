@@ -295,7 +295,7 @@ export class PersistentAgent {
     const described = await this.describe(conversationId);
     if (described) return described;
     const chat = this.registry.list({ includeHidden: true }).find((item) => String(item.backend?.opaqueSession) === String(conversationId));
-    return chat ? { role: "chat", chatId: chat.id } : null;
+    return chat ? { role: "chat", chatId: chat.id, title: chat.title || "" } : null;
   }
 
   async describe(conversationId) {

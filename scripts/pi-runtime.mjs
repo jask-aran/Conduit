@@ -59,6 +59,8 @@ export function loadPiTemplate(file) {
     connectors: template.connectors === true,
     templateFile,
     systemPrompt: path.resolve(directory, template.systemPrompt || "SYSTEM.md"),
+    // The prompt it shares with other templates (the Assistant's and jbot's), drawn under its own.
+    ...(typeof template.base === "string" && template.base ? { basePrompt: path.resolve(directory, template.base) } : {}),
     tools,
     models: requireStrings(template.models, "models"),
     extensions: paths("extensions"),

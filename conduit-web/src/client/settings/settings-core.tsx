@@ -92,7 +92,7 @@ interface GeneralPreferences {
 interface EditablePrompt {
   id: string;
   label: string;
-  kind: "profile" | "service";
+  kind: "profile" | "service" | "base";
   content: string;
   modified: boolean;
 }
@@ -1256,7 +1256,7 @@ export function Settings(props: {
                 <SettingGroup title="System prompt">
                   <SettingLine plain label="Prompt" state={<>{prompts().find((item) => item.id === promptId())?.modified ? "modified" : "default"}</>} title="Changes apply when the next runtime or naming request starts.">
                       <Select id="prompt-selector" aria-label="Prompt" value={promptId()} onChange={(event) => choosePrompt(event.currentTarget.value)}>
-                        <For each={prompts()}>{(prompt) => <option value={prompt.id} selected={prompt.id === promptId()}>{prompt.label}{prompt.kind === "service" ? " · service" : ""}</option>}</For>
+                        <For each={prompts()}>{(prompt) => <option value={prompt.id} selected={prompt.id === promptId()}>{prompt.label}{prompt.kind === "service" ? " · service" : prompt.kind === "base" ? " · under Assistant and jbot" : ""}</option>}</For>
                       </Select>
                       <Button variant="ghost" size="icon-sm" aria-label="Reset to default" title="Reset to default" disabled={promptSaving() || (!prompts().find((item) => item.id === promptId())?.modified && promptDraft() === promptBaseline())} onClick={() => void resetPrompt()}><Icons.Reset /></Button>
                   </SettingLine>

@@ -1,6 +1,6 @@
 {
   "id": "assistant",
-  "version": "13",
+  "version": "14",
   "label": "Assistant",
   "description": "General-purpose Pi with file, shell, web research, subagents, and the person's connected accounts through Executor.",
   "posture": "read / write / edit / shell / web search / source fetch / subagents / connected accounts",
@@ -30,5 +30,6 @@
     "../coding/skills/web-research"
   ],
   "promptTemplates": [],
-  "connectors": true
+  "connectors": true,
+  "base": "BASE.md"
 }
